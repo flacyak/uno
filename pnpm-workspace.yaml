@@ -1,0 +1,2 @@
+configDependencies:
+  '@pnpm/plugin-types-fixer': 0.1.0
