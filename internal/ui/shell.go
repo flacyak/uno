@@ -60,6 +60,11 @@ func NewShell(w fyne.Window) *Shell {
 	// Dropping files is the same request as choosing one, so it lands in load too.
 	w.SetOnDropped(s.onDropped)
 
+	// Nothing in a shipped build: demo_off.go is what this reaches unless the
+	// "demo" tag is set, and then it is the scripted preview docs/preview.gif is
+	// filmed from.
+	s.startDemo()
+
 	return s
 }
 
