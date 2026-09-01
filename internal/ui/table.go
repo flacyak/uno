@@ -21,16 +21,20 @@ const (
 	cellPadding = 24
 )
 
-// newTable binds a grid to a sheet. widget.Table only builds the cells it can
-// see and recycles them as you scroll, so a 4,812-row file costs the same to
+// newTable binds a grid to a workspace. widget.Table only builds the cells it
+// can see and recycles them as you scroll, so a 4,812-row file costs the same to
 // display as a 20-row one. The price is that update runs constantly, so it must
 // stay cheap and must not allocate.
-func newTable(sh *sheet.Sheet) *widget.Table {
+//
+// It reads through the workspace rather than closing over one sheet because undo
+// rebuilds the sheet from the raw bytes and puts a new one in its place. Binding
+// to the workspace is what lets that swap be a Refresh rather than a new grid.
+func newTable(w *workspace) *widget.Table {
 	tbl := widget.NewTable(
-		func() (int, int) { return sh.Rows(), sh.Cols() },
+		func() (int, int) { return w.sheet.Rows(), w.sheet.Cols() },
 		func() fyne.CanvasObject { return widget.NewLabel("") },
 		func(id widget.TableCellID, o fyne.CanvasObject) {
-			o.(*widget.Label).SetText(sh.At(id.Row, id.Col))
+			o.(*widget.Label).SetText(w.sheet.At(id.Row, id.Col))
 		},
 	)
 
@@ -44,7 +48,7 @@ func newTable(sh *sheet.Sheet) *widget.Table {
 		name, badge := headerParts(o)
 		switch {
 		case id.Row < 0: // column header
-			c := sh.Columns[id.Col]
+			c := w.sheet.Columns[id.Col]
 			name.SetText(c.Header)
 			badge.SetText(badgeFor(c))
 		case id.Col < 0: // row-number gutter, 1-based for humans
@@ -53,8 +57,11 @@ func newTable(sh *sheet.Sheet) *widget.Table {
 		}
 	}
 
-	for i, c := range sh.Columns {
-		tbl.SetColumnWidth(i, widthFor(sh, i, c))
+	// Widths are measured once, from the sheet as it was opened. A later edit
+	// does not resize its column: a grid that rearranges itself while you are
+	// reading it is harder to work in than one that occasionally clips.
+	for i, c := range w.sheet.Columns {
+		tbl.SetColumnWidth(i, widthFor(w.sheet, i, c))
 	}
 	return tbl
 }

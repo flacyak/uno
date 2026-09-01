@@ -3,5 +3,20 @@ Website = "https://github.com/flacyak/uno"
 [Details]
   Name    = "uno"
   ID      = "io.uno.app"
-  Version = "0.1.0"
-  Build   = 1
+  Version = "0.2.0"
+  Build   = 2
+
+# Consumed by `fyne package`. The .desktop file it generates carries no MimeType
+# line and cannot be made to, so it is not what registers .uno — see
+# packaging/README.md. What this does is keep the entry fyne produces from
+# describing a different application than the one packaging/linux installs, and
+# ExecParams is what lets it accept a file at all.
+#
+# The leading space in ExecParams is load-bearing: the template trims the
+# whitespace before it.
+[LinuxAndBSD]
+  GenericName = "Spreadsheet"
+  Comment     = "Local spreadsheet handler"
+  Categories  = ["Office", "Spreadsheet"]
+  Keywords    = ["csv", "tsv", "spreadsheet", "data"]
+  ExecParams  = " %F"

@@ -3,8 +3,9 @@
 // attached (I-6).
 package sheet
 
-// Sheet is the one copy of the data in memory. ingest writes it once at load,
-// ui only reads it, and M2's recorder will observe it. Nothing else touches it.
+// Sheet is the one copy of the data in memory. ingest builds it at load, the
+// grid reads it every frame, and Set is the single door through which it
+// changes (I-7: only ever from the UI goroutine).
 type Sheet struct {
 	Name string
 	// Source describes how ingest read these bytes, for the status bar to show
@@ -13,6 +14,7 @@ type Sheet struct {
 	Source  string
 	Columns []Column
 	rows    [][]string
+	edits   []Edit // every change made to rows, in order; see edit.go
 }
 
 // Column pairs a header with the kind inferred from the values beneath it.

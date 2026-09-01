@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Name=uno
+GenericName=Spreadsheet
+Comment=Local spreadsheet handler
+Exec=@EXEC@ %F
+Icon=io.uno.app
+Terminal=false
+Categories=Office;Spreadsheet;
+Keywords=csv;tsv;spreadsheet;data;
+
+# %F above and several types here are the same decision: a workspace is one
+# file, but opening several at once is one request that lands as several tabs,
+# which is what OpenPaths already does with os.Args.
+#
+# Listing csv and tsv puts uno in "Open With" for them. It does not make uno
+# their default — that is a separate choice a person makes, and associate.sh
+# only ever claims the default for uno's own type.
+MimeType=application/vnd.uno.workspace+zip;text/csv;text/tab-separated-values;
+
+# Fyne sets WM_CLASS from the ID passed to app.NewWithID, so this is io.uno.app
+# rather than uno. Without it a running window is not matched to this entry, and
+# the taskbar shows it as an unnamed second application.
+StartupWMClass=io.uno.app
