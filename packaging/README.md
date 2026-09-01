@@ -63,22 +63,78 @@ Not verified — there is no Windows machine in this repository's development
 loop. The registry keys are the standard ones and the script reads them back
 after writing, but nobody has double-clicked a `.uno` in Explorer.
 
-## macOS — not shipped, and why
+## macOS — `darwin/associate.sh`
 
-macOS is the one platform where the declaration alone would not work, so there
-is deliberately nothing here to install.
+```
+packaging/darwin/associate.sh install [uno.app]     default: ./uno.app
+packaging/darwin/associate.sh verify  [uno.app]
+packaging/darwin/associate.sh uninstall [uno.app]
+```
+
+`document-types.plist` holds the two keys macOS wants: a
+`UTExportedTypeDeclarations` entry defining `io.uno.workspace`, and a
+`CFBundleDocumentTypes` entry claiming `LSHandlerRank: Owner` over it. The type
+conforms to `com.pkware.zip-archive`, which is the same statement the Linux
+declaration makes with `<sub-class-of type="application/zip"/>`, and its tag
+specification carries both the `uno` extension and the media type the other two
+platforms register.
+
+It is a fragment rather than a complete `Info.plist` because `fyne package -os
+darwin` creates that file and renders its own template over it on every run, so
+a copy of ours would last until the next package. `associate.sh` merges the keys
+into a bundle afterwards with `PlistBuddy`, deleting them first so a second
+install replaces the declaration rather than appending to the same arrays.
+
+The script checks two separate things, because they can disagree and the
+difference is the whole story here. `plutil -extract` reads the declaration back
+out of the bundle: that is what uno controls, and it is either right or it is a
+bug. `mdls -name kMDItemContentType` reports what a real `.uno` is taken for:
+that is what the system believes, and it is allowed to lag. Launch Services does
+not watch for a changed `Info.plist`, so the script nudges it with `lsregister
+-f` and, if the type has not landed yet, prints the database rebuild to run. A
+declaration that is correct but not yet registered is a wait, not a failure.
+
+### The Apple Event, and why there is Objective-C in internal/ui
 
 Finder does not pass a document as `argv`. It launches the application and sends
-it a `kAEOpenDocuments` Apple Event, and an application that does not answer that
-event simply opens. Fyne v2.8.1 installs no handler for it: there is no
-`application:openFile:`, no `application:openURLs:`, and no Apple Event
-machinery anywhere in the module.
+it a `kAEOpenDocuments` Apple Event, so the type declaration alone would put uno
+on screen with an empty workspace.
 
-So a `CFBundleDocumentTypes` entry would make Finder route `.uno` to uno, and uno
-would come up showing an empty workspace. That is worse than no association at
-all — the file looks broken rather than unregistered.
+Fyne v2.8.1 answers no such event, and neither does GLFW: `GLFWApplicationDelegate`
+implements `applicationShouldTerminate`, `applicationDidChangeScreenParameters`,
+`applicationWillFinishLaunching`, `applicationDidFinishLaunching` and
+`applicationDidHide`, and nothing else (`glfw/src/cocoa_init.m:397`). NSApplication's
+own handler for the event calls a delegate method that is not there, and the
+event is swallowed.
 
-What it needs is an open-documents handler in the app bundle, which means an
-Objective-C `NSApplicationDelegate` method reached through cgo, feeding the paths
-into `Shell.OpenPaths` on the UI goroutine. That is a real piece of work and it
-cannot be written blind: it needs a Mac to test on.
+`internal/ui/opendoc_darwin.m` registers a handler with `NSAppleEventManager`
+that replaces it, and hands each path to Go, which queues it onto the UI
+goroutine with `fyne.Do` and into `OpenPaths` — the same door a drop uses.
+
+Timing is the difficulty. Registering before AppKit finishes launching loses,
+because AppKit installs its handler afterwards; registering after the event has
+been dispatched loses the file that started the app. The hook in between is
+Fyne's `Lifecycle().SetOnStarted`, which the driver fires once GLFW has
+initialised and immediately before the event loop begins ticking
+(`internal/driver/glfw/loop.go:128`). That is where the handler goes in.
+
+### What is verified, and what is not
+
+Checked here, on Linux: the fragment parses as a plist and holds the expected
+UTI, extension, media type and handler rank; merging it into the `Info.plist`
+that `fyne package -os darwin` actually renders produces a plist that still
+parses and keeps all thirteen of Fyne's own keys; the build constraints select
+`opendoc_darwin.go` and `opendoc_darwin.m` on `darwin && cgo` and the no-op stub
+everywhere else, with no duplicate definition; the extension and media type match
+the Linux and Windows declarations exactly.
+
+Not checked: anything needing a Mac. The Objective-C has never been compiled —
+that needs the macOS SDK — and `PlistBuddy`, `plutil`, `lsregister` and `mdls`
+are all macOS-only, so `associate.sh` has never run past its platform check.
+Nobody has double-clicked a `.uno` in Finder.
+
+The likeliest thing to need adjusting on a real Mac is the handler's timing. If
+the document that launched uno is missed while a later `open file.uno` works,
+the event is being dispatched before `OnStarted`, and the fix is to add
+`application:openFiles:` to the live delegate class instead of replacing the
+event handler.
