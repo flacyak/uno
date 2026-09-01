@@ -1,0 +1,7 @@
+Website = "https://github.com/flacyak/uno"
+
+[Details]
+  Name    = "uno"
+  ID      = "io.uno.app"
+  Version = "0.1.0"
+  Build   = 1
