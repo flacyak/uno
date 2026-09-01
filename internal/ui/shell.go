@@ -1,5 +1,6 @@
 // Package ui owns the window, the tabs, the menu and the grid. It never opens a
-// file itself: it receives a reader and hands it to ingest (I-6).
+// file itself: it receives a reader and hands it to ingest, or a path and hands
+// it to document (I-6).
 package ui
 
 import (
@@ -8,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 )
@@ -19,25 +21,40 @@ type Shell struct {
 	win    fyne.Window
 	tabs   *container.DocTabs
 	status *widget.Label
+	cell   *widget.Label
+	undoIt *fyne.MenuItem
 	byTab  map[*container.TabItem]*workspace
 }
 
-// NewShell wires the window's menu, shortcut and drop handler. The content is
+// NewShell wires the window's menu, shortcuts and drop handler. The content is
 // built separately by Content, so a test can drive a shell without a canvas.
 func NewShell(w fyne.Window) *Shell {
 	s := &Shell{win: w, byTab: map[*container.TabItem]*workspace{}}
 
 	// One shortcut definition covers every desktop: KeyModifierShortcutDefault
 	// is Cmd on macOS and Ctrl on Linux and Windows.
-	open := fyne.NewMenuItem("Open…", s.chooseFile)
-	open.Shortcut = &desktop.CustomShortcut{
-		KeyName:  fyne.KeyO,
-		Modifier: fyne.KeyModifierShortcutDefault,
-	}
+	open := menuItem("Open…", key(fyne.KeyO, 0), s.chooseFile)
+	save := menuItem("Save", key(fyne.KeyS, 0), s.save)
+	saveAs := menuItem("Save As…", key(fyne.KeyS, fyne.KeyModifierShift), s.saveAs)
 
-	w.SetMainMenu(fyne.NewMainMenu(fyne.NewMenu("File", open)))
+	// Undo takes the framework's own undo shortcut rather than a custom Ctrl+Z,
+	// and it has to. The driver turns Ctrl+Z into a fyne.ShortcutUndo, matches
+	// the main menu by shortcut name before the focused widget is offered it,
+	// and hands anything unmatched to whatever has focus — which, while a value
+	// is being typed, is a text field with an undo of its own. Naming the
+	// standard shortcut here is what puts Ctrl+Z on the sheet rather than on the
+	// last few characters typed into the editor bar.
+	s.undoIt = menuItem("Undo", &fyne.ShortcutUndo{}, s.undo)
+
+	w.SetMainMenu(fyne.NewMainMenu(
+		fyne.NewMenu("File", open, fyne.NewMenuItemSeparator(), save, saveAs),
+		fyne.NewMenu("Edit", s.undoIt),
+	))
+
 	if c := w.Canvas(); c != nil {
-		c.AddShortcut(open.Shortcut, func(fyne.Shortcut) { s.chooseFile() })
+		for _, it := range []*fyne.MenuItem{open, save, saveAs, s.undoIt} {
+			c.AddShortcut(it.Shortcut, func(fyne.Shortcut) { it.Action() })
+		}
 	}
 
 	// Dropping files is the same request as choosing one, so it lands in load too.
@@ -46,10 +63,26 @@ func NewShell(w fyne.Window) *Shell {
 	return s
 }
 
+// menuItem pairs a label with the shortcut that reaches the same action, so the
+// menu and the keyboard can never drift apart.
+func menuItem(label string, sc fyne.Shortcut, action func()) *fyne.MenuItem {
+	it := fyne.NewMenuItem(label, action)
+	it.Shortcut = sc
+	return it
+}
+
+func key(name fyne.KeyName, extra fyne.KeyModifier) fyne.Shortcut {
+	return &desktop.CustomShortcut{
+		KeyName:  name,
+		Modifier: fyne.KeyModifierShortcutDefault | extra,
+	}
+}
+
 // Content builds the tab strip and the status bar. uno always has at least one
 // workspace, so even an empty app shows a tab.
 func (s *Shell) Content() fyne.CanvasObject {
 	s.status = widget.NewLabel("")
+	s.cell = widget.NewLabel("")
 	s.tabs = container.NewDocTabs()
 
 	// Setting CreateTab is what draws the "+"; Fyne appends and selects for us,
@@ -69,7 +102,10 @@ func (s *Shell) Content() fyne.CanvasObject {
 	s.tabs.Append(s.newWorkspace().tab)
 	s.refreshStatus()
 
-	return container.NewBorder(nil, s.status, nil, nil, s.tabs)
+	// The cell reference sits at the trailing end of the same bar, which is
+	// where a spreadsheet says which cell you are in.
+	bar := container.NewBorder(nil, nil, nil, s.cell, s.status)
+	return container.NewBorder(nil, bar, nil, nil, s.tabs)
 }
 
 // active returns the workspace behind the selected tab, or nil when there is none.
@@ -80,25 +116,123 @@ func (s *Shell) active() *workspace {
 	return s.byTab[s.tabs.Selected()]
 }
 
-// refreshStatus repoints the status bar at the active workspace and nothing
-// else, so switching tabs is what changes what it describes.
+// refreshStatus repoints the window at the active workspace and nothing else, so
+// switching tabs is what changes what it describes. Tab labels are refreshed
+// with it because a background save can clear a dot on a tab nobody is looking at.
 func (s *Shell) refreshStatus() {
-	if s.status == nil {
+	w := s.active()
+	if s.status != nil {
+		s.status.SetText(statusFor(w))
+		s.cell.SetText(cellRef(w))
+	}
+	s.refreshTabs()
+	s.refreshUndo(w)
+	s.win.SetTitle(titleFor(w))
+}
+
+// refreshUndo greys the item out when there is nothing behind the active
+// workspace to step back to. The keyboard reaches the action whatever the item
+// says, which is why undo checks for itself rather than trusting this.
+func (s *Shell) refreshUndo(w *workspace) {
+	off := w == nil || w.sheet == nil || w.sheet.EditCount() == 0
+	if s.undoIt == nil || s.undoIt.Disabled == off {
 		return
 	}
-	s.status.SetText(statusFor(s.active()))
+	s.undoIt.Disabled = off
+	if m := s.win.MainMenu(); m != nil {
+		m.Refresh()
+	}
+}
+
+// undo steps the active workspace back one operation.
+func (s *Shell) undo() {
+	w := s.active()
+	if w == nil || w.sheet == nil || w.sheet.EditCount() == 0 {
+		return // nothing was done here, so there is nothing to take back
+	}
+	if err := w.undo(); err != nil {
+		dialog.ShowError(err, s.win)
+		return
+	}
+
+	// The sheet was rebuilt rather than patched, so the grid and the editor both
+	// re-read it instead of being told which cell moved.
+	w.table.Refresh()
+	w.editor.SetText(w.sheet.At(w.active.Row, w.active.Col))
+	s.refreshStatus()
+}
+
+// refreshTabs writes the dirty marker onto every tab. The dot is the only thing
+// that says a workspace holds changes no file has yet.
+func (s *Shell) refreshTabs() {
+	changed := false
+	for tab, w := range s.byTab {
+		label := w.name
+		if w.dirty() {
+			label += " •"
+		}
+		if tab.Text != label {
+			tab.Text = label
+			changed = true
+		}
+	}
+	if changed {
+		s.tabs.Refresh()
+	}
 }
 
 func statusFor(w *workspace) string {
 	if w == nil || w.sheet == nil {
 		return "no file open"
 	}
-	return strings.Join([]string{
+
+	parts := []string{
 		plural(w.sheet.Rows(), "row"),
 		plural(w.sheet.Cols(), "col"),
 		w.sheet.Source, // how ingest read it; ui does not interpret it
-		"read-only",
-	}, " · ")
+	}
+	if n := w.sheet.EditCount(); n > 0 {
+		parts = append(parts, plural(n, "edit"))
+	}
+	switch {
+	case w.dirty():
+		parts = append(parts, "unsaved")
+	case w.path != "":
+		// Saved, and still naming where the data came from: that provenance is
+		// read from the manifest, not from anything on this machine.
+		parts = append(parts, "saved", "from "+w.manifest.Source.Name)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func titleFor(w *workspace) string {
+	if w == nil || w.sheet == nil {
+		return "uno"
+	}
+	if w.dirty() {
+		return "uno — " + w.name + " • edited"
+	}
+	return "uno — " + w.name
+}
+
+// cellRef names the selected cell the way a spreadsheet does, so what the editor
+// bar is pointed at can be read off the window rather than counted.
+func cellRef(w *workspace) string {
+	if w == nil || w.sheet == nil || w.sheet.Rows() == 0 {
+		return ""
+	}
+	return colName(w.active.Col) + fmt.Sprint(w.active.Row+1)
+}
+
+// colName renders 0 as A and 26 as AA. Column letters run like an odometer with
+// no zero digit, so the leading letter shifts down by one on each carry.
+func colName(col int) string {
+	var b []byte
+	for col >= 0 {
+		b = append([]byte{byte('A' + col%26)}, b...)
+		col = col/26 - 1
+	}
+	return string(b)
 }
 
 func plural(n int, unit string) string {
