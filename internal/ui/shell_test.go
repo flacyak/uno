@@ -35,7 +35,12 @@ func writeCSV(t *testing.T, name, body string) fyne.URI {
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
-	return storage.NewFileURI(p)
+	return fileURI(t, p)
+}
+
+func fileURI(t *testing.T, path string) fyne.URI {
+	t.Helper()
+	return storage.NewFileURI(path)
 }
 
 func tabNames(s *Shell) []string {
@@ -160,7 +165,7 @@ func TestStatusFollowsTheActiveTab(t *testing.T) {
 	}
 	loaded := s.tabs.Selected()
 
-	want := "2 rows · 3 cols · UTF-8 · delimiter ',' · read-only"
+	want := "2 rows · 3 cols · UTF-8 · delimiter ','"
 	if got := s.status.Text; got != want {
 		t.Errorf("status = %q, want %q", got, want)
 	}
