@@ -24,8 +24,14 @@ func main() {
 	w.CenterOnScreen()
 
 	// Files named on the command line are how a file-manager double-click
-	// arrives. They go through the same door as a drop, and report the same way.
+	// arrives on Linux and Windows. They go through the same door as a drop, and
+	// report the same way.
 	shell.OpenPaths(os.Args[1:])
+
+	// macOS is the exception: Finder passes no argument and sends an Apple Event
+	// instead. This has to be set before the app runs, because it hooks the
+	// moment the driver starts.
+	shell.WatchOpenDocuments()
 
 	w.ShowAndRun()
 }
