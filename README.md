@@ -2,6 +2,11 @@
 
 Easy spreadsheet handler
 
+![uno opening a CSV and fixing a flagged cell](docs/preview.gif)
+
+Open a data file, fix what does not parse, and save it as a `.uno` that keeps
+the original bytes alongside the log of every edit. Nothing leaves the machine.
+
 ## Opening a .uno from the desktop
 
 ```
