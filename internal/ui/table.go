@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/flacyak/uno/internal/document"
 	"github.com/flacyak/uno/internal/sheet"
 )
 
@@ -29,12 +30,12 @@ const (
 // It reads through the workspace rather than closing over one sheet because undo
 // rebuilds the sheet from the raw bytes and puts a new one in its place. Binding
 // to the workspace is what lets that swap be a Refresh rather than a new grid.
-func newTable(w *workspace) *widget.Table {
+func (s *Shell) newTable(w *workspace) *widget.Table {
 	tbl := widget.NewTable(
 		func() (int, int) { return w.sheet.Rows(), w.sheet.Cols() },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func() fyne.CanvasObject { return s.newCell(w) },
 		func(id widget.TableCellID, o fyne.CanvasObject) {
-			o.(*widget.Label).SetText(w.sheet.At(id.Row, id.Col))
+			o.(*cell).show(id)
 		},
 	)
 
@@ -65,6 +66,79 @@ func newTable(w *workspace) *widget.Table {
 	}
 	return tbl
 }
+
+// cell is one square of the grid. It is a label almost always, and the
+// workspace's inline editor for as long as it is the cell being edited: one
+// entry moved between squares rather than an entry in every square, for the same
+// reason there is one editor bar. The grid recycles these constantly, so what
+// they cost is what a big file costs to scroll (I-1).
+type cell struct {
+	widget.BaseWidget
+
+	s     *Shell
+	w     *workspace
+	id    widget.TableCellID
+	label *widget.Label
+	box   *fyne.Container
+}
+
+func (s *Shell) newCell(w *workspace) *cell {
+	c := &cell{s: s, w: w, label: widget.NewLabel("")}
+	c.box = container.NewStack(c.label)
+	c.ExtendBaseWidget(c)
+	return c
+}
+
+func (c *cell) CreateRenderer() fyne.WidgetRenderer { return widget.NewSimpleRenderer(c.box) }
+
+// show points this recycled square at another cell of the sheet. It is the
+// table's update closure, so it runs constantly and swaps the editor in or out
+// only when that changes something.
+func (c *cell) show(id widget.TableCellID) {
+	c.id = id
+	c.label.SetText(c.w.sheet.At(id.Row, id.Col))
+
+	if c.w.editing && c.w.active == (document.Cell{Row: id.Row, Col: id.Col}) {
+		c.takeInline()
+		return
+	}
+	c.dropInline()
+}
+
+// takeInline moves the workspace's one editor into this square, off whichever
+// square was holding it. Taking it off is the part that matters: a square that
+// has scrolled out of view is never updated again, so nothing else would ever
+// tell it to let go, and the same entry would sit in two places at once.
+func (c *cell) takeInline() {
+	if c.w.inlineIn == c {
+		return
+	}
+	if prev := c.w.inlineIn; prev != nil {
+		prev.showLabel()
+	}
+	c.w.inlineIn = c
+	c.box.Objects[0] = c.w.inline
+	c.box.Refresh()
+}
+
+func (c *cell) dropInline() {
+	if c.w.inlineIn != c {
+		return
+	}
+	c.w.inlineIn = nil
+	c.showLabel()
+}
+
+func (c *cell) showLabel() {
+	c.box.Objects[0] = c.label
+	c.box.Refresh()
+}
+
+// Tapped chooses this cell, or opens it for typing when it is the cell already
+// chosen. The table's own Tapped never runs for a square that handles its own
+// tap — hit-testing keeps the deepest object it finds — so everything that tap
+// used to do happens in tapCell instead.
+func (c *cell) Tapped(*fyne.PointEvent) { c.s.tapCell(c.w, c.id) }
 
 func newHeader() *fyne.Container {
 	name := widget.NewLabel("")

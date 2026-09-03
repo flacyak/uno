@@ -25,6 +25,14 @@ type workspace struct {
 	editor *widget.Entry
 	tab    *container.TabItem
 
+	// inline is the editor that appears in the grid itself, inlineIn the cell
+	// holding it, and editing whether it is in the grid at all. Which cell it is
+	// in is not a fourth piece of state: only the selected cell is ever edited,
+	// so active already says.
+	inline   *inlineEntry
+	inlineIn *cell
+	editing  bool
+
 	// raw is the bytes uno was handed, kept for as long as the workspace is
 	// open. They are authoritative (I-4): the .uno stores them verbatim, and
 	// replay rebuilds the sheet from them rather than from a rewritten copy.
@@ -82,15 +90,19 @@ func untitled(n int) string { return fmt.Sprintf("Untitled %d", n) }
 func (s *Shell) fill(w *workspace, sh *sheet.Sheet, raw []byte) {
 	w.sheet = sh
 	w.raw = raw
-	w.table = newTable(w)
 	w.editor = s.newEditor(w)
+
+	// The grid's cells reach for the inline editor as they are built, so it has
+	// to exist before the table does.
+	w.inline, w.inlineIn, w.editing = s.newInline(w), nil, false
+	w.table = s.newTable(w)
 
 	w.table.OnSelected = func(id widget.TableCellID) {
 		if id.Row < 0 || id.Col < 0 {
 			return // a header is not a cell anyone edits
 		}
 		w.active = document.Cell{Row: id.Row, Col: id.Col}
-		w.editor.SetText(w.sheet.At(id.Row, id.Col))
+		w.showActive()
 		s.refreshStatus()
 	}
 
@@ -149,7 +161,102 @@ func (s *Shell) commit(w *workspace, text string) {
 	} else {
 		w.table.RefreshItem(widget.TableCellID{Row: w.active.Row, Col: w.active.Col})
 	}
+	w.showActive()
 	s.refreshStatus()
+}
+
+// showActive points the editor bar at the selected cell. Every path that changes
+// which cell that is, or what is in it, ends here, so the bar and the grid
+// cannot drift apart.
+func (w *workspace) showActive() {
+	w.editor.SetText(w.sheet.At(w.active.Row, w.active.Col))
+}
+
+// inlineEntry is the grid's cell editor. It is a plain Entry apart from Escape:
+// Fyne's Entry ignores that key, and an editor opened by a stray click needs a
+// way out that writes nothing.
+type inlineEntry struct {
+	widget.Entry
+	cancel func()
+}
+
+func (s *Shell) newInline(w *workspace) *inlineEntry {
+	e := &inlineEntry{cancel: func() { s.endEdit(w, false) }}
+	e.ExtendBaseWidget(e)
+	e.OnSubmitted = func(string) { s.endEdit(w, true) }
+	return e
+}
+
+func (e *inlineEntry) TypedKey(k *fyne.KeyEvent) {
+	if k.Name == fyne.KeyEscape {
+		e.cancel()
+		return
+	}
+	e.Entry.TypedKey(k)
+}
+
+// tapCell is a click on a square of the grid. The first click chooses the cell,
+// which is all a click has ever done; a second click on the cell already chosen
+// opens it for typing, so the fix happens where the value is rather than at the
+// top of the window. Double-click would be the more familiar gesture and cannot
+// be the one: Fyne delays every single tap on a double-tappable object while it
+// waits to see whether a second one is coming, and that delay is on the plain
+// selection click, which is the one uno does most.
+func (s *Shell) tapCell(w *workspace, id widget.TableCellID) {
+	if w.sheet == nil {
+		return
+	}
+	if w.active == (document.Cell{Row: id.Row, Col: id.Col}) {
+		s.beginEdit(w)
+		return
+	}
+
+	// Clicking off a cell keeps what was typed into it, the way a spreadsheet
+	// does. Selecting is what then repoints active, the bar and the status.
+	s.endEdit(w, true)
+	w.table.Select(id)
+
+	// widget.Table focuses itself when it handles a tap, and it did not handle
+	// this one. Without this, giving a cell its own click would quietly cost the
+	// grid the keyboard.
+	s.focus(w.table)
+}
+
+// beginEdit puts the inline editor into the selected cell, carrying the value
+// already there so correcting one character is not retyping the whole field.
+func (s *Shell) beginEdit(w *workspace) {
+	if w.sheet == nil || w.editing || w.sheet.Rows() == 0 {
+		return
+	}
+	w.editing = true
+	w.inline.SetText(w.sheet.At(w.active.Row, w.active.Col))
+	w.table.RefreshItem(widget.TableCellID{Row: w.active.Row, Col: w.active.Col})
+	s.focus(w.inline)
+}
+
+// endEdit takes the inline editor back out of the grid. keep says whether what
+// is in it is worth anything: Enter and a click on another cell keep it, Escape
+// does not. Committing goes through the same commit the editor bar uses, so a
+// value typed in the grid is logged exactly like one typed at the top.
+func (s *Shell) endEdit(w *workspace, keep bool) {
+	if !w.editing {
+		return
+	}
+	text := w.inline.Text
+	w.editing = false
+	w.table.RefreshItem(widget.TableCellID{Row: w.active.Row, Col: w.active.Col})
+	s.focus(w.table)
+
+	if keep {
+		s.commit(w, text)
+	}
+}
+
+// focus guards the canvas, which a shell built without one does not have.
+func (s *Shell) focus(o fyne.Focusable) {
+	if c := s.win.Canvas(); c != nil {
+		c.Focus(o)
+	}
 }
 
 // undo drops the last operation and rebuilds the sheet by replaying what is left
