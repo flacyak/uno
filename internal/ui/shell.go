@@ -155,6 +155,11 @@ func (s *Shell) undo() {
 	if w == nil || w.sheet == nil || w.sheet.EditCount() == 0 {
 		return // nothing was done here, so there is nothing to take back
 	}
+
+	// An editor left open in the grid is pointed at a value that is about to be
+	// rebuilt, and nothing in it was ever committed.
+	s.endEdit(w, false)
+
 	if err := w.undo(); err != nil {
 		dialog.ShowError(err, s.win)
 		return
@@ -163,7 +168,7 @@ func (s *Shell) undo() {
 	// The sheet was rebuilt rather than patched, so the grid and the editor both
 	// re-read it instead of being told which cell moved.
 	w.table.Refresh()
-	w.editor.SetText(w.sheet.At(w.active.Row, w.active.Col))
+	w.showActive()
 	s.refreshStatus()
 }
 
