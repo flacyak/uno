@@ -103,7 +103,7 @@ func manifestFor(d *Document) Manifest {
 	sum := sha256.Sum256(d.Raw)
 
 	m := d.Manifest
-	m.Format = formatVersion
+	m.Format = versionFor(d.Edits)
 	m.Generator = generator
 	m.Modified = time.Now().UTC().Truncate(time.Second)
 	if m.Created.IsZero() {
@@ -118,6 +118,19 @@ func manifestFor(d *Document) Manifest {
 	m.Edits.Entry = logEntry
 	m.Edits.Count = len(d.Edits)
 	return m
+}
+
+// versionFor is the oldest build that could replay this log. An operation an
+// older uno does not know is not a thing to fail on halfway through a replay, so
+// a file carrying one says so in the manifest and Read refuses it by name before
+// a single entry is decoded.
+func versionFor(edits []sheet.Edit) int {
+	for _, e := range edits {
+		if e.Op != sheet.OpSet {
+			return formatVersion
+		}
+	}
+	return baseVersion
 }
 
 // create adds a deflated entry stamped with the save time. zip.Writer.Create

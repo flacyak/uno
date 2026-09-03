@@ -1,6 +1,10 @@
 package sheet
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/flacyak/uno/internal/program"
+)
 
 // rows returns a fresh copy each call, since Set mutates in place.
 func fixture() *Sheet {
@@ -141,5 +145,124 @@ func TestReplayRefusesALogThatDoesNotFit(t *testing.T) {
 				t.Error("want an error, got nil")
 			}
 		})
+	}
+}
+
+// prog parses a program the way a log line would, so a test that writes an
+// unparseable one fails here rather than somewhere downstream.
+func prog(t *testing.T, src string) program.Program {
+	t.Helper()
+	p, err := program.Parse(src)
+	if err != nil {
+		t.Fatalf("Parse(%q): %v", src, err)
+	}
+	return p
+}
+
+// The point of a column op is that the log grows with what a person did and not
+// with how much data they did it to. Three cells change and one line is written.
+func TestApplyWritesOneOperationForAWholeColumn(t *testing.T) {
+	s := fixture()
+
+	if err := s.Apply(2, prog(t, `replace(/,/, "")`)); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	for row, want := range map[int]string{0: "1204", 1: "987", 2: "1455"} {
+		if got := s.At(row, 2); got != want {
+			t.Errorf("cell (%d,2) = %q, want %q", row, got, want)
+		}
+	}
+
+	log := s.Edits()
+	if len(log) != 1 {
+		t.Fatalf("log = %v, want one entry", log)
+	}
+	want := Edit{Seq: 1, Op: OpApply, Row: NoRow, Col: 2, Now: `replace(/,/, "")`}
+	if log[0] != want {
+		t.Errorf("entry = %+v, want %+v", log[0], want)
+	}
+}
+
+// Fixing a whole column is what clears its warning badge, and the kind has to be
+// re-read as the operation lands rather than at the next open.
+func TestApplyingAProgramRenamesTheColumn(t *testing.T) {
+	s := fixture()
+	if c := s.Columns[2]; c.Kind != KindText || !c.Flagged {
+		t.Fatalf("units = %v flagged=%v, want the warning badge to start on", c.Kind, c.Flagged)
+	}
+
+	if err := s.Apply(2, prog(t, `replace(/,/, "")`)); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if c := s.Columns[2]; c.Kind != KindNum || c.Flagged {
+		t.Errorf("units = %v flagged=%v, want num and unflagged", c.Kind, c.Flagged)
+	}
+}
+
+// A transform rewrites values that are there. A row that never had this column
+// has no value to be wrong about, and inventing an empty cell would change the
+// shape of the data on the strength of an inference.
+func TestApplySkipsRowsWithoutTheColumn(t *testing.T) {
+	s := New("ragged.csv",
+		[]string{"date", "region", "units"},
+		[][]string{
+			{"2026-07-01", "West", "1,204"},
+			{"2026-07-01"},
+		})
+
+	if err := s.Apply(2, prog(t, `replace(/,/, "")`)); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got := s.At(0, 2); got != "1204" {
+		t.Errorf("cell (0,2) = %q, want %q", got, "1204")
+	}
+	if got := s.Rows(); got != 2 {
+		t.Errorf("Rows = %d, want 2", got)
+	}
+	if got := s.At(1, 2); got != "" {
+		t.Errorf("short row grew a cell holding %q", got)
+	}
+}
+
+// Undo replays, and a column op is the case that mechanism exists for: there is
+// no old value to put back, so the rebuild has to produce the same column the
+// operation did the first time.
+func TestReplayRebuildsAnAppliedColumn(t *testing.T) {
+	s := fixture()
+	if err := s.Set(1, 2, "9,870"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := s.Apply(2, prog(t, `replace(/,/, "")`)); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	log := s.Edits()
+
+	rebuilt := fixture()
+	if err := rebuilt.Replay(log); err != nil {
+		t.Fatalf("Replay: %v", err)
+	}
+
+	for row := 0; row < 3; row++ {
+		if got, want := rebuilt.At(row, 2), s.At(row, 2); got != want {
+			t.Errorf("cell (%d,2) = %q, want %q", row, got, want)
+		}
+	}
+	if c := rebuilt.Columns[2]; c.Kind != KindNum || c.Flagged {
+		t.Errorf("units = %v flagged=%v, want num and unflagged", c.Kind, c.Flagged)
+	}
+}
+
+// A log naming a program this build cannot read has to fail before a single cell
+// moves. Refusing to open a workspace is recoverable; half-transforming one is
+// not.
+func TestReplayRefusesAProgramItCannotRead(t *testing.T) {
+	s := fixture()
+	err := s.Replay([]Edit{{Seq: 1, Op: OpApply, Row: NoRow, Col: 2, Now: "explode()"}})
+	if err == nil {
+		t.Fatal("Replay accepted a program it cannot run")
+	}
+	if got := s.At(0, 2); got != "1,204" {
+		t.Errorf("cell (0,2) = %q, want it untouched at %q", got, "1,204")
 	}
 }
