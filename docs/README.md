@@ -1,8 +1,11 @@
 # docs
 
-`preview.gif` is the ten-second preview at the top of the README: uno opening
-`testdata/sales-q3.csv`, and one flagged cell being fixed in place — clicked,
-clicked again to open it, and retyped where it sits.
+`preview.gif` is the fourteen-second preview at the top of the README: uno
+opening `testdata/sales-q3.csv`, three flagged cells in `units` being fixed in
+place — clicked, clicked again to open them, retyped where they sit — and then
+the app recognising what those three edits have in common, rising from the
+bottom of the window to offer the other 3,149, and doing them in one operation
+that leaves the column badged `num`.
 
 It is filmed, not drawn. The window is the real binary's, built with the `demo`
 tag so it drives itself through the script in
@@ -16,7 +19,9 @@ dispatchers for keys but none for a pointer button — so no compositor-level to
 can reach the grid. The script enters at `tapCell`, the one call a cell makes
 when a pointer lands on it, so the selection, the editor, the `commit` and the
 status refresh are the ones real clicks would produce rather than a mock-up of
-them.
+them. The offer at the end is the same: nothing in the script puts the bar on
+screen, because the third `commit` is what makes the recogniser find something
+to ask about, and the last beat presses the button the bar itself would have.
 
 ## Re-shooting it
 

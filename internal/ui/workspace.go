@@ -13,6 +13,7 @@ import (
 
 	"github.com/flacyak/uno/internal/document"
 	"github.com/flacyak/uno/internal/ingest"
+	"github.com/flacyak/uno/internal/pattern"
 	"github.com/flacyak/uno/internal/sheet"
 )
 
@@ -32,6 +33,18 @@ type workspace struct {
 	inline   *inlineEntry
 	inlineIn *cell
 	editing  bool
+
+	// proposal is what the recogniser last found here, and nil when it found
+	// nothing or the log has moved on. The bar that asks about it belongs to the
+	// shell, because only the selected tab is being looked at; what the question
+	// is about stays here, so nothing about one file reaches another (I-3).
+	proposal *pattern.Proposal
+
+	// dismissed remembers, per column, the program the person said no to. Keyed
+	// by the program and not only by the column, so refusing one offer does not
+	// silence a column for the session: a better question about it is a
+	// different question.
+	dismissed map[int]string
 
 	// raw is the bytes uno was handed, kept for as long as the workspace is
 	// open. They are authoritative (I-4): the .uno stores them verbatim, and
@@ -96,6 +109,7 @@ func (s *Shell) fill(w *workspace, sh *sheet.Sheet, raw []byte) {
 	// to exist before the table does.
 	w.inline, w.inlineIn, w.editing = s.newInline(w), nil, false
 	w.table = s.newTable(w)
+	w.proposal, w.dismissed = nil, map[int]string{}
 
 	w.table.OnSelected = func(id widget.TableCellID) {
 		if id.Row < 0 || id.Col < 0 {
@@ -128,6 +142,11 @@ func (s *Shell) fill(w *workspace, sh *sheet.Sheet, raw []byte) {
 		w.table.ScrollToTop()
 		w.table.ScrollToLeading()
 	}
+
+	// A .uno reopened part-way through fixing a column arrives with the examples
+	// already in its log, and the question is as worth asking on Monday as it
+	// was on Friday.
+	s.rescan(w)
 }
 
 // newEditor is the cell editor: one field, not a widget per cell. The grid keeps
@@ -162,6 +181,7 @@ func (s *Shell) commit(w *workspace, text string) {
 		w.table.RefreshItem(widget.TableCellID{Row: w.active.Row, Col: w.active.Col})
 	}
 	w.showActive()
+	s.rescan(w) // this edit is the evidence the recogniser learns from
 	s.refreshStatus()
 }
 

@@ -53,27 +53,39 @@ const cuePoll = 20 * time.Millisecond
 // rather than hanging on a cue nobody is going to give.
 const cueWait = 60 * time.Second
 
-// The beat the whole preview is built around: E1 of testdata/sales-q3.csv holds
-// "1,204", which is why the units column is badged text? — the separators do not
-// parse. Retyping it without the comma is the smallest complete edit uno makes.
-var (
-	demoCell  = document.Cell{Row: 0, Col: 4}
-	demoValue = "1204"
-)
+// The story the preview tells. Rows 1, 3 and 5 of testdata/sales-q3.csv hold
+// 1,204, 1,455 and 2,038 in units, which is why that column is badged text? —
+// the separators do not parse. Correcting three of them by hand is the setup;
+// the app noticing and offering to do the other 3,149 is the point.
+type demoFix struct {
+	at    document.Cell
+	value string
+}
+
+var demoFixes = []demoFix{
+	{document.Cell{Row: 0, Col: 4}, "1204"},
+	{document.Cell{Row: 2, Col: 4}, "1455"},
+	{document.Cell{Row: 4, Col: 4}, "2038"},
+}
 
 // Beats, as offsets from the moment the driver starts. They are absolute rather
 // than a list of gaps so the timeline can be read off the file and matched
 // against the recording, and so a slow step steals its time from the following
 // hold instead of shifting everything after it.
 const (
-	beatOpen   = 1600 * time.Millisecond // the drop target has been read by now
-	beatSelect = 4200 * time.Millisecond // the grid and its type badges have
-	beatEdit   = 5000 * time.Millisecond // the flagged cell is highlighted
-	beatType   = 5600 * time.Millisecond // the caret is sitting in the cell
-	beatEnd    = 9000 * time.Millisecond
+	beatOpen  = 1400 * time.Millisecond // the drop target has been read by now
+	beatFix1  = 3400 * time.Millisecond // the grid and its type badges have
+	beatFix2  = 5800 * time.Millisecond
+	beatFix3  = 7800 * time.Millisecond
+	beatApply = 11200 * time.Millisecond // the offer has been up long enough to read
+	beatEnd   = 13600 * time.Millisecond
 
+	// The pacing inside one correction. These are gaps and not offsets because
+	// what matters about them is the rhythm, and because the three corrections
+	// have to look like the same gesture repeated.
+	openPause = 460 * time.Millisecond // between choosing a cell and opening it
 	keystroke = 110 * time.Millisecond // fast enough to read, slow enough to see
-	preEnter  = 400 * time.Millisecond // the pause before committing a value
+	preEnter  = 300 * time.Millisecond // the pause before committing a value
 )
 
 // startDemo arms the script when the environment names a file, and does nothing
@@ -107,24 +119,45 @@ func (s *Shell) runDemo(path string) {
 	at(beatOpen)
 	step(func() { s.OpenPaths([]string{path}) })
 
-	// Both beats are clicks on the same square, through the same tapCell a
-	// pointer reaches. The first chooses the cell — highlight, editor bar and
-	// cell reference, three things on screen from one selection. The second
-	// opens it, which is the gesture the preview is now for: the fix happens in
-	// the grid, at the value, rather than at the top of the window.
-	at(beatSelect)
-	step(func() { s.click(demoCell) })
+	// Three cells corrected by hand, each the same gesture: a click to choose,
+	// a click to open, the value typed where it sits, Enter. The repetition is
+	// the argument — by the third one the app has seen enough to ask.
+	for i, beat := range []time.Duration{beatFix1, beatFix2, beatFix3} {
+		at(beat)
+		s.playFix(step, demoFixes[i])
+	}
 
-	at(beatEdit)
-	step(func() { s.click(demoCell) })
+	// The bar has risen from the bottom of the window by now, carrying the
+	// offer. The hold before pressing it is the beat someone reads it in.
+	at(beatApply)
+	step(func() {
+		if w := s.active(); w != nil {
+			s.applyProposal(w) // the same call the bar's own button makes
+		}
+	})
+
+	// The tail is a resting state: units is badged num, the status bar reads
+	// "4 edits · unsaved", the tab carries its dot, and a looping preview holds
+	// there long enough to be read before it starts over.
+	at(beatEnd)
+}
+
+// playFix is one cell corrected the way a person corrects it. Both clicks go
+// through tapCell, which is what a pointer landing on a cell reaches, so the
+// selection, the editor opening on the second click, the commit and the scan it
+// triggers are the ones real clicks would produce.
+func (s *Shell) playFix(step func(func()), fix demoFix) {
+	step(func() { s.click(fix.at) })
+	time.Sleep(openPause)
+	step(func() { s.click(fix.at) })
+	time.Sleep(openPause)
 
 	// The value is typed a character at a time rather than assigned, because a
 	// field that fills instantly reads as a screenshot rather than as an edit.
-	at(beatType)
-	for i := range demoValue {
+	for i := range fix.value {
 		step(func() {
 			if w := s.active(); w != nil && w.editing {
-				w.inline.SetText(demoValue[:i+1])
+				w.inline.SetText(fix.value[:i+1])
 			}
 		})
 		time.Sleep(keystroke)
@@ -136,11 +169,6 @@ func (s *Shell) runDemo(path string) {
 			s.endEdit(w, true) // the same call Enter in the cell makes
 		}
 	})
-
-	// The tail is a resting state: the status bar reads "1 edit · unsaved", the
-	// tab carries its dot, and a looping preview holds there long enough to be
-	// read before it starts over.
-	at(beatEnd)
 }
 
 // click is one press on a cell of the grid, at the point a real one lands: the
