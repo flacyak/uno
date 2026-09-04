@@ -110,6 +110,65 @@ func TestApplyingFixesTheRestAndFlipsTheBadge(t *testing.T) {
 	}
 }
 
+// costumeBody is the two other columns whose badge an apply can flip: money in
+// a costume only some rows wear, and dates written with the wrong separator.
+const costumeBody = "amount,closed\n" +
+	"\"$1,204\",2026/07/01\n" +
+	"$87,2026/07/02\n" +
+	"\"$3,010\",2026/07/03\n" +
+	"$450,2026/07/04\n" +
+	"\"$12,900\",2026/07/05\n"
+
+// The badge has to reach num and date, not only leave text?, or the offer and
+// the badge are answering different questions about the same column.
+func TestApplyingFlipsACurrencyAndADateColumn(t *testing.T) {
+	s := newTestShell(t)
+	if err := s.load("costumes.csv", strings.NewReader(costumeBody)); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	w := s.active()
+
+	for _, c := range []struct {
+		col           int
+		fixed         []string
+		before, after string
+		wantKind      sheet.Kind
+	}{
+		// A costume the badge knows to warn about, and one it does not: a
+		// column of dates written the wrong way is not a number in disguise, so
+		// nothing flags it, and the recogniser reaches it anyway.
+		{0, []string{"1204", "87", "3010"}, "text?", "num", sheet.KindNum},
+		{1, []string{"2026-07-01", "2026-07-02", "2026-07-03"}, "text", "date", sheet.KindDate},
+	} {
+		if got := badgeFor(w.sheet.Columns[c.col]); got != c.before {
+			t.Errorf("column %d badge = %q before the fixes, want %q", c.col, got, c.before)
+		}
+		for row, v := range c.fixed {
+			edit(t, w, row, c.col, v)
+		}
+		if !s.bar.box.Visible() {
+			t.Fatalf("no question after three edits in column %d", c.col)
+		}
+		s.applyProposal(w)
+
+		if got := w.sheet.Columns[c.col]; got.Kind != c.wantKind || got.Flagged {
+			t.Errorf("column %d = %v flagged=%v, want %v unflagged",
+				c.col, got.Kind, got.Flagged, c.wantKind)
+		}
+		if got := badgeFor(w.sheet.Columns[c.col]); got != c.after {
+			t.Errorf("column %d badge = %q, want %q", c.col, got, c.after)
+		}
+	}
+
+	// The rows nobody touched are the ones the offer was about.
+	if got, want := w.sheet.At(4, 0), "12900"; got != want {
+		t.Errorf("cell (4,0) = %q, want %q", got, want)
+	}
+	if got, want := w.sheet.At(4, 1), "2026-07-05"; got != want {
+		t.Errorf("cell (4,1) = %q, want %q", got, want)
+	}
+}
+
 // Everything applied can be undone as one step. This is the case undo replays
 // for: there is no old value to put back, and there are four of them.
 func TestOneUndoTakesTheWholeColumnBack(t *testing.T) {
