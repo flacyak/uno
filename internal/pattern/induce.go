@@ -148,6 +148,7 @@ func deletions(a []rune, dels []run) []string {
 		prefix = true
 		suffix = true
 		spaces = true
+		edges  = true // every run touches an end, not necessarily the same one
 	)
 
 	for _, d := range dels {
@@ -161,11 +162,16 @@ func deletions(a []rune, dels []run) []string {
 				spaces = false
 			}
 		}
-		if d.at != 0 {
+		head := d.at == 0
+		tail := d.at+len([]rune(d.text)) == len(a)
+		if !head {
 			prefix = false
 		}
-		if d.at+len([]rune(d.text)) != len(a) {
+		if !tail {
 			suffix = false
+		}
+		if !head && !tail {
+			edges = false
 		}
 	}
 	if len(chars) == 0 {
@@ -187,7 +193,9 @@ func deletions(a []rune, dels []run) []string {
 	if prefix {
 		out = append(out, replaceSrc("^"+class+"+", ""))
 	}
-	if spaces && (prefix || suffix) {
+	// Both ends at once is the ordinary case and neither anchor covers it, so
+	// trim asks about the ends rather than about the anchor they share.
+	if spaces && edges {
 		out = append(out, "trim()")
 	}
 	return out
