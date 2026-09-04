@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -14,15 +15,23 @@ func tap(w *workspace, s *Shell, row, col int) {
 	s.tapCell(w, widget.TableCellID{Row: row, Col: col})
 }
 
-// typeIn and enter are the two halves of typing into an open cell editor: Fyne
-// hands OnSubmitted whatever is in the field, so a test that skips the first
-// half is testing a retype.
+// typeIn and enter are the two halves of typing into an open cell editor: the
+// editor is handed whatever is in the field, so a test that skips the first half
+// is testing a retype.
+//
+// Both of these and escape go through TypedKey rather than calling the callback
+// underneath, because which widget answers a key is now part of what is being
+// tested: press sends the same key to the grid instead.
 func typeIn(w *workspace, text string) { w.inline.SetText(text) }
-func enter(w *workspace)               { w.inline.OnSubmitted(w.inline.Text) }
+func enter(w *workspace)               { w.inline.TypedKey(&fyne.KeyEvent{Name: fyne.KeyReturn}) }
 
 func escape(w *workspace) {
 	w.inline.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEscape})
 }
+
+// press is a key struck with the grid focused, which is where Enter opens a cell
+// and the arrows move between them.
+func press(w *workspace, k fyne.KeyName) { w.table.TypedKey(&fyne.KeyEvent{Name: k}) }
 
 // The first click on a cell does what a click has always done: it chooses the
 // cell and points the editor bar at it, and nothing opens in the grid.
@@ -251,5 +260,87 @@ func TestTheKeyboardFollowsWhatIsBeingWorkedOn(t *testing.T) {
 	escape(w)
 	if got := s.win.Canvas().Focused(); got != fyne.Focusable(w.table) {
 		t.Errorf("focus = %T, want the grid back when the editor closes", got)
+	}
+}
+
+// Enter is the keyboard's way into a cell, and it has to reach exactly what a
+// second click reaches: the chosen cell, open on the value already in it.
+func TestEnterInTheGridOpensTheChosenCell(t *testing.T) {
+	s, w := loaded(t)
+
+	tap(w, s, 0, 2)
+	press(w, fyne.KeyReturn)
+
+	if !w.editing {
+		t.Fatal("Enter on the chosen cell did not open it")
+	}
+	if got := w.inline.Text; got != "1,204" {
+		t.Errorf("inline editor = %q, want the value already in the cell", got)
+	}
+	if got := s.win.Canvas().Focused(); got != fyne.Focusable(w.inline) {
+		t.Errorf("focus = %T, want the cell editor Enter opened", got)
+	}
+}
+
+// Enter opens the cell and Enter closes it again, so the whole edit is one key
+// struck twice with the value typed in between.
+func TestEnterOpensAndEnterCommits(t *testing.T) {
+	s, w := loaded(t)
+
+	tap(w, s, 0, 2)
+	press(w, fyne.KeyReturn)
+	typeIn(w, "1204")
+	enter(w)
+
+	if w.editing {
+		t.Error("the editor stayed open after the second Enter")
+	}
+	if got := w.sheet.At(0, 2); got != "1204" {
+		t.Errorf("cell = %q, want the typed value", got)
+	}
+	if got := s.win.Canvas().Focused(); got != fyne.Focusable(w.table) {
+		t.Errorf("focus = %T, want the grid back once the editor closed", got)
+	}
+}
+
+// A file with a header and no rows has no cell to open, and Enter on it must do
+// nothing rather than reach past the end of the sheet.
+func TestEnterOnASheetWithNoRowsOpensNothing(t *testing.T) {
+	s := newTestShell(t)
+	if err := s.load("empty.csv", strings.NewReader("date,region,units\n")); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	w := s.active()
+
+	press(w, fyne.KeyReturn)
+
+	if w.editing {
+		t.Error("Enter opened an editor on a sheet with no rows")
+	}
+}
+
+// The arrows move where you are, not just a rectangle: active, the editor bar
+// and the cell reference are one idea of it, and Enter opens the cell they name.
+func TestArrowKeysMoveTheChosenCell(t *testing.T) {
+	s, w := loaded(t)
+	s.win.Resize(fyne.NewSize(800, 600)) // lay the grid out, so the table can scroll
+
+	tap(w, s, 0, 2)
+	press(w, fyne.KeyDown)
+
+	if w.active.Row != 1 || w.active.Col != 2 {
+		t.Fatalf("active = %v, want the cell below the one clicked", w.active)
+	}
+	if got := w.editor.Text; got != "987" {
+		t.Errorf("editor bar = %q, want it following the arrows", got)
+	}
+	if got := s.cell.Text; got != "C2" {
+		t.Errorf("cell reference = %q, want C2", got)
+	}
+
+	press(w, fyne.KeyReturn)
+
+	if got := w.inline.Text; got != "987" {
+		t.Errorf("inline editor = %q, want the cell arrowed to, not the one clicked", got)
 	}
 }
