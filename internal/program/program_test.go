@@ -117,10 +117,20 @@ func TestDescribe(t *testing.T) {
 		{`trim() | replace(/,/, "")`, "trim the spaces off both ends, then remove commas"},
 		{`upper()`, "upper-case it"},
 
+		// A literal the QuoteMeta in the lattice can be inverted out of, and the
+		// anchored class rungs that lattice emits.
+		{`replace(/ kg/, "")`, `remove " kg"`},
+		{`replace(/SKU-/, "")`, `remove "SKU-"`},
+		{`replace(/[*]+$/, "")`, "remove asterisks from the end"},
+		{`replace(/^[#]+/, "")`, "remove hashes from the start"},
+		{`replace(/\//, "-")`, `replace slashes with "-"`},
+		{`replace(/[ ()\-]/, "")`, "remove spaces, brackets and dashes"},
+
 		// Nothing in the vocabulary names these, so they fall back to notation
 		// rather than to a description that glosses over what they do.
 		{`replace(/\d/, "")`, `replace(/\d/, "")`},
 		{`replace(/[^,]/, "")`, `replace(/[^,]/, "")`},
+		{`replace(/\s+/, " ")`, `replace(/\s+/, " ")`},
 		{`slice(0, -1)`, `slice(0, -1)`},
 	} {
 		t.Run(c.src, func(t *testing.T) {

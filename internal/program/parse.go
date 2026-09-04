@@ -295,13 +295,55 @@ var charNames = map[rune]string{
 	'_':  "underscores",
 	'\'': "apostrophes",
 	' ':  "spaces",
+	'*':  "asterisks",
+	'#':  "hashes",
+	'/':  "slashes",
+	'-':  "dashes",
+	'+':  "plus signs",
+	'(':  "brackets",
+	')':  "brackets",
+	'"':  "quotes",
+	'“':  "quotes",
+	'”':  "quotes",
 }
+
+// literalOf returns the text a pattern matches, when the pattern is that text and
+// nothing else. It inverts the QuoteMeta the deletion lattice applies, and refuses
+// anything it cannot invert exactly.
+func literalOf(src string) (string, bool) {
+	var b strings.Builder
+	for i := 0; i < len(src); i++ {
+		if c := src[i]; c == '\\' {
+			if i++; i >= len(src) || !isMeta(src[i]) {
+				return "", false
+			}
+			b.WriteByte(src[i])
+		} else if isMeta(c) {
+			return "", false
+		} else {
+			b.WriteByte(c)
+		}
+	}
+	return b.String(), b.Len() > 0
+}
+
+func isMeta(c byte) bool { return strings.IndexByte(`\.+*?()|[]{}^$`, c) >= 0 }
 
 // nameChars turns a pattern back into English when it is a plain literal or a
 // plain class of characters this vocabulary knows. Anything with an anchor, a
 // quantifier or a character it cannot name is refused, so Describe falls back
 // rather than describing a program approximately.
 func nameChars(src string) (string, bool) {
+	// The deletion lattice anchors its class rungs. Strip the anchor and say
+	// where it pointed, rather than refusing a program the recogniser offers.
+	where := ""
+	switch {
+	case strings.HasPrefix(src, "^") && strings.HasSuffix(src, "+"):
+		src, where = strings.TrimSuffix(src[1:], "+"), " from the start"
+	case strings.HasSuffix(src, "+$"):
+		src, where = strings.TrimSuffix(src, "+$"), " from the end"
+	}
+
 	body := src
 	if strings.HasPrefix(src, "[") && strings.HasSuffix(src, "]") {
 		body = src[1 : len(src)-1]
@@ -309,13 +351,20 @@ func nameChars(src string) (string, bool) {
 
 	var names []string
 	seen := map[string]bool{}
-	for i, r := range []rune(body) {
-		// A backslash escape inside the class is still one character to a
-		// reader, but working out which one is the regexp package's job.
-		if r == '\\' {
-			return "", false
-		}
-		if r == '^' && i == 0 {
+	rs := []rune(body)
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
+		switch {
+		case r == '\\':
+			// quoteClass escapes these four inside a class, and they are still
+			// one character to a reader. Any other escape — \d, \s — is a
+			// character set rather than a character, and naming it is the
+			// regexp package's job.
+			if i++; i >= len(rs) || !strings.ContainsRune(`]\^-`, rs[i]) {
+				return "", false
+			}
+			r = rs[i]
+		case r == '^' && i == 0:
 			return "", false // a negated class means the opposite of what we would say
 		}
 		n, ok := charNames[r]
@@ -331,7 +380,7 @@ func nameChars(src string) (string, bool) {
 		return "", false
 	}
 	if len(names) == 1 {
-		return names[0], true
+		return names[0] + where, true
 	}
-	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1], true
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1] + where, true
 }
