@@ -424,3 +424,52 @@ func TestOneDemonstrationCellWithoutTheSeparator(t *testing.T) {
 		t.Errorf("Apply = %q, want %q", got, want)
 	}
 }
+
+func TestProposesAParenthesisedNegative(t *testing.T) {
+	s := oneCol(t, "delta", "(1,204)", "(87)", "(3,010)", "(450)")
+	set(t, s, 0, 0, "-1204")
+	set(t, s, 1, 0, "-87")
+	set(t, s, 2, 0, "-3010")
+
+	p, ok := propose(t, s)
+	if !ok {
+		t.Fatal("no proposal from three parenthesised negatives")
+	}
+	if got, want := len(p.Prog), 2; got != want {
+		t.Fatalf("program %s has %d steps, want %d", p.Prog, got, want)
+	}
+	if got, want := p.Prog.Apply("(450)"), "-450"; got != want {
+		t.Errorf("Apply = %q, want %q", got, want)
+	}
+}
+
+func TestProposesAEuropeanDecimal(t *testing.T) {
+	s := oneCol(t, "amount", "1.204,50", "9.870,25", "2.000,00", "3.150,75")
+	set(t, s, 0, 0, "1204.50")
+	set(t, s, 1, 0, "9870.25")
+	set(t, s, 2, 0, "2000.00")
+
+	p, ok := propose(t, s)
+	if !ok {
+		t.Fatal("no proposal from three European decimals")
+	}
+	if got, want := p.Prog.Apply("3.150,75"), "3150.75"; got != want {
+		t.Errorf("Apply = %q, want %q", got, want)
+	}
+}
+
+// A one-step answer keeps its precedence over a two-step one.
+func TestCommasStayOneStep(t *testing.T) {
+	s := oneCol(t, "units", "1,204", "9,870", "3,010", "5,500")
+	set(t, s, 0, 0, "1204")
+	set(t, s, 1, 0, "9870")
+	set(t, s, 2, 0, "3010")
+
+	p, ok := propose(t, s)
+	if !ok {
+		t.Fatal("no proposal")
+	}
+	if got, want := len(p.Prog), 1; got != want {
+		t.Errorf("program %s has %d steps, want %d", p.Prog, got, want)
+	}
+}
