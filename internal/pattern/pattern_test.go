@@ -340,3 +340,42 @@ func TestVeryLongValuesAreNotAligned(t *testing.T) {
 		t.Errorf("proposed %q from values past the alignment bound", p.Prog)
 	}
 }
+
+func TestSpaceAtBothEndsIsATrim(t *testing.T) {
+	s := oneCol(t, "qty", " 45 ", "  7 ", " 120  ", " 9 ")
+	set(t, s, 0, 0, "45")
+	set(t, s, 1, 0, "7")
+	set(t, s, 2, 0, "120")
+
+	// Removing every space and trimming the ends agree on every value in this
+	// column, so it cannot say which was meant. What this pins is that there is
+	// an offer at all: before, spaces at both ends satisfied neither anchor and
+	// the column went unasked about. TestTrimmingANameColumn is where trim()
+	// has to win.
+	p, ok := propose(t, s)
+	if !ok {
+		t.Fatal("no proposal from three trims")
+	}
+	if got, want := p.Prog.Apply(" 9 "), "9"; got != want {
+		t.Errorf("Apply = %q, want %q", got, want)
+	}
+}
+
+// The value that separates trimming the ends from removing every space.
+func TestTrimmingANameColumn(t *testing.T) {
+	s := oneCol(t, "rep", " Ada Okafor ", " Bo Silva ", " Cy Tan ", " Di Vaz ")
+	set(t, s, 0, 0, "Ada Okafor")
+	set(t, s, 1, 0, "Bo Silva")
+	set(t, s, 2, 0, "Cy Tan")
+
+	p, ok := propose(t, s)
+	if !ok {
+		t.Fatal("no proposal from three trims")
+	}
+	if got, want := p.Prog.String(), "trim()"; got != want {
+		t.Errorf("program = %s, want %s", got, want)
+	}
+	if got, want := p.Prog.Apply(" Di Vaz "), "Di Vaz"; got != want {
+		t.Errorf("Apply = %q, want %q", got, want)
+	}
+}
