@@ -1,5 +1,8 @@
 # docs
 
+[SYNTHESIS.md](SYNTHESIS.md) is the work list for extending the recogniser: what each
+change touches, the test that pins it, and the command that proves it.
+
 `preview.gif` is the fourteen-second preview at the top of the README: uno
 opening `testdata/sales-q3.csv`, three flagged cells in `units` being fixed in
 place — clicked, clicked again to open them, retyped where they sit — and then
