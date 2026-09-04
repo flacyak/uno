@@ -11,6 +11,7 @@
 package pattern
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 
@@ -158,7 +159,52 @@ func (c column) propose() (Proposal, bool) {
 			return p, true
 		}
 	}
-	return Proposal{}, false
+	// Two steps where one will not do. The ranking comparator sorts by step
+	// count first, so a one-step program keeps its precedence and this is only
+	// ever reached by a column no single step explains.
+	return c.rank(compose(c.examples))
+}
+
+// maxFirstSteps bounds the fan-out. Each candidate costs a full induction over
+// every example.
+const maxFirstSteps = 8
+
+// compose builds the two-step programs, by clearing characters first and reading
+// what is left second. The first step comes from the characters the examples
+// lost rather than from a lattice that has to explain them, and what it leaves
+// is a shape the second step reads the same way in every row: (1,204) and (87)
+// have no decomposition in common until the comma is gone, and 1.204,50 and
+// 9.870,25 have no substitution in common until the full stop is.
+func compose(ex []example) []program.Program {
+	chars := droppedChars(ex)
+	if len(chars) == 0 || len(chars) > maxFirstSteps {
+		return nil
+	}
+
+	firsts := make([]string, 0, len(chars)+1)
+	for _, r := range chars {
+		firsts = append(firsts, replaceSrc(regexp.QuoteMeta(string(r)), ""))
+	}
+	if len(chars) > 1 {
+		firsts = append(firsts, replaceSrc("["+quoteClass(chars)+"]", ""))
+	}
+
+	var out []program.Program
+	for _, first := range parseAll(firsts) {
+		rest := make([]example, len(ex))
+		for i, e := range ex {
+			rest[i] = example{was: first.Apply(e.was), now: e.now}
+		}
+		for _, w := range witnesses {
+			for _, second := range induce(rest, w.each) {
+				if len(first)+len(second) > program.MaxSteps {
+					continue
+				}
+				out = append(out, append(slices.Clone(first), second...))
+			}
+		}
+	}
+	return out
 }
 
 func (c column) proposeFrom(w witness) (Proposal, bool) {
@@ -166,7 +212,12 @@ func (c column) proposeFrom(w witness) (Proposal, bool) {
 	if w.together != nil {
 		cands = append(cands, parseAll(w.together(c.examples))...)
 	}
+	return c.rank(cands)
+}
 
+// rank keeps the candidates that reproduce the examples and returns the best of
+// them as the question to ask.
+func (c column) rank(cands []program.Program) (Proposal, bool) {
 	// Verification is separate from induction on purpose. A witness function
 	// that generalises too far is a bug that shows up here as a candidate that
 	// does not reproduce an example, and it is dropped rather than ranked down:
