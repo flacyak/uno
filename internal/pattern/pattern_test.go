@@ -473,3 +473,65 @@ func TestCommasStayOneStep(t *testing.T) {
 		t.Errorf("program %s has %d steps, want %d", p.Prog, got, want)
 	}
 }
+
+// Each row is three demonstrated edits, the program they induce, and one
+// untouched value the program then claims.
+func TestTheShapesTheRecogniserReaches(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		values  []string // the column; the first three get edited
+		fixed   []string // what the person typed into them
+		want    string   // the program, in its text form
+		in, out string   // a value nobody touched, and what applying does to it
+	}{
+		{"commas", []string{"1,204", "9,870", "3,010", "5,500"},
+			[]string{"1204", "9870", "3010"}, `replace(/,/, "")`, "5,500", "5500"},
+		{"currency", []string{"$1,204", "$87", "$3,010", "$5,500"},
+			[]string{"1204", "87", "3010"}, `replace(/[$,]/, "")`, "$5,500", "5500"},
+		{"percent", []string{"12.5%", "3%", "88.1%", "40%"},
+			[]string{"12.5", "3", "88.1"}, `replace(/%/, "")`, "40%", "40"},
+		{"units", []string{"45 kg", "7 kg", "120 kg", "9 kg"},
+			[]string{"45", "7", "120"}, `replace(/ kg/, "")`, "9 kg", "9"},
+		{"footnote", []string{"1204*", "87*", "310*", "55*"},
+			[]string{"1204", "87", "310"}, `replace(/[*]+$/, "")`, "55*", "55"},
+		{"swiss separator", []string{"1'204", "9'870", "2'000", "3'150"},
+			[]string{"1204", "9870", "2000"}, `replace(/'/, "")`, "3'150", "3150"},
+		{"id prefix", []string{"SKU-00421", "SKU-00887", "SKU-01930", "SKU-00042"},
+			[]string{"00421", "00887", "01930"}, `replace(/SKU-/, "")`, "SKU-00042", "00042"},
+		{"phone", []string{"(555) 123-4567", "(212) 999-1000", "(310) 555-0101", "(415) 200-3000"},
+			[]string{"5551234567", "2129991000", "3105550101"},
+			`replace(/[ ()\-]/, "")`, "(415) 200-3000", "4152003000"},
+		{"case fold", []string{"ca", "ny", "tx", "wa"},
+			[]string{"CA", "NY", "TX"}, `upper()`, "wa", "WA"},
+		// "after the last @" and "after the first @" agree on every value here,
+		// so the tiebreak picks between them and this pins which.
+		{"email domain", []string{"ada@corp.com", "bo@acme.io", "cy@x.net", "di@q.org"},
+			[]string{"corp.com", "acme.io", "x.net"},
+			`slice(end(/@/, -1), len)`, "di@q.org", "q.org"},
+		// A name column rather than a quantity one: the interior space is what
+		// separates trimming the ends from removing every space.
+		{"trim", []string{" Ada Okafor ", " Bo Silva ", " Cy Tan ", " Di Vaz "},
+			[]string{"Ada Okafor", "Bo Silva", "Cy Tan"}, `trim()`, " Di Vaz ", "Di Vaz"},
+		{"date separator", []string{"2026/09/03", "2025/01/11", "2024/12/30", "2026/07/04"},
+			[]string{"2026-09-03", "2025-01-11", "2024-12-30"},
+			`replace(/[\/]+/, "-")`, "2026/07/04", "2026-07-04"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := oneCol(t, "col", c.values...)
+			for row, v := range c.fixed {
+				set(t, s, row, 0, v)
+			}
+
+			p, ok := propose(t, s)
+			if !ok {
+				t.Fatal("no proposal from three edits")
+			}
+			if got := p.Prog.String(); got != c.want {
+				t.Errorf("program = %s, want %s", got, c.want)
+			}
+			if got := p.Prog.Apply(c.in); got != c.out {
+				t.Errorf("Apply(%q) = %q, want %q", c.in, got, c.out)
+			}
+		})
+	}
+}
