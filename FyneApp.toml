@@ -6,6 +6,15 @@ Website = "https://github.com/flacyak/uno"
   Version = "0.2.0"
   Build   = 2
 
+  # `fyne package` requires an icon and fails with "Missing application icon"
+  # without one, so every release leg depends on this file. Declaring it here
+  # rather than passing -icon per invocation is what also puts it on the
+  # .desktop entry fyne generates.
+  #
+  # NOT YET PRESENT: Icon.png still has to be added at the repository root,
+  # square and at least 512x512 so the .icns macOS gets is usable.
+  Icon    = "Icon.png"
+
 # Consumed by `fyne package`. The .desktop file it generates carries no MimeType
 # line and cannot be made to, so it is not what registers .uno — see
 # packaging/README.md. What this does is keep the entry fyne produces from

@@ -11,6 +11,9 @@ import (
 	"github.com/flacyak/uno/internal/ui"
 )
 
+// Set by the linker at release time; see .github/workflows/release.yml.
+var version = "dev"
+
 func main() {
 	// The ID is what gives the app a preferences store and a per-user data
 	// directory, which is where later milestones keep the recents list.
