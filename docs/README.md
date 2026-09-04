@@ -1,7 +1,8 @@
 # docs
 
 `preview.gif` is the ten-second preview at the top of the README: uno opening
-`testdata/sales-q3.csv`, and one flagged cell being fixed.
+`testdata/sales-q3.csv`, and one flagged cell being fixed in place — clicked,
+clicked again to open it, and retyped where it sits.
 
 It is filmed, not drawn. The window is the real binary's, built with the `demo`
 tag so it drives itself through the script in
@@ -9,12 +10,13 @@ tag so it drives itself through the script in
 [internal/uitest](../internal/uitest) films it with grim and encodes the frames
 with ffmpeg.
 
-The app drives itself because nothing else can. The preview has to choose a cell
-and type into it, choosing a cell means clicking one, and Hyprland has
+The app drives itself because nothing else can. The preview has to click a cell,
+click it again to open it, and type into it where it sits; Hyprland has
 dispatchers for keys but none for a pointer button — so no compositor-level tool
-can reach the grid. The script goes through the same table selection, the same
-`commit` and the same status refresh a click would, so what is on film is the
-app rather than a mock-up of it.
+can reach the grid. The script enters at `tapCell`, the one call a cell makes
+when a pointer lands on it, so the selection, the editor, the `commit` and the
+status refresh are the ones real clicks would produce rather than a mock-up of
+them.
 
 ## Re-shooting it
 

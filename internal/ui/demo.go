@@ -21,9 +21,10 @@ import (
 // a cell means clicking one, and Hyprland offers dispatchers for keys but none
 // for a pointer button, so no compositor-level tool on this machine can reach
 // the grid. Driving the shell from inside is what makes the recording possible
-// at all — and it goes through the same commit, the same table selection and
-// the same status refresh a person's click would, so the pixels are the real
-// app rather than a mock-up of it.
+// at all — and it enters at tapCell, which is the one call a cell widget makes
+// when a pointer lands on it, so the selection, the editor that opens on the
+// second click, the commit and the status refresh are all the ones a person's
+// clicks would produce rather than a mock-up of them.
 
 // demoFile names the file the script opens. It is an environment variable
 // rather than an argument because the story starts on the empty drop target:
@@ -67,7 +68,8 @@ var (
 const (
 	beatOpen   = 1600 * time.Millisecond // the drop target has been read by now
 	beatSelect = 4200 * time.Millisecond // the grid and its type badges have
-	beatType   = 5400 * time.Millisecond // the editor bar is showing "1,204"
+	beatEdit   = 5000 * time.Millisecond // the flagged cell is highlighted
+	beatType   = 5600 * time.Millisecond // the caret is sitting in the cell
 	beatEnd    = 9000 * time.Millisecond
 
 	keystroke = 110 * time.Millisecond // fast enough to read, slow enough to see
@@ -105,26 +107,24 @@ func (s *Shell) runDemo(path string) {
 	at(beatOpen)
 	step(func() { s.OpenPaths([]string{path}) })
 
-	// The cell is chosen through the table, which is what moves the highlight,
-	// repoints the editor bar and updates the cell reference — one selection,
-	// three things on screen, exactly as a click leaves them.
+	// Both beats are clicks on the same square, through the same tapCell a
+	// pointer reaches. The first chooses the cell — highlight, editor bar and
+	// cell reference, three things on screen from one selection. The second
+	// opens it, which is the gesture the preview is now for: the fix happens in
+	// the grid, at the value, rather than at the top of the window.
 	at(beatSelect)
-	step(func() {
-		w := s.active()
-		if w == nil || w.table == nil {
-			return
-		}
-		w.table.Select(widget.TableCellID{Row: demoCell.Row, Col: demoCell.Col})
-		s.win.Canvas().Focus(w.editor) // the caret is what says it is typeable
-	})
+	step(func() { s.click(demoCell) })
+
+	at(beatEdit)
+	step(func() { s.click(demoCell) })
 
 	// The value is typed a character at a time rather than assigned, because a
 	// field that fills instantly reads as a screenshot rather than as an edit.
 	at(beatType)
 	for i := range demoValue {
 		step(func() {
-			if w := s.active(); w != nil && w.editor != nil {
-				w.editor.SetText(demoValue[:i+1])
+			if w := s.active(); w != nil && w.editing {
+				w.inline.SetText(demoValue[:i+1])
 			}
 		})
 		time.Sleep(keystroke)
@@ -133,7 +133,7 @@ func (s *Shell) runDemo(path string) {
 	time.Sleep(preEnter)
 	step(func() {
 		if w := s.active(); w != nil {
-			s.commit(w, demoValue) // the same call OnSubmitted makes
+			s.endEdit(w, true) // the same call Enter in the cell makes
 		}
 	})
 
@@ -141,6 +141,18 @@ func (s *Shell) runDemo(path string) {
 	// tab carries its dot, and a looping preview holds there long enough to be
 	// read before it starts over.
 	at(beatEnd)
+}
+
+// click is one press on a cell of the grid, at the point a real one lands: the
+// cell widget's Tapped calls exactly this. Going through it rather than through
+// table.Select is what makes the second click open the editor instead of being
+// a selection the table discards for naming the cell it already holds.
+func (s *Shell) click(at document.Cell) {
+	w := s.active()
+	if w == nil || w.table == nil {
+		return
+	}
+	s.tapCell(w, widget.TableCellID{Row: at.Row, Col: at.Col})
 }
 
 // waitForCue blocks until the recorder has a camera running, or until it is
