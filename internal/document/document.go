@@ -13,10 +13,20 @@ import (
 	"github.com/flacyak/uno/internal/sheet"
 )
 
-// formatVersion is the layout this build writes and the highest it reads. It is
-// the public API of uno: everything under internal/ can be reshaped on any
-// afternoon, but a .uno travels to other machines and stays readable there.
-const formatVersion = 1
+// formatVersion is the highest layout this build reads, and the highest it
+// writes. It is the public API of uno: everything under internal/ can be
+// reshaped on any afternoon, but a .uno travels to other machines and stays
+// readable there.
+//
+// A file declares the lowest version that can read it rather than this one, so a
+// workspace holding nothing a uno 0.2 could not replay still opens in uno 0.2.
+// The alternative is that adding an operation nobody used locks every file the
+// release touches out of every build before it.
+const formatVersion = 2
+
+// baseVersion is what a log of nothing but single-cell edits needs, which is
+// every file uno wrote before the recogniser existed.
+const baseVersion = 1
 
 const generator = "uno 0.2.0"
 

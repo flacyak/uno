@@ -22,6 +22,7 @@ type Shell struct {
 	tabs   *container.DocTabs
 	status *widget.Label
 	cell   *widget.Label
+	bar    *proposalBar
 	undoIt *fyne.MenuItem
 	byTab  map[*container.TabItem]*workspace
 }
@@ -109,8 +110,13 @@ func (s *Shell) Content() fyne.CanvasObject {
 
 	// The cell reference sits at the trailing end of the same bar, which is
 	// where a spreadsheet says which cell you are in.
-	bar := container.NewBorder(nil, nil, nil, s.cell, s.status)
-	return container.NewBorder(nil, bar, nil, nil, s.tabs)
+	status := container.NewBorder(nil, nil, nil, s.cell, s.status)
+	window := container.NewBorder(nil, status, nil, nil, s.tabs)
+
+	// The recogniser's question rides above all of it, anchored to the bottom
+	// edge it slides in from.
+	s.bar = s.newProposalBar()
+	return container.New(s.bar.lay, window, s.bar.box)
 }
 
 // active returns the workspace behind the selected tab, or nil when there is none.
@@ -132,6 +138,7 @@ func (s *Shell) refreshStatus() {
 	}
 	s.refreshTabs()
 	s.refreshUndo(w)
+	s.showProposal() // the question follows the selected tab, like everything else here
 	s.win.SetTitle(titleFor(w))
 }
 
@@ -169,6 +176,7 @@ func (s *Shell) undo() {
 	// re-read it instead of being told which cell moved.
 	w.table.Refresh()
 	w.showActive()
+	s.rescan(w) // the log is shorter, so what it supports may have changed
 	s.refreshStatus()
 }
 

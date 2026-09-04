@@ -3,6 +3,8 @@ package sheet
 import (
 	"fmt"
 	"slices"
+
+	"github.com/flacyak/uno/internal/program"
 )
 
 // Edit is one recorded change, and the unit the .uno edit log stores. A sheet
@@ -16,32 +18,70 @@ import (
 type Edit struct {
 	Seq int    `json:"seq"`
 	Op  string `json:"op"`
-	Row int    `json:"row"` // position today; identity from M2 (I-2)
+	Row int    `json:"row"` // position today, NoRow on a column op; identity from M2 (I-2)
 	Col int    `json:"col"`
 	Was string `json:"was,omitempty"`
+
+	// Now is the cell's new value under OpSet, and the program text under
+	// OpApply. One field rather than two because they are the same thing at
+	// different scopes — what this operation makes the data say — and a second
+	// field would have to be empty in every line of every log written so far.
 	Now string `json:"now"`
 }
 
-// OpSet is the only operation M1 writes. It is spelled out in the file so that
-// M2's row-spanning rules can be told apart from single cells by a reader that
-// predates them.
-const OpSet = "set"
+// The operations. Each is spelled out in the file so a reader that predates one
+// of them can tell a row-spanning rule from a single cell rather than guessing
+// from which fields happen to be set.
+const (
+	// OpSet is one cell, and the only operation M1 wrote.
+	OpSet = "set"
+
+	// OpApply is a program run over a whole column: the transformation the
+	// recogniser induced from a handful of edits and the person agreed to. It
+	// carries no Was, because thousands of old values are not a field, which is
+	// why undo replays the log rather than reversing it.
+	OpApply = "apply"
+)
+
+// NoRow is what a column-spanning op stores in Row. A log is read by people
+// with unzip as well as by uno, and -1 says "this one is not about a row" where
+// a plausible 0 would quietly point at the first one.
+const NoRow = -1
 
 // Set applies an edit and records it. It is the only way the grid changes a
-// value, so the log can never fall behind the data it describes.
+// single value, so the log can never fall behind the data it describes.
 //
 // An out-of-range cell cannot come from the grid, which only offers cells that
 // exist, so it means a log that does not belong to these bytes. That is worth an
 // error rather than a silent no-op.
 func (s *Sheet) Set(row, col int, v string) error {
-	e := Edit{
-		Seq: len(s.edits) + 1,
+	return s.record(Edit{
 		Op:  OpSet,
 		Row: row,
 		Col: col,
 		Was: s.At(row, col),
 		Now: v,
-	}
+	})
+}
+
+// Apply runs a program over every value in a column and records it as one
+// operation. It is the door a pattern proposal comes through, and the reason
+// the log stays proportional to what a person did rather than to how much data
+// they did it to: 3,149 cells change and one line is written.
+func (s *Sheet) Apply(col int, p program.Program) error {
+	return s.record(Edit{
+		Op:  OpApply,
+		Row: NoRow,
+		Col: col,
+		Now: p.String(),
+	})
+}
+
+// record numbers an edit, applies it, and keeps it. Set and Apply differ only
+// in the edit they hand over, so there is one path through mutation and
+// re-inference and no way for one of them to forget a step.
+func (s *Sheet) record(e Edit) error {
+	e.Seq = len(s.edits) + 1
 	if err := s.mutate(e); err != nil {
 		return err
 	}
@@ -94,20 +134,29 @@ func (s *Sheet) Edits() []Edit {
 	return out
 }
 
-// mutate changes the data and nothing else, so Set and Replay share one path
-// through the bounds checks and the padding and differ only in what they do
-// around it.
+// mutate changes the data and nothing else, so recording and replaying share one
+// path through the checks and differ only in what they do around it.
 func (s *Sheet) mutate(e Edit) error {
-	if e.Op != OpSet {
-		return fmt.Errorf("edit %d: unknown operation %q", e.Seq, e.Op)
-	}
-	if e.Row < 0 || e.Row >= len(s.rows) {
-		return fmt.Errorf("edit %d: row %d is outside the %d rows of this sheet",
-			e.Seq, e.Row, len(s.rows))
-	}
+	// Every operation names a column, whatever it does to the rows under it.
 	if e.Col < 0 || e.Col >= len(s.Columns) {
 		return fmt.Errorf("edit %d: column %d is outside the %d columns of this sheet",
 			e.Seq, e.Col, len(s.Columns))
+	}
+
+	switch e.Op {
+	case OpSet:
+		return s.setCell(e)
+	case OpApply:
+		return s.runProgram(e)
+	default:
+		return fmt.Errorf("edit %d: unknown operation %q", e.Seq, e.Op)
+	}
+}
+
+func (s *Sheet) setCell(e Edit) error {
+	if e.Row < 0 || e.Row >= len(s.rows) {
+		return fmt.Errorf("edit %d: row %d is outside the %d rows of this sheet",
+			e.Seq, e.Row, len(s.rows))
 	}
 
 	// Ragged rows are normal in real exports, so a cell can be edited into
@@ -119,6 +168,30 @@ func (s *Sheet) mutate(e Edit) error {
 		s.rows[e.Row] = grown
 	}
 	s.rows[e.Row][e.Col] = e.Now
+	return nil
+}
+
+// runProgram rewrites one column in place.
+//
+// The program is parsed here rather than carried in the Edit, because an Edit is
+// what a file holds and a file holds text. A log that names a program this build
+// cannot read fails before a single cell moves, which is the difference between
+// refusing to open a workspace and half-transforming one.
+//
+// Short rows are skipped rather than padded. A transform rewrites values that
+// are there; a row that never had this column has no value for it to be wrong
+// about, and inventing an empty cell would change the shape of the data on the
+// strength of an inference.
+func (s *Sheet) runProgram(e Edit) error {
+	p, err := program.Parse(e.Now)
+	if err != nil {
+		return fmt.Errorf("edit %d: %w", e.Seq, err)
+	}
+	for _, row := range s.rows {
+		if e.Col < len(row) {
+			row[e.Col] = p.Apply(row[e.Col])
+		}
+	}
 	return nil
 }
 

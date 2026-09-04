@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/flacyak/uno/internal/ingest"
+	"github.com/flacyak/uno/internal/program"
 	"github.com/flacyak/uno/internal/sheet"
 )
 
@@ -134,8 +135,10 @@ func TestTheManifestIsMeasuredFromTheBytes(t *testing.T) {
 	}
 	m := doc.Manifest
 
-	if m.Format != formatVersion {
-		t.Errorf("format = %d, want %d", m.Format, formatVersion)
+	// This log is single-cell edits and nothing else, so the file says the
+	// oldest build that could replay it rather than the one that wrote it.
+	if m.Format != baseVersion {
+		t.Errorf("format = %d, want %d", m.Format, baseVersion)
 	}
 	if m.Source.Bytes != len(csvBody) {
 		t.Errorf("source bytes = %d, want %d", m.Source.Bytes, len(csvBody))
@@ -188,13 +191,13 @@ func TestASecondSaveKeepsTheCreatedTime(t *testing.T) {
 // silently drop what it did not recognise, so it refuses and names both versions.
 func TestANewerFormatIsRefusedByName(t *testing.T) {
 	path, _ := saved(t, "sales-q3.csv", nil)
-	rewriteManifest(t, path, func(m *Manifest) { m.Format = 2 })
+	rewriteManifest(t, path, func(m *Manifest) { m.Format = formatVersion + 1 })
 
 	_, err := Read(path)
 	if err == nil {
 		t.Fatal("want a refusal, got nil")
 	}
-	for _, want := range []string{"sales-q3.uno", "format 2", "reads 1"} {
+	for _, want := range []string{"sales-q3.uno", "format 3", "reads 2"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
@@ -447,5 +450,74 @@ func addEntry(t *testing.T, path, name string, body []byte) {
 	}
 	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
 		t.Fatalf("replace: %v", err)
+	}
+}
+
+// stripCommas is the operation the recogniser proposes for this fixture's units
+// column, applied the way a person accepting a proposal applies it.
+func stripCommas(t *testing.T) func(*sheet.Sheet) {
+	t.Helper()
+	p, err := program.Parse(`replace(/,/, "")`)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	return func(sh *sheet.Sheet) {
+		if err := sh.Apply(2, p); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+	}
+}
+
+// A file declares the oldest build that could replay it. An operation nobody
+// used must not lock every file this release touches out of every build before
+// it, and one that was used must be refused by name rather than failing halfway
+// through a replay.
+func TestTheFormatVersionFollowsTheLog(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		edit func(*sheet.Sheet)
+		want int
+	}{
+		{"an empty log", nil, baseVersion},
+		{"single cells only", func(sh *sheet.Sheet) {
+			if err := sh.Set(0, 2, "1204"); err != nil {
+				t.Fatalf("Set: %v", err)
+			}
+		}, baseVersion},
+		{"a column op", stripCommas(t), formatVersion},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			path, _ := saved(t, "sales-q3.csv", c.edit)
+
+			doc, err := Read(path)
+			if err != nil {
+				t.Fatalf("Read: %v", err)
+			}
+			if got := doc.Manifest.Format; got != c.want {
+				t.Errorf("format = %d, want %d", got, c.want)
+			}
+		})
+	}
+}
+
+// A column op has to survive the round trip and rebuild the same column, since
+// one line of the log is the only record of what happened to thousands of cells.
+func TestAColumnOpRoundTrips(t *testing.T) {
+	path, _ := saved(t, "sales-q3.csv", stripCommas(t))
+
+	doc, err := Read(path)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	for row, want := range map[int]string{0: "1204", 1: "987", 2: "1455"} {
+		if got := doc.Sheet.At(row, 2); got != want {
+			t.Errorf("cell (%d,2) = %q, want %q", row, got, want)
+		}
+	}
+	if n := len(doc.Edits); n != 1 {
+		t.Errorf("log = %d entries, want the one operation that did it", n)
+	}
+	if c := doc.Sheet.Columns[2]; c.Kind != sheet.KindNum || c.Flagged {
+		t.Errorf("units = %v flagged=%v, want num and unflagged", c.Kind, c.Flagged)
 	}
 }

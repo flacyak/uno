@@ -11,7 +11,7 @@ import (
 
 // previewRun is how long the recorder films for. It is the script's own length
 // in internal/ui/demo.go plus a moment, so the last beat is held rather than cut.
-const previewRun = 9500 * time.Millisecond
+const previewRun = 14000 * time.Millisecond
 
 // minDistinctFrames is the floor for a recording that actually caught the app
 // doing something. The script has five visible states and types four
