@@ -36,8 +36,8 @@ const sampleRows = 200
 //
 // The flagged case is the one worth being precise about. A column is flagged
 // when every value would be a number but for a formatting convention the parser
-// does not accept — thousands separators, in practice. That is a stricter test
-// than "mostly numeric", and deliberately so: a column of numbers with the odd
+// does not accept: a separator, a currency mark, a percent sign. That is a
+// stricter test than "mostly numeric", and deliberately so: a column with the odd
 // "N/A" in it is genuinely mixed, whereas a column where 1,204 sits beside 987
 // is numeric data wearing a costume, and it is the second that M2 offers to fix.
 func inferKind(rows [][]string, col int) (kind Kind, flagged bool) {
@@ -57,7 +57,7 @@ func inferKind(rows [][]string, col int) (kind Kind, flagged bool) {
 			dates++
 		case isNumber(v):
 			nums++
-		case isNumber(strings.ReplaceAll(v, ",", "")):
+		case isNumber(undress(v)):
 			formatted++
 		}
 	}
@@ -74,6 +74,23 @@ func inferKind(rows [][]string, col int) (kind Kind, flagged bool) {
 	default:
 		return KindText, false
 	}
+}
+
+// decoration is what a number wears when it was formatted for a reader rather
+// than for a parser. The set is fixed and short, and leaves out the full stop:
+// the badge claims a column is numeric data in a costume, and a wider set would
+// let it claim that about text.
+const decoration = ",$£€%' "
+
+// undress strips that formatting, for the badge to ask whether what is left is a
+// number. It changes no value.
+func undress(v string) string {
+	return strings.Map(func(r rune) rune {
+		if strings.ContainsRune(decoration, r) {
+			return -1
+		}
+		return r
+	}, v)
 }
 
 // isNumber is deliberately stricter than strconv.ParseFloat alone. ParseFloat
