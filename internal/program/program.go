@@ -149,7 +149,11 @@ func (s replaceStep) String() string {
 func (s replaceStep) describe() string {
 	what, ok := nameChars(s.src)
 	if !ok {
-		return s.String()
+		lit, isLit := literalOf(s.src)
+		if !isLit {
+			return s.String()
+		}
+		what = strconv.Quote(lit)
 	}
 	if s.lit == "" {
 		return "remove " + what
