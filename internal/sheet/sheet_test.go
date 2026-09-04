@@ -69,6 +69,36 @@ func TestInferKind(t *testing.T) {
 	}
 }
 
+// The costume a number wears is not always a comma.
+func TestInferKindFlagsTheOtherDecorations(t *testing.T) {
+	s := New("t.csv",
+		[]string{"amount", "rate", "swiss", "spaced", "mixed"},
+		[][]string{
+			{"$1,204", "12.5%", "1'204", "1 204", "$1,204"},
+			{"$87", "3%", "9'870", "9 870", "N/A"},
+			{"$3,010", "88.1%", "2'000", "2 000", "$3,010"},
+		},
+	)
+
+	for _, c := range []struct {
+		col         int
+		wantKind    Kind
+		wantFlagged bool
+	}{
+		{0, KindText, true},  // currency and separators
+		{1, KindText, true},  // percent
+		{2, KindText, true},  // apostrophe separator
+		{3, KindText, true},  // space separator
+		{4, KindText, false}, // a genuine non-number keeps it mixed
+	} {
+		got := s.Columns[c.col]
+		if got.Kind != c.wantKind || got.Flagged != c.wantFlagged {
+			t.Errorf("column %q: kind=%v flagged=%v, want kind=%v flagged=%v",
+				got.Header, got.Kind, got.Flagged, c.wantKind, c.wantFlagged)
+		}
+	}
+}
+
 // A column of numbers with genuinely non-numeric values in it is mixed, not
 // misformatted, so it must not raise the flag M2 acts on.
 func TestInferKindDoesNotFlagGenuinelyMixedColumns(t *testing.T) {
