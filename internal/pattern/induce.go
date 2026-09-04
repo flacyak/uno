@@ -126,8 +126,8 @@ func rewrites(was, now string) []string {
 	switch {
 	case len(dels) > 0 && len(ins) == 0:
 		out = append(out, deletions(a, dels)...)
-	case len(dels) == 1 && len(ins) == 1:
-		out = append(out, substitutions(dels[0], ins[0])...)
+	case len(dels) == len(ins) && len(dels) > 0:
+		out = append(out, substitutions(dels, ins)...)
 	}
 	return out
 }
@@ -201,8 +201,24 @@ func deletions(a []rune, dels []run) []string {
 	return out
 }
 
-// substitutions generalises "this stretch became that one".
-func substitutions(d, i run) []string {
+// substitutions generalises "this stretch became that one", once or many times.
+// Many times only when it is the same stretch becoming the same thing, which is
+// one rule the person applied more than once: 2026/09/03 has two slashes and one
+// rule, and a value where two different stretches changed has no single rule in
+// it to find.
+func substitutions(dels, ins []run) []string {
+	d, i := dels[0], ins[0]
+	for _, r := range dels[1:] {
+		if r.text != d.text {
+			return nil
+		}
+	}
+	for _, r := range ins[1:] {
+		if r.text != i.text {
+			return nil
+		}
+	}
+
 	out := []string{replaceSrc(regexp.QuoteMeta(d.text), i.text)}
 
 	chars := []rune(d.text)

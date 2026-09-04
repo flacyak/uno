@@ -379,3 +379,28 @@ func TestTrimmingANameColumn(t *testing.T) {
 		t.Errorf("Apply = %q, want %q", got, want)
 	}
 }
+
+// A date column is the other one whose badge a fix can flip.
+func TestProposesADateSeparator(t *testing.T) {
+	s := oneCol(t, "closed", "2026/09/03", "2025/01/11", "2024/12/30", "2026/07/04")
+	set(t, s, 0, 0, "2026-09-03")
+	set(t, s, 1, 0, "2025-01-11")
+	set(t, s, 2, 0, "2024-12-30")
+
+	p, ok := propose(t, s)
+	if !ok {
+		t.Fatal("no proposal from three date separators")
+	}
+	// The literal /\// and the class /[\/]+/ both explain the examples and agree
+	// on every value in the column, so the tiebreak picks between them and this
+	// pins which one it picks.
+	if got, want := p.Prog.String(), `replace(/[\/]+/, "-")`; got != want {
+		t.Errorf("program = %s, want %s", got, want)
+	}
+	if err := s.Apply(p.Col, p.Prog); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := s.Columns[0].Kind, sheet.KindDate; got != want {
+		t.Errorf("after apply, Kind = %v, want %v", got, want)
+	}
+}
