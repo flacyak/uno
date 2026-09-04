@@ -232,6 +232,53 @@ func substitutions(dels, ins []run) []string {
 	return out
 }
 
+// droppedChars is every character the examples lost, across all of them.
+// Insertions are ignored: a caller wanting a whole transformation checks that,
+// a caller wanting a first step does not.
+func droppedChars(ex []example) []rune {
+	var chars []rune
+	seen := map[rune]bool{}
+	for _, e := range ex {
+		a, b := []rune(e.was), []rune(e.now)
+		if len(a) > maxDiff || len(b) > maxDiff {
+			return nil
+		}
+		dels, _, ok := align(a, b)
+		if !ok {
+			return nil
+		}
+		for _, d := range dels {
+			for _, r := range d.text {
+				if !seen[r] {
+					seen[r] = true
+					chars = append(chars, r)
+				}
+			}
+		}
+	}
+	slices.Sort(chars)
+	return chars
+}
+
+// unionDeletion is droppedChars as a candidate, for the columns whose decoration
+// only some rows wear: $1,204 offers [$,] and $87 offers [$], the intersection of
+// those two is empty, and [$,] is what both meant.
+//
+// This is the one reading that is not intersected, so it is offered rather than
+// concluded: explains decides whether it stands.
+func unionDeletion(ex []example) []string {
+	for _, e := range ex {
+		if _, ins, ok := align([]rune(e.was), []rune(e.now)); !ok || len(ins) > 0 {
+			return nil
+		}
+	}
+	chars := droppedChars(ex)
+	if len(chars) == 0 {
+		return nil
+	}
+	return []string{replaceSrc("["+quoteClass(chars)+"]", "")}
+}
+
 func replaceSrc(re, lit string) string {
 	return "replace(" + "/" + strings.ReplaceAll(re, "/", `\/`) + "/, " + strconv.Quote(lit) + ")"
 }

@@ -404,3 +404,23 @@ func TestProposesADateSeparator(t *testing.T) {
 		t.Errorf("after apply, Kind = %v, want %v", got, want)
 	}
 }
+
+// The decoration a column wears is not worn by every row in it, and the three
+// rows a person demonstrates on are not chosen to be representative.
+func TestOneDemonstrationCellWithoutTheSeparator(t *testing.T) {
+	s := oneCol(t, "amount", "$1,204", "$87", "$3,010", "$450", "$12,900")
+	set(t, s, 0, 0, "1204")
+	set(t, s, 1, 0, "87") // under a thousand: no comma to remove
+	set(t, s, 2, 0, "3010")
+
+	p, ok := propose(t, s)
+	if !ok {
+		t.Fatal("no proposal from three currency fixes")
+	}
+	if got, want := p.Prog.String(), `replace(/[$,]/, "")`; got != want {
+		t.Errorf("program = %s, want %s", got, want)
+	}
+	if got, want := p.Prog.Apply("$12,900"), "12900"; got != want {
+		t.Errorf("Apply = %q, want %q", got, want)
+	}
+}

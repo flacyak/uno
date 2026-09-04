@@ -125,6 +125,17 @@ func (sn Snapshot) Propose() (Proposal, bool) {
 	return Proposal{}, false
 }
 
+// witness is the two ways to read a set of examples: one at a time, whose
+// candidate sets are intersected, and all at once, whose candidates are not.
+// Intersecting asks what the examples have in common, which is the right
+// question and the whole of the design — but a column whose decoration only some
+// rows wear has its answer in their union instead. together is nil for a witness
+// with no such reading.
+type witness struct {
+	each     func(was, now string) []string
+	together func(ex []example) []string
+}
+
 // witnesses are tried in order, and the first that yields a proposal for this
 // column wins.
 //
@@ -136,7 +147,10 @@ func (sn Snapshot) Propose() (Proposal, bool) {
 // a time is what keeps one reading from answering for the other: three cells
 // that each look like a deletion in isolation, and like nothing together, are a
 // column the second reading should still get to look at.
-var witnesses = []func(was, now string) []string{rewrites, restructures}
+var witnesses = []witness{
+	{each: rewrites, together: unionDeletion},
+	{each: restructures},
+}
 
 func (c column) propose() (Proposal, bool) {
 	for _, w := range witnesses {
@@ -147,15 +161,26 @@ func (c column) propose() (Proposal, bool) {
 	return Proposal{}, false
 }
 
-func (c column) proposeFrom(witness func(was, now string) []string) (Proposal, bool) {
+func (c column) proposeFrom(w witness) (Proposal, bool) {
+	cands := induce(c.examples, w.each)
+	if w.together != nil {
+		cands = append(cands, parseAll(w.together(c.examples))...)
+	}
+
 	// Verification is separate from induction on purpose. A witness function
 	// that generalises too far is a bug that shows up here as a candidate that
 	// does not reproduce an example, and it is dropped rather than ranked down:
 	// a program that cannot reproduce what it was induced from has no claim on
 	// anything else in the column.
+	//
+	// The two readings can land on the same program, and a duplicate at the top
+	// of the ranking would compare a program with itself and report a column
+	// unambiguous that is not.
 	var kept []program.Program
-	for _, p := range induce(c.examples, witness) {
-		if c.explains(p) {
+	seen := map[string]bool{}
+	for _, p := range cands {
+		if s := p.String(); !seen[s] && c.explains(p) {
+			seen[s] = true
 			kept = append(kept, p)
 		}
 	}
