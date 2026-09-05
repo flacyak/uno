@@ -58,12 +58,28 @@ func (s *Shell) openDocument(path string) error {
 	w.manifest = doc.Manifest
 	w.extra = doc.Extra
 	w.active = doc.State.Active
+	w.formulaRefs = refsByColumn(doc.State.ColumnFormulas)
 	w.savedLog = doc.Edits // what is in the file, so a fresh open is clean
 
 	s.fill(w, doc.Sheet, doc.Raw)
 	s.tabs.Select(w.tab)
 	s.refreshStatus()
 	return nil
+}
+
+// refsByColumn turns the saved list back into the lookup the drawer uses. A
+// reference that names a formula this machine does not have is kept rather than
+// dropped, so saving the file again does not quietly strip what the sender knew
+// about it.
+func refsByColumn(list []document.ColumnFormula) map[int]string {
+	if len(list) == 0 {
+		return nil
+	}
+	out := make(map[int]string, len(list))
+	for _, cf := range list {
+		out[cf.Col] = cf.Ref
+	}
+	return out
 }
 
 // target is the workspace an opened file lands in: the active one while it is
