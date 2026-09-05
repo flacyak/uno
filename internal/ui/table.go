@@ -22,6 +22,24 @@ const (
 	cellPadding = 24
 )
 
+// grid is the sheet's table: a widget.Table in every respect but Enter. The
+// table itself does nothing with that key, and someone working the grid from the
+// keyboard needs the same way into a cell that a second click is.
+type grid struct {
+	widget.Table
+
+	s *Shell
+	w *workspace
+}
+
+func (g *grid) TypedKey(k *fyne.KeyEvent) {
+	if k.Name == fyne.KeyReturn || k.Name == fyne.KeyEnter {
+		g.s.beginEdit(g.w) // which guards an empty sheet and an editor already open
+		return
+	}
+	g.Table.TypedKey(k)
+}
+
 // newTable binds a grid to a workspace. widget.Table only builds the cells it
 // can see and recycles them as you scroll, so a 4,812-row file costs the same to
 // display as a 20-row one. The price is that update runs constantly, so it must
@@ -30,14 +48,21 @@ const (
 // It reads through the workspace rather than closing over one sheet because undo
 // rebuilds the sheet from the raw bytes and puts a new one in its place. Binding
 // to the workspace is what lets that swap be a Refresh rather than a new grid.
-func (s *Shell) newTable(w *workspace) *widget.Table {
-	tbl := widget.NewTable(
-		func() (int, int) { return w.sheet.Rows(), w.sheet.Cols() },
-		func() fyne.CanvasObject { return s.newCell(w) },
-		func(id widget.TableCellID, o fyne.CanvasObject) {
-			o.(*cell).show(id)
-		},
-	)
+func (s *Shell) newTable(w *workspace) *grid {
+	tbl := &grid{s: s, w: w}
+	tbl.Length = func() (int, int) { return w.sheet.Rows(), w.sheet.Cols() }
+	tbl.CreateCell = func() fyne.CanvasObject { return s.newCell(w) }
+	tbl.UpdateCell = func(id widget.TableCellID, o fyne.CanvasObject) {
+		o.(*cell).show(id)
+	}
+	tbl.ExtendBaseWidget(tbl)
+
+	// The table moves a highlight with the arrow keys and only promotes it to a
+	// selection on Space. uno has one idea of where you are — active, the editor
+	// bar and the cell reference all follow the selection — so the highlight is
+	// not allowed to be somewhere else. Select sets the highlight itself and does
+	// not call back here, so this settles rather than loops.
+	tbl.OnHighlighted = func(id widget.TableCellID) { tbl.Select(id) }
 
 	// Header row carries the column names and type badges; header column is the
 	// row-number gutter. Neither is part of the data, so neither shifts indices.

@@ -22,7 +22,7 @@ import (
 // owns, so a change made in one file can never reach another.
 type workspace struct {
 	sheet  *sheet.Sheet
-	table  *widget.Table
+	table  *grid
 	editor *widget.Entry
 	tab    *container.TabItem
 
@@ -141,6 +141,12 @@ func (s *Shell) fill(w *workspace, sh *sheet.Sheet, raw []byte) {
 		// a scroll position stored as a row identity rather than as an offset.
 		w.table.ScrollToTop()
 		w.table.ScrollToLeading()
+
+		// A file that has just opened has a cell chosen and nothing else worth
+		// typing into, so the grid takes the keyboard: without this the arrows
+		// and Enter do nothing until something has been clicked, which makes the
+		// keyboard a thing you reach by using the mouse first.
+		s.focus(w.table)
 	}
 
 	// A .uno reopened part-way through fixing a column arrives with the examples

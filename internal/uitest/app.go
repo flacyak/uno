@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/flacyak/uno/internal/ui"
 )
 
 // paintSettle is how long the window is given to finish its first frame after
@@ -17,9 +19,9 @@ import (
 // how a screenshot test produces a convincing-looking blank.
 const paintSettle = 900 * time.Millisecond
 
-// floatSettle is how long the float dispatch is given to finish. Hyprland
-// animates the move out of the tile, and reading the geometry mid-animation
-// returns a rectangle the window is only passing through.
+// floatSettle is how long the float and resize dispatches are given to finish.
+// Hyprland animates both, and reading the geometry mid-animation returns a
+// rectangle the window is only passing through.
 const floatSettle = 500 * time.Millisecond
 
 // repoRoot is the directory holding go.mod, which is where testdata lives.
@@ -63,11 +65,8 @@ func build(t *testing.T, tags ...string) string {
 // launch starts uno and waits until its window is mapped and painted, returning
 // where that window sits. The process is killed when the test ends.
 //
-// The window is floated on the way, so what is captured is the 1100x720 main.go
-// asks for rather than whatever slot the compositor's layout had free. Under a
-// tiling WM a captured size is otherwise a fact about the desktop the run
-// happened on, and two machines produce differently cropped artefacts from the
-// same code.
+// The window is reframed on the way, so what is captured is the size main.go
+// asks for rather than whatever slot the compositor's layout had free.
 func launch(t *testing.T, bin string, args ...string) rect {
 	t.Helper()
 
@@ -87,32 +86,53 @@ func launch(t *testing.T, bin string, args ...string) rect {
 		t.Fatalf("waiting for the uno window: %v", err)
 	}
 
-	if err := float(cmd.Process.Pid); err != nil {
-		t.Fatalf("floating the uno window: %v", err)
+	if err := reframe(cmd.Process.Pid); err != nil {
+		t.Fatalf("framing the uno window: %v", err)
 	}
-	// Floating moves and resizes the window, so where it sits has to be read
+	// Framing moves and resizes the window, so where it sits has to be read
 	// again; the first answer described the tile it has just left.
 	if r, err = windowFor(cmd.Process.Pid, 5*time.Second); err != nil {
-		t.Fatalf("waiting for the floated uno window: %v", err)
+		t.Fatalf("waiting for the framed uno window: %v", err)
 	}
 
 	time.Sleep(paintSettle)
 	return r
 }
 
-// float asks Hyprland to unfloat the window from its tile. A floating window
-// keeps the size its client asked for, which is what makes 1100x720 the size on
-// disk without this having to name a number of its own.
+// reframe lifts the window out of its tile and gives it the size uno asks for, so
+// what is captured is the same rectangle on every machine.
+//
+// Floating is not enough on its own. Hyprland hands a window out of its tile at
+// whatever size the tile had, so a captured size would be a fact about the
+// desktop the run happened on, and two machines would produce differently
+// cropped artefacts from the same code. Naming the rectangle — the one main.go
+// asks for, read from the same constants it uses — is what makes it reproducible.
 //
 // hyprctl answers "ok" whether or not the selector matched anything, so nothing
 // is read from it: the geometry re-read afterwards is what proves it worked.
-func float(pid int) error {
-	dispatch := fmt.Sprintf("hl.dsp.window.float(%q)", fmt.Sprintf("pid:%d", pid))
-	out, err := exec.Command("hyprctl", "dispatch", dispatch).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("hyprctl dispatch: %w (%s)", err, strings.TrimSpace(string(out)))
+func reframe(pid int) error {
+	sel := fmt.Sprintf("pid:%d", pid)
+	if err := dispatch(fmt.Sprintf("hl.dsp.window.float(%q)", sel)); err != nil {
+		return err
 	}
+	if err := dispatch(fmt.Sprintf("hl.dsp.window.resize({x=%d,y=%d,window=%q})",
+		ui.WindowWidth, ui.WindowHeight, sel)); err != nil {
+		return err
+	}
+
 	time.Sleep(floatSettle)
+	return nil
+}
+
+// dispatch runs one Hyprland dispatcher. A dispatcher it does not recognise, or
+// arguments it cannot parse, come back as a non-zero exit rather than as a quiet
+// no-op, which is what lets a compositor upgrade break the rig loudly.
+func dispatch(cmd string) error {
+	out, err := exec.Command("hyprctl", "dispatch", cmd).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("hyprctl dispatch %s: %w (%s)",
+			cmd, err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 

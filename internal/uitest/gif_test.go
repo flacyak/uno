@@ -11,7 +11,7 @@ import (
 
 // previewRun is how long the recorder films for. It is the script's own length
 // in internal/ui/demo.go plus a moment, so the last beat is held rather than cut.
-const previewRun = 14000 * time.Millisecond
+const previewRun = 15200 * time.Millisecond
 
 // minDistinctFrames is the floor for a recording that actually caught the app
 // doing something. The script has five visible states and types four
@@ -21,9 +21,10 @@ const minDistinctFrames = 8
 
 // TestPreviewGIF films the scripted preview and encodes docs/preview.gif.
 //
-// The window is the real binary's, built with the demo tag so it drives itself:
-// there is no pointer dispatcher on this compositor, so a preview that opens a
-// file and then edits a cell cannot be produced from outside the process.
+// The window is the real binary's, built with the demo tag so it drives itself.
+// The script and the recorder have to share one clock — the cue below is what
+// joins them — and there is no pointer dispatcher on this compositor either, so
+// a preview of the app being worked cannot be produced from outside the process.
 //
 // This writes into .screenshots, which is ignored. Promoting a take to
 // docs/preview.gif is a deliberate copy, because which take ships is a judgement

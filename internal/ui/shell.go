@@ -14,6 +14,15 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// WindowWidth and WindowHeight are the size uno asks its window to be. They live
+// beside the shell that fills it rather than in main.go because the filming rig
+// in internal/uitest has to ask a tiling compositor for the same rectangle, and
+// a preview cropped to a number that has since moved is worse than no preview.
+const (
+	WindowWidth  = 1100
+	WindowHeight = 720
+)
+
 // Shell is the window's contents: a strip of workspace tabs over a status bar.
 // It holds no data of its own; everything about an open file lives in the
 // workspace that owns it.
