@@ -51,7 +51,7 @@ func TestSniffIgnoresDelimitersInsideQuotes(t *testing.T) {
 	if s.Cols() != 2 {
 		t.Fatalf("Cols() = %d, want 2", s.Cols())
 	}
-	if got := s.At(0, 0); got != "Okafor, Ada" {
+	if got := s.Raw(0, 0); got != "Okafor, Ada" {
 		t.Errorf("At(0,0) = %q, want %q", got, "Okafor, Ada")
 	}
 }
@@ -64,7 +64,7 @@ func TestReadPadsRaggedRowsRatherThanRejectingTheFile(t *testing.T) {
 	if s.Rows() != 3 {
 		t.Errorf("Rows() = %d, want 3", s.Rows())
 	}
-	if got := s.At(1, 2); got != "" {
+	if got := s.Raw(1, 2); got != "" {
 		t.Errorf("At(1,2) = %q, want empty", got)
 	}
 }
@@ -74,7 +74,7 @@ func TestReadHandlesCRLF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if got := s.At(0, 1); got != "2" {
+	if got := s.Raw(0, 1); got != "2" {
 		t.Errorf("At(0,1) = %q, want %q", got, "2")
 	}
 }

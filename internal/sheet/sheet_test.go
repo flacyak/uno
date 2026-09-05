@@ -2,7 +2,7 @@ package sheet
 
 import "testing"
 
-func TestAtToleratesRaggedAndOutOfRange(t *testing.T) {
+func TestRawToleratesRaggedAndOutOfRange(t *testing.T) {
 	// The second row is short: a real export does this, and the grid must not
 	// have to bounds-check while scrolling (I-1).
 	s := New("t.csv",
@@ -22,8 +22,27 @@ func TestAtToleratesRaggedAndOutOfRange(t *testing.T) {
 		{"col past end", 0, 9, ""},
 		{"negative col", 0, -1, ""},
 	} {
-		if got := s.At(c.row, c.col); got != c.want {
-			t.Errorf("%s: At(%d,%d) = %q, want %q", c.name, c.row, c.col, got, c.want)
+		if got := s.Raw(c.row, c.col); got != c.want {
+			t.Errorf("%s: Raw(%d,%d) = %q, want %q", c.name, c.row, c.col, got, c.want)
+		}
+	}
+}
+
+// Raw and Display are one value today, and every caller was pointed at one or
+// the other on the strength of what it is asking for rather than of what it gets
+// back. This is the test that says so, and the test that will have to be
+// rewritten — not quietly deleted — the day a formula makes them differ.
+func TestDisplayIsRawUntilSomethingFillsIt(t *testing.T) {
+	s := New("t.csv",
+		[]string{"a", "b", "c"},
+		[][]string{{"1", "2", "3"}, {"4"}},
+	)
+
+	for row := -1; row <= s.Rows(); row++ {
+		for col := -1; col <= s.Cols(); col++ {
+			if got, want := s.Display(row, col), s.Raw(row, col); got != want {
+				t.Errorf("Display(%d,%d) = %q, Raw = %q", row, col, got, want)
+			}
 		}
 	}
 }
