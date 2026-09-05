@@ -4,12 +4,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/flacyak/uno/internal/formula"
 	"github.com/flacyak/uno/internal/ingest"
 	"github.com/flacyak/uno/internal/program"
 	"github.com/flacyak/uno/internal/sheet"
@@ -197,7 +199,11 @@ func TestANewerFormatIsRefusedByName(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a refusal, got nil")
 	}
-	for _, want := range []string{"sales-q3.uno", "format 3", "reads 2"} {
+	for _, want := range []string{
+		"sales-q3.uno",
+		fmt.Sprintf("format %d", formatVersion+1),
+		fmt.Sprintf("reads %d", formatVersion),
+	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
@@ -484,7 +490,8 @@ func TestTheFormatVersionFollowsTheLog(t *testing.T) {
 				t.Fatalf("Set: %v", err)
 			}
 		}, baseVersion},
-		{"a column op", stripCommas(t), formatVersion},
+		{"a column op", stripCommas(t), ruleVersion},
+		{"a binding", bindRegion(t), formatVersion},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			path, _ := saved(t, "sales-q3.csv", c.edit)
@@ -519,5 +526,141 @@ func TestAColumnOpRoundTrips(t *testing.T) {
 	}
 	if c := doc.Sheet.Columns[2]; c.Kind != sheet.KindNum || c.Flagged {
 		t.Errorf("units = %v flagged=%v, want num and unflagged", c.Kind, c.Flagged)
+	}
+}
+
+// bindRegion binds the region column to an expression reading units. It is a
+// column op the recogniser could not have written, so it is what the newest
+// format version exists for. It reads a column other than the one it fills,
+// because binding units to an expression naming units is the cycle Bind refuses.
+func bindRegion(t *testing.T) func(*sheet.Sheet) {
+	t.Helper()
+	return func(sh *sheet.Sheet) {
+		f, err := formula.Parse("units * 2")
+		if err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		if err := sh.Bind(1, f); err != nil {
+			t.Fatalf("Bind: %v", err)
+		}
+	}
+}
+
+// A binding is one line in the log and a column of values in the grid, and the
+// file carries the line. Reopening has to rebuild every one of those values from
+// it, because nothing else in the container holds them.
+func TestABindingRoundTripsAndRecomputes(t *testing.T) {
+	path, _ := saved(t, "sales-q3.csv", bindRegion(t))
+
+	doc, err := Read(path)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	// units is "1,204", "987", "1,455"; the expression doubles each.
+	for row, want := range []string{"2408", "1974", "2910"} {
+		if got := doc.Sheet.Display(row, 1); got != want {
+			t.Errorf("row %d = %q, want %q", row, got, want)
+		}
+	}
+	if got, want := doc.Sheet.EditCount(), 1; got != want {
+		t.Errorf("log holds %d edits, want %d", got, want)
+	}
+}
+
+// The expression travels in the log and the library reference travels in sheet
+// state, so a file opened by someone who has never seen the sender's library
+// still computes. This is the same promise the raw bytes make, and the reference
+// is not allowed to be what makes it true.
+func TestABoundFileComputesWithNoLibraryToResolve(t *testing.T) {
+	sh, err := ingest.Read("sales-q3.csv", strings.NewReader(csvBody))
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	bindRegion(t)(sh)
+
+	d := &Document{
+		Manifest: Manifest{
+			Source: Source{Name: "sales-q3.csv"},
+			Sheet:  SheetRef{Rows: sh.Rows(), Cols: sh.Cols()},
+		},
+		Raw: []byte(csvBody),
+		State: State{
+			Active:         Cell{Row: 0, Col: 0},
+			ColumnFormulas: []ColumnFormula{{Col: 1, Ref: "double-units"}},
+		},
+		Edits: sh.Edits(),
+	}
+	path := filepath.Join(t.TempDir(), "sales-q3.uno")
+	if err := Write(path, d); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	doc, err := Read(path)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got, want := doc.Sheet.Display(0, 1), "2408"; got != want {
+		t.Errorf("Display = %q, want %q — the expression has to be in the file", got, want)
+	}
+	if got := doc.State.ColumnFormulas; len(got) != 1 || got[0].Ref != "double-units" {
+		t.Errorf("ColumnFormulas = %v, want the library reference carried through", got)
+	}
+}
+
+// The real file, at the size the design argues about. A binding over 4,812 rows
+// has to be one line in the log and 4,812 values in the grid, and reopening has
+// to rebuild all of them from that line.
+func TestABindingOverTheWholeFixtureIsOneLine(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "sales-q3.csv"))
+	if err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	sh, err := ingest.Read("sales-q3.csv", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+
+	// date,region,rep,channel,units,revenue — channel is bound to the unit
+	// price, which reads a column carrying thousands separators.
+	f, err := formula.Parse("revenue / units")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if err := sh.Bind(3, f); err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+	if got, want := sh.Rows(), 4812; got != want {
+		t.Fatalf("fixture holds %d rows, want %d", got, want)
+	}
+
+	d := &Document{
+		Manifest: Manifest{
+			Source: Source{Name: "sales-q3.csv"},
+			Sheet:  SheetRef{Rows: sh.Rows(), Cols: sh.Cols()},
+		},
+		Raw:   raw,
+		State: State{ColumnFormulas: []ColumnFormula{{Col: 3, Ref: "unit-price"}}},
+		Edits: sh.Edits(),
+	}
+	path := filepath.Join(t.TempDir(), "sales-q3.uno")
+	if err := Write(path, d); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	doc, err := Read(path)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got, want := doc.Manifest.Edits.Count, 1; got != want {
+		t.Errorf("the file carries %d log lines, want %d for a whole column", got, want)
+	}
+	for row := 0; row < doc.Sheet.Rows(); row++ {
+		if got, want := doc.Sheet.Display(row, 3), sh.Display(row, 3); got != want {
+			t.Fatalf("reopened row %d = %q, want %q", row, got, want)
+		}
+	}
+	if got, want := doc.Sheet.Display(0, 3), "40"; got != want {
+		t.Errorf("unit price = %q, want %q", got, want)
 	}
 }

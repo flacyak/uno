@@ -35,22 +35,25 @@ const sampleRows = 200
 
 // inferKind reads down one column of the sample and names it.
 //
+// It takes a reader rather than the rows, because a bound column has no stored
+// values to read: what a formula computes lives in the display cache, and the
+// badge over it has to describe the numbers a person can see rather than the
+// empty strings underneath them. Callers pass Display, which answers for both
+// kinds of column without this having to know which it is looking at.
+//
 // The flagged case is the one worth being precise about. A column is flagged
 // when every value would be a number but for a formatting convention the parser
 // does not accept: a separator, a currency mark, a percent sign. That is a
 // stricter test than "mostly numeric", and deliberately so: a column with the odd
 // "N/A" in it is genuinely mixed, whereas a column where 1,204 sits beside 987
 // is numeric data wearing a costume, and it is the second that M2 offers to fix.
-func inferKind(rows [][]string, col int) (kind Kind, flagged bool) {
+func inferKind(rows int, at func(row int) string) (kind Kind, flagged bool) {
 	var seen, nums, formatted, dates int
 
-	for i := 0; i < len(rows) && i < sampleRows; i++ {
-		if col >= len(rows[i]) {
-			continue // ragged row, nothing to learn from it
-		}
-		v := strings.TrimSpace(rows[i][col])
+	for i := 0; i < rows && i < sampleRows; i++ {
+		v := strings.TrimSpace(at(i))
 		if v == "" {
-			continue // a blank is not evidence either way
+			continue // a blank, or a ragged row: not evidence either way
 		}
 		seen++
 		switch {
