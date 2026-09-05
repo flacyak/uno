@@ -287,3 +287,58 @@ func waitFor(t *testing.T, done func() bool, what string) {
 	}
 	t.Fatalf("timed out waiting for %s", what)
 }
+
+// The drawer leads with what you reached for last, because a library you use is
+// a handful of formulas and a long tail. The ordering lives in preferences and
+// not in the .unof: which formulas you use is a fact about you on this machine,
+// and putting it in the file would send your habits along with your arithmetic
+// every time you shared one.
+func TestTheDrawerLeadsWithWhatWasUsedLast(t *testing.T) {
+	s, w := loadedSales(t)
+	stockLibrary(t, s, "unit-margin", "variance")
+	s.toggleDrawer()
+
+	// Load sorts by id, so variance follows unit-margin until something is used.
+	if got, want := drawerNames(s), []string{"Unit margin", "Variance term"}; !equalNames(got, want) {
+		t.Fatalf("initial order = %v, want %v", got, want)
+	}
+
+	w.table.Select(widget.TableCellID{Row: 0, Col: 1})
+	s.applyFormula(library.Formula{
+		ID: "variance", Kind: library.KindNotation, Expr: "x^2",
+	})
+
+	if got, want := drawerNames(s), []string{"Variance term", "Unit margin"}; !equalNames(got, want) {
+		t.Errorf("order after use = %v, want %v", got, want)
+	}
+}
+
+// drawerNames reads the labels off the rows, which is what a person sees.
+func drawerNames(s *Shell) []string {
+	var out []string
+	for _, row := range s.drawer.list.Objects {
+		c, ok := row.(*fyne.Container)
+		if !ok {
+			continue
+		}
+		for _, o := range c.Objects {
+			if b, ok := o.(*widget.Button); ok && b.Text != "" {
+				out = append(out, b.Text)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func equalNames(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
