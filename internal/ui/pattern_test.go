@@ -382,6 +382,34 @@ func TestTheSlideLayoutPlacesTheBarOnTheBottomEdge(t *testing.T) {
 	}
 }
 
+// The same arithmetic about the other axis. A drawer is as tall as the window
+// and as wide as its own contents, and one drawer's width outside the right edge
+// is where it rests — so the panel that overlaps the grid never compresses it.
+func TestTheSlideLayoutPlacesADrawerOnTheRightEdge(t *testing.T) {
+	drawer := canvas.NewRectangle(nil)
+	drawer.SetMinSize(fyne.NewSize(296, 0))
+	objs := []fyne.CanvasObject{canvas.NewRectangle(nil), drawer}
+
+	l := &slideLayout{edge: fromRight}
+	l.Layout(objs, fyne.NewSize(300, 200))
+
+	if got, want := objs[0].Size(), fyne.NewSize(300, 200); got != want {
+		t.Errorf("window = %v, want the whole area at %v", got, want)
+	}
+	if got, want := drawer.Position(), fyne.NewPos(4, 0); got != want {
+		t.Errorf("open drawer at %v, want %v", got, want)
+	}
+	if got, want := drawer.Size(), fyne.NewSize(296, 200); got != want {
+		t.Errorf("drawer = %v, want the window's height at %v", got, want)
+	}
+
+	l.off = 1
+	l.place()
+	if got, want := drawer.Position(), fyne.NewPos(300, 0); got != want {
+		t.Errorf("resting drawer at %v, want %v — one drawer past the edge", got, want)
+	}
+}
+
 // A tab is not the only thing on screen, and the question belongs to the one
 // being looked at.
 func TestTheQuestionFollowsTheSelectedTab(t *testing.T) {
