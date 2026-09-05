@@ -25,7 +25,7 @@ func TestSetRecordsTheValueItReplaced(t *testing.T) {
 	if err := s.Set(0, 2, "1204"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := s.At(0, 2); got != "1204" {
+	if got := s.Raw(0, 2); got != "1204" {
 		t.Errorf("cell = %q, want %q", got, "1204")
 	}
 
@@ -97,10 +97,10 @@ func TestSetGrowsAShortRow(t *testing.T) {
 	if err := s.Set(0, 2, "filled"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := s.At(0, 2); got != "filled" {
+	if got := s.Raw(0, 2); got != "filled" {
 		t.Errorf("cell = %q, want %q", got, "filled")
 	}
-	if got := s.At(0, 1); got != "" {
+	if got := s.Raw(0, 1); got != "" {
 		t.Errorf("the padded cell = %q, want it empty", got)
 	}
 }
@@ -118,7 +118,7 @@ func TestReplayRebuildsAndKeepsTheLog(t *testing.T) {
 		t.Fatalf("Replay: %v", err)
 	}
 
-	if got := s.At(0, 2); got != "1204" {
+	if got := s.Raw(0, 2); got != "1204" {
 		t.Errorf("cell = %q, want the replayed value", got)
 	}
 	if s.EditCount() != 2 {
@@ -169,7 +169,7 @@ func TestApplyWritesOneOperationForAWholeColumn(t *testing.T) {
 	}
 
 	for row, want := range map[int]string{0: "1204", 1: "987", 2: "1455"} {
-		if got := s.At(row, 2); got != want {
+		if got := s.Raw(row, 2); got != want {
 			t.Errorf("cell (%d,2) = %q, want %q", row, got, want)
 		}
 	}
@@ -214,13 +214,13 @@ func TestApplySkipsRowsWithoutTheColumn(t *testing.T) {
 	if err := s.Apply(2, prog(t, `replace(/,/, "")`)); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if got := s.At(0, 2); got != "1204" {
+	if got := s.Raw(0, 2); got != "1204" {
 		t.Errorf("cell (0,2) = %q, want %q", got, "1204")
 	}
 	if got := s.Rows(); got != 2 {
 		t.Errorf("Rows = %d, want 2", got)
 	}
-	if got := s.At(1, 2); got != "" {
+	if got := s.Raw(1, 2); got != "" {
 		t.Errorf("short row grew a cell holding %q", got)
 	}
 }
@@ -244,7 +244,7 @@ func TestReplayRebuildsAnAppliedColumn(t *testing.T) {
 	}
 
 	for row := 0; row < 3; row++ {
-		if got, want := rebuilt.At(row, 2), s.At(row, 2); got != want {
+		if got, want := rebuilt.Raw(row, 2), s.Raw(row, 2); got != want {
 			t.Errorf("cell (%d,2) = %q, want %q", row, got, want)
 		}
 	}
@@ -262,7 +262,7 @@ func TestReplayRefusesAProgramItCannotRead(t *testing.T) {
 	if err == nil {
 		t.Fatal("Replay accepted a program it cannot run")
 	}
-	if got := s.At(0, 2); got != "1,204" {
+	if got := s.Raw(0, 2); got != "1,204" {
 		t.Errorf("cell (0,2) = %q, want it untouched at %q", got, "1,204")
 	}
 }

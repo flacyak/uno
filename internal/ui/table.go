@@ -121,7 +121,7 @@ func (c *cell) CreateRenderer() fyne.WidgetRenderer { return widget.NewSimpleRen
 // only when that changes something.
 func (c *cell) show(id widget.TableCellID) {
 	c.id = id
-	c.label.SetText(c.w.sheet.At(id.Row, id.Col))
+	c.label.SetText(c.w.sheet.Display(id.Row, id.Col))
 
 	if c.w.editing && c.w.active == (document.Cell{Row: id.Row, Col: id.Col}) {
 		c.takeInline()
@@ -200,7 +200,7 @@ func widthFor(sh *sheet.Sheet, col int, c sheet.Column) float32 {
 		measure(badgeFor(c), size, fyne.TextStyle{Monospace: true})
 
 	for row := 0; row < sh.Rows() && row < widthSample; row++ {
-		if m := measure(sh.At(row, col), size, fyne.TextStyle{}); m > w {
+		if m := measure(sh.Display(row, col), size, fyne.TextStyle{}); m > w {
 			w = m
 		}
 	}
