@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -140,6 +141,8 @@ func (s *Shell) refreshDrawer() {
 		fyne.LogError("reading the formula library", err)
 	}
 
+	found = s.byRecency(found)
+
 	d.list.RemoveAll()
 	for _, f := range found {
 		d.list.Add(s.formulaRow(f))
@@ -183,7 +186,7 @@ func (s *Shell) applyFormula(f library.Formula) {
 			dialog.ShowError(err, s.win)
 			return
 		}
-		s.afterFormula(w)
+		s.afterFormula(w, f.ID)
 		return
 	}
 
@@ -203,25 +206,79 @@ func (s *Shell) applyFormula(f library.Formula) {
 		w.formulaRefs = map[int]string{}
 	}
 	w.formulaRefs[w.active.Col] = f.ID
-	s.afterFormula(w)
+	s.afterFormula(w, f.ID)
 }
 
-// afterFormula redraws what a binding changed. The whole table and not one cell,
-// because a column that has just been filled is 4,812 cells and its header badge.
-func (s *Shell) afterFormula(w *workspace) {
-	s.touchRecent(w)
+// afterFormula redraws what a formula changed and remembers that it was used.
+// The whole table and not one cell, because a column that has just been filled
+// is 4,812 cells and a header badge that may have changed with them.
+func (s *Shell) afterFormula(w *workspace, id string) {
+	s.markRecent(id)
+	w.showActive() // the editor bar follows the selected cell, which may have moved
 	if w.table != nil {
 		w.table.Refresh()
 	}
 	s.refreshStatus()
+	s.refreshDrawer()
 }
 
-// touchRecent records that this workspace changed, so the status bar and the
-// tab's dirty mark agree with the sheet.
-func (s *Shell) touchRecent(w *workspace) {
-	if w.sheet != nil {
-		w.showActive()
+// recentsKey is where the ordering lives. In preferences and not in the .unof,
+// because which formulas you reach for is a fact about you on this machine, and
+// putting it in the file would mean sending your habits along with your
+// arithmetic every time you shared one.
+const recentsKey = "formula.recents"
+
+// recentsKept bounds the list. It is an ordering and not a history: the point is
+// that the formula you used a minute ago is at the top, and nobody is going to
+// scroll to the four hundredth.
+const recentsKept = 32
+
+// markRecent moves a formula to the front of the list.
+func (s *Shell) markRecent(id string) {
+	a := fyne.CurrentApp()
+	if a == nil || id == "" {
+		return
 	}
+	p := a.Preferences()
+
+	kept := []string{id}
+	for _, was := range p.StringList(recentsKey) {
+		if was != id && len(kept) < recentsKept {
+			kept = append(kept, was)
+		}
+	}
+	p.SetStringList(recentsKey, kept)
+}
+
+// byRecency puts the formulas someone has used at the top, in the order they
+// used them, and everything else after in the order Load returned. A library
+// nobody has used yet is simply alphabetical, which is the right answer for a
+// list with no history behind it.
+func (s *Shell) byRecency(found []library.Formula) []library.Formula {
+	a := fyne.CurrentApp()
+	if a == nil || len(found) < 2 {
+		return found
+	}
+
+	rank := map[string]int{}
+	for i, id := range a.Preferences().StringList(recentsKey) {
+		rank[id] = i
+	}
+
+	out := make([]library.Formula, len(found))
+	copy(out, found)
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, iok := rank[out[i].ID]
+		rj, jok := rank[out[j].ID]
+		if iok != jok {
+			return iok // anything used outranks anything not
+		}
+		if !iok {
+			return false // neither used: leave Load's order alone
+		}
+		return ri < rj
+	})
+	return out
 }
 
 // targetFor names the column the drawer would act on: the one the selected cell
