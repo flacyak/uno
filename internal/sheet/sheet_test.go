@@ -28,11 +28,11 @@ func TestRawToleratesRaggedAndOutOfRange(t *testing.T) {
 	}
 }
 
-// Raw and Display are one value today, and every caller was pointed at one or
-// the other on the strength of what it is asking for rather than of what it gets
-// back. This is the test that says so, and the test that will have to be
-// rewritten — not quietly deleted — the day a formula makes them differ.
-func TestDisplayIsRawUntilSomethingFillsIt(t *testing.T) {
+// The day a formula makes Raw and Display differ has arrived, so this is the
+// rewrite the old test asked for rather than a deletion of it. What it pinned
+// still holds everywhere nothing has been computed: an unbound column shows what
+// it stores, and out-of-range stays empty on both paths.
+func TestDisplayIsRawWhereNothingFillsIt(t *testing.T) {
 	s := New("t.csv",
 		[]string{"a", "b", "c"},
 		[][]string{{"1", "2", "3"}, {"4"}},
@@ -44,6 +44,27 @@ func TestDisplayIsRawUntilSomethingFillsIt(t *testing.T) {
 				t.Errorf("Display(%d,%d) = %q, Raw = %q", row, col, got, want)
 			}
 		}
+	}
+}
+
+// And the other half of it: once a column is bound the two part company, which
+// is the whole point of having split them. Raw keeps saying what the cell
+// stores, which is nothing, because a derived column holds no values of its own.
+func TestDisplayLeavesRawBehindOnceAColumnIsBound(t *testing.T) {
+	s := New("t.csv",
+		[]string{"price", "cost", "margin"},
+		[][]string{{"40", "31.20", ""}, {"40", "30", ""}},
+	)
+
+	if err := s.Bind(2, parse(t, "price - cost")); err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+
+	if got, want := s.Display(0, 2), "8.8"; got != want {
+		t.Errorf("Display = %q, want %q", got, want)
+	}
+	if got := s.Raw(0, 2); got != "" {
+		t.Errorf("Raw = %q, want the cell to store nothing", got)
 	}
 }
 
