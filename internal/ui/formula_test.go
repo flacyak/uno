@@ -127,6 +127,88 @@ func TestTheFooterCountsTheLibrary(t *testing.T) {
 	}
 }
 
+// Two folders are being read now, and a row that does not say which one it came
+// out of is a row a person cannot act on: editing it rewrites a file, and which
+// file that is decides whether they are changing their own copy or the one
+// somebody sent them. The beside group leads, because it is the group that is
+// about the file in front of you.
+func TestTheDrawerSaysWhichFolderEachFormulaCameFrom(t *testing.T) {
+	s, _, _ := besideSales(t, "unit-margin")
+	stockLibrary(t, s, "std-deviation")
+
+	s.toggleDrawer()
+
+	if got, want := drawerHeadings(s), []string{"Beside sales-q3.uno", "Your library"}; !equalNames(got, want) {
+		t.Errorf("headings = %v, want %v", got, want)
+	}
+	if got, want := drawerNames(s), []string{"Unit margin", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("drawer = %v, want %v with the beside group first", got, want)
+	}
+}
+
+// Most of the time there is only one group, and a heading over it would be a
+// label explaining a distinction the panel is not making. A CSV opened through
+// the dialog has no folder to read, so it gets the drawer exactly as it looked
+// before any of this: one list, no labels.
+func TestOneGroupOfFormulasIsListedWithNoHeadings(t *testing.T) {
+	s, _ := loadedSales(t)
+	stockLibrary(t, s, "unit-margin", "variance")
+
+	s.toggleDrawer()
+
+	if got := drawerHeadings(s); len(got) != 0 {
+		t.Errorf("headings over the library alone = %v, want none", got)
+	}
+	if got, want := drawerNames(s), []string{"Unit margin", "Variance term"}; !equalNames(got, want) {
+		t.Errorf("drawer = %v, want %v", got, want)
+	}
+}
+
+// And the same the other way round: a document with formulas beside it and an
+// empty library has nothing to separate either, so "Beside sales-q3.uno" would
+// be naming the only place the rows could have come from.
+func TestFormulasBesideAnEmptyLibraryAreListedWithNoHeadings(t *testing.T) {
+	s, _, _ := besideSales(t, "unit-margin", "variance")
+	stockLibrary(t, s)
+
+	s.toggleDrawer()
+
+	if got := drawerHeadings(s); len(got) != 0 {
+		t.Errorf("headings over the beside group alone = %v, want none", got)
+	}
+	if got, want := drawerNames(s), []string{"Unit margin", "Variance term"}; !equalNames(got, want) {
+		t.Errorf("drawer = %v, want %v", got, want)
+	}
+}
+
+// Recency orders a section from the inside. A library formula someone reached
+// for a minute ago goes to the top of the library, not to the top of the panel:
+// climbing over the heading would put it under a label that says it came out of
+// the document's folder, which is the one thing the headings are there to say.
+func TestWhatWasUsedLastRisesWithinItsOwnSection(t *testing.T) {
+	s, w, _ := besideSales(t, "unit-margin")
+	stockLibrary(t, s, "std-deviation", "variance")
+	s.toggleDrawer()
+
+	// Load sorts by id, so the library reads std-deviation then variance until
+	// something is used.
+	if got, want := drawerNames(s), []string{"Unit margin", "Std. deviation", "Variance term"}; !equalNames(got, want) {
+		t.Fatalf("initial order = %v, want %v", got, want)
+	}
+
+	w.table.Select(widget.TableCellID{Row: 0, Col: 1})
+	s.applyFormula(sourced{Formula: library.Formula{
+		ID: "variance", Kind: library.KindNotation, Expr: "x^2",
+	}})
+
+	if got, want := drawerNames(s), []string{"Unit margin", "Variance term", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("order after use = %v, want %v, with the beside formula left where it is", got, want)
+	}
+	if got, want := drawerHeadings(s), []string{"Beside sales-q3.uno", "Your library"}; !equalNames(got, want) {
+		t.Errorf("headings = %v, want %v", got, want)
+	}
+}
+
 // Applying a column formula binds the target column: 7 rows filled, one line in
 // the log, and the library reference kept so edit can find the file again.
 func TestApplyingAColumnFormulaBindsTheTargetColumn(t *testing.T) {
@@ -315,6 +397,19 @@ func drawerNames(s *Shell) []string {
 				out = append(out, b.Text)
 				break
 			}
+		}
+	}
+	return out
+}
+
+// drawerHeadings reads the section labels off the list, which are the rows that
+// are not rows: everything the drawer adds directly rather than inside a
+// container.
+func drawerHeadings(s *Shell) []string {
+	var out []string
+	for _, row := range s.drawer.list.Objects {
+		if l, ok := row.(*widget.Label); ok {
+			out = append(out, l.Text)
 		}
 	}
 	return out
