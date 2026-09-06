@@ -200,12 +200,19 @@ void app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // The one branch in this file that knows what a test is. See src/main/smoke.ts
-  // for why it has to live inside the app rather than outside it.
+  // The two branches in this file that know what a test is. See src/main/smoke.ts
+  // for why they have to live inside the app rather than outside it; preview.ts
+  // is the same argument for the same reason, one story instead of assertions.
   if (process.env["UNO_SMOKE"] !== undefined) {
     const { runSmoke } = await import("./smoke.ts");
     win.webContents.once("did-finish-load", () => {
       void runSmoke(win, (code) => app.exit(code));
+    });
+  }
+  if (process.env["UNO_PREVIEW"] !== undefined) {
+    const { runPreview } = await import("./preview.ts");
+    win.webContents.once("did-finish-load", () => {
+      void runPreview(win, (code) => app.exit(code));
     });
   }
 });
