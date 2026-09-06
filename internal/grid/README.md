@@ -12,7 +12,7 @@ one codebase.
 | `notation` | markdown in, symbols out                                 |
 | `formula`  | parse, evaluate, the column dependency graph             |
 | `program`  | the transform language a proposal names and a log stores |
-| `sheet`    | one table, the edit log, binding and notation            |
+| `sheet`    | the edit log, folded into a schema and applied per row   |
 | `ingest`   | bytes to rows: a CSV reader, a record scanner, a sniff   |
 | `engine`   | open a file without loading it: index, pages, passes     |
 | `pattern`  | the recogniser: watch edits, propose the rest            |
@@ -31,6 +31,13 @@ port and a way to open a `SourceRef`. It reads the header, then indexes the
 file in 8 MB chunks, noting where every block of 1,024 rows starts. The client
 holds an `Engine` and a `Band`: 2,000 rows around the viewport, answered
 synchronously, with rows that have not arrived reported as pending.
+
+The engine also owns the edit log. `sheet` folds the log into a `Schema`, and
+`finish` applies it to a row when the row is read, so an edit is one line and a
+new generation number rather than a rewrite. A `Sheet` is the same schema over
+rows held in memory, which is how the tests in `tests/sheet` pin the rules a
+file the engine never loads follows. The recogniser's `Survey` counts over one
+block of rows at a time, so its offer can grow while the engine reads.
 
 Indexing is the first pass. Validation, deduplication, splitting and format
 conversion are meant to be the next ones, each a loop over a `PassContext`

@@ -30,10 +30,16 @@ a time, and sends rows straight to the renderer, so neither main nor the
 renderer ever holds the file. The status bar shows `≈` rows and how far the
 index has got until it reaches the end.
 
-Ctrl+E switches to transform, which is where editing and saving work. Transform
-still loads the file into a `Sheet`, so it refuses a file over 64 MB and the
-file stays in view. A `.uno` is read whole and opens in view over its replayed
-log.
+Ctrl+E switches to transform, which unlocks editing and turns the recogniser on.
+It loads nothing. The engine keeps the edit log and applies it to each row as it
+reads the row, so an edit reaches the screen as soon as the next band does,
+anywhere in the file. After three fixes in one column, a banner offers the rest,
+and its count grows while the engine surveys the file. Apply is one edit, and
+Ctrl+Z takes it back.
+
+Saving still embeds the source in the `.uno`, so a source over 256 MB is refused
+by name until the format can point at the file instead. A `.uno` opens through
+the engine too, with its log replayed.
 
 ## Running it
 
@@ -69,9 +75,10 @@ move by rows, so a step is one row at row 50,000,000.
 `vp run smoke` builds the app, starts it on the real 4,812-row fixture, and asks
 the live DOM what it shows: that the file opened, that the delimiter was sniffed,
 that `units` is badged as numeric data in a costume, that scrolling to row 4,812
-still leaves under 120 rows in the DOM, that typing in view changes nothing, and
-that after Ctrl+E typing into a cell records an edit. It writes a screenshot to
-`out/smoke/window.png`.
+still leaves under 120 rows in the DOM, that typing in view changes nothing, that
+after Ctrl+E typing into a cell records an edit, that three fixes bring the
+banner's offer, that Apply rewrites the column as one edit, and that Ctrl+Z
+takes it back. It writes a screenshot to `out/smoke/window.png`.
 
 It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or

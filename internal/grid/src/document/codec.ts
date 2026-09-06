@@ -29,6 +29,31 @@ const encoder = new TextEncoder();
  * does not say which of twelve dropped files failed is useless.
  */
 export function readDocument(name: string, bytes: Uint8Array): Document {
+  const doc = readContainer(name, bytes);
+
+  // The same call a plain CSV takes. One way to build a sheet is the only
+  // reason a restored workspace is guaranteed to match the one that was saved.
+  let sheet;
+  try {
+    sheet = ingestRead(doc.manifest.source.name, doc.raw);
+  } catch (err) {
+    throw new Error(`${name}: embedded ${doc.manifest.source.name}: ${(err as Error).message}`);
+  }
+  try {
+    sheet.replay(doc.edits);
+  } catch (err) {
+    throw new Error(`${name}: replaying edits: ${(err as Error).message}`);
+  }
+  return { ...doc, sheet };
+}
+
+/**
+ * readContainer reads a .uno without building a sheet from it: the manifest,
+ * the source bytes, the state, the log and whatever this build did not
+ * recognise. It is what the engine opens a workspace with, since the engine
+ * reads the source through an index and replays the log over pages instead.
+ */
+export function readContainer(name: string, bytes: Uint8Array): Document {
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(bytes);
@@ -48,26 +73,10 @@ export function readDocument(name: string, bytes: Uint8Array): Document {
   }
 
   const raw = readEntry(name, entries, m.source.entry);
-
-  // The same call a plain CSV takes. One way to build a sheet is the only
-  // reason a restored workspace is guaranteed to match the one that was saved.
-  let sheet;
-  try {
-    sheet = ingestRead(m.source.name, raw);
-  } catch (err) {
-    throw new Error(`${name}: embedded ${m.source.name}: ${(err as Error).message}`);
-  }
-
   const edits = readLog(name, entries, m.edits.entry);
-  try {
-    sheet.replay(edits);
-  } catch (err) {
-    throw new Error(`${name}: replaying edits: ${(err as Error).message}`);
-  }
-
   const state = parseState(readJSON(name, entries, m.sheet.entry));
 
-  return { manifest: m, raw, state, edits, extra: readExtra(entries, m), sheet };
+  return { manifest: m, raw, state, edits, extra: readExtra(entries, m) };
 }
 
 /**

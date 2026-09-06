@@ -118,7 +118,10 @@ export class Snapshot {
    */
   propose(): Proposal | undefined {
     for (const c of this.cols) {
-      const p = proposeColumn(c);
+      const s = Survey.start(c.col, c.header, c.examples);
+      if (s === undefined) continue;
+      s.add(c.values, 0);
+      const p = s.proposal();
       if (p !== undefined) return p;
     }
     return undefined;
@@ -142,6 +145,135 @@ export function snap(s: Sheet | undefined): Snapshot {
     cols.push({ col, header: s.columns[col]!.header, values, examples: ex });
   }
   return new Snapshot(cols);
+}
+
+/** One candidate program, and what it has claimed so far. */
+interface Candidate {
+  prog: Program;
+  text: string;
+  affects: number;
+  sample: Change[];
+}
+
+/**
+ * Reading is the candidates one way of reading the examples produced, kept only
+ * if they reproduce every example, narrowest first.
+ *
+ * Candidates that have agreed on every value read so far share a class. Two in
+ * different classes part company somewhere in the column, which is what makes a
+ * proposal ambiguous, and tracking classes costs a comparison per candidate per
+ * value rather than one per pair.
+ */
+interface Reading {
+  cands: Candidate[];
+  /** The classes with more than one member. Singletons need no checking. */
+  classes: number[][];
+  classOf: Int32Array;
+  nextClass: number;
+}
+
+/**
+ * Survey scores a column's candidates against its values, a run of rows at a
+ * time.
+ *
+ * It is what lets the recogniser read a file it never holds. The engine feeds
+ * it a block of rows and asks for the proposal as it stands, so a banner can say
+ * "at least 18,204 in the first 12M rows" and be right, then say the exact count
+ * when the last block has been read. Fed every value at once, it proposes
+ * exactly what a whole-column scan does.
+ */
+export class Survey {
+  private seen = 0;
+
+  private constructor(
+    readonly col: number,
+    readonly header: string,
+    private readonly readings: Reading[],
+  ) {}
+
+  /**
+   * start induces the candidates for a column's examples. Undefined when there
+   * are too few examples, or when nothing reproduces them.
+   */
+  static start(col: number, header: string, examples: Example[]): Survey | undefined {
+    if (examples.length < MIN_EXAMPLES) return undefined;
+
+    const readings: Reading[] = [];
+    for (const w of WITNESSES) {
+      const cands = induce(examples, w.each);
+      if (w.together !== undefined) cands.push(...parseAll(w.together(examples)));
+      readings.push(reading(examples, cands));
+    }
+    // Two steps where one will not do, read last. The ranking puts fewer steps
+    // first anyway, so this only wins for a column no single step explains.
+    readings.push(reading(examples, compose(examples)));
+
+    const kept = readings.filter((r) => r.cands.length > 0);
+    return kept.length === 0 ? undefined : new Survey(col, header, kept);
+  }
+
+  /** How many values it has read. */
+  get rows(): number {
+    return this.seen;
+  }
+
+  /**
+   * add reads the column's values for a run of rows starting at `first`. Runs
+   * arrive in row order, so the sample is the first changes in the column rather
+   * than the first ones read.
+   */
+  add(values: readonly string[], first: number): void {
+    for (let i = 0; i < this.readings.length; i++) {
+      const r = this.readings[i]!;
+      scan(r, values, first);
+
+      // A reading with a candidate that claims a cell outranks every reading
+      // after it, whatever those go on to find, so they are not read again.
+      if (r.cands.some((c) => c.affects > 0)) {
+        this.readings.length = i + 1;
+        break;
+      }
+    }
+    this.seen += values.length;
+  }
+
+  /** proposal is the question the values read so far support. */
+  proposal(): Proposal | undefined {
+    for (const r of this.readings) {
+      const scored: number[] = [];
+      r.cands.forEach((c, i) => {
+        // It explains the examples and claims nothing else.
+        if (c.affects > 0) scored.push(i);
+      });
+      if (scored.length === 0) continue;
+
+      // Fewest steps, then fewest cells claimed. Preferring the narrowest program
+      // that still explains every example is the guard against reading one habit
+      // as a licence to rewrite a column: given the choice between "remove the
+      // commas" and "remove the commas and the digits", both of which fit, the
+      // smaller claim wins.
+      scored.sort((a, b) => {
+        const A = r.cands[a]!;
+        const B = r.cands[b]!;
+        const d = A.prog.length - B.prog.length;
+        if (d !== 0) return d;
+        const n = A.affects - B.affects;
+        if (n !== 0) return n;
+        return compareStrings(A.text, B.text);
+      });
+
+      const top = r.cands[scored[0]!]!;
+      return {
+        col: this.col,
+        header: this.header,
+        prog: top.prog,
+        affects: top.affects,
+        sample: top.sample.slice(),
+        ambiguous: scored.length > 1 && r.classOf[scored[0]!] !== r.classOf[scored[1]!],
+      };
+    }
+    return undefined;
+  }
 }
 
 /**
@@ -170,19 +302,6 @@ interface Witness {
  * other.
  */
 const WITNESSES: Witness[] = [{ each: rewrites, together: unionDeletion }, { each: restructures }];
-
-function proposeColumn(c: ColumnSnapshot): Proposal | undefined {
-  for (const w of WITNESSES) {
-    const cands = induce(c.examples, w.each);
-    if (w.together !== undefined) cands.push(...parseAll(w.together(c.examples)));
-    const p = rank(c, cands);
-    if (p !== undefined) return p;
-  }
-  // Two steps where one will not do. The ranking comparator sorts by step count
-  // first, so a one-step program keeps its precedence and this is only ever
-  // reached by a column no single step explains.
-  return rank(c, compose(c.examples));
-}
 
 /**
  * compose builds the two-step programs, by clearing characters first and
@@ -214,9 +333,8 @@ function compose(ex: Example[]): Program[] {
   return out;
 }
 
-/** rank keeps the candidates that reproduce the examples and returns the best
- * of them as the question to ask. */
-function rank(c: ColumnSnapshot, cands: Program[]): Proposal | undefined {
+/** reading keeps the candidates that reproduce the examples, narrowest first. */
+function reading(ex: Example[], cands: Program[]): Reading {
   // Verification is separate from induction on purpose. A witness function that
   // generalises too far is a bug that shows up here as a candidate that does
   // not reproduce an example, and it is dropped rather than ranked down: a
@@ -230,85 +348,89 @@ function rank(c: ColumnSnapshot, cands: Program[]): Proposal | undefined {
   const seen = new Set<string>();
   for (const p of cands) {
     const s = programText(p);
-    if (!seen.has(s) && explains(c, p)) {
+    if (!seen.has(s) && ex.every((e) => applyProgram(p, e.was) === e.now)) {
       seen.add(s);
       kept.push(p);
     }
   }
-  if (kept.length === 0) return undefined;
-
   kept.sort(bySize);
-  const scored: Array<{ p: Program; n: number; s: Change[] }> = [];
-  for (const p of kept.slice(0, MAX_RANKED)) {
-    const [n, sample] = survey(p, c.values);
-    if (n === 0) continue; // it explains the examples and claims nothing else
-    scored.push({ p, n, s: sample });
-  }
-  if (scored.length === 0) return undefined;
 
-  // Fewest steps, then fewest cells claimed. Preferring the narrowest program
-  // that still explains every example is the guard against reading one habit as
-  // a licence to rewrite a column: given the choice between "remove the commas"
-  // and "remove the commas and the digits", both of which fit, the smaller
-  // claim wins.
-  scored.sort((a, b) => {
-    const d = a.p.length - b.p.length;
-    if (d !== 0) return d;
-    const n = a.n - b.n;
-    if (n !== 0) return n;
-    return compareStrings(programText(a.p), programText(b.p));
-  });
-
-  const top = scored[0]!;
+  const top = kept.slice(0, MAX_RANKED).map((prog) => ({
+    prog,
+    text: programText(prog),
+    affects: 0,
+    sample: [] as Change[],
+  }));
   return {
-    col: c.col,
-    header: c.header,
-    prog: top.p,
-    affects: top.n,
-    sample: top.s,
-    ambiguous: scored.length > 1 && disagree(c, top.p, scored[1]!.p),
+    cands: top,
+    classes: top.length > 1 ? [top.map((_, i) => i)] : [],
+    classOf: new Int32Array(top.length),
+    nextClass: 1,
   };
 }
 
-function explains(c: ColumnSnapshot, p: Program): boolean {
-  return c.examples.every((e) => applyProgram(p, e.was) === e.now);
+/**
+ * scan counts what each candidate would change in a run of values and collects
+ * the first few for the preview. A cell a program leaves alone is a cell it
+ * does not claim, so the count is exactly the number of cells the person is
+ * being asked about.
+ */
+function scan(r: Reading, values: readonly string[], first: number): void {
+  const outs: string[] = [];
+
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]!;
+    for (let j = 0; j < r.cands.length; j++) {
+      const c = r.cands[j]!;
+      const out = applyProgram(c.prog, v);
+      outs[j] = out;
+      if (out === v) continue;
+      c.affects++;
+      if (c.sample.length < SAMPLE_SIZE) c.sample.push({ row: first + i, was: v, now: out });
+    }
+    if (r.classes.length > 0) split(r, outs);
+  }
 }
 
 /**
- * disagree reports whether two programs would do different things anywhere in
- * this column.
- *
- * Two spellings of the same transformation are not an ambiguity, however
- * different they look; two transformations that part company on row 400 are,
- * however similar.
+ * split breaks up any class whose members gave different answers for one value.
+ * Two spellings of the same transformation are never split, however different
+ * they look; two that part company on row 400 are, however similar.
  */
-function disagree(c: ColumnSnapshot, a: Program, b: Program): boolean {
-  return c.values.some((v) => applyProgram(a, v) !== applyProgram(b, v));
+function split(r: Reading, outs: readonly string[]): void {
+  let differs = false;
+  for (const members of r.classes) {
+    const lead = outs[members[0]!];
+    for (let m = 1; m < members.length && !differs; m++) differs = outs[members[m]!] !== lead;
+    if (differs) break;
+  }
+  if (!differs) return;
+
+  const next: number[][] = [];
+  for (const members of r.classes) {
+    const byOut = new Map<string, number[]>();
+    for (const m of members) {
+      const group = byOut.get(outs[m]!);
+      if (group === undefined) byOut.set(outs[m]!, [m]);
+      else group.push(m);
+    }
+    if (byOut.size === 1) {
+      next.push(members);
+      continue;
+    }
+    for (const group of byOut.values()) {
+      const id = r.nextClass++;
+      for (const m of group) r.classOf[m] = id;
+      if (group.length > 1) next.push(group);
+    }
+  }
+  r.classes = next;
 }
 
 function bySize(a: Program, b: Program): number {
   const d = a.length - b.length;
   if (d !== 0) return d;
   return compareStrings(programText(a), programText(b));
-}
-
-/**
- * survey counts what a program would change and collects the first few for the
- * preview. A cell the program leaves alone is a cell it does not claim, so the
- * count is exactly the number of cells the person is being asked about.
- */
-function survey(p: Program, values: string[]): [number, Change[]] {
-  let n = 0;
-  const sample: Change[] = [];
-
-  for (let row = 0; row < values.length; row++) {
-    const v = values[row]!;
-    const out = applyProgram(p, v);
-    if (out === v) continue;
-    n++;
-    if (sample.length < SAMPLE_SIZE) sample.push({ row, was: v, now: out });
-  }
-  return [n, sample];
 }
 
 /**
@@ -324,7 +446,7 @@ function survey(p: Program, values: string[]): [number, Change[]] {
  * longer exist, and generalising from them again would be inducing a rule from
  * the results of a rule.
  */
-function gather(log: Edit[]): Map<number, Example[]> {
+export function gather(log: readonly Edit[]): Map<number, Example[]> {
   const first = new Map<string, string>();
   const last = new Map<string, string>();
   const order = new Map<number, string[]>();
