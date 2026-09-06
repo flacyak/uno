@@ -15,6 +15,7 @@
   "exports": {
     ".": "./dist/index.mjs",
     "./document": "./dist/document/index.mjs",
+    "./engine": "./dist/engine/index.mjs",
     "./formula": "./dist/formula/index.mjs",
     "./go": "./dist/go/index.mjs",
     "./ingest": "./dist/ingest/index.mjs",
@@ -25,6 +26,7 @@
     "./program": "./dist/program/index.mjs",
     "./sheet": "./dist/sheet/index.mjs",
     "./store": "./dist/store/index.mjs",
+    "./store/node": "./dist/store/node.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {

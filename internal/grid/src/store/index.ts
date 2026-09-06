@@ -26,6 +26,31 @@ export interface FileStore {
   list(dir: string): Promise<string[]>;
 }
 
+/**
+ * ByteSource is a file read a piece at a time.
+ *
+ * It is what lets a file larger than memory open: nothing in the core asks for
+ * the whole of one, so nothing has to hold it. A desktop reads a descriptor at
+ * an offset, a browser slices a File, a test slices a Blob, and the core cannot
+ * tell them apart.
+ */
+export interface ByteSource {
+  readonly size: number;
+  /** Up to `length` bytes from `offset`. Fewer only where the file ends. */
+  read(offset: number, length: number): Promise<Uint8Array>;
+  close(): Promise<void>;
+}
+
+/** blobSource reads a Blob: a File a person dropped, or bytes a test holds. */
+export function blobSource(blob: Blob): ByteSource {
+  return {
+    size: blob.size,
+    read: async (offset, length) =>
+      new Uint8Array(await blob.slice(offset, offset + length).arrayBuffer()),
+    close: () => Promise.resolve(),
+  };
+}
+
 /** What `loadLibrary` could not read, alongside what it could. */
 export interface LibraryLoad {
   formulas: Formula[];

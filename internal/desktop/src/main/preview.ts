@@ -48,6 +48,7 @@ const MIN_DISTINCT = 8;
  * time from the following hold instead of shifting everything after it.
  */
 const BEAT = {
+  transform: 1_600, // the file opened in view; Ctrl+E is the decision to change it
   fix1: 2_500, // the grid and its type badges have been read by now
   fix2: 5_000,
   fix3: 7_000,
@@ -131,13 +132,13 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // as a preview that opens on nothing.
   for (let i = 0; i < 100 && !win.isVisible(); i++) await sleep(50);
 
-  // The window has loaded, but the fixture arrives over IPC a moment later.
-  // Filming before it does would spend the opening beat on an empty grid.
+  // The window has loaded, but the fixture's rows come from an engine a moment
+  // later. Filming before they do would spend the opening beat on an empty grid.
   try {
     await win.webContents.executeJavaScript(`
       (async () => {
         for (let i = 0; i < 120; i++) {
-          if (document.querySelector("tbody tr") !== null) return;
+          if (document.querySelector("tbody tr:not(.pending)") !== null) return;
           await new Promise((r) => setTimeout(r, 50));
         }
         throw new Error("no rows were ever drawn");
@@ -275,6 +276,11 @@ async function film(
  */
 async function play(win: BrowserWindow, start: number): Promise<void> {
   const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
+
+  // A file opens in view, where nothing a key does changes it.
+  await at(BEAT.transform);
+  win.webContents.sendInputEvent({ type: "keyDown", keyCode: "E", modifiers: ["control"] });
+  win.webContents.sendInputEvent({ type: "keyUp", keyCode: "E", modifiers: ["control"] });
 
   // Three corrections, each the same gesture: arrows to reach the cell, the
   // value typed where it sits, Enter to commit. The repetition is the argument.
