@@ -1,9 +1,0 @@
-{
-  "format": 1,
-  "id": "variance",
-  "name": "Variance term",
-  "kind": "notation",
-  "expr": "σ^2 = (x_i - \\mu)^2",
-  "created": "2026-08-31T09:31:47Z",
-  "modified": "2026-08-31T09:31:47Z"
-}
