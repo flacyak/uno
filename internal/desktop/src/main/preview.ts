@@ -111,8 +111,7 @@ interface Shot {
   at: number;
 }
 
-const sleep = (ms: number): Promise<void> =>
-  new Promise((r) => setTimeout(r, Math.max(0, ms)));
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
 /**
  * run films the window while the script plays, writes what it caught, and quits
