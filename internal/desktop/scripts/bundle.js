@@ -1,7 +1,7 @@
-// Bundling the two halves of the Electron side.
+// Bundling the Node side of the app.
 //
-// The renderer goes through Vite, which is what `vp build` does. Main and
-// preload cannot: they run in Node with Electron's own module loader, so they
+// The renderer goes through Vite, which is what `vp build` does. Main, preload
+// and the engine cannot: they run with Electron's own module loader, so they
 // are built here, as CommonJS, which is the format a preload script has to be.
 
 import { build } from "vite";
@@ -11,6 +11,8 @@ export async function bundleElectron(opts = {}) {
   for (const [name, entry] of [
     ["main", "src/main/index.ts"],
     ["preload", "src/preload/index.ts"],
+    // The utility process that owns an open file. Main starts one per workspace.
+    ["engine", "src/engine/index.ts"],
   ]) {
     await build({
       configFile: false,

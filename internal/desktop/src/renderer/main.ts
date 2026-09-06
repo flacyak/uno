@@ -1,33 +1,43 @@
 // The shell: the tab strip, the grid, the status bar, and what the menu means.
 //
 // It owns *when* things happen and nothing about what they do. Opening a file
-// is `Workspace.fromFile`, changing a cell is `sheet.set`, saving is
+// is `Workspace.open` over an engine, changing a cell is `sheet.set`, saving is
 // `workspace.bytes` handed to the host. Every one of those is testable without
 // a window, which is the seam this file exists to keep.
 
 import "./app.css";
 
-import { Grid } from "./grid.ts";
-import { Workspace } from "./workspace.ts";
+import { Engine, messagePort } from "@uno/grid/engine";
+import type { MessagePortLike, Reply, Request, SourceRef } from "@uno/grid/engine";
+
 import type { Host } from "../shared/host.ts";
+import { Grid } from "./grid.ts";
+import { electronHost } from "./host.ts";
+import { Workspace } from "./workspace.ts";
 
 /** The extensions the app will try to open. Anything else is very likely a
  * mis-drop, and saying so is better than a parser error. */
 const OPENABLE = [".uno", ".csv", ".tsv"];
 
+type MenuChannel = "menu:open" | "menu:save" | "menu:save-as" | "menu:mode";
+
 interface MenuBridge {
-  on(channel: "menu:open" | "menu:save" | "menu:save-as", fn: () => void): void;
+  on(channel: MenuChannel, fn: () => void): void;
   onOpenPath(fn: (path: string) => void): void;
 }
 
 class Shell {
   private workspace: Workspace | undefined;
   private readonly grid: Grid;
+  /** Counts opens, so one that finishes after a later one does not replace it. */
+  private opens = 0;
+  private switching = false;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
   private readonly empty = must(document.querySelector<HTMLElement>("#empty"));
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
+  private readonly statusMode = must(document.querySelector<HTMLElement>("#status-mode"));
   private readonly statusFile = must(document.querySelector<HTMLElement>("#status-file"));
   private readonly statusMsg = must(document.querySelector<HTMLElement>("#status-msg"));
   private readonly statusCell = must(document.querySelector<HTMLElement>("#status-cell"));
@@ -36,9 +46,11 @@ class Shell {
     this.grid = new Grid(this.content, {
       onSelect: () => this.paintStatus(),
       onEdit: (row, col, value) => this.edit(row, col, value),
+      onLocked: () => this.say("View · Ctrl+E to transform"),
     });
 
     this.wireDrop();
+    this.wireKeys();
     this.paintStatus();
   }
 
@@ -46,9 +58,9 @@ class Shell {
 
   async open(): Promise<void> {
     try {
-      const picked = await this.host.open();
-      if (picked === undefined) return; // cancelled, which is not a failure
-      this.load(picked.name, picked.path, picked.bytes);
+      const ref = await this.host.open();
+      if (ref === undefined) return; // cancelled, which is not a failure
+      await this.load(ref, "path" in ref ? ref.path : "");
     } catch (err) {
       this.say(message(err), true);
     }
@@ -57,26 +69,42 @@ class Shell {
   /** Open a file by path: named on the command line, or double-clicked in the
    * file manager. */
   async openPath(path: string): Promise<void> {
-    try {
-      const picked = await this.host.read(path);
-      this.load(picked.name, picked.path, picked.bytes);
-    } catch (err) {
-      this.say(message(err), true);
-    }
+    const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
+    await this.load({ name, path }, path);
   }
 
-  private load(name: string, path: string, bytes: Uint8Array): void {
+  /**
+   * load starts an engine for the file and shows what it serves.
+   *
+   * A file that will not open leaves whatever was already open alone, and its
+   * engine is closed. A half-loaded workspace is worse than a refused one.
+   */
+  private async load(ref: SourceRef, savePath: string): Promise<void> {
+    const open = ++this.opens;
+    let engine: Engine | undefined;
+
     try {
-      this.workspace = Workspace.fromFile(name, path, bytes);
-      this.grid.show(this.workspace.sheet);
+      const port = await this.host.connect();
+      engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
+      engine.onProgress = () => this.repaint();
+      engine.onError = (msg) => this.say(msg, true);
+
+      const w = await Workspace.open(ref, engine, savePath, () => this.repaint());
+      if (open !== this.opens) {
+        w.close(); // a later open finished first
+        return;
+      }
+
+      this.workspace?.close();
+      this.workspace = w;
+      this.grid.show(w.rows, w.editable);
       this.empty.hidden = true;
       this.content.hidden = false;
       this.grid.focus();
       this.say("");
     } catch (err) {
-      // A file that will not open leaves whatever was already open alone. A
-      // half-loaded workspace is worse than a refused one.
-      this.say(message(err), true);
+      engine?.close();
+      if (open === this.opens) this.say(message(err), true);
     }
     this.paintTabs();
     this.paintStatus();
@@ -116,27 +144,71 @@ class Shell {
         return;
       }
 
-      void file
-        .arrayBuffer()
-        .then((buf) => {
-          // A dropped file has no path in a sandboxed renderer, so a workspace
-          // opened this way saves with a dialog the first time. That is one
-          // question, once, and the alternative is a path the renderer had no
-          // business knowing.
-          this.load(name, "", new Uint8Array(buf));
-        })
-        .catch((err: unknown) => this.say(message(err), true));
+      try {
+        // A dropped workspace saves with a dialog the first time. That is one
+        // question, once, and it keeps a drop from quietly writing over a file
+        // the person may have dragged out of somewhere they did not mean to.
+        void this.load(this.host.dropped(file), "");
+      } catch (err) {
+        this.say(message(err), true);
+      }
     });
+  }
+
+  // ----------------------------------------------------------------- modes
+
+  private wireKeys(): void {
+    // Here rather than as a menu accelerator, so that the key reaches the page
+    // and the menu item only shows it. Both call the same toggle.
+    window.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        void this.toggleMode();
+      }
+    });
+  }
+
+  /**
+   * toggleMode moves between view and transform.
+   *
+   * The switch is explicit because transform is where a keystroke changes the
+   * file, and that should follow a decision to change it rather than a stray key
+   * while scrolling.
+   */
+  async toggleMode(): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined || this.switching) return;
+
+    if (w.mode === "transform") {
+      w.view();
+    } else {
+      this.switching = true;
+      if (w.sheet === undefined) this.say("loading for transform…");
+      try {
+        await w.transform();
+        this.say("");
+      } catch (err) {
+        this.say(message(err), true);
+      } finally {
+        this.switching = false;
+      }
+      if (this.workspace !== w) return;
+    }
+
+    this.grid.show(w.rows, w.editable, true);
+    this.grid.focus();
+    this.paintTabs();
+    this.paintStatus();
   }
 
   // --------------------------------------------------------------- editing
 
   private edit(row: number, col: number, value: string): void {
-    const w = this.workspace;
-    if (w === undefined) return;
+    const sheet = this.workspace?.sheet;
+    if (sheet === undefined) return;
 
     try {
-      w.sheet.set(row, col, value);
+      sheet.set(row, col, value);
       this.say("");
     } catch (err) {
       // The sheet refuses a cell it will not let a person type into -- a bound
@@ -187,6 +259,12 @@ class Shell {
 
   // -------------------------------------------------------------- painting
 
+  /** Rows landed or the index moved: the body and the status bar, nothing else. */
+  private repaint(): void {
+    this.grid.repaint();
+    this.paintStatus();
+  }
+
   private paintTabs(): void {
     const w = this.workspace;
     this.tabs.replaceChildren();
@@ -202,19 +280,39 @@ class Shell {
       dot.title = "unsaved edits";
       tab.append(dot);
     }
-    this.tabs.append(tab);
+
+    const grow = document.createElement("span");
+    grow.className = "grow";
+
+    const seg = document.createElement("span");
+    seg.className = "seg";
+    seg.title = "Ctrl+E";
+    for (const [mode, label] of [
+      ["view", "View"],
+      ["transform", "Transform"],
+    ] as const) {
+      const option = document.createElement("span");
+      option.textContent = label;
+      if (w.mode === mode) option.className = mode === "view" ? "on" : "on t";
+      else option.addEventListener("click", () => void this.toggleMode());
+      seg.append(option);
+    }
+
+    this.tabs.append(tab, grow, seg);
   }
 
   private paintStatus(): void {
     const w = this.workspace;
     this.statusFile.textContent = w === undefined ? "no file open" : w.status();
+    this.statusMode.textContent = w === undefined ? "" : w.mode.toUpperCase();
+    this.statusMode.className = w?.mode === "transform" ? "mode t" : "mode";
 
     if (w === undefined) {
       this.statusCell.textContent = "";
       return;
     }
     const { row, col } = this.grid.selection();
-    const header = w.sheet.columns[col]?.header ?? "";
+    const header = w.rows.columns[col]?.header ?? "";
     this.statusCell.textContent = `${header} · row ${row + 1}`;
   }
 
@@ -237,17 +335,18 @@ function message(err: unknown): string {
 
 // ------------------------------------------------------------------ start
 
-const host = window.uno;
-if (host === undefined) {
+const bridge = window.uno;
+if (bridge === undefined) {
   // Nothing here works without the bridge, and a blank window explains nothing.
   document.body.textContent = "uno could not reach its host process.";
 } else {
-  const shell = new Shell(host);
+  const shell = new Shell(electronHost(bridge));
   const menu = (window as unknown as { unoMenu?: MenuBridge }).unoMenu;
 
   menu?.on("menu:open", () => void shell.open());
   menu?.on("menu:save", () => void shell.save());
   menu?.on("menu:save-as", () => void shell.saveAs());
+  menu?.on("menu:mode", () => void shell.toggleMode());
   menu?.onOpenPath((path) => void shell.openPath(path));
 
   document.querySelector("#open")?.addEventListener("click", () => void shell.open());

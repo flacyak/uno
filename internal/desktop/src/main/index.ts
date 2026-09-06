@@ -1,14 +1,26 @@
-// The main process: one window, the menu, and the four file operations the
-// renderer cannot do for itself.
+// The main process: one window, the menu, the file dialogs, and the engines
+// that read files for the renderer.
 //
-// It holds no sheet and no document. Everything about the data lives in the
-// renderer, because `@uno/grid` is pure and runs there unchanged -- which is
-// what makes the web build the same renderer with a different `host`.
+// It holds no sheet, no document and no file's contents. An engine reads a file
+// in a utility process and sends rows straight to the renderer, and everything
+// else about the data lives in the renderer, because `@uno/grid` is pure and
+// runs there unchanged -- which is what makes the web build the same renderer
+// with a different `host`.
 
-import { BrowserWindow, Menu, app, dialog, ipcMain, shell } from "electron";
+import {
+  BrowserWindow,
+  Menu,
+  MessageChannelMain,
+  app,
+  dialog,
+  ipcMain,
+  shell,
+  utilityProcess,
+} from "electron";
+import type { UtilityProcess } from "electron";
 import { join } from "node:path";
 
-import { readPicked, writeAtomic } from "./files.ts";
+import { sourceAt, writeAtomic } from "./files.ts";
 
 /**
  * This file is bundled to CommonJS, because a preload script has to be and the
@@ -135,6 +147,15 @@ function buildMenu(win: BrowserWindow): void {
     {
       label: "View",
       submenu: [
+        // The renderer binds the key itself, so the accelerator is shown here
+        // and not registered. Registering it too would toggle twice.
+        {
+          label: "View / Transform",
+          accelerator: "CmdOrCtrl+E",
+          registerAccelerator: false,
+          click: send("menu:mode"),
+        },
+        { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },
         { type: "separator" },
@@ -150,13 +171,43 @@ function buildMenu(win: BrowserWindow): void {
 }
 
 /**
- * The four file operations, as IPC handlers.
+ * The file operations, as IPC handlers.
  *
- * They are deliberately dumb: choose a file, read bytes, write bytes. No
+ * They are deliberately dumb: choose a file, start an engine, write bytes. No
  * parsing, no format knowledge, no idea what a .uno is. That is what keeps the
  * whole of uno's behaviour in one place the tests can reach without a window.
  */
 function registerFileHandlers(win: BrowserWindow): void {
+  /**
+   * Engines, one per open file, each a utility process of its own.
+   *
+   * Not the renderer, because reading a file by path takes Node and the renderer
+   * has none. Not this process, because an index scan over 30 GB would stall
+   * every menu and dialog while it ran. Rows go from the engine to the renderer
+   * over the port and never pass through here.
+   *
+   * An engine exits by itself when its port closes, which is what closing a
+   * workspace does. These handles are kept so the ones still running when the
+   * window goes are stopped by handle, never by name.
+   */
+  const engines = new Set<UtilityProcess>();
+
+  ipcMain.on("engine:connect", (event, id: number) => {
+    const child = utilityProcess.fork(join(here, "../engine/index.cjs"), [], {
+      serviceName: "uno engine",
+    });
+    engines.add(child);
+    child.once("exit", () => engines.delete(child));
+
+    const { port1, port2 } = new MessageChannelMain();
+    child.postMessage(null, [port1]);
+    event.sender.postMessage("engine:port", id, [port2]);
+  });
+
+  win.on("closed", () => {
+    for (const child of engines) child.kill();
+  });
+
   ipcMain.handle("file:open", async () => {
     const picked = await dialog.showOpenDialog(win, {
       title: "Open",
@@ -168,7 +219,7 @@ function registerFileHandlers(win: BrowserWindow): void {
     });
     // Cancelling is not a failure and must not be reported as one.
     if (picked.canceled || picked.filePaths[0] === undefined) return undefined;
-    return readPicked(picked.filePaths[0]);
+    return sourceAt(picked.filePaths[0]);
   });
 
   ipcMain.handle("file:save-as", async (_event, suggestedName: string, bytes: Uint8Array) => {
@@ -185,8 +236,6 @@ function registerFileHandlers(win: BrowserWindow): void {
   ipcMain.handle("file:save", async (_event, path: string, bytes: Uint8Array) => {
     await writeAtomic(path, bytes);
   });
-
-  ipcMain.handle("file:read", async (_event, path: string) => readPicked(path));
 }
 
 // One window. Tabs come later, and they are a renderer concern when they do:

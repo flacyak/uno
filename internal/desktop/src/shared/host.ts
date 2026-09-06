@@ -1,34 +1,31 @@
 // The whole of what the renderer asks of the machine it is running on.
 //
-// Everything above this line is `@uno/grid`, which is pure: it turns bytes into
-// a sheet and a sheet back into bytes, and knows nothing about where either
-// came from. What is left over is choosing a file and moving bytes, and that is
-// all this is.
+// Everything above this line is `@uno/grid`, which is pure. What is left over is
+// choosing a file, starting an engine to read it, and writing a workspace back.
 //
-// It is four methods because a fifth would be something the browser then has to
-// pretend to have. The Electron implementation is `preload`, talking to the
-// main process over IPC; a web build implements the same four against the File
-// System Access API and shares every line of the renderer above it.
+// No file's bytes cross this on the way in. `open` says where a file is, and
+// the engine `connect` starts reads it from there, so a 30 GB CSV costs the
+// renderer a name and a path. Saving still hands bytes over, until a .uno can
+// point at its source instead of carrying it.
+//
+// The Electron implementation is `preload` plus `renderer/host.ts`; a web build
+// implements the same methods with the File System Access API and a Web Worker,
+// and shares every line of the renderer above it.
 
-/** A file the person chose, and where it came from. */
-export interface PickedFile {
-  /**
-   * Where the file lives, for a later save to write back to.
-   *
-   * A path is a fact about this machine, so it never reaches `@uno/grid` and
-   * never goes into a .uno. The renderer holds it to answer Ctrl+S, and a web
-   * build leaves it empty because there is nothing there to name.
-   */
-  path: string;
-  /** What to call it. `ingest` picks its decoder from the extension. */
-  name: string;
-  bytes: Uint8Array;
-}
+import type { SourceRef } from "@uno/grid/engine";
 
 export interface Host {
   /** Ask for a file to open. Undefined when the person cancelled, which is not
    * a failure and must not be reported as one. */
-  open(): Promise<PickedFile | undefined>;
+  open(): Promise<SourceRef | undefined>;
+
+  /** Where a dropped file is, in the form this platform's engine opens. Throws
+   * for a file that is not on this machine's disk. */
+  dropped(file: File): SourceRef;
+
+  /** Start an engine, a worker that owns one file. The port is the only way in
+   * or out of it, and closing the port ends the worker. */
+  connect(): Promise<MessagePort>;
 
   /** Ask where to save, and write. Returns the chosen path, or undefined when
    * the person cancelled. */
@@ -37,9 +34,17 @@ export interface Host {
   /** Write over a file already chosen. Atomic: an interrupted save loses the
    * new bytes rather than the ones already there. */
   save(path: string, bytes: Uint8Array): Promise<void>;
+}
 
-  /** Read a file the person dropped or opened from a recents list. */
-  read(path: string): Promise<PickedFile>;
+/**
+ * Bridge is what preload hands the page: Host, except for `connect`.
+ *
+ * A MessagePort cannot cross contextBridge, so the page asks for one by id and
+ * preload posts it to the window with that id. `electronHost` in the renderer
+ * turns that back into `connect`.
+ */
+export interface Bridge extends Omit<Host, "connect"> {
+  connect(id: number): void;
 }
 
 declare global {
@@ -50,6 +55,6 @@ declare global {
      * `node:fs`, and no way to reach the main process except through what
      * preload chose to hand it.
      */
-    uno?: Host;
+    uno?: Bridge;
   }
 }
