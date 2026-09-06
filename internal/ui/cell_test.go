@@ -80,7 +80,7 @@ func TestEnterInTheGridCommitsTheEdit(t *testing.T) {
 	if w.editing {
 		t.Error("the editor stayed open after Enter")
 	}
-	if got := w.sheet.At(0, 2); got != "1204" {
+	if got := w.sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("cell = %q, want the typed value", got)
 	}
 	if w.sheet.EditCount() != 1 {
@@ -107,7 +107,7 @@ func TestEscapeInTheGridWritesNothing(t *testing.T) {
 	if w.editing {
 		t.Error("Escape left the editor open")
 	}
-	if got := w.sheet.At(0, 2); got != "1,204" {
+	if got := w.sheet.Raw(0, 2); got != "1,204" {
 		t.Errorf("cell = %q, want it untouched", got)
 	}
 	if w.sheet.EditCount() != 0 {
@@ -131,7 +131,7 @@ func TestClickingAnotherCellKeepsWhatWasTyped(t *testing.T) {
 	if w.editing {
 		t.Error("the editor followed the click to the next cell")
 	}
-	if got := w.sheet.At(0, 2); got != "1204" {
+	if got := w.sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("cell = %q, want the typed value kept", got)
 	}
 	if w.active.Row != 1 || w.active.Col != 2 {
@@ -173,7 +173,7 @@ func TestUndoClosesAnOpenCellEditor(t *testing.T) {
 	if w.editing {
 		t.Error("undo left the cell editor open")
 	}
-	if got := w.sheet.At(0, 2); got != "1,204" {
+	if got := w.sheet.Raw(0, 2); got != "1,204" {
 		t.Errorf("cell = %q, want the raw value back and nothing typed over it", got)
 	}
 	if w.sheet.EditCount() != 0 {
@@ -295,7 +295,7 @@ func TestEnterOpensAndEnterCommits(t *testing.T) {
 	if w.editing {
 		t.Error("the editor stayed open after the second Enter")
 	}
-	if got := w.sheet.At(0, 2); got != "1204" {
+	if got := w.sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("cell = %q, want the typed value", got)
 	}
 	if got := s.win.Canvas().Focused(); got != fyne.Focusable(w.table) {
