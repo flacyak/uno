@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- The renderer loads nothing from the network: no fonts, no analytics, no
+         CDN. A spreadsheet is somebody's data, and an app that opens one should
+         not be talking to anyone about it. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>uno</title>
+  </head>
+  <body>
+    <!-- tabindex, because the grid handles arrow keys and needs the focus to
+         receive them. -->
+    <div id="app" tabindex="0">
+      <div class="win-tabs" id="tabs"></div>
+
+      <div class="dropzone" id="empty">
+        <h1>Drop a spreadsheet</h1>
+        <p>or <a href="#" id="open">open one</a></p>
+        <p class="exts">csv &middot; tsv &middot; uno</p>
+      </div>
+
+      <!-- tabindex, because the grid listens for arrow keys here and a plain
+           div cannot take focus. -->
+      <div id="content" tabindex="0" hidden></div>
+
+      <div class="win-status">
+        <span id="status-file">no file open</span>
+        <span class="sep">&middot;</span>
+        <span id="status-msg"></span>
+        <span class="grow"></span>
+        <span id="status-cell"></span>
+      </div>
+    </div>
+
+    <script type="module" src="/src/renderer/main.ts"></script>
+  </body>
+</html>
