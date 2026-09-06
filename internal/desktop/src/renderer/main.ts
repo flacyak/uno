@@ -1,14 +1,15 @@
-// The shell: the tab strip, the grid, the status bar, and what the menu means.
+// The shell: the tab strip, the banner, the grid, the status bar, and what the
+// menu means.
 //
 // It owns *when* things happen and nothing about what they do. Opening a file
-// is `Workspace.open` over an engine, changing a cell is `sheet.set`, saving is
-// `workspace.bytes` handed to the host. Every one of those is testable without
-// a window, which is the seam this file exists to keep.
+// is `Workspace.open` over an engine, changing a cell is `workspace.set`, saving
+// is `workspace.bytes` handed to the host. Every one of those is testable
+// without a window, which is the seam this file exists to keep.
 
 import "./app.css";
 
 import { Engine, messagePort } from "@uno/grid/engine";
-import type { MessagePortLike, Reply, Request, SourceRef } from "@uno/grid/engine";
+import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
 
 import type { Host } from "../shared/host.ts";
 import { Grid } from "./grid.ts";
@@ -31,10 +32,12 @@ class Shell {
   private readonly grid: Grid;
   /** Counts opens, so one that finishes after a later one does not replace it. */
   private opens = 0;
-  private switching = false;
+  /** The offer a person said "not now" to, so it stays gone until it changes. */
+  private dismissed = "";
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
+  private readonly banner = must(document.querySelector<HTMLElement>("#banner"));
   private readonly empty = must(document.querySelector<HTMLElement>("#empty"));
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
   private readonly statusMode = must(document.querySelector<HTMLElement>("#status-mode"));
@@ -86,17 +89,25 @@ class Shell {
     try {
       const port = await this.host.connect();
       engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
+      let opened: Workspace | undefined;
       engine.onProgress = () => this.repaint();
       engine.onError = (msg) => this.say(msg, true);
+      engine.onOffer = (offer) => {
+        if (opened === undefined || this.workspace !== opened) return;
+        opened.offer = offer;
+        this.paintBanner();
+      };
 
       const w = await Workspace.open(ref, engine, savePath, () => this.repaint());
       if (open !== this.opens) {
         w.close(); // a later open finished first
         return;
       }
+      opened = w;
 
       this.workspace?.close();
       this.workspace = w;
+      this.dismissed = "";
       this.grid.show(w.rows, w.editable);
       this.empty.hidden = true;
       this.content.hidden = false;
@@ -107,6 +118,7 @@ class Shell {
       if (open === this.opens) this.say(message(err), true);
     }
     this.paintTabs();
+    this.paintBanner();
     this.paintStatus();
   }
 
@@ -158,12 +170,17 @@ class Shell {
   // ----------------------------------------------------------------- modes
 
   private wireKeys(): void {
-    // Here rather than as a menu accelerator, so that the key reaches the page
-    // and the menu item only shows it. Both call the same toggle.
+    // Here rather than as menu accelerators, so the key reaches the page. The
+    // cell editor stops its own keys, so these never fire while typing in one.
     window.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e") {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "e") {
         e.preventDefault();
-        void this.toggleMode();
+        this.toggleMode();
+      } else if (key === "z" && this.workspace?.editable === true) {
+        e.preventDefault();
+        void this.undo();
       }
     });
   }
@@ -173,53 +190,69 @@ class Shell {
    *
    * The switch is explicit because transform is where a keystroke changes the
    * file, and that should follow a decision to change it rather than a stray key
-   * while scrolling.
+   * while scrolling. It loads nothing either way.
    */
-  async toggleMode(): Promise<void> {
+  toggleMode(): void {
     const w = this.workspace;
-    if (w === undefined || this.switching) return;
+    if (w === undefined) return;
 
-    if (w.mode === "transform") {
-      w.view();
-    } else {
-      this.switching = true;
-      if (w.sheet === undefined) this.say("loading for transform…");
-      try {
-        await w.transform();
-        this.say("");
-      } catch (err) {
-        this.say(message(err), true);
-      } finally {
-        this.switching = false;
-      }
-      if (this.workspace !== w) return;
-    }
+    if (w.mode === "transform") w.view();
+    else w.transform();
 
     this.grid.show(w.rows, w.editable, true);
     this.grid.focus();
     this.paintTabs();
+    this.paintBanner();
     this.paintStatus();
   }
 
   // --------------------------------------------------------------- editing
 
   private edit(row: number, col: number, value: string): void {
-    const sheet = this.workspace?.sheet;
-    if (sheet === undefined) return;
+    const w = this.workspace;
+    if (w === undefined) return;
 
+    w.set(row, col, value)
+      .then(
+        () => this.say(""),
+        // The engine refuses a cell it will not let a person type into -- a bound
+        // column, a row that is not there. Saying which is the whole point of it
+        // refusing by name.
+        (err: unknown) => this.say(message(err), true),
+      )
+      .finally(() => this.changed(w));
+  }
+
+  private async apply(offer: Offer): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined) return;
     try {
-      sheet.set(row, col, value);
+      await w.apply(offer);
       this.say("");
     } catch (err) {
-      // The sheet refuses a cell it will not let a person type into -- a bound
-      // column, a row that is not there. Saying which is the whole point of it
-      // refusing by name.
       this.say(message(err), true);
     }
-    // An edit can change a column's kind, and a bound column anywhere in view
-    // may have recomputed, so the header and the body are both redrawn.
+    this.changed(w);
+  }
+
+  private async undo(): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined) return;
+    try {
+      await w.undo();
+      this.say("");
+    } catch (err) {
+      this.say(message(err), true);
+    }
+    this.changed(w);
+  }
+
+  /** After an edit lands: kinds may have changed, and so has the log. */
+  private changed(w: Workspace): void {
+    if (this.workspace !== w) return;
     this.grid.refresh();
     this.paintTabs();
+    this.paintBanner();
     this.paintStatus();
   }
 
@@ -231,7 +264,7 @@ class Shell {
     if (w.path === "") return this.saveAs();
 
     try {
-      await this.host.save(w.path, w.bytes(this.grid.selection()));
+      await this.host.save(w.path, await w.bytes(this.grid.selection()));
       w.saved(w.path);
       this.say(`saved ${w.path}`);
     } catch (err) {
@@ -246,7 +279,8 @@ class Shell {
     if (w === undefined) return;
 
     try {
-      const path = await this.host.saveAs(w.suggestedFileName, w.bytes(this.grid.selection()));
+      const bytes = await w.bytes(this.grid.selection());
+      const path = await this.host.saveAs(w.suggestedFileName, bytes);
       if (path === undefined) return; // cancelled
       w.saved(path);
       this.say(`saved ${path}`);
@@ -294,11 +328,63 @@ class Shell {
       const option = document.createElement("span");
       option.textContent = label;
       if (w.mode === mode) option.className = mode === "view" ? "on" : "on t";
-      else option.addEventListener("click", () => void this.toggleMode());
+      else option.addEventListener("click", () => this.toggleMode());
       seg.append(option);
     }
 
     this.tabs.append(tab, grow, seg);
+  }
+
+  /**
+   * paintBanner asks the recogniser's question, in transform only.
+   *
+   * On a file larger than its first pass, the count grows while the survey
+   * reads and says it is a lower bound. Apply works before the count is final:
+   * it is one edit, and Ctrl+Z takes it back.
+   */
+  private paintBanner(): void {
+    const w = this.workspace;
+    const offer = w?.mode === "transform" ? w.offer : null;
+    if (offer === null || offer === undefined || this.dismissed === key(offer)) {
+      this.banner.hidden = true;
+      this.banner.replaceChildren();
+      return;
+    }
+
+    const header = document.createElement("b");
+    header.textContent = offer.header;
+
+    const n = offer.affects.toLocaleString();
+    const count = offer.complete
+      ? `${n} ${offer.affects === 1 ? "cell" : "cells"}`
+      : `at least ${n} in the first ${offer.scanned.toLocaleString()} rows`;
+    const parts = [offer.description, count];
+    if (offer.ambiguous) parts.push("another rule fits these examples too");
+
+    const grow = document.createElement("span");
+    grow.className = "grow";
+
+    const apply = document.createElement("button");
+    apply.className = "primary";
+    apply.textContent = "Apply";
+    apply.addEventListener("click", () => void this.apply(offer));
+
+    const later = document.createElement("button");
+    later.textContent = "Not now";
+    later.addEventListener("click", () => {
+      this.dismissed = key(offer);
+      this.paintBanner();
+      this.grid.focus();
+    });
+
+    this.banner.replaceChildren(
+      header,
+      document.createTextNode(` · ${parts.join(" · ")}`),
+      grow,
+      apply,
+      later,
+    );
+    this.banner.hidden = false;
   }
 
   private paintStatus(): void {
@@ -324,6 +410,11 @@ class Shell {
   }
 }
 
+/** An offer is the same question while its column and program are. */
+function key(offer: Offer): string {
+  return `${offer.col}:${offer.program}`;
+}
+
 function must<T>(value: T | null): T {
   if (value === null) throw new Error("the renderer's markup is missing an element it needs");
   return value;
@@ -346,7 +437,7 @@ if (bridge === undefined) {
   menu?.on("menu:open", () => void shell.open());
   menu?.on("menu:save", () => void shell.save());
   menu?.on("menu:save-as", () => void shell.saveAs());
-  menu?.on("menu:mode", () => void shell.toggleMode());
+  menu?.on("menu:mode", () => shell.toggleMode());
   menu?.onOpenPath((path) => void shell.openPath(path));
 
   document.querySelector("#open")?.addEventListener("click", () => void shell.open());
