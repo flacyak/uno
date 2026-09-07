@@ -215,6 +215,14 @@ export class Band {
     return this.columns.length;
   }
 
+  /**
+   * readable is how many rows the engine can answer for now. Until the index is
+   * complete, `rows` is a projection past it, and a motion to the end stops here.
+   */
+  readable(): number {
+    return this.engine.progress?.readable ?? 0;
+  }
+
   /** ready reports whether a row has arrived. One that has not is drawn as pending. */
   ready(row: number): boolean {
     return row >= this.start && row < this.start + this.data.length;
