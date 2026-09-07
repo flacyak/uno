@@ -56,9 +56,10 @@ cell it changed.
 
 Moving is the same in both modes and writes nothing: `h` `j` `k` `l`, `w` and
 `b` through cells in reading order, `0` `^` `$` across the row, `gg` and `G` to
-the first and last row, Ctrl+d, u, f and b by half and whole pages. Each takes
-a count, which waits in the status bar until the motion arrives, and `{n}G` goes
-to row n. While a file is still indexing, `G` stops at the last row the engine
+the first and last row, `H` `M` `L` to the top, middle and bottom row on screen,
+Ctrl+d, u, f and b by half and whole pages. Each takes a count, which waits in
+the status bar until the motion arrives, and `{n}G` goes to row n. `zt` `zz`
+`zb` scroll the selected row to the top, middle or bottom and leave it selected. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 
