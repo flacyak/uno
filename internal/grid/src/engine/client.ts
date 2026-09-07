@@ -8,6 +8,8 @@ import type {
   Changed,
   ColumnInfo,
   EditRequest,
+  FindRequest,
+  Found,
   Offer,
   Opened,
   Port,
@@ -75,6 +77,13 @@ export class Engine {
     const r = await this.ask((id) => ({ t: "undo", id }));
     if (r.t !== "changed") throw new Error(`the engine answered an undo with ${r.t}`);
     return r.changed;
+  }
+
+  /** find asks for the next matching row in a column, however far from the band it is. */
+  async find(find: FindRequest): Promise<Found> {
+    const r = await this.ask((id) => ({ t: "find", id, find }));
+    if (r.t !== "found") throw new Error(`the engine answered a find with ${r.t}`);
+    return r.found;
   }
 
   mode(transform: boolean): void {

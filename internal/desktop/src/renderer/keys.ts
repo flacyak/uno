@@ -91,6 +91,8 @@ export type Action =
   | { t: "dismiss" }
   /** : opens the command line. */
   | { t: "prompt"; lead: ":" }
+  /** ]f and [f: the next and previous cell in the column that does not parse as its kind. */
+  | { t: "unparsed"; dir: 1 | -1 }
   | { t: "say"; text: string };
 
 export interface Step {
@@ -205,6 +207,8 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
     case "'":
     case "`":
     case "y":
+    case "]":
+    case "[":
     case "c":
       return { pending: { count: pending.count, keys: key }, action: NONE };
     case "i":
@@ -260,6 +264,10 @@ function finish(mode: Mode, press: Press, keys: string, count: number | undefine
       return { t: "scroll", where: "bottom" };
     case "yy":
       return { t: "yank" };
+    case "]f":
+      return { t: "unparsed", dir: 1 };
+    case "[f":
+      return { t: "unparsed", dir: -1 };
     case "cc":
       return open(mode, "empty");
   }

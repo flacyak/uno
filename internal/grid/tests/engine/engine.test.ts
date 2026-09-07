@@ -22,6 +22,7 @@ import {
 } from "../../src/engine/index.ts";
 import type { MessagePortLike, Offer, Reply, Request, Tuning } from "../../src/engine/index.ts";
 import { openFormat, read } from "../../src/ingest/index.ts";
+import { isNumber } from "../../src/num/index.ts";
 import { snap } from "../../src/pattern/index.ts";
 import { parse as parseProgram, text as programText } from "../../src/program/index.ts";
 import { NO_ROW, Op } from "../../src/sheet/index.ts";
@@ -168,6 +169,60 @@ test("an edit shows in the next rows, and undo takes it back", async () => {
     expect(undone.columns[UNITS]).toMatchObject({ kind: "text", flagged: true });
     expect((await engine.rows(5, 1)).rows[0]![UNITS]).toBe("1,101");
     expect((await engine.rows(0, 1)).rows[0]![UNITS], "undo took back one edit").toBe("1204");
+  } finally {
+    done();
+  }
+});
+
+test("find reads the column past any band, with the log applied", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    await engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
+    await indexed(engine);
+    const rows = sales.rows();
+
+    // Every units cell that does not parse as a number, read the slow way.
+    const unparsed: number[] = [];
+    for (let row = 0; row < rows; row++) {
+      const v = sales.display(row, UNITS).trim();
+      if (v !== "" && !isNumber(v)) unparsed.push(row);
+    }
+    const units = (from: number, dir: 1 | -1) =>
+      engine.find({ col: UNITS, from, dir, match: { t: "unparsed" } });
+
+    for (const from of [0, 7, 2400, 4811]) {
+      const down = unparsed.find((r) => r > from) ?? null;
+      expect(await units(from, 1), `down from ${from}`).toEqual({
+        row: down,
+        searched: (down ?? rows - 1) - from,
+        complete: true,
+      });
+      const up = unparsed.findLast((r) => r < from) ?? null;
+      expect((await units(from, -1)).row, `up from ${from}`).toBe(up);
+    }
+
+    // Text that is not numeric data in a costume has nothing in it to fail.
+    const region = await engine.find({ col: REGION, from: 0, dir: 1, match: { t: "unparsed" } });
+    expect(region).toEqual({ row: null, searched: 0, complete: true });
+
+    const north = [...Array(rows).keys()].find(
+      (r) => r > 0 && sales.display(r, REGION).includes("North"),
+    );
+    const text = await engine.find({
+      col: REGION,
+      from: 0,
+      dir: 1,
+      match: { t: "text", text: "North" },
+    });
+    expect(text.row).toBe(north);
+
+    // With the commas gone nothing fails, until one cell far below is typed over.
+    engine.mode(true);
+    await engine.edit({ op: Op.Apply, row: NO_ROW, col: UNITS, now: 'replace(/,/, "")' });
+    await engine.edit({ op: Op.Set, row: 4000, col: UNITS, now: "n/a" });
+    expect((await units(0, 1)).row).toBe(4000);
+    expect((await units(4000, 1)).row).toBe(null);
+    expect((await units(4811, -1)).row).toBe(4000);
   } finally {
     done();
   }

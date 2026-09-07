@@ -605,6 +605,31 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "]f and [f go to the cells in a column that do not parse",
+    script: `
+      const at = () => text("#status-cell");
+      await press("h");
+      if (at() !== "units · row 3") return "the selection is at " + at();
+
+      // Row 5 is blank, which is no evidence either way; rows 6 and 8 keep their commas.
+      for (const [key, want] of [["]", "units · row 6"], ["]", "units · row 8"], ["[", "units · row 6"]]) {
+        await press(key);
+        await press("f");
+        if (!(await until(() => at() === want))) return key + "f went to " + at() + ", not " + want;
+      }
+
+      for (const key of ["g", "g", "[", "f"]) await press(key);
+      const none = "nothing above row 1 in units fails to parse as a number";
+      if (!(await until(() => text("#status-msg") === none))) {
+        return "[f from row 1 says " + JSON.stringify(text("#status-msg"));
+      }
+
+      for (const key of ["0", "l", "]", "f"]) await press(key);
+      const plain = text("#status-msg");
+      return plain === "region is text · every value in it parses" ? "" : "]f on region says " + JSON.stringify(plain);
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
