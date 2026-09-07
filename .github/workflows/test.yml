@@ -4,7 +4,8 @@
 # ever needs an Xvfb, an import went the wrong way.
 #
 # Compiling still needs the toolkit's headers, because fyne.io/fyne/v2/test
-# links the same GL and X11 bindings the app does. Building is not displaying.
+# links the same GL and windowing bindings the app does. Building is not
+# displaying.
 name: test
 
 on:
@@ -24,12 +25,17 @@ jobs:
           # it.
           go-version-file: go.mod
 
+      # Untagged, the GLFW binding compiles both of its Linux backends and picks
+      # between them at run time, so both sets of headers have to be here even
+      # though nothing is ever displayed. Dropping the wayland half back off the
+      # list is what broke this workflow the last time.
       - name: Install the toolkit's build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libgl1-mesa-dev libx11-dev libxcursor-dev libxrandr-dev \
-            libxinerama-dev libxi-dev libxxf86vm-dev
+            libxinerama-dev libxi-dev libxxf86vm-dev \
+            libwayland-dev libxkbcommon-dev
 
       - name: Check the tree is formatted
         run: |
