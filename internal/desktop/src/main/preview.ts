@@ -357,18 +357,15 @@ async function fix(
   }
   await sleep(OPEN_PAUSE);
 
-  // The first character opens the editor over the selected cell already holding
-  // it, the way every spreadsheet does; it is sent as a keydown alone because
-  // the grid reads the keydown and puts the character in the field itself.
-  // Sending the char too would type it a second time, into the field that the
-  // keydown had just focused.
-  press(win, value[0]!);
+  // s opens the editor empty over the selected cell. It is a keydown alone: the
+  // grid prevents it, so no char follows it into the field it just focused.
+  press(win, "s");
   await sleep(KEYSTROKE);
 
-  // The rest go to the field, which needs the char to insert anything. Typed a
-  // character at a time rather than assigned, because a field that fills
+  // The value goes to the field, which needs the char to insert anything. Typed
+  // a character at a time rather than assigned, because a field that fills
   // instantly reads as a screenshot rather than as an edit.
-  for (const ch of value.slice(1)) {
+  for (const ch of value) {
     win.webContents.sendInputEvent({ type: "keyDown", keyCode: ch });
     win.webContents.sendInputEvent({ type: "char", keyCode: ch });
     win.webContents.sendInputEvent({ type: "keyUp", keyCode: ch });
