@@ -77,6 +77,12 @@ export type Action =
   /** Open the editor. `transform` switches to transform first, which is `a` in view. */
   | { t: "insert"; caret: Caret; transform: boolean }
   | { t: "undo" }
+  /** x: set the cell to "". */
+  | { t: "clear" }
+  /** yy: copy what the cell stores. It changes nothing, so view allows it. */
+  | { t: "yank" }
+  /** p and P: set the cell to what was yanked. */
+  | { t: "put" }
   | { t: "say"; text: string };
 
 export interface Step {
@@ -190,6 +196,7 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
     case "m":
     case "'":
     case "`":
+    case "y":
     case "c":
       return { pending: { count: pending.count, keys: key }, action: NONE };
     case "i":
@@ -205,6 +212,12 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
       return done(open(mode, "empty"));
     case "u":
       return done(change(mode, press, { t: "undo" }));
+    case "x":
+      return done(change(mode, press, { t: "clear" }));
+    case "p":
+    case "P":
+      // A cell has no before and after, so P puts where p does.
+      return done(change(mode, press, { t: "put" }));
   }
   return done(NONE);
 }
@@ -229,6 +242,8 @@ function finish(mode: Mode, keys: string, count: number | undefined): Action {
       return { t: "scroll", where: "middle" };
     case "zb":
       return { t: "scroll", where: "bottom" };
+    case "yy":
+      return { t: "yank" };
     case "cc":
       return open(mode, "empty");
   }
