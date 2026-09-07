@@ -15,6 +15,8 @@ import { NO_ROW } from "@uno/grid/sheet";
 import type { Host } from "../shared/host.ts";
 import { Grid } from "./grid.ts";
 import { electronHost } from "./host.ts";
+import { command } from "./keys.ts";
+import type { Command } from "./keys.ts";
 import { Workspace } from "./workspace.ts";
 
 /** The extensions the app will try to open. Anything else is very likely a
@@ -45,6 +47,8 @@ class Shell {
   private readonly statusFile = must(document.querySelector<HTMLElement>("#status-file"));
   private readonly statusMsg = must(document.querySelector<HTMLElement>("#status-msg"));
   private readonly statusKeys = must(document.querySelector<HTMLElement>("#status-keys"));
+  private readonly statusBar = must(document.querySelector<HTMLElement>(".win-status"));
+  private readonly statusCmd = must(document.querySelector<HTMLInputElement>("#status-cmd"));
   private readonly statusCell = must(document.querySelector<HTMLElement>("#status-cell"));
 
   constructor(private readonly host: Host) {
@@ -85,12 +89,16 @@ class Shell {
             if (offer !== null) this.dismiss(offer);
             return;
           }
+          case "prompt":
+            this.prompt(action.lead);
+            return;
         }
       },
     });
 
     this.wireDrop();
     this.wireKeys();
+    this.wirePrompt();
     this.paintStatus();
   }
 
@@ -335,6 +343,77 @@ class Shell {
     }
     this.paintTabs();
     this.paintStatus();
+  }
+
+  // ---------------------------------------------------------- command line
+
+  /**
+   * wirePrompt runs the one-line prompt in the status bar. Enter runs what was
+   * typed and Esc closes it, as do clicking away and deleting the colon.
+   */
+  private wirePrompt(): void {
+    const input = this.statusCmd;
+    input.addEventListener("keydown", (e) => {
+      // The grid's keys and the shell's chords stay out of what is being typed.
+      e.stopPropagation();
+      if (e.isComposing) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.closePrompt();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const typed = input.value;
+        this.closePrompt();
+        this.run(command(typed.slice(1)));
+      }
+    });
+    input.addEventListener("input", () => {
+      if (!input.value.startsWith(":")) this.closePrompt();
+    });
+    input.addEventListener("blur", () => this.closePrompt());
+  }
+
+  private prompt(lead: ":"): void {
+    this.statusBar.classList.add("prompting");
+    this.statusCmd.hidden = false;
+    this.statusCmd.value = lead;
+    this.statusCmd.focus();
+  }
+
+  private closePrompt(): void {
+    // Hidden first: handing the focus back blurs the input, which closes it again.
+    if (this.statusCmd.hidden) return;
+    this.statusCmd.hidden = true;
+    this.statusBar.classList.remove("prompting");
+    this.grid.focus();
+  }
+
+  /** run carries out a command from the prompt. */
+  private run(c: Command): void {
+    switch (c.t) {
+      case "none":
+        return;
+      case "write":
+        void this.save();
+        return;
+      case "save-as":
+        void this.saveAs();
+        return;
+      case "open":
+        // Opening closes the workspace without asking, so :e asks first.
+        if (!c.force && this.workspace?.dirty === true) {
+          this.say("unsaved edits · :w first, or :e! to drop them", true);
+        } else {
+          void this.open();
+        }
+        return;
+      case "row":
+        this.grid.act({ t: "move", motion: "last-row", count: c.row });
+        return;
+      case "unknown":
+        this.say(`not a command: :${c.text}`, true);
+        return;
+    }
   }
 
   // -------------------------------------------------------------- painting

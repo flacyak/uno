@@ -565,6 +565,46 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: ": opens a command line that goes to a row, refuses what it does not know, and Esc closes",
+    script: `
+      const input = document.querySelector("#status-cmd");
+      const run = async (typed) => {
+        await press(":");
+        input.value = typed;
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await frame();
+      };
+
+      await press(":");
+      if (input.hidden) return "the command line did not open";
+      if (document.activeElement !== input) return "the command line did not take the keys";
+      if (input.value !== ":") return "it opened holding " + JSON.stringify(input.value);
+      if (document.querySelector("#status-file").getClientRects().length > 0) {
+        return "the file's line still shows beside it";
+      }
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await frame();
+      if (!input.hidden) return "Esc left the command line open";
+      if (text("#status-cell") !== "revenue · row 3") return "Esc moved the selection to " + text("#status-cell");
+
+      await run(":120");
+      if (!input.hidden) return "Enter left the command line open";
+      if (text("#status-cell") !== "revenue · row 120") return ":120 went to " + text("#status-cell");
+      await press("'");
+      await press("'");
+      if (text("#status-cell") !== "revenue · row 3") return "'' after :120 went to " + text("#status-cell");
+
+      await run(":e");
+      const refused = text("#status-msg");
+      if (refused !== "unsaved edits · :w first, or :e! to drop them") {
+        return ":e over unsaved edits says " + JSON.stringify(refused);
+      }
+      await run(":foo");
+      const unknown = text("#status-msg");
+      return unknown === "not a command: :foo" ? "" : ":foo says " + JSON.stringify(unknown);
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
