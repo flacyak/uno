@@ -102,7 +102,7 @@ func Snap(s *sheet.Sheet) Snapshot {
 		}
 		vals := make([]string, s.Rows())
 		for row := range vals {
-			vals[row] = s.At(row, col)
+			vals[row] = s.Raw(row, col)
 		}
 		sn.cols = append(sn.cols, column{
 			col:      col,

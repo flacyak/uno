@@ -42,11 +42,14 @@ func New(name string, header []string, rows [][]string) *Sheet {
 func (s *Sheet) Rows() int { return len(s.rows) }
 func (s *Sheet) Cols() int { return len(s.Columns) }
 
-// At is called once per visible cell on every scroll frame (I-1). Keep it
-// allocation free, and treat an absent cell as empty rather than as an error:
-// short rows are normal in real exports, and returning "" is what lets the
-// table skip bounds checks while scrolling.
-func (s *Sheet) At(row, col int) string {
+// Raw is what the cell stores. The log records it, undo restores it, and the
+// recogniser reads it, because all three are about the value a person put there
+// rather than the one they are being shown.
+//
+// An absent cell is empty rather than an error: short rows are normal in real
+// exports, and returning "" is what lets the table skip bounds checks while
+// scrolling.
+func (s *Sheet) Raw(row, col int) string {
 	if row < 0 || row >= len(s.rows) {
 		return ""
 	}
@@ -54,4 +57,15 @@ func (s *Sheet) At(row, col int) string {
 		return ""
 	}
 	return s.rows[row][col]
+}
+
+// Display is what the cell shows, and what the grid binds to. It is called once
+// per visible cell on every scroll frame (I-1), so it reads and returns:
+// whatever fills it in does so when an edit lands, never when a cell is read.
+//
+// Today it is Raw. A formula separates the two — =SUM(...) stored, 48160.00
+// shown — and the split lands here first so that arrival is a body added to this
+// method rather than a change to every caller and to the per-frame contract.
+func (s *Sheet) Display(row, col int) string {
+	return s.Raw(row, col)
 }

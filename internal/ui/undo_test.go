@@ -28,10 +28,10 @@ func TestUndoStepsBackOneEditAtATime(t *testing.T) {
 
 	s.undo()
 
-	if got := w.sheet.At(1, 2); got != "987" {
+	if got := w.sheet.Raw(1, 2); got != "987" {
 		t.Errorf("cell = %q, want the original %q back", got, "987")
 	}
-	if got := w.sheet.At(0, 2); got != "1204" {
+	if got := w.sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("the earlier edit = %q, want it left alone", got)
 	}
 	if w.sheet.EditCount() != 1 {
@@ -40,7 +40,7 @@ func TestUndoStepsBackOneEditAtATime(t *testing.T) {
 
 	s.undo()
 
-	if got := w.sheet.At(0, 2); got != "1,204" {
+	if got := w.sheet.Raw(0, 2); got != "1,204" {
 		t.Errorf("cell = %q, want the raw value back", got)
 	}
 	if w.sheet.EditCount() != 0 {
@@ -58,7 +58,7 @@ func TestUndoWithNothingToUndoDoesNothing(t *testing.T) {
 	if w.dirty() {
 		t.Error("undo on an untouched workspace marked it dirty")
 	}
-	if got := w.sheet.At(0, 2); got != "1,204" {
+	if got := w.sheet.Raw(0, 2); got != "1,204" {
 		t.Errorf("cell = %q, want the file untouched", got)
 	}
 }
@@ -109,10 +109,10 @@ func TestUndoWorksOnAReopenedFile(t *testing.T) {
 
 	fresh.undo()
 
-	if got := reopened.sheet.At(1, 2); got != "987" {
+	if got := reopened.sheet.Raw(1, 2); got != "987" {
 		t.Errorf("cell = %q, want an edit made before the save taken back", got)
 	}
-	if got := reopened.sheet.At(0, 2); got != "1204" {
+	if got := reopened.sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("the earlier edit = %q, want it left alone", got)
 	}
 	if !reopened.dirty() {

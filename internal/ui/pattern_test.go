@@ -92,7 +92,7 @@ func TestApplyingFixesTheRestAndFlipsTheBadge(t *testing.T) {
 	s.applyProposal(w)
 
 	for row, want := range map[int]string{4: "3120", 5: "4001", 6: "612"} {
-		if got := w.sheet.At(row, 2); got != want {
+		if got := w.sheet.Raw(row, 2); got != want {
 			t.Errorf("cell (%d,2) = %q, want %q", row, got, want)
 		}
 	}
@@ -161,10 +161,10 @@ func TestApplyingFlipsACurrencyAndADateColumn(t *testing.T) {
 	}
 
 	// The rows nobody touched are the ones the offer was about.
-	if got, want := w.sheet.At(4, 0), "12900"; got != want {
+	if got, want := w.sheet.Raw(4, 0), "12900"; got != want {
 		t.Errorf("cell (4,0) = %q, want %q", got, want)
 	}
-	if got, want := w.sheet.At(4, 1), "2026-07-05"; got != want {
+	if got, want := w.sheet.Raw(4, 1), "2026-07-05"; got != want {
 		t.Errorf("cell (4,1) = %q, want %q", got, want)
 	}
 }
@@ -180,12 +180,12 @@ func TestOneUndoTakesTheWholeColumnBack(t *testing.T) {
 	s.undo()
 
 	for row, want := range map[int]string{4: "3,120", 5: "4,001", 6: "612"} {
-		if got := w.sheet.At(row, 2); got != want {
+		if got := w.sheet.Raw(row, 2); got != want {
 			t.Errorf("cell (%d,2) = %q, want %q back", row, got, want)
 		}
 	}
 	// The three edits made by hand are before it in the log and stay done.
-	if got := w.sheet.At(0, 2); got != "1204" {
+	if got := w.sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("cell (0,2) = %q, want the hand edit to survive", got)
 	}
 	if got := w.sheet.EditCount(); got != 3 {
@@ -256,7 +256,7 @@ func TestAReopenedWorkspaceStillAsks(t *testing.T) {
 	}
 	fresh.applyProposal(reopened)
 
-	if got := reopened.sheet.At(4, 2); got != "3120" {
+	if got := reopened.sheet.Raw(4, 2); got != "3120" {
 		t.Errorf("cell (4,2) = %q, want %q", got, "3120")
 	}
 	if got, want := badgeFor(reopened.sheet.Columns[2]), "num"; got != want {
@@ -265,7 +265,7 @@ func TestAReopenedWorkspaceStillAsks(t *testing.T) {
 
 	// Still one step back, on a file that has been to disk and come back.
 	fresh.undo()
-	if got := reopened.sheet.At(4, 2); got != "3,120" {
+	if got := reopened.sheet.Raw(4, 2); got != "3,120" {
 		t.Errorf("cell (4,2) = %q, want %q back", got, "3,120")
 	}
 }
@@ -312,7 +312,7 @@ func TestTheWholeStoryOnTheRealFile(t *testing.T) {
 	if !strings.Contains(s.status.Text, "4 edits") {
 		t.Errorf("status = %q, want it to count 4 edits", s.status.Text)
 	}
-	if got := w.sheet.At(5, units); got != "1101" {
+	if got := w.sheet.Raw(5, units); got != "1101" {
 		t.Errorf("cell (5,%d) = %q, want it fixed by the operation", units, got)
 	}
 
@@ -321,10 +321,10 @@ func TestTheWholeStoryOnTheRealFile(t *testing.T) {
 	if got, want := badgeFor(w.sheet.Columns[units]), "text?"; got != want {
 		t.Errorf("badge = %q, want %q back", got, want)
 	}
-	if got := w.sheet.At(5, units); got != "1,101" {
+	if got := w.sheet.Raw(5, units); got != "1,101" {
 		t.Errorf("cell (5,%d) = %q, want the separator back", units, got)
 	}
-	if got := w.sheet.At(0, units); got != "1204" {
+	if got := w.sheet.Raw(0, units); got != "1204" {
 		t.Errorf("cell (0,%d) = %q, want the hand edit to survive", units, got)
 	}
 }

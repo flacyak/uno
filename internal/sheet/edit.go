@@ -59,7 +59,7 @@ func (s *Sheet) Set(row, col int, v string) error {
 		Op:  OpSet,
 		Row: row,
 		Col: col,
-		Was: s.At(row, col),
+		Was: s.Raw(row, col),
 		Now: v,
 	})
 }

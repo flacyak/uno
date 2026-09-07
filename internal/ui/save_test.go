@@ -36,7 +36,7 @@ func TestEditingACellLogsItAndMarksTheTabDirty(t *testing.T) {
 
 	w.editor.OnSubmitted("1204")
 
-	if got := w.sheet.At(0, 2); got != "1204" {
+	if got := w.sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("cell = %q, want %q", got, "1204")
 	}
 	if w.sheet.EditCount() != 1 {
@@ -214,7 +214,7 @@ func TestOpeningAUnoRestoresTheWorkspace(t *testing.T) {
 	if got.sheet == nil {
 		t.Fatal("the .uno opened with no sheet")
 	}
-	if v := got.sheet.At(0, 2); v != "1204" {
+	if v := got.sheet.Raw(0, 2); v != "1204" {
 		t.Errorf("cell = %q, want the edit replayed", v)
 	}
 	if got.path != path {

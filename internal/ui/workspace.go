@@ -169,7 +169,7 @@ func (s *Shell) newEditor(w *workspace) *widget.Entry {
 // change is logged as it is made. Retyping the value already there is not an
 // edit and must not add a line to the log.
 func (s *Shell) commit(w *workspace, text string) {
-	if w.sheet == nil || text == w.sheet.At(w.active.Row, w.active.Col) {
+	if w.sheet == nil || text == w.sheet.Raw(w.active.Row, w.active.Col) {
 		return
 	}
 
@@ -194,8 +194,11 @@ func (s *Shell) commit(w *workspace, text string) {
 // showActive points the editor bar at the selected cell. Every path that changes
 // which cell that is, or what is in it, ends here, so the bar and the grid
 // cannot drift apart.
+//
+// Raw and not Display: the bar is where a cell is edited, and what you edit is
+// what the cell stores. The grid is the only thing bound to Display.
 func (w *workspace) showActive() {
-	w.editor.SetText(w.sheet.At(w.active.Row, w.active.Col))
+	w.editor.SetText(w.sheet.Raw(w.active.Row, w.active.Col))
 }
 
 // inlineEntry is the grid's cell editor. It is a plain Entry apart from Escape:
@@ -255,7 +258,7 @@ func (s *Shell) beginEdit(w *workspace) {
 		return
 	}
 	w.editing = true
-	w.inline.SetText(w.sheet.At(w.active.Row, w.active.Col))
+	w.inline.SetText(w.sheet.Raw(w.active.Row, w.active.Col))
 	w.table.RefreshItem(widget.TableCellID{Row: w.active.Row, Col: w.active.Col})
 	s.focus(w.inline)
 }

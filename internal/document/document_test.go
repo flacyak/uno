@@ -88,10 +88,10 @@ func TestRoundTripRebuildsTheWorkspace(t *testing.T) {
 	if !bytes.Equal(doc.Raw, []byte(csvBody)) {
 		t.Error("the embedded source is not the bytes that went in")
 	}
-	if got := doc.Sheet.At(0, 2); got != "1204" {
+	if got := doc.Sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("cell = %q, want the log replayed over the raw bytes", got)
 	}
-	if got := doc.Sheet.At(1, 2); got != "987" {
+	if got := doc.Sheet.Raw(1, 2); got != "987" {
 		t.Errorf("untouched cell = %q, want it to come from the raw bytes", got)
 	}
 	if doc.Sheet.EditCount() != 2 {
@@ -249,10 +249,10 @@ func TestATruncatedLogReplaysItsCompleteLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if got := doc.Sheet.At(0, 2); got != "1204" {
+	if got := doc.Sheet.Raw(0, 2); got != "1204" {
 		t.Errorf("first edit = %q, want it replayed", got)
 	}
-	if got := doc.Sheet.At(2, 2); got != "1,455" {
+	if got := doc.Sheet.Raw(2, 2); got != "1,455" {
 		t.Errorf("cut edit = %q, want the raw value", got)
 	}
 }
@@ -510,7 +510,7 @@ func TestAColumnOpRoundTrips(t *testing.T) {
 		t.Fatalf("Read: %v", err)
 	}
 	for row, want := range map[int]string{0: "1204", 1: "987", 2: "1455"} {
-		if got := doc.Sheet.At(row, 2); got != want {
+		if got := doc.Sheet.Raw(row, 2); got != want {
 			t.Errorf("cell (%d,2) = %q, want %q", row, got, want)
 		}
 	}
