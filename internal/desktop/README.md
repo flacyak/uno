@@ -73,7 +73,8 @@ opened with `a` that only added to the end repeats as that text appended, one
 opened with `i` that only added to the start repeats as a prepend, and anything
 else repeats as the whole value. It is what makes three fixes cheap: on a column
 where 12 should read 12.00, `a` `.00` Esc `j` `.` `j` `.` fixes three cells and
-brings the recogniser's offer for the rest. While a file is still indexing, `G` stops at the last row the engine
+brings the recogniser's offer for the rest. `ga` is Apply on that banner, from
+any cell, and `gx` is Not now. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 
