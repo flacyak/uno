@@ -1,0 +1,56 @@
+# The suite runs with no display attached, which is what I-6 promises: sheet,
+# ingest, document and safefile import nothing from ui, and the ui tests
+# themselves drive a Fyne test window rather than a real one. If this workflow
+# ever needs an Xvfb, an import went the wrong way.
+#
+# Compiling still needs the toolkit's headers, because fyne.io/fyne/v2/test
+# links the same GL and X11 bindings the app does. Building is not displaying.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Tracks the module rather than a pinned string that can drift behind
+          # it.
+          go-version-file: go.mod
+
+      - name: Install the toolkit's build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxi-dev libxxf86vm-dev
+
+      - name: Check the tree is formatted
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error title=gofmt::$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+
+      # -race is the one that matters for I-7: the sheet is mutated only on the
+      # UI goroutine, and a save deflates a snapshot on a worker while the person
+      # keeps typing. A run that prints "Error in Fyne call thread" has broken
+      # that and must fail the build rather than scroll past.
+      - name: Run the suite
+        run: |
+          go test -race ./... 2>&1 | tee test.log
+          status=${PIPESTATUS[0]}
+          if grep -q "Error in Fyne call thread" test.log; then
+            echo "::error title=Fyne call thread::Something touched a widget off the UI goroutine."
+            exit 1
+          fi
+          exit "$status"
