@@ -88,7 +88,7 @@ class Shell {
       onAction: (action) => {
         switch (action.t) {
           case "undo":
-            void this.undo();
+            void this.history("undo");
             return;
           case "apply": {
             // From any cell, since the offer names its own column.
@@ -110,6 +110,9 @@ class Shell {
             return;
           case "next":
             this.next(action.reverse);
+            return;
+          case "redo":
+            void this.history("redo");
             return;
         }
       },
@@ -244,7 +247,7 @@ class Shell {
         this.toggleMode();
       } else if (key === "z" && this.workspace?.editable === true) {
         e.preventDefault();
-        void this.undo();
+        void this.history("undo");
       }
     });
   }
@@ -305,14 +308,15 @@ class Shell {
     this.paintBanner();
   }
 
-  private async undo(): Promise<void> {
+  /** history takes the last edit back, or records again the one undo last took back. */
+  private async history(which: "undo" | "redo"): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
     try {
-      const undone = await w.undo();
+      const edit = await (which === "undo" ? w.undo() : w.redo());
       // One cell came back, so show it. An apply names a whole column and no row,
       // and the selection stays where it is.
-      if (undone.row !== NO_ROW && this.workspace === w) this.grid.moveTo(undone.row, undone.col);
+      if (edit.row !== NO_ROW && this.workspace === w) this.grid.moveTo(edit.row, edit.col);
       this.say("");
     } catch (err) {
       this.say(message(err), true);

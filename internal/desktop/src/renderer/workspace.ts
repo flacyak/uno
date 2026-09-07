@@ -125,6 +125,13 @@ export class Workspace {
     return changed.edit;
   }
 
+  /** redo records again the edit undo last took back, and returns it. */
+  async redo(): Promise<Edit> {
+    const changed = await this.engine.redo();
+    this.landed(changed);
+    return changed.edit;
+  }
+
   /** find asks the engine for the next matching row in a column, read from the file. */
   find(req: FindRequest): Promise<Found> {
     return this.engine.find(req);
