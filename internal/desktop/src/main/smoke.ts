@@ -630,6 +630,38 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "/ and ? search the column, and n and N search again",
+    script: `
+      const at = () => text("#status-cell");
+      const input = document.querySelector("#status-cmd");
+      if (at() !== "region · row 1") return "the selection is at " + at();
+
+      const steps = [
+        ["/North", "region · row 3"],
+        ["n", "region · row 7"],
+        ["N", "region · row 3"],
+        ["?West", "region · row 1"],
+      ];
+      for (const [step, want] of steps) {
+        await press(step[0]);
+        if (step.length > 1) {
+          if (input.hidden || input.value !== step[0]) return step[0] + " did not open the command line";
+          input.value = step;
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          await frame();
+        }
+        if (!(await until(() => at() === want))) return step + " went to " + at() + ", not " + want;
+      }
+
+      // ?West searched up, so n does too, from the top.
+      await press("n");
+      const none = '"West" is not above row 1 in region';
+      return (await until(() => text("#status-msg") === none))
+        ? ""
+        : "n from row 1 says " + JSON.stringify(text("#status-msg"));
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
