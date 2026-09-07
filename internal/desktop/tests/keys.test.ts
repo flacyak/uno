@@ -151,6 +151,16 @@ test(". sets the whole value after any other insert", () => {
   expect(replay({ t: "set", value: "13" }, "7")).toBe("13");
 });
 
+test("ga applies the banner's offer and gx says not now, in transform only", () => {
+  expect(action("transform", "ga")).toEqual({ t: "apply" });
+  expect(action("transform", "gx")).toEqual({ t: "dismiss" });
+  expect(action("view", "ga")).toEqual({ t: "say", text: LOCKED });
+  expect(action("view", "gx")).toEqual({ t: "say", text: LOCKED });
+
+  const g = { count: "", keys: "g" };
+  expect(interpret("transform", g, held("a"))?.action, "a held after g").toEqual({ t: "none" });
+});
+
 test("the keys that were there before keep working", () => {
   expect(action("view", "<ArrowDown>")).toEqual({ t: "move", motion: "down" });
   expect(action("view", "<Tab>")).toEqual({ t: "move", motion: "right" });

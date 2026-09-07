@@ -85,6 +85,10 @@ export type Action =
   | { t: "put" }
   /** .: do the last insert, x or p again, on the selected cell. */
   | { t: "repeat" }
+  /** ga: Apply on the banner. */
+  | { t: "apply" }
+  /** gx: Not now on the banner. */
+  | { t: "dismiss" }
   | { t: "say"; text: string };
 
 export interface Step {
@@ -159,7 +163,7 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
   // A named key that types nothing: Shift, CapsLock, a dead key.
   if (!ONE_CHARACTER.test(key)) return undefined;
 
-  if (pending.keys !== "") return done(finish(mode, pending.keys + key, count));
+  if (pending.keys !== "") return done(finish(mode, press, pending.keys + key, count));
 
   // 0 is a digit once a count has started, as in 10j, and a motion otherwise.
   if ((key >= "1" && key <= "9") || (key === "0" && pending.count !== "")) {
@@ -227,7 +231,7 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
 }
 
 /** finish reads the second key of two. One that finishes nothing drops both, and the count. */
-function finish(mode: Mode, keys: string, count: number | undefined): Action {
+function finish(mode: Mode, press: Press, keys: string, count: number | undefined): Action {
   const [first, second] = [keys.slice(0, 1), keys.slice(1)];
   if (first === "m") return MARK.test(second) ? { t: "mark", name: second } : NONE;
   // Both go to the cell, row and column. A sheet has no line-versus-character
@@ -240,6 +244,10 @@ function finish(mode: Mode, keys: string, count: number | undefined): Action {
   switch (keys) {
     case "gg":
       return move("first-row", count);
+    case "ga":
+      return change(mode, press, { t: "apply" });
+    case "gx":
+      return change(mode, press, { t: "dismiss" });
     case "zt":
       return { t: "scroll", where: "top" };
     case "zz":

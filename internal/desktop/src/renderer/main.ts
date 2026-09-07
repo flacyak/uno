@@ -73,6 +73,18 @@ class Shell {
           case "undo":
             void this.undo();
             return;
+          case "apply": {
+            // From any cell, since the offer names its own column.
+            const offer = this.offered();
+            if (offer === null) this.say("nothing to apply", true);
+            else void this.apply(offer);
+            return;
+          }
+          case "dismiss": {
+            const offer = this.offered();
+            if (offer !== null) this.dismiss(offer);
+            return;
+          }
         }
       },
     });
@@ -260,6 +272,12 @@ class Shell {
     this.changed(w);
   }
 
+  /** dismiss is Not now: the offer stays gone until it changes. */
+  private dismiss(offer: Offer): void {
+    this.dismissed = key(offer);
+    this.paintBanner();
+  }
+
   private async undo(): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
@@ -363,6 +381,13 @@ class Shell {
     this.tabs.append(tab, grow, seg);
   }
 
+  /** The offer the banner is asking about, or null while it is hidden. */
+  private offered(): Offer | null {
+    const w = this.workspace;
+    const offer = w?.mode === "transform" ? w.offer : null;
+    return offer === null || offer === undefined || this.dismissed === key(offer) ? null : offer;
+  }
+
   /**
    * paintBanner asks the recogniser's question, in transform only.
    *
@@ -371,9 +396,8 @@ class Shell {
    * it is one edit, and Ctrl+Z takes it back.
    */
   private paintBanner(): void {
-    const w = this.workspace;
-    const offer = w?.mode === "transform" ? w.offer : null;
-    if (offer === null || offer === undefined || this.dismissed === key(offer)) {
+    const offer = this.offered();
+    if (offer === null) {
       this.banner.hidden = true;
       this.banner.replaceChildren();
       return;
@@ -395,13 +419,16 @@ class Shell {
     const apply = document.createElement("button");
     apply.className = "primary";
     apply.textContent = "Apply";
-    apply.addEventListener("click", () => void this.apply(offer));
+    // Both hand the keys back to the grid, or a j after the click would go nowhere.
+    apply.addEventListener("click", () => {
+      void this.apply(offer);
+      this.grid.focus();
+    });
 
     const later = document.createElement("button");
     later.textContent = "Not now";
     later.addEventListener("click", () => {
-      this.dismissed = key(offer);
-      this.paintBanner();
+      this.dismiss(offer);
       this.grid.focus();
     });
 
