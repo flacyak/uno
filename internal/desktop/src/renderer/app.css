@@ -391,6 +391,24 @@ table.grid td.sel {
   display: none;
 }
 
+/* The command line is typed where the status bar talks, over the file's line. */
+.win-status .cmd {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+
+.win-status.prompting #status-file,
+.win-status.prompting #status-msg,
+.win-status.prompting .sep {
+  display: none;
+}
+
 /* ---------- the empty state ---------- */
 
 .dropzone {
