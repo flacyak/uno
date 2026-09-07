@@ -105,6 +105,22 @@ test("u undoes in transform, says why not in view, and does nothing held down", 
   expect(interpret("transform", NOTHING, held("u"))?.action).toEqual({ t: "none" });
 });
 
+test("x and p change the cell in transform only, and do nothing held down", () => {
+  expect(action("transform", "x")).toEqual({ t: "clear" });
+  expect(action("transform", "p")).toEqual({ t: "put" });
+  expect(action("transform", "P")).toEqual({ t: "put" });
+  expect(action("view", "x")).toEqual({ t: "say", text: LOCKED });
+  expect(action("view", "P")).toEqual({ t: "say", text: LOCKED });
+  expect(interpret("transform", NOTHING, held("x"))?.action).toEqual({ t: "none" });
+  expect(interpret("transform", NOTHING, held("p"))?.action).toEqual({ t: "none" });
+});
+
+test("yy copies in view as well, because copying changes nothing", () => {
+  expect(action("view", "yy")).toEqual({ t: "yank" });
+  expect(action("transform", "3yy")).toEqual({ t: "yank" });
+  expect(press("view", "yj")).toEqual({ pending: NOTHING, action: { t: "none" } });
+});
+
 test("the keys that were there before keep working", () => {
   expect(action("view", "<ArrowDown>")).toEqual({ t: "move", motion: "down" });
   expect(action("view", "<Tab>")).toEqual({ t: "move", motion: "right" });
@@ -154,6 +170,7 @@ test("a count before a change is dropped", () => {
     action: { t: "insert", caret: "empty", transform: false },
   });
   expect(action("transform", "3u")).toEqual({ t: "undo" });
+  expect(action("transform", "3x"), "3x would record a set per cell").toEqual({ t: "clear" });
 });
 
 // ---------------------------------------------------------------- motions
