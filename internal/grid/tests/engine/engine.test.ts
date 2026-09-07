@@ -228,6 +228,38 @@ test("find reads the column past any band, with the log applied", async () => {
   }
 });
 
+test("redo records again what undo took back, until a new edit", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    await engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
+    await indexed(engine);
+    await expect(engine.redo()).rejects.toThrow("the file is in view");
+    engine.mode(true);
+    await expect(engine.redo()).rejects.toThrow("there is nothing to redo");
+
+    await engine.edit({ op: Op.Set, row: 0, col: UNITS, now: "1204" });
+    await engine.edit({ op: Op.Apply, row: NO_ROW, col: UNITS, now: 'replace(/,/, "")' });
+    await engine.undo();
+    await engine.undo();
+    expect((await engine.rows(0, 1)).rows[0]![UNITS]).toBe("1,204");
+
+    // Oldest first: the set comes back before the apply that followed it.
+    const set = await engine.redo();
+    expect(set.edit).toEqual({ seq: 1, op: "set", row: 0, col: UNITS, was: "1,204", now: "1204" });
+    const apply = await engine.redo();
+    expect(apply.edit).toMatchObject({ seq: 2, op: "apply" });
+    expect(apply.columns[UNITS]).toMatchObject({ kind: "num", flagged: false });
+    expect((await engine.rows(5, 1)).rows[0]![UNITS]).toBe("1101");
+
+    // A new edit goes on a log the undone one no longer follows.
+    await engine.undo();
+    await engine.edit({ op: Op.Set, row: 1, col: UNITS, now: "988" });
+    await expect(engine.redo()).rejects.toThrow("there is nothing to redo");
+  } finally {
+    done();
+  }
+});
+
 test("the engine refuses what a Sheet refuses, in the same words", async () => {
   const { engine, done } = connect();
   try {

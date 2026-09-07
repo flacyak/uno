@@ -119,6 +119,8 @@ export type Request =
   | { t: "rows"; id: number; first: number; count: number }
   | { t: "edit"; id: number; edit: EditRequest }
   | { t: "undo"; id: number }
+  /** The edit undo last took back, recorded again. */
+  | { t: "redo"; id: number }
   /** The next matching row in a column, read from the file rather than any band. */
   | { t: "find"; id: number; find: FindRequest }
   /** Transform allows edits and runs the recogniser. View allows neither. */
