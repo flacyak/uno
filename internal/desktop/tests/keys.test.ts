@@ -79,6 +79,14 @@ test("a letter is a command, never the start of a value", () => {
   }
 });
 
+test("u undoes in transform, says why not in view, and does nothing held down", () => {
+  expect(action("transform", "u")).toEqual({ t: "undo" });
+  expect(action("view", "u")).toEqual({ t: "say", text: LOCKED });
+
+  const held = { key: "u", ctrl: false, alt: false, meta: false, repeat: true };
+  expect(interpret("transform", NOTHING, held)?.action).toEqual({ t: "none" });
+});
+
 test("the keys that were there before keep working", () => {
   expect(action("view", "<ArrowDown>")).toEqual({ t: "move", motion: "down" });
   expect(action("view", "<Tab>")).toEqual({ t: "move", motion: "right" });

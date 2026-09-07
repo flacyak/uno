@@ -378,6 +378,22 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "u takes the edit back and selects its cell",
+    script: `
+      await press("ArrowUp");
+      await press("ArrowLeft");
+      if (text("#status-cell") !== "channel · row 6") return "the selection is at " + text("#status-cell");
+
+      await press("u");
+      if (!(await until(() => text("#status-file").includes("4 edits")))) {
+        return "status bar says: " + text("#status-file");
+      }
+      if (text("#status-cell") !== "units · row 7") return "the selection is at " + text("#status-cell");
+      const cell = () => document.querySelectorAll("tbody tr")[6].children[5].textContent;
+      return (await until(() => cell() === "8430")) ? "" : "the cell shows " + JSON.stringify(cell());
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");

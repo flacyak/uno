@@ -38,6 +38,7 @@ export type Action =
   | { t: "mode"; to: Mode }
   /** Open the editor. `transform` switches to transform first, which is `a` in view. */
   | { t: "insert"; caret: Caret; transform: boolean }
+  | { t: "undo" }
   | { t: "say"; text: string };
 
 export interface Step {
@@ -113,8 +114,19 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
       return done(open(mode, "empty"));
     case "c":
       return { pending: { keys: "c" }, action: NONE };
+    case "u":
+      return done(change(mode, press, { t: "undo" }));
   }
   return done(NONE);
+}
+
+/**
+ * change is a key that writes. View refuses it, and a held key does nothing:
+ * holding j should scroll, and holding u should not empty the log.
+ */
+function change(mode: Mode, press: Press, action: Action): Action {
+  if (press.repeat) return NONE;
+  return mode === "view" ? { t: "say", text: LOCKED } : action;
 }
 
 /**
