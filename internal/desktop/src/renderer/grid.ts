@@ -12,7 +12,7 @@
 
 import type { Kind } from "@uno/grid/sheet";
 
-import { LOCKED, NOTHING, interpret, leavesInsert } from "./keys.ts";
+import { LOCKED, NOTHING, interpret, leavesInsert, showing, target } from "./keys.ts";
 import type { Action, Caret, Mode, Motion, Pending } from "./keys.ts";
 
 /** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
@@ -32,8 +32,9 @@ const MAX_SCROLL_PX = 15_000_000;
 /**
  * Rows is what the grid draws. A Sheet is one, and so is an engine's band.
  *
- * The two optional methods are the band's. A Sheet has every row, so it has
- * nothing to say about which have arrived or what is on screen.
+ * The optional methods are the band's. A Sheet has every row, so it has nothing
+ * to say about which have arrived, how far the index has got, or what is on
+ * screen.
  */
 export interface Rows {
   readonly columns: readonly { header: string; kind: Kind; flagged: boolean }[];
@@ -43,6 +44,8 @@ export interface Rows {
   raw(row: number, col: number): string;
   binding(col: number): string | undefined;
   ready?(row: number): boolean;
+  /** Rows the engine can answer for now, which is where G stops while a file indexes. */
+  readable?(): number;
   view?(first: number, count: number): void;
 }
 
@@ -58,6 +61,13 @@ export interface GridEvents {
   onMode(to: Mode): void;
   /** The editor opened or closed, so the status bar can say INSERT. */
   onEditor(open: boolean): void;
+  /** Keys are waiting for more, or stopped waiting: what the status bar shows of them. */
+  onPending(keys: string): void;
+  /**
+   * A motion stopped at the last row the engine can read, short of the row it
+   * asked for, or of the end.
+   */
+  onShort(wanted: number | "end"): void;
   /** A key the grid cannot carry out itself, because the workspace does. */
   onAction(action: ShellAction): void;
 }
@@ -137,7 +147,7 @@ export class Grid {
     this.cancelEdit();
     this.source = source;
     this.editable = editable;
-    this.pending = NOTHING;
+    this.wait(NOTHING);
     if (!keep) {
       this.selRow = 0;
       this.selCol = 0;
@@ -432,8 +442,14 @@ export class Grid {
     });
     if (step === undefined) return;
     e.preventDefault();
-    this.pending = step.pending;
+    this.wait(step.pending);
     this.act(step.action);
+  }
+
+  private wait(pending: Pending): void {
+    const before = showing(this.pending);
+    this.pending = pending;
+    if (showing(pending) !== before) this.events.onPending(showing(pending));
   }
 
   private act(action: Action): void {
@@ -441,7 +457,7 @@ export class Grid {
       case "none":
         return;
       case "move":
-        this.move(action.motion);
+        this.move(action.motion, action.count);
         return;
       case "mode":
         this.events.onMode(action.to);
@@ -460,27 +476,22 @@ export class Grid {
     }
   }
 
-  private move(motion: Motion): void {
+  /** move goes where keys.ts says a motion lands. None of them write. */
+  private move(motion: Motion, count: number | undefined): void {
     const source = this.source;
     if (source === undefined) return;
-    switch (motion) {
-      case "down":
-        return this.select(this.selRow + 1, this.selCol);
-      case "up":
-        return this.select(this.selRow - 1, this.selCol);
-      case "right":
-        return this.select(this.selRow, this.selCol + 1);
-      case "left":
-        return this.select(this.selRow, this.selCol - 1);
-      case "page-down":
-        return this.select(this.selRow + this.page(), this.selCol);
-      case "page-up":
-        return this.select(this.selRow - this.page(), this.selCol);
-      case "home":
-        return this.select(0, 0);
-      case "end":
-        return this.select(source.rows() - 1, source.cols() - 1);
-    }
+
+    const rows = source.rows();
+    const to = target(motion, count, {
+      row: this.selRow,
+      col: this.selCol,
+      rows,
+      cols: source.cols(),
+      readable: source.readable?.() ?? rows,
+      page: this.page(),
+    });
+    this.select(to.row, to.col);
+    if (to.short !== undefined) this.events.onShort(to.short);
   }
 
   private page(): number {
