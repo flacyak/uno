@@ -59,7 +59,9 @@ Moving is the same in both modes and writes nothing: `h` `j` `k` `l`, `w` and
 the first and last row, `H` `M` `L` to the top, middle and bottom row on screen,
 Ctrl+d, u, f and b by half and whole pages. Each takes a count, which waits in
 the status bar until the motion arrives, and `{n}G` goes to row n. `zt` `zz`
-`zb` scroll the selected row to the top, middle or bottom and leave it selected. While a file is still indexing, `G` stops at the last row the engine
+`zb` scroll the selected row to the top, middle or bottom and leave it selected.
+`m{a-z}` marks a cell for as long as the workspace is open, `'{a-z}` goes back
+to it, and `''` returns to where the last jump left from. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 

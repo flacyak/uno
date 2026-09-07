@@ -454,6 +454,32 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "a mark brings the selection back, and '' returns from the jump",
+    script: `
+      const at = () => text("#status-cell");
+      await press("m");
+      await press("a");
+      const marked = at();
+
+      await press("G");
+      if (at() !== "revenue · row 4812") return "G went to " + at();
+      await press("'");
+      await press("a");
+      if (at() !== marked) return "'a went to " + at() + ", not " + marked;
+      await press("'");
+      await press("'");
+      if (at() !== "revenue · row 4812") return "'' went to " + at();
+      await press("\`");
+      await press("\`");
+      if (at() !== marked) return "\`\` went to " + at() + ", not " + marked;
+
+      await press("'");
+      await press("q");
+      const said = text("#status-msg");
+      return said === "mark q is not set" ? "" : "an unset mark says " + JSON.stringify(said);
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
