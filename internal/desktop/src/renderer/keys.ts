@@ -67,6 +67,12 @@ export type Action =
   | { t: "move"; motion: Motion; count: number | undefined }
   /** zt zz zb: scroll the selected row to the top, middle or bottom. The selection stays. */
   | { t: "scroll"; where: "top" | "middle" | "bottom" }
+  /** m{a-z}: remember the selected cell by a letter. */
+  | { t: "mark"; name: string }
+  /** '{a-z} and `{a-z}: go to a marked cell. */
+  | { t: "to-mark"; name: string }
+  /** '' and ``: go back to where the last jump left from. */
+  | { t: "back" }
   | { t: "mode"; to: Mode }
   /** Open the editor. `transform` switches to transform first, which is `a` in view. */
   | { t: "insert"; caret: Caret; transform: boolean }
@@ -88,6 +94,9 @@ const ONE_CHARACTER = /^.$/u;
 
 /** The most digits a count keeps. Past that it could only be clamped to the sheet. */
 const COUNT_DIGITS = 10;
+
+/** A mark's name. */
+const MARK = /^[a-z]$/;
 
 /**
  * interpret reads one key in view or transform.
@@ -178,6 +187,9 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
       return done(move("screen-bottom", count));
     case "g":
     case "z":
+    case "m":
+    case "'":
+    case "`":
     case "c":
       return { pending: { count: pending.count, keys: key }, action: NONE };
     case "i":
@@ -199,6 +211,15 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
 
 /** finish reads the second key of two. One that finishes nothing drops both, and the count. */
 function finish(mode: Mode, keys: string, count: number | undefined): Action {
+  const [first, second] = [keys.slice(0, 1), keys.slice(1)];
+  if (first === "m") return MARK.test(second) ? { t: "mark", name: second } : NONE;
+  // Both go to the cell, row and column. A sheet has no line-versus-character
+  // split worth two different keys.
+  if (first === "'" || first === "`") {
+    if (second === "'" || second === "`") return { t: "back" };
+    return MARK.test(second) ? { t: "to-mark", name: second } : NONE;
+  }
+
   switch (keys) {
     case "gg":
       return move("first-row", count);
@@ -212,6 +233,24 @@ function finish(mode: Mode, keys: string, count: number | undefined): Action {
       return open(mode, "empty");
   }
   return NONE;
+}
+
+/**
+ * isJump says whether a motion is a jump, which '' goes back from: G, gg and
+ * {n}G, and H, M and L. Going to a mark is one too. It keeps one position, not
+ * a jumplist.
+ */
+export function isJump(motion: Motion): boolean {
+  switch (motion) {
+    case "first-row":
+    case "last-row":
+    case "screen-top":
+    case "screen-middle":
+    case "screen-bottom":
+      return true;
+    default:
+      return false;
+  }
 }
 
 function ctrlMotion(key: string): Motion | undefined {
