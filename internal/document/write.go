@@ -7,57 +7,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/flacyak/uno/internal/safefile"
 	"github.com/flacyak/uno/internal/sheet"
 )
 
 // Write saves a document to path. The file already at that path is never opened
-// for writing: we build a sibling temp file and rename over it, so an
+// for writing: safefile builds a sibling temp file and renames over it, so an
 // interrupted save loses the new data rather than the data already saved.
 //
 // Saving is the one operation in uno that can destroy something, and every
 // failure mode worth designing for resolves to the same promise — the previously
-// saved file is still there.
-func Write(path string, d *Document) (err error) {
-	// Same directory, so the rename stays on one filesystem and stays atomic.
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".uno-*.part")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			tmp.Close()
-			os.Remove(tmp.Name()) // a failed save leaves no debris
-		}
-	}()
-
-	// A temp file is created 0600 because it is a temp file. That is not a
-	// decision about the document, which is an ordinary user file.
-	if err = tmp.Chmod(0o644); err != nil {
-		return err
-	}
-
+// saved file is still there. What is left here is the layout of the container;
+// the promise itself lives in one place now that a .unof needs it too.
+func Write(path string, d *Document) error {
 	m := manifestFor(d)
 
-	zw := zip.NewWriter(tmp)
-	if err = writeEntries(zw, d, m); err != nil {
-		return err
-	}
-	if err = zw.Close(); err != nil { // flushes the central directory
-		return err
-	}
-	if err = tmp.Sync(); err != nil { // durable before the swap, not after
-		return err
-	}
-	if err = tmp.Close(); err != nil {
-		return err
-	}
-
-	if err = os.Rename(tmp.Name(), path); err != nil {
+	if err := safefile.Write(path, func(w io.Writer) error {
+		zw := zip.NewWriter(w)
+		if err := writeEntries(zw, d, m); err != nil {
+			return err
+		}
+		return zw.Close() // flushes the central directory
+	}); err != nil {
 		return err
 	}
 
