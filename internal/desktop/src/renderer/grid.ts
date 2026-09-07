@@ -12,8 +12,18 @@
 
 import type { Kind } from "@uno/grid/sheet";
 
-import { LOCKED, NOTHING, interpret, isJump, leavesInsert, showing, target } from "./keys.ts";
-import type { Action, Caret, Mode, Motion, Pending } from "./keys.ts";
+import {
+  LOCKED,
+  NOTHING,
+  changeOf,
+  interpret,
+  isJump,
+  leavesInsert,
+  replay,
+  showing,
+  target,
+} from "./keys.ts";
+import type { Action, Caret, Change, Mode, Motion, Pending } from "./keys.ts";
 
 /** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
  * the next frame catches up. */
@@ -125,6 +135,10 @@ export class Grid {
   private before: Cell | undefined;
   /** What yy copied, for p. Kept across opens, as vim keeps a register across files. */
   private register: string | undefined;
+  /** How the open editor was opened, so . can tell what the insert did. */
+  private caret: Caret = "all";
+  /** The last insert, x or p, for . to make again. */
+  private last: Change | undefined;
 
   private rowHeight = 29;
   private frame = 0;
@@ -522,14 +536,17 @@ export class Grid {
         if (this.before !== undefined) this.jump(this.before.row, this.before.col);
         return;
       case "clear":
-        this.write("");
+        this.write({ t: "set", value: "" });
         return;
       case "yank":
         this.yank();
         return;
       case "put":
         if (this.register === undefined) this.events.onSay("nothing yanked", true);
-        else this.write(this.register);
+        else this.write({ t: "set", value: this.register });
+        return;
+      case "repeat":
+        if (this.last !== undefined) this.write(this.last);
         return;
       case "mode":
         this.events.onMode(action.to);
@@ -610,6 +627,7 @@ export class Grid {
     const input = document.createElement("input");
     input.className = "cell-editor";
     input.value = caret === "empty" ? "" : source.raw(this.selRow, this.selCol);
+    this.caret = caret;
 
     input.addEventListener("keydown", (e) => {
       // Swallowed first, before anything that could fail. Stopping propagation
@@ -667,11 +685,11 @@ export class Grid {
   }
 
   /**
-   * write sets the selected cell from a key rather than through the editor, and
-   * is refused wherever the editor would be. A value the cell already holds
-   * records nothing.
+   * write changes the selected cell from a key rather than through the editor,
+   * and is refused wherever the editor would be. A value the cell already holds
+   * records nothing. What it did is what . does next.
    */
-  private write(value: string): void {
+  private write(change: Change): void {
     const source = this.source;
     if (source === undefined) return;
     const refused = this.refusal(source);
@@ -679,7 +697,11 @@ export class Grid {
       this.events.onSay(refused, true);
       return;
     }
-    if (value === source.raw(this.selRow, this.selCol)) return;
+
+    this.last = change;
+    const raw = source.raw(this.selRow, this.selCol);
+    const value = replay(change, raw);
+    if (value === raw) return;
     this.events.onEdit(this.selRow, this.selCol, value);
     this.layout();
   }
@@ -739,7 +761,9 @@ export class Grid {
     const value = input.value;
     this.cancelEdit();
 
-    if (value !== source.raw(this.selRow, this.selCol)) {
+    const raw = source.raw(this.selRow, this.selCol);
+    if (value !== raw) {
+      this.last = changeOf(this.caret, raw, value);
       this.events.onEdit(this.selRow, this.selCol, value);
     }
     this.focus();
