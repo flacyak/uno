@@ -156,7 +156,9 @@ function buildMenu(win: BrowserWindow): void {
           click: send("menu:mode"),
         },
         { type: "separator" },
-        { role: "reload" },
+        // No accelerator. The reload role binds Ctrl+R, which vim users press for
+        // redo, and a reload loses the open workspace.
+        { label: "Reload", click: () => win.webContents.reload() },
         { role: "toggleDevTools" },
         { type: "separator" },
         { role: "resetZoom" },
