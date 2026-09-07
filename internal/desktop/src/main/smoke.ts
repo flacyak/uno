@@ -77,20 +77,22 @@ const CHECKS: Check[] = [
     `,
   },
   {
-    name: "it opens in view, where typing changes nothing",
+    name: "it opens in view, where a key that writes changes nothing",
     script: `
-      const mode = document.querySelector("#status-mode").textContent;
+      const mode = text("#status-mode");
       if (mode !== "VIEW") return "the status bar's mode is " + JSON.stringify(mode);
 
-      const content = document.querySelector("#content");
       document.querySelectorAll("tbody tr")[0].children[5].click();
-      await new Promise((r) => requestAnimationFrame(r));
-      content.dispatchEvent(new KeyboardEvent("keydown", { key: "9", bubbles: true }));
-      await new Promise((r) => requestAnimationFrame(r));
+      await frame();
+      // A digit used to open the editor holding itself. Letters and digits are
+      // commands now, and the one that asks to write is s.
+      await press("9");
+      if (document.querySelector(".cell-editor") !== null) return "9 in view opened an editor";
+      await press("s");
 
-      if (document.querySelector(".cell-editor") !== null) return "typing in view opened an editor";
-      const said = document.querySelector("#status-msg").textContent;
-      return said.includes("Ctrl+E") ? "" : "the status bar says " + JSON.stringify(said);
+      if (document.querySelector(".cell-editor") !== null) return "s in view opened an editor";
+      const said = text("#status-msg");
+      return said.includes("i or Ctrl+E") ? "" : "the status bar says " + JSON.stringify(said);
     `,
   },
   {
@@ -297,6 +299,85 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "i in view switches to transform and opens nothing",
+    script: `
+      await press("Escape"); // Ctrl+Z left the file in transform
+      if (text("#status-mode") !== "VIEW") return "Esc left the mode at " + text("#status-mode");
+
+      document.querySelectorAll("tbody tr")[6].children[5].click(); // units, row 7: 843
+      await frame();
+      await press("i");
+      if (text("#status-mode") !== "TRANSFORM") return "the mode is " + text("#status-mode");
+      return document.querySelector(".cell-editor") === null ? "" : "i in view opened an editor";
+    `,
+  },
+  {
+    name: "a opens the editor with the caret after the value",
+    script: `
+      await press("a");
+      const input = document.querySelector(".cell-editor");
+      if (input === null) return "a did not open an editor";
+      if (text("#status-mode") !== "INSERT") return "the mode is " + text("#status-mode");
+      return input.value === "843" && input.selectionStart === input.value.length
+        ? ""
+        : "the editor holds " + JSON.stringify(input.value) + " with the caret at " + input.selectionStart;
+    `,
+  },
+  {
+    name: "Esc, then i in transform, opens the editor with the caret at the start",
+    script: `
+      await press("Escape");
+      if (document.querySelector(".cell-editor") !== null) return "Esc left the editor open";
+      if (text("#status-mode") !== "TRANSFORM") return "Esc left the mode at " + text("#status-mode");
+
+      await press("i");
+      const input = document.querySelector(".cell-editor");
+      if (input === null) return "i in transform did not open an editor";
+      return input.selectionStart === 0 ? "" : "the caret is at " + input.selectionStart;
+    `,
+  },
+  {
+    name: "Esc keeps what was typed, and leaves insert for transform",
+    script: `
+      document.querySelector(".cell-editor").value = "8430";
+      await press("Escape");
+      if (document.querySelector(".cell-editor") !== null) return "Esc left the editor open";
+      if (text("#status-mode") !== "TRANSFORM") return "the mode is " + text("#status-mode");
+
+      // 3 before, so the Esc that closed a's editor unchanged recorded nothing.
+      if (!(await until(() => text("#status-file").includes("4 edits")))) {
+        return "status bar says: " + text("#status-file");
+      }
+      const shown = document.querySelectorAll("tbody tr")[6].children[5].textContent;
+      return shown === "8430" ? "" : "the cell shows " + JSON.stringify(shown);
+    `,
+  },
+  {
+    name: "Esc again switches to view, and keeps the log",
+    script: `
+      await press("Escape");
+      if (text("#status-mode") !== "VIEW") return "the mode is " + text("#status-mode");
+      if (!text("#status-file").includes("4 edits")) return "status bar says: " + text("#status-file");
+      return document.querySelector(".tab .dirty") !== null ? "" : "the tab lost its dirty dot";
+    `,
+  },
+  {
+    name: "s in transform opens the editor empty",
+    script: `
+      await press("i");
+      await press("s");
+      const input = document.querySelector(".cell-editor");
+      if (input === null) return "s did not open an editor";
+      if (input.value !== "") return "the editor holds " + JSON.stringify(input.value);
+
+      input.value = "843";
+      await press("Escape");
+      return (await until(() => text("#status-file").includes("5 edits")))
+        ? ""
+        : "status bar says: " + text("#status-file");
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
@@ -305,6 +386,26 @@ const CHECKS: Check[] = [
     `,
   },
 ];
+
+/**
+ * What every check can call. A check's body runs in a block of its own, so one
+ * that declares its own `frame` shadows this one rather than colliding with it.
+ */
+const PRELUDE = `
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const text = (selector) => document.querySelector(selector)?.textContent ?? "";
+  // A key goes where a real one would: to the editor while it is open, to the
+  // grid otherwise.
+  const press = async (key, init = {}) => {
+    const target = document.querySelector(".cell-editor") ?? document.querySelector("#content");
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
+    await frame();
+  };
+  const until = async (ok) => {
+    for (let i = 0; i < 150 && !ok(); i++) await frame();
+    return ok();
+  };
+`;
 
 /**
  * run drives the window, reports to stdout, and quits with a status the shell
@@ -332,7 +433,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   for (const check of CHECKS) {
     try {
       const failure = (await win.webContents.executeJavaScript(
-        `(async () => { ${check.script} })()`,
+        `(async () => { ${PRELUDE} { ${check.script} } })()`,
       )) as string;
 
       if (failure === "") {

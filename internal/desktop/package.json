@@ -12,6 +12,7 @@
     "start": "electron .",
     "smoke": "node scripts/build.js && node scripts/smoke.js",
     "preview": "node scripts/build.js && node scripts/preview.js",
+    "test": "vp test",
     "check": "vp check"
   },
   "dependencies": {

@@ -148,9 +148,10 @@ function buildMenu(win: BrowserWindow): void {
       label: "View",
       submenu: [
         // The renderer binds the key itself, so the accelerator is shown here
-        // and not registered. Registering it too would toggle twice.
+        // and not registered. Registering it too would toggle twice. i and Esc
+        // switch too, and a menu item has room for one accelerator.
         {
-          label: "View / Transform",
+          label: "View / Transform (i, Esc)",
           accelerator: "CmdOrCtrl+E",
           registerAccelerator: false,
           click: send("menu:mode"),

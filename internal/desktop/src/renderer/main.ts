@@ -49,7 +49,11 @@ class Shell {
     this.grid = new Grid(this.content, {
       onSelect: () => this.paintStatus(),
       onEdit: (row, col, value) => this.edit(row, col, value),
-      onLocked: () => this.say("View · Ctrl+E to transform"),
+      onSay: (text, isError) => this.say(text, isError),
+      onMode: (to) => {
+        if (this.workspace !== undefined && this.workspace.mode !== to) this.toggleMode();
+      },
+      onEditor: () => this.paintStatus(),
     });
 
     this.wireDrop();
@@ -320,7 +324,7 @@ class Shell {
 
     const seg = document.createElement("span");
     seg.className = "seg";
-    seg.title = "Ctrl+E";
+    seg.title = "i to transform · Esc to view · Ctrl+E";
     for (const [mode, label] of [
       ["view", "View"],
       ["transform", "Transform"],
@@ -390,7 +394,9 @@ class Shell {
   private paintStatus(): void {
     const w = this.workspace;
     this.statusFile.textContent = w === undefined ? "no file open" : w.status();
-    this.statusMode.textContent = w === undefined ? "" : w.mode.toUpperCase();
+    // INSERT is transform with the editor open, so it wears transform's amber.
+    const mode = this.grid.editing() ? "INSERT" : w?.mode.toUpperCase();
+    this.statusMode.textContent = mode ?? "";
     this.statusMode.className = w?.mode === "transform" ? "mode t" : "mode";
 
     if (w === undefined) {
