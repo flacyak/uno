@@ -31,9 +31,13 @@ const drawerWidth = 296
 // so an overlay leaves the data exactly where it was.
 //
 // There is one drawer and not one per workspace, the same way there is one
-// proposal bar. The library is a fact about this machine rather than about a
-// file; only the column it would act on belongs to the selected tab, and that is
-// read from the workspace each time it is shown (I-3).
+// proposal bar. What it lists is now half a fact about this machine and half a
+// fact about a file: the library is the same library whichever tab is in front,
+// and the beside group is whatever happens to be sitting in the active
+// document's folder. Neither is held anywhere. That folder, like the column the
+// drawer would act on, is read off the selected tab every time the panel is
+// shown, so nothing one workspace listed can turn up beside another one's rows
+// (I-3).
 type formulaDrawer struct {
 	box  *fyne.Container
 	lay  *slideLayout
@@ -130,7 +134,8 @@ func (s *Shell) refreshDrawer() {
 	if d == nil {
 		return
 	}
-	d.target.SetText(targetFor(s.active()))
+	w := s.active()
+	d.target.SetText(targetFor(w))
 
 	beside, lib, err := s.sources()
 	if err != nil {
@@ -142,21 +147,50 @@ func (s *Shell) refreshDrawer() {
 		fyne.LogError("reading formulas", err)
 	}
 
-	// One flat list for now, the folder each row came from carried alongside it
-	// so that editing one writes it back where it was found.
-	found := make([]sourced, 0, len(beside)+len(lib))
-	found = append(found, beside...)
-	found = append(found, lib...)
+	// Recency orders each group from the inside rather than the concatenation as
+	// a whole. Sorting the two together would let a library formula used a
+	// minute ago climb over the file somebody sent with the document, which
+	// would put a row under a heading that no longer describes it. Within a
+	// section the promise is the one it has always been: what you reached for
+	// last is at the top.
+	beside = s.byRecency(beside)
+	lib = s.byRecency(lib)
 
-	found = s.byRecency(found)
+	// The headings appear only when there is something to tell apart. A
+	// workspace with no file on disk, or one whose folder holds no formulas,
+	// gets the drawer exactly as it has always looked -- one list, no labels --
+	// because a single heading over a single group is a distinction the panel is
+	// not currently making.
+	sectioned := len(beside) > 0 && len(lib) > 0
 
 	d.list.RemoveAll()
-	for _, f := range found {
+	if sectioned {
+		// Named after the document rather than after the folder, because that is
+		// the thing on screen: the tab says sales-q3.uno and so does the
+		// heading, and nobody has to recognise a path to connect the two.
+		d.list.Add(heading("Beside " + w.name))
+	}
+	for _, f := range beside {
+		d.list.Add(s.formulaRow(f))
+	}
+	if sectioned {
+		d.list.Add(heading("Your library"))
+	}
+	for _, f := range lib {
 		d.list.Add(s.formulaRow(f))
 	}
 	d.list.Refresh()
 
-	d.foot.SetText(fmt.Sprintf("%s · %s", plural(len(found), "formula"), shortDir(s.libraryDir())))
+	d.foot.SetText(fmt.Sprintf("%s · %s", plural(len(beside)+len(lib), "formula"), shortDir(s.libraryDir())))
+}
+
+// heading is the small bold label over a group of rows. It is the editor's
+// labelled in the one respect that matters here: the same weight is what says
+// "this is a name for what follows" in both places.
+func heading(text string) *widget.Label {
+	l := widget.NewLabel(text)
+	l.TextStyle = fyne.TextStyle{Bold: true}
+	return l
 }
 
 // formulaRow is one entry: what it is called, what kind it is, and the two
