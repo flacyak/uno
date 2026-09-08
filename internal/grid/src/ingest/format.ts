@@ -72,7 +72,7 @@ export async function openFormat(name: string, src: ByteSource): Promise<Format>
   }
   if (dataStart < 0) throw new Error(`${name}: file is empty`);
 
-  const columns = readAll(headDecoder.decode(head.subarray(0, dataStart)), comma)[0]!;
+  const columns = headerOf(readAll(headDecoder.decode(head.subarray(0, dataStart)), comma)[0]!);
   return {
     label: describe(comma),
     columns,
@@ -99,6 +99,32 @@ function findDataStart(head: Uint8Array, comma: string, whole: boolean): number 
   if (second >= 0) return second;
   if (!whole) return undefined;
   return records === 0 ? -1 : head.length;
+}
+
+/**
+ * headerOf names every column once. A file can say product_cost twice, and a
+ * name two columns share is one no formula can use: the first keeps it and each
+ * later one takes the lowest free suffix, product_cost_2, then _3. The suffix
+ * keeps the name an identifier, and the renamed header is on screen, so a
+ * person sees both columns rather than a name that quietly means one of them.
+ *
+ * It is a function of the header alone, so a .uno that carries its source
+ * reads the same names on every open.
+ */
+export function headerOf(record: readonly string[]): string[] {
+  const taken = new Set(record);
+  const seen = new Set<string>();
+  return record.map((name) => {
+    if (!seen.has(name)) {
+      seen.add(name);
+      return name;
+    }
+    let n = 2;
+    while (taken.has(`${name}_${n}`)) n++;
+    const unique = `${name}_${n}`;
+    taken.add(unique);
+    return unique;
+  });
 }
 
 /** The extension, lower-cased, including its dot. "" when there is none. */
