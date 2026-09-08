@@ -2,26 +2,24 @@
 //
 // The signing is held to AWS's own published examples, because a signature
 // that is wrong in one byte is a 403 and nothing more helpful. The rest runs
-// against a small stand-in for S3 on localhost that serves the real fixture,
-// checks every request's signature the way S3 would, and answers ranges.
+// against standin.ts, a small stand-in for S3 on localhost that serves the real
+// fixture, checks every request's signature the way S3 would, and answers
+// ranges.
 
-import { createServer } from "node:http";
-import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { mkdtemp, writeFile } from "node:fs/promises";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
 
 import { readContainer } from "../../src/document/index.ts";
 import { EMPTY_SHA256, s3Files, s3Location, s3Url, signV4 } from "../../src/store/s3.ts";
-import type { AwsCredentials } from "../../src/store/s3.ts";
 import { awsCredentials, localFiles } from "../../src/store/node.ts";
 import { bytes, connect, indexed, openOne, sales } from "../engine/harness.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { AWKWARD_KEYS, DOT_KEYS } from "./awkward.ts";
-import { HOME_REGION, REGION_FORMATS, rendered } from "./regions.ts";
-import type { Misdirect } from "./regions.ts";
+import { HOME_REGION, REGION_FORMATS } from "./regions.ts";
+import { at, BUCKET, bucket, KEYS } from "./standin.ts";
+import type { Bucket } from "./standin.ts";
 
 // ------------------------------------------------------------ signing
 
@@ -160,127 +158,8 @@ describe("credentials", () => {
 });
 
 // ------------------------------------------------------------ a bucket
-
-const KEYS: AwsCredentials = {
-  accessKeyId: "AKIDUNOTEST",
-  secretAccessKey: "uno/test/secret",
-  region: "us-east-1",
-};
-
-/** Where the stand-in keeps its one bucket. regions.ts says which region. */
-const BUCKET = "acme-exports";
-
-/** How the stand-in turns a request away by default: the way AWS does it. */
-const MOVED: Misdirect = { status: 301, headers: { "x-amz-bucket-region": "$REGION" } };
-
-interface Bucket {
-  endpoint: string;
-  /** Every request that reached it: the raw target too, for counting and for
-   * checking that a key arrived on the wire exactly as it was written. */
-  seen: Array<{ method: string; path: string; range: string | undefined; region: string }>;
-  /** What each key holds. Change one to rewrite the object under a reader. */
-  objects: Map<string, Uint8Array>;
-  close(): Promise<void>;
-}
-
-/**
- * bucket is S3 as far as uno can tell: HEAD, ranged GET, If-Match, a redirect
- * for the wrong region, and a 403 for a signature that does not check out --
- * checked by signing the same request again with the same secret.
- *
- * It turns a request signed for the wrong region away with `misdirect`, which
- * is how AWS does it unless a test says otherwise, and lives in `home`.
- */
-async function bucket(misdirect: Misdirect = MOVED, home = HOME_REGION): Promise<Bucket> {
-  const objects = new Map<string, Uint8Array>([["2025/sales-q3.csv", bytes]]);
-  const seen: Bucket["seen"] = [];
-
-  const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const range = req.headers["range"];
-    // req.url is the target as it was sent. Everything that looks at the path
-    // works off this, because `new URL` would resolve away a `.` or `..`
-    // segment that is part of a key's name.
-    const raw = req.url!.split("?")[0]!;
-    const url = new URL(req.url!, `http://${req.headers.host}`);
-    const auth = req.headers["authorization"] ?? "";
-    const region = /Credential=[^/]+\/\d{8}\/([^/]+)\//.exec(auth)?.[1];
-    seen.push({ method: req.method!, path: raw, range, region: region ?? "" });
-
-    // S3 checks the signature before anything else, and so does this.
-    const signed = /SignedHeaders=([^,]+)/.exec(auth)?.[1]?.split(";") ?? [];
-    const again = signV4(
-      {
-        method: req.method!,
-        url,
-        headers: Object.fromEntries(
-          signed
-            .filter((h) => h !== "host" && h !== "x-amz-date")
-            .map((h) => [h, String(req.headers[h])]),
-        ),
-      },
-      KEYS,
-      region ?? "",
-      "s3",
-      amzDate(String(req.headers["x-amz-date"])),
-    );
-    if (again["authorization"] !== auth) {
-      res.writeHead(403).end();
-      return;
-    }
-    if (region !== home) {
-      const away = rendered(misdirect, home);
-      // A reply to a HEAD carries no body however the server writes it, so a
-      // region that is only in the body cannot reach a HEAD at all. Node
-      // drops it for us; content-length still says what a GET would send.
-      res.writeHead(away.status, {
-        ...away.headers,
-        "content-length": Buffer.byteLength(away.body),
-      });
-      res.end(req.method === "HEAD" ? undefined : away.body);
-      return;
-    }
-
-    const [, name, ...rest] = raw.split("/");
-    const key = rest.map((seg) => decodeURIComponent(seg)).join("/");
-    const body = name === BUCKET ? objects.get(key) : undefined;
-    if (body === undefined) {
-      res.writeHead(404).end();
-      return;
-    }
-    const etag = `"${body.length}-${body[0]}"`;
-    if (req.headers["if-match"] !== undefined && req.headers["if-match"] !== etag) {
-      res.writeHead(412).end();
-      return;
-    }
-    if (req.method === "HEAD") {
-      res.writeHead(200, { "content-length": body.length, etag }).end();
-      return;
-    }
-    const m = /^bytes=(\d+)-(\d+)$/.exec(range ?? "");
-    const part = m === null ? body : body.subarray(Number(m[1]), Number(m[2]) + 1);
-    res.writeHead(m === null ? 200 : 206, { "content-length": part.length, etag }).end(part);
-  });
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  return {
-    endpoint: `http://127.0.0.1:${port}`,
-    seen,
-    objects,
-    close: () => new Promise((resolve) => server.close(() => resolve())),
-  };
-}
-
-/** A ref to an object in the stand-in's bucket. */
-function at(key: string): { name: string; path: string } {
-  return { name: key.slice(key.lastIndexOf("/") + 1), path: `s3://${BUCKET}/${key}` };
-}
-
-/** The date a request was signed at, back out of its x-amz-date. */
-function amzDate(s: string): Date {
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s)!;
-  return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`);
-}
+//
+// standin.ts is the S3 these run against, and says what it answers and why.
 
 describe("a source in a bucket", () => {
   let b: Bucket;
