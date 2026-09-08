@@ -9,15 +9,13 @@
 
 import type { Change } from "../pattern/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
+import type { FileRef } from "../store/index.ts";
 
 /**
- * SourceRef says where a file is without holding any of it.
- *
- * A path means something only to a desktop engine and a Blob only to a browser
- * one. Each platform's worker entry opens the kind it understands and refuses
- * the other.
+ * SourceRef says where a file is without holding any of it: a FileRef, which
+ * the engine opens through whichever of its FileHandlers claims it.
  */
-export type SourceRef = { name: string; path: string } | { name: string; blob: Blob };
+export type SourceRef = FileRef;
 
 export interface ColumnInfo {
   header: string;
