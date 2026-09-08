@@ -106,6 +106,11 @@ export type Action =
   | { t: "unparsed"; dir: 1 | -1 }
   /** The last search again, the same way or the other. */
   | { t: "next"; reverse: boolean }
+  /**
+   * gt and gT: another source's tab. A count after gt is the tab to go to, from
+   * 1, and a count after gT is how many to go back.
+   */
+  | { t: "tab"; step: 1 | -1; count: number | undefined }
   | { t: "say"; text: string };
 
 /** What the command line opens with: a command, or a search down or up. */

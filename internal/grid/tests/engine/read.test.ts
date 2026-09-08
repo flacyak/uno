@@ -20,6 +20,7 @@ import {
   TINY,
   bytes,
   connect,
+  openOne,
   indexed,
   sales,
   sheetRows,
@@ -32,18 +33,19 @@ const BAND_ROWS = 2000;
 test("the engine reads the fixture the way read does", async () => {
   const { engine, done } = connect(TINY);
   try {
-    const opened = await engine.open({ name: "sales-q3.csv", path: FIXTURE });
+    const src = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
+    const opened = src.opened;
     expect(opened.label).toBe("UTF-8 · delimiter ','");
     // The same sample, so the same badges: units is numeric data in a costume.
     expect(opened.columns).toEqual(sales.columns);
     expect(opened.columns[UNITS]).toEqual({ header: "units", kind: "text", flagged: true });
 
-    await indexed(engine);
-    expect(engine.progress).toMatchObject({ rows: ROWS, readable: ROWS, complete: true });
+    await indexed(src);
+    expect(src.progress).toMatchObject({ rows: ROWS, readable: ROWS, complete: true });
 
     const page = 500;
     for (let first = 0; first < ROWS; first += page) {
-      const { rows } = await engine.rows(first, page);
+      const { rows } = await src.rows(first, page);
       expect(widened(rows), `rows from ${first}`).toEqual(sheetRows(sales, first, page, "raw"));
     }
   } finally {
@@ -54,18 +56,18 @@ test("the engine reads the fixture the way read does", async () => {
 test("a band holds the rows around the viewport, and only those", async () => {
   const { engine, done } = connect(TINY);
   try {
-    const opened = await engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
-    await indexed(engine);
+    const src = await openOne(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
+    await indexed(src);
 
     let asked = 0;
-    const rows = engine.rows.bind(engine);
-    engine.rows = (first, count) => {
+    const rows = src.rows.bind(src);
+    src.rows = (first, count) => {
       asked++;
       return rows(first, count);
     };
 
     let landed = (): void => {};
-    const band = new Band(engine, opened, () => landed());
+    const band = new Band(src, () => landed());
     expect(band.rows()).toBe(ROWS);
     expect(band.readable(), "indexed to the end, so every row can be read").toBe(ROWS);
     expect(band.ready(LAST_ROW), "nothing has arrived yet").toBe(false);
@@ -91,8 +93,8 @@ test("a band holds the rows around the viewport, and only those", async () => {
 test("find reads the column past any band, with the log applied", async () => {
   const { engine, done } = connect(TINY);
   try {
-    await engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
-    await indexed(engine);
+    const src = await openOne(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
+    await indexed(src);
     const rows = sales.rows();
 
     // Every units cell that does not parse as a number, read the slow way.
@@ -102,7 +104,7 @@ test("find reads the column past any band, with the log applied", async () => {
       if (v !== "" && !isNumber(v)) unparsed.push(row);
     }
     const units = (from: number, dir: 1 | -1) =>
-      engine.find({ col: UNITS, from, dir, match: { t: "unparsed" } });
+      src.find({ col: UNITS, from, dir, match: { t: "unparsed" } });
 
     for (const from of [0, 7, 2400, LAST_ROW]) {
       const down = unparsed.find((r) => r > from) ?? null;
@@ -116,13 +118,13 @@ test("find reads the column past any band, with the log applied", async () => {
     }
 
     // Text that is not numeric data in a costume has nothing in it to fail.
-    const region = await engine.find({ col: REGION, from: 0, dir: 1, match: { t: "unparsed" } });
+    const region = await src.find({ col: REGION, from: 0, dir: 1, match: { t: "unparsed" } });
     expect(region).toEqual({ row: null, searched: 0, complete: true });
 
     const north = [...Array(rows).keys()].find(
       (r) => r > 0 && sales.display(r, REGION).includes("North"),
     );
-    const text = await engine.find({
+    const text = await src.find({
       col: REGION,
       from: 0,
       dir: 1,
@@ -133,8 +135,8 @@ test("find reads the column past any band, with the log applied", async () => {
     // With the commas gone nothing fails, until one cell far below is typed over.
     const far = 4000;
     engine.mode(true);
-    await engine.edit({ op: Op.Apply, row: NO_ROW, col: UNITS, now: 'replace(/,/, "")' });
-    await engine.edit({ op: Op.Set, row: far, col: UNITS, now: "n/a" });
+    await src.edit({ op: Op.Apply, row: NO_ROW, col: UNITS, now: 'replace(/,/, "")' });
+    await src.edit({ op: Op.Set, row: far, col: UNITS, now: "n/a" });
     expect((await units(0, 1)).row).toBe(far);
     expect((await units(far, 1)).row).toBe(null);
     expect((await units(LAST_ROW, -1)).row).toBe(far);

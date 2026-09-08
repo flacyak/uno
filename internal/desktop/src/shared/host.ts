@@ -19,11 +19,15 @@ export interface Host {
    * a failure and must not be reported as one. */
   open(): Promise<SourceRef | undefined>;
 
+  /** Ask for files to add to the open workspace as sources. Empty when the
+   * person cancelled. */
+  add(): Promise<SourceRef[]>;
+
   /** Where a dropped file is, in the form this platform's engine opens. Throws
    * for a file that is not on this machine's disk. */
   dropped(file: File): SourceRef;
 
-  /** Start an engine, a worker that owns one file. The port is the only way in
+  /** Start an engine, a worker that owns one workspace. The port is the only way in
    * or out of it, and closing the port ends the worker. */
   connect(): Promise<MessagePort>;
 

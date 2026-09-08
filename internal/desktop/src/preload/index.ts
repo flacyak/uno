@@ -14,6 +14,8 @@ import type { Bridge } from "../shared/host.ts";
 const bridge: Bridge = {
   open: () => ipcRenderer.invoke("file:open") as Promise<SourceRef | undefined>,
 
+  add: () => ipcRenderer.invoke("file:add") as Promise<SourceRef[]>,
+
   /**
    * A dropped File is turned into its path here, because only preload can ask.
    * The engine opens files by path, and a File that came from somewhere other
@@ -55,7 +57,10 @@ ipcRenderer.on("engine:port", (event, id: number) => {
  * action, and the renderer decides what it means.
  */
 contextBridge.exposeInMainWorld("unoMenu", {
-  on(channel: "menu:open" | "menu:save" | "menu:save-as" | "menu:mode", fn: () => void): void {
+  on(
+    channel: "menu:open" | "menu:add" | "menu:save" | "menu:save-as" | "menu:mode",
+    fn: () => void,
+  ): void {
     ipcRenderer.on(channel, () => fn());
   },
 
@@ -69,6 +74,11 @@ contextBridge.exposeInMainWorld("unoMenu", {
    */
   onOpenPath(fn: (path: string) => void): void {
     ipcRenderer.on("menu:open-path", (_event, path: string) => fn(path));
+  },
+
+  /** Files named together on the command line, added to one workspace in order. */
+  onAddPaths(fn: (paths: string[]) => void): void {
+    ipcRenderer.on("menu:add-paths", (_event, paths: string[]) => fn(paths));
   },
 
   /**
