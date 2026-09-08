@@ -3,6 +3,8 @@
 // attached (I-6).
 package sheet
 
+import "github.com/flacyak/uno/internal/formula"
+
 // Sheet is the one copy of the data in memory. ingest builds it at load, the
 // grid reads it every frame, and Set is the single door through which it
 // changes (I-7: only ever from the UI goroutine).
@@ -15,6 +17,23 @@ type Sheet struct {
 	Columns []Column
 	rows    [][]string
 	edits   []Edit // every change made to rows, in order; see edit.go
+
+	// computed is what Display hands out where something has filled it in: a
+	// column a formula is bound to, and a cell holding notation. It is indexed
+	// by column and nil for a column nothing computes, so the common case costs
+	// one bounds check and no allocation on the per-frame path (I-1).
+	//
+	// A slice and not a map because Display runs about two hundred times a
+	// frame, and hashing a key that many times to answer "no" for most of them
+	// is work the grid does not have to do.
+	computed [][]string
+
+	// bound is the expression each computed column resolves to, and graph is
+	// what they depend on. Both are rebuilt by replaying the log, so neither is
+	// written to the file: raw plus the log is the whole truth of a workspace
+	// (I-4), and a second copy of a binding is a second thing to keep in step.
+	bound map[int]formula.Formula
+	graph formula.Graph
 }
 
 // Column pairs a header with the kind inferred from the values beneath it.
@@ -31,10 +50,15 @@ type Column struct {
 // each column's kind as it goes. A row longer than the header contributes no
 // column: the header decides the shape, and At tolerates the overhang.
 func New(name string, header []string, rows [][]string) *Sheet {
-	s := &Sheet{Name: name, Columns: make([]Column, len(header)), rows: rows}
+	s := &Sheet{
+		Name:     name,
+		Columns:  make([]Column, len(header)),
+		rows:     rows,
+		computed: make([][]string, len(header)),
+	}
 	for i, h := range header {
-		kind, flagged := inferKind(rows, i)
-		s.Columns[i] = Column{Header: h, Kind: kind, Flagged: flagged}
+		s.Columns[i].Header = h
+		s.inferKindOf(i)
 	}
 	return s
 }
@@ -63,9 +87,18 @@ func (s *Sheet) Raw(row, col int) string {
 // per visible cell on every scroll frame (I-1), so it reads and returns:
 // whatever fills it in does so when an edit lands, never when a cell is read.
 //
-// Today it is Raw. A formula separates the two — =SUM(...) stored, 48160.00
-// shown — and the split lands here first so that arrival is a body added to this
-// method rather than a change to every caller and to the per-frame contract.
+// The body is a cache read and nothing else. Recalculation fills it when an
+// edit lands, walking the dependency graph in order; a notation cell fills its
+// own entry when it is authored. Evaluating here instead would put an expression
+// tree walk on the scroll path, which is the exact mistake this seam exists to
+// prevent.
 func (s *Sheet) Display(row, col int) string {
+	if col >= 0 && col < len(s.computed) {
+		if vals := s.computed[col]; row >= 0 && row < len(vals) {
+			if v := vals[row]; v != "" {
+				return v
+			}
+		}
+	}
 	return s.Raw(row, col)
 }

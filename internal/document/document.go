@@ -22,11 +22,15 @@ import (
 // workspace holding nothing a uno 0.2 could not replay still opens in uno 0.2.
 // The alternative is that adding an operation nobody used locks every file the
 // release touches out of every build before it.
-const formatVersion = 2
+const formatVersion = 3
 
 // baseVersion is what a log of nothing but single-cell edits needs, which is
 // every file uno wrote before the recogniser existed.
 const baseVersion = 1
+
+// ruleVersion is what a log carrying an induced column rule needs, which is
+// every file the recogniser wrote before formulas existed.
+const ruleVersion = 2
 
 const generator = "uno 0.2.0"
 
@@ -113,6 +117,23 @@ type EditsRef struct {
 // can be replayed is written here.
 type State struct {
 	Active Cell `json:"active"`
+
+	// ColumnFormulas says which .unof in the person's own library each bound
+	// column came from, and nothing else. The expression itself is in the log,
+	// because that is what has to be there for the file to compute on a machine
+	// that has never seen the sender's library — the same promise the raw bytes
+	// make. This is the convenience that makes edit beside a name find the
+	// formula again, so it belongs to what the grid looked like rather than to
+	// what the workspace holds.
+	ColumnFormulas []ColumnFormula `json:"columnFormulas,omitempty"`
+}
+
+// ColumnFormula points a bound column at the library file it was written in.
+// A reference that does not resolve is not an error: the column still computes,
+// and the drawer simply has nothing to open.
+type ColumnFormula struct {
+	Col int    `json:"col"`
+	Ref string `json:"ref"`
 }
 
 // Cell is a position in the grid. It is where the person was, which is a fact

@@ -22,10 +22,11 @@ type Edit struct {
 	Col int    `json:"col"`
 	Was string `json:"was,omitempty"`
 
-	// Now is the cell's new value under OpSet, and the program text under
-	// OpApply. One field rather than two because they are the same thing at
-	// different scopes — what this operation makes the data say — and a second
-	// field would have to be empty in every line of every log written so far.
+	// Now is the cell's new value under OpSet, the program text under OpApply
+	// and the expression text under OpBind. One field rather than four because
+	// they are the same thing at different scopes — what this operation makes
+	// the data say — and a second field would have to be empty in every line of
+	// every log written so far.
 	Now string `json:"now"`
 }
 
@@ -41,6 +42,15 @@ const (
 	// carries no Was, because thousands of old values are not a field, which is
 	// why undo replays the log rather than reversing it.
 	OpApply = "apply"
+
+	// OpBind makes a column derived: from here on it stores nothing of its own
+	// and shows what the expression computes.
+	//
+	// It is an operation and not a line of sheet state, though it looks like
+	// one. A binding is something a person did, so it has to be something they
+	// can undo, and undo is truncate-and-replay of this log. Putting it in
+	// state.json would have left Ctrl+Z unable to reach it.
+	OpBind = "bind"
 )
 
 // NoRow is what a column-spanning op stores in Row. A log is read by people
@@ -145,15 +155,35 @@ func (s *Sheet) mutate(e Edit) error {
 
 	switch e.Op {
 	case OpSet:
-		return s.setCell(e)
+		if err := s.setCell(e); err != nil {
+			return err
+		}
+		// A cell a person typed into may be read by a bound column, so what
+		// follows from it is brought up to date here, where the change is,
+		// rather than later where a read would have had to notice.
+		s.recalcAfter(e.Col)
+		return nil
 	case OpApply:
-		return s.runProgram(e)
+		if err := s.runProgram(e); err != nil {
+			return err
+		}
+		s.recalcAfter(e.Col)
+		return nil
+	case OpBind:
+		return s.bindColumn(e)
 	default:
 		return fmt.Errorf("edit %d: unknown operation %q", e.Seq, e.Op)
 	}
 }
 
 func (s *Sheet) setCell(e Edit) error {
+	// A derived column has no stored values of its own, so there is nothing
+	// here for a person to type over: the next recalculation would discard it
+	// without saying so. Refusing names the column instead.
+	if _, bound := s.bound[e.Col]; bound {
+		return fmt.Errorf("edit %d: %s is computed by a formula, so its cells cannot be typed into",
+			e.Seq, s.Columns[e.Col].Header)
+	}
 	if e.Row < 0 || e.Row >= len(s.rows) {
 		return fmt.Errorf("edit %d: row %d is outside the %d rows of this sheet",
 			e.Seq, e.Row, len(s.rows))
@@ -201,6 +231,8 @@ func (s *Sheet) runProgram(e Edit) error {
 // sample changes nothing — exactly as that value would not have changed the kind
 // had it arrived in the file.
 func (s *Sheet) inferKindOf(col int) {
-	kind, flagged := inferKind(s.rows, col)
+	kind, flagged := inferKind(len(s.rows), func(row int) string {
+		return s.Display(row, col)
+	})
 	s.Columns[col].Kind, s.Columns[col].Flagged = kind, flagged
 }
