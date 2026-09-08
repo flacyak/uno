@@ -32,6 +32,7 @@ type Shell struct {
 	status *widget.Label
 	cell   *widget.Label
 	bar    *proposalBar
+	drawer *formulaDrawer
 	undoIt *fyne.MenuItem
 	byTab  map[*container.TabItem]*workspace
 }
@@ -56,19 +57,30 @@ func NewShell(w fyne.Window) *Shell {
 	// last few characters typed into the editor bar.
 	s.undoIt = menuItem("Undo", &fyne.ShortcutUndo{}, s.undo)
 
+	// Shift rather than a bare Ctrl+F, which every application that has a find
+	// has already spent. uno has no find today and should not be the reason it
+	// cannot have one.
+	formulas := menuItem("Formula…", key(fyne.KeyF, fyne.KeyModifierShift), s.toggleDrawer)
+
 	w.SetMainMenu(fyne.NewMainMenu(
 		fyne.NewMenu("File", open, fyne.NewMenuItemSeparator(), save, saveAs),
 		fyne.NewMenu("Edit", s.undoIt),
+		fyne.NewMenu("Insert", formulas),
 	))
 
 	if c := w.Canvas(); c != nil {
-		for _, it := range []*fyne.MenuItem{open, save, saveAs, s.undoIt} {
+		for _, it := range []*fyne.MenuItem{open, save, saveAs, s.undoIt, formulas} {
 			c.AddShortcut(it.Shortcut, func(fyne.Shortcut) { it.Action() })
 		}
 	}
 
 	// Dropping files is the same request as choosing one, so it lands in load too.
 	w.SetOnDropped(s.onDropped)
+
+	// A formula being typed when the window closes is one the person believes
+	// they have. The process is about to end, so the pending write happens here
+	// rather than being left to a timer that will not fire.
+	w.SetOnClosed(s.flushFormula)
 
 	// Nothing in a shipped build: demo_off.go is what this reaches unless the
 	// "demo" tag is set, and then it is the scripted preview docs/preview.gif is
@@ -125,7 +137,13 @@ func (s *Shell) Content() fyne.CanvasObject {
 	// The recogniser's question rides above all of it, anchored to the bottom
 	// edge it slides in from.
 	s.bar = s.newProposalBar()
-	return container.New(s.bar.lay, window, s.bar.box)
+	asked := container.New(s.bar.lay, window, s.bar.box)
+
+	// And the library over that, from the right. Two layouts nested rather than
+	// one holding three objects, so each stays about a single axis and the
+	// drawer passes over the bar in the corner where they meet.
+	s.drawer = s.newFormulaDrawer()
+	return container.New(s.drawer.lay, asked, s.drawer.box)
 }
 
 // active returns the workspace behind the selected tab, or nil when there is none.
@@ -148,6 +166,7 @@ func (s *Shell) refreshStatus() {
 	s.refreshTabs()
 	s.refreshUndo(w)
 	s.showProposal() // the question follows the selected tab, like everything else here
+	s.retargetDrawer()
 	s.win.SetTitle(titleFor(w))
 }
 
