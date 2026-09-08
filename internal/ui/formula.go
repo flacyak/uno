@@ -52,6 +52,11 @@ type formulaDrawer struct {
 
 	editor *formulaEditor
 
+	// listedBeside is the folder whose formulas the list currently shows. A click
+	// that only moved the selected cell repaints the header; rebuilding the list
+	// there would put a ReadDir and a file read per formula on the click path.
+	listedBeside string
+
 	showing bool
 	anim    *fyne.Animation
 }
@@ -130,6 +135,9 @@ func (s *Shell) showDrawer() {
 }
 
 // refreshDrawer rebuilds the list and repoints the header at the active tab.
+// This is the only thing in the panel that reads a folder, and it runs when
+// somebody asks for the drawer or changes which document is in front of it --
+// never on the way through a click.
 func (s *Shell) refreshDrawer() {
 	d := s.drawer
 	if d == nil {
@@ -198,6 +206,11 @@ func (s *Shell) refreshDrawer() {
 	}
 	parts = append(parts, shortDir(s.libraryDir()))
 	d.foot.SetText(strings.Join(parts, " · "))
+
+	// Written last, so a folder is only claimed as listed once it actually has
+	// been. retargetDrawer reads this on every selection to decide whether it
+	// has anything to do.
+	d.listedBeside = besideDir(w)
 }
 
 // heading is the small bold label over a group of rows. It is the editor's
@@ -434,13 +447,32 @@ func (s *Shell) toggleDrawer() {
 	s.showDrawer()
 }
 
-// retargetDrawer repoints the open drawer at the newly selected tab. Only the
-// header moves: the library it lists is the same library whichever file is in
-// front of it.
+// retargetDrawer repoints the open drawer at the newly selected tab, and
+// relists it only when that tab is sitting in a different folder.
+//
+// This runs on every cell selection, by way of refreshStatus, and that is the
+// whole reason the guard exists. Now that half the list comes from the
+// document's own folder, rebuilding it here would put a ReadDir plus a file
+// read and a parse per formula on the click path, on the UI goroutine, with
+// nothing to show for it: the list does not depend on the selected cell. It
+// depends on that cell's folder, which changes when somebody switches tabs or
+// saves somewhere new, and not otherwise. Clicking around a sheet therefore
+// costs what it has always cost, which is two label writes.
+//
+// That is a decision this codebase has already made three times. refreshTabs
+// diffs every tab label and calls tabs.Refresh only if one moved, repaint in
+// the proposal bar compares the colour before touching the rectangle because
+// showProposal lands there on every selection too, and Display reads an indexed
+// slice rather than a map because it runs about two hundred times a frame.
+// Anything reachable from a selection has to be free.
 func (s *Shell) retargetDrawer() {
-	if s.drawer == nil || !s.drawer.showing {
+	d := s.drawer
+	if d == nil || !d.showing {
 		return
 	}
-	s.drawer.target.SetText(targetFor(s.active()))
-	s.drawer.editor.applies.SetText(targetFor(s.active()))
+	if besideDir(s.active()) != d.listedBeside {
+		s.refreshDrawer()
+	}
+	d.target.SetText(targetFor(s.active()))
+	d.editor.applies.SetText(targetFor(s.active()))
 }

@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/flacyak/uno/internal/document"
 	"github.com/flacyak/uno/internal/library"
 )
 
@@ -224,6 +225,126 @@ func TestWhatWasUsedLastRisesWithinItsOwnSection(t *testing.T) {
 	if got, want := drawerHeadings(s), []string{"Beside sales-q3.uno", "Your library"}; !equalNames(got, want) {
 		t.Errorf("headings = %v, want %v", got, want)
 	}
+}
+
+// Clicking around a sheet with the drawer open must stay free. The panel's
+// contents depend on which document is in front of it, and the function that
+// keeps it pointed there is reached from every cell selection, so a list rebuilt
+// on the way through would read the folder and parse every file in it on each
+// click -- unnoticeable on a local disk with three formulas and unusable over a
+// network share with forty. The cost of that is a formula dropped into the
+// folder mid-session not appearing until something actually changes, which is
+// what closing and reopening the panel is for.
+func TestSelectingCellsDoesNotReReadTheFolder(t *testing.T) {
+	s, w, dir := besideSales(t, "unit-margin")
+	stockLibrary(t, s, "std-deviation")
+	s.toggleDrawer()
+
+	// Somebody drops a second formula in beside the document while the panel is
+	// open, which is exactly the read that must not happen on a click.
+	copyFixtures(t, dir, "variance")
+
+	w.table.Select(widget.TableCellID{Row: 0, Col: 2})
+
+	if got, want := drawerNames(s), []string{"Unit margin", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("drawer after a click = %v, want %v, unchanged", got, want)
+	}
+	// The header still followed the cell, which is the whole of what a click owes.
+	if got, want := s.drawer.target.Text, "column C · units"; got != want {
+		t.Errorf("target after a click = %q, want %q", got, want)
+	}
+
+	// And reopening the panel is what a person does when they know they have
+	// added a file, so that has to find it.
+	s.toggleDrawer()
+	s.toggleDrawer()
+
+	if got, want := drawerNames(s), []string{"Unit margin", "Variance term", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("drawer after reopening = %v, want %v", got, want)
+	}
+}
+
+// Two documents in two folders are two different sets of formulas beside them,
+// and the drawer follows whichever tab is in front. The library is the same
+// library in both, so it stays where it is: only the beside group answers to the
+// tab.
+func TestSwitchingTabsRelistsWhatIsBesideTheNewDocument(t *testing.T) {
+	s, first, _ := besideSales(t, "unit-margin")
+	stockLibrary(t, s, "std-deviation")
+	s.toggleDrawer()
+
+	if got, want := drawerNames(s), []string{"Unit margin", "Std. deviation"}; !equalNames(got, want) {
+		t.Fatalf("drawer on the first tab = %v, want %v", got, want)
+	}
+
+	second := saveInto(t, s, "margins.csv", "margins.uno", "variance")
+
+	if got, want := drawerNames(s), []string{"Variance term", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("drawer on the second tab = %v, want %v", got, want)
+	}
+	if got, want := drawerHeadings(s), []string{"Beside margins.uno", "Your library"}; !equalNames(got, want) {
+		t.Errorf("headings on the second tab = %v, want %v", got, want)
+	}
+
+	s.tabs.Select(first.tab)
+	if got, want := drawerNames(s), []string{"Unit margin", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("drawer back on the first tab = %v, want %v", got, want)
+	}
+
+	s.tabs.Select(second.tab)
+	if got, want := drawerNames(s), []string{"Variance term", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("drawer on the second tab again = %v, want %v", got, want)
+	}
+}
+
+// A Save As moves the document into a folder it was not in, which is a change of
+// which formulas are beside it. Nothing tells the drawer that: a finished save
+// sets the path and refreshes the window, and the panel notices for itself that
+// the folder it listed is no longer the one it is looking at.
+func TestSavingIntoAnotherFolderRelistsWithoutBeingTold(t *testing.T) {
+	s, w, _ := besideSales(t)
+	stockLibrary(t, s, "std-deviation")
+	s.toggleDrawer()
+
+	if got := drawerHeadings(s); len(got) != 0 {
+		t.Fatalf("headings with nothing beside the document = %v, want none", got)
+	}
+
+	elsewhere := t.TempDir()
+	copyFixtures(t, elsewhere, "unit-margin")
+	path := filepath.Join(elsewhere, "sales-q3.uno")
+	doc := w.document()
+	if err := document.Write(path, doc); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	s.wrote(w, path, doc, nil)
+
+	if got, want := drawerNames(s), []string{"Unit margin", "Std. deviation"}; !equalNames(got, want) {
+		t.Errorf("drawer after the save = %v, want %v", got, want)
+	}
+}
+
+// saveInto opens a second document in a tab of its own, saves it into a fresh
+// folder and puts the named fixtures beside it, which is the shape of having two
+// files open out of two different places.
+func saveInto(t *testing.T, s *Shell, from, name string, ids ...string) *workspace {
+	t.Helper()
+
+	if err := s.load(from, strings.NewReader(salesBody)); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	w := s.active()
+
+	dir := t.TempDir()
+	copyFixtures(t, dir, ids...)
+
+	path := filepath.Join(dir, name)
+	doc := w.document()
+	if err := document.Write(path, doc); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	s.wrote(w, path, doc, nil)
+	return w
 }
 
 // Applying a column formula binds the target column: 7 rows filled, one line in
