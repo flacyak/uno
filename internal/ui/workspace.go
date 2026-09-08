@@ -40,6 +40,12 @@ type workspace struct {
 	// is about stays here, so nothing about one file reaches another (I-3).
 	proposal *pattern.Proposal
 
+	// formulaRefs says which .unof each bound column came from, so edit beside a
+	// name can find it again. It is a convenience and never a dependency: the
+	// expression itself is in the log, so a file whose references resolve to
+	// nothing still computes (I-4).
+	formulaRefs map[int]string
+
 	// dismissed remembers, per column, the program the person said no to. Keyed
 	// by the program and not only by the column, so refusing one offer does not
 	// silence a column for the session: a better question about it is a
@@ -324,10 +330,33 @@ func (w *workspace) document() *document.Document {
 	return &document.Document{
 		Manifest: m,
 		Raw:      w.raw,
-		State:    document.State{Active: w.active},
-		Edits:    w.sheet.Edits(),
-		Extra:    w.extra, // replaced wholesale on open, never written into
+		State: document.State{
+			Active:         w.active,
+			ColumnFormulas: w.columnFormulas(),
+		},
+		Edits: w.sheet.Edits(),
+		Extra: w.extra, // replaced wholesale on open, never written into
 	}
+}
+
+// columnFormulas is the library reference for each bound column, in column
+// order so two saves of an unchanged workspace produce the same bytes.
+//
+// A column with no reference is simply absent. That is the ordinary case for a
+// file someone else bound and sent, and it is not a gap to be filled in: the
+// expression is in the log, and the reference is only ever how the drawer finds
+// the formula again on the machine it was written on.
+func (w *workspace) columnFormulas() []document.ColumnFormula {
+	if len(w.formulaRefs) == 0 {
+		return nil
+	}
+	out := make([]document.ColumnFormula, 0, len(w.formulaRefs))
+	for col := 0; col < w.sheet.Cols(); col++ {
+		if ref, ok := w.formulaRefs[col]; ok {
+			out = append(out, document.ColumnFormula{Col: col, Ref: ref})
+		}
+	}
+	return out
 }
 
 func clampIndex(i, n int) int {
