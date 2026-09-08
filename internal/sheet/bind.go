@@ -62,6 +62,15 @@ func (s *Sheet) bindColumn(e Edit) error {
 	if err != nil {
 		return fmt.Errorf("edit %d: %w", e.Seq, err)
 	}
+
+	// A column nothing is bound to but which already fills the cache is one
+	// holding notation, and recalculation replaces a column's cache wholesale.
+	// Binding over it would leave the sources in place and stop drawing them,
+	// which is a loss a person would have to notice rather than be told about.
+	if _, bound := s.bound[e.Col]; !bound && s.computed[e.Col] != nil {
+		return fmt.Errorf("edit %d: %s holds notation, so a formula cannot be bound over it",
+			e.Seq, name)
+	}
 	for _, ref := range f.Refs() {
 		if _, err := s.resolve(ref); err != nil {
 			return fmt.Errorf("edit %d: %w", e.Seq, err)
