@@ -11,6 +11,19 @@
 // one in a bucket somewhere else, and the redirect is exercised against S3 too.
 //
 //   UNO_S3_LIVE="s3://uno-live-use1/sales-q3.csv s3://uno-live-euw1/sales-q3.csv" vp test s3.live
+//
+// UNO_S3_LIVE_KEYS does the same for the keys in awkward.ts, and names an
+// s3:// prefix rather than an object, because there are ten of them. Seed it
+// once -- s3Files only ever reads, so nothing here can put them there:
+//
+//   for k in "sales q3.csv" "sales+q3.csv" "100%.csv" ... ; do
+//     aws s3api put-object --bucket uno-live-use1 --key "awkward/$k" \
+//       --body testdata/sales-q3.csv
+//   done
+//   UNO_S3_LIVE_KEYS="s3://uno-live-use1/awkward/" vp test s3.live
+//
+// The dot-segment keys are left to the stand-in. They never reach the wire
+// intact, so there is nothing for a real bucket to say about them.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,8 +35,11 @@ import { awsCredentials, localFiles } from "../../src/store/node.ts";
 import { s3Files, s3Location } from "../../src/store/s3.ts";
 import { bytes, connect, indexed, openOne, sales, sheetRows, widened } from "../engine/harness.ts";
 import { LAST_ROW, ROWS, UNITS } from "../testdata/sales-q3.ts";
+import { AWKWARD_KEYS } from "./awkward.ts";
 
 const URLS = (process.env["UNO_S3_LIVE"] ?? "").split(/[\s,]+/).filter((u) => u !== "");
+/** An s3:// prefix holding a copy of the fixture under each awkward key. */
+const PREFIX = (process.env["UNO_S3_LIVE_KEYS"] ?? "").trim();
 
 /** A real round trip is slower than localhost: an index pass is dozens of them. */
 const TIMEOUT = 120_000;
@@ -102,4 +118,62 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
       TIMEOUT,
     );
   }
+});
+
+// S3 is the only thing that can settle whether uno encodes a key the way S3
+// decodes it. The stand-in agrees with uno by construction -- both are this
+// repository -- so agreeing with it proves the two halves match, not that
+// either is right. One HEAD and two ranges per key is enough to tell: a size
+// that matches and both ends of the fixture means the signature was accepted
+// and the bytes came from the object that was asked for.
+describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
+  const s3 = () => s3Files({ credentials: awsCredentials() });
+  /** Enough of each end to be sure, and short enough to be two small requests. */
+  const EDGE = 512;
+
+  for (const [key] of AWKWARD_KEYS) {
+    const url = `${PREFIX.replace(/\/+$/, "")}/${key}`;
+
+    test(
+      `${key}: opens, and both ends are the fixture`,
+      async () => {
+        expect(s3Location(url), `${url} is not an s3:// URL`).toBeDefined();
+        const file = await s3().open({ name: key, path: url });
+        try {
+          expect(file.size, `${url} should be a copy of testdata/sales-q3.csv`).toBe(bytes.length);
+          expect(await file.read(0, EDGE)).toEqual(bytes.subarray(0, EDGE));
+          const tail = bytes.length - EDGE;
+          expect(await file.read(tail, EDGE)).toEqual(bytes.subarray(tail));
+        } finally {
+          await file.close();
+        }
+      },
+      TIMEOUT,
+    );
+  }
+
+  // One of them read the whole way through, so the awkward key is held to the
+  // same bar as the plain one in the test above: indexed, and read at the end.
+  test(
+    "one of them indexes and reads its last rows like any other source",
+    async () => {
+      const key = AWKWARD_KEYS[0]![0];
+      const url = `${PREFIX.replace(/\/+$/, "")}/${key}`;
+      const { engine, done } = connect(undefined, [
+        localFiles(),
+        s3Files({ credentials: awsCredentials() }),
+      ]);
+      try {
+        const src = await openOne(engine, { name: key, path: url });
+        expect(src.opened.link).toEqual({ path: url });
+        await indexed(src);
+        expect(src.progress.rows).toBe(ROWS);
+        const { rows } = await src.rows(LAST_ROW - 4, 10);
+        expect(widened(rows)).toEqual(sheetRows(sales, LAST_ROW - 4, 10, "raw"));
+      } finally {
+        done();
+      }
+    },
+    TIMEOUT,
+  );
 });

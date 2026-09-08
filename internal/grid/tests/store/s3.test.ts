@@ -19,6 +19,7 @@ import type { AwsCredentials } from "../../src/store/s3.ts";
 import { awsCredentials, localFiles } from "../../src/store/node.ts";
 import { bytes, connect, indexed, openOne, sales } from "../engine/harness.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
+import { AWKWARD_KEYS, DOT_KEYS } from "./awkward.ts";
 
 // ------------------------------------------------------------ signing
 
@@ -170,8 +171,9 @@ const HOME_REGION = "eu-west-1";
 
 interface Bucket {
   endpoint: string;
-  /** Every request that reached it, for counting. */
-  seen: Array<{ method: string; range: string | undefined }>;
+  /** Every request that reached it: the raw target too, for counting and for
+   * checking that a key arrived on the wire exactly as it was written. */
+  seen: Array<{ method: string; path: string; range: string | undefined }>;
   /** What each key holds. Change one to rewrite the object under a reader. */
   objects: Map<string, Uint8Array>;
   close(): Promise<void>;
@@ -188,7 +190,11 @@ async function bucket(): Promise<Bucket> {
 
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const range = req.headers["range"];
-    seen.push({ method: req.method!, range });
+    // req.url is the target as it was sent. Everything that looks at the path
+    // works off this, because `new URL` would resolve away a `.` or `..`
+    // segment that is part of a key's name.
+    const raw = req.url!.split("?")[0]!;
+    seen.push({ method: req.method!, path: raw, range });
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const auth = req.headers["authorization"] ?? "";
     const region = /Credential=[^/]+\/\d{8}\/([^/]+)\//.exec(auth)?.[1];
@@ -219,8 +225,9 @@ async function bucket(): Promise<Bucket> {
       return;
     }
 
-    const [, name, ...rest] = url.pathname.split("/");
-    const body = name === BUCKET ? objects.get(decodeURIComponent(rest.join("/"))) : undefined;
+    const [, name, ...rest] = raw.split("/");
+    const key = rest.map((seg) => decodeURIComponent(seg)).join("/");
+    const body = name === BUCKET ? objects.get(key) : undefined;
     if (body === undefined) {
       res.writeHead(404).end();
       return;
@@ -288,7 +295,7 @@ describe("a source in a bucket", () => {
       expect(rows.map((r) => r[UNITS])).toEqual([100, 101, 102].map((r) => sales.raw(r, UNITS)));
 
       // Nothing asked for the whole object: a HEAD for its size, then ranges.
-      expect(b.seen[0]).toEqual({ method: "HEAD", range: undefined });
+      expect(b.seen[0]).toMatchObject({ method: "HEAD", range: undefined });
       expect(b.seen.filter((r) => r.method === "GET").every((r) => r.range !== undefined)).toBe(
         true,
       );
@@ -398,3 +405,98 @@ describe("a source in a bucket", () => {
     }
   });
 });
+
+// ------------------------------------------------------------ awkward keys
+//
+// awkward.ts says what these keys are and why they are the ones that break.
+// Here they are read out of the stand-in, which checks every signature the way
+// S3 does and looks a key up by the path as it arrived, not as URL would
+// rather have it.
+
+describe("awkward keys", () => {
+  let b: Bucket;
+  beforeAll(async () => {
+    b = await bucket();
+    for (const [key] of AWKWARD_KEYS) b.objects.set(`2025/${key}`, utf8(`the object at ${key}`));
+  });
+  afterAll(() => b.close());
+
+  const s3 = () => s3Files({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint });
+
+  /** Everything the handler gives back for a key, as text. */
+  async function readAll(key: string): Promise<string> {
+    const file = await s3().open(at(key));
+    const text = new TextDecoder().decode(await file.read(0, file.size));
+    await file.close();
+    return text;
+  }
+
+  test("open every one of them, and give back the object that was asked for", async () => {
+    for (const [key] of AWKWARD_KEYS) {
+      expect(await readAll(`2025/${key}`), key).toBe(`the object at ${key}`);
+    }
+  });
+
+  // If the encoding and the signature ever disagree the stand-in answers 403,
+  // the same as S3 does, so reaching the bytes above already proves they agree.
+  // This says what the encoding is, so a change to it is a change somebody
+  // chose rather than one a runtime made on uno's behalf.
+  test("go out encoded once, and reach the wire that way", async () => {
+    for (const [key, encoded] of AWKWARD_KEYS) {
+      b.seen.length = 0;
+      await readAll(`2025/${key}`);
+      expect(b.seen.length, key).toBeGreaterThan(0);
+      for (const req of b.seen) expect(req.path, key).toBe(`/${BUCKET}/2025/${encoded}`);
+    }
+  });
+
+  test("survive the round trip through the URL a .uno writes down", () => {
+    for (const [key] of AWKWARD_KEYS) {
+      const loc = { bucket: BUCKET, key: `2025/${key}` };
+      expect(s3Location(s3Url(loc)), key).toEqual(loc);
+    }
+  });
+
+  test("never quietly read the object a dot segment collapses onto", async () => {
+    for (const [key, onto] of DOT_KEYS) {
+      b.objects.set(key, utf8(`the object at ${key}`));
+      b.objects.set(onto, utf8(`the object at ${onto}`));
+      const got = await readAll(key).catch((err: unknown) => err as Error);
+      if (got instanceof Error) {
+        // Refusing is a fine answer, as long as it names the key it refused.
+        expect(got.message, key).toContain(key);
+      } else {
+        expect(got, key).toBe(`the object at ${key}`);
+      }
+    }
+  });
+});
+
+test("reads awkward keys out of the https forms too, and never throws", () => {
+  for (const [url, want] of [
+    ["https://acme-exports.s3.amazonaws.com/2025/sales%2Bq3.csv", "2025/sales+q3.csv"],
+    ["https://acme-exports.s3.amazonaws.com/2025/100%25.csv", "2025/100%.csv"],
+    ["https://acme-exports.s3.amazonaws.com/2025/ventas-%C3%B1.csv", "2025/ventas-ñ.csv"],
+    ["https://acme-exports.s3.amazonaws.com/2025//double.csv", "2025//double.csv"],
+    // A + in a path is a plus, not a space. Only a query string spells it that way.
+    ["https://acme-exports.s3.amazonaws.com/2025/sales+q3.csv", "2025/sales+q3.csv"],
+  ] as Array<[string, string]>) {
+    expect(s3Location(url), url).toEqual({ bucket: "acme-exports", key: want });
+  }
+
+  // A pasted URL with a stray per cent is not an address uno can read, and
+  // saying so is the handler's job. Throwing out of handles() takes down the
+  // choice of handler for every source in the workspace, local ones included.
+  for (const url of [
+    "https://acme-exports.s3.amazonaws.com/2025/100%.csv",
+    "https://s3.eu-west-1.amazonaws.com/acme-exports/50%off.csv",
+    "https://example.com/100%.csv",
+  ]) {
+    expect(() => s3Location(url), url).not.toThrow();
+  }
+});
+
+/** The bytes of a string, for objects whose content only has to be telling. */
+function utf8(s: string): Uint8Array {
+  return new TextEncoder().encode(s);
+}
