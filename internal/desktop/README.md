@@ -30,8 +30,8 @@ a time, and sends rows straight to the renderer, so neither main nor the
 renderer ever holds the file. The status bar shows `≈` rows and how far the
 index has got until it reaches the end.
 
-`i` or Ctrl+E switches to transform, which unlocks editing and turns the
-recogniser on, and Esc or Ctrl+E switches back. It loads nothing. The engine keeps the edit log and applies it to each row as it
+Ctrl+E switches to transform, which unlocks editing and turns the recogniser
+on, and back again. It loads nothing. The engine keeps the edit log and applies it to each row as it
 reads the row, so an edit reaches the screen as soon as the next band does,
 anywhere in the file. After three fixes in one column, a banner offers the rest,
 and its count grows while the engine surveys the file. Apply is one edit, and
@@ -47,9 +47,18 @@ does.
 
 ## Keys
 
-The grid reads keys the way vim does. View is a normal mode that cannot write,
-transform is one that can, and the cell editor is insert mode. `i` moves one
-level in and Esc one level back out.
+How the grid reads keys is an input strategy, picked from Edit → Input and kept
+between launches. There are two, and Default is the one a new install gets.
+
+**Default** is a spreadsheet's keys. The arrows, Tab, PgUp, PgDn, Home and End
+move. Enter, F2 or a double click open the editor on the value, and typing over
+a cell replaces it. In the editor Enter keeps the typing and Esc throws it away.
+Ctrl+C copies what the cell stores, Ctrl+Z takes back the last edit and selects
+the cell it changed, and Ctrl+R records it again, until the next edit.
+
+**Vim-style** reads keys the way vim does. View is a normal mode that cannot
+write, transform is one that can, and the cell editor is insert mode. `i` moves
+one level in and Esc one level back out.
 
 `i` in view switches to transform and stops there. In transform, `i`, `a`, `s`
 and Enter open the editor with the caret at the start, at the end, on nothing

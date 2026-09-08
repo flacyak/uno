@@ -279,6 +279,9 @@ async function film(
 async function play(win: BrowserWindow, start: number): Promise<void> {
   const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
 
+  // The story is told in the default keys, whichever this machine last chose.
+  win.webContents.send("menu:input", "default");
+
   // A file opens in view, where nothing a key does changes it.
   await at(BEAT.transform);
   win.webContents.sendInputEvent({ type: "keyDown", keyCode: "E", modifiers: ["control"] });
@@ -357,15 +360,18 @@ async function fix(
   }
   await sleep(OPEN_PAUSE);
 
-  // s opens the editor empty over the selected cell. It is a keydown alone: the
-  // grid prevents it, so no char follows it into the field it just focused.
-  press(win, "s");
+  // The first character opens the editor over the selected cell already holding
+  // it, the way every spreadsheet does; it is sent as a keydown alone because
+  // the grid reads the keydown and puts the character in the field itself.
+  // Sending the char too would type it a second time, into the field that the
+  // keydown had just focused.
+  press(win, value[0]!);
   await sleep(KEYSTROKE);
 
-  // The value goes to the field, which needs the char to insert anything. Typed
-  // a character at a time rather than assigned, because a field that fills
+  // The rest go to the field, which needs the char to insert anything. Typed a
+  // character at a time rather than assigned, because a field that fills
   // instantly reads as a screenshot rather than as an edit.
-  for (const ch of value) {
+  for (const ch of value.slice(1)) {
     win.webContents.sendInputEvent({ type: "keyDown", keyCode: ch });
     win.webContents.sendInputEvent({ type: "char", keyCode: ch });
     win.webContents.sendInputEvent({ type: "keyUp", keyCode: ch });

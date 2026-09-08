@@ -70,4 +70,15 @@ contextBridge.exposeInMainWorld("unoMenu", {
   onOpenPath(fn: (path: string) => void): void {
     ipcRenderer.on("menu:open-path", (_event, path: string) => fn(path));
   },
+
+  /**
+   * Edit → Input. The renderer keeps which strategy was chosen, so the menu tells
+   * it when a person picks one, and it tells the menu which to check at start.
+   */
+  onInput(fn: (name: string) => void): void {
+    ipcRenderer.on("menu:input", (_event, name: string) => fn(name));
+  },
+  inputChosen(name: string): void {
+    ipcRenderer.send("input:chosen", name);
+  },
 });
