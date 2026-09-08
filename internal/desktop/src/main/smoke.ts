@@ -17,11 +17,11 @@ import type { BrowserWindow } from "electron";
 interface Check {
   name: string;
   /**
-   * A menu item's message, sent before the script runs the way the menu sends
-   * it. An accelerator is the main process's, so a key the page dispatches
-   * never reaches one.
+   * A menu item's message and what it carries, sent before the script runs the
+   * way the menu sends it. An accelerator is the main process's, so a key the
+   * page dispatches never reaches one.
    */
-  send?: string;
+  send?: readonly [channel: string, ...args: unknown[]];
   /** Runs in the renderer. Returns a message on failure, or "" when it passes. */
   script: string;
 }
@@ -83,22 +83,18 @@ const CHECKS: Check[] = [
     `,
   },
   {
-    name: "it opens in view, where a key that writes changes nothing",
+    name: "it opens in view, where typing changes nothing",
     script: `
       const mode = text("#status-mode");
       if (mode !== "VIEW") return "the status bar's mode is " + JSON.stringify(mode);
 
       document.querySelectorAll("tbody tr")[0].children[5].click();
       await frame();
-      // A digit used to open the editor holding itself. Letters and digits are
-      // commands now, and the one that asks to write is s.
       await press("9");
-      if (document.querySelector(".cell-editor") !== null) return "9 in view opened an editor";
-      await press("s");
 
-      if (document.querySelector(".cell-editor") !== null) return "s in view opened an editor";
+      if (document.querySelector(".cell-editor") !== null) return "typing in view opened an editor";
       const said = text("#status-msg");
-      return said.includes("i or Ctrl+E") ? "" : "the status bar says " + JSON.stringify(said);
+      return said === "View · Ctrl+E to transform" ? "" : "the status bar says " + JSON.stringify(said);
     `,
   },
   {
@@ -305,6 +301,52 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "by default, typing over a cell replaces it and Esc throws the typing away",
+    script: `
+      const cell = () => document.querySelectorAll("tbody tr")[6].children[5].textContent;
+      document.querySelectorAll("tbody tr")[6].children[5].click(); // units, row 7: 843
+      await frame();
+
+      await press("9");
+      const input = document.querySelector(".cell-editor");
+      if (input === null) return "typing did not open an editor";
+      if (input.value !== "9") return "the editor holds " + JSON.stringify(input.value);
+      if (text("#status-mode") !== "TRANSFORM") return "the mode is " + text("#status-mode");
+
+      await press("Escape");
+      if (document.querySelector(".cell-editor") !== null) return "Esc left the editor open";
+      if (cell() !== "843") return "Esc kept the typing: the cell shows " + JSON.stringify(cell());
+      return text("#status-file").includes("3 edits") ? "" : "status bar says: " + text("#status-file");
+    `,
+  },
+  {
+    name: "by default, Ctrl+R records again what Ctrl+Z took back",
+    script: `
+      const cell = () => document.querySelectorAll("tbody tr")[5].children[5].textContent;
+      await press("r", { ctrlKey: true });
+      if (!(await until(() => text("#status-file").includes("4 edits") && cell() === "1101"))) {
+        return "after Ctrl+R row 6 shows " + JSON.stringify(cell()) + ", status bar: " + text("#status-file");
+      }
+
+      // Taken back again, so the checks after this one start where they expect.
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+      return (await until(() => text("#status-file").includes("3 edits") && cell() === "1,101"))
+        ? ""
+        : "Ctrl+Z after Ctrl+R left row 6 showing " + JSON.stringify(cell());
+    `,
+  },
+  {
+    name: "Edit → Input → Vim-style reads keys the vim way, and is kept",
+    send: ["menu:input", "vim-style"],
+    script: `
+      if (!(await until(() => localStorage.getItem("uno.input") === "vim-style"))) {
+        return "the choice was not kept: " + JSON.stringify(localStorage.getItem("uno.input"));
+      }
+      const hint = document.querySelector(".seg")?.title ?? "";
+      return hint.startsWith("i to transform") ? "" : "the mode switch says " + JSON.stringify(hint);
+    `,
+  },
+  {
     name: "i in view switches to transform and opens nothing",
     script: `
       await press("Escape"); // Ctrl+Z left the file in transform
@@ -443,19 +485,25 @@ const CHECKS: Check[] = [
     name: "zt, zb and zz scroll the row into place, and H, L and M find it there",
     script: `
       const row = () => Number(text("#status-cell").split("row ")[1].replace(/,/g, ""));
+      // Sent without waiting a frame between keys. The grid lays out as each key
+      // lands, and the recogniser's banner comes and goes as offers arrive: one
+      // arriving between zb and L would move the rows under L.
+      const grid = document.querySelector("#content");
+      const key = (k) => grid.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+
       // 30G left row 29 one above the bottom of the screen, far from its top.
       for (const [scroll, find] of [["t", "H"], ["b", "L"], ["z", "M"]]) {
-        await press("z");
-        await press(scroll);
+        key("z");
+        key(scroll);
         if (row() !== 29) return "z" + scroll + " moved the selection to row " + row();
-        await press(find);
+        key(find);
         if (row() !== 29) return "z" + scroll + " then " + find + " went to row " + row();
       }
 
-      await press("H");
+      key("H");
       const top = row();
-      await press("3");
-      await press("H");
+      key("3");
+      key("H");
       return row() === top + 2 ? "" : "3H went to row " + row() + " with row " + top + " on top";
     `,
   },
@@ -698,7 +746,7 @@ const CHECKS: Check[] = [
   {
     // A check that fails here opens the file dialog instead, and the run times out.
     name: "Ctrl+O over unsaved edits says so, and opens nothing",
-    send: "menu:open",
+    send: ["menu:open"],
     script: `
       const warning = "unsaved edits · Ctrl+S first, or Ctrl+O again to drop them";
       if (!(await until(() => text("#status-msg") === warning))) {
@@ -720,7 +768,7 @@ const CHECKS: Check[] = [
   },
   {
     name: "a Ctrl+O warning that was replaced is given again",
-    send: "menu:open",
+    send: ["menu:open"],
     script: `
       const warning = "unsaved edits · Ctrl+S first, or Ctrl+O again to drop them";
       return (await until(() => text("#status-msg") === warning))
@@ -734,6 +782,20 @@ const CHECKS: Check[] = [
       const empty = document.querySelector("#empty");
       const shown = empty.getClientRects().length > 0;
       return shown ? "the dropzone is still on screen behind the grid" : "";
+    `,
+  },
+  {
+    // Last, so a run leaves the strategy a person gets by default.
+    name: "Edit → Input → Default reads keys the default way again, and is kept",
+    send: ["menu:input", "default"],
+    script: `
+      if (!(await until(() => localStorage.getItem("uno.input") === "default"))) {
+        return "the choice was not kept: " + JSON.stringify(localStorage.getItem("uno.input"));
+      }
+      // Esc on the grid is nobody's by default, so it no longer leaves transform.
+      const mode = text("#status-mode");
+      await press("Escape");
+      return text("#status-mode") === mode ? "" : "Esc took the mode from " + mode + " to " + text("#status-mode");
     `,
   },
 ];
@@ -781,9 +843,14 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
     })()
   `);
 
+  // The input strategy outlives the window. A run stopped partway through the
+  // vim-style checks would leave the next one reading keys the vim way, so every
+  // run starts from the default.
+  win.webContents.send("menu:input", "default");
+
   for (const check of CHECKS) {
     try {
-      if (check.send !== undefined) win.webContents.send(check.send);
+      if (check.send !== undefined) win.webContents.send(...check.send);
       const failure = (await win.webContents.executeJavaScript(
         `(async () => { ${PRELUDE} { ${check.script} } })()`,
       )) as string;
