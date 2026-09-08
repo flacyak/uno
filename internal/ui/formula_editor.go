@@ -117,6 +117,24 @@ func (s *Shell) newFormula() {
 	})
 }
 
+// placeName says which of the two folders a formula's file is sitting in, in
+// the words the footer says it in.
+//
+// The editor writes back to whichever folder the row was opened out of, and one
+// of those two folders is not necessarily yours. A .unof beside the document may
+// have arrived in an email or be tracked in somebody's git repository, and a
+// keystroke here rewrites it 600 ms later. Nothing asks first, on purpose: a
+// formula is 400 bytes and this panel exists to edit it, so a dialog in front of
+// every edit would make the shared case worse than the private one. What is owed
+// instead is that the answer is on screen before the first keystroke rather than
+// discovered after it.
+func (s *Shell) placeName(dir string) string {
+	if dir == s.libraryDir() {
+		return "your library"
+	}
+	return "beside file"
+}
+
 // editFormula pushes the panel a level deeper, onto one formula's own file.
 func (s *Shell) editFormula(f sourced) {
 	d := s.drawer
@@ -133,7 +151,7 @@ func (s *Shell) editFormula(f sourced) {
 	e.kind.SetSelected(kind)
 	e.name.SetText(f.Name)
 	e.expr.SetText(f.Expr)
-	e.foot.SetText("· " + f.ID + ".unof")
+	e.foot.SetText("· " + f.ID + ".unof · " + s.placeName(f.dir))
 
 	s.refreshPreview()
 	e.box.Show()
@@ -167,6 +185,11 @@ func (s *Shell) formulaChanged() {
 	e := s.drawer.editor
 	e.editing.Formula = s.editorFormula()
 	pending, dir := e.editing.Formula, e.editing.dir
+	// The wording is worked out here, with the rest of what the worker is
+	// handed, because deciding it needs the library's path and that comes from
+	// the app. The debounce below runs off the UI goroutine and must not go
+	// back to the Shell for anything (I-7).
+	place := s.placeName(dir)
 
 	if e.timer != nil {
 		e.timer.Stop()
@@ -179,8 +202,8 @@ func (s *Shell) formulaChanged() {
 				e.foot.SetText("not saved · " + err.Error())
 				return
 			}
-			e.foot.SetText(fmt.Sprintf("autosaved %s · %s.unof",
-				at.Format("15:04:05"), pending.ID))
+			e.foot.SetText(fmt.Sprintf("autosaved %s · %s.unof · %s",
+				at.Format("15:04:05"), pending.ID, place))
 		})
 	})
 }
