@@ -117,3 +117,15 @@ test("an id that names a path never reaches the filesystem", async () => {
   await expect(saveFormula(store, dir, column("../escape", "Escape", "a"))).rejects.toThrow();
   expect(await readdir(dir)).toEqual([]);
 });
+
+// The library is read the way every other file is, through its store's
+// handlers. A store that lists none cannot read a formula, and says why.
+test("formulas are read through the store's handlers, and nothing else", async () => {
+  const store = nodeStore();
+  const dir = await scratch();
+  await saveFormula(store, dir, column("f", "F", "a + b"));
+
+  const { formulas, failed } = await loadLibrary({ ...store, files: [] }, dir);
+  expect(formulas).toEqual([]);
+  expect(failed[0]!.message).toContain("f.unof: nothing here opens it");
+});

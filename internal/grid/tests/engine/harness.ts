@@ -15,8 +15,9 @@ import type {
 } from "../../src/engine/index.ts";
 import { read } from "../../src/ingest/index.ts";
 import type { Sheet } from "../../src/sheet/index.ts";
-import { blobSource } from "../../src/store/index.ts";
-import { nodeSource } from "../../src/store/node.ts";
+import { blobFiles } from "../../src/store/index.ts";
+import type { FileHandler } from "../../src/store/index.ts";
+import { localFiles } from "../../src/store/node.ts";
 
 export const FIXTURE = fileURLToPath(new URL("../testdata/sales-q3.csv", import.meta.url));
 export const bytes = new Uint8Array(readFileSync(FIXTURE));
@@ -28,13 +29,12 @@ export const SCREEN = 22;
 /** Small enough that the 240 KB fixture spans hundreds of blocks and the cache has to evict. */
 export const TINY: Tuning = { chunkBytes: 4096, blockRows: 7, blockBytes: 512, cacheBytes: 8192 };
 
-export function connect(tuning?: Tuning): { engine: Engine; done: () => void } {
+export function connect(
+  tuning?: Tuning,
+  handlers: FileHandler[] = [localFiles(), blobFiles()],
+): { engine: Engine; done: () => void } {
   const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
-    (ref) => ("path" in ref ? nodeSource(ref.path) : Promise.resolve(blobSource(ref.blob))),
-    tuning,
-  );
+  serve(messagePort<Request, Reply>(port1 as unknown as MessagePortLike), handlers, tuning);
   const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
   return {
     engine,

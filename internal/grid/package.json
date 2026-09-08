@@ -27,6 +27,7 @@
     "./sheet": "./dist/sheet/index.mjs",
     "./store": "./dist/store/index.mjs",
     "./store/node": "./dist/store/node.mjs",
+    "./store/s3": "./dist/store/s3.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {

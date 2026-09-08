@@ -19,10 +19,14 @@
 /** Separators, both of them, because a .uno written on Windows opens on Linux. */
 const SEP = /[/\\]/;
 
-/** isAbsolute covers a POSIX path, a Windows drive path, and a UNC share. */
+/** isAbsolute covers a POSIX path, a Windows drive path, a UNC share, and a
+ * URL: s3://bucket/key is never read relative to anything. */
 export function isAbsolute(path: string): boolean {
-  return /^[/\\]/.test(path) || /^[A-Za-z]:[/\\]/.test(path);
+  return /^[/\\]/.test(path) || /^[A-Za-z]:[/\\]/.test(path) || URL_LIKE.test(path);
 }
+
+/** A scheme of two letters or more, so a drive letter is not taken for one. */
+const URL_LIKE = /^[A-Za-z][A-Za-z0-9+.-]+:\/\//;
 
 /** dirOf is the folder a file is in, or "" for a bare name. */
 export function dirOf(path: string): string {

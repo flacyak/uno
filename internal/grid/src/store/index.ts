@@ -1,16 +1,21 @@
 // The seam between the pure core and a machine.
 //
 // Everything under src/ but this module works on bytes and strings, so it runs
-// unchanged in a browser. What a desktop adds is a filesystem, and this is the
-// whole of what the core needs from one: three methods, because a fourth would
-// be something the browser then has to pretend to have.
+// unchanged in a browser. What a machine adds is somewhere files are, and every
+// file uno reads -- a source, a .uno, a formula in the library -- is opened
+// through a FileHandler. There is no second way in: a platform that has not
+// listed a handler for a kind of place cannot read from it, and says so by name.
 
 import { compareStrings } from "../go/index.ts";
 import type { Formula } from "../library/index.ts";
 import { EXT, fileName, formatFormula, parseFormula } from "../library/index.ts";
 
 /**
- * FileStore is what a machine offers the core.
+ * FileStore is a folder uno keeps files of its own in: the formula library.
+ *
+ * Reading goes through `files`, the same handlers every other open goes
+ * through. What the store adds is the two things a handler never does, writing
+ * and listing.
  *
  * `write` must be atomic: a failure anywhere in it has to leave the file that
  * was already there untouched, and leave no half-written part behind for the
@@ -19,7 +24,8 @@ import { EXT, fileName, formatFormula, parseFormula } from "../library/index.ts"
  * promise -- the previously saved file is still there.
  */
 export interface FileStore {
-  read(path: string): Promise<Uint8Array>;
+  /** How files in the store are opened for reading. */
+  files: readonly FileHandler[];
   write(path: string, bytes: Uint8Array): Promise<void>;
   /** The names of the entries directly in dir, or an empty list where there is
    * no such directory. */
@@ -41,6 +47,101 @@ export interface ByteSource {
   close(): Promise<void>;
 }
 
+/**
+ * FileRef says where a file is without holding any of it: a path, which may be
+ * a URL like s3://bucket/key, or a Blob the caller already holds -- a file
+ * dropped into a browser, which has no path to give.
+ *
+ * The name is what the file is called, which is what `ingest` picks a decoder
+ * by and what a tab says.
+ */
+export type FileRef = { name: string; path: string } | { name: string; blob: Blob };
+
+/**
+ * FileHandler opens one kind of place a file can be: a disk, a bucket, bytes
+ * already in hand.
+ *
+ * It only opens, and only for reading. A source is a view of a file somebody
+ * else owns, and the log is where every change to it lives, so nothing here
+ * ever has a reason to write one back.
+ *
+ * A handler says which refs are its own by looking at them and nothing else,
+ * so the engine can pick one for a path it read out of a .uno without asking
+ * anybody. That is what lets one workspace hold a CSV off the desktop beside an
+ * export in S3.
+ */
+export interface FileHandler {
+  /** What a person would call this kind of place, for an error that names it. */
+  readonly label: string;
+  /** Whether `ref` is one this handler opens. */
+  handles(ref: FileRef): boolean;
+  /** The file, read a piece at a time. Throws, naming it, when it is not there
+   * or not ours to read. */
+  open(ref: FileRef): Promise<ByteSource>;
+}
+
+/**
+ * A path with a scheme in front of it -- s3://, https:// -- rather than one on
+ * this machine's disks. A Windows drive letter is one character, so C:\ is not
+ * mistaken for one.
+ */
+const REMOTE = /^[A-Za-z][A-Za-z0-9+.-]+:\/\//;
+
+/** isRemote says whether a path names a place on a network rather than a disk. */
+export function isRemote(path: string): boolean {
+  return REMOTE.test(path);
+}
+
+/**
+ * openWith opens a ref through the first handler that claims it.
+ *
+ * Refusing by name matters here more than anywhere: a .uno written on a
+ * machine with S3 set up, opened on one without, has to say which kind of
+ * place it cannot reach rather than "file not found".
+ */
+export function openWith(handlers: readonly FileHandler[], ref: FileRef): Promise<ByteSource> {
+  const handler = handlers.find((h) => h.handles(ref));
+  if (handler === undefined) {
+    const where = "path" in ref ? ref.path : ref.name;
+    const kinds = handlers.map((h) => h.label).join(", ");
+    return Promise.reject(new Error(`${where}: nothing here opens it · this build reads ${kinds}`));
+  }
+  return handler.open(ref);
+}
+
+/**
+ * readAll opens a ref through the handlers and reads the whole of it. It is for
+ * the small files uno reads at once -- a formula, a .uno, a config file -- and
+ * never for a source, which is read a piece at a time.
+ */
+export async function readAll(handlers: readonly FileHandler[], ref: FileRef): Promise<Uint8Array> {
+  const file = await openWith(handlers, ref);
+  try {
+    return await file.read(0, file.size);
+  } finally {
+    await file.close();
+  }
+}
+
+/**
+ * blobFiles opens Blobs: files dropped into a browser, which have no path, and
+ * bytes a test holds.
+ *
+ * It is a handler like the others so that accepting one is a platform's
+ * decision. A desktop engine opens files by path and does not list it, so a
+ * Blob that reaches one is refused by name rather than half-supported.
+ */
+export function blobFiles(): FileHandler {
+  return {
+    label: "dropped files",
+    handles: (ref) => "blob" in ref,
+    open: (ref) =>
+      "blob" in ref
+        ? Promise.resolve(blobSource(ref.blob))
+        : Promise.reject(new Error(`${ref.path}: not a dropped file`)),
+  };
+}
+
 /** blobSource reads a Blob: a File a person dropped, or bytes a test holds. */
 export function blobSource(blob: Blob): ByteSource {
   return {
@@ -51,8 +152,13 @@ export function blobSource(blob: Blob): ByteSource {
   };
 }
 
-/** bytesSource reads bytes already in memory without copying them: the source a
- * .uno carries, once the container has been read. */
+/**
+ * bytesSource reads bytes already in memory without copying them: the source a
+ * .uno carries, once the container has been read.
+ *
+ * It is not a way of opening a file. The container it came out of was opened
+ * through a handler, and these are a piece of what that open read.
+ */
 export function bytesSource(bytes: Uint8Array): ByteSource {
   return {
     size: bytes.length,
@@ -93,7 +199,8 @@ export async function loadLibrary(store: FileStore, dir: string): Promise<Librar
   for (const entry of await store.list(dir)) {
     if (!entry.toLowerCase().endsWith(EXT)) continue;
     try {
-      const bytes = await store.read(join(dir, entry));
+      const path = join(dir, entry);
+      const bytes = await readAll(store.files, { name: entry, path });
       formulas.push(parseFormula(entry, decoder.decode(bytes)));
     } catch (err) {
       failed.push(err as Error);
