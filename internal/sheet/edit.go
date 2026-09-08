@@ -22,8 +22,9 @@ type Edit struct {
 	Col int    `json:"col"`
 	Was string `json:"was,omitempty"`
 
-	// Now is the cell's new value under OpSet, the program text under OpApply
-	// and the expression text under OpBind. One field rather than four because
+	// Now is the cell's new value under OpSet, the markdown source under OpNote,
+	// the program text under OpApply and the expression text under OpBind. One
+	// field rather than four because
 	// they are the same thing at different scopes — what this operation makes
 	// the data say — and a second field would have to be empty in every line of
 	// every log written so far.
@@ -42,6 +43,12 @@ const (
 	// carries no Was, because thousands of old values are not a field, which is
 	// why undo replays the log rather than reversing it.
 	OpApply = "apply"
+
+	// OpNote is notation in one cell: markdown stored, symbols shown. It is one
+	// cell like OpSet and derived like OpBind, and it is neither of them —
+	// setting a cell would lose the source the symbols came from, and binding
+	// would make a thing that reads no columns join a dependency graph.
+	OpNote = "note"
 
 	// OpBind makes a column derived: from here on it stores nothing of its own
 	// and shows what the expression computes.
@@ -169,6 +176,8 @@ func (s *Sheet) mutate(e Edit) error {
 		}
 		s.recalcAfter(e.Col)
 		return nil
+	case OpNote:
+		return s.setNote(e)
 	case OpBind:
 		return s.bindColumn(e)
 	default:
