@@ -14,7 +14,7 @@ import type { Changed, Engine, FindRequest, Found, Offer, SourceRef } from "@uno
 import { NO_ROW, Op, editEquals } from "@uno/grid/sheet";
 import type { Edit } from "@uno/grid/sheet";
 
-import type { Rows } from "./grid.ts";
+import type { Rows } from "./grid/rows.ts";
 
 /**
  * The most source a saved workspace embeds. A .uno carries its source inside
