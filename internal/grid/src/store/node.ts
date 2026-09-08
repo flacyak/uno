@@ -10,6 +10,7 @@ import { mkdtemp, open, readdir, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
+import type { Provider } from "../plugin/index.ts";
 import type { ByteSource, FileHandler, FileStore } from "./index.ts";
 import { isRemote, readAll } from "./index.ts";
 import type { AwsCredentials } from "./s3.ts";
@@ -27,6 +28,17 @@ export function localFiles(): FileHandler {
         ? nodeSource(ref.path)
         : Promise.reject(new Error(`${ref.name}: local files are opened by path`)),
   };
+}
+
+/**
+ * diskProvider is this machine's disks plugged in as one thing.
+ *
+ * Its lister is task 1.2 and is not here yet, which is why `browse` is absent:
+ * a provider that cannot browse says so by having nothing, and the panel that
+ * asks gets the refusal by name rather than an empty folder.
+ */
+export function diskProvider(): Provider {
+  return { name: "disk", label: "local files", files: localFiles() };
 }
 
 /**
