@@ -133,12 +133,21 @@ func (s *Shell) refreshDrawer() {
 	d.target.SetText(targetFor(s.active()))
 
 	dir := s.libraryDir()
-	found, err := library.Load(dir)
+	loaded, err := library.Load(dir)
 	if err != nil {
 		// A library with one unreadable file is still a library. The rest are
 		// listed and the failure is said once, in the footer, rather than in a
 		// dialog that has to be dismissed before the others can be used.
 		fyne.LogError("reading the formula library", err)
+	}
+
+	// Each formula is paired with the folder it was read out of on the way in,
+	// because that is the only moment the pairing is known for certain. A row
+	// that is later edited has to write itself back to the file it came from,
+	// and a formula carries no path of its own to say where that is.
+	found := make([]sourced, 0, len(loaded))
+	for _, f := range loaded {
+		found = append(found, sourced{Formula: f, dir: dir})
 	}
 
 	found = s.byRecency(found)
@@ -156,7 +165,7 @@ func (s *Shell) refreshDrawer() {
 // things you can do with it. Applying is the row itself, because that is what
 // someone came to the drawer to do; editing is a button, because it is the
 // rarer of the two and should not be what a mis-aimed click does.
-func (s *Shell) formulaRow(f library.Formula) fyne.CanvasObject {
+func (s *Shell) formulaRow(f sourced) fyne.CanvasObject {
 	kind := widget.NewLabel(badgeForKind(f.Kind))
 	kind.TextStyle = fyne.TextStyle{Monospace: true}
 
@@ -175,7 +184,7 @@ func (s *Shell) formulaRow(f library.Formula) fyne.CanvasObject {
 // applyFormula binds a column formula to the column the selected cell is in, or
 // writes notation into that cell. The drawer stays open: applying one formula is
 // not evidence that you are finished with the library.
-func (s *Shell) applyFormula(f library.Formula) {
+func (s *Shell) applyFormula(f sourced) {
 	w := s.active()
 	if w == nil || w.sheet == nil {
 		return
@@ -254,7 +263,7 @@ func (s *Shell) markRecent(id string) {
 // used them, and everything else after in the order Load returned. A library
 // nobody has used yet is simply alphabetical, which is the right answer for a
 // list with no history behind it.
-func (s *Shell) byRecency(found []library.Formula) []library.Formula {
+func (s *Shell) byRecency(found []sourced) []sourced {
 	a := fyne.CurrentApp()
 	if a == nil || len(found) < 2 {
 		return found
@@ -265,7 +274,7 @@ func (s *Shell) byRecency(found []library.Formula) []library.Formula {
 		rank[id] = i
 	}
 
-	out := make([]library.Formula, len(found))
+	out := make([]sourced, len(found))
 	copy(out, found)
 	sort.SliceStable(out, func(i, j int) bool {
 		ri, iok := rank[out[i].ID]

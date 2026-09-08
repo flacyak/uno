@@ -40,10 +40,15 @@ type formulaEditor struct {
 	// every keystroke. Its ID is fixed when it is created, because the ID is the
 	// file name and a rename that moved the file would leave the old one behind.
 	//
+	// It carries the folder it was opened out of as well as the formula, so a
+	// save writes the file that was edited rather than a copy of it somewhere
+	// else. The folder is not a field on screen: it arrives with the row that
+	// was clicked and is never re-derived while the panel is open.
+	//
 	// It is only ever read and written on the UI goroutine (I-7). The debounce
 	// is handed a copy, so the worker that writes it shares nothing with the
 	// fields someone is still typing into.
-	editing library.Formula
+	editing sourced
 
 	timer *time.Timer
 }
@@ -99,16 +104,21 @@ func labelled(title string, field fyne.CanvasObject) fyne.CanvasObject {
 // from the clock rather than from the name, because the name is about to be
 // typed and an ID that followed it would rename the file on every keystroke.
 func (s *Shell) newFormula() {
-	s.editFormula(library.Formula{
-		Format: 1,
-		ID:     fmt.Sprintf("formula-%d", time.Now().UnixNano()),
-		Name:   "New formula",
-		Kind:   library.KindColumn,
+	// A formula that does not exist yet is not beside anything, so it goes to
+	// the library: it is yours, written here, and nobody sent it to you.
+	s.editFormula(sourced{
+		Formula: library.Formula{
+			Format: 1,
+			ID:     fmt.Sprintf("formula-%d", time.Now().UnixNano()),
+			Name:   "New formula",
+			Kind:   library.KindColumn,
+		},
+		dir: s.libraryDir(),
 	})
 }
 
 // editFormula pushes the panel a level deeper, onto one formula's own file.
-func (s *Shell) editFormula(f library.Formula) {
+func (s *Shell) editFormula(f sourced) {
 	d := s.drawer
 	if d == nil {
 		return
@@ -155,8 +165,8 @@ func (s *Shell) formulaChanged() {
 	s.refreshPreview()
 
 	e := s.drawer.editor
-	e.editing = s.editorFormula()
-	pending, dir := e.editing, s.libraryDir()
+	e.editing.Formula = s.editorFormula()
+	pending, dir := e.editing.Formula, e.editing.dir
 
 	if e.timer != nil {
 		e.timer.Stop()
@@ -193,7 +203,7 @@ func (s *Shell) flushFormula() {
 		return // it has already fired, and its own write is in flight
 	}
 	e.timer = nil
-	if err := library.Save(s.libraryDir(), e.editing); err != nil {
+	if err := library.Save(e.editing.dir, e.editing.Formula); err != nil {
 		fyne.LogError("writing the formula", err)
 	}
 }
@@ -206,9 +216,13 @@ func (s *Shell) flushFormula() {
 // cannot drift from what it actually reads. An expression that does not parse
 // yet has no refs rather than the last ones that did: someone halfway through
 // typing has not said anything about dependencies.
+//
+// It returns the formula alone and not the folder it will be written to: that
+// arrived with the row someone clicked, and no field on this page can change
+// it.
 func (s *Shell) editorFormula() library.Formula {
 	e := s.drawer.editor
-	f := e.editing
+	f := e.editing.Formula
 	f.Name = strings.TrimSpace(e.name.Text)
 	f.Expr = e.expr.Text
 	f.Kind = library.KindColumn
@@ -268,8 +282,8 @@ func (s *Shell) applyEditing() {
 		e.timer.Stop()
 		e.timer = nil
 	}
-	e.editing = s.editorFormula()
-	if err := library.Save(s.libraryDir(), e.editing); err != nil {
+	e.editing.Formula = s.editorFormula()
+	if err := library.Save(e.editing.dir, e.editing.Formula); err != nil {
 		fyne.LogError("writing the formula", err)
 	}
 	s.applyFormula(e.editing)

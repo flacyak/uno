@@ -148,9 +148,9 @@ func TestApplyingAColumnFormulaBindsTheTargetColumn(t *testing.T) {
 	// region is the column being bound; the expression reads units and date is
 	// left alone, so nothing is asked to depend on itself.
 	w.table.Select(widget.TableCellID{Row: 0, Col: 1})
-	s.applyFormula(library.Formula{
+	s.applyFormula(sourced{Formula: library.Formula{
 		ID: "double-units", Kind: library.KindColumn, Expr: "units * 2",
-	})
+	}})
 
 	if got, want := w.sheet.Display(0, 1), "2408"; got != want {
 		t.Errorf("bound cell = %q, want %q", got, want)
@@ -170,9 +170,9 @@ func TestApplyingNotationWritesOneCell(t *testing.T) {
 	s.toggleDrawer()
 
 	w.table.Select(widget.TableCellID{Row: 1, Col: 1})
-	s.applyFormula(library.Formula{
+	s.applyFormula(sourced{Formula: library.Formula{
 		ID: "variance", Kind: library.KindNotation, Expr: "x^2",
-	})
+	}})
 
 	if got, want := w.sheet.Display(1, 1), "x²"; got != want {
 		t.Errorf("noted cell = %q, want %q", got, want)
@@ -259,9 +259,9 @@ func TestTypingAutosavesToTheFormulasOwnFile(t *testing.T) {
 func TestTheLibraryReferenceSurvivesASaveAndReopen(t *testing.T) {
 	s, w := loadedSales(t)
 	w.table.Select(widget.TableCellID{Row: 0, Col: 1})
-	s.applyFormula(library.Formula{
+	s.applyFormula(sourced{Formula: library.Formula{
 		ID: "double-units", Kind: library.KindColumn, Expr: "units * 2",
-	})
+	}})
 
 	doc := w.document()
 	if got := doc.State.ColumnFormulas; len(got) != 1 || got[0].Col != 1 || got[0].Ref != "double-units" {
@@ -304,9 +304,9 @@ func TestTheDrawerLeadsWithWhatWasUsedLast(t *testing.T) {
 	}
 
 	w.table.Select(widget.TableCellID{Row: 0, Col: 1})
-	s.applyFormula(library.Formula{
+	s.applyFormula(sourced{Formula: library.Formula{
 		ID: "variance", Kind: library.KindNotation, Expr: "x^2",
-	})
+	}})
 
 	if got, want := drawerNames(s), []string{"Variance term", "Unit margin"}; !equalNames(got, want) {
 		t.Errorf("order after use = %v, want %v", got, want)
