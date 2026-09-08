@@ -7,8 +7,9 @@
 // a single cell moves. Parsing is therefore interpretation of a stored text
 // rather than a second guess at it.
 //
-// Nothing here knows what a sheet is. A row reaches an expression through `Row`,
-// which is what lets `sheet` import `formula` without `formula` importing
+// Nothing here knows what a sheet is. Cells reach an expression through
+// `Columns`, a column at a time, or through `Row` for a single preview, which
+// is what lets `sheet` import `formula` without `formula` importing
 // `sheet` back.
 //
 // It is not `program`. A program is a string-rewriting pipeline with no numbers,
@@ -24,6 +25,7 @@ export {
   NotNumberError,
   UnknownColumnError,
   evaluate,
+  evaluateColumn,
 } from "./eval.ts";
-export type { Row } from "./eval.ts";
+export type { Column, Columns, Row } from "./eval.ts";
 export { Graph } from "./graph.ts";
