@@ -100,15 +100,34 @@ func repaint(r *canvas.Rectangle, c color.Color) {
 	r.Refresh()
 }
 
-// slideLayout puts the window's contents underneath and the bar across the
-// bottom of them, at whatever height the slide has reached. An offset of 0 has
-// the bar fully up and 1 has it fully below the window's bottom edge, where the
-// window itself is what hides it — which is why the bar is anchored to the
-// window rather than to the tab, and why nothing has to clip it.
+// edge says which side of the window a panel slides in from. The bar comes up
+// from the bottom because that is where a question about the whole sheet
+// belongs; the formula drawer comes in from the right, next to the column it
+// acts on.
+type edge int
+
+const (
+	// fromBottom is the zero value, so a layout that says nothing keeps doing
+	// what the proposal bar has always done.
+	fromBottom edge = iota
+	fromRight
+)
+
+// slideLayout puts the window's contents underneath and a panel against one edge
+// of them, at whatever point the slide has reached. An offset of 0 has the panel
+// fully in and 1 has it fully outside the window's edge, where the window itself
+// is what hides it — which is why a panel is anchored to the window rather than
+// to the tab, and why nothing has to clip it.
+//
+// It holds exactly two objects, the contents and the panel, so two panels nest
+// rather than sharing one layout. That keeps each one's arithmetic about one
+// axis, and it is why the drawer overlaps the bar instead of fighting it for the
+// same corner.
 type slideLayout struct {
-	off  float32
-	bar  fyne.CanvasObject
-	size fyne.Size
+	edge  edge
+	off   float32
+	panel fyne.CanvasObject
+	size  fyne.Size
 }
 
 func (l *slideLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
@@ -116,21 +135,34 @@ func (l *slideLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
 }
 
 func (l *slideLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
-	l.size, l.bar = size, objs[1]
+	l.size, l.panel = size, objs[1]
 	objs[0].Resize(size)
 	objs[0].Move(fyne.NewPos(0, 0))
 	l.place()
 }
 
-// place puts the bar where the slide has got to. The animation calls it every
+// place puts the panel where the slide has got to. The animation calls it every
 // frame, and it moves one object rather than laying the whole window out again.
+//
+// The panel is measured along the axis it travels and stretched along the other,
+// so a drawer is as tall as the window and as wide as its own contents. The
+// offset is a fraction of that measured size, which is what makes 1 mean "one
+// panel outside the edge" whichever edge it is.
 func (l *slideLayout) place() {
-	if l.bar == nil || l.size.IsZero() {
+	if l.panel == nil || l.size.IsZero() {
 		return
 	}
-	h := l.bar.MinSize().Height
-	l.bar.Resize(fyne.NewSize(l.size.Width, h))
-	l.bar.Move(fyne.NewPos(0, l.size.Height-h+l.off*h))
+
+	if l.edge == fromRight {
+		w := l.panel.MinSize().Width
+		l.panel.Resize(fyne.NewSize(w, l.size.Height))
+		l.panel.Move(fyne.NewPos(l.size.Width-w+l.off*w, 0))
+		return
+	}
+
+	h := l.panel.MinSize().Height
+	l.panel.Resize(fyne.NewSize(l.size.Width, h))
+	l.panel.Move(fyne.NewPos(0, l.size.Height-h+l.off*h))
 }
 
 // showProposal points the bar at what the selected workspace is being asked
