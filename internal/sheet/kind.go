@@ -1,9 +1,10 @@
 package sheet
 
 import (
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/flacyak/uno/internal/num"
 )
 
 // Kind is what a column looks like. It is inferred at load and never stored in
@@ -55,9 +56,9 @@ func inferKind(rows [][]string, col int) (kind Kind, flagged bool) {
 		switch {
 		case isDate(v):
 			dates++
-		case isNumber(v):
+		case num.IsNumber(v):
 			nums++
-		case isNumber(undress(v)):
+		case num.IsNumber(num.Undress(v)):
 			formatted++
 		}
 	}
@@ -74,36 +75,6 @@ func inferKind(rows [][]string, col int) (kind Kind, flagged bool) {
 	default:
 		return KindText, false
 	}
-}
-
-// decoration is what a number wears when it was formatted for a reader rather
-// than for a parser. The set is fixed and short, and leaves out the full stop:
-// the badge claims a column is numeric data in a costume, and a wider set would
-// let it claim that about text.
-const decoration = ",$£€%' "
-
-// undress strips that formatting, for the badge to ask whether what is left is a
-// number. It changes no value.
-func undress(v string) string {
-	return strings.Map(func(r rune) rune {
-		if strings.ContainsRune(decoration, r) {
-			return -1
-		}
-		return r
-	}, v)
-}
-
-// isNumber is deliberately stricter than strconv.ParseFloat alone. ParseFloat
-// accepts "inf", "NaN" and hex floats, none of which a spreadsheet column
-// means, so the value must first look like a decimal number.
-func isNumber(v string) bool {
-	if strings.ContainsFunc(v, func(r rune) bool {
-		return !strings.ContainsRune("0123456789+-.eE", r)
-	}) {
-		return false
-	}
-	_, err := strconv.ParseFloat(v, 64)
-	return err == nil
 }
 
 var dateLayouts = []string{"2006-01-02", time.RFC3339}

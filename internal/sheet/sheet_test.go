@@ -128,17 +128,3 @@ func TestInferKindDoesNotFlagGenuinelyMixedColumns(t *testing.T) {
 		t.Errorf("kind=%v flagged=%v, want text and unflagged", c.Kind, c.Flagged)
 	}
 }
-
-func TestIsNumberRejectsWhatASpreadsheetDoesNotMean(t *testing.T) {
-	for _, v := range []string{"12", "-3.5", "+7", "1e3", "0.0"} {
-		if !isNumber(v) {
-			t.Errorf("isNumber(%q) = false, want true", v)
-		}
-	}
-	// ParseFloat alone accepts all of these; a column of them is not numeric.
-	for _, v := range []string{"inf", "NaN", "0x1p-2", "1,204", "", "12 "} {
-		if isNumber(v) {
-			t.Errorf("isNumber(%q) = true, want false", v)
-		}
-	}
-}
