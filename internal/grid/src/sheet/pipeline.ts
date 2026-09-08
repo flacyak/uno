@@ -1,13 +1,14 @@
 // Finishing a row: its source values, with the log applied.
 //
 // Every operation the log holds reads one row and nothing else, which is what
-// lets this run a row at a time, over whichever rows someone is looking at, in
-// any order. Nothing here is kept. A row is finished when it is read, so an
+// lets this run over whichever rows someone is looking at, in any order. A
+// formula is computed a column at a time across the block being read, and each
+// of its cells still reads only its own row. Nothing here is kept. A row is finished when it is read, so an
 // apply over 50 million rows costs one log line and the rows on screen.
 
 import { formatFloat, roundSignificant } from "../go/index.ts";
-import type { Row } from "../formula/index.ts";
-import { evaluate } from "../formula/index.ts";
+import type { Columns } from "../formula/index.ts";
+import { evaluateColumn } from "../formula/index.ts";
 import { apply as applyProgram } from "../program/index.ts";
 import type { Program } from "../program/index.ts";
 import type { Schema, Written } from "./schema.ts";
@@ -102,20 +103,71 @@ export function settled(prog: Program, w: Pick<Written, "was" | "now">): boolean
 }
 
 /**
- * finish applies the log to one source row.
+ * finish applies the log to one source row. It is `finishRows` over a block of
+ * one, for a caller holding a single row.
+ */
+export function finish(schema: Schema, row: number, source: readonly string[]): Finished {
+  return finishRows(schema, row, [source])[0]!;
+}
+
+/**
+ * finishRows applies the log to a block of source rows, the first of which is
+ * row `first`.
+ *
+ * Everything but formulas is finished a row at a time. Formulas are then
+ * computed a column at a time over the block: a bound column is one expression
+ * over a whole column, so it is walked once for the block rather than once per
+ * row.
  *
  * A row nothing touched comes back as the source itself, with no copy, so a
  * file with an empty log reads as fast as it did before there was a log.
  */
-export function finish(schema: Schema, row: number, source: readonly string[]): Finished {
-  if (schema.empty) return { raw: source, shown: source };
+export function finishRows(
+  schema: Schema,
+  first: number,
+  sources: readonly (readonly string[])[],
+): Finished[] {
+  if (schema.empty) return sources.map((source) => ({ raw: source, shown: source }));
 
+  const order = schema.computedColumns();
+  const out = sources.map((source, i) => finishCells(schema, first + i, source, order.length > 0));
+  if (order.length === 0 || out.length === 0) return out;
+
+  // A formula reads what a cell shows, not what it stores: a column it names may
+  // be bound too, and what that column is worth is what it computed. The order
+  // puts every bound column after the ones it reads, so the answer is written
+  // into the block before it is gathered from it.
+  const shown = out.map((f) => f.shown as string[]);
+  const columns: Columns = {
+    column(name) {
+      const c = schema.indexOf(name);
+      return c === undefined ? undefined : shown.map((row) => row[c]!);
+    },
+  };
+  for (const c of order) {
+    const { values, errors } = evaluateColumn(schema.formula(c)!, shown.length, columns);
+    for (let i = 0; i < shown.length; i++) {
+      shown[i]![c] = errors[i] === undefined ? formatValue(values[i]!) : ERR_CELL;
+    }
+  }
+  return out;
+}
+
+/**
+ * finishCells applies everything in the log but formulas to one row. shown is
+ * a copy of raw wherever a formula is about to write into it.
+ */
+function finishCells(
+  schema: Schema,
+  row: number,
+  source: readonly string[],
+  computed: boolean,
+): Finished {
   const width = schema.headers.length;
   const written = schema.writtenIn(row);
   const raw: string[] = [];
   for (let c = 0; c < width; c++) raw.push(stored(schema, c, written?.get(c), source));
 
-  const order = schema.computedColumns();
   let notes = false;
   if (written !== undefined) {
     for (const w of written.values()) {
@@ -125,31 +177,11 @@ export function finish(schema: Schema, row: number, source: readonly string[]): 
       }
     }
   }
-  if (order.length === 0 && !notes) return { raw, shown: raw };
+  if (!computed && !notes) return { raw, shown: raw };
 
   const shown = raw.slice();
   if (notes) {
     for (const [c, w] of written!) if (w.rendered !== undefined) shown[c] = w.rendered;
-  }
-
-  // A formula reads what a cell shows, not what it stores: a column it names may
-  // be bound too, and what that column is worth is what it computed. The order
-  // puts every bound column after the ones it reads, so the answer is there by
-  // the time it is asked for.
-  if (order.length > 0) {
-    const view: Row = {
-      value(name) {
-        const i = schema.indexOf(name);
-        return i === undefined ? undefined : shown[i];
-      },
-    };
-    for (const c of order) {
-      try {
-        shown[c] = formatValue(evaluate(schema.formula(c)!, view));
-      } catch {
-        shown[c] = ERR_CELL;
-      }
-    }
   }
   return { raw, shown };
 }

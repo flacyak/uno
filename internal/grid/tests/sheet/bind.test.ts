@@ -1,4 +1,9 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, test } from "vite-plus/test";
+
+import { read } from "../../src/ingest/index.ts";
 
 import { ERR_CELL, Sheet } from "../../src/sheet/index.ts";
 import { parse } from "../../src/formula/index.ts";
@@ -277,4 +282,30 @@ test("replay rebuilds a column whose formula was removed", () => {
 
   expect(replayed.display(0, REGION)).toBe("West");
   expect(replayed.binding(REGION)).toBeUndefined();
+});
+
+// A sheet computes a bound column a block at a time. Every row, either side of
+// every block boundary, has to read what the one-row preview computes for it.
+test("a bound column over the whole file agrees with the preview row by row", () => {
+  const path = fileURLToPath(new URL("../testdata/sales-q3.csv", import.meta.url));
+  const s = read("sales-q3.csv", readFileSync(path));
+  const channel = s.resolve("channel");
+  const f = parse("revenue / units");
+  s.bind(channel, f);
+
+  let failed = 0;
+  for (let row = 0; row < s.rows(); row++) {
+    let want: string;
+    try {
+      want = s.evaluateAt(f, row);
+    } catch {
+      want = ERR_CELL;
+      failed++;
+    }
+    if (s.display(row, channel) !== want) {
+      expect(s.display(row, channel), `row ${row}`).toBe(want);
+    }
+  }
+  // A few rows of the file cannot be read as numbers, so failures are compared too.
+  expect(failed).toBeGreaterThan(0);
 });
