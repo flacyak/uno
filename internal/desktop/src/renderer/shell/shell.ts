@@ -431,6 +431,32 @@ export class Shell {
     }
   }
 
+  /**
+   * relink asks where a source's file is now, and points it there.
+   *
+   * It goes through the Add Source dialog, because the question is the same one
+   * -- which export do you mean -- and a second dialog that filters the same
+   * extensions would be a second thing to keep in step for nothing. Only the
+   * first file picked is used.
+   */
+  private async relink(tab: Tab): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined) return;
+    try {
+      const [ref] = await this.host.add();
+      if (ref === undefined) return; // cancelled
+      const fresh = await w.relink(tab, ref);
+      if (this.workspace !== w) return;
+
+      this.say(`${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`);
+      if (w.active === fresh) this.showActive();
+      else this.paintTabs();
+      this.paintStatus();
+    } catch (err) {
+      this.say(message(err), true);
+    }
+  }
+
   // ----------------------------------------------------------------- input
 
   /** The input strategy reading keys now, for the Edit menu to check. */
@@ -523,7 +549,7 @@ export class Shell {
     if (w.path === "") return this.saveAs();
 
     try {
-      await this.host.save(w.path, await w.bytes(grid.selection()));
+      await this.host.save(w.path, await w.bytes(grid.selection(), w.path));
       w.saved(w.path);
       this.say(`saved ${w.path}`);
     } catch (err) {
@@ -533,15 +559,22 @@ export class Shell {
     this.paintStatus();
   }
 
+  /**
+   * saveAs asks where first, then lays the workspace out for that folder.
+   *
+   * That order is the whole reason the dialog and the write are two calls: a
+   * source beside the workspace is pointed at relative to it, so what gets
+   * written depends on where it is going.
+   */
   async saveAs(): Promise<void> {
     const on = this.showing();
     if (on === undefined) return;
     const { workspace: w, grid } = on;
 
     try {
-      const bytes = await w.bytes(grid.selection());
-      const path = await this.host.saveAs(w.suggestedFileName, bytes);
+      const path = await this.host.pickSave(w.suggestedFileName);
       if (path === undefined) return; // cancelled
+      await this.host.save(path, await w.bytes(grid.selection(), path));
       w.saved(path);
       this.say(`saved ${path}`);
     } catch (err) {
@@ -599,6 +632,7 @@ export class Shell {
             select: (tab) => this.select(tab),
             remove: (tab) => void this.remove(tab),
             add: () => void this.add(),
+            relink: (tab) => void this.relink(tab),
           });
     this.tabs.replaceChildren(...strip);
   }
