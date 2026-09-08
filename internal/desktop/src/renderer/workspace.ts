@@ -16,6 +16,7 @@ import type {
   Engine,
   FindRequest,
   Found,
+  Link,
   Offer,
   SourceHandle,
   SourceRef,
@@ -26,11 +27,13 @@ import type { Edit } from "@uno/grid/sheet";
 import type { Cell, Rows } from "./grid/rows.ts";
 
 /**
- * The most source a saved workspace embeds, all its sources together. A .uno
- * carries its sources inside it, so past this a save is refused by name.
- * Pointing at the files instead lifts it.
+ * The most a saved workspace carries, all such sources together.
+ *
+ * A .uno points at the files it can name, so this bounds only what is left:
+ * bytes with no file behind them, which the container has to copy or lose. On
+ * the desktop every source comes from a path, so nothing counts against it.
  */
-export const SAVE_LIMIT = 256 << 20;
+export const CARRY_LIMIT = 256 << 20;
 
 export type Mode = "view" | "transform";
 
@@ -48,9 +51,12 @@ export class Tab {
   constructor(
     readonly source: SourceHandle,
     readonly band: Band,
+    /** The log the last save held, for a tab replacing one that was already
+     * here. A tab that has just opened was saved with whatever it opened with. */
+    saved?: readonly Edit[],
   ) {
     this.edits = source.opened.edits.slice();
-    this.savedEdits = source.opened.edits.slice();
+    this.savedEdits = (saved ?? source.opened.edits).slice();
   }
 
   get id(): string {
@@ -59,6 +65,28 @@ export class Tab {
 
   get name(): string {
     return this.source.opened.name;
+  }
+
+  /** The file behind this source, for a tab that points at one. */
+  get link(): Link | undefined {
+    return this.source.opened.link;
+  }
+
+  /** What is wrong with the file behind this source, if anything: it is gone,
+   * or it is not the file the log was written against. */
+  get trouble(): string | undefined {
+    return this.link?.missing ?? this.link?.changed;
+  }
+
+  /** Whether there is a grid behind this tab at all. */
+  get missing(): boolean {
+    return this.link?.missing !== undefined;
+  }
+
+  /** The log the last save held, so a tab replacing this one keeps the same
+   * idea of what is unsaved. */
+  get savedLog(): readonly Edit[] {
+    return this.savedEdits;
   }
 
   get edited(): number {
@@ -105,6 +133,15 @@ export class Workspace {
   private showing!: Tab;
   /** The sources the last save held, so adding or removing one is unsaved work too. */
   private savedSources: string[] = [];
+  /**
+   * Sources pointed at a different file since the last save.
+   *
+   * The log does not change when a source is relinked, and neither does the
+   * list of sources, so nothing else here would notice. What changed is the
+   * path the .uno on disk still holds, and leaving that unsaved is how somebody
+   * finds the same missing file again tomorrow.
+   */
+  private readonly relinked = new Set<string>();
 
   private constructor(
     private readonly engine: Engine,
@@ -149,8 +186,8 @@ export class Workspace {
     return added.find((t) => t.id === showing) ?? added[0]!;
   }
 
-  private tab(source: SourceHandle): Tab {
-    const t = new Tab(source, new Band(source, this.changed));
+  private tab(source: SourceHandle, saved?: readonly Edit[]): Tab {
+    const t = new Tab(source, new Band(source, this.changed), saved);
     source.onProgress = () => this.changed();
     source.onOffer = (offer) => {
       t.offer = offer;
@@ -168,7 +205,30 @@ export class Workspace {
     const i = this.tabs.indexOf(tab);
     if (i < 0) return;
     this.tabs.splice(i, 1);
+    this.relinked.delete(tab.id);
     if (this.showing === tab) this.showing = this.tabs[Math.min(i, this.tabs.length - 1)]!;
+  }
+
+  /**
+   * relink points a tab at a file: one whose file has gone, or one whose file
+   * changed under the log.
+   *
+   * The tab is replaced rather than repaired, because its columns, its rows and
+   * its band all belong to the file behind it. What it keeps is its place in the
+   * strip, the cell it was left on, and what the last save held, so nothing
+   * about the session moves under the person doing it.
+   */
+  async relink(tab: Tab, ref: SourceRef): Promise<Tab> {
+    const source = await this.engine.relink(tab.source, ref);
+    const i = this.tabs.indexOf(tab);
+    if (i < 0) return tab;
+
+    const fresh = this.tab(source, tab.savedLog);
+    fresh.cell = tab.cell;
+    this.tabs[i] = fresh;
+    this.relinked.add(fresh.id);
+    if (this.showing === tab) this.showing = fresh;
+    return fresh;
   }
 
   /** The sources, in the order the strip shows them. */
@@ -281,31 +341,38 @@ export class Workspace {
     return `${base || "workspace"}.uno`;
   }
 
-  /** Whether anything would be lost by closing: an edit, or a source added or removed. */
+  /** Whether anything would be lost by closing: an edit, a source added or
+   * removed, or a source pointed at another file. */
   get dirty(): boolean {
     const ids = this.tabs.map((t) => t.id);
     const same =
       ids.length === this.savedSources.length && ids.every((id, i) => id === this.savedSources[i]);
-    return !same || this.tabs.some((t) => t.dirty);
+    return !same || this.relinked.size > 0 || this.tabs.some((t) => t.dirty);
   }
 
   /** Whether a tab holds something the last save did not. */
   unsaved(tab: Tab): boolean {
-    return tab.dirty || !this.savedSources.includes(tab.id);
+    return tab.dirty || this.relinked.has(tab.id) || !this.savedSources.includes(tab.id);
   }
 
   /**
    * bytes asks the engine for the workspace as a .uno. `cell` is where the
    * grid is on the tab showing; every other tab is where it was left.
+   *
+   * `at` is where the file is going, which the writer needs before it writes:
+   * a source under the same folder is pointed at relative to it, so the folder
+   * can be copied somewhere else whole. That is why Save As asks for the path
+   * first and serialises second.
    */
-  bytes(cell: Cell): Promise<Uint8Array> {
+  bytes(cell: Cell, at: string): Promise<Uint8Array> {
     this.showing.cell = cell;
     return this.engine.save(
       {
         source: this.showing.id,
         cells: this.tabs.map((t) => ({ source: t.id, row: t.cell.row, col: t.cell.col })),
+        at,
       },
-      SAVE_LIMIT,
+      CARRY_LIMIT,
     );
   }
 
@@ -313,6 +380,7 @@ export class Workspace {
   saved(path: string): void {
     this.path = path;
     this.savedSources = this.tabs.map((t) => t.id);
+    this.relinked.clear();
     for (const t of this.tabs) t.saved();
   }
 
@@ -326,6 +394,11 @@ export class Workspace {
   status(): string {
     const t = this.showing;
     const p = t.source.progress;
+
+    // A tab with no file behind it has no rows, no columns and no encoding to
+    // report. What it has is a path that stopped working, which is the only
+    // thing worth saying about it.
+    if (t.missing) return `${t.trouble} · point it at a file to see its rows`;
 
     // Until the index reaches the end, the count is projected from how far it
     // has got, and says so.

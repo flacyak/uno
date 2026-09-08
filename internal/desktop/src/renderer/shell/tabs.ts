@@ -12,6 +12,9 @@ export interface TabActions {
   select(tab: Tab): void;
   remove(tab: Tab): void;
   add(): void;
+  /** Point a source at a file: one whose file has gone, or one that changed
+   * under the log. */
+  relink(tab: Tab): void;
 }
 
 /** tabStrip is what the strip holds for a workspace. `hint` is the switch's tooltip. */
@@ -52,6 +55,22 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: TabActions): HTML
   tab.dataset["source"] = t.id;
   tab.append(document.createTextNode(t.name));
   tab.addEventListener("click", () => act.select(t));
+
+  // A source whose file is gone, or is not the file the log was written
+  // against. Clicking the mark asks where the file is now; the tab itself still
+  // selects, because its edits are worth looking at either way.
+  const trouble = t.trouble;
+  if (trouble !== undefined) {
+    const mark = document.createElement("span");
+    mark.className = t.missing ? "trouble gone" : "trouble";
+    mark.textContent = "!";
+    mark.title = `${trouble} · click to point it at a file`;
+    mark.addEventListener("click", (e) => {
+      e.stopPropagation();
+      act.relink(t);
+    });
+    tab.append(mark);
+  }
 
   // The dot is the only thing in the window that says there is unsaved work.
   if (w.unsaved(t)) {
