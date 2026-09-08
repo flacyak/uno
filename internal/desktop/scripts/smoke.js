@@ -49,10 +49,11 @@ child.stderr.on("data", (b) => process.stderr.write(b));
 
 // A hung app is a failure, not something to wait out. The pid is tracked so it
 // can be stopped by pid rather than by name.
+const DEADLINE_MS = 60_000;
 const deadline = setTimeout(() => {
-  console.error("smoke: timed out after 60s");
+  console.error(`smoke: timed out after ${DEADLINE_MS / 1000}s`);
   if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
-}, 60_000);
+}, DEADLINE_MS);
 
 const code = await new Promise((resolve) => child.on("close", resolve));
 clearTimeout(deadline);
