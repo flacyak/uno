@@ -200,3 +200,18 @@ func (s *Sheet) uniqueHeader(col int) (string, error) {
 	}
 	return name, nil
 }
+
+// Evaluate computes one row of an expression without binding it, which is what
+// the editor's preview is: an answer to "what would this do", asked while
+// someone is still typing.
+//
+// It is here rather than in the editor because resolving a header to a column is
+// this package's job, and because a preview that read the sheet differently from
+// the binding would be a preview of something else.
+func (s *Sheet) Evaluate(f formula.Formula, row int) (string, error) {
+	v, err := f.Eval(&sheetRow{s: s, row: row})
+	if err != nil {
+		return "", err
+	}
+	return formatValue(v), nil
+}
