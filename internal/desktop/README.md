@@ -151,6 +151,13 @@ Ctrl+Z takes it back, and that `i`, `a`, `s` and Esc move between view,
 transform and insert with Esc keeping what was typed. It writes a screenshot to
 `out/smoke/window.png`.
 
+The window it drives ignores the desktop. Keys, clicks and the wheel from the
+window system never reach the page, and the page keeps the focus when someone
+switches to another window. Keep working while it runs. Two of the checks send
+input down the window system's path, once dropped and once let through. The menu
+bar is outside the page and still takes clicks. `vp run preview` runs in the same
+mode, and `src/main/driven.ts` has the details.
+
 It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
 Electron starts as plain Node and main finds no `app`.
