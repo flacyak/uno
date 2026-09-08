@@ -112,18 +112,35 @@ func TestTheDrawerNamesTheColumnTheSelectedCellIsIn(t *testing.T) {
 }
 
 // The footer counts what is actually in the library and says where it is, so a
-// person can find the files without being told separately.
+// person can find the files without being told separately. With one group there
+// is nothing to apportion, so it says the count and the path and stops.
 func TestTheFooterCountsTheLibrary(t *testing.T) {
 	s, _ := loadedSales(t)
 	stockLibrary(t, s, "unit-margin", "variance")
 
 	s.toggleDrawer()
 
-	if got := s.drawer.foot.Text; !strings.HasPrefix(got, "2 formulas") {
-		t.Errorf("footer = %q, want it to count both formulas", got)
+	if got, want := s.drawer.foot.Text, "2 formulas · "+shortDir(s.libraryDir()); got != want {
+		t.Errorf("footer = %q, want %q", got, want)
 	}
 	if got := len(s.drawer.list.Objects); got != 2 {
 		t.Errorf("list holds %d rows, want 2", got)
+	}
+}
+
+// When both folders have something in them the footer apportions the total, so
+// the number of formulas that arrived with the document can be read without
+// counting the rows above the second heading. The path stays the library's:
+// that is the folder somebody may have to go and find, and the other one they
+// are already in.
+func TestTheFooterSaysHowManyFormulasCameWithTheDocument(t *testing.T) {
+	s, _, _ := besideSales(t, "unit-margin", "variance")
+	stockLibrary(t, s, "std-deviation")
+
+	s.toggleDrawer()
+
+	if got, want := s.drawer.foot.Text, "3 formulas · 2 beside file · "+shortDir(s.libraryDir()); got != want {
+		t.Errorf("footer = %q, want %q", got, want)
 	}
 }
 

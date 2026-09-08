@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -181,7 +182,22 @@ func (s *Shell) refreshDrawer() {
 	}
 	d.list.Refresh()
 
-	d.foot.SetText(fmt.Sprintf("%s · %s", plural(len(beside)+len(lib), "formula"), shortDir(s.libraryDir())))
+	// The footer counts everything the list holds and then says how much of it
+	// travelled with the document, on the same condition as the headings: with
+	// one group there is nothing to apportion, and a middle term reading "0
+	// beside file" would be answering a question nobody asked.
+	//
+	// "beside file" stays singular however many there are. It names where those
+	// formulas are rather than a kind of thing being counted, so plural would
+	// make it read as two files that are beside, which is not what the number
+	// is about. The path stays the library's, because that is the folder a
+	// person may have to go and find -- the other one they are already in.
+	parts := []string{plural(len(beside)+len(lib), "formula")}
+	if sectioned {
+		parts = append(parts, group(len(beside))+" beside file")
+	}
+	parts = append(parts, shortDir(s.libraryDir()))
+	d.foot.SetText(strings.Join(parts, " · "))
 }
 
 // heading is the small bold label over a group of rows. It is the editor's
