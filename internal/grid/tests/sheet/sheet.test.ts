@@ -127,6 +127,27 @@ describe("inferKind flags the other decorations", () => {
   }
 });
 
+// Accounting exports write a negative with the sign last (SAP) or in
+// parentheses (Oracle). Either is a number, beside plain ones or alone.
+test("inferKind reads accounting negatives as numbers", () => {
+  const cases: Array<[string, string[], string, boolean]> = [
+    ["sap", ["1234.00-", "87.50", "0.00", "12.00-"], "num", false],
+    ["oracle", ["(1234.00)", "87.50", "(0.50)"], "num", false],
+    ["sap with separators", ["1,234.00-", "87.50"], "text", true],
+    ["oracle with currency", ["$(1,234.00)", "$87.50"], "text", true],
+  ];
+
+  for (const [name, values, kind, flagged] of cases) {
+    const s = new Sheet(
+      "t.csv",
+      ["amount"],
+      values.map((v) => [v]),
+    );
+    expect(s.columns[0]!.kind, name).toBe(kind);
+    expect(s.columns[0]!.flagged, name).toBe(flagged);
+  }
+});
+
 // A column of numbers with genuinely non-numeric values in it is mixed, not
 // misformatted, so it must not raise the flag the recogniser acts on.
 test("inferKind does not flag genuinely mixed columns", () => {
