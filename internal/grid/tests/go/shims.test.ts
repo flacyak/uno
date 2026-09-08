@@ -154,7 +154,10 @@ describe("formatFloat", () => {
 });
 
 describe("roundSignificant", () => {
-  // This is what turns arithmetic showing its working into an answer.
+  // This is what turns arithmetic showing its working into an answer, at the
+  // significant digits a computed cell keeps.
+  const DIGITS = 10;
+
   const cases: Array<[number, string]> = [
     [(40.0 - 31.2) / 40.0, "0.22"],
     [1 / 3, "0.3333333333"],
@@ -163,12 +166,12 @@ describe("roundSignificant", () => {
 
   for (const [v, want] of cases) {
     test(`${v} => ${want}`, () => {
-      expect(formatFloat(roundSignificant(v, 10))).toBe(want);
+      expect(formatFloat(roundSignificant(v, DIGITS))).toBe(want);
     });
   }
 
   test("leaves an infinity alone rather than throwing", () => {
-    expect(roundSignificant(Infinity, 10)).toBe(Infinity);
+    expect(roundSignificant(Infinity, DIGITS)).toBe(Infinity);
   });
 });
 

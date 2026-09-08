@@ -4,6 +4,9 @@ import { NO_ROW, Op, Sheet } from "../../src/sheet/index.ts";
 import type { Edit } from "../../src/sheet/index.ts";
 import { parse as parseProgram } from "../../src/program/index.ts";
 
+const REGION = 1;
+const UNITS = 2;
+
 // A fresh sheet each call, since the operations mutate in place.
 function fixture(): Sheet {
   return new Sheet(
@@ -21,23 +24,23 @@ function fixture(): Sheet {
 // and reversible without re-reading the source.
 test("set records the value it replaced", () => {
   const s = fixture();
-  s.set(0, 2, "1204");
+  s.set(0, UNITS, "1204");
 
-  expect(s.raw(0, 2)).toBe("1204");
+  expect(s.raw(0, UNITS)).toBe("1204");
 
   const log = s.edits();
   expect(log).toHaveLength(1);
-  expect(log[0]).toEqual({ seq: 1, op: Op.Set, row: 0, col: 2, was: "1,204", now: "1204" });
+  expect(log[0]).toEqual({ seq: 1, op: Op.Set, row: 0, col: UNITS, was: "1,204", now: "1204" });
 });
 
 // edits() is handed to whatever writes it while the person keeps typing, so it
 // must not alias the log the sheet goes on appending to.
 test("edits does not alias the log", () => {
   const s = fixture();
-  s.set(0, 2, "1204");
+  s.set(0, UNITS, "1204");
 
   const snapshot = s.edits();
-  s.set(1, 2, "987!");
+  s.set(1, UNITS, "987!");
 
   expect(snapshot).toHaveLength(1);
   expect(s.editCount()).toBe(2);
@@ -48,15 +51,15 @@ test("edits does not alias the log", () => {
 // open.
 test("fixing the last bad value clears the flag", () => {
   const s = fixture();
-  expect(s.columns[2]!.kind).toBe("text");
-  expect(s.columns[2]!.flagged).toBe(true);
+  expect(s.columns[UNITS]!.kind).toBe("text");
+  expect(s.columns[UNITS]!.flagged).toBe(true);
 
-  s.set(0, 2, "1204");
-  s.set(2, 2, "1455");
+  s.set(0, UNITS, "1204");
+  s.set(2, UNITS, "1455");
 
-  expect(s.columns[2]!.kind).toBe("num");
-  expect(s.columns[2]!.flagged).toBe(false);
-  expect(s.columns[2]!.header, "re-inferring lost the header").toBe("units");
+  expect(s.columns[UNITS]!.kind).toBe("num");
+  expect(s.columns[UNITS]!.flagged).toBe(false);
+  expect(s.columns[UNITS]!.header, "re-inferring lost the header").toBe("units");
 });
 
 // Ragged rows are normal in real exports. Editing a cell past the end of its
@@ -75,17 +78,17 @@ test("set grows a short row", () => {
 // one.
 test("replay rebuilds and keeps the log", () => {
   const edits: Edit[] = [
-    { seq: 1, op: Op.Set, row: 0, col: 2, was: "1,204", now: "1204" },
-    { seq: 2, op: Op.Set, row: 2, col: 2, was: "1,455", now: "1455" },
+    { seq: 1, op: Op.Set, row: 0, col: UNITS, was: "1,204", now: "1204" },
+    { seq: 2, op: Op.Set, row: 2, col: UNITS, was: "1,455", now: "1455" },
   ];
 
   const s = fixture();
   s.replay(edits);
 
-  expect(s.raw(0, 2)).toBe("1204");
+  expect(s.raw(0, UNITS)).toBe("1204");
   expect(s.editCount()).toBe(2);
 
-  s.set(1, 2, "986");
+  s.set(1, UNITS, "986");
   expect(s.edits()[2]!.seq, "seq carries on after a replay").toBe(3);
 });
 
@@ -109,11 +112,11 @@ describe("replay refuses a log that does not fit", () => {
 // with how much data they did it to. Three cells change and one line is written.
 test("apply writes one operation for a whole column", () => {
   const s = fixture();
-  s.apply(2, parseProgram('replace(/,/, "")'));
+  s.apply(UNITS, parseProgram('replace(/,/, "")'));
 
-  expect(s.raw(0, 2)).toBe("1204");
-  expect(s.raw(1, 2)).toBe("987");
-  expect(s.raw(2, 2)).toBe("1455");
+  expect(s.raw(0, UNITS)).toBe("1204");
+  expect(s.raw(1, UNITS)).toBe("987");
+  expect(s.raw(2, UNITS)).toBe("1455");
 
   const log = s.edits();
   expect(log).toHaveLength(1);
@@ -121,7 +124,7 @@ test("apply writes one operation for a whole column", () => {
     seq: 1,
     op: Op.Apply,
     row: NO_ROW,
-    col: 2,
+    col: UNITS,
     now: 'replace(/,/, "")',
   });
 });
@@ -130,12 +133,12 @@ test("apply writes one operation for a whole column", () => {
 // be re-read as the operation lands rather than at the next open.
 test("applying a program renames the column", () => {
   const s = fixture();
-  expect(s.columns[2]!.flagged).toBe(true);
+  expect(s.columns[UNITS]!.flagged).toBe(true);
 
-  s.apply(2, parseProgram('replace(/,/, "")'));
+  s.apply(UNITS, parseProgram('replace(/,/, "")'));
 
-  expect(s.columns[2]!.kind).toBe("num");
-  expect(s.columns[2]!.flagged).toBe(false);
+  expect(s.columns[UNITS]!.kind).toBe("num");
+  expect(s.columns[UNITS]!.flagged).toBe(false);
 });
 
 // A transform rewrites values that are there. A row that never had this column
@@ -148,11 +151,11 @@ test("apply skips rows without the column", () => {
     [["2026-07-01", "West", "1,204"], ["2026-07-01"]],
   );
 
-  s.apply(2, parseProgram('replace(/,/, "")'));
+  s.apply(UNITS, parseProgram('replace(/,/, "")'));
 
-  expect(s.raw(0, 2)).toBe("1204");
+  expect(s.raw(0, UNITS)).toBe("1204");
   expect(s.rows()).toBe(2);
-  expect(s.raw(1, 2), "the short row grew a cell").toBe("");
+  expect(s.raw(1, UNITS), "the short row grew a cell").toBe("");
 });
 
 // Undo replays, and a column op is the case that mechanism exists for: there is
@@ -160,17 +163,17 @@ test("apply skips rows without the column", () => {
 // operation did the first time.
 test("replay rebuilds an applied column", () => {
   const s = fixture();
-  s.set(1, 2, "9,870");
-  s.apply(2, parseProgram('replace(/,/, "")'));
+  s.set(1, UNITS, "9,870");
+  s.apply(UNITS, parseProgram('replace(/,/, "")'));
 
   const rebuilt = fixture();
   rebuilt.replay(s.edits());
 
-  for (let row = 0; row < 3; row++) {
-    expect(rebuilt.raw(row, 2), `row ${row}`).toBe(s.raw(row, 2));
+  for (let row = 0; row < s.rows(); row++) {
+    expect(rebuilt.raw(row, UNITS), `row ${row}`).toBe(s.raw(row, UNITS));
   }
-  expect(rebuilt.columns[2]!.kind).toBe("num");
-  expect(rebuilt.columns[2]!.flagged).toBe(false);
+  expect(rebuilt.columns[UNITS]!.kind).toBe("num");
+  expect(rebuilt.columns[UNITS]!.flagged).toBe(false);
 });
 
 // The recogniser learns a program from cells a person fixed, and those were
@@ -178,20 +181,20 @@ test("replay rebuilds an applied column", () => {
 // over them again would fix them twice: West-q3 would read West-q3-q3.
 test("apply leaves a cell it would have fixed the same way, and rewrites one it would not", () => {
   const s = fixture();
-  s.set(0, 1, "West-q3");
-  s.set(1, 1, "Eas");
-  s.set(1, 1, "East-q3"); // a slip on the way is still East to East-q3
-  s.set(2, 1, "N");
-  s.apply(1, parseProgram('concat(slice(0, len), "-q3")'));
+  s.set(0, REGION, "West-q3");
+  s.set(1, REGION, "Eas");
+  s.set(1, REGION, "East-q3"); // a slip on the way is still East to East-q3
+  s.set(2, REGION, "N");
+  s.apply(REGION, parseProgram('concat(slice(0, len), "-q3")'));
 
-  expect(s.raw(0, 1)).toBe("West-q3");
-  expect(s.raw(1, 1)).toBe("East-q3");
-  expect(s.raw(2, 1), "N is not what the program makes of North").toBe("N-q3");
+  expect(s.raw(0, REGION)).toBe("West-q3");
+  expect(s.raw(1, REGION)).toBe("East-q3");
+  expect(s.raw(2, REGION), "N is not what the program makes of North").toBe("N-q3");
 
   const rebuilt = fixture();
   rebuilt.replay(s.edits());
-  for (let row = 0; row < 3; row++) {
-    expect(rebuilt.raw(row, 1), `row ${row} after replay`).toBe(s.raw(row, 1));
+  for (let row = 0; row < s.rows(); row++) {
+    expect(rebuilt.raw(row, REGION), `row ${row} after replay`).toBe(s.raw(row, REGION));
   }
 });
 
@@ -201,7 +204,7 @@ test("apply leaves a cell it would have fixed the same way, and rewrites one it 
 test("replay refuses a program it cannot read", () => {
   const s = fixture();
   expect(() =>
-    s.replay([{ seq: 1, op: Op.Apply, row: NO_ROW, col: 2, now: "explode()" }]),
+    s.replay([{ seq: 1, op: Op.Apply, row: NO_ROW, col: UNITS, now: "explode()" }]),
   ).toThrow();
-  expect(s.raw(0, 2), "the cell should be untouched").toBe("1,204");
+  expect(s.raw(0, UNITS), "the cell should be untouched").toBe("1,204");
 });

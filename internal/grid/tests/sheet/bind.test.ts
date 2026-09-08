@@ -3,6 +3,11 @@ import { describe, expect, test } from "vite-plus/test";
 import { ERR_CELL, Sheet } from "../../src/sheet/index.ts";
 import { parse } from "../../src/formula/index.ts";
 
+const REGION = 0;
+const PRICE = 1;
+const COST = 2;
+const MARGIN = 3;
+
 // A fresh sheet each call, since binding mutates in place.
 function sales(): Sheet {
   return new Sheet(
@@ -21,9 +26,9 @@ function sales(): Sheet {
 // ratio is the whole argument for storing the expression instead of the results.
 test("binding a column fills it from one line", () => {
   const s = sales();
-  s.bind(3, parse("(price - cost) / price"));
+  s.bind(MARGIN, parse("(price - cost) / price"));
 
-  expect(["0.22", "0.25", "0.5"].map((_, row) => s.display(row, 3))).toEqual([
+  expect(["0.22", "0.25", "0.5"].map((_, row) => s.display(row, MARGIN))).toEqual([
     "0.22",
     "0.25",
     "0.5",
@@ -35,32 +40,32 @@ test("binding a column fills it from one line", () => {
 // and a column of those is arithmetic showing its working rather than answering.
 test("a computed value is not shown with its floating point noise", () => {
   const s = sales();
-  s.bind(3, parse("(price - cost) / price"));
-  expect(s.display(0, 3)).not.toContain("999999");
+  s.bind(MARGIN, parse("(price - cost) / price"));
+  expect(s.display(0, MARGIN)).not.toContain("999999");
 });
 
 // Editing an input recomputes what reads it. Nothing else moves, because the
 // walk is over what is downstream of the change rather than over the sheet.
 test("editing an input updates the column that reads it", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
-  const before = s.display(1, 3);
+  s.bind(MARGIN, parse("price - cost"));
+  const before = s.display(1, MARGIN);
 
-  s.set(0, 2, "20.00");
+  s.set(0, COST, "20.00");
 
-  expect(s.display(0, 3)).toBe("20");
-  expect(s.display(1, 3), "the untouched row moved").toBe(before);
+  expect(s.display(0, MARGIN)).toBe("20");
+  expect(s.display(1, MARGIN), "the untouched row moved").toBe(before);
 });
 
 // A cycle is refused where a person can still do something about it, and the
 // error names the loop rather than reporting that one exists.
 test("a cycle is refused at bind time with the path named", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
+  s.bind(MARGIN, parse("price - cost"));
 
   let thrown: Error | undefined;
   try {
-    s.bind(1, parse("margin + cost"));
+    s.bind(PRICE, parse("margin + cost"));
   } catch (err) {
     thrown = err as Error;
   }
@@ -69,17 +74,17 @@ test("a cycle is refused at bind time with the path named", () => {
   expect(thrown!.message).toContain("margin");
   expect(thrown!.message).toContain("price");
   expect(s.editCount(), "the refused binding was recorded anyway").toBe(1);
-  expect(s.display(0, 1), "the refusal changed something").toBe("40.00");
+  expect(s.display(0, PRICE), "the refusal changed something").toBe("40.00");
 });
 
 // A derived column stores nothing, so typing into one would be typing something
 // the next recalculation discards without saying so.
 test("a cell in a bound column cannot be typed into", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
+  s.bind(MARGIN, parse("price - cost"));
 
-  expect(() => s.set(0, 3, "nonsense")).toThrow();
-  expect(s.display(0, 3)).toBe("8.8");
+  expect(() => s.set(0, MARGIN, "nonsense")).toThrow();
+  expect(s.display(0, MARGIN)).toBe("8.8");
 });
 
 // A row the expression cannot read says so in the cell it happened in. An empty
@@ -120,7 +125,7 @@ test("an ambiguous column name is refused rather than guessed at", () => {
 // computed, rather than filling 4,812 rows with a failure.
 test("a formula naming a column that is not there is refused", () => {
   const s = sales();
-  expect(() => s.bind(3, parse("price - postage"))).toThrow();
+  expect(() => s.bind(MARGIN, parse("price - postage"))).toThrow();
   expect(s.editCount(), "the refused binding was recorded").toBe(0);
 });
 
@@ -149,14 +154,14 @@ test("a column that reads a bound column sees what it computed", () => {
 // carry one expression instead of a column of results.
 test("replay rebuilds what was computed", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
-  s.set(0, 2, "10.00");
+  s.bind(MARGIN, parse("price - cost"));
+  s.set(0, COST, "10.00");
 
   const replayed = sales();
   replayed.replay(s.edits());
 
   for (let row = 0; row < s.rows(); row++) {
-    expect(replayed.display(row, 3), `row ${row}`).toBe(s.display(row, 3));
+    expect(replayed.display(row, MARGIN), `row ${row}`).toBe(s.display(row, MARGIN));
   }
 });
 
@@ -165,13 +170,13 @@ test("replay rebuilds what was computed", () => {
 // line of sheet state, which Ctrl+Z could never have reached.
 test("a binding can be undone", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
+  s.bind(MARGIN, parse("price - cost"));
 
   const undone = sales();
   undone.replay(s.edits().slice(0, 0));
 
-  expect(undone.display(0, 3)).toBe("");
-  expect(undone.binding(3), "still bound after replaying the binding away").toBeUndefined();
+  expect(undone.display(0, MARGIN)).toBe("");
+  expect(undone.binding(MARGIN), "still bound after replaying the binding away").toBeUndefined();
 });
 
 // The badge over a bound column has to describe what a person can see in it.
@@ -179,8 +184,8 @@ test("a binding can be undone", () => {
 // derived column stores nothing at all.
 test("a bound column is named for what it computes", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
-  expect(s.columns[3]!.kind).toBe("num");
+  s.bind(MARGIN, parse("price - cost"));
+  expect(s.columns[MARGIN]!.kind).toBe("num");
 });
 
 // Binding never removed a column's values; it stopped them being what display
@@ -188,18 +193,18 @@ test("a bound column is named for what it computes", () => {
 // the column with them.
 test("removing a formula gives a column its own values back", () => {
   const s = sales();
-  s.bind(0, parse("price * 2"));
-  expect(s.display(0, 0)).toBe("80");
+  s.bind(REGION, parse("price * 2"));
+  expect(s.display(0, REGION)).toBe("80");
 
-  s.unbind(0);
+  s.unbind(REGION);
 
-  expect(["West", "East", "North"].map((_, row) => s.display(row, 0))).toEqual([
+  expect(["West", "East", "North"].map((_, row) => s.display(row, REGION))).toEqual([
     "West",
     "East",
     "North",
   ]);
-  expect(s.binding(0)).toBeUndefined();
-  expect(s.columns[0]!.kind, "re-inferred from the values that came back").toBe("text");
+  expect(s.binding(REGION)).toBeUndefined();
+  expect(s.columns[REGION]!.kind, "re-inferred from the values that came back").toBe("text");
 });
 
 // A column that read a bound one was reading what that column computed. Once
@@ -208,27 +213,27 @@ test("removing a formula gives a column its own values back", () => {
 // on values nobody can see any more.
 test("removing a formula recalculates what read it", () => {
   const s = sales();
-  s.bind(2, parse("price * 2"));
-  s.bind(3, parse("cost + 1"));
-  expect(s.display(0, 3)).toBe("81");
+  s.bind(COST, parse("price * 2"));
+  s.bind(MARGIN, parse("cost + 1"));
+  expect(s.display(0, MARGIN)).toBe("81");
 
-  s.unbind(2);
+  s.unbind(COST);
 
-  expect(s.display(0, 3)).toBe("32.2");
+  expect(s.display(0, MARGIN)).toBe("32.2");
 });
 
 // Undo is truncate-and-replay, which is why removing a formula is an operation
 // rather than something done to the sheet on the side.
 test("removing a formula can be undone", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
-  s.unbind(3);
+  s.bind(MARGIN, parse("price - cost"));
+  s.unbind(MARGIN);
   expect(s.editCount(), "the removal should be a line of its own").toBe(2);
 
   const undone = sales();
   undone.replay(s.edits().slice(0, 1));
 
-  expect(undone.display(0, 3)).toBe("8.8");
+  expect(undone.display(0, MARGIN)).toBe("8.8");
 });
 
 // A log line that removes nothing is a log that does not belong to these bytes.
@@ -237,7 +242,7 @@ test("removing a formula from a column that has none is refused", () => {
 
   let thrown: Error | undefined;
   try {
-    s.unbind(3);
+    s.unbind(MARGIN);
   } catch (err) {
     thrown = err as Error;
   }
@@ -253,23 +258,23 @@ test("removing a formula from a column that has none is refused", () => {
 // removal a one-way door.
 test("a column can be bound again after its formula is removed", () => {
   const s = sales();
-  s.bind(3, parse("price - cost"));
-  s.unbind(3);
+  s.bind(MARGIN, parse("price - cost"));
+  s.unbind(MARGIN);
 
-  s.bind(3, parse("price + cost"));
-  expect(s.display(0, 3)).toBe("71.2");
+  s.bind(MARGIN, parse("price + cost"));
+  expect(s.display(0, MARGIN)).toBe("71.2");
 });
 
 // A .uno is raw bytes plus the log, so a workspace whose formula was removed
 // has to rebuild that way on open rather than only in the session it happened in.
 test("replay rebuilds a column whose formula was removed", () => {
   const s = sales();
-  s.bind(0, parse("price * 2"));
-  s.unbind(0);
+  s.bind(REGION, parse("price * 2"));
+  s.unbind(REGION);
 
   const replayed = sales();
   replayed.replay(s.edits());
 
-  expect(replayed.display(0, 0)).toBe("West");
-  expect(replayed.binding(0)).toBeUndefined();
+  expect(replayed.display(0, REGION)).toBe("West");
+  expect(replayed.binding(REGION)).toBeUndefined();
 });

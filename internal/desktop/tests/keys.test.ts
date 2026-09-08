@@ -46,16 +46,23 @@ test("the command line reads :w, :sav, :e, :e! and a row number", () => {
 
 // ---------------------------------------------------------------- motions
 
-/** A sheet of 4,812 rows and 6 columns, fully indexed, with rows 0 to 19 on a 20-row page. */
+/** The sheet `at` places the selection in: fully indexed, with the first page on screen. */
+const ROWS = 4812;
+const COLS = 6;
+const PAGE = 20;
+const LAST_ROW = ROWS - 1;
+const LAST_COL = COLS - 1;
+
 function at(row: number, col: number, more: Partial<Place> = {}): Place {
-  return { row, col, rows: 4812, cols: 6, readable: 4812, page: 20, top: 0, bottom: 19, ...more };
+  const screen = { top: 0, bottom: PAGE - 1 };
+  return { row, col, rows: ROWS, cols: COLS, readable: ROWS, page: PAGE, ...screen, ...more };
 }
 
 test("h j k l move by one or by the count, and clamp at the edges", () => {
   expect(target("down", 5, at(10, 2))).toEqual({ row: 15, col: 2 });
-  expect(target("down", undefined, at(4811, 2))).toEqual({ row: 4811, col: 2 });
+  expect(target("down", undefined, at(LAST_ROW, 2))).toEqual({ row: LAST_ROW, col: 2 });
   expect(target("left", 9, at(10, 2))).toEqual({ row: 10, col: 0 });
-  expect(target("right", 1, at(10, 5))).toEqual({ row: 10, col: 5 });
+  expect(target("right", 1, at(10, LAST_COL))).toEqual({ row: 10, col: LAST_COL });
 });
 
 test("j moves exactly one row at row 50,000,000", () => {
@@ -64,46 +71,53 @@ test("j moves exactly one row at row 50,000,000", () => {
 });
 
 test("w and b read cells in order, across rows, and stop at either end", () => {
-  expect(target("next", undefined, at(3, 5))).toEqual({ row: 4, col: 0 });
-  expect(target("previous", undefined, at(4, 0))).toEqual({ row: 3, col: 5 });
-  expect(target("next", 8, at(0, 0))).toEqual({ row: 1, col: 2 });
-  expect(target("next", undefined, at(4811, 5))).toEqual({ row: 4811, col: 5 });
+  expect(target("next", undefined, at(3, LAST_COL))).toEqual({ row: 4, col: 0 });
+  expect(target("previous", undefined, at(4, 0))).toEqual({ row: 3, col: LAST_COL });
+  expect(target("next", COLS + 2, at(0, 0))).toEqual({ row: 1, col: 2 });
+  const end = { row: LAST_ROW, col: LAST_COL };
+  expect(target("next", undefined, at(end.row, end.col))).toEqual(end);
   expect(target("previous", undefined, at(0, 0))).toEqual({ row: 0, col: 0 });
 });
 
 test("0, ^ and $ go to the ends of the row", () => {
   expect(target("first-col", undefined, at(7, 4))).toEqual({ row: 7, col: 0 });
-  expect(target("last-col", undefined, at(7, 1))).toEqual({ row: 7, col: 5 });
+  expect(target("last-col", undefined, at(7, 1))).toEqual({ row: 7, col: LAST_COL });
 });
 
 test("gg and G go to the first and last row, and with a count to row n", () => {
   expect(target("first-row", undefined, at(300, 3))).toEqual({ row: 0, col: 3 });
-  expect(target("last-row", undefined, at(300, 3))).toEqual({ row: 4811, col: 3 });
+  expect(target("last-row", undefined, at(300, 3))).toEqual({ row: LAST_ROW, col: 3 });
   expect(target("first-row", 5, at(300, 3))).toEqual({ row: 4, col: 3 });
   expect(target("last-row", 5, at(300, 3))).toEqual({ row: 4, col: 3 });
-  expect(target("last-row", 99_999, at(300, 3)), "past the end").toEqual({ row: 4811, col: 3 });
+  expect(target("last-row", ROWS + 1, at(300, 3)), "past the end").toEqual({
+    row: LAST_ROW,
+    col: 3,
+  });
 });
 
 test("while the file indexes, G stops at the last row the engine can read and says so", () => {
   const indexing = { rows: 8_000_000, readable: 5_000_000 };
+  const readableEnd = indexing.readable - 1;
   expect(target("last-row", undefined, at(0, 1, indexing))).toEqual({
-    row: 4_999_999,
+    row: readableEnd,
     col: 1,
     short: "end",
   });
-  expect(target("last-row", 6_000_000, at(0, 1, indexing))).toEqual({
-    row: 4_999_999,
+  const unread = 6_000_000;
+  expect(target("last-row", unread, at(0, 1, indexing))).toEqual({
+    row: readableEnd,
     col: 1,
-    short: 5_999_999,
+    short: unread - 1,
   });
   expect(target("last-row", 12, at(0, 1, indexing))).toEqual({ row: 11, col: 1 });
 });
 
 test("Ctrl+d and Ctrl+u move half a page, and at least a row", () => {
-  expect(target("half-down", undefined, at(100, 0))).toEqual({ row: 110, col: 0 });
-  expect(target("half-up", 2, at(100, 0))).toEqual({ row: 80, col: 0 });
+  const half = PAGE / 2;
+  expect(target("half-down", undefined, at(100, 0))).toEqual({ row: 100 + half, col: 0 });
+  expect(target("half-up", 2, at(100, 0))).toEqual({ row: 100 - 2 * half, col: 0 });
   expect(target("half-down", undefined, at(100, 0, { page: 1 }))).toEqual({ row: 101, col: 0 });
-  expect(target("page-down", undefined, at(100, 0))).toEqual({ row: 120, col: 0 });
+  expect(target("page-down", undefined, at(100, 0))).toEqual({ row: 100 + PAGE, col: 0 });
 });
 
 test("H, M and L land on the rows on screen, and a count counts in from the edge", () => {
