@@ -1,0 +1,90 @@
+/* uno desktop: the tokens, the reset, and the frame every window has.
+ *
+ * The tokens and the chrome rules are lifted from resource/uno-doc.css, so the
+ * app and the design documents stay one visual language: change a colour here
+ * and the mock in resource/workspace.html is describing a different product.
+ *
+ * What is not lifted is everything that made that file a document stylesheet --
+ * the prose, the mastheads, the figure captions. This is an app: it fills the
+ * viewport, and the only thing that scrolls is the grid.
+ *
+ * The rest of the styles sit beside the module that draws what they style, and
+ * are imported by it, so each loads with the code that needs it. The grid's
+ * arrive with the grid, when the first file opens. */
+
+:root {
+  --paper: #eff2f3;
+  --surface: #fbfcfc;
+  --sunken: #e4e9eb;
+  --ink: #10171b;
+  --ink-2: #5a676e;
+  --ink-3: #869399;
+  --rule: #d2d9dc;
+  --rule-2: #e2e7e9;
+  --accent: #0b6e8c;
+  --accent-b: #e2f0f4;
+  --flag: #a85f06;
+  --flag-b: #f8eddc;
+
+  --display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* One row height, in one place. The virtualiser does arithmetic with it, so
+   * it cannot be a number the stylesheet and the script each decide for
+   * themselves. */
+  --row-h: 29px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1214;
+    --surface: #141b1e;
+    --sunken: #0a0f11;
+    --ink: #e4eaec;
+    --ink-2: #93a3aa;
+    --ink-3: #6b7c83;
+    --rule: #263136;
+    --rule-2: #1d262a;
+    --accent: #4fc3e8;
+    --accent-b: #12303a;
+    --flag: #efa84c;
+    --flag-b: #33240f;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `hidden` has to win. The browser's own [hidden] { display: none } is a UA
+ * rule, so any author `display` beats it -- and both .dropzone and #content set
+ * one, which left the empty state showing over an open file. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface);
+}
