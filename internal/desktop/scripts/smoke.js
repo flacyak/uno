@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
 const fixture = join(pkg, "../grid/tests/testdata/sales-q3.csv");
+// The export added beside it, for the checks that a workspace holds several.
+const second = join(pkg, "../grid/tests/testdata/google-ads-sales.csv");
 
 // The screenshot goes somewhere it survives the run, because the point of
 // taking one is to look at it.
@@ -35,7 +37,7 @@ if (process.env["DISPLAY"] === undefined && process.platform === "linux") {
 
 const child = spawn(electron, [pkg, fixture], {
   stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, UNO_SMOKE: scratch },
+  env: { ...process.env, UNO_SMOKE: scratch, UNO_SMOKE_SOURCE: second },
 });
 
 console.log(`smoke: electron pid ${child.pid}`);

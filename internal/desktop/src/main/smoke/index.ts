@@ -18,6 +18,7 @@ import { through } from "../driven.ts";
 import type { Check } from "./check.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { OPEN } from "./open.ts";
+import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
 
 /** How long the first rows get to arrive from the engine: tries, and the wait between them. */
@@ -33,7 +34,7 @@ const DRAW_MS = 50;
  *
  * They run in order, and each picks up the window where the one before left it.
  */
-const CHECKS: Check[] = [...OPEN, ...DEFAULT_INPUT, ...VIM_STYLE];
+const CHECKS: Check[] = [...OPEN, ...DEFAULT_INPUT, ...VIM_STYLE, ...SOURCES];
 
 /**
  * What every check can call. A check's body runs in a block of its own, so one

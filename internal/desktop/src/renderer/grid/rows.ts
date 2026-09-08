@@ -56,5 +56,5 @@ export interface Cell {
 /** The actions that belong to the shell rather than the grid. */
 export type ShellAction = Extract<
   Action,
-  { t: "undo" | "redo" | "apply" | "dismiss" | "prompt" | "unparsed" | "next" }
+  { t: "undo" | "redo" | "apply" | "dismiss" | "prompt" | "unparsed" | "next" | "tab" }
 >;

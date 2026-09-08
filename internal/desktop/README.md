@@ -13,7 +13,7 @@ for itself.
 src/
   main/       the Electron main process: one window, the menu, dialogs, engines
   preload/    the only bridge to the renderer
-  engine/     the utility process that owns one open file
+  engine/     the utility process that owns one open workspace
   renderer/   the app: tab strip, virtualized grid, status bar
   shared/     the Host interface both Electron and a web build implement
 ```
@@ -37,9 +37,25 @@ anywhere in the file. After three fixes in one column, a banner offers the rest,
 and its count grows while the engine surveys the file. Apply is one edit, and
 Ctrl+Z takes it back.
 
-Saving still embeds the source in the `.uno`, so a source over 256 MB is refused
-by name until the format can point at the file instead. A `.uno` opens through
-the engine too, with its log replayed.
+Saving still embeds the sources in the `.uno`, so sources over 256 MB together
+are refused by name until the format can point at the files instead. A `.uno`
+opens through the engine too, with its log replayed.
+
+## A workspace of several sources
+
+A workspace holds as many sources as the work needs, each in a tab of its own.
+File → Add Source (Ctrl+Shift+O) adds one or more beside the file already open, and so does the `+` at the end of the tab strip.
+Dropping files on the window adds them too, and `uno ads.csv shop.csv bank.csv` opens all three as one workspace.
+A `.uno` is a workspace of its own, so it opens rather than being added.
+
+One engine serves every source in the workspace, and the log is one list in the order the edits were made, with each line naming the source it changed.
+Each tab edits, undoes and redoes its own source, and View / Transform switches all of them together.
+A tab's dot says its source has edits, or was added, since the last save.
+The × on a tab takes its source and its edits out of the workspace, and asks once more first when there are edits to lose.
+The last source has no ×.
+
+Ctrl+PageDown and Ctrl+PageUp, or Ctrl+Tab and Ctrl+Shift+Tab, move between tabs, and each tab goes back to the cell it was left on.
+A workspace of one source saves in the layout every earlier uno reads, and a second source moves it to format 4.
 
 Opening a file closes the one open now. Over unsaved edits, Ctrl+O says so
 first, and a second Ctrl+O while that is still on screen opens anyway, as `:e!`
@@ -95,6 +111,8 @@ does, `:sav` is Save As, `:e` opens a file but refuses over unsaved edits unless
 it is `:e!`, and `:{n}` goes to row n. There is no `:q`; closing is the window's
 job.
 
+`gt` and `gT` go to the next and previous source's tab, `{n}gt` to the nth.
+
 `]f` and `[f` go to the next and previous cell in the column that does not parse
 as its badge says, which is the work uno is for: `]f` `.` `]f` `.` `]f` `.` `ga`.
 The band holds a few screens of rows, so the engine reads the file for them and
@@ -124,7 +142,7 @@ vp check                 # format, lint, type check
 something else on the machine called electron.
 
 The dev server's URL reaches Electron through `UNO_RENDERER_URL` at run time and
-is never compiled in — a localhost address baked into a bundle is one that ships,
+is never compiled in - a localhost address baked into a bundle is one that ships,
 and the installed app then tries to reach a dev server that is not running.
 
 ## The grid
@@ -162,7 +180,7 @@ It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
 Electron starts as plain Node and main finds no `app`.
 
-The assertions live in `src/main/smoke/`, which is test code inside the app —
+The assertions live in `src/main/smoke/`, which is test code inside the app -
 a smell worth naming. It is there because a virtualiser, a preload bridge and an
 IPC round trip cannot be checked anywhere but inside a real Electron, and the
 alternative was a browser-automation dependency larger than the app it tests. It

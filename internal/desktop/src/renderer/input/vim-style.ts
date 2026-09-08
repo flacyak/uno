@@ -166,6 +166,10 @@ function finish(mode: Mode, press: Press, keys: string, count: number | undefine
       return change(mode, press, { t: "apply" });
     case "gx":
       return change(mode, press, { t: "dismiss" });
+    case "gt":
+      return { t: "tab", step: 1, count };
+    case "gT":
+      return { t: "tab", step: -1, count };
     case "zt":
       return { t: "scroll", where: "top" };
     case "zz":

@@ -20,6 +20,7 @@ export function electronHost(bridge: Bridge): Host {
 
   return {
     open: () => bridge.open(),
+    add: () => bridge.add(),
     dropped: (file) => bridge.dropped(file),
     saveAs: (suggestedName, bytes) => bridge.saveAs(suggestedName, bytes),
     save: (path, bytes) => bridge.save(path, bytes),
