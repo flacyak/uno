@@ -99,12 +99,22 @@ func manifestFor(d *Document) Manifest {
 // a file carrying one says so in the manifest and Read refuses it by name before
 // a single entry is decoded.
 func versionFor(edits []sheet.Edit) int {
+	v := baseVersion
 	for _, e := range edits {
-		if e.Op != sheet.OpSet {
+		switch e.Op {
+		case sheet.OpSet:
+		case sheet.OpApply:
+			if v < ruleVersion {
+				v = ruleVersion
+			}
+		default:
+			// Anything newer than a rule, which today means a binding. A build
+			// that does not know the operation cannot replay the log, and a
+			// column it silently skipped would open as an empty one.
 			return formatVersion
 		}
 	}
-	return baseVersion
+	return v
 }
 
 // create adds a deflated entry stamped with the save time. zip.Writer.Create
