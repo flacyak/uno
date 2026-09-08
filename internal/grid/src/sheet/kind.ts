@@ -62,13 +62,44 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
   return { kind: "text", flagged: false };
 }
 
-// The two layouts Go parses: a plain date, and RFC 3339. Spelled out rather
-// than handed to `new Date`, which accepts far more than Go does -- "2026",
-// "July 1 2026" and "2026-07-01T25:00:00Z" would all become dates, and a text
-// column would come back wearing a date badge.
-const PLAIN_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+// The layouts a date is written in: year first with any one separator, the
+// year last the same way, a month by name, and RFC 3339. Spelled out rather
+// than handed to `new Date`, which accepts far more -- "2026", "Nov 1970" and
+// "2026-07-01T25:00:00Z" would all become dates, and a text column would come
+// back wearing a date badge.
+const YEAR_FIRST = /^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})$/;
+const YEAR_LAST = /^(\d{1,2})([-/.])(\d{1,2})\2(\d{4})$/;
+// Nov. 6, 1970 and November 6 1970; 6 Nov 1970 and 06-Nov-1970.
+const NAME_FIRST = /^([A-Za-z]+)\.? (\d{1,2}),? (\d{4})$/;
+const DAY_FIRST = /^(\d{1,2})([ -])([A-Za-z]+)\.?\2(\d{4})$/;
 const RFC3339 =
   /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
+
+// Only a name or its usual short form is a month: "Nov" and "November", but
+// not "No" or "Novem", which would let any word before a number through.
+const MONTHS = new Map<string, number>();
+[
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+].forEach((name, i) => {
+  MONTHS.set(name, i + 1);
+  MONTHS.set(name.slice(0, 3), i + 1);
+});
+MONTHS.set("sept", 9);
+
+function month(name: string): number {
+  return MONTHS.get(name.toLowerCase()) ?? 0;
+}
 
 function isRealDate(y: number, m: number, d: number): boolean {
   if (m < 1 || m > 12 || d < 1) return false;
@@ -77,9 +108,29 @@ function isRealDate(y: number, m: number, d: number): boolean {
 }
 
 export function isDate(v: string): boolean {
-  const plain = PLAIN_DATE.exec(v);
-  if (plain !== null) {
-    return isRealDate(Number(plain[1]), Number(plain[2]), Number(plain[3]));
+  const first = YEAR_FIRST.exec(v);
+  if (first !== null) {
+    return isRealDate(Number(first[1]), Number(first[3]), Number(first[4]));
+  }
+
+  // 20-11-2024 is day first and 11/20/2024 month first. Either reading makes
+  // it a date; which one is meant only matters to whatever reads the value.
+  const last = YEAR_LAST.exec(v);
+  if (last !== null) {
+    const a = Number(last[1]);
+    const b = Number(last[3]);
+    const y = Number(last[4]);
+    return isRealDate(y, b, a) || isRealDate(y, a, b);
+  }
+
+  const named = NAME_FIRST.exec(v);
+  if (named !== null) {
+    return isRealDate(Number(named[3]), month(named[1]!), Number(named[2]));
+  }
+
+  const day = DAY_FIRST.exec(v);
+  if (day !== null) {
+    return isRealDate(Number(day[4]), month(day[3]!), Number(day[1]));
   }
 
   const full = RFC3339.exec(v);
