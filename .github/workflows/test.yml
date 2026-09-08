@@ -7,43 +7,30 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: internal
     steps:
       - uses: actions/checkout@v7
 
-      # internal/ is the pnpm workspace root and has no package.json of its own,
-      # so the vp version is read from the catalog both packages point at.
+      # The repo root is the pnpm workspace root, and the vp version is read from
+      # the catalog every package points at.
       - uses: voidzero-dev/setup-vp@v1.19.0
         with:
-          working-directory: internal
           version-file: pnpm-workspace.yaml
           cache: true
           run-install: true
 
-      - name: Check the core
-        working-directory: internal/grid
-        run: vp check
-
-      - name: Run the core suite
-        working-directory: internal/grid
-        run: vp test
-
+      # The same root scripts anyone runs locally; see package.json.
+      #
       # @uno/grid's exports point at dist/, which is not committed, so the
-      # desktop package has nothing to type check or bundle against until this
-      # has run.
-      - name: Build the core
-        working-directory: internal/grid
-        run: vp pack
+      # desktop package has nothing to type check or bundle against until the
+      # build has run.
+      - name: Build
+        run: vp run build
 
-      - name: Check the desktop client
-        working-directory: internal/desktop
-        run: vp check
+      - name: Check
+        run: vp run check
 
-      - name: Run the desktop suite
-        working-directory: internal/desktop
-        run: vp test
+      - name: Test
+        run: vp run test
 
       # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox
       # is built on, and Electron exits rather than run without one.
@@ -52,7 +39,6 @@ jobs:
 
       # The runner has no display; the image ships Xvfb for exactly this.
       - name: Smoke test the desktop client
-        working-directory: internal/desktop
         run: xvfb-run --auto-servernum vp run smoke
 
       - name: Upload the smoke screenshot
