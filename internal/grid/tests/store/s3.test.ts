@@ -20,6 +20,8 @@ import { awsCredentials, localFiles } from "../../src/store/node.ts";
 import { bytes, connect, indexed, openOne, sales } from "../engine/harness.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { AWKWARD_KEYS, DOT_KEYS } from "./awkward.ts";
+import { HOME_REGION, REGION_FORMATS, rendered } from "./regions.ts";
+import type { Misdirect } from "./regions.ts";
 
 // ------------------------------------------------------------ signing
 
@@ -165,15 +167,17 @@ const KEYS: AwsCredentials = {
   region: "us-east-1",
 };
 
-/** Where the stand-in keeps its one bucket, and the region it says it is in. */
+/** Where the stand-in keeps its one bucket. regions.ts says which region. */
 const BUCKET = "acme-exports";
-const HOME_REGION = "eu-west-1";
+
+/** How the stand-in turns a request away by default: the way AWS does it. */
+const MOVED: Misdirect = { status: 301, headers: { "x-amz-bucket-region": "$REGION" } };
 
 interface Bucket {
   endpoint: string;
   /** Every request that reached it: the raw target too, for counting and for
    * checking that a key arrived on the wire exactly as it was written. */
-  seen: Array<{ method: string; path: string; range: string | undefined }>;
+  seen: Array<{ method: string; path: string; range: string | undefined; region: string }>;
   /** What each key holds. Change one to rewrite the object under a reader. */
   objects: Map<string, Uint8Array>;
   close(): Promise<void>;
@@ -183,8 +187,11 @@ interface Bucket {
  * bucket is S3 as far as uno can tell: HEAD, ranged GET, If-Match, a redirect
  * for the wrong region, and a 403 for a signature that does not check out --
  * checked by signing the same request again with the same secret.
+ *
+ * It turns a request signed for the wrong region away with `misdirect`, which
+ * is how AWS does it unless a test says otherwise, and lives in `home`.
  */
-async function bucket(): Promise<Bucket> {
+async function bucket(misdirect: Misdirect = MOVED, home = HOME_REGION): Promise<Bucket> {
   const objects = new Map<string, Uint8Array>([["2025/sales-q3.csv", bytes]]);
   const seen: Bucket["seen"] = [];
 
@@ -194,10 +201,10 @@ async function bucket(): Promise<Bucket> {
     // works off this, because `new URL` would resolve away a `.` or `..`
     // segment that is part of a key's name.
     const raw = req.url!.split("?")[0]!;
-    seen.push({ method: req.method!, path: raw, range });
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const auth = req.headers["authorization"] ?? "";
     const region = /Credential=[^/]+\/\d{8}\/([^/]+)\//.exec(auth)?.[1];
+    seen.push({ method: req.method!, path: raw, range, region: region ?? "" });
 
     // S3 checks the signature before anything else, and so does this.
     const signed = /SignedHeaders=([^,]+)/.exec(auth)?.[1]?.split(";") ?? [];
@@ -220,8 +227,16 @@ async function bucket(): Promise<Bucket> {
       res.writeHead(403).end();
       return;
     }
-    if (region !== HOME_REGION) {
-      res.writeHead(301, { "x-amz-bucket-region": HOME_REGION }).end();
+    if (region !== home) {
+      const away = rendered(misdirect, home);
+      // A reply to a HEAD carries no body however the server writes it, so a
+      // region that is only in the body cannot reach a HEAD at all. Node
+      // drops it for us; content-length still says what a GET would send.
+      res.writeHead(away.status, {
+        ...away.headers,
+        "content-length": Buffer.byteLength(away.body),
+      });
+      res.end(req.method === "HEAD" ? undefined : away.body);
       return;
     }
 
@@ -494,6 +509,123 @@ test("reads awkward keys out of the https forms too, and never throws", () => {
   ]) {
     expect(() => s3Location(url), url).not.toThrow();
   }
+});
+
+// ------------------------------------------------------------ elsewhere
+//
+// regions.ts says what these replies are and why each one is followed or
+// refused. A bucket in another region is the first thing anyone with more than
+// one bucket meets, and the reply that says so is the only request uno gets:
+// there is nothing else to ask, because every request after it is signed the
+// same wrong way.
+//
+// The stand-in checks signatures the way S3 does, so reaching the object at
+// all proves the second attempt was re-signed for the region it was sent to.
+
+describe("a bucket that is somewhere else", () => {
+  const where = (b: Bucket) =>
+    s3Files({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint });
+
+  for (const format of REGION_FORMATS) {
+    test(`${format.follow ? "follows" : "refuses"} ${format.name}`, async () => {
+      const home = format.home ?? HOME_REGION;
+      const b = await bucket(format.reply, home);
+      try {
+        const opening = where(b).open(at("2025/sales-q3.csv"));
+        if (!format.follow) {
+          await expect(opening, format.name).rejects.toThrow();
+          // Refusing means refusing quietly: nothing signed for a region the
+          // credentials did not name, which is what a body would be choosing.
+          for (const r of b.seen) expect(r.region, format.name).toBe(KEYS.region);
+          return;
+        }
+        expect((await opening).size, format.name).toBe(bytes.length);
+        // Once. A probe for the region is allowed; a second round of them is
+        // the bug this is here to catch.
+        expect(b.seen.length, format.name).toBeLessThanOrEqual(3);
+        expect(b.seen.at(-1)?.region, format.name).toBe(home);
+      } finally {
+        await b.close();
+      }
+    });
+  }
+
+  // "Once, and then remembered": the second object costs one request, because
+  // the region is already known by the time it is asked for.
+  test("remembers it, so the next object in the bucket goes straight there", async () => {
+    const b = await bucket(REGION_FORMATS[0]!.reply);
+    try {
+      b.objects.set("2025/other.csv", bytes);
+      const s3 = where(b);
+      await s3.open(at("2025/sales-q3.csv"));
+      b.seen.length = 0;
+      await s3.open(at("2025/other.csv"));
+      expect(b.seen.map((r) => r.region)).toEqual([HOME_REGION]);
+    } finally {
+      await b.close();
+    }
+  });
+
+  // A HEAD reply has no body, and open() starts with a HEAD. So a bucket that
+  // only says where it is in the body can only say it to a GET, and following
+  // one means asking a second way rather than reading nothing twice.
+  test("asks a way that can carry the answer, since a HEAD cannot", async () => {
+    const b = await bucket(REGION_FORMATS[0]!.reply);
+    try {
+      await where(b).open(at("2025/sales-q3.csv"));
+      const probe = b.seen.find((r) => r.method === "GET" && r.region === KEYS.region);
+      expect(probe, "the region came from somewhere a body could reach").toBeDefined();
+      // And the probe asked for as little as it could.
+      expect(probe?.range).toBe("bytes=0-0");
+    } finally {
+      await b.close();
+    }
+  });
+});
+
+// A region becomes a hostname. These go through a stand-in fetch rather than
+// the server above, because the point is the request that is never sent: with
+// no endpoint set, the host uno builds is the whole of the evidence.
+describe("a region out of a body never becomes a host", () => {
+  /**
+   * A stand-in that answers every request with the same refusal, gives up
+   * rather than hanging if uno keeps following it, and keeps what it was sent.
+   */
+  function refusing(body: (n: number) => string) {
+    const sent: URL[] = [];
+    const go: typeof fetch = (input) => {
+      sent.push(new URL(input as URL));
+      if (sent.length > 8) throw new Error("gave up: uno is still following it");
+      return Promise.resolve(
+        new Response(body(sent.length), {
+          status: 400,
+          headers: { "content-type": "application/xml" },
+        }),
+      );
+    };
+    return { sent, s3: s3Files({ credentials: () => Promise.resolve(KEYS), fetch: go }) };
+  }
+
+  test("refuses a body that names a host instead of a region", async () => {
+    const { sent, s3 } = refusing(
+      () =>
+        "<Error><Code>AuthorizationHeaderMalformed</Code>" +
+        "<Region>elsewhere.example.com</Region></Error>",
+    );
+    await expect(s3.open(at("2025/sales-q3.csv"))).rejects.toThrow();
+    for (const url of sent) expect(url.host).toBe(`${BUCKET}.s3.${KEYS.region}.amazonaws.com`);
+  });
+
+  // A bucket that is somewhere new every time it is asked is not one to keep
+  // asking. Following forever is a loop nothing downstream can interrupt.
+  test("stops following a bucket that keeps moving", async () => {
+    const { sent, s3 } = refusing(
+      (n) =>
+        `<Error><Code>AuthorizationHeaderMalformed</Code><Region>ap-southeast-${n}</Region></Error>`,
+    );
+    await expect(s3.open(at("2025/sales-q3.csv"))).rejects.toThrow(/400|region/);
+    expect(sent.length).toBeLessThanOrEqual(4);
+  });
 });
 
 /** The bytes of a string, for objects whose content only has to be telling. */
