@@ -31,18 +31,7 @@ func stockLibrary(t *testing.T, s *Shell, ids ...string) {
 		t.Fatalf("clearing the library: %v", err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	for _, id := range ids {
-		b, err := os.ReadFile(filepath.Join("..", "..", "testdata", id+".unof"))
-		if err != nil {
-			t.Fatalf("fixture %s: %v", id, err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, id+".unof"), b, 0o644); err != nil {
-			t.Fatalf("write %s: %v", id, err)
-		}
-	}
+	copyFixtures(t, dir, ids...)
 }
 
 // The drawer rests outside the right edge and comes in from it, so where the

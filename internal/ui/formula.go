@@ -132,23 +132,21 @@ func (s *Shell) refreshDrawer() {
 	}
 	d.target.SetText(targetFor(s.active()))
 
-	dir := s.libraryDir()
-	loaded, err := library.Load(dir)
+	beside, lib, err := s.sources()
 	if err != nil {
-		// A library with one unreadable file is still a library. The rest are
-		// listed and the failure is said once, in the footer, rather than in a
-		// dialog that has to be dismissed before the others can be used.
-		fyne.LogError("reading the formula library", err)
+		// A folder with one unreadable file in it is still a folder of
+		// formulas. The rest are listed and the failure goes to the log, rather
+		// than into a dialog that has to be dismissed before the others can be
+		// used. The file may have come from either folder, so the message names
+		// neither and the joined error names the files.
+		fyne.LogError("reading formulas", err)
 	}
 
-	// Each formula is paired with the folder it was read out of on the way in,
-	// because that is the only moment the pairing is known for certain. A row
-	// that is later edited has to write itself back to the file it came from,
-	// and a formula carries no path of its own to say where that is.
-	found := make([]sourced, 0, len(loaded))
-	for _, f := range loaded {
-		found = append(found, sourced{Formula: f, dir: dir})
-	}
+	// One flat list for now, the folder each row came from carried alongside it
+	// so that editing one writes it back where it was found.
+	found := make([]sourced, 0, len(beside)+len(lib))
+	found = append(found, beside...)
+	found = append(found, lib...)
 
 	found = s.byRecency(found)
 
@@ -158,7 +156,7 @@ func (s *Shell) refreshDrawer() {
 	}
 	d.list.Refresh()
 
-	d.foot.SetText(fmt.Sprintf("%s · %s", plural(len(found), "formula"), shortDir(dir)))
+	d.foot.SetText(fmt.Sprintf("%s · %s", plural(len(found), "formula"), shortDir(s.libraryDir())))
 }
 
 // formulaRow is one entry: what it is called, what kind it is, and the two
