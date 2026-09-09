@@ -20,6 +20,7 @@ import { strategy } from "../input/index.ts";
 import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
 import type { Command } from "../keys.ts";
+import { Sources } from "../sources.ts";
 import { Workspace } from "../workspace.ts";
 import type { Tab } from "../workspace.ts";
 import { AddMenu } from "./add.ts";
@@ -27,9 +28,13 @@ import { bannerParts, offerKey } from "./banner.ts";
 import { wireDrop } from "./drop.ts";
 import { Finder } from "./find.ts";
 import type { Showing } from "./find.ts";
+import { Panel } from "./panel.ts";
 import { StatusBar } from "./status.ts";
 import { tabStrip } from "./tabs.ts";
 import { message, must } from "./util.ts";
+
+/** What the panel says when it is asked to browse before there is an engine to ask. */
+const NO_ENGINE = new Error("open a file first · browsing goes through its engine");
 
 /** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
 const INPUT_KEY = "uno.input";
@@ -53,6 +58,8 @@ export class Shell {
 
   private readonly status: StatusBar;
   private readonly finder: Finder;
+  private readonly sources: Sources;
+  private readonly panel: Panel;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
@@ -71,6 +78,39 @@ export class Shell {
     this.finder = new Finder(
       () => this.showing(),
       (text, isError) => this.say(text, isError),
+    );
+
+    this.sources = new Sources(
+      {
+        // Browsing goes through the open workspace's engine, which holds the
+        // listers and the credentials. The page never lists anything itself.
+        list: (path, cursor) => this.workspace?.list(path, cursor) ?? Promise.reject(NO_ENGINE),
+        peek: (ref) => this.workspace?.peek(ref) ?? Promise.reject(NO_ENGINE),
+      },
+      () => this.workspace?.sources ?? [],
+      [],
+      () => this.panel.draw(),
+    );
+    this.panel = new Panel(
+      must(document.querySelector<HTMLElement>("#panel")),
+      this.sources,
+      () => this.input.name,
+      {
+        select: (id) => {
+          const tab = this.workspace?.sources.find((t) => t.id === id);
+          if (tab !== undefined) this.select(tab);
+        },
+        add: (refs, one) => {
+          // One source reading several files is phase 4. Until then the
+          // button says what it would do and the shell says it cannot yet.
+          if (one) this.say("Add as one needs multi-file sources, which are not built yet", true);
+          else void this.addSources([...refs]);
+        },
+        closed: () => {
+          this.paintTabs();
+          this.grid?.focus();
+        },
+      },
     );
 
     wireDrop(
@@ -358,8 +398,15 @@ export class Shell {
           return;
         }
       }
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
       const key = e.key.toLowerCase();
+      if (e.shiftKey) {
+        if (key === "b") {
+          e.preventDefault();
+          this.showPanel();
+        }
+        return;
+      }
       if (key === "e") {
         e.preventDefault();
         this.toggleMode();
@@ -393,6 +440,27 @@ export class Shell {
   }
 
   // ------------------------------------------------------------------ tabs
+
+  /**
+   * togglePanel opens the sources panel beside the grid, or closes it. The
+   * grid gives up the width and keeps its rows, so it is laid out again and
+   * nothing is fetched.
+   */
+  togglePanel(): void {
+    this.panel.toggle();
+    this.paintTabs();
+    this.grid?.repaint();
+  }
+
+  /**
+   * showPanel opens the sources panel with the keys in it: the + menu's
+   * Browse sources…, Ctrl+Shift+B and :sources. Open already, it only takes
+   * the keys back, so a second Ctrl+Shift+B is not a close.
+   */
+  showPanel(): void {
+    if (this.panel.open) return this.panel.show();
+    this.togglePanel();
+  }
 
   /**
    * select shows another source. The grid it leaves remembers where it was, and
@@ -625,6 +693,9 @@ export class Shell {
           void this.open(true);
         }
         return;
+      case "sources":
+        this.showPanel();
+        return;
       case "row":
         this.grid?.act({ t: "move", motion: "last-row", count: c.row });
         return;
@@ -647,14 +718,17 @@ export class Shell {
     const strip =
       w === undefined
         ? []
-        : tabStrip(w, this.input.switchHint, {
+        : tabStrip(w, this.input.switchHint, this.panel.open, {
             toggle: () => this.toggleMode(),
             select: (tab) => this.select(tab),
             remove: (tab) => void this.remove(tab),
             add: (plus) => this.offerAdd(plus),
             relink: (tab) => void this.relink(tab),
+            panel: () => this.togglePanel(),
           });
     this.tabs.replaceChildren(...strip);
+    // The panel lists the tabs too, and whatever changed the strip changed them.
+    this.panel.draw();
   }
 
   /** The offer the banner is asking about, or null while it is hidden. */

@@ -1,0 +1,241 @@
+/* The panel: a column on the right of the grid, the filter at its top, and the
+ * sections as one virtualised list. `--panel-row-h` is set by panel.ts, which
+ * does arithmetic with it. */
+
+/* `min-width: 0`, or the peek's table, as wide as the file's header, would
+ * widen the column and push the grid over every time a file is picked. */
+.panel {
+  flex: 0 0 330px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.panel-filter {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.panel-filter input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  outline: none;
+}
+
+.panel-filter input:focus {
+  border-color: var(--accent);
+}
+
+.panel-filter button {
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.panel-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+  padding: 0 6px;
+}
+
+.panel-sizer {
+  position: relative;
+}
+
+.panel-rows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--panel-row-h);
+  padding: 0 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.panel-row > :first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-row > :last-child {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-row.head {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.panel-row.head > :last-child {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.panel-row.note {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* The line the keys are on. Quiet while the keys are somewhere else, so it
+ * still says where they will land. */
+.panel-row.sel {
+  background: var(--rule-2);
+}
+
+.panel-list:focus .panel-row.sel {
+  background: var(--accent-b);
+  color: var(--accent);
+}
+
+.panel-list:focus .panel-row.sel > :last-child {
+  color: var(--accent);
+}
+
+/* A file in the selection, and one nothing reads, which is listed but cannot
+ * be picked. */
+.panel-row.picked {
+  color: var(--accent);
+}
+
+.panel-row.picked > :first-child::before {
+  content: "✓ ";
+}
+
+.panel-row.off {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* The front of the one picked file. Its own scroller, so a wide header does
+ * not push the list sideways. */
+.panel-peek {
+  flex: 0 0 auto;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.panel-peek .note {
+  padding: 6px 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.panel-peek .table {
+  overflow: auto;
+  min-height: 0;
+}
+
+.panel-peek table {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.panel-peek th,
+.panel-peek td {
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--rule-2);
+  text-align: left;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-peek th {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.panel-foot {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 9px 12px;
+  border-top: 1px solid var(--rule);
+  background: var(--sunken);
+}
+
+.panel-foot button {
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.panel-foot button.primary {
+  color: var(--surface);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The switch at the right of the tab strip: a window with its right column
+ * filled in while the panel is open. */
+.panel-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px 0 2px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.panel-toggle::before {
+  --c: var(--ink-3);
+  content: "";
+  width: 14px;
+  height: 11px;
+  border: 1.5px solid var(--c);
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px 8px, transparent 8px);
+}
+
+.panel-toggle:hover::before {
+  --c: var(--ink);
+}
+
+.panel-toggle.on::before {
+  --c: var(--accent);
+  background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px);
+}

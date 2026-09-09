@@ -145,6 +145,8 @@ export type Command =
   | { t: "write" }
   | { t: "save-as" }
   | { t: "open"; force: boolean }
+  /** :sources, the panel beside the grid. */
+  | { t: "sources" }
   /** :{n}, a row numbered from 1. */
   | { t: "row"; row: number }
   | { t: "unknown"; text: string };
@@ -171,6 +173,8 @@ export function command(text: string): Command {
     case "e!":
     case "edit!":
       return { t: "open", force: true };
+    case "sources":
+      return { t: "sources" };
   }
   return { t: "unknown", text: typed };
 }
