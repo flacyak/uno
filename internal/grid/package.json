@@ -1,0 +1,58 @@
+{
+  "name": "@uno/grid",
+  "version": "0.0.0",
+  "description": "uno's core, in TypeScript: sheets, formulas, the transform language and the .uno container.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flacyak/uno.git",
+    "directory": "internal/grid"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./document": "./dist/document/index.mjs",
+    "./formula": "./dist/formula/index.mjs",
+    "./go": "./dist/go/index.mjs",
+    "./ingest": "./dist/ingest/index.mjs",
+    "./library": "./dist/library/index.mjs",
+    "./notation": "./dist/notation/index.mjs",
+    "./num": "./dist/num/index.mjs",
+    "./pattern": "./dist/pattern/index.mjs",
+    "./program": "./dist/program/index.mjs",
+    "./sheet": "./dist/sheet/index.mjs",
+    "./store": "./dist/store/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "bumpp": "^11.1.0",
+    "typescript": "^7.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.3.4",
+      "onFail": "download"
+    }
+  }
+}

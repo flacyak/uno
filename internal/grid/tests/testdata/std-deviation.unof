@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "std-deviation",
+  "name": "Std. deviation",
+  "kind": "notation",
+  "expr": "σ = \\frac{1}{n}\\sum_{i=1}^{n}(x_i - \\mu)^2",
+  "created": "2026-08-31T09:20:11Z",
+  "modified": "2026-08-31T09:20:11Z"
+}

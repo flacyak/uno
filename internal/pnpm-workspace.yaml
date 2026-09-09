@@ -1,0 +1,22 @@
+packages:
+  - grid
+  - desktop
+
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@0.3.1
+  vite-plus: 0.3.1
+
+# pnpm does not run a dependency's install script unless it is named here.
+# Electron's fetches the ~100 MB runtime, so without this the app has nothing
+# to start.
+onlyBuiltDependencies:
+  - electron
+
+overrides:
+  vite@*: "catalog:"
+
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"
