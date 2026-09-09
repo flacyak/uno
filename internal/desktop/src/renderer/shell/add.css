@@ -1,4 +1,4 @@
-/* The + menu: a file, or an object in S3. */
+/* The + menu: a file, or the sources panel. */
 
 .add-menu {
   position: fixed;
@@ -31,31 +31,4 @@
 
 .add-item .keys {
   color: var(--ink-3);
-}
-
-/* Wide enough for a bucket and a dated prefix without scrolling sideways. */
-.add-url {
-  display: block;
-  width: 420px;
-  padding: 5px 8px;
-  font: inherit;
-  color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  outline: none;
-}
-
-.add-url:focus {
-  border-color: var(--accent);
-}
-
-.add-hint {
-  padding: 5px 2px 1px;
-  font-size: 11px;
-  color: var(--ink-3);
-}
-
-.add-hint.err {
-  color: var(--flag);
 }
