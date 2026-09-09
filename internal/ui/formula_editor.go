@@ -50,6 +50,21 @@ type formulaEditor struct {
 	// fields someone is still typing into.
 	editing sourced
 
+	// loading is set while editFormula fills the fields from the formula
+	// somebody clicked. Each of those SetSelected and SetText calls fires
+	// OnChanged exactly the way a keystroke does, so all three land in
+	// formulaChanged and schedule the autosave: without this, opening a formula
+	// rewrites it 600 ms later with nobody having pressed a key.
+	//
+	// That was harmless while every file in the drawer was one you had written
+	// yourself, where it moved the modified date on your own copy. Now that the
+	// folder the document is sitting in is listed too, a formula opened only to
+	// be read is one that may have arrived in an email or be tracked in
+	// somebody's git repository, and rewriting it is rewriting somebody else's
+	// file on behalf of a person who asked for nothing more than a look. A write
+	// follows a keystroke; reading is not one.
+	loading bool
+
 	timer *time.Timer
 }
 
@@ -148,9 +163,14 @@ func (s *Shell) editFormula(f sourced) {
 	if f.Kind == library.KindNotation {
 		kind = "Notation"
 	}
+	// Filling the fields is not typing, so none of it schedules a write. The
+	// preview is refreshed below, once, rather than three times on the way past.
+	e.loading = true
 	e.kind.SetSelected(kind)
 	e.name.SetText(f.Name)
 	e.expr.SetText(f.Expr)
+	e.loading = false
+
 	e.foot.SetText("· " + f.ID + ".unof · " + s.placeName(f.dir))
 
 	s.refreshPreview()
@@ -180,9 +200,12 @@ func (s *Shell) leaveEditor() {
 // the writing touches nothing anyone else is holding — the same handover the
 // system design describes for every other job that runs off the UI thread (I-7).
 func (s *Shell) formulaChanged() {
+	e := s.drawer.editor
+	if e.loading {
+		return
+	}
 	s.refreshPreview()
 
-	e := s.drawer.editor
 	e.editing.Formula = s.editorFormula()
 	pending, dir := e.editing.Formula, e.editing.dir
 	// The wording is worked out here, with the rest of what the worker is

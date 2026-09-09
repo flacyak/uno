@@ -118,3 +118,30 @@ func TestTheEditorSaysAFormulaFromTheLibraryIsYourOwn(t *testing.T) {
 		t.Errorf("footer = %q, want %q", got, want)
 	}
 }
+
+// Opening a formula is reading it, and reading a file is not a reason to write
+// one. Every field the editor fills fires the same OnChanged a keystroke does,
+// so without a guard, clicking edit and going straight back out rewrites the
+// file and moves its modified date. For a formula that arrived beside the
+// document that is somebody else's file, changed by somebody who only looked.
+func TestOpeningAFormulaWithoutTypingLeavesItsFileAlone(t *testing.T) {
+	s, _, dir := besideSales(t, "unit-margin")
+	stockLibrary(t, s)
+	untouched := bytesOf(t, dir, "unit-margin")
+
+	s.toggleDrawer()
+	s.editFormula(besideOne(t, s))
+
+	// No timer is the claim, and asserting it here is what makes the claim
+	// deterministic rather than a race against the debounce: there is nothing
+	// pending to wait out, and leaveEditor's flush returns early on exactly
+	// this.
+	if s.drawer.editor.timer != nil {
+		t.Error("opening a formula scheduled a write, want none until a key is pressed")
+	}
+	s.leaveEditor()
+
+	if got := bytesOf(t, dir, "unit-margin"); !bytes.Equal(got, untouched) {
+		t.Errorf("the file = %s, want it byte-identical at %s", got, untouched)
+	}
+}
