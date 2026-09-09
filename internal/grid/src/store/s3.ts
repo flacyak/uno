@@ -14,6 +14,11 @@
 // Nothing here knows where credentials come from. The caller hands in a
 // function that produces them, so a desktop can read ~/.aws in its engine
 // process and the renderer never holds a key.
+//
+// Browsing a bucket is store/s3lister.ts, beside this, the way the disk's two
+// are store/node.ts and store/disklister.ts. What the two here share is the
+// request rather than the syscall: `s3Requests` signs, retries and follows a
+// bucket to its region, and the lister sends nothing of its own.
 
 import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -21,6 +26,7 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 import type { Provider } from "../plugin/index.ts";
 import type { FileHandler } from "./index.ts";
+import { s3Lister } from "./s3lister.ts";
 
 /** Credentials and the region to sign for when a bucket has not said otherwise. */
 export interface AwsCredentials {
@@ -142,37 +148,58 @@ const MOVES = 1;
 const REFUSAL_BYTES = 64 << 10;
 
 /**
- * s3Files opens objects in S3 for reading. It claims s3:// URLs and the https
- * URLs of objects on amazonaws.com.
- */
-
-/**
- * s3Provider is a bucket plugged in as one thing.
+ * s3Provider is a bucket plugged in as one thing: the handler that opens an
+ * object, and the lister that browses the prefix it came out of.
  *
- * Its lister is task 1.3. The same module answers for every S3-compatible
- * store -- R2, MinIO, Supabase -- because they differ by endpoint and region
- * and not by protocol, so they are this provider with different options rather
- * than providers of their own.
+ * The same module answers for every S3-compatible store -- R2, MinIO, Supabase
+ * -- because they differ by endpoint and region and not by protocol, so they
+ * are this provider with different options rather than providers of their own.
  */
 export function s3Provider(opts: S3Options): Provider {
-  return { name: "s3", label: "S3", files: s3Files(opts) };
+  return { name: "s3", label: "S3", files: s3Files(opts), browse: s3Lister(opts) };
 }
 
-export function s3Files(opts: S3Options): FileHandler {
+/**
+ * S3Requests is a signed request, retried, and followed to wherever the bucket
+ * turns out to be: everything about asking S3 anything that is not about what
+ * was asked for.
+ *
+ * It is out here rather than inside the handler because the lister needs every
+ * word of it and none of it is about objects. A lister with its own copy of the
+ * region redirect and the backoff would be a second one to keep right, and the
+ * two would drift the way the two refusals in claim.ts had already begun to.
+ */
+export interface S3Requests {
+  /** One object: HEAD for how big it is, GET for a range of it. */
+  object(loc: S3Location, method: "HEAD" | "GET", extra: Record<string, string>): Promise<Response>;
+  /** The bucket itself with a query on it, which is what a listing asks for. */
+  bucket(bucket: string, query: Record<string, string>): Promise<Response>;
+}
+
+/**
+ * s3Requests is the two ways uno asks a bucket anything, and one bucket's worth
+ * of memory about where buckets are.
+ *
+ * s3Files and s3Lister each make their own, so a bucket in another region is
+ * followed there once by each rather than once between them. That is one extra
+ * round trip, the first time a workspace both opens and browses such a bucket,
+ * and task 2.9 spends it once for good by storing the region in the connection.
+ */
+export function s3Requests(opts: S3Options): S3Requests {
   const go = opts.fetch ?? fetch;
   /** Where each bucket turned out to be, once it has said, so only the first
    * request to a bucket in another region pays for the redirect. */
   const regions = new Map<string, string>();
 
-  /** One signed request, sent once. */
+  /** One signed request, sent once, to wherever `at` says a region is asked. */
   async function send(
-    loc: S3Location,
+    at: (region: string) => URL,
     method: "HEAD" | "GET",
     extra: Record<string, string>,
     creds: AwsCredentials,
     region: string,
   ): Promise<Response> {
-    const url = objectUrl(loc, region, opts.endpoint);
+    const url = at(region);
     const headers = signV4(
       { method, url, headers: { ...extra, "x-amz-content-sha256": EMPTY_SHA256 } },
       creds,
@@ -183,19 +210,29 @@ export function s3Files(opts: S3Options): FileHandler {
     return go(url, { method, headers });
   }
 
+  /**
+   * request is `send` with the two things around it that every request to S3
+   * needs: another try for what the network did, and one move to the region the
+   * bucket says it is in.
+   *
+   * What is being asked for is a function of the region rather than a URL,
+   * because the second attempt goes to a different host and asks the same
+   * question, and a signature is only valid for the host it named.
+   */
   async function request(
-    loc: S3Location,
+    bucket: string,
+    at: (region: string) => URL,
     method: "HEAD" | "GET",
     extra: Record<string, string>,
   ): Promise<Response> {
     let moves = 0;
     for (let attempt = 1; ; attempt++) {
       const creds = await opts.credentials();
-      const region = regions.get(loc.bucket) ?? creds.region;
+      const region = regions.get(bucket) ?? creds.region;
 
       let res: Response;
       try {
-        res = await send(loc, method, extra, creds, region);
+        res = await send(at, method, extra, creds, region);
       } catch (err) {
         if (attempt >= TRIES) throw err;
         await wait(BACKOFF_MS << (attempt - 1));
@@ -210,11 +247,11 @@ export function s3Files(opts: S3Options): FileHandler {
           // first, so a bucket that only names its region in the body has to
           // be asked a way that can answer. One byte is enough of an ask: the
           // refusal comes back instead of the byte.
-          send(loc, "GET", { range: "bytes=0-0" }, creds, region),
+          send(at, "GET", { range: "bytes=0-0" }, creds, region),
         );
         if (moved !== undefined && moved !== region) {
           moves++;
-          regions.set(loc.bucket, moved);
+          regions.set(bucket, moved);
           continue;
         }
       }
@@ -227,6 +264,23 @@ export function s3Files(opts: S3Options): FileHandler {
   }
 
   return {
+    object: (loc, method, extra) =>
+      request(loc.bucket, (region) => objectUrl(loc, region, opts.endpoint), method, extra),
+    // A listing is a GET, so its refusal carries a body, so the region in one
+    // is there to be read without the extra ask a HEAD needs.
+    bucket: (bucket, query) =>
+      request(bucket, (region) => listUrl(bucket, query, region, opts.endpoint), "GET", {}),
+  };
+}
+
+/**
+ * s3Files opens objects in S3 for reading. It claims s3:// URLs and the https
+ * URLs of objects on amazonaws.com.
+ */
+export function s3Files(opts: S3Options): FileHandler {
+  const send = s3Requests(opts);
+
+  return {
     label: "S3",
     handles: (ref) => "path" in ref && s3Location(ref.path) !== undefined,
 
@@ -236,16 +290,10 @@ export function s3Files(opts: S3Options): FileHandler {
       const url = s3Url(loc);
       // Refused here, before a single request goes out, because the request
       // would be the wrong one and nothing downstream could tell.
-      const dot = dotSegment(loc.key);
-      if (dot !== undefined) {
-        throw new Error(
-          `${url}: uno cannot address a key with a ${dot} segment in it · S3 can hold one, ` +
-            `but every URL on the way to it resolves the segment away, so the object that ` +
-            `came back would be a different one · copy it to a key without ${dot} in a segment`,
-        );
-      }
+      const cannot = unaddressable(loc);
+      if (cannot !== undefined) throw cannot;
 
-      const head = await request(loc, "HEAD", {});
+      const head = await send.object(loc, "HEAD", {});
       if (!head.ok) throw new Error(`${url}: ${refusal(head.status)}`);
       const size = Number(head.headers.get("content-length") ?? "NaN");
       if (!Number.isFinite(size)) throw new Error(`${url}: S3 did not say how big it is`);
@@ -259,7 +307,7 @@ export function s3Files(opts: S3Options): FileHandler {
         async read(offset, length) {
           const end = Math.min(offset + length, size);
           if (end <= offset) return new Uint8Array();
-          const res = await request(loc, "GET", {
+          const res = await send.object(loc, "GET", {
             range: `bytes=${offset}-${end - 1}`,
             ...(etag === null ? {} : { "if-match": etag }),
           });
@@ -388,8 +436,13 @@ function isRegion(word: string): boolean {
   return /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(word);
 }
 
-/** What S3's status codes mean to the person who pasted the URL. */
-function refusal(status: number): string {
+/**
+ * What S3's status codes mean to the person who pasted the URL.
+ *
+ * Shared with the lister's `stat`, which sends the same HEAD of the same object
+ * and has to say the same thing about a 403 as opening it does.
+ */
+export function refusal(status: number): string {
   switch (status) {
     case 403:
       return "access denied · the AWS credentials uno found cannot read it";
@@ -398,6 +451,25 @@ function refusal(status: number): string {
     default:
       return `S3 answered ${status}`;
   }
+}
+
+/**
+ * unaddressable is the Error for a key no URL can ask for, and undefined for a
+ * key uno can reach.
+ *
+ * Opening and statting both make this refusal, because both are about to turn a
+ * key into a URL, and it is one function rather than two copies of a paragraph
+ * for the reason claim.ts is one refusal: the copies had drifted once already.
+ */
+export function unaddressable(loc: S3Location): Error | undefined {
+  const dot = dotSegment(loc.key);
+  if (dot === undefined) return undefined;
+  const url = s3Url(loc);
+  return new Error(
+    `${url}: uno cannot address a key with a ${dot} segment in it · S3 can hold one, ` +
+      `but every URL on the way to it resolves the segment away, so the object that ` +
+      `came back would be a different one · copy it to a key without ${dot} in a segment`,
+  );
 }
 
 /**
@@ -424,17 +496,46 @@ function dotSegment(key: string): string | undefined {
   return key.split("/").find((segment) => /^(?:\.|%2e){1,2}$/i.test(segment));
 }
 
-function objectUrl(loc: S3Location, region: string, endpoint: string | undefined): URL {
-  const key = encodePath(loc.key);
+/**
+ * bucketUrl is where a bucket is reached, which is the part an object and a
+ * listing of one have in common.
+ *
+ * A dotted bucket name does not match the wildcard certificate on the
+ * virtual-hosted name, so it goes path-style, and an endpoint is always
+ * path-style: MinIO and a stand-in on localhost have no per-bucket hostname.
+ */
+function bucketUrl(bucket: string, region: string, endpoint: string | undefined): string {
   if (endpoint !== undefined && endpoint !== "") {
-    return new URL(`${endpoint.replace(/\/+$/, "")}/${encodePath(loc.bucket)}/${key}`);
+    return `${endpoint.replace(/\/+$/, "")}/${encodePath(bucket)}`;
   }
-  // A dotted bucket name does not match the wildcard certificate on the
-  // virtual-hosted name, so it goes path-style.
-  if (loc.bucket.includes(".")) {
-    return new URL(`https://s3.${region}.amazonaws.com/${loc.bucket}/${key}`);
-  }
-  return new URL(`https://${loc.bucket}.s3.${region}.amazonaws.com/${key}`);
+  if (bucket.includes(".")) return `https://s3.${region}.amazonaws.com/${bucket}`;
+  return `https://${bucket}.s3.${region}.amazonaws.com`;
+}
+
+function objectUrl(loc: S3Location, region: string, endpoint: string | undefined): URL {
+  return new URL(`${bucketUrl(loc.bucket, region, endpoint)}/${encodePath(loc.key)}`);
+}
+
+/**
+ * listUrl is the bucket with a question on it: ListObjectsV2 is a GET of the
+ * bucket root, and what is being asked is entirely in the query.
+ *
+ * The query is written here with `encode` rather than through `searchParams`,
+ * because URLSearchParams serialises the way a form does -- a space becomes a
+ * `+` -- and SigV4 signs the way RFC 3986 does, where it is `%20`. A prefix with
+ * a space in it would be signed one way and sent another, which is a 403, and a
+ * prefix with a `+` in it would list somebody else's folder.
+ */
+function listUrl(
+  bucket: string,
+  query: Record<string, string>,
+  region: string,
+  endpoint: string | undefined,
+): URL {
+  const asked = Object.entries(query)
+    .map(([k, v]) => `${encode(k)}=${encode(v)}`)
+    .join("&");
+  return new URL(`${bucketUrl(bucket, region, endpoint)}/?${asked}`);
 }
 
 // ------------------------------------------------------------------ SigV4
