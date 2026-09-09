@@ -35,6 +35,8 @@ const second = join(pkg, "../grid/tests/testdata/google-ads-sales.csv");
 
 /** The object pasted into the sources panel: the same export, in the bucket instead of on the disk. */
 const KEY = "2025/ads-q3.csv";
+/** Beside it, the two the panel browses to, peeks at and adds. */
+const BESIDE = ["2025/ads-q4.csv", "2025/sales-q3.csv"];
 
 // The screenshot goes somewhere it survives the run, because the point of
 // taking one is to look at it.
@@ -58,7 +60,15 @@ if (displayMissing(process.env, process.platform)) {
 // The bucket is up before the app is, holding the export under a key that looks
 // like one somebody would have. It listens on a port the OS picks, so two runs
 // at once do not fight over one.
-const standin = await bucket(undefined, undefined, new Map([[KEY, await readFile(second)]]));
+const standin = await bucket(
+  undefined,
+  undefined,
+  new Map([
+    [KEY, await readFile(second)],
+    [BESIDE[0], await readFile(second)],
+    [BESIDE[1], await readFile(fixture)],
+  ]),
+);
 const object = `s3://${BUCKET}/${KEY}`;
 console.log(`smoke: stand-in S3 at ${standin.endpoint}, holding ${object}`);
 
