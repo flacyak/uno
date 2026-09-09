@@ -11,7 +11,7 @@
 // nobody has selected any more -- and all of it is tested here without a
 // window.
 
-import type { Peeked, SourceRef } from "@uno/grid/engine";
+import type { Link, Peeked, SourceRef } from "@uno/grid/engine";
 import type { Entry, Listing } from "@uno/grid/store";
 import { s3Location, s3Url } from "@uno/grid/store/s3";
 
@@ -32,8 +32,8 @@ export interface Listings {
 }
 
 /**
- * Open is a tab as the panel reads it: a name, and something to tell two of
- * them apart by.
+ * Open is a tab as the panel reads it: a name, something to tell two of them
+ * apart by, and the file behind it.
  *
  * A `Tab` is that and a source, a band and a log besides, none of which the
  * panel wants. Taking the smaller shape means a tab is one already, and a test
@@ -42,6 +42,38 @@ export interface Listings {
 export interface Open {
   readonly id: string;
   readonly name: string;
+  /** Where its file is and what is wrong with it, for a tab that points at one. */
+  readonly link?: Link;
+  /** How big its file was when it opened. */
+  readonly bytes?: number;
+}
+
+/**
+ * State is what a workspace line says about the file behind a tab: it reads,
+ * it is not the file the log was written against, or it is not there.
+ *
+ * Newer in the bucket is a fourth, once something asks the bucket (3.4).
+ */
+export type State = "fine" | "changed" | "missing";
+
+export function stateOf(tab: Open): State {
+  if (tab.link?.missing !== undefined) return "missing";
+  if (tab.link?.changed !== undefined) return "changed";
+  return "fine";
+}
+
+/**
+ * Doing is what can be done to the tab the keys are on, besides showing it:
+ * read its file again, point it at another, or take it out.
+ */
+export type Doing = "reload" | "repoint" | "remove";
+
+/** One of the things a workspace line offers, as its button says it. */
+export interface TabAction {
+  label: string;
+  does: Doing;
+  /** The tab it is done to. */
+  id: string;
 }
 
 /**
@@ -89,12 +121,14 @@ export interface Crumb {
  * one.
  */
 export interface Button {
-  /** What it says: "Add 3", "Add as one". */
+  /** What it says: "Add 3", "Add as one", "Point ledger.csv here". */
   label: string;
   /** Whether the files are one source between them, or a tab each. */
   one: boolean;
   /** The files it hands back, in the order they are listed. */
   refs: readonly SourceRef[];
+  /** The tab the one file is for, when the button re-points rather than adds. */
+  to?: string;
 }
 
 /**
@@ -132,6 +166,35 @@ function address(typed: string): SourceRef | undefined {
   const loc = s3Location(typed);
   if (loc === undefined || loc.key.endsWith("/")) return undefined;
   return { name: loc.key.slice(loc.key.lastIndexOf("/") + 1), path: s3Url(loc) };
+}
+
+/**
+ * trailTo is the crumb down to the folder a file is in, so re-pointing starts
+ * where the file was: most often the right one is beside it.
+ *
+ * An object's trail starts at its bucket, the way a connection's does, and
+ * each folder keeps its trailing slash, since that is how the lister names a
+ * prefix and a prefix without it is a different one. A file on disk has no
+ * connection to start from, so its trail is its folder alone. A path with no
+ * folder in it has no trail.
+ */
+export function trailTo(path: string): Crumb[] | undefined {
+  const loc = s3Location(path);
+  if (loc !== undefined) {
+    const trail: Crumb[] = [{ name: loc.bucket, path: `s3://${loc.bucket}` }];
+    const folders = loc.key.split("/").slice(0, -1);
+    let key = "";
+    for (const f of folders) {
+      key += `${f}/`;
+      trail.push({ name: f, path: s3Url({ bucket: loc.bucket, key }) });
+    }
+    return trail;
+  }
+  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  if (cut < 0) return undefined;
+  const folder = cut === 0 ? path.slice(0, 1) : path.slice(0, cut);
+  const name = folder.slice(Math.max(folder.lastIndexOf("/"), folder.lastIndexOf("\\")) + 1);
+  return [{ name: name === "" ? folder : name, path: folder }];
 }
 
 /** A line that exists, for a count of lines that may have changed under it. */
@@ -190,6 +253,11 @@ export class Sources {
    * filtered afresh instead of served short of the page that arrived.
    */
   private kept: { from: readonly Entry[]; query: string; entries: readonly Entry[] } | undefined;
+  /**
+   * The tab the browser is picking a file for, while it is: re-pointing is
+   * browsing with a different button at the end of it.
+   */
+  private pointing: Open | undefined;
 
   constructor(
     private readonly listings: Listings,
@@ -233,6 +301,63 @@ export class Sources {
     const entries = this.found.filter((e) => matches(e.name, q));
     this.kept = { from: this.found, query: q, entries };
     return entries;
+  }
+
+  /**
+   * What can be done to the tab the keys are on: reload a tab with a file to
+   * read again, re-point any of them, and remove one while it is not the last,
+   * since a workspace of none has nothing to show. Nothing when the keys are
+   * not on a tab.
+   */
+  get doings(): readonly TabAction[] {
+    const { section, line } = this.place;
+    const tab = section === "workspace" ? this.tabs[line] : undefined;
+    if (tab === undefined) return [];
+    const id = tab.id;
+    const out: TabAction[] = [];
+    if (tab.link !== undefined) out.push({ label: "Reload", does: "reload", id });
+    out.push({ label: "Re-point", does: "repoint", id });
+    if (this.opened().length > 1) out.push({ label: "Remove", does: "remove", id });
+    return out;
+  }
+
+  /**
+   * The tab the browser is picking a file for, or undefined while it is only
+   * browsing. A tab that has closed since is not being picked for any more.
+   */
+  get repointing(): Open | undefined {
+    const p = this.pointing;
+    return p !== undefined && this.opened().some((t) => t.id === p.id) ? p : undefined;
+  }
+
+  /**
+   * repoint starts picking a file for a tab, in the folder its file was in, and
+   * puts the keys there. A tab with no path to start from is picked for from
+   * wherever the browser already is.
+   *
+   * Picking for one tab is picking one file, so what was selected to add is let
+   * go, and the peek with it.
+   */
+  async repoint(tab: Open): Promise<void> {
+    this.pointing = tab;
+    const trail = tab.link === undefined ? undefined : trailTo(tab.link.path);
+    if (trail === undefined) {
+      this.forget();
+      this.focus("browser");
+      this.changed();
+      return;
+    }
+    this.trail = trail;
+    this.focus("browser");
+    await this.browse(trail[trail.length - 1]!.path);
+  }
+
+  /** stop is picking done, or given up on: the browser goes back to adding. */
+  stop(): void {
+    if (this.pointing === undefined) return;
+    this.pointing = undefined;
+    this.forget();
+    this.changed();
   }
 
   /** What the lines are filtered by, as it was typed less its case. */
@@ -344,6 +469,10 @@ export class Sources {
   get buttons(): readonly Button[] {
     const refs = this.selected.map((e) => ({ name: e.name, path: e.path }));
     if (refs.length === 0) return [];
+    const pointing = this.repointing;
+    if (pointing !== undefined) {
+      return [{ label: `Point ${pointing.name} here`, one: false, refs, to: pointing.id }];
+    }
     const each: Button = { label: `Add ${refs.length}`, one: false, refs };
     if (refs.length === 1) return [each];
     return [each, { label: "Add as one", one: true, refs }];
@@ -542,7 +671,11 @@ export class Sources {
    */
   async toggle(entry: Entry): Promise<void> {
     if (!this.selectable(entry)) return;
-    if (!this.picks.delete(entry.path)) this.picks.add(entry.path);
+    // A tab reads one file, so while picking for one, a pick replaces the last.
+    const had = this.picks.has(entry.path);
+    if (this.repointing !== undefined) this.picks.clear();
+    if (had) this.picks.delete(entry.path);
+    else this.picks.add(entry.path);
     await this.look();
   }
 
