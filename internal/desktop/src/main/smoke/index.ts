@@ -20,6 +20,7 @@ import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
 import { COMMAS_LEFT, DATE, DOM_ROWS, GUTTER, REGION, REP, ROWS, UNITS } from "./fixture.ts";
 import { OPEN } from "./open.ts";
+import { PANEL } from "./panel.ts";
 import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
 
@@ -36,7 +37,7 @@ const DRAW_MS = 50;
  *
  * They run in order, and each picks up the window where the one before left it.
  */
-const CHECKS: Check[] = [...OPEN, ...DEFAULT_INPUT, ...VIM_STYLE, ...SOURCES];
+const CHECKS: Check[] = [...OPEN, ...DEFAULT_INPUT, ...VIM_STYLE, ...SOURCES, ...PANEL];
 
 /**
  * What every check that is still a string can call. A check's body runs in a
