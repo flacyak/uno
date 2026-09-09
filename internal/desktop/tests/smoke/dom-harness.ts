@@ -105,7 +105,7 @@ export async function bootShell(): Promise<void> {
   const { port1, port2 } = new MessageChannel();
   serve(
     messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
-    sources([diskProvider()]).files,
+    sources([diskProvider()]),
   );
 
   const host: Host = {

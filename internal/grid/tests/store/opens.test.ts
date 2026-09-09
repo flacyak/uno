@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
 import { blobFiles, openWith, readAll } from "../../src/store/index.ts";
-import { localFiles } from "../../src/store/node.ts";
+import { diskProvider, localFiles } from "../../src/store/node.ts";
 import { FIXTURE, bytes, connect } from "../engine/harness.ts";
 
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
@@ -61,7 +61,7 @@ test("nothing outside a handler or a lister reads a file or a network", () => {
 // Accepting dropped bytes is a platform's decision. The desktop does not list
 // the blob handler, and a Blob that reaches its engine is refused by name.
 test("an engine without the blob handler refuses a Blob by name", async () => {
-  const { engine, done } = connect(undefined, [localFiles()]);
+  const { engine, done } = connect(undefined, [diskProvider()]);
   try {
     await expect(engine.open({ name: "dropped.csv", blob: new Blob([bytes]) })).rejects.toThrow(
       "dropped.csv: nothing here opens it · this build reads local files",
