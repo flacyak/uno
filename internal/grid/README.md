@@ -19,9 +19,8 @@ one codebase.
 | `library`  | the `.unof` codec, string in and out                     |
 | `store`    | the `FileStore` seam, and its one Node implementation    |
 
-Everything above `store` is pure: no `node:fs`, no filesystem, no network. That
-is what lets the same code serve the desktop and the browser, and it is the
-property to protect when adding to this package.
+Everything above `store` is pure. This let's it share the same code across
+platforms. This property should continue
 
 ## Development
 
