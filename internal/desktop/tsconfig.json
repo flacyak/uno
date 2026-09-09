@@ -11,6 +11,9 @@
     "noUnusedLocals": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    // scripts/ is JavaScript and is already checked; this is what lets a test
+    // import from it and be told the types its JSDoc declares.
+    "allowJs": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
