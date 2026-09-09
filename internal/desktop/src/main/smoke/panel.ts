@@ -50,6 +50,18 @@ export const PANEL: Check[] = [
     `,
   },
   {
+    // Only a window lays anything out, so this is the one place it is measured.
+    name: "the grid gives the panel its width rather than sitting under it",
+    script: `
+      const grid = document.querySelector(".grid-scroll").getBoundingClientRect();
+      const panel = document.querySelector("#panel").getBoundingClientRect();
+      if (panel.width < 100) return "the panel is " + panel.width + "px wide";
+      return grid.right <= panel.left + 1
+        ? ""
+        : "the grid ends at " + grid.right + "px, past the panel's " + panel.left + "px";
+    `,
+  },
+  {
     name: "p on the object's tab lists the folder in the bucket it came from",
     script: `
       ${LINES}
