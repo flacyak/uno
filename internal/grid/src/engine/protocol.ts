@@ -169,6 +169,25 @@ export interface Offer {
   complete: boolean;
 }
 
+/**
+ * Peeked is what a file holds, before anything is added: enough of it to
+ * decide by, and no more.
+ *
+ * It is the answer to a selection in the panel, so a 30 GB export and a 30 KB
+ * one have to cost the same -- one HEAD and one ranged GET of the front of it
+ * -- because a person clicking down a list of objects is asking the same
+ * question of each and should not pay by the size of what they land on.
+ */
+export interface Peeked {
+  /** How the bytes were read, the sentence an opened source carries too:
+   * "UTF-8 · delimiter ','". */
+  label: string;
+  /** The header row, one string per column. */
+  header: string[];
+  /** The rows under it, as many as the peek takes or the bytes it read held. */
+  rows: string[][];
+}
+
 export type Request =
   /**
    * Add a file to the workspace: read its header, begin indexing it. A .uno
@@ -201,6 +220,16 @@ export type Request =
   /** Size and version of a path now, without reading it: the same way, and for
    * the same reason. */
   | { t: "stat"; id: number; path: string }
+  /**
+   * What a file holds, without adding it to the workspace: a person picking
+   * one out of a folder of four hundred wants to see it before they commit a
+   * tab to it.
+   *
+   * It names a ref and not a path, because a file about to be added may have
+   * no path: bytes dropped into a page are looked at the same way an object in
+   * a bucket is.
+   */
+  | { t: "peek"; id: number; ref: SourceRef }
   /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
   | { t: "mode"; transform: boolean }
   /** The workspace as a .uno, refusing carried sources larger than limit together. */
@@ -226,6 +255,7 @@ export type Reply =
   | { t: "found"; id: number; found: Found }
   | { t: "listed"; id: number; listing: Listing }
   | { t: "statted"; id: number; entry: Entry }
+  | { t: "peeked"; id: number; peeked: Peeked }
   /** Null when the source has nothing to ask. */
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }

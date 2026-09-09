@@ -1,11 +1,11 @@
-// Browsing across the protocol: `list` and `stat`.
+// Browsing across the protocol: `list`, `stat` and `peek`.
 //
-// These are the requests that do not name a source, because they are asked
-// before there is one: what is in this folder, how big is that object. They go
-// to the listers the engine was wired with and never into the workspace's
-// queue, which is the whole point of them -- a panel scrolling a prefix while
-// a 30 GB save runs has to keep answering, and a save holds that queue for as
-// long as it takes.
+// These three are the requests that do not name a source, because they are
+// asked before there is one: what is in this folder, how big is that object,
+// what does this file look like. They go to the listers and the handlers the
+// engine was wired with and never into the workspace's queue, which is the
+// whole point of them -- a panel scrolling a prefix while a 30 GB save runs
+// has to keep answering, and a save holds that queue for as long as it takes.
 //
 // The first half sends raw messages over the channel, because what is under
 // test there is the protocol itself: which message comes back, with which id,
@@ -352,6 +352,39 @@ test("an engine with no workspace behind it still browses", async () => {
     const entry = (await engine.list(dir)).entries.find((e) => e.name === "sales-q3.csv")!;
     const source = await openOne(engine, { name: entry.name, path: entry.path });
     expect(source.opened.size).toBe(bytes.length);
+  } finally {
+    done();
+  }
+});
+
+// ------------------------------------------------------------ peek
+//
+// The peek request and its reply are the protocol's, and the reading behind
+// them is not built yet: opening a file, taking 64 KB of it and detecting what
+// it is has a task of its own. What is under test here is the route -- that a
+// peek crosses, is answered outside the queue like the other two, and comes
+// back against the id that asked -- so that the only thing left to do is fill
+// in the answer.
+
+test("a peek is refused by an engine that cannot peek yet, against its own id", async () => {
+  const w = wire([diskProvider()]);
+  try {
+    w.send({ t: "peek", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
+    const r = await w.reply(1);
+
+    expect(r).toMatchObject({ t: "error", id: 1 });
+    if (r.t !== "error") return;
+    expect(r.message).toContain("sales-q3.csv");
+    expect(r.message).toContain("peek");
+  } finally {
+    w.close();
+  }
+});
+
+test("the client's peek rejects with what the engine said", async () => {
+  const { engine, done } = connect(undefined, [diskProvider()]);
+  try {
+    await expect(engine.peek({ name: "sales-q3.csv", path: FIXTURE })).rejects.toThrow("peek");
   } finally {
     done();
   }
