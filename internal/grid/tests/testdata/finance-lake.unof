@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "id": "finance-lake",
+  "name": "Finance lake",
+  "kind": "connection",
+  "provider": "s3",
+  "bucket": "acme-finance-lake",
+  "prefix": "",
+  "region": "us-east-2",
+  "auth": {
+    "mode": "role",
+    "roleArn": "arn:aws:iam::210987654321:role/uno-read"
+  }
+}

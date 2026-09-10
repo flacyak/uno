@@ -14,6 +14,18 @@
 
 import { compareStrings, nowTruncated, parseTime, rfc3339, runes } from "../go/index.ts";
 
+// A connection is a .unof too, with a codec of its own beside this one. It is
+// re-exported here so that `@uno/grid/library` is every kind of .unof.
+export {
+  CONNECTION_KIND,
+  formatConnection,
+  parseConnection,
+  secretIn,
+  stampConnection,
+  validConnection,
+} from "./connection.ts";
+export type { Auth, AuthMode, Connection, ConnectionProvider } from "./connection.ts";
+
 /**
  * FORMAT_VERSION is the highest layout this build reads, and the one it writes.
  * A .unof is meant to travel -- it is the whole reason a formula is a file -- so
@@ -97,36 +109,37 @@ const MAX_ID_LEN = 200;
  * both separators are refused on every platform because a file written on
  * Windows is expected to open here.
  */
-export function validID(id: string): void {
-  if (id === "") throw new Error("a formula with no id has no file to be saved in");
+export function validID(id: string, what = "formula"): void {
+  if (id === "") throw new Error(`a ${what} with no id has no file to be saved in`);
 
   const bytes = new TextEncoder().encode(id).length;
   if (bytes > MAX_ID_LEN) {
     throw new Error(
-      `formula id ${JSON.stringify(id)} is ${bytes} bytes, longer than a filename may be`,
+      `${what} id ${JSON.stringify(id)} is ${bytes} bytes, longer than a filename may be`,
     );
   }
   // A leading dot covers "." and ".." without naming them, hides the file from
   // the person who owns it, and keeps an id away from the temp files an atomic
   // write is in the middle of renaming.
   if (id.startsWith(".")) {
-    throw new Error(`formula id ${JSON.stringify(id)} may not start with a dot`);
+    throw new Error(`${what} id ${JSON.stringify(id)} may not start with a dot`);
   }
   for (const r of runes(id)) {
     if (r === "/" || r === "\\" || r === ":") {
-      throw new Error(`formula id ${JSON.stringify(id)} may not name a path`);
+      throw new Error(`${what} id ${JSON.stringify(id)} may not name a path`);
     }
     const cp = r.codePointAt(0)!;
     if (cp < 0x20 || cp === 0x7f) {
-      throw new Error(`formula id ${JSON.stringify(id)} contains a control character`);
+      throw new Error(`${what} id ${JSON.stringify(id)} contains a control character`);
     }
   }
 }
 
 /** fileName is the only place an id becomes a path, and `validID` is the only
- * thing standing between the two. */
-export function fileName(id: string): string {
-  validID(id);
+ * thing standing between the two. A connection's id is checked the same way,
+ * and named as one in the refusal. */
+export function fileName(id: string, what = "formula"): string {
+  validID(id, what);
   return id + EXT;
 }
 
@@ -164,9 +177,11 @@ export function parseFormula(name: string, text: string): Formula {
   const kind = o["kind"];
   if (kind !== "column" && kind !== "notation") {
     throw new Error(
-      kind === undefined
-        ? `${name} is not a formula: it has no kind`
-        : `${name} is not a formula: this build does not know kind ${JSON.stringify(kind)}`,
+      kind === "connection"
+        ? `${name} is a connection ("kind": "connection"), not a formula · it belongs in connections/`
+        : kind === undefined
+          ? `${name} is not a formula: it has no kind`
+          : `${name} is not a formula: this build does not know kind ${JSON.stringify(kind)}`,
     );
   }
 
