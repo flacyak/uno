@@ -1,182 +1,98 @@
 # A git tag is the single source of truth for uno's version.
 #
-# One ubuntu-latest runner does the whole release. uno is a Fyne GUI app, so
-# every desktop binary needs CGO and the target's GUI toolchain -- not just a C
-# compiler -- and fyne-cross supplies all three from its container images while
-# driving `fyne package`, so the output is a real .app bundle and a real .exe.
-# Docker is preinstalled on the runner, which is all fyne-cross needs. One
-# runner also means one process creating the release, so there is no ordering to
-# arrange between jobs.
+# Electron does not cross-build its installers: a .dmg wants macOS and an NSIS
+# installer wants Windows. So each platform packages on its own runner and
+# uploads what it built, and one job at the end creates the release from all of
+# them. The release is only created after every platform has passed, so a failed
+# build never leaves a half-populated release behind.
 name: release
 
 on:
   push:
     tags: ["v*"]
 
+# Read-only by default. Only the job that creates the release can write.
 permissions:
-  contents: write
-
-env:
-  APP_ID: io.uno.app
-  FYNE_CROSS_VERSION: v1.6.3
-  RCODESIGN_VERSION: "0.29.0"
-  # The SDK version fyne-cross supports. arm64 arrived with macOS 11.0, so this
-  # covers Apple Silicon.
-  MACOSX_SDK: MacOSX11.3.sdk
+  contents: read
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  package:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux
+          - runner: macos-latest
+            platform: mac
+          - runner: windows-latest
+            platform: win
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        # bash on Windows too, so the steps below are written once.
+        shell: bash
+        working-directory: internal
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - uses: voidzero-dev/setup-vp@v1.19.0
         with:
-          # The changelog is generated from history, so a shallow clone is not
-          # enough.
-          fetch-depth: 0
+          working-directory: internal
+          # The vite-plus catalog entry, so CI runs the vp the lockfile does.
+          version-file: pnpm-workspace.yaml
+          cache: true
+          run-install: false
 
-      - uses: actions/setup-go@v5
+      - run: vp install --frozen-lockfile
+
+      # Through `vp exec`, so this is the workspace's own vp. The global one
+      # looks for TypeScript Go next to its own install rather than the
+      # project's, finds none, and fails the declaration build.
+      - name: Build @uno/grid
+        run: vp exec --filter @uno/grid -- vp pack
+
+      - name: Build @uno/desktop
+        run: vp run --filter @uno/desktop build
+
+      # --publish never: electron-builder publishes on its own when it sees a
+      # tag in CI, and the release belongs to the job below.
+      - name: Package
+        working-directory: internal/desktop
+        run: |
+          vp exec -- electron-builder --${{ matrix.platform }} --publish never \
+            -c.extraMetadata.version="${GITHUB_REF_NAME#v}"
+
+      # The installers only. out/release also holds the unpacked app and
+      # electron-builder's update metadata, and uno has no updater to read it.
+      - uses: actions/upload-artifact@v7
         with:
-          # Tracks the module rather than a pinned string that can drift behind
-          # it.
-          go-version-file: go.mod
+          name: uno-${{ matrix.platform }}
+          path: |
+            internal/desktop/out/release/*.AppImage
+            internal/desktop/out/release/*.tar.gz
+            internal/desktop/out/release/*.dmg
+            internal/desktop/out/release/*.exe
+          if-no-files-found: error
 
-      # Apple's SDK cannot be redistributed and its download needs an Apple ID,
-      # so CI cannot fetch it. It is extracted once locally with
-      # `fyne-cross darwin-sdk-extract` and primed into this cache; see
-      # docs/RELEASER.md. A cold cache skips the darwin leg rather than failing
-      # the release -- note that Actions evicts an entry after 7 days without a
-      # hit, so a release cut after a quiet spell ships no macOS artifacts until
-      # the cache is primed again.
-      - name: Restore the macOS SDK
-        id: sdk
-        uses: actions/cache/restore@v4
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
         with:
-          path: SDKs
-          key: macosx-sdk-11.3
+          path: release
+          merge-multiple: true
 
-      - name: Warn when the darwin leg is skipped
-        if: steps.sdk.outputs.cache-hit != 'true'
-        run: |
-          echo "::warning title=No macOS artifacts::The MacOSX SDK cache is cold, so the darwin leg was skipped. Re-prime it and re-cut the tag if this release needs macOS builds."
+      - name: Checksum the artifacts
+        working-directory: release
+        run: sha256sum -- * > SHA256SUMS
 
-      - name: Install fyne-cross
-        run: go install github.com/fyne-io/fyne-cross@${{ env.FYNE_CROSS_VERSION }}
-
-      - name: Install rcodesign
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          # The static musl build needs neither Docker nor a Mac.
-          asset="apple-codesign-${RCODESIGN_VERSION}-x86_64-unknown-linux-musl"
-          curl -fsSL -o rcodesign.tar.gz \
-            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCODESIGN_VERSION}/${asset}.tar.gz"
-          tar -xzf rcodesign.tar.gz
-          install -m755 "${asset}/rcodesign" /usr/local/bin/rcodesign
-          rm -rf rcodesign.tar.gz "$asset"
-          rcodesign --version
-
-      - name: Build for Linux and Windows
-        run: |
-          set -euo pipefail
-          ldflags="-X main.version=${GITHUB_REF_NAME}"
-          fyne-cross linux   -arch=amd64,arm64 -app-id "$APP_ID" -ldflags "$ldflags"
-          fyne-cross windows -arch=amd64       -app-id "$APP_ID" -ldflags "$ldflags"
-
-      - name: Build for macOS
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          fyne-cross darwin -arch=amd64,arm64 -app-id "$APP_ID" \
-            -ldflags "-X main.version=${GITHUB_REF_NAME}" \
-            -macosx-sdk-path "${GITHUB_WORKSPACE}/SDKs/${MACOSX_SDK}"
-
-      # Order is load-bearing from here to the archive: package, merge, sign.
-      # `fyne package -os darwin` renders its own Info.plist over whatever was
-      # there, so the .uno declaration goes in afterwards; rcodesign then digests
-      # that Info.plist and every resource, so editing the bundle after signing
-      # invalidates the signature -- and an invalid signature on arm64 is a
-      # bundle macOS will not launch.
-      - name: Declare the .uno document type
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: python3 packaging/darwin/merge-document-types.py fyne-cross/dist/darwin-*/uno.app
-
-      - name: Sign the macOS bundles
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          for app in fyne-cross/dist/darwin-*/uno.app; do
-            # With no certificate supplied this is an ad-hoc signature, which is
-            # what gets the app to run; the identity comes from the bundle's own
-            # CFBundleIdentifier. Gatekeeper still wants notarization.
-            rcodesign sign "$app"
-            rcodesign print-signature-info "$app" | head -20
-          done
-
-      - name: Assemble the release artifacts
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p release-artifacts
-          for dir in fyne-cross/dist/*/; do
-            platform="$(basename "$dir")"   # linux-amd64, darwin-arm64, ...
-            os="${platform%-*}"
-            arch="${platform##*-}"
-            for entry in "$dir"*; do
-              [ -e "$entry" ] || continue
-              name="$(basename "$entry")"
-              if [ -d "$entry" ]; then
-                # A signed .app bundle. -y stores symlinks as symlinks, which is
-                # what lets the signature survive the round trip.
-                (cd "$dir" && zip -qry "uno_${version}_${os}_${arch}.zip" "$name")
-                mv "${dir}uno_${version}_${os}_${arch}.zip" release-artifacts/
-              else
-                # Keep whatever extension fyne-cross chose (.tar.xz, .zip).
-                cp "$entry" "release-artifacts/uno_${version}_${os}_${arch}${name#uno}"
-              fi
-            done
-          done
-          # GoReleaser's checksum pipe only covers artifacts it built itself, and
-          # builds are disabled, so the checksums are computed here and upload as
-          # one more extra_file.
-          (cd release-artifacts && sha256sum -- * > "${RUNNER_TEMP}/checksums.txt")
-          mv "${RUNNER_TEMP}/checksums.txt" release-artifacts/
-          ls -l release-artifacts
-
-      # .goreleaser.yaml is generated rather than committed: fyne-cross builds
-      # the binaries and this workflow assembles them, so what GoReleaser needs
-      # is derived from the step above it.
-      - name: Generate the GoReleaser config
-        run: |
-          cat > .goreleaser.yaml <<'CONFIG'
-          version: 2
-          project_name: uno
-
-          builds:
-            - skip: true
-
-          # The checksums were computed over release-artifacts/ above and upload
-          # with the rest of that directory.
-          checksum:
-            disable: true
-
-          # release-artifacts/ is flat, so the glob still matches when the darwin
-          # leg is skipped.
-          release:
-            draft: false
-            prerelease: auto
-            extra_files:
-              - glob: release-artifacts/*
-
-          changelog:
-            sort: asc
-            use: github
-            filters:
-              exclude: ['^docs:', '^test:', '^chore:', '^ci:']
-          CONFIG
-          goreleaser check
-
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: softprops/action-gh-release@v2
         with:
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: release/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          # v1.2.0-rc.1 is a prerelease; v1.2.0 is not.
+          prerelease: ${{ contains(github.ref_name, '-') }}

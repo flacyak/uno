@@ -1,0 +1,42 @@
+# Packaging for .github/workflows/release.yml.
+#
+# The version is not here. package.json stays at 0.0.0 and the workflow passes
+# the tag in with -c.extraMetadata.version, so the tag is the only place a
+# version is written down.
+appId: io.uno.app
+productName: uno
+executableName: uno
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+directories:
+  # Beside out/smoke and out/preview, so every generated thing is under one
+  # ignored directory.
+  output: out/release
+
+# Only the build. Main, preload and renderer are all bundles, and @uno/grid is a
+# devDependency because Vite inlines it into the renderer, so the app has no
+# node_modules to ship.
+files:
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
+  - "!**/*.map"
+
+linux:
+  target: [AppImage, tar.gz]
+  category: Office
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  # Ad-hoc. With no identity electron-builder skips signing entirely, and an
+  # unsigned arm64 app does not launch at all. Gatekeeper still wants a Developer
+  # ID and notarization; ad-hoc only gets the app to run.
+  identity: "-"
+  # The hardened runtime rejects Electron's own frameworks under an ad-hoc
+  # signature, because library validation compares Team IDs and there is none.
+  hardenedRuntime: false
+
+win:
+  target: nsis

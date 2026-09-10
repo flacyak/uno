@@ -7,10 +7,14 @@ catalog:
   vite-plus: 0.3.1
 
 # pnpm does not run a dependency's install script unless it is named here.
-# Electron's fetches the ~100 MB runtime, so without this the app has nothing
-# to start.
-onlyBuiltDependencies:
-  - electron
+#
+# Electron's fetches the ~100 MB runtime, so without it the app has nothing to
+# start. electron-winstaller comes with electron-builder, and its script picks a
+# 7z binary for Squirrel.Windows; the release builds NSIS instead, so it stays
+# off. pnpm refuses to install a package whose script is left undecided.
+allowBuilds:
+  electron: true
+  electron-winstaller: false
 
 overrides:
   vite@*: "catalog:"
