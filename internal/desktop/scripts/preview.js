@@ -4,11 +4,15 @@
 // half that lives outside it: set the scene, start the real built app on it,
 // then turn the frames it left behind into a GIF.
 //
-// There are two stories. `browse`, the README's, finds a workspace's moved
-// export again through the sources panel, then tries the themes in settings. `edit` fixes three cells of the
-// fixture and applies the offer to fix the rest.
+// There are three stories. `browse`, the README's, finds a workspace's moved
+// export again through the sources panel, then tries the themes in settings.
+// `edit` fixes three cells of the fixture and applies the offer to fix the
+// rest. `refresh` reopens a workspace whose export in a bucket was regenerated
+// since, sees it regenerated again on coming back to the window, and reloads
+// it; it is filmed against the stand-in bucket, and goes to out/refresh.gif
+// rather than the README's.
 //
-// Usage: node scripts/preview.js [browse|edit]   (after node scripts/build.js)
+// Usage: node scripts/preview.js [browse|edit|refresh]   (after node scripts/build.js)
 
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -25,8 +29,8 @@ const testdata = join(pkg, "../grid/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 
 const story = process.argv[2] ?? "browse";
-if (story !== "browse" && story !== "edit") {
-  console.error(`preview: no story called ${story} · browse or edit`);
+if (story !== "browse" && story !== "edit" && story !== "refresh") {
+  console.error(`preview: no story called ${story} · browse, edit or refresh`);
   process.exit(2);
 }
 
@@ -34,7 +38,7 @@ if (story !== "browse" && story !== "edit") {
 // the shots of this app go.
 const frames = join(pkg, "out/preview");
 const takes = join(root, "docs");
-const gif = join(takes, "preview.gif");
+const gif = story === "refresh" ? join(pkg, "out/refresh.gif") : join(takes, "preview.gif");
 
 /** What the GIF is resampled to. Twelve is enough for a caret and a scroll to
  * look continuous, and low enough that sixteen seconds of a mostly still window
@@ -103,7 +107,93 @@ async function stage() {
   return uno;
 }
 
-const opened = story === "browse" ? await stage() : fixture;
+/** The object the refresh story's workspace points at, in the stand-in bucket. */
+const REFRESH_KEY = "2025/ads-q3.csv";
+
+/**
+ * rewrite writes the stand-in's object over with the same bytes but one digit,
+ * the same size and another ETag, the way an export regenerated with one figure
+ * corrected is. The digit is the first in the rows, which is on screen.
+ */
+function rewrite(objects, key) {
+  const now = objects.get(key).slice();
+  const body = now.indexOf(0x0a);
+  const at = now.findIndex((c, i) => i > body && c >= 0x30 && c <= 0x39);
+  now[at] = now[at] === 0x39 ? 0x30 : now[at] + 1;
+  objects.set(key, now);
+}
+
+/**
+ * stageRefresh lays out the refresh story: the stand-in bucket holding an
+ * export, a workspace a colleague saved over it with three campaign names
+ * corrected, and the export regenerated since at the same size. It answers
+ * with the .uno to open, the bucket, and the connection this machine has to it.
+ */
+async function stageRefresh() {
+  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
+  const { sources } = await import("@uno/grid/plugin");
+  const { Op } = await import("@uno/grid/sheet");
+  const { diskProvider } = await import("@uno/grid/store/node");
+  const { s3Provider } = await import("@uno/grid/store/s3");
+  const { BUCKET, KEYS, bucket } = await import("../../grid/tests/store/standin.ts");
+  const { HOME_REGION } = await import("../../grid/tests/store/regions.ts");
+
+  const standin = await bucket(
+    undefined,
+    undefined,
+    new Map([[REFRESH_KEY, await readFile(join(testdata, "google-ads-sales.csv"))]]),
+  );
+  const dir = join(tmpdir(), "uno-preview", "refresh");
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  const uno = join(dir, "q3-close.uno");
+
+  const { port1, port2 } = new MessageChannel();
+  serve(
+    messagePort(port1),
+    sources([
+      diskProvider(),
+      s3Provider({
+        credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
+        endpoint: standin.endpoint,
+      }),
+    ]),
+  );
+  const engine = new Engine(messagePort(port2));
+  try {
+    const {
+      sources: [src],
+    } = await engine.open({ name: "ads-q3.csv", path: `s3://${BUCKET}/${REFRESH_KEY}` });
+    engine.mode(true);
+    // Three of the campaign names the export misspells, corrected.
+    for (const row of [2, 3, 4]) {
+      await src.edit({ op: Op.Set, row, col: 1, now: "Data Analytics Course" });
+    }
+    const cells = [{ source: src.id, row: 0, col: 0 }];
+    await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
+  } finally {
+    engine.close();
+    port1.close();
+  }
+  rewrite(standin.objects, REFRESH_KEY);
+
+  const connection = {
+    format: 1,
+    id: BUCKET,
+    name: `${BUCKET} / 2025`,
+    provider: "s3",
+    bucket: BUCKET,
+    prefix: "2025/",
+    region: HOME_REGION,
+    auth: { mode: "machine" },
+    created: undefined,
+    modified: undefined,
+  };
+  return { uno, standin, connection };
+}
+
+const refresh = story === "refresh" ? await stageRefresh() : undefined;
+const opened = story === "browse" ? await stage() : (refresh?.uno ?? fixture);
 
 const electron = (await import("electron")).default;
 
@@ -119,16 +209,53 @@ if (displayMissing(process.env, process.platform)) {
 const data = join(pkg, "out/preview-data");
 await rm(data, { recursive: true, force: true });
 
+// The refresh story's machine: the connection to the bucket, AWS files of its
+// own so no profile of whoever films it can reach a published GIF, and the
+// stand-in's address and keys.
+let aws = {};
+if (refresh !== undefined) {
+  const { saveConnection } = await import("@uno/grid/store");
+  const { nodeStore } = await import("@uno/grid/store/node");
+  const { standinEnv } = await import("../../grid/tests/store/standin.ts");
+  await mkdir(join(data, "connections"), { recursive: true });
+  await saveConnection(nodeStore(), join(data, "connections"), refresh.connection);
+  const files = join(data, "aws");
+  await mkdir(files, { recursive: true });
+  await writeFile(join(files, "config"), "");
+  await writeFile(join(files, "credentials"), "");
+  aws = {
+    ...standinEnv(refresh.standin),
+    AWS_CONFIG_FILE: join(files, "config"),
+    AWS_SHARED_CREDENTIALS_FILE: join(files, "credentials"),
+  };
+}
+
 const child = spawn(electron, [pkg, `--user-data-dir=${data}`, opened], {
-  stdio: ["ignore", "pipe", "pipe"],
-  env: electronEnv(process.env, { UNO_PREVIEW: frames, UNO_PREVIEW_STORY: story }),
+  // stdin carries this script's answers to what the story asks of it.
+  stdio: ["pipe", "pipe", "pipe"],
+  env: electronEnv(process.env, { UNO_PREVIEW: frames, UNO_PREVIEW_STORY: story, ...aws }),
 });
 
 console.log(`preview: electron pid ${child.pid}`);
 
 let out = "";
+let pending = "";
 child.stdout.on("data", (b) => {
   out += String(b);
+  pending += String(b);
+  const lines = pending.split("\n");
+  pending = lines.pop() ?? "";
+  for (const line of lines) {
+    const what = line.startsWith("preview: ask ") ? line.slice("preview: ask ".length) : undefined;
+    if (what === undefined) continue;
+    const [verb, key] = what.split(" ");
+    if (verb === "rewrite" && refresh?.standin.objects.has(key)) {
+      rewrite(refresh.standin.objects, key);
+      child.stdin.write(`preview: done ${what}\n`);
+    } else {
+      child.stdin.write(`preview: nothing here does ${what}\n`);
+    }
+  }
   process.stdout.write(b);
 });
 child.stderr.on("data", (b) => process.stderr.write(b));
@@ -142,6 +269,7 @@ const deadline = setTimeout(() => {
 
 const code = await new Promise((r) => child.on("close", r));
 clearTimeout(deadline);
+await refresh?.standin.close();
 
 const failed = verdict("preview", code, out, "preview: rolled");
 if (failed !== undefined) {
