@@ -19,6 +19,7 @@ import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
+import type { Provider } from "../plugin/index.ts";
 import type { FileHandler } from "./index.ts";
 
 /** Credentials and the region to sign for when a bucket has not said otherwise. */
@@ -144,6 +145,19 @@ const REFUSAL_BYTES = 64 << 10;
  * s3Files opens objects in S3 for reading. It claims s3:// URLs and the https
  * URLs of objects on amazonaws.com.
  */
+
+/**
+ * s3Provider is a bucket plugged in as one thing.
+ *
+ * Its lister is task 1.3. The same module answers for every S3-compatible
+ * store -- R2, MinIO, Supabase -- because they differ by endpoint and region
+ * and not by protocol, so they are this provider with different options rather
+ * than providers of their own.
+ */
+export function s3Provider(opts: S3Options): Provider {
+  return { name: "s3", label: "S3", files: s3Files(opts) };
+}
+
 export function s3Files(opts: S3Options): FileHandler {
   const go = opts.fetch ?? fetch;
   /** Where each bucket turned out to be, once it has said, so only the first
