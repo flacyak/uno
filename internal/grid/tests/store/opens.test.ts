@@ -6,9 +6,10 @@
 // somebody reached for in a hurry -- and that is a line of code, not a
 // behaviour a test would ever call.
 //
-// A lister is allowed exactly the reads its handler is: they browse and open
-// the same place, so they live in the same module and the list below names a
-// module rather than an interface.
+// A lister is allowed exactly the reads its handler is, because they reach the
+// same place. The list below names modules and not interfaces, so where the two
+// are one file it holds one name and where they are split -- the disk's are --
+// it holds both.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -36,9 +37,9 @@ function sources(dir: string): string[] {
  * the lister beside it, and nowhere else.
  */
 const ALLOWED: Array<[RegExp, string[]]> = [
-  // The local handler's descriptor, the disk lister's readdir and stat, and
-  // the store's atomic write.
-  [/\bfrom "node:fs(\/promises)?"/, ["store/node.ts"]],
+  // The local handler's descriptor and the store's atomic write, and beside
+  // them the disk lister's readdir and stat.
+  [/\bfrom "node:fs(\/promises)?"/, ["store/node.ts", "store/disklister.ts"]],
   // The S3 handler's requests, and the S3 lister's ListObjectsV2.
   [/\bfetch\b/, ["store/s3.ts"]],
   // The blob handler.
