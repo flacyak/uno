@@ -34,38 +34,68 @@ function sources(dir: string): string[] {
 }
 
 /**
+ * A module named as a string, however it is reached for: `from`, a bare
+ * `import`, `import()` or `require()`, with the `node:` prefix or without.
+ * Matching the import statement alone would let the lazy `await import(...)`
+ * a browser-safe module reaches for through, and `child_process` without its
+ * prefix is still child_process.
+ */
+function named(modules: string): RegExp {
+  return new RegExp(`["'](node:)?(${modules})["']`);
+}
+
+/** One way out of the core, and the only modules it may be taken in. */
+interface Rule {
+  way: string;
+  pattern: RegExp;
+  where: readonly string[];
+}
+
+/**
  * Where each way of reading a file, reaching a network or running a program is
  * allowed: inside a handler, the lister beside it, or the exchange that turns
  * a sign-in into keys, and nowhere else.
  *
  * Each pattern is the way in rather than one function on the far side of it:
- * an import of node:child_process is what makes a spawn possible, whichever of
+ * naming node:child_process is what makes a spawn possible, whichever of
  * spawn, execFile or fork is called after.
  */
-const ALLOWED: Array<[RegExp, string[]]> = [
+const RULES: readonly Rule[] = [
   // The local handler's descriptor and the store's atomic write, and beside
   // them the disk lister's readdir and stat.
-  [/\bfrom "node:fs(\/promises)?"/, ["store/node.ts", "store/disklister.ts"]],
+  {
+    way: "the disk",
+    pattern: named("fs|fs/promises"),
+    where: ["store/node.ts", "store/disklister.ts"],
+  },
   // The S3 handler's requests, and through them the S3 lister's
   // ListObjectsV2. Beside them, the exchanges that turn a sign-in into keys:
   // the SSO portal and STS.
-  [/\bfetch\b/, ["store/s3.ts", "store/sts.ts"]],
+  { way: "fetch", pattern: /\bfetch\b/, where: ["store/s3.ts", "store/sts.ts"] },
   // A profile's credential_process, which is the one program uno runs.
-  [/\bfrom "node:child_process"/, ["store/node.ts"]],
+  { way: "a program", pattern: named("child_process"), where: ["store/node.ts"] },
   // The blob handler.
-  [/\.slice\([^)]*\)\.arrayBuffer\(/, ["store/index.ts"]],
+  { way: "a Blob's bytes", pattern: /\.slice\([^)]*\)\.arrayBuffer\(/, where: ["store/index.ts"] },
   // Every other way to a network or a process, which nothing in the core
-  // takes: a socket, a server, a worker's own requests, the process bindings.
-  [/\bfrom "node:(net|http|https|http2|dgram|tls|worker_threads|cluster)"/, []],
-  [/\b(XMLHttpRequest|WebSocket|EventSource)\b|process\.binding\b|navigator\.sendBeacon/, []],
+  // takes: a socket, a server, a name lookup, a worker's own requests.
+  {
+    way: "a socket",
+    pattern: named("net|http|https|http2|dgram|tls|dns|worker_threads|cluster"),
+    where: [],
+  },
+  {
+    way: "a page's own requests",
+    pattern: /\b(XMLHttpRequest|WebSocket|EventSource)\b|process\.binding\b|navigator\.sendBeacon/,
+    where: [],
+  },
 ];
 
-/** Every way in the guard found outside where it is allowed, as `file: pattern`. */
+/** Every way out the guard found outside where it is allowed, as `file: way`. */
 function offences(files: ReadonlyMap<string, string>): string[] {
   const found: string[] = [];
   for (const [name, text] of files) {
-    for (const [pattern, where] of ALLOWED) {
-      if (pattern.test(text) && !where.includes(name)) found.push(`${name}: ${pattern}`);
+    for (const { way, pattern, where } of RULES) {
+      if (pattern.test(text) && !where.includes(name)) found.push(`${name}: ${way}`);
     }
   }
   return found;
@@ -81,33 +111,56 @@ function core(): Map<string, string> {
   );
 }
 
+/** The core with one line added to one file. */
+function plant(file: string, line: string): Map<string, string> {
+  const files = core();
+  const text = files.get(file);
+  if (text === undefined) throw new Error(`there is no ${file} to plant in`);
+  files.set(file, `${text}\n${line}\n`);
+  return files;
+}
+
 test("nothing outside a handler or a lister reads a file or a network, or runs a program", () => {
   expect(offences(core())).toEqual([]);
 });
 
-// The guard is only worth what it catches, so each allowance is planted
-// somewhere it is not allowed and has to be found there.
+// The task's own sentence, in each way a spawn is written.
 test("a planted spawn outside store/node.ts fails it", () => {
-  const planted = new Map(core());
-  planted.set(
-    "engine/serve.ts",
-    `${planted.get("engine/serve.ts")}\nimport { spawn } from "node:child_process";\n`,
-  );
-  expect(offences(planted)).toEqual(['engine/serve.ts: /\\bfrom "node:child_process"/']);
+  for (const line of [
+    'import { spawn } from "node:child_process";',
+    'import { spawn } from "child_process";',
+    'const { spawn } = await import("node:child_process");',
+    "const { fork } = require('child_process');",
+  ]) {
+    expect(offences(plant("engine/serve.ts", line)), line).toEqual(["engine/serve.ts: a program"]);
+  }
 });
 
-test("a planted fetch, readFile or socket outside the allowed places fails it", () => {
-  const plants: Array<[string, string]> = [
-    ["store/list.ts", "await fetch(url);"],
-    ["library/connection.ts", 'import { readFile } from "node:fs/promises";'],
-    ["engine/peek.ts", 'import { connect } from "node:net";'],
-    ["store/s3lister.ts", "new WebSocket(url);"],
+// The guard is only worth what it catches, so every rule is planted somewhere
+// it is not allowed, in each form it could be written, and has to be found
+// there and nowhere else.
+test("every rule is found where it is planted outside its places", () => {
+  const plants: Array<[way: string, file: string, line: string]> = [
+    ["the disk", "library/connection.ts", 'import { readFile } from "node:fs/promises";'],
+    ["the disk", "engine/view.ts", 'const { open } = await import("fs/promises");'],
+    ["the disk", "sheet/sheet.ts", "const { readFileSync } = require('node:fs');"],
+    ["fetch", "store/list.ts", "await fetch(url);"],
+    ["a program", "store/disklister.ts", 'import { execFile } from "node:child_process";'],
+    ["a Blob's bytes", "engine/peek.ts", "await blob.slice(0, 64).arrayBuffer();"],
+    ["a socket", "engine/peek.ts", 'import { connect } from "node:net";'],
+    ["a socket", "store/s3lister.ts", 'import "node:dns";'],
+    // Allowed the disk and a program, and still not a server.
+    ["a socket", "store/node.ts", 'const { createServer } = await import("http");'],
+    ["a page's own requests", "store/s3lister.ts", "new WebSocket(url);"],
+    ["a page's own requests", "engine/client.ts", "new XMLHttpRequest();"],
+    ["a page's own requests", "engine/client.ts", "navigator.sendBeacon(url, body);"],
+    ["a page's own requests", "engine/client.ts", 'process.binding("tcp_wrap");'],
   ];
-  for (const [file, line] of plants) {
-    const planted = new Map(core());
-    planted.set(file, `${planted.get(file)}\n${line}\n`);
-    expect(offences(planted), `${line} in ${file}`).toHaveLength(1);
+  for (const [way, file, line] of plants) {
+    expect(offences(plant(file, line)), `${line} in ${file}`).toEqual([`${file}: ${way}`]);
   }
+  // And each rule has a plant, so a rule added later is proved too.
+  expect(new Set(plants.map(([way]) => way))).toEqual(new Set(RULES.map((r) => r.way)));
 });
 
 // Accepting dropped bytes is a platform's decision. The desktop does not list
