@@ -20,6 +20,7 @@ import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
 import { COMMAS_LEFT, DATE, DOM_ROWS, GUTTER, REGION, REP, ROWS, UNITS } from "./fixture.ts";
+import { MEETS } from "./meets.ts";
 import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
 import { SETTINGS } from "./settings.ts";
@@ -47,6 +48,7 @@ const CHECKS: Check[] = [
   ...PANEL,
   ...CONNECTIONS,
   ...SETTINGS,
+  ...MEETS,
 ];
 
 /**

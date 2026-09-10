@@ -88,6 +88,9 @@ export class Engine {
    * It answers with a new handle, because the columns, the progress and the log
    * all belong to the file that is now behind it. Whoever holds the old one
    * throws it away, along with the band of rows it was serving.
+   *
+   * A source that was waiting for its bucket to be connected can answer with
+   * no file behind it still, once connected: its link then says why.
    */
   async relink(source: SourceHandle, ref: SourceRef): Promise<SourceHandle> {
     const r = await this.ask((id) => ({ t: "relink", id, source: source.id, ref }));
