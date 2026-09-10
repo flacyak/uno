@@ -60,9 +60,12 @@ test("a provider with nothing to browse contributes no lister", () => {
 test("a provider opens and browses the same place", async () => {
   const store = sources([diskProvider()]);
 
-  expect(await store.open({ name: "sales-q3.csv", path: FIXTURE }).then((f) => f.size)).toBe(
-    bytes.length,
-  );
+  const file = await store.open({ name: "sales-q3.csv", path: FIXTURE });
+  try {
+    expect(file.size).toBe(bytes.length);
+  } finally {
+    await file.close();
+  }
   const listing = await store.list(dirname(FIXTURE));
   expect(listing.entries.map((e) => e.path)).toContain(FIXTURE);
 });
