@@ -10,7 +10,7 @@
 // It holds no widgets, which is the property that let the Go build test its
 // shell without a window.
 
-import { Band } from "@uno/grid/engine";
+import { Band, formatBytes } from "@uno/grid/engine";
 import type {
   Changed,
   Engine,
@@ -40,6 +40,30 @@ export const CARRY_LIMIT = 256 << 20;
 export type Mode = "view" | "transform";
 
 /** One source as the workspace shows it: a tab. */
+/**
+ * reloaded says what reading a tab's file again found, from the tab before
+ * and the one that replaced it: a new version and how its size moved, or no
+ * change at all, and the edits that replayed over it. An object says whether
+ * its version moved; a file on a disk, which has none, says its size.
+ */
+export function reloaded(was: Tab, now: Tab): string {
+  const before = was.link?.version;
+  const after = now.link?.version;
+  const size =
+    was.bytes === now.bytes
+      ? "the same size"
+      : `${formatBytes(now.bytes)}, was ${formatBytes(was.bytes)}`;
+  const found =
+    before !== undefined && after !== undefined
+      ? before === after
+        ? "no change in the bucket"
+        : `a new version, ${size}`
+      : size;
+  const n = now.edited;
+  const replayed = n === 0 ? "" : ` · ${n} ${n === 1 ? "edit" : "edits"} replayed`;
+  return `reloaded ${now.name} · ${found}${replayed}`;
+}
+
 /** What the status bar says of a tab the bucket holds a newer version of. */
 export const NEWER = "a newer version is in the bucket · Reload reads it";
 
