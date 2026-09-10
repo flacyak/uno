@@ -8,21 +8,20 @@
 
 import type { Kind } from "@uno/grid/sheet";
 
+import {
+  clampTop,
+  firstRow,
+  intoView,
+  measure,
+  pageSize,
+  poolSize,
+  scrollerToTop,
+  scrollTarget,
+  tableOffset,
+  topToScroller,
+  visibleRange,
+} from "./metrics.ts";
 import type { Cell, Rows } from "./rows.ts";
-
-/** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
- * the next frame catches up. */
-const OVERSCAN = 6;
-
-/**
- * The tallest the scroller's content is allowed to be.
- *
- * Browsers stop laying out past a limit -- about 33.5 million pixels in
- * Chromium, less in Firefox -- so a sheet taller than this scrolls by
- * proportion: the scrollbar maps onto the rows, and the wheel and the keys still
- * move by rows.
- */
-const MAX_SCROLL_PX = 15_000_000;
 
 export class View {
   /** What is drawn, or nothing. */
@@ -159,7 +158,7 @@ export class View {
     const total = source.rows();
     const headH = this.head.offsetHeight;
     const viewport = this.scroller.clientHeight;
-    const m = this.measure(total, headH, viewport);
+    const m = measure(total, this.rowHeight, headH, viewport);
 
     const height = `${m.real}px`;
     if (this.sizer.style.height !== height) this.sizer.style.height = height;
@@ -169,9 +168,9 @@ export class View {
     // did not cause -- the scrollbar dragged -- moves the view to match it.
     const scrollTop = Math.max(0, this.scroller.scrollTop);
     if (!this.scaled || Math.abs(scrollTop - this.seen) >= 0.5) {
-      this.top = m.rMax === 0 ? 0 : (scrollTop / m.rMax) * m.vMax;
+      this.top = scrollerToTop(scrollTop, m.rMax, m.vMax);
     }
-    this.top = Math.min(Math.max(0, this.top), m.vMax);
+    this.top = clampTop(this.top, m.vMax);
     this.seen = scrollTop;
     if (this.scaled) this.syncScroll(m.vMax, m.rMax);
 
@@ -181,7 +180,7 @@ export class View {
       this.table.style.setProperty("--gutter-digits", String(digits));
     }
 
-    const visible = Math.min(total, Math.ceil(viewport / this.rowHeight) + OVERSCAN);
+    const visible = poolSize(total, viewport, this.rowHeight);
 
     // Grow or shrink the pool. This runs on a resize and on the first draw, and
     // not while scrolling.
@@ -194,8 +193,7 @@ export class View {
     }
     while (this.pool.length > visible) this.pool.pop()?.remove();
 
-    const maxFirst = Math.max(0, total - this.pool.length);
-    const first = Math.min(maxFirst, Math.floor(this.top / this.rowHeight));
+    const first = firstRow(total, this.pool.length, this.top, this.rowHeight);
     this.first = first;
 
     // The table is moved as one element rather than each row being positioned,
@@ -206,9 +204,8 @@ export class View {
     // It moves by `top` and not by a transform. A sticky header is placed from
     // the table's layout box, which a transform does not move, so past the
     // table's own height the header stuck to where the table had been and
-    // scrolled out of sight. Whole pixels, because at millions of pixels down a
-    // fraction draws the text blurred.
-    this.offset = Math.round(this.seen - (this.top - first * this.rowHeight));
+    // scrolled out of sight.
+    this.offset = tableOffset(this.seen, this.top, first, this.rowHeight);
     const top = `${this.offset}px`;
     if (this.table.style.top !== top) this.table.style.top = top;
 
@@ -221,24 +218,9 @@ export class View {
     this.laidOut();
   }
 
-  private measure(
-    total: number,
-    headH: number,
-    viewport: number,
-  ): { real: number; scaled: boolean; vMax: number; rMax: number } {
-    const virtual = total * this.rowHeight + headH;
-    const real = Math.min(virtual, MAX_SCROLL_PX);
-    return {
-      real,
-      scaled: virtual > MAX_SCROLL_PX,
-      vMax: Math.max(0, virtual - viewport),
-      rMax: Math.max(0, real - viewport),
-    };
-  }
-
   /** syncScroll puts the scrollbar where the view is, for a sheet above the cap. */
   private syncScroll(vMax: number, rMax: number): void {
-    const want = vMax === 0 ? 0 : (this.top / vMax) * rMax;
+    const want = topToScroller(this.top, vMax, rMax);
     if (Math.abs(want - this.scroller.scrollTop) >= 1) this.scroller.scrollTop = want;
     this.seen = this.scroller.scrollTop;
   }
@@ -310,11 +292,8 @@ export class View {
 
   /** scrollIntoView scrolls as little as puts a row wholly on screen. */
   scrollIntoView(row: number): void {
-    const top = row * this.rowHeight;
-    const height = this.bodyHeight();
-
-    if (top < this.top) this.scrollTo(top);
-    else if (top + this.rowHeight > this.top + height) this.scrollTo(top + this.rowHeight - height);
+    const want = intoView(row, this.rowHeight, this.top, this.bodyHeight());
+    if (want !== undefined) this.scrollTo(want);
   }
 
   /**
@@ -322,11 +301,7 @@ export class View {
    * the selection where it is. Near either end of the sheet the scroll clamps.
    */
   scrollRow(row: number, where: "top" | "middle" | "bottom"): void {
-    const y = row * this.rowHeight;
-    const height = this.bodyHeight();
-    if (where === "top") this.scrollTo(y);
-    else if (where === "bottom") this.scrollTo(y + this.rowHeight - height);
-    else this.scrollTo(y + (this.rowHeight - height) / 2);
+    this.scrollTo(scrollTarget(row, this.rowHeight, this.bodyHeight(), where));
     this.layout();
   }
 
@@ -336,8 +311,8 @@ export class View {
    */
   private scrollTo(top: number): void {
     const headH = this.head.offsetHeight;
-    const m = this.measure(this.source?.rows() ?? 0, headH, this.scroller.clientHeight);
-    this.top = Math.min(Math.max(0, top), m.vMax);
+    const m = measure(this.source?.rows() ?? 0, this.rowHeight, headH, this.scroller.clientHeight);
+    this.top = clampTop(top, m.vMax);
     if (this.scaled) this.syncScroll(m.vMax, m.rMax);
     else this.scroller.scrollTop = this.top;
   }
@@ -349,15 +324,12 @@ export class View {
 
   /** The first and last rows wholly on screen, for H, M and L. */
   visibleRows(): { top: number; bottom: number } {
-    const last = Math.max(0, (this.source?.rows() ?? 0) - 1);
-    const top = Math.min(last, Math.ceil(this.top / this.rowHeight));
-    const bottom = Math.floor((this.top + this.bodyHeight()) / this.rowHeight) - 1;
-    return { top, bottom: Math.max(top, Math.min(last, bottom)) };
+    return visibleRange(this.top, this.rowHeight, this.bodyHeight(), this.source?.rows() ?? 0);
   }
 
   /** page is how many rows a page moves: a screen, less one to keep in sight. */
   page(): number {
-    return Math.max(1, Math.floor(this.scroller.clientHeight / this.rowHeight) - 1);
+    return pageSize(this.scroller.clientHeight, this.rowHeight);
   }
 
   /**
