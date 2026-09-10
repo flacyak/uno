@@ -435,6 +435,10 @@ export class Workspace {
 
     const edits = t.edited;
     if (edits > 0) parts.push(`${edits} ${edits === 1 ? "edit" : "edits"}`);
+    // A file that is not the one the log was made against still reads, and
+    // says so where the person is looking, not only on the mark's hover.
+    const changed = t.link?.changed;
+    if (changed !== undefined) parts.push(changed);
     return parts.join(" · ");
   }
 }
