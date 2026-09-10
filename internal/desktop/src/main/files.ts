@@ -10,8 +10,9 @@
 // previously saved file is still there -- belongs wherever the filesystem is.
 
 import type { SourceRef } from "@uno/grid/engine";
+import { fileName, parseConnection } from "@uno/grid/library";
 import { constants } from "node:fs";
-import { mkdtemp, open, rename, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, open, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 export function sourceAt(path: string): SourceRef {
@@ -44,4 +45,21 @@ export async function writeAtomic(path: string, bytes: Uint8Array): Promise<void
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
+}
+
+/**
+ * writeConnection saves one connection into the folder the engines read them
+ * from, as <id>.unof, atomically.
+ *
+ * The text arrives from the page, and the page is treated as a web page: it is
+ * read back as a connection here before a byte is written, so what lands in
+ * the folder is a connection whose id names this file and which holds no key,
+ * whatever the renderer was persuaded to send.
+ */
+export async function writeConnection(dir: string, id: string, text: string): Promise<void> {
+  const name = fileName(id, "connection");
+  const c = parseConnection(name, text);
+  if (c.id !== id) throw new Error(`${name} holds connection ${JSON.stringify(c.id)}, not ${id}`);
+  await mkdir(dir, { recursive: true });
+  await writeAtomic(join(dir, name), new TextEncoder().encode(text));
 }

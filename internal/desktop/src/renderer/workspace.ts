@@ -151,7 +151,9 @@ export class Workspace {
   private readonly relinked = new Set<string>();
 
   private constructor(
-    private readonly engine: Engine,
+    /** The engine this workspace owns. The panel browses and reads the
+     * connections through it while the workspace is open. */
+    readonly engine: Engine,
     /** Called when rows land or the index moves, so whoever draws can draw them. */
     private readonly changed: () => void,
     /** Called when a source's offer changes, with the tab it belongs to. */

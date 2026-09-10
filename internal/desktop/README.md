@@ -71,6 +71,22 @@ Every range is asked for as the version of the object that was opened, so an
 export rewritten in the bucket mid-read is an error that says so, never half
 of one file and half of another.
 
+## Connections
+
+A connection is a bucket, a folder in it, and how to sign in, kept as one
+`.unof` file in the `connections/` folder under the app's data directory
+(`~/.config/uno/connections` on Linux). It never holds a key, so a connection
+can be sent to a colleague the way a formula is. The panel's Connections section
+lists every connection the engine loaded, and choosing one browses its folder.
+
+Main writes a connection atomically, after reading the text back as a
+connection, so the page cannot put a key or a mismatched id in the folder. The
+engine reads the folder when it starts and again whenever the renderer says it
+changed, which is how a connection saved from the panel is used at once without a
+restart. A file that will not read costs that connection only, and is said once
+in the status bar. Before any file is open, the panel browses through a spare
+engine that holds no workspace, and closes it once a workspace brings its own.
+
 Every file uno reads goes through a `FileHandler` from `@uno/grid/store`:
 sources, `.uno` files, formulas in the library, and the `~/.aws` config. There
 are three handlers. `localFiles` (in `store/node`) reads paths on disk,
@@ -227,6 +243,10 @@ switches to another window. Keep working while it runs. Two of the checks send
 input down the window system's path, once dropped and once let through. The menu
 bar is outside the page and still takes clicks. `vp run preview` runs in the same
 mode, and `src/main/driven.ts` has the details.
+
+The run starts Electron with a `--user-data-dir` of its own under `out/smoke/`,
+emptied first, so the connection it saves never lands among yours and a file a
+previous run left behind is not taken as evidence.
 
 It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or

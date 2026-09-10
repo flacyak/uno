@@ -15,6 +15,7 @@
 // and shares every line of the renderer above it.
 
 import type { SourceRef } from "@uno/grid/engine";
+import type { Connection } from "@uno/grid/library";
 
 export interface Host {
   /** Ask for a file to open. Undefined when the person cancelled, which is not
@@ -45,17 +46,34 @@ export interface Host {
   /** Write over a file already chosen. Atomic: an interrupted save loses the
    * new bytes rather than the ones already there. */
   save(path: string, bytes: Uint8Array): Promise<void>;
+
+  /**
+   * Keep a connection where this platform's engines read them, and hand back
+   * the copy that was written, times stamped. Atomic, like `save`, and refused
+   * for a connection holding anything shaped like a key.
+   *
+   * Nothing is told the connection changed: the caller asks its engine to read
+   * them again, since it is the one that knows which engine that is.
+   */
+  saveConnection(c: Connection): Promise<Connection>;
 }
 
 /**
- * Bridge is what preload hands the page: Host, except for `connect`.
+ * Bridge is what preload hands the page: Host, except for `connect` and
+ * `saveConnection`.
  *
  * A MessagePort cannot cross contextBridge, so the page asks for one by id and
  * preload posts it to the window with that id. `electronHost` in the renderer
  * turns that back into `connect`.
  */
-export interface Bridge extends Omit<Host, "connect"> {
+export interface Bridge extends Omit<Host, "connect" | "saveConnection"> {
   connect(id: number): void;
+  /**
+   * A connection as the text of its .unof. A Connection carries a Map and
+   * Dates, which contextBridge does not promise to carry intact, and the text
+   * is what main reads back and writes anyway.
+   */
+  saveConnection(id: string, text: string): Promise<void>;
 }
 
 declare global {

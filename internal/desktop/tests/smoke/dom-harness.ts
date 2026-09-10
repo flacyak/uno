@@ -20,7 +20,8 @@
 // MessagePort. There is no mock engine here: `serve` is the same function
 // src/engine/index.ts hands its provider list to, and a disk provider reads
 // the same bytes off the same fixture path a real open would.
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MessageChannel } from "node:worker_threads";
@@ -28,7 +29,8 @@ import { MessageChannel } from "node:worker_threads";
 import { messagePort, serve } from "@uno/grid/engine";
 import type { MessagePortLike, Reply, Request } from "@uno/grid/engine";
 import { sources } from "@uno/grid/plugin";
-import { diskProvider } from "@uno/grid/store/node";
+import { connectionsIn, saveConnection } from "@uno/grid/store";
+import { diskProvider, nodeStore } from "@uno/grid/store/node";
 
 import type { Host } from "../../src/shared/host.ts";
 
@@ -102,10 +104,15 @@ export async function bootShell(): Promise<void> {
   document.body.innerHTML = bodyMarkup();
   fakeLayout();
 
+  // A connections folder of its own, the way main hands the desktop's engine
+  // one, so the shell's connection reads are answered rather than refused.
+  const kept = mkdtempSync(join(tmpdir(), "uno-dom-connections-"));
   const { port1, port2 } = new MessageChannel();
   serve(
     messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
     sources([diskProvider()]),
+    undefined,
+    connectionsIn(nodeStore(), kept),
   );
 
   const host: Host = {
@@ -117,6 +124,7 @@ export async function bootShell(): Promise<void> {
     connect: () => Promise.resolve(port1 as unknown as MessagePort),
     pickSave: () => Promise.resolve(undefined),
     save: () => Promise.resolve(),
+    saveConnection: (c) => saveConnection(nodeStore(), kept, c),
   };
 
   const { Shell } = await import("../../src/renderer/shell/shell.ts");
