@@ -66,6 +66,8 @@ export class Shell {
   private spare: Promise<Engine> | undefined;
   /** What the last connections read said it could not read, so it is said once. */
   private connectionTrouble = "";
+  /** The connections the engine last read, whole, for a new one's id to avoid. */
+  private known: readonly Connection[] = [];
 
   private readonly status: StatusBar;
   private readonly finder: Finder;
@@ -134,6 +136,12 @@ export class Shell {
           this.grid?.focus();
         },
       },
+      {
+        profiles: async () => (await this.browser()).profiles(),
+        tryConnection: async (c) => (await this.browser()).tryConnection(c),
+        save: (c) => this.saveConnection(c),
+        known: () => this.known,
+      },
     );
 
     wireDrop(
@@ -198,6 +206,7 @@ export class Shell {
   private async refreshConnections(): Promise<void> {
     try {
       const { connections, failed } = await (await this.browser()).connections();
+      this.known = connections;
       this.sources.connections = connections.map(connectionLine);
       this.panel.draw();
       const trouble = failed.join(" · ");

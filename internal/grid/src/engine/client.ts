@@ -23,7 +23,9 @@ import type {
   SourceRef,
 } from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
+import type { Connection } from "../library/index.ts";
 import type { Entry, Listing } from "../store/index.ts";
+import type { Tried } from "../store/s3.ts";
 
 interface Waiter<T> {
   resolve(value: T): void;
@@ -156,6 +158,17 @@ export class Engine {
     const r = await this.ask((id) => ({ t: "profiles", id }));
     if (r.t !== "names") throw new Error(`the engine answered a profiles request with ${r.t}`);
     return r.names;
+  }
+
+  /**
+   * tryConnection has the engine try a connection nobody has saved yet: its
+   * bucket's region, and a page of its prefix. It rejects in the words that
+   * stopped it, and keeps nothing either way.
+   */
+  async tryConnection(connection: Connection): Promise<Tried> {
+    const r = await this.ask((id) => ({ t: "try", id, connection }));
+    if (r.t !== "tried") throw new Error(`the engine answered a try with ${r.t}`);
+    return r.tried;
   }
 
   /** close ends the connection. The worker behind it goes when its port does. */

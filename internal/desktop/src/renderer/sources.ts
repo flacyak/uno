@@ -310,6 +310,18 @@ export class Sources {
     this.saved = list;
   }
 
+  /**
+   * Whether a connections line is the one after them all, which connects a
+   * bucket rather than browsing one. It is a line and not a button in the
+   * section's title, so that it is reached the way every other line is: with
+   * the keys, and Enter. A search hides it, since a person searching is
+   * looking for something that is there, and the section should say whether
+   * it is.
+   */
+  isConnect(line: number): boolean {
+    return this.query === "" && line === this.connections.length;
+  }
+
   /** The browser: the page of the place being browsed, folders first, as far
    * as the filter keeps it. */
   get entries(): readonly Entry[] {
@@ -524,7 +536,7 @@ export class Sources {
       case "workspace":
         return this.tabs.length;
       case "connections":
-        return this.connections.length;
+        return this.connections.length + (this.query === "" ? 1 : 0);
       case "browser":
         return this.entries.length;
     }

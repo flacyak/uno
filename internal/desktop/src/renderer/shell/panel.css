@@ -256,3 +256,135 @@
 .panel-row.missing > :first-child {
   color: var(--ink-3);
 }
+
+/* The line after the connections, which connects another. */
+.panel-row.action > :first-child {
+  color: var(--accent);
+}
+
+/* Connecting a bucket, in the list's place: labelled fields, what the test
+ * found, and the buttons, in the panel's own type and rules. */
+.panel-connect {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+}
+
+.panel-connect[hidden] {
+  display: none;
+}
+
+.panel-connect .title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.panel-connect .field {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-connect .field > span {
+  color: var(--ink-2);
+}
+
+.panel-connect input,
+.panel-connect select {
+  min-width: 0;
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  outline: none;
+}
+
+.panel-connect input::placeholder {
+  color: var(--ink-3);
+}
+
+.panel-connect input:focus,
+.panel-connect select:focus {
+  border-color: var(--accent);
+}
+
+.panel-connect .value {
+  padding: 4px 0;
+  color: var(--ink-3);
+}
+
+.panel-connect .value.found {
+  color: var(--ink);
+}
+
+/* What the test said: nothing until it runs, then a line that is either the
+ * folder's count or the reason nothing will be saved. */
+.panel-connect .result {
+  min-height: 1.5em;
+  padding: 6px 8px;
+  border-radius: 4px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.panel-connect .result.untried {
+  padding: 0;
+  min-height: 0;
+}
+
+.panel-connect .result.trying {
+  color: var(--ink-3);
+}
+
+.panel-connect .result.tried {
+  color: var(--accent);
+  background: var(--accent-b);
+}
+
+.panel-connect .result.refused {
+  color: var(--flag);
+  background: var(--flag-b);
+}
+
+.panel-connect .buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.panel-connect button {
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.panel-connect button.primary {
+  color: var(--surface);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.panel-connect button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.panel-connect .fine {
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.45;
+}

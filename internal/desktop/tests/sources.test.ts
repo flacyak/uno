@@ -260,24 +260,28 @@ test("moving down the last line of a section carries on into the next one", asyn
   panel.focus("workspace");
 
   const walked = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 6; i++) {
     walked.push(panel.place);
     panel.move(1);
   }
 
+  // The connections end on the line that connects another, which the keys
+  // land on like any other.
   expect(walked).toEqual([
     { section: "workspace", line: 0 },
     { section: "workspace", line: 1 },
     { section: "connections", line: 0 },
     { section: "connections", line: 1 },
+    { section: "connections", line: 2 },
     { section: "browser", line: 0 },
   ]);
+  expect(panel.isConnect(2)).toBe(true);
 
   // The last line of the last section is as far as it goes, and coming back up
   // walks the same lines the other way.
   panel.move(1);
   expect(panel.place).toEqual({ section: "browser", line: 0 });
-  panel.move(-4);
+  panel.move(-5);
   expect(panel.place).toEqual({ section: "workspace", line: 0 });
 });
 
