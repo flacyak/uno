@@ -80,7 +80,19 @@ export interface ByteSource {
  * The name is what the file is called, which is what `ingest` picks a decoder
  * by and what a tab says.
  */
-export type FileRef = { name: string; path: string } | { name: string; blob: Blob };
+export type FileRef =
+  | {
+      name: string;
+      path: string;
+      /**
+       * Which bytes of it to read, where the place can hand them over again: a
+       * version a save recorded. A handler that cannot, or a place that no
+       * longer has them, reads the file as it is now, and says which version
+       * that was.
+       */
+      version?: string;
+    }
+  | { name: string; blob: Blob };
 
 /**
  * FileHandler opens one kind of place a file can be: a disk, a bucket, bytes
