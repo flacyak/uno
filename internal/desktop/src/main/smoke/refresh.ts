@@ -1,5 +1,6 @@
 // Checks that a source in a bucket knows when it is out of date: a workspace
-// whose export was written over since it was saved opens saying so.
+// whose export was written over since it was saved opens saying so, and one
+// written over while it is open is marked when the window gets the focus back.
 //
 // They run after meets.ts, with acme-exports/2025/ connected, so the saved
 // workspace opens its object at once. The object is written over by smoke.js,
@@ -46,6 +47,29 @@ export const REFRESH: Check[] = [
       if (!(await arrives(() => document.querySelector("thead th .colhead") !== null))) return "no rows came";
       const status = () => text("#status-file");
       return (await arrives(() => status().endsWith(" · " + want))) ? "" : "the status bar says " + JSON.stringify(status());
+    `,
+  },
+  {
+    // The task's own sentence: coming back to the window is when the bucket
+    // is asked, one HEAD per object, and the moved one wears the mark.
+    name: "replacing the object in the stand-in shows the mark on the next focus",
+    ask: `rewrite ${KEY}`,
+    shot: "refresh-newer",
+    script: `
+      ${REMOTE}
+      ${LINE}
+      const words = () => line("ads-q3.csv")?.children[1]?.textContent;
+      if (words() !== "changed") return "before the focus the line says " + JSON.stringify(words());
+      window.dispatchEvent(new Event("focus"));
+      if (!(await arrives(() => words() === "newer in bucket"))) return "after the focus the line says " + JSON.stringify(words());
+      const want = "a newer version is in the bucket · Reload reads it";
+      const mark = tab("ads-q3.csv").querySelector(".trouble");
+      if (mark === null || !mark.title.startsWith(want)) return "the mark says " + JSON.stringify(mark?.title);
+      if (!text("#status-file").endsWith(want)) return "the status bar says " + JSON.stringify(text("#status-file"));
+      // The mark opens the panel with the keys on its line, where Reload is.
+      mark.click();
+      const foot = () => [...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent);
+      return (await until(() => foot()[0] === "Reload")) ? "" : "its line offers " + JSON.stringify(foot());
     `,
   },
 ];

@@ -16,6 +16,7 @@ import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
 import { SECTIONS, STATE_WORDS, connectionLine, stateOf } from "../sources.ts";
 import type { Button, Connection, Doing, Place, Section, Sources, TabAction } from "../sources.ts";
+import { NEWER } from "../workspace.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
 
@@ -256,6 +257,21 @@ export class Panel {
     if (tab === undefined) return;
     if (!this.open) this.show();
     void this.sources.repoint(tab).then(() => this.reveal());
+  }
+
+  /**
+   * showTab opens the panel with the keys on a tab's own line, where what can
+   * be done about its file is offered: Reload, for a tab the bucket holds a
+   * newer version of.
+   */
+  showTab(id: string): void {
+    const line = this.sources.tabs.findIndex((t) => t.id === id);
+    if (line < 0) return;
+    if (!this.open) this.show();
+    this.sources.focus("workspace", line);
+    this.layout();
+    this.reveal();
+    this.list.focus();
   }
 
   /** draw lays the list out on the next frame, once however often it is asked. */
@@ -585,7 +601,11 @@ export class Panel {
         const state = stateOf(tab);
         if (state !== "fine") cls += ` ${state}`;
         // Where it lives, and what is wrong with it, for whoever hovers.
-        title = [tab.link?.path, tab.link?.missing ?? tab.link?.changed]
+        title = [
+          tab.link?.path,
+          tab.link?.missing ?? (tab.newer === undefined ? undefined : NEWER),
+          tab.link?.changed,
+        ]
           .filter((t) => t !== undefined)
           .join(" · ");
       }
