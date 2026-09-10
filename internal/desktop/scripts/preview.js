@@ -112,9 +112,23 @@ const filter =
 
 const ff = spawn(
   "ffmpeg",
-  ["-y", "-hide_banner", "-loglevel", "error",
-    "-f", "concat", "-safe", "0", "-i", list,
-    "-filter_complex", filter, "-loop", "0", gif],
+  [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    list,
+    "-filter_complex",
+    filter,
+    "-loop",
+    "0",
+    gif,
+  ],
   { stdio: "inherit" },
 );
 const ffCode = await new Promise((r) => ff.on("close", r));
@@ -124,5 +138,7 @@ if (ffCode !== 0) {
 }
 
 const { size } = await stat(gif);
-console.log(`preview: ${gif} (${(size / 1024).toFixed(0)} KB, ${shots.length} frames at ${FPS}fps)`);
+console.log(
+  `preview: ${gif} (${(size / 1024).toFixed(0)} KB, ${shots.length} frames at ${FPS}fps)`,
+);
 console.log(`preview: copy it into docs/preview.gif when the take is the one you want`);
