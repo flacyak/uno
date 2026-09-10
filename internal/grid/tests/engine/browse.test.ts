@@ -101,9 +101,12 @@ function wire(providers: Provider[]): Wire {
       if (already !== undefined) return Promise.resolve(already);
       return new Promise((resolve) => watching.push([is, resolve]));
     },
+    // What an Engine does when it closes: ask the workspace to close the
+    // files it holds, and close this end alone. The other end closes once
+    // the request has been delivered, and closing it here would drop it.
     close: () => {
+      client.post({ t: "close" });
       client.close();
-      port1.close();
     },
   };
 }
