@@ -5,7 +5,7 @@
 // then turn the frames it left behind into a GIF.
 //
 // There are two stories. `browse`, the README's, finds a workspace's moved
-// export again through the sources panel. `edit` fixes three cells of the
+// export again through the sources panel, then tries the themes in settings. `edit` fixes three cells of the
 // fixture and applies the offer to fix the rest.
 //
 // Usage: node scripts/preview.js [browse|edit]   (after node scripts/build.js)
@@ -112,7 +112,14 @@ if (displayMissing(process.env, process.platform)) {
   process.exit(2);
 }
 
-const child = spawn(electron, [pkg, opened], {
+// The app's own data -- its connections, the page's storage, the theme -- for
+// this take only, emptied first. The GIF is published, so it must show none of
+// the connections of whoever films it, and a theme the story chooses must not
+// become the one their own uno opens in.
+const data = join(pkg, "out/preview-data");
+await rm(data, { recursive: true, force: true });
+
+const child = spawn(electron, [pkg, `--user-data-dir=${data}`, opened], {
   stdio: ["ignore", "pipe", "pipe"],
   env: electronEnv(process.env, { UNO_PREVIEW: frames, UNO_PREVIEW_STORY: story }),
 });
