@@ -64,7 +64,9 @@ export class StatusBar {
     this.mode.textContent = editing ?? w?.mode.toUpperCase() ?? "";
     this.mode.className = w?.mode === "transform" ? "mode t" : "mode";
 
-    if (w === undefined || grid === undefined) {
+    // A tab with no file behind it has no cells to be on, and " · row 1" with
+    // no column in front of it would say it had.
+    if (w === undefined || grid === undefined || w.active.missing) {
       this.cell.textContent = "";
       return;
     }

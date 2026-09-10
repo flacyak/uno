@@ -418,6 +418,8 @@ export class Workspace {
     // A tab with no file behind it has no rows, no columns and no encoding to
     // report. What it has is a path that stopped working, which is the only
     // thing worth saying about it.
+    // One in a bucket nobody connected already says what to do about it.
+    if (t.link?.connect !== undefined) return `${t.trouble}`;
     if (t.missing) return `${t.trouble} · point it at a file to see its rows`;
 
     // Until the index reaches the end, the count is projected from how far it

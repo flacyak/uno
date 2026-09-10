@@ -229,8 +229,11 @@ export const SOURCES: Check[] = [
     `,
   },
   {
-    name: "the saved workspace opens again, and the object comes back",
+    // The .uno names a bucket this run has made no connection to, so the
+    // object is not read: it opens waiting, and says which bucket it wants.
+    name: "the saved workspace opens again, and the object waits for its bucket to be connected",
     send: ["menu:open-path", SAVED],
+    shot: "meets-waiting",
     script: `
       ${REMOTE}
       // A load that works clears the line the save left. One that fails puts
@@ -243,12 +246,55 @@ export const SOURCES: Check[] = [
       if (tabs.length !== 2) return "the reopened workspace has " + JSON.stringify(tabs);
       const active = document.querySelector(".tab.active").textContent;
       if (!active.startsWith("ads-q3.csv")) return "the tab showing is " + JSON.stringify(active);
+      const want = "sales-q3.uno reads s3://acme-exports/…, which no connection covers · connect acme-exports to read it";
+      if (!(await arrives(() => text("#status-file") === want))) {
+        return "the status bar says " + JSON.stringify(text("#status-file"));
+      }
+      // No file, so no cell for the selection to be on.
+      return text("#status-cell") === "" ? "" : "the selection is at " + JSON.stringify(text("#status-cell"));
+    `,
+  },
+  {
+    name: "Connect on its line connects the bucket, filled in, and the object comes back",
+    shot: "meets-connected",
+    script: `
+      ${REMOTE}
+      await press("B", { ctrlKey: true, shiftKey: true });
+      const line = () => [...document.querySelectorAll("#panel .panel-row.unconnected")][0];
+      if (!(await arrives(() => line() !== undefined))) return "no line says it is not connected";
+      if (line().children[1].textContent !== "not connected") return "the line says " + JSON.stringify(line().textContent);
+      line().click();
+      const button = () => [...document.querySelectorAll("#panel .panel-foot button")].find((b) => b.textContent === "Connect acme-exports");
+      if (!(await until(() => button() !== undefined))) {
+        return "the line offers " + JSON.stringify([...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent));
+      }
+      button().click();
+      const form = document.querySelector("#panel .panel-connect");
+      if (form.hidden) return "the form did not open";
+      if (form.querySelector("input[name=bucket]").value !== "acme-exports") return "the bucket was not filled in";
+      const choose = form.querySelector("select");
+      if (!(await arrives(() => [...choose.options].some((o) => o.value === "profile:finance")))) return "no finance profile to choose";
+      choose.value = "profile:finance";
+      choose.dispatchEvent(new Event("change", { bubbles: true }));
+      [...form.querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
 
+      if (!(await arrives(() => text("#status-msg") === "ads-q3.csv reads from acme-exports"))) {
+        return "the status bar says " + JSON.stringify(text("#status-msg")) + " · the form says " + JSON.stringify(form.querySelector(".result").textContent);
+      }
       if (!(await arrives(() => document.querySelector("thead th .colhead") !== null))) {
-        return "no header came back · " + JSON.stringify(text("#status-msg"));
+        return "no header came back · " + JSON.stringify(text("#status-file"));
       }
       const first = document.querySelector("thead th .colhead").firstChild.textContent;
-      return first === "Ad_ID" ? "" : "the first header is " + JSON.stringify(first);
+      if (first !== "Ad_ID") return "the first header is " + JSON.stringify(first);
+      // The panel checks after these open it themselves, and expect the keys
+      // on the tabs, where a panel nobody has used yet has them. The keys stay
+      // where they were left when a panel closes, so they are walked back up
+      // first: saving the connection left them in the browser.
+      const list = document.querySelector("#panel .panel-list");
+      const key = (k) => list.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+      for (let i = 0; i < 20; i++) key("ArrowUp");
+      key("Escape");
+      return (await until(() => document.querySelector("#panel").hidden)) ? "" : "Esc did not close the panel";
     `,
   },
 ];

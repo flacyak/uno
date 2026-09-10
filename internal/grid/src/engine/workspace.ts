@@ -33,6 +33,7 @@ import type {
   SourceRef,
 } from "./protocol.ts";
 import { formatBytes, messageOf } from "./protocol.ts";
+import type { Unconnected } from "../store/s3.ts";
 import type { Tuning } from "./rows.ts";
 import { View } from "./view.ts";
 import type { Carried, Part } from "./view.ts";
@@ -75,6 +76,8 @@ class Absent {
     private readonly rows: number,
     private readonly cols: number,
     why: string,
+    /** The bucket it reads that no connection covers, when that is why. */
+    connect?: Unconnected,
   ) {
     this.opened = {
       source: id,
@@ -88,7 +91,7 @@ class Absent {
       progress: { done: 0, total: bytes, readable: 0, rows: 0, complete: true },
       edits,
       generation: 0,
-      link: { path, missing: why },
+      link: connect === undefined ? { path, missing: why } : { path, missing: why, connect },
     };
   }
 
@@ -153,6 +156,8 @@ export class Workspace {
     private readonly handlers: readonly FileHandler[],
     private readonly port: Port<Request, Reply>,
     private readonly tuning: Tuning,
+    /** Whether an address a .uno names is in a bucket no connection covers. */
+    private readonly guard?: (path: string) => Unconnected | undefined,
   ) {}
 
   /**
@@ -269,6 +274,25 @@ export class Workspace {
    * with a file full of their own work and no way into it.
    */
   private async reopen(container: string, src: Held, edits: Edit[]): Promise<Source> {
+    // A .uno travels, and the person opening one did not choose the buckets
+    // it names. One no connection covers is not read at all -- not a HEAD --
+    // until they connect it: the source is kept, edits and all, and says why.
+    const needs =
+      src.raw === undefined && src.path !== undefined ? this.guard?.(src.path) : undefined;
+    if (needs !== undefined) {
+      return new Absent(
+        src.id,
+        src.name,
+        src.path ?? "",
+        undefined,
+        src.bytes ?? 0,
+        edits,
+        src.rows,
+        src.cols,
+        `${container} reads s3://${needs.bucket}/…, which no connection covers · connect ${needs.bucket} to read it`,
+        needs,
+      );
+    }
     const carried: Carried = { container, raw: src.raw, edits };
     try {
       const view =

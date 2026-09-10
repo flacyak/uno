@@ -20,7 +20,7 @@ import type { ConnectAsks } from "../src/renderer/shell/connect.ts";
 import { draftOf, folderOf, triedLine } from "../src/renderer/shell/connect.ts";
 import { Panel } from "../src/renderer/shell/panel.ts";
 import type { Listings } from "../src/renderer/sources.ts";
-import { Sources } from "../src/renderer/sources.ts";
+import { Sources, stateOf } from "../src/renderer/sources.ts";
 
 const REGION = "eu-west-1";
 
@@ -314,4 +314,64 @@ test("Esc gives up, keeps nothing, and gives the list back its place", async () 
   expect(form().hidden).toBe(true);
   expect(root.querySelector<HTMLElement>(".panel-list")!.hidden).toBe(false);
   expect(asks.saved).toEqual([]);
+});
+
+// ------------------------------------------------------------ a tab waiting for one
+
+// A .uno that names a bucket nobody connected opens that tab missing, having
+// read nothing. Its line offers to connect the bucket and does not offer to
+// reload, which would read it with this machine's credentials.
+test("a tab in a bucket nobody connected offers Connect, filled in, and no Reload", async () => {
+  const waiting = {
+    id: "q4",
+    name: "orders.csv",
+    link: {
+      path: "s3://acme-exports/shop/orders.csv",
+      missing:
+        "q4-close.uno reads s3://acme-exports/…, which no connection covers · connect acme-exports to read it",
+      connect: { bucket: "acme-exports" },
+    },
+  };
+  const tabs = [waiting, { id: "b", name: "ledger.csv" }];
+  document.body.innerHTML = `<aside id="panel" class="panel" hidden></aside>`;
+  root = document.querySelector<HTMLElement>("#panel")!;
+  sources = new Sources(
+    listed,
+    () => tabs,
+    [],
+    () => panel.draw(),
+  );
+  const noop = (): void => {};
+  panel = new Panel(
+    root,
+    sources,
+    () => "default",
+    { select: noop, add: noop, reload: noop, repoint: noop, remove: noop, closed: noop },
+    asks,
+  );
+  panel.show();
+  sources.focus("workspace", 0);
+  panel.draw();
+  await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+
+  expect(stateOf(waiting)).toBe("unconnected");
+  expect(sources.doings.map((a) => a.label)).toEqual([
+    "Connect acme-exports",
+    "Re-point",
+    "Remove",
+  ]);
+  const line = root.querySelector<HTMLElement>(".panel-row.unconnected")!;
+  expect([line.children[0]!.textContent, line.children[1]!.textContent]).toEqual([
+    "orders.csv",
+    "not connected",
+  ]);
+
+  [...root.querySelectorAll<HTMLButtonElement>(".panel-foot button")]
+    .find((b) => b.textContent === "Connect acme-exports")!
+    .click();
+  await settle();
+  expect(form().hidden).toBe(false);
+  expect(field("bucket").value).toBe("acme-exports");
+  expect(document.activeElement).toBe(field("prefix"));
+  expect(asks.tried).toEqual([]);
 });
