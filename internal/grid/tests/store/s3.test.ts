@@ -149,13 +149,15 @@ describe("credentials", () => {
     });
   });
 
-  test("refuse an SSO profile by name, with the command that gets around it", async () => {
+  // SSO itself is followed, and sso.test.ts holds it to a stand-in portal.
+  // A profile that points at a portal section nobody wrote is refused by name.
+  test("refuse an SSO profile whose sso-session is not in the config", async () => {
     const env = {
       ...(await files("", "[profile work]\nsso_session = acme\nregion = us-east-1\n")),
       AWS_PROFILE: "work",
     };
     await expect(awsCredentials(env)()).rejects.toThrow(
-      "aws configure export-credentials --profile work",
+      "the AWS profile work names sso-session acme, which ~/.aws/config does not have",
     );
   });
 
