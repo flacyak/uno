@@ -1,18 +1,21 @@
-// Reading and writing bytes, and nothing else.
+// Naming files and writing bytes, and nothing else.
+//
+// Reading is not here. An engine reads a file by path in a process of its own,
+// a piece at a time, so the main process never holds a file's contents on the
+// way in.
 //
 // The atomic write is `internal/safefile/write.go`, and it is here rather than
 // in `@uno/grid` for the reason it is its own package in Go: saving is the one
 // operation in uno that can destroy something, and the promise -- the
 // previously saved file is still there -- belongs wherever the filesystem is.
 
+import type { SourceRef } from "@uno/grid/engine";
 import { constants } from "node:fs";
-import { mkdtemp, open, readFile, rename, rm } from "node:fs/promises";
+import { mkdtemp, open, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import type { PickedFile } from "../shared/host.ts";
-
-export async function readPicked(path: string): Promise<PickedFile> {
-  return { path, name: basename(path), bytes: new Uint8Array(await readFile(path)) };
+export function sourceAt(path: string): SourceRef {
+  return { name: basename(path), path };
 }
 
 /**
