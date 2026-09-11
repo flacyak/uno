@@ -127,6 +127,12 @@ test("a part appended extends the rows and leaves every edit on its cell", async
     expect(src.progress).toMatchObject({ rows: ROWS, readable: ROWS, complete: true });
     expect(src.opened.columns).toEqual(sales.columns);
 
+    // A client is told which files it reads, before and after, in order.
+    const told = (count: number) =>
+      PART_NAMES.slice(0, count).map((name, i) => ({ name, path: PART_FIXTURES[i] }));
+    expect(before.opened.parts).toEqual(told(OPENED));
+    expect(src.opened.parts).toEqual(told(PARTS));
+
     // The log is the one that was made: the same edits, in the same order.
     expect(made(src.opened.edits)).toEqual(made(EDITS));
 

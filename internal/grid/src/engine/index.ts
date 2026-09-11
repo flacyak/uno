@@ -24,6 +24,7 @@ export type {
   Offer,
   Opened,
   Opening,
+  PartInfo,
   Peeked,
   Place,
   Port,
