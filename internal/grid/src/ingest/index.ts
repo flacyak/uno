@@ -1,25 +1,24 @@
-// Package ingest turns bytes into a Sheet. It is the only module that knows a
-// file had a delimiter, an encoding or a header row, so adding a format later
-// never reaches the grid.
+// Package ingest turns bytes into rows. It is the only module that knows a file
+// had a delimiter, an encoding or a header row, so adding a format later never
+// reaches the grid.
+//
+// There are two ways in. `read` takes a whole file and returns a Sheet, for a
+// file that fits in memory. `openFormat` reads a file a piece at a time through
+// a ByteSource, for the engine, which never holds one.
 
 import { Sheet } from "../sheet/index.ts";
 import { readAll } from "./csv.ts";
+import { describe, extensionOf } from "./format.ts";
 import { sniffDelimiter } from "./sniff.ts";
 
 export { readAll } from "./csv.ts";
+export { openFormat } from "./format.ts";
+export type { Format, Scanner } from "./format.ts";
+export { RecordScanner } from "./scan.ts";
 export { sniffDelimiter } from "./sniff.ts";
 
-/** The extension, lower-cased, including its dot. "" when there is none. */
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
-  if (dot < 0 || dot < slash) return "";
-  return name.slice(dot).toLowerCase();
-}
-
 /**
- * read picks a decoder from the extension, then from the bytes. It is the only
- * entry point, which keeps format knowledge inside this module.
+ * read picks a decoder from the extension, then from the bytes.
  *
  * It takes the bytes rather than a path: a .uno carries its source embedded,
  * and the web build has no filesystem to read one from.
@@ -46,16 +45,4 @@ function readSeparated(name: string, text: string, comma: string): Sheet {
   const s = new Sheet(name, rows[0]!, rows.slice(1));
   s.source = describe(comma);
   return s;
-}
-
-/**
- * describe is how the status bar says what was guessed, so a wrong guess is
- * visible rather than silent.
- *
- * The quoting is Go's `%q` on a rune, which is a single-quoted character
- * literal rather than a double-quoted string.
- */
-function describe(comma: string): string {
-  if (comma === "\t") return "UTF-8 · tab-separated";
-  return `UTF-8 · delimiter '${comma}'`;
 }

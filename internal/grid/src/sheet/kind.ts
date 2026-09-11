@@ -15,7 +15,7 @@ export type Kind = "text" | "num" | "date";
  * columns to name their kinds costs 28,872 parses before the first frame; the
  * top of the file is enough to catch the shape of a column.
  */
-const SAMPLE_ROWS = 200;
+export const SAMPLE_ROWS = 200;
 
 export interface Inferred {
   kind: Kind;

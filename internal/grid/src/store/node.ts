@@ -9,7 +9,42 @@ import { constants } from "node:fs";
 import { mkdtemp, open, readFile, readdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { FileStore } from "./index.ts";
+import type { ByteSource, FileStore } from "./index.ts";
+
+/**
+ * nodeSource reads a file at an offset, so a 30 GB CSV costs a descriptor and
+ * not 30 GB.
+ *
+ * Reads with an explicit position share the descriptor safely, so an index
+ * scan and a page read can be in flight together.
+ */
+export async function nodeSource(path: string): Promise<ByteSource> {
+  const fh = await open(path, "r");
+  let size: number;
+  try {
+    size = (await fh.stat()).size;
+  } catch (err) {
+    await fh.close();
+    throw err;
+  }
+
+  return {
+    size,
+    async read(offset: number, length: number): Promise<Uint8Array> {
+      const want = Math.max(0, Math.min(length, size - offset));
+      const buf = new Uint8Array(want);
+      let got = 0;
+      // A read may return fewer bytes than asked without being at the end.
+      while (got < want) {
+        const { bytesRead } = await fh.read(buf, got, want - got, offset + got);
+        if (bytesRead === 0) break; // the file shrank since it was opened
+        got += bytesRead;
+      }
+      return got === want ? buf : buf.subarray(0, got);
+    },
+    close: () => fh.close(),
+  };
+}
 
 /**
  * nodeStore is a FileStore backed by the local filesystem.

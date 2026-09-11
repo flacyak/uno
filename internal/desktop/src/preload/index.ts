@@ -2,26 +2,49 @@
 //
 // Context isolation is on, so the renderer has no `require`, no `node:fs`, and
 // no way to reach the main process except through what is exposed here. That is
-// the point: the surface is four functions, so a bug in the renderer -- or
-// something nasty in a spreadsheet somebody sent -- has four things to reach for
-// rather than a filesystem.
+// the point: the surface is a handful of functions, so a bug in the renderer --
+// or something nasty in a spreadsheet somebody sent -- has a handful of things
+// to reach for rather than a filesystem.
 
-import { contextBridge, ipcRenderer } from "electron";
+import type { SourceRef } from "@uno/grid/engine";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
-import type { Host, PickedFile } from "../shared/host.ts";
+import type { Bridge } from "../shared/host.ts";
 
-const host: Host = {
-  open: () => ipcRenderer.invoke("file:open") as Promise<PickedFile | undefined>,
+const bridge: Bridge = {
+  open: () => ipcRenderer.invoke("file:open") as Promise<SourceRef | undefined>,
+
+  /**
+   * A dropped File is turned into its path here, because only preload can ask.
+   * The engine opens files by path, and a File that came from somewhere other
+   * than the disk -- a drag out of a browser -- has none to give.
+   */
+  dropped(file) {
+    const path = webUtils.getPathForFile(file);
+    if (path === "") throw new Error(`${file.name} is not a file on this machine`);
+    return { name: file.name, path };
+  },
+
+  connect: (id) => ipcRenderer.send("engine:connect", id),
 
   saveAs: (suggestedName, bytes) =>
     ipcRenderer.invoke("file:save-as", suggestedName, bytes) as Promise<string | undefined>,
 
   save: (path, bytes) => ipcRenderer.invoke("file:save", path, bytes) as Promise<void>,
-
-  read: (path) => ipcRenderer.invoke("file:read", path) as Promise<PickedFile>,
 };
 
-contextBridge.exposeInMainWorld("uno", host);
+contextBridge.exposeInMainWorld("uno", bridge);
+
+/**
+ * An engine's port, handed on to the page.
+ *
+ * Ports cannot go through contextBridge, and posting to the window is the way
+ * Electron gives for moving one into the main world. The id is the one the page
+ * asked with, so two engines started together each find their own.
+ */
+ipcRenderer.on("engine:port", (event, id: number) => {
+  window.postMessage({ unoEnginePort: id }, "*", event.ports);
+});
 
 /**
  * The menu's accelerators, forwarded.
@@ -32,7 +55,7 @@ contextBridge.exposeInMainWorld("uno", host);
  * action, and the renderer decides what it means.
  */
 contextBridge.exposeInMainWorld("unoMenu", {
-  on(channel: "menu:open" | "menu:save" | "menu:save-as", fn: () => void): void {
+  on(channel: "menu:open" | "menu:save" | "menu:save-as" | "menu:mode", fn: () => void): void {
     ipcRenderer.on(channel, () => fn());
   },
 
@@ -40,9 +63,9 @@ contextBridge.exposeInMainWorld("unoMenu", {
    * A file named on the command line, or handed over by the desktop when
    * somebody double-clicks a .csv.
    *
-   * It carries a path rather than bytes because the renderer already knows how
-   * to read one, and because a workspace opened this way should save back to
-   * where it came from without asking.
+   * It carries a path because a path is what the engine opens, and because a
+   * workspace opened this way should save back to where it came from without
+   * asking.
    */
   onOpenPath(fn: (path: string) => void): void {
     ipcRenderer.on("menu:open-path", (_event, path: string) => fn(path));

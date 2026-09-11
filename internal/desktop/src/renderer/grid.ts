@@ -2,15 +2,46 @@
 //
 // A 4,812-row export is about forty elements in the DOM, and scrolling moves
 // them rather than making more. That is the same trade the Go build makes with
-// widget.Table, and it is why `sheet.display` had to stay a cache read: this
-// calls it once per visible cell on every frame, so anything it did beyond
-// reading an array would be work multiplied by two hundred and then by sixty.
+// widget.Table, and it is why what the grid reads has to stay a cache read: it
+// calls `display` once per visible cell on every frame, so anything done there
+// beyond reading an array is work multiplied by two hundred and then by sixty.
+//
+// It draws a Sheet or a band of rows from an engine through `Rows`, and cannot
+// tell which. A row the band has not received yet is drawn pending and filled
+// in when it lands. Nothing here waits.
 
-import type { Kind, Sheet } from "@uno/grid/sheet";
+import type { Kind } from "@uno/grid/sheet";
 
 /** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
  * the next frame catches up. */
 const OVERSCAN = 6;
+
+/**
+ * The tallest the scroller's content is allowed to be.
+ *
+ * Browsers stop laying out past a limit -- about 33.5 million pixels in
+ * Chromium, less in Firefox -- so a sheet taller than this scrolls by
+ * proportion: the scrollbar maps onto the rows, and the wheel and the keys still
+ * move by rows.
+ */
+const MAX_SCROLL_PX = 15_000_000;
+
+/**
+ * Rows is what the grid draws. A Sheet is one, and so is an engine's band.
+ *
+ * The two optional methods are the band's. A Sheet has every row, so it has
+ * nothing to say about which have arrived or what is on screen.
+ */
+export interface Rows {
+  readonly columns: readonly { header: string; kind: Kind; flagged: boolean }[];
+  rows(): number;
+  cols(): number;
+  display(row: number, col: number): string;
+  raw(row: number, col: number): string;
+  binding(col: number): string | undefined;
+  ready?(row: number): boolean;
+  view?(first: number, count: number): void;
+}
 
 export interface GridEvents {
   /** The selection moved, so the status bar can say where it is. */
@@ -18,10 +49,14 @@ export interface GridEvents {
   /** A cell was committed. The sheet has already been told; this is for
    * everything that follows from an edit. */
   onEdit(row: number, col: number, value: string): void;
+  /** Someone tried to edit while editing is locked. */
+  onLocked(): void;
 }
 
 export class Grid {
-  private sheet: Sheet | undefined;
+  private source: Rows | undefined;
+  private editable = false;
+
   private readonly scroller: HTMLElement;
   private readonly sizer: HTMLElement;
   private readonly table: HTMLTableElement;
@@ -29,8 +64,24 @@ export class Grid {
   private readonly body: HTMLTableSectionElement;
 
   /** The pool. One row element per visible line, reused as the view moves. */
-  private rows: HTMLTableRowElement[] = [];
+  private pool: HTMLTableRowElement[] = [];
   private first = 0;
+  /** How far down the table is translated, for the editor to sit over a cell. */
+  private offset = 0;
+
+  /**
+   * How far down the sheet the view is, in pixels of a sheet nothing capped.
+   *
+   * Below the cap this is the scroller's scrollTop. Above it, it is kept here,
+   * because at many rows to a pixel, reading scrollTop back would round a
+   * one-row step to nothing.
+   */
+  private top = 0;
+  /** The scrollTop the grid last saw or set, so a scroll it did not cause stands out. */
+  private seen = 0;
+  private scaled = false;
+  private digits = 0;
+  private readonly onWheel = (e: WheelEvent): void => this.wheel(e);
 
   private selRow = 0;
   private selCol = 0;
@@ -64,15 +115,24 @@ export class Grid {
     this.rowHeight = readRowHeight(this.scroller);
   }
 
-  /** Show a sheet, or nothing. */
-  show(sheet: Sheet | undefined): void {
+  /**
+   * Show rows, or nothing. `keep` holds the selection and the scroll position,
+   * for the same rows drawn from somewhere else -- a band handing over to a
+   * sheet when a file enters transform.
+   */
+  show(source: Rows | undefined, editable: boolean, keep = false): void {
     this.cancelEdit();
-    this.sheet = sheet;
-    this.selRow = 0;
-    this.selCol = 0;
-    this.rows = [];
+    this.source = source;
+    this.editable = editable;
+    if (!keep) {
+      this.selRow = 0;
+      this.selCol = 0;
+      this.top = 0;
+      this.scroller.scrollTop = 0;
+      this.seen = 0;
+    }
+    this.pool = [];
     this.body.replaceChildren();
-    this.scroller.scrollTop = 0;
     this.buildHead();
     this.layout();
   }
@@ -82,6 +142,11 @@ export class Grid {
   refresh(): void {
     this.buildHead();
     this.layout();
+  }
+
+  /** Redraw the body on the next frame: rows arrived, or the row count moved. */
+  repaint(): void {
+    this.schedule();
   }
 
   selection(): { row: number; col: number } {
@@ -107,12 +172,12 @@ export class Grid {
    */
   private buildHead(): void {
     this.head.replaceChildren();
-    if (this.sheet === undefined) return;
+    if (this.source === undefined) return;
 
     const tr = document.createElement("tr");
     tr.append(el("th", "gutter"));
 
-    for (const column of this.sheet.columns) {
+    for (const column of this.source.columns) {
       const th = document.createElement("th");
       const wrap = el("span", "colhead");
       wrap.append(text(column.header));
@@ -137,68 +202,147 @@ export class Grid {
    * destroyed while a person scrolls.
    */
   private layout(): void {
-    const sheet = this.sheet;
-    if (sheet === undefined) {
+    const source = this.source;
+    if (source === undefined) {
       this.sizer.style.height = "0px";
       return;
     }
 
-    const total = sheet.rows();
+    const total = source.rows();
     const headH = this.head.offsetHeight;
-    this.sizer.style.height = `${total * this.rowHeight + headH}px`;
-
     const viewport = this.scroller.clientHeight;
+    const m = this.measure(total, headH, viewport);
+
+    const height = `${m.real}px`;
+    if (this.sizer.style.height !== height) this.sizer.style.height = height;
+    this.scale(m.scaled);
+
+    // Below the cap the scroller is the truth. Above it, only a scroll the grid
+    // did not cause -- the scrollbar dragged -- moves the view to match it.
+    const scrollTop = Math.max(0, this.scroller.scrollTop);
+    if (!this.scaled || Math.abs(scrollTop - this.seen) >= 0.5) {
+      this.top = m.rMax === 0 ? 0 : (scrollTop / m.rMax) * m.vMax;
+    }
+    this.top = Math.min(Math.max(0, this.top), m.vMax);
+    this.seen = scrollTop;
+    if (this.scaled) this.syncScroll(m.vMax, m.rMax);
+
+    const digits = String(total).length;
+    if (digits !== this.digits) {
+      this.digits = digits;
+      this.table.style.setProperty("--gutter-digits", String(digits));
+    }
+
     const visible = Math.min(total, Math.ceil(viewport / this.rowHeight) + OVERSCAN);
 
     // Grow or shrink the pool. This runs on a resize and on the first draw, and
     // not while scrolling.
-    while (this.rows.length < visible) {
+    while (this.pool.length < visible) {
       const tr = document.createElement("tr");
       tr.append(el("td", "gutter"));
-      for (let c = 0; c < sheet.cols(); c++) tr.append(document.createElement("td"));
-      this.rows.push(tr);
+      for (let c = 0; c < source.cols(); c++) tr.append(document.createElement("td"));
+      this.pool.push(tr);
       this.body.append(tr);
     }
-    while (this.rows.length > visible) this.rows.pop()?.remove();
+    while (this.pool.length > visible) this.pool.pop()?.remove();
 
-    const maxFirst = Math.max(0, total - this.rows.length);
-    const first = Math.min(
-      maxFirst,
-      Math.floor(Math.max(0, this.scroller.scrollTop) / this.rowHeight),
-    );
+    const maxFirst = Math.max(0, total - this.pool.length);
+    const first = Math.min(maxFirst, Math.floor(this.top / this.rowHeight));
     this.first = first;
 
     // The table is moved as one element rather than each row being positioned,
-    // so a scroll is one style write and not forty.
-    this.table.style.transform = `translateY(${first * this.rowHeight}px)`;
+    // so a scroll is one style write and not forty. It sits as far above the
+    // scroller's top as the view is past row `first`, which below the cap is
+    // exactly where row `first` is.
+    //
+    // It moves by `top` and not by a transform. A sticky header is placed from
+    // the table's layout box, which a transform does not move, so past the
+    // table's own height the header stuck to where the table had been and
+    // scrolled out of sight. Whole pixels, because at millions of pixels down a
+    // fraction draws the text blurred.
+    this.offset = Math.round(this.seen - (this.top - first * this.rowHeight));
+    const top = `${this.offset}px`;
+    if (this.table.style.top !== top) this.table.style.top = top;
 
-    for (let i = 0; i < this.rows.length; i++) {
-      this.paint(this.rows[i]!, first + i, sheet);
+    source.view?.(first, this.pool.length);
+    for (let i = 0; i < this.pool.length; i++) {
+      this.paint(this.pool[i]!, first + i, source);
     }
 
     this.placeEditor();
   }
 
-  /** paint writes one row. Every read here is `display`, which is the cache. */
-  private paint(tr: HTMLTableRowElement, row: number, sheet: Sheet): void {
-    tr.className = row % 2 === 1 ? "even" : "";
+  private measure(
+    total: number,
+    headH: number,
+    viewport: number,
+  ): { real: number; scaled: boolean; vMax: number; rMax: number } {
+    const virtual = total * this.rowHeight + headH;
+    const real = Math.min(virtual, MAX_SCROLL_PX);
+    return {
+      real,
+      scaled: virtual > MAX_SCROLL_PX,
+      vMax: Math.max(0, virtual - viewport),
+      rMax: Math.max(0, real - viewport),
+    };
+  }
+
+  /** syncScroll puts the scrollbar where the view is, for a sheet above the cap. */
+  private syncScroll(vMax: number, rMax: number): void {
+    const want = vMax === 0 ? 0 : (this.top / vMax) * rMax;
+    if (Math.abs(want - this.scroller.scrollTop) >= 1) this.scroller.scrollTop = want;
+    this.seen = this.scroller.scrollTop;
+  }
+
+  /**
+   * scale turns the grid's own wheel handling on above the cap and off below it.
+   * A wheel listener that can cancel sends every scroll through script first, so
+   * it is only there while the grid has to move by rows itself.
+   */
+  private scale(on: boolean): void {
+    if (on === this.scaled) return;
+    this.scaled = on;
+    if (on) this.scroller.addEventListener("wheel", this.onWheel, { passive: false });
+    else this.scroller.removeEventListener("wheel", this.onWheel);
+  }
+
+  private wheel(e: WheelEvent): void {
+    if (e.ctrlKey) return; // a pinch is a zoom, and belongs to the browser
+    e.preventDefault();
+    const unit =
+      e.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? this.rowHeight
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? this.scroller.clientHeight
+          : 1;
+    this.top += e.deltaY * unit;
+    this.scroller.scrollLeft += e.deltaX * unit;
+    this.schedule();
+  }
+
+  /** paint writes one row. Every read here is `display`, which is a cache read. */
+  private paint(tr: HTMLTableRowElement, row: number, source: Rows): void {
+    const ready = source.ready?.(row) ?? true;
+    const even = row % 2 === 1;
+    const cls = ready ? (even ? "even" : "") : even ? "even pending" : "pending";
+    if (tr.className !== cls) tr.className = cls;
 
     const cells = tr.children;
     const gutter = cells[0] as HTMLTableCellElement;
     const label = String(row + 1);
     if (gutter.textContent !== label) gutter.textContent = label;
 
-    for (let col = 0; col < sheet.cols(); col++) {
+    for (let col = 0; col < source.cols(); col++) {
       const td = cells[col + 1] as HTMLTableCellElement | undefined;
       if (td === undefined) continue;
 
-      const value = sheet.display(row, col);
+      const value = ready ? source.display(row, col) : "";
       // Writing textContent unconditionally would dirty every cell on every
       // frame; most of them have not changed.
       if (td.textContent !== value) td.textContent = value;
 
       const selected = row === this.selRow && col === this.selCol;
-      const cls = className(sheet.columns[col]!.kind, selected);
+      const cls = className(source.columns[col]!.kind, selected);
       if (td.className !== cls) td.className = cls;
     }
   }
@@ -217,12 +361,12 @@ export class Grid {
   }
 
   private select(row: number, col: number): void {
-    const sheet = this.sheet;
-    if (sheet === undefined) return;
+    const source = this.source;
+    if (source === undefined) return;
 
     this.cancelEdit();
-    this.selRow = Math.max(0, Math.min(sheet.rows() - 1, row));
-    this.selCol = Math.max(0, Math.min(sheet.cols() - 1, col));
+    this.selRow = Math.max(0, Math.min(source.rows() - 1, row));
+    this.selCol = Math.max(0, Math.min(source.cols() - 1, col));
     this.scrollIntoView();
     this.layout();
     this.events.onSelect(this.selRow, this.selCol);
@@ -231,17 +375,22 @@ export class Grid {
   private scrollIntoView(): void {
     const headH = this.head.offsetHeight;
     const top = this.selRow * this.rowHeight;
-    const view = this.scroller.scrollTop;
     const height = this.scroller.clientHeight - headH;
 
-    if (top < view) this.scroller.scrollTop = top;
-    else if (top + this.rowHeight > view + height) {
-      this.scroller.scrollTop = top + this.rowHeight - height;
+    if (top < this.top) this.top = top;
+    else if (top + this.rowHeight > this.top + height) this.top = top + this.rowHeight - height;
+    else return;
+
+    if (!this.scaled) {
+      this.scroller.scrollTop = this.top;
+      return;
     }
+    const m = this.measure(this.source?.rows() ?? 0, headH, this.scroller.clientHeight);
+    this.syncScroll(m.vMax, m.rMax);
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (this.sheet === undefined) return;
+    if (this.source === undefined) return;
     if (this.editor !== undefined) return; // the editor has its own keys
 
     switch (e.key) {
@@ -268,7 +417,7 @@ export class Grid {
         this.select(0, 0);
         break;
       case "End":
-        this.select(this.sheet.rows() - 1, this.sheet.cols() - 1);
+        this.select(this.source.rows() - 1, this.source.cols() - 1);
         break;
       case "Enter":
       case "F2":
@@ -297,17 +446,23 @@ export class Grid {
    * typing is a worse way to say so than not offering it.
    */
   private beginEdit(initial?: string): void {
-    const sheet = this.sheet;
-    if (sheet === undefined || this.editor !== undefined) return;
-    if (sheet.rows() === 0) return;
+    const source = this.source;
+    if (source === undefined || this.editor !== undefined) return;
+    if (source.rows() === 0) return;
+
+    // In view a keystroke changes nothing, and says what would.
+    if (!this.editable) {
+      this.events.onLocked();
+      return;
+    }
 
     // A derived column stores nothing to type over. The sheet would refuse it;
     // saying so before the keystroke is kinder than after it.
-    if (sheet.binding(this.selCol) !== undefined) return;
+    if (source.binding(this.selCol) !== undefined) return;
 
     const input = document.createElement("input");
     input.className = "cell-editor";
-    input.value = initial ?? sheet.raw(this.selRow, this.selCol);
+    input.value = initial ?? source.raw(this.selRow, this.selCol);
 
     input.addEventListener("keydown", (e) => {
       // Swallowed first, before anything that could fail. Stopping propagation
@@ -348,7 +503,7 @@ export class Grid {
     }
 
     input.style.left = `${td.offsetLeft}px`;
-    input.style.top = `${td.offsetTop + this.first * this.rowHeight}px`;
+    input.style.top = `${td.offsetTop + this.offset}px`;
     input.style.width = `${td.offsetWidth}px`;
     input.style.height = `${td.offsetHeight}px`;
   }
@@ -361,13 +516,13 @@ export class Grid {
 
   private commitEdit(): void {
     const input = this.editor;
-    const sheet = this.sheet;
-    if (input === undefined || sheet === undefined) return;
+    const source = this.source;
+    if (input === undefined || source === undefined) return;
 
     const value = input.value;
     this.cancelEdit();
 
-    if (value !== sheet.raw(this.selRow, this.selCol)) {
+    if (value !== source.raw(this.selRow, this.selCol)) {
       this.events.onEdit(this.selRow, this.selCol, value);
     }
     this.focus();

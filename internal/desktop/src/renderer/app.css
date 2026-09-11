@@ -125,6 +125,42 @@ body {
   background: var(--flag);
 }
 
+.win-tabs .grow {
+  flex: 1;
+}
+
+/* The mode switch. View in the accent, transform in amber, because transform is
+ * where a keystroke changes the file. */
+.seg {
+  display: inline-flex;
+  align-self: center;
+  margin: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  -webkit-app-region: no-drag;
+}
+
+.seg span {
+  padding: 3px 10px;
+  color: var(--ink-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.seg span.on {
+  background: var(--accent-b);
+  color: var(--accent);
+  cursor: default;
+}
+
+.seg span.on.t {
+  background: var(--flag-b);
+  color: var(--flag);
+}
+
 /* ---------- the grid ---------- */
 
 /* The grid's container has to be told to fill what is left, and told that it
@@ -190,11 +226,13 @@ table.grid thead th {
   font-weight: 500;
 }
 
+/* As wide as the row count needs, set by the grid, so the column does not
+ * widen under the cursor as the numbers grow past row 99,999. */
 table.grid .gutter {
   background: var(--sunken);
   color: var(--ink-3);
   text-align: right;
-  width: 56px;
+  width: calc(var(--gutter-digits, 4) * 1ch + 22px);
   min-width: 56px;
   font-size: 11.5px;
   user-select: none;
@@ -206,6 +244,12 @@ table.grid td.num {
 
 table.grid tbody tr.even td:not(.gutter) {
   background: color-mix(in srgb, var(--sunken) 42%, transparent);
+}
+
+/* A row the engine has not sent yet. It has a number and nothing else. */
+table.grid tbody tr.pending td:not(.gutter)::after {
+  content: "·";
+  color: var(--ink-3);
 }
 
 table.grid td.sel {
@@ -274,6 +318,19 @@ table.grid td.sel {
 
 .win-status .grow {
   flex: 1;
+}
+
+.win-status .mode {
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.win-status .mode.t {
+  color: var(--flag);
+}
+
+.win-status .mode:empty {
+  display: none;
 }
 
 .win-status .err {

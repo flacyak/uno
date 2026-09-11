@@ -77,6 +77,34 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "it opens in view, where typing changes nothing",
+    script: `
+      const mode = document.querySelector("#status-mode").textContent;
+      if (mode !== "VIEW") return "the status bar's mode is " + JSON.stringify(mode);
+
+      const content = document.querySelector("#content");
+      document.querySelectorAll("tbody tr")[0].children[5].click();
+      await new Promise((r) => requestAnimationFrame(r));
+      content.dispatchEvent(new KeyboardEvent("keydown", { key: "9", bubbles: true }));
+      await new Promise((r) => requestAnimationFrame(r));
+
+      if (document.querySelector(".cell-editor") !== null) return "typing in view opened an editor";
+      const said = document.querySelector("#status-msg").textContent;
+      return said.includes("Ctrl+E") ? "" : "the status bar says " + JSON.stringify(said);
+    `,
+  },
+  {
+    name: "a file that is not on disk is refused by name",
+    script: `
+      try {
+        window.uno.dropped(new File(["a,b\\n1,2\\n"], "memory.csv"));
+        return "a file with no path was accepted";
+      } catch (err) {
+        return err.message.includes("memory.csv") ? "" : err.message;
+      }
+    `,
+  },
+  {
     name: "only the visible rows are in the DOM",
     script: `
       const n = document.querySelectorAll("tbody tr").length;
@@ -90,16 +118,28 @@ const CHECKS: Check[] = [
     script: `
       const sc = document.querySelector(".grid-scroll");
       sc.scrollTop = sc.scrollHeight;
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-      const rows = [...document.querySelectorAll("tbody tr")];
+      // The rows at the end are not in the band the file opened with, so they
+      // are drawn pending until the engine sends them.
+      let rows = [];
+      for (let i = 0; i < 100; i++) {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        rows = [...document.querySelectorAll("tbody tr")];
+        const last = rows[rows.length - 1];
+        if (last.children[0].textContent === "4812" && !last.classList.contains("pending")) {
+          const date = last.children[1].textContent;
+          if (rows.length >= 120) return rows.length + " rows in the DOM";
+          if (date === "") return "row 4,812 arrived empty";
+
+          // The header has to have come along. It once stuck to where the table
+          // started and scrolled out of sight with it.
+          const head = document.querySelector("thead th").getBoundingClientRect().top;
+          const view = sc.getBoundingClientRect().top;
+          return Math.abs(head - view) <= 1 ? "" : "the header is at " + head + ", the view starts at " + view;
+        }
+      }
       const last = rows[rows.length - 1];
-      const gutter = last.children[0].textContent;
-      const inDom = rows.length;
-
-      return gutter === "4812" && inDom < 120
-        ? ""
-        : "last gutter is " + gutter + " with " + inDom + " rows in the DOM";
+      return "last gutter is " + last.children[0].textContent + ", class " + JSON.stringify(last.className);
     `,
   },
   {
@@ -118,6 +158,21 @@ const CHECKS: Check[] = [
       return status === "rep · row 3" && selected === 1
         ? ""
         : "status is " + JSON.stringify(status) + " with " + selected + " selected";
+    `,
+  },
+  {
+    name: "Ctrl+E switches to transform",
+    script: `
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", ctrlKey: true, bubbles: true }));
+      const mode = document.querySelector("#status-mode");
+      for (let i = 0; i < 100 && mode.textContent !== "TRANSFORM"; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      await new Promise((r) => requestAnimationFrame(r));
+
+      const on = document.querySelector(".seg .on")?.textContent;
+      if (mode.textContent !== "TRANSFORM") return "the mode is still " + mode.textContent;
+      return on === "Transform" ? "" : "the switch shows " + JSON.stringify(on);
     `,
   },
   {
@@ -195,11 +250,12 @@ const CHECKS: Check[] = [
 export async function runSmoke(win: BrowserWindow, quit: (code: number) => void): Promise<void> {
   let failed = 0;
 
-  // The window has loaded, but the fixture arrives over IPC a moment later.
+  // The window has loaded, but the fixture's first rows come from an engine a
+  // moment later.
   await win.webContents.executeJavaScript(`
     (async () => {
       for (let i = 0; i < 120; i++) {
-        if (document.querySelector("tbody tr") !== null) return;
+        if (document.querySelector("tbody tr:not(.pending)") !== null) return;
         await new Promise((r) => setTimeout(r, 50));
       }
       throw new Error("no rows were ever drawn");
