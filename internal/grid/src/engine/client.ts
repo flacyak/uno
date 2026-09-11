@@ -305,7 +305,7 @@ export class SourceHandle {
 }
 
 /** Rows kept around the viewport. Several screens, so a wheel rarely outruns them. */
-const BAND_ROWS = 2000;
+export const BAND_ROWS = 2000;
 
 /** A value shown before the engine has recorded it, and what it covered. */
 export interface Pending {

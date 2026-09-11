@@ -52,6 +52,47 @@ Indexing is the first pass. Validation, deduplication, splitting and format
 conversion are meant to be the next ones, each a loop over a `PassContext`
 running in a worker of its own. `resource/composition.html` has the plan.
 
+## Efficiency
+
+`tests/efficiency` measures what a person waits on, as counts that come out
+the same on every run: requests sent, bytes asked for, directory entries read.
+The engine is the real one, reading the stand-in bucket through the real S3
+provider. Every ranged read is held until the test lets it through, so the
+order of reads is the scenario's and not a race.
+
+| file             | what it measures                                              |
+| ---------------- | ------------------------------------------------------------- |
+| `ahead.test.ts`  | bytes fetched to index an object, alone and beside a reader   |
+| `band.test.ts`   | requests and bytes for one jump of the grid's 2,000 row band  |
+| `open.test.ts`   | requests and bytes an open waits on before it shows rows      |
+| `lister.test.ts` | directory entries read again for each page of a 20,000 folder |
+
+Each file holds its numbers to a budget, which is what they are today, so a
+change that costs more fails.
+A change that costs less should lower the budget with it.
+Each also writes its numbers to `out/efficiency/<file>.json` as a list of
+`{ name, unit, value }`, smaller is better, for a tracker to plot over time.
+
+```bash
+vp test tests/efficiency                       # the four files alone
+node scripts/efficiency.ts                     # their numbers as a table
+```
+
+`scripts/efficiency.ts` also sets the numbers beside a base's with `--base`,
+and sends them to a collector where `OTEL_EXPORTER_OTLP_ENDPOINT` names one.
+The `efficiency` workflow does both on every pull request.
+`observability/README.md` at the root of the repository has the rest.
+
+## Telemetry
+
+`serve` takes a `Telemetry`, a function it calls with how long each request
+took to answer and each source took to index. The engine measures and sends
+nothing: `engine/telemetry.ts` is pure, like the rest of the core. Its `Meter`
+adds measurements up and writes them as an OTLP metrics request, and the
+platform sends that, as the desktop does from `src/engine/telemetry.ts`.
+A measurement names what was done and where the bytes were, and nothing about
+whose they are.
+
 ## Development
 
 ```bash
