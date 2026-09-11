@@ -39,6 +39,20 @@ export interface Run {
   prog: Program;
 }
 
+/**
+ * A column whoever holds the rows fills in as it reads them, from something
+ * about a row that is not in it: which file it came from.
+ *
+ * Like a bound column it stores nothing of its own, and unlike one there is
+ * no expression behind it to change, so every edit that names it is refused.
+ */
+export interface Supplied {
+  /** Which column, counting from 0. */
+  col: number;
+  /** What it shows, as the end of a sentence refusing an edit to it. */
+  shows: string;
+}
+
 export class Schema {
   /** How many rows an edit may name. Whoever holds the rows keeps it current. */
   rows: number;
@@ -58,14 +72,22 @@ export class Schema {
   constructor(
     readonly headers: readonly string[],
     rows: number,
+    /** The column the holder of the rows fills in, where there is one. It is
+     * one of `headers`, so an expression can name it like any other. */
+    readonly supplied?: Supplied,
   ) {
     this.rows = rows;
     headers.forEach((h, i) => this.names.set(h, this.names.has(h) ? -1 : i));
   }
 
   /** of builds a Schema from a saved log, which is how undo rebuilds one. */
-  static of(headers: readonly string[], rows: number, edits: readonly Edit[]): Schema {
-    const s = new Schema(headers, rows);
+  static of(
+    headers: readonly string[],
+    rows: number,
+    edits: readonly Edit[],
+    supplied?: Supplied,
+  ): Schema {
+    const s = new Schema(headers, rows, supplied);
     s.replay(edits);
     return s;
   }
@@ -156,6 +178,13 @@ export class Schema {
     if (e.col < 0 || e.col >= cols) {
       throw new Error(
         `edit ${e.seq}: column ${e.col} is outside the ${cols} columns of this sheet`,
+      );
+    }
+    // Nothing is stored in a supplied column and nothing computes it here, so
+    // there is no operation that could change what it shows.
+    if (e.col === this.supplied?.col) {
+      throw new Error(
+        `edit ${e.seq}: ${this.headers[e.col]} shows ${this.supplied.shows}, so it cannot be changed`,
       );
     }
 
