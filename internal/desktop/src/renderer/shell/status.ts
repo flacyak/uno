@@ -3,6 +3,10 @@
 //
 // It also holds the prompt: a command after :, a search after / or ?. While the
 // prompt is open it stands in for the file's line.
+//
+// The window's switches are at its ends: the one that opens and closes the
+// sidebar on the left, and on the right the one between view and transform and
+// the one that opens the sources panel.
 
 import "./status.css";
 
@@ -11,6 +15,22 @@ import type { InputStrategy } from "../input/index.ts";
 import type { Lead } from "../keys.ts";
 import type { Workspace } from "../workspace.ts";
 import { must } from "./util.ts";
+
+/** What the bar's switches do. The shell decides; the bar only asks. */
+export interface StatusAsks {
+  /** Move between view and transform. */
+  toggleMode(): void;
+  /** Open or close the sidebar. */
+  toggleSidebar(): void;
+  /** Open or close the sources panel. */
+  togglePanel(): void;
+}
+
+/** Which of the window's columns are open, for the switches to say. */
+export interface Columns {
+  sidebar: boolean;
+  panel: boolean;
+}
 
 export class StatusBar {
   /** What the open prompt began with. */
@@ -23,6 +43,9 @@ export class StatusBar {
   private readonly waiting = must(document.querySelector<HTMLElement>("#status-keys"));
   private readonly cmd = must(document.querySelector<HTMLInputElement>("#status-cmd"));
   private readonly cell = must(document.querySelector<HTMLElement>("#status-cell"));
+  private readonly seg = must(document.querySelector<HTMLElement>("#mode-switch"));
+  private readonly side = must(document.querySelector<HTMLButtonElement>("#sidebar-toggle"));
+  private readonly sources = must(document.querySelector<HTMLButtonElement>("#panel-toggle"));
 
   /**
    * Enter runs what was typed and Esc closes the prompt, as do clicking away and
@@ -33,7 +56,17 @@ export class StatusBar {
     private readonly entered: (lead: Lead, typed: string) => void,
     /** The prompt closed, so the keys go back to the grid. */
     private readonly closed: () => void,
+    asks: StatusAsks,
   ) {
+    for (const option of this.seg.querySelectorAll<HTMLElement>("[data-mode]")) {
+      // The option showing is where the workspace already is.
+      option.addEventListener("click", () => {
+        if (!option.classList.contains("on")) asks.toggleMode();
+      });
+    }
+    this.side.addEventListener("click", () => asks.toggleSidebar());
+    this.sources.addEventListener("click", () => asks.togglePanel());
+
     const input = this.cmd;
     input.addEventListener("keydown", (e) => {
       // The grid's keys and the shell's chords stay out of what is being typed.
@@ -55,8 +88,17 @@ export class StatusBar {
     input.addEventListener("blur", () => this.close());
   }
 
-  /** paint says what is open, which mode it is in, and where the selection is. */
-  paint(w: Workspace | undefined, grid: Grid | undefined, input: InputStrategy): void {
+  /**
+   * paint says what is open, which mode it is in, where the selection is, and
+   * which of the window's columns are open.
+   */
+  paint(
+    w: Workspace | undefined,
+    grid: Grid | undefined,
+    input: InputStrategy,
+    open: Columns,
+  ): void {
+    this.switches(w, input, open);
     this.file.textContent = w === undefined ? "no file open" : w.status();
     // A narrow window cuts the line short, and the whole of it is a hover away.
     this.file.title = this.file.textContent;
@@ -75,6 +117,30 @@ export class StatusBar {
     const { row, col } = grid.selection();
     const header = w.rows.columns[col]?.header ?? "";
     this.cell.textContent = `${header} · row ${row + 1}`;
+  }
+
+  /** switches draws the mode switch as the workspace has it, and each column's
+   * switch as open or closed. */
+  private switches(w: Workspace | undefined, input: InputStrategy, open: Columns): void {
+    // With nothing open there is no mode to switch.
+    this.seg.hidden = w === undefined;
+    this.seg.title = input.switchHint;
+    for (const option of this.seg.querySelectorAll<HTMLElement>("[data-mode]")) {
+      const mode = option.dataset["mode"];
+      option.className = w?.mode !== mode ? "" : mode === "view" ? "on" : "on t";
+    }
+
+    this.side.classList.toggle("on", open.sidebar);
+    this.side.title = `${open.sidebar ? "Close" : "Open"} the sidebar · Ctrl+B`;
+    this.side.setAttribute("aria-label", "Sidebar");
+    this.side.setAttribute("aria-pressed", String(open.sidebar));
+
+    this.sources.classList.toggle("on", open.panel);
+    this.sources.title = open.panel
+      ? "Close the sources panel"
+      : "Sources: what is open, and where files come from · Ctrl+Shift+B";
+    this.sources.setAttribute("aria-label", "Sources");
+    this.sources.setAttribute("aria-pressed", String(open.panel));
   }
 
   /** One line, and the only place the shell talks. */

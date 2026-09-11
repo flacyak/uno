@@ -14,6 +14,7 @@ import {
   poolSize,
   scrollerToTop,
   scrollTarget,
+  spanIntoView,
   tableOffset,
   topToScroller,
   visibleRange,
@@ -92,6 +93,26 @@ test("scrolling into view moves as little as puts the row wholly on screen", () 
   expect(intoView(5, ROW_H, top, height), "above the view").toBe(5 * ROW_H);
   expect(intoView(25, ROW_H, top, height), "below the view").toBe(25 * ROW_H + ROW_H - height);
   expect(intoView(15, ROW_H, top, height), "already wholly on screen").toBeUndefined();
+});
+
+// The same question along the row: a selection moved to a column off the side
+// of a wide file brings the column on screen.
+test("a column off either side scrolls just far enough to be wholly on screen", () => {
+  const scrollLeft = 300;
+  const width = 800;
+
+  expect(spanIntoView(120, 90, scrollLeft, width), "off the left").toBe(120);
+  expect(spanIntoView(1050, 140, scrollLeft, width), "off the right").toBe(1050 + 140 - width);
+  expect(
+    spanIntoView(1000, 100, scrollLeft, width),
+    "its right edge on the window's",
+  ).toBeUndefined();
+  expect(spanIntoView(400, 90, scrollLeft, width), "already wholly on screen").toBeUndefined();
+});
+
+test("a column wider than the window is shown from its start", () => {
+  expect(spanIntoView(500, 1200, 300, 800)).toBe(500);
+  expect(spanIntoView(200, 1200, 300, 800)).toBe(200);
 });
 
 test("zt, zz and zb place a row at the top, middle and bottom of the screen", () => {

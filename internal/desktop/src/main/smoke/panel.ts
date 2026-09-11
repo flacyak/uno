@@ -123,7 +123,7 @@ export const PANEL: Check[] = [
 
       buttons()[0].click();
       if (!(await arrives(() => document.querySelectorAll(".tab").length === 4))) {
-        return "the strip has " + document.querySelectorAll(".tab").length + " tabs · " + JSON.stringify(text("#status-msg"));
+        return "the sidebar has " + document.querySelectorAll(".tab").length + " tabs · " + JSON.stringify(text("#status-msg"));
       }
       // A tab's line says where it reads from to whoever hovers.
       const want = ["s3://acme-exports/2025/ads-q4.csv", "s3://acme-exports/2025/sales-q3.csv"];

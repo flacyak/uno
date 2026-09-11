@@ -56,6 +56,10 @@ export interface Host {
    * them again, since it is the one that knows which engine that is.
    */
   saveConnection(c: Connection): Promise<Connection>;
+
+  /** Close the window, and the app with its last one. The window has no frame
+   * of its own, so the page draws the control and asks through here. */
+  quit(): void;
 }
 
 /**
