@@ -15,8 +15,8 @@
 // on Wayland.
 //
 // What still reaches the page is what main sends it: scripts, the menu's
-// messages, and sendInputEvent inside `through`. The menu bar is drawn by the
-// window rather than the page, so a click on it still lands.
+// messages, and sendInputEvent inside `through`. The menu's accelerators are
+// the main process's and not the page's, so one of those still lands.
 
 import type { BrowserWindow } from "electron";
 
