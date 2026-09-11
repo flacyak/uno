@@ -1,6 +1,6 @@
 // The engine's measurements, sent to a collector only where one is named.
 
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 
 import { exporting } from "../src/engine/telemetry.ts";
 
@@ -107,5 +107,19 @@ test("a collector that cannot be reached costs the engine nothing", async () => 
     await expect(telemetry.fetch(OBJECT)).rejects.toThrow("no route");
   } finally {
     telemetry.stop();
+  }
+});
+
+test("an endpoint that cannot be read is said once, and the engine runs unmeasured", () => {
+  const said = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    expect(
+      exporting({ OTEL_EXPORTER_OTLP_ENDPOINT: "otlp.example.test/otlp" }, VERSION),
+    ).toBeUndefined();
+    expect(said).toHaveBeenCalledTimes(1);
+    expect(said.mock.calls[0]![0]).toContain("OTEL_EXPORTER_OTLP_ENDPOINT is not a URL");
+    expect(said.mock.calls[0]![0]).not.toContain("otlp.example.test");
+  } finally {
+    said.mockRestore();
   }
 });

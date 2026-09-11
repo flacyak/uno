@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { METRICS_PATH, Meter, otlpHeaders } from "../src/engine/telemetry.ts";
+import { ENDPOINT_VARIABLE, Meter, collector } from "../src/engine/telemetry.ts";
 import { compare, markdown } from "../tests/efficiency/compare.ts";
 import type { Metric } from "../tests/efficiency/record.ts";
 
@@ -59,9 +59,9 @@ function metricsIn(folder: string): Metric[] {
 
 /** send hands the metrics to the collector the environment names, if it names one. */
 async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise<string> {
-  const endpoint = env["OTEL_EXPORTER_OTLP_ENDPOINT"];
-  if (endpoint === undefined || endpoint === "") {
-    return "OTEL_EXPORTER_OTLP_ENDPOINT is not set, so nothing was sent to a collector";
+  const to = collector(env);
+  if (to === undefined) {
+    return `${ENDPOINT_VARIABLE} is not set, so nothing was sent to a collector`;
   }
 
   // A pull request is measured on a branch of its own name. GitHub says which
@@ -78,14 +78,17 @@ async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise
     });
   }
 
-  const res = await fetch(`${endpoint.replace(/\/+$/, "")}${METRICS_PATH}`, {
+  const res = await fetch(to.url, {
     method: "POST",
-    headers: {
-      ...otlpHeaders(env["OTEL_EXPORTER_OTLP_HEADERS"]),
-      "content-type": "application/json",
-    },
+    headers: { ...to.headers, "content-type": "application/json" },
     body: JSON.stringify(meter.payload()),
     signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+  }).catch((err: unknown) => {
+    // fetch says only that it failed, and keeps why in the cause.
+    const cause = err instanceof Error && err.cause instanceof Error ? err.cause : err;
+    throw new Error(
+      `the collector could not be reached · ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
   });
   if (!res.ok) {
     throw new Error(`the collector answered ${res.status}: ${await res.text()}`);
@@ -106,4 +109,14 @@ const base = values.base === undefined ? [] : metricsIn(values.base);
 const table = markdown(compare(base, head), base.length > 0);
 if (values.out !== undefined) writeFileSync(values.out, table);
 console.log(table);
-console.log(await send(head, process.env));
+
+// The table is out before anything is sent, so a collector that cannot be
+// reached costs the history and not the report. What went wrong is said in a
+// line, and as an error GitHub shows on the run, where it is run by one.
+try {
+  console.log(await send(head, process.env));
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`${process.env["GITHUB_ACTIONS"] === "true" ? "::error::" : ""}${message}`);
+  process.exitCode = 1;
+}
