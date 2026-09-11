@@ -5,6 +5,7 @@
 
 import type { FindRequest } from "@uno/grid/engine";
 
+import { m } from "../../paraglide/messages.js";
 import type { Grid } from "../grid/index.ts";
 import { num } from "../locale.ts";
 import type { Workspace } from "../workspace.ts";
@@ -44,13 +45,16 @@ export class Finder {
       this.say(`${column.header} is text · every value in it parses`, true);
       return;
     }
-    const where = `${dir === 1 ? "below" : "above"} row ${num(row + 1)}`;
-    const kind = column.kind === "date" ? "a date" : "a number";
-    void this.find(
-      { t: "unparsed" },
-      dir,
-      `nothing ${where} in ${column.header} fails to parse as ${kind}`,
-    );
+    const from = { row: num(row + 1), column: column.header };
+    const missing =
+      column.kind === "date"
+        ? dir === 1
+          ? m.find_unparsed_date_below(from)
+          : m.find_unparsed_date_above(from)
+        : dir === 1
+          ? m.find_unparsed_number_below(from)
+          : m.find_unparsed_number_above(from);
+    void this.find({ t: "unparsed" }, dir, missing);
   }
 
   /**
@@ -82,8 +86,12 @@ export class Finder {
     if (on === undefined) return;
     const { row, col } = on.grid.selection();
     const header = on.workspace.rows.columns[col]?.header ?? "this column";
-    const where = `${dir === 1 ? "below" : "above"} row ${num(row + 1)}`;
-    void this.find({ t: "text", text }, dir, `"${text}" is not ${where} in ${header}`);
+    const from = { text, row: num(row + 1), column: header };
+    void this.find(
+      { t: "text", text },
+      dir,
+      dir === 1 ? m.find_text_below(from) : m.find_text_above(from),
+    );
   }
 
   /**
@@ -109,8 +117,12 @@ export class Finder {
       } else if (found.complete) {
         this.say(missing, true);
       } else {
-        const searched = num(found.searched);
-        this.say(`${missing} · searched ${searched} rows · indexing ${w.indexed()}%`, true);
+        const parts = [
+          missing,
+          m.find_searched_rows({ count: found.searched }),
+          m.indexing_percent({ percent: w.indexed() }),
+        ];
+        this.say(parts.join(" · "), true);
       }
     } catch (err) {
       if (asked === this.finds) this.say(message(err), true);

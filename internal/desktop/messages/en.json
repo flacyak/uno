@@ -1,4 +1,171 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "saved_path": "saved {path}"
+  "saved_path": "saved {path}",
+  "rows_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} row",
+        "plural=other": "{n} rows"
+      }
+    }
+  ],
+  "rows_count_about": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "≈{n} row",
+        "plural=other": "≈{n} rows"
+      }
+    }
+  ],
+  "columns_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} column",
+        "plural=other": "{n} columns"
+      }
+    }
+  ],
+  "edits_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} edit",
+        "plural=other": "{n} edits"
+      }
+    }
+  ],
+  "cells_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} cell",
+        "plural=other": "{n} cells"
+      }
+    }
+  ],
+  "files_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} file",
+        "plural=other": "{n} files"
+      }
+    }
+  ],
+  "files_new_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} new file",
+        "plural=other": "{n} new files"
+      }
+    }
+  ],
+  "folders_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} folder",
+        "plural=other": "{n} folders"
+      }
+    }
+  ],
+  "indexing_percent": "indexing {percent}%",
+  "offer_cells_at_least": [
+    {
+      "declarations": [
+        "input scanned",
+        "input affected",
+        "local plural = scanned: plural",
+        "local n = scanned: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "at least {affected} in the first row",
+        "plural=other": "at least {affected} in the first {n} rows"
+      }
+    }
+  ],
+  "connect_found": "{folders}, {files}",
+  "connect_found_more": "{folders}, {files}, and more",
+  "connect_listed_bucket": "listed the bucket · {found}",
+  "connect_listed_prefix": "listed {prefix} · {found}",
+  "sources_append_new": [
+    {
+      "declarations": [
+        "input count",
+        "input folder",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} new file in {folder} · append",
+        "plural=other": "{n} new files in {folder} · append"
+      }
+    }
+  ],
+  "find_unparsed_date_below": "nothing below row {row} in {column} fails to parse as a date",
+  "find_unparsed_date_above": "nothing above row {row} in {column} fails to parse as a date",
+  "find_unparsed_number_below": "nothing below row {row} in {column} fails to parse as a number",
+  "find_unparsed_number_above": "nothing above row {row} in {column} fails to parse as a number",
+  "find_text_below": "\"{text}\" is not below row {row} in {column}",
+  "find_text_above": "\"{text}\" is not above row {row} in {column}",
+  "find_searched_rows": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "searched {n} row",
+        "plural=other": "searched {n} rows"
+      }
+    }
+  ],
+  "sidebar_close_hint": "Close the sidebar · Ctrl+B",
+  "sidebar_open_hint": "Open the sidebar · Ctrl+B",
+  "status_row": "row {row}",
+  "reloaded_name": "reloaded {name}",
+  "reload_same_size": "the same size",
+  "reload_size_moved": "{now}, was {was}",
+  "reload_no_change": "no change in the bucket",
+  "reload_new_version_same_size": "a new version, the same size",
+  "reload_new_version_size_moved": "a new version, {now}, was {was}",
+  "edits_replayed": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} edit replayed",
+        "plural=other": "{n} edits replayed"
+      }
+    }
+  ],
+  "source_has_edits": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} has {n} edit · × again to remove it",
+        "plural=other": "{name} has {n} edits · × again to remove it"
+      }
+    }
+  ],
+  "unsaved_edits_key_again": "unsaved edits · Ctrl+S first, or {key} again to drop them",
+  "unsaved_edits_click_again": "unsaved edits · Ctrl+S first, or click again to drop them"
 }

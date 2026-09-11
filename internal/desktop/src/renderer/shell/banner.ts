@@ -5,6 +5,7 @@ import "./banner.css";
 
 import type { Offer } from "@uno/grid/engine";
 
+import { m } from "../../paraglide/messages.js";
 import { num } from "../locale.ts";
 
 /** An offer is the same question while its source, column and program are. */
@@ -23,10 +24,9 @@ export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void
   const header = document.createElement("b");
   header.textContent = offer.header;
 
-  const n = num(offer.affects);
   const count = offer.complete
-    ? `${n} ${offer.affects === 1 ? "cell" : "cells"}`
-    : `at least ${n} in the first ${num(offer.scanned)} rows`;
+    ? m.cells_count({ count: offer.affects })
+    : m.offer_cells_at_least({ affected: num(offer.affects), scanned: offer.scanned });
   const parts = [offer.description, count];
   if (offer.ambiguous) parts.push("another rule fits these examples too");
 
