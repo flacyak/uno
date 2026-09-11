@@ -98,6 +98,11 @@ export function serve(
         port.post({ t: "relinked", id: msg.id, opened });
         return;
       }
+      case "append": {
+        const opened = await workspace.append(msg.source, msg.parts);
+        port.post({ t: "appended", id: msg.id, opened });
+        return;
+      }
       case "rows": {
         const r = await workspace.rows(msg.source, msg.first, msg.count);
         port.post({ t: "rows", id: msg.id, first: msg.first, ...r });

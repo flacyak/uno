@@ -27,7 +27,7 @@ import {
 } from "../sheet/index.ts";
 import type { Edit, Written } from "../sheet/index.ts";
 import { isRemote, multiOf } from "../store/index.ts";
-import type { ByteSource, HeaderMode, PartMap, PartsRef } from "../store/index.ts";
+import type { ByteSource, HeaderMode, PartMap, PartsRef, SingleRef } from "../store/index.ts";
 import { indexPass } from "./pass.ts";
 import type {
   Changed,
@@ -867,6 +867,31 @@ export class View {
       // The choice is part of what the source is. What the column shows is
       // worked out from the parts again, so none of it is written.
       fileColumn: ref.fileColumn === true ? true : undefined,
+    };
+  }
+
+  /**
+   * extended is the ref this source is opened by with `files` added at its
+   * end, or undefined for a source that is one file.
+   *
+   * Each part it has now goes with the extent the join measured of it. A part
+   * measures the same whatever comes after it, so the longer source places
+   * every one of them where it is now without opening it, and holds it to
+   * that when a read reaches it: every row keeps its number.
+   */
+  extended(files: readonly SingleRef[]): PartsRef | undefined {
+    const ref = this.parts;
+    if (ref === undefined) return undefined;
+    const extents = multiOf(this.source)?.extents;
+    return {
+      ...ref,
+      parts: [
+        ...ref.parts.map((part, i) => {
+          const extent = extents?.[i];
+          return extent === undefined ? part : { ...part, extent };
+        }),
+        ...files.map((file) => ({ ref: file })),
+      ],
     };
   }
 
