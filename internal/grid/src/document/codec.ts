@@ -3,24 +3,41 @@ import { unzipSync, zipSync } from "fflate";
 import { compareStrings, nowTruncated, parseTime, rfc3339, sha256Hex } from "../go/index.ts";
 import { read as ingestRead } from "../ingest/index.ts";
 import type { Edit, Op, Sheet } from "../sheet/index.ts";
-import type { Document, Held, Logged, Manifest, Source, State } from "./document.ts";
+import type {
+  Document,
+  FileSource,
+  Held,
+  HeldFile,
+  HeldPart,
+  HeldParts,
+  Logged,
+  Manifest,
+  PartsSource,
+  Source,
+  SourcePart,
+  State,
+} from "./document.ts";
 import {
   BASE_VERSION,
   FORMAT_VERSION,
   FORMULA_VERSION,
   GENERATOR,
+  KNOWN_HEADER_MODES,
   LOG_ENTRY,
   MANIFEST_ENTRY,
+  PARTS_VERSION,
   POINTED_VERSION,
   RULE_VERSION,
   SOURCES_VERSION,
   STATE_ENTRY,
+  isHeaderMode,
   logOf,
   resolvedPath,
   sourceEntry,
   sourceId,
   storedPath,
 } from "./document.ts";
+import { baseOf } from "./path.ts";
 
 const decoder = new TextDecoder("utf-8");
 const encoder = new TextEncoder();
@@ -82,20 +99,46 @@ export function readContainer(name: string, bytes: Uint8Array, at = ""): Documen
     throw new Error(`${name} is not a readable .uno file: ${(err as Error).message}`);
   }
 
-  const m = parseManifest(name, readJSON(name, entries, MANIFEST_ENTRY));
+  const manifest = readJSON(name, entries, MANIFEST_ENTRY);
 
   // A reader that guesses at a layout it does not know will either crash or,
   // far worse, silently drop the entries it did not recognise and then save
   // that loss back over the original.
-  if (m.format > FORMAT_VERSION) {
+  //
+  // The format is the first thing read out of the manifest and the only thing
+  // read before this, so a newer file is refused as a newer file whatever it
+  // has done to the rest of the layout, and not as a broken one for holding a
+  // kind of source this build has never heard of.
+  const format = asNumber(asRecord(manifest)["format"]);
+  if (format > FORMAT_VERSION) {
     throw new Error(
-      `${name} was saved by a newer uno (format ${m.format}, this build reads ${FORMAT_VERSION}). Update uno to open it`,
+      `${name} was saved by a newer uno (format ${format}, this build reads ${FORMAT_VERSION}). Update uno to open it`,
     );
   }
+  const m = parseManifest(name, manifest);
 
   const log = readLog(name, entries, m);
   const { active, states } = parseState(readJSON(name, entries, m.sheet.entry), m);
-  const sources: Held[] = m.sources.map((src) => ({
+  const sources: Held[] = m.sources.map((src) => {
+    const state = states.get(src.id) ?? { active: { row: 0, col: 0 } };
+    return src.parts === undefined
+      ? heldFile(name, entries, src, state, at)
+      : heldParts(src, state, at);
+  });
+
+  return { manifest: m, sources, active, log, extra: readExtra(entries, m), at };
+}
+
+/** One file as the workspace holds it: the bytes the container carried for
+ * it, or where it is, read from where the .uno is now. */
+function heldFile(
+  name: string,
+  entries: Record<string, Uint8Array>,
+  src: FileSource,
+  state: State,
+  at: string,
+): HeldFile {
+  return {
     id: src.id,
     name: src.name,
     raw: src.entry === "" ? undefined : readEntry(name, entries, src.entry),
@@ -105,10 +148,33 @@ export function readContainer(name: string, bytes: Uint8Array, at = ""): Documen
     connection: src.connection === "" ? undefined : src.connection,
     rows: src.rows,
     cols: src.cols,
-    state: states.get(src.id) ?? { active: { row: 0, col: 0 } },
-  }));
+    state,
+  };
+}
 
-  return { manifest: m, sources, active, log, extra: readExtra(entries, m), at };
+/** Several files read as one as the workspace holds them: where each part is,
+ * read from where the .uno is now, and what the save measured of it. */
+function heldParts(src: PartsSource, state: State, at: string): HeldParts {
+  return {
+    id: src.id,
+    name: src.name,
+    connection: src.connection === "" ? undefined : src.connection,
+    parts: src.parts.map((part): HeldPart => {
+      const path = resolvedPath(part.path, at);
+      return {
+        name: part.name === "" ? baseOf(path) : part.name,
+        path,
+        bytes: part.bytes,
+        version: part.version === "" ? undefined : part.version,
+        skip: part.skip,
+        unterminated: part.unterminated,
+      };
+    }),
+    header: src.header,
+    rows: src.rows,
+    cols: src.cols,
+    state,
+  };
 }
 
 /**
@@ -121,7 +187,9 @@ export function readContainer(name: string, bytes: Uint8Array, at = ""): Documen
  *
  * A workspace of one carried source is written the way every build before
  * format 4 wrote one, so it still opens in them. A second source, or a pointer,
- * changes the layout.
+ * changes the layout. Several files read as one are the only thing that needs
+ * format 6, and a workspace without them is written as format 5 wrote it, to
+ * the byte.
  *
  * The measured manifest is written back onto the document, so the next save
  * preserves the time of the first one and the status bar can report what was
@@ -142,7 +210,8 @@ export function writeDocument(d: Document): Uint8Array {
     [MANIFEST_ENTRY]: entry(encoder.encode(formatJSON(manifestJSON(m)))),
   };
   d.sources.forEach((src, i) => {
-    if (src.raw !== undefined) files[m.sources[i]!.entry] = entry(src.raw);
+    const named = m.sources[i]!.entry;
+    if (src.raw !== undefined && named !== undefined) files[named] = entry(src.raw);
   });
   files[STATE_ENTRY] = entry(encoder.encode(formatJSON(stateJSON(d, single))));
   files[LOG_ENTRY] = entry(encoder.encode(formatLog(d.log, single)));
@@ -170,9 +239,11 @@ function checkLog(d: Document): void {
   for (const src of d.sources) {
     if (src.id === "") throw new Error(`${src.name} has no id to log its edits under`);
     if (ids.has(src.id)) throw new Error(`two sources are both called ${src.id}`);
-    // Neither is a source that would open as an empty grid and save over the
-    // one it came from. Both is a file the reader has two answers for.
-    if ((src.raw === undefined) === (src.path === undefined)) {
+    if (src.parts !== undefined) {
+      checkParts(src);
+    } else if ((src.raw === undefined) === (src.path === undefined)) {
+      // Neither is a source that would open as an empty grid and save over the
+      // one it came from. Both is a file the reader has two answers for.
       throw new Error(
         src.raw === undefined
           ? `${src.name} has neither bytes to carry nor a path to point at`
@@ -186,6 +257,22 @@ function checkLog(d: Document): void {
       throw new Error(`edit ${l.edit.seq} names ${l.source}, which is not a source here`);
   }
   if (!ids.has(d.active)) throw new Error(`the active source ${d.active} is not a source here`);
+}
+
+/**
+ * checkParts refuses several files read as one with no files, or with one
+ * there is no path to: a part is always pointed at, so a part without a path
+ * is a part the file could not say anything about.
+ */
+function checkParts(src: HeldParts): void {
+  if (src.parts.length === 0) throw new Error(`${src.name} has no parts to point at`);
+  src.parts.forEach((part, i) => {
+    if (part.path === "") {
+      throw new Error(
+        `${src.name}: ${part.name} (part ${i + 1} of ${src.parts.length}) has no path to point at`,
+      );
+    }
+  });
 }
 
 /**
@@ -213,31 +300,65 @@ function manifestFor(d: Document): Manifest {
     generator: GENERATOR,
     modified,
     created: d.manifest.created ?? modified,
-    sources: d.sources.map((src): Source => ({
-      id: src.id,
-      name: src.name,
-      bytes: src.raw?.length ?? src.bytes ?? 0,
-      sha256: src.raw === undefined ? "" : sha256Hex(src.raw),
-      entry:
-        src.raw === undefined ? "" : single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
-      path: src.path === undefined ? "" : storedPath(src.path, d.at),
-      // Both are about the file pointed at, so a carried source has neither.
-      version: src.path === undefined ? "" : (src.version ?? ""),
-      connection: src.path === undefined ? "" : (src.connection ?? ""),
-      rows: src.rows,
-      cols: src.cols,
-    })),
+    sources: d.sources.map((src) =>
+      src.parts === undefined ? fileSource(src, single, d.at) : partsSource(src, d.at),
+    ),
     sheet: { entry: STATE_ENTRY },
     edits: { count: d.log.length, entry: LOG_ENTRY },
   };
 }
 
+/** What the manifest says of one file, for a .uno going to `at`. */
+function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
+  return {
+    id: src.id,
+    name: src.name,
+    bytes: src.raw?.length ?? src.bytes ?? 0,
+    sha256: src.raw === undefined ? "" : sha256Hex(src.raw),
+    entry:
+      src.raw === undefined ? "" : single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
+    path: src.path === undefined ? "" : storedPath(src.path, at),
+    // Both are about the file pointed at, so a carried source has neither.
+    version: src.path === undefined ? "" : (src.version ?? ""),
+    connection: src.path === undefined ? "" : (src.connection ?? ""),
+    rows: src.rows,
+    cols: src.cols,
+  };
+}
+
 /**
- * formatFor is the oldest build that could open this workspace: a pointer needs
- * the layout that can hold one, a second source the layout that lists them, and
- * one carried source whatever its log needs.
+ * What the manifest says of several files read as one, for a .uno going to
+ * `at`. Each part is written down the way a file source's path is, so a
+ * folder of parts beside the workspace moves with it.
+ */
+function partsSource(src: HeldParts, at: string): PartsSource {
+  return {
+    id: src.id,
+    name: src.name,
+    connection: src.connection ?? "",
+    parts: src.parts.map((part): SourcePart => ({
+      // Only a name the path does not already say is worth a key.
+      name: part.name === baseOf(part.path) ? "" : part.name,
+      path: storedPath(part.path, at),
+      bytes: part.bytes,
+      version: part.version ?? "",
+      skip: part.skip,
+      unterminated: part.unterminated,
+    })),
+    header: src.header,
+    rows: src.rows,
+    cols: src.cols,
+  };
+}
+
+/**
+ * formatFor is the oldest build that could open this workspace: several files
+ * read as one need the layout that lists parts, a pointer the layout that can
+ * hold one, a second source the layout that lists them, and one carried source
+ * whatever its log needs.
  */
 export function formatFor(sources: readonly Held[], log: readonly Logged[]): number {
+  if (sources.some((s) => s.parts !== undefined)) return PARTS_VERSION;
   if (sources.some((s) => s.path !== undefined)) return POINTED_VERSION;
   if (sources.length > 1) return SOURCES_VERSION;
   return versionFor(log.map((l) => l.edit));
@@ -336,7 +457,7 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
  */
 function readExtra(entries: Record<string, Uint8Array>, m: Manifest): Map<string, Uint8Array> {
   const known = new Set([MANIFEST_ENTRY, m.sheet.entry, m.edits.entry]);
-  for (const s of m.sources) if (s.entry !== "") known.add(s.entry);
+  for (const s of m.sources) if (s.entry !== undefined && s.entry !== "") known.add(s.entry);
 
   const extra = new Map<string, Uint8Array>();
   for (const [key, bytes] of Object.entries(entries)) {
@@ -360,6 +481,12 @@ function asString(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
+/** Whether a value out of a file is a count of bytes: a whole number, and not
+ * a negative one. */
+function isByteCount(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0;
+}
+
 /**
  * parseManifest reads either layout into the one shape: a list of sources.
  *
@@ -376,21 +503,7 @@ function parseManifest(name: string, v: unknown): Manifest {
   const listed = o["sources"];
   let sources: Source[];
   if (Array.isArray(listed)) {
-    sources = listed.map((raw) => {
-      const s = asRecord(raw);
-      return {
-        id: asString(s["id"]),
-        name: asString(s["name"]),
-        bytes: asNumber(s["bytes"]),
-        sha256: asString(s["sha256"]),
-        entry: asString(s["entry"]),
-        path: asString(s["path"]),
-        version: asString(s["version"]),
-        connection: asString(s["connection"]),
-        rows: asNumber(s["rows"]),
-        cols: asNumber(s["cols"]),
-      };
-    });
+    sources = listed.map((raw) => parseSource(name, asRecord(raw)));
   } else {
     const s = asRecord(o["source"]);
     const sourceName = asString(s["name"]);
@@ -416,9 +529,9 @@ function parseManifest(name: string, v: unknown): Manifest {
     if (s.name === "") throw new Error(`${name}: the manifest names no source file`);
     if (s.id === "") throw new Error(`${name}: ${s.name} has no id in the manifest`);
     if (ids.has(s.id)) throw new Error(`${name}: two sources are both called ${s.id}`);
-    // A source with neither would open as an empty grid and then save over
-    // whatever it came from. Better to say so before anything is decoded.
-    if (s.entry === "" && s.path === "") {
+    // A file source with neither would open as an empty grid and then save
+    // over whatever it came from. Better to say so before anything is decoded.
+    if (s.parts === undefined && s.entry === "" && s.path === "") {
       throw new Error(`${name}: ${s.name} has no entry in this file and no path to the original`);
     }
     ids.add(s.id);
@@ -432,6 +545,117 @@ function parseManifest(name: string, v: unknown): Manifest {
     sources,
     sheet: { entry: asString(sheet["entry"]) },
     edits: { count: asNumber(edits["count"]), entry: asString(edits["entry"]) },
+  };
+}
+
+/**
+ * parseSource reads one of the manifest's sources: one file, or several read
+ * as one where it has `parts`.
+ *
+ * A file source is read the way it always was, a key at a time and with
+ * nothing asked of a key that is missing. Parts are read strictly, because
+ * every row's number depends on every part before it: a list that is not
+ * quite what was written is refused, saying which part and what is wrong with
+ * it, before a single file is opened.
+ */
+function parseSource(name: string, s: Record<string, unknown>): Source {
+  const base = {
+    id: asString(s["id"]),
+    name: asString(s["name"]),
+    connection: asString(s["connection"]),
+    rows: asNumber(s["rows"]),
+    cols: asNumber(s["cols"]),
+  };
+  if (s["parts"] === undefined) {
+    return {
+      ...base,
+      bytes: asNumber(s["bytes"]),
+      sha256: asString(s["sha256"]),
+      entry: asString(s["entry"]),
+      path: asString(s["path"]),
+      version: asString(s["version"]),
+    };
+  }
+
+  if (base.name === "") throw new Error(`${name}: the manifest names no source file`);
+  const source = `${name}: ${base.name}`;
+
+  // One file and several at once is a source the reader has two answers for.
+  const one = asString(s["path"]) !== "" ? "a path" : asString(s["entry"]) !== "" ? "an entry" : "";
+  if (one !== "") {
+    throw new Error(
+      `${source} has both ${one} and parts · a source is one file or several read as one`,
+    );
+  }
+
+  const listed = s["parts"];
+  if (!Array.isArray(listed)) throw new Error(`${source}: parts is not a list of files`);
+  if (listed.length === 0) {
+    throw new Error(`${source} has no parts · several files read as one need at least one`);
+  }
+  const parts = listed.map((raw, i) =>
+    parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw),
+  );
+
+  const known = KNOWN_HEADER_MODES.map((mode) => JSON.stringify(mode)).join(", ");
+  const header = s["header"];
+  if (header === undefined) {
+    throw new Error(
+      `${source} has parts and no header · it has to say whether they have a header row, as one of ${known}`,
+    );
+  }
+  if (typeof header !== "string" || !isHeaderMode(header)) {
+    throw new Error(
+      `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
+    );
+  }
+  return { ...base, parts, header };
+}
+
+/**
+ * parsePart reads one part. `which` is what an error calls it before its path
+ * is known: the file, the source, and the part's place in the list.
+ *
+ * `skip` and `unterminated` are left out of the file where a part is there
+ * whole and ends in a newline, which is what a missing key means.
+ */
+function parsePart(which: string, raw: unknown): SourcePart {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`${which} is not a file with a path and bytes`);
+  }
+  const p = asRecord(raw);
+
+  const path = p["path"];
+  if (typeof path !== "string" || path === "") throw new Error(`${which} has no path`);
+  const part = `${which} (${path})`;
+
+  const bytes = p["bytes"];
+  if (!isByteCount(bytes)) throw new Error(`${part} does not say how many bytes it is`);
+
+  const partName = p["name"];
+  if (partName !== undefined && typeof partName !== "string") {
+    throw new Error(`${part}: name is not text`);
+  }
+  const version = p["version"];
+  if (version !== undefined && typeof version !== "string") {
+    throw new Error(`${part}: version is not text`);
+  }
+  const skip = p["skip"];
+  if (skip !== undefined && !isByteCount(skip)) {
+    throw new Error(`${part}: skip is not a number of bytes`);
+  }
+  const unterminated = p["unterminated"];
+  if (unterminated !== undefined && typeof unterminated !== "boolean") {
+    throw new Error(`${part}: unterminated is neither true nor false`);
+  }
+
+  return {
+    name: partName ?? "",
+    path,
+    bytes,
+    version: version ?? "",
+    skip: skip ?? 0,
+    unterminated: unterminated ?? false,
   };
 }
 
@@ -510,6 +734,7 @@ function manifestJSON(m: Manifest): unknown {
   const edits = m.edits;
 
   if (m.format < SOURCES_VERSION) {
+    // One carried file, which is the only source this layout can hold.
     const s = m.sources[0]!;
     return {
       ...head,
@@ -522,8 +747,20 @@ function manifestJSON(m: Manifest): unknown {
 }
 
 /** omitempty over the half that does not apply, so a person reading uno.json
- * sees either an entry or a path and never an empty one of each. */
+ * sees either an entry or a path and never an empty one of each. Several files
+ * read as one have neither, and a list of parts where a file has its path. */
 function sourceJSON(s: Source): unknown {
+  if (s.parts !== undefined) {
+    return {
+      id: s.id,
+      name: s.name,
+      connection: s.connection === "" ? undefined : s.connection,
+      parts: s.parts.map(partJSON),
+      header: s.header,
+      rows: s.rows,
+      cols: s.cols,
+    };
+  }
   return {
     id: s.id,
     name: s.name,
@@ -535,6 +772,22 @@ function sourceJSON(s: Source): unknown {
     version: s.version === "" ? undefined : s.version,
     rows: s.rows,
     cols: s.cols,
+  };
+}
+
+/**
+ * omitempty over what most parts do not have: a name the path does not say, a
+ * version, a header to leave out, a last row with no newline. The first part
+ * of a folder of exports on a disk is its path and its size.
+ */
+function partJSON(p: SourcePart): unknown {
+  return {
+    name: p.name === "" ? undefined : p.name,
+    path: p.path,
+    bytes: p.bytes,
+    version: p.version === "" ? undefined : p.version,
+    skip: p.skip === 0 ? undefined : p.skip,
+    unterminated: p.unterminated ? true : undefined,
   };
 }
 

@@ -10,6 +10,10 @@
 // cannot name by path -- bytes dropped into a browser, with no file behind them
 // -- is carried instead.
 //
+// A source can also be several files read as one table. Those are always
+// pointed at, each part by its own path, in the order their rows are read: the
+// log names rows by number, so the list is fixed and written down whole.
+//
 // A pointer that no longer resolves is not a broken file. The source keeps its
 // id, its edits and its place in the log; it simply has no grid until somebody
 // points it at a file again. Losing a path must never cost the work done through
@@ -23,6 +27,8 @@
 
 import type { Edit } from "../sheet/index.ts";
 import type { Sheet } from "../sheet/index.ts";
+// Type only: whether parts have a header row is decided where they are joined.
+import type { HeaderMode } from "../store/index.ts";
 import { against, dirOf, relativeTo } from "./path.ts";
 
 /**
@@ -35,7 +41,7 @@ import { against, dirOf, relativeTo } from "./path.ts";
  * The alternative is that adding an operation nobody used locks every file the
  * release touches out of every build before it.
  */
-export const FORMAT_VERSION = 5;
+export const FORMAT_VERSION = 6;
 
 /** What a log of nothing but single-cell edits needs, which is every file uno
  * wrote before the recogniser existed. */
@@ -63,6 +69,32 @@ export const SOURCES_VERSION = 4;
  */
 export const POINTED_VERSION = 5;
 
+/**
+ * What a workspace holding several files read as one needs. A build before it
+ * knows a source as an entry or a path and nothing else, so it would have no
+ * rows to give for one that is a list of parts.
+ *
+ * Nothing else needs it: a workspace with no such source is written as it
+ * always was, and opens in every build that read it before.
+ */
+export const PARTS_VERSION = 6;
+
+/**
+ * Every way parts can say whether they have a header row, as uno.json spells
+ * them. A record of them, so a mode added to the type has to be added here
+ * before this compiles.
+ */
+const HEADER_MODES: Record<HeaderMode, true> = { first: true, none: true };
+
+/** The header modes this build reads, in the order a refusal lists them. */
+export const KNOWN_HEADER_MODES: readonly string[] = Object.keys(HEADER_MODES);
+
+/** isHeaderMode says whether a string out of a file is a header mode this
+ * build knows. */
+export function isHeaderMode(v: string): v is HeaderMode {
+  return Object.hasOwn(HEADER_MODES, v);
+}
+
 export const GENERATOR = "uno 0.2.0";
 
 /**
@@ -79,12 +111,8 @@ const SOURCE_STEM = "data/source";
 const SOURCE_DIR = "data/source/";
 
 /**
- * Source is where one file is, as uno.json records it.
- *
- * Exactly one of `entry` and `path` is set. An entry is a copy of the file
- * inside this zip. A path is where the file was when the workspace was saved,
- * relative to the .uno when the file sits under its folder and absolute
- * otherwise.
+ * Source is where one source's bytes are, as uno.json records it: one file, or
+ * several read as one. It is never both, and `parts` is what says which.
  *
  * The name is kept either way, because it is what the tab says and because
  * `ingest` picks its decoder from the extension. For a pointed-at source it is
@@ -95,12 +123,47 @@ const SOURCE_DIR = "data/source/";
  * from the same bytes with the same code that derived them the first time, so a
  * stored copy could only ever be a second opinion that disagrees.
  */
-export interface Source {
+export type Source = FileSource | PartsSource;
+
+/** What uno.json records of every source, whatever is behind it. */
+interface SourceBase {
   /** What the log calls this source. Unique in its workspace, and never reused
    * for another file in it. */
   id: string;
   name: string;
 
+  /**
+   * The id of the connection the source was read through, as a hint. The
+   * connection's details stay in its own file, and an opener matches each
+   * address to its own connections regardless. "" where none covered it, and
+   * for several files where they were not all read through the same one.
+   *
+   * Optional, as a file's `version` is: a format 5 reader ignores both and
+   * opens the workspace as it always did, so neither moves the format.
+   */
+  connection: string;
+
+  /**
+   * The shape of the grid the source and the log add up to, so a recents list
+   * or a file inspector can say how big a workspace is without decoding it.
+   *
+   * For a pointed-at source still being indexed at the save, `rows` is as far
+   * as the index had got. Nothing replays against it -- the engine counts the
+   * rows itself -- so it is a number to show and not one to trust.
+   */
+  rows: number;
+  cols: number;
+}
+
+/**
+ * FileSource is a source that is one file.
+ *
+ * Exactly one of `entry` and `path` is set. An entry is a copy of the file
+ * inside this zip. A path is where the file was when the workspace was saved,
+ * relative to the .uno when the file sits under its folder and absolute
+ * otherwise.
+ */
+export interface FileSource extends SourceBase {
   /**
    * The file's size. For a carried source it is the length of the entry; for a
    * pointed-at one it is what the file measured at the save.
@@ -125,29 +188,63 @@ export interface Source {
    * Which bytes of the file the log was made against, where the place it is in
    * can say: an S3 VersionId, or an ETag in its quotes. "" where there is
    * none to record, which is every carried source and every file on a disk.
-   *
-   * Optional, as `connection` is: a format 5 reader ignores both and opens
-   * the workspace as it always did, so neither moves the format.
    */
   version: string;
 
-  /**
-   * The id of the connection the file was read through, as a hint. The
-   * connection's details stay in its own file, and an opener matches the
-   * address to its own connections regardless. "" where none covered it.
-   */
-  connection: string;
+  parts?: never;
+  header?: never;
+}
 
-  /**
-   * The shape of the grid the file and the log add up to, so a recents list or
-   * a file inspector can say how big a workspace is without decoding it.
-   *
-   * For a pointed-at source still being indexed at the save, `rows` is as far
-   * as the index had got. Nothing replays against it -- the engine counts the
-   * rows itself -- so it is a number to show and not one to trust.
-   */
-  rows: number;
-  cols: number;
+/**
+ * PartsSource is a source that is several files read as one table.
+ *
+ * The parts are a fixed, ordered list, and never "whatever is in the folder
+ * now": the log names rows by number, and a file landing in the middle would
+ * move every row after it out from under its edits.
+ */
+export interface PartsSource extends SourceBase {
+  /** The files, in the order their rows are read. Never empty. */
+  parts: SourcePart[];
+  /** Whether the parts have a header row. */
+  header: HeaderMode;
+
+  bytes?: never;
+  sha256?: never;
+  entry?: never;
+  path?: never;
+  version?: never;
+}
+
+/**
+ * SourcePart is one file of several read as one, as uno.json records it:
+ * where it is, which bytes of it the log was made against, and how it sits in
+ * the join.
+ *
+ * `bytes`, `skip` and `unterminated` are what the join measured of the part at
+ * the save. With them written down the next open places every part without
+ * opening one, and a part is read for the first time when a row in it is. It
+ * is held to all three then, and to its version, so a part that is no longer
+ * the file the log was made against is refused by name rather than read with
+ * every row after it moved.
+ */
+export interface SourcePart {
+  /** What the part is called where that is something other than the last
+   * piece of its path, and "" otherwise. It is what `ingest` picks a decoder
+   * by, so it has to come back as it was. */
+  name: string;
+  /** Where the part is, written down the way a file source's path is. */
+  path: string;
+  /** How big the part was at the save. */
+  bytes: number;
+  /** Which bytes of it were read, where its place can say. "" where there is
+   * none to record. */
+  version: string;
+  /** How many bytes at its start the join leaves out: a later part's repeat
+   * of the header. 0 for a part that is there whole. */
+  skip: number;
+  /** Whether its last byte was something other than a newline, so the join
+   * gives it one. */
+  unterminated: boolean;
 }
 
 /** Where the state entry is. */
@@ -213,16 +310,33 @@ export interface State {
 
 /**
  * Held is one source as a workspace holds it: where its bytes are, and what its
- * grid looked like.
+ * grid looked like. It is one file or several read as one, and `parts` is what
+ * says which.
  *
- * Exactly one of `raw` and `path` is set, and which one decides whether the save
- * copies the file or points at it. The caller owns the facts the writer cannot
- * see -- the id, the file's name, the shape of the grid the log builds. What can
- * be measured is measured as it is written.
+ * The caller owns the facts the writer cannot see -- the id, the source's
+ * name, the shape of the grid the log builds. What can be measured is measured
+ * as it is written.
  */
-export interface Held {
+export type Held = HeldFile | HeldParts;
+
+/** What a workspace holds of every source, whatever is behind it. */
+interface HeldBase {
   id: string;
   name: string;
+  /** The connection it was read through, for a pointed-at source one covered. */
+  connection?: string;
+  rows: number;
+  cols: number;
+  state: State;
+}
+
+/**
+ * HeldFile is a source that is one file.
+ *
+ * Exactly one of `raw` and `path` is set, and which one decides whether the
+ * save copies the file or points at it.
+ */
+export interface HeldFile extends HeldBase {
   /** The file's bytes, for a source the workspace carries. */
   raw?: Uint8Array;
   /** Where the file is, absolute, for a source the workspace points at. */
@@ -233,11 +347,41 @@ export interface Held {
   /** Which bytes of it the log was made against, for a pointed-at source whose
    * place can say. */
   version?: string;
-  /** The connection it was read through, for a pointed-at source one covered. */
-  connection?: string;
-  rows: number;
-  cols: number;
-  state: State;
+
+  parts?: never;
+  header?: never;
+}
+
+/**
+ * HeldParts is a source that is several files read as one. Every part is
+ * pointed at: a save never copies one in.
+ */
+export interface HeldParts extends HeldBase {
+  /** The files, in the order their rows are read. Never empty. */
+  parts: HeldPart[];
+  /** Whether the parts have a header row. */
+  header: HeaderMode;
+
+  raw?: never;
+  path?: never;
+  bytes?: never;
+  version?: never;
+}
+
+/** HeldPart is one file of several read as one, as a workspace holds it. */
+export interface HeldPart {
+  /** What the part is called, which `ingest` picks a decoder by. */
+  name: string;
+  /** Where the part is, absolute. */
+  path: string;
+  /** How big the part is. */
+  bytes: number;
+  /** Which bytes of it the log was made against, where its place can say. */
+  version?: string;
+  /** How many bytes at its start the join leaves out. */
+  skip: number;
+  /** Whether its last byte is something other than a newline. */
+  unterminated: boolean;
 }
 
 /**

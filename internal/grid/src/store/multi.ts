@@ -53,7 +53,8 @@ export interface Extent {
  *
  * `extent` is what an earlier open measured, handed back. A part that comes
  * with one is not opened until a read needs its bytes, and is held to it
- * then. A part without one is opened and measured as the source opens.
+ * then, and to the version on its ref where its place says which bytes it
+ * has. A part without one is opened and measured as the source opens.
  */
 export interface Part {
   /** Where the part is, and which version of it where a save recorded one.
@@ -407,9 +408,18 @@ class Parts {
 
   /** open opens part `i`, measures it, and holds it to the extent it came with. */
   private async open(i: number): Promise<ByteSource> {
-    const source = await openWith(this.handlers, this.parts[i]!.ref);
+    const ref = this.parts[i]!.ref;
+    const source = await openWith(this.handlers, ref);
     try {
       const was = this.extents[i];
+      // An extent came out of a save, and the version beside it says which
+      // bytes that save's log was made against. Where the place says these
+      // are other bytes, the part is refused before any of it is read: a
+      // rewrite the same size would otherwise pass for the file it replaced.
+      const saved = was !== undefined && "path" in ref ? ref.version : undefined;
+      if (saved !== undefined && source.version !== undefined && source.version !== saved) {
+        throw new Error("it is not the version this source was saved against");
+      }
       const extent: Extent = {
         bytes: source.size,
         skip: await this.skip(i, source),

@@ -86,7 +86,7 @@ test("the container holds four named entries", () => {
   const entries = Object.keys(unzipSync(bytes)).sort();
 
   expect(entries).toEqual(
-    [MANIFEST_ENTRY, doc.manifest.sources[0]!.entry, STATE_ENTRY, LOG_ENTRY].sort(),
+    [MANIFEST_ENTRY, doc.manifest.sources[0]!.entry!, STATE_ENTRY, LOG_ENTRY].sort(),
   );
   // The source entry is named after the file it holds, so `unzip -l` on a
   // workspace opened from a TSV does not call its bytes source.csv.
