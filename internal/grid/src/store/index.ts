@@ -18,7 +18,10 @@ import {
   parseFormula,
   stampConnection,
 } from "../library/index.ts";
-import { OPENS, claim } from "./claim.ts";
+import { JOINS, OPENS, claim } from "./claim.ts";
+// Type only: what a part is belongs to the module that joins them, and the
+// handler that opens a ref of them is exported from here, further down.
+import type { HeaderMode, Part } from "./multi.ts";
 // Type only, and one way on purpose: the plugin package composes what is here,
 // and nothing here reaches back into it at run time.
 import type { Provider } from "../plugin/index.ts";
@@ -27,6 +30,11 @@ import type { Provider } from "../plugin/index.ts";
 // seam: a platform that lists no lister for a kind of place cannot browse it.
 export { listWith, statWith } from "./list.ts";
 export type { Entry, Listing, Lister } from "./list.ts";
+
+// Several files read as one is a handler like the others, over the others. It
+// is in a module of its own because it opens its parts through `openWith`.
+export { multiFiles, multiOf, multiProvider, openMulti, partMap } from "./multi.ts";
+export type { Extent, HeaderMode, MultiSource, Part, PartMap, Span } from "./multi.ts";
 
 /**
  * FileStore is a folder uno keeps files of its own in: the formula library, and
@@ -73,14 +81,20 @@ export interface ByteSource {
 }
 
 /**
- * FileRef says where a file is without holding any of it: a path, which may be
- * a URL like s3://bucket/key, or a Blob the caller already holds -- a file
- * dropped into a browser, which has no path to give.
+ * FileRef says where a source's bytes are without holding any of them: one
+ * file, or several read as one.
  *
- * The name is what the file is called, which is what `ingest` picks a decoder
- * by and what a tab says.
+ * The name is what the source is called, which is what `ingest` picks a
+ * decoder by and what a tab says.
  */
-export type FileRef =
+export type FileRef = SingleRef | PartsRef;
+
+/**
+ * SingleRef is one file: a path, which may be a URL like s3://bucket/key, or a
+ * Blob the caller already holds -- a file dropped into a browser, which has no
+ * path to give.
+ */
+export type SingleRef =
   | {
       name: string;
       path: string;
@@ -93,6 +107,28 @@ export type FileRef =
       version?: string;
     }
   | { name: string; blob: Blob };
+
+/**
+ * PartsRef is several files read as one table: a fixed, ordered list of
+ * parts, under a name of its own.
+ *
+ * Each part is a SingleRef and never a PartsRef, so a part is whatever one
+ * file can be -- a path on a disk, an object in a bucket, a Blob -- in any
+ * mix, and each is opened as it would be alone: an object in a bucket is read
+ * through the connection that covers it. A part carries the version a save
+ * recorded on its own ref, and beside it the extent an earlier open measured,
+ * which lets the source open without touching that part.
+ *
+ * It is plain data, like every ref, and it is everything `openMulti` is
+ * handed, so what a save has to keep of a multi-file source is this.
+ */
+export interface PartsRef {
+  name: string;
+  /** The files, in the order their rows are read. At least one. */
+  parts: readonly Part[];
+  /** Whether the parts have a header row. */
+  header: HeaderMode;
+}
 
 /**
  * FileHandler opens one kind of place a file can be: a disk, a bucket, bytes
@@ -134,14 +170,19 @@ export function isRemote(path: string): boolean {
  *
  * Refusing by name matters here more than anywhere: a .uno written on a
  * machine with S3 set up, opened on one without, has to say which kind of
- * place it cannot reach rather than "file not found".
+ * place it cannot reach rather than "file not found". A ref of several files
+ * is refused by its own name, and the refusal says that reading several files
+ * as one is what this build lacks.
  */
 export async function openWith(
   handlers: readonly FileHandler[],
   ref: FileRef,
 ): Promise<ByteSource> {
   const where = "path" in ref ? ref.path : ref.name;
-  return claim(handlers, where, (h) => h.handles(ref), OPENS).open(ref);
+  // Several files read as one is a kind of ref, so the refusal says that
+  // reading them as one is what this build lacks.
+  const refusal = "parts" in ref ? JOINS : OPENS;
+  return claim(handlers, where, (h) => h.handles(ref), refusal).open(ref);
 }
 
 /**
@@ -173,7 +214,7 @@ export function blobFiles(): FileHandler {
     open: (ref) =>
       "blob" in ref
         ? Promise.resolve(blobSource(ref.blob))
-        : Promise.reject(new Error(`${ref.path}: not a dropped file`)),
+        : Promise.reject(new Error(`${"path" in ref ? ref.path : ref.name}: not a dropped file`)),
   };
 }
 
