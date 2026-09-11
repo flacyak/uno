@@ -16,6 +16,8 @@ src/
   engine/     the utility process that owns one open workspace
   renderer/   the app: sidebar, virtualized grid, sources panel, status bar
   shared/     the Host interface both Electron and a web build implement
+  paraglide/  the app's text as typed functions, compiled from messages/
+messages/     the app's text, one JSON file a language
 ```
 
 The seam is `src/shared/host.ts`. Everything above it is a plain web page
@@ -331,6 +333,22 @@ The keys are read by an input strategy in `src/renderer/input/`, and what they
 mean is carried out through `src/renderer/keys.ts`. Neither touches the DOM, and
 both are tested without a window. The whole plan is `resource/vim-motions.html`.
 
+## The text
+
+Every sentence the app says is in `messages/en.json`, in [inlang's message format](https://inlang.com/m/reootnfj/plugin-inlang-messageFormat).
+[Paraglide](https://paraglidejs.com) compiles each one to a typed function in `src/paraglide`, which is generated and not committed.
+
+```ts
+import { m } from "../../paraglide/messages.js";
+
+this.say(m.saved_path({ path }));
+```
+
+A key that is not there, or a parameter left out, fails `vp run check`.
+The Vite plugin compiles the messages for the dev server, the renderer build and the tests.
+`scripts/messages.js` holds the compiler's options and compiles them for the Electron bundles and the check.
+The plugin that reads the JSON is loaded from `node_modules`, so a build fetches nothing.
+
 ## Running it
 
 ```bash
@@ -339,7 +357,7 @@ vp run dev               # vite dev server + electron, reloading
 vp run build             # out/main, out/preload, out/renderer
 vp run smoke             # build, then drive the real app and assert
 vp test                  # the keys, without a window
-vp check                 # format, lint, type check
+vp run check             # compile the messages, then format, lint, type check
 ```
 
 `vp run dev` prints the Electron pid. Stop it by that pid; there is usually

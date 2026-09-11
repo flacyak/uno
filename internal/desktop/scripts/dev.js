@@ -14,6 +14,11 @@ import { createServer } from "vite";
 
 import { bundleElectron } from "./bundle.js";
 import { electronEnv } from "./launch.js";
+import { compileMessages } from "./messages.js";
+
+// Before the server and the bundles, since all of them import the messages.
+// The server's plugin compiles them again whenever one changes.
+await compileMessages();
 
 const server = await createServer({ configFile: "vite.config.ts" });
 await server.listen();
