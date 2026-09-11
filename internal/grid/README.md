@@ -52,6 +52,19 @@ Indexing is the first pass. Validation, deduplication, splitting and format
 conversion are meant to be the next ones, each a loop over a `PassContext`
 running in a worker of its own. `resource/composition.html` has the plan.
 
+## Files with no header row
+
+A reader is told whether a file's first record names its columns: `openFormat`,
+`peekFormat` and `read` each take a `HeaderMode`, `"first"` unless said.
+With `"none"` every record is a row, the first included, and the columns are
+`column_1`, `column_2` and on, from `columnNames`.
+What a source was read as shows in its label, which ends `· no header row`.
+
+Only several files read as one carry the choice today, as `header` on the
+ref and in the `.uno`. One file opened on its own is read with a header.
+`tests/headerless` is the suite for it, from the format up through the join,
+the engine and a save opened again.
+
 ## Efficiency
 
 `tests/efficiency` measures what a person waits on, as counts that come out

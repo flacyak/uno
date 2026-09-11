@@ -13,20 +13,21 @@
 // in any mix, and nothing here knows which.
 
 import { bomLength, delimiterName, encodingName, openFormat, peekFormat } from "../ingest/index.ts";
-import type { Encoding, Format } from "../ingest/index.ts";
+import type { Encoding, Format, HeaderMode } from "../ingest/index.ts";
 import { openWith } from "./index.ts";
 import type { ByteSource, FileHandler, SingleRef } from "./index.ts";
 // Type only, the way every provider factory beside its transport has it.
 import type { Provider } from "../plugin/index.ts";
 
 /**
- * Whether the parts have a header row.
+ * Whether the parts have a header row, which is ingest's to define: it is the
+ * same choice a reader of one file is given.
  *
  * With "first", the first part's header names the columns, and every later
  * part opens with the same header, which is skipped. With "none" no part has
  * one, and every line of every part is a row.
  */
-export type HeaderMode = "first" | "none";
+export type { HeaderMode };
 
 /**
  * Extent is what the join needs to know about a part to place it, and all it
@@ -456,13 +457,18 @@ class Parts {
     if (format !== undefined && first !== undefined) {
       const differs = disagreement(first, format, this.header);
       if (differs !== undefined) {
-        this.refused ??= new DisagreementError(this.parts, i, differs);
-        throw this.refused;
+        // Parts are opened several at a time and land in any order. The one
+        // the source is refused for is the first in the list that disagrees,
+        // so the same parts give the same refusal on every open.
+        const refusal = new DisagreementError(this.parts, i, differs);
+        if (this.refused === undefined || i < this.refused.part) this.refused = refusal;
+        throw refusal;
       }
     }
-    if (format === undefined || this.header === "none") {
-      return bomLength(await source.read(0, BOM_BYTES));
-    }
+    // A part read as having no header row starts its rows after a byte order
+    // mark and nothing else, so where its rows start is what is left out
+    // either way. A part with no record in it has only the mark to leave out.
+    if (format === undefined) return bomLength(await source.read(0, BOM_BYTES));
     return format.dataStart;
   }
 
@@ -472,7 +478,9 @@ class Parts {
    */
   private format(i: number, source: ByteSource): Promise<Format | undefined> {
     const name = this.parts[i]!.ref.name;
-    return this.header === "first" ? openFormat(name, source) : peekFormat(name, source);
+    return this.header === "first"
+      ? openFormat(name, source)
+      : peekFormat(name, source, this.header);
   }
 
   /** How the first part reads, read once. */
@@ -487,25 +495,31 @@ class Parts {
 
   /**
    * each runs `run` for every part, `OPENING` at a time, and waits for all
-   * that started. It stops starting them at the first failure, and that
-   * failure is what it throws.
+   * that started. It stops starting them at the first failure.
+   *
+   * What it throws is the failure of the earliest part in the list that
+   * failed, whichever landed first. Parts are started in order, so every
+   * part before a failed one was started and waited for, and the earliest
+   * failure is the same one on every run.
    */
   private async each(run: (i: number) => Promise<unknown> | undefined): Promise<void> {
     let next = 0;
-    let stopped = false;
+    const failures: Array<{ part: number; reason: unknown }> = [];
     const worker = async (): Promise<void> => {
-      while (next < this.parts.length && !stopped) {
+      while (next < this.parts.length && failures.length === 0) {
+        const part = next++;
         try {
-          await run(next++);
-        } catch (err) {
-          stopped = true;
-          throw err;
+          await run(part);
+        } catch (reason) {
+          failures.push({ part, reason });
+          return;
         }
       }
     };
-    const workers = Array.from({ length: Math.min(OPENING, this.parts.length) }, worker);
-    const failure = (await Promise.allSettled(workers)).find((w) => w.status === "rejected");
-    if (failure !== undefined) throw failure.reason;
+    await Promise.all(Array.from({ length: Math.min(OPENING, this.parts.length) }, worker));
+
+    const [first] = failures.toSorted((a, b) => a.part - b.part);
+    if (first !== undefined) throw first.reason;
   }
 
   /** A sentence about part `i` that says which part it is. */
