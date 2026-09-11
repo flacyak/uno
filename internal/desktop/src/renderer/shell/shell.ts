@@ -39,6 +39,7 @@ import type { Showing } from "./find.ts";
 import { Theming } from "../theme.ts";
 import { FormulaForm } from "./formula.ts";
 import { PopMenu, below } from "./menu.ts";
+import { labelPage } from "./page.ts";
 import type { MenuItem, MenuPlace } from "./menu.ts";
 import { Panel } from "./panel.ts";
 import { Settings } from "./settings.ts";
@@ -116,7 +117,10 @@ export class Shell {
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
 
   constructor(private readonly host: Host) {
-    // First, so the page is in its theme before anything is drawn in it.
+    // The page's own words, before the rest is drawn beside them.
+    labelPage();
+
+    // First of what is drawn, so the page is in its theme before anything is drawn in it.
     this.theming = new Theming(
       localStorage,
       window.matchMedia("(prefers-color-scheme: dark)"),
