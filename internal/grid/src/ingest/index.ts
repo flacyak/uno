@@ -12,10 +12,11 @@ import { describe, extensionOf, headerOf } from "./format.ts";
 import { sniffDelimiter } from "./sniff.ts";
 
 export { readAll } from "./csv.ts";
-export { headerOf, openFormat } from "./format.ts";
+export { delimiterName, encodingName, headerOf, openFormat, peekFormat } from "./format.ts";
 export type { Format, Scanner } from "./format.ts";
 export { RecordScanner, bomLength } from "./scan.ts";
-export { sniffDelimiter } from "./sniff.ts";
+export { sniffDelimiter, sniffEncoding } from "./sniff.ts";
+export type { Encoding } from "./sniff.ts";
 
 /**
  * read picks a decoder from the extension, then from the bytes.
