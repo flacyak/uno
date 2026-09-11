@@ -17,6 +17,8 @@ import type { BrowserWindow } from "electron";
 import { through } from "../driven.ts";
 import type { Check } from "./check.ts";
 import { DEFAULT_INPUT } from "./default.ts";
+import { electronPage } from "./electron-page.ts";
+import { COMMAS_LEFT, DATE, DOM_ROWS, GUTTER, REGION, REP, ROWS, UNITS } from "./fixture.ts";
 import { OPEN } from "./open.ts";
 import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
@@ -37,20 +39,25 @@ const DRAW_MS = 50;
 const CHECKS: Check[] = [...OPEN, ...DEFAULT_INPUT, ...VIM_STYLE, ...SOURCES];
 
 /**
- * What every check can call. A check's body runs in a block of its own, so one
- * that declares its own `frame` shadows this one rather than colliding with it.
+ * What every check that is still a string can call. A check's body runs in a
+ * block of its own, so one that declares its own `frame` shadows this one
+ * rather than colliding with it.
+ *
+ * The fixture's own facts -- ROWS, DATE and the rest -- live in fixture.ts, so
+ * a check that has become a function and one that is still a string read the
+ * same values under the same names.
  */
 const PRELUDE = `
   // The fixture: date,region,rep,channel,units,revenue. A body row has the
   // gutter before those, so a column's cell is one further along.
-  const ROWS = 4812;
-  const DATE = 0, REGION = 1, REP = 2, UNITS = 4;
-  const GUTTER = 1;
+  const ROWS = ${ROWS};
+  const DATE = ${DATE}, REGION = ${REGION}, REP = ${REP}, UNITS = ${UNITS};
+  const GUTTER = ${GUTTER};
   // What remove commas changes once rows 1, 3 and 5 of units are fixed by hand.
-  const COMMAS_LEFT = 3149;
+  const COMMAS_LEFT = ${COMMAS_LEFT};
 
   // More rows than this in the DOM means the grid is not virtualising.
-  const DOM_ROWS = 120;
+  const DOM_ROWS = ${DOM_ROWS};
 
   // How long a check waits on the app: this many frames, or polls POLL_MS apart.
   const TRIES = 150;
@@ -77,12 +84,14 @@ const PRELUDE = `
  * run drives the window, reports to stdout, and quits with a status the shell
  * can read.
  *
- * The script for each check is evaluated in the renderer as an async function
- * body, so a check can wait a frame for the virtualiser to catch up -- which
- * several of them have to.
+ * A check with `run` is called with a `Page` over this window. One still
+ * carrying `script` is evaluated in the renderer as an async function body, so
+ * it can wait a frame for the virtualiser to catch up -- which several of them
+ * have to.
  */
 export async function runSmoke(win: BrowserWindow, quit: (code: number) => void): Promise<void> {
   let failed = 0;
+  const page = electronPage(win);
 
   // The window has loaded, but the fixture's first rows come from an engine a
   // moment later.
@@ -112,9 +121,12 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
         if (check.input.through) through(win, send);
         else send();
       }
-      const failure = (await win.webContents.executeJavaScript(
-        `(async () => { ${PRELUDE} { ${check.script} } })()`,
-      )) as string;
+      const failure =
+        check.run !== undefined
+          ? await check.run(page)
+          : ((await win.webContents.executeJavaScript(
+              `(async () => { ${PRELUDE} { ${check.script} } })()`,
+            )) as string);
 
       if (failure === "") {
         console.log(`  ok   ${check.name}`);
