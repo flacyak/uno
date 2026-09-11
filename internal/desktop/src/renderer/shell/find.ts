@@ -42,7 +42,7 @@ export class Finder {
     // Plain text has nothing in it to fail, and reading the file to say so
     // would be slow for nothing.
     if (column.kind === "text" && !column.flagged) {
-      this.say(`${column.header} is text · every value in it parses`, true);
+      this.say(m.find_column_is_text({ column: column.header }), true);
       return;
     }
     const from = { row: num(row + 1), column: column.header };
@@ -64,7 +64,7 @@ export class Finder {
   search(typed: string, dir: 1 | -1): void {
     const text = typed === "" ? this.searched?.text : typed;
     if (text === undefined) {
-      this.say("nothing searched yet", true);
+      this.say(m.nothing_searched(), true);
       return;
     }
     this.searched = { text, dir };
@@ -75,7 +75,7 @@ export class Finder {
   next(reverse: boolean): void {
     const last = this.searched;
     if (last === undefined) {
-      this.say("nothing searched yet", true);
+      this.say(m.nothing_searched(), true);
       return;
     }
     this.searchFor(last.text, reverse === (last.dir === 1) ? -1 : 1);
@@ -85,7 +85,7 @@ export class Finder {
     const on = this.showing();
     if (on === undefined) return;
     const { row, col } = on.grid.selection();
-    const header = on.workspace.rows.columns[col]?.header ?? "this column";
+    const header = on.workspace.rows.columns[col]?.header ?? m.this_column();
     const from = { text, row: num(row + 1), column: header };
     void this.find(
       { t: "text", text },
@@ -107,7 +107,7 @@ export class Finder {
 
     // Most finds answer within a frame. Saying so only for one that does not
     // keeps the status bar from blinking on every ]f.
-    const slow = setTimeout(() => this.say("searching…"), 200);
+    const slow = setTimeout(() => this.say(m.searching()), 200);
     try {
       const found = await w.find({ col, from: row, dir, match });
       if (asked !== this.finds || this.showing()?.workspace !== w) return;
