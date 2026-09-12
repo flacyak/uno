@@ -13,7 +13,7 @@ import type { Entry, Listing } from "@uno/grid/store";
 import type { InputName } from "../src/renderer/input/index.ts";
 import type { ConnectAsks } from "../src/renderer/shell/connect.ts";
 import { Panel, rowAt, rowCount, rowOf, spans } from "../src/renderer/shell/panel.ts";
-import type { Connection, Listings, Open } from "../src/renderer/sources.ts";
+import type { Arriving, Connection, Listings, Open } from "../src/renderer/sources.ts";
 import { Sources } from "../src/renderer/sources.ts";
 
 const BUCKET: Connection = { name: "acme-exports", path: "s3://acme-exports", kind: "s3" };
@@ -107,6 +107,7 @@ function draw(
   bucket = new Bucket([]),
   input: { name: InputName } = { name: "default" },
   tabs: readonly Open[] = TABS,
+  arriving: () => readonly Arriving[] = () => [],
 ): Drawn {
   document.body.innerHTML = `<aside id="panel" class="panel" hidden></aside>`;
   const root = document.querySelector<HTMLElement>("#panel")!;
@@ -116,6 +117,7 @@ function draw(
     () => tabs,
     [BUCKET, DISK],
     () => panel?.draw(),
+    arriving,
   );
   const chosen: string[] = [];
   const added: { names: string[]; one: boolean }[] = [];
@@ -251,6 +253,35 @@ test("the three sections are drawn from what the panel holds, sizes and all", as
   ]);
   expect(row(d.root, "orders-000000.csv")!.children[1]!.textContent).toBe("2.0 KB");
   expect(row(d.root, "Browser")!.children[1]!.textContent).toBe("acme-exports");
+});
+
+test("a source still opening has a line under the tabs that says so and cannot be chosen", async () => {
+  let arriving: readonly Arriving[] = [{ name: "orders-2025.csv" }];
+  const d = draw(undefined, undefined, undefined, () => arriving);
+
+  const coming = row(d.root, "orders-2025.csv")!;
+  expect(lines(d.root).slice(0, 5)).toEqual([
+    "In this workspace",
+    "ledger-2025.csv",
+    "google-ads.csv",
+    "Ledger-2024.csv",
+    "orders-2025.csv",
+  ]);
+  // The class is what draws the bar that fills along the bottom of its line.
+  expect(coming.classList.contains("opening")).toBe(true);
+  expect(coming.children[1]!.textContent).toBe("opening…");
+  expect(row(d.root, "google-ads.csv")!.classList.contains("opening")).toBe(false);
+
+  // A click on it moves no keys and shows no tab.
+  coming.click();
+  expect(selected(d.root)).toBe("ledger-2025.csv");
+  expect(d.chosen).toEqual([]);
+
+  // Opened, the line is its tab's, and the bar is gone with the class.
+  arriving = [];
+  d.panel.draw();
+  await settle();
+  expect(d.root.querySelector(".panel-row.opening")).toBeNull();
 });
 
 test("a 200,000-entry listing scrolls with fewer than 100 rows in the DOM", async () => {
