@@ -21,7 +21,7 @@ import {
   signV4,
 } from "../../src/store/s3.ts";
 import { awsCredentials, diskProvider } from "../../src/store/node.ts";
-import { bytes, connect, indexed, openOne, sales } from "../engine/harness.ts";
+import { bytes, connect, indexed, openOne, sales, saidIn } from "../engine/harness.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { AWKWARD_KEYS, DOT_KEYS } from "./awkward.ts";
 import { HOME_REGION, REGION_FORMATS } from "./regions.ts";
@@ -306,7 +306,7 @@ describe("a source in a bucket", () => {
     const local = connect();
     try {
       const src = await openOne(local.engine, { name: "q3.uno", path: join(dir, "q3.uno") });
-      expect(src.opened.link?.missing).toContain("this build reads local files");
+      expect(saidIn(src.opened.link?.missing)).toContain("this build reads local files");
     } finally {
       local.done();
     }

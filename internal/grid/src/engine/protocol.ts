@@ -3,12 +3,14 @@
 // An engine is a worker that owns one workspace: its sources, and the log over
 // them. Its client -- a renderer, or a test -- never touches the bytes: it names
 // each file once, asks one source for rows by position, and sends it edits. What
-// comes back is ready to draw.
+// comes back is ready to draw. What it says to a person comes back as data, a
+// `Said`, for the client to write in the person's language.
 // Everything crosses as plain data, so the same messages run over an Electron
 // MessagePortMain, a Web Worker or a MessageChannel in vitest.
 
 import type { Connection } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
+import type { Said } from "../said/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
 import type { Entry, FileRef, Listing, SingleRef } from "../store/index.ts";
 import type { Tried, Unconnected } from "../store/s3.ts";
@@ -67,7 +69,7 @@ export interface Link {
    * edits and its place in the log are kept -- and `relink` gives it a file
    * again.
    */
-  missing?: string;
+  missing?: Said;
 
   /**
    * The file is there and is a different size than when the workspace was
@@ -77,7 +79,7 @@ export interface Link {
    * open a workspace over an appended row would be a worse answer than showing
    * it and saying so.
    */
-  changed?: string;
+  changed?: Said;
 
   /**
    * The bucket a source reads that no connection covers, when that is why it
@@ -94,8 +96,8 @@ export interface Opened {
   /** The file the rows come from. A .uno names the source it carries. */
   name: string;
   size: number;
-  /** How the bytes were read, for the status bar. */
-  label: string;
+  /** How the bytes were read, for the status bar. Nothing for a source with no file. */
+  label?: Said;
   columns: ColumnInfo[];
   progress: Progress;
   /** This source's part of the log a .uno was saved with, already applied.
@@ -194,7 +196,7 @@ export interface Offer {
   /** The program's text, which is what Apply records. */
   program: string;
   /** What the program does, in words. */
-  description: string;
+  description: Said;
   affects: number;
   sample: Change[];
   ambiguous: boolean;
@@ -215,7 +217,7 @@ export interface Offer {
 export interface Peeked {
   /** How the bytes were read, the sentence an opened source carries too:
    * "UTF-8 · delimiter ','". */
-  label: string;
+  label: Said;
   /** The header row, one string per column. */
   header: string[];
   /** The rows under it, as many as the peek takes or the bytes it read held. */
@@ -229,7 +231,7 @@ export interface Peeked {
  */
 export interface Loaded {
   connections: Connection[];
-  failed: string[];
+  failed: Said[];
 }
 
 export type Request =
@@ -329,7 +331,7 @@ export type Reply =
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }
   /** Without an id, a failure of an index or a pass behind a source. */
-  | { t: "error"; id?: number; source?: string; message: string };
+  | { t: "error"; id?: number; source?: string; said: Said };
 
 /** One end of a connection, whatever the runtime calls it. */
 export interface Port<In, Out> {
@@ -361,12 +363,4 @@ export function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function formatBytes(n: number): string {
-  const units = ["bytes", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${i === 0 ? n : n.toFixed(n < 10 ? 1 : 0)} ${units[i]}`;
-}
+export { formatBytes } from "../said/index.ts";

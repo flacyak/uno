@@ -9,7 +9,7 @@
 // sheet is.
 
 export type { Program } from "./program.ts";
-export { apply, describe, text } from "./program.ts";
+export { apply, describe, described, text } from "./program.ts";
 export { parse } from "./parse.ts";
 export { MAX_PARTS, MAX_STEPS, literalOf, nameChars, newReplace, quoteRegex } from "./steps.ts";
 export type {
@@ -25,4 +25,4 @@ export type {
   Step,
   TrimStep,
 } from "./steps.ts";
-export { describeStep, posText, runStep, stepText } from "./steps.ts";
+export { describeStep, describedStep, posText, runStep, stepText } from "./steps.ts";

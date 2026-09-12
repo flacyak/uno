@@ -208,7 +208,10 @@ test("three fixes stream an offer that ends as the one snap makes", async () => 
       col: UNITS,
       header: "units",
       program: programText(p.prog),
-      description: "remove commas",
+      description: {
+        t: "program",
+        steps: [{ t: "remove", what: { t: "chars", names: ["commas"], where: "anywhere" } }],
+      },
       affects: COMMAS_LEFT,
       ambiguous: false,
       scanned: ROWS,

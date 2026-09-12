@@ -84,7 +84,7 @@ const BIG: Connection = { name: "big", path: "s3://acme-exports/big", kind: "s3"
 /** What a peek of a file answers: its name as the one header, so a test can
  * tell whose front it is looking at. */
 function front(ref: SourceRef): Peeked {
-  return { label: "UTF-8 · delimiter ','", header: [ref.name], rows: [] };
+  return { label: { t: "read", delimiter: ",", header: "first" }, header: [ref.name], rows: [] };
 }
 
 /**
@@ -875,12 +875,18 @@ const STATED: Open[] = [
   {
     id: "b",
     name: "ads.csv",
-    link: { path: "s3://acme-exports/ads/ads.csv", missing: "ads.csv is not there" },
+    link: {
+      path: "s3://acme-exports/ads/ads.csv",
+      missing: { t: "text", text: "ads.csv is not there" },
+    },
   },
   {
     id: "c",
     name: "q3.csv",
-    link: { path: "/home/jo/exports/q3.csv", changed: "q3.csv is 12 bytes bigger" },
+    link: {
+      path: "/home/jo/exports/q3.csv",
+      changed: { t: "text", text: "q3.csv is 12 bytes bigger" },
+    },
     bytes: 12,
   },
 ];

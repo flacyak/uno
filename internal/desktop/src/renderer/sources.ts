@@ -19,6 +19,7 @@ import { s3Location, s3Url } from "@uno/grid/store/s3";
 
 import { m } from "../paraglide/messages.js";
 import { num } from "./locale.ts";
+import { said } from "./said.ts";
 
 /**
  * Listings is the whole of what the panel needs an engine for.
@@ -943,7 +944,7 @@ export class Sources {
       // panel has nowhere better to say so than where its entries would be. An
       // empty folder and a bucket this machine has no credentials for look the
       // same otherwise.
-      this.refused = err instanceof Error ? err.message : String(err);
+      this.refused = said(err);
     }
     this.waiting = false;
     this.changed();
@@ -983,7 +984,7 @@ export class Sources {
       // is the retry a person would reach for anyway. The refusal is kept for
       // the view to say where it says why a folder has no lines, which it only
       // needs to when a filter has hidden all of them.
-      this.refused = err instanceof Error ? err.message : String(err);
+      this.refused = said(err);
     }
     this.paging = false;
     this.changed();

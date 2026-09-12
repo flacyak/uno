@@ -28,7 +28,7 @@ import { read } from "../../src/ingest/index.ts";
 import { parse as parseProgram } from "../../src/program/index.ts";
 import { Op } from "../../src/sheet/index.ts";
 import { COLS, ROWS, UNITS } from "../testdata/sales-q3.ts";
-import { FIXTURE, bytes, connect, indexed, openOne } from "./harness.ts";
+import { FIXTURE, bytes, connect, indexed, openOne, saidIn } from "./harness.ts";
 
 /** A carry limit the 240 KB fixture fits under, and one it does not. */
 const ROOMY = 1 << 20;
@@ -210,7 +210,7 @@ test("a source whose file has gone opens as itself, without its rows", async () 
       "the workspace opened anyway",
     ).toEqual(["sales-q3", "ads"]);
     expect(ads.opened.link?.path).toBe(csv);
-    expect(ads.opened.link?.missing).toContain("ads.csv");
+    expect(saidIn(ads.opened.link?.missing)).toContain("ads.csv");
     expect(ads.opened.edits, "the edit made through it is still here").toHaveLength(1);
     await expect(ads.rows(0, 1)).rejects.toThrow("point it at one to read its rows");
 
@@ -303,7 +303,7 @@ test("a source whose file changed size opens and says so", async () => {
   try {
     const ads = await openOne(second.engine, { name: "ads.uno", path: join(dir, "ads.uno") });
     expect(ads.opened.link?.missing).toBeUndefined();
-    expect(ads.opened.link?.changed).toContain("when the workspace was saved");
+    expect(saidIn(ads.opened.link?.changed)).toContain("when the workspace was saved");
     expect((await ads.rows(0, 4)).rows).toHaveLength(4);
   } finally {
     second.done();
