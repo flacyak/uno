@@ -2,9 +2,12 @@
 // one that is open lists its sources under it, a tab each, with the dot that
 // says one has unsaved work and a way to add another.
 
+import "./arriving.css";
 import "./sidebar.css";
 
 import { m } from "../../paraglide/messages.js";
+import { opening } from "../sources.ts";
+import type { Arriving } from "../sources.ts";
 import type { Tab, Workspace } from "../workspace.ts";
 import type { MenuPlace } from "./menu.ts";
 import { baseName, folderName } from "./util.ts";
@@ -38,12 +41,15 @@ export function workspaceName(path: string): string {
 
 /**
  * sidebarRows is what the list holds: the open workspace with its sources,
- * then every other one in `recents`, which is most recent first.
+ * then every other one in `recents`, which is most recent first. A source in
+ * `arriving` was asked for and has not opened yet: it is listed after the
+ * sources, where its tab will be, and takes no choosing until it is one.
  */
 export function sidebarRows(
   w: Workspace | undefined,
   recents: readonly string[],
   act: SidebarActions,
+  arriving: readonly Arriving[] = [],
 ): HTMLElement[] {
   const rows: HTMLElement[] = [];
   if (w !== undefined) {
@@ -51,6 +57,7 @@ export function sidebarRows(
     // The last source stays, so it has no × to offer.
     const removable = w.sources.length > 1;
     rows.push(...w.sources.map((t) => tabFor(w, t, removable, act)));
+    rows.push(...arriving.map(arrivingRow));
 
     const add = document.createElement("div");
     add.className = "tab-add";
@@ -70,6 +77,23 @@ export function sidebarRows(
     rows.push(note);
   }
   return rows;
+}
+
+/**
+ * A source that is still opening: its name, dimmed, over the bar that fills
+ * until it has opened. It is a tab's line with nothing on it to click, and
+ * not a tab: nothing that counts or selects the sources finds it.
+ */
+function arrivingRow(a: Arriving): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "tab-opening";
+  row.title = `${a.name} · ${opening()}`;
+  row.setAttribute("aria-busy", "true");
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = a.name;
+  row.append(name);
+  return row;
 }
 
 /** The workspace that is open: its name, and whether a save would change it. */
