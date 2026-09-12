@@ -79,6 +79,9 @@ export class View {
     // Scrolling is the hot path, so it schedules a frame rather than laying out
     // synchronously on every one of the events a trackpad produces.
     this.scroller.addEventListener("scroll", () => this.schedule(), { passive: true });
+    // The pool is sized to the scroller, so a window grown taller, or a panel
+    // closed beside the grid, needs more rows than were made for the old size.
+    new ResizeObserver(() => this.schedule()).observe(this.scroller);
 
     this.rowHeight = readRowHeight(this.scroller);
   }
@@ -92,6 +95,9 @@ export class View {
     if (!keep) {
       this.top = 0;
       this.scroller.scrollTop = 0;
+      // Along the row too: a fresh open starts at the first cell, and the
+      // selection is put there without a scroll to bring it on screen.
+      this.scroller.scrollLeft = 0;
       this.seen = 0;
     }
     this.pool = [];
