@@ -41,8 +41,7 @@
 
   /* The width kept clear at the top right of the window for its ×. The
    * window has no frame, so whatever reaches that corner -- the grid's
-   * header, the banner, the sources panel's head -- ends this far short of
-   * it. */
+   * header, the banner -- ends this far short of it. */
   --corner: 34px;
 
   /* How long the sources panel takes to come in. The scrim over the workspace
@@ -172,6 +171,23 @@ body {
   -webkit-app-region: drag;
 }
 
+/* The column the sources panel is in: the end of the window's top line, and
+ * the panel under it. The line's end is the window's and not the panel's, so
+ * it stays under the scrim with the rest of the line while the panel is lit,
+ * and the × on it reads as closing the window. The column is there while the
+ * panel is open, and its width is what the panel has. */
+.win-side {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 330px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.win-side:has(> .panel[hidden]) {
+  display: none;
+}
+
 /* A narrow window has three columns to fit when the sidebar and the sources
  * panel are both open, so each gives some up and the grid between them keeps
  * enough to read. Ctrl+B gives the grid the sidebar's width as well. */
@@ -180,7 +196,7 @@ body {
     flex-basis: 168px;
   }
 
-  #panel {
+  .win-side {
     flex-basis: 250px;
   }
 }
