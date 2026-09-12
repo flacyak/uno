@@ -13,6 +13,11 @@
 // The keys are the input strategy. The window has no menu bar to pick one
 // from, so it is picked here.
 //
+// The language is one of the ones the app has messages for, each under the
+// name it calls itself, or whichever of them the system prefers. Choosing one
+// writes the whole window again in it, this menu included, without closing
+// what is open.
+//
 // It hangs off the page rather than the status bar, as the + menu does,
 // because the status bar is written again on every edit and would take an
 // open menu down with it.
@@ -22,6 +27,8 @@ import "./settings.css";
 import { m } from "../../paraglide/messages.js";
 import { INPUTS, inputLabel } from "../input/index.ts";
 import type { InputName } from "../input/index.ts";
+import { SYSTEM, languageName } from "../language.ts";
+import type { Language, LanguageChoice } from "../language.ts";
 import type { Connection } from "../sources.ts";
 import { APPEARANCES, THEMES } from "../theme.ts";
 import type { Appearance, Theming } from "../theme.ts";
@@ -54,6 +61,9 @@ function appearanceWord(a: Appearance): string {
   }
 }
 
+/** What marks the one chosen among several in a list. */
+const CHOSEN = "✓";
+
 /** The gap between the control and the menu it opens above it, in pixels. */
 const GAP = 6;
 
@@ -79,26 +89,37 @@ export class Settings {
     /** The control in the corner, which the menu opens above. */
     private readonly toggle: HTMLButtonElement,
     private readonly theming: Theming,
+    private readonly language: Language,
     private readonly asks: SettingsAsks,
   ) {
     toggle.innerHTML = GEAR;
-    toggle.setAttribute("aria-label", m.settings_title());
     toggle.setAttribute("aria-haspopup", "true");
     toggle.setAttribute("aria-expanded", "false");
-    toggle.title = m.settings_title();
     toggle.addEventListener("click", () => (this.open ? this.close() : this.show()));
 
     this.box.className = "settings";
     this.box.setAttribute("role", "dialog");
-    this.box.setAttribute("aria-label", m.settings_title());
     this.box.hidden = true;
     this.box.addEventListener("keydown", (e) => this.key(e));
     document.body.append(this.box);
 
+    this.label();
     // A theme worn is drawn as chosen whatever chose it.
     theming.onChange(() => {
       if (this.open) this.paint();
     });
+    // A language chosen is the one the control and the open menu are in.
+    language.onChange(() => {
+      this.label();
+      if (this.open) this.paint();
+    });
+  }
+
+  /** label names the control and its menu, for a pointer resting on it and for a screen reader. */
+  private label(): void {
+    this.toggle.setAttribute("aria-label", m.settings_title());
+    this.toggle.title = m.settings_title();
+    this.box.setAttribute("aria-label", m.settings_title());
   }
 
   get open(): boolean {
@@ -187,7 +208,14 @@ export class Settings {
     const focused = this.items().indexOf(document.activeElement as HTMLButtonElement);
 
     const title = element("div", "title", m.settings_title());
-    this.box.replaceChildren(title, this.sources(), this.themes(), this.appearances(), this.keys());
+    this.box.replaceChildren(
+      title,
+      this.sources(),
+      this.themes(),
+      this.appearances(),
+      this.keys(),
+      this.languages(),
+    );
 
     if (focused >= 0) this.items()[Math.min(focused, this.items().length - 1)]?.focus();
   }
@@ -225,7 +253,7 @@ export class Settings {
     const mode = this.theming.mode;
     for (const t of THEMES) {
       const chosen = t.id === this.theming.theme.id;
-      const item = row(t.name, chosen ? "✓" : "");
+      const item = row(t.name, chosen ? CHOSEN : "");
       item.setAttribute("role", "menuitemradio");
       item.setAttribute("aria-checked", String(chosen));
       item.dataset["theme"] = t.id;
@@ -283,6 +311,31 @@ export class Settings {
       seg.append(button);
     }
     section.append(seg);
+    return section;
+  }
+
+  /**
+   * The languages the app speaks, each under its own name so it can be found
+   * by someone who reads no other, and the system's first.
+   */
+  private languages(): HTMLElement {
+    const section = heading(m.settings_language());
+    const choices: Array<[LanguageChoice, string]> = [
+      [SYSTEM, m.language_system()],
+      ...this.language.offered.map((l): [LanguageChoice, string] => [l, languageName(l)]),
+    ];
+    for (const [choice, name] of choices) {
+      const chosen = choice === this.language.choice;
+      const item = row(name, chosen ? CHOSEN : "");
+      item.setAttribute("role", "menuitemradio");
+      item.setAttribute("aria-checked", String(chosen));
+      item.dataset["language"] = choice;
+      // The name is in the language itself, and the page is in another.
+      if (choice !== SYSTEM) item.lang = choice;
+      if (chosen) item.classList.add("chosen");
+      item.addEventListener("click", () => this.language.choose(choice));
+      section.append(item);
+    }
     return section;
   }
 }
