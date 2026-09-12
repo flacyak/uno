@@ -112,6 +112,28 @@ export class Graph {
   }
 
   /**
+   * order returns every bound column, each after the bound columns it reads.
+   *
+   * A row is finished by computing its bound columns in this order, so a column
+   * that reads another bound column reads what that column computed. The start
+   * is sorted for the reason `downstreamOf`'s is.
+   */
+  order(): string[] {
+    const out: string[] = [];
+    const done = new Set<string>();
+    const emit = (c: string): void => {
+      if (done.has(c)) return;
+      done.add(c);
+      for (const d of this.deps.get(c) ?? []) {
+        if (this.deps.has(d)) emit(d);
+      }
+      out.push(c);
+    };
+    for (const c of [...this.deps.keys()].sort(compareStrings)) emit(c);
+    return out;
+  }
+
+  /**
    * wouldCycle walks from each proposed dependency looking for col, and returns
    * the path it got there by.
    *

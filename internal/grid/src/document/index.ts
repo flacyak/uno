@@ -21,4 +21,4 @@ export type {
   Source,
   State,
 } from "./document.ts";
-export { readDocument, versionFor, writeDocument } from "./codec.ts";
+export { readContainer, readDocument, versionFor, writeDocument } from "./codec.ts";

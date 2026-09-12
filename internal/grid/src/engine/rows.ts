@@ -154,13 +154,20 @@ export class Pages {
     for (let row = Math.max(0, first); row < end;) {
       const block = this.index.blockOf(row);
       const [from] = this.index.rowsOf(block);
-      const records = await this.block(block);
+      const records = await this.records(block);
       for (let i = row - from; i < records.length && row < end; i++, row++) out.push(records[i]!);
     }
     return out;
   }
 
-  private block(block: number): Promise<string[][]> {
+  /**
+   * records reads one block's source rows.
+   *
+   * A pass reading the whole file passes `keep = false`, so a survey over 50
+   * million rows reads the blocks it needs without pushing out the ones around
+   * the viewport that a person is looking at.
+   */
+  records(block: number, keep = true): Promise<string[][]> {
     const hit = this.cache.get(block);
     if (hit !== undefined) {
       // A Map iterates in insertion order, so re-inserting makes it the newest.
@@ -170,14 +177,20 @@ export class Pages {
     }
 
     let pending = this.loading.get(block);
-    if (pending === undefined) {
-      pending = this.load(block).finally(() => this.loading.delete(block));
-      this.loading.set(block, pending);
-    }
+    if (pending !== undefined) return pending;
+    if (!keep) return this.decode(block);
+
+    pending = this.decode(block)
+      .then((records) => {
+        this.keep(block, records);
+        return records;
+      })
+      .finally(() => this.loading.delete(block));
+    this.loading.set(block, pending);
     return pending;
   }
 
-  private async load(block: number): Promise<string[][]> {
+  private async decode(block: number): Promise<string[][]> {
     const [start, end] = this.index.bytesOf(block);
     const [from, to] = this.index.rowsOf(block);
     const records = this.format.decode(await this.source.read(start, end - start));
@@ -188,7 +201,11 @@ export class Pages {
     if (records.length !== to - from) {
       throw new Error(`${this.name} changed on disk after it was opened`);
     }
+    return records;
+  }
 
+  private keep(block: number, records: string[][]): void {
+    const [start, end] = this.index.bytesOf(block);
     this.cache.set(block, { records, bytes: end - start });
     this.kept += end - start;
     for (const [key, entry] of this.cache) {
@@ -196,6 +213,5 @@ export class Pages {
       this.cache.delete(key);
       this.kept -= entry.bytes;
     }
-    return records;
   }
 }

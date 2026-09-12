@@ -1,9 +1,12 @@
-// Package sheet holds one in-memory table per workspace. It imports nothing
-// from the packages above it, which is what lets it be tested with no display
-// attached.
+// Package sheet holds one table per workspace. It imports nothing from the
+// packages above it, which is what lets it be tested with no display attached.
 
-export { ERR_CELL, Sheet, formatValue } from "./sheet.ts";
+export { Sheet } from "./sheet.ts";
 export type { Column } from "./sheet.ts";
+export { Schema } from "./schema.ts";
+export type { Run, Written } from "./schema.ts";
+export { ERR_CELL, finish, formatValue, valueAt } from "./pipeline.ts";
+export type { Finished } from "./pipeline.ts";
 export { NO_ROW, Op, editEquals } from "./edit.ts";
 export type { Edit } from "./edit.ts";
 export { SAMPLE_ROWS, inferKind, isDate } from "./kind.ts";

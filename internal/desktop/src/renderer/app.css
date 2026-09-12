@@ -161,6 +161,48 @@ body {
   color: var(--flag);
 }
 
+/* ---------- the recogniser's banner ---------- */
+
+/* Amber, like the badge it answers: the column that looked numeric and did not
+ * parse is the one the question is about. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  background: var(--flag-b);
+  border-bottom: 1px solid var(--rule);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.banner b {
+  color: var(--flag);
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.banner .grow {
+  flex: 1;
+}
+
+.banner button {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.banner button.primary {
+  border-color: color-mix(in srgb, var(--flag) 50%, transparent);
+  color: var(--flag);
+}
+
 /* ---------- the grid ---------- */
 
 /* The grid's container has to be told to fill what is left, and told that it
