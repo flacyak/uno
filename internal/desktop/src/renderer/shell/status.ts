@@ -10,10 +10,12 @@
 
 import "./status.css";
 
+import { m } from "../../paraglide/messages.js";
 import type { Grid } from "../grid/index.ts";
 import type { InputStrategy } from "../input/index.ts";
 import type { Lead } from "../keys.ts";
-import type { Workspace } from "../workspace.ts";
+import { num } from "../locale.ts";
+import type { Mode, Workspace } from "../workspace.ts";
 import { must } from "./util.ts";
 
 /** What the bar's switches do. The shell decides; the bar only asks. */
@@ -30,6 +32,11 @@ export interface StatusAsks {
 export interface Columns {
   sidebar: boolean;
   panel: boolean;
+}
+
+/** What the bar calls a mode: the word in capitals at its left. */
+function modeWord(mode: Mode): string {
+  return mode === "view" ? m.mode_view() : m.mode_transform();
 }
 
 export class StatusBar {
@@ -99,13 +106,13 @@ export class StatusBar {
     open: Columns,
   ): void {
     this.switches(w, input, open);
-    this.file.textContent = w === undefined ? "no file open" : w.status();
+    this.file.textContent = w === undefined ? m.no_file_open() : w.status();
     // A narrow window cuts the line short, and the whole of it is a hover away.
     this.file.title = this.file.textContent;
     // A strategy that names the editor, as vim's INSERT, names transform with it
     // open, so the name wears transform's amber.
     const editing = grid?.editing() === true ? input.editing : undefined;
-    this.mode.textContent = editing ?? w?.mode.toUpperCase() ?? "";
+    this.mode.textContent = editing ?? (w === undefined ? "" : modeWord(w.mode));
     this.mode.className = w?.mode === "transform" ? "mode t" : "mode";
 
     // A tab with no file behind it has no cells to be on, and " · row 1" with
@@ -116,7 +123,7 @@ export class StatusBar {
     }
     const { row, col } = grid.selection();
     const header = w.rows.columns[col]?.header ?? "";
-    this.cell.textContent = `${header} · row ${row + 1}`;
+    this.cell.textContent = `${header} · ${m.status_row({ row: num(row + 1) })}`;
   }
 
   /** switches draws the mode switch as the workspace has it, and each column's
@@ -131,15 +138,13 @@ export class StatusBar {
     }
 
     this.side.classList.toggle("on", open.sidebar);
-    this.side.title = `${open.sidebar ? "Close" : "Open"} the sidebar · Ctrl+B`;
-    this.side.setAttribute("aria-label", "Sidebar");
+    this.side.title = open.sidebar ? m.sidebar_close_hint() : m.sidebar_open_hint();
+    this.side.setAttribute("aria-label", m.sidebar_aria());
     this.side.setAttribute("aria-pressed", String(open.sidebar));
 
     this.sources.classList.toggle("on", open.panel);
-    this.sources.title = open.panel
-      ? "Close the sources panel"
-      : "Sources: what is open, and where files come from · Ctrl+Shift+B";
-    this.sources.setAttribute("aria-label", "Sources");
+    this.sources.title = open.panel ? m.panel_close_hint() : m.panel_open_hint();
+    this.sources.setAttribute("aria-label", m.sources_title());
     this.sources.setAttribute("aria-pressed", String(open.panel));
   }
 

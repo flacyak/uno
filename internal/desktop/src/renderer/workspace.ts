@@ -10,7 +10,7 @@
 // It holds no widgets, which is the property that let the Go build test its
 // shell without a window.
 
-import { Band, formatBytes } from "@uno/grid/engine";
+import { Band } from "@uno/grid/engine";
 import type {
   Changed,
   Engine,
@@ -28,6 +28,9 @@ import type { Edit } from "@uno/grid/sheet";
 import type { Listing, SingleRef } from "@uno/grid/store";
 
 import type { Cell, Rows } from "./grid/rows.ts";
+import { m } from "../paraglide/messages.js";
+import { bytes } from "./locale.ts";
+import { say } from "./said.ts";
 
 /**
  * The most a saved workspace carries, all such sources together.
@@ -50,23 +53,22 @@ export type Mode = "view" | "transform";
 export function reloaded(was: Tab, now: Tab): string {
   const before = was.link?.version;
   const after = now.link?.version;
-  const size =
-    was.bytes === now.bytes
-      ? "the same size"
-      : `${formatBytes(now.bytes)}, was ${formatBytes(was.bytes)}`;
-  const found =
-    before !== undefined && after !== undefined
-      ? before === after
-        ? "no change in the bucket"
-        : `a new version, ${size}`
-      : size;
-  const n = now.edited;
-  const replayed = n === 0 ? "" : ` · ${n} ${n === 1 ? "edit" : "edits"} replayed`;
-  return `reloaded ${now.name} · ${found}${replayed}`;
+  const sized = was.bytes === now.bytes;
+  const moved = { now: bytes(now.bytes), was: bytes(was.bytes) };
+  const versioned = before !== undefined && after !== undefined;
+  const found = !versioned
+    ? sized
+      ? m.reload_same_size()
+      : m.reload_size_moved(moved)
+    : before === after
+      ? m.reload_no_change()
+      : sized
+        ? m.reload_new_version_same_size()
+        : m.reload_new_version_size_moved(moved);
+  const parts = [m.reloaded_name({ name: now.name }), found];
+  if (now.edited > 0) parts.push(m.edits_replayed({ count: now.edited }));
+  return parts.join(" · ");
 }
-
-/** What the status bar says of a tab the bucket holds a newer version of. */
-export const NEWER = "a newer version is in the bucket · Reload reads it";
 
 export class Tab {
   /** The recogniser's question about this source, while it has one. */
@@ -121,7 +123,8 @@ export class Tab {
   /** What is wrong with the file behind this source, if anything: it is gone,
    * or it is not the file the log was written against. */
   get trouble(): string | undefined {
-    return this.link?.missing ?? this.link?.changed;
+    const wrong = this.link?.missing ?? this.link?.changed;
+    return wrong === undefined ? undefined : say(wrong);
   }
 
   /** Whether there is a grid behind this tab at all. */
@@ -417,7 +420,7 @@ export class Workspace {
   /** apply runs an offered program over its column: one edit, however long the column. */
   async apply(offer: Offer): Promise<void> {
     const t = this.tabs.find((tab) => tab.id === offer.source);
-    if (t === undefined) throw new Error("the source that offer was about is gone");
+    if (t === undefined) throw new Error(m.offer_source_gone());
     t.offer = null;
     t.landed(
       await t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
@@ -464,7 +467,7 @@ export class Workspace {
   /** What a save without a path should suggest: named after the first source. */
   get suggestedFileName(): string {
     const base = (this.tabs[0]?.name ?? "").replace(/\.[^.]*$/, "");
-    return `${base || "workspace"}.uno`;
+    return `${base || m.workspace_file_stem()}.uno`;
   }
 
   /** Whether anything would be lost by closing: an edit, a source added or
@@ -526,25 +529,26 @@ export class Workspace {
     // thing worth saying about it.
     // One in a bucket nobody connected already says what to do about it.
     if (t.link?.connect !== undefined) return t.trouble ?? "";
-    if (t.missing) return `${t.trouble} · point it at a file to see its rows`;
+    if (t.missing) return `${t.trouble} · ${m.point_at_file_to_see_rows()}`;
 
     // Until the index reaches the end, the count is projected from how far it
     // has got, and says so.
-    const parts = [
-      `${p.complete ? "" : "≈"}${p.rows.toLocaleString()} rows`,
-      `${t.band.cols()} columns`,
-      t.source.opened.label,
+    const parts: string[] = [
+      p.complete ? m.rows_count({ count: p.rows }) : m.rows_count_about({ count: p.rows }),
+      m.columns_count({ count: t.band.cols() }),
     ];
-    if (!p.complete) parts.push(`indexing ${this.indexed()}%`);
+    const read = t.source.opened.label;
+    if (read !== undefined) parts.push(say(read));
+    if (!p.complete) parts.push(m.indexing_percent({ percent: this.indexed() }));
 
     const edits = t.edited;
-    if (edits > 0) parts.push(`${edits} ${edits === 1 ? "edit" : "edits"}`);
+    if (edits > 0) parts.push(m.edits_count({ count: edits }));
     // A file that is not the one the log was made against still reads, and
     // says so where the person is looking, not only on the mark's hover.
     // The one with something to do about it goes first, as on its panel line:
     // a newer version, which Reload reads, before a change it would replace.
-    const changed = t.newer === undefined ? t.link?.changed : NEWER;
-    if (changed !== undefined) parts.push(changed);
+    if (t.newer !== undefined) parts.push(m.newer_version());
+    else if (t.link?.changed !== undefined) parts.push(say(t.link.changed));
     return parts.join(" · ");
   }
 }

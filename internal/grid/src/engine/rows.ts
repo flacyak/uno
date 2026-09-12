@@ -6,6 +6,7 @@
 // opening a file larger than memory comes down to.
 
 import type { Format } from "../ingest/index.ts";
+import { Refusal } from "../said/index.ts";
 import type { ByteSource } from "../store/index.ts";
 
 export interface Tuning {
@@ -199,7 +200,7 @@ export class Pages {
     // rows it did is a file somebody rewrote while it was open, and showing
     // rows from two versions of it would be worse than saying so.
     if (records.length !== to - from) {
-      throw new Error(`${this.name} changed on disk after it was opened`);
+      throw new Refusal({ t: "changed-on-disk", name: this.name });
     }
     return records;
   }

@@ -15,6 +15,8 @@
   <body>
     <!-- tabindex, because the grid handles arrow keys and needs the focus to
          receive them. -->
+    <!-- The elements are here and their words are not: shell/page.ts writes
+         those in the language the app is in. -->
     <div id="app" tabindex="0">
       <!-- Three columns: the sidebar, the sheet, and the sources panel. Each
            begins with a head one row high, so the heads make one line across
@@ -23,10 +25,10 @@
         <!-- The workspaces opened on this machine, most recent first. The one
              open lists its sources under it. -->
         <aside id="sidebar" class="sidebar">
-          <div class="sidebar-head col-head">Workspaces</div>
+          <div class="sidebar-head col-head"></div>
           <div class="sidebar-list" id="workspaces"></div>
           <button id="new" class="sidebar-new" type="button">
-            <span class="plus">+</span>New workspace
+            <span class="plus">+</span><span class="label"></span>
           </button>
         </aside>
 
@@ -37,8 +39,8 @@
           <div class="banner" id="banner" hidden></div>
 
           <div class="dropzone" id="empty">
-            <h1>Drop a spreadsheet</h1>
-            <p>or <a href="#" id="open">open one</a></p>
+            <h1></h1>
+            <p><a href="#" id="open"></a></p>
             <p class="exts">csv &middot; tsv &middot; uno</p>
           </div>
 
@@ -57,15 +59,8 @@
         <button id="sidebar-toggle" class="side-toggle" type="button"></button>
         <span id="status-mode" class="mode"></span>
         <!-- The : command line. While it is open it stands in for the file's line. -->
-        <input
-          id="status-cmd"
-          class="cmd"
-          hidden
-          spellcheck="false"
-          autocomplete="off"
-          aria-label="command"
-        />
-        <span id="status-file">no file open</span>
+        <input id="status-cmd" class="cmd" hidden spellcheck="false" autocomplete="off" />
+        <span id="status-file"></span>
         <span class="sep">&middot;</span>
         <span id="status-msg"></span>
         <span class="grow"></span>
@@ -74,13 +69,13 @@
         <span id="status-cell"></span>
         <!-- The switch between view and transform, while a workspace is open. -->
         <span id="mode-switch" class="seg" hidden>
-          <span data-mode="view">View</span><span data-mode="transform">Transform</span>
+          <span data-mode="view"></span><span data-mode="transform"></span>
         </span>
         <button id="panel-toggle" class="panel-toggle" type="button"></button>
       </div>
 
       <!-- The window has no frame of its own, so closing it is here. -->
-      <button id="close" class="win-close" type="button" aria-label="Close uno">
+      <button id="close" class="win-close" type="button">
         <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
           <path
             d="M2 2l6 6M8 2l-6 6"
