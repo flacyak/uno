@@ -36,18 +36,26 @@ export function offered(dev: boolean): readonly Locale[] {
 }
 
 /**
- * preferred is the first of the system's languages the app has, as the
- * language exactly or as the language of another region: es-MX reads es. The
- * base locale is what a system that prefers none of them gets.
+ * preferred is the first of the system's languages the app has: as the
+ * language and region exactly, or failing that as the same language in the
+ * first region offered, which is the one most of its speakers are in. en-AU
+ * reads en-US, pt reads pt-BR, and es-MX reads es. The base locale is what a
+ * system that prefers none of them gets.
  */
 export function preferred(system: readonly string[], among: readonly Locale[]): Locale {
   for (const tag of system) {
     const exact = toLocale(tag);
     if (exact !== undefined && among.includes(exact)) return exact;
-    const language = toLocale(tag.split("-")[0]);
-    if (language !== undefined && among.includes(language)) return language;
+    const language = languageOf(tag);
+    const same = among.find((locale) => languageOf(locale) === language);
+    if (same !== undefined) return same;
   }
   return baseLocale;
+}
+
+/** languageOf is a tag's language without its region: the en of en-GB. */
+function languageOf(tag: string): string {
+  return tag.split("-")[0]!.toLowerCase();
 }
 
 /** languageName is what a language calls itself, capitalised as it would: Español. */
