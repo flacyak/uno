@@ -8,9 +8,11 @@
 
 import { NOTHING, isCharacter } from "../keys.ts";
 import type { Action, Mode, Motion, Pending, Press, Step } from "../keys.ts";
+import { m } from "../../paraglide/messages.js";
 import type { EditorKey, InputStrategy } from "./strategy.ts";
 
-const LOCKED = "View · Ctrl+E to transform";
+/** The chord that moves between view and transform, which is all the switch needs to say. */
+const SWITCH_KEY = "Ctrl+E";
 
 const NONE: Action = { t: "none" };
 
@@ -78,15 +80,17 @@ function move(motion: Motion): Action {
 
 /** writes is a key that changes the file, which view refuses by saying what would. */
 function writes(mode: Mode, action: Action): Action {
-  return mode === "view" ? { t: "say", text: LOCKED } : action;
+  return mode === "view" ? { t: "say", text: m.locked_default() } : action;
 }
 
 export const defaultInput: InputStrategy = {
   name: "default",
-  locked: LOCKED,
+  get locked() {
+    return m.locked_default();
+  },
   // The editor is open in transform, and the status bar goes on saying so.
   editing: undefined,
-  switchHint: "Ctrl+E",
+  switchHint: SWITCH_KEY,
   interpret,
   editorKey,
 };
