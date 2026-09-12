@@ -172,7 +172,9 @@ test("smoke opens the app directory, not the main bundle, and on fixtures that e
   // Electron given a file runs that file; given a directory it reads the
   // package's `main`, which is what makes __dirname in the bundle point at
   // out/main and the preload resolve beside it.
-  expect(src).toMatch(/spawn\(electron,\s*\[pkg,\s*`--user-data-dir=\$\{data\}`,\s*fixture\]/);
+  expect(src).toMatch(
+    /spawn\(electron,\s*\[pkg,\s*`--user-data-dir=\$\{data\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
+  );
   for (const fixture of ["sales-q3.csv", "google-ads-sales.csv"]) {
     expect(() => readFileSync(join(SCRIPTS, "../../grid/tests/testdata", fixture))).not.toThrow();
   }
