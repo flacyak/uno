@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vite-plus/test";
 
 import { read } from "../../src/ingest/index.ts";
-import { SAMPLE_SIZE, snap } from "../../src/pattern/index.ts";
+import { SAMPLE_SIZE, Survey, gather, snap } from "../../src/pattern/index.ts";
 import type { Proposal } from "../../src/pattern/index.ts";
 import {
   apply as applyProgram,
@@ -78,6 +78,46 @@ test("applying a proposal settles the column", () => {
   expect(s.columns[UNITS_COL]!.kind).toBe("num");
   expect(s.columns[UNITS_COL]!.flagged).toBe(false);
   expect(propose(s), "a second proposal after the column was fixed").toBeUndefined();
+});
+
+// The engine reads a column a block at a time and asks for the proposal as it
+// stands. Fed that way to the end, a survey has to ask exactly what one pass over
+// the whole column asks, sample and ambiguity included.
+test("a survey fed in pieces proposes what one pass does", () => {
+  const s = sales();
+  s.set(0, UNITS_COL, "1204");
+  s.set(2, UNITS_COL, "1455");
+  s.set(4, UNITS_COL, "2038");
+  const whole = propose(s)!;
+
+  const values = Array.from({ length: s.rows() }, (_, row) => s.raw(row, UNITS_COL));
+  const survey = Survey.start(UNITS_COL, "units", gather(s.edits()).get(UNITS_COL)!)!;
+
+  let partial: Proposal | undefined;
+  for (let first = 0; first < values.length; first += 7) {
+    survey.add(values.slice(first, first + 7), first);
+    if (first === 700) partial = survey.proposal();
+  }
+
+  expect(partial, "no proposal part of the way through").toBeDefined();
+  expect(partial!.affects, "the partial count should be a lower bound").toBeLessThan(whole.affects);
+  expect(survey.rows).toBe(values.length);
+  expect(survey.proposal()).toEqual(whole);
+});
+
+// The runner-up only disagrees in the last value, so the classes have to carry
+// every agreement until then.
+test("ambiguity found in the last piece still counts", () => {
+  const s = oneCol("code", "AB,", "CD,", "EF,", "XY,", "G,H,");
+  s.set(0, 0, "AB");
+  s.set(1, 0, "CD");
+  s.set(2, 0, "EF");
+  const whole = propose(s)!;
+  expect(whole.ambiguous).toBe(true);
+
+  const survey = Survey.start(0, "code", gather(s.edits()).get(0)!)!;
+  for (let row = 0; row < s.rows(); row++) survey.add([s.raw(row, 0)], row);
+  expect(survey.proposal()).toEqual(whole);
 });
 
 // Two is a coincidence often enough to be annoying. The third is the one that

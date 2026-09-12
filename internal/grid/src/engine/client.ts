@@ -4,7 +4,18 @@
 // viewport, the one piece of a file a renderer keeps, and it answers the grid
 // synchronously: a row that has not arrived is pending, never awaited.
 
-import type { ColumnInfo, Opened, Port, Progress, Reply, Request, SourceRef } from "./protocol.ts";
+import type {
+  Changed,
+  ColumnInfo,
+  EditRequest,
+  Offer,
+  Opened,
+  Port,
+  Progress,
+  Reply,
+  Request,
+  SourceRef,
+} from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
 
 interface Waiter<T> {
@@ -12,11 +23,24 @@ interface Waiter<T> {
   reject(err: Error): void;
 }
 
+/** A page of rows as the engine sends it. */
+export interface RowsReply {
+  first: number;
+  generation: number;
+  rows: string[][];
+  raws: Array<string[] | null>;
+}
+
 export class Engine {
   /** The latest the engine has said about its index. */
   progress: Progress | undefined;
+  /** The newest log the engine has said it holds. Rows built before it are stale. */
+  generation = 0;
+
   onProgress: (progress: Progress) => void = () => {};
-  /** A failure nothing was waiting on: the index, or a band request. */
+  /** The recogniser's question, or null when there is none. */
+  onOffer: (offer: Offer | null) => void = () => {};
+  /** A failure nothing was waiting on: the index, a survey, or a band request. */
   onError: (message: string) => void = () => {};
 
   private next = 1;
@@ -35,16 +59,32 @@ export class Engine {
     });
   }
 
-  async rows(first: number, count: number): Promise<{ first: number; rows: string[][] }> {
+  async rows(first: number, count: number): Promise<RowsReply> {
     const r = await this.ask((id) => ({ t: "rows", id, first, count }));
     if (r.t !== "rows") throw new Error(`the engine answered a rows request with ${r.t}`);
     return r;
   }
 
-  /** bytes reads a whole file, refusing one larger than limit. */
-  async bytes(ref: SourceRef, limit: number): Promise<Uint8Array> {
-    const r = await this.ask((id) => ({ t: "bytes", id, ref, limit }));
-    if (r.t !== "bytes") throw new Error(`the engine answered a bytes request with ${r.t}`);
+  async edit(edit: EditRequest): Promise<Changed> {
+    const r = await this.ask((id) => ({ t: "edit", id, edit }));
+    if (r.t !== "changed") throw new Error(`the engine answered an edit with ${r.t}`);
+    return r.changed;
+  }
+
+  async undo(): Promise<Changed> {
+    const r = await this.ask((id) => ({ t: "undo", id }));
+    if (r.t !== "changed") throw new Error(`the engine answered an undo with ${r.t}`);
+    return r.changed;
+  }
+
+  mode(transform: boolean): void {
+    if (!this.closed) this.port.post({ t: "mode", transform });
+  }
+
+  /** save returns the workspace as a .uno, refusing a source larger than limit. */
+  async save(active: { row: number; col: number }, limit: number): Promise<Uint8Array> {
+    const r = await this.ask((id) => ({ t: "save", id, active, limit }));
+    if (r.t !== "saved") throw new Error(`the engine answered a save with ${r.t}`);
     return r.bytes;
   }
 
@@ -74,6 +114,7 @@ export class Engine {
     switch (msg.t) {
       case "opened":
         this.progress = msg.opened.progress;
+        this.generation = msg.opened.generation;
         this.opening?.resolve(msg.opened);
         this.opening = undefined;
         return;
@@ -81,6 +122,19 @@ export class Engine {
       case "progress":
         this.progress = msg.progress;
         this.onProgress(msg.progress);
+        return;
+
+      case "offer":
+        // An offer about an older log is a question about something that is no
+        // longer there.
+        if (msg.generation < this.generation) return;
+        this.generation = msg.generation;
+        this.onOffer(msg.offer);
+        return;
+
+      case "changed":
+        this.generation = Math.max(this.generation, msg.changed.generation);
+        this.settle(msg.id, msg);
         return;
 
       case "error": {
@@ -98,28 +152,48 @@ export class Engine {
       }
 
       default:
-        this.waiting.get(msg.id)?.resolve(msg);
-        this.waiting.delete(msg.id);
+        this.settle(msg.id, msg);
     }
+  }
+
+  private settle(id: number, msg: Reply): void {
+    this.waiting.get(id)?.resolve(msg);
+    this.waiting.delete(id);
   }
 }
 
 /** Rows kept around the viewport. Several screens, so a wheel rarely outruns them. */
 const BAND_ROWS = 2000;
 
+/** A value shown before the engine has recorded it, and what it covered. */
+export interface Pending {
+  row: number;
+  col: number;
+  value: string;
+  was: string;
+  shown: string;
+}
+
 /**
  * Band is the rows around the viewport.
  *
  * It has the reading half of a Sheet's surface -- `rows`, `cols`, `columns`,
- * `display`, `raw` -- so the grid draws either without knowing which. Every read
- * is an array lookup, as `Sheet.display` is, because the grid calls it for every
- * visible cell on every frame.
+ * `display`, `raw`, `binding` -- so the grid draws either without knowing which.
+ * Every read is an array lookup, because the grid calls it for every visible
+ * cell on every frame.
+ *
+ * When the log changes, the rows it holds are stale. It keeps drawing them until
+ * the new ones land, so nothing on screen blinks empty, and a value a person
+ * just typed is laid over whatever arrives until the engine has recorded it.
  */
 export class Band {
-  readonly columns: readonly ColumnInfo[];
+  columns: readonly ColumnInfo[];
 
   private start = 0;
   private data: string[][] = [];
+  private raws: Array<string[] | null> = [];
+  private generation: number;
+  private readonly pending: Pending[] = [];
   private asking = false;
   private broken = false;
 
@@ -130,6 +204,7 @@ export class Band {
     private readonly changed: () => void,
   ) {
     this.columns = opened.columns;
+    this.generation = opened.generation;
   }
 
   rows(): number {
@@ -146,15 +221,47 @@ export class Band {
   }
 
   display(row: number, col: number): string {
-    return this.raw(row, col);
-  }
-
-  raw(row: number, col: number): string {
     return this.data[row - this.start]?.[col] ?? "";
   }
 
-  binding(_col: number): string | undefined {
-    return undefined;
+  raw(row: number, col: number): string {
+    const i = row - this.start;
+    return this.raws[i]?.[col] ?? this.data[i]?.[col] ?? "";
+  }
+
+  binding(col: number): string | undefined {
+    return this.columns[col]?.binding;
+  }
+
+  /**
+   * write shows a typed value at once. The returned token settles it: `settle`
+   * once the engine has recorded the edit, `restore` if the engine refused it.
+   */
+  write(row: number, col: number, value: string): Pending {
+    const p = { row, col, value, was: this.raw(row, col), shown: this.display(row, col) };
+    this.pending.push(p);
+    this.put(row, col, value, value);
+    return p;
+  }
+
+  settle(p: Pending): void {
+    const i = this.pending.indexOf(p);
+    if (i >= 0) this.pending.splice(i, 1);
+  }
+
+  /** restore puts back what a refused edit replaced. */
+  restore(p: Pending): void {
+    this.settle(p);
+    this.put(p.row, p.col, p.shown, p.was);
+  }
+
+  private put(row: number, col: number, shown: string, raw: string): void {
+    const i = row - this.start;
+    const cells = this.data[i];
+    if (cells === undefined) return;
+    cells[col] = shown;
+    const stored = this.raws[i];
+    if (stored !== undefined && stored !== null) stored[col] = raw;
   }
 
   /**
@@ -162,9 +269,10 @@ export class Band {
    * so the usual case compares a few numbers and returns.
    *
    * It asks for a new band when one screen either side of the viewport is not
-   * covered, and one request is in flight at most. The reply's `changed` redraws
-   * the grid, which calls this again, which is how a viewport that moved while
-   * the request was out gets its own.
+   * covered, or when the rows it holds were built from an older log, and one
+   * request is in flight at most. The reply's `changed` redraws the grid, which
+   * calls this again, which is how a viewport that moved while the request was
+   * out gets its own.
    */
   view(first: number, count: number): void {
     if (this.asking || this.broken) return;
@@ -173,7 +281,8 @@ export class Band {
     const lo = Math.max(0, first - count);
     const hi = Math.min(readable, first + 2 * count);
     if (lo >= hi) return;
-    if (lo >= this.start && hi <= this.start + this.data.length) return;
+    const covered = lo >= this.start && hi <= this.start + this.data.length;
+    if (covered && this.generation >= this.engine.generation) return;
 
     const from = Math.max(
       0,
@@ -183,8 +292,17 @@ export class Band {
     this.engine.rows(from, BAND_ROWS).then(
       (r) => {
         this.asking = false;
+        // Built before an edit that has since been recorded. Ask again rather
+        // than draw a value the person has already changed.
+        if (r.generation < this.engine.generation) {
+          this.changed();
+          return;
+        }
         this.start = r.first;
         this.data = r.rows;
+        this.raws = r.raws;
+        this.generation = r.generation;
+        for (const p of this.pending) this.put(p.row, p.col, p.value, p.value);
         this.changed();
       },
       (err: unknown) => {

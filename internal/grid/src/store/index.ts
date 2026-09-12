@@ -51,6 +51,17 @@ export function blobSource(blob: Blob): ByteSource {
   };
 }
 
+/** bytesSource reads bytes already in memory without copying them: the source a
+ * .uno carries, once the container has been read. */
+export function bytesSource(bytes: Uint8Array): ByteSource {
+  return {
+    size: bytes.length,
+    read: (offset, length) =>
+      Promise.resolve(bytes.subarray(offset, Math.min(offset + length, bytes.length))),
+    close: () => Promise.resolve(),
+  };
+}
+
 /** What `loadLibrary` could not read, alongside what it could. */
 export interface LibraryLoad {
   formulas: Formula[];

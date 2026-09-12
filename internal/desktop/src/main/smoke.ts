@@ -196,13 +196,18 @@ const CHECKS: Check[] = [
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
+      // The value shows before the engine has recorded it.
       const shown = document.querySelectorAll("tbody tr")[0].children[5].textContent;
-      const dirty = document.querySelector(".tab .dirty") !== null;
-      const status = document.querySelector("#status-file").textContent;
-
       if (shown !== "1204") return "the cell shows " + JSON.stringify(shown);
-      if (!dirty) return "the tab is not marked dirty";
+
+      let status = "";
+      for (let i = 0; i < 100; i++) {
+        status = document.querySelector("#status-file").textContent;
+        if (status.includes("1 edit")) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
       if (!status.includes("1 edit")) return "status bar says: " + status;
+      if (document.querySelector(".tab .dirty") === null) return "the tab is not marked dirty";
       return "";
     `,
   },
@@ -227,6 +232,68 @@ const CHECKS: Check[] = [
       // it as "start editing" and reopened an editor over the cell.
       const open = document.querySelectorAll(".cell-editor").length;
       return open === 0 ? "" : open + " editor(s) still open after committing";
+    `,
+  },
+  {
+    name: "three fixes bring an offer, and Apply is one edit",
+    script: `
+      const content = document.querySelector("#content");
+      const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const type = async (row, value) => {
+        document.querySelectorAll("tbody tr")[row].children[5].click();
+        await frame();
+        content.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await frame();
+        const input = document.querySelector(".cell-editor");
+        input.value = value;
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await frame();
+      };
+
+      // Row 1 was fixed by the check before last. These are the second and third.
+      await type(2, "1455");
+      await type(4, "2038");
+
+      const banner = document.querySelector("#banner");
+      for (let i = 0; i < 150 && !(banner.textContent.includes("3,149 cells")); i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      if (banner.hidden) return "no banner after three fixes";
+      if (!banner.textContent.includes("remove commas · 3,149 cells")) {
+        return "the banner says " + JSON.stringify(banner.textContent);
+      }
+
+      banner.querySelector("button.primary").click();
+      let cell = "";
+      let status = "";
+      for (let i = 0; i < 150; i++) {
+        await frame();
+        cell = document.querySelectorAll("tbody tr")[5].children[5].textContent;
+        status = document.querySelector("#status-file").textContent;
+        if (cell === "1101" && status.includes("4 edits")) break;
+      }
+      if (cell !== "1101") return "row 6 still shows " + JSON.stringify(cell);
+      if (!status.includes("4 edits")) return "status bar says: " + status;
+
+      const badge = document.querySelectorAll("thead th .badge")[4].textContent;
+      if (badge !== "num") return "the units badge says " + badge;
+      return banner.hidden ? "" : "the banner stayed after Apply";
+    `,
+  },
+  {
+    name: "Ctrl+Z takes the apply back",
+    script: `
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+      let cell = "";
+      let status = "";
+      for (let i = 0; i < 150; i++) {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        cell = document.querySelectorAll("tbody tr")[5].children[5].textContent;
+        status = document.querySelector("#status-file").textContent;
+        if (cell === "1,101" && status.includes("3 edits")) break;
+      }
+      if (cell !== "1,101") return "row 6 shows " + JSON.stringify(cell);
+      return status.includes("3 edits") ? "" : "status bar says: " + status;
     `,
   },
   {

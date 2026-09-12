@@ -1,30 +1,27 @@
 // One open file: what the grid reads, where it came from, and where it goes back to.
 //
-// A workspace opens in view. Its rows come from an engine that owns the file,
-// and the renderer keeps a band of them around the viewport, so opening costs
-// the same for 4,812 rows and for 200 million. Transform loads the file into a
-// Sheet, which is the only thing that takes an edit today. That load has a
-// ceiling, so a file too large for it stays in view and says why.
+// A workspace is an engine and the band of rows it sends. The file and the log
+// both live in the engine, so view and transform read the same rows the same
+// way: transform unlocks editing and turns the recogniser on, and loads
+// nothing. An edit is a message and a new generation, which is why applying a
+// program to 50 million rows reaches the screen as fast as typing into one cell.
 //
 // It holds no widgets, which is the property that let the Go build test its
 // shell without a window.
 
-import { newManifest, readDocument, writeDocument } from "@uno/grid/document";
-import type { Document } from "@uno/grid/document";
-import { Band, formatBytes } from "@uno/grid/engine";
-import type { Engine, SourceRef } from "@uno/grid/engine";
-import { read as ingest } from "@uno/grid/ingest";
-import type { Sheet } from "@uno/grid/sheet";
+import { Band } from "@uno/grid/engine";
+import type { Changed, Engine, Offer, SourceRef } from "@uno/grid/engine";
+import { NO_ROW, Op, editEquals } from "@uno/grid/sheet";
+import type { Edit } from "@uno/grid/sheet";
 
 import type { Rows } from "./grid.ts";
 
 /**
- * The largest file transform will load. A Sheet keeps every cell as a string,
- * and near 400,000 rows that stops fitting in a renderer's heap. This is well
- * under that. It goes away once transform reads through the engine the way
- * view does.
+ * The most source a saved workspace embeds. A .uno carries its source inside
+ * it, so past this a save is refused by name. Format 4 lifts it by pointing at
+ * the file instead.
  */
-export const TRANSFORM_LIMIT = 64 << 20;
+export const SAVE_LIMIT = 256 << 20;
 
 export type Mode = "view" | "transform";
 
@@ -36,26 +33,30 @@ export class Workspace {
   /** Never saved: every open lands in view. */
   mode: Mode = "view";
 
-  private doc: Document | undefined;
-  private band: Band | undefined;
-  private label = "";
-  private size = 0;
+  /** The recogniser's question, while it has one. */
+  offer: Offer | null = null;
+
+  /** The log as the engine last reported it, and as it was at the last save. */
+  private edits: Edit[];
+  private savedEdits: Edit[];
 
   private constructor(
-    private readonly ref: SourceRef,
-    private engine: Engine | undefined,
-  ) {}
+    readonly name: string,
+    private readonly engine: Engine,
+    private readonly band: Band,
+    private readonly label: string,
+    edits: Edit[],
+  ) {
+    this.edits = edits.slice();
+    this.savedEdits = edits.slice();
+  }
 
   /**
-   * open reads a file through an engine that the workspace owns from here on.
+   * open reads a file through an engine the workspace owns from here on.
    *
-   * A .uno is read whole: its rows are the source with the log replayed, and
-   * the engine cannot replay a log yet. It lands in view over the replayed
-   * sheet. Anything else is viewed through the engine, and nothing of it is
-   * loaded.
-   *
-   * `savePath` is where Ctrl+S writes without asking. A dropped .uno passes ""
-   * so its first save asks.
+   * `savePath` is where Ctrl+S writes without asking. It only applies to a .uno,
+   * since anything else has no workspace file to go back to, and a dropped .uno
+   * passes "" so its first save asks.
    */
   static async open(
     ref: SourceRef,
@@ -63,83 +64,70 @@ export class Workspace {
     savePath: string,
     changed: () => void,
   ): Promise<Workspace> {
-    const w = new Workspace(ref, engine);
-
-    if (ref.name.toLowerCase().endsWith(".uno")) {
-      w.doc = readDocument(ref.name, await engine.bytes(ref, TRANSFORM_LIMIT));
-      w.path = savePath;
-      w.release();
-      return w;
-    }
-
     const opened = await engine.open(ref);
-    w.band = new Band(engine, opened, changed);
-    w.label = opened.label;
-    w.size = opened.size;
+    const band = new Band(engine, opened, changed);
+    const w = new Workspace(opened.name, engine, band, opened.label, opened.edits);
+    if (ref.name.toLowerCase().endsWith(".uno")) w.path = savePath;
     return w;
   }
 
-  /** What the grid draws: the sheet once there is one, the band until then. */
   get rows(): Rows {
-    return this.doc?.sheet ?? this.band!;
-  }
-
-  /** The sheet, once transform has loaded one. */
-  get sheet(): Sheet | undefined {
-    return this.doc?.sheet;
+    return this.band;
   }
 
   get editable(): boolean {
     return this.mode === "transform";
   }
 
-  /**
-   * transform loads the file into a sheet the first time, then unlocks editing.
-   *
-   * The engine goes once the sheet exists, since everything it served is now in
-   * memory. Leaving transform keeps the sheet and its log; it only locks editing.
-   */
-  async transform(): Promise<void> {
-    if (this.doc === undefined) {
-      if (this.size > TRANSFORM_LIMIT) {
-        throw new Error(
-          `${this.name} is ${formatBytes(this.size)}, and transform can load ${formatBytes(TRANSFORM_LIMIT)} at most for now. It stays in view`,
-        );
-      }
-      if (this.engine === undefined) throw new Error(`${this.name} is no longer open`);
-
-      const raw = await this.engine.bytes(this.ref, TRANSFORM_LIMIT);
-      this.doc = {
-        manifest: newManifest(this.ref.name),
-        raw,
-        state: { active: { row: 0, col: 0 } },
-        edits: [],
-        extra: new Map(),
-        sheet: ingest(this.ref.name, raw),
-      };
-      this.release();
-    }
+  transform(): void {
     this.mode = "transform";
+    this.engine.mode(true);
   }
 
+  /** view locks editing again. The log and the dirty dot stay. */
   view(): void {
     this.mode = "view";
+    this.offer = null;
+    this.engine.mode(false);
   }
 
-  /** close lets the engine go, and the utility process behind it. */
+  /**
+   * set types a value into one cell. It shows at once, the engine records it,
+   * and a value the engine refuses is put back.
+   */
+  async set(row: number, col: number, value: string): Promise<void> {
+    const pending = this.band.write(row, col, value);
+    try {
+      this.landed(await this.engine.edit({ op: Op.Set, row, col, now: value }));
+    } catch (err) {
+      this.band.restore(pending);
+      throw err;
+    }
+    this.band.settle(pending);
+  }
+
+  /** apply runs an offered program over its column: one edit, however long the column. */
+  async apply(offer: Offer): Promise<void> {
+    this.offer = null;
+    this.landed(
+      await this.engine.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
+    );
+  }
+
+  /** undo takes the last edit back. The engine replays the rest; no row is read again. */
+  async undo(): Promise<void> {
+    const changed = await this.engine.undo();
+    this.edits.pop();
+    this.band.columns = changed.columns;
+  }
+
+  private landed(changed: Changed): void {
+    this.edits.push(changed.edit);
+    this.band.columns = changed.columns;
+  }
+
   close(): void {
-    this.release();
-  }
-
-  private release(): void {
-    this.engine?.close();
-    this.engine = undefined;
-    this.band = undefined;
-  }
-
-  /** What the tab and the window title say. */
-  get name(): string {
-    return this.doc?.manifest.source.name ?? this.ref.name;
+    this.engine.close();
   }
 
   /** What a save without a path should suggest. */
@@ -155,50 +143,26 @@ export class Workspace {
    * one lands on the same number and a different sheet.
    */
   get dirty(): boolean {
-    return this.doc !== undefined && !this.doc.sheet!.logEquals(this.doc.edits);
+    const a = this.edits;
+    const b = this.savedEdits;
+    return a.length !== b.length || !a.every((e, i) => editEquals(e, b[i]!));
   }
 
-  /**
-   * bytes renders the workspace as a .uno.
-   *
-   * The manifest is filled in with the three things the writer cannot see for
-   * itself -- where the bytes came from, the shape the log builds, and where the
-   * person was -- and everything else it measures from what it writes.
-   */
-  bytes(active: { row: number; col: number }): Uint8Array {
-    const doc = this.doc;
-    if (doc === undefined)
-      throw new Error("nothing to save until the file is in transform · Ctrl+E");
-    const sheet = doc.sheet!;
-    doc.edits = sheet.edits();
-    doc.manifest.sheet.rows = sheet.rows();
-    doc.manifest.sheet.cols = sheet.cols();
-    doc.state.active = active;
-    return writeDocument(doc);
+  /** bytes asks the engine for the workspace as a .uno. */
+  bytes(active: { row: number; col: number }): Promise<Uint8Array> {
+    return this.engine.save(active, SAVE_LIMIT);
   }
 
   /** Called once a save has landed, so the workspace stops reading as dirty. */
   saved(path: string): void {
     this.path = path;
-    if (this.doc !== undefined) this.doc.edits = this.doc.sheet!.edits();
+    this.savedEdits = this.edits.slice();
   }
 
   /** What the status bar reports about the file itself. */
   status(): string {
-    const sheet = this.doc?.sheet;
-    if (sheet !== undefined) {
-      const parts = [
-        `${sheet.rows().toLocaleString()} rows`,
-        `${sheet.cols()} columns`,
-        sheet.source,
-      ].filter((p) => p !== "");
-      const edits = sheet.editCount();
-      if (edits > 0) parts.push(`${edits} ${edits === 1 ? "edit" : "edits"}`);
-      return parts.join(" · ");
-    }
-
-    const p = this.engine?.progress;
-    if (this.band === undefined || p === undefined) return this.name;
+    const p = this.engine.progress;
+    if (p === undefined) return this.name;
 
     // Until the index reaches the end, the count is projected from how far it
     // has got, and says so.
@@ -208,6 +172,9 @@ export class Workspace {
       this.label,
     ];
     if (!p.complete) parts.push(`indexing ${Math.floor((p.done / Math.max(1, p.total)) * 100)}%`);
+
+    const edits = this.edits.length;
+    if (edits > 0) parts.push(`${edits} ${edits === 1 ? "edit" : "edits"}`);
     return parts.join(" · ");
   }
 }
