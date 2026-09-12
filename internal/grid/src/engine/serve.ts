@@ -11,6 +11,7 @@ import type { Port, Reply, Request } from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
 import { TUNING } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
+import { peek } from "./peek.ts";
 import type { Sources } from "../plugin/index.ts";
 import { Workspace } from "./workspace.ts";
 
@@ -69,13 +70,13 @@ export function serve(port: Port<Request, Reply>, sources: Sources, tuning: Tuni
         port.post({ t: "statted", id: msg.id, entry: await sources.stat(msg.path) });
         return;
       }
-      // The route is here and the reading is not. Opening a file through a
-      // handler, taking the front of it and working out what it is is a task
-      // of its own, and until it lands this says so by name: an empty Peeked
-      // would be drawn as a file with no columns in it, which is the quieter
-      // lie of the two.
+      // peek is handed sources.files for the same reason as list and stat
+      // above -- it must not queue behind a save. Unlike those two it opens
+      // a file of its own to read the front of it, but that file is closed
+      // again on the way out and never added to the workspace.
       case "peek": {
-        throw new Error(`${msg.ref.name}: this engine cannot peek at a file yet`);
+        port.post({ t: "peeked", id: msg.id, peeked: await peek(sources.files, msg.ref) });
+        return;
       }
       case "mode": {
         workspace.mode(msg.transform);
