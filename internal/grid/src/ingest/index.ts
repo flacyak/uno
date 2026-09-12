@@ -40,7 +40,7 @@ export function read(
   bytes: Uint8Array | string,
   header: HeaderMode = "first",
 ): Sheet {
-  const text = typeof bytes === "string" ? bytes : new TextDecoder("utf-8").decode(bytes);
+  const text = typeof bytes === "string" ? stripBOM(bytes) : new TextDecoder("utf-8").decode(bytes);
 
   switch (extensionOf(name)) {
     case ".json":
@@ -50,6 +50,15 @@ export function read(
     default:
       return readSeparated(name, text, sniffDelimiter(text), header);
   }
+}
+
+/** The byte order mark as a character, which the decoder strips from bytes. */
+const BOM = "\uFEFF";
+
+/** stripBOM does for a string what the decoder does for bytes, so both ways in
+ * read the same header. */
+function stripBOM(text: string): string {
+  return text.startsWith(BOM) ? text.slice(BOM.length) : text;
 }
 
 function readSeparated(name: string, text: string, comma: string, header: HeaderMode): Sheet {
