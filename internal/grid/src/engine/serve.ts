@@ -69,6 +69,14 @@ export function serve(port: Port<Request, Reply>, sources: Sources, tuning: Tuni
         port.post({ t: "statted", id: msg.id, entry: await sources.stat(msg.path) });
         return;
       }
+      // The route is here and the reading is not. Opening a file through a
+      // handler, taking the front of it and working out what it is is a task
+      // of its own, and until it lands this says so by name: an empty Peeked
+      // would be drawn as a file with no columns in it, which is the quieter
+      // lie of the two.
+      case "peek": {
+        throw new Error(`${msg.ref.name}: this engine cannot peek at a file yet`);
+      }
       case "mode": {
         workspace.mode(msg.transform);
         return;

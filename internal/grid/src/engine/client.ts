@@ -13,6 +13,7 @@ import type {
   Found,
   Offer,
   Opened,
+  Peeked,
   Place,
   Port,
   Progress,
@@ -123,6 +124,19 @@ export class Engine {
     const r = await this.ask((id) => ({ t: "stat", id, path }));
     if (r.t !== "statted") throw new Error(`the engine answered a stat with ${r.t}`);
     return r.entry;
+  }
+
+  /**
+   * peek reads enough of a file to show what is in it -- the format it is in,
+   * its header, and the first rows -- without adding it to the workspace.
+   *
+   * It takes a ref for the reason the request does: a file somebody is about
+   * to add may have no path to name it by.
+   */
+  async peek(ref: SourceRef): Promise<Peeked> {
+    const r = await this.ask((id) => ({ t: "peek", id, ref }));
+    if (r.t !== "peeked") throw new Error(`the engine answered a peek with ${r.t}`);
+    return r.peeked;
   }
 
   /** close ends the connection. The worker behind it goes when its port does. */
