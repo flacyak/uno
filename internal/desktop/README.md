@@ -19,8 +19,9 @@ src/
 ```
 
 The seam is `src/shared/host.ts`. Everything above it is a plain web page
-running the pure core, which is what makes `internal/web` the same renderer with
-a different `host` behind it.
+running the pure core, which is what makes a web build the same renderer with
+a different `host` behind it. `package.json` exports `src/renderer`,
+`src/shared` and `index.html` for that build to import as they are.
 
 ## The window
 
