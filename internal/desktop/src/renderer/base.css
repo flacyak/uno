@@ -88,3 +88,15 @@ body {
   height: 100%;
   background: var(--surface);
 }
+
+/* The grid and the sources panel side by side. `min-width: 0` so the grid
+ * gives up the width the panel takes rather than pushing it off the window. */
+.win-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.win-body > #content {
+  min-width: 0;
+}
