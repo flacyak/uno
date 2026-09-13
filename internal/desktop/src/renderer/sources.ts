@@ -13,6 +13,7 @@
 
 import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { Entry, Listing } from "@uno/grid/store";
+import { s3Location, s3Url } from "@uno/grid/store/s3";
 
 /**
  * Listings is the whole of what the panel needs an engine for.
@@ -65,7 +66,7 @@ export interface Connection {
 /** The sections, in the order they are drawn and moved through. */
 export type Section = "workspace" | "connections" | "browser";
 
-const SECTIONS: readonly Section[] = ["workspace", "connections", "browser"];
+export const SECTIONS: readonly Section[] = ["workspace", "connections", "browser"];
 
 /** Where the keys are: which section, and which line in it. */
 export interface Place {
@@ -110,6 +111,29 @@ export interface Button {
  */
 const READS: readonly string[] = [".csv", ".tsv"];
 
+/**
+ * matches is the filter's one rule: the typed text anywhere in the name, with
+ * case ignored, since a person looking for a ledger types "ledger" and not
+ * "Ledger-2025". Nothing typed matches everything.
+ */
+function matches(name: string, query: string): boolean {
+  return query === "" || name.toLowerCase().includes(query);
+}
+
+/**
+ * address reads what was searched for as an S3 object, in the s3:// form or
+ * one of the https forms a browser shows, the way the + menu reads a pasted
+ * URL, and names it after the object as that does.
+ *
+ * A key ending in a slash is a prefix rather than an object, and there is
+ * nothing to add at one, so it is left to be a filter like any other text.
+ */
+function address(typed: string): SourceRef | undefined {
+  const loc = s3Location(typed);
+  if (loc === undefined || loc.key.endsWith("/")) return undefined;
+  return { name: loc.key.slice(loc.key.lastIndexOf("/") + 1), path: s3Url(loc) };
+}
+
 /** A line that exists, for a count of lines that may have changed under it. */
 function bound(line: number, count: number): number {
   return Math.max(0, Math.min(line, count - 1));
@@ -138,6 +162,18 @@ export class Sources {
   private looking = false;
   /** Which peek is wanted, counted the way a listing's ask is. */
   private looked = 0;
+  /** What the lines are filtered by, lower-cased, or "" for every line. */
+  private query = "";
+  /** The object an address searched for names, when it named one. */
+  private address: SourceRef | undefined;
+  /**
+   * The entries the filter keeps, and the page they were kept from.
+   *
+   * A prefix can be 200,000 entries, and every draw and every key reads this
+   * list, so it is filtered once per page and per filter rather than once per
+   * read. The page is the key because a listing that lands replaces it.
+   */
+  private kept: { from: readonly Entry[]; query: string; entries: readonly Entry[] } | undefined;
 
   constructor(
     private readonly listings: Listings,
@@ -151,23 +187,68 @@ export class Sources {
     this.saved = connections;
   }
 
-  /** In this workspace: one line per open tab. */
+  /** In this workspace: one line per open tab the filter keeps. */
   get tabs(): readonly Open[] {
-    return this.opened();
+    const q = this.query;
+    const all = this.opened();
+    return q === "" ? all : all.filter((t) => matches(t.name, q));
   }
 
-  /** The places that can be browsed. */
+  /** The places that can be browsed, as far as the filter keeps them. A
+   * connection is kept on its path as well, since that is what a person pastes. */
   get connections(): readonly Connection[] {
-    return this.saved;
+    const q = this.query;
+    return q === ""
+      ? this.saved
+      : this.saved.filter((c) => matches(c.name, q) || matches(c.path, q));
   }
 
   set connections(list: readonly Connection[]) {
     this.saved = list;
   }
 
-  /** The browser: the page of the place being browsed, folders first. */
+  /** The browser: the page of the place being browsed, folders first, as far
+   * as the filter keeps it. */
   get entries(): readonly Entry[] {
-    return this.found;
+    const q = this.query;
+    if (q === "") return this.found;
+    const kept = this.kept;
+    if (kept !== undefined && kept.from === this.found && kept.query === q) return kept.entries;
+    const entries = this.found.filter((e) => matches(e.name, q));
+    this.kept = { from: this.found, query: q, entries };
+    return entries;
+  }
+
+  /** What the lines are filtered by, as it was typed less its case. */
+  get filter(): string {
+    return this.query;
+  }
+
+  /**
+   * The S3 object the last search was an address of, for the shell to open as
+   * a tab. Undefined when what was searched for was only a filter.
+   */
+  get pasted(): SourceRef | undefined {
+    return this.address;
+  }
+
+  /**
+   * search filters every section by name, and puts the keys on the first line
+   * that is left, so Enter straight after a search opens what was searched for.
+   *
+   * It is a search asked for rather than a filter that follows each key: the
+   * three sections are redrawn once per question, not once per letter of it.
+   *
+   * An object's address is not filtered by. No tab, connection or entry is
+   * named s3://bucket/key, so filtering by one would only ever hide every line,
+   * and what the person meant was the object. It is read before the case is
+   * dropped, since a key is not the same key in another case.
+   */
+  search(text: string): void {
+    this.address = address(text);
+    this.query = this.address === undefined ? text.trim().toLowerCase() : "";
+    this.at = { section: "workspace", line: 0 };
+    if (this.count("workspace") === 0) this.one(1);
   }
 
   /** Where that place is, from the connection down. Empty until one is opened. */
@@ -198,6 +279,12 @@ export class Sources {
    *
    * Every draw asks, through the buttons, and a page can be 200,000 entries,
    * so with nothing picked it answers without walking the page at all.
+   *
+   * It reads the whole page rather than what the filter keeps. Filtering is
+   * how a person finds the next file in a long prefix, so picking across
+   * several searches is how files from all over one are gathered; a pick that
+   * a later search hid and quietly dropped would be a file the buttons no
+   * longer add, with nothing on screen to say so.
    */
   get selected(): readonly Entry[] {
     if (this.picks.size === 0) return [];
@@ -259,11 +346,11 @@ export class Sources {
   count(section: Section): number {
     switch (section) {
       case "workspace":
-        return this.opened().length;
+        return this.tabs.length;
       case "connections":
-        return this.saved.length;
+        return this.connections.length;
       case "browser":
-        return this.found.length;
+        return this.entries.length;
     }
   }
 
@@ -349,6 +436,9 @@ export class Sources {
   private async browse(path: string): Promise<void> {
     const mine = ++this.asked;
     this.found = [];
+    // The page the filter kept from is gone, and holding on to what it kept
+    // would keep up to a whole prefix alive for nothing.
+    this.kept = undefined;
     this.refused = "";
     this.waiting = true;
     this.forget();

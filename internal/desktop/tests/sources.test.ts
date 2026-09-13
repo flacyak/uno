@@ -406,6 +406,148 @@ test("browsing somewhere else lets go of the selection and the peek on its way",
   expect(panel.chosen(named(panel, "jul.csv"))).toBe(false);
 });
 
+test("a search narrows every section to the lines whose names hold it", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME, DISK, Q3]);
+  await panel.open(Q3);
+
+  panel.search("q3");
+
+  expect(panel.filter).toBe("q3");
+  expect(panel.tabs.map((t) => t.id)).toEqual(["b"]);
+  expect(panel.connections).toEqual([Q3]);
+  expect(names(panel.entries)).toEqual([]);
+
+  panel.search("jul");
+
+  expect(panel.tabs).toEqual([]);
+  expect(panel.connections).toEqual([]);
+  expect(names(panel.entries)).toEqual(["jul.csv"]);
+  expect(panel.count("browser")).toBe(1);
+});
+
+test("a search ignores case, in what is typed and in the names it is held to", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [Q3]);
+  await panel.open(Q3);
+
+  panel.search("  CSV ");
+
+  expect(panel.filter).toBe("csv");
+  expect(panel.tabs).toHaveLength(2);
+  expect(names(panel.entries)).toEqual(["jul.csv", "sep.CSV"]);
+});
+
+test("a connection is kept on its path as well as its name", () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME, DISK]);
+
+  panel.search("/home/jo");
+
+  expect(panel.connections).toEqual([DISK]);
+});
+
+test("an empty search shows every line again", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME, DISK, Q3]);
+  await panel.open(Q3);
+  panel.search("jul");
+
+  panel.search("   ");
+
+  expect(panel.filter).toBe("");
+  expect(panel.tabs).toBe(TABS);
+  expect(panel.connections).toEqual([ACME, DISK, Q3]);
+  expect(panel.entries).toHaveLength(5);
+});
+
+test("a search puts the keys on the first line it leaves, whichever section that is in", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME, DISK, Q3]);
+  await panel.open(Q3);
+
+  panel.search("q3");
+  expect(panel.place).toEqual({ section: "workspace", line: 0 });
+
+  panel.search("exports");
+  expect(panel.place).toEqual({ section: "connections", line: 0 });
+
+  panel.search("aug");
+  expect(panel.place).toEqual({ section: "browser", line: 0 });
+});
+
+test("a file the filter hides stays selected, and is still handed to the buttons", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [Q3]);
+  await panel.open(Q3);
+  await panel.toggle(named(panel, "jul.csv"));
+  await panel.toggle(named(panel, "aug.tsv"));
+
+  panel.search("aug");
+
+  expect(names(panel.entries)).toEqual(["aug.tsv"]);
+  expect(names(panel.selected)).toEqual(["jul.csv", "aug.tsv"]);
+  expect(panel.buttons[0]!.refs.map((r) => r.name)).toEqual(["jul.csv", "aug.tsv"]);
+
+  panel.search("");
+  expect(panel.chosen(named(panel, "jul.csv"))).toBe(true);
+});
+
+test("a page that lands while a search is on is filtered afresh, not served from the last page", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME, Q3]);
+  await panel.open(Q3);
+  panel.search("csv");
+  expect(names(panel.entries)).toEqual(["jul.csv", "sep.CSV"]);
+
+  await panel.open(ACME);
+
+  expect(panel.filter).toBe("csv");
+  expect(names(panel.entries)).toEqual(["ledger.csv"]);
+});
+
+test("a pasted s3:// object is offered to add, and filters nothing out", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME, Q3]);
+  await panel.open(Q3);
+
+  panel.search("  s3://acme-exports/2025/Q4/Orders.csv ");
+
+  expect(panel.pasted).toEqual({
+    name: "Orders.csv",
+    path: "s3://acme-exports/2025/Q4/Orders.csv",
+  });
+  expect(panel.filter).toBe("");
+  expect(panel.tabs).toHaveLength(2);
+  expect(panel.connections).toHaveLength(2);
+  expect(panel.entries).toHaveLength(5);
+
+  panel.search("jul");
+  expect(panel.pasted).toBeUndefined();
+});
+
+test("an object's https address is offered as its s3:// form", () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME]);
+
+  panel.search("https://acme-exports.s3.eu-west-1.amazonaws.com/2025/q3/Google%20Ads.csv");
+
+  expect(panel.pasted).toEqual({
+    name: "Google Ads.csv",
+    path: "s3://acme-exports/2025/q3/Google Ads.csv",
+  });
+  expect(panel.filter).toBe("");
+  expect(panel.connections).toEqual([ACME]);
+});
+
+test("an address with no object in it is only a filter", () => {
+  const panel = new Sources(new Stand(), () => TABS, [ACME, DISK]);
+
+  for (const typed of [
+    "s3://acme-exports",
+    "s3://acme-exports/2025/",
+    "https://example.com/a.csv",
+  ]) {
+    panel.search(typed);
+    expect(panel.pasted, typed).toBeUndefined();
+    expect(panel.filter, typed).toBe(typed.toLowerCase());
+  }
+
+  panel.search("s3://acme-exports");
+  expect(panel.connections).toEqual([ACME]);
+});
+
 // No DOM, and it has to stay that way: the panel is the part of the shell whose
 // browsing is worth testing, and it is only testable at all while it can be
 // built without a document.
