@@ -120,7 +120,8 @@ export class Panel {
     form.className = "panel-filter";
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
-    this.input.placeholder = "filter sources";
+    // An object's address is added rather than filtered by, so the box says so.
+    this.input.placeholder = "filter, or paste s3://bucket/key";
     this.input.setAttribute("aria-label", "filter sources");
     const go = document.createElement("button");
     go.type = "submit";
