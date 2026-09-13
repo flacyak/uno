@@ -148,6 +148,7 @@ export class Grid {
       ctrl: e.ctrlKey,
       alt: e.altKey,
       meta: e.metaKey,
+      shift: e.shiftKey,
       repeat: e.repeat,
     });
     if (step === undefined) return;
