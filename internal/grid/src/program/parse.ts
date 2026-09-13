@@ -1,6 +1,6 @@
-import { atoi, compile, isDigit, isLetter, isSpace, quote, runes, unquote } from "../go/index.ts";
+import { atoi, isDigit, isLetter, isSpace, quote, runes, unquote } from "../go/index.ts";
 import type { Pos, Step } from "./steps.ts";
-import { MAX_PARTS, MAX_STEPS, newReplace } from "./steps.ts";
+import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from "./steps.ts";
 import type { Program } from "./program.ts";
 
 /**
@@ -184,13 +184,7 @@ class Parser {
       throw new Error(`match number 0 at character ${this.i}: matches are counted from 1`);
     }
 
-    let compiled: RegExp;
-    try {
-      compiled = compile(re);
-    } catch (err) {
-      throw new Error(`pattern /${re}/: ${(err as Error).message}`);
-    }
-    const p: Pos = { kind: "match", re: compiled, src: re, k, atEnd: name === "end" };
+    const p: Pos = { kind: "match", re: compilePattern(re), src: re, k, atEnd: name === "end" };
     this.expect(")");
     return p;
   }
