@@ -1191,3 +1191,26 @@ test("the panel reaches for no document and no window", () => {
   const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
   expect(code).not.toMatch(/\bdocument\b|\bwindow\b|\bHTML[A-Za-z]*Element\b/);
 });
+
+test("the selected files are read once per page and per pick, not once per draw", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [BIG]);
+  await panel.open(BIG);
+  await panel.toggle(named(panel, "a.csv"));
+
+  // Every draw asks, through the buttons and the choices, and a page can be
+  // 200,000 entries: the same page and the same picks are the same answer.
+  const once = panel.selected;
+  expect(names(once)).toEqual(["a.csv"]);
+  expect(panel.selected).toBe(once);
+
+  // A pick is a new answer, and so is a page that lands.
+  await panel.toggle(named(panel, "b.csv"));
+  const picked = panel.selected;
+  expect(picked).not.toBe(once);
+  expect(names(picked)).toEqual(["a.csv", "b.csv"]);
+  expect(panel.selected).toBe(picked);
+
+  await panel.next();
+  await panel.toggle(named(panel, "c.csv"));
+  expect(names(panel.selected)).toEqual(["a.csv", "b.csv", "c.csv"]);
+});
