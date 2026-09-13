@@ -16,7 +16,9 @@ import {
   isDigit,
   isLetter,
   isSpace,
+  isZeroTime,
   parseFloat as goParseFloat,
+  parseTime,
   quote,
   quoteMeta,
   replaceAllLiteral,
@@ -349,5 +351,17 @@ describe("fmt and hashing", () => {
 
   test("rfc3339 truncates to the second, as encoding/json does", () => {
     expect(rfc3339(new Date(Date.UTC(2026, 8, 9, 12, 0, 0)))).toBe("2026-09-09T12:00:00Z");
+  });
+
+  // time.Time{} marshals as year 1, which is not the Unix epoch. A manifest the
+  // Go build wrote with a stamp it never set reads as absent, so the next save
+  // fills it in rather than keeping January 1 of year 1 as the creation date.
+  test("the zero time.Time is year 1 and reads as absent, and so does the epoch", () => {
+    expect(isZeroTime(parseTime("2026-09-09T12:00:00Z"))).toBe(false);
+    expect(isZeroTime(new Date(0))).toBe(true);
+    expect(parseTime("0001-01-01T00:00:00Z")).toBeUndefined();
+    expect(parseTime("1970-01-01T00:00:00Z")).toBeUndefined();
+    expect(parseTime("garbage")).toBeUndefined();
+    expect(parseTime("2026-09-09T12:00:00Z")?.toISOString()).toBe("2026-09-09T12:00:00.000Z");
   });
 });
