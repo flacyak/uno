@@ -199,6 +199,7 @@
   "connect_action": "+ Connect a bucket",
   "this_column": "this column",
   "the_column": "the column",
+  "column_unnamed": "column {number}",
   "no_rows": "no rows",
   "unsaved_edits": "unsaved edits",
   "unsaved_changes": "unsaved changes",
