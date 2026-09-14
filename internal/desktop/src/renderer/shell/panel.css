@@ -239,3 +239,20 @@
   --c: var(--accent);
   background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px);
 }
+
+/* A tab whose file changed under the log, and one whose file is gone: flagged
+ * the way the tab's own mark is, amber and then filled. */
+.panel-row.changed > :last-child,
+.panel-row.missing > :last-child {
+  color: var(--flag);
+}
+
+.panel-row.changed > :first-child::before,
+.panel-row.missing > :first-child::before {
+  content: "! ";
+  color: var(--flag);
+}
+
+.panel-row.missing > :first-child {
+  color: var(--ink-3);
+}

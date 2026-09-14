@@ -84,31 +84,41 @@ interface Drawn {
   list: HTMLElement;
   chosen: string[];
   added: { names: string[]; one: boolean }[];
+  /** What the tab buttons and keys asked of the shell, as `does id [path]`. */
+  done: string[];
   closed: () => number;
 }
 
-function draw(bucket = new Bucket([]), input: { name: InputName } = { name: "default" }): Drawn {
+function draw(
+  bucket = new Bucket([]),
+  input: { name: InputName } = { name: "default" },
+  tabs: readonly Open[] = TABS,
+): Drawn {
   document.body.innerHTML = `<aside id="panel" class="panel" hidden></aside>`;
   const root = document.querySelector<HTMLElement>("#panel")!;
   let panel: Panel | undefined;
   const sources = new Sources(
     bucket,
-    () => TABS,
+    () => tabs,
     [BUCKET, DISK],
     () => panel?.draw(),
   );
   const chosen: string[] = [];
   const added: { names: string[]; one: boolean }[] = [];
+  const done: string[] = [];
   let closed = 0;
   panel = new Panel(root, sources, () => input.name, {
     select: (id) => chosen.push(id),
     add: (refs, one) => added.push({ names: refs.map((r) => r.name), one }),
+    reload: (id) => done.push(`reload ${id}`),
+    repoint: (id, ref) => done.push(`repoint ${id} ${"path" in ref ? ref.path : ref.name}`),
+    remove: (id) => done.push(`remove ${id}`),
     closed: () => closed++,
   });
   const list = root.querySelector<HTMLElement>(".panel-list")!;
   Object.defineProperty(list, "clientHeight", { value: VIEWPORT });
   panel.show();
-  return { panel, sources, bucket, root, list, chosen, added, closed: () => closed };
+  return { panel, sources, bucket, root, list, chosen, added, done, closed: () => closed };
 }
 
 function press(el: HTMLElement, key: string): void {
@@ -407,4 +417,97 @@ test("Enter on a file nothing reads adds nothing", async () => {
 
   press(d.list, "Enter");
   expect(d.added).toEqual([]);
+});
+
+// ------------------------------------------------------------ in this workspace
+
+/** A tab that reads, one whose object is gone, and one whose file changed. */
+const STATED: Open[] = [
+  { id: "a", name: "ledger-2025.csv", link: { path: "/home/jo/ledger-2025.csv" }, bytes: 2048 },
+  {
+    id: "b",
+    name: "google-ads.csv",
+    link: { path: "s3://acme-exports/ads/google-ads.csv", missing: "google-ads.csv is not there" },
+  },
+  {
+    id: "c",
+    name: "q3.csv",
+    link: { path: "/home/jo/q3.csv", changed: "q3.csv is 12 bytes bigger" },
+    bytes: 12,
+  },
+];
+
+test("each tab's line says its size, or that its file changed or is missing", () => {
+  const d = draw(new Bucket([]), { name: "default" }, STATED);
+
+  const meta = (name: string) => row(d.root, name)!.children[1]!.textContent;
+  expect(meta("ledger-2025.csv")).toBe("2.0 KB");
+  expect(meta("google-ads.csv")).toBe("missing");
+  expect(meta("q3.csv")).toBe("changed");
+  expect(row(d.root, "google-ads.csv")!.classList.contains("missing")).toBe(true);
+  expect(row(d.root, "q3.csv")!.classList.contains("changed")).toBe(true);
+  expect(row(d.root, "google-ads.csv")!.title).toBe(
+    "s3://acme-exports/ads/google-ads.csv · google-ads.csv is not there",
+  );
+});
+
+test("the keys on a tab offer its buttons, and r and Delete reload and remove it", () => {
+  const d = draw(new Bucket([]), { name: "default" }, STATED);
+
+  expect(buttons(d.root)).toEqual(["Reload", "Re-point", "Remove"]);
+  press(d.list, "r");
+  press(d.list, "Delete");
+  d.root.querySelector<HTMLButtonElement>(".panel-foot button")!.click();
+  expect(d.done).toEqual(["reload a", "remove a", "reload a"]);
+
+  // Off the tabs, there is no tab to do anything to.
+  d.sources.focus("connections");
+  press(d.list, "r");
+  d.panel.draw();
+  expect(d.done).toHaveLength(3);
+});
+
+test("p on a missing object browses where it was, and Enter on a file points the tab at it", async () => {
+  const d = draw(new Bucket(objects(3)), { name: "default" }, STATED);
+  press(d.list, "ArrowDown");
+  press(d.list, "p");
+  await settle();
+
+  expect(lines(d.root)).toContain("Point google-ads.csv at…");
+  expect(d.sources.crumb.map((c) => c.name)).toEqual(["acme-exports", "ads"]);
+  expect(selected(d.root)).toBe("orders-000000.csv");
+
+  press(d.list, "ArrowDown");
+  press(d.list, " ");
+  await settle();
+  expect(buttons(d.root)).toEqual(["Point google-ads.csv here"]);
+
+  press(d.list, "Enter");
+  await settle();
+  expect(d.done).toEqual(["repoint b s3://acme-exports/orders-000001.csv"]);
+  expect(d.added).toEqual([]);
+  // Pointed, the browser is for adding again.
+  expect(lines(d.root)).toContain("Browser");
+});
+
+test("a pasted address while picking for a tab points the tab at it", async () => {
+  const d = draw(new Bucket([]), { name: "default" }, STATED);
+  await d.sources.repoint(STATED[1]!);
+
+  filter(d.root, "s3://acme-exports/ads/google-ads-v2.csv", "enter");
+
+  expect(d.done).toEqual(["repoint b s3://acme-exports/ads/google-ads-v2.csv"]);
+  expect(d.added).toEqual([]);
+});
+
+test("Esc while picking for a tab gives that up, and a second closes the panel", async () => {
+  const d = draw(new Bucket(objects(2)), { name: "default" }, STATED);
+  await d.sources.repoint(STATED[1]!);
+
+  press(d.list, "Escape");
+  expect(d.sources.repointing).toBeUndefined();
+  expect(d.root.hidden).toBe(false);
+
+  press(d.list, "Escape");
+  expect(d.root.hidden).toBe(true);
 });

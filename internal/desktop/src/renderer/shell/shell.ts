@@ -97,7 +97,7 @@ export class Shell {
       () => this.input.name,
       {
         select: (id) => {
-          const tab = this.workspace?.sources.find((t) => t.id === id);
+          const tab = this.tabAt(id);
           if (tab !== undefined) this.select(tab);
         },
         add: (refs, one) => {
@@ -105,6 +105,18 @@ export class Shell {
           // button says what it would do and the shell says it cannot yet.
           if (one) this.say("Add as one needs multi-file sources, which are not built yet", true);
           else void this.addSources([...refs]);
+        },
+        reload: (id) => {
+          const tab = this.tabAt(id);
+          if (tab !== undefined) void this.reload(tab);
+        },
+        repoint: (id, ref) => {
+          const tab = this.tabAt(id);
+          if (tab !== undefined) void this.pointAt(tab, ref);
+        },
+        remove: (id) => {
+          const tab = this.tabAt(id);
+          if (tab !== undefined) void this.remove(tab);
         },
         closed: () => {
           this.paintTabs();
@@ -134,6 +146,11 @@ export class Shell {
     );
     this.wireKeys();
     this.paintStatus();
+  }
+
+  /** The open tab with this id, which is how the panel names one. */
+  private tabAt(id: string): Tab | undefined {
+    return this.workspace?.sources.find((t) => t.id === id);
   }
 
   /** The open workspace and the grid showing it, or undefined before a file opens. */
@@ -527,15 +544,40 @@ export class Shell {
    * first file picked is used.
    */
   private async relink(tab: Tab): Promise<void> {
+    let ref: SourceRef | undefined;
+    try {
+      [ref] = await this.host.add();
+    } catch (err) {
+      this.say(message(err), true);
+      return;
+    }
+    if (ref !== undefined) await this.pointAt(tab, ref); // undefined is cancelled
+  }
+
+  /**
+   * reload reads a tab's file again from where it already points, which is a
+   * re-point at the same path: the log replays over whatever is there now. A
+   * file that came back after going missing is found again the same way.
+   */
+  private async reload(tab: Tab): Promise<void> {
+    const path = tab.link?.path;
+    if (path === undefined) return;
+    await this.pointAt(tab, refAt(path), `reloaded ${tab.name}`);
+  }
+
+  /**
+   * pointAt points a tab at a file, from the panel's browser, its reload, or
+   * the ! mark's dialog. The edits replay over the file; one that cannot take
+   * them is refused and the tab is left as it was.
+   */
+  private async pointAt(tab: Tab, ref: SourceRef, said?: string): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
     try {
-      const [ref] = await this.host.add();
-      if (ref === undefined) return; // cancelled
       const fresh = await w.relink(tab, ref);
       if (this.workspace !== w) return;
 
-      this.say(`${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`);
+      this.say(said ?? `${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`);
       if (w.active === fresh) this.showActive();
       else this.paintTabs();
       this.paintStatus();
