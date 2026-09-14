@@ -25,7 +25,7 @@ import { diskLister } from "./disklister.ts";
 import type { ByteSource, FileHandler, FileStore } from "./index.ts";
 import { isRemote, readAll } from "./index.ts";
 import type { AwsCredentials, S3Location, Signing } from "./s3.ts";
-import { signInAgain, ssoRoleCredentials } from "./sts.ts";
+import { assumeRole, signInAgain, ssoRoleCredentials } from "./sts.ts";
 import type { Session } from "./sts.ts";
 
 /**
@@ -228,19 +228,37 @@ async function profileSession(
   env: Env,
   files: AwsFiles,
   profile: string,
+  through: readonly string[] = [],
 ): Promise<Held | undefined> {
   const p = files.credentials.get(profile);
   const fromConfig = configOf(files, profile);
   const region = regionOf(env, files, profile);
   const as = `the AWS profile ${profile}`;
 
-  const key = p?.get("aws_access_key_id") ?? fromConfig?.get("aws_access_key_id");
-  const secret = p?.get("aws_secret_access_key") ?? fromConfig?.get("aws_secret_access_key");
-  if (key !== undefined && secret !== undefined) {
-    const token = p?.get("aws_session_token") ?? fromConfig?.get("aws_session_token");
+  // A role comes first, as it does for the CLI: a profile with role_arn is the
+  // role, whatever else it holds, and its keys are whatever its source's are.
+  const roleArn = fromConfig?.get("role_arn") ?? p?.get("role_arn");
+  if (roleArn !== undefined) {
+    const setting = (key: string): string | undefined => fromConfig?.get(key) ?? p?.get(key);
+    const { expiration, ...keys } = await roleSession(
+      env,
+      files,
+      profile,
+      roleArn,
+      setting,
+      through,
+    );
+    return { creds: { ...keys, region, as }, until: expiration.getTime() - EARLY_MS };
+  }
+
+  const own = profileKeysOnly(env, files, profile);
+  if (own !== undefined) return { creds: { ...own.creds, as }, until: own.until };
+  const command = fromConfig?.get("credential_process");
+  if (command !== undefined) {
+    const { expiration, ...keys } = await processCredentials(profile, command);
     return {
-      creds: { accessKeyId: key, secretAccessKey: secret, sessionToken: token, region, as },
-      until: Date.now() + CREDENTIALS_MS,
+      creds: { ...keys, region, as },
+      until: expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS,
     };
   }
   const command = fromConfig?.get("credential_process");
