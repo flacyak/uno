@@ -158,11 +158,23 @@ export function parseFormula(name: string, text: string): Formula {
     );
   }
 
+  // Other things are .unof files too, a connection among them. One that lands
+  // in the formula folder is refused by name rather than read as an empty
+  // column formula, the rule `document` keeps for what it does not recognise.
+  const kind = o["kind"];
+  if (kind !== "column" && kind !== "notation") {
+    throw new Error(
+      kind === undefined
+        ? `${name} is not a formula: it has no kind`
+        : `${name} is not a formula: this build does not know kind ${JSON.stringify(kind)}`,
+    );
+  }
+
   const f: Formula = {
     format,
     id: typeof o["id"] === "string" ? o["id"] : "",
     name: typeof o["name"] === "string" ? o["name"] : "",
-    kind: o["kind"] === "notation" ? "notation" : "column",
+    kind,
     expr: typeof o["expr"] === "string" ? o["expr"] : "",
     created: parseTime(typeof o["created"] === "string" ? o["created"] : undefined),
     modified: parseTime(typeof o["modified"] === "string" ? o["modified"] : undefined),

@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "id": "acme-exports",
+  "name": "ACME exports",
+  "kind": "connection",
+  "provider": "s3",
+  "bucket": "acme-exports",
+  "prefix": "shop/",
+  "region": "eu-west-1",
+  "auth": {
+    "mode": "profile",
+    "profile": "finance"
+  },
+  "created": "2026-09-21T09:12:40Z",
+  "modified": "2026-09-21T09:12:40Z"
+}
