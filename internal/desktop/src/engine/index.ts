@@ -3,7 +3,8 @@
 // The engine itself is `serve` in @uno/grid. This file holds the facts only this
 // runtime knows: the port arrives as a MessagePortMain on parentPort, and what
 // the process can open -- files on this machine's disks, and objects in S3 read
-// with whatever AWS credentials this machine already has.
+// the way the connection covering each one says to sign in, or with whatever
+// AWS credentials this machine already has where no connection covers it.
 //
 // There is no blob handler: every file the desktop hands its engine has a
 // path, and a Blob that arrives anyway is refused by name.
@@ -16,7 +17,7 @@ import { TUNING, serve } from "@uno/grid/engine";
 import type { Reply, Request } from "@uno/grid/engine";
 import { sources } from "@uno/grid/plugin";
 import { connectionsIn } from "@uno/grid/store";
-import { awsCredentials, diskProvider, nodeStore } from "@uno/grid/store/node";
+import { connectionSigning, diskProvider, nodeStore } from "@uno/grid/store/node";
 import { s3Provider } from "@uno/grid/store/s3";
 
 /**
@@ -38,6 +39,12 @@ process.parentPort.once("message", (e) => {
   // has nothing else to do.
   port.on("close", () => process.exit(0));
 
+  // Read through the same disk handler every other file is, from the one
+  // folder main named. The S3 provider asks it on every request, so a request
+  // is signed by the connection covering where it goes as that connection
+  // stands now, and by the machine's own chain where no connection covers it.
+  const kept = CONNECTIONS === undefined ? undefined : connectionsIn(nodeStore(), CONNECTIONS);
+
   serve(
     {
       post: (msg: Reply) => port.postMessage(msg),
@@ -52,15 +59,13 @@ process.parentPort.once("message", (e) => {
     sources([
       diskProvider(),
       s3Provider({
-        credentials: awsCredentials(),
+        credentials: connectionSigning(() => kept?.all ?? []),
         // The same variables the AWS CLI reads, so MinIO or a local stand-in is
         // pointed at the way every other tool on the machine is.
         endpoint: process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"],
       }),
     ]),
     TUNING,
-    // Read through the same disk handler every other file is, from the one
-    // folder main named.
-    CONNECTIONS === undefined ? undefined : connectionsIn(nodeStore(), CONNECTIONS),
+    kept,
   );
 });

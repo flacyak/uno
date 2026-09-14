@@ -369,3 +369,33 @@ export function formatConnection(c: Connection): string {
   }
   return JSON.stringify(out, undefined, 2) + "\n";
 }
+
+/**
+ * covers says whether an object, or a prefix a listing asks about, in `bucket`
+ * is read through `c`: it is in c's bucket, and its key starts with c's prefix.
+ */
+export function covers(c: Connection, bucket: string, key: string): boolean {
+  return c.bucket === bucket && key.startsWith(c.prefix);
+}
+
+/**
+ * covering is the connection an address is read through: of the connections
+ * that cover it, the one with the longest prefix.
+ *
+ * Longest, because a narrower connection is the more deliberate one. A bucket
+ * connected whole through one profile and its finance/ folder through another
+ * reads finance/ with the second, which is the one somebody set up for it.
+ */
+export function covering(
+  connections: readonly Connection[],
+  bucket: string,
+  key: string,
+): Connection | undefined {
+  let best: Connection | undefined;
+  for (const c of connections) {
+    if (covers(c, bucket, key) && (best === undefined || c.prefix.length > best.prefix.length)) {
+      best = c;
+    }
+  }
+  return best;
+}
