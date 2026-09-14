@@ -23,7 +23,7 @@ const takes = join(root, "docs");
 const gif = join(takes, "preview.gif");
 
 /** What the GIF is resampled to. Twelve is enough for a caret and a scroll to
- * look continuous, and low enough that fourteen seconds of a mostly still window
+ * look continuous, and low enough that sixteen seconds of a mostly still window
  * stays a file worth putting in a README. */
 const FPS = 12;
 

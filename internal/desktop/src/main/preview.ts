@@ -52,9 +52,10 @@ const BEAT = {
   fix1: 2_500, // the grid and its type badges have been read by now
   fix2: 5_000,
   fix3: 7_000,
-  toEnd: 9_500, // the three corrections have landed and the status bar says so
-  toHome: 11_400, // row 4,812 has been up long enough to read
-  end: 13_400,
+  apply: 9_700, // the three corrections have landed and the banner has been read
+  toEnd: 11_400, // the column has been rewritten where it was watched
+  toHome: 13_200, // row 4,812 has been up long enough to read
+  end: 15_600,
 };
 
 /**
@@ -267,12 +268,13 @@ async function film(
 
 /**
  * play performs the story: three cells corrected the way a person corrects them,
- * then the length of the file, then back to what was fixed.
+ * the offer to correct the rest accepted, then the length of the file, then back
+ * to what was fixed.
  *
- * Keys go through sendInputEvent rather than a synthetic DOM event, so every one
- * of them lands wherever the window has focus -- which is exactly where a real
- * key would land. A preview that dispatched its own events would be filming an
- * assertion about the app rather than the app.
+ * Keys and the click go through sendInputEvent rather than a synthetic DOM event,
+ * so every one of them lands wherever the window would send a real one. A
+ * preview that dispatched its own events would be filming an assertion about the
+ * app rather than the app.
  */
 async function play(win: BrowserWindow, start: number): Promise<void> {
   const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
@@ -289,9 +291,15 @@ async function play(win: BrowserWindow, start: number): Promise<void> {
     await fix(win, FIXES[i]!);
   }
 
-  // The length of the file, which is the other thing this app claims. Eased
-  // rather than assigned: `scrollTop = scrollHeight` is a cut, and a cut says
-  // nothing about whether 4,812 rows stay fluid on the way.
+  // The banner has offered the rest of the column. Nothing changes until it is
+  // accepted, so the story is not finished until Apply is clicked.
+  await at(BEAT.apply);
+  await click(win, "#banner button.primary");
+
+  // The length of the file, which is the other thing this app claims -- and the
+  // proof that Apply reached rows nobody was looking at. Eased rather than
+  // assigned: `scrollTop = scrollHeight` is a cut, and a cut says nothing about
+  // whether 4,812 rows stay fluid on the way.
   await at(BEAT.toEnd);
   await scroll(win, "end", SCROLL_END);
 
@@ -301,10 +309,37 @@ async function play(win: BrowserWindow, start: number): Promise<void> {
   await at(BEAT.toHome);
   await scroll(win, "home", 0);
 
-  // The tail is a resting state: three corrected cells, `3 edits` in the status
-  // bar, a dot on the tab. A looping preview holds there long enough to be read
-  // before it starts over.
+  // The tail is a resting state: a rewritten column badged `num`, `4 edits` in
+  // the status bar, a dot on the tab. A looping preview holds there long enough
+  // to be read before it starts over.
   await at(BEAT.end);
+}
+
+/** The pause between the pointer arriving at a button and pressing it. */
+const HOVER = 250;
+
+/**
+ * click presses the element under a selector with the pointer, the way a person
+ * does: it arrives, and then it presses.
+ *
+ * Only where to press is read from the page. The press itself is a real input
+ * event, so a button that was covered or disabled would fail to respond here
+ * exactly as it would under a real mouse.
+ */
+async function click(win: BrowserWindow, selector: string): Promise<void> {
+  const { x, y } = (await win.webContents.executeJavaScript(`
+    (() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (el === null) throw new Error("nothing to click at ${selector}");
+      const r = el.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    })()
+  `)) as { x: number; y: number };
+
+  win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+  await sleep(HOVER);
+  win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+  win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
 }
 
 /** One cell corrected without ever leaving the keyboard. */
