@@ -151,6 +151,13 @@ export class Engine {
     return r.loaded;
   }
 
+  /** profiles answers the names of the AWS profiles the engine's machine has. */
+  async profiles(): Promise<string[]> {
+    const r = await this.ask((id) => ({ t: "profiles", id }));
+    if (r.t !== "names") throw new Error(`the engine answered a profiles request with ${r.t}`);
+    return r.names;
+  }
+
   /** close ends the connection. The worker behind it goes when its port does. */
   close(): void {
     if (this.closed) return;

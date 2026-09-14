@@ -17,20 +17,39 @@ import type { Connections } from "../store/index.ts";
 import { Workspace } from "./workspace.ts";
 
 /**
+ * Connecting is what a platform lets its engine know about signing in, besides
+ * the signing itself, which is inside the providers.
+ */
+export interface Connecting {
+  /**
+   * Where the platform keeps the connections this engine signs in through.
+   * They are read once as it starts and again whenever a client says they
+   * changed.
+   */
+  connections: Connections;
+  /**
+   * The names of the AWS profiles this machine has, for a person choosing one,
+   * and nothing else about them. Absent where there is no ~/.aws to read: the
+   * hosted engine signs in with roles.
+   */
+  profiles?: () => Promise<string[]>;
+}
+
+/**
  * serve runs one engine over a port.
  *
- * `connections` is where the platform keeps the connections this engine signs
- * in through. They are read once as it starts and again whenever a client says
- * they changed. An engine given none -- a test, a build that connects to
- * nothing -- refuses the request by name rather than answering with an empty
- * list, which would read as a folder with nothing in it.
+ * An engine given no `connecting` -- a test, a build that connects to nothing
+ * -- refuses to answer about connections and profiles by name, rather than
+ * with an empty list, which would read as a folder or a machine with nothing
+ * in it.
  */
 export function serve(
   port: Port<Request, Reply>,
   sources: Sources,
   tuning: Tuning = TUNING,
-  connections?: Connections,
+  connecting?: Connecting,
 ): void {
+  const connections = connecting?.connections;
   const workspace = new Workspace(sources.files, port, tuning);
   // Read before anything is answered, so the first request that signs -- a
   // .uno opened the moment the engine is up -- is signed by its connection and
@@ -113,6 +132,18 @@ export function serve(
           id: msg.id,
           loaded: { connections: read.connections, failed: read.failed.map((e) => e.message) },
         });
+        return;
+      }
+      // A person choosing how a connection signs in picks a profile by name,
+      // and a name is all that crosses: ~/.aws is read in this process, and
+      // what is in it besides the names stays here.
+      case "profiles": {
+        if (connecting?.profiles === undefined) {
+          throw new Error(
+            "this engine has no AWS profiles to offer · its platform signs in another way",
+          );
+        }
+        port.post({ t: "names", id: msg.id, names: await connecting.profiles() });
         return;
       }
       case "mode": {
