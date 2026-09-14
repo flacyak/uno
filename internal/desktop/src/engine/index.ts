@@ -10,12 +10,22 @@
 //
 // The credentials are read here, in the engine's own process. The renderer
 // asks for an s3:// URL and gets rows back; no key ever crosses into the page.
+// So are the connections: main names the folder, and the engine reads it.
 
-import { serve } from "@uno/grid/engine";
+import { TUNING, serve } from "@uno/grid/engine";
 import type { Reply, Request } from "@uno/grid/engine";
 import { sources } from "@uno/grid/plugin";
-import { awsCredentials, diskProvider } from "@uno/grid/store/node";
+import { connectionsIn } from "@uno/grid/store";
+import { awsCredentials, diskProvider, nodeStore } from "@uno/grid/store/node";
 import { s3Provider } from "@uno/grid/store/s3";
+
+/**
+ * Where the connections are kept, as main passed it. An engine started any
+ * other way has no folder, and keeps no connections rather than guessing one.
+ */
+const CONNECTIONS = process.argv
+  .find((a) => a.startsWith("--connections="))
+  ?.slice("--connections=".length);
 
 process.parentPort.once("message", (e) => {
   const port = e.ports[0];
@@ -48,5 +58,9 @@ process.parentPort.once("message", (e) => {
         endpoint: process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"],
       }),
     ]),
+    TUNING,
+    // Read through the same disk handler every other file is, from the one
+    // folder main named.
+    CONNECTIONS === undefined ? undefined : connectionsIn(nodeStore(), CONNECTIONS),
   );
 });

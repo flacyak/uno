@@ -20,7 +20,7 @@ import {
 import type { UtilityProcess } from "electron";
 import { join } from "node:path";
 
-import { sourceAt, writeAtomic } from "./files.ts";
+import { sourceAt, writeAtomic, writeConnection } from "./files.ts";
 
 /**
  * This file is bundled to CommonJS, because a preload script has to be and the
@@ -210,6 +210,14 @@ function buildMenu(win: BrowserWindow): void {
  */
 function registerFileHandlers(win: BrowserWindow): void {
   /**
+   * Where connections are kept: a folder of .unof files under the app's own
+   * data, beside nothing the person put there themselves. It is read at the
+   * moment it is needed rather than once, so a run started with its own
+   * --user-data-dir -- the smoke, the preview -- keeps its connections there.
+   */
+  const connectionsDir = (): string => join(app.getPath("userData"), "connections");
+
+  /**
    * Engines, one per open workspace, each a utility process of its own.
    *
    * Not the renderer, because reading a file by path takes Node and the renderer
@@ -224,9 +232,13 @@ function registerFileHandlers(win: BrowserWindow): void {
   const engines = new Set<UtilityProcess>();
 
   ipcMain.on("engine:connect", (event, id: number) => {
-    const child = utilityProcess.fork(join(here, "../engine/index.cjs"), [], {
-      serviceName: "uno engine",
-    });
+    // The folder is an argument rather than something the engine works out,
+    // because only this process knows where the app keeps its data.
+    const child = utilityProcess.fork(
+      join(here, "../engine/index.cjs"),
+      [`--connections=${connectionsDir()}`],
+      { serviceName: "uno engine" },
+    );
     engines.add(child);
     child.once("exit", () => engines.delete(child));
 
@@ -282,6 +294,12 @@ function registerFileHandlers(win: BrowserWindow): void {
 
   ipcMain.handle("file:save", async (_event, path: string, bytes: Uint8Array) => {
     await writeAtomic(path, bytes);
+  });
+
+  // A connection saved from the panel. The engines read the folder again when
+  // the renderer tells them to, so nothing here has to reach one.
+  ipcMain.handle("connections:save", async (_event, id: string, text: string) => {
+    await writeConnection(connectionsDir(), id, text);
   });
 }
 

@@ -15,6 +15,7 @@ import { sources } from "../../src/plugin/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
 import type { Sheet } from "../../src/sheet/index.ts";
 import { blobProvider } from "../../src/store/index.ts";
+import type { Connections } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { bytes, FIXTURE } from "../testdata/sales-q3.ts";
 
@@ -41,12 +42,14 @@ export const TINY: Tuning = { chunkBytes: 4096, blockRows: 7, blockBytes: 512, c
 export function connect(
   tuning?: Tuning,
   providers: Provider[] = [diskProvider(), blobProvider()],
+  connections?: Connections,
 ): { engine: Engine; done: () => void } {
   const { port1, port2 } = new MessageChannel();
   serve(
     messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
     sources(providers),
     tuning,
+    connections,
   );
   const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
   return {

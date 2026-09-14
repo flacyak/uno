@@ -13,10 +13,28 @@ import { TUNING } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
 import { peek } from "./peek.ts";
 import type { Sources } from "../plugin/index.ts";
+import type { Connections } from "../store/index.ts";
 import { Workspace } from "./workspace.ts";
 
-export function serve(port: Port<Request, Reply>, sources: Sources, tuning: Tuning = TUNING): void {
+/**
+ * serve runs one engine over a port.
+ *
+ * `connections` is where the platform keeps the connections this engine signs
+ * in through. They are read once as it starts and again whenever a client says
+ * they changed. An engine given none -- a test, a build that connects to
+ * nothing -- refuses the request by name rather than answering with an empty
+ * list, which would read as a folder with nothing in it.
+ */
+export function serve(
+  port: Port<Request, Reply>,
+  sources: Sources,
+  tuning: Tuning = TUNING,
+  connections?: Connections,
+): void {
   const workspace = new Workspace(sources.files, port, tuning);
+  // Started now so the first request that signs finds them read. A folder that
+  // cannot be read is said when somebody asks, not to nobody at start.
+  void connections?.load().catch(() => undefined);
 
   async function handle(msg: Request): Promise<void> {
     switch (msg.t) {
@@ -76,6 +94,22 @@ export function serve(port: Port<Request, Reply>, sources: Sources, tuning: Tuni
       // again on the way out and never added to the workspace.
       case "peek": {
         port.post({ t: "peeked", id: msg.id, peeked: await peek(sources.files, msg.ref) });
+        return;
+      }
+      // Beside list and stat for the same reason: reading a folder of small
+      // files must not wait behind a save.
+      case "connections": {
+        if (connections === undefined) {
+          throw new Error(
+            "this engine keeps no connections · its platform gave it nowhere to read them from",
+          );
+        }
+        const read = await connections.load();
+        port.post({
+          t: "loaded",
+          id: msg.id,
+          loaded: { connections: read.connections, failed: read.failed.map((e) => e.message) },
+        });
         return;
       }
       case "mode": {
