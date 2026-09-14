@@ -44,6 +44,7 @@ class Shell {
   private readonly statusMode = must(document.querySelector<HTMLElement>("#status-mode"));
   private readonly statusFile = must(document.querySelector<HTMLElement>("#status-file"));
   private readonly statusMsg = must(document.querySelector<HTMLElement>("#status-msg"));
+  private readonly statusKeys = must(document.querySelector<HTMLElement>("#status-keys"));
   private readonly statusCell = must(document.querySelector<HTMLElement>("#status-cell"));
 
   constructor(private readonly host: Host) {
@@ -55,6 +56,18 @@ class Shell {
         if (this.workspace !== undefined && this.workspace.mode !== to) this.toggleMode();
       },
       onEditor: () => this.paintStatus(),
+      onPending: (keys) => {
+        this.statusKeys.textContent = keys;
+      },
+      onShort: (wanted) => {
+        const w = this.workspace;
+        if (w === undefined) return;
+        this.say(
+          wanted === "end"
+            ? `indexing ${w.indexed()}% · G again when it finishes`
+            : `row ${(wanted + 1).toLocaleString()} is not indexed yet`,
+        );
+      },
       onAction: (action) => {
         switch (action.t) {
           case "undo":

@@ -163,6 +163,12 @@ export class Workspace {
     this.savedEdits = this.edits.slice();
   }
 
+  /** How far the index has read the file, as a whole percent. */
+  indexed(): number {
+    const p = this.engine.progress;
+    return p === undefined ? 0 : Math.floor((p.done / Math.max(1, p.total)) * 100);
+  }
+
   /** What the status bar reports about the file itself. */
   status(): string {
     const p = this.engine.progress;
@@ -175,7 +181,7 @@ export class Workspace {
       `${this.band.cols()} columns`,
       this.label,
     ];
-    if (!p.complete) parts.push(`indexing ${Math.floor((p.done / Math.max(1, p.total)) * 100)}%`);
+    if (!p.complete) parts.push(`indexing ${this.indexed()}%`);
 
     const edits = this.edits.length;
     if (edits > 0) parts.push(`${edits} ${edits === 1 ? "edit" : "edits"}`);

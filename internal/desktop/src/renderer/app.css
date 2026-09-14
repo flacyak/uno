@@ -379,6 +379,18 @@ table.grid td.sel {
   color: var(--flag);
 }
 
+/* A half-typed 12g stays visible until it finishes or Esc drops it. */
+.win-status .keys {
+  color: var(--ink);
+  background: var(--surface);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.win-status .keys:empty {
+  display: none;
+}
+
 /* ---------- the empty state ---------- */
 
 .dropzone {
