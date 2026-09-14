@@ -217,6 +217,7 @@ export class Schema {
       }
 
       case Op.Apply: {
+        this.refuseBound(e, "rewritten by a program");
         // Parsed here rather than carried in the Edit, because an Edit is what a
         // file holds and a file holds text. A log naming a program this build
         // cannot read fails before anything changes.
