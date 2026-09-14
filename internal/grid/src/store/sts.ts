@@ -121,6 +121,14 @@ export interface RoleAsk {
 const STS_VERSION = "2011-06-15";
 
 /**
+ * What STS takes for a RoleSessionName: 2 to 64 of the characters its API
+ * reference lists. It is checked here because the name can come off a
+ * profile's role_session_name, and a refusal that says which setting is wrong
+ * is better than STS's ValidationError sent back across the network.
+ */
+const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
+
+/**
  * assumeRole takes on a role with the credentials that are allowed to, and
  * hands back the role's session.
  *
@@ -140,6 +148,12 @@ export async function assumeRole(
   source: Omit<AwsCredentials, "region">,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
+  if (!SESSION_NAME.test(ask.sessionName)) {
+    throw new Error(
+      `${ask.roleArn} cannot be assumed as ${JSON.stringify(ask.sessionName)} · ` +
+        "a role session name is 2 to 64 of letters, digits and +=,.@_-",
+    );
+  }
   const go = opts.fetch ?? fetch;
   const base = (opts.endpoint ?? `https://sts.${ask.region}.amazonaws.com`).replace(/\/+$/, "");
   const query: Array<[string, string]> = [
