@@ -536,22 +536,13 @@ export class Shell {
   }
 
   /**
-   * relink asks where a source's file is now, and points it there.
-   *
-   * It goes through the Add Source dialog, because the question is the same one
-   * -- which export do you mean -- and a second dialog that filters the same
-   * extensions would be a second thing to keep in step for nothing. Only the
-   * first file picked is used.
+   * repoint is a tab's ! mark: the panel opens picking a file for it, from the
+   * browser, so a source in S3 is pointed at another object and not only at
+   * whatever the local file dialog can reach.
    */
-  private async relink(tab: Tab): Promise<void> {
-    let ref: SourceRef | undefined;
-    try {
-      [ref] = await this.host.add();
-    } catch (err) {
-      this.say(message(err), true);
-      return;
-    }
-    if (ref !== undefined) await this.pointAt(tab, ref); // undefined is cancelled
+  private repoint(tab: Tab): void {
+    if (!this.panel.open) this.togglePanel();
+    this.panel.repoint(tab.id);
   }
 
   /**
@@ -566,9 +557,9 @@ export class Shell {
   }
 
   /**
-   * pointAt points a tab at a file, from the panel's browser, its reload, or
-   * the ! mark's dialog. The edits replay over the file; one that cannot take
-   * them is refused and the tab is left as it was.
+   * pointAt points a tab at a file, from the panel's browser or its reload.
+   * The edits replay over the file; one that cannot take them is refused and
+   * the tab is left as it was.
    */
   private async pointAt(tab: Tab, ref: SourceRef, said?: string): Promise<void> {
     const w = this.workspace;
@@ -764,7 +755,7 @@ export class Shell {
             select: (tab) => this.select(tab),
             remove: (tab) => void this.remove(tab),
             add: (plus) => this.offerAdd(plus),
-            relink: (tab) => void this.relink(tab),
+            repoint: (tab) => this.repoint(tab),
             panel: () => this.togglePanel(),
           });
     this.tabs.replaceChildren(...strip);

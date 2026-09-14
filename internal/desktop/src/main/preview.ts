@@ -43,7 +43,7 @@ const FRAME_INTERVAL = 60;
 const MIN_DISTINCT = 8;
 
 /**
- * The story, as offsets from the moment the camera rolls.
+ * The edit story, as offsets from the moment the camera rolls.
  *
  * They are absolute rather than a list of gaps so the timeline can be read off
  * this file and matched against the recording, and so a slow step steals its
@@ -58,6 +58,27 @@ const BEAT = {
   toEnd: 11_400, // the column has been rewritten where it was watched
   toHome: 13_200, // row 4,812 has been up long enough to read
   end: 15_600,
+};
+
+/**
+ * The browse story, in the same form: a workspace whose export was renamed,
+ * found again from the sources panel, and a second export added beside it.
+ *
+ * scripts/preview.js lays the folder out. Browsed from the workspace, it is
+ * 2024/, google-ads.csv, q3-close.uno and sales-q3-final.csv, in that order,
+ * and 2024/ holds google-ads-2024.csv.
+ */
+const BROWSE = {
+  panel: 1_600, // the ! on the tab and the empty grid have been read
+  repoint: 3_400, // the panel says the file is missing, and offers Re-point
+  enter: 5_000, // the folder the file was in is listed; step into 2024/
+  peek: 6_200, // its one file, peeked at before anything is added
+  up: 8_600, // not it: back up
+  walk: 9_400, // down past the other export and the workspace itself
+  pick: 10_600, // sales-q3-final.csv, peeked at, with the Point button under it
+  point: 12_800, // the tab reads it, and the three fixes replay
+  add: 15_200, // the other export, one Enter from being a tab
+  end: 18_600,
 };
 
 /**
@@ -135,16 +156,20 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // as a preview that opens on nothing.
   for (let i = 0; i < 100 && !win.isVisible(); i++) await sleep(50);
 
-  // The window has loaded, but the fixture's rows come from an engine a moment
-  // later. Filming before they do would spend the opening beat on an empty grid.
+  // The window has loaded, but what it opens comes from an engine a moment
+  // later. Filming before it does would spend the opening beat on an empty
+  // window. The edit story waits for rows; the browse story opens a workspace
+  // whose source is missing, so it has none, and waits for the tab's ! instead.
+  const browse = process.env["UNO_PREVIEW_STORY"] === "browse";
+  const ready = browse ? ".tab .trouble" : "tbody tr:not(.pending)";
   try {
     await win.webContents.executeJavaScript(`
       (async () => {
         for (let i = 0; i < 120; i++) {
-          if (document.querySelector("tbody tr:not(.pending)") !== null) return;
+          if (document.querySelector(${JSON.stringify(ready)}) !== null) return;
           await new Promise((r) => setTimeout(r, 50));
         }
-        throw new Error("no rows were ever drawn");
+        throw new Error("nothing was ever drawn at ${ready}");
       })()
     `);
   } catch (err) {
@@ -158,7 +183,11 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // One clock. The camera and the script start together and never consult each
   // other again, which is the whole reason for filming from inside the process.
   const start = Date.now();
-  const [shots] = await Promise.all([film(win, dir, rect, start), play(win, start)]);
+  const end = browse ? BROWSE.end : BEAT.end;
+  const [shots] = await Promise.all([
+    film(win, dir, rect, start, end),
+    browse ? playBrowse(win, start) : play(win, start),
+  ]);
 
   // The manifest is what carries the camera's real timing out to the encoder.
   // The hashes stay here; what the encoder needs is when each frame happened.
@@ -238,13 +267,14 @@ async function film(
   dir: string,
   rect: Rectangle,
   start: number,
+  end: number,
 ): Promise<(Shot & { hash: string })[]> {
   const shots: (Shot & { hash: string })[] = [];
   const writes: Promise<void>[] = [];
 
   for (let i = 0; ; i++) {
     const at = Date.now() - start;
-    if (at >= BEAT.end) break;
+    if (at >= end) break;
 
     const image = await win.webContents.capturePage(rect);
     const { width, height } = image.getSize();
@@ -323,6 +353,60 @@ async function play(win: BrowserWindow, start: number): Promise<void> {
   // the status bar, a dot on the tab. A looping preview holds there long enough
   // to be read before it starts over.
   await at(BEAT.end);
+}
+
+/**
+ * playBrowse performs the browse story, all of it from the keyboard: the panel
+ * opened, the missing file's folder browsed, a wrong file peeked at and left,
+ * the right one pointed at, and the other export added.
+ *
+ * Every key after Ctrl+Shift+B lands on the panel's list, which holds the keys
+ * until the last Enter adds a tab and hands them to the grid.
+ */
+async function playBrowse(win: BrowserWindow, start: number): Promise<void> {
+  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
+
+  win.webContents.send("menu:input", "default");
+
+  await at(BROWSE.panel);
+  through(win, () => {
+    const modifiers: ("control" | "shift")[] = ["control", "shift"];
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
+  });
+
+  // p on the tab's line, where the panel opened with the keys.
+  await at(BROWSE.repoint);
+  press(win, "p");
+
+  await at(BROWSE.enter);
+  press(win, "Return");
+  await at(BROWSE.peek);
+  press(win, "Space");
+  await at(BROWSE.up);
+  press(win, "Backspace");
+
+  await at(BROWSE.walk);
+  for (let i = 0; i < 3; i++) {
+    press(win, "Down");
+    await sleep(ARROW_GAP * 2);
+  }
+  await at(BROWSE.pick);
+  press(win, "Space");
+
+  // Enter with a file picked presses the button under it: Point sales-q3.csv here.
+  await at(BROWSE.point);
+  press(win, "Return");
+
+  await at(BROWSE.add);
+  for (let i = 0; i < 2; i++) {
+    press(win, "Up");
+    await sleep(ARROW_GAP * 2);
+  }
+  await sleep(OPEN_PAUSE);
+  press(win, "Return");
+
+  await at(BROWSE.end);
 }
 
 /** The pause between the pointer arriving at a button and pressing it. */
