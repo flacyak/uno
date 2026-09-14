@@ -58,7 +58,12 @@ export interface GridEvents {
   onMode(to: Mode): void;
   /** The editor opened or closed, so the status bar can say INSERT. */
   onEditor(open: boolean): void;
+  /** A key the grid cannot carry out itself, because the workspace does. */
+  onAction(action: ShellAction): void;
 }
+
+/** The actions that belong to the shell rather than the grid. */
+export type ShellAction = Extract<Action, { t: "undo" }>;
 
 export class Grid {
   private source: Rows | undefined;
@@ -160,6 +165,11 @@ export class Grid {
 
   selection(): { row: number; col: number } {
     return { row: this.selRow, col: this.selCol };
+  }
+
+  /** moveTo selects a cell and brings it into view, as a key would. */
+  moveTo(row: number, col: number): void {
+    this.select(row, col);
   }
 
   /** Whether the cell editor is open: vim's insert mode. */
@@ -445,6 +455,8 @@ export class Grid {
       case "say":
         this.events.onSay(action.text, false);
         return;
+      default:
+        this.events.onAction(action);
     }
   }
 
