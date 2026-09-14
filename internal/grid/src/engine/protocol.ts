@@ -11,6 +11,7 @@ import type { Connection } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
 import type { Entry, FileRef, Listing } from "../store/index.ts";
+import type { Tried } from "../store/s3.ts";
 
 /**
  * SourceRef says where a file is without holding any of it: a FileRef, which
@@ -249,6 +250,11 @@ export type Request =
   | { t: "connections"; id: number }
   /** The names of the AWS profiles the engine's machine has, for a person picking one. */
   | { t: "profiles"; id: number }
+  /**
+   * A connection tried before it is saved: where its bucket is, and a page of
+   * its prefix, asked the way it signs in. Nothing is kept by asking.
+   */
+  | { t: "try"; id: number; connection: Connection }
   /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
   | { t: "mode"; transform: boolean }
   /** The workspace as a .uno, refusing carried sources larger than limit together. */
@@ -279,6 +285,7 @@ export type Reply =
   | { t: "loaded"; id: number; loaded: Loaded }
   /** Profile names, and nothing else out of the files they are in. */
   | { t: "names"; id: number; names: string[] }
+  | { t: "tried"; id: number; tried: Tried }
   /** Null when the source has nothing to ask. */
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }
