@@ -2,7 +2,7 @@
 
 Easy spreadsheet handler
 
-![uno opening a workspace whose export was renamed, browsing its folder from the sources panel, peeking at files, pointing the workspace at the renamed export so its edits replay, and adding a second export as a tab](docs/preview.gif)
+![uno opening a workspace whose export was renamed, browsing its folder from the sources panel, peeking at files, pointing the workspace at the renamed export so its edits replay, adding a second export as a tab, then opening settings from the bottom left and trying the Tokyo Night, Catppuccin Frappé and Sakura themes in light and dark before returning to Paper Ember](docs/preview.gif)
 
 Open a data file, fix what does not parse, and save it as a `.uno` that keeps
 the original bytes alongside the log of every edit. Nothing leaves the machine.

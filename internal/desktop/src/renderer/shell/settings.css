@@ -1,0 +1,171 @@
+/* The settings control at the left of the status bar, and the menu it opens
+ * upward. Every colour is a token, so each theme dresses it too. */
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  margin: -3px 0 -3px -6px;
+  padding: 0;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.settings-toggle:hover,
+.settings-toggle.on {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+
+.settings-toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings {
+  position: fixed;
+  z-index: 10;
+  width: 300px;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.18);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.settings .title {
+  padding: 6px 8px 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--rule);
+}
+
+.settings section {
+  padding: 6px 0 4px;
+}
+
+.settings section + section {
+  border-top: 1px solid var(--rule);
+}
+
+.settings .head {
+  padding: 4px 8px 5px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.settings .note {
+  padding: 4px 8px;
+  color: var(--ink-3);
+}
+
+.settings .item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.settings .item .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings .item .meta {
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.settings .item:hover,
+.settings .item:focus-visible {
+  outline: none;
+  background: var(--accent-b);
+  color: var(--accent);
+}
+
+.settings .item:hover .meta,
+.settings .item:focus-visible .meta,
+.settings .item.chosen .meta,
+.settings .item.action {
+  color: var(--accent);
+}
+
+/* A theme's colours in the mode worn now: its surface, with its accent and
+ * its ink as two dots on it. */
+.settings .chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  width: 30px;
+  height: 16px;
+  border: 1px solid;
+  border-radius: 4px;
+}
+
+.settings .chip .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.settings .seg {
+  display: flex;
+  margin: 2px 8px 4px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.settings .seg button {
+  flex: 1;
+  padding: 4px 0;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.settings .seg button + button {
+  border-left: 1px solid var(--rule);
+}
+
+.settings .seg button.on {
+  color: var(--accent);
+  background: var(--accent-b);
+  cursor: default;
+}
+
+.settings .seg button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}

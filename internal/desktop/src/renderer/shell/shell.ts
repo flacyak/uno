@@ -32,7 +32,9 @@ import { bannerParts, offerKey } from "./banner.ts";
 import { wireDrop } from "./drop.ts";
 import { Finder } from "./find.ts";
 import type { Showing } from "./find.ts";
+import { Theming } from "../theme.ts";
 import { Panel } from "./panel.ts";
+import { Settings } from "./settings.ts";
 import { StatusBar } from "./status.ts";
 import { tabStrip } from "./tabs.ts";
 import { message, must } from "./util.ts";
@@ -75,6 +77,8 @@ export class Shell {
   private readonly finder: Finder;
   private readonly sources: Sources;
   private readonly panel: Panel;
+  /** The theme the page wears, which the settings menu changes. */
+  readonly theming: Theming;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
@@ -83,6 +87,13 @@ export class Shell {
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
 
   constructor(private readonly host: Host) {
+    // First, so the page is in its theme before anything is drawn in it.
+    this.theming = new Theming(
+      localStorage,
+      window.matchMedia("(prefers-color-scheme: dark)"),
+      document.documentElement,
+    );
+
     this.status = new StatusBar(
       (lead, typed) => {
         if (lead === ":") this.run(command(typed));
@@ -165,6 +176,25 @@ export class Shell {
       },
       (text) => this.say(text, true),
     );
+    // It wires itself to the control and asks through these, so the shell
+    // holds nothing of it.
+    new Settings(must(document.querySelector<HTMLButtonElement>("#settings")), this.theming, {
+      connections: async () => {
+        await this.refreshConnections();
+        return this.known.map(connectionLine);
+      },
+      browse: (c) => {
+        this.showPanel();
+        this.panel.browse(c);
+      },
+      connect: () => {
+        this.showPanel();
+        this.panel.connect();
+      },
+      closed: () => {
+        if (!this.panel.open) this.grid?.focus();
+      },
+    });
     this.wireKeys();
     this.paintStatus();
   }

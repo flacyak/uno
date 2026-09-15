@@ -78,7 +78,15 @@ const BROWSE = {
   pick: 10_600, // sales-q3-final.csv, peeked at, with the Point button under it
   point: 12_800, // the tab reads it, and the three fixes replay
   add: 15_200, // the other export, one Enter from being a tab
-  end: 18_600,
+  settings: 18_400, // both exports are open; the gear in the corner
+  tokyo: 19_900, // the menu has been read; a theme is worn the moment it is chosen
+  dark: 21_300, // the same theme in the dark
+  frappe: 22_700,
+  sakura: 24_100,
+  light: 25_700, // back to where the take began, so the loop joins up
+  ember: 26_500,
+  close: 27_900,
+  end: 29_400,
 };
 
 /**
@@ -184,10 +192,19 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // other again, which is the whole reason for filming from inside the process.
   const start = Date.now();
   const end = browse ? BROWSE.end : BEAT.end;
-  const [shots] = await Promise.all([
-    film(win, dir, rect, start, end),
-    browse ? playBrowse(win, start) : play(win, start),
-  ]);
+  let shots: (Shot & { hash: string })[];
+  try {
+    [shots] = await Promise.all([
+      film(win, dir, rect, start, end),
+      browse ? playBrowse(win, start) : play(win, start),
+    ]);
+  } catch (err) {
+    // A take that fails says why and ends now, rather than leaving the app
+    // open for the script's deadline to find.
+    console.error(`preview: FAILED -- ${(err as Error).message}`);
+    quit(1);
+    return;
+  }
 
   // The manifest is what carries the camera's real timing out to the encoder.
   // The hashes stay here; what the encoder needs is when each frame happened.
@@ -226,18 +243,28 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
  * for explicitly on every grab. What the window does afterwards cannot reach the
  * film.
  */
+/** How often settle reads the window's size, and the most readings it takes. */
+const SETTLE_MS = 100;
+const SETTLE_READS = 60;
+/** How many readings in a row have to agree before the size is taken as settled. */
+const STABLE_READS = 6;
+
 async function settle(win: BrowserWindow): Promise<Rectangle> {
   // Ask for the shape the design is drawn in. A tiling window manager will
   // refuse, which is its right.
   win.setContentSize(WANT_WIDTH, WANT_HEIGHT);
 
+  // Stopped means the same size for a while, not twice in a row: a tiling
+  // window manager can take the size it was asked for and change it a few
+  // hundred milliseconds later, after two readings have already agreed.
   let last = "";
-  for (let i = 0; i < 40; i++) {
+  let same = 0;
+  for (let i = 0; i < SETTLE_READS && same < STABLE_READS; i++) {
     const [w, h] = win.getContentSize();
     const now = `${w}x${h}`;
-    if (now === last) break;
+    same = now === last ? same + 1 : 0;
     last = now;
-    await sleep(100);
+    await sleep(SETTLE_MS);
   }
 
   const { width, height } = (await win.webContents.capturePage()).getSize();
@@ -356,9 +383,10 @@ async function play(win: BrowserWindow, start: number): Promise<void> {
 }
 
 /**
- * playBrowse performs the browse story, all of it from the keyboard: the panel
- * opened, the missing file's folder browsed, a wrong file peeked at and left,
- * the right one pointed at, and the other export added.
+ * playBrowse performs the browse story: the panel opened, the missing file's
+ * folder browsed, a wrong file peeked at and left, the right one pointed at,
+ * and the other export added, all from the keyboard; then the themes tried
+ * from the settings menu, by the pointer.
  *
  * Every key after Ctrl+Shift+B lands on the panel's list, which holds the keys
  * until the last Enter adds a tab and hands them to the grid.
@@ -406,6 +434,26 @@ async function playBrowse(win: BrowserWindow, start: number): Promise<void> {
   await sleep(OPEN_PAUSE);
   press(win, "Return");
 
+  // Settings, from the gear at the bottom left, by the pointer: a theme is
+  // worn as it is chosen, in light and then in dark, and the take goes back to
+  // the one it began in before the menu closes.
+  await at(BROWSE.settings);
+  await click(win, "#settings");
+  await at(BROWSE.tokyo);
+  await click(win, '.settings [data-theme="tokyo-night"]');
+  await at(BROWSE.dark);
+  await click(win, '.settings [data-appearance="dark"]');
+  await at(BROWSE.frappe);
+  await click(win, '.settings [data-theme="catppuccin-frappe"]');
+  await at(BROWSE.sakura);
+  await click(win, '.settings [data-theme="sakura"]');
+  await at(BROWSE.light);
+  await click(win, '.settings [data-appearance="light"]');
+  await at(BROWSE.ember);
+  await click(win, '.settings [data-theme="paper-ember"]');
+  await at(BROWSE.close);
+  press(win, "Escape");
+
   await at(BROWSE.end);
 }
 
@@ -421,14 +469,18 @@ const HOVER = 250;
  * exactly as it would under a real mouse.
  */
 async function click(win: BrowserWindow, selector: string): Promise<void> {
-  const { x, y } = (await win.webContents.executeJavaScript(`
+  // Found or not is answered rather than thrown: an error thrown in the page
+  // arrives here as "Script failed to execute", which names nothing.
+  const at = (await win.webContents.executeJavaScript(`
     (() => {
       const el = document.querySelector(${JSON.stringify(selector)});
-      if (el === null) throw new Error("nothing to click at ${selector}");
+      if (el === null) return null;
       const r = el.getBoundingClientRect();
       return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
     })()
-  `)) as { x: number; y: number };
+  `)) as { x: number; y: number } | null;
+  if (at === null) throw new Error(`nothing to click at ${selector}`);
+  const { x, y } = at;
 
   through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
   await sleep(HOVER);
