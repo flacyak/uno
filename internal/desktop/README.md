@@ -96,8 +96,9 @@ direction or the other. While a file is still indexing, `G` stops at the last ro
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 
-The keys are read in `src/renderer/keys.ts`, which touches no DOM and is tested
-without a window. The whole plan is `resource/vim-motions.html`.
+The keys are read by an input strategy in `src/renderer/input/`, and what they
+mean is carried out through `src/renderer/keys.ts`. Neither touches the DOM, and
+both are tested without a window. The whole plan is `resource/vim-motions.html`.
 
 ## Running it
 
