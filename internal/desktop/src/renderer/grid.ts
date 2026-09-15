@@ -12,6 +12,9 @@
 
 import type { Kind } from "@uno/grid/sheet";
 
+import { LOCKED, NOTHING, interpret, leavesInsert } from "./keys.ts";
+import type { Action, Caret, Mode, Motion, Pending } from "./keys.ts";
+
 /** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
  * the next frame catches up. */
 const OVERSCAN = 6;
@@ -49,8 +52,12 @@ export interface GridEvents {
   /** A cell was committed. The sheet has already been told; this is for
    * everything that follows from an edit. */
   onEdit(row: number, col: number, value: string): void;
-  /** Someone tried to edit while editing is locked. */
-  onLocked(): void;
+  /** A key has something to say: why it did nothing, or nothing, to clear the line. */
+  onSay(text: string, isError: boolean): void;
+  /** A key asked for the other mode. The shell switches, then shows the rows again. */
+  onMode(to: Mode): void;
+  /** The editor opened or closed, so the status bar can say INSERT. */
+  onEditor(open: boolean): void;
 }
 
 export class Grid {
@@ -86,6 +93,7 @@ export class Grid {
   private selRow = 0;
   private selCol = 0;
   private editor: HTMLInputElement | undefined;
+  private pending: Pending = NOTHING;
 
   private rowHeight = 29;
   private frame = 0;
@@ -109,7 +117,7 @@ export class Grid {
     // synchronously on every one of the events a trackpad produces.
     this.scroller.addEventListener("scroll", () => this.schedule(), { passive: true });
     this.scroller.addEventListener("click", (e) => this.onClick(e));
-    this.scroller.addEventListener("dblclick", () => this.beginEdit());
+    this.scroller.addEventListener("dblclick", () => this.beginEdit("all"));
     this.host.addEventListener("keydown", (e) => this.onKey(e));
 
     this.rowHeight = readRowHeight(this.scroller);
@@ -124,6 +132,7 @@ export class Grid {
     this.cancelEdit();
     this.source = source;
     this.editable = editable;
+    this.pending = NOTHING;
     if (!keep) {
       this.selRow = 0;
       this.selCol = 0;
@@ -151,6 +160,11 @@ export class Grid {
 
   selection(): { row: number; col: number } {
     return { row: this.selRow, col: this.selCol };
+  }
+
+  /** Whether the cell editor is open: vim's insert mode. */
+  editing(): boolean {
+    return this.editor !== undefined;
   }
 
   focus(): void {
@@ -389,46 +403,72 @@ export class Grid {
     this.syncScroll(m.vMax, m.rMax);
   }
 
+  /**
+   * onKey hands a key to keys.ts and carries out what it means.
+   *
+   * Every key the grid takes is prevented, so a letter that opens the editor is
+   * not typed into it as well.
+   */
   private onKey(e: KeyboardEvent): void {
     if (this.source === undefined) return;
     if (this.editor !== undefined) return; // the editor has its own keys
 
-    switch (e.key) {
-      case "ArrowDown":
-        this.select(this.selRow + 1, this.selCol);
-        break;
-      case "ArrowUp":
-        this.select(this.selRow - 1, this.selCol);
-        break;
-      case "ArrowRight":
-      case "Tab":
-        this.select(this.selRow, this.selCol + 1);
-        break;
-      case "ArrowLeft":
-        this.select(this.selRow, this.selCol - 1);
-        break;
-      case "PageDown":
-        this.select(this.selRow + this.page(), this.selCol);
-        break;
-      case "PageUp":
-        this.select(this.selRow - this.page(), this.selCol);
-        break;
-      case "Home":
-        this.select(0, 0);
-        break;
-      case "End":
-        this.select(this.source.rows() - 1, this.source.cols() - 1);
-        break;
-      case "Enter":
-      case "F2":
-        this.beginEdit();
-        break;
-      default:
-        // Typing over a cell replaces it, which is what every spreadsheet does.
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) this.beginEdit(e.key);
-        else return;
-    }
+    const step = interpret(this.editable ? "transform" : "view", this.pending, {
+      key: e.key,
+      ctrl: e.ctrlKey,
+      alt: e.altKey,
+      meta: e.metaKey,
+      repeat: e.repeat,
+    });
+    if (step === undefined) return;
     e.preventDefault();
+    this.pending = step.pending;
+    this.act(step.action);
+  }
+
+  private act(action: Action): void {
+    switch (action.t) {
+      case "none":
+        return;
+      case "move":
+        this.move(action.motion);
+        return;
+      case "mode":
+        this.events.onMode(action.to);
+        return;
+      case "insert":
+        // a in view: the switch writes nothing and was asked for, so it happens
+        // even when the editor then refuses the cell.
+        if (action.transform) this.events.onMode("transform");
+        this.beginEdit(action.caret);
+        return;
+      case "say":
+        this.events.onSay(action.text, false);
+        return;
+    }
+  }
+
+  private move(motion: Motion): void {
+    const source = this.source;
+    if (source === undefined) return;
+    switch (motion) {
+      case "down":
+        return this.select(this.selRow + 1, this.selCol);
+      case "up":
+        return this.select(this.selRow - 1, this.selCol);
+      case "right":
+        return this.select(this.selRow, this.selCol + 1);
+      case "left":
+        return this.select(this.selRow, this.selCol - 1);
+      case "page-down":
+        return this.select(this.selRow + this.page(), this.selCol);
+      case "page-up":
+        return this.select(this.selRow - this.page(), this.selCol);
+      case "home":
+        return this.select(0, 0);
+      case "end":
+        return this.select(source.rows() - 1, source.cols() - 1);
+    }
   }
 
   private page(): number {
@@ -445,24 +485,24 @@ export class Grid {
    * a computation, which the sheet refuses anyway -- and refusing after the
    * typing is a worse way to say so than not offering it.
    */
-  private beginEdit(initial?: string): void {
+  private beginEdit(caret: Caret): void {
     const source = this.source;
     if (source === undefined || this.editor !== undefined) return;
-    if (source.rows() === 0) return;
 
     // In view a keystroke changes nothing, and says what would.
     if (!this.editable) {
-      this.events.onLocked();
+      this.events.onSay(LOCKED, false);
+      return;
+    }
+    const refused = this.refusal(source);
+    if (refused !== "") {
+      this.events.onSay(refused, true);
       return;
     }
 
-    // A derived column stores nothing to type over. The sheet would refuse it;
-    // saying so before the keystroke is kinder than after it.
-    if (source.binding(this.selCol) !== undefined) return;
-
     const input = document.createElement("input");
     input.className = "cell-editor";
-    input.value = initial ?? source.raw(this.selRow, this.selCol);
+    input.value = caret === "empty" ? "" : source.raw(this.selRow, this.selCol);
 
     input.addEventListener("keydown", (e) => {
       // Swallowed first, before anything that could fail. Stopping propagation
@@ -472,13 +512,12 @@ export class Grid {
       // that had just been committed.
       e.stopPropagation();
 
-      if (e.key === "Enter") {
+      // Esc keeps the typing, as Enter and blur do. Vim users press it at the end
+      // of every insert, and losing the text each time would make the keys
+      // useless. A value that did not change records nothing.
+      if (leavesInsert(e.key, e.isComposing)) {
         e.preventDefault();
         this.commitEdit();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        this.cancelEdit();
-        this.focus();
       }
     });
     input.addEventListener("blur", () => this.commitEdit());
@@ -487,7 +526,31 @@ export class Grid {
     this.sizer.append(input);
     this.placeEditor();
     input.focus();
-    if (initial === undefined) input.select();
+    if (caret === "all") input.select();
+    else {
+      const at = caret === "start" ? 0 : input.value.length;
+      input.setSelectionRange(at, at);
+    }
+    this.events.onEditor(true);
+  }
+
+  /**
+   * refusal says why the selected cell cannot be written, or "" when it can.
+   *
+   * A row the band has not received has no value here. An editor opened on it
+   * would start from "", and appending to that would write over the real cell.
+   */
+  private refusal(source: Rows): string {
+    if (source.rows() === 0) return "no rows";
+    // A derived column stores nothing to type over. The sheet would refuse it;
+    // saying so before the keystroke is kinder than after it.
+    if (source.binding(this.selCol) !== undefined) {
+      return `${source.columns[this.selCol]?.header ?? "this column"} is computed from a formula · nothing to type over`;
+    }
+    if (source.ready?.(this.selRow) === false) {
+      return `row ${(this.selRow + 1).toLocaleString()} is still loading`;
+    }
+    return "";
   }
 
   private placeEditor(): void {
@@ -530,8 +593,13 @@ export class Grid {
   }
 
   private cancelEdit(): void {
-    this.editor?.remove();
+    const input = this.editor;
+    if (input === undefined) return;
+    // Cleared before the input goes, so a blur fired by removing it finds no
+    // editor to commit a second time.
     this.editor = undefined;
+    input.remove();
+    this.events.onEditor(false);
   }
 }
 

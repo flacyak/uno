@@ -286,7 +286,7 @@ export class View {
   /** The grid offers editing only in transform, so an edit in view is refused
    * here too rather than trusted. */
   private refuseInView(): void {
-    if (!this.transform) throw new Error("the file is in view · Ctrl+E to transform");
+    if (!this.transform) throw new Error("the file is in view · i or Ctrl+E to transform");
   }
 
   private serially<T>(fn: () => Promise<T>): Promise<T> {

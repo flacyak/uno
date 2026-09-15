@@ -41,6 +41,10 @@ jobs:
         working-directory: internal/desktop
         run: vp check
 
+      - name: Run the desktop suite
+        working-directory: internal/desktop
+        run: vp test
+
       # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox
       # is built on, and Electron exits rather than run without one.
       - name: Allow the Electron sandbox
