@@ -3,7 +3,15 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { LOCKED, NOTHING, interpret, leavesInsert, showing, target } from "../src/renderer/keys.ts";
+import {
+  LOCKED,
+  NOTHING,
+  interpret,
+  isJump,
+  leavesInsert,
+  showing,
+  target,
+} from "../src/renderer/keys.ts";
 import type { Action, Mode, Pending, Place, Press, Step } from "../src/renderer/keys.ts";
 
 /**
@@ -220,6 +228,34 @@ test("H, M and L land on the rows on screen, and a count counts in from the edge
     row: 119,
     col: 2,
   });
+});
+
+test("m sets a mark, ' and ` go to it, and '' goes back", () => {
+  expect(action("view", "mq")).toEqual({ t: "mark", name: "q" });
+  expect(action("transform", "'q")).toEqual({ t: "to-mark", name: "q" });
+  expect(action("view", "`q")).toEqual({ t: "to-mark", name: "q" });
+  expect(action("view", "''")).toEqual({ t: "back" });
+  expect(action("view", "``")).toEqual({ t: "back" });
+  expect(showing(press("view", "m").pending)).toBe("m");
+
+  // A mark is a lowercase letter. Anything else drops the m.
+  expect(press("view", "mQ")).toEqual({ pending: NOTHING, action: { t: "none" } });
+  expect(press("view", "'1")).toEqual({ pending: NOTHING, action: { t: "none" } });
+});
+
+test("G, gg, H, M and L are jumps, and a step is not", () => {
+  for (const m of [
+    "first-row",
+    "last-row",
+    "screen-top",
+    "screen-middle",
+    "screen-bottom",
+  ] as const) {
+    expect(isJump(m), m).toBe(true);
+  }
+  for (const m of ["down", "next", "last-col", "half-down", "end"] as const) {
+    expect(isJump(m), m).toBe(false);
+  }
 });
 
 test("M, zz, zt and zb take no count", () => {

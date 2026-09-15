@@ -12,7 +12,7 @@
 
 import type { Kind } from "@uno/grid/sheet";
 
-import { LOCKED, NOTHING, interpret, leavesInsert, showing, target } from "./keys.ts";
+import { LOCKED, NOTHING, interpret, isJump, leavesInsert, showing, target } from "./keys.ts";
 import type { Action, Caret, Mode, Motion, Pending } from "./keys.ts";
 
 /** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
@@ -72,6 +72,11 @@ export interface GridEvents {
   onAction(action: ShellAction): void;
 }
 
+interface Cell {
+  row: number;
+  col: number;
+}
+
 /** The actions that belong to the shell rather than the grid. */
 export type ShellAction = Extract<Action, { t: "undo" }>;
 
@@ -109,6 +114,15 @@ export class Grid {
   private selCol = 0;
   private editor: HTMLInputElement | undefined;
   private pending: Pending = NOTHING;
+
+  /**
+   * Marks belong to the open workspace: not saved in the .uno, and cleared by
+   * the next open. A row keeps its number, because the log has no row insert or
+   * delete, so a mark stays on the same record.
+   */
+  private marks = new Map<string, Cell>();
+  /** Where the last jump left from, for ''. */
+  private before: Cell | undefined;
 
   private rowHeight = 29;
   private frame = 0;
@@ -149,6 +163,8 @@ export class Grid {
     this.editable = editable;
     this.wait(NOTHING);
     if (!keep) {
+      this.marks = new Map();
+      this.before = undefined;
       this.selRow = 0;
       this.selCol = 0;
       this.top = 0;
@@ -491,6 +507,18 @@ export class Grid {
       case "scroll":
         this.scrollRow(this.selRow, action.where);
         return;
+      case "mark":
+        this.marks.set(action.name, { row: this.selRow, col: this.selCol });
+        return;
+      case "to-mark": {
+        const mark = this.marks.get(action.name);
+        if (mark === undefined) this.events.onSay(`mark ${action.name} is not set`, true);
+        else this.jump(mark.row, mark.col);
+        return;
+      }
+      case "back":
+        if (this.before !== undefined) this.jump(this.before.row, this.before.col);
+        return;
       case "mode":
         this.events.onMode(action.to);
         return;
@@ -523,8 +551,19 @@ export class Grid {
       page: this.page(),
       ...this.visibleRows(),
     });
-    this.select(to.row, to.col);
+    if (isJump(motion)) this.jump(to.row, to.col);
+    else this.select(to.row, to.col);
     if (to.short !== undefined) this.events.onShort(to.short);
+  }
+
+  /**
+   * jump selects a cell and remembers where the selection left from, so '' can
+   * go back. Going back is a jump too, which makes '' twice return.
+   */
+  private jump(row: number, col: number): void {
+    const from = { row: this.selRow, col: this.selCol };
+    this.select(row, col);
+    if (this.selRow !== from.row || this.selCol !== from.col) this.before = from;
   }
 
   private page(): number {
