@@ -10,6 +10,7 @@ import "./app.css";
 
 import { Engine, messagePort } from "@uno/grid/engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
+import { NO_ROW } from "@uno/grid/sheet";
 
 import type { Host } from "../shared/host.ts";
 import { Grid } from "./grid.ts";
@@ -54,6 +55,13 @@ class Shell {
         if (this.workspace !== undefined && this.workspace.mode !== to) this.toggleMode();
       },
       onEditor: () => this.paintStatus(),
+      onAction: (action) => {
+        switch (action.t) {
+          case "undo":
+            void this.undo();
+            return;
+        }
+      },
     });
 
     this.wireDrop();
@@ -243,7 +251,10 @@ class Shell {
     const w = this.workspace;
     if (w === undefined) return;
     try {
-      await w.undo();
+      const undone = await w.undo();
+      // One cell came back, so show it. An apply names a whole column and no row,
+      // and the selection stays where it is.
+      if (undone.row !== NO_ROW && this.workspace === w) this.grid.moveTo(undone.row, undone.col);
       this.say("");
     } catch (err) {
       this.say(message(err), true);

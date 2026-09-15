@@ -114,11 +114,15 @@ export class Workspace {
     );
   }
 
-  /** undo takes the last edit back. The engine replays the rest; no row is read again. */
-  async undo(): Promise<void> {
+  /**
+   * undo takes the last edit back and returns it, so the cell it changed can be
+   * shown. The engine replays the rest; no row is read again.
+   */
+  async undo(): Promise<Edit> {
     const changed = await this.engine.undo();
     this.edits.pop();
     this.band.columns = changed.columns;
+    return changed.edit;
   }
 
   private landed(changed: Changed): void {

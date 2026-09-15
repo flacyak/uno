@@ -51,7 +51,8 @@ level in and Esc one level back out.
 and Enter open the editor with the caret at the start, at the end, on nothing
 and on the whole value. `a` in view does both at once. Esc in the editor keeps
 what was typed, as Enter does. Letters are commands, so typing over a cell
-starts with `s`.
+starts with `s`. `u` takes back the last edit, as Ctrl+Z does, and selects the
+cell it changed.
 
 The keys are read in `src/renderer/keys.ts`, which touches no DOM and is tested
 without a window. The whole plan is `resource/vim-motions.html`.
