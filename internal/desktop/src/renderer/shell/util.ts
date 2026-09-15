@@ -9,6 +9,29 @@ export function must<T>(value: T | null): T {
 }
 
 /**
+ * el is one element as the shell makes most of them: a tag, the class it
+ * wears, and the text in it. Either may be left out, and an empty class is
+ * no class at all, so the markup stays as index.html would have written it.
+ */
+export function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  cls = "",
+  text = "",
+): HTMLElementTagNameMap[K] {
+  const made = document.createElement(tag);
+  if (cls !== "") made.className = cls;
+  if (text !== "") made.textContent = text;
+  return made;
+}
+
+/** option is one choice in a select: what it says, and the value it stands for. */
+export function option(label: string, value: string): HTMLOptionElement {
+  const made = el("option", "", label);
+  made.value = value;
+  return made;
+}
+
+/**
  * Words are the texts a component writes once, when it is built, kept so they
  * can be written again in another language. What a component paints on every
  * change needs none of this, since its next paint is already in the language

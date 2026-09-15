@@ -8,6 +8,7 @@ import type { Offer } from "@uno/grid/engine";
 import { m } from "../../paraglide/messages.js";
 import { num } from "../locale.ts";
 import { say } from "../said.ts";
+import { el } from "./util.ts";
 
 /** An offer is the same question while its source, column and program are. */
 export function offerKey(offer: Offer): string {
@@ -22,8 +23,7 @@ export function offerKey(offer: Offer): string {
  * one edit, and Ctrl+Z takes it back.
  */
 export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void): Node[] {
-  const header = document.createElement("b");
-  header.textContent = offer.header;
+  const header = el("b", "", offer.header);
 
   const count = offer.complete
     ? m.cells_count({ count: offer.affects })
@@ -31,17 +31,16 @@ export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void
   const parts = [say(offer.description), count];
   if (offer.ambiguous) parts.push(m.offer_ambiguous());
 
-  const grow = document.createElement("span");
-  grow.className = "grow";
-
-  const applyButton = document.createElement("button");
-  applyButton.className = "primary";
-  applyButton.textContent = m.action_apply();
+  const applyButton = el("button", "primary", m.action_apply());
   applyButton.addEventListener("click", apply);
-
-  const later = document.createElement("button");
-  later.textContent = m.action_not_now();
+  const later = el("button", "", m.action_not_now());
   later.addEventListener("click", dismiss);
 
-  return [header, document.createTextNode(` · ${parts.join(" · ")}`), grow, applyButton, later];
+  return [
+    header,
+    document.createTextNode(` · ${parts.join(" · ")}`),
+    el("span", "grow"),
+    applyButton,
+    later,
+  ];
 }
