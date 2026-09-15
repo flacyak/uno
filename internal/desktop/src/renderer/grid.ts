@@ -12,17 +12,8 @@
 
 import type { Kind } from "@uno/grid/sheet";
 
-import {
-  LOCKED,
-  NOTHING,
-  changeOf,
-  interpret,
-  isJump,
-  leavesInsert,
-  replay,
-  showing,
-  target,
-} from "./keys.ts";
+import type { InputStrategy } from "./input/strategy.ts";
+import { NOTHING, changeOf, isJump, replay, showing, target } from "./keys.ts";
 import type { Action, Caret, Change, Mode, Motion, Pending } from "./keys.ts";
 
 /** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
@@ -149,6 +140,8 @@ export class Grid {
   constructor(
     private readonly host: HTMLElement,
     private readonly events: GridEvents,
+    /** How keys are read. The grid carries out what the strategy says a key means. */
+    private readonly input: InputStrategy,
   ) {
     this.scroller = el("div", "grid-scroll");
     this.sizer = el("div", "grid-sizer");
@@ -217,7 +210,7 @@ export class Grid {
     this.select(row, col);
   }
 
-  /** Whether the cell editor is open: vim's insert mode. */
+  /** Whether the cell editor is open. */
   editing(): boolean {
     return this.editor !== undefined;
   }
@@ -488,7 +481,7 @@ export class Grid {
   }
 
   /**
-   * onKey hands a key to keys.ts and carries out what it means.
+   * onKey hands a key to the input strategy and carries out what it means.
    *
    * Every key the grid takes is prevented, so a letter that opens the editor is
    * not typed into it as well.
@@ -497,7 +490,7 @@ export class Grid {
     if (this.source === undefined) return;
     if (this.editor !== undefined) return; // the editor has its own keys
 
-    const step = interpret(this.editable ? "transform" : "view", this.pending, {
+    const step = this.input.interpret(this.editable ? "transform" : "view", this.pending, {
       key: e.key,
       ctrl: e.ctrlKey,
       alt: e.altKey,
@@ -622,7 +615,7 @@ export class Grid {
 
     // In view a keystroke changes nothing, and says what would.
     if (!this.editable) {
-      this.events.onSay(LOCKED, false);
+      this.events.onSay(this.input.locked, false);
       return;
     }
     const refused = this.refusal(source);
@@ -644,12 +637,15 @@ export class Grid {
       // that had just been committed.
       e.stopPropagation();
 
-      // Esc keeps the typing, as Enter and blur do. Vim users press it at the end
-      // of every insert, and losing the text each time would make the keys
-      // useless. A value that did not change records nothing.
-      if (leavesInsert(e.key, e.isComposing)) {
-        e.preventDefault();
+      // Whether Esc keeps the typing is the strategy's to say.
+      const key = this.input.editorKey(e.key, e.isComposing);
+      if (key === undefined) return;
+      e.preventDefault();
+      if (key === "commit") {
         this.commitEdit();
+      } else {
+        this.cancelEdit();
+        this.focus();
       }
     });
     input.addEventListener("blur", () => this.commitEdit());

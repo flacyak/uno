@@ -22,6 +22,8 @@ import { NO_ROW } from "@uno/grid/sheet";
 import type { Host } from "../shared/host.ts";
 import { Grid } from "./grid.ts";
 import { electronHost } from "./host.ts";
+import type { InputStrategy } from "./input/strategy.ts";
+import { vimStyle } from "./input/vim-style.ts";
 import { command } from "./keys.ts";
 import type { Command, Lead } from "./keys.ts";
 import { Workspace } from "./workspace.ts";
@@ -52,6 +54,8 @@ class Shell {
   private lead: Lead = ":";
   /** The last text searched for, and which way, for n and N. */
   private searched: { text: string; dir: 1 | -1 } | undefined;
+  /** How keys are read, which the grid and the status bar both follow. */
+  private readonly input: InputStrategy = vimStyle;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
@@ -67,58 +71,62 @@ class Shell {
   private readonly statusCell = must(document.querySelector<HTMLElement>("#status-cell"));
 
   constructor(private readonly host: Host) {
-    this.grid = new Grid(this.content, {
-      onSelect: () => this.paintStatus(),
-      onEdit: (row, col, value) => this.edit(row, col, value),
-      onSay: (text, isError) => this.say(text, isError),
-      onMode: (to) => {
-        if (this.workspace !== undefined && this.workspace.mode !== to) this.toggleMode();
-      },
-      onEditor: () => this.paintStatus(),
-      onPending: (keys) => {
-        this.statusKeys.textContent = keys;
-      },
-      onShort: (wanted) => {
-        const w = this.workspace;
-        if (w === undefined) return;
-        this.say(
-          wanted === "end"
-            ? `indexing ${w.indexed()}% · G again when it finishes`
-            : `row ${(wanted + 1).toLocaleString()} is not indexed yet`,
-        );
-      },
-      onAction: (action) => {
-        switch (action.t) {
-          case "undo":
-            void this.history("undo");
-            return;
-          case "apply": {
-            // From any cell, since the offer names its own column.
-            const offer = this.offered();
-            if (offer === null) this.say("nothing to apply", true);
-            else void this.apply(offer);
-            return;
+    this.grid = new Grid(
+      this.content,
+      {
+        onSelect: () => this.paintStatus(),
+        onEdit: (row, col, value) => this.edit(row, col, value),
+        onSay: (text, isError) => this.say(text, isError),
+        onMode: (to) => {
+          if (this.workspace !== undefined && this.workspace.mode !== to) this.toggleMode();
+        },
+        onEditor: () => this.paintStatus(),
+        onPending: (keys) => {
+          this.statusKeys.textContent = keys;
+        },
+        onShort: (wanted) => {
+          const w = this.workspace;
+          if (w === undefined) return;
+          this.say(
+            wanted === "end"
+              ? `indexing ${w.indexed()}% · G again when it finishes`
+              : `row ${(wanted + 1).toLocaleString()} is not indexed yet`,
+          );
+        },
+        onAction: (action) => {
+          switch (action.t) {
+            case "undo":
+              void this.history("undo");
+              return;
+            case "apply": {
+              // From any cell, since the offer names its own column.
+              const offer = this.offered();
+              if (offer === null) this.say("nothing to apply", true);
+              else void this.apply(offer);
+              return;
+            }
+            case "dismiss": {
+              const offer = this.offered();
+              if (offer !== null) this.dismiss(offer);
+              return;
+            }
+            case "prompt":
+              this.prompt(action.lead);
+              return;
+            case "unparsed":
+              this.findUnparsed(action.dir);
+              return;
+            case "next":
+              this.next(action.reverse);
+              return;
+            case "redo":
+              void this.history("redo");
+              return;
           }
-          case "dismiss": {
-            const offer = this.offered();
-            if (offer !== null) this.dismiss(offer);
-            return;
-          }
-          case "prompt":
-            this.prompt(action.lead);
-            return;
-          case "unparsed":
-            this.findUnparsed(action.dir);
-            return;
-          case "next":
-            this.next(action.reverse);
-            return;
-          case "redo":
-            void this.history("redo");
-            return;
-        }
+        },
       },
-    });
+      this.input,
+    );
 
     this.wireDrop();
     this.wireKeys();
@@ -580,7 +588,7 @@ class Shell {
 
     const seg = document.createElement("span");
     seg.className = "seg";
-    seg.title = "i to transform · Esc to view · Ctrl+E";
+    seg.title = this.input.switchHint;
     for (const [mode, label] of [
       ["view", "View"],
       ["transform", "Transform"],
@@ -659,8 +667,10 @@ class Shell {
   private paintStatus(): void {
     const w = this.workspace;
     this.statusFile.textContent = w === undefined ? "no file open" : w.status();
-    // INSERT is transform with the editor open, so it wears transform's amber.
-    const mode = this.grid.editing() ? "INSERT" : w?.mode.toUpperCase();
+    // A strategy that names the editor, as vim's INSERT, names transform with it
+    // open, so the name wears transform's amber.
+    const editing = this.grid.editing() ? this.input.editing : undefined;
+    const mode = editing ?? w?.mode.toUpperCase();
     this.statusMode.textContent = mode ?? "";
     this.statusMode.className = w?.mode === "transform" ? "mode t" : "mode";
 
