@@ -74,7 +74,12 @@ opened with `i` that only added to the start repeats as a prepend, and anything
 else repeats as the whole value. It is what makes three fixes cheap: on a column
 where 12 should read 12.00, `a` `.00` Esc `j` `.` `j` `.` fixes three cells and
 brings the recogniser's offer for the rest. `ga` is Apply on that banner, from
-any cell, and `gx` is Not now. While a file is still indexing, `G` stops at the last row the engine
+any cell, and `gx` is Not now.
+
+`:` opens a command line in the status bar, in either mode. `:w` saves as Ctrl+S
+does, `:sav` is Save As, `:e` opens a file but refuses over unsaved edits unless
+it is `:e!`, and `:{n}` goes to row n. There is no `:q`; closing is the window's
+job. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 

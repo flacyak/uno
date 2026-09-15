@@ -88,7 +88,7 @@ interface Cell {
 }
 
 /** The actions that belong to the shell rather than the grid. */
-export type ShellAction = Extract<Action, { t: "undo" | "apply" | "dismiss" }>;
+export type ShellAction = Extract<Action, { t: "undo" | "apply" | "dismiss" | "prompt" }>;
 
 export class Grid {
   private source: Rows | undefined;
@@ -513,7 +513,11 @@ export class Grid {
     if (showing(pending) !== before) this.events.onPending(showing(pending));
   }
 
-  private act(action: Action): void {
+  /**
+   * act carries out an action as if its keys had been pressed. The shell calls
+   * it for :{n}, which is {n}G typed at the command line.
+   */
+  act(action: Action): void {
     switch (action.t) {
       case "none":
         return;

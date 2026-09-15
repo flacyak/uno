@@ -33,6 +33,15 @@
 
       <div class="win-status">
         <span id="status-mode" class="mode"></span>
+        <!-- The : command line. While it is open it stands in for the file's line. -->
+        <input
+          id="status-cmd"
+          class="cmd"
+          hidden
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="command"
+        />
         <span id="status-file">no file open</span>
         <span class="sep">&middot;</span>
         <span id="status-msg"></span>

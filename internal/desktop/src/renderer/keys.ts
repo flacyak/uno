@@ -89,6 +89,8 @@ export type Action =
   | { t: "apply" }
   /** gx: Not now on the banner. */
   | { t: "dismiss" }
+  /** : opens the command line. */
+  | { t: "prompt"; lead: ":" }
   | { t: "say"; text: string };
 
 export interface Step {
@@ -226,6 +228,8 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
       return done(change(mode, press, { t: "put" }));
     case ".":
       return done(change(mode, press, { t: "repeat" }));
+    case ":":
+      return done({ t: "prompt", lead: ":" });
   }
   return done(NONE);
 }
@@ -303,6 +307,42 @@ function ctrlMotion(key: string): Motion | undefined {
 export function leavesInsert(key: string, composing: boolean): boolean {
   if (composing || key === "Process") return false;
   return key === "Enter" || key === "Escape";
+}
+
+/** A command typed at the : prompt. */
+export type Command =
+  | { t: "none" }
+  | { t: "write" }
+  | { t: "save-as" }
+  | { t: "open"; force: boolean }
+  /** :{n}, a row numbered from 1. */
+  | { t: "row"; row: number }
+  | { t: "unknown"; text: string };
+
+/**
+ * command reads what was typed after the colon. There is no :q or :wq. Closing
+ * is the window's job, and quitting with unsaved edits over a mistyped command
+ * is a bad trade for two saved keystrokes.
+ */
+export function command(text: string): Command {
+  const typed = text.trim();
+  if (typed === "") return { t: "none" };
+  if (/^\d+$/.test(typed)) return { t: "row", row: Number(typed) };
+  switch (typed) {
+    case "w":
+    case "write":
+      return { t: "write" };
+    case "sav":
+    case "saveas":
+      return { t: "save-as" };
+    case "e":
+    case "edit":
+      return { t: "open", force: false };
+    case "e!":
+    case "edit!":
+      return { t: "open", force: true };
+  }
+  return { t: "unknown", text: typed };
 }
 
 /** A change . can make again on another cell. */
