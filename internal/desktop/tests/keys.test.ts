@@ -108,6 +108,13 @@ test("u undoes in transform, says why not in view, and does nothing held down", 
   expect(interpret("transform", NOTHING, held("u"))?.action).toEqual({ t: "none" });
 });
 
+test("Ctrl+r redoes in transform, says why not in view, and does nothing held down", () => {
+  expect(action("transform", "<C-r>")).toEqual({ t: "redo" });
+  expect(action("view", "<C-r>")).toEqual({ t: "say", text: LOCKED });
+  const holding = { key: "r", ctrl: true, alt: false, meta: false, repeat: true };
+  expect(interpret("transform", NOTHING, holding)?.action).toEqual({ t: "none" });
+});
+
 test("x and p change the cell in transform only, and do nothing held down", () => {
   expect(action("transform", "x")).toEqual({ t: "clear" });
   expect(action("transform", "p")).toEqual({ t: "put" });

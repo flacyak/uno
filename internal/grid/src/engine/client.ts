@@ -79,6 +79,12 @@ export class Engine {
     return r.changed;
   }
 
+  async redo(): Promise<Changed> {
+    const r = await this.ask((id) => ({ t: "redo", id }));
+    if (r.t !== "changed") throw new Error(`the engine answered a redo with ${r.t}`);
+    return r.changed;
+  }
+
   /** find asks for the next matching row in a column, however far from the band it is. */
   async find(find: FindRequest): Promise<Found> {
     const r = await this.ask((id) => ({ t: "find", id, find }));

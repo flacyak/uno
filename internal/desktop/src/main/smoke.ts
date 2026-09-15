@@ -662,6 +662,29 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "Ctrl+r records again what u took back, once",
+    script: `
+      const region = () => document.querySelectorAll("tbody tr")[3].children[2].textContent;
+      const edits = (n) => until(() => text("#status-file").includes(n + " edits"));
+
+      await press("u"); // the apply ga recorded
+      if (!(await edits(9))) return "status bar says: " + text("#status-file");
+      if (!(await until(() => region() === "South"))) return "u left row 4 reading " + JSON.stringify(region());
+
+      await press("r", { ctrlKey: true });
+      if (!(await edits(10))) return "status bar says: " + text("#status-file");
+      if (!(await until(() => region() === "South-q3"))) {
+        return "Ctrl+r left row 4 reading " + JSON.stringify(region());
+      }
+
+      await press("r", { ctrlKey: true });
+      const none = "there is nothing to redo";
+      return (await until(() => text("#status-msg") === none))
+        ? ""
+        : "a second Ctrl+r says " + JSON.stringify(text("#status-msg"));
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");

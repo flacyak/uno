@@ -52,7 +52,8 @@ and Enter open the editor with the caret at the start, at the end, on nothing
 and on the whole value. `a` in view does both at once. Esc in the editor keeps
 what was typed, as Enter does. Letters are commands, so typing over a cell
 starts with `s`. `u` takes back the last edit, as Ctrl+Z does, and selects the
-cell it changed.
+cell it changed. Ctrl+r records it again, until the next edit, and no longer
+reloads the window.
 
 Moving is the same in both modes and writes nothing: `h` `j` `k` `l`, `w` and
 `b` through cells in reading order, `0` `^` `$` across the row, `gg` and `G` to

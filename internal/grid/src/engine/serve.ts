@@ -47,6 +47,10 @@ export function serve(
         port.post({ t: "changed", id: msg.id, changed: await (await need()).undo() });
         return;
       }
+      case "redo": {
+        port.post({ t: "changed", id: msg.id, changed: await (await need()).redo() });
+        return;
+      }
       case "find": {
         port.post({ t: "found", id: msg.id, found: await (await need()).find(msg.find) });
         return;
