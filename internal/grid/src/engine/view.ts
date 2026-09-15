@@ -318,7 +318,12 @@ export class View {
         source: id,
         name,
         size: source.size,
-        label: { t: "read", delimiter: format.delimiter, header: format.header },
+        label: {
+          t: "read",
+          delimiter: format.delimiter,
+          header: format.header,
+          charset: format.charset,
+        },
         columns: await v.columns(),
         progress: progressOf(index),
         edits: carried?.edits ?? [],
