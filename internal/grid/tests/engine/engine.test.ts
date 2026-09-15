@@ -118,6 +118,7 @@ test("a band holds the rows around the viewport, and only those", async () => {
     let landed = (): void => {};
     const band = new Band(engine, opened, () => landed());
     expect(band.rows()).toBe(4812);
+    expect(band.readable(), "indexed to the end, so every row can be read").toBe(4812);
     expect(band.ready(4811), "nothing has arrived yet").toBe(false);
 
     const arrived = new Promise<void>((r) => (landed = r));

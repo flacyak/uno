@@ -54,6 +54,14 @@ what was typed, as Enter does. Letters are commands, so typing over a cell
 starts with `s`. `u` takes back the last edit, as Ctrl+Z does, and selects the
 cell it changed.
 
+Moving is the same in both modes and writes nothing: `h` `j` `k` `l`, `w` and
+`b` through cells in reading order, `0` `^` `$` across the row, `gg` and `G` to
+the first and last row, Ctrl+d, u, f and b by half and whole pages. Each takes
+a count, which waits in the status bar until the motion arrives, and `{n}G` goes
+to row n. While a file is still indexing, `G` stops at the last row the engine
+can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
+work as before.
+
 The keys are read in `src/renderer/keys.ts`, which touches no DOM and is tested
 without a window. The whole plan is `resource/vim-motions.html`.
 

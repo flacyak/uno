@@ -394,6 +394,46 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "a count waits in the status bar, and 5j moves five rows",
+    script: `
+      await press("5");
+      const waiting = text("#status-keys");
+      if (waiting !== "5") return "the status bar shows " + JSON.stringify(waiting) + " waiting";
+      await press("j");
+      if (text("#status-keys") !== "") return "the count was still waiting after j";
+      return text("#status-cell") === "units · row 12" ? "" : "the selection is at " + text("#status-cell");
+    `,
+  },
+  {
+    name: "Esc drops a pending count and stays in transform",
+    script: `
+      await press("4");
+      await press("Escape");
+      if (text("#status-keys") !== "") return "the count is still waiting";
+      return text("#status-mode") === "TRANSFORM" ? "" : "the mode is " + text("#status-mode");
+    `,
+  },
+  {
+    name: "G, gg, $, 0, {n}G and w land where vim would",
+    script: `
+      const steps = [
+        [["G"], "units · row 4812"],
+        [["g", "g"], "units · row 1"],
+        [["$"], "revenue · row 1"],
+        [["0"], "date · row 1"],
+        [["3", "0", "G"], "date · row 30"],
+        [["w"], "region · row 30"],
+        [["b", "b"], "revenue · row 29"],
+      ];
+      for (const [keys, want] of steps) {
+        for (const key of keys) await press(key);
+        const at = text("#status-cell");
+        if (at !== want) return keys.join("") + " went to " + JSON.stringify(at) + ", not " + JSON.stringify(want);
+      }
+      return "";
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
