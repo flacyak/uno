@@ -14,6 +14,10 @@ import { join } from "node:path";
 
 import type { BrowserWindow } from "electron";
 
+import { through } from "./driven.ts";
+
+type Input = Parameters<BrowserWindow["webContents"]["sendInputEvent"]>[0];
+
 interface Check {
   name: string;
   /**
@@ -22,9 +26,26 @@ interface Check {
    * page dispatches never reaches one.
    */
   send?: readonly [channel: string, ...args: unknown[]];
+  /**
+   * Input sent before the script runs, down the path the window system sends a
+   * person's. The window is driven, so it drops all of it unless `through` is set.
+   */
+  input?: { events: readonly Input[]; through: boolean };
   /** Runs in the renderer. Returns a message on failure, or "" when it passes. */
   script: string;
 }
+
+/**
+ * What a person at the desktop might do to the window mid-run: a key that moves
+ * the selection, a click on a cell, and the wheel over the grid.
+ */
+const PERSON: readonly Input[] = [
+  { type: "keyDown", keyCode: "Down" },
+  { type: "keyUp", keyCode: "Down" },
+  { type: "mouseDown", x: 400, y: 300, button: "left", clickCount: 1 },
+  { type: "mouseUp", x: 400, y: 300, button: "left", clickCount: 1 },
+  { type: "mouseWheel", x: 400, y: 300, deltaY: -600 },
+];
 
 /**
  * What a person would look at to decide the app works.
@@ -162,6 +183,33 @@ const CHECKS: Check[] = [
       return status === "rep · row 3" && selected === 1
         ? ""
         : "status is " + JSON.stringify(status) + " with " + selected + " selected";
+    `,
+  },
+  {
+    // Whoever is at the desktop keeps working while this runs. See src/main/driven.ts.
+    name: "a person's key, click and wheel do not reach the page",
+    input: { events: PERSON, through: false },
+    script: `
+      for (let i = 0; i < 10; i++) await frame();
+      const sc = document.querySelector(".grid-scroll");
+      if (sc.scrollTop !== 0) return "the grid scrolled to " + sc.scrollTop;
+      return text("#status-cell") === "rep · row 3" ? "" : "the selection moved to " + text("#status-cell");
+    `,
+  },
+  {
+    // Without this, the check before it would pass on input that went nowhere.
+    // The wheel stays out: its scroll follows it later, and through does not wait.
+    name: "the same key and click let through do reach it",
+    input: { events: PERSON.filter((e) => e.type !== "mouseWheel"), through: true },
+    script: `
+      if (!(await until(() => text("#status-cell") !== "rep · row 3"))) {
+        return "the selection is still at " + text("#status-cell");
+      }
+
+      // Back where the checks after this one expect.
+      document.querySelectorAll("tbody tr")[2].children[3].click();
+      await frame();
+      return text("#status-cell") === "rep · row 3" ? "" : "the selection went back to " + text("#status-cell");
     `,
   },
   {
@@ -851,6 +899,14 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   for (const check of CHECKS) {
     try {
       if (check.send !== undefined) win.webContents.send(...check.send);
+      if (check.input !== undefined) {
+        const { events } = check.input;
+        const send = (): void => {
+          for (const event of events) win.webContents.sendInputEvent(event);
+        };
+        if (check.input.through) through(win, send);
+        else send();
+      }
       const failure = (await win.webContents.executeJavaScript(
         `(async () => { ${PRELUDE} { ${check.script} } })()`,
       )) as string;
