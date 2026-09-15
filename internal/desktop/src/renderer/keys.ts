@@ -54,6 +54,10 @@ export type Motion =
   | "page-up"
   | "half-down"
   | "half-up"
+  // H M L: the top, middle and bottom row on screen
+  | "screen-top"
+  | "screen-middle"
+  | "screen-bottom"
   // the first and last cell of the sheet
   | "home"
   | "end";
@@ -61,6 +65,8 @@ export type Motion =
 export type Action =
   | { t: "none" }
   | { t: "move"; motion: Motion; count: number | undefined }
+  /** zt zz zb: scroll the selected row to the top, middle or bottom. The selection stays. */
+  | { t: "scroll"; where: "top" | "middle" | "bottom" }
   | { t: "mode"; to: Mode }
   /** Open the editor. `transform` switches to transform first, which is `a` in view. */
   | { t: "insert"; caret: Caret; transform: boolean }
@@ -164,7 +170,14 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
       return done(move("last-col", undefined));
     case "G":
       return done(move("last-row", count));
+    case "H":
+      return done(move("screen-top", count));
+    case "M":
+      return done(move("screen-middle", undefined));
+    case "L":
+      return done(move("screen-bottom", count));
     case "g":
+    case "z":
     case "c":
       return { pending: { count: pending.count, keys: key }, action: NONE };
     case "i":
@@ -189,6 +202,12 @@ function finish(mode: Mode, keys: string, count: number | undefined): Action {
   switch (keys) {
     case "gg":
       return move("first-row", count);
+    case "zt":
+      return { t: "scroll", where: "top" };
+    case "zz":
+      return { t: "scroll", where: "middle" };
+    case "zb":
+      return { t: "scroll", where: "bottom" };
     case "cc":
       return open(mode, "empty");
   }
@@ -230,6 +249,9 @@ export interface Place {
   readable: number;
   /** Rows a page moves. */
   page: number;
+  /** The first and last rows wholly on screen. */
+  top: number;
+  bottom: number;
 }
 
 export interface Target {
@@ -284,6 +306,12 @@ export function target(motion: Motion, count: number | undefined, at: Place): Ta
       return cell(at.row + n * half(at.page), at.col);
     case "half-up":
       return cell(at.row - n * half(at.page), at.col);
+    case "screen-top":
+      return cell(Math.min(at.top + n - 1, at.bottom), at.col);
+    case "screen-middle":
+      return cell(at.top + Math.floor((at.bottom - at.top) / 2), at.col);
+    case "screen-bottom":
+      return cell(Math.max(at.bottom - n + 1, at.top), at.col);
     case "home":
       return cell(0, 0);
     case "end":

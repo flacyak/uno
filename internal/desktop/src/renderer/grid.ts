@@ -407,20 +407,49 @@ export class Grid {
   }
 
   private scrollIntoView(): void {
-    const headH = this.head.offsetHeight;
     const top = this.selRow * this.rowHeight;
-    const height = this.scroller.clientHeight - headH;
+    const height = this.bodyHeight();
 
-    if (top < this.top) this.top = top;
-    else if (top + this.rowHeight > this.top + height) this.top = top + this.rowHeight - height;
-    else return;
+    if (top < this.top) this.scrollTo(top);
+    else if (top + this.rowHeight > this.top + height) this.scrollTo(top + this.rowHeight - height);
+  }
 
-    if (!this.scaled) {
-      this.scroller.scrollTop = this.top;
-      return;
-    }
+  /**
+   * scrollRow puts a row at the top, middle or bottom of the screen and leaves
+   * the selection where it is. Near either end of the sheet the scroll clamps.
+   */
+  private scrollRow(row: number, where: "top" | "middle" | "bottom"): void {
+    const y = row * this.rowHeight;
+    const height = this.bodyHeight();
+    if (where === "top") this.scrollTo(y);
+    else if (where === "bottom") this.scrollTo(y + this.rowHeight - height);
+    else this.scrollTo(y + (this.rowHeight - height) / 2);
+    this.layout();
+  }
+
+  /**
+   * scrollTo moves the view to `top`, in pixels of a sheet nothing capped. Above
+   * the cap the scrollbar is put where that is, rather than read back.
+   */
+  private scrollTo(top: number): void {
+    const headH = this.head.offsetHeight;
     const m = this.measure(this.source?.rows() ?? 0, headH, this.scroller.clientHeight);
-    this.syncScroll(m.vMax, m.rMax);
+    this.top = Math.min(Math.max(0, top), m.vMax);
+    if (this.scaled) this.syncScroll(m.vMax, m.rMax);
+    else this.scroller.scrollTop = this.top;
+  }
+
+  /** The height the rows have on screen: the viewport, less the header over it. */
+  private bodyHeight(): number {
+    return this.scroller.clientHeight - this.head.offsetHeight;
+  }
+
+  /** The first and last rows wholly on screen, for H, M and L. */
+  private visibleRows(): { top: number; bottom: number } {
+    const last = Math.max(0, (this.source?.rows() ?? 0) - 1);
+    const top = Math.min(last, Math.ceil(this.top / this.rowHeight));
+    const bottom = Math.floor((this.top + this.bodyHeight()) / this.rowHeight) - 1;
+    return { top, bottom: Math.max(top, Math.min(last, bottom)) };
   }
 
   /**
@@ -459,6 +488,9 @@ export class Grid {
       case "move":
         this.move(action.motion, action.count);
         return;
+      case "scroll":
+        this.scrollRow(this.selRow, action.where);
+        return;
       case "mode":
         this.events.onMode(action.to);
         return;
@@ -489,6 +521,7 @@ export class Grid {
       cols: source.cols(),
       readable: source.readable?.() ?? rows,
       page: this.page(),
+      ...this.visibleRows(),
     });
     this.select(to.row, to.col);
     if (to.short !== undefined) this.events.onShort(to.short);

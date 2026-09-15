@@ -434,6 +434,26 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "zt, zb and zz scroll the row into place, and H, L and M find it there",
+    script: `
+      const row = () => Number(text("#status-cell").split("row ")[1].replace(/,/g, ""));
+      // 30G left row 29 one above the bottom of the screen, far from its top.
+      for (const [scroll, find] of [["t", "H"], ["b", "L"], ["z", "M"]]) {
+        await press("z");
+        await press(scroll);
+        if (row() !== 29) return "z" + scroll + " moved the selection to row " + row();
+        await press(find);
+        if (row() !== 29) return "z" + scroll + " then " + find + " went to row " + row();
+      }
+
+      await press("H");
+      const top = row();
+      await press("3");
+      await press("H");
+      return row() === top + 2 ? "" : "3H went to row " + row() + " with row " + top + " on top";
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");

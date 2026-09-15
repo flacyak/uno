@@ -150,9 +150,9 @@ test("a count before a change is dropped", () => {
 
 // ---------------------------------------------------------------- motions
 
-/** A sheet of 4,812 rows and 6 columns, 20 rows to a page, fully indexed. */
+/** A sheet of 4,812 rows and 6 columns, fully indexed, with rows 0 to 19 on a 20-row page. */
 function at(row: number, col: number, more: Partial<Place> = {}): Place {
-  return { row, col, rows: 4812, cols: 6, readable: 4812, page: 20, ...more };
+  return { row, col, rows: 4812, cols: 6, readable: 4812, page: 20, top: 0, bottom: 19, ...more };
 }
 
 test("h j k l move by one or by the count, and clamp at the edges", () => {
@@ -208,4 +208,26 @@ test("Ctrl+d and Ctrl+u move half a page, and at least a row", () => {
   expect(target("half-up", 2, at(100, 0))).toEqual({ row: 80, col: 0 });
   expect(target("half-down", undefined, at(100, 0, { page: 1 }))).toEqual({ row: 101, col: 0 });
   expect(target("page-down", undefined, at(100, 0))).toEqual({ row: 120, col: 0 });
+});
+
+test("H, M and L land on the rows on screen, and a count counts in from the edge", () => {
+  const screen = { top: 100, bottom: 119 };
+  expect(target("screen-top", undefined, at(300, 2, screen))).toEqual({ row: 100, col: 2 });
+  expect(target("screen-top", 3, at(300, 2, screen))).toEqual({ row: 102, col: 2 });
+  expect(target("screen-bottom", 3, at(300, 2, screen))).toEqual({ row: 117, col: 2 });
+  expect(target("screen-middle", undefined, at(300, 2, screen))).toEqual({ row: 109, col: 2 });
+  expect(target("screen-top", 50, at(300, 2, screen)), "never off the screen").toEqual({
+    row: 119,
+    col: 2,
+  });
+});
+
+test("M, zz, zt and zb take no count", () => {
+  expect(action("view", "3M")).toEqual({ t: "move", motion: "screen-middle", count: undefined });
+  expect(action("view", "zz")).toEqual({ t: "scroll", where: "middle" });
+  expect(action("view", "zt")).toEqual({ t: "scroll", where: "top" });
+  expect(press("transform", "5zb")).toEqual({
+    pending: NOTHING,
+    action: { t: "scroll", where: "bottom" },
+  });
 });
