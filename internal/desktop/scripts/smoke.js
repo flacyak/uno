@@ -188,8 +188,18 @@ try {
   }
   if (c.region !== HOME_REGION)
     trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
-  const refused = await readdir(join(data, "connections"));
-  if (refused.length !== 1) trouble.push(`the connections folder holds ${JSON.stringify(refused)}`);
+  // The second, for 2025/ of the same bucket, keeps a file of its own, and the
+  // bucket that was refused left none.
+  const folder = (await readdir(join(data, "connections"))).toSorted();
+  if (JSON.stringify(folder) !== '["acme-exports-2.unof","acme-exports.unof"]') {
+    trouble.push(`the connections folder holds ${JSON.stringify(folder)}`);
+  }
+  const second = parseConnection(
+    "acme-exports-2.unof",
+    await readFile(join(data, "connections", "acme-exports-2.unof"), "utf8"),
+  );
+  if (second.prefix !== "2025/")
+    trouble.push(`acme-exports-2.unof covers ${second.prefix}, not 2025/`);
 } catch (err) {
   trouble.push(`the saved connection did not read back: ${err.message}`);
 }
