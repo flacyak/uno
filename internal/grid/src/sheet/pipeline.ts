@@ -9,6 +9,7 @@ import { formatFloat, roundSignificant } from "../go/index.ts";
 import type { Row } from "../formula/index.ts";
 import { evaluate } from "../formula/index.ts";
 import { apply as applyProgram } from "../program/index.ts";
+import type { Program } from "../program/index.ts";
 import type { Schema, Written } from "./schema.ts";
 
 /**
@@ -48,9 +49,10 @@ export interface Finished {
  * valueAt is what one cell stores: the last value written into it, or else its
  * source value, rewritten by every program recorded after that.
  *
- * Order is the whole rule. A value typed before an apply is rewritten by it and
- * one typed after is not, because the programs that count are the ones with a
- * later sequence number than the write.
+ * Order is the rule. A value typed before an apply is rewritten by it and one
+ * typed after is not, because the programs that count are the ones with a later
+ * sequence number than the write. The exception is a write the program is
+ * settled over -- see `settled`.
  */
 export function valueAt(
   schema: Schema,
@@ -80,9 +82,23 @@ function stored(
 
   let v = w.now;
   if (runs !== undefined) {
-    for (const r of runs) if (r.seq > w.seq) v = applyProgram(r.prog, v);
+    for (const r of runs) if (r.seq > w.seq && !settled(r.prog, w)) v = applyProgram(r.prog, v);
   }
   return v;
+}
+
+/**
+ * settled says whether a program has nothing left to do in a written cell: run
+ * over what the cell held before it was typed into, it gives what was typed.
+ *
+ * Those are the fixes the recogniser learned the program from, and they are
+ * typed before the apply that follows. Running the program over them again
+ * fixes them twice -- remove commas does not show it, but 12 fixed to 12.00
+ * would read 12.00.00. So an apply leaves such a cell alone, and the recogniser
+ * does not count it.
+ */
+export function settled(prog: Program, w: Pick<Written, "was" | "now">): boolean {
+  return w.was !== undefined && applyProgram(prog, w.was) === w.now;
 }
 
 /**
