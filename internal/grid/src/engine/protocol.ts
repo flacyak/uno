@@ -67,6 +67,29 @@ export interface Changed {
   columns: ColumnInfo[];
 }
 
+/** A find: the next row down or up one column whose cell matches. */
+export interface FindRequest {
+  col: number;
+  /** The row the search starts beside. It is never a match itself. */
+  from: number;
+  /** 1 looks down, -1 up. */
+  dir: 1 | -1;
+  /** A cell that does not parse as its column's kind, or one that shows some text. */
+  match: { t: "unparsed" } | { t: "text"; text: string };
+}
+
+export interface Found {
+  /** The matching row, or null for none. */
+  row: number | null;
+  /** Rows looked at. */
+  searched: number;
+  /**
+   * Whether the search reached the end of the file in its direction. Down, it
+   * stops where the index has got to rather than waiting for the rest.
+   */
+  complete: boolean;
+}
+
 /**
  * Offer is the recogniser's question as it stands.
  *
@@ -96,6 +119,8 @@ export type Request =
   | { t: "rows"; id: number; first: number; count: number }
   | { t: "edit"; id: number; edit: EditRequest }
   | { t: "undo"; id: number }
+  /** The next matching row in a column, read from the file rather than any band. */
+  | { t: "find"; id: number; find: FindRequest }
   /** Transform allows edits and runs the recogniser. View allows neither. */
   | { t: "mode"; transform: boolean }
   /** The workspace as a .uno, refusing a source larger than limit. */
@@ -116,6 +141,7 @@ export type Reply =
       raws: Array<string[] | null>;
     }
   | { t: "changed"; id: number; changed: Changed }
+  | { t: "found"; id: number; found: Found }
   /** Null when there is nothing to ask. */
   | { t: "offer"; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }

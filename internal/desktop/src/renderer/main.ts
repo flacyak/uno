@@ -9,7 +9,14 @@
 import "./app.css";
 
 import { Engine, messagePort } from "@uno/grid/engine";
-import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
+import type {
+  FindRequest,
+  MessagePortLike,
+  Offer,
+  Reply,
+  Request,
+  SourceRef,
+} from "@uno/grid/engine";
 import { NO_ROW } from "@uno/grid/sheet";
 
 import type { Host } from "../shared/host.ts";
@@ -37,6 +44,8 @@ class Shell {
   private opens = 0;
   /** The offer a person said "not now" to, so it stays gone until it changes. */
   private dismissed = "";
+  /** Counts finds, so the answer to one a person has since asked again over is dropped. */
+  private finds = 0;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
@@ -91,6 +100,9 @@ class Shell {
           }
           case "prompt":
             this.prompt(action.lead);
+            return;
+          case "unparsed":
+            this.findUnparsed(action.dir);
             return;
         }
       },
@@ -343,6 +355,67 @@ class Shell {
     }
     this.paintTabs();
     this.paintStatus();
+  }
+
+  // --------------------------------------------------------------- finding
+
+  /**
+   * findUnparsed is ]f and [f: the next cell down or up this column that does
+   * not parse as its badge says it should. Fixing those is what uno is for.
+   */
+  private findUnparsed(dir: 1 | -1): void {
+    const w = this.workspace;
+    if (w === undefined) return;
+    const { row, col } = this.grid.selection();
+    const column = w.rows.columns[col];
+    if (column === undefined) return;
+
+    // Plain text has nothing in it to fail, and reading the file to say so
+    // would be slow for nothing.
+    if (column.kind === "text" && !column.flagged) {
+      this.say(`${column.header} is text · every value in it parses`, true);
+      return;
+    }
+    const where = `${dir === 1 ? "below" : "above"} row ${(row + 1).toLocaleString()}`;
+    const kind = column.kind === "date" ? "a date" : "a number";
+    void this.find(
+      { t: "unparsed" },
+      dir,
+      `nothing ${where} in ${column.header} fails to parse as ${kind}`,
+    );
+  }
+
+  /**
+   * find asks the engine for the next row down or up this column that matches,
+   * and selects it. The engine reads the file for it, so it reaches rows no band
+   * holds. `missing` is what to say when there is none.
+   */
+  private async find(match: FindRequest["match"], dir: 1 | -1, missing: string): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined) return;
+    const { row, col } = this.grid.selection();
+    const asked = ++this.finds;
+
+    // Most finds answer within a frame. Saying so only for one that does not
+    // keeps the status bar from blinking on every ]f.
+    const slow = setTimeout(() => this.say("searching…"), 200);
+    try {
+      const found = await w.find({ col, from: row, dir, match });
+      if (asked !== this.finds || this.workspace !== w) return;
+      if (found.row !== null) {
+        this.grid.moveTo(found.row, col);
+        this.say("");
+      } else if (found.complete) {
+        this.say(missing, true);
+      } else {
+        const searched = found.searched.toLocaleString();
+        this.say(`${missing} · searched ${searched} rows · indexing ${w.indexed()}%`, true);
+      }
+    } catch (err) {
+      if (asked === this.finds) this.say(message(err), true);
+    } finally {
+      clearTimeout(slow);
+    }
   }
 
   // ---------------------------------------------------------- command line

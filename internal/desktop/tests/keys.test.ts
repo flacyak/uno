@@ -184,6 +184,15 @@ test("the command line reads :w, :sav, :e, :e! and a row number", () => {
   expect(command("foo")).toEqual({ t: "unknown", text: "foo" });
 });
 
+// ------------------------------------------------------------- the engine
+
+test("]f and [f look down and up the column, in either mode", () => {
+  expect(action("view", "]f")).toEqual({ t: "unparsed", dir: 1 });
+  expect(action("transform", "[f")).toEqual({ t: "unparsed", dir: -1 });
+  expect(showing(press("view", "]").pending)).toBe("]");
+  expect(press("view", "]x")).toEqual({ pending: NOTHING, action: { t: "none" } });
+});
+
 test("the keys that were there before keep working", () => {
   expect(action("view", "<ArrowDown>")).toEqual({ t: "move", motion: "down" });
   expect(action("view", "<Tab>")).toEqual({ t: "move", motion: "right" });

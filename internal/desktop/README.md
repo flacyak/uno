@@ -79,7 +79,13 @@ any cell, and `gx` is Not now.
 `:` opens a command line in the status bar, in either mode. `:w` saves as Ctrl+S
 does, `:sav` is Save As, `:e` opens a file but refuses over unsaved edits unless
 it is `:e!`, and `:{n}` goes to row n. There is no `:q`; closing is the window's
-job. While a file is still indexing, `G` stops at the last row the engine
+job.
+
+`]f` and `[f` go to the next and previous cell in the column that does not parse
+as its badge says, which is the work uno is for: `]f` `.` `]f` `.` `]f` `.` `ga`.
+The band holds a few screens of rows, so the engine reads the file for them and
+they reach any row. While a file is still indexing they search what has been
+indexed and say how much that was. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 
