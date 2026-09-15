@@ -11,6 +11,7 @@
 import { Refusal } from "@uno/grid/engine";
 import type { CharName, Said, Sought, StepSaid } from "@uno/grid/engine";
 import { quote } from "@uno/grid/go";
+import type { Sentences } from "@uno/grid/said";
 
 import { m } from "../paraglide/messages.js";
 import { getLocale } from "../paraglide/runtime.js";
@@ -79,9 +80,6 @@ const REPLACES: Record<Where, (p: { what: string; with: string }) => string> = {
   start: m.step_replace_from_start,
   end: m.step_replace_from_end,
 };
-
-/** Sentences is one message for each kind, so a kind the engine gains fails to compile here until it has one. */
-type Sentences<U extends { t: string }> = { [K in U["t"]]: (s: Extract<U, { t: K }>) => string };
 
 const STEPS: Sentences<StepSaid> = {
   trim: m.step_trim,
