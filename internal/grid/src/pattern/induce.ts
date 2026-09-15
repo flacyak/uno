@@ -215,9 +215,7 @@ function substitutions(dels: Run[], ins: Run[]): string[] {
  * a caller wanting a first step does not.
  */
 export function droppedChars(ex: Example[]): string[] {
-  const chars: string[] = [];
-  const seen = new Set<string>();
-
+  const chars = new Set<string>();
   for (const e of ex) {
     const a = runes(e.was);
     const b = runes(e.now);
@@ -225,17 +223,9 @@ export function droppedChars(ex: Example[]): string[] {
 
     const al = align(a, b);
     if (al === undefined) return [];
-    for (const d of al.dels) {
-      for (const r of d.text) {
-        if (!seen.has(r)) {
-          seen.add(r);
-          chars.push(r);
-        }
-      }
-    }
+    for (const d of al.dels) for (const r of d.text) chars.add(r);
   }
-  chars.sort(compareStrings);
-  return chars;
+  return [...chars].sort(compareStrings);
 }
 
 /**
