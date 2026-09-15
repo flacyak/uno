@@ -46,6 +46,8 @@ class Shell {
   private dismissed = "";
   /** Counts finds, so the answer to one a person has since asked again over is dropped. */
   private finds = 0;
+  /** The workspace Ctrl+O warned about, for as long as the warning is on screen. */
+  private warned: Workspace | undefined;
   /** What the open command line began with. */
   private lead: Lead = ":";
   /** The last text searched for, and which way, for n and N. */
@@ -126,7 +128,20 @@ class Shell {
 
   // --------------------------------------------------------------- opening
 
-  async open(): Promise<void> {
+  /**
+   * open asks for a file and opens it in place of the one open now.
+   *
+   * Opening closes the workspace without asking, so over unsaved edits the
+   * first Ctrl+O says so. A second, while that is still on screen, opens anyway,
+   * as :e! does. `force` is :e!, and :e, which has asked already.
+   */
+  async open(force = false): Promise<void> {
+    const w = this.workspace;
+    if (!force && w?.dirty === true && this.warned !== w) {
+      this.say("unsaved edits · Ctrl+S first, or Ctrl+O again to drop them", true);
+      this.warned = w;
+      return;
+    }
     try {
       const ref = await this.host.open();
       if (ref === undefined) return; // cancelled, which is not a failure
@@ -524,7 +539,7 @@ class Shell {
         if (!c.force && this.workspace?.dirty === true) {
           this.say("unsaved edits · :w first, or :e! to drop them", true);
         } else {
-          void this.open();
+          void this.open(true);
         }
         return;
       case "row":
@@ -661,6 +676,9 @@ class Shell {
   /** One line, and the only place the shell talks. An error stays until the
    * next thing happens, so it cannot be missed by blinking. */
   private say(text: string, isError = false): void {
+    // Whatever is said next replaces Ctrl+O's warning, and a second Ctrl+O
+    // opens only while the warning is there to be read.
+    this.warned = undefined;
     this.statusMsg.textContent = text;
     this.statusMsg.className = isError ? "err" : "";
   }
