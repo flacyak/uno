@@ -88,7 +88,7 @@ interface Cell {
 }
 
 /** The actions that belong to the shell rather than the grid. */
-export type ShellAction = Extract<Action, { t: "undo" }>;
+export type ShellAction = Extract<Action, { t: "undo" | "apply" | "dismiss" }>;
 
 export class Grid {
   private source: Rows | undefined;
