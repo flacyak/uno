@@ -123,6 +123,8 @@ export class Grid {
   private marks = new Map<string, Cell>();
   /** Where the last jump left from, for ''. */
   private before: Cell | undefined;
+  /** What yy copied, for p. Kept across opens, as vim keeps a register across files. */
+  private register: string | undefined;
 
   private rowHeight = 29;
   private frame = 0;
@@ -519,6 +521,16 @@ export class Grid {
       case "back":
         if (this.before !== undefined) this.jump(this.before.row, this.before.col);
         return;
+      case "clear":
+        this.write("");
+        return;
+      case "yank":
+        this.yank();
+        return;
+      case "put":
+        if (this.register === undefined) this.events.onSay("nothing yanked", true);
+        else this.write(this.register);
+        return;
       case "mode":
         this.events.onMode(action.to);
         return;
@@ -642,10 +654,57 @@ export class Grid {
     if (source.binding(this.selCol) !== undefined) {
       return `${source.columns[this.selCol]?.header ?? "this column"} is computed from a formula · nothing to type over`;
     }
+    return this.unreadable(source);
+  }
+
+  /** unreadable says why the selected cell has no value here, or "" when it has one. */
+  private unreadable(source: Rows): string {
+    if (source.rows() === 0) return "no rows";
     if (source.ready?.(this.selRow) === false) {
       return `row ${(this.selRow + 1).toLocaleString()} is still loading`;
     }
     return "";
+  }
+
+  /**
+   * write sets the selected cell from a key rather than through the editor, and
+   * is refused wherever the editor would be. A value the cell already holds
+   * records nothing.
+   */
+  private write(value: string): void {
+    const source = this.source;
+    if (source === undefined) return;
+    const refused = this.refusal(source);
+    if (refused !== "") {
+      this.events.onSay(refused, true);
+      return;
+    }
+    if (value === source.raw(this.selRow, this.selCol)) return;
+    this.events.onEdit(this.selRow, this.selCol, value);
+    this.layout();
+  }
+
+  /**
+   * yank copies what the cell stores to the register and the system clipboard.
+   * It copies raw rather than what is shown, because p puts it back into a cell
+   * and the editor works on stored values, and the two should agree.
+   */
+  private yank(): void {
+    const source = this.source;
+    if (source === undefined) return;
+    const unreadable = this.unreadable(source);
+    if (unreadable !== "") {
+      this.events.onSay(unreadable, true);
+      return;
+    }
+
+    const value = source.raw(this.selRow, this.selCol);
+    this.register = value;
+    // The register is uno's copy. The system clipboard is a courtesy a page can
+    // be refused, without focus or permission.
+    void navigator.clipboard.writeText(value).catch(() => {
+      this.events.onSay("yanked, but the system clipboard refused it", true);
+    });
   }
 
   private placeEditor(): void {

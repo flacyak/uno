@@ -480,6 +480,43 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "yy copies in view, and p puts it in a cell in transform",
+    script: `
+      const cell = (row) => document.querySelectorAll("tbody tr")[row].children[5].textContent;
+      await press("Escape");
+      if (text("#status-mode") !== "VIEW") return "Esc left the mode at " + text("#status-mode");
+      for (const key of ["g", "g", "0", "4", "l"]) await press(key);
+      if (text("#status-cell") !== "units · row 1") return "the selection is at " + text("#status-cell");
+      await press("y");
+      await press("y");
+      await frame(); // the clipboard answers on its own time
+
+      for (const key of ["3", "j", "p"]) await press(key);
+      if (cell(3) !== "612") return "p in view changed the cell to " + JSON.stringify(cell(3));
+      const said = text("#status-msg");
+      if (!said.includes("i or Ctrl+E")) return "p in view says " + JSON.stringify(said);
+
+      await press("i");
+      await press("p");
+      if (!(await until(() => text("#status-file").includes("5 edits")))) {
+        return "status bar says: " + text("#status-file");
+      }
+      return cell(3) === "1204" ? "" : "row 4 shows " + JSON.stringify(cell(3));
+    `,
+  },
+  {
+    name: "x clears the cell, and a count before it is dropped",
+    script: `
+      const cell = (row) => document.querySelectorAll("tbody tr")[row].children[5].textContent;
+      for (const key of ["j", "3", "x"]) await press(key);
+      if (!(await until(() => text("#status-file").includes("6 edits")))) {
+        return "status bar says: " + text("#status-file");
+      }
+      if (cell(4) !== "") return "row 5 shows " + JSON.stringify(cell(4));
+      return cell(5) === "1,101" ? "" : "3x reached row 6, which shows " + JSON.stringify(cell(5));
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");

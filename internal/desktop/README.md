@@ -61,7 +61,12 @@ Ctrl+d, u, f and b by half and whole pages. Each takes a count, which waits in
 the status bar until the motion arrives, and `{n}G` goes to row n. `zt` `zz`
 `zb` scroll the selected row to the top, middle or bottom and leave it selected.
 `m{a-z}` marks a cell for as long as the workspace is open, `'{a-z}` goes back
-to it, and `''` returns to where the last jump left from. While a file is still indexing, `G` stops at the last row the engine
+to it, and `''` returns to where the last jump left from.
+
+Changing is transform's. `x` clears a cell and `p` sets it to what `yy` copied.
+`yy` works in view too, since copying changes nothing, and copies what the cell
+stores to the system clipboard as well. Each change is one set in the log, so a
+count before one is dropped: `3x` would record a set per cell. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 
