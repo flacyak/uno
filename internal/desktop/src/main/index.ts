@@ -120,6 +120,7 @@ function createWindow(): BrowserWindow {
  */
 function buildMenu(win: BrowserWindow): void {
   const send = (channel: string) => () => win.webContents.send(channel);
+  const pick = (name: string) => () => win.webContents.send("menu:input", name);
 
   const menu = Menu.buildFromTemplate([
     {
@@ -142,23 +143,32 @@ function buildMenu(win: BrowserWindow): void {
         { role: "cut" },
         { role: "copy" },
         { role: "paste" },
+        { type: "separator" },
+        // How the grid reads keys. The renderer keeps the choice, and checks the
+        // item it read at start through input:chosen.
+        {
+          label: "Input",
+          submenu: [
+            { id: "input:default", label: "Default", type: "radio", click: pick("default") },
+            { id: "input:vim-style", label: "Vim-style", type: "radio", click: pick("vim-style") },
+          ],
+        },
       ],
     },
     {
       label: "View",
       submenu: [
         // The renderer binds the key itself, so the accelerator is shown here
-        // and not registered. Registering it too would toggle twice. i and Esc
-        // switch too, and a menu item has room for one accelerator.
+        // and not registered. Registering it too would toggle twice.
         {
-          label: "View / Transform (i, Esc)",
+          label: "View / Transform",
           accelerator: "CmdOrCtrl+E",
           registerAccelerator: false,
           click: send("menu:mode"),
         },
         { type: "separator" },
-        // No accelerator. The reload role binds Ctrl+R, which vim users press for
-        // redo, and a reload loses the open workspace.
+        // No accelerator. The reload role binds Ctrl+R, which is redo whichever
+        // way the grid reads keys, and a reload loses the open workspace.
         { label: "Reload", click: () => win.webContents.reload() },
         { role: "toggleDevTools" },
         { type: "separator" },
@@ -171,6 +181,12 @@ function buildMenu(win: BrowserWindow): void {
     },
   ]);
   Menu.setApplicationMenu(menu);
+
+  ipcMain.on("input:chosen", (event, name: string) => {
+    if (event.sender !== win.webContents) return;
+    const item = menu.getMenuItemById(`input:${name}`);
+    if (item !== null) item.checked = true;
+  });
 }
 
 /**

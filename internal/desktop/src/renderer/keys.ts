@@ -80,8 +80,11 @@ export type Action =
   /** '' and ``: go back to where the last jump left from. */
   | { t: "back" }
   | { t: "mode"; to: Mode }
-  /** Open the editor. `transform` switches to transform first, which is `a` in view. */
-  | { t: "insert"; caret: Caret; transform: boolean }
+  /**
+   * Open the editor. `transform` switches to transform first, which is `a` in
+   * view. `text` starts it holding that instead of the value: typing over a cell.
+   */
+  | { t: "insert"; caret: Caret; transform: boolean; text?: string }
   | { t: "undo" }
   /** Record again what undo took back. */
   | { t: "redo" }

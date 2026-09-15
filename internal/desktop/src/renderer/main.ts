@@ -22,8 +22,8 @@ import { NO_ROW } from "@uno/grid/sheet";
 import type { Host } from "../shared/host.ts";
 import { Grid } from "./grid.ts";
 import { electronHost } from "./host.ts";
-import type { InputStrategy } from "./input/strategy.ts";
-import { vimStyle } from "./input/vim-style.ts";
+import { strategy } from "./input/index.ts";
+import type { InputName, InputStrategy } from "./input/index.ts";
 import { command } from "./keys.ts";
 import type { Command, Lead } from "./keys.ts";
 import { Workspace } from "./workspace.ts";
@@ -32,11 +32,16 @@ import { Workspace } from "./workspace.ts";
  * mis-drop, and saying so is better than a parser error. */
 const OPENABLE = [".uno", ".csv", ".tsv"];
 
+/** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
+const INPUT_KEY = "uno.input";
+
 type MenuChannel = "menu:open" | "menu:save" | "menu:save-as" | "menu:mode";
 
 interface MenuBridge {
   on(channel: MenuChannel, fn: () => void): void;
   onOpenPath(fn: (path: string) => void): void;
+  onInput(fn: (name: string) => void): void;
+  inputChosen(name: InputName): void;
 }
 
 class Shell {
@@ -55,7 +60,7 @@ class Shell {
   /** The last text searched for, and which way, for n and N. */
   private searched: { text: string; dir: 1 | -1 } | undefined;
   /** How keys are read, which the grid and the status bar both follow. */
-  private readonly input: InputStrategy = vimStyle;
+  private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
@@ -293,6 +298,27 @@ class Shell {
     this.grid.focus();
     this.paintTabs();
     this.paintBanner();
+    this.paintStatus();
+  }
+
+  // ----------------------------------------------------------------- input
+
+  /** The input strategy reading keys now, for the Edit menu to check. */
+  get inputName(): InputName {
+    return this.input.name;
+  }
+
+  /**
+   * setInput changes how keys are read, from Edit → Input. The choice is kept in
+   * the page's storage, so the next launch reads keys the same way.
+   */
+  setInput(name: string): void {
+    this.input = strategy(name);
+    localStorage.setItem(INPUT_KEY, this.input.name);
+    this.closePrompt();
+    this.grid.setInput(this.input);
+    this.grid.focus();
+    this.paintTabs();
     this.paintStatus();
   }
 
@@ -723,6 +749,8 @@ if (bridge === undefined) {
   menu?.on("menu:save-as", () => void shell.saveAs());
   menu?.on("menu:mode", () => shell.toggleMode());
   menu?.onOpenPath((path) => void shell.openPath(path));
+  menu?.onInput((name) => shell.setInput(name));
+  menu?.inputChosen(shell.inputName);
 
   document.querySelector("#open")?.addEventListener("click", () => void shell.open());
 }

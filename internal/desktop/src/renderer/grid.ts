@@ -141,7 +141,7 @@ export class Grid {
     private readonly host: HTMLElement,
     private readonly events: GridEvents,
     /** How keys are read. The grid carries out what the strategy says a key means. */
-    private readonly input: InputStrategy,
+    private input: InputStrategy,
   ) {
     this.scroller = el("div", "grid-scroll");
     this.sizer = el("div", "grid-sizer");
@@ -217,6 +217,12 @@ export class Grid {
 
   focus(): void {
     this.host.focus();
+  }
+
+  /** setInput changes how keys are read. Keys waiting for more were read the old way, so they go. */
+  setInput(input: InputStrategy): void {
+    this.input = input;
+    this.wait(NOTHING);
   }
 
   private schedule(): void {
@@ -555,7 +561,7 @@ export class Grid {
         // a in view: the switch writes nothing and was asked for, so it happens
         // even when the editor then refuses the cell.
         if (action.transform) this.events.onMode("transform");
-        this.beginEdit(action.caret);
+        this.beginEdit(action.caret, action.text);
         return;
       case "say":
         this.events.onSay(action.text, false);
@@ -609,7 +615,7 @@ export class Grid {
    * a computation, which the sheet refuses anyway -- and refusing after the
    * typing is a worse way to say so than not offering it.
    */
-  private beginEdit(caret: Caret): void {
+  private beginEdit(caret: Caret, text?: string): void {
     const source = this.source;
     if (source === undefined || this.editor !== undefined) return;
 
@@ -626,7 +632,8 @@ export class Grid {
 
     const input = document.createElement("input");
     input.className = "cell-editor";
-    input.value = caret === "empty" ? "" : source.raw(this.selRow, this.selCol);
+    // Typing over a cell starts the editor holding what was typed.
+    input.value = text ?? (caret === "empty" ? "" : source.raw(this.selRow, this.selCol));
     this.caret = caret;
 
     input.addEventListener("keydown", (e) => {
