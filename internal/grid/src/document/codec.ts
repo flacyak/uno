@@ -70,18 +70,10 @@ export function readDocument(name: string, bytes: Uint8Array, at = ""): Document
   // reason a restored workspace is guaranteed to match the one that was saved.
   const sheets = new Map<string, Sheet>();
   for (const src of doc.sources) {
-    if (src.raw === undefined) continue;
-    let sheet;
-    try {
-      sheet = ingestRead(src.name, src.raw);
-    } catch (err) {
-      throw new Error(`${name}: embedded ${src.name}: ${(err as Error).message}`);
-    }
-    try {
-      sheet.replay(logOf(doc.log, src.id));
-    } catch (err) {
-      throw new Error(`${name}: replaying edits to ${src.name}: ${(err as Error).message}`);
-    }
+    const raw = src.raw;
+    if (raw === undefined) continue;
+    const sheet = blamed(`${name}: embedded ${src.name}`, () => ingestRead(src.name, raw));
+    blamed(`${name}: replaying edits to ${src.name}`, () => sheet.replay(logOf(doc.log, src.id)));
     sheets.set(src.id, sheet);
   }
   return { ...doc, sheets };
@@ -100,12 +92,7 @@ export function readDocument(name: string, bytes: Uint8Array, at = ""): Document
  * and fails to open under its own name.
  */
 export function readContainer(name: string, bytes: Uint8Array, at = ""): Document {
-  let entries: Record<string, Uint8Array>;
-  try {
-    entries = unzipSync(bytes);
-  } catch (err) {
-    throw new Error(`${name} is not a readable .uno file: ${(err as Error).message}`);
-  }
+  const entries = blamed(`${name} is not a readable .uno file`, () => unzipSync(bytes));
 
   const manifest = readJSON(name, entries, MANIFEST_ENTRY);
 
@@ -557,10 +544,19 @@ function readEntry(name: string, entries: Record<string, Uint8Array>, entry: str
 
 function readJSON(name: string, entries: Record<string, Uint8Array>, entry: string): unknown {
   const b = readEntry(name, entries, entry);
+  return blamed(`${name}: ${entry}`, (): unknown => JSON.parse(decoder.decode(b)));
+}
+
+/**
+ * blamed runs `read`, and what it throws is thrown again with `about` in
+ * front: the file, the entry, the source the failure was about, which a dialog
+ * over twelve dropped files has to be able to say.
+ */
+function blamed<T>(about: string, read: () => T): T {
   try {
-    return JSON.parse(decoder.decode(b));
+    return read();
   } catch (err) {
-    throw new Error(`${name}: ${entry}: ${(err as Error).message}`);
+    throw new Error(`${about}: ${(err as Error).message}`);
   }
 }
 
@@ -655,6 +651,37 @@ function asString(v: unknown): string {
  * a negative one. */
 function isByteCount(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= 0;
+}
+
+function isText(v: unknown): v is string {
+  return typeof v === "string";
+}
+
+function isFlag(v: unknown): v is boolean {
+  return typeof v === "boolean";
+}
+
+/** What a field that is not what it should be is said to be, by the guard it failed. */
+const NOT = new Map<(v: unknown) => boolean, string>([
+  [isText, "is not text"],
+  [isFlag, "is neither true nor false"],
+  [isByteCount, "is not a number of bytes"],
+]);
+
+/**
+ * optional reads a field a record may leave out: undefined where it is not
+ * there, the value where `is` holds, and otherwise the refusal `where: key is
+ * not …`, in the guard's words.
+ */
+function optional<T>(
+  o: Record<string, unknown>,
+  key: string,
+  is: (v: unknown) => v is T,
+  where: string,
+): T | undefined {
+  const v = o[key];
+  if (v !== undefined && !is(v)) throw new Error(`${where}: ${key} ${NOT.get(is)}`);
+  return v;
 }
 
 /**
@@ -779,10 +806,7 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
     );
   }
-  const fileColumn = s["fileColumn"];
-  if (fileColumn !== undefined && typeof fileColumn !== "boolean") {
-    throw new Error(`${source}: fileColumn is neither true nor false`);
-  }
+  const fileColumn = optional(s, "fileColumn", isFlag, source);
   return { ...base, parts, header, fileColumn: fileColumn ?? false };
 }
 
@@ -806,22 +830,10 @@ function parsePart(which: string, raw: unknown): SourcePart {
   const bytes = p["bytes"];
   if (!isByteCount(bytes)) throw new Error(`${part} does not say how many bytes it is`);
 
-  const partName = p["name"];
-  if (partName !== undefined && typeof partName !== "string") {
-    throw new Error(`${part}: name is not text`);
-  }
-  const version = p["version"];
-  if (version !== undefined && typeof version !== "string") {
-    throw new Error(`${part}: version is not text`);
-  }
-  const skip = p["skip"];
-  if (skip !== undefined && !isByteCount(skip)) {
-    throw new Error(`${part}: skip is not a number of bytes`);
-  }
-  const unterminated = p["unterminated"];
-  if (unterminated !== undefined && typeof unterminated !== "boolean") {
-    throw new Error(`${part}: unterminated is neither true nor false`);
-  }
+  const partName = optional(p, "name", isText, part);
+  const version = optional(p, "version", isText, part);
+  const skip = optional(p, "skip", isByteCount, part);
+  const unterminated = optional(p, "unterminated", isFlag, part);
 
   return {
     name: partName ?? "",
