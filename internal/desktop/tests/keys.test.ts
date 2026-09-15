@@ -6,9 +6,11 @@ import { expect, test } from "vite-plus/test";
 import {
   LOCKED,
   NOTHING,
+  changeOf,
   interpret,
   isJump,
   leavesInsert,
+  replay,
   showing,
   target,
 } from "../src/renderer/keys.ts";
@@ -119,6 +121,34 @@ test("yy copies in view as well, because copying changes nothing", () => {
   expect(action("view", "yy")).toEqual({ t: "yank" });
   expect(action("transform", "3yy")).toEqual({ t: "yank" });
   expect(press("view", "yj")).toEqual({ pending: NOTHING, action: { t: "none" } });
+});
+
+test(". repeats in transform only, and does nothing held down", () => {
+  expect(action("transform", ".")).toEqual({ t: "repeat" });
+  expect(action("view", ".")).toEqual({ t: "say", text: LOCKED });
+  expect(interpret("transform", NOTHING, held("."))?.action).toEqual({ t: "none" });
+});
+
+test(". appends what a added at the end, and prepends what i added at the start", () => {
+  // The recogniser's opening: 12 should read 12.00, and so should the next row.
+  const append = changeOf("end", "12", "12.00");
+  expect(append).toEqual({ t: "append", text: ".00" });
+  expect(replay(append, "7")).toBe("7.00");
+
+  const prepend = changeOf("start", "12", "$12");
+  expect(prepend).toEqual({ t: "prepend", text: "$" });
+  expect(replay(prepend, "7")).toBe("$7");
+});
+
+test(". sets the whole value after any other insert", () => {
+  expect(changeOf("end", "12", "1x2"), "a change in the middle").toEqual({
+    t: "set",
+    value: "1x2",
+  });
+  expect(changeOf("start", "12", "12$"), "i, then the end").toEqual({ t: "set", value: "12$" });
+  expect(changeOf("empty", "12", "13"), "s").toEqual({ t: "set", value: "13" });
+  expect(changeOf("all", "12", "12.00"), "Enter").toEqual({ t: "set", value: "12.00" });
+  expect(replay({ t: "set", value: "13" }, "7")).toBe("13");
 });
 
 test("the keys that were there before keep working", () => {

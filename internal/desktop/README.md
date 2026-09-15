@@ -66,7 +66,14 @@ to it, and `''` returns to where the last jump left from.
 Changing is transform's. `x` clears a cell and `p` sets it to what `yy` copied.
 `yy` works in view too, since copying changes nothing, and copies what the cell
 stores to the system clipboard as well. Each change is one set in the log, so a
-count before one is dropped: `3x` would record a set per cell. While a file is still indexing, `G` stops at the last row the engine
+count before one is dropped: `3x` would record a set per cell.
+
+`.` makes the last insert, `x` or `p` again on the selected cell. An insert
+opened with `a` that only added to the end repeats as that text appended, one
+opened with `i` that only added to the start repeats as a prepend, and anything
+else repeats as the whole value. It is what makes three fixes cheap: on a column
+where 12 should read 12.00, `a` `.00` Esc `j` `.` `j` `.` fixes three cells and
+brings the recogniser's offer for the rest. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 

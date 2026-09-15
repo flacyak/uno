@@ -83,6 +83,8 @@ export type Action =
   | { t: "yank" }
   /** p and P: set the cell to what was yanked. */
   | { t: "put" }
+  /** .: do the last insert, x or p again, on the selected cell. */
+  | { t: "repeat" }
   | { t: "say"; text: string };
 
 export interface Step {
@@ -218,6 +220,8 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
     case "P":
       // A cell has no before and after, so P puts where p does.
       return done(change(mode, press, { t: "put" }));
+    case ".":
+      return done(change(mode, press, { t: "repeat" }));
   }
   return done(NONE);
 }
@@ -291,6 +295,41 @@ function ctrlMotion(key: string): Motion | undefined {
 export function leavesInsert(key: string, composing: boolean): boolean {
   if (composing || key === "Process") return false;
   return key === "Enter" || key === "Escape";
+}
+
+/** A change . can make again on another cell. */
+export type Change =
+  | { t: "set"; value: string }
+  | { t: "append"; text: string }
+  | { t: "prepend"; text: string };
+
+/**
+ * changeOf works out what an insert did by comparing the value it left with the
+ * one it started from. Opened at the end and only added to there, it repeats as
+ * an append; opened at the start and only added to there, as a prepend.
+ * Anything else repeats as the whole value, which is still right for the common
+ * case, several cells holding the same bad value.
+ */
+export function changeOf(caret: Caret, before: string, after: string): Change {
+  if (caret === "end" && after.startsWith(before)) {
+    return { t: "append", text: after.slice(before.length) };
+  }
+  if (caret === "start" && after.endsWith(before)) {
+    return { t: "prepend", text: after.slice(0, after.length - before.length) };
+  }
+  return { t: "set", value: after };
+}
+
+/** replay is what a change makes of a cell's value. */
+export function replay(change: Change, value: string): string {
+  switch (change.t) {
+    case "set":
+      return change.value;
+    case "append":
+      return value + change.text;
+    case "prepend":
+      return change.text + value;
+  }
 }
 
 /** Where the selection is and what is around it: what a motion needs to land. */

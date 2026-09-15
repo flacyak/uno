@@ -517,6 +517,25 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: ". appends what a added, on the next cells down",
+    script: `
+      const region = (row) => document.querySelectorAll("tbody tr")[row].children[2].textContent;
+      for (const key of ["g", "g", "0", "l", "a"]) await press(key);
+      const input = document.querySelector(".cell-editor");
+      if (input === null) return "a did not open an editor";
+      input.value = "West-q3"; // typed after West, where a put the caret
+
+      for (const key of ["Escape", "j", ".", "j", "."]) await press(key);
+      if (!(await until(() => text("#status-file").includes("9 edits")))) {
+        return "status bar says: " + text("#status-file");
+      }
+      const got = [0, 1, 2, 3].map(region);
+      return JSON.stringify(got) === JSON.stringify(["West-q3", "East-q3", "North-q3", "South"])
+        ? ""
+        : "region reads " + JSON.stringify(got);
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
