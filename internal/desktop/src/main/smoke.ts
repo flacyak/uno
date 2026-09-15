@@ -536,6 +536,35 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    name: "ga applies the banner's offer from another column, and says when there is none",
+    script: `
+      for (const key of ["Escape", "g", "a"]) await press(key);
+      const said = text("#status-msg");
+      if (!said.includes("i or Ctrl+E")) return "ga in view says " + JSON.stringify(said);
+
+      // Back in transform, the recogniser asks again about the three fixes.
+      await press("i");
+      const banner = document.querySelector("#banner");
+      if (!(await until(() => !banner.hidden && banner.textContent.includes("region")))) {
+        return "the banner says " + JSON.stringify(banner.textContent);
+      }
+
+      for (const key of ["4", "l", "g", "a"]) await press(key); // from revenue
+      const region = () => document.querySelectorAll("tbody tr")[3].children[2].textContent;
+      if (!(await until(() => region() === "South-q3"))) return "row 4 reads " + JSON.stringify(region());
+      if (!(await until(() => text("#status-file").includes("10 edits")))) {
+        return "status bar says: " + text("#status-file");
+      }
+      if (!banner.hidden) return "the banner stayed after ga";
+      if (text("#status-cell") !== "revenue · row 3") return "ga moved the selection to " + text("#status-cell");
+
+      await press("g");
+      await press("a");
+      const none = text("#status-msg");
+      return none === "nothing to apply" ? "" : "ga with no banner says " + JSON.stringify(none);
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
