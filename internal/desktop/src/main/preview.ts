@@ -22,6 +22,8 @@ import { join } from "node:path";
 
 import type { BrowserWindow, Rectangle } from "electron";
 
+import { through } from "./driven.ts";
+
 /**
  * How often the camera tries for a frame.
  *
@@ -275,6 +277,9 @@ async function film(
  * so every one of them lands wherever the window would send a real one. A
  * preview that dispatched its own events would be filming an assertion about the
  * app rather than the app.
+ *
+ * The window ignores real input while it is driven, so each one is sent inside
+ * `through`, which lets the story's input past and nobody else's.
  */
 async function play(win: BrowserWindow, start: number): Promise<void> {
   const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
@@ -284,8 +289,10 @@ async function play(win: BrowserWindow, start: number): Promise<void> {
 
   // A file opens in view, where nothing a key does changes it.
   await at(BEAT.transform);
-  win.webContents.sendInputEvent({ type: "keyDown", keyCode: "E", modifiers: ["control"] });
-  win.webContents.sendInputEvent({ type: "keyUp", keyCode: "E", modifiers: ["control"] });
+  through(win, () => {
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "E", modifiers: ["control"] });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "E", modifiers: ["control"] });
+  });
 
   // Three corrections, each the same gesture: arrows to reach the cell, the
   // value typed where it sits, Enter to commit. The repetition is the argument.
@@ -339,10 +346,12 @@ async function click(win: BrowserWindow, selector: string): Promise<void> {
     })()
   `)) as { x: number; y: number };
 
-  win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
   await sleep(HOVER);
-  win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
-  win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
+  through(win, () => {
+    win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+    win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
+  });
 }
 
 /** One cell corrected without ever leaving the keyboard. */
@@ -372,9 +381,11 @@ async function fix(
   // character at a time rather than assigned, because a field that fills
   // instantly reads as a screenshot rather than as an edit.
   for (const ch of value.slice(1)) {
-    win.webContents.sendInputEvent({ type: "keyDown", keyCode: ch });
-    win.webContents.sendInputEvent({ type: "char", keyCode: ch });
-    win.webContents.sendInputEvent({ type: "keyUp", keyCode: ch });
+    through(win, () => {
+      win.webContents.sendInputEvent({ type: "keyDown", keyCode: ch });
+      win.webContents.sendInputEvent({ type: "char", keyCode: ch });
+      win.webContents.sendInputEvent({ type: "keyUp", keyCode: ch });
+    });
     await sleep(KEYSTROKE);
   }
 
@@ -383,8 +394,10 @@ async function fix(
 }
 
 function press(win: BrowserWindow, keyCode: string): void {
-  win.webContents.sendInputEvent({ type: "keyDown", keyCode });
-  win.webContents.sendInputEvent({ type: "keyUp", keyCode });
+  through(win, () => {
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode });
+  });
 }
 
 /**
