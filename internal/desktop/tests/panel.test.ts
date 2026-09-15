@@ -45,7 +45,7 @@ function objects(n: number): Entry[] {
 }
 
 const PEEKED: Peeked = {
-  label: { t: "read", delimiter: ",", header: "first" },
+  label: { t: "read", delimiter: ",", header: "first", charset: "UTF-8" },
   header: ["date", "amount"],
   rows: [["2025-10-01", "12.00"]],
 };

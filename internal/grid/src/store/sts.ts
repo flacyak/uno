@@ -12,6 +12,7 @@
 
 import { encode, signV4 } from "./s3.ts";
 import type { AwsCredentials } from "./s3.ts";
+import { entities } from "./s3xml.ts";
 
 /** Keys AWS handed out for a while, and when they stop working. */
 export interface Session {
@@ -120,6 +121,14 @@ export interface RoleAsk {
 const STS_VERSION = "2011-06-15";
 
 /**
+ * What STS takes for a RoleSessionName: 2 to 64 of the characters its API
+ * reference lists. It is checked here because the name can come off a
+ * profile's role_session_name, and a refusal that says which setting is wrong
+ * is better than STS's ValidationError sent back across the network.
+ */
+const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
+
+/**
  * assumeRole takes on a role with the credentials that are allowed to, and
  * hands back the role's session.
  *
@@ -139,6 +148,12 @@ export async function assumeRole(
   source: Omit<AwsCredentials, "region">,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
+  if (!SESSION_NAME.test(ask.sessionName)) {
+    throw new Error(
+      `${ask.roleArn} cannot be assumed as ${JSON.stringify(ask.sessionName)} · ` +
+        "a role session name is 2 to 64 of letters, digits and +=,.@_-",
+    );
+  }
   const go = opts.fetch ?? fetch;
   const base = (opts.endpoint ?? `https://sts.${ask.region}.amazonaws.com`).replace(/\/+$/, "");
   const query: Array<[string, string]> = [
@@ -194,16 +209,10 @@ export async function assumeRole(
  * undefined where there is none. STS's answer is four elements deep and uno
  * reads six names out of it, so this is the whole of the XML it needs: the
  * store/s3xml.ts reader is ListBucketResult's, and its rules are that reply's.
+ * The entities are XML's own, and undone the way that reader undoes them.
  */
 function element(xml: string, name: string): string | undefined {
   const m = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(xml);
   if (m === null) return undefined;
-  return m[1]!.replace(/&(lt|gt|quot|apos|amp|#\d+|#x[0-9a-f]+);/gi, (_, e: string) => {
-    const named: Record<string, string> = { lt: "<", gt: ">", quot: '"', apos: "'", amp: "&" };
-    const lower = e.toLowerCase();
-    if (lower in named) return named[lower]!;
-    return String.fromCodePoint(
-      lower.startsWith("#x") ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10),
-    );
-  });
+  return entities(m[1]!);
 }

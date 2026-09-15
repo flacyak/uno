@@ -7,8 +7,16 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { against, baseOf, dirOf, isAbsolute, relativeTo } from "../../src/document/index.ts";
-import { resolvedPath, storedPath } from "../../src/document/index.ts";
+import {
+  against,
+  baseOf,
+  dirOf,
+  isAbsolute,
+  relativeTo,
+  resolvedPath,
+  samePath,
+  storedPath,
+} from "../../src/document/index.ts";
 
 test("a path under the workspace's folder is written down relative to it", () => {
   expect(storedPath("/home/cpa/q4/sales.csv", "/home/cpa/q4/books.uno")).toBe("sales.csv");
@@ -78,4 +86,11 @@ test("a path splits into its folder and its name, either way round", () => {
   expect(baseOf("sales.csv")).toBe("sales.csv");
   expect(relativeTo("/home/cpa/q4/sales.csv", "/home/cpa/q4")).toBe("sales.csv");
   expect(relativeTo("/home/cpa/q4", "/home/cpa/q4"), "a folder is not under itself").toBe("");
+});
+
+test("two paths are the same place whichever way their slashes lean", () => {
+  expect(samePath("C:\\data\\q4\\sales.csv", "C:/data/q4/sales.csv")).toBe(true);
+  expect(samePath("/home/cpa/q4/sales.csv", "/home/cpa/q4/sales.csv")).toBe(true);
+  expect(samePath("/home/cpa/q4/sales.csv", "/home/cpa/q4/Sales.csv")).toBe(false);
+  expect(samePath("/home/cpa/q4/sales.csv", "/home/cpa/q4")).toBe(false);
 });

@@ -225,6 +225,25 @@ describe("uno never signs in for anybody", () => {
     );
   });
 
+  // `aws sso login` writes the cache file in place, so a sign-in cut short
+  // leaves half a file behind. It is a sign-in uno cannot read, said in the
+  // same words as any other, and the command that mends it is the same.
+  test("a cache file that is not JSON says the same", async () => {
+    const env = await home({});
+    const name = createHash("sha1").update("acme").digest("hex") + ".json";
+    const cached = join(env.HOME, ".aws", "sso", "cache", name);
+    await writeFile(cached, `{"startUrl": "https://acme.awsapps.com/start", "accessTok`);
+    await expect(profileCredentials("finance-sso", env)()).rejects.toThrow(
+      "the AWS profile finance-sso is not signed in · its cached SSO sign-in could not be read · sign in with `aws sso login --profile finance-sso`",
+    );
+
+    await writeFile(cached, "null");
+    await expect(profileCredentials("finance-sso", env)()).rejects.toThrow(
+      "the AWS profile finance-sso is not signed in · its cached SSO sign-in could not be read · sign in with `aws sso login --profile finance-sso`",
+    );
+    expect(p.seen).toEqual([]);
+  });
+
   // A token that has not expired on disk but was revoked at the portal.
   test("a token the portal turns away says the same", async () => {
     const env = await home({

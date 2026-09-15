@@ -1,6 +1,6 @@
-import { atoi, compile, isDigit, isLetter, isSpace, quote, runes, unquote } from "../go/index.ts";
+import { atoi, isDigit, isLetter, isSpace, quote, runes, unquote } from "../go/index.ts";
 import type { Pos, Step } from "./steps.ts";
-import { MAX_PARTS, MAX_STEPS, newReplace } from "./steps.ts";
+import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from "./steps.ts";
 import type { Program } from "./program.ts";
 
 /**
@@ -80,9 +80,11 @@ class Parser {
   }
 
   step(): Step {
+    this.space();
+    const at = this.i + 1;
     const name = this.ident();
     if (name === "") {
-      throw new Error(`expected a step name at character ${this.i + 1}, ${this.here()}`);
+      throw new Error(`expected a step name at character ${at}, ${this.here()}`);
     }
     this.expect("(");
 
@@ -107,7 +109,7 @@ class Parser {
         st = { kind: "case", up: false };
         break;
       default:
-        throw new Error(`unknown step ${quote(name)} at character ${this.i - name.length}`);
+        throw new Error(`unknown step ${quote(name)} at character ${at}`);
     }
 
     this.expect(")");
@@ -184,13 +186,7 @@ class Parser {
       throw new Error(`match number 0 at character ${this.i}: matches are counted from 1`);
     }
 
-    let compiled: RegExp;
-    try {
-      compiled = compile(re);
-    } catch (err) {
-      throw new Error(`pattern /${re}/: ${(err as Error).message}`);
-    }
-    const p: Pos = { kind: "match", re: compiled, src: re, k, atEnd: name === "end" };
+    const p: Pos = { kind: "match", re: compilePattern(re), src: re, k, atEnd: name === "end" };
     this.expect(")");
     return p;
   }
