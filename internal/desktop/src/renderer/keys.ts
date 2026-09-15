@@ -89,11 +89,16 @@ export type Action =
   | { t: "apply" }
   /** gx: Not now on the banner. */
   | { t: "dismiss" }
-  /** : opens the command line. */
-  | { t: "prompt"; lead: ":" }
+  /** :, / and ?: the command line, or a search down or up. */
+  | { t: "prompt"; lead: Lead }
   /** ]f and [f: the next and previous cell in the column that does not parse as its kind. */
   | { t: "unparsed"; dir: 1 | -1 }
+  /** n and N: the last search again, the same way or the other. */
+  | { t: "next"; reverse: boolean }
   | { t: "say"; text: string };
+
+/** What the command line opens with: a command, or a search down or up. */
+export type Lead = ":" | "/" | "?";
 
 export interface Step {
   pending: Pending;
@@ -234,6 +239,14 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
       return done(change(mode, press, { t: "repeat" }));
     case ":":
       return done({ t: "prompt", lead: ":" });
+    case "/":
+      return done({ t: "prompt", lead: "/" });
+    case "?":
+      return done({ t: "prompt", lead: "?" });
+    case "n":
+      return done({ t: "next", reverse: false });
+    case "N":
+      return done({ t: "next", reverse: true });
   }
   return done(NONE);
 }

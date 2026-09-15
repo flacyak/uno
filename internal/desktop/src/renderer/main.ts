@@ -23,7 +23,7 @@ import type { Host } from "../shared/host.ts";
 import { Grid } from "./grid.ts";
 import { electronHost } from "./host.ts";
 import { command } from "./keys.ts";
-import type { Command } from "./keys.ts";
+import type { Command, Lead } from "./keys.ts";
 import { Workspace } from "./workspace.ts";
 
 /** The extensions the app will try to open. Anything else is very likely a
@@ -46,6 +46,10 @@ class Shell {
   private dismissed = "";
   /** Counts finds, so the answer to one a person has since asked again over is dropped. */
   private finds = 0;
+  /** What the open command line began with. */
+  private lead: Lead = ":";
+  /** The last text searched for, and which way, for n and N. */
+  private searched: { text: string; dir: 1 | -1 } | undefined;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
@@ -103,6 +107,9 @@ class Shell {
             return;
           case "unparsed":
             this.findUnparsed(action.dir);
+            return;
+          case "next":
+            this.next(action.reverse);
             return;
         }
       },
@@ -386,6 +393,39 @@ class Shell {
   }
 
   /**
+   * search is / and ?: the next cell down or up this column that shows some
+   * text. Enter on nothing searches for the last text again, as vim does.
+   */
+  private search(typed: string, dir: 1 | -1): void {
+    const text = typed === "" ? this.searched?.text : typed;
+    if (text === undefined) {
+      this.say("nothing searched yet", true);
+      return;
+    }
+    this.searched = { text, dir };
+    this.searchFor(text, dir);
+  }
+
+  /** next is n and N: the last search again, the same way or the other. */
+  private next(reverse: boolean): void {
+    const last = this.searched;
+    if (last === undefined) {
+      this.say("nothing searched yet", true);
+      return;
+    }
+    this.searchFor(last.text, reverse === (last.dir === 1) ? -1 : 1);
+  }
+
+  private searchFor(text: string, dir: 1 | -1): void {
+    const w = this.workspace;
+    if (w === undefined) return;
+    const { row, col } = this.grid.selection();
+    const header = w.rows.columns[col]?.header ?? "this column";
+    const where = `${dir === 1 ? "below" : "above"} row ${(row + 1).toLocaleString()}`;
+    void this.find({ t: "text", text }, dir, `"${text}" is not ${where} in ${header}`);
+  }
+
+  /**
    * find asks the engine for the next row down or up this column that matches,
    * and selects it. The engine reads the file for it, so it reaches rows no band
    * holds. `missing` is what to say when there is none.
@@ -421,8 +461,9 @@ class Shell {
   // ---------------------------------------------------------- command line
 
   /**
-   * wirePrompt runs the one-line prompt in the status bar. Enter runs what was
-   * typed and Esc closes it, as do clicking away and deleting the colon.
+   * wirePrompt runs the one-line prompt in the status bar: a command after :, a
+   * search after / or ?. Enter runs what was typed and Esc closes it, as do
+   * clicking away and deleting the character it opened with.
    */
   private wirePrompt(): void {
     const input = this.statusCmd;
@@ -435,18 +476,20 @@ class Shell {
         this.closePrompt();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        const typed = input.value;
+        const typed = input.value.slice(1);
         this.closePrompt();
-        this.run(command(typed.slice(1)));
+        if (this.lead === ":") this.run(command(typed));
+        else this.search(typed, this.lead === "/" ? 1 : -1);
       }
     });
     input.addEventListener("input", () => {
-      if (!input.value.startsWith(":")) this.closePrompt();
+      if (!input.value.startsWith(this.lead)) this.closePrompt();
     });
     input.addEventListener("blur", () => this.closePrompt());
   }
 
-  private prompt(lead: ":"): void {
+  private prompt(lead: Lead): void {
+    this.lead = lead;
     this.statusBar.classList.add("prompting");
     this.statusCmd.hidden = false;
     this.statusCmd.value = lead;

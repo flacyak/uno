@@ -85,7 +85,9 @@ job.
 as its badge says, which is the work uno is for: `]f` `.` `]f` `.` `]f` `.` `ga`.
 The band holds a few screens of rows, so the engine reads the file for them and
 they reach any row. While a file is still indexing they search what has been
-indexed and say how much that was. While a file is still indexing, `G` stops at the last row the engine
+indexed and say how much that was. `/` and `?` search down and up the column
+for text a cell shows, the same way, and `n` and `N` search again in the same
+direction or the other. While a file is still indexing, `G` stops at the last row the engine
 can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
 work as before.
 

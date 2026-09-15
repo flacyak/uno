@@ -193,6 +193,13 @@ test("]f and [f look down and up the column, in either mode", () => {
   expect(press("view", "]x")).toEqual({ pending: NOTHING, action: { t: "none" } });
 });
 
+test("/ and ? open a search down and up, and n and N search again", () => {
+  expect(action("view", "/")).toEqual({ t: "prompt", lead: "/" });
+  expect(action("transform", "?")).toEqual({ t: "prompt", lead: "?" });
+  expect(action("view", "n")).toEqual({ t: "next", reverse: false });
+  expect(action("transform", "N")).toEqual({ t: "next", reverse: true });
+});
+
 test("the keys that were there before keep working", () => {
   expect(action("view", "<ArrowDown>")).toEqual({ t: "move", motion: "down" });
   expect(action("view", "<Tab>")).toEqual({ t: "move", motion: "right" });
