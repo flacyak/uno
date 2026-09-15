@@ -8,7 +8,7 @@
 import type { Mode, Pending, Press, Step } from "../keys.ts";
 
 /** The name the menu and the saved setting know a strategy by. */
-export type InputName = "vim-style";
+export type InputName = "default" | "vim-style";
 
 /** What a key in the cell editor does. Undefined leaves the key to the field. */
 export type EditorKey = "commit" | "cancel" | undefined;
