@@ -41,6 +41,10 @@ Saving still embeds the source in the `.uno`, so a source over 256 MB is refused
 by name until the format can point at the file instead. A `.uno` opens through
 the engine too, with its log replayed.
 
+Opening a file closes the one open now. Over unsaved edits, Ctrl+O says so
+first, and a second Ctrl+O while that is still on screen opens anyway, as `:e!`
+does.
+
 ## Keys
 
 The grid reads keys the way vim does. View is a normal mode that cannot write,

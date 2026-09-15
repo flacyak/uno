@@ -16,6 +16,12 @@ import type { BrowserWindow } from "electron";
 
 interface Check {
   name: string;
+  /**
+   * A menu item's message, sent before the script runs the way the menu sends
+   * it. An accelerator is the main process's, so a key the page dispatches
+   * never reaches one.
+   */
+  send?: string;
   /** Runs in the renderer. Returns a message on failure, or "" when it passes. */
   script: string;
 }
@@ -685,6 +691,39 @@ const CHECKS: Check[] = [
     `,
   },
   {
+    // A check that fails here opens the file dialog instead, and the run times out.
+    name: "Ctrl+O over unsaved edits says so, and opens nothing",
+    send: "menu:open",
+    script: `
+      const warning = "unsaved edits · Ctrl+S first, or Ctrl+O again to drop them";
+      if (!(await until(() => text("#status-msg") === warning))) {
+        return "Ctrl+O over unsaved edits says " + JSON.stringify(text("#status-msg"));
+      }
+      // Moving says nothing, so the warning stays, and a second Ctrl+O would open.
+      await press("j");
+      if (text("#status-msg") !== warning) return "moving took the warning away";
+
+      // Anything the status bar says next replaces the warning, and the next
+      // Ctrl+O has to warn again.
+      await press(":");
+      const input = document.querySelector("#status-cmd");
+      input.value = ":foo";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await frame();
+      return text("#status-msg") === "not a command: :foo" ? "" : "the status bar says " + JSON.stringify(text("#status-msg"));
+    `,
+  },
+  {
+    name: "a Ctrl+O warning that was replaced is given again",
+    send: "menu:open",
+    script: `
+      const warning = "unsaved edits · Ctrl+S first, or Ctrl+O again to drop them";
+      return (await until(() => text("#status-msg") === warning))
+        ? ""
+        : "the second Ctrl+O says " + JSON.stringify(text("#status-msg"));
+    `,
+  },
+  {
     name: "the empty state is out of the way once a file is open",
     script: `
       const empty = document.querySelector("#empty");
@@ -739,6 +778,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
 
   for (const check of CHECKS) {
     try {
+      if (check.send !== undefined) win.webContents.send(check.send);
       const failure = (await win.webContents.executeJavaScript(
         `(async () => { ${PRELUDE} { ${check.script} } })()`,
       )) as string;
