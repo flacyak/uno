@@ -7,6 +7,7 @@ import {
   LOCKED,
   NOTHING,
   changeOf,
+  command,
   interpret,
   isJump,
   leavesInsert,
@@ -159,6 +160,28 @@ test("ga applies the banner's offer and gx says not now, in transform only", () 
 
   const g = { count: "", keys: "g" };
   expect(interpret("transform", g, held("a"))?.action, "a held after g").toEqual({ t: "none" });
+});
+
+// ----------------------------------------------------------- command line
+
+test(": opens the command line in either mode, and drops a count", () => {
+  expect(action("view", ":")).toEqual({ t: "prompt", lead: ":" });
+  expect(press("transform", "3:")).toEqual({
+    pending: NOTHING,
+    action: { t: "prompt", lead: ":" },
+  });
+});
+
+test("the command line reads :w, :sav, :e, :e! and a row number", () => {
+  expect(command("w")).toEqual({ t: "write" });
+  expect(command(" write ")).toEqual({ t: "write" });
+  expect(command("sav")).toEqual({ t: "save-as" });
+  expect(command("e")).toEqual({ t: "open", force: false });
+  expect(command("e!")).toEqual({ t: "open", force: true });
+  expect(command("5000000")).toEqual({ t: "row", row: 5_000_000 });
+  expect(command("")).toEqual({ t: "none" });
+  expect(command("q"), "closing is the window's job").toEqual({ t: "unknown", text: "q" });
+  expect(command("foo")).toEqual({ t: "unknown", text: "foo" });
 });
 
 test("the keys that were there before keep working", () => {
