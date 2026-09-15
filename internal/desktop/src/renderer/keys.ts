@@ -77,6 +77,8 @@ export type Action =
   /** Open the editor. `transform` switches to transform first, which is `a` in view. */
   | { t: "insert"; caret: Caret; transform: boolean }
   | { t: "undo" }
+  /** Ctrl+r: record again what u took back. */
+  | { t: "redo" }
   /** x: set the cell to "". */
   | { t: "clear" }
   /** yy: copy what the cell stores. It changes nothing, so view allows it. */
@@ -137,6 +139,8 @@ export function interpret(mode: Mode, pending: Pending, press: Press): Step | un
   const count = pending.count === "" ? undefined : Number(pending.count);
 
   if (press.ctrl) {
+    // Redo, which is why the reload item gave up Ctrl+R.
+    if (key.toLowerCase() === "r") return done(change(mode, press, { t: "redo" }));
     const motion = ctrlMotion(key);
     return motion === undefined ? undefined : done(move(motion, count));
   }

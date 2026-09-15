@@ -83,6 +83,8 @@ export class View {
   private survey: AbortController | undefined;
   /** The find running now. A newer one stops it. */
   private finding: AbortController | undefined;
+  /** What undo took back, newest last, for redo. A new edit empties it. */
+  private undone: Edit[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private waiters: Waiter[] = [];
   private failed: Error | undefined;
@@ -256,7 +258,31 @@ export class View {
       const last = edits.pop();
       if (last === undefined) throw new Error("there is nothing to undo");
       this.schema = Schema.of(this.format.columns, this.schema.rows, edits);
+      this.undone.push(last);
       return this.changed(last);
+    });
+  }
+
+  /**
+   * redo records again the edit undo last took back. It is one fold, like any
+   * edit. A new edit empties what there was to redo, because the log those
+   * edits followed no longer exists.
+   */
+  redo(): Promise<Changed> {
+    return this.serially(async () => {
+      this.refuseInView();
+      const e = this.undone.pop();
+      if (e === undefined) throw new Error("there is nothing to redo");
+
+      const index = this.index;
+      this.schema.rows = index.complete ? index.counted : index.readable();
+      try {
+        this.schema.record(e);
+      } catch (err) {
+        this.undone.push(e);
+        throw err;
+      }
+      return this.changed(e);
     });
   }
 
@@ -289,6 +315,7 @@ export class View {
     }
 
     schema.record(e);
+    this.undone = [];
     return this.changed(e);
   }
 
