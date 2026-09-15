@@ -173,6 +173,28 @@ test("replay rebuilds an applied column", () => {
   expect(rebuilt.columns[2]!.flagged).toBe(false);
 });
 
+// The recogniser learns a program from cells a person fixed, and those were
+// typed before the apply that follows. Running a program that is not idempotent
+// over them again would fix them twice: West-q3 would read West-q3-q3.
+test("apply leaves a cell it would have fixed the same way, and rewrites one it would not", () => {
+  const s = fixture();
+  s.set(0, 1, "West-q3");
+  s.set(1, 1, "Eas");
+  s.set(1, 1, "East-q3"); // a slip on the way is still East to East-q3
+  s.set(2, 1, "N");
+  s.apply(1, parseProgram('concat(slice(0, len), "-q3")'));
+
+  expect(s.raw(0, 1)).toBe("West-q3");
+  expect(s.raw(1, 1)).toBe("East-q3");
+  expect(s.raw(2, 1), "N is not what the program makes of North").toBe("N-q3");
+
+  const rebuilt = fixture();
+  rebuilt.replay(s.edits());
+  for (let row = 0; row < 3; row++) {
+    expect(rebuilt.raw(row, 1), `row ${row} after replay`).toBe(s.raw(row, 1));
+  }
+});
+
 // A log naming a program this build cannot read has to fail before a single
 // cell moves. Refusing to open a workspace is recoverable; half-transforming
 // one is not.

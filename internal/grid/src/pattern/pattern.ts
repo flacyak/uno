@@ -12,8 +12,8 @@
 import { compareStrings, quoteMeta } from "../go/index.ts";
 import type { Program } from "../program/index.ts";
 import { MAX_STEPS, apply as applyProgram, text as programText } from "../program/index.ts";
-import type { Edit, Sheet } from "../sheet/index.ts";
-import { Op } from "../sheet/index.ts";
+import type { Edit, Sheet, Written } from "../sheet/index.ts";
+import { Op, settled } from "../sheet/index.ts";
 import type { Example } from "./induce.ts";
 import {
   droppedChars,
@@ -89,6 +89,8 @@ interface ColumnSnapshot {
   col: number;
   header: string;
   values: string[];
+  /** What was typed into each cell, where anything was. */
+  written: Array<Written | undefined>;
   examples: Example[];
 }
 
@@ -120,7 +122,7 @@ export class Snapshot {
     for (const c of this.cols) {
       const s = Survey.start(c.col, c.header, c.examples);
       if (s === undefined) continue;
-      s.add(c.values, 0);
+      s.add(c.values, 0, c.written);
       const p = s.proposal();
       if (p !== undefined) return p;
     }
@@ -140,9 +142,13 @@ export function snap(s: Sheet | undefined): Snapshot {
     if (ex === undefined || ex.length < MIN_EXAMPLES) continue;
 
     const values: string[] = [];
-    for (let row = 0; row < s.rows(); row++) values.push(s.raw(row, col));
+    const written: Array<Written | undefined> = [];
+    for (let row = 0; row < s.rows(); row++) {
+      values.push(s.raw(row, col));
+      written.push(s.written(row, col));
+    }
 
-    cols.push({ col, header: s.columns[col]!.header, values, examples: ex });
+    cols.push({ col, header: s.columns[col]!.header, values, written, examples: ex });
   }
   return new Snapshot(cols);
 }
@@ -221,11 +227,14 @@ export class Survey {
    * add reads the column's values for a run of rows starting at `first`. Runs
    * arrive in row order, so the sample is the first changes in the column rather
    * than the first ones read.
+   *
+   * `written` is what was typed into each of those cells, where anything was,
+   * so a cell already fixed the way a program would fix it is not counted.
    */
-  add(values: readonly string[], first: number): void {
+  add(values: readonly string[], first: number, written: readonly (Written | undefined)[]): void {
     for (let i = 0; i < this.readings.length; i++) {
       const r = this.readings[i]!;
-      scan(r, values, first);
+      scan(r, values, first, written);
 
       // A reading with a candidate that claims a cell outranks every reading
       // after it, whatever those go on to find, so they are not read again.
@@ -375,14 +384,22 @@ function reading(ex: Example[], cands: Program[]): Reading {
  * does not claim, so the count is exactly the number of cells the person is
  * being asked about.
  */
-function scan(r: Reading, values: readonly string[], first: number): void {
+function scan(
+  r: Reading,
+  values: readonly string[],
+  first: number,
+  written: readonly (Written | undefined)[],
+): void {
   const outs: string[] = [];
 
   for (let i = 0; i < values.length; i++) {
     const v = values[i]!;
+    const w = written[i];
     for (let j = 0; j < r.cands.length; j++) {
       const c = r.cands[j]!;
-      const out = applyProgram(c.prog, v);
+      // An apply leaves a cell the program is settled over, so the person is not
+      // being asked about it.
+      const out = w !== undefined && settled(c.prog, w) ? v : applyProgram(c.prog, v);
       outs[j] = out;
       if (out === v) continue;
       c.affects++;

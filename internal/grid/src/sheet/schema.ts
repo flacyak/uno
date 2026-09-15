@@ -25,6 +25,12 @@ export interface Written {
   now: string;
   /** What a notation cell shows. Undefined for a typed value. */
   rendered?: string;
+  /**
+   * What the cell held before the typing this write ends began: its own `was`
+   * for the first write since the last apply over the column, and the first's
+   * for any after it. Undefined for notation.
+   */
+  was?: string;
 }
 
 /** A program run over a column by the edit numbered seq. */
@@ -156,7 +162,7 @@ export class Schema {
       case Op.Set:
         this.refuseBound(e, "typed into");
         this.refuseRow(e);
-        this.write(e.row, e.col, { seq: e.seq, now: e.now });
+        this.write(e.row, e.col, { seq: e.seq, now: e.now, was: this.firstWas(e) });
         return;
 
       case Op.Note: {
@@ -217,6 +223,21 @@ export class Schema {
     if (e.row < 0 || e.row >= this.rows) {
       throw new Error(`edit ${e.seq}: row ${e.row} is outside the ${this.rows} rows of this sheet`);
     }
+  }
+
+  /**
+   * firstWas is what a set's cell held before the typing it ends began. A cell
+   * typed into twice is one change, from before the first write to after the
+   * last, and an apply over the column starts afresh -- the same reading the
+   * recogniser's examples take. A log line without a `was` read it as "", as
+   * the file does.
+   */
+  private firstWas(e: Edit): string {
+    const w = this.written.get(e.row)?.get(e.col);
+    const runs = this.runs.get(e.col);
+    const applied = runs === undefined ? 0 : runs[runs.length - 1]!.seq;
+    if (w?.was !== undefined && w.seq > applied) return w.was;
+    return e.was ?? "";
   }
 
   private write(row: number, col: number, w: Written): void {

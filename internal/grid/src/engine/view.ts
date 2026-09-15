@@ -26,7 +26,7 @@ import {
   isDate,
   valueAt,
 } from "../sheet/index.ts";
-import type { Edit } from "../sheet/index.ts";
+import type { Edit, Written } from "../sheet/index.ts";
 import type { ByteSource } from "../store/index.ts";
 import { bytesSource } from "../store/index.ts";
 import { indexPass } from "./pass.ts";
@@ -401,8 +401,12 @@ export class View {
         if (signal.aborted) return;
 
         const values: string[] = [];
-        for (let r = row; r < end; r++) values.push(valueAt(schema, r, col, records[r - from]!));
-        survey.add(values, row);
+        const written: Array<Written | undefined> = [];
+        for (let r = row; r < end; r++) {
+          values.push(valueAt(schema, r, col, records[r - from]!));
+          written.push(schema.writtenIn(r)?.get(col));
+        }
+        survey.add(values, row, written);
         row = end;
 
         const now = Date.now();

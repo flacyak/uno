@@ -373,6 +373,43 @@ test("three fixes stream an offer that ends as the one snap makes", async () => 
   }
 });
 
+test("an offer counts and applies around the fixes it was learned from", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    await engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
+    await indexed(engine);
+    engine.mode(true);
+
+    const final = new Promise<Offer>((resolve) => {
+      engine.onOffer = (o) => {
+        if (o?.complete === true) resolve(o);
+      };
+    });
+    const fixes = [
+      [0, "West-q3"],
+      [1, "East-q3"],
+      [2, "North-q3"],
+    ] as const;
+    for (const [row, now] of fixes) await engine.edit({ op: Op.Set, row, col: REGION, now });
+    const offer = await final;
+
+    const sheet = read("sales-q3.csv", bytes);
+    for (const [row, now] of fixes) sheet.set(row, REGION, now);
+    const p = snap(sheet).propose()!;
+
+    // Appending is not idempotent, so the three fixed rows are the ones left out.
+    expect(p.affects).toBe(4809);
+    expect(offer).toMatchObject({ col: REGION, program: programText(p.prog), affects: 4809 });
+    expect(offer.sample).toEqual(p.sample);
+
+    await engine.edit({ op: Op.Apply, row: NO_ROW, col: REGION, now: offer.program });
+    const { rows } = await engine.rows(0, 4);
+    expect(rows.map((r) => r[REGION])).toEqual(["West-q3", "East-q3", "North-q3", "South-q3"]);
+  } finally {
+    done();
+  }
+});
+
 test("a .uno opens with its log applied, and saves back", async () => {
   const saved = read("sales-q3.csv", bytes);
   saved.set(0, UNITS, "1204");

@@ -91,11 +91,12 @@ test("a survey fed in pieces proposes what one pass does", () => {
   const whole = propose(s)!;
 
   const values = Array.from({ length: s.rows() }, (_, row) => s.raw(row, UNITS_COL));
+  const written = Array.from({ length: s.rows() }, (_, row) => s.written(row, UNITS_COL));
   const survey = Survey.start(UNITS_COL, "units", gather(s.edits()).get(UNITS_COL)!)!;
 
   let partial: Proposal | undefined;
   for (let first = 0; first < values.length; first += 7) {
-    survey.add(values.slice(first, first + 7), first);
+    survey.add(values.slice(first, first + 7), first, written.slice(first, first + 7));
     if (first === 700) partial = survey.proposal();
   }
 
@@ -116,7 +117,7 @@ test("ambiguity found in the last piece still counts", () => {
   expect(whole.ambiguous).toBe(true);
 
   const survey = Survey.start(0, "code", gather(s.edits()).get(0)!)!;
-  for (let row = 0; row < s.rows(); row++) survey.add([s.raw(row, 0)], row);
+  for (let row = 0; row < s.rows(); row++) survey.add([s.raw(row, 0)], row, [s.written(row, 0)]);
   expect(survey.proposal()).toEqual(whole);
 });
 
@@ -193,6 +194,29 @@ test("one inconsistent example sinks the proposal", () => {
   s.set(2, 0, "n/a");
 
   expect(propose(s)).toBeUndefined();
+});
+
+// Remove commas leaves a fixed cell as it is, so it never showed: the count has
+// to leave out cells already fixed whatever the program would do to them again.
+test("cells fixed by hand are not counted, even by a program that is not idempotent", () => {
+  const s = oneCol("region", "West", "East", "North", "South", "West");
+  s.set(0, 0, "West-q3");
+  s.set(1, 0, "East-q3");
+  s.set(2, 0, "North-q3");
+
+  const p = propose(s);
+  expect(p).toBeDefined();
+  expect(p!.affects).toBe(2);
+  expect(p!.sample.map((c) => c.row)).toEqual([3, 4]);
+
+  s.apply(0, p!.prog);
+  expect([0, 1, 2, 3, 4].map((row) => s.raw(row, 0))).toEqual([
+    "West-q3",
+    "East-q3",
+    "North-q3",
+    "South-q3",
+    "West-q3",
+  ]);
 });
 
 // The examples an apply generalised describe characters that are no longer

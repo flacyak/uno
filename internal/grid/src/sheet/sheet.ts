@@ -17,6 +17,7 @@ import { inferKind } from "./kind.ts";
 import type { Finished } from "./pipeline.ts";
 import { finish, formatValue } from "./pipeline.ts";
 import { Schema } from "./schema.ts";
+import type { Written } from "./schema.ts";
 
 /** Column pairs a header with the kind inferred from the values beneath it. */
 export interface Column {
@@ -97,6 +98,11 @@ export class Sheet {
   display(row: number, col: number): string {
     if (col < 0) return "";
     return this.row(row)?.shown[col] ?? "";
+  }
+
+  /** written is the last write into a cell, or undefined where nobody typed. */
+  written(row: number, col: number): Written | undefined {
+    return this.schema.writtenIn(row)?.get(col);
   }
 
   private row(row: number): Finished | undefined {

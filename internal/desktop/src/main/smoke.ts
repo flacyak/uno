@@ -551,7 +551,7 @@ const CHECKS: Check[] = [
       // Back in transform, the recogniser asks again about the three fixes.
       await press("i");
       const banner = document.querySelector("#banner");
-      if (!(await until(() => !banner.hidden && banner.textContent.includes("region")))) {
+      if (!(await until(() => !banner.hidden && banner.textContent.includes("region") && banner.textContent.includes("4,809 cells")))) {
         return "the banner says " + JSON.stringify(banner.textContent);
       }
 
@@ -560,6 +560,11 @@ const CHECKS: Check[] = [
       if (!(await until(() => region() === "South-q3"))) return "row 4 reads " + JSON.stringify(region());
       if (!(await until(() => text("#status-file").includes("10 edits")))) {
         return "status bar says: " + text("#status-file");
+      }
+      // The three fixes the offer was learned from are left as they were typed.
+      const fixed = [0, 1, 2].map((r) => document.querySelectorAll("tbody tr")[r].children[2].textContent);
+      if (JSON.stringify(fixed) !== JSON.stringify(["West-q3", "East-q3", "North-q3"])) {
+        return "after ga the fixed rows read " + JSON.stringify(fixed);
       }
       if (!banner.hidden) return "the banner stayed after ga";
       if (text("#status-cell") !== "revenue · row 3") return "ga moved the selection to " + text("#status-cell");
