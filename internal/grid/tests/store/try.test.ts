@@ -17,7 +17,7 @@ import { connectionAuth, diskProvider, nodeStore } from "../../src/store/node.ts
 import { tryConnection } from "../../src/store/s3.ts";
 import { bytes, connect } from "../engine/harness.ts";
 import { HOME_REGION } from "./regions.ts";
-import { BUCKET, KEYS, bucket } from "./standin.ts";
+import { BUCKET, bucket, keysOnly } from "./standin.ts";
 import type { Bucket } from "./standin.ts";
 
 let b: Bucket;
@@ -37,14 +37,7 @@ beforeAll(async () => {
 afterAll(() => b.close());
 
 /** The machine's keys, which say us-east-1, while the bucket is in eu-west-1. */
-const env = {
-  AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
-  AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
-  AWS_REGION: "us-east-1",
-  AWS_PROFILE: undefined,
-  AWS_CONFIG_FILE: "/nonexistent/config",
-  AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/credentials",
-};
+const env = keysOnly("us-east-1");
 
 function draft(over: Partial<Connection> = {}): Connection {
   return {
