@@ -10,7 +10,7 @@
 // shell without a window.
 
 import { Band } from "@uno/grid/engine";
-import type { Changed, Engine, Offer, SourceRef } from "@uno/grid/engine";
+import type { Changed, Engine, FindRequest, Found, Offer, SourceRef } from "@uno/grid/engine";
 import { NO_ROW, Op, editEquals } from "@uno/grid/sheet";
 import type { Edit } from "@uno/grid/sheet";
 
@@ -123,6 +123,11 @@ export class Workspace {
     this.edits.pop();
     this.band.columns = changed.columns;
     return changed.edit;
+  }
+
+  /** find asks the engine for the next matching row in a column, read from the file. */
+  find(req: FindRequest): Promise<Found> {
+    return this.engine.find(req);
   }
 
   private landed(changed: Changed): void {

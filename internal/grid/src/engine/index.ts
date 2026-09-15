@@ -16,6 +16,8 @@ export type {
   Changed,
   ColumnInfo,
   EditRequest,
+  FindRequest,
+  Found,
   MessagePortLike,
   Offer,
   Opened,

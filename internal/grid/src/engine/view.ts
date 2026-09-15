@@ -9,12 +9,23 @@
 
 import { newManifest, readContainer, writeDocument } from "../document/index.ts";
 import type { Cell, Document } from "../document/index.ts";
+import { trimSpace } from "../go/index.ts";
 import { openFormat } from "../ingest/index.ts";
 import type { Format } from "../ingest/index.ts";
+import { isNumber } from "../num/index.ts";
 import { MIN_EXAMPLES, Survey, gather } from "../pattern/index.ts";
 import type { Example } from "../pattern/index.ts";
 import { describe as describeProgram, text as programText } from "../program/index.ts";
-import { NO_ROW, Op, SAMPLE_ROWS, Schema, finish, inferKind, valueAt } from "../sheet/index.ts";
+import {
+  NO_ROW,
+  Op,
+  SAMPLE_ROWS,
+  Schema,
+  finish,
+  inferKind,
+  isDate,
+  valueAt,
+} from "../sheet/index.ts";
 import type { Edit } from "../sheet/index.ts";
 import type { ByteSource } from "../store/index.ts";
 import { bytesSource } from "../store/index.ts";
@@ -23,6 +34,8 @@ import type {
   Changed,
   ColumnInfo,
   EditRequest,
+  FindRequest,
+  Found,
   Opened,
   Port,
   Progress,
@@ -68,6 +81,8 @@ export class View {
 
   private transform = false;
   private survey: AbortController | undefined;
+  /** The find running now. A newer one stops it. */
+  private finding: AbortController | undefined;
   private queue: Promise<unknown> = Promise.resolve();
   private waiters: Waiter[] = [];
   private failed: Error | undefined;
@@ -404,6 +419,81 @@ export class View {
     });
   }
 
+  // ------------------------------------------------------------ finding
+
+  /**
+   * find looks down or up one column for the next cell that matches, with the
+   * log applied. A client's band is a few screens of rows, so anything that
+   * looks beyond it runs here, as a pass over the blocks.
+   *
+   * It searches what the index can serve now rather than waiting for the rest,
+   * and says how far it got. A newer find stops an older one: a person who has
+   * pressed ]f again has already moved past the first answer.
+   */
+  async find(req: FindRequest): Promise<Found> {
+    this.finding?.abort();
+    const abort = new AbortController();
+    this.finding = abort;
+
+    const matches = await this.matcher(req);
+    if (matches === undefined) return { row: null, searched: 0, complete: true };
+
+    const schema = this.schema;
+    const index = this.index;
+    const down = req.dir === 1;
+    let row = down ? Math.max(0, req.from + 1) : Math.min(index.readable(), req.from) - 1;
+    let searched = 0;
+    let slice = Date.now();
+
+    while (down ? row < index.readable() : row >= 0) {
+      const block = index.blockOf(row);
+      const [from, end] = index.rowsOf(block);
+      const records = await this.pages.records(block, false);
+      if (abort.signal.aborted) return { row: null, searched, complete: false };
+
+      for (; down ? row < end : row >= from; row += req.dir) {
+        searched++;
+        if (matches(finish(schema, row, records[row - from]!).shown[req.col] ?? "")) {
+          return { row, searched, complete: true };
+        }
+      }
+      if (Date.now() - slice >= SLICE_MS) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        slice = Date.now();
+      }
+    }
+    return { row: null, searched, complete: !down || index.complete };
+  }
+
+  /**
+   * matcher is the test a find puts to what each cell shows, or undefined when
+   * no cell could pass it.
+   *
+   * Not parsing means what the column's badge means: a date column's cells
+   * should be dates, and a numeric one's -- or text flagged as numeric data in a
+   * costume -- numbers. A blank is no evidence either way, as the badge reads it.
+   */
+  private async matcher(req: FindRequest): Promise<((shown: string) => boolean) | undefined> {
+    if (req.match.t === "text") {
+      const text = req.match.text;
+      return text === "" ? undefined : (shown) => shown.includes(text);
+    }
+
+    const column = (await this.columns())[req.col];
+    if (column === undefined) return undefined;
+    const parses =
+      column.kind === "date"
+        ? isDate
+        : column.kind === "num" || column.flagged
+          ? isNumber
+          : undefined;
+    if (parses === undefined) return undefined;
+    return (shown) => {
+      const v = trimSpace(shown);
+      return v !== "" && !parses(v);
+    };
+  }
+
   // ------------------------------------------------------------ saving
 
   /**
@@ -450,6 +540,7 @@ export class View {
   async close(): Promise<void> {
     this.abort.abort();
     this.survey?.abort();
+    this.finding?.abort();
     this.fail(new Error("the file was closed"));
     await this.source.close();
   }
