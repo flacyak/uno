@@ -5,3 +5,4 @@ export * from "./regexp.ts";
 export * from "./fmt.ts";
 export * from "./hash.ts";
 export * from "./time.ts";
+export * from "./bytes.ts";
