@@ -21,7 +21,7 @@ import { diskProvider } from "@uno/grid/store/node";
 import { s3Provider } from "@uno/grid/store/s3";
 
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
-import { KEYS, bucket } from "../../grid/tests/store/standin.ts";
+import { KEYS, bucket, etagOf } from "../../grid/tests/store/standin.ts";
 import type { Bucket } from "../../grid/tests/store/standin.ts";
 import { Sources, stateOf } from "../src/renderer/sources.ts";
 import { Workspace } from "../src/renderer/workspace.ts";
@@ -125,7 +125,10 @@ test("a missing S3 source is re-pointed at another object, and its edits replay"
     panel.stop();
 
     expect(back.id, "the id the log names is the one it keeps").toBe(gone.id);
-    expect(back.link).toEqual({ path: "s3://acme-exports/ads/google-ads-v2.csv" });
+    expect(back.link).toEqual({
+      path: "s3://acme-exports/ads/google-ads-v2.csv",
+      version: etagOf(enc.encode(ADS)),
+    });
     expect(stateOf(back)).toBe("fine");
     expect(back.edited).toBe(1);
     expect((await back.source.rows(0, 3)).rows.map((r) => r[COST])).toEqual([

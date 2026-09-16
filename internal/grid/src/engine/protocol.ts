@@ -51,6 +51,13 @@ export interface Link {
   path: string;
 
   /**
+   * Which bytes of it were opened, where the place can say: an S3 VersionId,
+   * or an ETag in its quotes. A save writes it down, so the next open can tell
+   * a rewrite from the file the log was made against.
+   */
+  version?: string;
+
+  /**
    * Why there is no grid behind this source: the file was not where the
    * workspace said, or would not open. The source is still here -- its id, its
    * edits and its place in the log are kept -- and `relink` gives it a file

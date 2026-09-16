@@ -33,7 +33,7 @@ import type {
   SourceRef,
 } from "./protocol.ts";
 import { formatBytes, messageOf } from "./protocol.ts";
-import type { Unconnected } from "../store/s3.ts";
+import type { Meeting, Unconnected } from "../store/s3.ts";
 import type { Tuning } from "./rows.ts";
 import { View } from "./view.ts";
 import type { Carried, Part } from "./view.ts";
@@ -63,61 +63,56 @@ class Absent {
   constructor(
     readonly id: string,
     readonly name: string,
-    readonly path: string,
     /**
-     * The bytes the container carried, for a source that had no path and would
-     * not parse. They go back in at the next save: uno could not read them, but
-     * that is not a reason to be the thing that finally loses them.
+     * Everything a save writes of it, as the .uno held it: the pointer and
+     * which bytes it was made against, or the bytes a container carried for a
+     * source that had no path and would not parse. Those go back in at the
+     * next save: uno could not read them, but that is not a reason to be the
+     * thing that finally loses them.
      */
-    private readonly raw: Uint8Array | undefined,
-    /** What the file measured when the workspace was saved. */
-    readonly bytes: number,
-    private readonly edits: Edit[],
-    private readonly rows: number,
-    private readonly cols: number,
+    private readonly kept: Part,
     why: string,
     /** The bucket it reads that no connection covers, when that is why. */
     connect?: Unconnected,
   ) {
+    const path = this.path;
     this.opened = {
       source: id,
       name,
-      size: bytes,
+      size: kept.bytes,
       label: "",
       columns: [],
       // Complete, because nothing is going to arrive. A grid that waits for rows
       // out of a file that is not there waits forever, and says "indexing 0%"
       // the whole time.
-      progress: { done: 0, total: bytes, readable: 0, rows: 0, complete: true },
-      edits,
+      progress: { done: 0, total: kept.bytes, readable: 0, rows: 0, complete: true },
+      edits: kept.edits,
       generation: 0,
       link: connect === undefined ? { path, missing: why } : { path, missing: why, connect },
     };
   }
 
+  /** Where the file was, or "" for bytes the container carried. */
+  get path(): string {
+    return this.kept.path ?? "";
+  }
+
   /** Whatever the container carried for it, which for a pointed-at source is
    * nothing. */
   get carries(): number {
-    return this.raw?.length ?? 0;
+    return this.kept.raw?.length ?? 0;
   }
 
   /** What a save writes: the pointer or the bytes it was given, and the log,
    * all exactly as they were read. */
   part(): Promise<Part> {
-    return Promise.resolve({
-      raw: this.raw,
-      path: this.path === "" ? undefined : this.path,
-      bytes: this.bytes,
-      edits: this.edits,
-      rows: this.rows,
-      cols: this.cols,
-    });
+    return Promise.resolve(this.kept);
   }
 
   /** The log as it stands, which is what a relink replays over the file it is
    * pointed at. */
   get log(): Edit[] {
-    return this.edits;
+    return this.kept.edits;
   }
 
   /** The bucket it waits to have connected, when that is why it has no file. */
@@ -130,8 +125,7 @@ class Absent {
    * file still does not open: the same source, saying why it has no file.
    */
   missing(why: string): Absent {
-    const { id, name, path, raw, bytes, edits, rows, cols } = this;
-    return new Absent(id, name, path, raw, bytes, edits, rows, cols, why);
+    return new Absent(this.id, this.name, this.kept, why);
   }
 
   /** Nothing to switch, and nothing to close. */
@@ -170,8 +164,12 @@ export class Workspace {
     private readonly handlers: readonly FileHandler[],
     private readonly port: Port<Request, Reply>,
     private readonly tuning: Tuning,
-    /** Whether an address a .uno names is in a bucket no connection covers. */
-    private readonly guard?: (path: string) => Unconnected | undefined,
+    /**
+     * Which connection an address is read through, or the bucket no connection
+     * covers. Undefined for a platform with no connections, and its answer
+     * undefined for an address that is not in a bucket.
+     */
+    private readonly meet?: (path: string) => Meeting | undefined,
   ) {}
 
   /**
@@ -248,7 +246,7 @@ export class Workspace {
           was.waiting !== undefined &&
           "path" in ref &&
           ref.path === was.path &&
-          this.guard?.(was.path) === undefined;
+          this.unconnected(was.path) === undefined;
         if (!connected) throw err;
         const now = was.missing(messageOf(err));
         this.sources.set(id, now);
@@ -312,18 +310,23 @@ export class Workspace {
     // A .uno travels, and the person opening one did not choose the buckets
     // it names. One no connection covers is not read at all -- not a HEAD --
     // until they connect it: the source is kept, edits and all, and says why.
+    const kept: Part = {
+      raw: src.raw,
+      path: src.path,
+      bytes: src.bytes ?? 0,
+      version: src.version,
+      connection: src.connection,
+      edits,
+      rows: src.rows,
+      cols: src.cols,
+    };
     const needs =
-      src.raw === undefined && src.path !== undefined ? this.guard?.(src.path) : undefined;
+      src.raw === undefined && src.path !== undefined ? this.unconnected(src.path) : undefined;
     if (needs !== undefined) {
       return new Absent(
         src.id,
         src.name,
-        src.path ?? "",
-        undefined,
-        src.bytes ?? 0,
-        edits,
-        src.rows,
-        src.cols,
+        kept,
         `${container} reads s3://${needs.bucket}/…, which no connection covers · connect ${needs.bucket} to read it`,
         needs,
       );
@@ -345,18 +348,14 @@ export class Workspace {
       view.opened.link = linkOf(view, src);
       return view;
     } catch (err) {
-      return new Absent(
-        src.id,
-        src.name,
-        src.path ?? "",
-        src.raw,
-        src.bytes ?? 0,
-        edits,
-        src.rows,
-        src.cols,
-        messageOf(err),
-      );
+      return new Absent(src.id, src.name, kept, messageOf(err));
     }
+  }
+
+  /** The bucket an address is in that no connection covers, if it is. */
+  private unconnected(path: string): Unconnected | undefined {
+    const met = this.meet?.(path);
+    return met !== undefined && "unconnected" in met ? met.unconnected : undefined;
   }
 
   /** view opens one file as a source, through whatever this platform hands back
@@ -364,7 +363,11 @@ export class Workspace {
   private async view(id: string, ref: SourceRef, carried: Carried | undefined): Promise<View> {
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
-    return View.open(id, ref.name, path, source, carried, this.port, this.tuning);
+    const view = await View.open(id, ref.name, path, source, carried, this.port, this.tuning);
+    // Which connection it came through, for the save to write down as a hint.
+    const met = path === "" ? undefined : this.meet?.(path);
+    view.connection = met !== undefined && "through" in met ? met.through : undefined;
+    return view;
   }
 
   private keep(source: Source): Opened {
@@ -462,6 +465,8 @@ export class Workspace {
           raw: part.raw,
           path: part.path,
           bytes: part.bytes,
+          version: part.version,
+          connection: part.connection,
           rows: part.rows,
           cols: part.cols,
           state,
@@ -551,11 +556,12 @@ export class Workspace {
  * grid is better placed than uno to say whether it is the right file.
  */
 function linkOf(view: View, src: Held): Link | undefined {
-  if (view.path === "") return undefined;
+  const link = view.opened.link;
+  if (link === undefined) return undefined;
   const was = src.bytes ?? 0;
-  if (was === 0 || was === view.size) return { path: view.path };
+  if (was === 0 || was === view.size) return link;
   return {
-    path: view.path,
+    ...link,
     changed: `${src.name} is ${formatBytes(view.size)} now and was ${formatBytes(was)} when the workspace was saved`,
   };
 }

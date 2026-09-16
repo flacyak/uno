@@ -403,23 +403,34 @@ export interface Unconnected {
 }
 
 /**
- * connectionGuard says of an address a .uno names whether it is in a bucket no
- * connection covers, and answers undefined for one that is covered or is not
- * in S3 at all.
+ * Meeting is how an address a .uno names meets this machine's connections: the
+ * id of the one it is read through, or the bucket no connection covers.
+ */
+export type Meeting = { through: string } | { unconnected: Unconnected };
+
+/**
+ * connectionMeeting says of an address which connection it is read through,
+ * or that it is in a bucket no connection covers, and answers undefined for
+ * one that is not in S3 at all.
  *
  * It reads addresses the way s3Files does, with s3Location, so every form the
- * handler would open -- s3://, and the https ones -- is one this guards. A
+ * handler would open -- s3://, and the https ones -- is one this meets. A
  * guard that parsed only s3:// would let a .uno written with an https address
  * be read with this machine's credentials, which is what it exists to stop.
+ * The connection it names is the one the handler signs with, the covering one
+ * with the longest prefix, so the hint a save writes is never a second opinion.
  */
-export function connectionGuard(
+export function connectionMeeting(
   connections: () => readonly Connection[],
-): (path: string) => Unconnected | undefined {
+): (path: string) => Meeting | undefined {
   return (path) => {
     const loc = s3Location(path);
     if (loc === undefined) return undefined;
-    if (covering(connections(), loc.bucket, loc.key) !== undefined) return undefined;
-    return { bucket: loc.bucket, prefix: loc.key.slice(0, loc.key.lastIndexOf("/") + 1) };
+    const c = covering(connections(), loc.bucket, loc.key);
+    if (c !== undefined) return { through: c.id };
+    return {
+      unconnected: { bucket: loc.bucket, prefix: loc.key.slice(0, loc.key.lastIndexOf("/") + 1) },
+    };
   };
 }
 
@@ -454,6 +465,7 @@ export function s3Files(opts: S3Options): FileHandler {
 
       return {
         size,
+        version: versionOf(head.headers),
         async read(offset, length) {
           const end = Math.min(offset + length, size);
           if (end <= offset) return new Uint8Array();
@@ -473,6 +485,20 @@ export function s3Files(opts: S3Options): FileHandler {
       };
     },
   };
+}
+
+/**
+ * versionOf is which bytes a reply is about: the object's VersionId where its
+ * bucket keeps versions, and its ETag otherwise.
+ *
+ * The two never look alike, since an ETag keeps the quotes S3 sends it in, so
+ * one string says both what the version is and how it can be asked for again.
+ * A bucket with versioning suspended answers "null", which pins nothing.
+ */
+export function versionOf(headers: Headers): string | undefined {
+  const id = headers.get("x-amz-version-id");
+  if (id !== null && id !== "" && id !== "null") return id;
+  return headers.get("etag") ?? undefined;
 }
 
 /**

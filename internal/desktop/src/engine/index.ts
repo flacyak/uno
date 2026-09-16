@@ -24,7 +24,7 @@ import {
   diskProvider,
   nodeStore,
 } from "@uno/grid/store/node";
-import { connectionGuard, s3Provider, tryConnection } from "@uno/grid/store/s3";
+import { connectionMeeting, s3Provider, tryConnection } from "@uno/grid/store/s3";
 
 /**
  * Where S3 is: the same variables the AWS CLI reads, so MinIO or a local
@@ -87,8 +87,9 @@ process.parentPort.once("message", (e) => {
           // never leaves this process.
           profiles: () => awsProfiles(),
           test: (c) => tryConnection(c, { sign: (x) => auth.of(x), endpoint: ENDPOINT }),
-          // A .uno somebody sent reads no bucket this machine has not connected.
-          guard: connectionGuard(() => kept.all),
+          // A .uno somebody sent reads no bucket this machine has not
+          // connected, and one this machine has is saved naming it.
+          meet: connectionMeeting(() => kept.all),
         },
   );
 });
