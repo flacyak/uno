@@ -67,7 +67,11 @@ The `+` at the end of the tab strip offers a file or an S3 URL. An S3 URL is
 `s3://bucket/key` or the https address the console shows, and the object opens
 as a view the same way a file on disk does: a HEAD for its size, then ranged
 GETs as the index and the grid need them. Nothing is downloaded whole, and a
-workspace saves the `s3://` URL rather than a copy.
+workspace saves the `s3://` URL rather than a copy. Indexing reads the object
+front to back, and every chunk is a round trip, so the next three are asked for
+while it scans the one in hand: four in flight at most, which is also all it
+ever holds, 32 MB at the 8 MB chunks indexing reads. The grid's own reads for
+the rows on screen go straight through beside them.
 
 Beside the URL, a save writes down which bytes were read -- the object's
 VersionId where its bucket keeps versions, and its ETag otherwise -- and the id
