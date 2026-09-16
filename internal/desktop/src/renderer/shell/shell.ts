@@ -21,6 +21,7 @@ import { s3Location } from "@uno/grid/store/s3";
 
 import { m } from "../../paraglide/messages.js";
 import { columnLabel } from "../grid/rows.ts";
+import type { ShellAction } from "../grid/rows.ts";
 import type { Host } from "../../shared/host.ts";
 import type { Grid, GridEvents } from "../grid/index.ts";
 import { strategy } from "../input/index.ts";
@@ -50,7 +51,8 @@ import { Settings } from "./settings.ts";
 import { sidebarRows } from "./sidebar.ts";
 import type { SidebarActions } from "./sidebar.ts";
 import { StatusBar } from "./status.ts";
-import { baseName, message, must, settled } from "./util.ts";
+import { baseName, dispatch, found, message, must, settled } from "./util.ts";
+import type { Handlers } from "./util.ts";
 
 /** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
 const INPUT_KEY = "uno.input";
@@ -144,7 +146,7 @@ export class Shell {
 
     this.status = new StatusBar(
       (lead, typed) => {
-        if (lead === ":") this.run(command(typed));
+        if (lead === ":") dispatch(this.commands, command(typed));
         else this.finder.search(typed, lead === "/" ? 1 : -1);
       },
       () => this.grid?.focus(),
@@ -217,8 +219,7 @@ export class Shell {
     );
     // It wires itself to the control and asks through these, so the shell
     // holds nothing of it.
-    const settings = must(document.querySelector<HTMLButtonElement>("#settings"));
-    new Settings(settings, this.theming, this.language, {
+    new Settings(found<HTMLButtonElement>("#settings"), this.theming, this.language, {
       connections: async () => {
         await this.refreshConnections();
         return this.known.map(connectionLine);
@@ -238,13 +239,8 @@ export class Shell {
       setInput: (name) => this.setInput(name),
     });
     this.root.classList.toggle(NO_SIDEBAR, !this.sidebarOpen);
-    must(document.querySelector<HTMLElement>("#new")).addEventListener(
-      "click",
-      () => void this.open(),
-    );
-    must(document.querySelector<HTMLElement>("#close")).addEventListener("click", () =>
-      this.quit(),
-    );
+    found("#new").addEventListener("click", () => void this.open());
+    found("#close").addEventListener("click", () => this.quit());
     this.wireKeys();
     // Coming back to the window is when a person has had the chance to change
     // something in a bucket, so it is when the buckets are asked.
@@ -714,50 +710,38 @@ export class Shell {
             : m.row_not_indexed({ row: num(wanted + 1) }),
         );
       },
-      onAction: (action) => {
-        switch (action.t) {
-          case "undo":
-            void this.history("undo");
-            return;
-          case "apply": {
-            // From any cell, since the offer names its own column.
-            const offer = this.offered();
-            if (offer === null) this.say(m.nothing_to_apply(), true);
-            else void this.apply(offer);
-            return;
-          }
-          case "dismiss": {
-            const offer = this.offered();
-            if (offer !== null) this.dismiss(offer);
-            return;
-          }
-          case "prompt":
-            this.status.prompt(action.lead);
-            return;
-          case "unparsed":
-            this.finder.unparsed(action.dir);
-            return;
-          case "next":
-            this.finder.next(action.reverse);
-            return;
-          case "redo":
-            void this.history("redo");
-            return;
-          case "tab": {
-            const w = this.workspace;
-            if (w === undefined) return;
-            // 3gt is the third tab, as in vim. A count past the last goes nowhere.
-            const to =
-              action.step === 1 && action.count !== undefined
-                ? w.sources[action.count - 1]
-                : w.beside(action.step * (action.count ?? 1));
-            if (to !== undefined) this.select(to);
-            return;
-          }
-        }
-      },
+      onAction: (action) => dispatch(this.actions, action),
     };
   }
+
+  /** What the grid's keys ask of the shell, by kind. */
+  private readonly actions: Handlers<ShellAction> = {
+    undo: () => void this.history("undo"),
+    redo: () => void this.history("redo"),
+    apply: () => {
+      // From any cell, since the offer names its own column.
+      const offer = this.offered();
+      if (offer === null) this.say(m.nothing_to_apply(), true);
+      else void this.apply(offer);
+    },
+    dismiss: () => {
+      const offer = this.offered();
+      if (offer !== null) this.dismiss(offer);
+    },
+    prompt: (a) => this.status.prompt(a.lead),
+    unparsed: (a) => this.finder.unparsed(a.dir),
+    next: (a) => this.finder.next(a.reverse),
+    tab: (a) => {
+      const w = this.workspace;
+      if (w === undefined) return;
+      // 3gt is the third tab, as in vim. A count past the last goes nowhere.
+      const to =
+        a.step === 1 && a.count !== undefined
+          ? w.sources[a.count - 1]
+          : w.beside(a.step * (a.count ?? 1));
+      if (to !== undefined) this.select(to);
+    },
+  };
 
   // ----------------------------------------------------------------- modes
 
@@ -784,26 +768,29 @@ export class Shell {
         }
       }
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const key = e.key.toLowerCase();
-      if (e.shiftKey) {
-        if (key === "b") {
-          e.preventDefault();
-          this.showPanel();
-        }
-        return;
-      }
-      if (key === "b") {
-        e.preventDefault();
-        this.toggleSidebar();
-      } else if (key === "e") {
-        e.preventDefault();
-        this.toggleMode();
-      } else if (key === "z" && this.workspace?.editable === true) {
-        e.preventDefault();
-        void this.history("undo");
-      }
+      const chord = this.chords.get(`${e.shiftKey ? "Shift+" : ""}${e.key.toLowerCase()}`);
+      if (chord === undefined || chord.when?.() === false) return;
+      e.preventDefault();
+      chord.run();
     });
   }
+
+  /**
+   * The shell's chords, under Ctrl or Cmd: what each does, and for one, when
+   * it is the shell's at all. Ctrl+Z over a workspace that cannot be edited
+   * is left to the page, as every other chord is.
+   */
+  private readonly chords: ReadonlyMap<string, { run: () => void; when?: () => boolean }> = new Map(
+    [
+      ["Shift+b", { run: () => this.showPanel() }],
+      ["b", { run: () => this.toggleSidebar() }],
+      ["e", { run: () => this.toggleMode() }],
+      [
+        "z",
+        { run: () => void this.history("undo"), when: () => this.workspace?.editable === true },
+      ],
+    ],
+  );
 
   /**
    * toggleMode moves between view and transform.
@@ -1035,25 +1022,26 @@ export class Shell {
   // --------------------------------------------------------------- editing
 
   private edit(row: number, col: number, value: string): void {
-    const w = this.workspace;
-    if (w === undefined) return;
-
-    w.set(row, col, value)
-      .then(
-        () => this.say(""),
-        // The engine refuses a cell it will not let a person type into -- a bound
-        // column, a row that is not there. Saying which is the whole point of it
-        // refusing by name.
-        (err: unknown) => this.say(message(err), true),
-      )
-      .finally(() => this.changed(w));
+    // The engine refuses a cell it will not let a person type into -- a bound
+    // column, a row that is not there. Saying which is the whole point of it
+    // refusing by name.
+    void this.editing((w) => w.set(row, col, value));
   }
 
-  private async apply(offer: Offer): Promise<void> {
+  private apply(offer: Offer): Promise<void> {
+    return this.editing((w) => w.apply(offer));
+  }
+
+  /**
+   * editing is one change to the open workspace's log: made, said to have
+   * landed or been refused, and repainted after either way, since kinds may
+   * have changed and so has the log.
+   */
+  private async editing(change: (w: Workspace) => Promise<unknown>): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
     try {
-      await w.apply(offer);
+      await change(w);
       this.say("");
     } catch (err) {
       this.say(message(err), true);
@@ -1068,13 +1056,11 @@ export class Shell {
   }
 
   /** history takes the last edit back, or records again the one undo last took back. */
-  private async history(which: "undo" | "redo"): Promise<void> {
-    const w = this.workspace;
-    if (w === undefined) return;
-    // The edit is the showing tab's, and so is the cell it changed: one the
-    // person has since left is not moved to in the other.
-    const tab = w.active;
-    try {
+  private history(which: "undo" | "redo"): Promise<void> {
+    return this.editing(async (w) => {
+      // The edit is the showing tab's, and so is the cell it changed: one the
+      // person has since left is not moved to in the other.
+      const tab = w.active;
       const edit = await (which === "undo" ? w.undo() : w.redo());
       // One cell came back, so show it. An apply names a whole column and no row,
       // and the selection stays where it is.
@@ -1082,11 +1068,7 @@ export class Shell {
       if (edit.row !== NO_ROW && on?.workspace === w && w.active === tab) {
         on.grid.moveTo(edit.row, edit.col);
       }
-      this.say("");
-    } catch (err) {
-      this.say(message(err), true);
-    }
-    this.changed(w);
+    });
   }
 
   /** After an edit lands: kinds may have changed, and so has the log. */
@@ -1160,36 +1142,20 @@ export class Shell {
 
   // ---------------------------------------------------------- command line
 
-  /** run carries out a command from the prompt. */
-  private run(c: Command): void {
-    switch (c.t) {
-      case "none":
-        return;
-      case "write":
-        void this.save();
-        return;
-      case "save-as":
-        void this.saveAs();
-        return;
-      case "open":
-        // Opening closes the workspace without asking, so :e asks first.
-        if (!c.force && this.workspace?.dirty === true) {
-          this.say(m.unsaved_edits_command(), true);
-        } else {
-          void this.open(true);
-        }
-        return;
-      case "sources":
-        this.showPanel();
-        return;
-      case "row":
-        this.grid?.act({ t: "move", motion: "last-row", count: c.row });
-        return;
-      case "unknown":
-        this.say(m.not_a_command({ text: c.text }), true);
-        return;
-    }
-  }
+  /** What each command from the prompt does. */
+  private readonly commands: Handlers<Command> = {
+    none: () => {},
+    write: () => void this.save(),
+    "save-as": () => void this.saveAs(),
+    open: (c) => {
+      // Opening closes the workspace without asking, so :e asks first.
+      if (!c.force && this.workspace?.dirty === true) this.say(m.unsaved_edits_command(), true);
+      else void this.open(true);
+    },
+    sources: () => this.showPanel(),
+    row: (c) => this.grid?.act({ t: "move", motion: "last-row", count: c.row }),
+    unknown: (c) => this.say(m.not_a_command({ text: c.text }), true),
+  };
 
   // -------------------------------------------------------------- painting
 
