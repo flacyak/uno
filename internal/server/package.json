@@ -1,0 +1,30 @@
+{
+  "name": "@uno/server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "uno's hosted engine, one per workspace on an EC2 instance of its own, and the gate in front of them.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "uno-engine": "dist/engine.mjs",
+    "uno-gate": "dist/gate.mjs"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "node scripts/dev.js",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@uno/desktop": "workspace:*",
+    "@uno/grid": "workspace:*",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
