@@ -97,7 +97,7 @@ interface Drawn {
 
 /** A connect form's asks for a panel that never connects anything. connect.test.ts drives the form. */
 const NOT_CONNECTING: ConnectAsks = {
-  profiles: () => Promise.resolve([]),
+  signIns: () => Promise.resolve({ modes: ["machine", "profile", "public"], profiles: [] }),
   tryConnection: () => Promise.reject(new Error("not tried in this test")),
   save: () => Promise.reject(new Error("not saved in this test")),
   known: () => [],

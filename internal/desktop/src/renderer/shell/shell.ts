@@ -191,7 +191,7 @@ export class Shell {
         },
       },
       {
-        profiles: async () => (await this.browser()).profiles(),
+        signIns: async () => (await this.browser()).signIns(),
         tryConnection: async (c) => (await this.browser()).tryConnection(c),
         save: (c) => this.saveConnection(c),
         known: () => this.known,
