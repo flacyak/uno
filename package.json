@@ -1,0 +1,24 @@
+{
+  "name": "@uno/monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp run --filter @uno/desktop dev",
+    "start": "vp run --filter @uno/desktop start",
+    "build": "vp run --filter './internal/*' build",
+    "test": "vp run --filter './internal/*' test",
+    "check": "vp run --filter './internal/*' check",
+    "smoke": "vp run --filter @uno/desktop smoke",
+    "preview": "vp run --filter @uno/desktop preview"
+  },
+  "devDependencies": {
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.3.4",
+      "onFail": "download"
+    }
+  }
+}
