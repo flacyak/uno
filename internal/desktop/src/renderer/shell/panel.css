@@ -240,15 +240,21 @@
   background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px);
 }
 
-/* A tab whose file changed under the log, and one whose file is gone: flagged
- * the way the tab's own mark is, amber and then filled. */
+/* A tab whose file changed under the log, one the bucket holds a newer version
+ * of, and one whose file is gone: flagged the way the tab's own mark is, amber
+ * and then filled. */
 .panel-row.changed > :last-child,
+.panel-row.newer > :last-child,
 .panel-row.missing > :last-child,
-.panel-row.unconnected > :last-child {
+.panel-row.unconnected > :last-child,
+.panel-list:focus .panel-row.sel:is(.changed, .newer, .missing, .unconnected) > :last-child {
+  /* The state keeps its colour with the keys on its line, which is when it is
+   * being read. */
   color: var(--flag);
 }
 
 .panel-row.changed > :first-child::before,
+.panel-row.newer > :first-child::before,
 .panel-row.missing > :first-child::before,
 .panel-row.unconnected > :first-child::before {
   content: "! ";
