@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { apply, describe as describeProgram, parse, text } from "../../src/program/index.ts";
+import {
+  MAX_PARTS,
+  MAX_STEPS,
+  apply,
+  describe as describeProgram,
+  parse,
+  text,
+} from "../../src/program/index.ts";
 
 // The text form is what a .uno carries, so a program that has been through a
 // file has to be the program that went in.
@@ -73,7 +80,7 @@ describe("parse refuses what it cannot run", () => {
     "trim",
     "trim()) ",
     'replace(/,/, "") | ',
-    "trim() | trim() | trim() | trim()", // past MAX_STEPS
+    Array.from({ length: MAX_STEPS + 1 }, () => "trim()").join(" | "),
     "slice(0)",
     "slice(start(/a/, 0), 1)", // matches are counted from 1
     'replace(/,/, ")',
@@ -152,7 +159,7 @@ describe("concat parse refusals", () => {
     'concat("only")', // one part is that part
     "concat(slice(0, 1))", // likewise
     'concat(trim(), "x")', // a part is a piece, not a step
-    'concat("a", "b", "c", "d", "e")', // past MAX_PARTS
+    `concat(${Array.from({ length: MAX_PARTS + 1 }, () => '"a"').join(", ")})`,
     'concat("a",)',
   ];
 

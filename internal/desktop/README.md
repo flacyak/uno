@@ -162,7 +162,7 @@ It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
 Electron starts as plain Node and main finds no `app`.
 
-The assertions live in `src/main/smoke.ts`, which is test code inside the app —
+The assertions live in `src/main/smoke/`, which is test code inside the app —
 a smell worth naming. It is there because a virtualiser, a preload bridge and an
 IPC round trip cannot be checked anywhere but inside a real Electron, and the
 alternative was a browser-automation dependency larger than the app it tests. It

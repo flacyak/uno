@@ -44,10 +44,12 @@ describe("evaluate computes what was written", () => {
     ["0 - -1", 1],
   ];
 
+  // Binary floats, so compare within a tolerance no cell displays.
+  const DIGITS = 9;
+
   for (const [src, want] of cases) {
     test(src, () => {
-      // Binary floats, so compare within a tolerance no cell displays.
-      expect(evaluate(parse(src), sample)).toBeCloseTo(want, 9);
+      expect(evaluate(parse(src), sample)).toBeCloseTo(want, DIGITS);
     });
   }
 });

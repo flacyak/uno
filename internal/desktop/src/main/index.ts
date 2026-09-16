@@ -268,7 +268,7 @@ void app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // The two branches in this file that know what a test is. See src/main/smoke.ts
+  // The two branches in this file that know what a test is. See src/main/smoke/index.ts
   // for why they have to live inside the app rather than outside it; preview.ts
   // is the same argument for the same reason, one story instead of assertions.
   // Either one drives the window, so the person at the desktop is shut out of it
@@ -278,7 +278,7 @@ void app.whenReady().then(async () => {
     const { drive } = await import("./driven.ts");
     const driven = drive(win);
     const run = smoke
-      ? (await import("./smoke.ts")).runSmoke
+      ? (await import("./smoke/index.ts")).runSmoke
       : (await import("./preview.ts")).runPreview;
     const quit = (code: number): void => app.exit(code);
 

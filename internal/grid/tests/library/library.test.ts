@@ -16,6 +16,9 @@ function column(id: string, name: string, expr: string, refs?: string[]): Formul
   };
 }
 
+/** The longest id library/index.ts accepts. */
+const ID_LIMIT = 200;
+
 /** What a save-then-read round trip does, without a filesystem in the way. */
 function roundTrip(f: Formula): Formula {
   const { text } = formatFormula(f);
@@ -69,7 +72,7 @@ test("a notation formula carries no refs key at all", () => {
 test("keys this build does not know survive a save and read", () => {
   const text = JSON.stringify(
     {
-      format: 1,
+      format: FORMAT_VERSION,
       id: "f",
       name: "F",
       kind: "column",
@@ -95,7 +98,7 @@ test("keys this build does not know survive a save and read", () => {
 // produces the same bytes as the one before it.
 test("unknown keys are written in a stable order", () => {
   const text = JSON.stringify({
-    format: 1,
+    format: FORMAT_VERSION,
     id: "f",
     name: "F",
     kind: "column",
@@ -124,7 +127,7 @@ describe("an id that could name a path is refused", () => {
     "a\\b",
     "C:name",
     "with\u0000null",
-    "x".repeat(201),
+    "x".repeat(ID_LIMIT + 1),
   ];
 
   for (const id of bad) {
@@ -142,7 +145,13 @@ describe("an id that could name a path is refused", () => {
 // The id is checked on the way in as well as on the way out, so no id that
 // could name a path is ever handed to a caller in the first place.
 test("a file whose id names a path is refused on read", () => {
-  const text = JSON.stringify({ format: 1, id: "../escape", name: "F", kind: "column", expr: "a" });
+  const text = JSON.stringify({
+    format: FORMAT_VERSION,
+    id: "../escape",
+    name: "F",
+    kind: "column",
+    expr: "a",
+  });
   expect(() => parseFormula("f.unof", text)).toThrow();
 });
 

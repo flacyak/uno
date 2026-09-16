@@ -2,7 +2,7 @@
 // camera in the same process films it.
 //
 // This is the second piece of test-shaped code in `src/main`, and it is here for
-// the reason `smoke.ts` gives for the first: a window is the only place it can
+// the reason `smoke/index.ts` gives for the first: a window is the only place it can
 // run. The Go build filmed itself for the same reason -- it needed to choose a
 // cell and type into it, and no compositor-level tool on this machine has a
 // dispatcher for a pointer button.

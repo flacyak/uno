@@ -2,9 +2,11 @@ import { strFromU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, test } from "vite-plus/test";
 
 import {
+  BASE_VERSION,
   FORMAT_VERSION,
   LOG_ENTRY,
   MANIFEST_ENTRY,
+  RULE_VERSION,
   STATE_ENTRY,
   newManifest,
   readDocument,
@@ -18,6 +20,13 @@ import type { Sheet } from "../../src/sheet/index.ts";
 
 const CSV_BODY =
   'date,region,units\n2026-07-01,West,"1,204"\n2026-07-01,East,987\n2026-07-02,North,"1,455"\n';
+const ROWS = 3;
+const COLS = 3;
+const REGION = 1;
+const UNITS = 2;
+
+/** The cell a saved workspace was left on. */
+const ACTIVE = { row: 2, col: REGION };
 
 const encoder = new TextEncoder();
 
@@ -33,7 +42,7 @@ function saved(name: string, edit?: (s: Sheet) => void): { bytes: Uint8Array; do
       sheet: { rows: sh.rows(), cols: sh.cols(), entry: "" },
     },
     raw: encoder.encode(CSV_BODY),
-    state: { active: { row: 2, col: 1 } },
+    state: { active: ACTIVE },
     edits: sh.edits(),
     extra: new Map(),
   };
@@ -43,15 +52,15 @@ function saved(name: string, edit?: (s: Sheet) => void): { bytes: Uint8Array; do
 
 test("a round trip rebuilds the workspace", () => {
   const { bytes, doc } = saved("sales.csv", (s) => {
-    s.set(0, 2, "1204");
+    s.set(0, UNITS, "1204");
   });
 
   const back = readDocument("sales.csv", bytes);
 
-  expect(back.sheet!.rows()).toBe(3);
-  expect(back.sheet!.cols()).toBe(3);
-  expect(back.sheet!.raw(0, 2), "the edit was not replayed").toBe("1204");
-  expect(back.state.active).toEqual({ row: 2, col: 1 });
+  expect(back.sheet!.rows()).toBe(ROWS);
+  expect(back.sheet!.cols()).toBe(COLS);
+  expect(back.sheet!.raw(0, UNITS), "the edit was not replayed").toBe("1204");
+  expect(back.state.active).toEqual(ACTIVE);
   expect(back.raw, "the source went in byte for byte").toEqual(doc.raw);
   expect(back.sheet!.logEquals(doc.edits)).toBe(true);
 });
@@ -72,7 +81,7 @@ test("the container holds four named entries", () => {
 // so no code path can produce a manifest describing a different file.
 test("the manifest is measured from the bytes", () => {
   const { bytes, doc } = saved("sales.csv", (s) => {
-    s.set(0, 2, "1204");
+    s.set(0, UNITS, "1204");
   });
 
   const m = doc.manifest;
@@ -80,8 +89,8 @@ test("the manifest is measured from the bytes", () => {
   expect(m.source.bytes).toBe(encoder.encode(CSV_BODY).length);
   expect(m.source.sha256).toMatch(/^[0-9a-f]{64}$/);
   expect(m.edits.count).toBe(1);
-  expect(m.sheet.rows).toBe(3);
-  expect(m.sheet.cols).toBe(3);
+  expect(m.sheet.rows).toBe(ROWS);
+  expect(m.sheet.cols).toBe(COLS);
 
   // And the file agrees with the value handed back.
   const written = JSON.parse(strFromU8(unzipSync(bytes)[MANIFEST_ENTRY]!)) as Record<
@@ -139,26 +148,27 @@ test("an unknown entry survives a round trip", () => {
 // the whole argument for JSONL over JSON.
 test("a truncated log replays its complete lines", () => {
   const { bytes } = saved("sales.csv", (s) => {
-    s.set(0, 2, "1204");
-    s.set(2, 2, "1455");
+    s.set(0, UNITS, "1204");
+    s.set(2, UNITS, "1455");
   });
 
   const entries = unzipSync(bytes);
   const log = strFromU8(entries[LOG_ENTRY]!);
   const cut = log.indexOf("\n") + 1;
-  entries[LOG_ENTRY] = encoder.encode(log.slice(0, cut) + log.slice(cut, cut + 12));
+  const torn = 12; // bytes of the second line that made it out
+  entries[LOG_ENTRY] = encoder.encode(log.slice(0, cut) + log.slice(cut, cut + torn));
 
   const back = readDocument("sales.csv", zipSync(entries));
   expect(back.edits, "the complete line should survive").toHaveLength(1);
-  expect(back.sheet!.raw(0, 2)).toBe("1204");
+  expect(back.sheet!.raw(0, UNITS)).toBe("1204");
 });
 
 // Damage in the middle is a different thing: stopping there would silently
 // discard the operations after it.
 test("a log damaged in the middle fails the open", () => {
   const { bytes } = saved("sales.csv", (s) => {
-    s.set(0, 2, "1204");
-    s.set(2, 2, "1455");
+    s.set(0, UNITS, "1204");
+    s.set(2, UNITS, "1455");
   });
 
   const entries = unzipSync(bytes);
@@ -184,21 +194,21 @@ test("a file that is not a zip is refused by name", () => {
 describe("the format version follows the log", () => {
   test("plain edits stay at 1", () => {
     const { doc } = saved("sales.csv", (s) => {
-      s.set(0, 2, "1204");
+      s.set(0, UNITS, "1204");
     });
-    expect(doc.manifest.format).toBe(1);
+    expect(doc.manifest.format).toBe(BASE_VERSION);
   });
 
   test("a column rule needs 2", () => {
     const { doc } = saved("sales.csv", (s) => {
-      s.apply(2, parseProgram('replace(/,/, "")'));
+      s.apply(UNITS, parseProgram('replace(/,/, "")'));
     });
-    expect(doc.manifest.format).toBe(2);
+    expect(doc.manifest.format).toBe(RULE_VERSION);
   });
 
   test("a binding needs the current version", () => {
     const { doc } = saved("sales.csv", (s) => {
-      s.bind(1, parseFormula("units * 2"));
+      s.bind(REGION, parseFormula("units * 2"));
     });
     expect(doc.manifest.format).toBe(FORMAT_VERSION);
   });
@@ -208,30 +218,30 @@ describe("the format version follows the log", () => {
 // same column it did the first time.
 test("a column op round-trips", () => {
   const { bytes, doc } = saved("sales.csv", (s) => {
-    s.apply(2, parseProgram('replace(/,/, "")'));
+    s.apply(UNITS, parseProgram('replace(/,/, "")'));
   });
   expect(doc.edits).toHaveLength(1);
 
   const back = readDocument("sales.csv", bytes);
-  expect(back.sheet!.raw(0, 2)).toBe("1204");
-  expect(back.sheet!.raw(2, 2)).toBe("1455");
-  expect(back.sheet!.columns[2]!.kind).toBe("num");
+  expect(back.sheet!.raw(0, UNITS)).toBe("1204");
+  expect(back.sheet!.raw(2, UNITS)).toBe("1455");
+  expect(back.sheet!.columns[UNITS]!.kind).toBe("num");
 });
 
 // The expression is what the file carries, not the results, so reopening
 // recomputes them rather than reading them back.
 test("a binding round-trips and recomputes", () => {
   const { bytes } = saved("sales.csv", (s) => {
-    s.set(0, 2, "1204");
-    s.bind(1, parseFormula("units * 2"));
+    s.set(0, UNITS, "1204");
+    s.bind(REGION, parseFormula("units * 2"));
   });
 
   const back = readDocument("sales.csv", bytes);
-  expect(back.sheet!.display(0, 1)).toBe("2408");
-  expect(back.sheet!.binding(1)).toBe("units * 2");
+  expect(back.sheet!.display(0, REGION)).toBe("2408");
+  expect(back.sheet!.binding(REGION)).toBe("units * 2");
   // Binding never removed the column's own values -- it stopped them being what
   // display hands out -- so they are still underneath, waiting for an unbind.
-  expect(back.sheet!.raw(0, 1)).toBe("West");
+  expect(back.sheet!.raw(0, REGION)).toBe("West");
 });
 
 // The library reference is a convenience about this machine. The expression is
@@ -239,7 +249,7 @@ test("a binding round-trips and recomputes", () => {
 // library.
 test("a bound file computes with no library to resolve", () => {
   const { bytes } = saved("sales.csv", (s) => {
-    s.bind(1, parseFormula("units * 2"));
+    s.bind(REGION, parseFormula("units * 2"));
   });
 
   const entries = unzipSync(bytes);
@@ -247,12 +257,12 @@ test("a bound file computes with no library to resolve", () => {
   expect(state["columnFormulas"], "no bound reference was written").toBeUndefined();
 
   const back = readDocument("sales.csv", bytes);
-  expect(back.sheet!.display(1, 1)).toBe("1974");
+  expect(back.sheet!.display(1, REGION)).toBe("1974");
 });
 
 test("a library reference round-trips when there is one", () => {
   const sh = ingestRead("sales.csv", CSV_BODY);
-  sh.bind(1, parseFormula("units * 2"));
+  sh.bind(REGION, parseFormula("units * 2"));
 
   const doc: Document = {
     manifest: {
@@ -260,11 +270,11 @@ test("a library reference round-trips when there is one", () => {
       sheet: { rows: sh.rows(), cols: sh.cols(), entry: "" },
     },
     raw: encoder.encode(CSV_BODY),
-    state: { active: { row: 0, col: 0 }, columnFormulas: [{ col: 1, ref: "double-units" }] },
+    state: { active: { row: 0, col: 0 }, columnFormulas: [{ col: REGION, ref: "double-units" }] },
     edits: sh.edits(),
     extra: new Map(),
   };
 
   const back = readDocument("sales.csv", writeDocument(doc));
-  expect(back.state.columnFormulas).toEqual([{ col: 1, ref: "double-units" }]);
+  expect(back.state.columnFormulas).toEqual([{ col: REGION, ref: "double-units" }]);
 });
