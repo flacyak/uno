@@ -50,16 +50,23 @@ function random(seed: number): () => number {
 // that decoded: a multi-byte letter, and a U+FEFF in the middle of a file.
 const ALPHABET = ["a", "b", ",", ";", '"', '"', "\n", "\n", "\r", "\r\n", " ", "é", "日", "\uFEFF"];
 
+/** How often a random file opens with a byte order mark, and how long it runs. */
+const BOM_CHANCE = 0.1;
+const MAX_CHARS = 40;
+
+/** How many random files the scanner is checked against. */
+const SEEDS = 4000;
+
 function csvish(rand: () => number): string {
-  let s = rand() < 0.1 ? "\uFEFF" : "";
-  const n = Math.floor(rand() * 40);
+  let s = rand() < BOM_CHANCE ? "\uFEFF" : "";
+  const n = Math.floor(rand() * MAX_CHARS);
   for (let i = 0; i < n; i++) s += ALPHABET[Math.floor(rand() * ALPHABET.length)];
   return s;
 }
 
 describe("the scanner agrees with readAll", () => {
   test("on random input, in any chunk size, split at any record", () => {
-    for (let seed = 1; seed <= 4000; seed++) {
+    for (let seed = 1; seed <= SEEDS; seed++) {
       const rand = random(seed);
       const text = csvish(rand);
       const comma = rand() < 0.5 ? "," : ";";

@@ -16,10 +16,7 @@ import { parse as parseFormula } from "../src/formula/index.ts";
 import { read } from "../src/ingest/index.ts";
 import { snap } from "../src/pattern/index.ts";
 import { describe as describeProgram, text as programText } from "../src/program/index.ts";
-
-// date,region,rep,channel,units,revenue
-const CHANNEL = 3;
-const UNITS = 4;
+import { CHANNEL, COLS, COMMAS_LEFT, ROWS, UNITS } from "./testdata/sales-q3.ts";
 
 function salesBytes(): Uint8Array {
   return new Uint8Array(
@@ -32,8 +29,8 @@ test("a workspace survives being built, saved and reopened", () => {
   const s = read("sales-q3.csv", raw);
 
   // 1. It opens, and the delimiter was guessed from the bytes.
-  expect(s.rows()).toBe(4812);
-  expect(s.cols()).toBe(6);
+  expect(s.rows()).toBe(ROWS);
+  expect(s.cols()).toBe(COLS);
   expect(s.source).toBe("UTF-8 · delimiter ','");
 
   // 2. units looks numeric and does not parse: numeric data wearing a costume.
@@ -50,7 +47,7 @@ test("a workspace survives being built, saved and reopened", () => {
   expect(p, "no proposal from three consistent edits").toBeDefined();
   expect(programText(p!.prog)).toBe('replace(/,/, "")');
   expect(describeProgram(p!.prog)).toBe("remove commas");
-  expect(p!.affects).toBe(3149);
+  expect(p!.affects).toBe(COMMAS_LEFT);
 
   // 4. Accepting it is one line in the log for 3,149 changed cells, and the
   //    column stops being flagged.
@@ -88,7 +85,7 @@ test("a workspace survives being built, saved and reopened", () => {
   // 7. Reopened, it is the same workspace: the rule replayed, and the bound
   //    column recomputed from the expression rather than from stored results.
   const back = readDocument("sales-q3.uno", bytes);
-  expect(back.sheet!.rows()).toBe(4812);
+  expect(back.sheet!.rows()).toBe(ROWS);
   expect(back.sheet!.raw(0, UNITS)).toBe("1204");
   expect(back.sheet!.columns[UNITS]!.kind).toBe("num");
   expect(back.sheet!.binding(CHANNEL)).toBe("revenue / units");

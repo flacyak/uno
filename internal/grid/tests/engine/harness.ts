@@ -1,0 +1,67 @@
+// What the engine tests share: a real MessageChannel between a client and
+// `serve`, the fixture, and a way to compare rows with what a Sheet builds.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { Engine, messagePort, serve } from "../../src/engine/index.ts";
+import type { MessagePortLike, Reply, Request, Tuning } from "../../src/engine/index.ts";
+import { read } from "../../src/ingest/index.ts";
+import type { Sheet } from "../../src/sheet/index.ts";
+import { blobSource } from "../../src/store/index.ts";
+import { nodeSource } from "../../src/store/node.ts";
+
+export const FIXTURE = fileURLToPath(new URL("../testdata/sales-q3.csv", import.meta.url));
+export const bytes = new Uint8Array(readFileSync(FIXTURE));
+export const sales = read("sales-q3.csv", bytes);
+
+/** The rows a viewport shows. */
+export const SCREEN = 22;
+
+/** Small enough that the 240 KB fixture spans hundreds of blocks and the cache has to evict. */
+export const TINY: Tuning = { chunkBytes: 4096, blockRows: 7, blockBytes: 512, cacheBytes: 8192 };
+
+export function connect(tuning?: Tuning): { engine: Engine; done: () => void } {
+  const { port1, port2 } = new MessageChannel();
+  serve(
+    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
+    (ref) => ("path" in ref ? nodeSource(ref.path) : Promise.resolve(blobSource(ref.blob))),
+    tuning,
+  );
+  const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
+  return {
+    engine,
+    done: () => {
+      engine.close();
+      port1.close();
+    },
+  };
+}
+
+export function indexed(engine: Engine): Promise<void> {
+  return new Promise((resolve) => {
+    if (engine.progress?.complete === true) return resolve();
+    engine.onProgress = (p) => {
+      if (p.complete) resolve();
+    };
+  });
+}
+
+/** What a Sheet shows and stores for a run of rows, as wide as its header. */
+export function sheetRows(
+  s: Sheet,
+  first: number,
+  count: number,
+  what: "raw" | "display",
+): string[][] {
+  const out: string[][] = [];
+  for (let row = first; row < Math.min(first + count, s.rows()); row++) {
+    out.push(s.columns.map((_, col) => s[what](row, col)));
+  }
+  return out;
+}
+
+/** Rows as wide as the header, the way a Sheet reads a short one: padded with "". */
+export function widened(rows: string[][]): string[][] {
+  return rows.map((r) => sales.columns.map((_, col) => r[col] ?? ""));
+}
