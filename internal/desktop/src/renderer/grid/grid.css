@@ -1,0 +1,136 @@
+/* The grid: the scroller, the virtualised table, the cell editor, and the
+ * column badges. Loaded with the grid, when the first file opens. */
+
+/* The grid's container has to be told to fill what is left, and told that it
+ * may be shorter than its contents. Without `min-height: 0` a flex child sizes
+ * to its content instead of scrolling, and the virtualiser then measures a
+ * viewport the height of the whole sheet -- which is every row in the DOM, the
+ * one thing it exists to avoid. */
+#content {
+  outline: none; /* it takes focus to receive keys, not to be drawn around */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.grid-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  position: relative;
+  background: var(--surface);
+}
+
+/* The scroller's inner height is the whole sheet; the table inside holds only
+ * the rows that fit the viewport, translated into place. That is what keeps a
+ * 4,812-row file at about forty elements. */
+.grid-sizer {
+  position: relative;
+  width: 100%;
+}
+
+table.grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+table.grid th,
+table.grid td {
+  border-right: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--rule-2);
+  padding: 0 11px;
+  height: var(--row-h);
+  text-align: left;
+  white-space: nowrap;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+
+table.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--sunken);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* As wide as the row count needs, set by the grid, so the column does not
+ * widen under the cursor as the numbers grow past row 99,999. */
+table.grid .gutter {
+  background: var(--sunken);
+  color: var(--ink-3);
+  text-align: right;
+  width: calc(var(--gutter-digits, 4) * 1ch + 22px);
+  min-width: 56px;
+  font-size: 11.5px;
+  user-select: none;
+}
+
+table.grid td.num {
+  text-align: right;
+}
+
+table.grid tbody tr.even td:not(.gutter) {
+  background: color-mix(in srgb, var(--sunken) 42%, transparent);
+}
+
+/* A row the engine has not sent yet. It has a number and nothing else. */
+table.grid tbody tr.pending td:not(.gutter)::after {
+  content: "·";
+  color: var(--ink-3);
+}
+
+table.grid td.sel {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-b) !important;
+  color: var(--ink);
+}
+
+/* The cell editor sits exactly over the cell it is editing, so nothing moves
+ * when a person starts typing. */
+.cell-editor {
+  position: absolute;
+  z-index: 3;
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 0 9px;
+  outline: none;
+}
+
+.colhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.5;
+}
+
+.badge.flagged {
+  color: var(--flag);
+  border-color: color-mix(in srgb, var(--flag) 45%, transparent);
+  background: var(--flag-b);
+}

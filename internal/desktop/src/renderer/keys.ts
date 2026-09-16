@@ -4,7 +4,7 @@
 // grid carries the action out. Where a motion lands, what . makes again and what
 // a command says are the same whichever strategy asked, so they live here. None
 // of it touches the DOM, so a test can drive every key without a window -- the
-// same property the header of main.ts says the shell exists to keep.
+// same property the header of shell/shell.ts says the shell exists to keep.
 
 export type Mode = "view" | "transform";
 

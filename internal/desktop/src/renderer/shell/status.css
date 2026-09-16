@@ -1,0 +1,69 @@
+/* The status bar and the prompt that stands in for its file line. */
+
+.win-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-top: 1px solid var(--rule);
+  background: var(--sunken);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.win-status .sep {
+  color: var(--ink-3);
+}
+
+.win-status .grow {
+  flex: 1;
+}
+
+.win-status .mode {
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.win-status .mode.t {
+  color: var(--flag);
+}
+
+.win-status .mode:empty {
+  display: none;
+}
+
+.win-status .err {
+  color: var(--flag);
+}
+
+/* A half-typed 12g stays visible until it finishes or Esc drops it. */
+.win-status .keys {
+  color: var(--ink);
+  background: var(--surface);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.win-status .keys:empty {
+  display: none;
+}
+
+/* The command line is typed where the status bar talks, over the file's line. */
+.win-status .cmd {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+
+.win-status.prompting #status-file,
+.win-status.prompting #status-msg,
+.win-status.prompting .sep {
+  display: none;
+}

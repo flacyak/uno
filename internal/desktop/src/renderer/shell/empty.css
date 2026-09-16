@@ -1,0 +1,42 @@
+/* The empty state, which is also where a dropped file lights up. */
+
+.dropzone {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 22px;
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.dropzone.over {
+  border-color: var(--accent);
+  background: var(--accent-b);
+}
+
+.dropzone h1 {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+
+.dropzone p {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.dropzone .exts {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
