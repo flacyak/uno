@@ -120,6 +120,20 @@ class Absent {
     return this.edits;
   }
 
+  /** The bucket it waits to have connected, when that is why it has no file. */
+  get waiting(): Unconnected | undefined {
+    return this.opened.link?.connect;
+  }
+
+  /**
+   * missing is this source once it has stopped waiting for its bucket but its
+   * file still does not open: the same source, saying why it has no file.
+   */
+  missing(why: string): Absent {
+    const { id, name, path, raw, bytes, edits, rows, cols } = this;
+    return new Absent(id, name, path, raw, bytes, edits, rows, cols, why);
+  }
+
   /** Nothing to switch, and nothing to close. */
   mode(_transform: boolean): void {}
   close(): Promise<void> {
@@ -213,12 +227,33 @@ export class Workspace {
    * replayed over what the file holds now. A file that will not take them --
    * because it is a quarter the size and the log names a row past its end --
    * leaves the source as it was and says so, so a wrong pick costs nothing.
+   *
+   * The one exception is a source that was waiting for its bucket to be
+   * connected, read where it already points once a connection covers it. It
+   * is not waiting any more whether or not the read works, so a read that
+   * fails leaves it missing and saying why, and that is the answer: asking
+   * again to connect a bucket that is connected would send the person round
+   * the same form for nothing.
    */
   relink(id: string, ref: SourceRef): Promise<Opened> {
     return this.serially(async () => {
       const was = this.need(id);
       const carried: Carried = { container: "", edits: was.log };
-      const view = await this.view(id, ref, carried);
+      let view: View;
+      try {
+        view = await this.view(id, ref, carried);
+      } catch (err) {
+        const connected =
+          was instanceof Absent &&
+          was.waiting !== undefined &&
+          "path" in ref &&
+          ref.path === was.path &&
+          this.guard?.(was.path) === undefined;
+        if (!connected) throw err;
+        const now = was.missing(messageOf(err));
+        this.sources.set(id, now);
+        return now.opened;
+      }
 
       // Only once the new one is open, so a refused relink leaves the source
       // showing whatever it was showing before.

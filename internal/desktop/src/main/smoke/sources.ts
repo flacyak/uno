@@ -255,7 +255,7 @@ export const SOURCES: Check[] = [
     `,
   },
   {
-    name: "Connect on its line connects the bucket, filled in, and the object comes back",
+    name: "Connect on its line connects the object's folder, filled in, and the object comes back",
     shot: "meets-connected",
     script: `
       ${REMOTE}
@@ -272,13 +272,14 @@ export const SOURCES: Check[] = [
       const form = document.querySelector("#panel .panel-connect");
       if (form.hidden) return "the form did not open";
       if (form.querySelector("input[name=bucket]").value !== "acme-exports") return "the bucket was not filled in";
+      if (form.querySelector("input[name=prefix]").value !== "2025/") return "the folder was not filled in";
       const choose = form.querySelector("select");
       if (!(await arrives(() => [...choose.options].some((o) => o.value === "profile:finance")))) return "no finance profile to choose";
       choose.value = "profile:finance";
       choose.dispatchEvent(new Event("change", { bubbles: true }));
       [...form.querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
 
-      if (!(await arrives(() => text("#status-msg") === "ads-q3.csv reads from acme-exports"))) {
+      if (!(await arrives(() => text("#status-msg") === "ads-q3.csv reads from acme-exports / 2025"))) {
         return "the status bar says " + JSON.stringify(text("#status-msg")) + " · the form says " + JSON.stringify(form.querySelector(".result").textContent);
       }
       if (!(await arrives(() => document.querySelector("thead th .colhead") !== null))) {
