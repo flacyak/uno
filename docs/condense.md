@@ -65,16 +65,23 @@ Each is one commit on the branch. Deltas are insertions and deletions over `src/
 23. grid tests: the two-profile machine fixture, tests/store/profiles.ts.
 24. grid said exports Sentences; the desktop's tables use it.
 25. desktop smoke PRELUDE connects a bucket: connectForm, signInAs, saveConnection. Smoke run passes.
+26. grid tests: keysOnly, the machine with the stand-in's keys and nothing else, for four suites.
+27. desktop tests: the DOM shim's waits are bounded by the clock. happy-dom's frame is setImmediate, so a frame budget was no time at all under load, and three checks failed now and then. This was the flakiness seen in the run.
+28. desktop shell: Handlers and dispatch in util; the grid's actions and the prompt's commands as tables; editing for edit, apply and history; the Ctrl chords as a map. Panel: a step map for the moving keys, a Map for the tab keys, a record for the doings, el for its fields. page.ts and shell.ts find elements through found. Smoke run passes.
+29. grid s3Location: both https forms through one host pattern.
+30. grid codec: omitempty writes a manifest source, with the key order kept where fileSource and partsSource build the records.
+31. grid workspace: pointedAt and everyPart, each used once, written where they are used.
+32. grid engine: Part is Held less id, name and state, with edits, as a type; keptOf and the save's held are each one spread.
 
-Measured after step 24, against the baseline:
+Measured after step 32, against the baseline:
 
-| area                 | lines  | was    |
-| -------------------- | ------ | ------ |
-| internal/grid/src    | 16902  | 16971  |
-| internal/desktop/src | 13427  | 13697  |
-| internal/grid/tests  | 20652  |        |
-| internal/desktop/tests | 7662 |        |
-| everything under internal | +2350 -2827 over 91 files, 25 commits |
+| area                      | lines | was   |
+| ------------------------- | ----- | ----- |
+| internal/grid/src         | 16813 | 16971 |
+| internal/desktop/src      | 13388 | 13697 |
+| internal/grid/tests       | 20639 |       |
+| internal/desktop/tests    | 7671  |       |
+| everything under internal | +2637 -3246 over 96 files, 35 commits |
 
 Tried and reverted: a key and radio helper for the main process menu and an override helper for the driven run's IPC handlers.
 tests/bridge.test.ts reads main/index.ts and counts the channel names written as literals beside `webContents.send` and `ipcMain.handle`, on purpose, so a helper that passes the channel through hides what that guard looks for.
@@ -89,6 +96,8 @@ From the survey, not yet done, highest value first.
 - desktop renderer: text-field key guard shared by six handlers (~15, medium risk: the six differ in composing and preventDefault, and the saving after the helper is a few lines); frameOnce for the two next-frame redraws (~5); Theming and Language listener lists (~3).
 - desktop smoke/vim-style.ts: the connection form filled three times across meets, sources and connections; the typed command repeated four times.
 - grid: telemetry's three switches over a kind as three small classes. Measured as line-neutral, so left as it is.
+- grid codec: the hand-written CRC-32 could be read out of fflate's gzip trailer, about 20 lines. Left as it is: it would couple the save to gzip's wrapper, and no test checks the CRC, so a wrong one would pass every test and fail only in Go's archive/zip.
+- desktop sources: the peek's `shown` and `looking` as one field, about 9 lines, with about 14 test assertions to reword.
 - grid codec: field-table codec for sources (~25, medium risk: JSON key order must match the Go structs).
 - grid tests: a memory FileHandler stand-in in agree, multi and multifiles (each records something different, so a shared one needs hooks); standinProviders(b) for the three `providers` closures; a `listening(server)` for the three stand-in servers.
 - A scan for repeated windows (`python3` over the .ts files, four lines, two or more files) finds little left in src. The next pool is per-file repetition inside shell.ts, panel.ts and sources.ts, and the smoke checks' connection form and command typing.
