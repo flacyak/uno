@@ -51,6 +51,24 @@ export interface Beside {
   objects: Map<string, Uint8Array>;
   keys?: AwsCredentials;
   public?: boolean;
+  /**
+   * Whether the bucket keeps every version of an object, as one with
+   * versioning on does: each answer names the version it is, and one asked
+   * for by VersionId is served however the object has changed since, or
+   * after it is deleted.
+   */
+  versioned?: boolean;
+}
+
+/**
+ * versionIdOf is the VersionId a versioned stand-in bucket gives a body: its
+ * MD5 in base64, so an id holds the `+`, `/` and `=` a request has to carry
+ * encoded and signed as sent, the way S3's own ids hold them. S3 gives every
+ * PUT a new id; this gives every distinct body one, which is the same thing
+ * for a test that never writes the same bytes twice.
+ */
+export function versionIdOf(body: Uint8Array): string {
+  return createHash("md5").update(body).digest("base64");
 }
 
 /**
@@ -107,6 +125,17 @@ export async function bucket(
     [BUCKET, { objects, keys: KEYS }],
     ...Object.entries(beside),
   ]);
+  /** Every body a versioned bucket has held under each key, by VersionId. */
+  const history = new Map<string, Map<string, Uint8Array>>();
+  /** remember keeps what a versioned bucket holds now, before it is changed. */
+  function remember(name: string, held: Beside): void {
+    if (held.versioned !== true) return;
+    for (const [key, body] of held.objects) {
+      const at = `${name}/${key}`;
+      if (!history.has(at)) history.set(at, new Map());
+      history.get(at)!.set(versionIdOf(body), body);
+    }
+  }
   const secrets = new Map(
     [KEYS, ...Object.values(beside).flatMap((b) => (b.keys === undefined ? [] : [b.keys]))].map(
       (k) => [k.accessKeyId, k],
@@ -133,6 +162,7 @@ export async function bucket(
     });
     const [, name, ...rest] = raw.split("/");
     const held = buckets.get(name ?? "");
+    if (held !== undefined) remember(name!, held);
 
     // A request with no signature is somebody reading a public bucket, and
     // nothing else is ever answered without one.
@@ -231,23 +261,34 @@ export async function bucket(
       res.writeHead(200, { "x-amz-bucket-region": home }).end();
       return;
     }
-    const body = held.objects.get(key);
+    // One version asked for by name is served whatever the object is now,
+    // and a bucket that keeps no versions has none to give.
+    const asked = url.searchParams.get("versionId");
+    if (asked !== null && held.versioned !== true) {
+      res.writeHead(400).end();
+      return;
+    }
+    const body = asked === null ? held.objects.get(key) : history.get(`${name}/${key}`)?.get(asked);
     if (body === undefined) {
       res.writeHead(404).end();
       return;
     }
     const etag = etagOf(body);
+    const version: Record<string, string> =
+      held.versioned === true ? { "x-amz-version-id": asked ?? versionIdOf(body) } : {};
     if (req.headers["if-match"] !== undefined && req.headers["if-match"] !== etag) {
       res.writeHead(412).end();
       return;
     }
     if (req.method === "HEAD") {
-      res.writeHead(200, { "content-length": body.length, etag }).end();
+      res.writeHead(200, { "content-length": body.length, etag, ...version }).end();
       return;
     }
     const m = /^bytes=(\d+)-(\d+)$/.exec(range ?? "");
     const part = m === null ? body : body.subarray(Number(m[1]), Number(m[2]) + 1);
-    res.writeHead(m === null ? 200 : 206, { "content-length": part.length, etag }).end(part);
+    res
+      .writeHead(m === null ? 200 : 206, { "content-length": part.length, etag, ...version })
+      .end(part);
   }
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

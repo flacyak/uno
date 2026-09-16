@@ -106,6 +106,13 @@ Every range is asked for as the version of the object that was opened, so an
 export rewritten in the bucket mid-read is an error that says so, never half
 of one file and half of another.
 
+A workspace opens the bytes its log was made against where the bucket can
+still hand them over. A bucket with versioning on keeps every version, so the
+VersionId a save recorded is asked for by name, and the saved bytes come back
+after the object has been written over or deleted. A bucket without versioning
+keeps no copy, so the object is read as it is now. So is one whose recorded
+version the bucket no longer has, and it says which version it opened instead.
+
 ## Connections
 
 A connection is a bucket, a folder in it, and how to sign in, kept as one
