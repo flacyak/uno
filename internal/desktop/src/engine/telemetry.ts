@@ -1,57 +1,51 @@
-// Where the engine's measurements go: a collector, when this machine names one.
+// Sends the engine's metrics to an OTLP collector.
 //
-// The engine measures and @uno/grid adds it up. This file is the part only a
-// platform can do, which is sending it. Nothing is sent unless
-// OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_EXPORTER_OTLP_METRICS_ENDPOINT is set,
-// the variables every OpenTelemetry tool reads, so it is something a person
-// turns on for their own machine and off for everybody else's. Grafana
-// Cloud's OTLP gateway and the local stack in observability/ both take what
-// is sent here as it is.
+// @uno/grid's Meter aggregates the measurements. This file posts them on a
+// timer. Sending starts when OTEL_EXPORTER_OTLP_ENDPOINT or
+// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT is set.
 //
-// What is sent says what was done and how long it took: the kind of request,
-// whether the bytes were on a disk or in a bucket, the count and size of the
-// requests made to S3. No file name, path, bucket or key is in it.
+// The metrics carry request kinds, durations, storage type, and S3 request
+// counts and byte sizes. File names, paths, buckets and keys stay local.
 
 import { Meter, collector } from "@uno/grid/engine";
 import type { Collector } from "@uno/grid/engine";
 import type { Telemetry } from "@uno/grid/engine";
 
-/** How often the totals are sent while the engine runs. */
+/** Interval between sends. */
 const EXPORT_MS = 10_000;
-/** How long a send may take before it is given up on. Closing waits this long at most. */
+/** Timeout for one send. */
 const SEND_TIMEOUT_MS = 2_000;
 
-/** How many requests the engine made to S3. */
+/** Metric name: number of S3 requests. */
 const S3_REQUESTS = "uno.s3.requests";
-/** How many bytes S3 answered with. */
+/** Metric name: bytes received from S3. */
 const S3_RECEIVED = "uno.s3.received";
 
-/** Exporting is a collector being told what the engine measures. */
+/** A running metrics exporter. */
 export interface Exporting {
-  /** What `serve` is handed. */
+  /** Telemetry hook passed to `serve`. */
   record: Telemetry;
-  /** A fetch that counts what goes through it, for the S3 provider. */
+  /** A fetch wrapper that counts S3 requests and bytes. */
   fetch: typeof fetch;
-  /** Sends what has been measured so far. It never throws. */
+  /** Sends the current totals. Resolves after success and after failure
+   * alike. */
   flush(): Promise<void>;
-  /** Stops the sends on a timer. */
+  /** Stops the periodic sends. */
   stop(): void;
 }
 
-/** What is said of a request by its answer: the hundreds digit of the status. */
+/** Returns the status class of an HTTP status, such as "2xx". */
 function statusClass(status: number): string {
   return `${Math.floor(status / 100)}xx`;
 }
 
 /**
- * exporting reads where to send from `env`, and answers undefined where it
- * names no collector. An endpoint that is set and cannot be read is said
- * once, on stderr, and nothing is measured: a setting somebody got wrong must
- * not stop a file from opening.
+ * Creates an exporter for the collector named in `env`. Returns undefined
+ * when `env` omits a collector. An invalid endpoint is logged to stderr
+ * once and also returns undefined.
  *
- * `go` is how a request goes out, the runtime's own fetch unless said: both
- * the sends to the collector and the requests to S3 that are counted on their
- * way through.
+ * `go` is the fetch used for sends to the collector and for the counted S3
+ * requests. Defaults to the global fetch.
  */
 export function exporting(
   env: Record<string, string | undefined>,
@@ -82,14 +76,12 @@ export function exporting(
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       });
     } catch {
-      // A collector that is down costs the measurements and nothing else. The
-      // totals are running ones, so the next send carries what this one held.
+      // Totals are cumulative, so a failed send is covered by the next one.
     }
   }
 
-  // One send at a time, in the order asked. Two in flight could arrive out of
-  // order, and a collector drops a total older than the one it has. A close
-  // during a send on the timer waits for it, then sends what came after.
+  // Sends run one at a time, in order. Collectors drop a cumulative total
+  // older than the one they already have.
   let sending: Promise<void> = Promise.resolve();
   function flush(): Promise<void> {
     sending = sending.then(send);
@@ -97,7 +89,7 @@ export function exporting(
   }
 
   const timer = setInterval(() => void flush(), EXPORT_MS);
-  // The timer alone does not keep the process up.
+  // Lets the process exit while the timer is pending.
   timer.unref();
 
   return {
@@ -110,8 +102,7 @@ export function exporting(
       try {
         const res = await go(input, init);
         outcome = statusClass(res.status);
-        // S3 says how long every answer is. One that does not counts as no
-        // bytes, so what was received is under-counted rather than guessed.
+        // A missing content-length counts as zero bytes.
         const length = Number(res.headers.get("content-length") ?? "0");
         meter.record({ name: S3_RECEIVED, kind: "count", unit: "By", value: length });
         return res;

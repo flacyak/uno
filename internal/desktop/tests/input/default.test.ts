@@ -1,4 +1,4 @@
-// Default input without a window: the keys a spreadsheet has.
+// The default input strategy on its own: what each key does.
 
 import { expect, test } from "vite-plus/test";
 

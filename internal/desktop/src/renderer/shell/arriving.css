@@ -1,11 +1,7 @@
-/* What is on its way: a source that was asked for and has not opened yet, in
- * the sidebar and in the sources panel, and a connection being tried and kept,
- * in the panel. Each is listed where its tab or its line will be, dimmed, with
- * a bar along the bottom of its line that fills from the left and starts again
- * until what it is waiting for takes the line's place. How long that takes is
- * not known ahead of it, so the bar says that something is coming and never
- * how much of it has. The text gives up the bar's height, so the two never
- * touch in a line that is kept at one height. */
+/* Rows for things still arriving: a source that is still opening, in the
+ * sidebar and the panel, and a connection being tested and saved, in the
+ * panel. Each is dimmed, with a bar along the bottom that fills from the
+ * left and repeats. The bottom padding makes room for the bar. */
 :is(.panel-row.opening, .tab-opening),
 .panel-row.failed {
   --opening-bar-h: 4px;
@@ -14,8 +10,7 @@
   padding-bottom: calc(var(--opening-bar-h) + 2px);
 }
 
-/* The bar runs under the text, from where it starts to where it ends, which
- * is each line's own padding. */
+/* The bar's inset from each side, matching the line's own padding. */
 .panel-row:is(.opening, .failed) {
   --opening-bar-left: 6px;
   --opening-bar-right: 6px;
@@ -31,8 +26,7 @@
   cursor: default;
 }
 
-/* It stays dimmed with the keys on its line, since there is nothing there to
- * choose yet. */
+/* Stays dimmed while focused: it can be chosen once it has opened. */
 .panel-list:focus .panel-row.sel.opening,
 .panel-list:focus .panel-row.sel.opening > :last-child {
   color: var(--ink-3);
@@ -56,8 +50,7 @@
   background: var(--rule);
 }
 
-/* The fill grows by its width, so both its ends are round however much of the
- * bar it covers, where one scaled along its length would have them squashed. */
+/* The fill animates its width, so both ends stay round. */
 :is(.panel-row.opening, .tab-opening)::after {
   background: var(--accent);
   animation: opening-fill 1.5s ease-in-out infinite;
@@ -78,12 +71,10 @@
   }
 }
 
-/* A connection that was refused: its line stays where it was connecting,
- * still dimmed, flagged the way a tab whose file has gone is. The bar takes
- * the flag's colour, shakes once the way a head does, and drains, and the
- * empty track is left under the line. Choosing the line edits the connection. */
+/* A refused connection: its line stays, dimmed, with the flag mark. The bar
+ * takes the flag colour, shakes once, and drains to empty. */
 .panel-row.failed {
-  /* How far the bar goes to either side as it shakes, and how long it shakes for. */
+  /* How far the bar moves as it shakes, and for how long. */
   --failed-shake: 4px;
   --failed-shake-for: 420ms;
 }
@@ -106,7 +97,7 @@
   animation: failed-shake var(--failed-shake-for) ease-in-out;
 }
 
-/* The drain waits for the shake, filled, and leaves the bar empty. */
+/* The drain starts after the shake and leaves the bar empty. */
 .panel-row.failed::after {
   width: 0;
   background: var(--flag);
@@ -132,8 +123,8 @@
   }
 }
 
-/* Without motion the bar is filled and faint while it waits, which still says
- * the line is waiting on something, and empty at once when it is refused. */
+/* With reduced motion the fill is static and faint while waiting, and empty
+ * at once when refused. */
 @media (prefers-reduced-motion: reduce) {
   :is(.panel-row.opening, .tab-opening)::after {
     animation: none;

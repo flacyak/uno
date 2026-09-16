@@ -1,9 +1,8 @@
-// A ref for parts: several files named as one source, claimed by a handler a
-// platform lists like any other, and opened through the handlers beside it.
+// PartsRef: several files named as one source, claimed by multiFiles and
+// opened through the handlers beside it.
 //
-// What is under test is the seam. The ref is all the handler is handed, a
-// build that does not list the handler refuses the ref by name, and a part in
-// a bucket is signed by the connection that covers it, as it would be alone.
+// A build of single-file handlers only refuses the ref by name, and a part
+// in a bucket is signed by the connection covering it.
 
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -36,7 +35,7 @@ import { FINANCE, MARKETING, profilesEnv, twoProfiles } from "./profiles.ts";
 /** What the three parts are called as one source. */
 const NAME = "sales-q3";
 
-/** Where a file held in memory is said to be. */
+/** The path prefix of a file held in memory. */
 const MEMORY = "memory://";
 
 /** How many rows are compared at a time. */
@@ -81,7 +80,7 @@ test("multiFiles claims a ref of parts and no other", () => {
   expect(multi.handles({ name: "a.csv", path: "/tmp/a.csv" })).toBe(false);
   expect(multi.handles({ name: "a.csv", path: "s3://acme/a.csv" })).toBe(false);
   expect(multi.handles({ name: "a.csv", blob: new Blob([]) })).toBe(false);
-  // And no handler for one file claims a ref of several.
+  // And each single-file handler leaves a ref of several alone.
   for (const one of [localFiles(), blobFiles()]) expect(one.handles(ON_DISK)).toBe(false);
 });
 
@@ -114,14 +113,13 @@ test("multiOf hands back the map, the extents and each part's version", async ()
     await source.close();
   }
 
-  // Any other source is not one.
+  // A single-file source's multi is undefined.
   const one = await openWith([m.handler], inMemory(PART_NAMES[0]!));
   expect(multiOf(one)).toBeUndefined();
 });
 
-// What a save keeps is the ref with what the open measured, and that ref
-// alone opens the source again: each part as the version recorded, and none
-// of them touched until a read needs it.
+// A ref carrying extents and versions, as a save keeps it, opens with every
+// part left closed. Each part is asked for with its recorded version.
 test("a ref carrying extents and versions opens without touching a part", async () => {
   const first = memory();
   const fresh: PartsRef = {
@@ -140,7 +138,7 @@ test("a ref carrying extents and versions opens without touching a part", async 
   };
   await measured.close();
 
-  // Through JSON and back, which is all a save has to be able to do with it.
+  // Round-tripped through JSON, as a save does.
   const restored = JSON.parse(JSON.stringify(saved)) as PartsRef;
   const again = memory();
   const source = await openWith([multiFiles([again.handler])], restored);
@@ -152,8 +150,8 @@ test("a ref carrying extents and versions opens without touching a part", async 
     expect(
       same(await source.read(last.start, last.end - last.start), bytes.subarray(last.start)),
     ).toBe(true);
-    // The part read, as the version recorded, and the first, whose header it
-    // is held to. The one between them is still unopened.
+    // The part read and the first part, for its header, were opened with
+    // their recorded versions. The middle part stayed closed.
     expect(again.refs.toSorted((x, y) => x.name.localeCompare(y.name))).toEqual(
       [0, PARTS - 1].map((i) => ({ ...inMemory(PART_NAMES[i]!), version: versions[i] })),
     );
@@ -183,8 +181,7 @@ test("a part no handler under it claims is refused, naming the part", async () =
   );
 });
 
-// A ref is plain data by the time it gets here, so what the type rules out
-// has to be refused in words as well.
+// A nested PartsRef, which the type rules out, is refused at run time too.
 test("a part that is several files itself is refused, named", async () => {
   const nested = JSON.parse(
     JSON.stringify({
@@ -240,7 +237,7 @@ beforeAll(async () => {
 
 afterAll(() => b.close());
 
-/** A machine with the two profiles and no keys of its own. */
+/** A machine with the two profiles, and only those, to sign in with. */
 function env(): Record<string, string | undefined> {
   return profilesEnv(aws);
 }
@@ -270,7 +267,7 @@ const ACROSS: PartsRef = {
   header: "first",
 };
 
-/** An engine wired the way the desktop's is, with several files as one listed. */
+/** An engine wired the way the desktop's is, with multiProvider listed. */
 async function engine(saved: Connection[]) {
   const dir = await mkdtemp(join(tmpdir(), "uno-multifiles-connections-"));
   const store = nodeStore();
@@ -313,7 +310,7 @@ test("each part in a bucket is read as the connection covering it", async () => 
   }
 });
 
-// The same refusal one object gets, with the part it is about in front.
+// The single-object refusal, with the part named in front.
 test("a part whose connection cannot read it is refused, naming the part and the connection", async () => {
   const { engine: e, done } = await engine([
     connection("finance", FINANCE_BUCKET, "finance"),

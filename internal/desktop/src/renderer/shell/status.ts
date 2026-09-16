@@ -1,12 +1,9 @@
-// The status bar: the mode, the file, the one line the shell talks on, keys
-// waiting for more, and where the selection is.
+// The status bar: the mode, the file line, the message line, pending keys,
+// and the selected cell. It also holds the prompt for : commands and / and ?
+// searches, which replaces the file line while open.
 //
-// It also holds the prompt: a command after :, a search after / or ?. While the
-// prompt is open it stands in for the file's line.
-//
-// The window's switches are at its ends: the one that opens and closes the
-// sidebar on the left, and on the right the one between view and transform and
-// the one that opens the sources panel.
+// The switches at its ends: the sidebar toggle on the left; the mode switch
+// and the sources panel toggle on the right.
 
 import "./status.css";
 
@@ -19,9 +16,9 @@ import { num } from "../locale.ts";
 import type { Mode, Workspace } from "../workspace.ts";
 import { must } from "./util.ts";
 
-/** What the bar's switches do. The shell decides; the bar only asks. */
+/** What the bar's switches ask of the shell. */
 export interface StatusAsks {
-  /** Move between view and transform. */
+  /** Switch between view and transform. */
   toggleMode(): void;
   /** Open or close the sidebar. */
   toggleSidebar(): void;
@@ -29,19 +26,19 @@ export interface StatusAsks {
   togglePanel(): void;
 }
 
-/** Which of the window's columns are open, for the switches to say. */
+/** Which of the window's side columns are open. */
 export interface Columns {
   sidebar: boolean;
   panel: boolean;
 }
 
-/** What the bar calls a mode: the word in capitals at its left. */
+/** The word the bar shows for a mode. */
 function modeWord(mode: Mode): string {
   return mode === "view" ? m.mode_view() : m.mode_transform();
 }
 
 export class StatusBar {
-  /** What the open prompt began with. */
+  /** The character the open prompt began with. */
   private lead: Lead = ":";
 
   private readonly bar = must(document.querySelector<HTMLElement>(".win-status"));
@@ -56,18 +53,20 @@ export class StatusBar {
   private readonly sources = must(document.querySelector<HTMLButtonElement>("#panel-toggle"));
 
   /**
-   * Enter runs what was typed and Esc closes the prompt, as do clicking away and
-   * deleting the character it opened with.
+   * Enter runs the prompt. Esc closes it, as do blur and deleting the lead
+   * character.
    */
   constructor(
-    /** Enter in the prompt: what it began with, and what was typed after that. */
+    /**
+     * Called on Enter in the prompt with the lead and the text typed after it.
+     */
     private readonly entered: (lead: Lead, typed: string) => void,
-    /** The prompt closed, so the keys go back to the grid. */
+    /** Called when the prompt closes. */
     private readonly closed: () => void,
     asks: StatusAsks,
   ) {
     for (const option of this.seg.querySelectorAll<HTMLElement>("[data-mode]")) {
-      // The option showing is where the workspace already is.
+      // A click switches the mode when it lands on the option that is off.
       option.addEventListener("click", () => {
         if (!option.classList.contains("on")) asks.toggleMode();
       });
@@ -77,7 +76,7 @@ export class StatusBar {
 
     const input = this.cmd;
     input.addEventListener("keydown", (e) => {
-      // The grid's keys and the shell's chords stay out of what is being typed.
+      // Keep the key from reaching the grid and the shell's shortcuts.
       e.stopPropagation();
       if (e.isComposing) return;
       if (e.key === "Escape") {
@@ -97,8 +96,7 @@ export class StatusBar {
   }
 
   /**
-   * paint says what is open, which mode it is in, where the selection is, and
-   * which of the window's columns are open.
+   * paint draws the file line, the mode, the selected cell, and the switches.
    */
   paint(
     w: Workspace | undefined,
@@ -108,16 +106,15 @@ export class StatusBar {
   ): void {
     this.switches(w, input, open);
     this.file.textContent = w === undefined ? m.no_file_open() : w.status();
-    // A narrow window cuts the line short, and the whole of it is a hover away.
+    // The full text is the hover text, for a narrow window.
     this.file.title = this.file.textContent;
-    // A strategy that names the editor, as vim's INSERT, names transform with it
-    // open, so the name wears transform's amber.
+    // While the cell editor is open, the input strategy's editor name (such as
+    // INSERT) replaces the mode word.
     const editing = grid?.editing() === true ? input.editing : undefined;
     this.mode.textContent = editing ?? (w === undefined ? "" : modeWord(w.mode));
     this.mode.className = w?.mode === "transform" ? "mode t" : "mode";
 
-    // A tab with no file behind it has no cells to be on, and " · row 1" with
-    // no column in front of it would say it had.
+    // The cell line is empty until there is a grid and the tab has a file.
     if (w === undefined || grid === undefined || w.active.missing) {
       this.cell.textContent = "";
       return;
@@ -125,16 +122,14 @@ export class StatusBar {
     const { row, col } = grid.selection();
     const column = w.rows.columns[col];
     const header = column === undefined ? "" : columnLabel(column.header, col);
-    // A sheet with no rows has a column to be on and no row in it, and saying
-    // "row 1" of none would be saying there was one.
+    // An empty sheet shows the column only.
     this.cell.textContent =
       w.rows.rows() === 0 ? header : `${header} · ${m.status_row({ row: num(row + 1) })}`;
   }
 
-  /** switches draws the mode switch as the workspace has it, and each column's
-   * switch as open or closed. */
+  /** switches draws the mode switch and the two column toggles. */
   private switches(w: Workspace | undefined, input: InputStrategy, open: Columns): void {
-    // With nothing open there is no mode to switch.
+    // The mode switch shows while a workspace is open.
     this.seg.hidden = w === undefined;
     this.seg.title = input.switchHint;
     for (const option of this.seg.querySelectorAll<HTMLElement>("[data-mode]")) {
@@ -153,14 +148,14 @@ export class StatusBar {
     this.sources.setAttribute("aria-pressed", String(open.panel));
   }
 
-  /** One line, and the only place the shell talks. */
+  /** say writes the message line. */
   say(text: string, isError: boolean): void {
     this.msg.textContent = text;
     this.msg.title = text;
     this.msg.className = isError ? "err" : "";
   }
 
-  /** keys shows what is waiting for the rest of a command, where vim's showcmd would. */
+  /** keys shows a partly typed command, like vim's showcmd. */
   keys(text: string): void {
     this.waiting.textContent = text;
   }
@@ -174,7 +169,8 @@ export class StatusBar {
   }
 
   close(): void {
-    // Hidden first: handing the focus back blurs the input, which closes it again.
+    // Hide the input first: giving focus back blurs it, which calls close
+    // again.
     if (this.cmd.hidden) return;
     this.cmd.hidden = true;
     this.bar.classList.remove("prompting");

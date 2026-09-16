@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 //
-// Saving from the shell: what is refused before a byte goes to the host, what
-// a second Ctrl+S does while the first is still writing, and what the × does
-// over a save in flight. Over the real shell and the real engine, as
-// history.test.ts is, with a host that answers the dialog and counts writes.
+// Saving from the shell: what is refused before a write, what a second Ctrl+S
+// does while the first is still writing, and what quit does over a save in
+// flight. Runs over the real shell and engine, with a host that answers the
+// dialog and counts writes.
 
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,13 +24,13 @@ let shell: Shell;
 
 const dir = mkdtempSync(join(tmpdir(), "uno-save-"));
 
-/** What the dialog answers next. */
+/** What the save dialog answers next. */
 let picked: string | undefined;
-/** Every write the host was handed. */
+/** Every path the host was asked to write. */
 const writes: string[] = [];
-/** Lets a write finish, for a test that holds one open. */
+/** Resolves the write in flight. */
 let release: (() => void) | undefined;
-/** Whether the next write fails, as a full disk would. */
+/** Whether the next write rejects. */
 let failing = false;
 let quits = 0;
 
@@ -42,7 +42,7 @@ function dirtyMarks(): number {
   return document.querySelectorAll(".dirty").length;
 }
 
-/** edit changes one cell, so the workspace has something to save. */
+/** Changes one cell, so the workspace has something to save. */
 async function edit(row: number, value: string): Promise<void> {
   await page.clickCell(row, UNITS);
   await page.settle(1);

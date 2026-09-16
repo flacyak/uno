@@ -1,10 +1,7 @@
-// Passes: work that reads a whole file a chunk at a time.
+// Passes: work that reads a whole file one chunk at a time.
 //
-// Indexing is the first one. Validation, deduplication, splitting and format
-// conversion are the next four, and each is this loop with a different body:
-// read a chunk, do the work, say how far it got, stop when told. What a pass is
-// handed is written down once here, so a pass can run in the engine that serves
-// the view or in a worker of its own without knowing which.
+// A pass reads a chunk, does its work, reports progress, and stops when its
+// signal is aborted. PassContext is what every pass is handed.
 
 import type { Format } from "../ingest/index.ts";
 import type { ByteSource } from "../store/index.ts";
@@ -15,18 +12,17 @@ export interface PassContext {
   readonly format: Format;
   readonly index: RowIndex;
   readonly tuning: Tuning;
-  /** Checked between chunks. A pass that sees it aborted returns early. */
+  /** Checked between chunks. An aborted pass returns early. */
   readonly signal: AbortSignal;
-  /** Called after every chunk. The caller decides how often anyone hears about it. */
+  /** Called after every chunk. */
   progress(): void;
 }
 
 /**
- * indexPass reads from the first data record to the end of the file and notes
- * where every block of rows starts.
+ * indexPass reads from the first data record to the end of the file and
+ * records where each block of rows starts.
  *
- * Every chunk is an awaited read, so a request that arrives mid-scan runs at the
- * next one: it waits for one chunk of scanning at most, never for the file.
+ * Each chunk read is awaited, so other work runs between chunks.
  */
 export async function indexPass(ctx: PassContext): Promise<void> {
   const { source, format, index, tuning, signal } = ctx;

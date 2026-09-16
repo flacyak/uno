@@ -1,28 +1,21 @@
-// Reading a source out of a real bucket.
+// Reading a source out of a real bucket, with the credentials this machine
+// has.
 //
-// s3.test.ts holds the signing to AWS's examples and runs everything else
-// against a stand-in. This holds the stand-in to S3: the same open, index, read
-// and save, against real objects, with the credentials this machine has.
-//
-// It runs only when UNO_S3_LIVE names objects to read -- s3:// URLs, separated
-// by spaces or commas -- and is skipped everywhere else, CI included. Each
-// object must be a copy of testdata/sales-q3.csv, so what comes back can be
-// checked cell for cell.
+// It runs only when UNO_S3_LIVE names objects to read (s3:// URLs separated
+// by spaces or commas) and is skipped otherwise, CI included. Each object
+// must be a copy of testdata/sales-q3.csv.
 //
 //   UNO_S3_LIVE="s3://uno-live-use1/sales-q3.csv s3://uno-live-euw1/sales-q3.csv" vp test s3.live
 //
-// UNO_S3_LIVE_ELSEWHERE names one such object, and names it only if the bucket
-// holding it is outside the region the credentials sign for. That is the whole
-// of what makes the redirect happen, and nothing in a reply says a bucket was
-// where it was asked for, so the block that reads it asserts a refusal was
-// seen rather than trusting a green run to mean anything:
+// UNO_S3_LIVE_ELSEWHERE names one such object in a bucket outside the region
+// the credentials sign for. The block that reads it asserts a refusal was
+// seen and reports which channel carried the region:
 //
 //   UNO_S3_LIVE_ELSEWHERE="s3://uno-live-euw1/sales-q3.csv" \
 //     AWS_REGION=us-east-1 vp test s3.live
 //
-// UNO_S3_LIVE_KEYS does the same for the keys in awkward.ts, and names an
-// s3:// prefix rather than an object, because there are ten of them. Seed it
-// once -- s3Files only ever reads, so nothing here can put them there:
+// UNO_S3_LIVE_KEYS names an s3:// prefix holding a copy of the fixture under
+// each key in awkward.ts. Seed it once:
 //
 //   for k in "sales q3.csv" "sales+q3.csv" "100%.csv" ... ; do
 //     aws s3api put-object --bucket uno-live-use1 --key "awkward/$k" \
@@ -30,8 +23,7 @@
 //   done
 //   UNO_S3_LIVE_KEYS="s3://uno-live-use1/awkward/" vp test s3.live
 //
-// The dot-segment keys are left to the stand-in. They never reach the wire
-// intact, so there is nothing for a real bucket to say about them.
+// The dot-segment keys are tested only against the stand-in.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -51,10 +43,10 @@ const PREFIX = (process.env["UNO_S3_LIVE_KEYS"] ?? "").trim();
 /** One copy of the fixture, in a bucket outside the credentials' own region. */
 const ELSEWHERE = (process.env["UNO_S3_LIVE_ELSEWHERE"] ?? "").trim();
 
-/** A real round trip is slower than localhost: an index pass is dozens of them. */
+/** A real round trip is slower than localhost. */
 const TIMEOUT = 120_000;
 
-/** How much of a refusal is kept, matching what s3.ts is willing to read of one. */
+/** How much of a refusal body is kept, matching what s3.ts reads of one. */
 const REFUSAL_BYTES = 64 << 10;
 
 /** One request uno sent, and what S3 answered it with. */
@@ -62,24 +54,18 @@ interface Exchange {
   method: string;
   range: string | undefined;
   status: number;
-  /** The `x-amz-bucket-region` header, which is one of the two ways a bucket
-   * says where it really is. Undefined when the reply did not carry it. */
+  /**
+   * The `x-amz-bucket-region` header, or undefined when absent.
+   */
   region: string | undefined;
-  /** The other way: the XML of a refusal, kept only for a 301 or a 400. */
+  /** The XML of a refusal, kept only for a 301 or a 400. */
   body: string | undefined;
 }
 
 /**
- * watched is the fetch uno is handed, keeping both halves of every exchange.
- *
- * Recording only the request cannot answer the question the redirect tests
- * ask. s3.ts follows the header and the body alike, so an open that succeeded
- * proves one of them carried the region and says nothing about which -- and
- * which one real S3 uses is a fact about AWS, not about this repository, so it
- * has to be read off the wire rather than assumed.
- *
- * strip takes `x-amz-bucket-region` off the reply before uno sees it, which
- * leaves the body as the only channel left.
+ * watched is a fetch that records both halves of every exchange in `seen`.
+ * With `strip`, it removes `x-amz-bucket-region` from the reply before uno
+ * sees it, leaving the body as the only channel.
  */
 function watched(seen: Exchange[], strip = false): typeof fetch {
   return async (input, init) => {
@@ -148,7 +134,7 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
           const { rows } = await src.rows(LAST_ROW - 4, 10);
           expect(widened(rows)).toEqual(sheetRows(sales, LAST_ROW - 4, 10, "raw"));
 
-          // S3 was asked for its size and for ranges, never for the whole object.
+          // S3 was asked for its size and for ranges only.
           const gets = first.seen.filter((r) => r.method === "GET");
           expect(first.seen.some((r) => r.method === "HEAD")).toBe(true);
           expect(gets.length).toBeGreaterThan(0);
@@ -164,7 +150,8 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
           a.done();
         }
 
-        // The .uno holds where the object is and the edit, and none of its bytes.
+        // The .uno holds where the object is and the edit, and is smaller than
+        // the object.
         expect(readContainer("q3.uno", uno).manifest.sources[0]!.path).toBe(url);
         expect(uno.length).toBeLessThan(bytes.length);
         await writeFile(join(dir, "q3.uno"), uno);
@@ -183,12 +170,8 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
   }
 });
 
-// A bucket somewhere else is the one part of s3.ts that a stand-in can only
-// half answer. s3.test.ts settles what uno does with each shape of refusal,
-// because it writes the refusals; what it cannot settle is which shape AWS
-// actually sends, and uno now follows two of them. So this block reads the
-// refusal rather than inferring it from an open that worked, and reports the
-// channel it found instead of expecting one.
+// This block reads the refusal S3 sends for a bucket in another region and
+// reports which channel, header or body, carried the region.
 describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
   const loc = s3Location(ELSEWHERE);
   const name = loc?.key.slice(loc.key.lastIndexOf("/") + 1) ?? ELSEWHERE;
@@ -214,9 +197,8 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
         done();
       }
 
-      // Without this the block passes on an object that was in the credentials'
-      // own region all along, having exercised no redirect whatsoever, which is
-      // the quietest way for a live suite to stop testing anything.
+      // A refusal must have been seen. Otherwise the object was in the
+      // credentials' own region and went straight through.
       const refusals = seen.filter((r) => r.status === 301 || r.status === 400);
       expect(
         refusals.length,
@@ -234,11 +216,7 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
     TIMEOUT,
   );
 
-  // The header is the only thing simulated here. Everything the body path is
-  // made of stays real: the probe goes to AWS, AWS answers it with a 400, and
-  // the region uno signs the next request for is the one it read out of that
-  // XML. A stand-in can put those bytes in front of s3.ts, but only AWS can
-  // say they are the bytes it sends.
+  // Only the header is stripped. The 400 and its body come from AWS.
   test(
     "opens on the body alone when the header never arrives",
     async () => {
@@ -255,8 +233,8 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
         await file.close();
       }
 
-      // A HEAD carries no body, so reaching the XML at all means uno asked a
-      // second way rather than reading nothing twice.
+      // A HEAD carries headers only, so uno must have sent a GET probe to read
+      // the XML.
       const probe = seen.find((r) => r.method === "GET" && r.range === "bytes=0-0");
       expect(probe, "the region came from somewhere a body could reach").toBeDefined();
     },
@@ -264,12 +242,9 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
   );
 });
 
-// S3 is the only thing that can settle whether uno encodes a key the way S3
-// decodes it. The stand-in agrees with uno by construction -- both are this
-// repository -- so agreeing with it proves the two halves match, not that
-// either is right. One HEAD and two ranges per key is enough to tell: a size
-// that matches and both ends of the fixture means the signature was accepted
-// and the bytes came from the object that was asked for.
+// Each awkward key against real S3: a HEAD and two ranges. A matching size
+// and both ends of the fixture mean the signature was accepted and the right
+// object was read.
 describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
   const s3 = () => s3Files({ credentials: awsCredentials() });
   /** Enough of each end to be sure, and short enough to be two small requests. */
@@ -296,8 +271,7 @@ describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
     );
   }
 
-  // One of them read the whole way through, so the awkward key is held to the
-  // same bar as the plain one in the test above: indexed, and read at the end.
+  // One awkward key indexed and read to the end, like the plain one above.
   test(
     "one of them indexes and reads its last rows like any other source",
     async () => {

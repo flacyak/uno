@@ -1,13 +1,10 @@
-// The smoke run's own footing.
+// The smoke run's launcher and setup, checked headless.
 //
-// scripts/smoke.js is the only thing that answers whether the shell works, so
-// what it cannot check is whether it started the app at all. These are the
-// pieces of that -- the environment the child gets, whether there is a display,
-// and what a finished run amounts to -- asked about here, where no display is
-// needed and a wrong answer is a failing test rather than sixty seconds and a
-// stack trace out of the bundle.
+// scripts/smoke.js checks the shell from inside a started app. These tests
+// cover the start itself: the environment the child gets, whether there is a
+// display, and what a finished run amounts to.
 //
-// The run itself stays where it is: `vp run smoke`, on a desktop session.
+// The run itself is `vp run smoke`, on a desktop session.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -22,8 +19,8 @@ const SCRIPTS = fileURLToPath(new URL("../scripts", import.meta.url));
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
 const read = (name: string) => readFileSync(join(SCRIPTS, name), "utf8");
 
-/** main, split where the app ends and the two branches that know what a test is
- * begin. What is on which side of that line is the point of several tests. */
+/** main's source, split into the app's file handlers and the driven branch.
+ * Several tests check what is on which side. */
 const MAIN = readFileSync(join(SRC, "main/index.ts"), "utf8");
 const HANDLERS = MAIN.slice(
   MAIN.indexOf("function registerFileHandlers"),
@@ -43,12 +40,10 @@ function sources(dir: string): string[] {
 }
 
 /**
- * Source with its comments taken out, so a rule about what code may say is not
- * also a rule about what a comment may explain.
+ * Source with its comments removed, so a rule about code reads code alone.
  *
- * A line comment is only one where the slashes do not follow a colon, because
- * `s3://bucket/key` is not a comment and a scanner that thinks it is would read
- * `http://127.0.0.1:9000` as `http:` and find nothing wrong with it.
+ * A `//` after a colon is part of a URL, so `s3://bucket/key` and
+ * `http://127.0.0.1:9000` stay as code.
  */
 function code(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
@@ -57,11 +52,9 @@ function code(src: string): string {
 // ------------------------------------------------------------ the environment
 
 test("the Electron child is not told to run as node", () => {
-  // The whole of 0.4. An editor's terminal exports ELECTRON_RUN_AS_NODE for its
-  // own helpers; inheriting it turns the app into a plain Node, where
-  // `require("electron")` is the npm package -- a path string -- and main dies
-  // reading `app` off it. Nothing about the bundle is wrong when that happens,
-  // which is why it cost a task to find.
+  // An editor's terminal can export ELECTRON_RUN_AS_NODE. Inherited, it runs
+  // the app as plain Node, where `require("electron")` is a path string and
+  // main dies reading `app` off it.
   const env = electronEnv({ ELECTRON_RUN_AS_NODE: "1", PATH: "/usr/bin" });
   expect("ELECTRON_RUN_AS_NODE" in env).toBe(false);
   expect(env["PATH"]).toBe("/usr/bin");
@@ -94,12 +87,9 @@ test("the caller's own environment is left alone", () => {
 });
 
 test("every script that starts Electron goes through electronEnv", () => {
-  // A fourth launcher that spreads process.env itself brings the bug back, and
-  // brings it back somewhere nothing in this file is looking. The spread is
-  // looked for wherever it is written, not only as the `env:` of a spawn: the
-  // smoke run builds a bigger environment than it used to -- the scratch
-  // directory, the fixtures, and where the stand-in S3 came up -- and the
-  // tempting way to write that is a second object of its own.
+  // A launcher that spreads process.env itself would bring the bug back. The
+  // spread is looked for anywhere in the file, the `env:` of a spawn
+  // included.
   const launchers = ["dev.js", "smoke.js", "preview.js"];
   const spreading = launchers.filter((name) => /\{\s*\.\.\.\s*process\.env/.test(read(name)));
   expect(spreading).toEqual([]);
@@ -110,10 +100,9 @@ test("every script that starts Electron goes through electronEnv", () => {
 });
 
 test("what the stand-in S3 tells the child is part of that one environment", () => {
-  // The engine reads AWS_ENDPOINT_URL_S3 and the access keys from its own
-  // environment, and a utility process gets the app's. So pointing the whole
-  // app at the stand-in is nothing but these variables arriving -- through
-  // electronEnv with everything else, never beside it.
+  // The engine reads AWS_ENDPOINT_URL_S3 and the access keys from its
+  // environment, which the utility process inherits from the app. They go
+  // through electronEnv with everything else.
   expect(read("smoke.js")).toMatch(/env:\s*electronEnv\(process\.env,\s*\{[^}]*\.\.\.standinEnv\(/);
 });
 
@@ -141,14 +130,13 @@ test("a non-zero exit is a failure, and says which", () => {
   expect(verdict("smoke", 1, "smoke: all checks passed\n", "smoke: all checks passed")).toBe(
     "smoke: FAILED (exit 1)",
   );
-  // SIGKILL from the deadline closes the child with a null code, which is not 0
-  // and must not read as one.
+  // SIGKILL from the deadline closes the child with a null code, which is a
+  // failure.
   expect(verdict("smoke", null, "", "smoke: all checks passed")).toBe("smoke: FAILED (exit null)");
 });
 
 test("exiting 0 without ever reporting is a failure, not a pass", () => {
-  // The one that looks most like success: the window closed before the checks
-  // ran, so there is nothing to print and nothing went wrong.
+  // The window closed after the first check and before the verdict line.
   const out = "smoke: electron pid 9\n  ok   yy copies\n";
   expect(verdict("smoke", 0, out, "smoke: all checks passed")).toBe(
     "smoke: FAILED (the app exited cleanly without reporting)",
@@ -169,9 +157,9 @@ test("the run names itself in its own failures", () => {
 
 test("smoke opens the app directory, not the main bundle, and on fixtures that exist", () => {
   const src = read("smoke.js");
-  // Electron given a file runs that file; given a directory it reads the
-  // package's `main`, which is what makes __dirname in the bundle point at
-  // out/main and the preload resolve beside it.
+  // Electron given a directory reads the package's `main`, which makes
+  // __dirname in the bundle point at out/main and the preload resolve beside
+  // it.
   expect(src).toMatch(
     /args:\s*\[pkg,\s*`--user-data-dir=\$\{data\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
   );
@@ -181,9 +169,9 @@ test("smoke opens the app directory, not the main bundle, and on fixtures that e
   }
 });
 
-// A connection the run saves lands in the app's data folder. That folder is
-// the run's own, emptied before it starts, or the smoke would write into the
-// connections of whoever is at the desktop and read back one it never saved.
+// A connection the run saves lands in the app's data folder. The run uses a
+// folder of its own, emptied first, so the desktop user's connections stay
+// as they were.
 test("smoke runs with a data folder of its own, emptied first", () => {
   const src = read("smoke.js");
   expect(src).toMatch(
@@ -203,19 +191,17 @@ test("a hung app is killed by pid, on a deadline", () => {
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {
   const src = read("smoke.js");
   expect(src).toMatch(/from\s+"\.\.\/\.\.\/grid\/tests\/store\/standin\.ts"/);
-  // Seeded with the real bytes of a real export, under a key that looks like one
-  // somebody would have in a bucket.
+  // Seeded with a real export, under a key like one in a real bucket.
   expect(src).toContain("2025/ads-q3.csv");
   expect(src).toMatch(/await bucket\(/);
-  // Only smoke.js knows where the bucket is, so it is the only thing that can
-  // tell the checks what to add, the way it already names the local fixture.
+  // Only smoke.js knows where the bucket is, so it tells the checks what to
+  // add through UNO_SMOKE_OBJECT.
   expect(src).toMatch(/UNO_SMOKE_OBJECT:/);
   expect(src).toMatch(/s3:\/\/\$\{BUCKET\}\//);
 });
 
 test("the stand-in is shut both ways the run can end", () => {
-  // A leaked server holds the port, and the next run comes up on a different
-  // one -- which passes, and quietly tests nothing about the one that leaked.
+  // A leaked server holds the port, and the next run comes up on another one.
   const src = read("smoke.js");
   const driven = src.slice(src.indexOf("await drive("), src.indexOf("const failed"));
   expect(driven).toMatch(/onTimeout:.*shut\(\)/);
@@ -225,9 +211,8 @@ test("the stand-in is shut both ways the run can end", () => {
 test("the workspace the run saved is read back, and its absence is loud", () => {
   const src = read("smoke.js");
   expect(src).toMatch(/readContainer/);
-  // The check that triggers the save lives in the app. Until it lands there is
-  // no .uno, and "there was nothing to read" has to read as a failure rather
-  // than as nothing to do -- the same failure verdict() already guards against.
+  // The check that triggers the save lives in the app. A missing .uno must
+  // read as a failure.
   expect(src).toMatch(/FAILED \(no \.uno/);
   expect(src).toMatch(/process\.exit\(1\)/);
 });
@@ -235,9 +220,8 @@ test("the workspace the run saved is read back, and its absence is loud", () => 
 // -------------------------------------------------------------- what it starts
 
 test("main, preload and the engine are built as CommonJS", () => {
-  // A preload script has to be CJS, and main is bundled the same way -- which is
-  // why it can declare __dirname, and why an ESM main would resolve every path
-  // off import.meta.url to the wrong place without saying so.
+  // A preload script must be CJS, and main is bundled the same way so it can
+  // declare __dirname.
   const src = read("bundle.js");
   expect(src).toMatch(/formats:\s*\[\s*"cjs"\s*\]/);
   expect(src).toMatch(/fileName:\s*\(\)\s*=>\s*"index\.cjs"/);
@@ -247,8 +231,8 @@ test("main, preload and the engine are built as CommonJS", () => {
 });
 
 test("electron and node's own modules stay out of the bundle", () => {
-  // Bundling a second copy of the platform is the other way main ends up holding
-  // an `electron` that is not Electron's.
+  // Bundling a copy of electron would give main an `electron` of its own,
+  // apart from Electron's.
   expect(read("bundle.js")).toMatch(/external:\s*\[\/\^node:\/,\s*"electron"\]/);
 });
 
@@ -264,24 +248,21 @@ test("a driven run saves into its own scratch directory", () => {
 });
 
 test("outside a smoke run there is nowhere of its own, and the dialog stands", () => {
-  // The plain app has to keep asking. Answering undefined here is what leaves
-  // main with nothing to say and the dialog the only way to say it.
+  // Outside a run, savePathFor answers undefined and main opens the dialog.
   expect(savePathFor({}, "sales-q3.uno")).toBeUndefined();
   expect(savePathFor({ UNO_SMOKE: "" }, "sales-q3.uno")).toBeUndefined();
 });
 
 test("the suggested name is a name, and cannot lead out of the directory", () => {
-  // The renderer suggests this, and nothing about a run that writes where it
-  // was not told to is worth finding out afterwards.
+  // The renderer suggests the name. Its base name alone is used, inside the
+  // directory.
   expect(savePathFor({ UNO_SMOKE: "/tmp/run" }, "../../etc/passwd")).toBe("/tmp/run/passwd");
   expect(savePathFor({ UNO_SMOKE: "/tmp/run" }, "/etc/passwd")).toBe("/tmp/run/passwd");
   expect(savePathFor({ UNO_SMOKE: "/tmp/run" }, "")).toBe("/tmp/run/workspace.uno");
 });
 
 test("the plain app asks where to save, and knows nothing about a test", () => {
-  // Save As opens a dialog, a dialog hangs a driven window, and the run can
-  // then never save. What must not happen is registerFileHandlers learning
-  // about that: it is the app's, and every person who ever saves goes through it.
+  // registerFileHandlers is the app's, and always asks the dialog.
   expect(HANDLERS).toMatch(/ipcMain\.handle\("file:pick-save"[\s\S]*?dialog\.showSaveDialog/);
   expect(HANDLERS).not.toContain("savePathFor");
   expect(HANDLERS).not.toContain("UNO_SMOKE");
@@ -296,11 +277,9 @@ test("only the driven branch answers where to save by itself", () => {
 // ------------------------------------------------------- what is compiled in
 
 test("no address and no port is baked into anything that ships", () => {
-  // Pain point 2. A localhost address compiled into a bundle is one that ships,
-  // and the installed app then reaches for a dev server, a proxy or a stand-in
-  // that is not there. Every endpoint uno uses arrives in the environment at
-  // run time: UNO_RENDERER_URL for the renderer, AWS_ENDPOINT_URL_S3 for the
-  // engine. Comments are allowed to say the word; code is not.
+  // Every endpoint arrives in the environment at run time: UNO_RENDERER_URL
+  // for the renderer, AWS_ENDPOINT_URL_S3 for the engine. Comments may name
+  // an address. Code naming one fails the test.
   const ADDRESS = /127\.0\.0\.1|\[::1\]|\b0\.0\.0\.0\b|\blocalhost\b|\/\/[^\s"'`]*:\d{2,5}/;
   const named: string[] = [];
   for (const root of [SRC, join(SRC, "../../grid/src")]) {
@@ -311,8 +290,8 @@ test("no address and no port is baked into anything that ships", () => {
   expect(named).toEqual([]);
 });
 
-// The + at the foot of the sidebar asks for a file through a dialog, which a
-// driven window cannot answer either.
+// The sidebar's + asks for a file through a dialog. A driven run answers it
+// from the environment.
 test("a driven run's Open picks the file it was told, and cancels when told none", () => {
   expect(openPathFor({ [DRIVEN_OPEN]: "/tmp/run/google-ads.csv" })).toBe("/tmp/run/google-ads.csv");
   expect(openPathFor({})).toBeUndefined();

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { read, readAll, sniffDelimiter } from "../../src/ingest/index.ts";
 
-/** How much of a file the sniff looks at. */
+/** Bytes the delimiter sniff looks at. */
 const PEEK = 64 << 10;
 
 describe("read sniffs the delimiter from the bytes", () => {
@@ -22,22 +22,20 @@ describe("read sniffs the delimiter from the bytes", () => {
   }
 });
 
-// The extension decides before the bytes do, so a single-column TSV is not
-// mistaken for a comma-delimited file with one field.
+// A .tsv extension sets the delimiter to tab and skips the sniff.
 test("read trusts the .tsv extension", () => {
   expect(read("f.tsv", "a\tb\n1\t2\n").cols()).toBe(2);
 });
 
-// A separator inside a quoted field is data, not structure.
+// The sniff counts delimiters outside quotes only.
 test("sniff ignores delimiters inside quotes", () => {
   const s = read("f.csv", 'name,role\n"Okafor, Ada",lead\n"Iyer, Ben",eng\n');
   expect(s.cols()).toBe(2);
   expect(s.raw(0, 0)).toBe("Okafor, Ada");
 });
 
-// A comma is the one candidate that lives inside fields too: as the decimal
-// mark of a European export, and after a surname. Neither makes it the
-// delimiter when another separator fits every line.
+// A comma used as a decimal mark or after a surname is data when another
+// separator fits every line.
 describe("sniff reads a comma inside fields as data", () => {
   const cases: Array<[string, string, string, string[]]> = [
     ["decimals between semicolons", "1,5;2,5;3,5\n4,5;5,5;6,5\n", ";", ["1,5", "2,5", "3,5"]],
@@ -57,14 +55,15 @@ describe("sniff reads a comma inside fields as data", () => {
     });
   }
 
-  // Without another separator to fit, a comma between digits is a comma.
+  // When the comma is the only separator, a comma between digits is the
+  // delimiter.
   test("integers between commas are still columns", () => {
     expect(sniffDelimiter("1,2,3\n4,5,6\n")).toBe(",");
   });
 });
 
-// A quoted cell can hold a line break. The sniff counts records, not lines, so
-// the two halves of such a cell do not each get a field count of their own.
+// The sniff counts records, so a quoted cell with a line break is one
+// record.
 describe("sniff counts a quoted cell with a line break in it as one record", () => {
   test("in the first few records", () => {
     const s = read("f.csv", 'a;b\n1;"two\nlines"\n2;z\n');
@@ -72,8 +71,7 @@ describe("sniff counts a quoted cell with a line break in it as one record", () 
     expect(s.raw(0, 1)).toBe("two\nlines");
   });
 
-  // The peek can end inside a quoted cell. What is open at the cut is not a
-  // record yet, and nothing inside it is a delimiter.
+  // A quoted cell still open at the end of the peek is left out of the count.
   test("when the peek ends inside the cell", () => {
     const tail = "\n2,3\n4,5\n6,7\n8,9";
     const filler = "x".repeat(PEEK - tail.length);
@@ -92,9 +90,7 @@ test("read handles CRLF", () => {
   expect(read("f.csv", "a,b\r\n1,2\r\n").raw(0, 1)).toBe("2");
 });
 
-// The decoder strips a byte order mark from bytes. Text handed over as a string
-// has to lose it too, or the first column is named "\uFEFFname" one way in and
-// "name" the other.
+// read strips a leading byte order mark from both string and byte input.
 test("read strips a byte order mark from a string as from bytes", () => {
   const body = "\uFEFFname,role\nAda,lead\n";
   const asString = read("f.csv", body);
@@ -119,23 +115,20 @@ describe("read names the file in every error", () => {
       }
       expect(thrown).toBeDefined();
       expect(thrown!.message).toContain(want);
-      // An error dialog that does not name the file is useless in a twelve-file
-      // drop.
+      // The message names the file.
       expect(thrown!.message).toContain(file);
     });
   }
 });
 
-// A header-only file is a valid sheet with no rows, not an error.
+// A header-only file is a sheet of zero rows.
 test("read accepts a header with no rows", () => {
   const s = read("f.csv", "a,b,c\n");
   expect(s.rows()).toBe(0);
   expect(s.cols()).toBe(3);
 });
 
-// The lazy-quote rules are the reason this reader is hand-written rather than
-// taken from npm: every one of these opens in Go, and a stricter reader would
-// reject the file instead.
+// readAll follows Go's encoding/csv rules with LazyQuotes on.
 describe("the csv reader follows Go's rules", () => {
   const cases: Array<[string, string, string[][]]> = [
     ["doubled quotes are one quote", 'a\n"say ""hi"""\n', [["a"], ['say "hi"']]],

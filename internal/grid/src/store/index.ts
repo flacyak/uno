@@ -1,11 +1,9 @@
-// The seam between the pure core and a machine.
+// The store: FileHandler for opening files, Lister for browsing places, and
+// FileStore for the folders uno writes its own files to.
 //
-// Everything under src/ but this module works on bytes and strings, so it runs
-// unchanged in a browser. What a machine adds is somewhere files are, and every
-// file uno reads -- a source, a .uno, a formula in the library -- is opened
-// through a FileHandler, and every place uno browses is browsed through a
-// Lister. There is no second way in: a platform that has not listed a handler
-// or a lister for a kind of place cannot reach it, and says so by name.
+// Every file is opened through a handler a platform lists, and every place is
+// browsed through a lister it lists. A kind of place outside both lists is
+// refused by name.
 
 import { compareStrings } from "../go/index.ts";
 import type { Connection, Formula } from "../library/index.ts";
@@ -19,108 +17,82 @@ import {
   stampConnection,
 } from "../library/index.ts";
 import { JOINS, OPENS, claim } from "./claim.ts";
-// Type only: what a part is belongs to the module that joins them, and the
-// handler that opens a ref of them is exported from here, further down.
+// Type only. The handler that opens parts is re-exported below.
 import type { HeaderMode, Part } from "./multi.ts";
-// Type only, and one way on purpose: the plugin package composes what is here,
-// and nothing here reaches back into it at run time.
+// Type only, so the run-time import graph stays one-way with the plugin
+// package.
 import type { Provider } from "../plugin/index.ts";
 
-// Browsing is its own interface, in its own module, and belongs to the same
-// seam: a platform that lists no lister for a kind of place cannot browse it.
+// Browsing is its own interface, in store/list.ts.
 export { listWith, statWith } from "./list.ts";
 export type { Entry, Listing, Lister } from "./list.ts";
 
-// Several files read as one is a handler like the others, over the others. It
-// is in a module of its own because it opens its parts through `openWith`.
+// Several files read as one, in store/multi.ts. It opens its parts through
+// openWith.
 export { multiFiles, multiOf, multiProvider, openMulti, partMap } from "./multi.ts";
 export type { Extent, HeaderMode, MultiSource, Part, PartMap, Span } from "./multi.ts";
 
 /**
- * FileStore is a folder uno keeps files of its own in: the formula library, and
- * the connections beside it.
+ * FileStore is a folder uno keeps its own files in: the formula library and
+ * the connections.
  *
- * Reading goes through `files`, the same handlers every other open goes
- * through. What the store adds is the two things a handler never does, writing
- * and listing.
- *
- * `write` must be atomic: a failure anywhere in it has to leave the file that
- * was already there untouched, and leave no half-written part behind for the
- * next person to find. Saving is the one operation in uno that can destroy
- * something, and every failure mode worth designing for resolves to the same
- * promise -- the previously saved file is still there.
+ * Reading goes through `files`. `write` is atomic: a failure leaves the file
+ * that was there untouched and the folder otherwise as it was.
  */
 export interface FileStore {
-  /** How files in the store are opened for reading. */
+  /** The handlers files in the store are opened with. */
   files: readonly FileHandler[];
   write(path: string, bytes: Uint8Array): Promise<void>;
-  /** The names of the entries directly in dir, or an empty list where there is
-   * no such directory. */
+  /** The names of the entries directly in dir, or an empty list for a
+   * missing directory. */
   list(dir: string): Promise<string[]>;
 }
 
 /**
- * ByteSource is a file read a piece at a time.
- *
- * It is what lets a file larger than memory open: nothing in the core asks for
- * the whole of one, so nothing has to hold it. A desktop reads a descriptor at
- * an offset, a browser slices a File, a test slices a Blob, and the core cannot
- * tell them apart.
+ * ByteSource is a file read a range at a time. A desktop reads a descriptor
+ * at an offset, a browser slices a File, a test slices a Blob.
  */
 export interface ByteSource {
   readonly size: number;
   /**
-   * Which bytes these are, where the place they come from can say: an S3
-   * VersionId, or an ETag in its quotes. Undefined for a file on disk, which
-   * has no version to ask for again.
+   * Which bytes these are, where the place can say: an S3 VersionId, or an
+   * ETag in its quotes. Undefined for a file on disk.
    */
   readonly version?: string;
-  /** Up to `length` bytes from `offset`. Fewer only where the file ends. */
+  /** Up to `length` bytes from `offset`. Fewer only at the end of the file. */
   read(offset: number, length: number): Promise<Uint8Array>;
   close(): Promise<void>;
 }
 
 /**
- * FileRef says where a source's bytes are without holding any of them: one
- * file, or several read as one.
- *
- * The name is what the source is called, which is what `ingest` picks a
- * decoder by and what a tab says.
+ * FileRef says where a source's bytes are: one file, or several read as one.
+ * `name` is what the source is called. `ingest` picks a decoder by it.
  */
 export type FileRef = SingleRef | PartsRef;
 
 /**
- * SingleRef is one file: a path, which may be a URL like s3://bucket/key, or a
- * Blob the caller already holds -- a file dropped into a browser, which has no
- * path to give.
+ * SingleRef is one file: a path, which may be a URL like s3://bucket/key, or
+ * a Blob the caller holds.
  */
 export type SingleRef =
   | {
       name: string;
       path: string;
       /**
-       * Which bytes of it to read, where the place can hand them over again: a
-       * version a save recorded. A handler that cannot, or a place that no
-       * longer has them, reads the file as it is now, and says which version
-       * that was.
+       * Which version of the file to read, where a save recorded one. A
+       * handler that lacks versions reads the file as it is now and reports
+       * which version that was.
        */
       version?: string;
     }
   | { name: string; blob: Blob };
 
 /**
- * PartsRef is several files read as one table: a fixed, ordered list of
- * parts, under a name of its own.
+ * PartsRef is several files read as one table: an ordered list of parts under
+ * a name of its own. Each part is a SingleRef and is opened as it would be
+ * alone. A part may carry the version and extent an earlier open recorded.
  *
- * Each part is a SingleRef and never a PartsRef, so a part is whatever one
- * file can be -- a path on a disk, an object in a bucket, a Blob -- in any
- * mix, and each is opened as it would be alone: an object in a bucket is read
- * through the connection that covers it. A part carries the version a save
- * recorded on its own ref, and beside it the extent an earlier open measured,
- * which lets the source open without touching that part.
- *
- * It is plain data, like every ref, and it is everything `openMulti` is
- * handed, so what a save has to keep of a multi-file source is this.
+ * It is plain data, and it is everything `openMulti` needs.
  */
 export interface PartsRef {
   name: string;
@@ -133,64 +105,48 @@ export interface PartsRef {
 }
 
 /**
- * FileHandler opens one kind of place a file can be: a disk, a bucket, bytes
- * already in hand.
- *
- * It only opens, and only for reading. A source is a view of a file somebody
- * else owns, and the log is where every change to it lives, so nothing here
- * ever has a reason to write one back.
- *
- * A handler says which refs are its own by looking at them and nothing else,
- * so the engine can pick one for a path it read out of a .uno without asking
- * anybody. That is what lets one workspace hold a CSV off the desktop beside an
- * export in S3.
+ * FileHandler opens one kind of place a file can be: a disk, a bucket, a
+ * Blob. It only opens, and only for reading. `handles` looks at the ref only,
+ * so a handler can be picked for a path read out of a .uno.
  */
 export interface FileHandler {
-  /** What a person would call this kind of place, for an error that names it. */
+  /** The kind of place, as an error names it. */
   readonly label: string;
   /** Whether `ref` is one this handler opens. */
   handles(ref: FileRef): boolean;
-  /** The file, read a piece at a time. Throws, naming it, when it is not there
-   * or not ours to read. */
+  /** The file, read a range at a time. Throws, naming it, when it is
+   * missing or the read fails. */
   open(ref: FileRef): Promise<ByteSource>;
 }
 
 /**
- * A path with a scheme in front of it -- s3://, https:// -- rather than one on
- * this machine's disks. A Windows drive letter is one character, so C:\ is not
- * mistaken for one.
+ * A path with a URL scheme in front of it: s3://, https://. The scheme is at
+ * least two characters, so a Windows drive letter stays a local path.
  */
 const REMOTE = /^[A-Za-z][A-Za-z0-9+.-]+:\/\//;
 
-/** isRemote says whether a path names a place on a network rather than a disk. */
+/** isRemote says whether a path has a URL scheme. */
 export function isRemote(path: string): boolean {
   return REMOTE.test(path);
 }
 
 /**
- * openWith opens a ref through the first handler that claims it.
- *
- * Refusing by name matters here more than anywhere: a .uno written on a
- * machine with S3 set up, opened on one without, has to say which kind of
- * place it cannot reach rather than "file not found". A ref of several files
- * is refused by its own name, and the refusal says that reading several files
- * as one is what this build lacks.
+ * openWith opens a ref through the first handler that claims it. Throws,
+ * naming the kinds this build reads, when none does. A ref with parts is
+ * refused as "opens several files as one".
  */
 export async function openWith(
   handlers: readonly FileHandler[],
   ref: FileRef,
 ): Promise<ByteSource> {
   const where = "path" in ref ? ref.path : ref.name;
-  // Several files read as one is a kind of ref, so the refusal says that
-  // reading them as one is what this build lacks.
   const refusal = "parts" in ref ? JOINS : OPENS;
   return claim(handlers, where, (h) => h.handles(ref), refusal).open(ref);
 }
 
 /**
- * readAll opens a ref through the handlers and reads the whole of it. It is for
- * the small files uno reads at once -- a formula, a .uno, a config file -- and
- * never for a source, which is read a piece at a time.
+ * readAll opens a ref and reads all of it. For small files read at once: a
+ * formula, a .uno, a config file.
  */
 export async function readAll(handlers: readonly FileHandler[], ref: FileRef): Promise<Uint8Array> {
   const file = await openWith(handlers, ref);
@@ -202,12 +158,8 @@ export async function readAll(handlers: readonly FileHandler[], ref: FileRef): P
 }
 
 /**
- * blobFiles opens Blobs: files dropped into a browser, which have no path, and
- * bytes a test holds.
- *
- * It is a handler like the others so that accepting one is a platform's
- * decision. A desktop engine opens files by path and does not list it, so a
- * Blob that reaches one is refused by name rather than half-supported.
+ * blobFiles opens Blobs: files dropped into a browser, and bytes a test
+ * holds. It claims every ref with a `blob`.
  */
 export function blobFiles(): FileHandler {
   return {
@@ -220,13 +172,7 @@ export function blobFiles(): FileHandler {
   };
 }
 
-/**
- * blobProvider is the dropped-file provider: a handler and nothing to browse.
- *
- * It is the case that proves `browse` is allowed to be missing. A Blob has no
- * folder it came from and no path to name one with, so there is nothing here a
- * person could look in.
- */
+/** blobProvider is the dropped-file provider: blobFiles, for opening only. */
 export function blobProvider(): Provider {
   return { name: "blob", label: "dropped files", files: blobFiles() };
 }
@@ -242,11 +188,8 @@ export function blobSource(blob: Blob): ByteSource {
 }
 
 /**
- * bytesSource reads bytes already in memory without copying them: the source a
- * .uno carries, once the container has been read.
- *
- * It is not a way of opening a file. The container it came out of was opened
- * through a handler, and these are a piece of what that open read.
+ * bytesSource reads bytes already in memory in place, such as a source
+ * carried inside a .uno.
  */
 export function bytesSource(bytes: Uint8Array): ByteSource {
   return {
@@ -257,11 +200,11 @@ export function bytesSource(bytes: Uint8Array): ByteSource {
   };
 }
 
-/** What `loadLibrary` could not read, alongside what it could. */
+/** What loadLibrary read, and what failed. */
 export interface LibraryLoad {
   formulas: Formula[];
-  /** One entry per file that failed, naming it. Both halves of the result are
-   * meant to be used: failures here do not mean the list is empty. */
+  /** One error per file that failed to load. `formulas` still holds the
+   * rest. */
   failed: Error[];
 }
 
@@ -269,37 +212,21 @@ const decoder = new TextDecoder("utf-8");
 const encoder = new TextEncoder();
 
 /**
- * loadLibrary reads every .unof in dir.
- *
- * One bad file costs one formula and not the library: it returns everything it
- * could read, and alongside it the failures, so the drawer still opens with the
- * other seventeen formulas in it and the caller still has something specific to
- * say about the missing one.
- *
- * A directory that does not exist is an empty library rather than a failure. A
- * person who has never written a formula has no folder, and that is not a fault
- * worth reporting to them -- which is why `list` answers with an empty list
- * rather than raising.
+ * loadLibrary reads every .unof in dir as a formula, sorted by id. A file that
+ * fails to parse becomes an entry in `failed` and the rest still load. A
+ * missing directory is an empty library.
  */
 export async function loadLibrary(store: FileStore, dir: string): Promise<LibraryLoad> {
   const { read, failed } = await readEach(store, dir, parseFormula, false);
   const formulas = read.map((r) => r.value);
 
-  // Sorted by id, so the caller is handed a stable order instead of whatever
-  // the directory happened to give. Which order they are shown in is the
-  // caller's decision: recency is a fact about this person on this machine and
-  // is deliberately not in these files.
   formulas.sort((a, b) => compareStrings(a.id, b.id));
   return { formulas, failed };
 }
 
 /**
- * saveFormula writes f to <dir>/<id>.unof and hands back the stamped copy.
- *
- * It goes through the store's atomic write because this is the save that runs
- * on a debounce while someone is still typing, which is exactly when a crash is
- * most likely. An interrupted autosave loses the keystroke rather than the
- * formula that was already there.
+ * saveFormula writes f to <dir>/<id>.unof through the store's atomic write
+ * and returns the stamped copy.
  */
 export async function saveFormula(store: FileStore, dir: string, f: Formula): Promise<Formula> {
   const name = fileName(f.id);
@@ -309,11 +236,9 @@ export async function saveFormula(store: FileStore, dir: string, f: Formula): Pr
 }
 
 /**
- * readEach reads every .unof in a folder through `parse`, each on its own: one
- * broken file costs one entry and is kept beside the rest as the Error it
- * threw, because somebody who can see which file is broken can fix it. The
- * entries are taken in name order where `sorted`, which is what decides which
- * of two files is the failure, and in the folder's order otherwise.
+ * readEach reads every .unof in dir through `parse`. A file that fails is
+ * kept as its Error in `failed`. Files are read in name order where `sorted`,
+ * and in the folder's order otherwise.
  */
 async function readEach<T>(
   store: FileStore,
@@ -336,35 +261,28 @@ async function readEach<T>(
   return { read, failed };
 }
 
-/** What `loadConnections` could not read, alongside what it could. */
+/** What loadConnections read, and what failed. */
 export interface ConnectionLoad {
   connections: Connection[];
-  /** One entry per file that failed, naming it, the way a library load has. */
+  /** One error per file that failed to load. */
   failed: Error[];
 }
 
 /**
- * loadConnections reads every .unof in dir as a connection.
+ * loadConnections reads every .unof in dir as a connection, sorted by id. A
+ * file that fails to parse becomes an entry in `failed`, and a missing
+ * directory loads as empty.
  *
- * It is loadLibrary's rules for the same reasons: one bad file costs one
- * connection and not the rest, a folder that does not exist is no connections
- * rather than a fault, and the list comes back in id order.
- *
- * One rule is its own. Two files with the same id are two answers to "which
- * connection is acme-exports", and a workspace names its connection by id, so
- * only one of them loads and each other one is a failure naming both. The one
- * that loads is the file named after its id, since that is the file a save
- * writes to; a copy beside it is the stranger. With no such file, the first in
- * name order loads, so the answer never depends on how the directory lists.
+ * Only one file loads per id. The file named `<id>.unof` wins, since that is
+ * the one a save writes. Otherwise the first in name order wins. Every other
+ * file with that id becomes an entry in `failed` naming both files.
  */
 export async function loadConnections(store: FileStore, dir: string): Promise<ConnectionLoad> {
-  // In name order, so which of two files with one id is the failure does not
-  // depend on the order the directory gave them in.
   const loaded = await readEach(store, dir, parseConnection, true);
   const read = loaded.read.map(({ file, value }) => ({ file, connection: value }));
   const failed = loaded.failed;
 
-  // The file a save would write to goes first for its id; the rest keep name order.
+  // The file a save writes to goes first for its id. The rest keep name order.
   const own = (r: { file: string; connection: Connection }): number =>
     r.file === r.connection.id + EXT ? 0 : 1;
   const byId = new Map<string, string>();
@@ -387,12 +305,9 @@ export async function loadConnections(store: FileStore, dir: string): Promise<Co
 }
 
 /**
- * saveConnection writes c to <dir>/<id>.unof and hands back the stamped copy.
- *
- * It goes through the store's atomic write, so a crash leaves either the
- * connection that was there or the new one and never half of either. The file
- * is formatted before anything is written, which is where a connection holding
- * a key is refused: a refused save writes nothing at all.
+ * saveConnection writes c to <dir>/<id>.unof through the store's atomic write
+ * and returns the stamped copy. formatConnection runs before the write, so a
+ * connection it refuses leaves the file as it was.
  */
 export async function saveConnection(
   store: FileStore,
@@ -407,27 +322,19 @@ export async function saveConnection(
 }
 
 /**
- * Connections is the connections an engine signs in through, as they stand,
- * and the folder they are read again from when somebody says they changed.
- *
- * It is one object rather than a list handed around, because two things read
- * it at different times -- the handler signing a request, the workspace
- * deciding whether a .uno may read a bucket -- and both have to see a
- * connection saved a moment ago without the engine being started again.
+ * Connections is the loaded connections, and a way to read their folder
+ * again. Both the handler signing a request and the workspace read it.
  */
 export interface Connections {
   /** The connections the last load read, in id order. */
   readonly all: readonly Connection[];
-  /** Read the folder again. What it could read replaces what was there. */
+  /** Reads the folder again. The result replaces `all`. */
   load(): Promise<ConnectionLoad>;
 }
 
 /**
- * connectionsIn keeps the connections in one folder of a store, and holds none
- * until the first load.
- *
- * Loads run one at a time, so two asked for together land in the order they
- * were asked for and the later one is what stays.
+ * connectionsIn keeps the connections of one folder. It holds none until the
+ * first load. Loads run one at a time, in the order they were asked for.
  */
 export function connectionsIn(store: FileStore, dir: string): Connections {
   let all: readonly Connection[] = [];

@@ -1,10 +1,5 @@
-// Where an efficiency test writes what it measured.
-//
-// Each test file measures one thing a person waits on and writes its numbers
-// to out/efficiency/<suite>.json as a list of { name, unit, value }. That
-// shape is what a benchmark tracker reads as it is, so the files can be handed
-// to one from a workflow and plotted commit by commit. Every metric here is
-// one where smaller is better.
+// Writes an efficiency suite's metrics to out/efficiency/<suite>.json as a
+// list of { name, unit, value }. Smaller is better for every metric.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -14,7 +9,7 @@ export type Unit = "requests" | "bytes" | "x" | "entries" | "ms";
 
 /** Metric is one number about one scenario. */
 export interface Metric {
-  /** What was measured, in words a chart can be titled with. */
+  /** What was measured. Used as the chart title. */
   name: string;
   unit: Unit;
   value: number;
