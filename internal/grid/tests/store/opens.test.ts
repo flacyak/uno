@@ -2,15 +2,12 @@
 // browses is browsed through a Lister, and the one program uno runs is a
 // profile's credential_process.
 //
-// This is the guard on that. It reads the source rather than running it,
-// because the thing it protects against is a second way in -- a readFile
+// This is the guard on that, as text. It reads the source rather than running
+// it, because the thing it protects against is a second way in -- a readFile
 // somebody reached for in a hurry -- and that is a line of code, not a
-// behaviour a test would ever call.
-//
-// A lister is allowed exactly the reads its handler is, because they reach the
-// same place. The list below names modules and not interfaces, so where the two
-// are one file it holds one name and where they are split -- the disk's are --
-// it holds both.
+// behaviour a test would ever call. reaches.test.ts is the same guard with the
+// core running, for a way out no text shows. Where each way is allowed is
+// ways.ts, which both read.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -20,6 +17,8 @@ import { expect, test } from "vite-plus/test";
 import { blobFiles, openWith, readAll } from "../../src/store/index.ts";
 import { diskProvider, localFiles } from "../../src/store/node.ts";
 import { FIXTURE, bytes, connect } from "../engine/harness.ts";
+import { MODULES, PLACES, offences as outside } from "./ways.ts";
+import type { Way } from "./ways.ts";
 
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
 
@@ -44,61 +43,36 @@ function named(modules: string): RegExp {
   return new RegExp(`["'](node:)?(${modules})["']`);
 }
 
-/** One way out of the core, and the only modules it may be taken in. */
+/** What finds one way out of the core in a module's text. */
 interface Rule {
-  way: string;
+  way: Way;
   pattern: RegExp;
-  where: readonly string[];
 }
 
 /**
- * Where each way of reading a file, reaching a network or running a program is
- * allowed: inside a handler, the lister beside it, or the exchange that turns
- * a sign-in into keys, and nowhere else.
- *
  * Each pattern is the way in rather than one function on the far side of it:
  * naming node:child_process is what makes a spawn possible, whichever of
- * spawn, execFile or fork is called after.
+ * spawn, execFile or fork is called after. Where each is allowed is ways.ts.
  */
 const RULES: readonly Rule[] = [
-  // The local handler's descriptor and the store's atomic write, and beside
-  // them the disk lister's readdir and stat.
-  {
-    way: "the disk",
-    pattern: named("fs|fs/promises"),
-    where: ["store/node.ts", "store/disklister.ts"],
-  },
-  // The S3 handler's requests, and through them the S3 lister's
-  // ListObjectsV2. Beside them, the exchanges that turn a sign-in into keys:
-  // the SSO portal and STS.
-  { way: "fetch", pattern: /\bfetch\b/, where: ["store/s3.ts", "store/sts.ts"] },
-  // A profile's credential_process, which is the one program uno runs.
-  { way: "a program", pattern: named("child_process"), where: ["store/node.ts"] },
-  // The blob handler.
-  { way: "a Blob's bytes", pattern: /\.slice\([^)]*\)\.arrayBuffer\(/, where: ["store/index.ts"] },
-  // Every other way to a network or a process, which nothing in the core
-  // takes: a socket, a server, a name lookup, a worker's own requests.
-  {
-    way: "a socket",
-    pattern: named("net|http|https|http2|dgram|tls|dns|worker_threads|cluster"),
-    where: [],
-  },
+  ...Object.entries(MODULES).map(([way, modules]) => ({
+    way: way as Way,
+    pattern: named(modules.join("|")),
+  })),
+  { way: "fetch", pattern: /\bfetch\b/ },
+  { way: "a Blob's bytes", pattern: /\.slice\([^)]*\)\.arrayBuffer\(/ },
   {
     way: "a page's own requests",
     pattern: /\b(XMLHttpRequest|WebSocket|EventSource)\b|process\.binding\b|navigator\.sendBeacon/,
-    where: [],
   },
 ];
 
 /** Every way out the guard found outside where it is allowed, as `file: way`. */
 function offences(files: ReadonlyMap<string, string>): string[] {
-  const found: string[] = [];
-  for (const [name, text] of files) {
-    for (const { way, pattern, where } of RULES) {
-      if (pattern.test(text) && !where.includes(name)) found.push(`${name}: ${way}`);
-    }
-  }
-  return found;
+  const uses = [...files].flatMap(([file, text]) =>
+    RULES.filter((r) => r.pattern.test(text)).map((r) => ({ file, way: r.way })),
+  );
+  return outside(uses);
 }
 
 /** The core's sources, by their path under src/. */
@@ -161,6 +135,7 @@ test("every rule is found where it is planted outside its places", () => {
   }
   // And each rule has a plant, so a rule added later is proved too.
   expect(new Set(plants.map(([way]) => way))).toEqual(new Set(RULES.map((r) => r.way)));
+  expect(new Set(RULES.map((r) => r.way))).toEqual(new Set(Object.keys(PLACES)));
 });
 
 // Accepting dropped bytes is a platform's decision. The desktop does not list
