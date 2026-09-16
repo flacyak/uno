@@ -82,20 +82,10 @@ export function parseAll(srcs: string[]): Program[] {
   return out;
 }
 
+/** dedup keeps each candidate once, in the order first seen, and no more than MAX_PER_EXAMPLE of them. */
 function dedup(input: string[]): string[] {
-  const seen = new Set<string>();
-  let out: string[] = [];
-  for (const s of input) {
-    if (!seen.has(s)) {
-      seen.add(s);
-      out.push(s);
-    }
-  }
-  if (out.length > MAX_PER_EXAMPLE) {
-    out.sort(compareStrings);
-    out = out.slice(0, MAX_PER_EXAMPLE);
-  }
-  return out;
+  const out = [...new Set(input)];
+  return out.length > MAX_PER_EXAMPLE ? out.sort(compareStrings).slice(0, MAX_PER_EXAMPLE) : out;
 }
 
 /**
@@ -142,8 +132,7 @@ export function rewrites(was: string, now: string): string[] {
 function deletions(a: string[], dels: Run[]): string[] {
   const out: string[] = [];
   const texts = new Set<string>();
-  const chars: string[] = [];
-  const seen = new Set<string>();
+  const dropped = new Set<string>();
 
   let prefix = true;
   let suffix = true;
@@ -153,10 +142,7 @@ function deletions(a: string[], dels: Run[]): string[] {
   for (const d of dels) {
     texts.add(d.text);
     for (const r of d.text) {
-      if (!seen.has(r)) {
-        seen.add(r);
-        chars.push(r);
-      }
+      dropped.add(r);
       if (!isSpace(r)) spaces = false;
     }
     const head = d.at === 0;
@@ -165,8 +151,8 @@ function deletions(a: string[], dels: Run[]): string[] {
     if (!tail) suffix = false;
     if (!head && !tail) edges = false;
   }
-  if (chars.length === 0) return [];
-  chars.sort(compareStrings);
+  if (dropped.size === 0) return [];
+  const chars = [...dropped].sort(compareStrings);
 
   if (texts.size === 1) {
     for (const t of texts) out.push(replaceSrc(quoteMeta(t), ""));
@@ -215,9 +201,7 @@ function substitutions(dels: Run[], ins: Run[]): string[] {
  * a caller wanting a first step does not.
  */
 export function droppedChars(ex: Example[]): string[] {
-  const chars: string[] = [];
-  const seen = new Set<string>();
-
+  const chars = new Set<string>();
   for (const e of ex) {
     const a = runes(e.was);
     const b = runes(e.now);
@@ -225,17 +209,9 @@ export function droppedChars(ex: Example[]): string[] {
 
     const al = align(a, b);
     if (al === undefined) return [];
-    for (const d of al.dels) {
-      for (const r of d.text) {
-        if (!seen.has(r)) {
-          seen.add(r);
-          chars.push(r);
-        }
-      }
-    }
+    for (const d of al.dels) for (const r of d.text) chars.add(r);
   }
-  chars.sort(compareStrings);
-  return chars;
+  return [...chars].sort(compareStrings);
 }
 
 /**

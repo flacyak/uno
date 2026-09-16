@@ -88,27 +88,9 @@ export class Graph {
     };
     collect(col);
 
-    // Post-order over the forward edges: a column is emitted after every column
-    // it reads that is also downstream of the change. This terminates without a
-    // visited-in-progress guard because bind refuses cycles, which is the
-    // second thing that check buys.
-    const out: string[] = [];
-    const done = new Set<string>();
-    const emit = (c: string): void => {
-      if (done.has(c)) return;
-      done.add(c);
-      for (const d of this.deps.get(c) ?? []) {
-        if (down.has(d)) emit(d);
-      }
-      out.push(c);
-    };
-
-    // The starting order is fixed, so a graph that is bound the same way twice
-    // recalculates in the same order twice. A JavaScript Map iterates in
-    // insertion order, which is deterministic and is not the order the Go
-    // sorts into -- keeping the sort is what keeps the two builds agreeing.
-    for (const c of [...down].sort(compareStrings)) emit(c);
-    return out;
+    // A column is emitted after every column it reads that is also downstream
+    // of the change.
+    return this.postOrder(down, (d) => down.has(d));
   }
 
   /**
@@ -119,17 +101,32 @@ export class Graph {
    * is sorted for the reason `downstreamOf`'s is.
    */
   order(): string[] {
+    return this.postOrder(this.deps.keys(), (d) => this.deps.has(d));
+  }
+
+  /**
+   * postOrder walks the forward edges from each of `from`, following those
+   * `kept` allows, and emits a column after every column it reads. It
+   * terminates without a visited-in-progress guard because bind refuses
+   * cycles, which is the second thing that check buys.
+   *
+   * The starting order is fixed, so a graph that is bound the same way twice
+   * recalculates in the same order twice. A JavaScript Map iterates in
+   * insertion order, which is deterministic and is not the order the Go
+   * sorts into -- keeping the sort is what keeps the two builds agreeing.
+   */
+  private postOrder(from: Iterable<string>, kept: (col: string) => boolean): string[] {
     const out: string[] = [];
     const done = new Set<string>();
     const emit = (c: string): void => {
       if (done.has(c)) return;
       done.add(c);
       for (const d of this.deps.get(c) ?? []) {
-        if (this.deps.has(d)) emit(d);
+        if (kept(d)) emit(d);
       }
       out.push(c);
     };
-    for (const c of [...this.deps.keys()].sort(compareStrings)) emit(c);
+    for (const c of [...from].sort(compareStrings)) emit(c);
     return out;
   }
 
