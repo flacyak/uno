@@ -1,29 +1,20 @@
-// What the engine says about how long things took, and how that is written
-// for a collector.
+// Engine timing measurements, and how they are written for an OTLP collector.
 //
-// The engine measures and does not send. `serve` is handed a Telemetry, which
-// is a function, and calls it with each measurement: how long a request took
-// to answer, how long a source took to index. Where those go is the
-// platform's, as opening a file is. A platform that hands over nothing gets an
-// engine that measures nothing.
+// `serve` calls a Telemetry function with each measurement: how long a
+// request took, how long a source took to index. Sending is left to the
+// platform. A measurement carries timings and request kinds only, so file
+// names, paths and buckets stay on the machine.
 //
-// A measurement names what was done and where the bytes were, and nothing
-// about whose they are: no file name, no path, no bucket.
-//
-// Meter is the usual thing to hand `serve`. It adds measurements up, and
-// `payload` writes the totals as an OTLP metrics request in JSON, which is
-// what Grafana, and any other OpenTelemetry collector, takes on /v1/metrics.
-// It is pure: sending the payload is the platform's too.
+// Meter sums measurements, and `payload` writes the totals as an OTLP
+// metrics request in JSON for a collector's /v1/metrics endpoint.
 
-/** What is known about a measurement besides its value. */
+/** String attributes attached to a measurement. */
 export type Attributes = Readonly<Record<string, string>>;
 
 /**
- * How measurements of one name add up.
- *
- * A duration is spread over buckets, so a collector can say what the slowest
- * one in a hundred took. A count is added to a running total. A level is a
- * reading, and the newest one stands.
+ * How measurements of one name are summed. A duration is counted into
+ * histogram buckets. A count is added to a running total. A level keeps the
+ * newest value.
  */
 export type Kind = "duration" | "count" | "level";
 
@@ -38,15 +29,15 @@ export interface Measurement {
   attributes?: Attributes;
 }
 
-/** Telemetry takes a measurement. It must not throw, and is not waited on. */
+/** Telemetry takes a measurement. It returns at once and swallows its own failures. */
 export type Telemetry = (m: Measurement) => void;
 
-/** The Telemetry of an engine nobody is measuring. */
+/** A Telemetry that discards every measurement. */
 export const unmeasured: Telemetry = () => undefined;
 
-/** How long a request took from arriving to its answer being posted. */
+/** How long a request took from arriving to its reply being posted. */
 export const REQUEST = "uno.engine.request";
-/** How long a source took to index, from being opened to its last row counted. */
+/** How long a source took to index, from open to the last row counted. */
 export const INDEX = "uno.engine.index";
 /** How many bytes a source that finished indexing holds. */
 export const INDEXED = "uno.engine.indexed";
@@ -54,20 +45,16 @@ export const INDEXED = "uno.engine.indexed";
 export const MILLISECONDS = "ms";
 export const BYTES = "By";
 
-/**
- * The upper edges of the buckets durations are counted into, in milliseconds:
- * from a row request answered out of the cache to an object indexed over a
- * slow line.
- */
+/** The upper bounds of the duration histogram buckets, in milliseconds. */
 export const DURATION_BOUNDS: readonly number[] = [
   1, 2, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000, 60_000, 300_000,
 ];
 
-/** What the collector files a platform's measurements under. */
+/** The OTLP resource a platform's measurements are filed under. */
 export interface Resource {
-  /** "uno-engine", "uno-efficiency": what is doing the measuring. */
+  /** The service name: "uno-engine", "uno-efficiency". */
   service: string;
-  /** Anything else true of every measurement it sends. */
+  /** Attributes shared by every measurement sent. */
   attributes?: Attributes;
 }
 
@@ -95,7 +82,7 @@ interface HistogramPoint extends Point {
   explicitBounds: number[];
 }
 
-/** Totals since the meter began, which is the only kind every collector takes. */
+/** OTLP aggregation temporality for totals since the meter began. */
 const CUMULATIVE = 2;
 
 type Data =
@@ -111,7 +98,7 @@ type Data =
 
 type Metric = { name: string; unit: string } & Data;
 
-/** An OTLP ExportMetricsServiceRequest, as its JSON encoding writes one. */
+/** An OTLP ExportMetricsServiceRequest in its JSON encoding. */
 export interface Payload {
   resourceMetrics: Array<{
     resource: { attributes: KeyValue[] };
@@ -119,12 +106,12 @@ export interface Payload {
   }>;
 }
 
-/** What the collector is told wrote the metrics. */
+/** The OTLP instrumentation scope name. */
 const SCOPE = "@uno/grid";
 
 const NANOS_PER_MS = 1_000_000n;
 
-/** OTLP writes a time as nanoseconds since 1970, in a string: it does not fit a double. */
+/** Formats a time as nanoseconds since 1970 in a string, as OTLP requires. */
 function nanos(ms: number): string {
   return String(BigInt(Math.round(ms)) * NANOS_PER_MS);
 }
@@ -135,7 +122,7 @@ function keyValues(attributes: Attributes | undefined): KeyValue[] {
     .map(([key, value]) => ({ key, value: { stringValue: value } }));
 }
 
-/** What a series has added up to. */
+/** The running total of one series. */
 type Total =
   | { kind: "duration"; count: number; sum: number; buckets: number[] }
   | { kind: "count"; sum: number }
@@ -151,7 +138,7 @@ interface Series {
 function begin(kind: Kind): Total {
   switch (kind) {
     case "duration":
-      // One more bucket than bounds: the last holds what is over every bound.
+      // One more bucket than bounds. The last holds values over every bound.
       return { kind, count: 0, sum: 0, buckets: DURATION_BOUNDS.map(() => 0).concat(0) };
     case "count":
       return { kind, sum: 0 };
@@ -179,10 +166,9 @@ function add(total: Total, value: number): void {
 }
 
 /**
- * Meter adds measurements up and writes the totals for a collector.
+ * Meter sums measurements and writes the totals as an OTLP payload.
  *
- * `now` is the clock, in milliseconds since 1970. It is handed in so the
- * totals of a run can be compared with what they should be.
+ * `now` is the clock in milliseconds since 1970. It is injectable for tests.
  */
 export class Meter {
   private readonly series = new Map<string, Series>();
@@ -196,7 +182,7 @@ export class Meter {
     this.began = now();
   }
 
-  /** The Telemetry to hand `serve`. A measurement that is not a number is dropped. */
+  /** The Telemetry to hand `serve`. A measurement with a non-finite value is dropped. */
   readonly record: Telemetry = (m) => {
     if (!Number.isFinite(m.value)) return;
     const attributes = keyValues(m.attributes);
@@ -209,12 +195,12 @@ export class Meter {
     add(series.total, m.value);
   };
 
-  /** Whether anything has been measured. A meter with nothing has nothing to send. */
+  /** Whether the meter is still empty. */
   get empty(): boolean {
     return this.series.size === 0;
   }
 
-  /** payload is every total so far, as one OTLP metrics request. */
+  /** payload returns every total so far as one OTLP metrics request. */
   payload(): Payload {
     const point: Point = {
       attributes: [],
@@ -271,41 +257,36 @@ function empty(kind: Kind): Data {
   }
 }
 
-/** The path a collector takes metrics on, after its OTLP endpoint. */
+/** The path appended to a general OTLP endpoint for metrics. */
 export const METRICS_PATH = "/v1/metrics";
 
-/** The variable every OpenTelemetry tool reads for where its collector is. */
+/** The standard OpenTelemetry variable for the collector endpoint. */
 export const ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_ENDPOINT";
-/** The variable every OpenTelemetry tool reads for what to sign in with. */
+/** The standard OpenTelemetry variable for request headers. */
 export const HEADERS_VARIABLE = "OTEL_EXPORTER_OTLP_HEADERS";
-/** The variable every OpenTelemetry tool reads for how its collector is spoken to. */
+/** The standard OpenTelemetry variable for the wire protocol. */
 export const PROTOCOL_VARIABLE = "OTEL_EXPORTER_OTLP_PROTOCOL";
 
 /**
- * The same three, for metrics alone. Each stands over its general one where
- * it is set, and the address is the whole one: nothing is put after it.
+ * The metrics-specific variables. Each overrides its general one when set.
+ * The metrics endpoint is used as-is, as the full URL of the collector.
  */
 export const METRICS_ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT";
 export const METRICS_HEADERS_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
 export const METRICS_PROTOCOL_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL";
 
 /**
- * The protocols a payload written here answers to. A collector that takes
- * OTLP over HTTP takes JSON and protobuf on the same path and tells them
- * apart by content type, so either HTTP setting means what is sent. gRPC is
- * another port and another wire, and a post to it says nothing back.
+ * The protocol settings accepted. Both mean OTLP over HTTP, where the
+ * collector tells JSON from protobuf by content type. gRPC is refused.
  */
 const HTTP_PROTOCOLS: readonly string[] = ["http/json", "http/protobuf"];
 
-/** The quotes a value copied out of a shell snippet arrives wearing. */
+/** Quote characters stripped from a pasted value. */
 const QUOTES = ['"', "'"];
 
 /**
- * pasted is a variable's value as it was meant, from how it tends to arrive.
- *
- * A collector's settings page shows `NAME="value"` to be copied into a shell,
- * and what ends up in a secret is often that whole line, or the value with
- * its quotes. Neither can mean anything else, so both are read as the value.
+ * pasted cleans up a variable's value: it strips a leading `NAME=` and
+ * surrounding quotes, as left by copying a shell snippet.
  */
 function pasted(name: string, text: string | undefined): string {
   let value = (text ?? "").trim();
@@ -315,9 +296,8 @@ function pasted(name: string, text: string | undefined): string {
 }
 
 /**
- * otlpHeaders reads OTEL_EXPORTER_OTLP_HEADERS, which is how every
- * OpenTelemetry tool is told what to sign in with: `key=value` pairs with
- * commas between, the values percent-encoded.
+ * otlpHeaders parses an OTEL_EXPORTER_OTLP_HEADERS value: comma-separated
+ * `key=value` pairs with percent-encoded values.
  */
 export function otlpHeaders(text: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
@@ -329,17 +309,16 @@ export function otlpHeaders(text: string | undefined): Record<string, string> {
   return out;
 }
 
-/** Collector is where metrics are sent, and what the send is signed in with. */
+/** Collector is where metrics are posted, and the headers to send. */
 export interface Collector {
-  /** The whole address a metrics request is posted to. */
+  /** The full URL a metrics request is posted to. */
   url: string;
   headers: Record<string, string>;
 }
 
 /**
- * What is wrong with an endpoint that is not a URL, said from its shape and
- * without a character of it: it sits beside a token, and an error is read by
- * people the token was never meant for.
+ * whyNot describes what is wrong with an endpoint value by its shape and
+ * length alone, since it may hold a secret.
  */
 function whyNot(value: string): string {
   if (/^authorization\s*=/i.test(value)) {
@@ -351,7 +330,7 @@ function whyNot(value: string): string {
   return `it starts as a URL does and cannot be read as one, and is ${value.length} characters long`;
 }
 
-/** The first of `variables` that is set to something, with what it is set to. */
+/** setOf returns the first of `variables` with a non-empty value, and that value. */
 function setOf(
   env: Readonly<Record<string, string | undefined>>,
   variables: readonly string[],
@@ -364,12 +343,10 @@ function setOf(
 }
 
 /**
- * collector reads where metrics go from the environment, as every
- * OpenTelemetry tool does, and answers undefined where it names nowhere.
- *
- * An endpoint that is set and is not a URL is refused, saying which variable
- * it was and what about it is wrong: sending to nowhere quietly would look
- * the same as sending. So is a protocol this cannot speak.
+ * collector reads the metrics endpoint, protocol and headers from the
+ * environment. It returns undefined when the endpoint variables are empty,
+ * and throws for an endpoint that fails to parse as a URL, a protocol other
+ * than HTTP, or a headers value that parses to zero headers.
  */
 export function collector(
   env: Readonly<Record<string, string | undefined>>,

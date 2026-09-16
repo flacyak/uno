@@ -1,9 +1,7 @@
-// The desktop reads no file itself.
+// The desktop leaves every file read to the engine.
 //
-// Main writes saves and screenshots, and asks dialogs for paths. Every read --
-// a source, a .uno, an object in S3 -- happens in the engine, through the
-// providers that src/engine/index.ts lists. This fails the day something here
-// reaches for a file on its own.
+// Main writes saves and screenshots, and asks dialogs for paths. Every read
+// happens in the engine, through the providers src/engine/index.ts lists.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -31,28 +29,25 @@ test("nothing in the desktop reads a file except through the engine's handlers",
   expect(found).toEqual([]);
 });
 
-// What the desktop can reach is a list written here and nowhere else. It is
-// providers now rather than handlers, so browsing arrives with the same list
-// rather than a second one somebody has to remember to keep in step.
+// The providers the engine reads through are listed in src/engine/index.ts.
 test("the engine lists the providers it reaches through", () => {
   const entry = readFileSync(join(SRC, "engine/index.ts"), "utf8");
   expect(entry).toMatch(/sources\(\[/);
   expect(entry).toMatch(/diskProvider\(\)/);
   expect(entry).toMatch(/s3Provider\(/);
-  // Several files read as one, over the places one file can be.
+  // multiProvider reads several files as one.
   expect(entry).toMatch(/multiProvider\(single\)/);
 });
 
 /**
- * child_process named as a string, however it is reached for: `from`,
- * `import()` or `require()`, with the `node:` prefix or without.
+ * child_process as a string, from `from`, `import()` or `require()`, the
+ * `node:` prefix optional.
  */
 const RUNS = /["'](node:)?child_process["']/;
 
-// The one program uno runs is a profile's credential_process, and it runs in
-// the engine, inside @uno/grid/store/node, where grid's guard holds it. The
-// desktop starts engines through Electron's utilityProcess and runs nothing
-// else, so child_process here is a second way to run one.
+// The only program uno runs is a profile's credential_process, inside
+// @uno/grid/store/node in the engine. The desktop starts engines through
+// Electron's utilityProcess alone.
 test("nothing in the desktop runs a program of its own", () => {
   const found = sources(SRC)
     .filter((file) => RUNS.test(readFileSync(file, "utf8")))

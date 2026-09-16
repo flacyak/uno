@@ -1,10 +1,6 @@
-// An engine's connections: read from a folder as it starts, and again when a
-// client says they changed.
-//
-// What is under test is "without a restart": a connection saved into the
-// folder after the engine came up is one it answers with the next time it is
-// asked, and what crosses the channel is the connection whole, dates and the
-// keys this build does not know included.
+// `engine.connections`: connections are read from a folder on each call, so
+// one saved after the engine started is returned. Dates and unknown keys
+// cross the channel intact.
 
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -34,15 +30,13 @@ test("a connection saved after the engine started is one it answers with", async
     const saved = await saveConnection(store, dir, await acme());
     const { connections } = await engine.connections();
     expect(connections).toEqual([saved]);
-    // Structured clone, not JSON: a date is still a date on this side.
+    // A Date crosses the channel as a Date.
     expect(connections[0]!.modified).toBeInstanceOf(Date);
   } finally {
     done();
   }
 });
 
-// A key this build does not know is carried through a save, so it has to be
-// carried across the channel too, or the panel would save the loss back.
 test("the keys this build does not know cross the channel with the rest", async () => {
   const dir = await mkdtemp(join(tmpdir(), "uno-engine-connections-"));
   const store = nodeStore();
@@ -74,8 +68,6 @@ test("a file that will not read is said, and the rest still load", async () => {
   }
 });
 
-// A build that connects to nothing says so, rather than an empty list that
-// reads as a folder with nothing in it.
 test("an engine with nowhere to keep connections refuses by name", async () => {
   const { engine, done } = connect();
   try {

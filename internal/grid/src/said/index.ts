@@ -1,27 +1,18 @@
 // What the engine says to a person, as data.
 //
-// A sentence built here is English, and an engine does not know what language
-// the person reading it speaks: it may be in another process, behind a port
-// that carries plain data and nothing else. So what it says crosses as which
-// sentence it is and what goes in it, and whoever draws it writes it in their
-// own language. `english` is the sentence as this package has always said it,
-// which is what an Error's message, a log and a test read.
-//
-// Not everything has a kind of its own yet. What does not is `text`: a
-// diagnostic as it was written, in English, passed on whole. Giving one a kind
-// is adding it to `Said`, after which the compiler asks for its English here
-// and for its message wherever a client writes one.
+// A `Said` value names which sentence it is and what goes in it. `english`
+// renders it in English, which is what an Error's message, a log and a test
+// read; a client can render it in another language. A one-off diagnostic
+// travels as `text`, already in English. Adding a kind to `Said`
+// makes the compiler require its sentence here and in every client.
 
 import { quote } from "../go/strconv.ts";
 import type { HeaderMode } from "../store/multi.ts";
 
-/**
- * Charset is the name a file's text is read by, as the status bar shows it.
- * The two are the same word in every language, so the name travels as data.
- */
+/** Charset is the name of a file's text encoding, as the status bar shows it. */
 export type Charset = "UTF-8" | "Windows-1252";
 
-/** The punctuation a description can call by name, as the plural it is called by. */
+/** The punctuation a description can name, as plurals. */
 export type CharName =
   | "commas"
   | "full stops"
@@ -40,7 +31,7 @@ export type CharName =
   | "brackets"
   | "quotes";
 
-/** What a step of a program looks for: characters by name, or a piece of text as written. */
+/** What a step looks for: characters by name, or a literal piece of text. */
 export type Sought =
   | { t: "chars"; names: CharName[]; where: "anywhere" | "start" | "end" }
   | { t: "literal"; text: string };
@@ -52,11 +43,11 @@ export type StepSaid =
   | { t: "lower" }
   | { t: "remove"; what: Sought }
   | { t: "replace"; what: Sought; with: string }
-  /** A step with no sentence for it, shown in the notation a person can learn. */
+  /** A step shown in program notation: a slice, a concat or a constant. */
   | { t: "notation"; text: string };
 
 export type Said =
-  /** A diagnostic with no kind of its own yet, as it was written. */
+  /** A one-off diagnostic, already in English. */
   | { t: "text"; text: string }
   /** What went wrong with something named: "sales.csv: no such file". */
   | { t: "about"; subject: string; why: Said }
@@ -68,7 +59,7 @@ export type Said =
   // What a program does, for the recogniser's banner.
   | { t: "program"; steps: StepSaid[] }
 
-  // A file that is not the one a workspace was saved against.
+  // A file that differs from the one a workspace was saved against.
   | { t: "version-changed"; name: string; sizes?: { now: number; was: number } }
   | { t: "size-changed"; name: string; now: number; was: number }
 
@@ -104,14 +95,14 @@ export type Said =
   | { t: "file-closed" }
   | { t: "changed-on-disk"; name: string }
 
-  // What an engine whose platform gave it less cannot do.
+  // What an engine refuses because its platform left out the means.
   | { t: "keeps-no-connections" }
   | { t: "offers-no-sign-ins" }
   | { t: "tries-no-connection" };
 
 /**
- * Refusal is an error that knows what it says as data, so a client can say it
- * in another language. Its message is the English.
+ * Refusal is an Error that carries its message as `Said`. Its message is the
+ * English.
  */
 export class Refusal extends Error {
   constructor(readonly said: Said) {
@@ -120,16 +111,16 @@ export class Refusal extends Error {
   }
 }
 
-/** saidOf is what an error says: as data where it knows, and as its text otherwise. */
+/** saidOf returns a Refusal's Said, or any other error's message as `text`. */
 export function saidOf(err: unknown): Said {
   if (err instanceof Refusal) return err.said;
   return { t: "text", text: err instanceof Error ? err.message : String(err) };
 }
 
-/** How many of one unit make the next: bytes in a KB, KB in a MB. */
+/** Bytes per KB, KB per MB, and so on. */
 const UNIT_STEP = 1024;
 
-/** A size under this many of its unit keeps one decimal place. */
+/** A size under this many of its unit is shown with one decimal place. */
 const DECIMAL_BELOW = 10;
 
 export function formatBytes(n: number): string {
@@ -142,10 +133,10 @@ export function formatBytes(n: number): string {
   return `${i === 0 ? n : n.toFixed(n < DECIMAL_BELOW ? 1 : 0)} ${units[i]}`;
 }
 
-/** What the `_file` column shows, as the end of a sentence about it. */
+/** What the `_file` column shows, as the end of a sentence. */
 export const FILE_SHOWS = "which file each row came from";
 
-/** englishSought is what a step looks for, in English: "commas and spaces from the end". */
+/** englishSought renders a Sought in English: "commas from the end". */
 export function englishSought(what: Sought): string {
   if (what.t === "literal") return quote(what.text);
   const names = what.names;
@@ -164,8 +155,8 @@ export function englishSought(what: Sought): string {
 }
 
 /**
- * Sentences is one sentence for each kind of a union, so a kind without one is
- * a type error: here in English, and in a client in whatever language it writes.
+ * Sentences maps each kind of a union to the function that renders it, so a
+ * missing kind is a type error.
  */
 export type Sentences<U extends { t: string }> = {
   [K in U["t"]]: (s: Extract<U, { t: K }>) => string;
@@ -190,7 +181,7 @@ const SENTENCES: Sentences<Said> = {
   replaying: (s) => `replaying edits to ${s.name}: ${english(s.why)}`,
 
   read: (s) => {
-    // The quoting is Go's `%q` on a rune: a single-quoted character literal.
+    // The delimiter is quoted as Go's `%q` quotes a rune: in single quotes.
     const read =
       s.delimiter === "\t"
         ? `${s.charset} · tab-separated`
@@ -260,9 +251,8 @@ const SENTENCES: Sentences<Said> = {
     "this engine cannot try a connection · its platform connects to nothing",
 };
 
-/** english is the sentence in English, as this package has always written it. */
+/** english renders a Said as its English sentence. */
 export function english(s: Said): string {
-  // The table is typed by kind, and s is the union, so the one pairing the
-  // compiler cannot see is said here: each sentence takes its own kind.
+  // SENTENCES is typed per kind and s is the union; the cast pairs them.
   return (SENTENCES[s.t] as (s: Said) => string)(s);
 }

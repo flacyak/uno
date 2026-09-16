@@ -1,12 +1,12 @@
-// What both programs do with a request: read its body, answer with JSON, and
-// hand out a file from a folder.
+// HTTP helpers shared by the engine and the gate: read a request body, answer
+// with JSON, and serve a file from a folder.
 
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
 
-/** An answer with a status and a sentence, thrown from anywhere under a route. */
+/** An error carrying the HTTP status to answer with. */
 export class Refused extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -15,7 +15,7 @@ export class Refused extends Error {
   }
 }
 
-/** json answers with one value, as the page reads it. */
+/** Writes `value` as a JSON response with the given status. */
 export function json(res: ServerResponse, status: number, value: unknown): void {
   const body = JSON.stringify(value);
   res.writeHead(status, {
@@ -25,7 +25,10 @@ export function json(res: ServerResponse, status: number, value: unknown): void 
   res.end(body);
 }
 
-/** body reads a request whole, refusing one over `limit` bytes before it is held. */
+/**
+ * Reads the whole request body. Rejects with a 413 `Refused` once more than
+ * `limit` bytes have arrived.
+ */
 export function body(req: IncomingMessage, limit: number): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const parts: Buffer[] = [];
@@ -44,7 +47,7 @@ export function body(req: IncomingMessage, limit: number): Promise<Uint8Array> {
   });
 }
 
-/** The types a web build is made of. Anything else is handed out as bytes. */
+/** Content types by extension. Other extensions are served as octet-stream. */
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -56,9 +59,8 @@ const TYPES: Record<string, string> = {
 };
 
 /**
- * Static hands out the files of one folder: a built web page. A path that
- * names no file, or one outside the folder, is the page itself, since the
- * page is the whole app and its router is the address bar.
+ * Serves the files of one folder, a built single-page app. index.html is
+ * served for a directory, a missing file, or a path outside the folder.
  */
 export class Static {
   private readonly root: string;
@@ -66,7 +68,8 @@ export class Static {
     this.root = normalize(root);
   }
 
-  /** The file under the root a request path names, or the page. */
+  /** The file under the root that `pathname` names, or the root itself when
+   * the path points outside it. */
   private fileFor(pathname: string): string {
     const rel = normalize(decodeURIComponent(pathname)).replace(/^(\.\.(\/|\\|$))+/, "");
     const full = join(this.root, rel);
@@ -84,8 +87,8 @@ export class Static {
     res.writeHead(200, {
       "content-type": TYPES[extname(file)] ?? "application/octet-stream",
       "content-length": found.size,
-      // The page is small and its assets are named by their hash, so the
-      // page is asked for every time and the assets never are.
+      // index.html is fetched fresh each time. Every other asset has a hash in
+      // its name, so it is cached for a year.
       "cache-control": extname(file) === ".html" ? "no-cache" : "public, max-age=31536000, immutable",
     });
     createReadStream(file).pipe(res);

@@ -1,34 +1,27 @@
-// The themes, and the one the page wears.
+// The colour themes and the one the page is using.
 //
-// Four, each a light and a dark palette, taken as they are from T3 Themes
-// (t3themes.com, github.com/SunkenInTime/t3-themes), the community gallery for
-// T3 Code, and credited to their authors below. A theme there is written in T3
-// Code's tokens; uno has fewer, so each is kept here already mapped onto uno's:
+// Four themes, each with a light and a dark palette, from T3 Themes
+// (t3themes.com, github.com/SunkenInTime/t3-themes), credited to their
+// authors below. Each is stored already mapped onto uno's tokens:
 //
-// - uno has three grounds, ordered by lightness in both modes -- the grid is
-//   the most raised, the chrome around it the least -- so the theme's canvas,
-//   surfaceRaised and sidebar are assigned to surface, paper and sunken by how
-//   light they are, lightest to surface. A theme does not keep one order
-//   between the three, and the grid on its border colour is what the order
-//   would otherwise have given Catppuccin's light variant.
-// - text, textMuted, border and accent are ink, ink-3, rule and accent.
-// - What uno needs besides is mixed from those in CSS (`derived`), and the
-//   warning amber is T3 Code's own standard pair, which it shows under every
-//   theme so a warning never takes on a brand tint.
+// - The theme's three grounds are assigned to surface, paper and sunken by
+//   lightness, lightest to surface.
+// - text, textMuted, border and accent map to ink, ink-3, rule and accent.
+// - The remaining tokens are mixed from those in `tokensOf`. The warning
+//   amber is the same under every theme.
 //
-// Which theme, and whether it is light or dark or follows the system, is this
-// machine's choice, kept the way the input strategy is.
+// The chosen theme and appearance are kept in local storage.
 
-/** The seven colours a palette gives; the rest of uno's tokens are mixed from them. */
+/** The seven colours a palette defines. The other tokens are mixed from these. */
 export interface Palette {
-  /** The chrome: the sidebar, the status bar, a column's header. */
+  /** Chrome background: sidebar, status bar, column headers. */
   sunken: string;
-  /** The ground the panel and the empty window sit on. */
+  /** Background of the panel and the empty window. */
   paper: string;
-  /** The grid, and anything raised off the paper: inputs, the tab showing. */
+  /** Background of the grid, inputs and the active tab. */
   surface: string;
   ink: string;
-  /** Muted ink: notes, sizes, what is beside a line. */
+  /** Muted text: notes, sizes, secondary labels. */
   ink3: string;
   rule: string;
   accent: string;
@@ -37,7 +30,7 @@ export interface Palette {
 export interface Theme {
   readonly id: string;
   readonly name: string;
-  /** Who made it, as T3 Themes credits them. */
+  /** The author as credited on T3 Themes. */
   readonly author: string;
   readonly light: Palette;
   readonly dark: Palette;
@@ -140,39 +133,38 @@ export const THEMES = [
 
 export type ThemeId = (typeof THEMES)[number]["id"];
 
-/** What a person chooses: a mode, or whatever the system is in. */
+/** The appearance a person chooses: a mode, or follow the system. */
 export type Appearance = "system" | "light" | "dark";
 
-/** What the page is actually in, once `system` is asked. */
+/** The mode the page is in after resolving `system`. */
 export type Mode = "light" | "dark";
 
 export const APPEARANCES: readonly Appearance[] = ["system", "light", "dark"];
 
-/** The theme before anybody has chosen one: the first of the four. */
+/** The theme used when none is stored. */
 export const DEFAULT_THEME: ThemeId = "paper-ember";
 
-/** Where the choices are kept. They are this machine's, not a workspace's. */
+/** Storage keys for the theme and appearance choices. */
 export const THEME_KEY = "uno.theme";
 export const APPEARANCE_KEY = "uno.appearance";
 
 /**
- * T3 Code's standard warning, which uno's flag is: the fill, the readable
- * foreground on each mode's surface, and how much of the fill is laid over the
- * paper for a flagged surface -- 8% in light and 16% in dark, as T3 Code does.
+ * The warning colours used for the flag tokens: the fill, the readable
+ * foreground per mode, and how much fill is mixed into the paper per mode.
  */
 const WARNING = "#fe9a00";
 const WARNING_INK: Record<Mode, string> = { light: "#973e00", dark: "#ffb900" };
 const WARNING_WASH: Record<Mode, string> = { light: "8%", dark: "16%" };
 
-/** How much accent washes a selected line: more in dark, where the surface swallows it. */
+/** How much accent is mixed into the surface for a selected line, per mode. */
 const ACCENT_WASH: Record<Mode, string> = { light: "14%", dark: "22%" };
 
-/** What darkens the workspace behind the sources panel: more in dark, where the grounds are near it already. */
+/** The overlay drawn over the workspace behind the sources panel, per mode. */
 const SCRIM: Record<Mode, string> = { light: "rgb(0 0 0 / 30%)", dark: "rgb(0 0 0 / 50%)" };
 
 /**
- * tokensOf is a palette as the CSS custom properties base.css declares, the
- * ones it gives and the ones mixed from them.
+ * Returns the CSS custom properties for a palette: the seven it defines and
+ * the ones mixed from them. The names match those declared in base.css.
  */
 export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
   return {
@@ -180,11 +172,11 @@ export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
     "--paper": p.paper,
     "--surface": p.surface,
     "--ink": p.ink,
-    // Secondary ink, between the two a palette gives.
+    // Secondary text, between ink and ink3.
     "--ink-2": `color-mix(in srgb, ${p.ink} 62%, ${p.ink3})`,
     "--ink-3": p.ink3,
     "--rule": p.rule,
-    // The quieter rule, between rows.
+    // The lighter rule between rows.
     "--rule-2": `color-mix(in srgb, ${p.rule} 55%, ${p.paper})`,
     "--accent": p.accent,
     "--accent-b": `color-mix(in srgb, ${p.accent} ${ACCENT_WASH[mode]}, ${p.surface})`,
@@ -194,13 +186,13 @@ export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
   };
 }
 
-/** The storage the choices are kept in: the page's localStorage, or a map in a test. */
+/** Key-value storage for choices: localStorage, or a map in tests. */
 export interface Keeps {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
 
-/** What `system` is asked: `(prefers-color-scheme: dark)`, and when it changes. */
+/** The `(prefers-color-scheme: dark)` media query, with a change listener. */
 export interface Scheme {
   readonly matches: boolean;
   addEventListener(type: "change", fn: () => void): void;
@@ -215,11 +207,10 @@ function isAppearance(a: string | null): a is Appearance {
 }
 
 /**
- * Theming is the theme and the appearance the page wears, kept between
- * launches and put on the root element as its tokens.
+ * Theming holds the stored theme and appearance choices and applies them to
+ * the root element as CSS custom properties.
  *
- * A value kept by some other build that this one does not know is not an
- * error: the page wears the default, and the next choice writes over it.
+ * An unknown stored value falls back to the default.
  */
 export class Theming {
   private chosen: ThemeId;
@@ -235,7 +226,7 @@ export class Theming {
     const appearance = keeps.getItem(APPEARANCE_KEY);
     this.chosen = isTheme(theme) ? theme : DEFAULT_THEME;
     this.appearing = isAppearance(appearance) ? appearance : "system";
-    // The system turning dark at sunset is followed while the page follows it.
+    // Reapply when the system scheme changes, while following the system.
     scheme.addEventListener("change", () => {
       if (this.appearing === "system") this.apply();
     });
@@ -256,21 +247,21 @@ export class Theming {
     return this.scheme.matches ? "dark" : "light";
   }
 
-  /** choose wears another theme, in the same appearance, and keeps it. */
+  /** Stores and applies a theme. */
   choose(id: ThemeId): void {
     this.chosen = id;
     this.keeps.setItem(THEME_KEY, id);
     this.apply();
   }
 
-  /** appear puts the page in a mode, or back to following the system, and keeps it. */
+  /** Stores and applies an appearance. */
   appear(a: Appearance): void {
     this.appearing = a;
     this.keeps.setItem(APPEARANCE_KEY, a);
     this.apply();
   }
 
-  /** onChange is told whenever what the page wears changes. */
+  /** Registers a listener called after every apply. */
   onChange(fn: () => void): void {
     this.heard.push(fn);
   }
@@ -280,8 +271,8 @@ export class Theming {
     for (const [name, value] of Object.entries(tokensOf(this.theme[mode], mode))) {
       this.root.style.setProperty(name, value);
     }
-    // For the scrollbars, the form controls and the stylesheet's own
-    // [data-theme] rules, which read the mode rather than the colours.
+    // color-scheme styles scrollbars and form controls. data-theme is read
+    // by the stylesheet's [data-theme] rules.
     this.root.style.colorScheme = mode;
     this.root.dataset["theme"] = mode;
     this.root.dataset["palette"] = this.chosen;

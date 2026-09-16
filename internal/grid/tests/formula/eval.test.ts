@@ -11,21 +11,18 @@ import {
   parse,
 } from "../../src/formula/index.ts";
 
-// row is the whole of what an evaluator needs from a sheet, which is the point
-// of the Row interface: this test holds no sheet, and neither does the module.
+// A Row backed by a plain object, standing in for a sheet.
 function row(cells: Record<string, string>): Row {
   return { value: (col) => cells[col] };
 }
 
-// The preview in the editor evaluates row one as a person types, so the
-// arithmetic has to be the arithmetic they wrote: precedence, their brackets,
-// and cells read through the same coercion the numeric badge promised.
+// evaluate follows precedence and brackets, and reads decorated numbers.
 describe("evaluate computes what was written", () => {
   const sample = row({
     units: "120",
     price: "40.00",
     cost: "31.20",
-    gross: "1,204.50", // decorated, and still a number
+    gross: "1,204.50", // decorated, still a number
     blank: "",
     label: "West",
   });
@@ -35,7 +32,7 @@ describe("evaluate computes what was written", () => {
     ["units * price", 4800],
     ["price - cost", 8.8],
     ["(price - cost) / price", 0.22],
-    ["price - cost / price", 40 - 31.2 / 40], // precedence, not left to right
+    ["price - cost / price", 40 - 31.2 / 40], // division binds tighter
     ["(1 + 2) * 3", 9],
     ["1 + 2 * 3", 7],
     ["10 - 3 - 2", 5], // left-associative
@@ -45,7 +42,7 @@ describe("evaluate computes what was written", () => {
     ["0 - -1", 1],
   ];
 
-  // Binary floats, so compare within a tolerance no cell displays.
+  // Compare within a floating point tolerance.
   const DIGITS = 9;
 
   for (const [src, want] of cases) {
@@ -55,11 +52,8 @@ describe("evaluate computes what was written", () => {
   }
 });
 
-// A per-cell failure has to be reportable, and it has to name the column. The
-// class is what the caller branches on; the message is what it shows. This is
-// deliberately unlike program.apply, which returns the original value and says
-// nothing, because a program meets rows it was never induced from and a formula
-// meets a column a person chose.
+// evaluate throws a typed error whose message names the failing column or
+// literal.
 describe("evaluate reports which column failed and why", () => {
   const sample = row({
     price: "40.00",
@@ -91,15 +85,13 @@ describe("evaluate reports which column failed and why", () => {
   }
 });
 
-// A binding read out of a state.json some other build wrote can be empty. It
-// has to fail on the path that evaluates it rather than take the window down.
+// Evaluating an empty Formula throws.
 test("evaluating the empty formula fails rather than crashing", () => {
   expect(() => evaluate(new Formula(), row({}))).toThrow();
 });
 
-// A bound column is computed a column at a time, and every row of it has to come
-// out as the one-row preview says it will: its number, or the failure that row
-// would have thrown first.
+// evaluateColumn gives each row the same value or error that evaluate gives
+// for that row alone.
 describe("evaluateColumn computes every row as one row would", () => {
   const cols: Record<string, string[]> = {
     price: ["40.00", "10", "n/a", "8"],
@@ -113,7 +105,7 @@ describe("evaluateColumn computes every row as one row would", () => {
   const exprs = [
     "price - cost",
     "(price - cost) / price",
-    "cost / zero", // row 1 fails on cost before it reaches the divisor
+    "cost / zero", // row 1 fails on cost before the divisor
     "price / (zero - zero)",
     "-price * 2",
     "price + postage",
@@ -147,16 +139,13 @@ describe("evaluateColumn computes every row as one row would", () => {
     expect(errors[3]).toBeUndefined();
   });
 
-  // A divide by zero names the divisor, not the cell, so it reads the same in
-  // every row it happens in -- and an Error is the one allocation in a block
-  // that costs more than the arithmetic. A column whose divisor is blank is an
-  // ordinary moment in building a sheet, and it has to compute as fast as one
-  // whose divisor is not: one failure for the block, like an unknown column.
+  // Rows that divide by zero share one DivideByZeroError instance. Its
+  // message names the divisor column, so it is the same for every row.
   test("a column that divides by zero fails once, not once per row", () => {
     const { errors } = evaluateColumn(parse("price / zero"), 4, src);
     expect(errors[0]).toBeInstanceOf(DivideByZeroError);
     expect(errors[1]).toBe(errors[0]);
-    expect(errors[2]).toBeInstanceOf(NotNumberError); // price is "n/a" there
+    expect(errors[2]).toBeInstanceOf(NotNumberError); // price is "n/a" in row 2
     expect(errors[3]).toBeUndefined();
   });
 });

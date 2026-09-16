@@ -1,18 +1,16 @@
-// Reports what the efficiency tests measured, and sends it to a collector.
+// Prints the metrics the efficiency tests measured, and sends them to a
+// collector.
 //
 //   node scripts/efficiency.ts [--base <folder>] [--out <file>]
 //
-// It reads out/efficiency/*.json, which `vp test tests/efficiency` writes, and
-// prints a table of every metric. With --base, a folder of the same files from
-// the branch a change is going into, the table sets each metric beside what it
-// was. With --out the table is written to that file as well.
+// Reads out/efficiency/*.json, written by `vp test tests/efficiency`, and
+// prints a markdown table of every metric. --base names a folder of the same
+// files from another branch; the table then shows each metric beside its
+// value there. --out also writes the table to that file.
 //
-// Where OTEL_EXPORTER_OTLP_ENDPOINT is set the metrics are also sent there as
-// the gauge uno.efficiency, one series per metric, labelled with the branch
-// they were measured on. That is what a Grafana dashboard plots over time.
-// OTEL_EXPORTER_OTLP_HEADERS signs the send in, as it does for any
-// OpenTelemetry tool. Where the endpoint is not set nothing is sent, which is
-// every run on a machine nobody set up and every pull request from a fork.
+// When OTEL_EXPORTER_OTLP_ENDPOINT is set, the metrics are also sent there as
+// the gauge uno.efficiency, one series per metric, labelled with the branch.
+// OTEL_EXPORTER_OTLP_HEADERS is sent with the request.
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,9 +23,9 @@ import type { Metric } from "../tests/efficiency/record.ts";
 
 const HEAD = fileURLToPath(new URL("../out/efficiency/", import.meta.url));
 
-/** The gauge every metric is sent as. Which metric is a label on it. */
+/** The gauge every metric is sent as. The metric's name is a label on it. */
 const GAUGE = "uno.efficiency";
-/** How long a send may take before it is given up on. */
+/** How long a send may take before it is abandoned. */
 const SEND_TIMEOUT_MS = 10_000;
 
 function isMetric(v: unknown): v is Metric {
@@ -42,7 +40,7 @@ function isMetric(v: unknown): v is Metric {
   );
 }
 
-/** metricsIn reads every suite's metrics from a folder, in the order of the file names. */
+/** Reads every metrics file in a folder, in file name order. */
 function metricsIn(folder: string): Metric[] {
   if (!existsSync(folder)) return [];
   return readdirSync(folder)
@@ -57,15 +55,15 @@ function metricsIn(folder: string): Metric[] {
     });
 }
 
-/** send hands the metrics to the collector the environment names, if it names one. */
+/** Sends the metrics to the collector named in the environment, if any. */
 async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise<string> {
   const to = collector(env);
   if (to === undefined) {
     return `${ENDPOINT_VARIABLE} is not set, so nothing was sent to a collector`;
   }
 
-  // A pull request is measured on a branch of its own name. GitHub says which
-  // in GITHUB_HEAD_REF, and names the branch a push went to in GITHUB_REF_NAME.
+  // GitHub sets GITHUB_HEAD_REF on a pull request and GITHUB_REF_NAME on a
+  // push.
   const branch = env["GITHUB_HEAD_REF"] || env["GITHUB_REF_NAME"] || "local";
   const meter = new Meter({ service: "uno-efficiency" });
   for (const m of metrics) {
@@ -84,7 +82,7 @@ async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise
     body: JSON.stringify(meter.payload()),
     signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   }).catch((err: unknown) => {
-    // fetch says only that it failed, and keeps why in the cause.
+    // fetch keeps the reason it failed in the cause.
     const cause = err instanceof Error && err.cause instanceof Error ? err.cause : err;
     throw new Error(
       `the collector could not be reached · ${cause instanceof Error ? cause.message : String(cause)}`,
@@ -110,9 +108,8 @@ const table = markdown(compare(base, head), base.length > 0);
 if (values.out !== undefined) writeFileSync(values.out, table);
 console.log(table);
 
-// The table is out before anything is sent, so a collector that cannot be
-// reached costs the history and not the report. What went wrong is said in a
-// line, and as an error GitHub shows on the run, where it is run by one.
+// The table is printed before the send, so a send that fails still leaves the
+// report. In GitHub Actions the failure is printed as an error annotation.
 try {
   console.log(await send(head, process.env));
 } catch (err) {

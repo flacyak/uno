@@ -1,7 +1,6 @@
-// What the engine shows of a file that is not plain UTF-8: a byte order mark, a
-// UTF-16 export, a Windows-1252 one, a stray NUL, and a character the index
-// pass cuts in half. Every row is compared with what read builds of the same
-// bytes, so the two ways in agree on every cell.
+// Files beyond plain UTF-8 through the engine: a byte order mark,
+// UTF-16, Windows-1252, a stray NUL, and a character cut by a chunk boundary.
+// Every row is compared with what `read` builds from the same bytes.
 
 import { expect, test } from "vite-plus/test";
 
@@ -13,10 +12,10 @@ import { TINY, connect, indexed, saidIn, sheetRows } from "./harness.ts";
 
 const encoder = new TextEncoder();
 
-/** The three bytes Excel's "CSV UTF-8" opens a file with. */
+/** The UTF-8 byte order mark. */
 const UTF8_BOM = [0xef, 0xbb, 0xbf];
 
-/** é, € and the en dash as Windows-1252 writes them: one byte each, none UTF-8. */
+/** é, € and the en dash as single Windows-1252 bytes. */
 const E_ACUTE = 0xe9;
 const EURO = 0x80;
 const EN_DASH = 0x96;
@@ -41,7 +40,7 @@ function utf16(text: string, order: "le" | "be"): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-/** Every row the engine has, read in pages small enough to cross blocks. */
+/** Every row, read five at a time. */
 async function allRows(src: SourceHandle): Promise<string[][]> {
   await indexed(src);
   const out: string[][] = [];
@@ -52,7 +51,7 @@ async function allRows(src: SourceHandle): Promise<string[][]> {
   return out;
 }
 
-/** Opens one file through the engine and hands back its handle. */
+/** Opens `bytes` as a blob through an engine with TINY tuning. */
 async function open(name: string, bytes: Uint8Array<ArrayBuffer>) {
   const { engine, done } = connect(TINY);
   const { sources } = await engine.open({ name, blob: new Blob([bytes]) });
@@ -73,7 +72,7 @@ test("a UTF-8 byte order mark is not in the header, and not in the first row eit
     done();
   }
 
-  // With no header row the mark is still no part of the first cell.
+  // With header mode "none", the mark is still stripped from the first cell.
   const f = await openFormat("f.csv", blobSource(new Blob([withMark])), "none");
   expect(f.columns).toEqual(["column_1", "column_2"]);
   expect(f.dataStart).toBe(UTF8_BOM.length);
@@ -81,7 +80,7 @@ test("a UTF-8 byte order mark is not in the header, and not in the first row eit
 });
 
 test("a character the index pass cuts in half is whole in its cell", async () => {
-  // Rows wide enough that 4 KB chunks fall inside a cell, over and over.
+  // Rows wide enough that 4 KB chunk boundaries fall inside cells.
   const lines = Array.from({ length: 400 }, (_, i) => `${i},${"é".repeat(37)}€${"ß".repeat(11)}`);
   const body = bytesOf(`n,text\n${lines.join("\n")}\n`);
   const sheet = read("f.csv", body);

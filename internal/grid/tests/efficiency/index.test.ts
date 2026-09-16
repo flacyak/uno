@@ -1,11 +1,7 @@
-// What indexing a file costs per byte and per row.
-//
-// The index pass reads a file once, start to end, and every row after that is
-// served by range. On a 30 GB file that one read is the wait, so what matters
-// is bytes per second through the scanner and bytes kept per row. The file is
-// a synthetic 200 MB CSV with the things a scanner has to carry state for:
-// quoted commas, quoted newlines, CRLF on some rows, and multi-byte
-// characters. It is written to the temp directory once and reused.
+// Measures the index pass over a 200 MB synthetic CSV: bytes read to sniff,
+// read and scan time, heap kept per row, and the time to answer a window
+// asked for mid-pass. The CSV has quoted commas, quoted newlines, CRLF rows
+// and multi-byte characters. It is written to the temp directory once.
 
 import { closeSync, existsSync, openSync, statSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,9 +20,9 @@ import { SCREEN, connect, indexed, openOne } from "../engine/harness.ts";
 import { record } from "./record.ts";
 import type { Metric } from "./record.ts";
 
-/** The file is this many bytes, give or take the last row. */
+/** The file's size, give or take the last batch of rows. */
 const FILE_BYTES = 200 << 20;
-/** Named for its size, so a change to the generator makes a new file. */
+/** Where the file is written, named for its size. */
 const FILE = join(tmpdir(), `uno-index-${FILE_BYTES}.csv`);
 /** Rows written per `writeSync`. */
 const BATCH = 4096;
@@ -43,34 +39,29 @@ const LF = 0x0a;
 const CUSTOMERS = ['"Okafor, Ada"', "Lindqvist", '"Diaz ""Pepe"" Ruiz"', "Nakamura"];
 const CITIES = ["Lagos", "Malmö", "São Paulo", "東京", "Lyon"];
 
-/** How many of the file's bytes a megabyte is. */
+/** Bytes in a megabyte. */
 const MB = 1 << 20;
 /** Milliseconds in a second. */
 const SECOND_MS = 1000;
 
-/** The least bytes per second the pass has to manage, read and scan together. */
+/** The least MB per second the scan, and the whole pass, must manage. */
 const THROUGHPUT_FLOOR_MB_S = 150;
 /**
- * The most the scanner may cost over a loop that only counts newlines in the
- * same bytes. That loop is the floor for anything that has to look at every
- * byte, and measuring against it in the same process keeps the bound about the
- * scanner and not the machine. A switch reached once per byte is six times it.
+ * The most scan time may be, as a multiple of a loop that only counts
+ * newlines in the same bytes.
  */
 const SCAN_OVER_COUNT_BUDGET = 3;
-/** The most heap bytes the index may keep per row. A block start is 16 bytes over 1024 rows. */
+/** The most heap bytes the index may keep per row. */
 const HEAP_PER_ROW_BUDGET = 1;
 /** The most bytes a sniff may read to pick a delimiter and find the header. */
 const SNIFF_BYTES_BUDGET = 64 << 10;
 /**
- * The most a window asked for during the pass may wait, as a fraction of the
- * whole pass. One chunk of scanning out of 25 is 4%.
+ * The most a window asked for mid-pass may wait, as a fraction of the whole
+ * pass.
  */
 const WINDOW_WAIT_FRACTION = 0.1;
 
-/**
- * Picking the rows: a cheap, deterministic generator. The file is the same on
- * every machine, so the numbers are comparable.
- */
+/** rows yields the file's rows, the same on every machine. */
 function* rows(): Generator<string> {
   for (let i = 0; ; i++) {
     const customer = CUSTOMERS[i % CUSTOMERS.length]!;
@@ -86,7 +77,7 @@ function* rows(): Generator<string> {
   }
 }
 
-/** writeFile writes the file once. Rows are written until the size is reached. */
+/** writeFile writes the file if absent or short, and returns its row count. */
 function writeFile(): number {
   if (existsSync(FILE) && statSync(FILE).size >= FILE_BYTES) return countRows();
   const fd = openSync(FILE, "w");
@@ -106,7 +97,7 @@ function writeFile(): number {
   return count;
 }
 
-/** countRows counts the rows a written file has, by the generator's rules. */
+/** countRows counts the rows of an existing file by replaying the generator. */
 function countRows(): number {
   const size = statSync(FILE).size;
   let at = HEADER.length;
@@ -119,14 +110,14 @@ function countRows(): number {
   return count;
 }
 
-/** countNewlines is the loop every scanner has to at least be. */
+/** countNewlines counts LF bytes in a chunk. */
 function countNewlines(chunk: Uint8Array): number {
   let n = 0;
   for (let i = 0; i < chunk.length; i++) if (chunk[i] === LF) n++;
   return n;
 }
 
-/** A gc the test can call, whether or not the process was started with one. */
+/** collector exposes gc and returns it as a callable. */
 function collector(): () => void {
   v8.setFlagsFromString("--expose-gc");
   return vm.runInNewContext("gc") as () => void;
@@ -162,7 +153,7 @@ test("the index pass scans bytes at disk speed and keeps little per row", async 
   const gc = collector();
   const metrics: Metric[] = [];
 
-  // The sniff: what it reads to pick a delimiter and find the header.
+  // Bytes read by the sniff.
   const src = await nodeSource(FILE);
   const sniffed = counted(src);
   const format = await peekFormat("index.csv", sniffed.source);
@@ -172,7 +163,7 @@ test("the index pass scans bytes at disk speed and keeps little per row", async 
   expect(format.delimiter).toBe(",");
   expect(format.columns).toEqual(["id", "customer", "note", "amount", "city"]);
 
-  // The pass itself, read and scan timed apart, with the heap measured around it.
+  // The pass, with read and scan timed apart and heap measured around it.
   const index = new RowIndex(format.dataStart, src.size, TUNING);
   const scanner = format.scanner((offset) => index.begin(offset));
   gc();
@@ -200,7 +191,7 @@ test("the index pass scans bytes at disk speed and keeps little per row", async 
   await src.close();
 
   expect(index.counted).toBe(expected);
-  // Every row ends in one, and one in NEWLINE_EVERY holds another.
+  // Every row ends in a newline, and one in NEWLINE_EVERY holds another.
   expect(newlines).toBeGreaterThan(expected);
   const scanned = src.size - format.dataStart;
   const scanOverCount = scanMs / countMs;

@@ -1,38 +1,22 @@
-// Package num reads the number a spreadsheet cell holds, which is not always
-// the number a parser reads.
+// Package num reads the number a spreadsheet cell holds.
 //
-// It is its own module because two callers need one answer and neither can own
-// it. `sheet` asks whether a column is numeric data wearing a costume, and
-// `formula` asks what a cell is worth before multiplying it; sheet imports
-// formula, so formula can never import sheet back, and the coercion cannot live
-// in either. A second copy of it would be the copy that quietly stops matching
-// the first.
-//
-// Nothing here knows what a sheet is. A value arrives as the string it was
-// stored as and leaves as a number or as nothing.
+// It is shared by `sheet` and `formula`. It works on one string at a time:
+// a string goes in and a number or undefined comes out.
 
 import { parseFloat as parseDecimal, trimSpace } from "../go/index.ts";
 
 /**
- * DECORATION is what a number wears when it was formatted for a reader rather
- * than for a parser.
- *
- * The set is fixed and short, and leaves out the full stop: the badge it feeds
- * claims a column is numeric data in a costume, and a wider set would let it
- * claim that about text.
+ * DECORATION is the characters stripped from a value before it is read as a
+ * number. The full stop is kept, as the decimal mark.
  */
 export const DECORATION = ",$£€%' ";
 
-// The characters `strconv.ParseFloat` may see, once the decoration is off.
-// Anything outside this refuses the value before the parse runs, which is what
-// keeps "inf", "NaN" and hexadecimal floats out of a numeric column.
+// The characters a value may hold once decoration is removed. Anything else
+// refuses the value before the parse, which keeps "inf", "NaN" and
+// hexadecimal floats out.
 const ALLOWED = "0123456789+-.eE";
 
-/**
- * undress strips that formatting, so a caller can ask whether what is left is a
- * number. It changes no stored value: the raw bytes are authoritative and this
- * reads a copy of them.
- */
+/** undress returns a copy of `v` with every DECORATION character removed. */
 export function undress(v: string): string {
   let out = "";
   for (const r of v) {
@@ -42,12 +26,9 @@ export function undress(v: string): string {
 }
 
 /**
- * signed rewrites the two ways accounting exports write a negative into the
- * one a parser reads: Oracle's (1234.00) and SAP's trailing 1234.00-. Both
- * become -1234.00. Anything else comes back as it was.
- *
- * These are not decoration. Taking them off would flip the sign, so they
- * are read as a sign here rather than stripped with the costume.
+ * signed rewrites two accounting forms of a negative into a leading minus:
+ * (1234.00) and 1234.00- both become -1234.00. Anything else is returned
+ * unchanged.
  */
 export function signed(v: string): string {
   if (v.length > 2 && v.startsWith("(") && v.endsWith(")")) return "-" + v.slice(1, -1);
@@ -55,11 +36,7 @@ export function signed(v: string): string {
   return v;
 }
 
-/**
- * isNumber is deliberately stricter than a plain parse. Both Go's
- * `strconv.ParseFloat` and JavaScript's `Number` accept spellings a spreadsheet
- * column never means, so the value must first look like a decimal number.
- */
+/** isNumber reports whether `v`, after `signed`, is a plain decimal number. */
 export function isNumber(v: string): boolean {
   return decimal(signed(v)) !== undefined;
 }
@@ -72,18 +49,9 @@ function decimal(v: string): number | undefined {
 }
 
 /**
- * parse reads a cell as arithmetic reads it: undressed first, so a column an
- * evaluator was pointed at computes on the value a person sees rather than
- * refusing 1,204 for wearing a comma.
- *
- * The edges are trimmed the way the badge trims them, by `strings.TrimSpace`,
- * before the costume comes off: the recogniser calls a column of "12\t" numeric,
- * and arithmetic bound to it must read the 12 the badge promised rather than
- * refuse the tab. Undressing alone strips a plain space and nothing else.
- *
- * It reports `undefined` rather than throwing because the caller that has
- * something to say about the failure is the one that knows which column and
- * which row the value came from, and this module knows neither.
+ * parse reads a cell as a number: trims White_Space from both ends, removes
+ * decoration, applies `signed`, then parses. Returns undefined when what is
+ * left fails to read as a decimal number.
  */
 export function parse(v: string): number | undefined {
   return decimal(signed(undress(trimSpace(v))));

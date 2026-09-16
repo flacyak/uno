@@ -1,5 +1,4 @@
-// What every part of the shell reaches for: an element the markup promised, and
-// an error as something to say.
+// Helpers shared by the shell's files.
 
 import { said } from "../said.ts";
 
@@ -8,27 +7,31 @@ export function must<T>(value: T | null): T {
   return value;
 }
 
-/** found is the element the markup promised under a selector. */
+/**
+ * found returns the element matching `selector`, and throws if there is none.
+ */
 export function found<E extends HTMLElement = HTMLElement>(selector: string): E {
   return must(document.querySelector<E>(selector));
 }
 
-/** Handlers is one function for each kind of a union tagged by `t`, so a kind left out is a type error. */
+/**
+ * Handlers is one function per kind of a union tagged by `t`. Leaving a kind
+ * out is a type error.
+ */
 export type Handlers<U extends { t: string }> = {
   [K in U["t"]]: (u: Extract<U, { t: K }>) => void;
 };
 
-/** dispatch hands a tagged value to its kind's handler. */
+/** dispatch calls the handler for a tagged value's kind. */
 export function dispatch<U extends { t: string }>(handlers: Handlers<U>, u: U): void {
-  // The table is typed by kind, and u is the union, so the one pairing the
-  // compiler cannot see is said here: each handler takes its own kind.
+  // The cast tells the compiler that each handler takes its own kind, a link
+  // the union hides from it.
   (handlers[u.t as U["t"]] as (u: U) => void)(u);
 }
 
 /**
- * el is one element as the shell makes most of them: a tag, the class it
- * wears, and the text in it. Either may be left out, and an empty class is
- * no class at all, so the markup stays as index.html would have written it.
+ * el creates an element with a class name and text content. An empty class
+ * or text leaves the element as created.
  */
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -42,8 +45,8 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /**
- * hang places a surface hung off the page at `place`, moved in from the bottom
- * or the right of the window until the whole of it shows, `edge` pixels clear.
+ * hang positions a fixed element at `place`, moved left or up as needed so
+ * the whole of it fits in the window with `edge` pixels to spare.
  */
 export function hang(box: HTMLElement, place: { left: number; top: number }, edge: number): void {
   const { width, height } = box.getBoundingClientRect();
@@ -54,9 +57,9 @@ export function hang(box: HTMLElement, place: { left: number; top: number }, edg
 }
 
 /**
- * clickAway has a click outside a surface close it, armed after the click
- * that opened it has finished, or it would close what it opened. It answers
- * the disarm, for the close.
+ * clickAway calls `close` on a mousedown outside `box`. The listener is
+ * added on the next tick, so the click that opened the box leaves it open.
+ * Returns a function that removes the listener.
  */
 export function clickAway(box: HTMLElement, close: () => void): () => void {
   const away = (e: MouseEvent): void => {
@@ -66,7 +69,7 @@ export function clickAway(box: HTMLElement, close: () => void): () => void {
   return () => document.removeEventListener("mousedown", away);
 }
 
-/** option is one choice in a select: what it says, and the value it stands for. */
+/** option creates a select option with a label and a value. */
 export function option(label: string, value: string): HTMLOptionElement {
   const made = el("option", "", label);
   made.value = value;
@@ -74,30 +77,37 @@ export function option(label: string, value: string): HTMLOptionElement {
 }
 
 /**
- * Words are the texts a component writes once, when it is built, kept so they
- * can be written again in another language. What a component paints on every
- * change needs none of this, since its next paint is already in the language
- * the app is in by then.
+ * Words records text a component writes once when it is built, so it can be
+ * written again when the language changes.
  */
 export class Words {
   private readonly writers: Array<() => void> = [];
 
-  /** text keeps an element's text as whatever `say` answers, and hands the element back. */
+  /**
+   * text sets an element's text from `say`, now and on every write(). Returns
+   * the element.
+   */
   text<E extends HTMLElement>(el: E, say: () => string): E {
     return this.keep(el, () => (el.textContent = say()));
   }
 
-  /** attr keeps one of an element's attributes as whatever `say` answers. */
+  /**
+   * attr sets an attribute from `say`, now and on every write(). Returns the
+   * element.
+   */
   attr<E extends HTMLElement>(el: E, name: string, say: () => string): E {
     return this.keep(el, () => el.setAttribute(name, say()));
   }
 
-  /** placeholder keeps what a field shows before anything is typed in it. */
+  /**
+   * placeholder sets an input's placeholder from `say`, now and on every
+   * write().
+   */
   placeholder<E extends HTMLInputElement>(el: E, say: () => string): E {
     return this.keep(el, () => (el.placeholder = say()));
   }
 
-  /** write writes every one of them again, in the language the app is in now. */
+  /** write runs every recorded writer again, in the current language. */
   write(): void {
     for (const write of this.writers) write();
   }
@@ -110,12 +120,9 @@ export class Words {
 }
 
 /**
- * walk moves the keys through the controls of a surface hung off the page,
- * one step along and round the ends. The surface sits after the page in the
- * document, so Tab left alone would carry the keys out of it, to the
- * window's × behind it or the grid, with the surface still open: Tab and
- * Shift+Tab walk it instead, and so do whatever other keys the surface reads
- * as a step. It answers whether the key was one.
+ * walk moves focus one step through `controls`, wrapping at the ends, when
+ * `stepOf` reads the key as a step. This keeps Tab inside a surface that
+ * sits after the page in the document. Returns whether the key was handled.
  */
 export function walk(
   e: KeyboardEvent,
@@ -125,38 +132,35 @@ export function walk(
   const step = stepOf(e);
   if (step === 0) return false;
   e.preventDefault();
-  // A control that is disabled takes no focus, and a step that stopped on it
-  // would stop there for good: it is stepped over.
+  // Focus moves among the enabled controls, so disabled ones are skipped.
   const live = controls.filter((c) => !c.hasAttribute("disabled"));
-  // With nothing to land on, the key is left to the page rather than swallowed.
+  // When every control is disabled, the key is left to the page.
   if (live.length === 0) return false;
   const at = live.indexOf(document.activeElement as HTMLElement);
-  // From outside the controls, a step forward lands on the first and one
-  // back on the last, as it would from the end either step walks past.
+  // From outside the controls, a step forward lands on the first and a step
+  // back on the last.
   const from = at >= 0 ? at : step > 0 ? -1 : live.length;
   live[(from + step + live.length) % live.length]?.focus();
   return true;
 }
 
-/** tabStep reads Tab as a step forward and Shift+Tab as one back. */
+/** tabStep reads Tab as a step forward and Shift+Tab as a step back. */
 export function tabStep(e: KeyboardEvent): 1 | -1 | 0 {
   if (e.key !== "Tab") return 0;
   return e.shiftKey ? -1 : 1;
 }
 
 /**
- * message is what an error says, to say to a person: in the app's language
- * where the engine sent it as data, and as it was written otherwise.
+ * message returns an error's text: translated when the engine sent it as
+ * data, and as written otherwise.
  */
 export function message(err: unknown): string {
   return said(err);
 }
 
 /**
- * settled is `run` once `ms` pass with no trigger, and never twice at once:
- * a trigger while a run is out is answered by that run. It is how the window
- * getting the focus asks the buckets -- alt-tabbing through the window on the
- * way somewhere else asks nothing, and coming back asks once.
+ * settled returns a trigger that calls `run` once `ms` have passed since
+ * the last trigger. Triggers that fire while a run is in flight are ignored.
  */
 export function settled(ms: number, run: () => Promise<void>): () => void {
   let wait: ReturnType<typeof setTimeout> | undefined;
@@ -173,12 +177,15 @@ export function settled(ms: number, run: () => Promise<void>): () => void {
   };
 }
 
-/** The last part of a path, whichever way its separators lean. */
+/** baseName returns the last part of a path, with either separator. */
 export function baseName(path: string): string {
   return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }
 
-/** The folder a path is in, by its own name: "exports" for /work/exports/q3.uno. */
+/**
+ * folderName returns the name of the folder a path is in: "exports" for
+ * /work/exports/q3.uno.
+ */
 export function folderName(path: string): string {
   const end = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return end < 0 ? "" : baseName(path.slice(0, end));

@@ -1,5 +1,5 @@
-// The pseudo-locale's patterns: accented, longer, in brackets, and with what
-// the compiler reads in braces left exactly as it was.
+// The pseudo-locale's patterns: accented, padded, in brackets, with variables
+// and markup in braces left as they are.
 
 import { expect, test } from "vite-plus/test";
 
@@ -14,9 +14,9 @@ test("every letter wears an accent, between brackets", () => {
 });
 
 test("a message is padded to the length a longer language would run to", () => {
-  // Ten letters, and three more for the third a translation adds.
+  // Ten letters get three dots of padding.
   expect(pseudo("abcdefghij")).toBe(`${PSEUDO_OPEN}åƀçðéƒĝĥîĵ ···${PSEUDO_CLOSE}`);
-  // Nothing to pad: a message of marks alone is as long as it was.
+  // A message of only marks keeps its length.
   expect(pseudo("+ - * /")).toBe(`${PSEUDO_OPEN}+ - * /${PSEUDO_CLOSE}`);
 });
 

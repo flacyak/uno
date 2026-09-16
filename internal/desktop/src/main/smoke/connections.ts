@@ -1,14 +1,12 @@
-// Checks that a bucket is connected from the panel in a window, after the
-// folder the reopened workspace asked for in sources.ts: the form in the
-// list's place, a test that fails saying why and keeping nothing, one that
-// works finding the region nobody typed, and the whole bucket saved beside
-// that folder as a second connection, listed and browsed without a restart.
+// Checks that connect a bucket from the sources panel: the form in the list's
+// place, a test that fails and leaves the folder empty, one that works and
+// detects the region, and the whole bucket saved as a second connection
+// beside the folder one, listed and browsed in the same run.
 //
 // They run after panel.ts, with the panel open over the stand-in bucket. The
-// run has a --user-data-dir and AWS files of its own (smoke.js), so the folder
-// starts empty, the one profile on offer is `finance`, and nothing here reaches
-// the connections or the profiles of whoever is at the desktop. smoke.js reads
-// the saved file back from outside the app afterwards.
+// run has its own --user-data-dir and AWS files (smoke.js), so the connections
+// folder starts empty and the one profile on offer is `finance`. smoke.js
+// reads the saved files back afterwards.
 
 import type { Check } from "./check.ts";
 
@@ -55,8 +53,8 @@ export const CONNECTIONS: Check[] = [
       ${LINES}
       type("bucket", "acme-nowhere");
       form().requestSubmit();
-      // The form steps aside for the connection's line, which fails where it
-      // was connecting and says why under the list.
+      // The form closes, the connection's line fails, and the reason is shown
+      // under the list.
       const want = "✗ s3://acme-nowhere: no such bucket";
       const failed = () => document.querySelector("#panel .panel-row.failed");
       const why = () => document.querySelector("#panel .panel-foot .why")?.textContent ?? "";
@@ -86,8 +84,8 @@ export const CONNECTIONS: Check[] = [
     shot: "connect-tried",
     script: `
       ${LINES}
-      // The whole bucket, beside the 2025/ folder the reopened workspace was
-      // given: a second connection to one bucket keeps a file of its own.
+      // The whole bucket, beside the 2025/ folder connection. A second
+      // connection to one bucket gets a file of its own.
       type("bucket", "acme-exports");
       type("prefix", "");
       const choose = form().querySelector("select");

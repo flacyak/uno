@@ -13,8 +13,7 @@ import {
   text,
 } from "../../src/program/index.ts";
 
-// The text form is what a .uno carries, so a program that has been through a
-// file has to be the program that went in.
+// parse then text gives back the same source.
 describe("the text form round-trips", () => {
   const corpus = [
     'replace(/,/, "")',
@@ -42,22 +41,22 @@ describe("the text form round-trips", () => {
 describe("apply", () => {
   const cases: Array<[string, string, string]> = [
     ['replace(/,/, "")', "1,204", "1204"],
-    ['replace(/,/, "")', "1,204,567", "1204567"], // every occurrence, not the first
-    ['replace(/,/, "")', "987", "987"], // no match leaves it alone
+    ['replace(/,/, "")', "1,204,567", "1204567"], // every occurrence
+    ['replace(/,/, "")', "987", "987"], // a miss leaves it unchanged
     ['replace(/[$,]/, "")', "$1,204", "1204"],
     ['replace(/%$/, "")', "12%", "12"],
-    ['replace(/%$/, "")', "1%2", "1%2"], // anchored, so the middle one stays
+    ['replace(/%$/, "")', "1%2", "1%2"], // anchored to the end
     ["trim()", "  1204 ", "1204"],
     ["upper()", "west", "WEST"],
     ["lower()", "West", "west"],
     ["slice(0, -1)", "1204x", "1204"],
     ["slice(1, 3)", "abcde", "bc"],
     ["slice(end(/\\(/, 1), start(/\\)/, 1))", "Ada (West)", "West"],
-    ["slice(end(/\\(/, 1), start(/\\)/, 1))", "Ada Okafor", "Ada Okafor"], // no bracket, left alone
+    ["slice(end(/\\(/, 1), start(/\\)/, 1))", "Ada Okafor", "Ada Okafor"], // a miss leaves it unchanged
     ['trim() | replace(/,/, "")', " 1,204 ", "1204"],
-    ["slice(0, -1)", "é1", "é"], // code points, not bytes
-    ['replace(/\\d*/, "#")', "a12b", "#a#b#"], // Go's rule: one run of digits, one replacement
-    ['replace(/\\d*/, "#")', "12", "#"], // and the empty match at the end is not a second one
+    ["slice(0, -1)", "é1", "é"], // positions are code points
+    ['replace(/\\d*/, "#")', "a12b", "#a#b#"], // Go's empty-match rule
+    ['replace(/\\d*/, "#")', "12", "#"], // the trailing empty match is skipped
   ];
 
   for (const [src, input, want] of cases) {
@@ -67,15 +66,13 @@ describe("apply", () => {
   }
 });
 
-// A replacement is text. A value someone typed that happens to read like a
-// capture reference has to survive being written back.
+// The replacement is literal text.
 test("a replacement is literal text", () => {
   expect(apply(parse('replace(/x/, "$1")'), "x")).toBe("$1");
 });
 
-// A pattern may already escape the delimiter, as a pattern written for another
-// engine does. The text form has one spelling for a slash, so it has to come
-// back as that spelling rather than as a backslash before a bare one.
+// A pattern source that already escapes the slash is written with one
+// spelling and parses back to the same program.
 test("a pattern that escapes the slash itself round-trips", () => {
   for (const src of ["\\/", "a\\/b", "\\\\/"]) {
     const t = text([newReplace(src, "-")]);
@@ -84,12 +81,8 @@ test("a pattern that escapes the slash itself round-trips", () => {
   }
 });
 
-// A pattern is compiled once, at parse, and run over every cell of a column
-// for every candidate the recogniser is scoring. The shim's every-occurrence
-// calls take the pattern as compiled when it already matches globally and build
-// a second RegExp per call when it does not, so a step has to hold the global
-// one -- and holding one shared object means its match position must not leak
-// from one cell into the next.
+// Each step holds one RegExp compiled with the global flag, and applying it
+// to one cell leaves it ready for the next.
 describe("a step's pattern is compiled global, once", () => {
   const replace = parse('replace(/,/, "")')[0] as ReplaceStep;
   const slice = parse("slice(end(/,/, 1), start(/,/, -1))")[0] as SliceStep;
@@ -115,8 +108,7 @@ describe("a step's pattern is compiled global, once", () => {
   });
 });
 
-// A log that does not parse must say so before a column is rewritten, not
-// halfway through one.
+// parse throws on a program that is incomplete, malformed or too long.
 describe("parse refuses what it cannot run", () => {
   const corpus = [
     "",
@@ -142,17 +134,15 @@ describe("parse refuses what it cannot run", () => {
   }
 });
 
-// The position an error names is the step's own, in characters, whatever sits
-// before its bracket and however many code units its name takes.
+// The error position is the step name's offset in code points.
 test("an unknown step is placed at its name", () => {
   expect(() => parse("explode()")).toThrow(/at character 1/);
   expect(() => parse("  explode ()")).toThrow(/at character 3/);
   expect(() => parse("trim() | \u{1D522}()")).toThrow(/at character 10/);
 });
 
-// The banner asks the question in words, so the words have to be right for what
-// the recogniser actually proposes, and absent rather than approximate for the
-// rest.
+// describe gives an English description for the shapes the recogniser
+// proposes, and falls back to the program text for the rest.
 describe("describe", () => {
   const cases: Array<[string, string]> = [
     ['replace(/,/, "")', "remove commas"],
@@ -163,8 +153,7 @@ describe("describe", () => {
     ['trim() | replace(/,/, "")', "trim the spaces off both ends, then remove commas"],
     ["upper()", "upper-case it"],
 
-    // A literal the escaping in the lattice can be inverted out of, and the
-    // anchored class rungs that lattice emits.
+    // Literals and anchored character classes.
     ['replace(/ kg/, "")', 'remove " kg"'],
     ['replace(/SKU-/, "")', 'remove "SKU-"'],
     ['replace(/[*]+$/, "")', "remove asterisks from the end"],
@@ -172,8 +161,7 @@ describe("describe", () => {
     ['replace(/\\//, "-")', 'replace slashes with "-"'],
     ['replace(/[ ()\\-]/, "")', "remove spaces, brackets and dashes"],
 
-    // Nothing in the vocabulary names these, so they fall back to notation
-    // rather than to a description that glosses over what they do.
+    // These fall back to the program text as their description.
     ['replace(/\\d/, "")', 'replace(/\\d/, "")'],
     ['replace(/[^,]/, "")', 'replace(/[^,]/, "")'],
     ['replace(/\\s+/, " ")', 'replace(/\\s+/, " ")'],
@@ -187,8 +175,7 @@ describe("describe", () => {
   }
 });
 
-// A concat is what the other steps cannot do: the same characters in a
-// different order.
+// concat joins parts of the value in a new order.
 test("concat rearranges", () => {
   const src = 'concat(slice(end(/, /, 1), len), " ", slice(0, start(/,/, 1)))';
   const p = parse(src);
@@ -196,15 +183,13 @@ test("concat rearranges", () => {
   expect(apply(p, "Okafor, Ada")).toBe("Ada Okafor");
 });
 
-// A part that does not fit abandons the whole step. A name reassembled from the
-// half of it that parsed is a worse answer than the name already there.
+// A concat changes the value only when every part matches.
 test("a concat that does not fit leaves the value alone", () => {
   const p = parse('concat(slice(end(/, /, 1), len), " ", slice(0, start(/,/, 1)))');
   expect(apply(p, "Ada Okafor")).toBe("Ada Okafor");
 });
 
-// A program applies wholly or not at all. Half-transforming a cell would leave
-// data in a state no program describes.
+// A pipeline changes the value only when every step matches.
 test("a pipeline that breaks part way through changes nothing", () => {
   const p = parse("trim() | slice(start(/\\(/, 1), 99)");
   expect(apply(p, "  no bracket  ")).toBe("  no bracket  ");
@@ -212,9 +197,9 @@ test("a pipeline that breaks part way through changes nothing", () => {
 
 describe("concat parse refusals", () => {
   const corpus = [
-    'concat("only")', // one part is that part
-    "concat(slice(0, 1))", // likewise
-    'concat(trim(), "x")', // a part is a piece, not a step
+    'concat("only")', // needs at least two parts
+    "concat(slice(0, 1))", // needs at least two parts
+    'concat(trim(), "x")', // a part is a string or a slice
     `concat(${Array.from({ length: MAX_PARTS + 1 }, () => '"a"').join(", ")})`,
     'concat("a",)',
   ];

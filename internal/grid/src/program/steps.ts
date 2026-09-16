@@ -1,8 +1,5 @@
-// The steps a program is built from.
-//
-// In Go each is a struct implementing an unexported `run`, which seals the set.
-// Here they are a discriminated union, which seals it the same way and lets the
-// compiler check that `runStep` covers all of them.
+// The steps a program is built from, as a discriminated union so the compiler
+// checks that `runStep` covers all of them.
 
 import {
   atoi,
@@ -22,24 +19,19 @@ import { english, englishSought } from "../said/index.ts";
 import type { CharName, Sought, StepSaid } from "../said/index.ts";
 
 /**
- * MAX_STEPS bounds a pipeline. The limit is not about cost -- three steps run
- * in microseconds -- but about what a person can be shown in a banner and agree
- * to in one reading. A proposal nobody can check is not a proposal.
+ * MAX_STEPS is the most steps a pipeline may have. The limit keeps a proposal
+ * short enough to read in a banner.
  */
 export const MAX_STEPS = 3;
 
-/**
- * MAX_PARTS bounds a concat, for the same reason and to the same end: a
- * rearrangement of more than four pieces is not one a banner can put a question
- * about.
- */
+/** MAX_PARTS is the most parts a concat may have, for the same reason. */
 export const MAX_PARTS = 4;
 
 // ---------------------------------------------------------------- positions
 
 /**
- * IdxPos counts characters, negative from the end, so slice(0, -1) drops a
- * trailing character whatever the value's length.
+ * IdxPos is a character index. Negative counts from the end: slice(0, -1)
+ * drops the last character.
  */
 export interface IdxPos {
   readonly kind: "idx";
@@ -47,22 +39,16 @@ export interface IdxPos {
 }
 
 /**
- * LenPos is the end of the value, and exists because no index can say it.
- *
- * Counting back from the end gives -1 the character before the last one, which
- * is what a reader of slice(0, -1) expects it to mean, so "as far as it goes"
- * needs a word of its own rather than an off-by-one convention.
+ * LenPos is the end of the value. -1 is the position before the last
+ * character, so the end needs its own form.
  */
 export interface LenPos {
   readonly kind: "len";
 }
 
 /**
- * MatchPos is the boundary of the k-th match of a pattern, 1-based, and
- * negative from the end.
- *
- * It is what makes a slice generalise: "after the first open bracket" holds
- * across rows where a character count does not.
+ * MatchPos is the start or end of the k-th match of a pattern. k is 1-based;
+ * negative counts from the last match.
  */
 export interface MatchPos {
   readonly kind: "match";
@@ -75,9 +61,8 @@ export interface MatchPos {
 export type Pos = IdxPos | LenPos | MatchPos;
 
 /**
- * resolvePos returns a code-point offset into r, or undefined when the position
- * does not exist in this value -- which is how a slice leaves alone a row that
- * does not look like the rows it was induced from.
+ * resolvePos returns a code-point offset into r, or undefined when the k-th
+ * match is missing.
  */
 function resolvePos(p: Pos, v: string, r: string[]): number | undefined {
   switch (p.kind) {
@@ -86,8 +71,6 @@ function resolvePos(p: Pos, v: string, r: string[]): number | undefined {
     case "len":
       return r.length;
     case "match": {
-      // findAllIndex already answers in code points, so there is no byte
-      // offset to convert here the way the Go has to.
       const m = findAllIndex(p.re, v);
       const i = p.k < 0 ? m.length + p.k : p.k - 1;
       if (i < 0 || i >= m.length) return undefined;
@@ -110,11 +93,7 @@ export function posText(p: Pos): string {
 
 // -------------------------------------------------------------------- steps
 
-/**
- * ReplaceStep rewrites every occurrence. Every rather than the first, because a
- * value carrying two separators is the case a single-shot replace gets wrong
- * and a person reading a banner would never expect it to.
- */
+/** ReplaceStep replaces every match of `re` with `lit`. */
 export interface ReplaceStep {
   readonly kind: "replace";
   readonly re: RegExp;
@@ -131,11 +110,7 @@ export interface CaseStep {
   readonly up: boolean;
 }
 
-/**
- * SliceStep keeps what lies between two positions. It works in code points
- * rather than bytes: a column of names is as likely to hold é as it is to hold
- * e, and a transform that cuts one in half is worse than no transform.
- */
+/** SliceStep keeps the characters between two positions, in code points. */
 export interface SliceStep {
   readonly kind: "slice";
   readonly from: Pos;
@@ -143,16 +118,8 @@ export interface SliceStep {
 }
 
 /**
- * ConcatStep builds a value out of pieces of the old one and constants between
- * them.
- *
- * It is what a slice on its own cannot do: pulling two fields out of a cell and
- * putting them back in the other order changes no characters, only where they
- * sit, and no amount of replacing expresses that.
- *
- * A part that does not fit abandons the whole step rather than contributing an
- * empty string, because a name reassembled from the half of it that parsed is a
- * worse answer than the name that was already there.
+ * ConcatStep joins slices of the old value and constants. It applies only
+ * when every part does.
  */
 export interface ConcatStep {
   readonly kind: "concat";
@@ -160,11 +127,8 @@ export interface ConcatStep {
 }
 
 /**
- * ConstStep is a literal piece of a concat.
- *
- * It is not a step a pipeline can hold on its own: a program that ignores its
- * input and returns a constant would set every cell in a column to the same
- * value, which is a thing to type, not a thing to infer.
+ * ConstStep is a literal piece of a concat. The parser accepts it only inside
+ * a concat.
  */
 export interface ConstStep {
   readonly kind: "const";
@@ -174,18 +138,13 @@ export interface ConstStep {
 export type Step = ReplaceStep | TrimStep | CaseStep | SliceStep | ConcatStep | ConstStep;
 
 /**
- * runStep applies one stage.
- *
- * It reports undefined when the step does not apply to this value -- a slice
- * whose bracket is missing, say. Programs are induced from a handful of rows
- * and then run over thousands, so meeting a value the program was not induced
- * from is ordinary, and it is not an error.
+ * runStep applies one step. Returns undefined when the step fails to apply
+ * to this value, such as a slice whose match is missing.
  */
 export function runStep(s: Step, v: string): string | undefined {
   switch (s.kind) {
     case "replace":
-      // Literally: a replacement is text, not a template. A "$1" in a value
-      // someone typed has to survive being written back.
+      // The replacement is plain text: "$1" stays "$1".
       return replaceAllLiteral(s.re, v, s.lit);
 
     case "trim":
@@ -243,7 +202,7 @@ export function describeStep(s: Step): string {
   return english({ t: "program", steps: [describedStep(s)] });
 }
 
-/** describedStep is what `describeStep` says, as data. */
+/** describedStep returns what `describeStep` says, as data. */
 export function describedStep(s: Step): StepSaid {
   switch (s.kind) {
     case "trim":
@@ -263,9 +222,7 @@ export function describedStep(s: Step): StepSaid {
       return { t: "replace", what, with: s.lit };
     }
 
-    // A slice, a concat and a constant fall back to the notation. A person
-    // asked to approve a rearrangement is better shown a form they can learn
-    // than a sentence that glosses over which characters moved where.
+    // A slice, a concat and a constant are shown in program notation.
     case "slice":
     case "concat":
     case "const":
@@ -279,17 +236,14 @@ function clamp(i: number, n: number): number {
 
 /**
  * EVERY_OCCURRENCE is the flag a step's pattern is compiled with. A replace
- * rewrites every occurrence and a match position counts every occurrence, and
- * the shim's every-occurrence calls take the pattern as compiled when it is
- * already global and build a second RegExp per call when it is not. A step is
- * run once per cell per candidate, so it holds the one it will be run with.
+ * rewrites every match and a match position counts every match. Compiling
+ * with "g" saves the regexp shim building a second RegExp per call.
  */
 const EVERY_OCCURRENCE = "g";
 
 /**
- * compilePattern builds the RegExp a step or a position holds, and throws the
- * pattern's text with the engine's complaint so a damaged log names the line
- * that broke it.
+ * compilePattern compiles a step's pattern. On failure it throws an error
+ * naming the pattern.
  */
 export function compilePattern(src: string): RegExp {
   try {
@@ -299,21 +253,15 @@ export function compilePattern(src: string): RegExp {
   }
 }
 
-/**
- * newReplace builds a substitution step, and is how the synthesiser proposes
- * one without going through the text form.
- */
+/** newReplace builds a replace step from a pattern source and a literal. */
 export function newReplace(src: string, lit: string): ReplaceStep {
   return { kind: "replace", re: compilePattern(src), src, lit };
 }
 
 /**
- * quoteRegex renders a pattern back between slashes, escaping the delimiter so
- * a pattern containing one still round-trips.
- *
- * A slash the pattern already escapes is kept as the one escape rather than
- * given a second backslash: the parser reads `\/` as the delimiter, so a
- * doubled one would come back as a literal backslash and a pattern's end.
+ * quoteRegex renders a pattern between slashes, escaping a bare `/`. A `\/`
+ * already in the pattern is kept as one escape, since the parser reads `\/`
+ * as the delimiter.
  */
 export function quoteRegex(src: string): string {
   let out = "/";
@@ -334,9 +282,8 @@ export function quoteRegex(src: string): string {
 }
 
 /**
- * charNames is the vocabulary `describe` speaks. It covers the punctuation that
- * turns a number column into a text one, which is the whole of what the
- * recogniser proposes today; anything outside it falls back to the notation.
+ * NAMED maps the characters `describe` can name to their plural names.
+ * Anything outside it falls back to notation.
  */
 const NAMED: Readonly<Record<string, CharName>> = {
   ",": "commas",
@@ -363,9 +310,9 @@ const NAMED: Readonly<Record<string, CharName>> = {
 const CHAR_NAMES = new Map<string, CharName>(Object.entries(NAMED));
 
 /**
- * literalOf returns the text a pattern matches, when the pattern is that text
- * and nothing else. It inverts the escaping the deletion lattice applies, and
- * refuses anything it cannot invert exactly.
+ * literalOf returns the text a pattern matches when the pattern is only plain
+ * characters and escaped META characters. Returns undefined otherwise, or
+ * when the text is empty.
  */
 export function literalOf(src: string): string | undefined {
   let out = "";
@@ -386,20 +333,21 @@ export function literalOf(src: string): string | undefined {
 }
 
 /**
- * nameChars turns a pattern back into English when it is a plain literal or a
- * plain class of characters this vocabulary knows. Anything with an anchor, a
- * quantifier or a character it cannot name is refused, so `describe` falls back
- * rather than describing a program approximately.
+ * nameChars renders a pattern in English when it is NAMED characters, bare or
+ * in a class, with an optional `^[...]+` or `[...]+$` anchor. Returns
+ * undefined otherwise.
  */
 export function nameChars(src: string): string | undefined {
   const what = soughtChars(src);
   return what === undefined ? undefined : englishSought(what);
 }
 
-/** soughtChars is what `nameChars` says, as data: the characters by name, and where. */
+/**
+ * soughtChars returns what `nameChars` says, as data: the characters by name,
+ * and where.
+ */
 export function soughtChars(src: string): Sought | undefined {
-  // The deletion lattice anchors its class rungs. Strip the anchor and say
-  // where it pointed, rather than refusing a program the recogniser offers.
+  // Strip an anchor and record where it pointed.
   let where: "anywhere" | "start" | "end" = "anywhere";
   let body = src;
   if (body.startsWith("^") && body.endsWith("+")) {
@@ -418,14 +366,13 @@ export function soughtChars(src: string): Sought | undefined {
   for (let i = 0; i < rs.length; i++) {
     let r = rs[i]!;
     if (r === "\\") {
-      // A class escapes these four, and they are still one character to a
-      // reader. Any other escape -- \d, \s -- is a character set rather than a
-      // character, and naming it is the regex engine's job.
+      // A class escapes these four characters. Any other escape (\d, \s) is
+      // a set, and is refused.
       i++;
       if (i >= rs.length || !"]\\^-".includes(rs[i]!)) return undefined;
       r = rs[i]!;
     } else if (r === "^" && i === 0) {
-      return undefined; // a negated class means the opposite of what we would say
+      return undefined; // a negated class
     }
 
     const n = CHAR_NAMES.get(r);

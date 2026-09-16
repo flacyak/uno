@@ -1,8 +1,8 @@
-// credential_process: a profile that hands signing in to another program.
+// credential_process: a profile whose keys come from a program.
 //
-// What is under test is that the program's keys are the ones used, that it is
-// run again only once they expire, and that everything a program can do wrong
-// -- fail, hang, print the wrong thing -- is a sentence naming the profile.
+// The program's keys are used, it is run again only once they expire, and a
+// program that fails or prints the wrong thing is an error naming the
+// profile.
 
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,9 +45,9 @@ beforeAll(async () => {
 afterAll(() => b.close());
 
 /**
- * A machine whose one profile runs the fixture, from a folder with a space in
- * its name so the command line has to be quoted to reach it. Answers with the
- * environment, and a way to count how often the fixture ran.
+ * A temp home whose one profile runs the fixture, in a folder with a space in
+ * its name so the command line must be quoted. Returns the environment and a
+ * count of how often the fixture ran.
  */
 async function machine(expiration: string, answer = "keys", program = process.execPath) {
   const dir = await mkdtemp(join(tmpdir(), "uno process "));
@@ -117,7 +117,6 @@ describe("a fixture script's credentials are used", () => {
   });
 });
 
-// The task's own sentence: it is run again only after they expire.
 describe("the program is run again only once its keys expire", () => {
   test("keys good for an hour are reused, and it runs once", async () => {
     const { env, ran } = await machine(later());
@@ -126,9 +125,7 @@ describe("the program is run again only once its keys expire", () => {
     expect(await ran()).toBe(1);
   });
 
-  // Forty sources opening at once, and four ranges in flight for each, all
-  // ask before the first answer is back. One run answers them all: a program
-  // that asks a vault or a hardware key for its answer is asked once.
+  // Several asks before the first answer is back share one run.
   test("keys asked for together, before the first answer is back, run it once", async () => {
     const { env, ran } = await machine(later());
     const creds = profileCredentials("vault", env);
@@ -137,8 +134,8 @@ describe("the program is run again only once its keys expire", () => {
     expect(await ran()).toBe(1);
   });
 
-  // A run that fails answers everybody waiting with the failure, and the next
-  // ask after it runs the program again rather than repeating the failure.
+  // A failed run rejects everybody waiting, and the next ask runs the program
+  // again.
   test("a failed run is not kept, and the ask after it runs the program again", async () => {
     const { env, ran } = await machine(later(), "fail");
     const creds = profileCredentials("vault", env);
@@ -149,8 +146,7 @@ describe("the program is run again only once its keys expire", () => {
     expect(await ran()).toBe(2);
   });
 
-  // Keys a minute from expiry would lapse on the way to S3, so each ask runs
-  // the program for fresh ones.
+  // Keys within a minute of expiry run the program again.
   test("keys about to expire are not reused, and it runs each time", async () => {
     const { env, ran } = await machine(new Date(Date.now() + 60_000).toISOString());
     const creds = profileCredentials("vault", env);
@@ -159,7 +155,7 @@ describe("the program is run again only once its keys expire", () => {
     expect(await ran()).toBe(2);
   });
 
-  // No Expiration is the CLI's way of saying the keys do not expire.
+  // Keys printed with Expiration left out are kept for the whole run.
   test("keys with no expiration are kept for as long as the engine runs", async () => {
     const { env, ran } = await machine("none");
     const creds = profileCredentials("vault", env);
@@ -198,7 +194,7 @@ describe("a program that does not answer as it should is named", () => {
   });
 });
 
-// Split the way a shell splits, and nothing more: no shell ever sees the line.
+// Split the way a shell would, by uno's own splitter.
 describe("the command line is split into words without a shell", () => {
   test("quotes keep spaces, and a backslash keeps the next character", () => {
     expect(splitCommand(`aws-vault exec "my profile" --json`)).toEqual([

@@ -1,22 +1,18 @@
-// The subset of Go's encoding/csv that uno actually uses: `LazyQuotes` on,
+// A port of the subset of Go's encoding/csv that uno uses: `LazyQuotes` on,
 // `FieldsPerRecord` off, a configurable separator.
 //
-// Hand-ported rather than taken from npm. Lazy quoting is exactly where a
-// third-party reader disagrees -- it decides for itself whether a stray quote
-// in an unquoted field is data or a syntax error -- and a real export with one
-// stray quote in 4,812 rows has to open, not fail. The rules below are Go's,
-// including the ones that look like quirks: a bare `\r` before end of file is
-// dropped, a `\r\n` inside a quoted field becomes a `\n`, and a line holding
-// nothing but its terminator produces no record at all.
+// The rules are Go's, including: a bare `\r` before end of file is dropped,
+// a `\r\n` inside a quoted field becomes `\n`, and a line holding only its
+// terminator is skipped.
 
-/** 1 when the line ends with a newline, 0 otherwise. Go calls this lengthNL. */
+/** lengthNL mirrors Go's: 1 when the line ends with a newline, 0 otherwise. */
 function lengthNL(line: string): number {
   return line.endsWith("\n") ? 1 : 0;
 }
 
 /**
- * Lines hands out one line at a time, including its terminator, with `\r\n`
- * normalised to `\n` the way Go's readLine does.
+ * Lines yields one line at a time, including its terminator, with `\r\n`
+ * normalised to `\n` as Go's readLine does.
  */
 class Lines {
   private i = 0;
@@ -31,7 +27,7 @@ class Lines {
     if (nl < 0) {
       line = this.s.slice(this.i);
       this.i = this.s.length;
-      // For backwards compatibility Go drops a trailing \r before end of file.
+      // Go drops a trailing \r before end of file.
       if (line.endsWith("\r")) line = line.slice(0, -1);
     } else {
       line = this.s.slice(this.i, nl + 1);
@@ -42,10 +38,7 @@ class Lines {
   }
 }
 
-/**
- * readAll reads every record. Rows may be ragged -- that is what
- * `FieldsPerRecord: -1` buys -- and the caller decides what to do about it.
- */
+/** readAll reads every record. Rows may be ragged. */
 export function readAll(text: string, comma: string): string[][] {
   const lines = new Lines(text);
   const records: string[][] = [];
@@ -59,8 +52,7 @@ export function readAll(text: string, comma: string): string[][] {
 }
 
 function readRecord(lines: Lines, comma: string): string[] | undefined {
-  // Skip lines holding nothing but their terminator. A blank line in the middle
-  // of an export is spacing, not a row of empty cells.
+  // Skip lines holding only their terminator.
   let line: string;
   for (;;) {
     const got = lines.next();
@@ -75,8 +67,8 @@ function readRecord(lines: Lines, comma: string): string[] | undefined {
 
   parseField: for (;;) {
     if (!line.startsWith('"')) {
-      // A non-quoted field runs to the next separator or to the end of the line.
-      // A quote inside one is data, because LazyQuotes is on.
+      // An unquoted field runs to the next separator or the end of the line.
+      // A quote inside it is data (LazyQuotes).
       const i = line.indexOf(comma);
       if (i >= 0) {
         fields.push(line.slice(0, i));
@@ -87,7 +79,7 @@ function readRecord(lines: Lines, comma: string): string[] | undefined {
       break parseField;
     }
 
-    // A quoted field, which may run over more than one line.
+    // A quoted field, which may span lines.
     line = line.slice(1);
     for (;;) {
       const i = line.indexOf('"');
@@ -116,11 +108,11 @@ function readRecord(lines: Lines, comma: string): string[] | undefined {
       }
 
       if (line.length > 0) {
-        // The field carries on onto the next line, newline and all.
+        // The field continues on the next line, newline included.
         buf += line;
         const next = lines.next();
         if (next === undefined) {
-          // A quoted field the file ended in the middle of.
+          // The file ended inside a quoted field.
           fields.push(buf);
           buf = "";
           break parseField;
