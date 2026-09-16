@@ -451,19 +451,24 @@ function manifestFor(d: Document): Manifest {
   };
 }
 
-/** What the manifest says of one file, for a .uno going to `at`. */
+/**
+ * What the manifest says of one file, for a .uno going to `at`. The keys are
+ * in the order the Go struct has them, which is the order uno.json is written
+ * in, because a person is expected to open that file and read it.
+ */
 function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
   return {
     id: src.id,
     name: src.name,
+    // Both the connection and the version are about the file pointed at, so a
+    // carried source has neither.
+    connection: src.path === undefined ? "" : (src.connection ?? ""),
     bytes: src.raw?.length ?? src.bytes ?? 0,
     sha256: src.raw === undefined ? "" : sha256Hex(src.raw),
     entry:
       src.raw === undefined ? "" : single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
     path: src.path === undefined ? "" : storedPath(src.path, at),
-    // Both are about the file pointed at, so a carried source has neither.
     version: src.path === undefined ? "" : (src.version ?? ""),
-    connection: src.path === undefined ? "" : (src.connection ?? ""),
     rows: src.rows,
     cols: src.cols,
   };
@@ -910,9 +915,10 @@ function parseEdit(where: string, v: unknown): Edit {
 
 // ------------------------------------------------------------- writing
 
-// The key order below is the field order of the Go structs, because a person is
-// expected to open this file and read it. JSON.stringify follows insertion
-// order, so building the object in that order is the whole of what it takes.
+// The key order below, and in fileSource and partsSource above, is the field
+// order of the Go structs, because a person is expected to open this file and
+// read it. JSON.stringify follows insertion order, so building the object in
+// that order is the whole of what it takes.
 //
 // The one difference from Go's encoder is that it escapes `<`, `>` and `&` and
 // this does not. The bytes differ; the value any reader parses out does not.
@@ -942,50 +948,26 @@ function manifestJSON(m: Manifest): unknown {
   return { ...head, sources: m.sources.map(sourceJSON), sheet: m.sheet, edits };
 }
 
-/** omitempty over the half that does not apply, so a person reading uno.json
- * sees either an entry or a path and never an empty one of each. Several files
- * read as one have neither, and a list of parts where a file has its path. */
+/**
+ * sourceJSON leaves out the half that does not apply, so a person reading
+ * uno.json sees either an entry or a path and never an empty one of each.
+ * Several files read as one have neither, and a list of parts where a file has
+ * its path; of a part, most have no name the path does not say, no version,
+ * no header to leave out and a last row with its newline.
+ */
 function sourceJSON(s: Source): unknown {
   if (s.parts !== undefined) {
-    return {
-      id: s.id,
-      name: s.name,
-      connection: s.connection === "" ? undefined : s.connection,
-      parts: s.parts.map(partJSON),
-      header: s.header,
-      fileColumn: s.fileColumn ? true : undefined,
-      rows: s.rows,
-      cols: s.cols,
-    };
+    const parts = s.parts.map((p) => omitempty(p, "name", "version", "skip", "unterminated"));
+    return { ...omitempty(s, "connection", "fileColumn"), parts };
   }
-  return {
-    id: s.id,
-    name: s.name,
-    connection: s.connection === "" ? undefined : s.connection,
-    bytes: s.bytes,
-    sha256: s.sha256 === "" ? undefined : s.sha256,
-    entry: s.entry === "" ? undefined : s.entry,
-    path: s.path === "" ? undefined : s.path,
-    version: s.version === "" ? undefined : s.version,
-    rows: s.rows,
-    cols: s.cols,
-  };
+  return omitempty(s, "connection", "sha256", "entry", "path", "version");
 }
 
-/**
- * omitempty over what most parts do not have: a name the path does not say, a
- * version, a header to leave out, a last row with no newline. The first part
- * of a folder of exports on a disk is its path and its size.
- */
-function partJSON(p: SourcePart): unknown {
-  return {
-    name: p.name === "" ? undefined : p.name,
-    path: p.path,
-    bytes: p.bytes,
-    version: p.version === "" ? undefined : p.version,
-    skip: p.skip === 0 ? undefined : p.skip,
-    unterminated: p.unterminated ? true : undefined,
-  };
+/** omitempty is `o` without each of `keys` that holds its zero value -- "", 0 or false -- as Go's omitempty writes it. */
+function omitempty<T extends object>(o: T, ...keys: Array<keyof T>): Partial<T> {
+  const empty = new Set<PropertyKey>(keys);
+  const kept = Object.entries(o).filter(([k, v]) => !empty.has(k) || Boolean(v));
+  return Object.fromEntries(kept) as Partial<T>;
 }
 
 function stateJSON(d: Document, single: boolean): unknown {
