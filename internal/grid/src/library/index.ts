@@ -19,6 +19,10 @@ export {
 } from "./connection.ts";
 export type { Auth, AuthMode, Connection, ConnectionProvider } from "./connection.ts";
 
+// The IAM documents a role connection asks the bucket's owner to write.
+export { accountOf, permissionPolicy, roleNameOf, rolePolicies, trustPolicy } from "./policy.ts";
+export type { RolePolicies, RolePolicyAsk, RoleTrust } from "./policy.ts";
+
 /**
  * FORMAT_VERSION is the highest layout this build reads, and the one it
  * writes.
