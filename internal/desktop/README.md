@@ -112,7 +112,7 @@ both are tested without a window. The whole plan is `resource/vim-motions.html`.
 ## Running it
 
 ```bash
-vp install               # from internal/, the workspace root
+vp install               # from the repo root, the workspace root
 vp run dev               # vite dev server + electron, reloading
 vp run build             # out/main, out/preload, out/renderer
 vp run smoke             # build, then drive the real app and assert
