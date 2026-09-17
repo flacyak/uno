@@ -694,14 +694,17 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
 /**
  * What a hosted engine signs in with. `base` is the engine's own credentials,
  * which the customer's role trusts. `externalId` is the condition the
- * customer's trust policy checks. It comes from the requesting account and
+ * customer's trust policy checks. It comes from the requesting tenant and
  * stays out of connection files. `principal` is what the engine signs as, for
- * writing that policy.
+ * writing that policy. `sessionName` is who the session is for, which is what
+ * the role owner's CloudTrail shows against every read: the person, named by
+ * the gate that let them in, so a read is never traced to uno and no further.
  */
 export interface HostedOptions {
   base: () => Promise<AwsCredentials>;
   externalId: string;
   principal: string;
+  sessionName: string;
   env?: Env;
   /** Where STS is, for a test stand-in. Otherwise AWS_ENDPOINT_URL_STS. */
   stsEndpoint?: string;
@@ -709,8 +712,10 @@ export interface HostedOptions {
 
 /**
  * hostedAuth is the hosted engine's ways of signing in: `role` and `public`.
- * A `role` connection is assumed through STS with the account's external ID,
- * and its keys are kept until shortly before they expire. `machine` and
+ * A `role` connection is assumed through STS with the tenant's external ID,
+ * as a session named for the person, and its keys are kept until shortly
+ * before they expire. The keys are kept per role, in this process, and a
+ * process is one workspace's, so no session is ever shared across tenants. `machine` and
  * `profile` are refused, and `machine()` rejects, so only an address a
  * connection covers is read.
  */
@@ -738,7 +743,7 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
               const session = await assumeRole(
                 {
                   roleArn,
-                  sessionName: `uno-${Date.now()}`,
+                  sessionName: opts.sessionName,
                   externalId: opts.externalId,
                   region: c.region ?? source.region,
                 },
