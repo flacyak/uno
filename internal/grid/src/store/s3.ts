@@ -16,6 +16,7 @@ import type { Provider } from "../plugin/index.ts";
 import type { FileHandler } from "./index.ts";
 import { readAhead } from "./ahead.ts";
 import { s3Lister } from "./s3lister.ts";
+import { text } from "./s3xml.ts";
 
 /** Credentials, and the region to sign for until a bucket says otherwise. */
 export interface AwsCredentials {
@@ -127,6 +128,24 @@ function decoded(part: string): string | undefined {
 /** s3Url writes a location in the s3:// form, which is what a .uno records. */
 export function s3Url(loc: S3Location): string {
   return `s3://${loc.bucket}/${loc.key}`;
+}
+
+/**
+ * s3PrefixUrl writes a place in a bucket in the s3:// form: `s3://bucket`
+ * for the whole bucket, and `s3://bucket/prefix` otherwise.
+ */
+export function s3PrefixUrl(where: { bucket: string; prefix: string }): string {
+  return where.prefix === "" ? `s3://${where.bucket}` : `s3://${where.bucket}/${where.prefix}`;
+}
+
+/** keyFolder is a key up to and including its last slash: the folder the object is in, "" at the root. */
+export function keyFolder(key: string): string {
+  return key.slice(0, key.lastIndexOf("/") + 1);
+}
+
+/** keyName is a key after its last slash: the object's own name. */
+export function keyName(key: string): string {
+  return key.slice(key.lastIndexOf("/") + 1);
 }
 
 /** How many times a request that failed on the network or with a 5xx is tried. */
@@ -319,7 +338,7 @@ export interface TryOptions extends Omit<S3Options, "credentials"> {
 export async function tryConnection(c: Connection, opts: TryOptions): Promise<Tried> {
   const { sign, ...rest } = opts;
   const located = await locate(c, { ...rest, credentials: () => sign(c) });
-  const where = s3Url({ bucket: located.bucket, key: located.prefix });
+  const where = s3PrefixUrl(located);
   const page = await s3Lister({ ...rest, credentials: () => sign(located) }).list(where);
   const folders = page.entries.filter((e) => e.folder).length;
   return {
@@ -365,7 +384,7 @@ export function connectionMeeting(
     const c = covering(connections(), loc.bucket, loc.key);
     if (c !== undefined) return { through: c.id };
     return {
-      unconnected: { bucket: loc.bucket, prefix: loc.key.slice(0, loc.key.lastIndexOf("/") + 1) },
+      unconnected: { bucket: loc.bucket, prefix: keyFolder(loc.key) },
     };
   };
 }
@@ -511,14 +530,14 @@ async function refusalBody(res: Response): Promise<string> {
  * present is the answer, even when it fails isRegion.
  */
 function regionIn(xml: string): string | undefined {
-  const element = /<Region>([^<]*)<\/Region>/i.exec(xml)?.[1];
+  const element = text(xml, "Region");
   if (element !== undefined) return isRegion(element) ? element : undefined;
 
   // "the region 'us-east-1' is wrong; expecting 'eu-west-1'"
   const expecting = /expecting '([^']*)'/i.exec(xml)?.[1];
   if (expecting !== undefined) return isRegion(expecting) ? expecting : undefined;
 
-  const endpoint = /<Endpoint>([^<]*)<\/Endpoint>/i.exec(xml)?.[1];
+  const endpoint = text(xml, "Endpoint");
   return endpoint === undefined ? undefined : regionInHost(endpoint);
 }
 

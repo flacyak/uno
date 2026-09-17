@@ -51,7 +51,7 @@ export interface Sources {
  */
 export function sources(providers: readonly Provider[]): Sources {
   const files = providers.map((p) => p.files);
-  const browsers = providers.flatMap((p) => (p.browse === undefined ? [] : [p.browse]));
+  const browsers = providers.map((p) => p.browse).filter((b) => b !== undefined);
 
   return {
     providers,

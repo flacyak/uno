@@ -40,9 +40,14 @@ export function measure(
   };
 }
 
+/** Clamps a value to [0, max]. */
+export function clamp(value: number, max: number): number {
+  return Math.max(0, Math.min(max, value));
+}
+
 /** Clamps a view position to [0, vMax]. */
 export function clampTop(top: number, vMax: number): number {
-  return Math.min(Math.max(0, top), vMax);
+  return clamp(top, vMax);
 }
 
 /**

@@ -19,9 +19,9 @@ import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "../../grid/tests/store
 import {
   DRIVEN_LANGUAGE_ENV,
   DRIVEN_LANGUAGE_SWITCH,
-  displayMissing,
   drive,
   electronEnv,
+  requireDisplay,
   rewrite,
   verdict,
 } from "./launch.js";
@@ -115,10 +115,7 @@ await writeFile(
 
 const electron = (await import("electron")).default;
 
-if (displayMissing(process.env, process.platform)) {
-  console.error("smoke: no DISPLAY. Run under Xvfb, or on a desktop session.");
-  process.exit(2);
-}
+requireDisplay("smoke");
 
 // The stand-in bucket, started before the app, on a port the OS picks.
 const standin = await bucket(

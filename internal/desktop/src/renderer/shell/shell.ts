@@ -6,6 +6,7 @@
 //
 // The grid is loaded when the first file opens.
 
+import { isWorkspace } from "@uno/grid/document";
 import { Engine, messagePort } from "@uno/grid/engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
 import { NO_ROW } from "@uno/grid/sheet";
@@ -347,14 +348,11 @@ export class Shell {
    */
   private drops(what: Dropping): boolean {
     if (this.workspace?.dirty !== true || this.warned === what) return true;
-    this.say(
-      what === "open"
-        ? m.unsaved_edits_key_again({ key: "Ctrl+O" })
-        : what === "quit"
-          ? m.unsaved_edits_key_again({ key: "×" })
-          : m.unsaved_edits_click_again(),
-      true,
-    );
+    let warning: string;
+    if (what === "open") warning = m.unsaved_edits_key_again({ key: "Ctrl+O" });
+    else if (what === "quit") warning = m.unsaved_edits_key_again({ key: "×" });
+    else warning = m.unsaved_edits_click_again();
+    this.say(warning, true);
     this.warned = what;
     return false;
   }
@@ -428,10 +426,15 @@ export class Shell {
     }
   }
 
-  /** offer opens a pop-up menu, closing any menu or form already open. */
-  private offer(place: MenuPlace, items: readonly MenuItem[]): void {
+  /** closePopups dismisses the menu and the formula form, whichever is open. */
+  private closePopups(): void {
     this.menu?.close();
     this.formula?.close();
+  }
+
+  /** offer opens a pop-up menu, closing any menu or form already open. */
+  private offer(place: MenuPlace, items: readonly MenuItem[]): void {
+    this.closePopups();
     this.menu = new PopMenu(place, items, () => {
       this.menu = undefined;
       this.grid?.focus();
@@ -491,8 +494,7 @@ export class Shell {
       return;
     }
 
-    this.menu?.close();
-    this.formula?.close();
+    this.closePopups();
     this.formula = new FormulaForm(place, tab.name, tab.band.columns, grid.selection().col, {
       insert: (col, expr) => this.bind(w, tab, col, expr),
       closed: () => {
@@ -633,8 +635,7 @@ export class Shell {
       this.workspace?.close();
       this.workspace = w;
       // Close any menu or form open for the replaced workspace.
-      this.menu?.close();
-      this.formula?.close();
+      this.closePopups();
       if (w.path !== "") this.recents.opened(w.path);
       // The workspace's engine serves the panel from here on.
       this.closeSpare();
@@ -732,13 +733,10 @@ export class Shell {
       // Ctrl+PageDown, Ctrl+PageUp, Ctrl+Tab and Ctrl+Shift+Tab move between
       // tabs.
       if (e.ctrlKey && !e.altKey && !e.metaKey && this.workspace !== undefined) {
-        const step =
-          e.key === "PageDown" || (e.key === "Tab" && !e.shiftKey)
-            ? 1
-            : e.key === "PageUp" || (e.key === "Tab" && e.shiftKey)
-              ? -1
-              : 0;
-        if (step !== 0) {
+        const forward = e.key === "PageDown" || (e.key === "Tab" && !e.shiftKey);
+        const back = e.key === "PageUp" || (e.key === "Tab" && e.shiftKey);
+        if (forward || back) {
+          const step = forward ? 1 : -1;
           e.preventDefault();
           this.select(this.workspace.beside(step));
           return;
@@ -792,8 +790,7 @@ export class Shell {
     this.sidebarOpen = !this.sidebarOpen;
     localStorage.setItem(SIDEBAR_KEY, this.sidebarOpen ? "open" : SIDEBAR_CLOSED);
     this.root.classList.toggle(NO_SIDEBAR, !this.sidebarOpen);
-    this.menu?.close();
-    this.formula?.close();
+    this.closePopups();
     this.grid?.repaint();
     this.paintStatus();
   }
@@ -886,11 +883,12 @@ export class Shell {
    */
   private repoint(tab: Tab): void {
     if (!this.panel.open) this.togglePanel();
+    const state = tab.state;
     // A tab in a bucket still waiting for a connection opens the connect form.
-    if (tab.link?.connect !== undefined) this.panel.connectFor(tab.id);
+    if (state === "unconnected") this.panel.connectFor(tab.id);
     // A tab with a newer version in its bucket opens on its own line, where
     // Reload is offered.
-    else if (tab.newer !== undefined && !tab.missing) this.panel.showTab(tab.id);
+    else if (state === "newer") this.panel.showTab(tab.id);
     else this.panel.repoint(tab.id);
   }
 
@@ -1038,7 +1036,8 @@ export class Shell {
    * save at a time: a second joins the one in flight.
    */
   save(): Promise<void> {
-    return this.saveTo((w) => (w.path === "" ? undefined : w.path));
+    const path = this.workspace?.path;
+    return this.saveTo(path === "" ? undefined : path);
   }
 
   /**
@@ -1046,15 +1045,15 @@ export class Shell {
    * because sources beside the workspace are referenced relative to it.
    */
   saveAs(): Promise<void> {
-    return this.saveTo(() => undefined);
+    return this.saveTo(undefined);
   }
 
-  /** saveTo runs one save at a time, to the path `where` picks. */
-  private saveTo(where: (w: Workspace) => string | undefined): Promise<void> {
+  /** saveTo runs one save at a time, to `path`, or to one the dialog asks for. */
+  private saveTo(path: string | undefined): Promise<void> {
     if (this.saving !== undefined) return this.saving;
     const on = this.showing();
     if (on === undefined) return Promise.resolve();
-    this.saving = this.write(on, where(on.workspace));
+    this.saving = this.write(on, path);
     return this.saving;
   }
 
@@ -1119,8 +1118,7 @@ export class Shell {
   private relabel(): void {
     labelPage();
     // An open menu or form was built in the old language.
-    this.menu?.close();
-    this.formula?.close();
+    this.closePopups();
     // So was the last message.
     this.say("");
     this.panel.relabel();
@@ -1228,12 +1226,6 @@ export class Shell {
     this.warned = undefined;
     this.status.say(text, isError);
   }
-}
-
-/** isWorkspace returns whether a ref is a .uno file. */
-function isWorkspace(ref: SourceRef): boolean {
-  // Several files read as one are a source, whatever they are called.
-  return !("parts" in ref) && ref.name.toLowerCase().endsWith(".uno");
 }
 
 /** refAt makes a SourceRef for a path. */

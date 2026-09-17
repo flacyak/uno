@@ -10,7 +10,8 @@ import {
   sha256Hex,
 } from "../go/index.ts";
 import { read as ingestRead } from "../ingest/index.ts";
-import type { Edit, Op, Sheet } from "../sheet/index.ts";
+import { Op } from "../sheet/index.ts";
+import type { Edit, Sheet } from "../sheet/index.ts";
 import type {
   Document,
   FileSource,
@@ -464,8 +465,8 @@ export function formatFor(sources: readonly Held[], log: readonly Logged[]): num
 export function versionFor(edits: readonly Edit[]): number {
   let v = BASE_VERSION;
   for (const e of edits) {
-    if ((e.op as Op) === "set") continue;
-    if ((e.op as Op) === "apply") {
+    if (e.op === Op.Set) continue;
+    if (e.op === Op.Apply) {
       if (v < RULE_VERSION) v = RULE_VERSION;
       continue;
     }
@@ -596,26 +597,29 @@ function isFlag(v: unknown): v is boolean {
   return typeof v === "boolean";
 }
 
-/** The wording a refusal uses for each guard. */
-const NOT = new Map<(v: unknown) => boolean, string>([
-  [isText, "is not text"],
-  [isFlag, "is neither true nor false"],
-  [isByteCount, "is not a number of bytes"],
-]);
+/** A guard over a field's value, with the wording a refusal uses when it fails. */
+interface Expects<T> {
+  is: (v: unknown) => v is T;
+  not: string;
+}
+
+const TEXT: Expects<string> = { is: isText, not: "is not text" };
+const FLAG: Expects<boolean> = { is: isFlag, not: "is neither true nor false" };
+const BYTE_COUNT: Expects<number> = { is: isByteCount, not: "is not a number of bytes" };
 
 /**
  * optional reads a field a record may leave out: undefined when absent, the
- * value when `is` holds, and otherwise an error naming `where`, the key and
- * the guard's wording.
+ * value when `expects.is` holds, and otherwise an error naming `where`, the
+ * key and what was expected.
  */
 function optional<T>(
   o: Record<string, unknown>,
   key: string,
-  is: (v: unknown) => v is T,
+  expects: Expects<T>,
   where: string,
 ): T | undefined {
   const v = o[key];
-  if (v !== undefined && !is(v)) throw new Error(`${where}: ${key} ${NOT.get(is)}`);
+  if (v !== undefined && !expects.is(v)) throw new Error(`${where}: ${key} ${expects.not}`);
   return v;
 }
 
@@ -705,7 +709,9 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
   const source = `${name}: ${base.name}`;
 
   // A source has exactly one of a path, an entry or parts.
-  const one = asString(s["path"]) !== "" ? "a path" : asString(s["entry"]) !== "" ? "an entry" : "";
+  let one = "";
+  if (asString(s["path"]) !== "") one = "a path";
+  else if (asString(s["entry"]) !== "") one = "an entry";
   if (one !== "") {
     throw new Error(
       `${source} has both ${one} and parts · a source is one file or several read as one`,
@@ -733,7 +739,7 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
     );
   }
-  const fileColumn = optional(s, "fileColumn", isFlag, source);
+  const fileColumn = optional(s, "fileColumn", FLAG, source);
   return { ...base, parts, header, fileColumn: fileColumn ?? false };
 }
 
@@ -754,10 +760,10 @@ function parsePart(which: string, raw: unknown): SourcePart {
   const bytes = p["bytes"];
   if (!isByteCount(bytes)) throw new Error(`${part} does not say how many bytes it is`);
 
-  const partName = optional(p, "name", isText, part);
-  const version = optional(p, "version", isText, part);
-  const skip = optional(p, "skip", isByteCount, part);
-  const unterminated = optional(p, "unterminated", isFlag, part);
+  const partName = optional(p, "name", TEXT, part);
+  const version = optional(p, "version", TEXT, part);
+  const skip = optional(p, "skip", BYTE_COUNT, part);
+  const unterminated = optional(p, "unterminated", FLAG, part);
 
   return {
     name: partName ?? "",

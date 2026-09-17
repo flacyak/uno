@@ -6,7 +6,7 @@
 // Every message is plain data, so it works over an Electron MessagePortMain,
 // a Web Worker, or a MessageChannel.
 
-import type { AuthMode, Connection } from "../library/index.ts";
+import type { AuthMode, Connection, RoleTrust } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
 import type { Said } from "../said/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
@@ -229,12 +229,7 @@ export interface SignIns {
 }
 
 /** Trust is what a role's trust policy must name for the hosted engine to assume it. */
-export interface Trust {
-  /** The ARN the policy lets assume the role: the engine's own. */
-  principal: string;
-  /** The external ID the policy's condition asks for. */
-  externalId: string;
-}
+export type Trust = RoleTrust;
 
 /**
  * The most rows one `rows` request may ask for. A larger request is refused
@@ -293,22 +288,22 @@ export type Request =
   | { t: "save"; id: number; place: Place; limit: number }
   | { t: "close" };
 
+/** RowsPage is a page of rows with the log applied, tagged with the generation they were built at. */
+export interface RowsPage {
+  generation: number;
+  /** What each cell shows. */
+  rows: string[][];
+  /** What each cell stores, or null for a row where that matches what it shows. */
+  raws: Array<string[] | null>;
+}
+
 export type Reply =
   | { t: "opened"; id: number; added: Opening }
   | { t: "removed"; id: number }
   | { t: "relinked"; id: number; opened: Opened }
   | { t: "appended"; id: number; opened: Opened }
   | { t: "progress"; source: string; progress: Progress }
-  | {
-      t: "rows";
-      id: number;
-      first: number;
-      generation: number;
-      /** What each cell shows. */
-      rows: string[][];
-      /** What each cell stores, or null for a row where that matches what it shows. */
-      raws: Array<string[] | null>;
-    }
+  | ({ t: "rows"; id: number; first: number } & RowsPage)
   | { t: "changed"; id: number; source: string; changed: Changed }
   | { t: "found"; id: number; found: Found }
   | { t: "listed"; id: number; listing: Listing }
@@ -358,8 +353,4 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
   };
 }
 
-export function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-export { formatBytes } from "../said/index.ts";
+export { formatBytes, messageOf } from "../said/index.ts";

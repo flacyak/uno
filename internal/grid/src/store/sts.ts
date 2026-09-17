@@ -5,6 +5,7 @@
 // The guard test in tests/store/opens.test.ts checks that. Every file read
 // is in store/node.ts, which reads ~/.aws and passes the token or role in.
 
+import { parseTime } from "../go/index.ts";
 import { encodeQuery, signV4 } from "./s3.ts";
 import type { AwsCredentials } from "./s3.ts";
 import { text } from "./s3xml.ts";
@@ -171,13 +172,8 @@ export async function assumeRole(
   const id = text(credentials, "AccessKeyId");
   const secret = text(credentials, "SecretAccessKey");
   const token = text(credentials, "SessionToken");
-  const expiration = new Date(text(credentials, "Expiration") ?? "");
-  if (
-    id === undefined ||
-    secret === undefined ||
-    token === undefined ||
-    Number.isNaN(expiration.getTime())
-  ) {
+  const expiration = parseTime(text(credentials, "Expiration"));
+  if (id === undefined || secret === undefined || token === undefined || expiration === undefined) {
     throw new Error(`STS answered ${ask.roleArn}'s AssumeRole with no credentials uno could read`);
   }
   return { accessKeyId: id, secretAccessKey: secret, sessionToken: token, expiration };

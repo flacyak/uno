@@ -7,7 +7,7 @@
 // The metrics carry request kinds, durations, storage type, and S3 request
 // counts and byte sizes. File names, paths, buckets and keys stay local.
 
-import { Meter, collector } from "@uno/grid/engine";
+import { Meter, collector, messageOf } from "@uno/grid/engine";
 import type { Collector } from "@uno/grid/engine";
 import type { Telemetry } from "@uno/grid/engine";
 
@@ -56,9 +56,7 @@ export function exporting(
   try {
     to = collector(env);
   } catch (err) {
-    console.error(
-      `uno sends no measurements · ${err instanceof Error ? err.message : String(err)}`,
-    );
+    console.error(`uno sends no measurements · ${messageOf(err)}`);
   }
   if (to === undefined) return undefined;
 

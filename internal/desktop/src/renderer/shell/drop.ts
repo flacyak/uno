@@ -3,10 +3,13 @@
 
 import "./empty.css";
 
-import { m } from "../../paraglide/messages.js";
+import { WORKSPACE_EXT } from "@uno/grid/document";
 
-/** The file extensions a drop may open. */
-const OPENABLE = [".uno", ".csv", ".tsv"];
+import { m } from "../../paraglide/messages.js";
+import { READS } from "../sources.ts";
+
+/** The file extensions a drop may open: a workspace, or what the panel reads. */
+const OPENABLE = [WORKSPACE_EXT, ...READS];
 
 /** Returns whether a drag carries files. */
 function carriesFiles(e: DragEvent): boolean {

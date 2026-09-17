@@ -11,6 +11,7 @@
 
 import {
   isAbsolute,
+  isWorkspace,
   logOf,
   newManifest,
   readContainer,
@@ -20,7 +21,7 @@ import {
 } from "../document/index.ts";
 import type { Document, Held, HeldParts, Logged, State } from "../document/index.ts";
 import type { Edit } from "../sheet/index.ts";
-import { bytesSource, multiOf, openWith, partMap } from "../store/index.ts";
+import { bytesSource, headerModeOf, multiOf, openWith, partMap } from "../store/index.ts";
 import type { ByteSource, FileHandler, PartsRef, SingleRef } from "../store/index.ts";
 import type {
   Opening,
@@ -34,6 +35,7 @@ import type {
   Port,
   Reply,
   Request,
+  RowsPage,
   SourceRef,
 } from "./protocol.ts";
 import { Refusal, saidOf } from "../said/index.ts";
@@ -182,9 +184,7 @@ export class Workspace {
    */
   open(ref: SourceRef): Promise<Opening> {
     return this.serially(async () => {
-      // A parts ref is always a source, whatever its name.
-      const workspace = !("parts" in ref) && ref.name.toLowerCase().endsWith(".uno");
-      if (workspace) return this.openWorkspace(ref);
+      if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
       const view = await this.view(id, ref, undefined);
       return { opened: [this.keep(view)], showing: id };
@@ -230,14 +230,7 @@ export class Workspace {
       try {
         view = await this.view(id, to, carried, "parts" in to);
       } catch (err) {
-        const places = pathsIn(to);
-        const connected =
-          was instanceof Absent &&
-          was.waiting !== undefined &&
-          places.length > 0 &&
-          sameList(places, pathsIn(was.parts ?? { name: was.name, path: was.path })) &&
-          places.every((path) => this.unconnected(path) === undefined);
-        if (!connected) throw err;
+        if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
         this.sources.set(id, now);
         return now.opened;
@@ -247,6 +240,21 @@ export class Workspace {
       // the old source in place.
       return this.replace(was, view);
     });
+  }
+
+  /**
+   * nowCovered is relink's exception: `was` is a source waiting for its
+   * bucket to be connected, and `to` is the same addresses, every one of
+   * which a connection now covers.
+   */
+  private nowCovered(was: Source, to: SourceRef): was is Absent {
+    if (!(was instanceof Absent) || was.waiting === undefined) return false;
+    const places = pathsIn(to);
+    return (
+      places.length > 0 &&
+      sameList(places, pathsIn(was.parts ?? { name: was.name, path: was.path })) &&
+      places.every((path) => this.unconnected(path) === undefined)
+    );
   }
 
   /**
@@ -314,8 +322,14 @@ export class Workspace {
     }
     const doc = readContainer(ref.name, bytes, at);
 
-    for (const src of doc.sources) {
-      this.keep(await this.reopen(ref.name, src, logOf(doc.log, src.id)));
+    // Every source opens at once, and each is kept in the document's order.
+    const opened = await Promise.all(
+      doc.sources.map(
+        async (src) => [src, await this.reopen(ref.name, src, logOf(doc.log, src.id))] as const,
+      ),
+    );
+    for (const [src, source] of opened) {
+      this.keep(source);
       this.states.set(src.id, src.state);
     }
 
@@ -350,22 +364,24 @@ export class Workspace {
     }
     const carried: Carried = { container, raw: src.raw, edits };
     try {
-      const view =
-        src.parts !== undefined
-          ? await this.view(src.id, joinedFrom(src), carried)
-          : src.raw === undefined
-            ? // By path, pinned to the saved version where there is one.
-              await this.view(src.id, fileAt(src.name, src.path ?? "", src.version), carried)
-            : await View.open(
-                src.id,
-                src.name,
-                "",
-                bytesSource(src.raw),
-                carried,
-                this.port,
-                this.tuning,
-                this.telemetry,
-              );
+      let view: View;
+      if (src.parts !== undefined) {
+        view = await this.view(src.id, joinedFrom(src), carried);
+      } else if (src.raw === undefined) {
+        // By path, pinned to the saved version where there is one.
+        view = await this.view(src.id, fileAt(src.name, src.path ?? "", src.version), carried);
+      } else {
+        view = await View.open({
+          id: src.id,
+          name: src.name,
+          path: "",
+          source: bytesSource(src.raw),
+          carried,
+          port: this.port,
+          tuning: this.tuning,
+          telemetry: this.telemetry,
+        });
+      }
       view.opened.link = linkOf(view, src);
       return view;
     } catch (err) {
@@ -427,19 +443,18 @@ export class Workspace {
           throw err;
         });
     }
-    const view = await View.open(
+    const view = await View.open({
       id,
-      ref.name,
+      name: ref.name,
       path,
       source,
       carried,
-      this.port,
-      this.tuning,
-      this.telemetry,
-      // A parts ref carries its own header mode. A single file has a header row.
-      "parts" in ref ? ref.header : "first",
-      "parts" in ref ? ref : undefined,
-    );
+      port: this.port,
+      tuning: this.tuning,
+      telemetry: this.telemetry,
+      header: headerModeOf(ref),
+      parts: "parts" in ref ? ref : undefined,
+    });
     view.connection = this.through(ref);
     if ("parts" in ref) {
       view.opened.parts = ref.parts.map((part) => ({
@@ -474,11 +489,7 @@ export class Workspace {
 
   // ------------------------------------------------------------ reading
 
-  rows(
-    id: string,
-    first: number,
-    count: number,
-  ): Promise<{ generation: number; rows: string[][]; raws: Array<string[] | null> }> {
+  rows(id: string, first: number, count: number): Promise<RowsPage> {
     return this.needView(id).rows(first, count);
   }
 
@@ -537,8 +548,9 @@ export class Workspace {
       if (sources.length === 0) throw new Refusal({ t: "no-file-open" });
       this.refuseOver(sources, limit);
 
-      const parts = new Map<string, Part>();
-      for (const source of sources) parts.set(source.id, await source.part());
+      const parts = new Map(
+        await Promise.all(sources.map(async (source) => [source.id, await source.part()] as const)),
+      );
 
       const cells = new Map(place.cells.map((c) => [c.source, { row: c.row, col: c.col }]));
       const held = sources.map((source): Held => {
@@ -735,7 +747,7 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
 /** pathsIn returns every address a ref reads from, in order. A dropped file has none. */
 function pathsIn(ref: SourceRef): string[] {
   const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
-  return files.flatMap((file) => ("path" in file ? [file.path] : []));
+  return files.filter((file) => "path" in file).map((file) => file.path);
 }
 
 /** sameList reports whether two address lists are equal element by element. */
