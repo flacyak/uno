@@ -42,15 +42,33 @@ export function undress(v: string): string {
 }
 
 /**
+ * signed rewrites the two ways accounting exports write a negative into the
+ * one a parser reads: Oracle's (1234.00) and SAP's trailing 1234.00-. Both
+ * become -1234.00. Anything else comes back as it was.
+ *
+ * These are not decoration. Taking them off would flip the sign, so they
+ * are read as a sign here rather than stripped with the costume.
+ */
+export function signed(v: string): string {
+  if (v.length > 2 && v.startsWith("(") && v.endsWith(")")) return "-" + v.slice(1, -1);
+  if (v.length > 1 && v.endsWith("-")) return "-" + v.slice(0, -1);
+  return v;
+}
+
+/**
  * isNumber is deliberately stricter than a plain parse. Both Go's
  * `strconv.ParseFloat` and JavaScript's `Number` accept spellings a spreadsheet
  * column never means, so the value must first look like a decimal number.
  */
 export function isNumber(v: string): boolean {
+  return decimal(signed(v)) !== undefined;
+}
+
+function decimal(v: string): number | undefined {
   for (const r of v) {
-    if (!ALLOWED.includes(r)) return false;
+    if (!ALLOWED.includes(r)) return undefined;
   }
-  return parseDecimal(v) !== undefined;
+  return parseDecimal(v);
 }
 
 /**
@@ -63,7 +81,5 @@ export function isNumber(v: string): boolean {
  * which row the value came from, and this module knows neither.
  */
 export function parse(v: string): number | undefined {
-  const u = undress(v);
-  if (!isNumber(u)) return undefined;
-  return parseDecimal(u);
+  return decimal(signed(undress(v)));
 }
