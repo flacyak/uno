@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, test } from "vite-plus/test";
 
+import { read } from "../../src/ingest/index.ts";
 import { Sheet } from "../../src/sheet/index.ts";
 import { parse } from "../../src/formula/index.ts";
 
@@ -131,11 +135,44 @@ test("inferKind does not flag genuinely mixed columns", () => {
   expect(s.columns[0]!.flagged).toBe(false);
 });
 
-// `new Date` would accept every one of these; Go's two layouts do not, and a
-// text column wearing a date badge is a wrong answer that looks deliberate.
-describe("isDate is the two layouts and not whatever Date can parse", () => {
-  const dates = ["2026-07-01", "2026-07-01T12:00:00Z", "2026-07-01T12:00:00+01:00"];
-  const notDates = ["2026", "2026-07", "July 1 2026", "2026-13-01", "2026-07-32", "07/01/2026"];
+// `new Date` would accept every one of the not-dates; the written layouts do
+// not, and a text column wearing a date badge is a wrong answer that looks
+// deliberate.
+describe("isDate is the written layouts and not whatever Date can parse", () => {
+  const dates = [
+    "2026-07-01",
+    "2026-07-01T12:00:00Z",
+    "2026-07-01T12:00:00+01:00",
+    "2024/11/16",
+    "2024.11.16",
+    "2024-1-6",
+    "20-11-2024",
+    "07/01/2026",
+    "11/20/2024",
+    "1.6.2024",
+    "Nov. 6, 1970",
+    "Nov 6 1970",
+    "November 6, 1970",
+    "sept 6 1970",
+    "6 Nov 1970",
+    "06-Nov-1970",
+    "July 1 2026",
+  ];
+  const notDates = [
+    "2026",
+    "2026-07",
+    "Nov 1970",
+    "Novem 6, 1970",
+    "Item 6, 1970",
+    "Feb 30, 1970",
+    "6 Nov-1970",
+    "2026-13-01",
+    "2026-07-32",
+    "2026/07-01",
+    "13/13/2026",
+    "31-02-2024",
+    "07/01/26",
+  ];
 
   for (const v of dates) {
     test(`${v} is a date`, () => {
@@ -150,4 +187,14 @@ describe("isDate is the two layouts and not whatever Date can parse", () => {
       expect(s.columns[0]!.kind).not.toBe("date");
     });
   }
+});
+
+// An ad export that wrote its dates three ways down one column: 2024-11-16,
+// 2024/11/16 and 20-11-2024. Every one is a date, so the column is.
+test("a column of mixed date layouts is a date column", () => {
+  const path = fileURLToPath(new URL("../testdata/google-ads-sales.csv", import.meta.url));
+  const s = read("google-ads-sales.csv", readFileSync(path));
+  const col = s.columns.findIndex((c) => c.header === "Ad_Date");
+  expect(col).toBeGreaterThanOrEqual(0);
+  expect(s.columns[col]!.kind).toBe("date");
 });
