@@ -17,6 +17,11 @@
   color: var(--ink-3);
 }
 
+/* Nothing said, so nothing to set the file's line apart from. */
+.win-status .sep:has(+ #status-msg:empty) {
+  display: none;
+}
+
 .win-status .grow {
   flex: 1;
 }

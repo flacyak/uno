@@ -104,6 +104,40 @@ test("the engine refuses what a Sheet refuses, in the same words", async () => {
   }
 });
 
+// A file that says product_cost twice has two columns a formula can read, and
+// each one reads its own values.
+test("a column named twice in the file can be read by its own name", async () => {
+  const header = "sku,product_cost,price,product_cost,margin";
+  const csv = `${header}\nA,1,5,2,\nB,3,9,4,\n`;
+  const PRICE = 2;
+  const MARGIN = 4;
+  const { engine, done } = connect();
+  try {
+    await engine.open({ name: "dup.csv", blob: new Blob([csv]) });
+    await indexed(engine);
+    engine.mode(true);
+
+    const bound = await engine.edit({
+      op: Op.Bind,
+      row: NO_ROW,
+      col: MARGIN,
+      now: "price - product_cost - product_cost_2",
+    });
+    expect(bound.columns.map((c) => c.header)).toEqual([
+      "sku",
+      "product_cost",
+      "price",
+      "product_cost_2",
+      "margin",
+    ]);
+    const rows = (await engine.rows(0, 2)).rows;
+    expect(rows.map((r) => r[MARGIN])).toEqual(["2", "2"]);
+    expect(rows.map((r) => r[PRICE])).toEqual(["5", "9"]);
+  } finally {
+    done();
+  }
+});
+
 // The rule that makes a lazy log safe: whatever order the edits came in, a row
 // finished through the engine is the row a Sheet holds after the same edits.
 test("rows through the engine match a Sheet replaying the same log", async () => {
