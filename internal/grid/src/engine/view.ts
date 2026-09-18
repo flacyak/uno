@@ -38,6 +38,7 @@ import type {
   Progress,
   Reply,
   Request,
+  RowsPage,
 } from "./protocol.ts";
 import { FILE_SHOWS, Refusal, saidOf } from "../said/index.ts";
 import type { Said } from "../said/index.ts";
@@ -97,6 +98,26 @@ export interface Carried {
 export type Part = (Omit<HeldFile, Unsaved> | Omit<HeldParts, Unsaved>) & { edits: Edit[] };
 type Unsaved = "id" | "name" | "state";
 
+/** What View.open is given. */
+export interface OpenAsk {
+  id: string;
+  /** The file's name. `ingest` picks a decoder by it. */
+  name: string;
+  /** Where the bytes are, or "" for carried bytes. */
+  path: string;
+  /** The bytes. The view owns the source from here on and closes it if the open fails. */
+  source: ByteSource;
+  port: Port<Request, Reply>;
+  tuning: Tuning;
+  /** The edits, and for a carried source the bytes, a .uno holds for it. */
+  carried?: Carried;
+  telemetry?: Telemetry;
+  /** Whether the first line names the columns. A header row unless said. */
+  header?: HeaderMode;
+  /** Set for a source over several files. */
+  parts?: PartsRef;
+}
+
 export class View {
   opened!: Opened;
   pages!: Pages;
@@ -148,27 +169,13 @@ export class View {
   /**
    * open detects the format, starts indexing, waits for the sample rows,
    * replays any carried edits, and returns the view.
-   *
-   * `path` is "" for carried bytes. The view owns `source`
-   * from here on and closes it if the open fails. `header` says whether the
-   * first line names the columns. `parts` is set for a source over several
-   * files.
    */
-  static async open(
-    id: string,
-    name: string,
-    path: string,
-    source: ByteSource,
-    carried: Carried | undefined,
-    port: Port<Request, Reply>,
-    tuning: Tuning,
-    telemetry: Telemetry = unmeasured,
-    header: HeaderMode = "first",
-    parts?: PartsRef,
-  ): Promise<View> {
+  static async open(ask: OpenAsk): Promise<View> {
+    const { id, name, path, source, port, tuning, carried } = ask;
+    const telemetry = ask.telemetry ?? unmeasured;
     const v = new View(id, name, path, port);
     v.carried = carried?.raw;
-    v.parts = parts;
+    v.parts = ask.parts;
 
     // Errors for a source from a .uno name the .uno as well.
     const container = carried === undefined ? "" : carried.container;
@@ -177,7 +184,7 @@ export class View {
 
     let format: Format;
     try {
-      format = await openFormat(name, source, header);
+      format = await openFormat(name, source, ask.header);
     } catch (err) {
       await source.close();
       if (container === "") throw err;
@@ -188,21 +195,17 @@ export class View {
     v.format = format;
     v.index = new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
-    v.schema = schemaOf(format, parts);
+    v.schema = schemaOf(format, ask.parts);
 
     let told = 0;
     let started = false;
     const index = v.index;
     const began = performance.now();
     // The telemetry attribute for where the bytes came from.
-    const place =
-      carried?.raw !== undefined
-        ? "carried"
-        : path === ""
-          ? "joined"
-          : isRemote(path)
-            ? "bucket"
-            : "disk";
+    let place: string;
+    if (carried?.raw !== undefined) place = "carried";
+    else if (path === "") place = "joined";
+    else place = isRemote(path) ? "bucket" : "disk";
     indexPass({
       source,
       format,
@@ -278,10 +281,7 @@ export class View {
   // ------------------------------------------------------------ reading
 
   /** rows reads rows with the log applied, tagged with the generation they were built at. */
-  async rows(
-    first: number,
-    count: number,
-  ): Promise<{ generation: number; rows: string[][]; raws: Array<string[] | null> }> {
+  async rows(first: number, count: number): Promise<RowsPage> {
     const source = await this.pages.rows(first, count);
     const files = await this.files(Math.max(0, first), source.length);
     const schema = this.schema;
@@ -707,11 +707,6 @@ export class View {
     return this.schema.edits();
   }
 
-  /** The number of edits in the log. */
-  get logged(): number {
-    return this.schema.edits().length;
-  }
-
   /**
    * part returns what a save writes of this source. It runs in the edit
    * queue, so its log is consistent with the other sources.
@@ -725,14 +720,16 @@ export class View {
       if (this.parts !== undefined) {
         return { ...(await this.joined(this.parts)), connection: this.connection, ...this.kept() };
       }
-      const carry = this.path === "";
-      if (carry) await this.until(() => this.index.complete);
+      if (this.path === "") {
+        await this.until(() => this.index.complete);
+        const raw = this.carried ?? (await this.source.read(0, this.source.size));
+        return { raw, bytes: this.size, version: this.version, ...this.kept() };
+      }
       return {
-        raw: carry ? (this.carried ?? (await this.source.read(0, this.source.size))) : undefined,
-        path: carry ? undefined : this.path,
+        path: this.path,
         bytes: this.size,
         version: this.version,
-        connection: carry ? undefined : this.connection,
+        connection: this.connection,
         ...this.kept(),
       };
     });

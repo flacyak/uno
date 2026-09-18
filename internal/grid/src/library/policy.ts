@@ -9,7 +9,9 @@
 
 /** What the role's trust policy names: the engine's principal and the tenant's external ID. */
 export interface RoleTrust {
+  /** The ARN the policy lets assume the role: the engine's own. */
   principal: string;
+  /** The external ID the policy's condition asks for. */
   externalId: string;
 }
 

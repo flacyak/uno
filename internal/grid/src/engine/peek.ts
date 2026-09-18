@@ -8,7 +8,7 @@
 import { labelOf, openFormat } from "../ingest/index.ts";
 import type { HeaderMode } from "../ingest/index.ts";
 import type { Peeked } from "./protocol.ts";
-import { bytesSource, openWith } from "../store/index.ts";
+import { bytesSource, headerModeOf, openWith } from "../store/index.ts";
 import type { FileHandler, FileRef } from "../store/index.ts";
 
 /**
@@ -102,7 +102,6 @@ export async function peek(
   ref: FileRef,
   limits: PeekLimits = {},
 ): Promise<Peeked> {
-  // A parts ref carries its own header mode. A single file has a header row.
-  const header = "parts" in ref ? ref.header : "first";
+  const header = headerModeOf(ref);
   return peekHead(ref.name, await readHead(handlers, ref, limits.bytes), limits.rows, header);
 }

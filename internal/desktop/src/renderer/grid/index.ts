@@ -13,6 +13,7 @@ import { dispatch, el } from "../shell/util.ts";
 import type { Handlers } from "../shell/util.ts";
 import type { Action, Caret, Change, Motion, Pending } from "../keys.ts";
 import { num } from "../locale.ts";
+import { clamp } from "./metrics.ts";
 import { columnLabel } from "./rows.ts";
 import type { Cell, GridEvents, Rows, ShellAction } from "./rows.ts";
 
@@ -155,8 +156,8 @@ export class Grid {
     if (source === undefined) return;
 
     this.cancelEdit();
-    this.selRow = Math.max(0, Math.min(source.rows() - 1, row));
-    this.selCol = Math.max(0, Math.min(source.cols() - 1, col));
+    this.selRow = clamp(row, source.rows() - 1);
+    this.selCol = clamp(col, source.cols() - 1);
     this.view.scrollIntoView(this.selRow, this.selCol);
     this.view.layout();
     this.events.onSelect(this.selRow, this.selCol);

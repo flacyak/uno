@@ -12,6 +12,7 @@ import { PAGE, byPageKey } from "./list.ts";
 import type { S3Options, S3Requests } from "./s3.ts";
 import {
   answered,
+  keyName,
   objectAt,
   refused,
   s3Location,
@@ -106,7 +107,7 @@ async function listPrefix(
  */
 function folderAt(bucket: string, prefix: string): Entry {
   return {
-    name: lastSegment(prefix.endsWith("/") ? prefix.slice(0, -1) : prefix),
+    name: keyName(prefix.endsWith("/") ? prefix.slice(0, -1) : prefix),
     path: s3Url({ bucket, key: prefix }),
     folder: true,
   };
@@ -122,7 +123,7 @@ function fileAt(bucket: string, prefix: string, key: KeyEntry): Entry[] {
   if (key.key === prefix || key.key.endsWith("/")) return [];
   // Only the fields keyIn could read are present, so they carry over as is.
   const { key: k, ...facts } = key;
-  return [{ name: lastSegment(k), path: s3Url({ bucket, key: k }), folder: false, ...facts }];
+  return [{ name: keyName(k), path: s3Url({ bucket, key: k }), folder: false, ...facts }];
 }
 
 /**
@@ -141,18 +142,13 @@ async function statObject(send: S3Requests, path: string): Promise<Entry> {
   const version = versionOf(head.headers);
   const modified = when(head.headers.get("last-modified"));
   return {
-    name: lastSegment(loc.key),
+    name: keyName(loc.key),
     path: url,
     folder: false,
     bytes,
     ...(modified === undefined ? {} : { modified }),
     ...(version === undefined || version === "" ? {} : { version }),
   };
-}
-
-/** Everything after the last slash of a key. */
-function lastSegment(key: string): string {
-  return key.slice(key.lastIndexOf("/") + 1);
 }
 
 /**
