@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
 import { blobFiles, bytesSource } from "../../src/store/index.ts";
-import type { FileHandler, FileRef } from "../../src/store/index.ts";
+import type { FileHandler, FileRef, SingleRef } from "../../src/store/index.ts";
 import { openMulti, partMap } from "../../src/store/multi.ts";
 import type { Extent, HeaderMode, Part } from "../../src/store/multi.ts";
 import { localFiles } from "../../src/store/node.ts";
@@ -70,7 +70,7 @@ function memory(files: ReadonlyMap<string, Uint8Array>): {
   return { handler, opened, closed, refs, reads };
 }
 
-function inMemory(name: string): FileRef {
+function inMemory(name: string): SingleRef {
   return { name, path: MEMORY + name };
 }
 

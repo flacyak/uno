@@ -29,6 +29,12 @@ export interface Refusal {
 /** Opening a ref through a FileHandler. */
 export const OPENS: Refusal = { cannot: "opens it", can: "reads" };
 
+/**
+ * Opening a ref of several files as one. Reading them as one is a handler a
+ * build lists or leaves out, so the refusal says that this is what is missing.
+ */
+export const JOINS: Refusal = { cannot: "opens several files as one", can: "reads" };
+
 /** Browsing a path through a Lister. */
 export const BROWSES: Refusal = { cannot: "browses it", can: "browses" };
 

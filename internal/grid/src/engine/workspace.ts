@@ -193,7 +193,9 @@ export class Workspace {
    */
   open(ref: SourceRef): Promise<Opening> {
     return this.serially(async () => {
-      if (ref.name.toLowerCase().endsWith(".uno")) return this.openWorkspace(ref);
+      // Several files read as one are a source whatever they are called.
+      const workspace = !("parts" in ref) && ref.name.toLowerCase().endsWith(".uno");
+      if (workspace) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
       const view = await this.view(id, ref, undefined);
       return { opened: [this.keep(view)], showing: id };
@@ -232,10 +234,24 @@ export class Workspace {
    * fails leaves it missing and saying why, and that is the answer: asking
    * again to connect a bucket that is connected would send the person round
    * the same form for nothing.
+   *
+   * Several files read as one are refused on either side, the source and the
+   * ref. Which of a source's parts may change under its log is a rule of its
+   * own, and until it is here the source stays as it is.
    */
   relink(id: string, ref: SourceRef): Promise<Opened> {
     return this.serially(async () => {
       const was = this.need(id);
+      if (was instanceof View && was.parts !== undefined) {
+        throw new Error(
+          `${was.name} is ${was.parts.parts.length} files read as one, and cannot be pointed at another file yet`,
+        );
+      }
+      if ("parts" in ref) {
+        throw new Error(
+          `${ref.name} is ${ref.parts.length} files read as one, and ${was.name} cannot be pointed at one yet`,
+        );
+      }
       const carried: Carried = { container: "", edits: was.log };
       let view: View;
       try {
@@ -359,7 +375,8 @@ export class Workspace {
   }
 
   /** view opens one file as a source, through whatever this platform hands back
-   * for a SourceRef. A ref with no path is bytes a save will have to carry. */
+   * for a SourceRef. A ref with no path is bytes a save will have to carry, or
+   * several files read as one, which the view keeps the parts of. */
   private async view(id: string, ref: SourceRef, carried: Carried | undefined): Promise<View> {
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
@@ -367,6 +384,7 @@ export class Workspace {
     // Which connection it came through, for the save to write down as a hint.
     const met = path === "" ? undefined : this.meet?.(path);
     view.connection = met !== undefined && "through" in met ? met.through : undefined;
+    view.parts = "parts" in ref ? ref : undefined;
     return view;
   }
 
