@@ -15,7 +15,7 @@ import { NO_ROW, Op } from "./edit.ts";
 import type { Kind } from "./kind.ts";
 import { inferKind } from "./kind.ts";
 import type { Finished } from "./pipeline.ts";
-import { finish, formatValue } from "./pipeline.ts";
+import { finishRows, formatValue } from "./pipeline.ts";
 import { Schema } from "./schema.ts";
 import type { Written } from "./schema.ts";
 
@@ -31,6 +31,13 @@ export interface Column {
    */
   flagged: boolean;
 }
+
+/**
+ * FINISH_ROWS is how many rows are finished together when one of them is read:
+ * the engine's block size, so a sheet and a file compute formulas in the same
+ * steps.
+ */
+const FINISH_ROWS = 1024;
 
 export class Sheet {
   readonly columns: Column[];
@@ -105,14 +112,19 @@ export class Sheet {
     return this.schema.writtenIn(row)?.get(col);
   }
 
+  /**
+   * row finishes the block a row is in, not the row alone, so that a bound
+   * column is computed over the block a column at a time.
+   */
   private row(row: number): Finished | undefined {
     if (row < 0 || row >= this.rowData.length) return undefined;
-    let f = this.finished[row];
-    if (f === undefined) {
-      f = finish(this.schema, row, this.rowData[row]!);
-      this.finished[row] = f;
-    }
-    return f;
+    const f = this.finished[row];
+    if (f !== undefined) return f;
+
+    const first = row - (row % FINISH_ROWS);
+    const block = finishRows(this.schema, first, this.rowData.slice(first, first + FINISH_ROWS));
+    for (let i = 0; i < block.length; i++) this.finished[first + i] = block[i];
+    return block[row - first];
   }
 
   // ------------------------------------------------------------ the log

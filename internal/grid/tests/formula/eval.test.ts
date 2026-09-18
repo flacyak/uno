@@ -7,6 +7,7 @@ import {
   type Row,
   UnknownColumnError,
   evaluate,
+  evaluateColumn,
   parse,
 } from "../../src/formula/index.ts";
 
@@ -94,4 +95,55 @@ describe("evaluate reports which column failed and why", () => {
 // has to fail on the path that evaluates it rather than take the window down.
 test("evaluating the empty formula fails rather than crashing", () => {
   expect(() => evaluate(new Formula(), row({}))).toThrow();
+});
+
+// A bound column is computed a column at a time, and every row of it has to come
+// out as the one-row preview says it will: its number, or the failure that row
+// would have thrown first.
+describe("evaluateColumn computes every row as one row would", () => {
+  const cols: Record<string, string[]> = {
+    price: ["40.00", "10", "n/a", "8"],
+    cost: ["31.20", "x", "5", "8"],
+    zero: ["0", "0", "0", "2"],
+  };
+  const src = { column: (name: string) => cols[name] };
+  const at = (i: number) =>
+    row(Object.fromEntries(Object.entries(cols).map(([k, v]) => [k, v[i]!])));
+
+  const exprs = [
+    "price - cost",
+    "(price - cost) / price",
+    "cost / zero", // row 1 fails on cost before it reaches the divisor
+    "price / (zero - zero)",
+    "-price * 2",
+    "price + postage",
+  ];
+
+  for (const src_ of exprs) {
+    test(src_, () => {
+      const { values, errors } = evaluateColumn(parse(src_), 4, src);
+      for (let i = 0; i < 4; i++) {
+        let want: number | Error;
+        try {
+          want = evaluate(parse(src_), at(i));
+        } catch (err) {
+          want = err as Error;
+        }
+        if (want instanceof Error) {
+          expect(errors[i], `row ${i}`).toBeInstanceOf(want.constructor);
+          expect(errors[i]!.message, `row ${i}`).toBe(want.message);
+        } else {
+          expect(errors[i], `row ${i}`).toBeUndefined();
+          expect(values[i], `row ${i}`).toBe(want);
+        }
+      }
+    });
+  }
+
+  test("a row keeps the first failure it meets", () => {
+    const { errors } = evaluateColumn(parse("cost / zero"), 4, src);
+    expect(errors[1]).toBeInstanceOf(NotNumberError);
+    expect(errors[0]).toBeInstanceOf(DivideByZeroError);
+    expect(errors[3]).toBeUndefined();
+  });
 });

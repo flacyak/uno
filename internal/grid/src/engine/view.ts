@@ -21,7 +21,7 @@ import {
   Op,
   SAMPLE_ROWS,
   Schema,
-  finish,
+  finishRows,
   inferKind,
   isDate,
   valueAt,
@@ -209,8 +209,7 @@ export class View {
 
     const rows: string[][] = [];
     const raws: Array<string[] | null> = [];
-    for (let i = 0; i < source.length; i++) {
-      const f = finish(schema, first + i, source[i]!);
+    for (const f of finishRows(schema, first, source)) {
       rows.push(f.shown as string[]);
       raws.push(f.shown === f.raw ? null : (f.raw as string[]));
     }
@@ -221,7 +220,7 @@ export class View {
   private async columns(): Promise<ColumnInfo[]> {
     const source = await this.pages.rows(0, SAMPLE_ROWS);
     const schema = this.schema;
-    const shown = source.map((row, i) => finish(schema, i, row).shown);
+    const shown = finishRows(schema, 0, source).map((f) => f.shown);
 
     return schema.headers.map((header, col) => {
       const { kind, flagged } = inferKind(shown.length, (row) => shown[row]![col] ?? "");
@@ -482,9 +481,12 @@ export class View {
       const records = await this.pages.records(block, false);
       if (abort.signal.aborted) return { row: null, searched, complete: false };
 
+      // The block is finished whole, so a bound column is computed once over it
+      // rather than once for every row the search steps through.
+      const finished = finishRows(schema, from, records);
       for (; down ? row < end : row >= from; row += req.dir) {
         searched++;
-        if (matches(finish(schema, row, records[row - from]!).shown[req.col] ?? "")) {
+        if (matches(finished[row - from]!.shown[req.col] ?? "")) {
           return { row, searched, complete: true };
         }
       }
