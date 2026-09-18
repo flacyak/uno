@@ -5,18 +5,18 @@
 // caller hands in. `s3Requests` signs, retries and follows a bucket to its
 // region, and store/s3lister.ts sends its requests through it too.
 
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
-import { compareStrings, concat } from "../go/index.ts";
-import type { Connection } from "../library/index.ts";
-import { covering } from "../library/index.ts";
-import type { Provider } from "../plugin/index.ts";
-import type { FileHandler } from "./index.ts";
-import { readAhead } from "./ahead.ts";
-import { s3Lister } from "./s3lister.ts";
-import { text } from "./s3xml.ts";
+import { compareStrings, concat } from '../go/index.ts';
+import type { Connection } from '../library/index.ts';
+import { covering } from '../library/index.ts';
+import type { Provider } from '../plugin/index.ts';
+import type { FileHandler } from './index.ts';
+import { readAhead } from './ahead.ts';
+import { s3Lister } from './s3lister.ts';
+import { text } from './s3xml.ts';
 
 /** Credentials, and the region to sign for until a bucket says otherwise. */
 export interface AwsCredentials {
@@ -44,7 +44,7 @@ export interface Anonymous {
 export type Signing = AwsCredentials | Anonymous;
 
 /** What a refusal calls credentials whose `as` is absent. */
-const FOUND = "the AWS credentials uno found";
+const FOUND = 'the AWS credentials uno found';
 
 export interface S3Options {
   /**
@@ -87,7 +87,7 @@ export function s3Location(url: string): S3Location | undefined {
   } catch {
     return undefined;
   }
-  if (u.protocol !== "https:") return undefined;
+  if (u.protocol !== 'https:') return undefined;
   // The raw path is split before any part of it is decoded, since a %2F in
   // the bucket name is part of the name, and only a plain slash separates
   // bucket and key.
@@ -97,14 +97,16 @@ export function s3Location(url: string): S3Location | undefined {
   // bucket.s3.us-west-2.amazonaws.com/key,
   // bucket.s3-us-west-2.amazonaws.com/key) or the path's first segment
   // (s3.amazonaws.com/bucket/key, s3.us-west-2.amazonaws.com/bucket/key).
-  const host = /^(?:(.+)\.)?s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$/.exec(u.hostname);
-  if (host === null || path === "") return undefined;
+  const host = /^(?:(.+)\.)?s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$/.exec(
+    u.hostname,
+  );
+  if (host === null || path === '') return undefined;
   const named = host[1];
   if (named !== undefined) {
     const key = decoded(path);
     return key === undefined ? undefined : { bucket: named, key };
   }
-  const slash = path.indexOf("/");
+  const slash = path.indexOf('/');
   if (slash <= 0 || slash === path.length - 1) return undefined;
   const bucket = decoded(path.slice(0, slash));
   const key = decoded(path.slice(slash + 1));
@@ -135,17 +137,19 @@ export function s3Url(loc: S3Location): string {
  * for the whole bucket, and `s3://bucket/prefix` otherwise.
  */
 export function s3PrefixUrl(where: { bucket: string; prefix: string }): string {
-  return where.prefix === "" ? `s3://${where.bucket}` : `s3://${where.bucket}/${where.prefix}`;
+  return where.prefix === ''
+    ? `s3://${where.bucket}`
+    : `s3://${where.bucket}/${where.prefix}`;
 }
 
 /** keyFolder is a key up to and including its last slash: the folder the object is in, "" at the root. */
 export function keyFolder(key: string): string {
-  return key.slice(0, key.lastIndexOf("/") + 1);
+  return key.slice(0, key.lastIndexOf('/') + 1);
 }
 
 /** keyName is a key after its last slash: the object's own name. */
 export function keyName(key: string): string {
-  return key.slice(key.lastIndexOf("/") + 1);
+  return key.slice(key.lastIndexOf('/') + 1);
 }
 
 /** How many times a request that failed on the network or with a 5xx is tried. */
@@ -163,7 +167,12 @@ const REFUSAL_BYTES = 64 << 10;
  * endpoint and region.
  */
 export function s3Provider(opts: S3Options): Provider {
-  return { name: "s3", label: "S3", files: s3Files(opts), browse: s3Lister(opts) };
+  return {
+    name: 's3',
+    label: 'S3',
+    files: s3Files(opts),
+    browse: s3Lister(opts),
+  };
 }
 
 /**
@@ -174,7 +183,7 @@ export interface S3Requests {
   /** One object, or one version of it: HEAD for its size, GET for a range. */
   object(
     loc: S3Location,
-    method: "HEAD" | "GET",
+    method: 'HEAD' | 'GET',
     extra: Record<string, string>,
     version?: string,
   ): Promise<Response>;
@@ -199,18 +208,22 @@ export function s3Requests(opts: S3Options): S3Requests {
   /** One signed request, sent once, to the URL `at` gives for `region`. */
   async function send(
     at: (region: string) => URL,
-    method: "HEAD" | "GET",
+    method: 'HEAD' | 'GET',
     extra: Record<string, string>,
     creds: Signing,
     region: string,
   ): Promise<Response> {
     const url = at(region);
-    if ("unsigned" in creds) return go(url, { method, headers: extra });
+    if ('unsigned' in creds) return go(url, { method, headers: extra });
     const headers = signV4(
-      { method, url, headers: { ...extra, "x-amz-content-sha256": EMPTY_SHA256 } },
+      {
+        method,
+        url,
+        headers: { ...extra, 'x-amz-content-sha256': EMPTY_SHA256 },
+      },
       creds,
       region,
-      "s3",
+      's3',
       new Date(),
     );
     return go(url, { method, headers });
@@ -224,7 +237,7 @@ export function s3Requests(opts: S3Options): S3Requests {
   async function request(
     loc: S3Location,
     at: (region: string) => URL,
-    method: "HEAD" | "GET",
+    method: 'HEAD' | 'GET',
     extra: Record<string, string>,
   ): Promise<Response> {
     const bucket = loc.bucket;
@@ -248,7 +261,7 @@ export function s3Requests(opts: S3Options): S3Requests {
         const moved = await whereItWent(res, () =>
           // A HEAD reply is headers only. When the region is only in the
           // body, a one-byte GET is sent to get it.
-          send(at, "GET", { range: "bytes=0-0" }, creds, region),
+          send(at, 'GET', { range: 'bytes=0-0' }, creds, region),
         );
         if (moved !== undefined && moved !== region) {
           moves++;
@@ -266,34 +279,40 @@ export function s3Requests(opts: S3Options): S3Requests {
 
   const requests: S3Requests = {
     object: (loc, method, extra, version) =>
-      request(loc, (region) => objectUrl(loc, region, opts.endpoint, version), method, extra),
+      request(
+        loc,
+        (region) => objectUrl(loc, region, opts.endpoint, version),
+        method,
+        extra,
+      ),
     // A listing is a GET, so its error reply carries a body. It is signed as
     // the prefix it asks about, which is what a connection covers.
     bucket: (bucket, query) =>
       request(
-        { bucket, key: query["prefix"] ?? "" },
+        { bucket, key: query['prefix'] ?? '' },
         (region) => listUrl(bucket, query, region, opts.endpoint),
-        "GET",
+        'GET',
         {},
       ),
     who: async (loc) => (await opts.credentials(loc)).as ?? FOUND,
     // HeadBucket returns x-amz-bucket-region on every answer, ok or refused.
     // `request` has already followed a moved bucket by then.
     async where(bucket) {
-      const loc = { bucket, key: "" };
+      const loc = { bucket, key: '' };
       const res = await request(
         loc,
         (region) => new URL(`${bucketUrl(bucket, region, opts.endpoint)}/`),
-        "HEAD",
+        'HEAD',
         {},
       );
-      const said = res.headers.get("x-amz-bucket-region");
+      const said = res.headers.get('x-amz-bucket-region');
       if (said !== null && isRegion(said)) return said;
-      if (res.ok) return regions.get(bucket) ?? (await opts.credentials(loc)).region;
+      if (res.ok)
+        return regions.get(bucket) ?? (await opts.credentials(loc)).region;
       const why = answered(
         res.status,
         {
-          404: "no such bucket",
+          404: 'no such bucket',
           403: `access denied · ${await requests.who(loc)} cannot reach that bucket`,
         },
         `S3 answered ${res.status} when asked where the bucket is`,
@@ -309,7 +328,10 @@ export function s3Requests(opts: S3Options): S3Requests {
  * HeadBucket signed the way the connection signs in. Done once, when a
  * connection is made.
  */
-export async function locate(c: Connection, opts: S3Options): Promise<Connection> {
+export async function locate(
+  c: Connection,
+  opts: S3Options,
+): Promise<Connection> {
   return { ...c, region: await s3Requests(opts).where(c.bucket) };
 }
 
@@ -325,7 +347,7 @@ export interface Tried {
 }
 
 /** What tryConnection needs: how a connection signs in, and where S3 is. */
-export interface TryOptions extends Omit<S3Options, "credentials"> {
+export interface TryOptions extends Omit<S3Options, 'credentials'> {
   /** How a request through `c` is signed. */
   sign: (c: Connection) => Promise<Signing>;
 }
@@ -335,11 +357,17 @@ export interface TryOptions extends Omit<S3Options, "credentials"> {
  * and lists the first page of its prefix, both signed the way the connection
  * signs in. Any failure is thrown as it is.
  */
-export async function tryConnection(c: Connection, opts: TryOptions): Promise<Tried> {
+export async function tryConnection(
+  c: Connection,
+  opts: TryOptions,
+): Promise<Tried> {
   const { sign, ...rest } = opts;
   const located = await locate(c, { ...rest, credentials: () => sign(c) });
   const where = s3PrefixUrl(located);
-  const page = await s3Lister({ ...rest, credentials: () => sign(located) }).list(where);
+  const page = await s3Lister({
+    ...rest,
+    credentials: () => sign(located),
+  }).list(where);
   const folders = page.entries.filter((e) => e.folder).length;
   return {
     connection: located,
@@ -397,48 +425,58 @@ export function s3Files(opts: S3Options): FileHandler {
   const send = s3Requests(opts);
 
   return {
-    label: "S3",
-    handles: (ref) => "path" in ref && s3Location(ref.path) !== undefined,
+    label: 'S3',
+    handles: (ref) => 'path' in ref && s3Location(ref.path) !== undefined,
 
     async open(ref) {
-      const loc = objectAt("path" in ref ? ref.path : undefined, ref.name);
+      const loc = objectAt('path' in ref ? ref.path : undefined, ref.name);
       const url = s3Url(loc);
 
       // A VersionId a save recorded is asked for by name. A bucket that has
       // dropped that version answers 404 or 400, and the object is then read
       // as it is now.
-      let pinned = "path" in ref ? versionIdIn(ref.version) : undefined;
-      let head = await send.object(loc, "HEAD", {}, pinned);
-      if (pinned !== undefined && (head.status === 404 || head.status === 400)) {
+      let pinned = 'path' in ref ? versionIdIn(ref.version) : undefined;
+      let head = await send.object(loc, 'HEAD', {}, pinned);
+      if (
+        pinned !== undefined &&
+        (head.status === 404 || head.status === 400)
+      ) {
         pinned = undefined;
-        head = await send.object(loc, "HEAD", {});
+        head = await send.object(loc, 'HEAD', {});
       }
       if (!head.ok) throw await refused(send, loc, head);
       const size = sizeOf(head, url);
       // Every range is asked for with If-Match on this ETag, so an object
       // rewritten mid-read answers 412 and the bytes stay from one version.
-      const etag = head.headers.get("etag");
+      const etag = head.headers.get('etag');
 
       /** One range, asked for as the version opened. */
-      const range = async (offset: number, length: number): Promise<Uint8Array> => {
+      const range = async (
+        offset: number,
+        length: number,
+      ): Promise<Uint8Array> => {
         const end = Math.min(offset + length, size);
         if (end <= offset) return new Uint8Array();
         const res = await send.object(
           loc,
-          "GET",
+          'GET',
           {
             range: `bytes=${offset}-${end - 1}`,
-            ...(etag === null ? {} : { "if-match": etag }),
+            ...(etag === null ? {} : { 'if-match': etag }),
           },
           pinned,
         );
         if (res.status === 412) {
-          throw new Error(`${url} changed in the bucket since it was opened · open it again`);
+          throw new Error(
+            `${url} changed in the bucket since it was opened · open it again`,
+          );
         }
         if (!res.ok) throw await refused(send, loc, res);
         const bytes = new Uint8Array(await res.arrayBuffer());
         // A server that ignored the range sent the whole object.
-        return res.status === 200 && bytes.length === size ? bytes.subarray(offset, end) : bytes;
+        return res.status === 200 && bytes.length === size
+          ? bytes.subarray(offset, end)
+          : bytes;
       };
 
       return {
@@ -458,9 +496,9 @@ export function s3Files(opts: S3Options): FileHandler {
  * versioning suspended answers "null" for the VersionId, which is skipped.
  */
 export function versionOf(headers: Headers): string | undefined {
-  const id = headers.get("x-amz-version-id");
-  if (id !== null && id !== "" && id !== "null") return id;
-  return headers.get("etag") ?? undefined;
+  const id = headers.get('x-amz-version-id');
+  if (id !== null && id !== '' && id !== 'null') return id;
+  return headers.get('etag') ?? undefined;
 }
 
 /**
@@ -468,8 +506,9 @@ export function versionOf(headers: Headers): string | undefined {
  * VersionId. An ETag, quoted or weak `W/`, gives undefined.
  */
 function versionIdIn(version: string | undefined): string | undefined {
-  if (version === undefined || version === "" || version.startsWith('"')) return undefined;
-  return version.startsWith("W/") ? undefined : version;
+  if (version === undefined || version === '' || version.startsWith('"'))
+    return undefined;
+  return version.startsWith('W/') ? undefined : version;
 }
 
 /**
@@ -485,11 +524,11 @@ async function whereItWent(
   res: Response,
   probe: () => Promise<Response>,
 ): Promise<string | undefined> {
-  const header = res.headers.get("x-amz-bucket-region");
+  const header = res.headers.get('x-amz-bucket-region');
   if (header !== null) return isRegion(header) ? header : undefined;
 
   let body = await refusalBody(res);
-  if (body === "") {
+  if (body === '') {
     // An empty body, which is every HEAD. Send the probe to get one. A probe
     // that succeeds means the bucket is already here.
     const again = await probe().catch(() => undefined);
@@ -506,7 +545,7 @@ async function whereItWent(
 /** Up to REFUSAL_BYTES of an error reply, as text. */
 async function refusalBody(res: Response): Promise<string> {
   const reader = res.body?.getReader();
-  if (reader === undefined) return "";
+  if (reader === undefined) return '';
   const parts: Uint8Array[] = [];
   let read = 0;
   try {
@@ -530,14 +569,15 @@ async function refusalBody(res: Response): Promise<string> {
  * present is the answer, even when it fails isRegion.
  */
 function regionIn(xml: string): string | undefined {
-  const element = text(xml, "Region");
+  const element = text(xml, 'Region');
   if (element !== undefined) return isRegion(element) ? element : undefined;
 
   // "the region 'us-east-1' is wrong; expecting 'eu-west-1'"
   const expecting = /expecting '([^']*)'/i.exec(xml)?.[1];
-  if (expecting !== undefined) return isRegion(expecting) ? expecting : undefined;
+  if (expecting !== undefined)
+    return isRegion(expecting) ? expecting : undefined;
 
-  const endpoint = text(xml, "Endpoint");
+  const endpoint = text(xml, 'Endpoint');
   return endpoint === undefined ? undefined : regionInHost(endpoint);
 }
 
@@ -547,7 +587,9 @@ function regionIn(xml: string): string | undefined {
  * The bare s3.amazonaws.com gives undefined.
  */
 function regionInHost(host: string): string | undefined {
-  const region = /(?:^|\.)s3[.-]([a-z0-9-]+)\.amazonaws\.com$/i.exec(host.trim())?.[1];
+  const region = /(?:^|\.)s3[.-]([a-z0-9-]+)\.amazonaws\.com$/i.exec(
+    host.trim(),
+  )?.[1];
   return region !== undefined && isRegion(region) ? region : undefined;
 }
 
@@ -568,7 +610,7 @@ function isRegion(word: string): boolean {
 export function refusal(status: number, who = FOUND): string {
   return answered(status, {
     403: `access denied · ${who} cannot read it`,
-    404: "no such object in that bucket",
+    404: 'no such object in that bucket',
   });
 }
 
@@ -599,15 +641,22 @@ export function objectAt(path: string | undefined, name: string): S3Location {
 
 /** The size a HEAD says, or the refusal for one that left it out. */
 export function sizeOf(head: Response, url: string): number {
-  const size = Number(head.headers.get("content-length") ?? "NaN");
-  if (!Number.isFinite(size)) throw new Error(`${url}: S3 did not say how big it is`);
+  const size = Number(head.headers.get('content-length') ?? 'NaN');
+  if (!Number.isFinite(size))
+    throw new Error(`${url}: S3 did not say how big it is`);
   return size;
 }
 
 /** The Error for a refused reply, naming the object and whose credentials
  * were turned away. */
-export async function refused(send: S3Requests, loc: S3Location, res: Response): Promise<Error> {
-  return new Error(`${s3Url(loc)}: ${refusal(res.status, await send.who(loc))}`);
+export async function refused(
+  send: S3Requests,
+  loc: S3Location,
+  res: Response,
+): Promise<Error> {
+  return new Error(
+    `${s3Url(loc)}: ${refusal(res.status, await send.who(loc))}`,
+  );
 }
 
 /**
@@ -632,7 +681,7 @@ export function unaddressable(loc: S3Location): Error | undefined {
  * sends only the resolved path, so the key is refused.
  */
 function dotSegment(key: string): string | undefined {
-  return key.split("/").find((segment) => /^(?:\.|%2e){1,2}$/i.test(segment));
+  return key.split('/').find((segment) => /^(?:\.|%2e){1,2}$/i.test(segment));
 }
 
 /**
@@ -640,11 +689,16 @@ function dotSegment(key: string): string | undefined {
  * A dotted bucket name is path-style too, since the wildcard certificate on
  * the virtual-hosted name covers one label only.
  */
-function bucketUrl(bucket: string, region: string, endpoint: string | undefined): string {
-  if (endpoint !== undefined && endpoint !== "") {
-    return `${endpoint.replace(/\/+$/, "")}/${encodePath(bucket)}`;
+function bucketUrl(
+  bucket: string,
+  region: string,
+  endpoint: string | undefined,
+): string {
+  if (endpoint !== undefined && endpoint !== '') {
+    return `${endpoint.replace(/\/+$/, '')}/${encodePath(bucket)}`;
   }
-  if (bucket.includes(".")) return `https://s3.${region}.amazonaws.com/${bucket}`;
+  if (bucket.includes('.'))
+    return `https://s3.${region}.amazonaws.com/${bucket}`;
   return `https://${bucket}.s3.${region}.amazonaws.com`;
 }
 
@@ -657,7 +711,9 @@ function objectUrl(
   version?: string,
 ): URL {
   const at = `${bucketUrl(loc.bucket, region, endpoint)}/${encodePath(loc.key)}`;
-  return new URL(version === undefined ? at : `${at}?versionId=${encode(version)}`);
+  return new URL(
+    version === undefined ? at : `${at}?versionId=${encode(version)}`,
+  );
 }
 
 /**
@@ -671,19 +727,24 @@ function listUrl(
   region: string,
   endpoint: string | undefined,
 ): URL {
-  return new URL(`${bucketUrl(bucket, region, endpoint)}/?${encodeQuery(Object.entries(query))}`);
+  return new URL(
+    `${bucketUrl(bucket, region, endpoint)}/?${encodeQuery(Object.entries(query))}`,
+  );
 }
 
 /** encodeQuery writes pairs as the query of a URL, each encoded as SigV4
  * signs it. */
-export function encodeQuery(pairs: Iterable<readonly [string, string]>): string {
-  return Array.from(pairs, ([k, v]) => `${encode(k)}=${encode(v)}`).join("&");
+export function encodeQuery(
+  pairs: Iterable<readonly [string, string]>,
+): string {
+  return Array.from(pairs, ([k, v]) => `${encode(k)}=${encode(v)}`).join('&');
 }
 
 // ------------------------------------------------------------------ SigV4
 
 /** The SHA-256 of an empty body, which every request here has. */
-export const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+export const EMPTY_SHA256 =
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
 export interface Unsigned {
   method: string;
@@ -701,48 +762,53 @@ export interface Unsigned {
  */
 export function signV4(
   req: Unsigned,
-  creds: Omit<AwsCredentials, "region">,
+  creds: Omit<AwsCredentials, 'region'>,
   region: string,
   service: string,
   now: Date,
 ): Record<string, string> {
   const amzDate = now
     .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d{3}/, "");
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}/, '');
   const day = amzDate.slice(0, 8);
 
   const headers: Record<string, string> = {};
-  for (const [k, v] of Object.entries(req.headers)) headers[k.toLowerCase()] = v;
-  headers["host"] = req.url.host;
-  headers["x-amz-date"] = amzDate;
-  if (creds.sessionToken !== undefined && creds.sessionToken !== "") {
-    headers["x-amz-security-token"] = creds.sessionToken;
+  for (const [k, v] of Object.entries(req.headers))
+    headers[k.toLowerCase()] = v;
+  headers['host'] = req.url.host;
+  headers['x-amz-date'] = amzDate;
+  if (creds.sessionToken !== undefined && creds.sessionToken !== '') {
+    headers['x-amz-security-token'] = creds.sessionToken;
   }
 
   const names = Object.keys(headers).sort();
-  const signed = names.join(";");
+  const signed = names.join(';');
   const canonical = [
     req.method,
-    req.url.pathname === "" ? "/" : req.url.pathname,
+    req.url.pathname === '' ? '/' : req.url.pathname,
     canonicalQuery(req.url),
-    names.map((n) => `${n}:${headers[n]!.trim().replace(/\s+/g, " ")}\n`).join(""),
+    names
+      .map((n) => `${n}:${headers[n]!.trim().replace(/\s+/g, ' ')}\n`)
+      .join(''),
     signed,
-    headers["x-amz-content-sha256"] ?? EMPTY_SHA256,
-  ].join("\n");
+    headers['x-amz-content-sha256'] ?? EMPTY_SHA256,
+  ].join('\n');
 
   const scope = `${day}/${region}/${service}/aws4_request`;
-  const toSign = ["AWS4-HMAC-SHA256", amzDate, scope, hex(canonical)].join("\n");
+  const toSign = ['AWS4-HMAC-SHA256', amzDate, scope, hex(canonical)].join(
+    '\n',
+  );
 
   let key = mac(utf8ToBytes(`AWS4${creds.secretAccessKey}`), day);
-  for (const part of [region, service, "aws4_request"]) key = mac(key, part);
+  for (const part of [region, service, 'aws4_request']) key = mac(key, part);
   const signature = bytesToHex(mac(key, toSign));
 
-  headers["authorization"] =
+  headers['authorization'] =
     `AWS4-HMAC-SHA256 Credential=${creds.accessKeyId}/${scope}, ` +
     `SignedHeaders=${signed}, Signature=${signature}`;
   // fetch sets Host itself.
-  delete headers["host"];
+  delete headers['host'];
   return headers;
 }
 
@@ -763,15 +829,17 @@ function hex(text: string): string {
 function canonicalQuery(url: URL): string {
   return [...url.searchParams]
     .map(([k, v]) => [encode(k), encode(v)] as const)
-    .sort(([k1, v1], [k2, v2]) => compareStrings(k1, k2) || compareStrings(v1, v2))
+    .sort(
+      ([k1, v1], [k2, v2]) => compareStrings(k1, k2) || compareStrings(v1, v2),
+    )
     .map(([k, v]) => `${k}=${v}`)
-    .join("&");
+    .join('&');
 }
 
 /** encodePath encodes each segment of a key as SigV4 wants it, keeping the
  * slashes. */
 function encodePath(key: string): string {
-  return key.split("/").map(encode).join("/");
+  return key.split('/').map(encode).join('/');
 }
 
 /** RFC 3986 unreserved characters stay. Everything else is %XX, which is

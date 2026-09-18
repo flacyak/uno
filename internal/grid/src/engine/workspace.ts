@@ -18,11 +18,28 @@ import {
   samePath,
   sourceId,
   writeDocument,
-} from "../document/index.ts";
-import type { Document, Held, HeldParts, Logged, State } from "../document/index.ts";
-import type { Edit } from "../sheet/index.ts";
-import { bytesSource, headerModeOf, multiOf, openWith, partMap } from "../store/index.ts";
-import type { ByteSource, FileHandler, PartsRef, SingleRef } from "../store/index.ts";
+} from '../document/index.ts';
+import type {
+  Document,
+  Held,
+  HeldParts,
+  Logged,
+  State,
+} from '../document/index.ts';
+import type { Edit } from '../sheet/index.ts';
+import {
+  bytesSource,
+  headerModeOf,
+  multiOf,
+  openWith,
+  partMap,
+} from '../store/index.ts';
+import type {
+  ByteSource,
+  FileHandler,
+  PartsRef,
+  SingleRef,
+} from '../store/index.ts';
 import type {
   Opening,
   Changed,
@@ -37,15 +54,15 @@ import type {
   Request,
   RowsPage,
   SourceRef,
-} from "./protocol.ts";
-import { Refusal, saidOf } from "../said/index.ts";
-import type { Said } from "../said/index.ts";
-import type { Meeting, Unconnected } from "../store/s3.ts";
-import type { Tuning } from "./rows.ts";
-import { unmeasured } from "./telemetry.ts";
-import type { Telemetry } from "./telemetry.ts";
-import { View } from "./view.ts";
-import type { Carried, Part } from "./view.ts";
+} from './protocol.ts';
+import { Refusal, saidOf } from '../said/index.ts';
+import type { Said } from '../said/index.ts';
+import type { Meeting, Unconnected } from '../store/s3.ts';
+import type { Tuning } from './rows.ts';
+import { unmeasured } from './telemetry.ts';
+import type { Telemetry } from './telemetry.ts';
+import { View } from './view.ts';
+import type { Carried, Part } from './view.ts';
 
 /**
  * The largest .uno file read whole. It bounds the container file itself.
@@ -79,23 +96,35 @@ class Absent {
       size,
       columns: [],
       // Marked complete so the grid settles with zero rows.
-      progress: { done: 0, total: size, readable: 0, rows: 0, complete: true, elapsedMs: 0 },
+      progress: {
+        done: 0,
+        total: size,
+        readable: 0,
+        rows: 0,
+        complete: true,
+        elapsedMs: 0,
+      },
       edits: kept.edits,
       generation: 0,
-      link: connect === undefined ? { path, missing: why } : { path, missing: why, connect },
+      link:
+        connect === undefined
+          ? { path, missing: why }
+          : { path, missing: why, connect },
     };
   }
 
   /** The file's path, or "" for a carried source or one over several files. */
   get path(): string {
-    return this.kept.path ?? "";
+    return this.kept.path ?? '';
   }
 
   /** The parts ref for a source over several files, built from what the .uno
    * saved. */
   get parts(): PartsRef | undefined {
     const kept = this.kept;
-    return kept.parts === undefined ? undefined : joinedFrom({ ...kept, name: this.name });
+    return kept.parts === undefined
+      ? undefined
+      : joinedFrom({ ...kept, name: this.name });
   }
 
   /** The size of the carried bytes, or 0 for a pointed-at source. */
@@ -199,7 +228,7 @@ export class Workspace {
     return this.serially(async () => {
       const source = this.need(id);
       if (this.sources.size === 1) {
-        throw new Refusal({ t: "only-source", name: source.name });
+        throw new Refusal({ t: 'only-source', name: source.name });
       }
       this.sources.delete(id);
       this.states.delete(id);
@@ -225,10 +254,10 @@ export class Workspace {
     return this.serially(async () => {
       const was = this.need(id);
       const to = pointedTo(was, ref);
-      const carried: Carried = { container: "", edits: was.log };
+      const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, carried, "parts" in to);
+        view = await this.view(id, to, carried, 'parts' in to);
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -252,7 +281,10 @@ export class Workspace {
     const places = pathsIn(to);
     return (
       places.length > 0 &&
-      sameList(places, pathsIn(was.parts ?? { name: was.name, path: was.path })) &&
+      sameList(
+        places,
+        pathsIn(was.parts ?? { name: was.name, path: was.path }),
+      ) &&
       places.every((path) => this.unconnected(path) === undefined)
     );
   }
@@ -267,29 +299,37 @@ export class Workspace {
     return this.serially(async () => {
       const was = this.need(id);
       if (!(was instanceof View)) {
-        throw new Refusal({ t: "append-to-absent", name: was.name });
+        throw new Refusal({ t: 'append-to-absent', name: was.name });
       }
       const ref = was.extended(files);
       if (ref === undefined) {
-        throw new Refusal({ t: "append-to-one-file", name: was.name });
+        throw new Refusal({ t: 'append-to-one-file', name: was.name });
       }
-      if (files.length === 0) throw new Refusal({ t: "append-nothing", name: was.name });
+      if (files.length === 0)
+        throw new Refusal({ t: 'append-nothing', name: was.name });
       const had = ref.parts.length - files.length;
       files.forEach((file, i) => {
-        if (!("path" in file)) return;
-        const at = ref.parts.findIndex((part) => "path" in part.ref && part.ref.path === file.path);
+        if (!('path' in file)) return;
+        const at = ref.parts.findIndex(
+          (part) => 'path' in part.ref && part.ref.path === file.path,
+        );
         if (at < had) {
           throw new Refusal({
-            t: "append-already-part",
+            t: 'append-already-part',
             file: file.name,
             part: at + 1,
             name: was.name,
           });
         }
-        if (at < had + i) throw new Refusal({ t: "append-twice", file: file.name, name: was.name });
+        if (at < had + i)
+          throw new Refusal({
+            t: 'append-twice',
+            file: file.name,
+            name: was.name,
+          });
       });
 
-      const view = await this.view(id, ref, { container: "", edits: was.log });
+      const view = await this.view(id, ref, { container: '', edits: was.log });
 
       // Swapped only after the new view is open, so a failed append leaves
       // the old source in place.
@@ -300,17 +340,17 @@ export class Workspace {
   /** openWorkspace opens every source of a .uno, each from its file or its carried bytes. */
   private async openWorkspace(ref: SourceRef): Promise<Opening> {
     if (this.sources.size > 0) {
-      throw new Refusal({ t: "workspace-as-source", name: ref.name });
+      throw new Refusal({ t: 'workspace-as-source', name: ref.name });
     }
 
     // The .uno is read whole into memory, up to WHOLE_LIMIT.
-    const at = "path" in ref ? ref.path : "";
+    const at = 'path' in ref ? ref.path : '';
     const file = await this.openSource(ref);
     let bytes: Uint8Array;
     try {
       if (file.size > WHOLE_LIMIT) {
         throw new Refusal({
-          t: "workspace-too-large",
+          t: 'workspace-too-large',
           name: ref.name,
           bytes: file.size,
           limit: WHOLE_LIMIT,
@@ -325,7 +365,11 @@ export class Workspace {
     // Every source opens at once, and each is kept in the document's order.
     const opened = await Promise.all(
       doc.sources.map(
-        async (src) => [src, await this.reopen(ref.name, src, logOf(doc.log, src.id))] as const,
+        async (src) =>
+          [
+            src,
+            await this.reopen(ref.name, src, logOf(doc.log, src.id)),
+          ] as const,
       ),
     );
     for (const [src, source] of opened) {
@@ -336,7 +380,10 @@ export class Workspace {
     this.trail = doc.log.map((l) => l.source);
     this.created = doc.manifest.created;
     this.extra = doc.extra;
-    return { opened: [...this.sources.values()].map((v) => v.opened), showing: doc.active };
+    return {
+      opened: [...this.sources.values()].map((v) => v.opened),
+      showing: doc.active,
+    };
   }
 
   /**
@@ -347,7 +394,11 @@ export class Workspace {
    * Parts open lazily. Each is opened by the first read that
    * reaches it and held to the extent the save recorded.
    */
-  private async reopen(container: string, src: Held, edits: Edit[]): Promise<Source> {
+  private async reopen(
+    container: string,
+    src: Held,
+    edits: Edit[],
+  ): Promise<Source> {
     // What a save writes back of it, exactly as the .uno held it.
     const kept: Part = { ...src, edits };
     // A source in an uncovered bucket skips the read. It becomes an Absent
@@ -358,7 +409,7 @@ export class Workspace {
         src.id,
         src.name,
         kept,
-        { t: "bucket-unconnected", container, bucket: needs.bucket },
+        { t: 'bucket-unconnected', container, bucket: needs.bucket },
         needs,
       );
     }
@@ -369,12 +420,16 @@ export class Workspace {
         view = await this.view(src.id, joinedFrom(src), carried);
       } else if (src.raw === undefined) {
         // By path, pinned to the saved version where there is one.
-        view = await this.view(src.id, fileAt(src.name, src.path ?? "", src.version), carried);
+        view = await this.view(
+          src.id,
+          fileAt(src.name, src.path ?? '', src.version),
+          carried,
+        );
       } else {
         view = await View.open({
           id: src.id,
           name: src.name,
-          path: "",
+          path: '',
           source: bytesSource(src.raw),
           carried,
           port: this.port,
@@ -393,7 +448,9 @@ export class Workspace {
   /** unconnected returns the uncovered bucket an address is in, if any. */
   private unconnected(path: string): Unconnected | undefined {
     const met = this.meet?.(path);
-    return met !== undefined && "unconnected" in met ? met.unconnected : undefined;
+    return met !== undefined && 'unconnected' in met
+      ? met.unconnected
+      : undefined;
   }
 
   /**
@@ -414,11 +471,11 @@ export class Workspace {
    * share, or undefined if they use more than one.
    */
   private through(ref: SourceRef): string | undefined {
-    const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
+    const files = 'parts' in ref ? ref.parts.map((part) => part.ref) : [ref];
     const ids = new Set<string>();
     for (const file of files) {
-      const met = "path" in file ? this.meet?.(file.path) : undefined;
-      if (met !== undefined && "through" in met) ids.add(met.through);
+      const met = 'path' in file ? this.meet?.(file.path) : undefined;
+      if (met !== undefined && 'through' in met) ids.add(met.through);
     }
     const [id] = ids;
     return ids.size === 1 ? id : undefined;
@@ -435,7 +492,7 @@ export class Workspace {
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
-    const path = "path" in ref ? ref.path : "";
+    const path = 'path' in ref ? ref.path : '';
     const source = await this.openSource(ref);
     // versions() opens every part still unread. A part that fails to open
     // closes the source and is the error.
@@ -458,13 +515,13 @@ export class Workspace {
       began,
       telemetry: this.telemetry,
       header: headerModeOf(ref),
-      parts: "parts" in ref ? ref : undefined,
+      parts: 'parts' in ref ? ref : undefined,
     });
     view.connection = this.through(ref);
-    if ("parts" in ref) {
+    if ('parts' in ref) {
       view.opened.parts = ref.parts.map((part) => ({
         name: part.ref.name,
-        path: "path" in part.ref ? part.ref.path : "",
+        path: 'path' in part.ref ? part.ref.path : '',
       }));
     }
     return view;
@@ -511,16 +568,16 @@ export class Workspace {
   }
 
   edit(id: string, req: EditRequest): Promise<Changed> {
-    return this.changing(id, (view) => view.edit(req), "push");
+    return this.changing(id, (view) => view.edit(req), 'push');
   }
 
   /** undo takes back the source's last edit and removes its last mention from the trail. */
   undo(id: string): Promise<Changed> {
-    return this.changing(id, (view) => view.undo(), "pull");
+    return this.changing(id, (view) => view.undo(), 'pull');
   }
 
   redo(id: string): Promise<Changed> {
-    return this.changing(id, (view) => view.redo(), "push");
+    return this.changing(id, (view) => view.redo(), 'push');
   }
 
   /**
@@ -530,11 +587,11 @@ export class Workspace {
   private changing(
     id: string,
     change: (view: View) => Promise<Changed>,
-    trail: "push" | "pull",
+    trail: 'push' | 'pull',
   ): Promise<Changed> {
     return this.serially(async () => {
       const changed = await change(this.needView(id));
-      if (trail === "push") this.trail.push(id);
+      if (trail === 'push') this.trail.push(id);
       else this.trail.splice(this.trail.lastIndexOf(id), 1);
       return changed;
     });
@@ -550,14 +607,20 @@ export class Workspace {
   save(place: Place, limit: number): Promise<Uint8Array> {
     return this.serially(async () => {
       const sources = [...this.sources.values()];
-      if (sources.length === 0) throw new Refusal({ t: "no-file-open" });
+      if (sources.length === 0) throw new Refusal({ t: 'no-file-open' });
       this.refuseOver(sources, limit);
 
       const parts = new Map(
-        await Promise.all(sources.map(async (source) => [source.id, await source.part()] as const)),
+        await Promise.all(
+          sources.map(
+            async (source) => [source.id, await source.part()] as const,
+          ),
+        ),
       );
 
-      const cells = new Map(place.cells.map((c) => [c.source, { row: c.row, col: c.col }]));
+      const cells = new Map(
+        place.cells.map((c) => [c.source, { row: c.row, col: c.col }]),
+      );
       const held = sources.map((source): Held => {
         const part = parts.get(source.id)!;
         const kept = this.states.get(source.id);
@@ -594,10 +657,15 @@ export class Workspace {
     if (total <= limit) return;
     if (carried.length === 1) {
       const s = carried[0]!;
-      throw new Refusal({ t: "carried-too-large", name: s.name, bytes: s.carries, limit });
+      throw new Refusal({
+        t: 'carried-too-large',
+        name: s.name,
+        bytes: s.carries,
+        limit,
+      });
     }
     throw new Refusal({
-      t: "carried-together-too-large",
+      t: 'carried-together-too-large',
       count: carried.length,
       bytes: total,
       limit,
@@ -613,13 +681,13 @@ export class Workspace {
       for (const path of pathsOf(src)) {
         if (!isAbsolute(path)) {
           throw new Refusal({
-            t: "text",
+            t: 'text',
             text: `${src.name} was opened by ${path}, which is relative to nowhere a workspace can point from · open it by its full path`,
           });
         }
-        if (at !== "" && samePath(path, at)) {
+        if (at !== '' && samePath(path, at)) {
           throw new Refusal({
-            t: "text",
+            t: 'text',
             text: `${at} is where ${src.name} is read from · saving the workspace there would write over it`,
           });
         }
@@ -643,7 +711,7 @@ export class Workspace {
 
   /** live throws if the workspace is closed. */
   private live(): void {
-    if (this.closed) throw new Refusal({ t: "workspace-closed" });
+    if (this.closed) throw new Refusal({ t: 'workspace-closed' });
   }
 
   private need(id: string): Source {
@@ -651,7 +719,9 @@ export class Workspace {
     const source = this.sources.get(id);
     if (source === undefined) {
       const none = this.sources.size === 0;
-      throw new Refusal(none ? { t: "no-file-open" } : { t: "no-such-source", id });
+      throw new Refusal(
+        none ? { t: 'no-file-open' } : { t: 'no-such-source', id },
+      );
     }
     return source;
   }
@@ -660,7 +730,7 @@ export class Workspace {
   private needView(id: string): View {
     const source = this.need(id);
     if (!(source instanceof View)) {
-      throw new Refusal({ t: "source-absent", name: source.name });
+      throw new Refusal({ t: 'source-absent', name: source.name });
     }
     return source;
   }
@@ -686,19 +756,27 @@ function pathsOf(src: Held): string[] {
  * joined size of its parts.
  */
 function sizeOf(kept: Part): number {
-  return kept.parts !== undefined ? partMap(kept.parts).size : (kept.bytes ?? 0);
+  return kept.parts !== undefined
+    ? partMap(kept.parts).size
+    : (kept.bytes ?? 0);
 }
 
 /**
  * joinedFrom builds the parts ref a saved multi-file source is reopened by:
  * each part by path and saved version, with the extent the save measured.
  */
-function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header" | "fileColumn">): PartsRef {
+function joinedFrom(
+  src: Pick<HeldParts, 'name' | 'parts' | 'header' | 'fileColumn'>,
+): PartsRef {
   return {
     name: src.name,
     parts: src.parts.map((part) => ({
       ref: fileAt(part.name, part.path, part.version),
-      extent: { bytes: part.bytes, skip: part.skip, unterminated: part.unterminated },
+      extent: {
+        bytes: part.bytes,
+        skip: part.skip,
+        unterminated: part.unterminated,
+      },
     })),
     header: src.header,
     fileColumn: src.fileColumn,
@@ -717,21 +795,26 @@ function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header" | "fileColu
 function pointedTo(was: Source, ref: SourceRef): SourceRef {
   const made = was.parts;
   if (made === undefined) {
-    if (!("parts" in ref)) return ref;
+    if (!('parts' in ref)) return ref;
     throw new Refusal({
-      t: "point-one-at-several",
+      t: 'point-one-at-several',
       file: ref.name,
       count: ref.parts.length,
       name: was.name,
     });
   }
   const count = made.parts.length;
-  if (!("parts" in ref)) {
-    throw new Refusal({ t: "point-several-at-one", name: was.name, count, file: ref.name });
+  if (!('parts' in ref)) {
+    throw new Refusal({
+      t: 'point-several-at-one',
+      name: was.name,
+      count,
+      file: ref.name,
+    });
   }
   if (ref.parts.length !== count) {
     throw new Refusal({
-      t: "point-several-at-other",
+      t: 'point-several-at-other',
       name: was.name,
       count,
       given: ref.parts.length,
@@ -742,7 +825,8 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
     name: ref.name,
     parts: ref.parts.map((part, i) => {
       const { ref: file, extent } = made.parts[i]!;
-      const stayed = "path" in part.ref && "path" in file && part.ref.path === file.path;
+      const stayed =
+        'path' in part.ref && 'path' in file && part.ref.path === file.path;
       const now = stayed ? file : part.ref;
       return extent === undefined ? { ref: now } : { ref: now, extent };
     }),
@@ -751,8 +835,8 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
 
 /** pathsIn returns every address a ref reads from, in order. A dropped file has none. */
 function pathsIn(ref: SourceRef): string[] {
-  const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
-  return files.filter((file) => "path" in file).map((file) => file.path);
+  const files = 'parts' in ref ? ref.parts.map((part) => part.ref) : [ref];
+  return files.filter((file) => 'path' in file).map((file) => file.path);
 }
 
 /** sameList reports whether two address lists are equal element by element. */
@@ -761,7 +845,11 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /** fileAt builds a SingleRef from a name, path, and optional version. */
-function fileAt(name: string, path: string, version: string | undefined): SingleRef {
+function fileAt(
+  name: string,
+  path: string,
+  version: string | undefined,
+): SingleRef {
   return version === undefined ? { name, path } : { name, path, version };
 }
 
@@ -786,32 +874,38 @@ function linkOf(view: View, src: Held): Link | undefined {
  */
 function changeOf(view: View, src: Held): Said | undefined {
   const was = src.bytes ?? 0;
-  const sizes = was === 0 || was === view.size ? undefined : { now: view.size, was };
+  const sizes =
+    was === 0 || was === view.size ? undefined : { now: view.size, was };
   if (src.version !== undefined && view.version !== undefined) {
     if (src.version === view.version) return undefined;
     return sizes === undefined
-      ? { t: "version-changed", name: src.name }
-      : { t: "version-changed", name: src.name, sizes };
+      ? { t: 'version-changed', name: src.name }
+      : { t: 'version-changed', name: src.name, sizes };
   }
-  return sizes === undefined ? undefined : { t: "size-changed", name: src.name, ...sizes };
+  return sizes === undefined
+    ? undefined
+    : { t: 'size-changed', name: src.name, ...sizes };
 }
 
 /**
  * interleave lays each source's edits out in trail order. It throws if the
  * trail and the per-source logs disagree on edit counts.
  */
-function interleave(trail: readonly string[], parts: ReadonlyMap<string, Part>): Logged[] {
+function interleave(
+  trail: readonly string[],
+  parts: ReadonlyMap<string, Part>,
+): Logged[] {
   const next = new Map<string, number>();
   const log: Logged[] = trail.map((source) => {
     const i = next.get(source) ?? 0;
     const edit = parts.get(source)?.edits[i];
-    if (edit === undefined) throw new Refusal({ t: "log-lost-edit", source });
+    if (edit === undefined) throw new Refusal({ t: 'log-lost-edit', source });
     next.set(source, i + 1);
     return { source, edit };
   });
   for (const [source, part] of parts) {
     if ((next.get(source) ?? 0) !== part.edits.length) {
-      throw new Refusal({ t: "log-lost-edit", source });
+      throw new Refusal({ t: 'log-lost-edit', source });
     }
   }
   return log;

@@ -22,12 +22,12 @@ import type {
   RowsPage,
   SignIns,
   SourceRef,
-} from "./protocol.ts";
-import { Refusal, saidOf } from "../said/index.ts";
-import type { Said } from "../said/index.ts";
-import type { Connection } from "../library/index.ts";
-import type { Entry, Listing, SingleRef } from "../store/index.ts";
-import type { Tried } from "../store/s3.ts";
+} from './protocol.ts';
+import { Refusal, saidOf } from '../said/index.ts';
+import type { Said } from '../said/index.ts';
+import type { Connection } from '../library/index.ts';
+import type { Entry, Listing, SingleRef } from '../store/index.ts';
+import type { Tried } from '../store/s3.ts';
 
 interface Waiter<T> {
   resolve(value: T): void;
@@ -67,13 +67,20 @@ export class Engine {
    * and only into an empty workspace.
    */
   async open(ref: SourceRef): Promise<Added> {
-    const { added } = await this.ask("opened", (id) => ({ t: "open", id, ref }));
-    return { sources: added.opened.map((o) => this.adopt(o)), showing: added.showing };
+    const { added } = await this.ask('opened', (id) => ({
+      t: 'open',
+      id,
+      ref,
+    }));
+    return {
+      sources: added.opened.map((o) => this.adopt(o)),
+      showing: added.showing,
+    };
   }
 
   /** remove takes a source out of the workspace, and its edits out of the log. */
   async remove(source: SourceHandle): Promise<void> {
-    await this.ask("removed", (id) => ({ t: "remove", id, source: source.id }));
+    await this.ask('removed', (id) => ({ t: 'remove', id, source: source.id }));
     this.sources.delete(source.id);
   }
 
@@ -85,7 +92,12 @@ export class Engine {
    * back absent; its link says why.
    */
   async relink(source: SourceHandle, ref: SourceRef): Promise<SourceHandle> {
-    const r = await this.ask("relinked", (id) => ({ t: "relink", id, source: source.id, ref }));
+    const r = await this.ask('relinked', (id) => ({
+      t: 'relink',
+      id,
+      source: source.id,
+      ref,
+    }));
     return this.adopt(r.opened);
   }
 
@@ -93,8 +105,16 @@ export class Engine {
    * append adds files at the end of a source that reads several files as one
    * and returns a new handle for it. The log is unchanged.
    */
-  async append(source: SourceHandle, parts: SingleRef[]): Promise<SourceHandle> {
-    const r = await this.ask("appended", (id) => ({ t: "append", id, source: source.id, parts }));
+  async append(
+    source: SourceHandle,
+    parts: SingleRef[],
+  ): Promise<SourceHandle> {
+    const r = await this.ask('appended', (id) => ({
+      t: 'append',
+      id,
+      source: source.id,
+      parts,
+    }));
     return this.adopt(r.opened);
   }
 
@@ -106,23 +126,25 @@ export class Engine {
   }
 
   mode(transform: boolean): void {
-    if (this.gone === undefined) this.port.post({ t: "mode", transform });
+    if (this.gone === undefined) this.port.post({ t: 'mode', transform });
   }
 
   /** save returns the workspace as a .uno. Refused if carried sources total
    * more than limit bytes. */
   async save(place: Place, limit: number): Promise<Uint8Array> {
-    return (await this.ask("saved", (id) => ({ t: "save", id, place, limit }))).bytes;
+    return (await this.ask('saved', (id) => ({ t: 'save', id, place, limit })))
+      .bytes;
   }
 
   /** list returns one page of a folder or prefix listing. */
   async list(path: string, cursor?: string): Promise<Listing> {
-    return (await this.ask("listed", (id) => ({ t: "list", id, path, cursor }))).listing;
+    return (await this.ask('listed', (id) => ({ t: 'list', id, path, cursor })))
+      .listing;
   }
 
   /** stat returns the size and version of a path, from its metadata alone. */
   async stat(path: string): Promise<Entry> {
-    return (await this.ask("statted", (id) => ({ t: "stat", id, path }))).entry;
+    return (await this.ask('statted', (id) => ({ t: 'stat', id, path }))).entry;
   }
 
   /**
@@ -130,17 +152,18 @@ export class Engine {
    * from the workspace.
    */
   async peek(ref: SourceRef): Promise<Peeked> {
-    return (await this.ask("peeked", (id) => ({ t: "peek", id, ref }))).peeked;
+    return (await this.ask('peeked', (id) => ({ t: 'peek', id, ref }))).peeked;
   }
 
   /** connections has the engine reload its connections and returns them. */
   async connections(): Promise<Loaded> {
-    return (await this.ask("loaded", (id) => ({ t: "connections", id }))).loaded;
+    return (await this.ask('loaded', (id) => ({ t: 'connections', id })))
+      .loaded;
   }
 
   /** signIns returns the engine's sign-in modes, profile names, and role trust. */
   async signIns(): Promise<SignIns> {
-    return (await this.ask("offered", (id) => ({ t: "signins", id }))).signins;
+    return (await this.ask('offered', (id) => ({ t: 'signins', id }))).signins;
   }
 
   /**
@@ -149,14 +172,15 @@ export class Engine {
    * afterwards.
    */
   async tryConnection(connection: Connection): Promise<Tried> {
-    return (await this.ask("tried", (id) => ({ t: "try", id, connection }))).tried;
+    return (await this.ask('tried', (id) => ({ t: 'try', id, connection })))
+      .tried;
   }
 
   /** close sends a close request, closes the port, and rejects every pending request. */
   close(): void {
     if (this.gone !== undefined) return;
-    this.gone = new Error("the engine was closed");
-    this.port.post({ t: "close" });
+    this.gone = new Error('the engine was closed');
+    this.port.post({ t: 'close' });
     this.port.close();
     this.refuse(this.gone);
   }
@@ -167,7 +191,10 @@ export class Engine {
    */
   private lost(): void {
     if (this.gone !== undefined) return;
-    const said: Said = { t: "text", text: "the connection to the engine closed" };
+    const said: Said = {
+      t: 'text',
+      text: 'the connection to the engine closed',
+    };
     this.gone = new Refusal(said);
     this.port.close();
     this.refuse(this.gone);
@@ -183,7 +210,7 @@ export class Engine {
    * ask sends a request and resolves with its reply. A reply of a kind other
    * than `want` is an error. Public for SourceHandle.
    */
-  async ask<K extends Reply["t"]>(
+  async ask<K extends Reply['t']>(
     want: K,
     make: (id: number) => Request,
   ): Promise<Extract<Reply, { t: K }>> {
@@ -195,14 +222,16 @@ export class Engine {
       this.port.post(request);
     });
     if (!isKind(reply, want)) {
-      throw new Error(`the engine answered a ${request.t} request with ${reply.t}`);
+      throw new Error(
+        `the engine answered a ${request.t} request with ${reply.t}`,
+      );
     }
     return reply;
   }
 
   private receive(msg: Reply): void {
     switch (msg.t) {
-      case "progress": {
+      case 'progress': {
         const s = this.sources.get(msg.source);
         if (s === undefined) return;
         s.progress = msg.progress;
@@ -210,7 +239,7 @@ export class Engine {
         return;
       }
 
-      case "offer": {
+      case 'offer': {
         const s = this.sources.get(msg.source);
         // Drop an offer built from an older generation of the log.
         if (s === undefined || msg.generation < s.generation) return;
@@ -219,14 +248,15 @@ export class Engine {
         return;
       }
 
-      case "changed": {
+      case 'changed': {
         const s = this.sources.get(msg.source);
-        if (s !== undefined) s.generation = Math.max(s.generation, msg.changed.generation);
+        if (s !== undefined)
+          s.generation = Math.max(s.generation, msg.changed.generation);
         this.settle(msg.id, msg);
         return;
       }
 
-      case "error": {
+      case 'error': {
         if (msg.id !== undefined) {
           // Rejected as a Refusal, so the Said stays data on this side too.
           this.waiting.get(msg.id)?.reject(new Refusal(msg.said));
@@ -276,31 +306,64 @@ export class SourceHandle {
   }
 
   rows(first: number, count: number): Promise<RowsReply> {
-    return this.engine.ask("rows", (id) => ({ t: "rows", id, source: this.id, first, count }));
+    return this.engine.ask('rows', (id) => ({
+      t: 'rows',
+      id,
+      source: this.id,
+      first,
+      count,
+    }));
   }
 
   async edit(edit: EditRequest): Promise<Changed> {
-    return (await this.engine.ask("changed", (id) => ({ t: "edit", id, source: this.id, edit })))
-      .changed;
+    return (
+      await this.engine.ask('changed', (id) => ({
+        t: 'edit',
+        id,
+        source: this.id,
+        edit,
+      }))
+    ).changed;
   }
 
   async undo(): Promise<Changed> {
-    return (await this.engine.ask("changed", (id) => ({ t: "undo", id, source: this.id }))).changed;
+    return (
+      await this.engine.ask('changed', (id) => ({
+        t: 'undo',
+        id,
+        source: this.id,
+      }))
+    ).changed;
   }
 
   async redo(): Promise<Changed> {
-    return (await this.engine.ask("changed", (id) => ({ t: "redo", id, source: this.id }))).changed;
+    return (
+      await this.engine.ask('changed', (id) => ({
+        t: 'redo',
+        id,
+        source: this.id,
+      }))
+    ).changed;
   }
 
   /** find asks the engine for the next matching row in a column. */
   async find(find: FindRequest): Promise<Found> {
-    return (await this.engine.ask("found", (id) => ({ t: "find", id, source: this.id, find })))
-      .found;
+    return (
+      await this.engine.ask('found', (id) => ({
+        t: 'find',
+        id,
+        source: this.id,
+        find,
+      }))
+    ).found;
   }
 }
 
 /** isKind narrows a reply to one kind. */
-function isKind<K extends Reply["t"]>(reply: Reply, kind: K): reply is Extract<Reply, { t: K }> {
+function isKind<K extends Reply['t']>(
+  reply: Reply,
+  kind: K,
+): reply is Extract<Reply, { t: K }> {
   return reply.t === kind;
 }
 
@@ -369,12 +432,12 @@ export class Band {
   }
 
   display(row: number, col: number): string {
-    return this.data[row - this.start]?.[col] ?? "";
+    return this.data[row - this.start]?.[col] ?? '';
   }
 
   raw(row: number, col: number): string {
     const i = row - this.start;
-    return this.raws[i]?.[col] ?? this.data[i]?.[col] ?? "";
+    return this.raws[i]?.[col] ?? this.data[i]?.[col] ?? '';
   }
 
   binding(col: number): string | undefined {
@@ -387,7 +450,13 @@ export class Band {
    * refused it.
    */
   write(row: number, col: number, value: string): Pending {
-    const p = { row, col, value, was: this.raw(row, col), shown: this.display(row, col) };
+    const p = {
+      row,
+      col,
+      value,
+      was: this.raw(row, col),
+      shown: this.display(row, col),
+    };
     this.pending.push(p);
     this.put(row, col, value, value);
     return p;

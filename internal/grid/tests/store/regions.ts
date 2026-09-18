@@ -30,7 +30,7 @@ export interface Misdirect {
  * documentation and memory. A capture was copied off the wire from the named
  * server on the named day.
  */
-export type Provenance = "reconstructed" | { captured: string; on: string };
+export type Provenance = 'reconstructed' | { captured: string; on: string };
 
 export interface RegionFormat {
   name: string;
@@ -50,18 +50,19 @@ export interface RegionFormat {
   from?: Provenance;
 }
 
-const XML = { "content-type": "application/xml" };
+const XML = { 'content-type': 'application/xml' };
 
 /** The RequestId and HostId a real reply carries. */
-const IDS = "<RequestId>8H4KZ1N0CJ0V4S9P</RequestId><HostId>0Lp1kQ5rW8xT2</HostId>";
+const IDS =
+  '<RequestId>8H4KZ1N0CJ0V4S9P</RequestId><HostId>0Lp1kQ5rW8xT2</HostId>';
 
 export const REGION_FORMATS: readonly RegionFormat[] = [
   // ------------------------------------------------------------- to follow
 
   // The common case: us-east-1 credentials against a bucket elsewhere.
   {
-    name: "AuthorizationHeaderMalformed, with a Region element",
-    from: "reconstructed",
+    name: 'AuthorizationHeaderMalformed, with a Region element',
+    from: 'reconstructed',
     follow: true,
     reply: {
       status: 400,
@@ -75,8 +76,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // The region in the Message only.
   {
-    name: "AuthorizationHeaderMalformed, region only in the Message",
-    from: "reconstructed",
+    name: 'AuthorizationHeaderMalformed, region only in the Message',
+    from: 'reconstructed',
     follow: true,
     reply: {
       status: 400,
@@ -90,8 +91,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // The region appears only inside the Endpoint hostname.
   {
-    name: "PermanentRedirect, region inside the Endpoint host",
-    from: "reconstructed",
+    name: 'PermanentRedirect, region inside the Endpoint host',
+    from: 'reconstructed',
     follow: true,
     reply: {
       status: 301,
@@ -107,8 +108,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // The older dashed endpoint form.
   {
-    name: "PermanentRedirect, the dashed endpoint",
-    from: "reconstructed",
+    name: 'PermanentRedirect, the dashed endpoint',
+    from: 'reconstructed',
     follow: true,
     reply: {
       status: 301,
@@ -122,28 +123,28 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // The header alone.
   {
-    name: "the header, with no body at all",
-    from: "reconstructed",
+    name: 'the header, with no body at all',
+    from: 'reconstructed',
     follow: true,
-    reply: { status: 301, headers: { "x-amz-bucket-region": "$REGION" } },
+    reply: { status: 301, headers: { 'x-amz-bucket-region': '$REGION' } },
   },
 
   // Header and body disagree. The header wins.
   {
-    name: "the header, against a body naming somewhere else",
-    from: "reconstructed",
+    name: 'the header, against a body naming somewhere else',
+    from: 'reconstructed',
     follow: true,
     reply: {
       status: 400,
-      headers: { ...XML, "x-amz-bucket-region": "$REGION" },
+      headers: { ...XML, 'x-amz-bucket-region': '$REGION' },
       body: `<Error><Code>AuthorizationHeaderMalformed</Code><Region>ap-southeast-2</Region></Error>`,
     },
   },
 
   // Pretty-printed, namespaced, elements in another order: the same reply.
   {
-    name: "a body with a namespace, newlines and its elements reordered",
-    from: "reconstructed",
+    name: 'a body with a namespace, newlines and its elements reordered',
+    from: 'reconstructed',
     follow: true,
     reply: {
       status: 400,
@@ -159,10 +160,10 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
   // R2 uses the region `auto`. A region made of letters alone is still a
   // region.
   {
-    name: "a region that is a word rather than a place",
-    from: "reconstructed",
+    name: 'a region that is a word rather than a place',
+    from: 'reconstructed',
     follow: true,
-    home: "auto",
+    home: 'auto',
     reply: {
       status: 400,
       headers: XML,
@@ -174,8 +175,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // The region the request already used. Following it would loop.
   {
-    name: "a body naming the region the request already used",
-    from: "reconstructed",
+    name: 'a body naming the region the request already used',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
@@ -189,8 +190,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // A 400 that is silent about the region.
   {
-    name: "IllegalLocationConstraintException, which names no region",
-    from: "reconstructed",
+    name: 'IllegalLocationConstraintException, which names no region',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
@@ -204,8 +205,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // A signature error is refused, even though it quotes a region.
   {
-    name: "SignatureDoesNotMatch, which quotes a region in passing",
-    from: "reconstructed",
+    name: 'SignatureDoesNotMatch, which quotes a region in passing',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 403,
@@ -220,8 +221,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
   // A region becomes a hostname. These three bodies name a host where a
   // region belongs, and must be refused.
   {
-    name: "a Region element holding a host",
-    from: "reconstructed",
+    name: 'a Region element holding a host',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
@@ -230,8 +231,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
   {
-    name: "a Region element that closes the host and opens a path",
-    from: "reconstructed",
+    name: 'a Region element that closes the host and opens a path',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
@@ -240,8 +241,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
   {
-    name: "a Message quoting something that is not a region",
-    from: "reconstructed",
+    name: 'a Message quoting something that is not a region',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
@@ -255,20 +256,20 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // An HTML reply from a proxy or portal, refused whole.
   {
-    name: "an HTML page from something in the way",
-    from: "reconstructed",
+    name: 'an HTML page from something in the way',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
-      headers: { "content-type": "text/html" },
+      headers: { 'content-type': 'text/html' },
       body:
         `<!DOCTYPE html><html><head><title>400 Bad Request</title></head><body>` +
         `<h1>400 Bad Request</h1><p>Region: $REGION</p></body></html>`,
     },
   },
   {
-    name: "a body that stops in the middle of the Region",
-    from: "reconstructed",
+    name: 'a body that stops in the middle of the Region',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
@@ -277,39 +278,42 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
   {
-    name: "a reply with no body, and no header either",
-    from: "reconstructed",
+    name: 'a reply with no body, and no header either',
+    from: 'reconstructed',
     follow: false,
     reply: { status: 400, headers: XML },
   },
   // A body larger than uno reads of a refusal, with the region past that
   // limit.
   {
-    name: "a megabyte before it gets to the point",
-    from: "reconstructed",
+    name: 'a megabyte before it gets to the point',
+    from: 'reconstructed',
     follow: false,
     reply: {
       status: 400,
       headers: XML,
       body:
-        `<Error><Code>AuthorizationHeaderMalformed</Code><Message>${"x".repeat(1 << 20)}` +
+        `<Error><Code>AuthorizationHeaderMalformed</Code><Message>${'x'.repeat(1 << 20)}` +
         `</Message><Region>$REGION</Region></Error>`,
     },
   },
 ];
 
 /** The region the stand-in's bucket is in by default. */
-export const HOME_REGION = "eu-west-1";
+export const HOME_REGION = 'eu-west-1';
 
 /** One reply with `$REGION` filled in. */
-export function rendered(reply: Misdirect, region: string): Required<Misdirect> {
+export function rendered(
+  reply: Misdirect,
+  region: string,
+): Required<Misdirect> {
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(reply.headers ?? {})) {
-    headers[k] = v.replaceAll("$REGION", region);
+    headers[k] = v.replaceAll('$REGION', region);
   }
   return {
     status: reply.status,
     headers,
-    body: (reply.body ?? "").replaceAll("$REGION", region),
+    body: (reply.body ?? '').replaceAll('$REGION', region),
   };
 }

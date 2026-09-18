@@ -1,71 +1,80 @@
 // The disk lister, against a real temp folder with the testdata fixtures
 // copied into it.
 
-import { execFileSync } from "node:child_process";
-import { copyFile, lstat, mkdir, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { expect, test } from "vite-plus/test";
+import { execFileSync } from 'node:child_process';
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'vite-plus/test';
 
-import type { Entry } from "../../src/store/index.ts";
-import { readAll } from "../../src/store/index.ts";
-import { diskLister } from "../../src/store/disklister.ts";
-import { localFiles } from "../../src/store/node.ts";
+import type { Entry } from '../../src/store/index.ts';
+import { readAll } from '../../src/store/index.ts';
+import { diskLister } from '../../src/store/disklister.ts';
+import { localFiles } from '../../src/store/node.ts';
 
-const TESTDATA = fileURLToPath(new URL("../testdata/", import.meta.url));
+const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));
 
 /** The fixtures copied into the folder under test, and the folders beside them. */
-const FILES = ["sales-q3.csv", "google-ads-sales.csv", "unit-margin.unof"];
-const FOLDERS = ["reports", "archive"];
+const FILES = ['sales-q3.csv', 'google-ads-sales.csv', 'unit-margin.unof'];
+const FOLDERS = ['reports', 'archive'];
 
 /**
  * folder builds the directory every check below browses: three fixtures, two
  * empty folders, a link to one of each, and a dangling link.
  */
 async function folder(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "uno-disk-"));
+  const dir = await mkdtemp(join(tmpdir(), 'uno-disk-'));
   for (const name of FOLDERS) await mkdir(join(dir, name));
-  for (const name of FILES) await copyFile(join(TESTDATA, name), join(dir, name));
-  await symlink(join(dir, "sales-q3.csv"), join(dir, "latest.csv"));
-  await symlink(join(dir, "reports"), join(dir, "linked-folder"));
-  await symlink(join(dir, "never-written.csv"), join(dir, "gone.csv"));
+  for (const name of FILES)
+    await copyFile(join(TESTDATA, name), join(dir, name));
+  await symlink(join(dir, 'sales-q3.csv'), join(dir, 'latest.csv'));
+  await symlink(join(dir, 'reports'), join(dir, 'linked-folder'));
+  await symlink(join(dir, 'never-written.csv'), join(dir, 'gone.csv'));
   return dir;
 }
 
 /** The expected order: folders first, then by name. */
 const ORDER = [
-  "archive",
-  "linked-folder",
-  "reports",
-  "gone.csv",
-  "google-ads-sales.csv",
-  "latest.csv",
-  "sales-q3.csv",
-  "unit-margin.unof",
+  'archive',
+  'linked-folder',
+  'reports',
+  'gone.csv',
+  'google-ads-sales.csv',
+  'latest.csv',
+  'sales-q3.csv',
+  'unit-margin.unof',
 ];
 
 function named(entries: Entry[]): string[] {
   return entries.map((e) => e.name);
 }
 
-test("a folder comes back folders first and then by name", async () => {
+test('a folder comes back folders first and then by name', async () => {
   const dir = await folder();
 
   const listing = await diskLister().list(dir);
 
   expect(named(listing.entries)).toEqual(ORDER);
   expect(listing.entries.filter((e) => e.folder).map((e) => e.name)).toEqual([
-    "archive",
-    "linked-folder",
-    "reports",
+    'archive',
+    'linked-folder',
+    'reports',
   ]);
-  expect(listing.next, "one page holds a folder this small").toBeUndefined();
+  expect(listing.next, 'one page holds a folder this small').toBeUndefined();
 });
 
 // The page size is set small to get several pages.
-test("a folder is paged by a cursor, two at a time", async () => {
+test('a folder is paged by a cursor, two at a time', async () => {
   const dir = await folder();
   const disk = diskLister(2);
 
@@ -78,52 +87,59 @@ test("a folder is paged by a cursor, two at a time", async () => {
   } while (cursor !== undefined);
 
   expect(pages).toEqual([
-    ["archive", "linked-folder"],
-    ["reports", "gone.csv"],
-    ["google-ads-sales.csv", "latest.csv"],
-    ["sales-q3.csv", "unit-margin.unof"],
+    ['archive', 'linked-folder'],
+    ['reports', 'gone.csv'],
+    ['google-ads-sales.csv', 'latest.csv'],
+    ['sales-q3.csv', 'unit-margin.unof'],
   ]);
-  expect(pages.flat(), "the pages are the folder, in the same order").toEqual(ORDER);
+  expect(pages.flat(), 'the pages are the folder, in the same order').toEqual(
+    ORDER,
+  );
 });
 
 // The cursor names the first entry of the next page.
-test("the cursor names where the next page starts", async () => {
+test('the cursor names where the next page starts', async () => {
   const dir = await folder();
   const disk = diskLister(2);
 
   const first = await disk.list(dir);
-  expect(first.next).toBe("d:reports");
+  expect(first.next).toBe('d:reports');
 
   const second = await disk.list(dir, first.next);
-  expect(second.entries[0]!.name).toBe("reports");
+  expect(second.entries[0]!.name).toBe('reports');
 });
 
 // A cursor past every entry gives an empty page.
-test("a cursor past the end is an empty last page", async () => {
+test('a cursor past the end is an empty last page', async () => {
   const dir = await folder();
 
-  const listing = await diskLister(2).list(dir, "f:zzzz");
+  const listing = await diskLister(2).list(dir, 'f:zzzz');
 
   expect(listing.entries).toEqual([]);
   expect(listing.next).toBeUndefined();
 });
 
-test("a listing carries the size a file weighs, and folders carry none", async () => {
+test('a listing carries the size a file weighs, and folders carry none', async () => {
   const dir = await folder();
 
   const { entries } = await diskLister().list(dir);
   const by = new Map(entries.map((e) => [e.name, e]));
 
-  expect(by.get("sales-q3.csv")!.bytes).toBe((await stat(join(TESTDATA, "sales-q3.csv"))).size);
-  expect(by.get("google-ads-sales.csv")!.bytes).toBe(
-    (await stat(join(TESTDATA, "google-ads-sales.csv"))).size,
+  expect(by.get('sales-q3.csv')!.bytes).toBe(
+    (await stat(join(TESTDATA, 'sales-q3.csv'))).size,
   );
-  expect(by.get("reports")!.bytes, "a directory's size is about the filesystem").toBeUndefined();
-  expect(by.get("sales-q3.csv")!.modified).toBeInstanceOf(Date);
+  expect(by.get('google-ads-sales.csv')!.bytes).toBe(
+    (await stat(join(TESTDATA, 'google-ads-sales.csv'))).size,
+  );
+  expect(
+    by.get('reports')!.bytes,
+    "a directory's size is about the filesystem",
+  ).toBeUndefined();
+  expect(by.get('sales-q3.csv')!.modified).toBeInstanceOf(Date);
 });
 
 // Every disk entry's version is undefined.
-test("nothing on a disk carries a version", async () => {
+test('nothing on a disk carries a version', async () => {
   const dir = await folder();
 
   const { entries } = await diskLister().list(dir);
@@ -131,29 +147,32 @@ test("nothing on a disk carries a version", async () => {
   expect(entries.filter((e) => e.version !== undefined)).toEqual([]);
 });
 
-test("a symlink is listed as what it points to", async () => {
+test('a symlink is listed as what it points to', async () => {
   const dir = await folder();
 
   const { entries } = await diskLister().list(dir);
   const by = new Map(entries.map((e) => [e.name, e]));
 
-  const link = by.get("latest.csv")!;
+  const link = by.get('latest.csv')!;
   expect(link.folder).toBe(false);
-  expect(link.bytes, "the size of the file it points at").toBe(
-    (await stat(join(TESTDATA, "sales-q3.csv"))).size,
+  expect(link.bytes, 'the size of the file it points at').toBe(
+    (await stat(join(TESTDATA, 'sales-q3.csv'))).size,
   );
 
-  const toFolder = by.get("linked-folder")!;
-  expect(toFolder.folder, "a link to a folder is a folder, and sorts with them").toBe(true);
+  const toFolder = by.get('linked-folder')!;
+  expect(
+    toFolder.folder,
+    'a link to a folder is a folder, and sorts with them',
+  ).toBe(true);
   expect(toFolder.bytes).toBeUndefined();
 });
 
 // A dangling link is listed, with size and time undefined.
-test("a link that points nowhere is listed with no size", async () => {
+test('a link that points nowhere is listed with no size', async () => {
   const dir = await folder();
 
   const { entries } = await diskLister().list(dir);
-  const gone = entries.find((e) => e.name === "gone.csv")!;
+  const gone = entries.find((e) => e.name === 'gone.csv')!;
 
   expect(gone.folder).toBe(false);
   expect(gone.bytes).toBeUndefined();
@@ -161,12 +180,17 @@ test("a link that points nowhere is listed with no size", async () => {
 });
 
 // A socket is left out of the listing.
-test("a socket is not listed", async () => {
+test('a socket is not listed', async () => {
   const dir = await folder();
   const server = createServer();
-  await new Promise<void>((resolve) => server.listen(join(dir, "engine.sock"), resolve));
+  await new Promise<void>((resolve) =>
+    server.listen(join(dir, 'engine.sock'), resolve),
+  );
   try {
-    expect((await lstat(join(dir, "engine.sock"))).isSocket(), "the socket is there").toBe(true);
+    expect(
+      (await lstat(join(dir, 'engine.sock'))).isSocket(),
+      'the socket is there',
+    ).toBe(true);
     const { entries } = await diskLister().list(dir);
     expect(named(entries)).toEqual(ORDER);
   } finally {
@@ -179,10 +203,13 @@ test("an entry's path is one the handler opens", async () => {
   const dir = await folder();
 
   const { entries } = await diskLister().list(dir);
-  const found = entries.find((e) => e.name === "unit-margin.unof")!;
+  const found = entries.find((e) => e.name === 'unit-margin.unof')!;
 
-  const read = await readAll([localFiles()], { name: found.name, path: found.path });
-  expect(read).toEqual(await readFixture("unit-margin.unof"));
+  const read = await readAll([localFiles()], {
+    name: found.name,
+    path: found.path,
+  });
+  expect(read).toEqual(await readFixture('unit-margin.unof'));
 });
 
 async function readFixture(name: string): Promise<Uint8Array> {
@@ -190,62 +217,66 @@ async function readFixture(name: string): Promise<Uint8Array> {
 }
 
 // A missing folder is an error.
-test("a folder that is not there is a failure and not an empty one", async () => {
+test('a folder that is not there is a failure and not an empty one', async () => {
   const dir = await folder();
 
-  await expect(diskLister().list(join(dir, "never-created"))).rejects.toThrow("ENOENT");
+  await expect(diskLister().list(join(dir, 'never-created'))).rejects.toThrow(
+    'ENOENT',
+  );
 });
 
-test("browsing a file rather than a folder fails naming it", async () => {
+test('browsing a file rather than a folder fails naming it', async () => {
   const dir = await folder();
 
-  await expect(diskLister().list(join(dir, "sales-q3.csv"))).rejects.toThrow("sales-q3.csv");
+  await expect(diskLister().list(join(dir, 'sales-q3.csv'))).rejects.toThrow(
+    'sales-q3.csv',
+  );
 });
 
-test("stat is the size and the time now, without reading the file", async () => {
+test('stat is the size and the time now, without reading the file', async () => {
   const dir = await folder();
   const disk = diskLister();
 
-  const file = await disk.stat(join(dir, "sales-q3.csv"));
-  expect(file.name).toBe("sales-q3.csv");
+  const file = await disk.stat(join(dir, 'sales-q3.csv'));
+  expect(file.name).toBe('sales-q3.csv');
   expect(file.folder).toBe(false);
-  expect(file.bytes).toBe((await stat(join(TESTDATA, "sales-q3.csv"))).size);
+  expect(file.bytes).toBe((await stat(join(TESTDATA, 'sales-q3.csv'))).size);
   expect(file.modified).toBeInstanceOf(Date);
   expect(file.version).toBeUndefined();
 
-  const dirEntry = await disk.stat(join(dir, "reports"));
+  const dirEntry = await disk.stat(join(dir, 'reports'));
   expect(dirEntry.folder).toBe(true);
   expect(dirEntry.bytes).toBeUndefined();
 });
 
-test("stat follows a link, the way the listing shows it", async () => {
+test('stat follows a link, the way the listing shows it', async () => {
   const dir = await folder();
 
-  const link = await diskLister().stat(join(dir, "latest.csv"));
+  const link = await diskLister().stat(join(dir, 'latest.csv'));
 
-  expect(link.name, "the link's own name, not the target's").toBe("latest.csv");
-  expect(link.bytes).toBe((await stat(join(TESTDATA, "sales-q3.csv"))).size);
+  expect(link.name, "the link's own name, not the target's").toBe('latest.csv');
+  expect(link.bytes).toBe((await stat(join(TESTDATA, 'sales-q3.csv'))).size);
 });
 
-test("a stat of something that is not there names it", async () => {
+test('a stat of something that is not there names it', async () => {
   const dir = await folder();
 
-  await expect(diskLister().stat(join(dir, "never-written.csv"))).rejects.toThrow(
-    "never-written.csv",
-  );
+  await expect(
+    diskLister().stat(join(dir, 'never-written.csv')),
+  ).rejects.toThrow('never-written.csv');
 });
 
-test("the disk lister claims paths and leaves schemes alone", () => {
+test('the disk lister claims paths and leaves schemes alone', () => {
   const disk = diskLister();
 
-  expect(disk.handles("/home/jo/exports")).toBe(true);
-  expect(disk.handles("C:\\Users\\jo")).toBe(true);
-  expect(disk.handles("s3://acme-exports/shop/")).toBe(false);
-  expect(disk.handles("https://example.com/a/")).toBe(false);
+  expect(disk.handles('/home/jo/exports')).toBe(true);
+  expect(disk.handles('C:\\Users\\jo')).toBe(true);
+  expect(disk.handles('s3://acme-exports/shop/')).toBe(false);
+  expect(disk.handles('https://example.com/a/')).toBe(false);
 });
 
-test("an empty folder is an empty listing", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "uno-disk-empty-"));
+test('an empty folder is an empty listing', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'uno-disk-empty-'));
 
   const listing = await diskLister().list(dir);
 
@@ -254,58 +285,61 @@ test("an empty folder is an empty listing", async () => {
 });
 
 // Dotfiles are listed.
-test("a dotfile is listed", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "uno-disk-dot-"));
-  await writeFile(join(dir, ".hidden.csv"), "a,b\n1,2\n");
+test('a dotfile is listed', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'uno-disk-dot-'));
+  await writeFile(join(dir, '.hidden.csv'), 'a,b\n1,2\n');
 
   const { entries } = await diskLister().list(dir);
 
-  expect(named(entries)).toEqual([".hidden.csv"]);
+  expect(named(entries)).toEqual(['.hidden.csv']);
 });
 
 // On Linux a file name can be bytes outside UTF-8. Node returns such a name
 // with the bad bytes replaced, a path that misses the file, so the lister
 // leaves it out. macOS and Windows refuse to create such a name.
-test.skipIf(process.platform !== "linux")(
-  "a name that is not UTF-8 is left out rather than listed as a path nothing opens",
+test.skipIf(process.platform !== 'linux')(
+  'a name that is not UTF-8 is left out rather than listed as a path nothing opens',
   async () => {
-    const dir = await mkdtemp(join(tmpdir(), "uno-disk-bytes-"));
+    const dir = await mkdtemp(join(tmpdir(), 'uno-disk-bytes-'));
     const latin1 = Buffer.concat([
       Buffer.from(`${dir}/caf`),
       Buffer.from([0xe9]),
-      Buffer.from(".csv"),
+      Buffer.from('.csv'),
     ]);
-    await writeFile(latin1, "a,b\n1,2\n");
-    await writeFile(join(dir, "cafe.csv"), "a,b\n1,2\n");
+    await writeFile(latin1, 'a,b\n1,2\n');
+    await writeFile(join(dir, 'cafe.csv'), 'a,b\n1,2\n');
 
     const { entries } = await diskLister().list(dir);
 
-    expect(named(entries)).toEqual(["cafe.csv"]);
+    expect(named(entries)).toEqual(['cafe.csv']);
   },
 );
 
 // Opening a folder as a file is refused at the open, naming the path.
-test("a folder opened as a file is refused by name", async () => {
+test('a folder opened as a file is refused by name', async () => {
   const dir = await folder();
 
   await expect(
-    readAll([localFiles()], { name: "reports", path: join(dir, "reports") }),
-  ).rejects.toThrow("reports");
+    readAll([localFiles()], { name: 'reports', path: join(dir, 'reports') }),
+  ).rejects.toThrow('reports');
   await expect(
-    readAll([localFiles()], { name: "linked-folder", path: join(dir, "linked-folder") }),
-  ).rejects.toThrow("linked-folder");
+    readAll([localFiles()], {
+      name: 'linked-folder',
+      path: join(dir, 'linked-folder'),
+    }),
+  ).rejects.toThrow('linked-folder');
 });
 
 // Opening a fifo as a file is refused at the open, right away.
-test.skipIf(process.platform === "win32")(
-  "a fifo opened as a file is refused rather than waited on",
+test.skipIf(process.platform === 'win32')(
+  'a fifo opened as a file is refused rather than waited on',
   async () => {
     const dir = await folder();
-    execFileSync("mkfifo", [join(dir, "feed")]);
+    execFileSync('mkfifo', [join(dir, 'feed')]);
 
     await expect(
-      readAll([localFiles()], { name: "feed", path: join(dir, "feed") }),
-    ).rejects.toThrow("feed");
+      readAll([localFiles()], { name: 'feed', path: join(dir, 'feed') }),
+    ).rejects.toThrow('feed');
   },
   2_000,
 );

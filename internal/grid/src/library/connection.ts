@@ -10,17 +10,26 @@
 //
 // It works on text alone.
 
-import { rfc3339 } from "../go/index.ts";
-import { validID } from "./index.ts";
-import { about, extraOf, readUnof, stamp, textOf, timeOf, writeExtra, wrongKind } from "./unof.ts";
+import { rfc3339 } from '../go/index.ts';
+import { validID } from './index.ts';
+import {
+  about,
+  extraOf,
+  readUnof,
+  stamp,
+  textOf,
+  timeOf,
+  writeExtra,
+  wrongKind,
+} from './unof.ts';
 
 /** The kind a connection's file says it is. */
-export const CONNECTION_KIND = "connection";
+export const CONNECTION_KIND = 'connection';
 
 /** The kinds of place a connection can name: S3 and stores with its API. */
-export type ConnectionProvider = "s3";
+export type ConnectionProvider = 's3';
 
-const PROVIDERS: readonly ConnectionProvider[] = ["s3"];
+const PROVIDERS: readonly ConnectionProvider[] = ['s3'];
 
 /**
  * Auth is how a connection signs in.
@@ -34,18 +43,18 @@ const PROVIDERS: readonly ConnectionProvider[] = ["s3"];
  * - `public`: an open bucket, read unsigned.
  */
 export type Auth = (
-  | { mode: "machine" }
-  | { mode: "profile"; profile: string }
-  | { mode: "role"; roleArn: string }
-  | { mode: "public" }
+  | { mode: 'machine' }
+  | { mode: 'profile'; profile: string }
+  | { mode: 'role'; roleArn: string }
+  | { mode: 'public' }
 ) & {
   /** The keys beyond this build's own, carried to the next save. */
   extra?: Map<string, unknown>;
 };
 
-export type AuthMode = Auth["mode"];
+export type AuthMode = Auth['mode'];
 
-const MODES: readonly AuthMode[] = ["machine", "profile", "role", "public"];
+const MODES: readonly AuthMode[] = ['machine', 'profile', 'role', 'public'];
 
 /**
  * Connection is one .unof of kind "connection". `prefix` is where browsing
@@ -70,31 +79,32 @@ export interface Connection {
 
 /** The keys this build owns, at the top of the file and inside `auth`. */
 const KNOWN_KEYS = new Set([
-  "format",
-  "id",
-  "name",
-  "kind",
-  "provider",
-  "bucket",
-  "prefix",
-  "region",
-  "auth",
-  "created",
-  "modified",
+  'format',
+  'id',
+  'name',
+  'kind',
+  'provider',
+  'bucket',
+  'prefix',
+  'region',
+  'auth',
+  'created',
+  'modified',
 ]);
 const isKnown = (key: string): boolean => KNOWN_KEYS.has(key);
 const AUTH_KEYS: Record<AuthMode, readonly string[]> = {
-  machine: ["mode"],
-  profile: ["mode", "profile"],
-  role: ["mode", "roleArn"],
-  public: ["mode"],
+  machine: ['mode'],
+  profile: ['mode', 'profile'],
+  role: ['mode', 'roleArn'],
+  public: ['mode'],
 };
 
 /**
  * Key names that hold a secret, matched with case and separators removed:
  * `Secret-Access-Key` matches the same as `secretAccessKey`.
  */
-const SECRET_NAME = /secret|password|passwd|token|credential|privatekey|accesskey/;
+const SECRET_NAME =
+  /secret|password|passwd|token|credential|privatekey|accesskey/;
 
 /**
  * The shape of an AWS access key id (AKIA, ASIA, ABIA or ACCA plus 16
@@ -122,10 +132,10 @@ const ROLE_ARN = /^arn:aws(?:-[a-z]+)*:iam::\d{12}:role\/[\w+=,.@/-]+$/;
  * secretIn describes the first thing in `value` that looks like a secret, or
  * returns undefined. It walks nested objects, arrays and Maps.
  */
-export function secretIn(value: unknown, at = ""): string | undefined {
-  if (typeof value === "string") {
+export function secretIn(value: unknown, at = ''): string | undefined {
+  if (typeof value === 'string') {
     return ACCESS_KEY_ID.test(value)
-      ? `${at === "" ? "a value" : at} holds an AWS access key id`
+      ? `${at === '' ? 'a value' : at} holds an AWS access key id`
       : undefined;
   }
   if (Array.isArray(value)) {
@@ -136,10 +146,10 @@ export function secretIn(value: unknown, at = ""): string | undefined {
     return undefined;
   }
   if (value instanceof Map) return secretIn(Object.fromEntries(value), at);
-  if (typeof value !== "object" || value === null) return undefined;
+  if (typeof value !== 'object' || value === null) return undefined;
   for (const [key, v] of Object.entries(value)) {
-    const path = at === "" ? key : `${at}.${key}`;
-    if (SECRET_NAME.test(key.toLowerCase().replace(/[^a-z]/g, ""))) {
+    const path = at === '' ? key : `${at}.${key}`;
+    if (SECRET_NAME.test(key.toLowerCase().replace(/[^a-z]/g, ''))) {
       return `${path} looks like a secret`;
     }
     const found = secretIn(v, path);
@@ -155,12 +165,12 @@ export function secretIn(value: unknown, at = ""): string | undefined {
 export function parseConnection(name: string, text: string): Connection {
   const { o, format } = readUnof(name, text);
 
-  const kind = o["kind"];
+  const kind = o['kind'];
   if (kind !== CONNECTION_KIND) {
-    throw wrongKind(name, kind, "connection", {
-      kinds: ["column", "notation"],
-      is: "a formula",
-      dir: "formulas/",
+    throw wrongKind(name, kind, 'connection', {
+      kinds: ['column', 'notation'],
+      is: 'a formula',
+      dir: 'formulas/',
     });
   }
 
@@ -168,31 +178,36 @@ export function parseConnection(name: string, text: string): Connection {
   // whole.
   const secret = secretIn(o);
   if (secret !== undefined) {
-    throw new Error(`${name}: ${secret} · a connection names how to sign in and never holds a key`);
+    throw new Error(
+      `${name}: ${secret} · a connection names how to sign in and never holds a key`,
+    );
   }
 
-  const provider = o["provider"];
-  if (typeof provider !== "string" || !PROVIDERS.includes(provider as ConnectionProvider)) {
+  const provider = o['provider'];
+  if (
+    typeof provider !== 'string' ||
+    !PROVIDERS.includes(provider as ConnectionProvider)
+  ) {
     throw new Error(
       provider === undefined
         ? `${name} names no provider`
-        : `${name}: this build does not connect to ${JSON.stringify(provider)} · it connects to ${PROVIDERS.join(", ")}`,
+        : `${name}: this build does not connect to ${JSON.stringify(provider)} · it connects to ${PROVIDERS.join(', ')}`,
     );
   }
 
   const c: Connection = {
     format,
-    id: textOf(o, "id"),
-    name: textOf(o, "name"),
+    id: textOf(o, 'id'),
+    name: textOf(o, 'name'),
     provider: provider as ConnectionProvider,
-    bucket: textOf(o, "bucket"),
-    prefix: textOf(o, "prefix"),
-    auth: parseAuth(name, o["auth"]),
-    created: timeOf(o, "created"),
-    modified: timeOf(o, "modified"),
+    bucket: textOf(o, 'bucket'),
+    prefix: textOf(o, 'prefix'),
+    auth: parseAuth(name, o['auth']),
+    created: timeOf(o, 'created'),
+    modified: timeOf(o, 'modified'),
   };
-  const region = textOf(o, "region");
-  if (region !== "") c.region = region;
+  const region = textOf(o, 'region');
+  if (region !== '') c.region = region;
   const extra = extraOf(o, isKnown);
   if (extra !== undefined) c.extra = extra;
 
@@ -202,16 +217,18 @@ export function parseConnection(name: string, text: string): Connection {
 
 /** parseAuth reads the auth block. Refuses a missing block or an unknown mode. */
 function parseAuth(name: string, raw: unknown): Auth {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new Error(`${name} does not say how to sign in: it has no auth block`);
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error(
+      `${name} does not say how to sign in: it has no auth block`,
+    );
   }
   const o = raw as Record<string, unknown>;
-  const mode = o["mode"];
+  const mode = o['mode'];
   if (!isMode(mode)) {
     throw new Error(
       mode === undefined
         ? `${name}: its auth block has no mode`
-        : `${name}: this build does not know auth mode ${JSON.stringify(mode)} · it knows ${MODES.join(", ")}`,
+        : `${name}: this build does not know auth mode ${JSON.stringify(mode)} · it knows ${MODES.join(', ')}`,
     );
   }
   const auth: Auth = AUTH_READERS[mode](o, name);
@@ -221,23 +238,37 @@ function parseAuth(name: string, raw: unknown): Auth {
 }
 
 function isMode(v: unknown): v is AuthMode {
-  return typeof v === "string" && MODES.includes(v as AuthMode);
+  return typeof v === 'string' && MODES.includes(v as AuthMode);
 }
 
 /** What each mode reads out of its auth block, besides the mode. */
 const AUTH_READERS: {
-  [M in AuthMode]: (o: Record<string, unknown>, name: string) => Extract<Auth, { mode: M }>;
+  [M in AuthMode]: (
+    o: Record<string, unknown>,
+    name: string,
+  ) => Extract<Auth, { mode: M }>;
 } = {
-  machine: () => ({ mode: "machine" }),
-  public: () => ({ mode: "public" }),
-  profile: (o, name) => ({ mode: "profile", profile: named(o, name, "profile", "profile") }),
-  role: (o, name) => ({ mode: "role", roleArn: named(o, name, "role", "roleArn") }),
+  machine: () => ({ mode: 'machine' }),
+  public: () => ({ mode: 'public' }),
+  profile: (o, name) => ({
+    mode: 'profile',
+    profile: named(o, name, 'profile', 'profile'),
+  }),
+  role: (o, name) => ({
+    mode: 'role',
+    roleArn: named(o, name, 'role', 'roleArn'),
+  }),
 };
 
 /** named reads the one required string field of a mode, or throws. */
-function named(o: Record<string, unknown>, name: string, mode: AuthMode, key: string): string {
+function named(
+  o: Record<string, unknown>,
+  name: string,
+  mode: AuthMode,
+  key: string,
+): string {
   const v = o[key];
-  if (typeof v !== "string" || v === "") {
+  if (typeof v !== 'string' || v === '') {
     throw new Error(`${name}: auth mode "${mode}" names no ${key}`);
   }
   return v;
@@ -253,15 +284,18 @@ function authKnown(mode: AuthMode): (key: string) => boolean {
  * on parse and on format.
  */
 export function validConnection(c: Connection): void {
-  validID(c.id, "connection");
-  if (!BUCKET.test(c.bucket) || c.bucket.includes("..")) {
+  validID(c.id, 'connection');
+  if (!BUCKET.test(c.bucket) || c.bucket.includes('..')) {
     throw new Error(
-      c.bucket === ""
-        ? "names no bucket"
+      c.bucket === ''
+        ? 'names no bucket'
         : `${JSON.stringify(c.bucket)} is not a bucket name · 3 to 63 lower-case letters, digits, dots and hyphens`,
     );
   }
-  if (c.prefix !== "" && (!c.prefix.endsWith("/") || c.prefix.startsWith("/"))) {
+  if (
+    c.prefix !== '' &&
+    (!c.prefix.endsWith('/') || c.prefix.startsWith('/'))
+  ) {
     throw new Error(
       `prefix ${JSON.stringify(c.prefix)} is not a folder · write it without a leading slash and with a trailing one, like shop/2025/`,
     );
@@ -269,7 +303,7 @@ export function validConnection(c: Connection): void {
   if (c.region !== undefined && !REGION.test(c.region)) {
     throw new Error(`${JSON.stringify(c.region)} is not a region`);
   }
-  if (c.auth.mode === "role" && !ROLE_ARN.test(c.auth.roleArn)) {
+  if (c.auth.mode === 'role' && !ROLE_ARN.test(c.auth.roleArn)) {
     throw new Error(
       `${JSON.stringify(c.auth.roleArn)} is not a role's ARN · one reads arn:aws:iam::123456789012:role/name`,
     );
@@ -295,8 +329,8 @@ export function formatConnection(c: Connection): string {
   validConnection(c);
 
   const auth: Record<string, unknown> = { mode: c.auth.mode };
-  if (c.auth.mode === "profile") auth["profile"] = c.auth.profile;
-  if (c.auth.mode === "role") auth["roleArn"] = c.auth.roleArn;
+  if (c.auth.mode === 'profile') auth['profile'] = c.auth.profile;
+  if (c.auth.mode === 'role') auth['roleArn'] = c.auth.roleArn;
   writeExtra(auth, c.auth.extra, authKnown(c.auth.mode));
 
   const out: Record<string, unknown> = {
@@ -308,10 +342,10 @@ export function formatConnection(c: Connection): string {
     bucket: c.bucket,
     prefix: c.prefix,
   };
-  if (c.region !== undefined) out["region"] = c.region;
-  out["auth"] = auth;
-  if (c.created !== undefined) out["created"] = rfc3339(c.created);
-  if (c.modified !== undefined) out["modified"] = rfc3339(c.modified);
+  if (c.region !== undefined) out['region'] = c.region;
+  out['auth'] = auth;
+  if (c.created !== undefined) out['created'] = rfc3339(c.created);
+  if (c.modified !== undefined) out['modified'] = rfc3339(c.modified);
   writeExtra(out, c.extra, isKnown);
 
   // Checked on the output, so a key carried in `extra` is caught too.
@@ -321,7 +355,7 @@ export function formatConnection(c: Connection): string {
       `${c.id}: ${secret} · uno does not save a connection holding a key, so it can be sent to anyone`,
     );
   }
-  return JSON.stringify(out, undefined, 2) + "\n";
+  return JSON.stringify(out, undefined, 2) + '\n';
 }
 
 /**
@@ -343,7 +377,10 @@ export function covering(
 ): Connection | undefined {
   let best: Connection | undefined;
   for (const c of connections) {
-    if (covers(c, bucket, key) && (best === undefined || c.prefix.length > best.prefix.length)) {
+    if (
+      covers(c, bucket, key) &&
+      (best === undefined || c.prefix.length > best.prefix.length)
+    ) {
       best = c;
     }
   }

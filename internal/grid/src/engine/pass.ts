@@ -3,9 +3,9 @@
 // A pass reads a chunk, does its work, reports progress, and stops when its
 // signal is aborted. PassContext is what every pass is handed.
 
-import type { Format } from "../ingest/index.ts";
-import type { ByteSource } from "../store/index.ts";
-import type { RowIndex, Tuning } from "./rows.ts";
+import type { Format } from '../ingest/index.ts';
+import type { ByteSource } from '../store/index.ts';
+import type { RowIndex, Tuning } from './rows.ts';
 
 export interface PassContext {
   readonly source: ByteSource;
@@ -30,7 +30,10 @@ export async function indexPass(ctx: PassContext): Promise<void> {
 
   for (let at = format.dataStart; at < source.size;) {
     if (signal.aborted) return;
-    const chunk = await source.read(at, Math.min(tuning.chunkBytes, source.size - at));
+    const chunk = await source.read(
+      at,
+      Math.min(tuning.chunkBytes, source.size - at),
+    );
     if (chunk.length === 0) break; // the file shrank after it was opened
     scanner.push(chunk, at);
     at += chunk.length;
