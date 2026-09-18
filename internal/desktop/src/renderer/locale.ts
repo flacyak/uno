@@ -10,8 +10,17 @@ import type { Locale } from "../paraglide/runtime.js";
 /** Cached number formatter, rebuilt when the locale changes. */
 let grouping: { locale: Locale; format: Intl.NumberFormat } | undefined;
 
-/** Cached size formatters, whole and to a tenth, rebuilt when the locale changes. */
+/** Cached fixed-decimal formatters, whole and to a tenth, rebuilt when the locale changes. */
 let sizes: { locale: Locale; whole: Intl.NumberFormat; tenths: Intl.NumberFormat } | undefined;
+
+/** The fixed-decimal formatters for the app's locale. */
+function fixed(): { whole: Intl.NumberFormat; tenths: Intl.NumberFormat } {
+  const locale = getLocale();
+  if (sizes?.locale !== locale) {
+    sizes = { locale, whole: decimals(locale, 0), tenths: decimals(locale, 1) };
+  }
+  return sizes;
+}
 
 /** A formatter that writes exactly `digits` decimals. */
 function decimals(locale: Locale, digits: number): Intl.NumberFormat {
@@ -46,12 +55,15 @@ export function bytes(n: number): string {
     size /= UNIT_STEP;
     unit++;
   }
-  const locale = getLocale();
-  if (sizes?.locale !== locale) {
-    sizes = { locale, whole: decimals(locale, 0), tenths: decimals(locale, 1) };
-  }
-  const written = (size < DECIMAL_BELOW ? sizes.tenths : sizes.whole).format(size);
+  const written = (size < DECIMAL_BELOW ? fixed().tenths : fixed().whole).format(size);
   return UNITS[unit]!({ size: written });
+}
+
+const MS_PER_SECOND = 1000;
+
+/** Formats a time in milliseconds as seconds to one decimal, with its unit: 2.4 s. */
+export function seconds(ms: number): string {
+  return m.elapsed_seconds({ seconds: fixed().tenths.format(ms / MS_PER_SECOND) });
 }
 
 /** Joins names as a short list in the app's locale: a, b, c. */
