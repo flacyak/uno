@@ -23,6 +23,7 @@ import { isRemote, readAll } from './index.ts';
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import { assumeRole, signInAgain, ssoRoleCredentials } from './sts.ts';
 import type { Session } from './sts.ts';
+import { unreachable } from '../never.ts';
 
 /**
  * localFiles opens files on this machine's disks by path, for reading. It
@@ -771,6 +772,8 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
             `${who(c)} signs in with a role, which only uno's hosted engine takes on · ` +
               `on the desktop, connect it with a profile that can assume ${c.auth.roleArn}`,
           );
+        default:
+          return unreachable(c.auth);
       }
     },
   };
@@ -853,6 +856,8 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
             `${who(c)} signs in as a machine of its own, which uno's hosted engine is not · ` +
               'connect it with a role in your account that uno may assume',
           );
+        default:
+          return unreachable(c.auth);
       }
     },
   };

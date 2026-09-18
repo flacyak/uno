@@ -7,6 +7,7 @@
 // makes the compiler require its sentence here and in every client.
 
 import { quote } from '../go/strconv.ts';
+import { unreachable } from '../never.ts';
 import type { HeaderMode } from '../store/multi.ts';
 
 /** Charset is the name of a file's text encoding, as the status bar shows it. */
@@ -167,6 +168,8 @@ export function englishSought(what: Sought): string {
       return `${listed} from the start`;
     case 'end':
       return `${listed} from the end`;
+    default:
+      return unreachable(what.where);
   }
 }
 

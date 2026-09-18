@@ -15,6 +15,7 @@ import {
   toUpper,
   trimSpace,
 } from '../go/index.ts';
+import { unreachable } from '../never.ts';
 import { english, englishSought } from '../said/index.ts';
 import type { CharName, Sought, StepSaid } from '../said/index.ts';
 
@@ -77,6 +78,8 @@ function resolvePos(p: Pos, v: string, r: string[]): number | undefined {
       const at = m[i]!;
       return p.atEnd ? at[1] : at[0];
     }
+    default:
+      return unreachable(p);
   }
 }
 
@@ -88,6 +91,8 @@ export function posText(p: Pos): string {
       return 'len';
     case 'match':
       return `${p.atEnd ? 'end' : 'start'}(${quoteRegex(p.src)}, ${p.k})`;
+    default:
+      return unreachable(p);
   }
 }
 
@@ -184,6 +189,8 @@ export function runStep(s: Step, v: string): string | undefined {
 
     case 'const':
       return s.lit;
+    default:
+      return unreachable(s);
   }
 }
 
@@ -201,6 +208,8 @@ export function stepText(s: Step): string {
       return 'concat(' + s.parts.map(stepText).join(', ') + ')';
     case 'const':
       return quote(s.lit);
+    default:
+      return unreachable(s);
   }
 }
 
@@ -233,6 +242,8 @@ export function describedStep(s: Step): StepSaid {
     case 'concat':
     case 'const':
       return { t: 'notation', text: stepText(s) };
+    default:
+      return unreachable(s);
   }
 }
 
