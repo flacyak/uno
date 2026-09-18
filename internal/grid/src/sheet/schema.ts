@@ -117,9 +117,10 @@ export class Schema {
   }
 
   /**
-   * resolve names a column the way an expression does. First match wins, and an
-   * ambiguous name is a failure rather than a guess: two columns called "total"
-   * are a spreadsheet a person can work with and an expression nobody can read.
+   * resolve names a column the way an expression does. An ambiguous name is a
+   * failure rather than a guess: two columns called "total" are a spreadsheet a
+   * person can work with and an expression nobody can read. Ingest gives every
+   * column of a file its own name, so this is for a header built some other way.
    */
   resolve(name: string): number {
     const i = this.names.get(name);

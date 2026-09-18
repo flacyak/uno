@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { openFormat, read } from "../../src/ingest/index.ts";
+import { headerOf, openFormat, read } from "../../src/ingest/index.ts";
 import { blobSource } from "../../src/store/index.ts";
 
 /** What ingest/format.ts reads of a file before it knows how long the header is. */
@@ -23,6 +23,7 @@ describe("openFormat reads the head the way read reads the file", () => {
     ["f.csv", "a\tb\tc\n1\t2\t3\n"],
     ["f.tsv", "a\tb\n1\t2\n"],
     ["f.csv", 'name,role\n"Okafor, Ada",lead\n'],
+    ["f.csv", "sku,product_cost,price,product_cost\nA,1,5,2\n"],
   ];
 
   for (const [name, text] of cases) {
@@ -84,6 +85,43 @@ describe("openFormat names the file in every error", () => {
   for (const [name, text, want] of cases) {
     test(name, async () => {
       await expect(open(name, text)).rejects.toThrow(want);
+    });
+  }
+});
+
+// A name two columns share is a name no formula can use, so every column gets
+// its own, and the first one keeps what the file called it.
+describe("headerOf names every column once", () => {
+  const cases: Array<[string[], string[]]> = [
+    [
+      ["a", "b"],
+      ["a", "b"],
+    ],
+    [
+      ["cost", "price", "cost"],
+      ["cost", "price", "cost_2"],
+    ],
+    [
+      ["cost", "cost", "cost"],
+      ["cost", "cost_2", "cost_3"],
+    ],
+    [
+      ["cost", "cost_2", "cost"],
+      ["cost", "cost_2", "cost_3"],
+    ],
+    [
+      ["cost", "cost", "cost_2"],
+      ["cost", "cost_3", "cost_2"],
+    ],
+    [
+      ["", ""],
+      ["", "_2"],
+    ],
+  ];
+
+  for (const [header, want] of cases) {
+    test(JSON.stringify(header), () => {
+      expect(headerOf(header)).toEqual(want);
     });
   }
 });

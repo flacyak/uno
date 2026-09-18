@@ -8,11 +8,11 @@
 
 import { Sheet } from "../sheet/index.ts";
 import { readAll } from "./csv.ts";
-import { describe, extensionOf } from "./format.ts";
+import { describe, extensionOf, headerOf } from "./format.ts";
 import { sniffDelimiter } from "./sniff.ts";
 
 export { readAll } from "./csv.ts";
-export { openFormat } from "./format.ts";
+export { headerOf, openFormat } from "./format.ts";
 export type { Format, Scanner } from "./format.ts";
 export { RecordScanner } from "./scan.ts";
 export { sniffDelimiter } from "./sniff.ts";
@@ -42,7 +42,7 @@ function readSeparated(name: string, text: string, comma: string): Sheet {
   const rows = readAll(text, comma);
   if (rows.length === 0) throw new Error(`${name}: file is empty`);
 
-  const s = new Sheet(name, rows[0]!, rows.slice(1));
+  const s = new Sheet(name, headerOf(rows[0]!), rows.slice(1));
   s.source = describe(comma);
   return s;
 }
