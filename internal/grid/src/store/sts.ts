@@ -5,10 +5,10 @@
 // The guard test in tests/store/opens.test.ts checks that. Every file read
 // is in store/node.ts, which reads ~/.aws and passes the token or role in.
 
-import { parseTime } from "../go/index.ts";
-import { encodeQuery, signV4 } from "./s3.ts";
-import type { AwsCredentials } from "./s3.ts";
-import { text } from "./s3xml.ts";
+import { parseTime } from '../go/index.ts';
+import { encodeQuery, signV4 } from './s3.ts';
+import type { AwsCredentials } from './s3.ts';
+import { text } from './s3xml.ts';
 
 /** Temporary keys, and when they expire. */
 export interface Session {
@@ -51,34 +51,43 @@ export async function ssoRoleCredentials(
   opts: ExchangeOptions = {},
 ): Promise<Session> {
   const go = opts.fetch ?? fetch;
-  const base = (opts.endpoint ?? `https://portal.sso.${ask.region}.amazonaws.com`).replace(
-    /\/+$/,
-    "",
-  );
+  const base = (
+    opts.endpoint ?? `https://portal.sso.${ask.region}.amazonaws.com`
+  ).replace(/\/+$/, '');
   const url = new URL(`${base}/federation/credentials`);
-  url.searchParams.set("account_id", ask.accountId);
-  url.searchParams.set("role_name", ask.roleName);
+  url.searchParams.set('account_id', ask.accountId);
+  url.searchParams.set('role_name', ask.roleName);
 
-  const res = await go(url, { headers: { "x-amz-sso_bearer_token": ask.accessToken } });
+  const res = await go(url, {
+    headers: { 'x-amz-sso_bearer_token': ask.accessToken },
+  });
   if (res.status === 401 || res.status === 403) {
-    throw new Error(signInAgain(ask.profile, "the SSO portal turned its sign-in away"));
+    throw new Error(
+      signInAgain(ask.profile, 'the SSO portal turned its sign-in away'),
+    );
   }
   if (!res.ok) {
-    throw new Error(`the AWS profile ${ask.profile}: the SSO portal answered ${res.status}`);
+    throw new Error(
+      `the AWS profile ${ask.profile}: the SSO portal answered ${res.status}`,
+    );
   }
-  const body = (await res.json()) as { roleCredentials?: Record<string, unknown> };
+  const body = (await res.json()) as {
+    roleCredentials?: Record<string, unknown>;
+  };
   const r = body.roleCredentials;
-  const id = r?.["accessKeyId"];
-  const secret = r?.["secretAccessKey"];
-  const token = r?.["sessionToken"];
-  const expiration = r?.["expiration"];
+  const id = r?.['accessKeyId'];
+  const secret = r?.['secretAccessKey'];
+  const token = r?.['sessionToken'];
+  const expiration = r?.['expiration'];
   if (
-    typeof id !== "string" ||
-    typeof secret !== "string" ||
-    typeof token !== "string" ||
-    typeof expiration !== "number"
+    typeof id !== 'string' ||
+    typeof secret !== 'string' ||
+    typeof token !== 'string' ||
+    typeof expiration !== 'number'
   ) {
-    throw new Error(`the AWS profile ${ask.profile}: the SSO portal's answer held no credentials`);
+    throw new Error(
+      `the AWS profile ${ask.profile}: the SSO portal's answer held no credentials`,
+    );
   }
   return {
     accessKeyId: id,
@@ -110,7 +119,7 @@ export interface RoleAsk {
 }
 
 /** The STS API version AssumeRole is asked in. */
-const STS_VERSION = "2011-06-15";
+const STS_VERSION = '2011-06-15';
 
 /**
  * What STS accepts as a RoleSessionName: 2 to 64 of these characters. Checked
@@ -126,55 +135,69 @@ const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
  */
 export async function assumeRole(
   ask: RoleAsk,
-  source: Omit<AwsCredentials, "region">,
+  source: Omit<AwsCredentials, 'region'>,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
   if (!SESSION_NAME.test(ask.sessionName)) {
     throw new Error(
       `${ask.roleArn} cannot be assumed as ${JSON.stringify(ask.sessionName)} · ` +
-        "a role session name is 2 to 64 of letters, digits and +=,.@_-",
+        'a role session name is 2 to 64 of letters, digits and +=,.@_-',
     );
   }
   const go = opts.fetch ?? fetch;
-  const base = (opts.endpoint ?? `https://sts.${ask.region}.amazonaws.com`).replace(/\/+$/, "");
+  const base = (
+    opts.endpoint ?? `https://sts.${ask.region}.amazonaws.com`
+  ).replace(/\/+$/, '');
   const query: Array<[string, string]> = [
-    ["Action", "AssumeRole"],
-    ["Version", STS_VERSION],
-    ["RoleArn", ask.roleArn],
-    ["RoleSessionName", ask.sessionName],
+    ['Action', 'AssumeRole'],
+    ['Version', STS_VERSION],
+    ['RoleArn', ask.roleArn],
+    ['RoleSessionName', ask.sessionName],
   ];
   if (ask.durationSeconds !== undefined)
-    query.push(["DurationSeconds", String(ask.durationSeconds)]);
-  if (ask.externalId !== undefined) query.push(["ExternalId", ask.externalId]);
+    query.push(['DurationSeconds', String(ask.durationSeconds)]);
+  if (ask.externalId !== undefined) query.push(['ExternalId', ask.externalId]);
   // Encoded with the encoder SigV4 signs with, so the query on the wire
   // matches the signature. URLSearchParams would write a space as `+`.
   const url = new URL(`${base}/?${encodeQuery(query)}`);
 
   const headers = signV4(
-    { method: "GET", url, headers: {} },
+    { method: 'GET', url, headers: {} },
     source,
     ask.region,
-    "sts",
+    'sts',
     new Date(),
   );
-  const res = await go(url, { method: "GET", headers });
+  const res = await go(url, { method: 'GET', headers });
   const body = await res.text();
   if (!res.ok) {
-    const code = text(body, "Code") ?? `HTTP ${res.status}`;
-    const message = text(body, "Message");
+    const code = text(body, 'Code') ?? `HTTP ${res.status}`;
+    const message = text(body, 'Message');
     throw new Error(
-      `STS would not let ${ask.roleArn} be assumed · ${code}${message === undefined ? "" : `: ${message}`}`,
+      `STS would not let ${ask.roleArn} be assumed · ${code}${message === undefined ? '' : `: ${message}`}`,
     );
   }
 
   // A missing Credentials element reads as empty, so every field is missing.
-  const credentials = text(body, "Credentials") ?? "";
-  const id = text(credentials, "AccessKeyId");
-  const secret = text(credentials, "SecretAccessKey");
-  const token = text(credentials, "SessionToken");
-  const expiration = parseTime(text(credentials, "Expiration"));
-  if (id === undefined || secret === undefined || token === undefined || expiration === undefined) {
-    throw new Error(`STS answered ${ask.roleArn}'s AssumeRole with no credentials uno could read`);
+  const credentials = text(body, 'Credentials') ?? '';
+  const id = text(credentials, 'AccessKeyId');
+  const secret = text(credentials, 'SecretAccessKey');
+  const token = text(credentials, 'SessionToken');
+  const expiration = parseTime(text(credentials, 'Expiration'));
+  if (
+    id === undefined ||
+    secret === undefined ||
+    token === undefined ||
+    expiration === undefined
+  ) {
+    throw new Error(
+      `STS answered ${ask.roleArn}'s AssumeRole with no credentials uno could read`,
+    );
   }
-  return { accessKeyId: id, secretAccessKey: secret, sessionToken: token, expiration };
+  return {
+    accessKeyId: id,
+    secretAccessKey: secret,
+    sessionToken: token,
+    expiration,
+  };
 }

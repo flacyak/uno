@@ -1,7 +1,7 @@
 // Tests for the Go standard library shims. Expected values were recorded from
 // the equivalent Go calls.
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from 'vite-plus/test';
 
 import {
   atoi,
@@ -29,53 +29,57 @@ import {
   toUpper,
   trimSpace,
   unquote,
-} from "../../src/go/index.ts";
+} from '../../src/go/index.ts';
 
-describe("runes", () => {
-  test("splits code points, not code units", () => {
-    expect(runes("aé\u{1F600}")).toEqual(["a", "é", "\u{1F600}"]);
-    expect(runeLen("\u{1F600}")).toBe(1);
-    expect("\u{1F600}".length).toBe(2); // JS length counts code units
+describe('runes', () => {
+  test('splits code points, not code units', () => {
+    expect(runes('aé\u{1F600}')).toEqual(['a', 'é', '\u{1F600}']);
+    expect(runeLen('\u{1F600}')).toBe(1);
+    expect('\u{1F600}'.length).toBe(2); // JS length counts code units
   });
 });
 
-describe("compareStrings", () => {
+describe('compareStrings', () => {
   // Go compares by UTF-8 bytes, which is code point order. JavaScript's `<`
   // compares code units, where a surrogate pair sorts below U+E000.
-  test("orders by code point, the way UTF-8 bytes do", () => {
-    const privateUse = "\ue000";
-    const astral = "\u{1F600}";
+  test('orders by code point, the way UTF-8 bytes do', () => {
+    const privateUse = '\ue000';
+    const astral = '\u{1F600}';
     expect(compareStrings(privateUse, astral)).toBe(-1);
     expect(privateUse < astral).toBe(false); // code unit order
   });
 
-  test("agrees with the obvious answer everywhere else", () => {
-    expect(compareStrings("a", "b")).toBe(-1);
-    expect(compareStrings("b", "a")).toBe(1);
-    expect(compareStrings("a", "a")).toBe(0);
-    expect(compareStrings("a", "ab")).toBe(-1);
-    expect(["total", "base", "left"].sort(compareStrings)).toEqual(["base", "left", "total"]);
+  test('agrees with the obvious answer everywhere else', () => {
+    expect(compareStrings('a', 'b')).toBe(-1);
+    expect(compareStrings('b', 'a')).toBe(1);
+    expect(compareStrings('a', 'a')).toBe(0);
+    expect(compareStrings('a', 'ab')).toBe(-1);
+    expect(['total', 'base', 'left'].sort(compareStrings)).toEqual([
+      'base',
+      'left',
+      'total',
+    ]);
   });
 
-  test("a prefix sorts first, and a cut surrogate pair sorts as its unit", () => {
-    expect(compareStrings("ab", "a")).toBe(1);
-    expect(compareStrings("", "a")).toBe(-1);
-    expect(compareStrings("x\ud83d", "x\u{1F600}")).toBe(-1);
-    expect(compareStrings("\u{1F600}a", "\u{1F600}b")).toBe(-1);
-    expect(compareStrings("\u{1F600}", "\u{1F600}")).toBe(0);
+  test('a prefix sorts first, and a cut surrogate pair sorts as its unit', () => {
+    expect(compareStrings('ab', 'a')).toBe(1);
+    expect(compareStrings('', 'a')).toBe(-1);
+    expect(compareStrings('x\ud83d', 'x\u{1F600}')).toBe(-1);
+    expect(compareStrings('\u{1F600}a', '\u{1F600}b')).toBe(-1);
+    expect(compareStrings('\u{1F600}', '\u{1F600}')).toBe(0);
   });
 });
 
-describe("case mapping", () => {
+describe('case mapping', () => {
   // Go uses simple case mapping: one rune in, one rune out. JavaScript's full
   // mapping changes the length for these runes.
   const cases: Array<[string, string, string]> = [
-    ["ß", "ß", "ß"], // eszett: JS uppercases it to "SS"
-    ["ﬁ", "ﬁ", "ﬁ"], // fi ligature: JS gives "FI"
-    ["İ", "İ", "i"], // dotted capital I: JS lowercases to i + combining dot
-    ["ǰ", "ǰ", "ǰ"],
-    ["é", "É", "é"],
-    ["istanbul", "ISTANBUL", "istanbul"],
+    ['ß', 'ß', 'ß'], // eszett: JS uppercases it to "SS"
+    ['ﬁ', 'ﬁ', 'ﬁ'], // fi ligature: JS gives "FI"
+    ['İ', 'İ', 'i'], // dotted capital I: JS lowercases to i + combining dot
+    ['ǰ', 'ǰ', 'ǰ'],
+    ['é', 'É', 'é'],
+    ['istanbul', 'ISTANBUL', 'istanbul'],
   ];
 
   for (const [input, up, low] of cases) {
@@ -85,67 +89,67 @@ describe("case mapping", () => {
     });
   }
 
-  test("never changes the rune count", () => {
+  test('never changes the rune count', () => {
     for (const [input] of cases) {
       expect(runeLen(toUpper(input))).toBe(runeLen(input));
       expect(runeLen(toLower(input))).toBe(runeLen(input));
     }
   });
 
-  test("equalFold", () => {
-    expect(equalFold("ABC", "abc")).toBe(true);
-    expect(equalFold("ABC", "abd")).toBe(false);
+  test('equalFold', () => {
+    expect(equalFold('ABC', 'abc')).toBe(true);
+    expect(equalFold('ABC', 'abd')).toBe(false);
   });
 });
 
-describe("unicode classes", () => {
-  test("isLetter is category L, not [a-zA-Z]", () => {
-    expect(isLetter("r")).toBe(true);
-    expect(isLetter("é")).toBe(true);
-    expect(isLetter("5")).toBe(false);
-    expect(isLetter("_")).toBe(false);
+describe('unicode classes', () => {
+  test('isLetter is category L, not [a-zA-Z]', () => {
+    expect(isLetter('r')).toBe(true);
+    expect(isLetter('é')).toBe(true);
+    expect(isLetter('5')).toBe(false);
+    expect(isLetter('_')).toBe(false);
   });
 
-  test("isDigit is category Nd", () => {
-    expect(isDigit("5")).toBe(true);
-    expect(isDigit("٥")).toBe(true); // Arabic-Indic five
-    expect(isDigit("a")).toBe(false);
+  test('isDigit is category Nd', () => {
+    expect(isDigit('5')).toBe(true);
+    expect(isDigit('٥')).toBe(true); // Arabic-Indic five
+    expect(isDigit('a')).toBe(false);
   });
 
-  test("isSpace is White_Space, which JS \\s is not", () => {
-    expect(isSpace(" ")).toBe(true);
-    expect(isSpace("\t")).toBe(true);
-    expect(isSpace("\u0085")).toBe(true); // NEL is White_Space
-    expect(isSpace("\u00a0")).toBe(true);
-    expect(isSpace("\ufeff")).toBe(false); // BOM is outside White_Space
-    expect(isSpace("x")).toBe(false);
+  test('isSpace is White_Space, which JS \\s is not', () => {
+    expect(isSpace(' ')).toBe(true);
+    expect(isSpace('\t')).toBe(true);
+    expect(isSpace('\u0085')).toBe(true); // NEL is White_Space
+    expect(isSpace('\u00a0')).toBe(true);
+    expect(isSpace('\ufeff')).toBe(false); // BOM is outside White_Space
+    expect(isSpace('x')).toBe(false);
   });
 
-  test("trimSpace", () => {
-    expect(trimSpace(" x")).toBe("x");
-    expect(trimSpace("  a b  ")).toBe("a b");
-    expect(trimSpace("y")).toBe("y");
-    expect(trimSpace("\u00a0z\u00a0")).toBe("z"); // NBSP is trimmed
-    expect(trimSpace("\u0085z\u0085")).toBe("z"); // NEL is trimmed
-    expect(trimSpace("\ufeffz\ufeff")).toBe("\ufeffz\ufeff"); // BOM is kept
-    expect(trimSpace("   ")).toBe("");
-    expect(trimSpace("")).toBe("");
-    expect(trimSpace(" \u{1F600} a \u{1F600} ")).toBe("\u{1F600} a \u{1F600}");
+  test('trimSpace', () => {
+    expect(trimSpace(' x')).toBe('x');
+    expect(trimSpace('  a b  ')).toBe('a b');
+    expect(trimSpace('y')).toBe('y');
+    expect(trimSpace('\u00a0z\u00a0')).toBe('z'); // NBSP is trimmed
+    expect(trimSpace('\u0085z\u0085')).toBe('z'); // NEL is trimmed
+    expect(trimSpace('\ufeffz\ufeff')).toBe('\ufeffz\ufeff'); // BOM is kept
+    expect(trimSpace('   ')).toBe('');
+    expect(trimSpace('')).toBe('');
+    expect(trimSpace(' \u{1F600} a \u{1F600} ')).toBe('\u{1F600} a \u{1F600}');
   });
 });
 
-describe("formatFloat", () => {
+describe('formatFloat', () => {
   // Matches strconv.FormatFloat(v, 'f', -1, 64): shortest round-trip form,
   // always in plain decimal.
   const cases: Array<[number, string]> = [
-    [0.22, "0.22"],
-    [0.21999999999999997, "0.21999999999999997"],
-    [1e21, "1000000000000000000000"],
-    [1e-7, "0.0000001"],
-    [1.5e-10, "0.00000000015"],
-    [123456789012345680000, "123456789012345680000"],
-    [0, "0"],
-    [-1.5, "-1.5"],
+    [0.22, '0.22'],
+    [0.21999999999999997, '0.21999999999999997'],
+    [1e21, '1000000000000000000000'],
+    [1e-7, '0.0000001'],
+    [1.5e-10, '0.00000000015'],
+    [123456789012345680000, '123456789012345680000'],
+    [0, '0'],
+    [-1.5, '-1.5'],
   ];
 
   for (const [v, want] of cases) {
@@ -154,26 +158,26 @@ describe("formatFloat", () => {
     });
   }
 
-  test("1e300 prints 301 digits rather than an exponent", () => {
+  test('1e300 prints 301 digits rather than an exponent', () => {
     const got = formatFloat(1e300);
-    expect(got).toBe("1" + "0".repeat(300));
-    expect(got).not.toContain("e");
+    expect(got).toBe('1' + '0'.repeat(300));
+    expect(got).not.toContain('e');
   });
 
-  test("keeps the sign of a negative zero, as Go does", () => {
-    expect(formatFloat(-0)).toBe("-0");
-    expect((-0).toString()).toBe("0"); // JS drops the sign
+  test('keeps the sign of a negative zero, as Go does', () => {
+    expect(formatFloat(-0)).toBe('-0');
+    expect((-0).toString()).toBe('0'); // JS drops the sign
   });
 });
 
-describe("roundSignificant", () => {
+describe('roundSignificant', () => {
   // Rounds to the significant digits a computed cell keeps.
   const DIGITS = 15;
 
   const cases: Array<[number, string]> = [
-    [(40.0 - 31.2) / 40.0, "0.22"],
-    [1 / 3, "0.333333333333333"],
-    [2 / 3, "0.666666666666667"],
+    [(40.0 - 31.2) / 40.0, '0.22'],
+    [1 / 3, '0.333333333333333'],
+    [2 / 3, '0.666666666666667'],
   ];
 
   for (const [v, want] of cases) {
@@ -182,24 +186,24 @@ describe("roundSignificant", () => {
     });
   }
 
-  test("leaves an infinity alone rather than throwing", () => {
+  test('leaves an infinity alone rather than throwing', () => {
     expect(roundSignificant(Infinity, DIGITS)).toBe(Infinity);
   });
 });
 
-describe("quote", () => {
+describe('quote', () => {
   const cases: Array<[string, string]> = [
-    ["a", '"a"'],
+    ['a', '"a"'],
     ['a"b', '"a\\"b"'],
-    ["a\\b", '"a\\\\b"'],
-    ["tab\there", '"tab\\there"'],
-    ["é", '"é"'], // printable runes are left as is
-    ["1,204", '"1,204"'],
-    ["", '""'],
-    ["nl\n", '"nl\\n"'],
-    ["\u0007", '"\\a"'],
-    ["\u0000", '"\\x00"'],
-    ["€", '"€"'],
+    ['a\\b', '"a\\\\b"'],
+    ['tab\there', '"tab\\there"'],
+    ['é', '"é"'], // printable runes are left as is
+    ['1,204', '"1,204"'],
+    ['', '""'],
+    ['nl\n', '"nl\\n"'],
+    ['\u0007', '"\\a"'],
+    ['\u0000', '"\\x00"'],
+    ['€', '"€"'],
   ];
 
   for (const [input, want] of cases) {
@@ -209,15 +213,15 @@ describe("quote", () => {
   }
 });
 
-describe("unquote", () => {
+describe('unquote', () => {
   const cases: Array<[string, string]> = [
-    ['"a\\tb"', "a\tb"],
-    ['"\\x41"', "A"],
-    ['"€"', "€"],
-    ['"$1"', "$1"],
-    ['"\\101"', "A"],
-    ['"\\u00e9"', "é"],
-    ['""', ""],
+    ['"a\\tb"', 'a\tb'],
+    ['"\\x41"', 'A'],
+    ['"€"', '€'],
+    ['"$1"', '$1'],
+    ['"\\101"', 'A'],
+    ['"\\u00e9"', 'é'],
+    ['""', ''],
   ];
 
   for (const [input, want] of cases) {
@@ -226,59 +230,59 @@ describe("unquote", () => {
     });
   }
 
-  test("refuses what Go refuses", () => {
+  test('refuses what Go refuses', () => {
     expect(() => unquote('"a')).toThrow();
     expect(() => unquote('"\\q"')).toThrow();
     expect(() => unquote('"\\x4"')).toThrow();
   });
 
-  test("round-trips through quote", () => {
-    for (const s of ["", "a", 'a"b', "a\\b", "\t", "1,204", "€", "$1"]) {
+  test('round-trips through quote', () => {
+    for (const s of ['', 'a', 'a"b', 'a\\b', '\t', '1,204', '€', '$1']) {
       expect(unquote(quote(s))).toBe(s);
     }
   });
 });
 
-describe("parseFloat", () => {
-  test("reads what Go reads", () => {
-    expect(goParseFloat("12")).toBe(12);
-    expect(goParseFloat("+7")).toBe(7);
-    expect(goParseFloat("-1.5")).toBe(-1.5);
-    expect(goParseFloat("1e3")).toBe(1000);
-    expect(goParseFloat(".5")).toBe(0.5);
+describe('parseFloat', () => {
+  test('reads what Go reads', () => {
+    expect(goParseFloat('12')).toBe(12);
+    expect(goParseFloat('+7')).toBe(7);
+    expect(goParseFloat('-1.5')).toBe(-1.5);
+    expect(goParseFloat('1e3')).toBe(1000);
+    expect(goParseFloat('.5')).toBe(0.5);
   });
 
-  test("refuses what Number() would have accepted", () => {
-    expect(goParseFloat("")).toBeUndefined();
-    expect(goParseFloat("0x10")).toBeUndefined();
-    expect(goParseFloat("Infinity")).toBeUndefined();
-    expect(goParseFloat(" 12 ")).toBeUndefined();
-    expect(goParseFloat("1.2.3")).toBeUndefined();
+  test('refuses what Number() would have accepted', () => {
+    expect(goParseFloat('')).toBeUndefined();
+    expect(goParseFloat('0x10')).toBeUndefined();
+    expect(goParseFloat('Infinity')).toBeUndefined();
+    expect(goParseFloat(' 12 ')).toBeUndefined();
+    expect(goParseFloat('1.2.3')).toBeUndefined();
   });
 
   // Matches strconv.ParseFloat: a value too large for a float64 is an error
   // (undefined here), and a value too small is 0.
-  test("refuses a decimal that overflows, as Go does", () => {
-    expect(goParseFloat("1e400")).toBeUndefined();
-    expect(goParseFloat("-1e400")).toBeUndefined();
-    expect(goParseFloat("1e-400")).toBe(0);
+  test('refuses a decimal that overflows, as Go does', () => {
+    expect(goParseFloat('1e400')).toBeUndefined();
+    expect(goParseFloat('-1e400')).toBeUndefined();
+    expect(goParseFloat('1e-400')).toBe(0);
   });
 
-  test("atoi is whole numbers only", () => {
-    expect(atoi("12")).toBe(12);
-    expect(atoi("-3")).toBe(-3);
-    expect(atoi("1.5")).toBeUndefined();
-    expect(atoi("")).toBeUndefined();
+  test('atoi is whole numbers only', () => {
+    expect(atoi('12')).toBe(12);
+    expect(atoi('-3')).toBe(-3);
+    expect(atoi('1.5')).toBeUndefined();
+    expect(atoi('')).toBeUndefined();
   });
 });
 
-describe("quoteMeta", () => {
+describe('quoteMeta', () => {
   const cases: Array<[string, string]> = [
-    [",", ","],
-    ["$", "\\$"],
-    ["1,204", "1,204"],
-    ["a.b+c", "a\\.b\\+c"],
-    ["[x]", "\\[x\\]"],
+    [',', ','],
+    ['$', '\\$'],
+    ['1,204', '1,204'],
+    ['a.b+c', 'a\\.b\\+c'],
+    ['[x]', '\\[x\\]'],
   ];
 
   for (const [input, want] of cases) {
@@ -287,35 +291,37 @@ describe("quoteMeta", () => {
     });
   }
 
-  test("what it escapes stays a valid pattern under the u flag", () => {
-    for (const c of "\\.+*?()|[]{}^$") {
-      expect(() => new RegExp(quoteMeta(c), "u")).not.toThrow();
-      expect(new RegExp(quoteMeta(c), "u").test(c)).toBe(true);
+  test('what it escapes stays a valid pattern under the u flag', () => {
+    for (const c of '\\.+*?()|[]{}^$') {
+      expect(() => new RegExp(quoteMeta(c), 'u')).not.toThrow();
+      expect(new RegExp(quoteMeta(c), 'u').test(c)).toBe(true);
     }
   });
 });
 
-describe("replaceAllLiteral", () => {
-  test("takes the replacement as text, not as a template", () => {
+describe('replaceAllLiteral', () => {
+  test('takes the replacement as text, not as a template', () => {
     // String.replaceAll would expand $& and $1. Go keeps them as typed.
-    expect(replaceAllLiteral(/x/u, "axb", "$&")).toBe("a$&b");
-    expect(replaceAllLiteral(/(a)/u, "aa", "$1")).toBe("$1$1");
-    expect(replaceAllLiteral(/,/u, "1,204,567", "")).toBe("1204567");
+    expect(replaceAllLiteral(/x/u, 'axb', '$&')).toBe('a$&b');
+    expect(replaceAllLiteral(/(a)/u, 'aa', '$1')).toBe('$1$1');
+    expect(replaceAllLiteral(/,/u, '1,204,567', '')).toBe('1204567');
   });
 
   // An empty match at the position where the previous match ended is skipped,
   // as in Go. String.replace would give "--" and "#a##b#".
-  test("an empty match abutting a previous match is not replaced twice", () => {
-    expect(replaceAllLiteral(/a*/u, "aaa", "-")).toBe("-");
-    expect(replaceAllLiteral(/\d*/u, "a12b", "#")).toBe("#a#b#");
-    expect(replaceAllLiteral(/x*/u, "abc", "-")).toBe("-a-b-c-");
-    expect(replaceAllLiteral(/x*/u, "a\u{1F600}b", "-")).toBe("-a-\u{1F600}-b-");
+  test('an empty match abutting a previous match is not replaced twice', () => {
+    expect(replaceAllLiteral(/a*/u, 'aaa', '-')).toBe('-');
+    expect(replaceAllLiteral(/\d*/u, 'a12b', '#')).toBe('#a#b#');
+    expect(replaceAllLiteral(/x*/u, 'abc', '-')).toBe('-a-b-c-');
+    expect(replaceAllLiteral(/x*/u, 'a\u{1F600}b', '-')).toBe(
+      '-a-\u{1F600}-b-',
+    );
   });
 });
 
-describe("findAllIndex", () => {
-  test("reports every match, in code points", () => {
-    expect(findAllIndex(/,/u, "1,204,567")).toEqual([
+describe('findAllIndex', () => {
+  test('reports every match, in code points', () => {
+    expect(findAllIndex(/,/u, '1,204,567')).toEqual([
       [1, 2],
       [5, 6],
     ]);
@@ -323,8 +329,8 @@ describe("findAllIndex", () => {
 
   // The empty match at 3 is dropped because it sits where the previous match
   // ended.
-  test("handles empty matches the way Go does", () => {
-    expect(findAllIndex(/x*/u, "abxc")).toEqual([
+  test('handles empty matches the way Go does', () => {
+    expect(findAllIndex(/x*/u, 'abxc')).toEqual([
       [0, 0],
       [1, 1],
       [2, 3],
@@ -332,40 +338,44 @@ describe("findAllIndex", () => {
     ]);
   });
 
-  test("offsets are code points even past the BMP", () => {
-    expect(findAllIndex(/,/u, "\u{1F600},a")).toEqual([[1, 2]]);
+  test('offsets are code points even past the BMP', () => {
+    expect(findAllIndex(/,/u, '\u{1F600},a')).toEqual([[1, 2]]);
   });
 
-  test("indexOfRunes", () => {
-    expect(indexOfRunes("\u{1F600},a", ",")).toBe(1);
-    expect(indexOfRunes("abc", "z")).toBe(-1);
+  test('indexOfRunes', () => {
+    expect(indexOfRunes('\u{1F600},a', ',')).toBe(1);
+    expect(indexOfRunes('abc', 'z')).toBe(-1);
   });
 });
 
-describe("fmt and hashing", () => {
-  test("formatU names a codepoint without printing it", () => {
-    expect(formatU("√")).toBe("U+221A");
-    expect(formatU("∑")).toBe("U+2211");
+describe('fmt and hashing', () => {
+  test('formatU names a codepoint without printing it', () => {
+    expect(formatU('√')).toBe('U+221A');
+    expect(formatU('∑')).toBe('U+2211');
   });
 
-  test("sha256Hex agrees with crypto/sha256", () => {
-    expect(sha256Hex(new TextEncoder().encode("abc"))).toBe(
-      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  test('sha256Hex agrees with crypto/sha256', () => {
+    expect(sha256Hex(new TextEncoder().encode('abc'))).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
   });
 
-  test("rfc3339 truncates to the second, as encoding/json does", () => {
-    expect(rfc3339(new Date(Date.UTC(2026, 8, 9, 12, 0, 0)))).toBe("2026-09-09T12:00:00Z");
+  test('rfc3339 truncates to the second, as encoding/json does', () => {
+    expect(rfc3339(new Date(Date.UTC(2026, 8, 9, 12, 0, 0)))).toBe(
+      '2026-09-09T12:00:00Z',
+    );
   });
 
   // Go's zero time.Time marshals as year 1. parseTime returns undefined for it
   // and for the Unix epoch, and isZeroTime is true for the epoch.
-  test("the zero time.Time is year 1 and reads as absent, and so does the epoch", () => {
-    expect(isZeroTime(parseTime("2026-09-09T12:00:00Z"))).toBe(false);
+  test('the zero time.Time is year 1 and reads as absent, and so does the epoch', () => {
+    expect(isZeroTime(parseTime('2026-09-09T12:00:00Z'))).toBe(false);
     expect(isZeroTime(new Date(0))).toBe(true);
-    expect(parseTime("0001-01-01T00:00:00Z")).toBeUndefined();
-    expect(parseTime("1970-01-01T00:00:00Z")).toBeUndefined();
-    expect(parseTime("garbage")).toBeUndefined();
-    expect(parseTime("2026-09-09T12:00:00Z")?.toISOString()).toBe("2026-09-09T12:00:00.000Z");
+    expect(parseTime('0001-01-01T00:00:00Z')).toBeUndefined();
+    expect(parseTime('1970-01-01T00:00:00Z')).toBeUndefined();
+    expect(parseTime('garbage')).toBeUndefined();
+    expect(parseTime('2026-09-09T12:00:00Z')?.toISOString()).toBe(
+      '2026-09-09T12:00:00.000Z',
+    );
   });
 });

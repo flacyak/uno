@@ -5,9 +5,9 @@ import {
   parseFloat as parseDecimal,
   quote,
   runes,
-} from "../go/index.ts";
-import type { Binary, Node } from "./ast.ts";
-import { Formula } from "./ast.ts";
+} from '../go/index.ts';
+import type { Binary, Node } from './ast.ts';
+import { Formula } from './ast.ts';
 
 /**
  * parse reads the text form into a Formula. It throws on any syntax error:
@@ -24,13 +24,13 @@ export function parse(src: string): Formula {
  * ends the expression loop.
  */
 function precedence(r: string): number {
-  if (r === "+" || r === "-") return 1;
-  if (r === "*" || r === "/") return 2;
+  if (r === '+' || r === '-') return 1;
+  if (r === '*' || r === '/') return 2;
   return 0;
 }
 
 function isIdentStart(r: string): boolean {
-  return isLetter(r) || r === "_";
+  return isLetter(r) || r === '_';
 }
 
 function isIdentRune(r: string): boolean {
@@ -43,7 +43,7 @@ function isIdentRune(r: string): boolean {
  */
 class Parser extends Scanner {
   constructor(s: string[]) {
-    super(s, "formula");
+    super(s, 'formula');
   }
 
   /**
@@ -63,7 +63,7 @@ class Parser extends Scanner {
 
       this.i++;
       const right = this.expr(prec + 1);
-      left = { kind: "binary", op: op as Binary["op"], left, right };
+      left = { kind: 'binary', op: op as Binary['op'], left, right };
     }
   }
 
@@ -73,20 +73,21 @@ class Parser extends Scanner {
    * binary operator.
    */
   private term(): Node {
-    if (this.accept("-")) {
-      return { kind: "unary", operand: this.term() };
+    if (this.accept('-')) {
+      return { kind: 'unary', operand: this.term() };
     }
 
     this.space();
     const c = this.s[this.i];
-    if (c === "(") {
+    if (c === '(') {
       this.i++;
       const inner = this.expr(0);
-      this.expect(")");
-      return { kind: "group", inner };
+      this.expect(')');
+      return { kind: 'group', inner };
     }
     if (c !== undefined && isDigit(c)) return this.number();
-    if (c !== undefined && isIdentStart(c)) return { kind: "col", name: this.ident() };
+    if (c !== undefined && isIdentStart(c))
+      return { kind: 'col', name: this.ident() };
 
     throw new Error(
       `expected a number, a column name or ( at character ${this.i + 1}, ${this.here()}`,
@@ -101,7 +102,7 @@ class Parser extends Scanner {
     const start = this.i;
     while (this.i < this.s.length && isDigit(this.s[this.i]!)) this.i++;
 
-    if (this.i < this.s.length && this.s[this.i] === ".") {
+    if (this.i < this.s.length && this.s[this.i] === '.') {
       this.i++;
       if (this.i >= this.s.length || !isDigit(this.s[this.i]!)) {
         throw new Error(
@@ -111,12 +112,14 @@ class Parser extends Scanner {
       while (this.i < this.s.length && isDigit(this.s[this.i]!)) this.i++;
     }
 
-    const text = this.s.slice(start, this.i).join("");
+    const text = this.s.slice(start, this.i).join('');
     const value = parseDecimal(text);
     if (value === undefined) {
-      throw new Error(`number ${quote(text)} at character ${start + 1}: invalid syntax`);
+      throw new Error(
+        `number ${quote(text)} at character ${start + 1}: invalid syntax`,
+      );
     }
-    return { kind: "num", text, value };
+    return { kind: 'num', text, value };
   }
 
   /**
@@ -126,6 +129,6 @@ class Parser extends Scanner {
   private ident(): string {
     const start = this.i;
     while (this.i < this.s.length && isIdentRune(this.s[this.i]!)) this.i++;
-    return this.s.slice(start, this.i).join("");
+    return this.s.slice(start, this.i).join('');
   }
 }

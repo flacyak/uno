@@ -12,20 +12,24 @@
 // the gauge uno.efficiency, one series per metric, labelled with the branch.
 // OTEL_EXPORTER_OTLP_HEADERS is sent with the request.
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 
-import { ENDPOINT_VARIABLE, Meter, collector } from "../src/engine/telemetry.ts";
-import type { Collector } from "../src/engine/telemetry.ts";
-import { compare, markdown } from "../tests/efficiency/compare.ts";
-import type { Metric } from "../tests/efficiency/record.ts";
+import {
+  ENDPOINT_VARIABLE,
+  Meter,
+  collector,
+} from '../src/engine/telemetry.ts';
+import type { Collector } from '../src/engine/telemetry.ts';
+import { compare, markdown } from '../tests/efficiency/compare.ts';
+import type { Metric } from '../tests/efficiency/record.ts';
 
-const HEAD = fileURLToPath(new URL("../out/efficiency/", import.meta.url));
+const HEAD = fileURLToPath(new URL('../out/efficiency/', import.meta.url));
 
 /** The gauge every metric is sent as. The metric's name is a label on it. */
-const GAUGE = "uno.efficiency";
+const GAUGE = 'uno.efficiency';
 /** How long a send may take before it is abandoned. */
 const SEND_TIMEOUT_MS = 10_000;
 /** How many times a send is tried when the collector is busy, down, or unreachable. */
@@ -34,14 +38,14 @@ const TRIES = 3;
 const BACKOFF_MS = 1_000;
 
 function isMetric(v: unknown): v is Metric {
-  if (typeof v !== "object" || v === null) return false;
+  if (typeof v !== 'object' || v === null) return false;
   return (
-    "name" in v &&
-    typeof v.name === "string" &&
-    "unit" in v &&
-    typeof v.unit === "string" &&
-    "value" in v &&
-    typeof v.value === "number"
+    'name' in v &&
+    typeof v.name === 'string' &&
+    'unit' in v &&
+    typeof v.unit === 'string' &&
+    'value' in v &&
+    typeof v.value === 'number'
   );
 }
 
@@ -49,10 +53,12 @@ function isMetric(v: unknown): v is Metric {
 function metricsIn(folder: string): Metric[] {
   if (!existsSync(folder)) return [];
   return readdirSync(folder)
-    .filter((name) => name.endsWith(".json"))
+    .filter((name) => name.endsWith('.json'))
     .toSorted()
     .flatMap((name) => {
-      const read: unknown = JSON.parse(readFileSync(join(folder, name), "utf8"));
+      const read: unknown = JSON.parse(
+        readFileSync(join(folder, name), 'utf8'),
+      );
       if (!Array.isArray(read) || !read.every(isMetric)) {
         throw new Error(`${join(folder, name)} is not a list of metrics`);
       }
@@ -61,7 +67,10 @@ function metricsIn(folder: string): Metric[] {
 }
 
 /** Sends the metrics to the collector named in the environment, if any. */
-async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise<string> {
+async function send(
+  metrics: readonly Metric[],
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
   const to = collector(env);
   if (to === undefined) {
     return `${ENDPOINT_VARIABLE} is not set, so nothing was sent to a collector`;
@@ -69,13 +78,13 @@ async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise
 
   // GitHub sets GITHUB_HEAD_REF on a pull request and GITHUB_REF_NAME on a
   // push.
-  const branch = env["GITHUB_HEAD_REF"] || env["GITHUB_REF_NAME"] || "local";
-  const meter = new Meter({ service: "uno-efficiency" });
+  const branch = env['GITHUB_HEAD_REF'] || env['GITHUB_REF_NAME'] || 'local';
+  const meter = new Meter({ service: 'uno-efficiency' });
   for (const m of metrics) {
     meter.record({
       name: GAUGE,
-      kind: "level",
-      unit: "",
+      kind: 'level',
+      unit: '',
       value: m.value,
       attributes: { metric: m.name, unit: m.unit, branch },
     });
@@ -83,7 +92,9 @@ async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise
 
   const res = await post(to, JSON.stringify(meter.payload()));
   if (!res.ok) {
-    throw new Error(`the collector answered ${res.status}: ${await res.text()}`);
+    throw new Error(
+      `the collector answered ${res.status}: ${await res.text()}`,
+    );
   }
   return `sent ${metrics.length} metrics to the collector as ${GAUGE}, branch ${branch}`;
 }
@@ -99,8 +110,8 @@ async function post(to: Collector, body: string): Promise<Response> {
     let res: Response;
     try {
       res = await fetch(to.url, {
-        method: "POST",
-        headers: { ...to.headers, "content-type": "application/json" },
+        method: 'POST',
+        headers: { ...to.headers, 'content-type': 'application/json' },
         body,
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       });
@@ -110,7 +121,8 @@ async function post(to: Collector, body: string): Promise<Response> {
         continue;
       }
       // fetch keeps the reason it failed in the cause.
-      const cause = err instanceof Error && err.cause instanceof Error ? err.cause : err;
+      const cause =
+        err instanceof Error && err.cause instanceof Error ? err.cause : err;
       throw new Error(
         `the collector could not be reached · ${cause instanceof Error ? cause.message : String(cause)}`,
       );
@@ -125,7 +137,7 @@ async function post(to: Collector, body: string): Promise<Response> {
 
 /** The wait a reply asks for in its Retry-After header, when it is in seconds. */
 function retryAfterMs(res: Response): number | undefined {
-  const seconds = Number(res.headers.get("retry-after"));
+  const seconds = Number(res.headers.get('retry-after'));
   return Number.isInteger(seconds) && seconds > 0 ? seconds * 1_000 : undefined;
 }
 
@@ -134,12 +146,14 @@ function wait(ms: number): Promise<void> {
 }
 
 const { values } = parseArgs({
-  options: { base: { type: "string" }, out: { type: "string" } },
+  options: { base: { type: 'string' }, out: { type: 'string' } },
 });
 
 const head = metricsIn(HEAD);
 if (head.length === 0) {
-  throw new Error(`${HEAD} holds no metrics · run \`vp test tests/efficiency\` first`);
+  throw new Error(
+    `${HEAD} holds no metrics · run \`vp test tests/efficiency\` first`,
+  );
 }
 const base = values.base === undefined ? [] : metricsIn(values.base);
 
@@ -153,6 +167,8 @@ try {
   console.log(await send(head, process.env));
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
-  console.error(`${process.env["GITHUB_ACTIONS"] === "true" ? "::error::" : ""}${message}`);
+  console.error(
+    `${process.env['GITHUB_ACTIONS'] === 'true' ? '::error::' : ''}${message}`,
+  );
   process.exitCode = 1;
 }

@@ -61,7 +61,7 @@ So what it says crosses the port as data, a `Said`: which sentence it is, and wh
 A client writes its own sentence for each kind, in the language its person reads.
 
 ```ts
-throw new Refusal({ t: "only-source", name: source.name });
+throw new Refusal({ t: 'only-source', name: source.name });
 // message: "ads.csv is the only source here, and a workspace needs one"
 ```
 

@@ -1,7 +1,7 @@
-import type { Step } from "./steps.ts";
-import { english } from "../said/index.ts";
-import type { Said } from "../said/index.ts";
-import { describedStep, runStep, stepText } from "./steps.ts";
+import type { Step } from './steps.ts';
+import { english } from '../said/index.ts';
+import type { Said } from '../said/index.ts';
+import { describedStep, runStep, stepText } from './steps.ts';
 
 /**
  * Program is a pipeline of steps applied left to right. The empty Program is
@@ -25,7 +25,7 @@ export function apply(p: Program, v: string): string {
 
 /** text is the text form, which a .uno log carries. */
 export function text(p: Program): string {
-  return p.map(stepText).join(" | ");
+  return p.map(stepText).join(' | ');
 }
 
 /**
@@ -38,5 +38,5 @@ export function describe(p: Program): string {
 
 /** described returns what `describe` says, as data. */
 export function described(p: Program): Said {
-  return { t: "program", steps: p.map(describedStep) };
+  return { t: 'program', steps: p.map(describedStep) };
 }

@@ -1,11 +1,11 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from 'vite-plus/test';
 
-import { readAll } from "../../src/ingest/csv.ts";
-import { RecordScanner, bomLength } from "../../src/ingest/scan.ts";
+import { readAll } from '../../src/ingest/csv.ts';
+import { RecordScanner, bomLength } from '../../src/ingest/scan.ts';
 
 const encoder = new TextEncoder();
-const whole = new TextDecoder("utf-8");
-const piece = new TextDecoder("utf-8", { ignoreBOM: true });
+const whole = new TextDecoder('utf-8');
+const piece = new TextDecoder('utf-8', { ignoreBOM: true });
 
 /** Record start offsets reported by the scanner when fed `chunk` bytes at a time. */
 function starts(bytes: Uint8Array, comma: string, chunk: number): number[] {
@@ -22,7 +22,12 @@ function starts(bytes: Uint8Array, comma: string, chunk: number): number[] {
  * Reads the file the way the engine does: split at every `every`th record
  * start, decode and parse each run on its own, and concatenate the rows.
  */
-function piecewise(bytes: Uint8Array, comma: string, begins: number[], every: number): string[][] {
+function piecewise(
+  bytes: Uint8Array,
+  comma: string,
+  begins: number[],
+  every: number,
+): string[][] {
   const cuts = [0];
   for (let i = every; i < begins.length; i += every) cuts.push(begins[i]!);
   cuts.push(bytes.length);
@@ -30,7 +35,9 @@ function piecewise(bytes: Uint8Array, comma: string, begins: number[], every: nu
   const rows: string[][] = [];
   for (let i = 0; i + 1 < cuts.length; i++) {
     const decoder = i === 0 ? whole : piece;
-    rows.push(...readAll(decoder.decode(bytes.subarray(cuts[i], cuts[i + 1])), comma));
+    rows.push(
+      ...readAll(decoder.decode(bytes.subarray(cuts[i], cuts[i + 1])), comma),
+    );
   }
   return rows;
 }
@@ -48,7 +55,22 @@ function random(seed: number): () => number {
 
 // Every byte the scanner acts on, plus multi-byte letters and a U+FEFF that
 // can land anywhere in the file.
-const ALPHABET = ["a", "b", ",", ";", '"', '"', "\n", "\n", "\r", "\r\n", " ", "é", "日", "\uFEFF"];
+const ALPHABET = [
+  'a',
+  'b',
+  ',',
+  ';',
+  '"',
+  '"',
+  '\n',
+  '\n',
+  '\r',
+  '\r\n',
+  ' ',
+  'é',
+  '日',
+  '\uFEFF',
+];
 
 /** Chance a random file starts with a byte order mark, and its maximum length. */
 const BOM_CHANCE = 0.1;
@@ -58,26 +80,28 @@ const MAX_CHARS = 40;
 const SEEDS = 4000;
 
 function csvish(rand: () => number): string {
-  let s = rand() < BOM_CHANCE ? "\uFEFF" : "";
+  let s = rand() < BOM_CHANCE ? '\uFEFF' : '';
   const n = Math.floor(rand() * MAX_CHARS);
-  for (let i = 0; i < n; i++) s += ALPHABET[Math.floor(rand() * ALPHABET.length)];
+  for (let i = 0; i < n; i++)
+    s += ALPHABET[Math.floor(rand() * ALPHABET.length)];
   return s;
 }
 
-describe("the scanner agrees with readAll", () => {
-  test("on random input, in any chunk size, split at any record", () => {
+describe('the scanner agrees with readAll', () => {
+  test('on random input, in any chunk size, split at any record', () => {
     for (let seed = 1; seed <= SEEDS; seed++) {
       const rand = random(seed);
       const text = csvish(rand);
-      const comma = rand() < 0.5 ? "," : ";";
+      const comma = rand() < 0.5 ? ',' : ';';
       const bytes = encoder.encode(text);
       const want = readAll(whole.decode(bytes), comma);
 
       for (const chunk of [1, 2, 7, 64]) {
         const begins = starts(bytes, comma, chunk);
-        expect(begins.length, `seed ${seed}, chunk ${chunk}: ${JSON.stringify(text)}`).toBe(
-          want.length,
-        );
+        expect(
+          begins.length,
+          `seed ${seed}, chunk ${chunk}: ${JSON.stringify(text)}`,
+        ).toBe(want.length);
         for (const every of [1, 2, 3]) {
           expect(
             piecewise(bytes, comma, begins, every),
@@ -89,28 +113,38 @@ describe("the scanner agrees with readAll", () => {
   });
 
   const cases: Array<[string, string, number[]]> = [
-    ["one record per line", "a,b\n1,2\n", [0, 4]],
-    ["blank lines are not records", "a\n\n\r\nb\n", [0, 5]],
-    ["a quoted newline stays inside its record", 'a\n"x\ny",1\nz\n', [0, 2, 10]],
-    ["a doubled quote does not close the field", 'a\n"x"",\ny"\nz', [0, 2, 11]],
-    ["a bare quote in an unquoted field is data", 'a\nx",\n"b"\n', [0, 2, 6]],
-    ["a lone CR at the end of the file is not a record", "a\n\r", [0]],
-    ["a CR that is not a line ending begins a record", "a\n\rb\n", [0, 2]],
-    ["the byte order mark is not part of the first record", '\uFEFF"a,b"\nc\n', [3, 9]],
+    ['one record per line', 'a,b\n1,2\n', [0, 4]],
+    ['blank lines are not records', 'a\n\n\r\nb\n', [0, 5]],
+    [
+      'a quoted newline stays inside its record',
+      'a\n"x\ny",1\nz\n',
+      [0, 2, 10],
+    ],
+    ['a doubled quote does not close the field', 'a\n"x"",\ny"\nz', [0, 2, 11]],
+    ['a bare quote in an unquoted field is data', 'a\nx",\n"b"\n', [0, 2, 6]],
+    ['a lone CR at the end of the file is not a record', 'a\n\r', [0]],
+    ['a CR that is not a line ending begins a record', 'a\n\rb\n', [0, 2]],
+    [
+      'the byte order mark is not part of the first record',
+      '\uFEFF"a,b"\nc\n',
+      [3, 9],
+    ],
   ];
 
   for (const [name, text, want] of cases) {
     test(name, () => {
       const bytes = encoder.encode(text);
-      expect(starts(bytes, ",", bytes.length)).toEqual(want);
+      expect(starts(bytes, ',', bytes.length)).toEqual(want);
       // Feeding one byte at a time gives the same offsets.
-      expect(starts(bytes, ",", 1)).toEqual(want);
+      expect(starts(bytes, ',', 1)).toEqual(want);
     });
   }
 });
 
-test("the scanner refuses a separator it cannot scan for", () => {
-  for (const comma of ['"', "\n", "é", ",,"]) {
-    expect(() => new RecordScanner(comma, () => {})).toThrow("cannot separate fields");
+test('the scanner refuses a separator it cannot scan for', () => {
+  for (const comma of ['"', '\n', 'é', ',,']) {
+    expect(() => new RecordScanner(comma, () => {})).toThrow(
+      'cannot separate fields',
+    );
   }
 });
