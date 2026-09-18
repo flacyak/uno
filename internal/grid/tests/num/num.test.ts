@@ -5,13 +5,27 @@ import { isNumber, parse, undress } from "../../src/num/index.ts";
 // The list is the point: a plain parse accepts everything in the second group,
 // and a column of them is not numeric data.
 describe("isNumber rejects what a spreadsheet does not mean", () => {
-  for (const v of ["12", "-3.5", "+7", "1e3", "0.0"]) {
+  for (const v of ["12", "-3.5", "+7", "1e3", "0.0", "1234.00-", "(1234.00)"]) {
     test(`accepts ${JSON.stringify(v)}`, () => {
       expect(isNumber(v)).toBe(true);
     });
   }
 
-  for (const v of ["inf", "NaN", "0x1p-2", "1,204", "", "12 "]) {
+  for (const v of [
+    "inf",
+    "NaN",
+    "0x1p-2",
+    "1,204",
+    "",
+    "12 ",
+    "-",
+    "()",
+    "(-5)",
+    "-5-",
+    "(5",
+    "5)",
+    "(5)-",
+  ]) {
     test(`refuses ${JSON.stringify(v)}`, () => {
       expect(isNumber(v)).toBe(false);
     });
@@ -60,6 +74,12 @@ describe("parse reads the number a person sees", () => {
     // Dividing by a hundred here would invent a value nobody typed and no cell
     // displays.
     ["12%", 12],
+
+    // Accounting negatives: SAP writes the sign last, Oracle in parentheses.
+    ["1234.00-", -1234],
+    ["(1234.00)", -1234],
+    ["1,234.00-", -1234],
+    ["$(1,234.00)", -1234],
 
     ["", undefined],
     ["N/A", undefined],
