@@ -1,9 +1,11 @@
-// The connect form: a bucket, a folder in it, how to sign in, and a test that
-// lists the folder. It takes the panel list's place while open.
-//
-// A connection is saved only after a test that lists its folder succeeds. The
-// sign-in options come from the engine. The region is found by the test and
-// kept in the connection.
+/**
+ * @fileoverview The connect form: a bucket, a folder in it, how to sign in, and
+ * a test that lists the folder. It takes the panel list's place while open.
+ *
+ * A connection is saved only after a test that lists its folder succeeds. The
+ * sign-in options come from the engine. The region is found by the test and
+ * kept in the connection.
+ */
 
 import type { SignIns } from "#engine";
 import type { AuthMode, Connection } from "#library";

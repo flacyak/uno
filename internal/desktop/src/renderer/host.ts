@@ -1,9 +1,11 @@
-// Builds the Host the shell uses from the preload Bridge.
-//
-// Most methods pass straight through. `dropped` throws for a file with no
-// path. `connect` asks preload for an engine by id and resolves when a
-// MessagePort is posted to the window under that id. `saveConnection` stamps
-// and formats the connection, then hands preload the file text.
+/**
+ * @fileoverview Builds the Host the shell uses from the preload Bridge.
+ *
+ * Most methods pass straight through. `dropped` throws for a file with no
+ * path. `connect` asks preload for an engine by id and resolves when a
+ * MessagePort is posted to the window under that id. `saveConnection` stamps
+ * and formats the connection, then hands preload the file text.
+ */
 
 import { formatConnection, stampConnection } from "#library";
 

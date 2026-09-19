@@ -1,6 +1,8 @@
-// The sidebar: the workspaces opened on this machine, most recent first. The
-// open one lists its sources under it, one tab each, with a dot for unsaved
-// work and a + to add another.
+/**
+ * @fileoverview The sidebar: the workspaces opened on this machine, most recent
+ * first. The open one lists its sources under it, one tab each, with a dot for
+ * unsaved work and a + to add another.
+ */
 
 import "./arriving.css";
 import "./sidebar.css";

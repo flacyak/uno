@@ -1,5 +1,7 @@
-// File drop handling. The whole window is the drop target. The empty state
-// element is highlighted while files are dragged over the window.
+/**
+ * @fileoverview File drop handling. The whole window is the drop target. The
+ * empty state element is highlighted while files are dragged over the window.
+ */
 
 import "./empty.css";
 

@@ -1,7 +1,9 @@
-// The checks the smoke test runs against a window.
-//
-// This is test code inside the app. It is reached only when UNO_SMOKE is set
-// in the environment, from main's index.ts.
+/**
+ * @fileoverview The checks the smoke test runs against a window.
+ *
+ * This is test code inside the app. It is reached only when UNO_SMOKE is set
+ * in the environment, from main's index.ts.
+ */
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";

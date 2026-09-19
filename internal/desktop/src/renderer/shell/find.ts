@@ -1,8 +1,10 @@
-// Find in a column: ]f and [f for cells that fail to parse, / and ? for text,
-// and n and N to repeat the last search.
-//
-// The engine answers each find by reading the file, so a find reaches rows
-// beyond what the grid has loaded.
+/**
+ * @fileoverview Find in a column: ]f and [f for cells that fail to parse, / and
+ * ? for text, and n and N to repeat the last search.
+ *
+ * The engine answers each find by reading the file, so a find reaches rows
+ * beyond what the grid has loaded.
+ */
 
 import type { FindRequest } from "#engine";
 

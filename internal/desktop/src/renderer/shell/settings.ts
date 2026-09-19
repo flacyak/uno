@@ -1,12 +1,14 @@
-// The settings control at the bottom left, and the menu it opens upward: the
-// connections, the theme, the appearance, the input strategy, and the
-// language.
-//
-// Choosing a theme or appearance applies it at once. Choosing a language
-// rewrites the whole window, this menu included, and everything stays open.
-//
-// The menu is appended to document.body, because the status bar is redrawn
-// on every edit and would remove an open menu.
+/**
+ * @fileoverview The settings control at the bottom left, and the menu it opens
+ * upward: the connections, the theme, the appearance, the input strategy, and
+ * the language.
+ *
+ * Choosing a theme or appearance applies it at once. Choosing a language
+ * rewrites the whole window, this menu included, and everything stays open.
+ *
+ * The menu is appended to document.body, because the status bar is redrawn
+ * on every edit and would remove an open menu.
+ */
 
 import "./settings.css";
 

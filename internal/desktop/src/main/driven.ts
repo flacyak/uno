@@ -1,13 +1,16 @@
-// Makes a window ignore the person at the desktop so a script can drive it.
-//
-// Two DevTools switches are used: one drops input events before they reach
-// the page, and one tells the page it has the focus whatever the window
-// manager says. Both hold across a reload, and both work under Wayland and
-// X11.
-//
-// What still reaches the page is what main sends it: scripts, the menu's
-// messages, and sendInputEvent inside `through`. Menu accelerators are
-// handled by the main process, so those still land.
+/**
+ * @fileoverview Makes a window ignore the person at the desktop so a script can
+ * drive it.
+ *
+ * Two DevTools switches are used: one drops input events before they reach
+ * the page, and one tells the page it has the focus whatever the window
+ * manager says. Both hold across a reload, and both work under Wayland and
+ * X11.
+ *
+ * What still reaches the page is what main sends it: scripts, the menu's
+ * messages, and sendInputEvent inside `through`. Menu accelerators are
+ * handled by the main process, so those still land.
+ */
 
 import type { BrowserWindow } from "electron";
 

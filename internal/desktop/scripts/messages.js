@@ -1,14 +1,16 @@
-// Compiles the app's messages.
-//
-// The messages are in messages/<locale>.json, one file per language, in
-// inlang's message format. Paraglide compiles them to src/paraglide, one
-// typed function per message.
-//
-// The options are shared by the Vite plugin for the renderer and the tests,
-// the build before it bundles main and preload, and `vp run check`.
-//
-// The pseudo-locale is written from the English before each compile. See
-// pseudo.js.
+/**
+ * @fileoverview Compiles the app's messages.
+ *
+ * The messages are in messages/<locale>.json, one file per language, in
+ * inlang's message format. Paraglide compiles them to src/paraglide, one
+ * typed function per message.
+ *
+ * The options are shared by the Vite plugin for the renderer and the tests,
+ * the build before it bundles main and preload, and `vp run check`.
+ *
+ * The pseudo-locale is written from the English before each compile. See
+ * pseudo.js.
+ */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
