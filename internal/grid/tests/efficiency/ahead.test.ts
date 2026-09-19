@@ -1,5 +1,7 @@
-// Measures the bytes fetched while indexing an object, alone and with a
-// second reader going down the rows at the same time.
+/**
+ * @fileoverview Measures the bytes fetched while indexing an object, alone and
+ * with a second reader going down the rows at the same time.
+ */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 

@@ -1,6 +1,8 @@
-// Measures what a page after the first costs when listing a folder of 20,000
-// files: directory entries read again, and wall-clock time. Only the entry
-// count is held to a budget.
+/**
+ * @fileoverview Measures what a page after the first costs when listing a
+ * folder of 20,000 files: directory entries read again, and wall-clock time.
+ * Only the entry count is held to a budget.
+ */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type * as FsPromises from 'node:fs/promises';

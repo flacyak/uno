@@ -1,6 +1,8 @@
-// Tests for how a .uno stores and resolves source paths: relative when the
-// file is under the workspace's folder, absolute otherwise. Windows and POSIX
-// paths are both handled.
+/**
+ * @fileoverview Tests for how a .uno stores and resolves source paths: relative
+ * when the file is under the workspace's folder, absolute otherwise. Windows
+ * and POSIX paths are both handled.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

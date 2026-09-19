@@ -1,5 +1,8 @@
-// Measures a second save of the same carried bytes. The second save must reuse
-// the first's deflated bytes, so it must be much cheaper than the first.
+/**
+ * @fileoverview Measures a second save of the same carried bytes. The second
+ * save must reuse the first's deflated bytes, so it must be much cheaper than
+ * the first.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

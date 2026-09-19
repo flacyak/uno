@@ -1,7 +1,10 @@
-// connectionSigning: each request signed by the connection covering it.
-//
-// Which connection covers an address, what each auth mode sends, and that a
-// connection saved while the engine runs is used by its next request.
+/**
+ * @fileoverview connectionSigning: each request signed by the connection
+ * covering it.
+ *
+ * Which connection covers an address, what each auth mode sends, and that a
+ * connection saved while the engine runs is used by its next request.
+ */
 
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

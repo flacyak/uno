@@ -1,8 +1,10 @@
-// credential_process: a profile whose keys come from a program.
-//
-// The program's keys are used, it is run again only once they expire, and a
-// program that fails or prints the wrong thing is an error naming the
-// profile.
+/**
+ * @fileoverview credential_process: a profile whose keys come from a program.
+ *
+ * The program's keys are used, it is run again only once they expire, and a
+ * program that fails or prints the wrong thing is an error naming the
+ * profile.
+ */
 
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

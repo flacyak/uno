@@ -1,6 +1,9 @@
-// The engine's messages as WebSocket frames: every kind of value comes back
-// as what it was, bytes ride beside the JSON uncopied, and a bad frame is
-// refused in a sentence. The last tests run a real engine over the frames.
+/**
+ * @fileoverview The engine's messages as WebSocket frames: every kind of value
+ * comes back as what it was, bytes ride beside the JSON uncopied, and a bad
+ * frame is refused in a sentence. The last tests run a real engine over the
+ * frames.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

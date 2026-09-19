@@ -1,10 +1,12 @@
-// A scenario for run.ts: an engine wired the way the desktop wires one,
-// taking every way out the core has.
-//
-// It opens, lists and peeks at a file on disk; opens, lists and stats an
-// object in a bucket; reads a bucket through a credential_process profile and
-// another through an STS role; tries a connection; reads dropped bytes; and
-// saves a workspace and opens it again.
+/**
+ * @fileoverview A scenario for run.ts: an engine wired the way the desktop
+ * wires one, taking every way out the core has.
+ *
+ * It opens, lists and peeks at a file on disk; opens, lists and stats an
+ * object in a bucket; reads a bucket through a credential_process profile and
+ * another through an STS role; tries a connection; reads dropped bytes; and
+ * saves a workspace and opens it again.
+ */
 
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

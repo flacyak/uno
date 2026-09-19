@@ -1,5 +1,7 @@
-// Ingest tests for files read with header mode "none": the columns are
-// numbered and the first line is a data row.
+/**
+ * @fileoverview Ingest tests for files read with header mode "none": the
+ * columns are numbered and the first line is a data row.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 

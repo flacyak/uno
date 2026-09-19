@@ -1,7 +1,9 @@
-// Saving a source of several files read as one, and reopening the save. The
-// save points at every part with what the join measured of it. A reopen
-// places the parts from that record, opens a part when a read reaches it,
-// and refuses a part that has drifted from the record.
+/**
+ * @fileoverview Saving a source of several files read as one, and reopening the
+ * save. The save points at every part with what the join measured of it. A
+ * reopen places the parts from that record, opens a part when a read reaches
+ * it, and refuses a part that has drifted from the record.
+ */
 
 import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

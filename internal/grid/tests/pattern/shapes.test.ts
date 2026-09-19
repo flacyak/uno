@@ -1,4 +1,6 @@
-// Tests for the program shapes the recogniser proposes.
+/**
+ * @fileoverview Tests for the program shapes the recogniser proposes.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 

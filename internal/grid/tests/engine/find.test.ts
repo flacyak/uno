@@ -1,6 +1,9 @@
-// `find` over the fixture: a case-sensitive substring test on what a cell
-// shows with the log applied. It skips the row it starts from, stops at the
-// end of the file in its direction, and a newer find cancels an older one.
+/**
+ * @fileoverview `find` over the fixture: a case-sensitive substring test on
+ * what a cell shows with the log applied. It skips the row it starts from,
+ * stops at the end of the file in its direction, and a newer find cancels an
+ * older one.
+ */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
