@@ -170,6 +170,7 @@
   ],
   "unsaved_edits_key_again": "unsaved edits · Ctrl+S first, or {key} again to drop them",
   "unsaved_edits_click_again": "unsaved edits · Ctrl+S first, or click again to drop them",
+  "unsaved_edits_open_again": "unsaved edits · Ctrl+S first, or open it again to drop them",
   "size_bytes": [
     {
       "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
