@@ -7,8 +7,8 @@
 // part is opened through the handlers given, so a part can be on a disk, in
 // a bucket or in memory.
 
-import { concat } from '../go/index.ts';
-import { unreachable } from '../never.ts';
+import { concat } from '#go';
+import { unreachable } from '#never';
 import {
   UnsupportedEncodingError,
   bomLength,
@@ -16,13 +16,13 @@ import {
   encodingName,
   openFormat,
   peekFormat,
-} from '../ingest/index.ts';
-import type { Encoding, Format, HeaderMode } from '../ingest/index.ts';
+} from '#ingest';
+import type { Encoding, Format, HeaderMode } from '#ingest';
 import { openWith } from './index.ts';
 import type { ByteSource, FileHandler, SingleRef } from './index.ts';
 // Type only.
-import type { Provider } from '../plugin/index.ts';
-import { messageOf } from '../said/index.ts';
+import type { Provider } from '#plugin';
+import { messageOf } from '#said';
 
 /**
  * Whether the parts have a header row. With "first", the first part's header

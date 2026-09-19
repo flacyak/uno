@@ -1,6 +1,6 @@
-import { quote } from '../go/index.ts';
-import { unreachable } from '../never.ts';
-import { parse as parseNumber } from '../num/index.ts';
+import { quote } from '#go';
+import { unreachable } from '#never';
+import { parse as parseNumber } from '#num';
 import type { Formula, Node } from './ast.ts';
 import { text } from './ast.ts';
 
