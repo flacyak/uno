@@ -37,6 +37,10 @@ const here = __dirname;
 const WINDOW_WIDTH = 1100;
 const WINDOW_HEIGHT = 720;
 
+/** The smallest the window can be dragged to and still lay the grid out. */
+const MIN_WINDOW_WIDTH = 640;
+const MIN_WINDOW_HEIGHT = 400;
+
 /**
  * The Vite dev server URL, read from the environment at run time. When it is
  * unset the renderer is loaded from a file beside this one.
@@ -111,8 +115,8 @@ function createWindow(files: string[]): BrowserWindow {
   const win = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
-    minWidth: 640,
-    minHeight: 400,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     show: false,
     // Frameless. The page draws its own close button and provides its own
     // drag regions.
