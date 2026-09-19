@@ -1,7 +1,10 @@
-// The engine: one workspace and its log, served to one client over a port.
-//
-// A platform's entry file builds a Port from its runtime, lists its file
-// providers, and calls `serve`.
+/**
+ * @fileoverview The engine: one workspace and its log, served to one client
+ * over a port.
+ *
+ * A platform's entry file builds a Port from its runtime, lists its file
+ * providers, and calls `serve`.
+ */
 
 import { ROWS_AT_MOST } from './protocol.ts';
 import type { Port, Reply, Request, SignIns } from './protocol.ts';

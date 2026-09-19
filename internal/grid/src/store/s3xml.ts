@@ -1,8 +1,10 @@
-// A reader for the elements of a ListBucketResult, also used for the STS
-// reply.
-//
-// It reads the few elements it needs with regular expressions and ignores
-// the rest. It works on the text of a reply it is handed.
+/**
+ * @fileoverview A reader for the elements of a ListBucketResult, also used for
+ * the STS reply.
+ *
+ * It reads the few elements it needs with regular expressions and ignores
+ * the rest. It works on the text of a reply it is handed.
+ */
 
 import { parseTime } from '#go';
 
