@@ -247,6 +247,7 @@
   "workspace_not_a_source": "{name} es un espacio de trabajo propio · ábrelo en lugar de añadirlo",
   "added_names": "añadido: {names}",
   "removed_name": "{name} quitado",
+  "stopped_opening": "se detuvo la apertura de {name}",
   "appended_to": "{files} añadido al final de {name}",
   "indexing_g_again": "indexando {percent} % · G otra vez cuando termine",
   "row_not_indexed": "la fila {row} todavía no está indexada",
