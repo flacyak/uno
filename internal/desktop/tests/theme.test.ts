@@ -1,10 +1,12 @@
-// @vitest-environment happy-dom
-//
-// The themes, and which one the page wears.
-//
-// Checks the choice and what it puts on the page: kept between launches, an
-// unknown kept value read as the default, the system's mode followed while
-// the appearance is "system", and every palette readable.
+/**
+ * @fileoverview The themes, and which one the page wears.
+ *
+ * Checks the choice and what it puts on the page: kept between launches, an
+ * unknown kept value read as the default, the system's mode followed while
+ * the appearance is "system", and every palette readable.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 

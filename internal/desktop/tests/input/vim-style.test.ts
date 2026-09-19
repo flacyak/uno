@@ -1,5 +1,7 @@
-// The vim-style input strategy on its own: a mode, the pending keys, and
-// a key in; the next pending keys and one action out.
+/**
+ * @fileoverview The vim-style input strategy on its own: a mode, the pending
+ * keys, and a key in; the next pending keys and one action out.
+ */
 
 import { expect, test } from "vite-plus/test";
 

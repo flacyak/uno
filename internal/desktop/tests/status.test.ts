@@ -1,8 +1,10 @@
-// @vitest-environment happy-dom
-//
-// The status bar's clock: the time the showing tab's source has taken while
-// it indexes, that time with the row count once it is complete, and nothing
-// for a tab with no file behind it or with no workspace open.
+/**
+ * @fileoverview The status bar's clock: the time the showing tab's source has
+ * taken while it indexes, that time with the row count once it is complete, and
+ * nothing for a tab with no file behind it or with no workspace open.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 

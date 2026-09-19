@@ -1,9 +1,11 @@
-// @vitest-environment happy-dom
-//
-// The × on a source still opening, over the real engine. The disk provider
-// is wrapped so the second fixture's open sits where a slow bucket would
-// leave it: format sniffed, first chunk on its way, waiting for its sample
-// rows with its row on screen.
+/**
+ * @fileoverview The × on a source still opening, over the real engine. The disk
+ * provider is wrapped so the second fixture's open sits where a slow bucket
+ * would leave it: format sniffed, first chunk on its way, waiting for its
+ * sample rows with its row on screen.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { setTimeout as sleep } from "node:timers/promises";
 
