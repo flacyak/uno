@@ -32,6 +32,11 @@ export const OPEN: Check[] = [
     `,
   },
   {
+    // The file is still on disk, so a workspace nobody has touched has nothing to lose.
+    name: "a file just opened has nothing unsaved",
+    script: `return document.querySelector(".tab .dirty") === null ? "" : "the tab has a dirty dot"`,
+  },
+  {
     name: "the delimiter was sniffed from the bytes",
     script: `
       const s = document.querySelector("#status-file").textContent;

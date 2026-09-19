@@ -5,7 +5,14 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { Engine, messagePort, serve } from "../../src/engine/index.ts";
-import type { MessagePortLike, Reply, Request, Tuning } from "../../src/engine/index.ts";
+import type {
+  MessagePortLike,
+  Reply,
+  Request,
+  SourceHandle,
+  SourceRef,
+  Tuning,
+} from "../../src/engine/index.ts";
 import { read } from "../../src/ingest/index.ts";
 import type { Sheet } from "../../src/sheet/index.ts";
 import { blobSource } from "../../src/store/index.ts";
@@ -38,10 +45,17 @@ export function connect(tuning?: Tuning): { engine: Engine; done: () => void } {
   };
 }
 
-export function indexed(engine: Engine): Promise<void> {
+/** openOne adds a file that is one source, and hands back that source. */
+export async function openOne(engine: Engine, ref: SourceRef): Promise<SourceHandle> {
+  const { sources } = await engine.open(ref);
+  if (sources.length !== 1) throw new Error(`${ref.name} opened ${sources.length} sources`);
+  return sources[0]!;
+}
+
+export function indexed(source: SourceHandle): Promise<void> {
   return new Promise((resolve) => {
-    if (engine.progress?.complete === true) return resolve();
-    engine.onProgress = (p) => {
+    if (source.progress.complete) return resolve();
+    source.onProgress = (p) => {
       if (p.complete) resolve();
     };
   });

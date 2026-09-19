@@ -1,5 +1,5 @@
-// The file being viewed: its format, its index, the log over it, and the pages
-// read through them.
+// One source in a workspace: its format, its index, its part of the log, and
+// the pages read through them.
 //
 // Every row that leaves here has been finished through the pipeline, so what a
 // client draws is the file with the log applied. The log lives here and nowhere
@@ -7,8 +7,6 @@
 // no stored row is rewritten, and the rows a client asks for next come back
 // changed, wherever in the file they are.
 
-import { newManifest, readContainer, writeDocument } from "../document/index.ts";
-import type { Cell, Document } from "../document/index.ts";
 import { trimSpace } from "../go/index.ts";
 import { openFormat } from "../ingest/index.ts";
 import type { Format } from "../ingest/index.ts";
@@ -28,7 +26,6 @@ import {
 } from "../sheet/index.ts";
 import type { Edit, Written } from "../sheet/index.ts";
 import type { ByteSource } from "../store/index.ts";
-import { bytesSource } from "../store/index.ts";
 import { indexPass } from "./pass.ts";
 import type {
   Changed,
@@ -43,7 +40,7 @@ import type {
   Request,
   SourceRef,
 } from "./protocol.ts";
-import { formatBytes, messageOf } from "./protocol.ts";
+import { messageOf } from "./protocol.ts";
 import { Pages, RowIndex } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
 
@@ -55,27 +52,34 @@ const PROGRESS_MS = 100;
 /** How long a pass computes before it lets a waiting request through. */
 const SLICE_MS = 8;
 
-/**
- * The largest .uno read whole. It is the same ceiling saving embeds a source
- * under, so any file this build wrote opens again.
- */
-export const WHOLE_LIMIT = 256 << 20;
-
 type Waiter = () => boolean;
+
+/** A source as a .uno carried it: its bytes, and its part of the log. */
+export interface Carried {
+  /** The .uno it came out of, which is the name an error about it gives. */
+  container: string;
+  raw: Uint8Array;
+  edits: Edit[];
+}
+
+/** What a save writes of one source: its bytes, its log, and the grid they add up to. */
+export interface Part {
+  raw: Uint8Array;
+  edits: Edit[];
+  rows: number;
+  cols: number;
+}
 
 export class View {
   opened!: Opened;
   pages!: Pages;
   generation = 0;
 
-  private name = "";
   private source!: ByteSource;
   private format!: Format;
   private index!: RowIndex;
   private schema!: Schema;
 
-  /** What a .uno was saved with, kept for the next save. */
-  private doc: Document | undefined;
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
   private carried: Uint8Array | undefined;
 
@@ -90,48 +94,39 @@ export class View {
   private failed: Error | undefined;
   private readonly abort = new AbortController();
 
-  private constructor(private readonly port: Port<Request, Reply>) {}
+  private constructor(
+    /** What the workspace and its log call this source. */
+    readonly id: string,
+    /** The file's name, which `ingest` picks a decoder by. */
+    readonly name: string,
+    private readonly port: Port<Request, Reply>,
+  ) {}
 
+  /**
+   * open starts viewing one source. `source` is the file, or the bytes a .uno
+   * carried when `carried` says so. The view owns `source` from here on, and
+   * closes it if the open fails.
+   */
   static async open(
-    ref: SourceRef,
-    openSource: OpenSource,
+    id: string,
+    name: string,
+    source: ByteSource,
+    carried: Carried | undefined,
     port: Port<Request, Reply>,
     tuning: Tuning,
   ): Promise<View> {
-    const v = new View(port);
-    let source = await openSource(ref);
-    let name = ref.name;
-
-    // A .uno is a zip, and its source has to come out of it before anything can
-    // index it. It was written from memory, so it is read into memory.
-    if (ref.name.toLowerCase().endsWith(".uno")) {
-      let bytes: Uint8Array;
-      try {
-        if (source.size > WHOLE_LIMIT) {
-          throw new Error(
-            `${ref.name} is ${formatBytes(source.size)}, over the ${formatBytes(WHOLE_LIMIT)} a workspace can be read whole`,
-          );
-        }
-        bytes = await source.read(0, source.size);
-      } finally {
-        await source.close();
-      }
-      v.doc = readContainer(ref.name, bytes);
-      v.carried = v.doc.raw;
-      name = v.doc.manifest.source.name;
-      source = bytesSource(v.doc.raw);
-    }
+    const v = new View(id, name, port);
+    v.carried = carried?.raw;
 
     let format: Format;
     try {
       format = await openFormat(name, source);
     } catch (err) {
       await source.close();
-      if (v.doc === undefined) throw err;
-      throw new Error(`${ref.name}: embedded ${name}: ${messageOf(err)}`);
+      if (carried === undefined) throw err;
+      throw new Error(`${carried.container}: embedded ${name}: ${messageOf(err)}`);
     }
 
-    v.name = name;
     v.source = source;
     v.format = format;
     v.index = new RowIndex(format.dataStart, source.size, tuning);
@@ -152,12 +147,12 @@ export class View {
         const now = Date.now();
         if (!index.complete && now - told < PROGRESS_MS) return;
         told = now;
-        port.post({ t: "progress", progress: progressOf(index) });
+        port.post({ t: "progress", source: id, progress: progressOf(index) });
       },
     }).catch((err: unknown) => {
       v.fail(err);
       // Before the open answers, the open fails with it instead.
-      if (started) port.post({ t: "error", message: `${name}: ${messageOf(err)}` });
+      if (started) port.post({ t: "error", source: id, message: `${name}: ${messageOf(err)}` });
     });
 
     try {
@@ -165,26 +160,28 @@ export class View {
       // names rows by number, and one naming a row the source does not have
       // belongs to another file, so a .uno is indexed to the end first. Its
       // source is in memory, which makes that a moment.
-      const doc = v.doc;
-      await v.until(() => index.complete || (doc === undefined && index.readable() >= SAMPLE_ROWS));
+      await v.until(
+        () => index.complete || (carried === undefined && index.readable() >= SAMPLE_ROWS),
+      );
       started = true;
 
-      if (doc !== undefined) {
+      if (carried !== undefined) {
         v.schema.rows = index.counted;
         try {
-          v.schema.replay(doc.edits);
+          v.schema.replay(carried.edits);
         } catch (err) {
-          throw new Error(`${ref.name}: replaying edits: ${messageOf(err)}`);
+          throw new Error(`${carried.container}: replaying edits to ${name}: ${messageOf(err)}`);
         }
       }
 
       v.opened = {
+        source: id,
         name,
         size: source.size,
         label: format.label,
         columns: await v.columns(),
         progress: progressOf(index),
-        edits: doc?.edits ?? [],
+        edits: carried?.edits ?? [],
         generation: v.generation,
       };
       return v;
@@ -355,14 +352,16 @@ export class View {
       .sort((a, b) => a - b);
 
     if (cols.length === 0) {
-      this.port.post({ t: "offer", generation, offer: null });
+      this.port.post({ t: "offer", source: this.id, generation, offer: null });
       return;
     }
 
     const abort = new AbortController();
     this.survey = abort;
     this.surveyColumns(cols, byCol, abort.signal, generation).catch((err: unknown) => {
-      if (!abort.signal.aborted) this.port.post({ t: "error", message: messageOf(err) });
+      if (!abort.signal.aborted) {
+        this.port.post({ t: "error", source: this.id, message: messageOf(err) });
+      }
     });
   }
 
@@ -425,7 +424,7 @@ export class View {
         return;
       }
     }
-    if (!signal.aborted) this.port.post({ t: "offer", generation, offer: null });
+    if (!signal.aborted) this.port.post({ t: "offer", source: this.id, generation, offer: null });
   }
 
   private offer(survey: Survey, generation: number, complete: boolean): void {
@@ -433,8 +432,10 @@ export class View {
     if (p === undefined) return;
     this.port.post({
       t: "offer",
+      source: this.id,
       generation,
       offer: {
+        source: this.id,
         col: p.col,
         header: p.header,
         program: programText(p.prog),
@@ -529,42 +530,33 @@ export class View {
 
   // ------------------------------------------------------------ saving
 
-  /**
-   * save writes the workspace as a .uno: the source, embedded, and the log.
-   *
-   * Embedding is the only layout this build writes, so a source over `limit`
-   * is refused by name. Format 4 lifts that by pointing at the file instead.
-   */
-  save(active: Cell, limit: number): Promise<Uint8Array> {
-    return this.serially(async () => {
-      const size = this.carried?.length ?? this.source.size;
-      if (size > limit) {
-        throw new Error(
-          `${this.name} is ${formatBytes(size)}, and a .uno can carry ${formatBytes(limit)} of its source until it can point at the file instead`,
-        );
-      }
+  /** How many bytes of source a save would embed. */
+  get size(): number {
+    return this.carried?.length ?? this.source.size;
+  }
 
+  /** How many edits this source's log holds now. */
+  get logged(): number {
+    return this.schema.edits().length;
+  }
+
+  /**
+   * part is what a save writes of this source. It runs in turn with the edits,
+   * so the log it hands back is one a save can pair with every other source's.
+   *
+   * A source read from disk is read again at every save rather than held
+   * between them.
+   */
+  part(): Promise<Part> {
+    return this.serially(async () => {
       // The manifest records the row count, which is exact only at the end.
       await this.until(() => this.index.complete);
-
-      const doc = (this.doc ??= {
-        manifest: newManifest(this.name),
-        raw: new Uint8Array(0),
-        state: { active },
-        edits: [],
-        extra: new Map(),
-      });
-      doc.raw = this.carried ?? (await this.source.read(0, this.source.size));
-      doc.edits = this.schema.edits();
-      doc.state.active = active;
-      doc.manifest.sheet.rows = this.index.counted;
-      doc.manifest.sheet.cols = this.schema.headers.length;
-
-      const bytes = writeDocument(doc);
-      // A source read from disk is read again at the next save rather than
-      // held between saves.
-      if (this.carried === undefined) doc.raw = new Uint8Array(0);
-      return bytes;
+      return {
+        raw: this.carried ?? (await this.source.read(0, this.source.size)),
+        edits: this.schema.edits(),
+        rows: this.index.counted,
+        cols: this.schema.headers.length,
+      };
     });
   }
 

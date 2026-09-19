@@ -49,15 +49,15 @@ const WINDOW_HEIGHT = 720;
 const devServer = process.env["UNO_RENDERER_URL"];
 
 /**
- * The first argument that looks like a file to open.
+ * The arguments that look like files to open.
  *
  * Electron's own switches are dropped rather than filtered by name: anything
  * beginning with a dash is not a path, and in development argv also carries the
  * "." that told Electron which app to run.
  */
-function fileFromArgv(): string | undefined {
+function filesFromArgv(): string[] {
   const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
-  return args.find((a) => !a.startsWith("-") && a !== ".");
+  return args.filter((a) => !a.startsWith("-") && a !== ".");
 }
 
 function createWindow(): BrowserWindow {
@@ -93,10 +93,13 @@ function createWindow(): BrowserWindow {
 
   // A file named on the command line -- `uno sales.csv`, or a double-click in
   // the file manager -- is handed to the renderer once it can receive it.
-  const argued = fileFromArgv();
-  if (argued !== undefined) {
+  // Several are one workspace, `uno ads.csv shop.csv bank.csv`, so they go
+  // together and the renderer adds them in order.
+  const argued = filesFromArgv();
+  if (argued.length > 0) {
     win.webContents.once("did-finish-load", () => {
-      win.webContents.send("menu:open-path", argued);
+      if (argued.length === 1) win.webContents.send("menu:open-path", argued[0]);
+      else win.webContents.send("menu:add-paths", argued);
     });
   }
 
@@ -127,6 +130,8 @@ function buildMenu(win: BrowserWindow): void {
       label: "File",
       submenu: [
         { label: "Open…", accelerator: "CmdOrCtrl+O", click: send("menu:open") },
+        // Another export into the workspace that is open, beside the files already in it.
+        { label: "Add Source…", accelerator: "CmdOrCtrl+Shift+O", click: send("menu:add") },
         { type: "separator" },
         { label: "Save", accelerator: "CmdOrCtrl+S", click: send("menu:save") },
         { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: send("menu:save-as") },
@@ -198,7 +203,7 @@ function buildMenu(win: BrowserWindow): void {
  */
 function registerFileHandlers(win: BrowserWindow): void {
   /**
-   * Engines, one per open file, each a utility process of its own.
+   * Engines, one per open workspace, each a utility process of its own.
    *
    * Not the renderer, because reading a file by path takes Node and the renderer
    * has none. Not this process, because an index scan over 30 GB would stall
@@ -241,6 +246,20 @@ function registerFileHandlers(win: BrowserWindow): void {
     return sourceAt(picked.filePaths[0]);
   });
 
+  // Several at once, because a week's liquidity is built from several exports.
+  ipcMain.handle("file:add", async () => {
+    const picked = await dialog.showOpenDialog(win, {
+      title: "Add Source",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "Spreadsheets", extensions: ["csv", "tsv"] },
+        { name: "All files", extensions: ["*"] },
+      ],
+    });
+    if (picked.canceled) return [];
+    return picked.filePaths.map(sourceAt);
+  });
+
   ipcMain.handle("file:save-as", async (_event, suggestedName: string, bytes: Uint8Array) => {
     const picked = await dialog.showSaveDialog(win, {
       title: "Save As",
@@ -257,8 +276,8 @@ function registerFileHandlers(win: BrowserWindow): void {
   });
 }
 
-// One window. Tabs come later, and they are a renderer concern when they do:
-// the Go build runs every workspace in one process too.
+// One window. Its tabs are the sources of the workspace open in it, and they are
+// a renderer concern: the engine behind them is one process for all of them.
 void app.whenReady().then(async () => {
   const win = createWindow();
   buildMenu(win);

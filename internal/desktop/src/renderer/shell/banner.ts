@@ -5,9 +5,9 @@ import "./banner.css";
 
 import type { Offer } from "@uno/grid/engine";
 
-/** An offer is the same question while its column and program are. */
+/** An offer is the same question while its source, column and program are. */
 export function offerKey(offer: Offer): string {
-  return `${offer.col}:${offer.program}`;
+  return `${offer.source}:${offer.col}:${offer.program}`;
 }
 
 /**

@@ -66,38 +66,45 @@ test("a workspace survives being built, saved and reopened", () => {
   // 6. Saved, and the log stayed proportional to what the person did rather
   //    than to how much data they did it to.
   const doc: Document = {
-    manifest: {
-      ...newManifest("sales-q3.csv"),
-      sheet: { rows: s.rows(), cols: s.cols(), entry: "" },
-    },
-    raw,
-    state: {
-      active: { row: 0, col: UNITS },
-      columnFormulas: [{ col: CHANNEL, ref: "unit-price" }],
-    },
-    edits: s.edits(),
+    manifest: newManifest(),
+    sources: [
+      {
+        id: "sales-q3",
+        name: "sales-q3.csv",
+        raw,
+        rows: s.rows(),
+        cols: s.cols(),
+        state: {
+          active: { row: 0, col: UNITS },
+          columnFormulas: [{ col: CHANNEL, ref: "unit-price" }],
+        },
+      },
+    ],
+    active: "sales-q3",
+    log: s.edits().map((edit) => ({ source: "sales-q3", edit })),
     extra: new Map(),
   };
   const bytes = writeDocument(doc);
   expect(doc.manifest.edits.count).toBe(5);
-  expect(doc.manifest.source.bytes).toBe(raw.length);
+  expect(doc.manifest.sources[0]!.bytes).toBe(raw.length);
 
   // 7. Reopened, it is the same workspace: the rule replayed, and the bound
   //    column recomputed from the expression rather than from stored results.
   const back = readDocument("sales-q3.uno", bytes);
-  expect(back.sheet!.rows()).toBe(ROWS);
-  expect(back.sheet!.raw(0, UNITS)).toBe("1204");
-  expect(back.sheet!.columns[UNITS]!.kind).toBe("num");
-  expect(back.sheet!.binding(CHANNEL)).toBe("revenue / units");
-  expect(back.sheet!.display(0, CHANNEL)).toBe(unitPrice);
-  expect(back.state.active).toEqual({ row: 0, col: UNITS });
-  expect(back.state.columnFormulas).toEqual([{ col: CHANNEL, ref: "unit-price" }]);
+  const sheet = back.sheets!.get("sales-q3")!;
+  expect(sheet.rows()).toBe(ROWS);
+  expect(sheet.raw(0, UNITS)).toBe("1204");
+  expect(sheet.columns[UNITS]!.kind).toBe("num");
+  expect(sheet.binding(CHANNEL)).toBe("revenue / units");
+  expect(sheet.display(0, CHANNEL)).toBe(unitPrice);
+  expect(back.sources[0]!.state.active).toEqual({ row: 0, col: UNITS });
+  expect(back.sources[0]!.state.columnFormulas).toEqual([{ col: CHANNEL, ref: "unit-price" }]);
 
   // Every one of the 4,812 values came back off one line of the log.
-  for (let row = 0; row < back.sheet!.rows(); row++) {
-    expect(back.sheet!.display(row, CHANNEL), `row ${row}`).toBe(s.display(row, CHANNEL));
+  for (let row = 0; row < sheet.rows(); row++) {
+    expect(sheet.display(row, CHANNEL), `row ${row}`).toBe(s.display(row, CHANNEL));
   }
 
   // 8. And the recogniser has nothing left to ask about.
-  expect(snap(back.sheet!).propose()).toBeUndefined();
+  expect(snap(sheet).propose()).toBeUndefined();
 });

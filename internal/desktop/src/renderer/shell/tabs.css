@@ -25,6 +25,14 @@
   -webkit-app-region: no-drag;
 }
 
+.tab:not(.active) {
+  cursor: pointer;
+}
+
+.tab:not(.active):hover {
+  color: var(--ink-2);
+}
+
 .tab.active {
   color: var(--ink);
   background: var(--surface);
@@ -36,6 +44,43 @@
   height: 6px;
   border-radius: 999px;
   background: var(--flag);
+}
+
+/* The × is quiet until the tab it closes is under the pointer. */
+.tab .close {
+  margin: 0 -5px 0 -2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--ink-3);
+  line-height: 16px;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.tab:hover .close,
+.tab.active .close {
+  visibility: visible;
+}
+
+.tab .close:hover {
+  color: var(--ink);
+  background: var(--rule-2);
+}
+
+.tab-add {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px 4px;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink-3);
+  cursor: pointer;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.tab-add:hover {
+  color: var(--ink);
 }
 
 .win-tabs .grow {
