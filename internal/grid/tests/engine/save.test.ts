@@ -18,14 +18,14 @@ import {
   readContainer,
   readDocument,
   writeDocument,
-} from '../../src/document/index.ts';
-import type { Document, Source } from '../../src/document/index.ts';
-import type { SourceHandle } from '../../src/engine/index.ts';
-import { sha256Hex } from '../../src/go/index.ts';
-import { read } from '../../src/ingest/index.ts';
-import { parse as parseProgram } from '../../src/program/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import { COLS, ROWS, UNITS } from '../testdata/sales-q3.ts';
+} from '#document';
+import type { Document, Source } from '#document';
+import type { SourceHandle } from '#engine';
+import { sha256Hex } from '#go';
+import { read } from '#ingest';
+import { parse as parseProgram } from '#program';
+import { Op } from '#sheet';
+import { COLS, ROWS, UNITS } from '#tests/testdata/sales-q3';
 import {
   FIXTURE,
   bytes,

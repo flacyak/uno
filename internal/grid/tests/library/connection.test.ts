@@ -12,8 +12,8 @@ import {
   formatConnection,
   parseConnection,
   stampConnection,
-} from '../../src/library/index.ts';
-import type { Connection } from '../../src/library/index.ts';
+} from '#library';
+import type { Connection } from '#library';
 
 function fixture(id: string): string {
   return readFileSync(

@@ -3,10 +3,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { read } from '../../src/ingest/index.ts';
-import { snap } from '../../src/pattern/index.ts';
-import type { Proposal } from '../../src/pattern/index.ts';
-import { Sheet } from '../../src/sheet/index.ts';
+import { read } from '#ingest';
+import { snap } from '#pattern';
+import type { Proposal } from '#pattern';
+import { Sheet } from '#sheet';
 
 /** A one-column sheet with the given header and values. */
 export function oneCol(header: string, ...values: string[]): Sheet {

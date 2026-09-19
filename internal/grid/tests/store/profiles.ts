@@ -5,7 +5,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { AwsCredentials } from '../../src/store/s3.ts';
+import type { AwsCredentials } from '#store/s3';
 import { HOME_REGION } from './regions.ts';
 
 export const FINANCE: AwsCredentials = {

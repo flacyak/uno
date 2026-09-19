@@ -4,14 +4,14 @@
 
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import { TUNING } from '../../src/engine/index.ts';
-import type { Tuning } from '../../src/engine/index.ts';
-import { AHEAD } from '../../src/store/ahead.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { HOME_REGION } from '../store/regions.ts';
-import { BUCKET, KEYS, bucket } from '../store/standin.ts';
-import type { Bucket } from '../store/standin.ts';
+import { TUNING } from '#engine';
+import type { Tuning } from '#engine';
+import { AHEAD } from '#store/ahead';
+import { diskProvider } from '#store/node';
+import { s3Provider } from '#store/s3';
+import { HOME_REGION } from '#tests/store/regions';
+import { BUCKET, KEYS, bucket } from '#tests/store/standin';
+import type { Bucket } from '#tests/store/standin';
 import { bytes, connect, indexed, openOne } from './harness.ts';
 
 /** Milliseconds added to each request to the bucket. */

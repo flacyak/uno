@@ -6,9 +6,9 @@
 
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import type { Connection } from '../../src/library/index.ts';
-import { hostedAuth } from '../../src/store/node.ts';
-import type { AwsCredentials, S3Location } from '../../src/store/s3.ts';
+import type { Connection } from '#library';
+import { hostedAuth } from '#store/node';
+import type { AwsCredentials, S3Location } from '#store/s3';
 import { HOME_REGION } from './regions.ts';
 import { sts } from './stsstandin.ts';
 import type { Sts } from './stsstandin.ts';

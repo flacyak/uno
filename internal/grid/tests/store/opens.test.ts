@@ -11,9 +11,9 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
-import { blobFiles, openWith, readAll } from '../../src/store/index.ts';
-import { diskProvider, localFiles } from '../../src/store/node.ts';
-import { FIXTURE, bytes, connect } from '../engine/harness.ts';
+import { blobFiles, openWith, readAll } from '#store';
+import { diskProvider, localFiles } from '#store/node';
+import { FIXTURE, bytes, connect } from '#tests/engine/harness';
 import { MODULES, PLACES, offences as outside } from './ways.ts';
 import type { Way } from './ways.ts';
 

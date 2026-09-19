@@ -8,9 +8,9 @@ import {
   peekFormat,
   read,
   sniffEncoding,
-} from '../../src/ingest/index.ts';
-import type { Encoding } from '../../src/ingest/index.ts';
-import { blobSource } from '../../src/store/index.ts';
+} from '#ingest';
+import type { Encoding } from '#ingest';
+import { blobSource } from '#store';
 
 /** Bytes openFormat reads first, before it knows how long the header is. */
 const PEEK = 64 << 10;

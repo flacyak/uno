@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'vite-plus/test';
 
-import {
-  FORMAT_VERSION,
-  formatFormula,
-  parseFormula,
-  validID,
-} from '../../src/library/index.ts';
-import type { Formula } from '../../src/library/index.ts';
+import { FORMAT_VERSION, formatFormula, parseFormula, validID } from '#library';
+import type { Formula } from '#library';
 
 function column(
   id: string,

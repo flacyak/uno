@@ -29,7 +29,7 @@ import {
   toUpper,
   trimSpace,
   unquote,
-} from '../../src/go/index.ts';
+} from '#go';
 
 describe('runes', () => {
   test('splits code points, not code units', () => {

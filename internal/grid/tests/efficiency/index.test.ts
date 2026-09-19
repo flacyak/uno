@@ -11,12 +11,12 @@ import vm from 'node:vm';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { RowIndex, TUNING } from '../../src/engine/index.ts';
-import type { Engine } from '../../src/engine/index.ts';
-import { peekFormat } from '../../src/ingest/index.ts';
-import type { ByteSource } from '../../src/store/index.ts';
-import { diskProvider, nodeSource } from '../../src/store/node.ts';
-import { SCREEN, connect, indexed, openOne } from '../engine/harness.ts';
+import { RowIndex, TUNING } from '#engine';
+import type { Engine } from '#engine';
+import { peekFormat } from '#ingest';
+import type { ByteSource } from '#store';
+import { diskProvider, nodeSource } from '#store/node';
+import { SCREEN, connect, indexed, openOne } from '#tests/engine/harness';
 import { record } from './record.ts';
 import type { Metric } from './record.ts';
 
