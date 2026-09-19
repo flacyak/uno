@@ -4,9 +4,9 @@
 // the cell editor acts as insert mode. `i` moves one level in and Esc moves
 // one level out.
 
-import { m } from "../../paraglide/messages.js";
-import { NAMED_MOTIONS, NONE, done, isCharacter, isLead, move, showing } from "../keys.ts";
-import type { Action, Caret, Mode, Motion, Pending, Press, Step } from "../keys.ts";
+import { m } from "#paraglide/messages";
+import { NAMED_MOTIONS, NONE, done, isCharacter, isLead, move, showing } from "#renderer/keys";
+import type { Action, Caret, Mode, Motion, Pending, Press, Step } from "#renderer/keys";
 import type { EditorKey, InputStrategy } from "./strategy.ts";
 
 /** Maximum digits in a count prefix. Further digits are dropped. */

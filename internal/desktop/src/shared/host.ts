@@ -7,8 +7,8 @@
 //
 // The Electron implementation is `preload` plus `renderer/host.ts`.
 
-import type { MessagePortLike, SourceRef } from "@uno/grid/engine";
-import type { Connection } from "@uno/grid/library";
+import type { MessagePortLike, SourceRef } from "#engine";
+import type { Connection } from "#library";
 
 export interface Host {
   /** Shows the open dialog. Returns undefined when the user cancels. */

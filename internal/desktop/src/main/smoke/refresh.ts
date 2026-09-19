@@ -9,7 +9,7 @@
 
 import { join } from "node:path";
 
-import { NEWER_AFTER_MS } from "../../renderer/timing.ts";
+import { NEWER_AFTER_MS } from "#renderer/timing";
 import type { Check } from "./check.ts";
 
 /** The workspace sources.ts saved, with the object in it. */

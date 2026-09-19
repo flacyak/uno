@@ -9,14 +9,14 @@
 import "./arriving.css";
 import "./panel.css";
 
-import type { Peeked, SourceRef } from "@uno/grid/engine";
-import type { SingleRef } from "@uno/grid/store";
+import type { Peeked, SourceRef } from "#engine";
+import type { SingleRef } from "#store";
 
-import { m } from "../../paraglide/messages.js";
-import { firstRow, fitPool, poolSize } from "../grid/metrics.ts";
-import type { InputName } from "../input/index.ts";
-import { bytes } from "../locale.ts";
-import { say } from "../said.ts";
+import { m } from "#paraglide/messages";
+import { firstRow, fitPool, poolSize } from "#renderer/grid/metrics";
+import type { InputName } from "#renderer/input";
+import { bytes } from "#renderer/locale";
+import { say } from "#renderer/said";
 import {
   SECTIONS,
   connecting,
@@ -27,7 +27,7 @@ import {
   opening,
   stateOf,
   stateWord,
-} from "../sources.ts";
+} from "#renderer/sources";
 import type {
   Arriving,
   Button,
@@ -39,7 +39,7 @@ import type {
   Section,
   Sources,
   TabAction,
-} from "../sources.ts";
+} from "#renderer/sources";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
 import { Words, button, el } from "./util.ts";

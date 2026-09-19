@@ -4,7 +4,7 @@
 // index.ts's PRELUDE interpolates the same values, so a check written as a
 // string sees them under the same names.
 
-import { baseLocale } from "../../paraglide/runtime.js";
+import { baseLocale } from "#paraglide/runtime";
 
 /** The locale the smoke runs the app in, and so the one its counts are written in. */
 export const LOCALE = baseLocale;
