@@ -1,18 +1,29 @@
-// Package document reads and writes the .uno container: a zip holding the bytes
-// of every file you were given, deflated, alongside the log of what you did to
-// them.
+// Package document reads and writes the .uno container: a zip holding the log of
+// what you did to each of your files, and, for each file, either where it is or
+// a copy of it.
 //
-// It consults nothing outside the file it was handed -- no original, no stored
-// path, no network -- which is what lets a workspace open on a machine that has
-// never seen the CSV it was made from.
+// Pointing rather than copying is what lets a workspace hold sources bigger than
+// a zip has any business carrying. A workspace of a 30 GB ledger and four 2 GB
+// exports is a few kilobytes of JSON, saves instantly, and costs nothing to keep
+// a dozen copies of. What it gives up is travelling alone: a .uno that points at
+// /home/you/exports opens on your machine and nowhere else, so a source uno
+// cannot name by path -- bytes dropped into a browser, with no file behind them
+// -- is carried instead.
+//
+// A pointer that no longer resolves is not a broken file. The source keeps its
+// id, its edits and its place in the log; it simply has no grid until somebody
+// points it at a file again. Losing a path must never cost the work done through
+// it.
 //
 // It is a codec and not a file reader. `readDocument` takes bytes and
 // `writeDocument` returns them, so the same code serves the desktop, where a
 // FileStore puts them on a disk, and the browser, where there is no disk to put
-// them on.
+// them on. Nothing here opens the file a source points at: it hands the path
+// back, and the engine does.
 
 import type { Edit } from "../sheet/index.ts";
 import type { Sheet } from "../sheet/index.ts";
+import { against, dirOf, relativeTo } from "./path.ts";
 
 /**
  * FORMAT_VERSION is the highest layout this build reads, and the highest it
@@ -24,7 +35,7 @@ import type { Sheet } from "../sheet/index.ts";
  * The alternative is that adding an operation nobody used locks every file the
  * release touches out of every build before it.
  */
-export const FORMAT_VERSION = 4;
+export const FORMAT_VERSION = 5;
 
 /** What a log of nothing but single-cell edits needs, which is every file uno
  * wrote before the recogniser existed. */
@@ -45,6 +56,13 @@ export const FORMULA_VERSION = 3;
  */
 export const SOURCES_VERSION = 4;
 
+/**
+ * What a workspace that points at a file needs. A build before it reads every
+ * source as one it carries, finds no entry where the manifest promised bytes,
+ * and has no idea there is a path to try instead.
+ */
+export const POINTED_VERSION = 5;
+
 export const GENERATOR = "uno 0.2.0";
 
 /**
@@ -61,29 +79,56 @@ const SOURCE_STEM = "data/source";
 const SOURCE_DIR = "data/source/";
 
 /**
- * Source is the provenance of one file's raw bytes, as uno.json records it.
+ * Source is where one file is, as uno.json records it.
  *
- * Name and not path: a path is precisely the thing that stops being true when
- * the file travels. The name is kept because it is useful to display and
- * because `ingest` picks its decoder from the extension; nothing here is ever
- * resolved against a filesystem.
+ * Exactly one of `entry` and `path` is set. An entry is a copy of the file
+ * inside this zip. A path is where the file was when the workspace was saved,
+ * relative to the .uno when the file sits under its folder and absolute
+ * otherwise.
+ *
+ * The name is kept either way, because it is what the tab says and because
+ * `ingest` picks its decoder from the extension. For a pointed-at source it is
+ * also what identifies the file after somebody has moved it: the name is the
+ * thing a person recognises when uno asks them where it went.
  *
  * The delimiter and encoding are deliberately absent. The reader derives them
- * from these same bytes with the same code that derived them the first time, so
- * a stored copy could only ever be a second opinion that disagrees.
- *
- * The rows and columns are the shape of the grid the bytes and the log add up
- * to. They are written so that a recents list or a file inspector can say how
- * big a workspace is without decoding it.
+ * from the same bytes with the same code that derived them the first time, so a
+ * stored copy could only ever be a second opinion that disagrees.
  */
 export interface Source {
   /** What the log calls this source. Unique in its workspace, and never reused
    * for another file in it. */
   id: string;
   name: string;
+
+  /**
+   * The file's size. For a carried source it is the length of the entry; for a
+   * pointed-at one it is what the file measured at the save.
+   *
+   * That makes it the cheap test for "is this still the file the log was
+   * written against", and the only one worth running: hashing 30 GB to open a
+   * workspace would cost more than every other part of opening it put together.
+   */
   bytes: number;
+
+  /** Over the carried bytes. Empty for a pointed-at source, which is not read
+   * until the engine opens it. */
   sha256: string;
+
+  /** The zip entry holding a copy of the file, or "" for a pointed-at source. */
   entry: string;
+
+  /** Where the file is, or "" for a carried source. */
+  path: string;
+
+  /**
+   * The shape of the grid the file and the log add up to, so a recents list or
+   * a file inspector can say how big a workspace is without decoding it.
+   *
+   * For a pointed-at source still being indexed at the save, `rows` is as far
+   * as the index had got. Nothing replays against it -- the engine counts the
+   * rows itself -- so it is a number to show and not one to trust.
+   */
   rows: number;
   cols: number;
 }
@@ -150,17 +195,24 @@ export interface State {
 }
 
 /**
- * Embedded is one source as a workspace holds it in memory: its bytes, and
- * what its grid looked like.
+ * Held is one source as a workspace holds it: where its bytes are, and what its
+ * grid looked like.
  *
- * The caller owns the facts the writer cannot see -- the id, the file's name,
- * and the shape of the grid the log builds. Everything else about the source
- * is measured from `raw` as it is written.
+ * Exactly one of `raw` and `path` is set, and which one decides whether the save
+ * copies the file or points at it. The caller owns the facts the writer cannot
+ * see -- the id, the file's name, the shape of the grid the log builds. What can
+ * be measured is measured as it is written.
  */
-export interface Embedded {
+export interface Held {
   id: string;
   name: string;
-  raw: Uint8Array;
+  /** The file's bytes, for a source the workspace carries. */
+  raw?: Uint8Array;
+  /** Where the file is, absolute, for a source the workspace points at. */
+  path?: string;
+  /** What the file measured, for a pointed-at source. Taken from `raw` for a
+   * carried one. */
+  bytes?: number;
   rows: number;
   cols: number;
   state: State;
@@ -195,10 +247,20 @@ export interface Document {
    */
   manifest: Manifest;
   /** In the order the workspace shows them. Never empty. */
-  sources: Embedded[];
+  sources: Held[];
   /** The id of the source that was showing. */
   active: string;
   log: Logged[];
+
+  /**
+   * Where the .uno itself is, so a source under the same folder is pointed at
+   * relative to it and the folder can be copied whole.
+   *
+   * Empty when that is not known -- a browser download has no path until after
+   * it is written -- and every pointer is then absolute. `readContainer` takes
+   * the same path and reads the relative ones back from it.
+   */
+  at: string;
 
   /**
    * Entries this build did not recognise, carried through to the next save.
@@ -271,4 +333,18 @@ export function newManifest(): Manifest {
     sheet: { entry: "" },
     edits: { count: 0, entry: "" },
   };
+}
+
+/**
+ * storedPath is what the manifest writes down for a source at `file`, given the
+ * .uno going to `at`: relative where the file sits under the workspace's own
+ * folder, absolute everywhere else.
+ */
+export function storedPath(file: string, at: string): string {
+  return relativeTo(file, dirOf(at)) || file;
+}
+
+/** resolvedPath is where a stored path points, read from the .uno at `at`. */
+export function resolvedPath(stored: string, at: string): string {
+  return against(stored, dirOf(at));
 }

@@ -7,9 +7,12 @@ import {
   FORMULA_VERSION,
   LOG_ENTRY,
   MANIFEST_ENTRY,
+  POINTED_VERSION,
   RULE_VERSION,
+  SOURCES_VERSION,
   STATE_ENTRY,
   newManifest,
+  readContainer,
   readDocument,
   sourceId,
   writeDocument,
@@ -53,6 +56,7 @@ function oneSource(
     active: id,
     log: sh.edits().map((edit) => ({ source: id, edit })),
     extra: new Map(),
+    at: "",
   };
 }
 
@@ -334,6 +338,7 @@ function twoSources(): { bytes: Uint8Array; doc: Document } {
     active: "google-ads",
     log,
     extra: new Map(),
+    at: "",
   };
   return { bytes: writeDocument(doc), doc };
 }
@@ -365,7 +370,7 @@ describe("a workspace of several sources", () => {
 
   test("needs format 4, and gives each source an entry of its own", () => {
     const { bytes, doc } = twoSources();
-    expect(doc.manifest.format).toBe(FORMAT_VERSION);
+    expect(doc.manifest.format).toBe(SOURCES_VERSION);
 
     const entries = Object.keys(unzipSync(bytes)).sort();
     expect(entries).toEqual(
@@ -437,7 +442,7 @@ describe("a workspace of several sources", () => {
     });
 
     const again = readDocument("sales.uno", writeDocument(back));
-    expect(again.manifest.format).toBe(FORMAT_VERSION);
+    expect(again.manifest.format).toBe(SOURCES_VERSION);
     expect(again.sources.map((s) => s.id)).toEqual(["sales", "ads"]);
     expect(again.sheets!.get("sales")!.raw(0, UNITS)).toBe("1204");
     expect(again.log.map((l) => l.source)).toEqual(["sales"]);
@@ -447,6 +452,140 @@ describe("a workspace of several sources", () => {
     const { doc } = twoSources();
     doc.log.push({ source: "tiktok", edit: doc.log[0]!.edit });
     expect(() => writeDocument(doc)).toThrow("names tiktok, which is not a source here");
+  });
+});
+
+// ---------------------------------------------------------- pointed at
+
+describe("a workspace that points at its sources", () => {
+  /** One source carried, one pointed at: the mixed case, which is what a
+   * browser drop beside a file on disk would make. */
+  function mixed(at: string): Document {
+    const sales = ingestRead("sales.csv", CSV_BODY);
+    sales.set(0, UNITS, "1204");
+    return {
+      manifest: newManifest(),
+      sources: [
+        {
+          id: "ledger",
+          name: "ledger.csv",
+          path: "/home/cpa/q4/exports/ledger.csv",
+          bytes: 3_300_000_000,
+          rows: 41_000_000,
+          cols: 8,
+          state: { active: { row: 0, col: 0 } },
+        },
+        {
+          id: "sales",
+          name: "sales.csv",
+          raw: encoder.encode(CSV_BODY),
+          rows: sales.rows(),
+          cols: sales.cols(),
+          state: { active: ACTIVE },
+        },
+      ],
+      active: "sales",
+      log: sales.edits().map((edit) => ({ source: "sales", edit })),
+      extra: new Map(),
+      at,
+    };
+  }
+
+  test("writes a path instead of an entry, and copies nothing in", () => {
+    const doc = mixed("/home/cpa/q4/books.uno");
+    const bytes = writeDocument(doc);
+
+    expect(doc.manifest.format).toBe(POINTED_VERSION);
+    // A 3 GB source and a 100-byte one, and the container is the size of the
+    // small one.
+    expect(bytes.length).toBeLessThan(2048);
+
+    const entries = Object.keys(unzipSync(bytes)).sort();
+    expect(entries).toEqual(
+      [MANIFEST_ENTRY, "data/source/sales.csv", STATE_ENTRY, LOG_ENTRY].sort(),
+    );
+
+    const [ledger, sales] = doc.manifest.sources;
+    expect(ledger!.path).toBe("exports/ledger.csv");
+    expect(ledger!.entry).toBe("");
+    expect(ledger!.bytes, "what the file measured at the save").toBe(3_300_000_000);
+    expect(sales!.entry).toBe("data/source/sales.csv");
+    expect(sales!.path).toBe("");
+    expect(sales!.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  // Nobody should have to wonder which of two empty fields means what.
+  test("writes neither key for the half that does not apply", () => {
+    const written = JSON.parse(
+      strFromU8(unzipSync(writeDocument(mixed("/home/cpa/q4/books.uno")))[MANIFEST_ENTRY]!),
+    ) as { sources: Array<Record<string, unknown>> };
+
+    expect(Object.keys(written.sources[0]!)).toEqual([
+      "id",
+      "name",
+      "bytes",
+      "path",
+      "rows",
+      "cols",
+    ]);
+    expect(Object.keys(written.sources[1]!)).toEqual([
+      "id",
+      "name",
+      "bytes",
+      "sha256",
+      "entry",
+      "rows",
+      "cols",
+    ]);
+  });
+
+  test("reads the path back against wherever the workspace is now", () => {
+    const bytes = writeDocument(mixed("/home/cpa/q4/books.uno"));
+    const back = readContainer("books.uno", bytes, "/media/stick/q4/books.uno");
+
+    expect(back.sources[0]!.path).toBe("/media/stick/q4/exports/ledger.csv");
+    expect(back.sources[0]!.raw, "nothing to read: it was never copied in").toBeUndefined();
+    expect(back.sources[1]!.raw).toEqual(encoder.encode(CSV_BODY));
+    expect(back.sources[1]!.path).toBeUndefined();
+  });
+
+  // readDocument reads a container and opens nothing. A pointed-at source is
+  // the engine's to open, an index at a time.
+  test("builds a sheet for what it carries and skips what it points at", () => {
+    const back = readDocument("books.uno", writeDocument(mixed("")));
+
+    expect([...back.sheets!.keys()]).toEqual(["sales"]);
+    expect(back.sheets!.get("sales")!.raw(0, UNITS)).toBe("1204");
+    expect(
+      back.sources.map((s) => s.id),
+      "both are still sources",
+    ).toEqual(["ledger", "sales"]);
+  });
+
+  test("refuses a source that is both, or neither", () => {
+    const both = mixed("");
+    both.sources[0]!.raw = encoder.encode(CSV_BODY);
+    expect(() => writeDocument(both)).toThrow("ledger.csv is both carried and pointed at");
+
+    const neither = mixed("");
+    delete neither.sources[0]!.path;
+    expect(() => writeDocument(neither)).toThrow(
+      "ledger.csv has neither bytes to carry nor a path to point at",
+    );
+  });
+
+  test("refuses to read a source with no entry and no path", () => {
+    const bytes = writeDocument(mixed(""));
+    const entries = unzipSync(bytes);
+    const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as {
+      sources: Array<Record<string, unknown>>;
+    };
+    delete m.sources[0]!["path"];
+    entries[MANIFEST_ENTRY] = encoder.encode(JSON.stringify(m));
+
+    expect(() => readContainer("books.uno", zipSync(entries))).toThrow(
+      "ledger.csv has no entry in this file and no path to the original",
+    );
   });
 });
 

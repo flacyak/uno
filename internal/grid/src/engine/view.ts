@@ -54,17 +54,26 @@ const SLICE_MS = 8;
 
 type Waiter = () => boolean;
 
-/** A source as a .uno carried it: its bytes, and its part of the log. */
+/** A source as a .uno left it: its part of the log, and its bytes where the
+ * workspace carried them rather than pointing at the file. */
 export interface Carried {
-  /** The .uno it came out of, which is the name an error about it gives. */
+  /** The .uno it came out of, which is what an error about the log blames.
+   * Empty where there is none: a file picked to replace a source that lost
+   * its own speaks for itself. */
   container: string;
-  raw: Uint8Array;
+  /** The bytes the container held. Undefined for a source it pointed at, which
+   * is read from its own file like any other. */
+  raw?: Uint8Array;
   edits: Edit[];
 }
 
-/** What a save writes of one source: its bytes, its log, and the grid they add up to. */
+/** What a save writes of one source: where its bytes are, its log, and the grid
+ * they add up to. Exactly one of `raw` and `path` is set. */
 export interface Part {
-  raw: Uint8Array;
+  raw?: Uint8Array;
+  path?: string;
+  /** What the file measures, for a save that points at it rather than copying it. */
+  bytes: number;
   edits: Edit[];
   rows: number;
   cols: number;
@@ -83,6 +92,10 @@ export class View {
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
   private carried: Uint8Array | undefined;
 
+  /** Where the file is, so a save can point at it. Empty for bytes with no file
+   * behind them, which a save has to carry. */
+  readonly path: string;
+
   private transform = false;
   private survey: AbortController | undefined;
   /** The find running now. A newer one stops it. */
@@ -99,32 +112,42 @@ export class View {
     readonly id: string,
     /** The file's name, which `ingest` picks a decoder by. */
     readonly name: string,
+    path: string,
     private readonly port: Port<Request, Reply>,
-  ) {}
+  ) {
+    this.path = path;
+  }
 
   /**
    * open starts viewing one source. `source` is the file, or the bytes a .uno
-   * carried when `carried` says so. The view owns `source` from here on, and
-   * closes it if the open fails.
+   * carried when `carried` says so. `path` is where the file is, which is what
+   * a save points at; bytes with no file behind them pass "". The view owns
+   * `source` from here on, and closes it if the open fails.
    */
   static async open(
     id: string,
     name: string,
+    path: string,
     source: ByteSource,
     carried: Carried | undefined,
     port: Port<Request, Reply>,
     tuning: Tuning,
   ): Promise<View> {
-    const v = new View(id, name, port);
+    const v = new View(id, name, path, port);
     v.carried = carried?.raw;
+
+    // What to blame in an error: the .uno a source came out of, where there is
+    // one. A file opened on its own, or picked to replace a source that lost
+    // its own, speaks for itself.
+    const from = carried === undefined || carried.container === "" ? "" : `${carried.container}: `;
 
     let format: Format;
     try {
       format = await openFormat(name, source);
     } catch (err) {
       await source.close();
-      if (carried === undefined) throw err;
-      throw new Error(`${carried.container}: embedded ${name}: ${messageOf(err)}`);
+      if (from === "") throw err;
+      throw new Error(`${from}${name}: ${messageOf(err)}`);
     }
 
     v.source = source;
@@ -157,20 +180,25 @@ export class View {
 
     try {
       // Kinds come from the first rows, the sample a Sheet reads. A .uno's log
-      // names rows by number, and one naming a row the source does not have
-      // belongs to another file, so a .uno is indexed to the end first. Its
-      // source is in memory, which makes that a moment.
-      await v.until(
-        () => index.complete || (carried === undefined && index.readable() >= SAMPLE_ROWS),
-      );
+      // names rows by number, and one naming a row the file does not have
+      // belongs to a different file, so a log is not replayed until the index
+      // has reached the deepest row it names.
+      //
+      // For bytes the container carried that is the whole of them, which is a
+      // moment. For a file the workspace points at it is as far in as the log
+      // actually goes: edits near the top of a 30 GB ledger cost a 30 GB
+      // ledger's first pages, and nobody waits for the rest.
+      const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
+      const whole = carried?.raw !== undefined;
+      await v.until(() => index.complete || (!whole && index.readable() >= want));
       started = true;
 
       if (carried !== undefined) {
-        v.schema.rows = index.counted;
+        v.schema.rows = index.complete ? index.counted : index.readable();
         try {
           v.schema.replay(carried.edits);
         } catch (err) {
-          throw new Error(`${carried.container}: replaying edits to ${name}: ${messageOf(err)}`);
+          throw new Error(`${from}replaying edits to ${name}: ${messageOf(err)}`);
         }
       }
 
@@ -183,6 +211,7 @@ export class View {
         progress: progressOf(index),
         edits: carried?.edits ?? [],
         generation: v.generation,
+        link: path === "" ? undefined : { path },
       };
       return v;
     } catch (err) {
@@ -530,9 +559,22 @@ export class View {
 
   // ------------------------------------------------------------ saving
 
-  /** How many bytes of source a save would embed. */
+  /** The file's size: what a save carries, or what it records about what it
+   * points at. */
   get size(): number {
     return this.carried?.length ?? this.source.size;
+  }
+
+  /** How many bytes a save would have to copy into the container, which for a
+   * source with a file behind it is none. */
+  get carries(): number {
+    return this.path === "" ? this.size : 0;
+  }
+
+  /** The log as it stands: what a relink replays over whatever file it is
+   * pointed at. */
+  get log(): Edit[] {
+    return this.schema.edits();
   }
 
   /** How many edits this source's log holds now. */
@@ -544,17 +586,25 @@ export class View {
    * part is what a save writes of this source. It runs in turn with the edits,
    * so the log it hands back is one a save can pair with every other source's.
    *
-   * A source read from disk is read again at every save rather than held
-   * between them.
+   * A source with a file behind it is written as that path and read no further.
+   * One with no file -- bytes dropped into a browser -- is read whole, because
+   * carrying them is the only way to keep them at all.
+   *
+   * Only a carried source waits for the index. Its bytes are already in memory,
+   * so the wait is nothing and the row count in the manifest comes out exact. A
+   * pointed-at source reports how far the index has got, and nothing replays
+   * against that number, so a save never blocks on a scan of 30 GB.
    */
   part(): Promise<Part> {
     return this.serially(async () => {
-      // The manifest records the row count, which is exact only at the end.
-      await this.until(() => this.index.complete);
+      const carry = this.path === "";
+      if (carry) await this.until(() => this.index.complete);
       return {
-        raw: this.carried ?? (await this.source.read(0, this.source.size)),
+        raw: carry ? (this.carried ?? (await this.source.read(0, this.source.size))) : undefined,
+        path: carry ? undefined : this.path,
+        bytes: this.size,
         edits: this.schema.edits(),
-        rows: this.index.counted,
+        rows: this.index.complete ? this.index.counted : this.index.readable(),
         cols: this.schema.headers.length,
       };
     });
@@ -592,6 +642,14 @@ export class View {
     this.failed ??= err instanceof Error ? err : new Error(String(err));
     this.wake();
   }
+}
+
+/** deepest is one past the last row a log names, and 0 for a log that names
+ * none: every operation in it covers a whole column. */
+function deepest(edits: readonly Edit[] | undefined): number {
+  let row = NO_ROW;
+  for (const e of edits ?? []) if (e.row > row) row = e.row;
+  return row + 1;
 }
 
 function progressOf(index: RowIndex): Progress {

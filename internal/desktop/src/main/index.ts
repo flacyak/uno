@@ -260,14 +260,16 @@ function registerFileHandlers(win: BrowserWindow): void {
     return picked.filePaths.map(sourceAt);
   });
 
-  ipcMain.handle("file:save-as", async (_event, suggestedName: string, bytes: Uint8Array) => {
+  // Where to save, and nothing else. The renderer writes through file:save
+  // afterwards, because a workspace points at sources relative to its own
+  // folder and cannot be laid out until that folder is known.
+  ipcMain.handle("file:pick-save", async (_event, suggestedName: string) => {
     const picked = await dialog.showSaveDialog(win, {
       title: "Save As",
       defaultPath: suggestedName,
       filters: [{ name: "uno workspace", extensions: ["uno"] }],
     });
     if (picked.canceled || picked.filePath === undefined) return undefined;
-    await writeAtomic(picked.filePath, bytes);
     return picked.filePath;
   });
 

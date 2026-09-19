@@ -19,6 +19,7 @@ export type {
   FindRequest,
   Found,
   MessagePortLike,
+  Link,
   Offer,
   Opened,
   Opening,
