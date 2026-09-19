@@ -16,10 +16,11 @@ import {
   utilityProcess,
 } from "electron";
 import type { MenuItemConstructorOptions, UtilityProcess, WebContents } from "electron";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { m } from "../paraglide/messages.js";
 import { isLocale, setLocale } from "../paraglide/runtime.js";
+import { filesNamed } from "./argv.ts";
 import { sourceAt, unoPath, writeAtomic, writeConnection } from "./files.ts";
 
 /**
@@ -69,17 +70,9 @@ function over(event: { sender: WebContents }): BrowserWindow {
   return win;
 }
 
-/**
- * The file paths on the command line, made absolute.
- *
- * Arguments starting with a dash are Electron switches and are dropped. In
- * development argv also carries the "." that told Electron which app to run.
- * Paths are resolved against the working directory here, because a workspace
- * stores absolute paths to its sources.
- */
+/** The file paths on this process's command line, made absolute. */
 function filesFromArgv(): string[] {
-  const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
-  return args.filter((a) => !a.startsWith("-") && a !== ".").map((a) => resolve(a));
+  return filesNamed(process.argv, process.cwd(), app.getAppPath());
 }
 
 function createWindow(): BrowserWindow {
