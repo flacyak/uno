@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { baseLocale, locales } from "../src/paraglide/runtime.js";
+import { baseLocale, locales } from "#paraglide/runtime";
 
 const MESSAGES = join(dirname(fileURLToPath(import.meta.url)), "..", "messages");
 

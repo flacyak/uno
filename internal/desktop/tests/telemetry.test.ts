@@ -3,7 +3,7 @@
 
 import { expect, test, vi } from "vite-plus/test";
 
-import { exporting } from "../src/engine/telemetry.ts";
+import { exporting } from "#engine/telemetry";
 
 const ENDPOINT = "https://otlp.example.test/otlp";
 const ENV = {

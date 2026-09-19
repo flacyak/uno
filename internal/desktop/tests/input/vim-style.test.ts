@@ -3,9 +3,9 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { vimStyle } from "../../src/renderer/input/vim-style.ts";
-import { NOTHING, showing } from "../../src/renderer/keys.ts";
-import type { Action, Mode, Pending, Press, Step } from "../../src/renderer/keys.ts";
+import { vimStyle } from "#renderer/input/vim-style";
+import { NOTHING, showing } from "#renderer/keys";
+import type { Action, Mode, Pending, Press, Step } from "#renderer/keys";
 
 const LOCKED = vimStyle.locked;
 

@@ -15,16 +15,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MessageChannel } from "node:worker_threads";
 
-import { messagePort, serve } from "@uno/grid/engine";
-import type { MessagePortLike, Reply, Request } from "@uno/grid/engine";
-import { sources } from "@uno/grid/plugin";
-import type { Provider } from "@uno/grid/plugin";
-import { connectionsIn, saveConnection } from "@uno/grid/store";
-import { diskProvider, nodeStore } from "@uno/grid/store/node";
+import { messagePort, serve } from "#engine";
+import type { MessagePortLike, Reply, Request } from "#engine";
+import { sources } from "#plugin";
+import type { Provider } from "#plugin";
+import { connectionsIn, saveConnection } from "#store";
+import { diskProvider, nodeStore } from "#store/node";
 
-import type { Shell } from "../../src/renderer/shell/shell.ts";
-import type { Host } from "../../src/shared/host.ts";
-import { bodyMarkup } from "../markup.ts";
+import type { Shell } from "#renderer/shell/shell";
+import type { Host } from "#shared/host";
+import { bodyMarkup } from "#tests/markup";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -118,7 +118,7 @@ export async function bootShell(
     },
   };
 
-  const { Shell } = await import("../../src/renderer/shell/shell.ts");
+  const { Shell } = await import("#renderer/shell/shell");
   const shell = new Shell({ ...host, ...over });
   await shell.openPath(FIXTURE);
 
