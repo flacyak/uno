@@ -236,7 +236,7 @@ function registerFileHandlers(win: BrowserWindow): void {
     // because only this process knows where the app keeps its data.
     const child = utilityProcess.fork(
       join(here, "../engine/index.cjs"),
-      [`--connections=${connectionsDir()}`],
+      [`--connections=${connectionsDir()}`, `--version=${app.getVersion()}`],
       { serviceName: "uno engine" },
     );
     engines.add(child);

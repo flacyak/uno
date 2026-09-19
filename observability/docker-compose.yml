@@ -1,0 +1,16 @@
+# Grafana on this machine, with everything it needs to take what uno sends.
+#
+# One container: an OpenTelemetry collector on 4318, Prometheus behind it, and
+# Grafana on 3000 with uno's dashboard already in it. Nothing is kept when the
+# container goes, which is what a stack for looking at one afternoon's numbers
+# should do. README.md beside this says how to point uno at it.
+
+services:
+  grafana:
+    image: grafana/otel-lgtm:0.34.0
+    ports:
+      - "3000:3000" # Grafana
+      - "4318:4318" # OTLP over HTTP, which is what uno sends
+    volumes:
+      - ./provisioning/uno.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/uno.yaml:ro
+      - ./dashboards:/var/lib/grafana/dashboards/uno:ro

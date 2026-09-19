@@ -16,6 +16,8 @@ import type { Sources } from "../plugin/index.ts";
 import type { Connection } from "../library/index.ts";
 import type { Connections } from "../store/index.ts";
 import type { Meeting, Tried } from "../store/s3.ts";
+import { MILLISECONDS, REQUEST, unmeasured } from "./telemetry.ts";
+import type { Telemetry } from "./telemetry.ts";
 import { Workspace } from "./workspace.ts";
 
 /**
@@ -60,15 +62,19 @@ export interface Connecting {
  * -- refuses to answer about connections and profiles by name, rather than
  * with an empty list, which would read as a folder or a machine with nothing
  * in it.
+ *
+ * `telemetry` is told how long each request took to answer and each source
+ * took to index. An engine given none measures nothing.
  */
 export function serve(
   port: Port<Request, Reply>,
   sources: Sources,
   tuning: Tuning = TUNING,
   connecting?: Connecting,
+  telemetry: Telemetry = unmeasured,
 ): void {
   const connections = connecting?.connections;
-  const workspace = new Workspace(sources.files, port, tuning, connecting?.meet);
+  const workspace = new Workspace(sources.files, port, tuning, connecting?.meet, telemetry);
   // Read before anything is answered, so the first request that signs -- a
   // .uno opened the moment the engine is up -- is signed by its connection and
   // not by whatever the machine has. A folder that cannot be read is said when
@@ -189,9 +195,25 @@ export function serve(
     }
   }
 
-  port.listen((msg) => {
-    handle(msg).catch((err: unknown) => {
-      port.post({ t: "error", id: "id" in msg ? msg.id : undefined, message: messageOf(err) });
+  /** took says how long a request of one kind took, and whether it was answered or refused. */
+  function took(msg: Request, started: number, outcome: "answered" | "refused"): void {
+    telemetry({
+      name: REQUEST,
+      kind: "duration",
+      unit: MILLISECONDS,
+      value: performance.now() - started,
+      attributes: { request: msg.t, outcome },
     });
+  }
+
+  port.listen((msg) => {
+    const started = performance.now();
+    handle(msg).then(
+      () => took(msg, started, "answered"),
+      (err: unknown) => {
+        port.post({ t: "error", id: "id" in msg ? msg.id : undefined, message: messageOf(err) });
+        took(msg, started, "refused");
+      },
+    );
   });
 }
