@@ -105,6 +105,7 @@ export type Said =
   | { t: 'nothing-to-redo' }
   | { t: 'in-view' }
   | { t: 'file-closed' }
+  | { t: 'cancelled'; name: string }
   | { t: 'changed-on-disk'; name: string }
 
   // What an engine refuses because its platform left out the means.
@@ -266,6 +267,7 @@ const SENTENCES: Sentences<Said> = {
   'nothing-to-redo': () => 'there is nothing to redo',
   'in-view': () => 'the file is in view · Ctrl+E to transform',
   'file-closed': () => 'the file was closed',
+  cancelled: (s) => `opening ${s.name} was cancelled`,
   'changed-on-disk': (s) => `${s.name} changed on disk after it was opened`,
 
   'keeps-no-connections': () =>
