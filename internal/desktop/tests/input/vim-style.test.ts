@@ -141,6 +141,16 @@ test("ga applies the banner's offer and gx says not now, in transform only", () 
   });
 });
 
+// Switching tabs writes nothing, so view allows it.
+test("gt and gT go to the next and previous source, with a count as vim reads it", () => {
+  for (const mode of ["view", "transform"] as const) {
+    expect(action(mode, "gt")).toEqual({ t: "tab", step: 1, count: undefined });
+    expect(action(mode, "gT")).toEqual({ t: "tab", step: -1, count: undefined });
+  }
+  expect(action("view", "3gt"), "the third tab").toEqual({ t: "tab", step: 1, count: 3 });
+  expect(action("view", "2gT"), "two tabs back").toEqual({ t: "tab", step: -1, count: 2 });
+});
+
 test(": opens the command line in either mode, and drops a count", () => {
   expect(action("view", ":")).toEqual({ t: "prompt", lead: ":" });
   expect(press("transform", "3:")).toEqual({

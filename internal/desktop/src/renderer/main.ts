@@ -8,11 +8,12 @@ import { electronHost } from "./host.ts";
 import type { InputName } from "./input/index.ts";
 import { Shell } from "./shell/shell.ts";
 
-type MenuChannel = "menu:open" | "menu:save" | "menu:save-as" | "menu:mode";
+type MenuChannel = "menu:open" | "menu:add" | "menu:save" | "menu:save-as" | "menu:mode";
 
 interface MenuBridge {
   on(channel: MenuChannel, fn: () => void): void;
   onOpenPath(fn: (path: string) => void): void;
+  onAddPaths(fn: (paths: string[]) => void): void;
   onInput(fn: (name: string) => void): void;
   inputChosen(name: InputName): void;
 }
@@ -26,10 +27,12 @@ if (bridge === undefined) {
   const menu = (window as unknown as { unoMenu?: MenuBridge }).unoMenu;
 
   menu?.on("menu:open", () => void shell.open());
+  menu?.on("menu:add", () => void shell.add());
   menu?.on("menu:save", () => void shell.save());
   menu?.on("menu:save-as", () => void shell.saveAs());
   menu?.on("menu:mode", () => shell.toggleMode());
   menu?.onOpenPath((path) => void shell.openPath(path));
+  menu?.onAddPaths((paths) => void shell.addPaths(paths));
   menu?.onInput((name) => shell.setInput(name));
   menu?.inputChosen(shell.inputName);
 

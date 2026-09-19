@@ -11,13 +11,15 @@ import "./empty.css";
 const OPENABLE = [".uno", ".csv", ".tsv"];
 
 /**
- * wireDrop opens a file dropped anywhere on `root`, lighting `zone` while one is
- * over it. A file uno cannot open is refused by name.
+ * wireDrop opens the files dropped anywhere on `root`, lighting `zone` while
+ * some are over it. Several can come at once, because a workspace is built from
+ * several exports. A file uno cannot open is refused by name, and the drop with
+ * it.
  */
 export function wireDrop(
   root: HTMLElement,
   zone: HTMLElement,
-  open: (file: File) => void,
+  open: (files: File[]) => void,
   refuse: (text: string) => void,
 ): void {
   const stop = (e: DragEvent): void => {
@@ -37,14 +39,14 @@ export function wireDrop(
     stop(e);
     zone.classList.remove("over");
 
-    const file = e.dataTransfer?.files[0];
-    if (file === undefined) return;
+    const files = [...(e.dataTransfer?.files ?? [])];
+    if (files.length === 0) return;
 
-    const name = file.name;
-    if (!OPENABLE.some((ext) => name.toLowerCase().endsWith(ext))) {
-      refuse(`${name} is not a spreadsheet uno can open`);
+    const odd = files.find((f) => !OPENABLE.some((ext) => f.name.toLowerCase().endsWith(ext)));
+    if (odd !== undefined) {
+      refuse(`${odd.name} is not a spreadsheet uno can open`);
       return;
     }
-    open(file);
+    open(files);
   });
 }

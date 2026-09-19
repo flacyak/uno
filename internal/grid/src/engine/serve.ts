@@ -1,4 +1,4 @@
-// The engine: one file and its log, served to one client.
+// The engine: one workspace and its log, served to one client.
 //
 // `serve` is what a worker does, minus the worker. A platform's entry file
 // builds a Port from whatever its runtime hands it, says how to open a
@@ -9,66 +9,62 @@ import type { Port, Reply, Request } from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
 import { TUNING } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
-import { View } from "./view.ts";
 import type { OpenSource } from "./view.ts";
+import { Workspace } from "./workspace.ts";
 
 export function serve(
   port: Port<Request, Reply>,
   openSource: OpenSource,
   tuning: Tuning = TUNING,
 ): void {
-  let view: Promise<View> | undefined;
-
-  const need = (): Promise<View> => view ?? Promise.reject(new Error("no file is open"));
+  const workspace = new Workspace(openSource, port, tuning);
 
   async function handle(msg: Request): Promise<void> {
     switch (msg.t) {
       case "open": {
-        if (view !== undefined) throw new Error("this engine already has a file open");
-        view = View.open(msg.ref, openSource, port, tuning);
-        try {
-          port.post({ t: "opened", opened: (await view).opened });
-        } catch (err) {
-          view = undefined; // a failed open leaves the engine free to try another
-          throw err;
-        }
+        port.post({ t: "opened", id: msg.id, added: await workspace.open(msg.ref) });
+        return;
+      }
+      case "remove": {
+        await workspace.remove(msg.source);
+        port.post({ t: "removed", id: msg.id });
         return;
       }
       case "rows": {
-        const r = await (await need()).rows(msg.first, msg.count);
+        const r = await workspace.rows(msg.source, msg.first, msg.count);
         port.post({ t: "rows", id: msg.id, first: msg.first, ...r });
         return;
       }
       case "edit": {
-        port.post({ t: "changed", id: msg.id, changed: await (await need()).edit(msg.edit) });
+        const changed = await workspace.edit(msg.source, msg.edit);
+        port.post({ t: "changed", id: msg.id, source: msg.source, changed });
         return;
       }
       case "undo": {
-        port.post({ t: "changed", id: msg.id, changed: await (await need()).undo() });
+        const changed = await workspace.undo(msg.source);
+        port.post({ t: "changed", id: msg.id, source: msg.source, changed });
         return;
       }
       case "redo": {
-        port.post({ t: "changed", id: msg.id, changed: await (await need()).redo() });
+        const changed = await workspace.redo(msg.source);
+        port.post({ t: "changed", id: msg.id, source: msg.source, changed });
         return;
       }
       case "find": {
-        port.post({ t: "found", id: msg.id, found: await (await need()).find(msg.find) });
+        port.post({ t: "found", id: msg.id, found: await workspace.find(msg.source, msg.find) });
         return;
       }
       case "mode": {
-        (await need()).mode(msg.transform);
+        workspace.mode(msg.transform);
         return;
       }
       case "save": {
-        const bytes = await (await need()).save(msg.active, msg.limit);
+        const bytes = await workspace.save(msg.place, msg.limit);
         port.post({ t: "saved", id: msg.id, bytes });
         return;
       }
       case "close": {
-        await view?.then(
-          (v) => v.close(),
-          () => undefined,
-        );
+        await workspace.close();
         return;
       }
     }

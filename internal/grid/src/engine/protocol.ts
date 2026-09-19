@@ -1,8 +1,9 @@
 // The messages between a client and an engine.
 //
-// An engine is a worker that owns one file and the log over it. Its client -- a
-// renderer, or a test -- never touches the bytes: it names the file once, asks
-// for rows by position, and sends edits. What comes back is ready to draw.
+// An engine is a worker that owns one workspace: its sources, and the log over
+// them. Its client -- a renderer, or a test -- never touches the bytes: it names
+// each file once, asks one source for rows by position, and sends it edits. What
+// comes back is ready to draw.
 // Everything crosses as plain data, so the same messages run over an Electron
 // MessagePortMain, a Web Worker or a MessageChannel in vitest.
 
@@ -39,6 +40,8 @@ export interface Progress {
 }
 
 export interface Opened {
+  /** What the workspace and its log call this source. */
+  source: string;
   /** The file the rows come from. A .uno names the source it carries. */
   name: string;
   size: number;
@@ -46,9 +49,17 @@ export interface Opened {
   label: string;
   columns: ColumnInfo[];
   progress: Progress;
-  /** The log a .uno was saved with, already applied. Empty for anything else. */
+  /** This source's part of the log a .uno was saved with, already applied.
+   * Empty for anything else. */
   edits: Edit[];
   generation: number;
+}
+
+/** What an open added to the workspace, in the order it shows them. */
+export interface Opening {
+  opened: Opened[];
+  /** The source to show: the one just added, or the one a .uno was left on. */
+  showing: string;
 }
 
 /** An edit as a client asks for it. The engine numbers it and fills in `was`. */
@@ -65,6 +76,13 @@ export interface Changed {
   /** Rows built before this number are stale. */
   generation: number;
   columns: ColumnInfo[];
+}
+
+/** Where each source's grid was left, and which source was showing: what a save keeps. */
+export interface Place {
+  /** The source that was showing. */
+  source: string;
+  cells: Array<{ source: string; row: number; col: number }>;
 }
 
 /** A find: the next row down or up one column whose cell matches. */
@@ -98,6 +116,8 @@ export interface Found {
  * banner can say out loud.
  */
 export interface Offer {
+  /** The source whose column it is. */
+  source: string;
   col: number;
   header: string;
   /** The program's text, which is what Apply records. */
@@ -113,25 +133,32 @@ export interface Offer {
 }
 
 export type Request =
-  /** Start viewing a file: read its header, begin indexing it. */
-  | { t: "open"; ref: SourceRef }
+  /**
+   * Add a file to the workspace: read its header, begin indexing it. A .uno
+   * opens every source it holds, and only into a workspace holding none.
+   */
+  | { t: "open"; id: number; ref: SourceRef }
+  /** Take a source out of the workspace, and its edits out of the log. */
+  | { t: "remove"; id: number; source: string }
   /** Rows by position, with the log applied. Fewer where the index has not reached. */
-  | { t: "rows"; id: number; first: number; count: number }
-  | { t: "edit"; id: number; edit: EditRequest }
-  | { t: "undo"; id: number }
-  /** The edit undo last took back, recorded again. */
-  | { t: "redo"; id: number }
+  | { t: "rows"; id: number; source: string; first: number; count: number }
+  | { t: "edit"; id: number; source: string; edit: EditRequest }
+  /** The source's last edit, taken back. */
+  | { t: "undo"; id: number; source: string }
+  /** The edit undo last took back from the source, recorded again. */
+  | { t: "redo"; id: number; source: string }
   /** The next matching row in a column, read from the file rather than any band. */
-  | { t: "find"; id: number; find: FindRequest }
-  /** Transform allows edits and runs the recogniser. View allows neither. */
+  | { t: "find"; id: number; source: string; find: FindRequest }
+  /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
   | { t: "mode"; transform: boolean }
-  /** The workspace as a .uno, refusing a source larger than limit. */
-  | { t: "save"; id: number; active: { row: number; col: number }; limit: number }
+  /** The workspace as a .uno, refusing sources larger than limit together. */
+  | { t: "save"; id: number; place: Place; limit: number }
   | { t: "close" };
 
 export type Reply =
-  | { t: "opened"; opened: Opened }
-  | { t: "progress"; progress: Progress }
+  | { t: "opened"; id: number; added: Opening }
+  | { t: "removed"; id: number }
+  | { t: "progress"; source: string; progress: Progress }
   | {
       t: "rows";
       id: number;
@@ -142,13 +169,13 @@ export type Reply =
       /** What each cell stores, where that differs from what it shows. */
       raws: Array<string[] | null>;
     }
-  | { t: "changed"; id: number; changed: Changed }
+  | { t: "changed"; id: number; source: string; changed: Changed }
   | { t: "found"; id: number; found: Found }
-  /** Null when there is nothing to ask. */
-  | { t: "offer"; generation: number; offer: Offer | null }
+  /** Null when the source has nothing to ask. */
+  | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }
-  /** Without an id, a failure of the open or of a pass behind it. */
-  | { t: "error"; id?: number; message: string };
+  /** Without an id, a failure of an index or a pass behind a source. */
+  | { t: "error"; id?: number; source?: string; message: string };
 
 /** One end of a connection, whatever the runtime calls it. */
 export interface Port<In, Out> {
