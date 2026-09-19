@@ -85,11 +85,12 @@ export function verdict(name, code, out, banner) {
  *
  * What the app prints is passed through. A line `<who>: ask <what>` is a
  * request to this script: `answer(what)` handles it and returns whether it
- * could, and the app is told `done` or `nothing here does` on its stdin. At
- * `deadlineMs` the app is killed by pid and `onTimeout` is called.
+ * could, at once or once it is done, and the app is told `done` or `nothing
+ * here does` on its stdin. At `deadlineMs` the app is killed by pid and
+ * `onTimeout` is called.
  *
  * @param {string} who  "smoke" or "preview": the prefix of every line the app prints
- * @param {{ electron: string, args: string[], env: NodeJS.ProcessEnv, answer: (what: string) => boolean, deadlineMs: number, onTimeout?: () => void }} run
+ * @param {{ electron: string, args: string[], env: NodeJS.ProcessEnv, answer: (what: string) => boolean | Promise<boolean>, deadlineMs: number, onTimeout?: () => void }} run
  * @returns {Promise<{ code: number | null, out: string }>}  the exit code, and everything written to stdout
  */
 export async function drive(who, { electron, args, env, answer, deadlineMs, onTimeout }) {
@@ -110,7 +111,9 @@ export async function drive(who, { electron, args, env, answer, deadlineMs, onTi
     for (const line of lines) {
       if (!line.startsWith(`${who}: ask `)) continue;
       const what = line.slice(`${who}: ask `.length);
-      child.stdin.write(`${who}: ${answer(what) ? "done" : "nothing here does"} ${what}\n`);
+      void Promise.resolve(answer(what)).then((could) => {
+        child.stdin.write(`${who}: ${could ? "done" : "nothing here does"} ${what}\n`);
+      });
     }
     process.stdout.write(chunk);
   });
