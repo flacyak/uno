@@ -514,6 +514,7 @@
   "refused_nothing_to_redo": "there is nothing to redo",
   "refused_in_view": "the file is in view · Ctrl+E to transform",
   "refused_file_closed": "the file was closed",
+  "refused_cancelled": "opening {name} was cancelled",
   "refused_changed_on_disk": "{name} changed on disk after it was opened",
   "refused_keeps_no_connections": "this engine keeps no connections · its platform gave it nowhere to read them from",
   "refused_offers_no_sign_ins": "this engine has no way of signing in to offer · its platform connects to nothing",

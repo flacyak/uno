@@ -209,13 +209,18 @@ export class Workspace {
 
   /**
    * open adds a file to the workspace and returns what it opened. A .uno
-   * opens every source it holds, and only into an empty workspace.
+   * opens every source it holds, and only into an empty workspace. Aborting
+   * `signal` refuses an open still in flight as cancelled.
    */
-  open(ref: SourceRef): Promise<Opening> {
+  open(ref: SourceRef, signal?: AbortSignal): Promise<Opening> {
     return this.serially(async () => {
+      if (signal?.aborted)
+        throw new Refusal({ t: 'cancelled', name: ref.name });
+      // A .uno open honours a cancel only before its turn, since the shell
+      // never lists one as opening.
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
-      const view = await this.view(id, ref, undefined);
+      const view = await this.view(id, ref, undefined, false, signal);
       return { opened: [this.keep(view)], showing: id };
     });
   }
@@ -482,18 +487,25 @@ export class Workspace {
   }
 
   /** view opens a ref as a View. With `whole`, every part of a source over
-   * several files is opened first, so a missing part fails here by name. */
+   * several files is opened first, so a missing part fails here by name.
+   * Aborting `signal` cancels the open. */
   private async view(
     id: string,
     ref: SourceRef,
     carried: Carried | undefined,
     whole = false,
+    signal?: AbortSignal,
   ): Promise<View> {
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
     const path = 'path' in ref ? ref.path : '';
     const source = await this.openSource(ref);
+    // A cancel that arrived while the file was opening is answered here.
+    if (signal?.aborted) {
+      await source.close();
+      throw new Refusal({ t: 'cancelled', name: ref.name });
+    }
     // versions() opens every part still unread. A part that fails to open
     // closes the source and is the error.
     if (whole) {
@@ -516,6 +528,7 @@ export class Workspace {
       telemetry: this.telemetry,
       header: headerModeOf(ref),
       parts: 'parts' in ref ? ref : undefined,
+      signal,
     });
     view.connection = this.through(ref);
     if ('parts' in ref) {
