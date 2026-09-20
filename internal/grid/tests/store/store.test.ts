@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The library on a disk: formulas saved and read back through the
+ * Node store, and what one bad file costs.
+ */
+
 import {
   copyFile,
   mkdtemp,
@@ -11,9 +16,9 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
 
-import type { Formula } from '../../src/library/index.ts';
-import { loadLibrary, saveFormula } from '../../src/store/index.ts';
-import { nodeStore } from '../../src/store/node.ts';
+import type { Formula } from '#library';
+import { loadLibrary, saveFormula } from '#store';
+import { nodeStore } from '#store/node';
 
 async function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'uno-store-'));

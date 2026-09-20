@@ -1,20 +1,22 @@
-// The desktop's message for each kind of thing the engine says.
-//
-// The engine has its own English for every kind, used in its errors and logs.
-// The desktop's English is in the message file. A sample of every kind, said
-// both ways, must match.
-//
-// SAMPLES is keyed by kind and typed to need every kind. A new kind fails to
-// compile here until it has a sample, as `say` does until it has a message.
+/**
+ * @fileoverview The desktop's message for each kind of thing the engine says.
+ *
+ * The engine has its own English for every kind, used in its errors and logs.
+ * The desktop's English is in the message file. A sample of every kind, said
+ * both ways, must match.
+ *
+ * SAMPLES is keyed by kind and typed to need every kind. A new kind fails to
+ * compile here until it has a sample, as `say` does until it has a message.
+ */
 
 import { beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { Refusal, english } from "@uno/grid/engine";
-import type { Said } from "@uno/grid/engine";
+import { Refusal, english } from "#engine";
+import type { Said } from "#engine";
 
-import { PSEUDO_LOCALE, PSEUDO_OPEN } from "../scripts/pseudo.js";
-import { baseLocale, setLocale } from "../src/paraglide/runtime.js";
-import { said, say } from "../src/renderer/said.ts";
+import { PSEUDO_LOCALE, PSEUDO_OPEN } from "#scripts/pseudo";
+import { baseLocale, setLocale } from "#paraglide/runtime";
+import { said, say } from "#renderer/said";
 
 const KB = 1024;
 const MB = KB * KB;

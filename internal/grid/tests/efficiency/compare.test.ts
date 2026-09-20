@@ -1,4 +1,6 @@
-// The Markdown table compare.ts builds.
+/**
+ * @fileoverview The Markdown table compare.ts builds.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

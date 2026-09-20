@@ -1,22 +1,24 @@
-// @vitest-environment happy-dom
-//
-// The `run` checks from open.ts and default.ts, driven by the DOM shim in
-// plain Node, headless. See dom-harness.ts and dom-page.ts.
-//
-// The checks are order-dependent, so they run in list order against one
-// shell and one page, as runSmoke in index.ts runs them. `beforeAll` boots
-// the shell once.
-//
-// Only checks with `run` are read. One with `script` needs real layout or the
-// real preload bridge, and one with `input` needs a real event reaching a
-// driven window. See check.ts.
+/**
+ * @fileoverview The `run` checks from open.ts and default.ts, driven by the DOM
+ * shim in plain Node, headless. See dom-harness.ts and dom-page.ts.
+ *
+ * The checks are order-dependent, so they run in list order against one
+ * shell and one page, as runSmoke in index.ts runs them. `beforeAll` boots
+ * the shell once.
+ *
+ * Only checks with `run` are read. One with `script` needs real layout or the
+ * real preload bridge, and one with `input` needs a real event reaching a
+ * driven window. See check.ts.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import type { Check } from "../../src/main/smoke/check.ts";
-import { DEFAULT_INPUT } from "../../src/main/smoke/default.ts";
-import { OPEN } from "../../src/main/smoke/open.ts";
-import type { Page } from "../../src/main/smoke/page.ts";
+import type { Check } from "#main/smoke/check";
+import { DEFAULT_INPUT } from "#main/smoke/default";
+import { OPEN } from "#main/smoke/open";
+import type { Page } from "#main/smoke/page";
 import { bootShell } from "./dom-harness.ts";
 import { domPage } from "./dom-page.ts";
 

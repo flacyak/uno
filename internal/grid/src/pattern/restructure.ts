@@ -1,5 +1,11 @@
-import { indexOfRunes, quote, quoteMeta, runes } from '../go/index.ts';
-import { MAX_PARTS, quoteRegex } from '../program/index.ts';
+/**
+ * @fileoverview Inducing the programs that move characters rather than change
+ * them: a code pulled out of the middle of a cell, or two fields put the other
+ * way round.
+ */
+
+import { indexOfRunes, quote, quoteMeta, runes } from '#go';
+import { MAX_PARTS, quoteRegex } from '#program';
 import { MAX_DIFF } from './align.ts';
 import { MAX_PER_EXAMPLE } from './induce.ts';
 

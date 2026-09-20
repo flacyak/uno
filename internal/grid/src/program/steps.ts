@@ -1,5 +1,7 @@
-// The steps a program is built from, as a discriminated union so the compiler
-// checks that `runStep` covers all of them.
+/**
+ * @fileoverview The steps a program is built from, as a discriminated union so
+ * the compiler checks that `runStep` covers all of them.
+ */
 
 import {
   atoi,
@@ -14,10 +16,10 @@ import {
   toLower,
   toUpper,
   trimSpace,
-} from '../go/index.ts';
-import { unreachable } from '../never.ts';
-import { english, englishSought } from '../said/index.ts';
-import type { CharName, Sought, StepSaid } from '../said/index.ts';
+} from '#go';
+import { unreachable } from '#never';
+import { english, englishSought } from '#said';
+import type { CharName, Sought, StepSaid } from '#said';
 
 /**
  * MAX_STEPS is the most steps a pipeline may have. The limit keeps a proposal

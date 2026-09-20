@@ -1,9 +1,11 @@
-// settled: a burst of triggers runs once after they stop, and a trigger while
-// a run is out is dropped.
+/**
+ * @fileoverview settled: a burst of triggers runs once after they stop, and a
+ * trigger while a run is out is dropped.
+ */
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { settled } from "../src/renderer/shell/util.ts";
+import { settled } from "#renderer/shell/util";
 
 const MS = 400;
 

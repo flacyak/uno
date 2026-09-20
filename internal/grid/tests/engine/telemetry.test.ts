@@ -1,5 +1,7 @@
-// What the engine measures, how a Meter writes it as OTLP JSON, and how a
-// collector's address is read from the environment.
+/**
+ * @fileoverview What the engine measures, how a Meter writes it as OTLP JSON,
+ * and how a collector's address is read from the environment.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -18,7 +20,7 @@ import {
   messagePort,
   otlpHeaders,
   serve,
-} from '../../src/engine/index.ts';
+} from '#engine';
 import type {
   Measurement,
   MessagePortLike,
@@ -28,10 +30,10 @@ import type {
   Request,
   SourceHandle,
   Tuning,
-} from '../../src/engine/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
+} from '#engine';
+import { sources } from '#plugin';
+import type { Provider } from '#plugin';
+import { diskProvider } from '#store/node';
 import { FIXTURE, TINY, bytes, indexed, openOne, slowed } from './harness.ts';
 
 /** An engine over a real channel, with every measurement kept in `seen`. */

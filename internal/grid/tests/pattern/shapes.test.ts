@@ -1,8 +1,10 @@
-// Tests for the program shapes the recogniser proposes.
+/**
+ * @fileoverview Tests for the program shapes the recogniser proposes.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { apply as applyProgram, text } from '../../src/program/index.ts';
+import { apply as applyProgram, text } from '#program';
 import { oneCol, propose } from './harness.ts';
 
 // Pulling a substring out of the middle of a cell is proposed as a slice.

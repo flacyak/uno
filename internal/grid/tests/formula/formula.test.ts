@@ -1,6 +1,11 @@
+/**
+ * @fileoverview The text form of an expression: round trips, normalised
+ * spacing, the columns it reads, and what parse refuses.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
-import { Formula, parse } from '../../src/formula/index.ts';
+import { Formula, parse } from '#formula';
 
 // parse then toString gives back the same text.
 describe('the text form round-trips', () => {

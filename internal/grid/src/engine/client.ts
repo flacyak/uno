@@ -1,8 +1,10 @@
-// The client side of the engine protocol.
-//
-// Engine wraps the protocol in promises and hands out one SourceHandle per
-// source. Band holds the rows around the viewport and answers the grid
-// synchronously. A row still in flight is reported as such.
+/**
+ * @fileoverview The client side of the engine protocol.
+ *
+ * Engine wraps the protocol in promises and hands out one SourceHandle per
+ * source. Band holds the rows around the viewport and answers the grid
+ * synchronously. A row still in flight is reported as such.
+ */
 
 import type {
   Changed,
@@ -23,11 +25,11 @@ import type {
   SignIns,
   SourceRef,
 } from './protocol.ts';
-import { Refusal, saidOf } from '../said/index.ts';
-import type { Said } from '../said/index.ts';
-import type { Connection } from '../library/index.ts';
-import type { Entry, Listing, SingleRef } from '../store/index.ts';
-import type { Tried } from '../store/s3.ts';
+import { Refusal, saidOf } from '#said';
+import type { Said } from '#said';
+import type { Connection } from '#library';
+import type { Entry, Listing, SingleRef } from '#store';
+import type { Tried } from '#store/s3';
 
 interface Waiter<T> {
   resolve(value: T): void;

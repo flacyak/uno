@@ -1,9 +1,11 @@
-// The engine's telemetry, sent to a collector only when one is named in the
-// environment.
+/**
+ * @fileoverview The engine's telemetry, sent to a collector only when one is
+ * named in the environment.
+ */
 
 import { expect, test, vi } from "vite-plus/test";
 
-import { exporting } from "../src/engine/telemetry.ts";
+import { exporting } from "#engine/telemetry";
 
 const ENDPOINT = "https://otlp.example.test/otlp";
 const ENV = {

@@ -1,20 +1,23 @@
-// The engine: one workspace and its log, served to one client over a port.
-//
-// A platform's entry file builds a Port from its runtime, lists its file
-// providers, and calls `serve`.
+/**
+ * @fileoverview The engine: one workspace and its log, served to one client
+ * over a port.
+ *
+ * A platform's entry file builds a Port from its runtime, lists its file
+ * providers, and calls `serve`.
+ */
 
 import { ROWS_AT_MOST } from './protocol.ts';
 import type { Port, Reply, Request, SignIns } from './protocol.ts';
-import { Refusal, saidOf } from '../said/index.ts';
-import { NO_ROW } from '../sheet/index.ts';
-import type { Said } from '../said/index.ts';
+import { Refusal, saidOf } from '#said';
+import { NO_ROW } from '#sheet';
+import type { Said } from '#said';
 import { TUNING } from './rows.ts';
 import type { Tuning } from './rows.ts';
 import { peek } from './peek.ts';
-import type { Sources } from '../plugin/index.ts';
-import type { Connection } from '../library/index.ts';
-import type { Connections } from '../store/index.ts';
-import type { Meeting, Tried } from '../store/s3.ts';
+import type { Sources } from '#plugin';
+import type { Connection } from '#library';
+import type { Connections } from '#store';
+import type { Meeting, Tried } from '#store/s3';
 import { MILLISECONDS, REQUEST, unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { Workspace } from './workspace.ts';

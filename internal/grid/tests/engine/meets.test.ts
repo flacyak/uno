@@ -1,26 +1,25 @@
-// A .uno's S3 sources are matched to the connections that cover them. A source
-// outside every connection opens as missing, keeps its edits, names the bucket
-// to connect, and leaves the bucket alone until a connection is made.
+/**
+ * @fileoverview A .uno's S3 sources are matched to the connections that cover
+ * them. A source outside every connection opens as missing, keeps its edits,
+ * names the bucket to connect, and leaves the bucket alone until a connection
+ * is made.
+ */
 
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import { readContainer } from '../../src/document/index.ts';
-import type { SourceHandle } from '../../src/engine/index.ts';
-import type { Connection } from '../../src/library/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import { connectionsIn, saveConnection } from '../../src/store/index.ts';
-import {
-  connectionSigning,
-  diskProvider,
-  nodeStore,
-} from '../../src/store/node.ts';
-import { connectionMeeting, s3Provider } from '../../src/store/s3.ts';
-import { BUCKET, bucket, etagOf, keysOnly } from '../store/standin.ts';
-import type { Bucket } from '../store/standin.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { readContainer } from '#document';
+import type { SourceHandle } from '#engine';
+import type { Connection } from '#library';
+import { Op } from '#sheet';
+import { connectionsIn, saveConnection } from '#store';
+import { connectionSigning, diskProvider, nodeStore } from '#store/node';
+import { connectionMeeting, s3Provider } from '#store/s3';
+import { BUCKET, bucket, etagOf, keysOnly } from '#tests/store/standin';
+import type { Bucket } from '#tests/store/standin';
+import { ROWS, UNITS } from '#tests/testdata/sales-q3';
 import { FIXTURE, connect, indexed, openOne } from './harness.ts';
 
 let b: Bucket;

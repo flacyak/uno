@@ -1,13 +1,15 @@
-// @vitest-environment happy-dom
-//
-// Opening a file the platform already holds a reference to, with no dialog:
-// what the web page does with a workspace the server kept. Runs over the real
-// shell and engine.
+/**
+ * @fileoverview Opening a file the platform already holds a reference to, with
+ * no dialog: what the web page does with a workspace the server kept. Runs over
+ * the real shell and engine.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import type { Shell } from "../src/renderer/shell/shell.ts";
+import type { Shell } from "#renderer/shell/shell";
 import { FIXTURE, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 

@@ -1,12 +1,14 @@
-// The main process: one window, the application menu, the file dialogs, and
-// the engine processes that read files for the renderer.
-//
-// uno runs once. A second uno started while this one runs hands its command
-// line over and exits, and the files it named open in this window.
-//
-// The data lives elsewhere. An engine reads a file in a utility process and
-// sends rows straight to the renderer over a message port. Everything else
-// about the data lives in the renderer.
+/**
+ * @fileoverview The main process: one window, the application menu, the file
+ * dialogs, and the engine processes that read files for the renderer.
+ *
+ * uno runs once. A second uno started while this one runs hands its command
+ * line over and exits, and the files it named open in this window.
+ *
+ * The data lives elsewhere. An engine reads a file in a utility process and
+ * sends rows straight to the renderer over a message port. Everything else
+ * about the data lives in the renderer.
+ */
 
 import {
   BrowserWindow,
@@ -21,8 +23,8 @@ import {
 import type { MenuItemConstructorOptions, UtilityProcess, WebContents } from "electron";
 import { join } from "node:path";
 
-import { m } from "../paraglide/messages.js";
-import { isLocale, setLocale } from "../paraglide/runtime.js";
+import { m } from "#paraglide/messages";
+import { isLocale, setLocale } from "#paraglide/runtime";
 import { filesNamed } from "./argv.ts";
 import { sourceAt, unoPath, writeAtomic, writeConnection } from "./files.ts";
 

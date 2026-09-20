@@ -1,7 +1,9 @@
-// Format 6 tests: a source made of several files read as one, with `parts`
-// and `header` keys. A workspace whose sources are all single files is still
-// written as format 5, byte for byte. Covers what is written, round trips,
-// and the refusals for malformed part lists.
+/**
+ * @fileoverview Format 6 tests: a source made of several files read as one,
+ * with `parts` and `header` keys. A workspace whose sources are all single
+ * files is still written as format 5, byte for byte. Covers what is written,
+ * round trips, and the refusals for malformed part lists.
+ */
 
 import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
@@ -15,9 +17,9 @@ import {
   readContainer,
   readDocument,
   writeDocument,
-} from '../../src/document/index.ts';
-import type { Document, Held, HeldParts } from '../../src/document/index.ts';
-import { sha256Hex } from '../../src/go/index.ts';
+} from '#document';
+import type { Document, Held, HeldParts } from '#document';
+import { sha256Hex } from '#go';
 
 const encoder = new TextEncoder();
 

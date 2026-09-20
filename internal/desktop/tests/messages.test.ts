@@ -1,9 +1,11 @@
-// The message files, checked against each other.
-//
-// The compiler catches a call site naming a message the base locale lacks.
-// These tests catch a translation that leaves a message out, drops a
-// variable, lacks a form for one of its language's plurals, or writes a
-// plural as one plain sentence.
+/**
+ * @fileoverview The message files, checked against each other.
+ *
+ * The compiler catches a call site naming a message the base locale lacks.
+ * These tests catch a translation that leaves a message out, drops a
+ * variable, lacks a form for one of its language's plurals, or writes a
+ * plural as one plain sentence.
+ */
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -11,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { baseLocale, locales } from "../src/paraglide/runtime.js";
+import { baseLocale, locales } from "#paraglide/runtime";
 
 const MESSAGES = join(dirname(fileURLToPath(import.meta.url)), "..", "messages");
 

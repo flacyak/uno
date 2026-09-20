@@ -1,18 +1,20 @@
-// @vitest-environment happy-dom
-//
-// Saving from the shell: what is refused before a write, what a second Ctrl+S
-// does while the first is still writing, and what quit does over a save in
-// flight. Runs over the real shell and engine, with a host that answers the
-// dialog and counts writes.
+/**
+ * @fileoverview Saving from the shell: what is refused before a write, what a
+ * second Ctrl+S does while the first is still writing, and what quit does over
+ * a save in flight. Runs over the real shell and engine, with a host that
+ * answers the dialog and counts writes.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { m } from "../src/paraglide/messages.js";
-import { RECENTS_KEY } from "../src/renderer/recents.ts";
-import type { Shell } from "../src/renderer/shell/shell.ts";
+import { m } from "#paraglide/messages";
+import { RECENTS_KEY } from "#renderer/recents";
+import type { Shell } from "#renderer/shell/shell";
 import { FIXTURE, SECOND, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 

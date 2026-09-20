@@ -1,5 +1,7 @@
-// Tests for the Go standard library shims. Expected values were recorded from
-// the equivalent Go calls.
+/**
+ * @fileoverview Tests for the Go standard library shims. Expected values were
+ * recorded from the equivalent Go calls.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 
@@ -29,7 +31,7 @@ import {
   toUpper,
   trimSpace,
   unquote,
-} from '../../src/go/index.ts';
+} from '#go';
 
 describe('runes', () => {
   test('splits code points, not code units', () => {

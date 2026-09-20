@@ -1,10 +1,12 @@
-// Passes: work that reads a whole file one chunk at a time.
-//
-// A pass reads a chunk, does its work, reports progress, and stops when its
-// signal is aborted. PassContext is what every pass is handed.
+/**
+ * @fileoverview Passes: work that reads a whole file one chunk at a time.
+ *
+ * A pass reads a chunk, does its work, reports progress, and stops when its
+ * signal is aborted. PassContext is what every pass is handed.
+ */
 
-import type { Format } from '../ingest/index.ts';
-import type { ByteSource } from '../store/index.ts';
+import type { Format } from '#ingest';
+import type { ByteSource } from '#store';
 import type { RowIndex, Tuning } from './rows.ts';
 
 export interface PassContext {

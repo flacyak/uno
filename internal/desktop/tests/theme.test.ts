@@ -1,10 +1,12 @@
-// @vitest-environment happy-dom
-//
-// The themes, and which one the page wears.
-//
-// Checks the choice and what it puts on the page: kept between launches, an
-// unknown kept value read as the default, the system's mode followed while
-// the appearance is "system", and every palette readable.
+/**
+ * @fileoverview The themes, and which one the page wears.
+ *
+ * Checks the choice and what it puts on the page: kept between launches, an
+ * unknown kept value read as the default, the system's mode followed while
+ * the appearance is "system", and every palette readable.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
@@ -15,8 +17,8 @@ import {
   THEME_KEY,
   Theming,
   tokensOf,
-} from "../src/renderer/theme.ts";
-import type { Mode, Palette, Scheme } from "../src/renderer/theme.ts";
+} from "#renderer/theme";
+import type { Mode, Palette, Scheme } from "#renderer/theme";
 import { Kept } from "./kept.ts";
 
 /** A Scheme in whichever mode the test sets, which notifies listeners on change. */

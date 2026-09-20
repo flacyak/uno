@@ -1,13 +1,15 @@
-// A stand-in for the AWS SSO portal, on localhost.
-//
-// It answers GET /federation/credentials with the role keys granted to the
-// token in the x-amz-sso_bearer_token header, and refuses an unknown token.
-// It records every request in `seen`.
+/**
+ * @fileoverview A stand-in for the AWS SSO portal, on localhost.
+ *
+ * It answers GET /federation/credentials with the role keys granted to the
+ * token in the x-amz-sso_bearer_token header, and refuses an unknown token.
+ * It records every request in `seen`.
+ */
 
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import type { AwsCredentials } from '../../src/store/s3.ts';
+import type { AwsCredentials } from '#store/s3';
 
 /** The keys one token is granted: one role in one account, with an expiry. */
 export interface Grant {

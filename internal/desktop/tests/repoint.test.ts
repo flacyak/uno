@@ -1,11 +1,13 @@
-// A missing S3 source, re-pointed at another object from the panel, with its
-// edits replayed.
-//
-// Runs headless over a real engine, the S3 provider, and the stand-in
-// bucket. A workspace is saved pointing at an object, the object is deleted,
-// and the workspace opens with the source missing. The panel browses the
-// object's prefix through the workspace's engine, and the file picked there
-// is what the workspace is pointed at.
+/**
+ * @fileoverview A missing S3 source, re-pointed at another object from the
+ * panel, with its edits replayed.
+ *
+ * Runs headless over a real engine, the S3 provider, and the stand-in
+ * bucket. A workspace is saved pointing at an object, the object is deleted,
+ * and the workspace opens with the source missing. The panel browses the
+ * object's prefix through the workspace's engine, and the file picked there
+ * is what the workspace is pointed at.
+ */
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,8 +18,8 @@ import { HOME_REGION } from "../../grid/tests/store/regions.ts";
 import { bucket, etagOf } from "../../grid/tests/store/standin.ts";
 import type { Bucket } from "../../grid/tests/store/standin.ts";
 import { bucketEngine } from "./bucket-engine.ts";
-import { Sources, stateOf } from "../src/renderer/sources.ts";
-import { Workspace } from "../src/renderer/workspace.ts";
+import { Sources, stateOf } from "#renderer/sources";
+import { Workspace } from "#renderer/workspace";
 
 /** A small export, and the index of its cost column. */
 const ADS = "Ad_Date,Cost\n2024-11-16,$12.50\n20-11-2024,$8.00\n2024/11/16,$3.10\n";

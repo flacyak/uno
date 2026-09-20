@@ -1,16 +1,18 @@
-// Find in a column: ]f and [f for cells that fail to parse, / and ? for text,
-// and n and N to repeat the last search.
-//
-// The engine answers each find by reading the file, so a find reaches rows
-// beyond what the grid has loaded.
+/**
+ * @fileoverview Find in a column: ]f and [f for cells that fail to parse, / and
+ * ? for text, and n and N to repeat the last search.
+ *
+ * The engine answers each find by reading the file, so a find reaches rows
+ * beyond what the grid has loaded.
+ */
 
-import type { FindRequest } from "@uno/grid/engine";
+import type { FindRequest } from "#engine";
 
-import { m } from "../../paraglide/messages.js";
-import { columnLabel } from "../grid/rows.ts";
-import type { Grid } from "../grid/index.ts";
-import { num } from "../locale.ts";
-import type { Workspace } from "../workspace.ts";
+import { m } from "#paraglide/messages";
+import { columnLabel } from "#renderer/grid/rows";
+import type { Grid } from "#renderer/grid";
+import { num } from "#renderer/locale";
+import type { Workspace } from "#renderer/workspace";
 import { message } from "./util.ts";
 
 /** How long a find may take before the status bar says "searching". */

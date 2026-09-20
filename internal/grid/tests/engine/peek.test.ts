@@ -1,29 +1,21 @@
-// `readHead` and `peekHead`, the two halves of a peek.
-//
-// `readHead` opens a file through a handler, reads its front, and closes it.
-// The checks here count reads and closes.
-//
-// `peekHead` parses a head: it detects the format, names the columns, and
-// returns the whole rows in the window. The heads are strings in this file.
+/**
+ * @fileoverview `readHead` and `peekHead`, the two halves of a peek.
+ *
+ * `readHead` opens a file through a handler, reads its front, and closes it.
+ * The checks here count reads and closes.
+ *
+ * `peekHead` parses a head: it detects the format, names the columns, and
+ * returns the whole rows in the window. The heads are strings in this file.
+ */
 
 import { expect, test } from 'vite-plus/test';
 
-import {
-  PEEK_BYTES,
-  PEEK_ROWS,
-  peek,
-  peekHead,
-  readHead,
-} from '../../src/engine/peek.ts';
-import type { Head } from '../../src/engine/peek.ts';
-import { headerOf, readAll } from '../../src/ingest/index.ts';
-import { blobFiles } from '../../src/store/index.ts';
-import type {
-  ByteSource,
-  FileHandler,
-  FileRef,
-} from '../../src/store/index.ts';
-import { localFiles } from '../../src/store/node.ts';
+import { PEEK_BYTES, PEEK_ROWS, peek, peekHead, readHead } from '#engine/peek';
+import type { Head } from '#engine/peek';
+import { headerOf, readAll } from '#ingest';
+import { blobFiles } from '#store';
+import type { ByteSource, FileHandler, FileRef } from '#store';
+import { localFiles } from '#store/node';
 import { FIXTURE, bytes, saidIn } from './harness.ts';
 
 /** The size of a 2.5 GB file. A virtual source stands in for it here. */

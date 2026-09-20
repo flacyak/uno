@@ -1,6 +1,8 @@
-// A stand-in for localStorage, backed by a Map.
+/**
+ * @fileoverview A stand-in for localStorage, backed by a Map.
+ */
 
-import type { Keeps } from "../src/renderer/theme.ts";
+import type { Keeps } from "#renderer/theme";
 
 export class Kept implements Keeps {
   readonly map = new Map<string, string>();

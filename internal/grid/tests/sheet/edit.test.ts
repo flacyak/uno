@@ -1,8 +1,13 @@
+/**
+ * @fileoverview The edit log on a sheet: set, apply, replay, and a log that
+ * does not fit.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
-import { NO_ROW, Op, Sheet } from '../../src/sheet/index.ts';
-import type { Edit } from '../../src/sheet/index.ts';
-import { parse as parseProgram } from '../../src/program/index.ts';
+import { NO_ROW, Op, Sheet } from '#sheet';
+import type { Edit } from '#sheet';
+import { parse as parseProgram } from '#program';
 
 const REGION = 1;
 const UNITS = 2;

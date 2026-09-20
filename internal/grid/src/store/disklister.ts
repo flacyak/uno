@@ -1,17 +1,19 @@
-// The disk's Lister: a folder's readdir and stats as a listing.
-//
-// A listing is a readdir put through four steps: classify each entry, sort,
-// drop what the cursor has already shown, take a page. Each call starts from
-// a fresh readdir.
-//
-// Only this file and store/node.ts import node:fs. The guard test in
-// tests/store/opens.test.ts checks that.
+/**
+ * @fileoverview The disk's Lister: a folder's readdir and stats as a listing.
+ *
+ * A listing is a readdir put through four steps: classify each entry, sort,
+ * drop what the cursor has already shown, take a page. Each call starts from
+ * a fresh readdir.
+ *
+ * Only this file and store/node.ts import node:fs. The guard test in
+ * tests/store/opens.test.ts checks that.
+ */
 
 import type { Dirent, Stats } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
-import { compareStrings } from '../go/index.ts';
+import { compareStrings } from '#go';
 import { isRemote } from './index.ts';
 import type { Entry, Lister, Listing } from './list.ts';
 import { PAGE, byPageKey, pageKey } from './list.ts';

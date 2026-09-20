@@ -1,5 +1,8 @@
-// Writes an efficiency suite's metrics to out/efficiency/<suite>.json as a
-// list of { name, unit, value }. Smaller is better for every metric.
+/**
+ * @fileoverview Writes an efficiency suite's metrics to
+ * out/efficiency/<suite>.json as a list of { name, unit, value }. Smaller is
+ * better for every metric.
+ */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -1,16 +1,18 @@
-// A connection: one .unof that says where a bucket is and how to sign in to
-// it.
-//
-// It is shaped like a formula file: one small JSON object, unrecognised keys
-// carried through to the next save, unknown kinds refused by name.
-//
-// It names how to sign in (a profile, a role) and leaves the keys to the
-// platform. Anything shaped like a key is refused on the way in and on the
-// way out.
-//
-// It works on text alone.
+/**
+ * @fileoverview A connection: one .unof that says where a bucket is and how to
+ * sign in to it.
+ *
+ * It is shaped like a formula file: one small JSON object, unrecognised keys
+ * carried through to the next save, unknown kinds refused by name.
+ *
+ * It names how to sign in (a profile, a role) and leaves the keys to the
+ * platform. Anything shaped like a key is refused on the way in and on the
+ * way out.
+ *
+ * It works on text alone.
+ */
 
-import { rfc3339 } from '../go/index.ts';
+import { rfc3339 } from '#go';
 import { validID } from './index.ts';
 import {
   about,

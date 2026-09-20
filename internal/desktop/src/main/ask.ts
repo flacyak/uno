@@ -1,8 +1,11 @@
-// Asks the script that started the app to do something, over stdio.
-//
-// The smoke run and the preview are started by a script that holds the
-// stand-in bucket. The app prints a request on stdout and waits for the
-// script to print a matching done line on the app's stdin.
+/**
+ * @fileoverview Asks the script that started the app to do something, over
+ * stdio.
+ *
+ * The smoke run and the preview are started by a script that holds the
+ * stand-in bucket. The app prints a request on stdout and waits for the
+ * script to print a matching done line on the app's stdin.
+ */
 
 import { createInterface } from "node:readline";
 
