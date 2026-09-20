@@ -1,3 +1,8 @@
+/**
+ * @fileoverview What a column looks like, inferred from a sample of its rows at
+ * open: text, number or date, and whether it is flagged.
+ */
+
 import { trimSpace } from '#go';
 import { isNumber, undress } from '#num';
 

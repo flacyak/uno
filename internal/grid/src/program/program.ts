@@ -1,3 +1,8 @@
+/**
+ * @fileoverview A Program is a pipeline of steps run left to right, and applied
+ * wholly or not at all.
+ */
+
 import type { Step } from './steps.ts';
 import { english } from '#said';
 import type { Said } from '#said';
