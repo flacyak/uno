@@ -5,8 +5,9 @@
 //
 // No file's bytes cross this on the way in. `open` says where a file is, and
 // the engine `connect` starts reads it from there, so a 30 GB CSV costs the
-// renderer a name and a path. Saving still hands bytes over, until a .uno can
-// point at its source instead of carrying it.
+// renderer a name and a path. Nor on the way out: a .uno points at its sources
+// rather than carrying them, so what `save` hands over is the log and a few
+// paths whatever the data behind them weighs.
 //
 // The Electron implementation is `preload` plus `renderer/host.ts`; a web build
 // implements the same methods with the File System Access API and a Web Worker,
@@ -31,9 +32,14 @@ export interface Host {
    * or out of it, and closing the port ends the worker. */
   connect(): Promise<MessagePort>;
 
-  /** Ask where to save, and write. Returns the chosen path, or undefined when
-   * the person cancelled. */
-  saveAs(suggestedName: string, bytes: Uint8Array): Promise<string | undefined>;
+  /**
+   * Ask where to save. Undefined when the person cancelled.
+   *
+   * Asking and writing are two calls because a workspace has to know where it
+   * is going before it can be written: a source under the same folder is
+   * pointed at relative to it. Cancelling then costs nothing, which it should.
+   */
+  pickSave(suggestedName: string): Promise<string | undefined>;
 
   /** Write over a file already chosen. Atomic: an interrupted save loses the
    * new bytes rather than the ones already there. */

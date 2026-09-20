@@ -29,8 +29,8 @@ const bridge: Bridge = {
 
   connect: (id) => ipcRenderer.send("engine:connect", id),
 
-  saveAs: (suggestedName, bytes) =>
-    ipcRenderer.invoke("file:save-as", suggestedName, bytes) as Promise<string | undefined>,
+  pickSave: (suggestedName) =>
+    ipcRenderer.invoke("file:pick-save", suggestedName) as Promise<string | undefined>,
 
   save: (path, bytes) => ipcRenderer.invoke("file:save", path, bytes) as Promise<void>,
 };

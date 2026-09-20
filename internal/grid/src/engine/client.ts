@@ -76,11 +76,28 @@ export class Engine {
     this.sources.delete(source.id);
   }
 
+  /**
+   * relink points a source at a file: the one whose file has gone, or one whose
+   * file changed under the log.
+   *
+   * It answers with a new handle, because the columns, the progress and the log
+   * all belong to the file that is now behind it. Whoever holds the old one
+   * throws it away, along with the band of rows it was serving.
+   */
+  async relink(source: SourceHandle, ref: SourceRef): Promise<SourceHandle> {
+    const r = await this.ask((id) => ({ t: "relink", id, source: source.id, ref }));
+    if (r.t !== "relinked") throw new Error(`the engine answered a relink with ${r.t}`);
+    const handle = new SourceHandle(this, r.opened);
+    this.sources.set(handle.id, handle);
+    return handle;
+  }
+
   mode(transform: boolean): void {
     if (!this.closed) this.port.post({ t: "mode", transform });
   }
 
-  /** save returns the workspace as a .uno, refusing sources larger than limit together. */
+  /** save returns the workspace as a .uno, refusing carried sources larger than
+   * limit together. */
   async save(place: Place, limit: number): Promise<Uint8Array> {
     const r = await this.ask((id) => ({ t: "save", id, place, limit }));
     if (r.t !== "saved") throw new Error(`the engine answered a save with ${r.t}`);

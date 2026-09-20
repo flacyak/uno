@@ -83,6 +83,7 @@ test("a workspace survives being built, saved and reopened", () => {
     active: "sales-q3",
     log: s.edits().map((edit) => ({ source: "sales-q3", edit })),
     extra: new Map(),
+    at: "",
   };
   const bytes = writeDocument(doc);
   expect(doc.manifest.edits.count).toBe(5);

@@ -30,6 +30,11 @@ export function serve(
         port.post({ t: "removed", id: msg.id });
         return;
       }
+      case "relink": {
+        const opened = await workspace.relink(msg.source, msg.ref);
+        port.post({ t: "relinked", id: msg.id, opened });
+        return;
+      }
       case "rows": {
         const r = await workspace.rows(msg.source, msg.first, msg.count);
         port.post({ t: "rows", id: msg.id, first: msg.first, ...r });

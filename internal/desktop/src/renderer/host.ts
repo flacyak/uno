@@ -22,7 +22,7 @@ export function electronHost(bridge: Bridge): Host {
     open: () => bridge.open(),
     add: () => bridge.add(),
     dropped: (file) => bridge.dropped(file),
-    saveAs: (suggestedName, bytes) => bridge.saveAs(suggestedName, bytes),
+    pickSave: (suggestedName) => bridge.pickSave(suggestedName),
     save: (path, bytes) => bridge.save(path, bytes),
     connect() {
       const id = next++;

@@ -37,9 +37,30 @@ anywhere in the file. After three fixes in one column, a banner offers the rest,
 and its count grows while the engine surveys the file. Apply is one edit, and
 Ctrl+Z takes it back.
 
-Saving still embeds the sources in the `.uno`, so sources over 256 MB together
-are refused by name until the format can point at the files instead. A `.uno`
-opens through the engine too, with its log replayed.
+Saving writes down where each source is rather than copying it in, so a
+workspace of a 30 GB ledger and four 2 GB exports is a few kilobytes and saves
+instantly. A source under the workspace's own folder is pointed at relative to
+it, so the folder can be copied somewhere else whole. The 256 MB ceiling is what
+is left over: bytes with no file behind them, which the container has to carry
+or lose, and on the desktop there are none. A `.uno` opens through the engine
+too, with its log replayed.
+
+What a `.uno` gives up for this is travelling on its own. Sending somebody the
+file without the data it points at gets them the tabs, the edits and the log,
+and no rows.
+
+## When a source's file moves
+
+A source whose file is not where the workspace left it still opens: it keeps its
+id, its edits and its place in the log, and the tab wears a `!` that says what
+went wrong. Clicking the `!` asks where the file is now, and the edits replay
+over it. A file that has changed size since the save gets the same mark and its
+rows anyway, because only the person looking at them can say whether it is still
+the right file.
+
+A file that cannot take the log -- one a quarter the size, whose last rows the
+log names -- is refused, and the source is left as it was. A wrong pick costs
+nothing.
 
 ## A workspace of several sources
 
@@ -55,7 +76,7 @@ The × on a tab takes its source and its edits out of the workspace, and asks on
 The last source has no ×.
 
 Ctrl+PageDown and Ctrl+PageUp, or Ctrl+Tab and Ctrl+Shift+Tab, move between tabs, and each tab goes back to the cell it was left on.
-A workspace of one source saves in the layout every earlier uno reads, and a second source moves it to format 4.
+A workspace of one carried source saves in the layout every earlier uno reads, a second source moves it to format 4, and pointing at a file moves it to format 5.
 
 Opening a file closes the one open now. Over unsaved edits, Ctrl+O says so
 first, and a second Ctrl+O while that is still on screen opens anyway, as `:e!`

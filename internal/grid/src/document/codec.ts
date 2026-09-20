@@ -3,7 +3,7 @@ import { unzipSync, zipSync } from "fflate";
 import { compareStrings, nowTruncated, parseTime, rfc3339, sha256Hex } from "../go/index.ts";
 import { read as ingestRead } from "../ingest/index.ts";
 import type { Edit, Op, Sheet } from "../sheet/index.ts";
-import type { Document, Embedded, Logged, Manifest, Source, State } from "./document.ts";
+import type { Document, Held, Logged, Manifest, Source, State } from "./document.ts";
 import {
   BASE_VERSION,
   FORMAT_VERSION,
@@ -11,34 +11,41 @@ import {
   GENERATOR,
   LOG_ENTRY,
   MANIFEST_ENTRY,
+  POINTED_VERSION,
   RULE_VERSION,
   SOURCES_VERSION,
   STATE_ENTRY,
   logOf,
+  resolvedPath,
   sourceEntry,
   sourceId,
+  storedPath,
 } from "./document.ts";
 
 const decoder = new TextDecoder("utf-8");
 const encoder = new TextEncoder();
 
 /**
- * readDocument restores a document from the bytes of a .uno.
+ * readDocument restores a document from the bytes of a .uno, and builds a sheet
+ * for every source the file carries.
  *
- * Nothing outside the container is consulted: no original file, no stored path,
- * no network. That is what lets the file open on a machine that has never seen
- * the CSV it was made from.
+ * It opens nothing: a source the workspace points at gets no sheet here,
+ * because reading it means reading a file, and this module cannot. The engine
+ * is what opens those, an index at a time. So `sheets` holds the carried
+ * sources and `sources` holds them all, and a caller that wants the rest has
+ * come to the wrong function.
  *
  * `name` is only ever used to name the file in an error. An error dialog that
  * does not say which of twelve dropped files failed is useless.
  */
-export function readDocument(name: string, bytes: Uint8Array): Document {
-  const doc = readContainer(name, bytes);
+export function readDocument(name: string, bytes: Uint8Array, at = ""): Document {
+  const doc = readContainer(name, bytes, at);
 
   // The same call a plain CSV takes. One way to build a sheet is the only
   // reason a restored workspace is guaranteed to match the one that was saved.
   const sheets = new Map<string, Sheet>();
   for (const src of doc.sources) {
+    if (src.raw === undefined) continue;
     let sheet;
     try {
       sheet = ingestRead(src.name, src.raw);
@@ -57,11 +64,17 @@ export function readDocument(name: string, bytes: Uint8Array): Document {
 
 /**
  * readContainer reads a .uno without building a sheet from it: the manifest,
- * each source's bytes, the state, the log and whatever this build did not
- * recognise. It is what the engine opens a workspace with, since the engine
- * reads each source through an index and replays the log over pages instead.
+ * the bytes of each source it carries, where each source it points at is, the
+ * state, the log and whatever this build did not recognise. It is what the
+ * engine opens a workspace with, since the engine reads each source through an
+ * index and replays the log over pages instead.
+ *
+ * `at` is where this .uno is, which is what the relative pointers in it are
+ * read from. A caller that has no path for it -- a browser, a test holding
+ * bytes -- passes nothing, and a relative pointer comes back as it was written
+ * and fails to open under its own name.
  */
-export function readContainer(name: string, bytes: Uint8Array): Document {
+export function readContainer(name: string, bytes: Uint8Array, at = ""): Document {
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(bytes);
@@ -82,27 +95,31 @@ export function readContainer(name: string, bytes: Uint8Array): Document {
 
   const log = readLog(name, entries, m);
   const { active, states } = parseState(readJSON(name, entries, m.sheet.entry), m);
-  const sources: Embedded[] = m.sources.map((src) => ({
+  const sources: Held[] = m.sources.map((src) => ({
     id: src.id,
     name: src.name,
-    raw: readEntry(name, entries, src.entry),
+    raw: src.entry === "" ? undefined : readEntry(name, entries, src.entry),
+    path: src.path === "" ? undefined : resolvedPath(src.path, at),
+    bytes: src.bytes,
     rows: src.rows,
     cols: src.cols,
     state: states.get(src.id) ?? { active: { row: 0, col: 0 } },
   }));
 
-  return { manifest: m, sources, active, log, extra: readExtra(entries, m) };
+  return { manifest: m, sources, active, log, extra: readExtra(entries, m), at };
 }
 
 /**
  * writeDocument lays out the container.
  *
- * Each source goes in byte for byte: uno has no opinion about your file's line
- * endings or quoting and must not acquire one by round-tripping it.
+ * A source the workspace carries goes in byte for byte: uno has no opinion
+ * about your file's line endings or quoting and must not acquire one by
+ * round-tripping it. A source it points at goes in as a path and costs the zip
+ * nothing, which is the whole reason a workspace can hold a 30 GB ledger.
  *
- * A workspace of one source is written the way every build before format 4
- * wrote one, so it still opens in them. Only a second source changes the
- * layout.
+ * A workspace of one carried source is written the way every build before
+ * format 4 wrote one, so it still opens in them. A second source, or a pointer,
+ * changes the layout.
  *
  * The measured manifest is written back onto the document, so the next save
  * preserves the time of the first one and the status bar can report what was
@@ -123,7 +140,7 @@ export function writeDocument(d: Document): Uint8Array {
     [MANIFEST_ENTRY]: entry(encoder.encode(formatJSON(manifestJSON(m)))),
   };
   d.sources.forEach((src, i) => {
-    files[m.sources[i]!.entry] = entry(src.raw);
+    if (src.raw !== undefined) files[m.sources[i]!.entry] = entry(src.raw);
   });
   files[STATE_ENTRY] = entry(encoder.encode(formatJSON(stateJSON(d, single))));
   files[LOG_ENTRY] = entry(encoder.encode(formatLog(d.log, single)));
@@ -151,6 +168,15 @@ function checkLog(d: Document): void {
   for (const src of d.sources) {
     if (src.id === "") throw new Error(`${src.name} has no id to log its edits under`);
     if (ids.has(src.id)) throw new Error(`two sources are both called ${src.id}`);
+    // Neither is a source that would open as an empty grid and save over the
+    // one it came from. Both is a file the reader has two answers for.
+    if ((src.raw === undefined) === (src.path === undefined)) {
+      throw new Error(
+        src.raw === undefined
+          ? `${src.name} has neither bytes to carry nor a path to point at`
+          : `${src.name} is both carried and pointed at`,
+      );
+    }
     ids.add(src.id);
   }
   for (const l of d.log) {
@@ -169,10 +195,15 @@ function checkLog(d: Document): void {
  * What the caller supplies is what the writer cannot see: where the bytes came
  * from, when the document was first saved, and the shape of the grid each log
  * builds.
+ *
+ * A pointed-at source is the one thing not measured here, because measuring it
+ * means reading it. Its size is what the workspace saw when it opened the file,
+ * and it carries no hash at all: a hash nobody can afford to check is a field
+ * that only ever goes stale.
  */
 function manifestFor(d: Document): Manifest {
   const modified = nowTruncated();
-  const format = formatFor(d.sources.length, d.log);
+  const format = formatFor(d.sources, d.log);
   const single = format < SOURCES_VERSION;
   return {
     ...d.manifest,
@@ -183,9 +214,11 @@ function manifestFor(d: Document): Manifest {
     sources: d.sources.map((src): Source => ({
       id: src.id,
       name: src.name,
-      bytes: src.raw.length,
-      sha256: sha256Hex(src.raw),
-      entry: single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
+      bytes: src.raw?.length ?? src.bytes ?? 0,
+      sha256: src.raw === undefined ? "" : sha256Hex(src.raw),
+      entry:
+        src.raw === undefined ? "" : single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
+      path: src.path === undefined ? "" : storedPath(src.path, d.at),
       rows: src.rows,
       cols: src.cols,
     })),
@@ -195,12 +228,13 @@ function manifestFor(d: Document): Manifest {
 }
 
 /**
- * formatFor is the oldest build that could open a workspace of `sources`
- * sources with this log: a second source needs the layout that lists them,
- * and one needs whatever its log does.
+ * formatFor is the oldest build that could open this workspace: a pointer needs
+ * the layout that can hold one, a second source the layout that lists them, and
+ * one carried source whatever its log needs.
  */
-export function formatFor(sources: number, log: readonly Logged[]): number {
-  if (sources > 1) return SOURCES_VERSION;
+export function formatFor(sources: readonly Held[], log: readonly Logged[]): number {
+  if (sources.some((s) => s.path !== undefined)) return POINTED_VERSION;
+  if (sources.length > 1) return SOURCES_VERSION;
   return versionFor(log.map((l) => l.edit));
 }
 
@@ -297,7 +331,7 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
  */
 function readExtra(entries: Record<string, Uint8Array>, m: Manifest): Map<string, Uint8Array> {
   const known = new Set([MANIFEST_ENTRY, m.sheet.entry, m.edits.entry]);
-  for (const s of m.sources) known.add(s.entry);
+  for (const s of m.sources) if (s.entry !== "") known.add(s.entry);
 
   const extra = new Map<string, Uint8Array>();
   for (const [key, bytes] of Object.entries(entries)) {
@@ -345,6 +379,7 @@ function parseManifest(name: string, v: unknown): Manifest {
         bytes: asNumber(s["bytes"]),
         sha256: asString(s["sha256"]),
         entry: asString(s["entry"]),
+        path: asString(s["path"]),
         rows: asNumber(s["rows"]),
         cols: asNumber(s["cols"]),
       };
@@ -359,6 +394,7 @@ function parseManifest(name: string, v: unknown): Manifest {
         bytes: asNumber(s["bytes"]),
         sha256: asString(s["sha256"]),
         entry: asString(s["entry"]),
+        path: "",
         rows: asNumber(sheet["rows"]),
         cols: asNumber(sheet["cols"]),
       },
@@ -371,6 +407,11 @@ function parseManifest(name: string, v: unknown): Manifest {
     if (s.name === "") throw new Error(`${name}: the manifest names no source file`);
     if (s.id === "") throw new Error(`${name}: ${s.name} has no id in the manifest`);
     if (ids.has(s.id)) throw new Error(`${name}: two sources are both called ${s.id}`);
+    // A source with neither would open as an empty grid and then save over
+    // whatever it came from. Better to say so before anything is decoded.
+    if (s.entry === "" && s.path === "") {
+      throw new Error(`${name}: ${s.name} has no entry in this file and no path to the original`);
+    }
     ids.add(s.id);
   }
 
@@ -468,7 +509,22 @@ function manifestJSON(m: Manifest): unknown {
       edits,
     };
   }
-  return { ...head, sources: m.sources, sheet: m.sheet, edits };
+  return { ...head, sources: m.sources.map(sourceJSON), sheet: m.sheet, edits };
+}
+
+/** omitempty over the half that does not apply, so a person reading uno.json
+ * sees either an entry or a path and never an empty one of each. */
+function sourceJSON(s: Source): unknown {
+  return {
+    id: s.id,
+    name: s.name,
+    bytes: s.bytes,
+    sha256: s.sha256 === "" ? undefined : s.sha256,
+    entry: s.entry === "" ? undefined : s.entry,
+    path: s.path === "" ? undefined : s.path,
+    rows: s.rows,
+    cols: s.cols,
+  };
 }
 
 function stateJSON(d: Document, single: boolean): unknown {

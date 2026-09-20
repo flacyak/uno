@@ -39,6 +39,36 @@ export interface Progress {
   complete: boolean;
 }
 
+/**
+ * Link is the file a source points at, and what is wrong with it.
+ *
+ * A source the workspace carries has no link at all: there is no file to be
+ * wrong about. One that points at a file has a link with neither `missing` nor
+ * `changed` set while everything is as it was.
+ */
+export interface Link {
+  /** Where the file is, as this machine names it. */
+  path: string;
+
+  /**
+   * Why there is no grid behind this source: the file was not where the
+   * workspace said, or would not open. The source is still here -- its id, its
+   * edits and its place in the log are kept -- and `relink` gives it a file
+   * again.
+   */
+  missing?: string;
+
+  /**
+   * The file is there and is a different size than when the workspace was
+   * saved, so the log may be naming rows in data that has moved under it.
+   *
+   * It is said and not acted on. The edits still replay, because refusing to
+   * open a workspace over an appended row would be a worse answer than showing
+   * it and saying so.
+   */
+  changed?: string;
+}
+
 export interface Opened {
   /** What the workspace and its log call this source. */
   source: string;
@@ -53,6 +83,8 @@ export interface Opened {
    * Empty for anything else. */
   edits: Edit[];
   generation: number;
+  /** The file this source points at, for one that does. */
+  link?: Link;
 }
 
 /** What an open added to the workspace, in the order it shows them. */
@@ -83,6 +115,13 @@ export interface Place {
   /** The source that was showing. */
   source: string;
   cells: Array<{ source: string; row: number; col: number }>;
+
+  /**
+   * Where the .uno is going, so a source under the same folder is pointed at
+   * relative to it. Empty where the caller has no path to give, and every
+   * pointer is then absolute.
+   */
+  at: string;
 }
 
 /** A find: the next row down or up one column whose cell matches. */
@@ -140,6 +179,12 @@ export type Request =
   | { t: "open"; id: number; ref: SourceRef }
   /** Take a source out of the workspace, and its edits out of the log. */
   | { t: "remove"; id: number; source: string }
+  /**
+   * Point a source at a file: the one whose file has gone, or one whose file
+   * has changed under it. The source keeps its id, its edits and its place in
+   * the log, and the log is replayed over what the file holds now.
+   */
+  | { t: "relink"; id: number; source: string; ref: SourceRef }
   /** Rows by position, with the log applied. Fewer where the index has not reached. */
   | { t: "rows"; id: number; source: string; first: number; count: number }
   | { t: "edit"; id: number; source: string; edit: EditRequest }
@@ -151,13 +196,14 @@ export type Request =
   | { t: "find"; id: number; source: string; find: FindRequest }
   /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
   | { t: "mode"; transform: boolean }
-  /** The workspace as a .uno, refusing sources larger than limit together. */
+  /** The workspace as a .uno, refusing carried sources larger than limit together. */
   | { t: "save"; id: number; place: Place; limit: number }
   | { t: "close" };
 
 export type Reply =
   | { t: "opened"; id: number; added: Opening }
   | { t: "removed"; id: number }
+  | { t: "relinked"; id: number; opened: Opened }
   | { t: "progress"; source: string; progress: Progress }
   | {
       t: "rows";
