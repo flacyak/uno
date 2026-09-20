@@ -1,8 +1,9 @@
 /**
- * @fileoverview The block a role connection shows: uno's account, the
- * external ID and the two policy documents to hand to whoever makes the role,
- * each with a Copy button. Tested on its own, with no form around it, the way
- * the web page and the desktop both mount it.
+ * @fileoverview The block of IAM documents a connection shows, each with a
+ * Copy button: for a role, uno's account, the external ID and the two
+ * policies to hand to whoever makes the role; for keys, the permission policy
+ * alone. Tested on its own, with no form around it, the way the web page and
+ * the desktop both mount it.
  *
  * @vitest-environment happy-dom
  */
@@ -11,7 +12,7 @@ import { beforeEach, expect, test, vi } from "vite-plus/test";
 
 import { permissionPolicy, trustPolicy } from "@library";
 import { setLocale } from "@paraglide/runtime";
-import { RoleBlock } from "@renderer/shell/role";
+import { PolicyBlock } from "@renderer/shell/policy";
 import { settle } from "./settle.ts";
 
 const TRUST = {
@@ -22,13 +23,13 @@ const PLACE = { bucket: "acme-finance-lake", prefix: "exports/" };
 
 let copied: string[];
 let refuse: boolean;
-let block: RoleBlock;
+let block: PolicyBlock;
 
 beforeEach(() => {
   void setLocale("en-US", { reload: false });
   copied = [];
   refuse = false;
-  block = new RoleBlock((text) => {
+  block = new PolicyBlock((text) => {
     if (refuse) return Promise.reject(new Error("refused"));
     copied.push(text);
     return Promise.resolve();
@@ -41,7 +42,7 @@ const buttons = (): HTMLButtonElement[] => [...block.el.querySelectorAll("button
 
 test("hidden until shown, then the account, the external ID, and the two policies", () => {
   expect(block.el.hidden).toBe(true);
-  block.show(TRUST, PLACE);
+  block.show(PLACE, TRUST);
   expect(block.el.hidden).toBe(false);
   expect(text(".row:nth-of-type(1) span")).toBe("uno's AWS account");
   expect(text(".row:nth-of-type(1) .copyable")).toBe("111122223333");
@@ -59,25 +60,40 @@ test("hidden until shown, then the account, the external ID, and the two policie
 });
 
 test("the permission policy follows the bucket and prefix, and waits for a bucket", () => {
-  block.show(TRUST, { bucket: "", prefix: "" });
+  block.show({ bucket: "", prefix: "" }, TRUST);
   const row = block.el.querySelector<HTMLElement>(".row:nth-of-type(4)")!;
   expect(row.hidden).toBe(true);
-  block.show(TRUST, { bucket: "open-data", prefix: "" });
+  block.show({ bucket: "open-data", prefix: "" }, TRUST);
   expect(row.hidden).toBe(false);
   expect(text(".row:nth-of-type(4) .document")).toContain('"Resource": "arn:aws:s3:::open-data/*"');
-  block.show(TRUST, PLACE);
+  block.show(PLACE, TRUST);
   expect(text(".row:nth-of-type(4) .document")).toContain('"exports/*"');
 });
 
+test("with keys alone, the permission policy and what the keys need", () => {
+  block.show(PLACE);
+  expect(block.el.hidden).toBe(false);
+  const rows = [...block.el.querySelectorAll<HTMLElement>(".row")];
+  expect(rows.map((r) => r.hidden)).toEqual([true, true, true, false]);
+  expect(text(".row:nth-of-type(4) .document")).toBe(permissionPolicy(PLACE));
+  expect(text(".how")).toBe(
+    "The IAM user or role whose keys sign in needs this policy: to list the bucket and read objects under the prefix, as typed above.",
+  );
+  // Shown for a role again, the rows come back and the note is the role's.
+  block.show(PLACE, TRUST);
+  expect(rows.map((r) => r.hidden)).toEqual([false, false, false, false]);
+  expect(text(".how")).toMatch(/^Give these to whoever manages the bucket\./);
+});
+
 test("a principal that is not an ARN is shown whole", () => {
-  block.show({ ...TRUST, principal: "uno-engine" }, PLACE);
+  block.show(PLACE, { ...TRUST, principal: "uno-engine" });
   expect(text(".row:nth-of-type(1) .copyable")).toBe("uno-engine");
 });
 
 test("each Copy button copies the value beside it and says so for a moment", async () => {
   vi.useFakeTimers();
   try {
-    block.show(TRUST, PLACE);
+    block.show(PLACE, TRUST);
     const [account, externalId, trust, permission] = buttons();
     expect(buttons().map((b) => b.textContent)).toEqual(["Copy", "Copy", "Copy", "Copy"]);
     expect(buttons().map((b) => b.getAttribute("aria-label"))).toEqual([
@@ -109,7 +125,7 @@ test("each Copy button copies the value beside it and says so for a moment", asy
 
 test("a copy the browser refuses leaves the button as it was", async () => {
   refuse = true;
-  block.show(TRUST, PLACE);
+  block.show(PLACE, TRUST);
   buttons()[0]!.click();
   await settle();
   expect(copied).toEqual([]);
@@ -117,7 +133,7 @@ test("a copy the browser refuses leaves the button as it was", async () => {
 });
 
 test("relabel rewrites the fixed text in the new language, and the values stay", () => {
-  block.show(TRUST, PLACE);
+  block.show(PLACE, TRUST);
   void setLocale("pt-BR", { reload: false });
   block.relabel();
   expect(text(".row:nth-of-type(1) span")).toBe("Conta AWS do uno");
