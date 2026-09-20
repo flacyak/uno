@@ -13,6 +13,7 @@ import { beforeEach, expect, test } from "vite-plus/test";
 
 import type { Peeked, Said, SignIns, SourceRef } from "@engine";
 import type { Connection } from "@library";
+import { permissionPolicy, trustPolicy } from "@library";
 import type { Listing } from "@store";
 import type { Tried } from "@store/s3";
 
@@ -254,8 +255,8 @@ test("the sign-in list is the engine's profiles, between this machine and public
 });
 
 // With a role mode on offer, the form asks for the role's ARN and shows what
-// to hand to whoever makes the role: uno's account and the external ID, with
-// what the role has to allow.
+// to hand to whoever makes the role: uno's account and the external ID, and
+// the two policies, the permission one written for the bucket and prefix.
 test("an engine that signs in with a role asks for its ARN and shows what to hand to whoever makes it", async () => {
   asks.offered = { modes: ["role", "public"], profiles: [], trust: TRUST };
   panel.connect({ bucket: "acme-finance-lake" });
@@ -271,14 +272,21 @@ test("an engine that signs in with a role asks for its ARN and shows what to han
   expect(block.hidden).toBe(false);
   // The block sits above the role's row, so a person copies before they paste.
   expect(block.nextElementSibling).toBe(row);
-  const copyable = [...block.querySelectorAll(".copyable")].map((e) => e.textContent);
-  expect(copyable).toEqual(["111122223333", TRUST.externalId]);
+  const copyable = (): string[] =>
+    [...block.querySelectorAll(".copyable")].map((e) => e.textContent ?? "");
+  expect(copyable()).toEqual([
+    "111122223333",
+    TRUST.externalId,
+    trustPolicy(TRUST),
+    permissionPolicy({ bucket: "acme-finance-lake", prefix: "" }),
+  ]);
   expect(block.querySelector(".how")!.textContent).toMatch(
     /^Give these to whoever manages the bucket\./,
   );
-  expect(block.querySelector(".needs")!.textContent).toBe(
-    "It allows s3:ListBucket on the bucket, and s3:GetObject and s3:GetObjectVersion under the prefix.",
-  );
+  // The permission policy follows the prefix as it is typed.
+  type("prefix", "exports");
+  expect(copyable()[3]).toBe(permissionPolicy({ bucket: "acme-finance-lake", prefix: "exports/" }));
+  type("prefix", "");
   expect(form().querySelector(".fine")!.textContent).toBe(
     "Each connection is one file in connections/. uno stores the role's ARN and never a key; what lets uno read is the role's own trust policy.",
   );
