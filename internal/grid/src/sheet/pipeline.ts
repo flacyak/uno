@@ -6,11 +6,11 @@
  * over the block of rows being finished.
  */
 
-import { formatFloat, roundSignificant } from '#go';
-import type { Columns } from '#formula';
-import { evaluateColumn } from '#formula';
-import { apply as applyProgram } from '#program';
-import type { Program } from '#program';
+import { formatFloat, roundSignificant } from '@go';
+import type { Columns } from '@formula';
+import { evaluateColumn } from '@formula';
+import { apply as applyProgram } from '@program';
+import type { Program } from '@program';
 import type { Schema, Written } from './schema.ts';
 
 /**

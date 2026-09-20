@@ -14,10 +14,10 @@
  * whether it appears by what it offers in `SignIns`.
  */
 
-import type { Trust } from "#engine";
-import { accountOf } from "#library";
+import type { Trust } from "@engine";
+import { accountOf } from "@library";
 
-import { m } from "#paraglide/messages";
+import { m } from "@paraglide/messages";
 import { Words, el } from "./util.ts";
 
 /** How long a copy button says it copied before it offers to copy again. */

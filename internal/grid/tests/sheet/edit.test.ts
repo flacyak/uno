@@ -5,9 +5,9 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { NO_ROW, Op, Sheet } from '#sheet';
-import type { Edit } from '#sheet';
-import { parse as parseProgram } from '#program';
+import { NO_ROW, Op, Sheet } from '@sheet';
+import type { Edit } from '@sheet';
+import { parse as parseProgram } from '@program';
 
 const REGION = 1;
 const UNITS = 2;

@@ -2,7 +2,7 @@
  * @fileoverview Prints the metrics the efficiency tests measured, and sends
  * them to a collector.
  *
- *   node scripts/efficiency.ts [--base <folder>] [--out <file>]
+ *   node --import ../paths.js scripts/efficiency.ts [--base <folder>] [--out <file>]
  *
  * Reads out/efficiency/*.json, written by `vp test tests/efficiency`, and
  * prints a markdown table of every metric. --base names a folder of the same
@@ -19,10 +19,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { ENDPOINT_VARIABLE, Meter, collector } from '#engine/telemetry';
-import type { Collector } from '#engine/telemetry';
-import { compare, markdown } from '#tests/efficiency/compare';
-import type { Metric } from '#tests/efficiency/record';
+import { ENDPOINT_VARIABLE, Meter, collector } from '@engine/telemetry';
+import type { Collector } from '@engine/telemetry';
+import { compare, markdown } from '@grid-tests/efficiency/compare';
+import type { Metric } from '@grid-tests/efficiency/record';
 
 const HEAD = fileURLToPath(new URL('../out/efficiency/', import.meta.url));
 

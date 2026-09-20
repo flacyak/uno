@@ -6,14 +6,14 @@
  * the Schema and a new generation number. Every stored row stays as read.
  */
 
-import type { HeldFile, HeldPart, HeldParts } from '#document';
-import { trimSpace } from '#go';
-import { headerOf, labelOf, openFormat } from '#ingest';
-import type { Format } from '#ingest';
-import { isNumber } from '#num';
-import { MIN_EXAMPLES, Survey, gather } from '#pattern';
-import type { Example } from '#pattern';
-import { described as describedProgram, text as programText } from '#program';
+import type { HeldFile, HeldPart, HeldParts } from '@document';
+import { trimSpace } from '@go';
+import { headerOf, labelOf, openFormat } from '@ingest';
+import type { Format } from '@ingest';
+import { isNumber } from '@num';
+import { MIN_EXAMPLES, Survey, gather } from '@pattern';
+import type { Example } from '@pattern';
+import { described as describedProgram, text as programText } from '@program';
 import {
   NO_ROW,
   Op,
@@ -23,16 +23,16 @@ import {
   inferKind,
   isDate,
   valueAt,
-} from '#sheet';
-import type { Edit, Written } from '#sheet';
-import { isRemote, multiOf } from '#store';
+} from '@sheet';
+import type { Edit, Written } from '@sheet';
+import { isRemote, multiOf } from '@store';
 import type {
   ByteSource,
   HeaderMode,
   PartMap,
   PartsRef,
   SingleRef,
-} from '#store';
+} from '@store';
 import { indexPass } from './pass.ts';
 import type {
   Changed,
@@ -48,8 +48,8 @@ import type {
   Request,
   RowsPage,
 } from './protocol.ts';
-import { FILE_SHOWS, Refusal, saidOf } from '#said';
-import type { Said } from '#said';
+import { FILE_SHOWS, Refusal, saidOf } from '@said';
+import type { Said } from '@said';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
 import {

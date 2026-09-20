@@ -5,8 +5,8 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import { PSEUDO_LOCALE } from "#scripts/pseudo";
-import { baseLocale, getLocale, locales } from "#paraglide/runtime";
+import { PSEUDO_LOCALE } from "@scripts/pseudo";
+import { baseLocale, getLocale, locales } from "@paraglide/runtime";
 import {
   LANGUAGE_KEY,
   Language,
@@ -14,7 +14,7 @@ import {
   languageName,
   offered,
   preferred,
-} from "#renderer/language";
+} from "@renderer/language";
 import { Kept } from "./kept.ts";
 
 /** Every locale the app has messages for, including the pseudo-locale. */

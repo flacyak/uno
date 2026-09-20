@@ -5,11 +5,11 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
-import type { Entry } from '#store';
-import { s3Files, s3Provider } from '#store/s3';
-import { s3Lister, s3Prefix } from '#store/s3lister';
-import { readListing } from '#store/s3xml';
-import { bytes } from '#tests/testdata/sales-q3';
+import type { Entry } from '@store';
+import { s3Files, s3Provider } from '@store/s3';
+import { s3Lister, s3Prefix } from '@store/s3lister';
+import { readListing } from '@store/s3xml';
+import { bytes } from '@grid-tests/testdata/sales-q3';
 import { AWKWARD_KEYS, DOT_KEYS } from './awkward.ts';
 import { HOME_REGION } from './regions.ts';
 import { BUCKET, KEYS, MODIFIED, bucket, etagOf } from './standin.ts';

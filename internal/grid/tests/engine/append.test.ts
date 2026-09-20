@@ -9,19 +9,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
-import { readContainer } from '#document';
-import { FILE_COLUMN } from '#engine';
-import type { Engine, SourceHandle, SourceRef } from '#engine';
-import { Op } from '#sheet';
-import type { SingleRef } from '#store';
-import { COLS, ROWS, UNITS } from '#tests/testdata/sales-q3';
+import { readContainer } from '@document';
+import { FILE_COLUMN } from '@engine';
+import type { Engine, SourceHandle, SourceRef } from '@engine';
+import { Op } from '@sheet';
+import type { SingleRef } from '@store';
+import { COLS, ROWS, UNITS } from '@grid-tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   PART_ROWS,
   partBytes,
-} from '#tests/testdata/sales-q3-parts';
+} from '@grid-tests/testdata/sales-q3-parts';
 import {
   connect,
   everyRow,

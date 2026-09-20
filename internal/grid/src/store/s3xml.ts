@@ -6,7 +6,7 @@
  * the rest. It works on the text of a reply it is handed.
  */
 
-import { parseTime } from '#go';
+import { parseTime } from '@go';
 
 /** One key from a page of a listing. */
 export interface KeyEntry {

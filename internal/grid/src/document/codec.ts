@@ -13,10 +13,10 @@ import {
   parseTime,
   rfc3339,
   sha256Hex,
-} from '#go';
-import { read as ingestRead } from '#ingest';
-import { Op } from '#sheet';
-import type { Edit, Sheet } from '#sheet';
+} from '@go';
+import { read as ingestRead } from '@ingest';
+import { Op } from '@sheet';
+import type { Edit, Sheet } from '@sheet';
 import type {
   Document,
   FileSource,

@@ -11,12 +11,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
-import { messagePort, serve } from '#engine';
-import type { MessagePortLike, Reply, Request } from '#engine';
-import { sources } from '#plugin';
-import { connectionsIn } from '#store';
-import { awsProfiles, diskProvider, nodeStore } from '#store/node';
-import { connect } from '#tests/engine/harness';
+import { messagePort, serve } from '@engine';
+import type { MessagePortLike, Reply, Request } from '@engine';
+import { sources } from '@plugin';
+import { connectionsIn } from '@store';
+import { awsProfiles, diskProvider, nodeStore } from '@store/node';
+import { connect } from '@grid-tests/engine/harness';
 
 /** Everything in the files below besides the profile names. */
 const SECRETS = [

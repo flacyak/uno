@@ -4,8 +4,8 @@
  */
 
 import type { Step } from './steps.ts';
-import { english } from '#said';
-import type { Said } from '#said';
+import { english } from '@said';
+import type { Said } from '@said';
 import { describedStep, runStep, stepText } from './steps.ts';
 
 /**

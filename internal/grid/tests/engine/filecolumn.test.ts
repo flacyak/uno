@@ -11,20 +11,23 @@ import { join } from 'node:path';
 import { strFromU8, unzipSync } from 'fflate';
 import { afterAll, afterEach, describe, expect, test } from 'vite-plus/test';
 
-import { MANIFEST_ENTRY, PARTS_VERSION, readContainer } from '#document';
-import { FILE_COLUMN, TUNING } from '#engine';
-import type { Engine, SourceHandle, SourceRef, Tuning } from '#engine';
-import { Op } from '#sheet';
-import type { HeaderMode } from '#store';
-import { COLS, REGION, ROWS, UNITS } from '#tests/testdata/sales-q3';
+import { MANIFEST_ENTRY, PARTS_VERSION, readContainer } from '@document';
+import { FILE_COLUMN, TUNING } from '@engine';
+import type { Engine, SourceHandle, SourceRef, Tuning } from '@engine';
+import { Op } from '@sheet';
+import type { HeaderMode } from '@store';
+import { COLS, REGION, ROWS, UNITS } from '@grid-tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   PART_ROWS,
   partBytes,
-} from '#tests/testdata/sales-q3-parts';
-import { NAMES as ROWS_ONLY_NAMES, rowsOnly } from '#tests/headerless/parts';
+} from '@grid-tests/testdata/sales-q3-parts';
+import {
+  NAMES as ROWS_ONLY_NAMES,
+  rowsOnly,
+} from '@grid-tests/headerless/parts';
 import {
   connect,
   everyRow,

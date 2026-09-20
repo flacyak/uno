@@ -3,8 +3,8 @@
  * open: text, number or date, and whether it is flagged.
  */
 
-import { trimSpace } from '#go';
-import { isNumber, undress } from '#num';
+import { trimSpace } from '@go';
+import { isNumber, undress } from '@num';
 
 /**
  * Kind is what a column looks like. It is inferred at load and lives in

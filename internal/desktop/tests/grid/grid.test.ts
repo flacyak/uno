@@ -8,14 +8,14 @@
 
 import { expect, test } from "vite-plus/test";
 
-import type { Kind } from "#sheet";
+import type { Kind } from "@sheet";
 
-import { Grid } from "#renderer/grid";
-import type { GridEvents, Rows } from "#renderer/grid/rows";
-import { defaultInput } from "#renderer/input/default";
-import type { InputStrategy } from "#renderer/input/strategy";
-import { vimStyle } from "#renderer/input/vim-style";
-import { m } from "#paraglide/messages";
+import { Grid } from "@renderer/grid";
+import type { GridEvents, Rows } from "@renderer/grid/rows";
+import { defaultInput } from "@renderer/input/default";
+import type { InputStrategy } from "@renderer/input/strategy";
+import { vimStyle } from "@renderer/input/vim-style";
+import { m } from "@paraglide/messages";
 
 /** The header height the grid is told, since happy-dom skips layout. */
 const HEAD_H = 30;

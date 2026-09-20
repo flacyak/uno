@@ -6,12 +6,12 @@
 import { dirname } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
-import type { Provider } from '#plugin';
-import { sources } from '#plugin';
-import type { Entry, Lister } from '#store';
-import { blobProvider } from '#store';
-import { diskProvider } from '#store/node';
-import { FIXTURE, bytes } from '#tests/engine/harness';
+import type { Provider } from '@plugin';
+import { sources } from '@plugin';
+import type { Entry, Lister } from '@store';
+import { blobProvider } from '@store';
+import { diskProvider } from '@store/node';
+import { FIXTURE, bytes } from '@grid-tests/engine/harness';
 
 /** A stand-in S3 provider that claims s3:// paths and lists and stats in memory. */
 function bucketProvider(): Provider {

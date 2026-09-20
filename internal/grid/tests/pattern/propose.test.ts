@@ -5,15 +5,15 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { MAX_DIFF, SAMPLE_SIZE, Survey, gather, snap } from '#pattern';
-import type { Proposal } from '#pattern';
+import { MAX_DIFF, SAMPLE_SIZE, Survey, gather, snap } from '@pattern';
+import type { Proposal } from '@pattern';
 import {
   apply as applyProgram,
   describe as describeProgram,
   text,
-} from '#program';
-import { Sheet } from '#sheet';
-import { COMMAS_LEFT, UNITS } from '#tests/testdata/sales-q3';
+} from '@program';
+import { Sheet } from '@sheet';
+import { COMMAS_LEFT, UNITS } from '@grid-tests/testdata/sales-q3';
 import { oneCol, propose, sales } from './harness.ts';
 
 test('three fixed cells propose the rest', () => {

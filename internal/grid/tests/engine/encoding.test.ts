@@ -6,10 +6,10 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { Refusal } from '#engine';
-import type { SourceHandle } from '#engine';
-import { openFormat, read, sniffEncoding } from '#ingest';
-import { blobSource } from '#store';
+import { Refusal } from '@engine';
+import type { SourceHandle } from '@engine';
+import { openFormat, read, sniffEncoding } from '@ingest';
+import { blobSource } from '@store';
 import { TINY, connect, indexed, saidIn, sheetRows } from './harness.ts';
 
 const encoder = new TextEncoder();

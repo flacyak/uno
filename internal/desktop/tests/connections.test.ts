@@ -12,10 +12,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
-import { parseConnection } from "#library";
+import { parseConnection } from "@library";
 
-import { writeConnection } from "#main/files";
-import { connectionLine } from "#renderer/sources";
+import { writeConnection } from "@main/files";
+import { connectionLine } from "@renderer/sources";
 
 const ACME = fileURLToPath(new URL("../../grid/tests/testdata/acme-exports.unof", import.meta.url));
 

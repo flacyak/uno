@@ -3,7 +3,7 @@
  * runs of what was removed and what was added.
  */
 
-import { runes } from '#go';
+import { runes } from '@go';
 
 /** MAX_DIFF is the longest value `align` will diff, in code points. */
 export const MAX_DIFF = 128;

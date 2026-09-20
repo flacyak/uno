@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
+  // The alias map in ../tsconfig.paths.json, for vitest.
+  resolve: { tsconfigPaths: true },
   pack: {
     // One entry per package folder, plus three store modules imported on
     // their own. `exports: true` writes the subpath map into package.json
