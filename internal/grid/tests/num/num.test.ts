@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { isNumber, parse, undress } from '#num';
+import { isNumber, parse, undress } from '@num';
 
 // isNumber accepts plain and accounting-style numbers and refuses the rest,
 // including values Number() would accept.

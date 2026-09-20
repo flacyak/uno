@@ -10,12 +10,12 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { PEEK_BYTES, PEEK_ROWS, peek, peekHead, readHead } from '#engine/peek';
-import type { Head } from '#engine/peek';
-import { headerOf, readAll } from '#ingest';
-import { blobFiles } from '#store';
-import type { ByteSource, FileHandler, FileRef } from '#store';
-import { localFiles } from '#store/node';
+import { PEEK_BYTES, PEEK_ROWS, peek, peekHead, readHead } from '@engine/peek';
+import type { Head } from '@engine/peek';
+import { headerOf, readAll } from '@ingest';
+import { blobFiles } from '@store';
+import type { ByteSource, FileHandler, FileRef } from '@store';
+import { localFiles } from '@store/node';
 import { FIXTURE, bytes, saidIn } from './harness.ts';
 
 /** The size of a 2.5 GB file. A virtual source stands in for it here. */

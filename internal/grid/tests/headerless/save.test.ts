@@ -7,10 +7,10 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, expect, test } from 'vite-plus/test';
 
-import { PARTS_VERSION, readContainer } from '#document';
-import { Op } from '#sheet';
-import { ROWS, UNITS } from '#tests/testdata/sales-q3';
-import { PART_ROWS } from '#tests/testdata/sales-q3-parts';
+import { PARTS_VERSION, readContainer } from '@document';
+import { Op } from '@sheet';
+import { ROWS, UNITS } from '@grid-tests/testdata/sales-q3';
+import { PART_ROWS } from '@grid-tests/testdata/sales-q3-parts';
 import {
   connect,
   everyRow,
@@ -18,7 +18,7 @@ import {
   openOne,
   sales,
   TINY,
-} from '#tests/engine/harness';
+} from '@grid-tests/engine/harness';
 import {
   COLUMNS,
   NAMES,

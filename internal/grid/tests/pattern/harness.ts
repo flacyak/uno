@@ -5,10 +5,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { read } from '#ingest';
-import { snap } from '#pattern';
-import type { Proposal } from '#pattern';
-import { Sheet } from '#sheet';
+import { read } from '@ingest';
+import { snap } from '@pattern';
+import type { Proposal } from '@pattern';
+import { Sheet } from '@sheet';
 
 /** A one-column sheet with the given header and values. */
 export function oneCol(header: string, ...values: string[]): Sheet {

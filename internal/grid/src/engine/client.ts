@@ -25,11 +25,11 @@ import type {
   SignIns,
   SourceRef,
 } from './protocol.ts';
-import { Refusal, saidOf } from '#said';
-import type { Said } from '#said';
-import type { Connection } from '#library';
-import type { Entry, Listing, SingleRef } from '#store';
-import type { Tried } from '#store/s3';
+import { Refusal, saidOf } from '@said';
+import type { Said } from '@said';
+import type { Connection } from '@library';
+import type { Entry, Listing, SingleRef } from '@store';
+import type { Tried } from '@store/s3';
 
 interface Waiter<T> {
   resolve(value: T): void;

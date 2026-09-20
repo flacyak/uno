@@ -17,9 +17,9 @@ import {
   readContainer,
   readDocument,
   writeDocument,
-} from '#document';
-import type { Document, Held, HeldParts } from '#document';
-import { sha256Hex } from '#go';
+} from '@document';
+import type { Document, Held, HeldParts } from '@document';
+import { sha256Hex } from '@go';
 
 const encoder = new TextEncoder();
 

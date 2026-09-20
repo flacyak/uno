@@ -3,7 +3,7 @@
  * a damaged log fails at replay with the line that broke it.
  */
 
-import { Scanner, atoi, isDigit, isLetter, quote, runes, unquote } from '#go';
+import { Scanner, atoi, isDigit, isLetter, quote, runes, unquote } from '@go';
 import type { Pos, Step } from './steps.ts';
 import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from './steps.ts';
 import type { Program } from './program.ts';

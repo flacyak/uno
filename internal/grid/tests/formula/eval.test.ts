@@ -14,7 +14,7 @@ import {
   evaluate,
   evaluateColumn,
   parse,
-} from '#formula';
+} from '@formula';
 
 // A Row backed by a plain object, standing in for a sheet.
 function row(cells: Record<string, string>): Row {

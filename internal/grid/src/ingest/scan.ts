@@ -9,7 +9,7 @@
  * checks it against csv.ts over random input.
  */
 
-import { unreachable } from '#never';
+import { unreachable } from '@never';
 
 const LF = 0x0a;
 const CR = 0x0d;

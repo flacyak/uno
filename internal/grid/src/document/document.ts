@@ -15,10 +15,10 @@
  * opens the file a source points at.
  */
 
-import type { Edit } from '#sheet';
-import type { Sheet } from '#sheet';
-import { extensionOf } from '#ingest';
-import type { FileRef, HeaderMode } from '#store';
+import type { Edit } from '@sheet';
+import type { Sheet } from '@sheet';
+import { extensionOf } from '@ingest';
+import type { FileRef, HeaderMode } from '@store';
 import { against, baseOf, dirOf, relativeTo } from './path.ts';
 
 /**

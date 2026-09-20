@@ -16,7 +16,7 @@ import {
   messagePort,
   serve,
   socketPort,
-} from '#engine';
+} from '@engine';
 import type {
   Frame,
   MessagePortLike,
@@ -25,10 +25,10 @@ import type {
   SourceHandle,
   SourceRef,
   WebSocketLike,
-} from '#engine';
-import { sources } from '#plugin';
-import { blobProvider } from '#store';
-import { diskProvider } from '#store/node';
+} from '@engine';
+import { sources } from '@plugin';
+import { blobProvider } from '@store';
+import { diskProvider } from '@store/node';
 import { FIXTURE, bytes, sales } from './harness.ts';
 
 /** join turns a frame into the one value a socket would deliver. */

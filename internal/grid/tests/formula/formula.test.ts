@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { Formula, parse } from '#formula';
+import { Formula, parse } from '@formula';
 
 // parse then toString gives back the same text.
 describe('the text form round-trips', () => {

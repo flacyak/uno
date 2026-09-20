@@ -15,7 +15,7 @@ import {
   resolvedPath,
   samePath,
   storedPath,
-} from '#document';
+} from '@document';
 
 test("a path under the workspace's folder is written down relative to it", () => {
   expect(storedPath('/home/cpa/q4/sales.csv', '/home/cpa/q4/books.uno')).toBe(
