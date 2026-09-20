@@ -10,10 +10,10 @@
 import { dirname, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { ROWS, UNITS, counted } from "#main/smoke/fixture";
-import type { KeyModifiers } from "#main/smoke/page";
-import { m } from "#paraglide/messages";
-import { num } from "#renderer/locale";
+import { ROWS, UNITS, counted } from "@main/smoke/fixture";
+import type { KeyModifiers } from "@main/smoke/page";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { FIXTURE, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 

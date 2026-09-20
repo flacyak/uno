@@ -10,14 +10,14 @@
  * peek responses are dropped by comparing request counters.
  */
 
-import { baseOf } from "#document";
-import type { Link, PartInfo, Peeked, SourceRef } from "#engine";
-import { compareStrings } from "#go";
-import type { Connection as Saved } from "#library";
-import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "#store";
-import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "#store/s3";
+import { baseOf } from "@document";
+import type { Link, PartInfo, Peeked, SourceRef } from "@engine";
+import { compareStrings } from "@go";
+import type { Connection as Saved } from "@library";
+import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@store";
+import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "@store/s3";
 
-import { m } from "#paraglide/messages";
+import { m } from "@paraglide/messages";
 import { num } from "./locale.ts";
 import { said } from "./said.ts";
 
