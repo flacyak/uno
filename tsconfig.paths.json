@@ -1,0 +1,56 @@
+{
+  // The names files go by, in one map every tool reads.
+  //
+  // `@engine` is the core's engine wherever it is written: in the core, in
+  // the desktop, on the server. Each package's tsconfig extends this file,
+  // Vite reads it through resolve.tsconfigPaths, tsdown through the tsconfig
+  // it finds, and paths.js beside it gives Node the same map for the scripts
+  // that run core source with no bundler in between.
+  //
+  // Every target names a file, extension and all, so the three resolvers
+  // agree without probing. `@renderer/grid` and `@renderer/input` are the
+  // two folders in the renderer with an index of their own.
+  "compilerOptions": {
+    "paths": {
+      "@never": ["./core/src/never.ts"],
+      "@document": ["./core/src/document/index.ts"],
+      "@document/*": ["./core/src/document/*.ts"],
+      "@engine": ["./core/src/engine/index.ts"],
+      "@engine/*": ["./core/src/engine/*.ts"],
+      "@formula": ["./core/src/formula/index.ts"],
+      "@formula/*": ["./core/src/formula/*.ts"],
+      "@go": ["./core/src/go/index.ts"],
+      "@go/*": ["./core/src/go/*.ts"],
+      "@ingest": ["./core/src/ingest/index.ts"],
+      "@ingest/*": ["./core/src/ingest/*.ts"],
+      "@library": ["./core/src/library/index.ts"],
+      "@library/*": ["./core/src/library/*.ts"],
+      "@notation": ["./core/src/notation/index.ts"],
+      "@notation/*": ["./core/src/notation/*.ts"],
+      "@num": ["./core/src/num/index.ts"],
+      "@num/*": ["./core/src/num/*.ts"],
+      "@pattern": ["./core/src/pattern/index.ts"],
+      "@pattern/*": ["./core/src/pattern/*.ts"],
+      "@plugin": ["./core/src/plugin/index.ts"],
+      "@plugin/*": ["./core/src/plugin/*.ts"],
+      "@program": ["./core/src/program/index.ts"],
+      "@program/*": ["./core/src/program/*.ts"],
+      "@said": ["./core/src/said/index.ts"],
+      "@said/*": ["./core/src/said/*.ts"],
+      "@sheet": ["./core/src/sheet/index.ts"],
+      "@sheet/*": ["./core/src/sheet/*.ts"],
+      "@store": ["./core/src/store/index.ts"],
+      "@store/*": ["./core/src/store/*.ts"],
+      "@core-tests/*": ["./core/tests/*.ts"],
+      "@desktop-engine/*": ["./apps/desktop/src/engine/*.ts"],
+      "@main/*": ["./apps/desktop/src/main/*.ts"],
+      "@paraglide/*": ["./apps/desktop/src/paraglide/*.js"],
+      "@renderer/grid": ["./apps/desktop/src/renderer/grid/index.ts"],
+      "@renderer/input": ["./apps/desktop/src/renderer/input/index.ts"],
+      "@renderer/*": ["./apps/desktop/src/renderer/*.ts"],
+      "@shared/*": ["./apps/desktop/src/shared/*.ts"],
+      "@scripts/*": ["./apps/desktop/scripts/*.js"],
+      "@desktop-tests/*": ["./apps/desktop/tests/*.ts"]
+    }
+  }
+}
