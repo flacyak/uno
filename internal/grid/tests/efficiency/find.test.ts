@@ -10,9 +10,8 @@ import { TUNING } from '@engine';
 import type { Engine, Found, SourceHandle } from '@engine';
 import { NO_ROW, Op } from '@sheet';
 import { connect, indexed, openOne } from '@grid-tests/engine/harness';
-import { CHANNEL, REGION } from '@grid-tests/testdata/sales-q3';
+import { CHANNEL, REGION, repeated } from '@grid-tests/testdata/sales-q3';
 import { record } from './record.ts';
-import { repeated } from './remote.ts';
 
 /** 24 MB and 481,200 rows. */
 const REPEATS = 100;

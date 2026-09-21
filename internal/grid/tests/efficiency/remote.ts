@@ -13,7 +13,7 @@ import { Engine } from '@engine';
 import type { SourceHandle, Tuning } from '@engine';
 import { diskProvider } from '@store/node';
 import { s3Provider } from '@store/s3';
-import { bytes, connect, openOne } from '@grid-tests/engine/harness';
+import { connect, openOne } from '@grid-tests/engine/harness';
 import { HOME_REGION } from '@grid-tests/store/regions';
 import { BUCKET, KEYS, bucket } from '@grid-tests/store/standin';
 import type { Bucket } from '@grid-tests/store/standin';
@@ -146,16 +146,6 @@ export class Door {
       bytes: sent.reduce((sum, a) => sum + a.length, 0),
     };
   }
-}
-
-/** The fixture's rows `repeats` times over, under one header. */
-export function repeated(repeats: number): Uint8Array<ArrayBuffer> {
-  const header = bytes.indexOf(0x0a) + 1;
-  const body = bytes.subarray(header);
-  const out = new Uint8Array(header + body.length * repeats);
-  out.set(bytes.subarray(0, header));
-  for (let i = 0; i < repeats; i++) out.set(body, header + i * body.length);
-  return out;
 }
 
 const KEY = '2025/big.csv';

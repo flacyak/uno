@@ -7,8 +7,9 @@
 import { afterEach, expect, test } from 'vite-plus/test';
 
 import { TUNING } from '@engine';
+import { repeated } from '@grid-tests/testdata/sales-q3';
 import { record } from './record.ts';
-import { remote, repeated } from './remote.ts';
+import { remote } from './remote.ts';
 import type { Remote } from './remote.ts';
 
 /** 24 MB: three chunks at the default chunk size. */
