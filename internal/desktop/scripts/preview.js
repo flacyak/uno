@@ -22,7 +22,7 @@
  * - `refused`: the same with the bucket's name mistyped. The line fails and
  *   is chosen to edit the connection. Goes to out/refused.gif.
  *
- * Usage: node --import ../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
  * (after node scripts/build.js)
  */
 
@@ -45,7 +45,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
 const root = resolve(pkg, "../..");
-const testdata = join(pkg, "../grid/tests/testdata");
+const testdata = join(pkg, "../../grid/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 
 const STORIES = ["browse", "sidebar", "edit", "refresh", "opening", "connecting", "refused"];

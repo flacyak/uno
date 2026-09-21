@@ -32,7 +32,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** The fixtures: the one scripts/smoke.js drives the real Electron path
  * with, and a second export for a check that opens another file over it. */
-const TESTDATA = join(HERE, "..", "..", "..", "grid", "tests", "testdata");
+const TESTDATA = join(HERE, "..", "..", "..", "..", "grid", "tests", "testdata");
 export const FIXTURE = join(TESTDATA, "sales-q3.csv");
 export const SECOND = join(TESTDATA, "google-ads-sales.csv");
 

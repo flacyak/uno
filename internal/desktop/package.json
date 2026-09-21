@@ -15,8 +15,8 @@
     "dev": "node scripts/dev.js",
     "build": "node scripts/build.js",
     "start": "electron .",
-    "smoke": "node scripts/build.js && node --import ../paths.js scripts/smoke.js",
-    "preview": "node scripts/build.js && node --import ../paths.js scripts/preview.js",
+    "smoke": "node scripts/build.js && node --import ../../paths.js scripts/smoke.js",
+    "preview": "node scripts/build.js && node --import ../../paths.js scripts/preview.js",
     "test": "vp test",
     "check": "node scripts/messages.js && vp check"
   },
