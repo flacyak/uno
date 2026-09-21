@@ -43,6 +43,7 @@ import { unreachable } from '@never';
 /**
  * localFiles opens files on this machine's disks by path, for reading. It
  * claims every scheme-free path.
+ * @return the handler
  */
 export function localFiles(): FileHandler {
   return {
@@ -57,7 +58,10 @@ export function localFiles(): FileHandler {
   };
 }
 
-/** diskProvider is this machine's disks: localFiles and diskLister. */
+/**
+ * diskProvider is this machine's disks: localFiles and diskLister.
+ * @return the provider
+ */
 export function diskProvider(): Provider {
   return {
     name: 'disk',
@@ -73,6 +77,8 @@ export function diskProvider(): Provider {
  *
  * Only a regular file opens. The open is non-blocking so a fifo returns at
  * once, and the stat after it refuses everything but a regular file.
+ * @param path the file to open
+ * @return a source that reads the file by offset
  */
 export async function nodeSource(path: string): Promise<ByteSource> {
   const fh = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -108,7 +114,10 @@ export async function nodeSource(path: string): Promise<ByteSource> {
   };
 }
 
-/** nodeStore is a FileStore backed by the local filesystem. */
+/**
+ * nodeStore is a FileStore backed by the local filesystem.
+ * @return the store
+ */
 export function nodeStore(): FileStore {
   return {
     files: [localFiles()],
@@ -118,6 +127,8 @@ export function nodeStore(): FileStore {
      * in the same directory, which is fsynced and renamed over the target. A
      * failure leaves the previous file untouched and removes the temp
      * directory.
+     * @param path the file to replace
+     * @param bytes what to write
      */
     async write(path: string, bytes: Uint8Array): Promise<void> {
       const dir = dirname(path);
@@ -148,6 +159,8 @@ export function nodeStore(): FileStore {
     /**
      * list names the files directly in dir. A missing directory is an empty
      * list.
+     * @param dir the directory to list
+     * @return the names of the files in it
      */
     async list(dir: string): Promise<string[]> {
       try {
