@@ -45,6 +45,12 @@ export interface Sts {
   close(): Promise<void>;
 }
 
+/**
+ * sts starts the stand-in on a free port of localhost.
+ * @param secrets the keys callers sign with
+ * @param roles the roles on offer, by ARN
+ * @return the stand-in, with its endpoint and what it saw
+ */
 export async function sts(
   secrets: readonly Omit<AwsCredentials, 'region'>[],
   roles: Map<string, Trust>,

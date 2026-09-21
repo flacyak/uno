@@ -37,6 +37,10 @@ export interface Host {
 const IMDS_TOKEN = 'imds-token';
 const ROLES = '/latest/meta-data/iam/security-credentials/';
 
+/**
+ * host starts the stand-in on a free port of localhost.
+ * @return the stand-in, with its endpoint and what it serves
+ */
 export async function host(): Promise<Host> {
   const h: Host = {
     endpoint: '',
