@@ -23,7 +23,7 @@ Every command runs from the repo root. `vp run` with no task lists them.
 ```bash
 vp install        # install the workspace
 vp run dev        # the desktop app, reloading
-vp run build      # @uno/grid, then the desktop app
+vp run build      # @uno/core, then the desktop app
 vp run check      # format, lint, type check
 vp run test       # every package's suite
 vp run smoke      # build, then drive the real desktop app and assert
