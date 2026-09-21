@@ -101,5 +101,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: smoke-window
-          path: internal/desktop/out/smoke/window.png
+          path: apps/desktop/out/smoke/window.png
           if-no-files-found: ignore
