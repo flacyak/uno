@@ -32,10 +32,10 @@
           "uid": "${datasource}"
         },
         "query": {
-          "query": "label_values(uno_efficiency, branch)",
+          "query": "label_values({__name__=~\"uno_efficiency|uno_performance\"}, branch)",
           "refId": "branch"
         },
-        "definition": "label_values(uno_efficiency, branch)",
+        "definition": "label_values({__name__=~\"uno_efficiency|uno_performance\"}, branch)",
         "multi": true,
         "includeAll": true,
         "allValue": ".*",
@@ -349,13 +349,83 @@
       ]
     },
     {
+      "id": 15,
+      "type": "row",
+      "title": "Performance tests \u00b7 what a change takes, from CI",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Wall clock",
+      "description": "Timed on the runner, so it moves with the machine. The base is measured in the same job, and a change under five percent is noise.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "last_over_time(uno_performance{unit=\"ms\", branch=~\"$branch\"}[$__interval])",
+          "legendFormat": "{{metric}} \u00b7 {{branch}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
       "id": 7,
       "type": "row",
       "title": "Engine \u00b7 what a running uno measures",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 17,
+        "y": 26,
         "w": 24,
         "h": 1
       },
@@ -372,7 +442,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 27,
         "w": 12,
         "h": 8
       },
@@ -429,7 +499,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 18,
+        "y": 27,
         "w": 12,
         "h": 8
       },
@@ -486,7 +556,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 35,
         "w": 8,
         "h": 8
       },
@@ -543,7 +613,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 26,
+        "y": 35,
         "w": 8,
         "h": 8
       },
@@ -600,7 +670,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 26,
+        "y": 35,
         "w": 8,
         "h": 8
       },
@@ -657,7 +727,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 43,
         "w": 12,
         "h": 8
       },
@@ -714,7 +784,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 34,
+        "y": 43,
         "w": 12,
         "h": 8
       },
