@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
 
+import type { Unit } from '../../../efficiency/record.ts';
 import { verdict } from '../../method/rule.ts';
 import type { Call } from '../../method/rule.ts';
 import { compare, markdown } from './pr-compare.ts';
@@ -109,21 +110,25 @@ function lcg(seed: number): () => number {
 
 const RANDOM_TIMEOUT_MS = 60_000;
 
-test('rule.ts matches the PR on 30,000 random values near the 5% edge', () => {
-  const rand = lcg(65);
-  const cases = 30_000;
-  const spread = 0.12;
-  for (let i = 0; i < cases; i++) {
-    const base = (rand() - 0.2) * 1000;
-    const head = base * (1 + (rand() - 0.5) * spread);
-    const unit = UNITS[i % UNITS.length]!;
-    const want = prCall(unit, base, head);
-    const got = verdict(unit, base, head);
-    if (got !== want) {
-      throw new Error(`${unit} ${base} -> ${head}: rule ${got}, PR ${want}`);
+test(
+  'rule.ts matches the PR on 30,000 random values near the 5% edge',
+  () => {
+    const rand = lcg(65);
+    const cases = 30_000;
+    const spread = 0.12;
+    for (let i = 0; i < cases; i++) {
+      const base = (rand() - 0.2) * 1000;
+      const head = base * (1 + (rand() - 0.5) * spread);
+      const unit = UNITS[i % UNITS.length]!;
+      const want = prCall(unit, base, head);
+      const got = verdict(unit, base, head);
+      if (got !== want) {
+        throw new Error(`${unit} ${base} -> ${head}: rule ${got}, PR ${want}`);
+      }
     }
-  }
-}, RANDOM_TIMEOUT_MS);
+  },
+  RANDOM_TIMEOUT_MS,
+);
 
 interface RunRecord {
   arm: string;
@@ -147,7 +152,8 @@ interface MethodJson {
 
 test('method.json counts match the PR code run on its own raw runs', () => {
   const data = JSON.parse(readFileSync(METHOD_JSON, 'utf8')) as MethodJson;
-  const unitOf = (name: string): string => (name.endsWith(': ms') ? 'ms' : '');
+  // Timings are named ": ms"; everything else in method.json is a count.
+  const unitOf = (name: string): Unit => (name.endsWith(': ms') ? 'ms' : 'x');
   for (const [armName, arm] of Object.entries(data.arms)) {
     const runs = data.runs.filter((r) => r.arm === armName);
     expect(runs).toHaveLength(2 * data.pairs);
