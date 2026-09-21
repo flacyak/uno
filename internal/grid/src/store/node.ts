@@ -6,10 +6,28 @@
 // rather than the content already there.
 
 import { constants } from "node:fs";
-import { mkdtemp, open, readFile, readdir, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdtemp, open, readdir, rename, rm } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 
-import type { ByteSource, FileStore } from "./index.ts";
+import type { ByteSource, FileHandler, FileStore } from "./index.ts";
+import { isRemote, readAll } from "./index.ts";
+import type { AwsCredentials } from "./s3.ts";
+
+/**
+ * localFiles opens files on this machine's disks, by path, for reading. It
+ * claims every path without a scheme in front of it.
+ */
+export function localFiles(): FileHandler {
+  return {
+    label: "local files",
+    handles: (ref) => "path" in ref && !isRemote(ref.path),
+    open: (ref) =>
+      "path" in ref
+        ? nodeSource(ref.path)
+        : Promise.reject(new Error(`${ref.name}: local files are opened by path`)),
+  };
+}
 
 /**
  * nodeSource reads a file at an offset, so a 30 GB CSV costs a descriptor and
@@ -55,9 +73,7 @@ export async function nodeSource(path: string): Promise<ByteSource> {
  */
 export function nodeStore(): FileStore {
   return {
-    async read(path: string): Promise<Uint8Array> {
-      return new Uint8Array(await readFile(path));
-    },
+    files: [localFiles()],
 
     /**
      * write publishes bytes to path atomically.
@@ -112,4 +128,101 @@ export function nodeStore(): FileStore {
       }
     },
   };
+}
+
+/** How long credentials read from disk are reused before they are read again. */
+const CREDENTIALS_MS = 60_000;
+
+/**
+ * awsCredentials finds AWS credentials the way the AWS CLI does, as far as a
+ * person with keys is concerned: the environment first, then the profile in
+ * ~/.aws/credentials that AWS_PROFILE names, or `default`.
+ *
+ * uno stores nothing. What it can read is what the person already set up for
+ * every other tool, and it is read in the engine's process, so a key never
+ * reaches the page that draws the grid.
+ *
+ * SSO and credential_process profiles are not followed. Each is a program to
+ * run and a token to exchange, and a profile that needs one is refused by name
+ * with the command that turns it into keys this can read.
+ */
+export function awsCredentials(
+  env: Record<string, string | undefined> = process.env,
+): () => Promise<AwsCredentials> {
+  let kept: { at: number; creds: AwsCredentials } | undefined;
+
+  return async () => {
+    if (kept !== undefined && Date.now() - kept.at < CREDENTIALS_MS) return kept.creds;
+
+    const profile = env["AWS_PROFILE"] ?? env["AWS_DEFAULT_PROFILE"] ?? "default";
+    const aws = join(homedir(), ".aws");
+    const config = await ini(env["AWS_CONFIG_FILE"] ?? join(aws, "config"));
+    const fromConfig = config.get(profile === "default" ? "default" : `profile ${profile}`);
+    const region =
+      env["AWS_REGION"] ?? env["AWS_DEFAULT_REGION"] ?? fromConfig?.get("region") ?? "us-east-1";
+
+    let creds: AwsCredentials | undefined;
+    const id = env["AWS_ACCESS_KEY_ID"];
+    const secret = env["AWS_SECRET_ACCESS_KEY"];
+    if (id !== undefined && id !== "" && secret !== undefined && secret !== "") {
+      creds = {
+        accessKeyId: id,
+        secretAccessKey: secret,
+        sessionToken: env["AWS_SESSION_TOKEN"],
+        region,
+      };
+    } else {
+      const file = await ini(env["AWS_SHARED_CREDENTIALS_FILE"] ?? join(aws, "credentials"));
+      const p = file.get(profile);
+      const key = p?.get("aws_access_key_id") ?? fromConfig?.get("aws_access_key_id");
+      const sec = p?.get("aws_secret_access_key") ?? fromConfig?.get("aws_secret_access_key");
+      if (key !== undefined && sec !== undefined) {
+        const token = p?.get("aws_session_token") ?? fromConfig?.get("aws_session_token");
+        creds = { accessKeyId: key, secretAccessKey: sec, sessionToken: token, region };
+      } else if (
+        fromConfig?.has("sso_session") === true ||
+        fromConfig?.has("sso_start_url") === true
+      ) {
+        throw new Error(
+          `the AWS profile ${profile} signs in through SSO, which uno does not follow yet · ` +
+            `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
+        );
+      }
+    }
+    if (creds === undefined) {
+      throw new Error(
+        `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or put keys for the ${profile} profile in ~/.aws/credentials`,
+      );
+    }
+    kept = { at: Date.now(), creds };
+    return creds;
+  };
+}
+
+/** ini reads an AWS-style ini file into sections of keys. A missing file is empty. */
+async function ini(path: string): Promise<Map<string, Map<string, string>>> {
+  const out = new Map<string, Map<string, string>>();
+  let text: string;
+  try {
+    const ref = { name: basename(path), path };
+    text = new TextDecoder().decode(await readAll([localFiles()], ref));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return out;
+    throw err;
+  }
+  let section: Map<string, string> | undefined;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#") || line.startsWith(";")) continue;
+    const head = /^\[(.+)\]$/.exec(line);
+    if (head !== null) {
+      section = new Map();
+      out.set(head[1]!.trim(), section);
+      continue;
+    }
+    const eq = line.indexOf("=");
+    if (section === undefined || eq < 0) continue;
+    section.set(line.slice(0, eq).trim(), line.slice(eq + 1).trim());
+  }
+  return out;
 }

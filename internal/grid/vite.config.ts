@@ -7,7 +7,8 @@ export default defineConfig({
     // subpath map into package.json from these.
     // store/node is its own entry because it is the one module that imports
     // node:fs: a worker on a desktop reaches for it, and a browser never should.
-    entry: ["src/index.ts", "src/*/index.ts", "src/store/node.ts"],
+    // store/s3 is its own so that only an engine pays for the signing code.
+    entry: ["src/index.ts", "src/*/index.ts", "src/store/node.ts", "src/store/s3.ts"],
     deps: { resolveDepSubpath: true },
     dts: {
       generator: "tsgo",
