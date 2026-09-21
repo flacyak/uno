@@ -38,13 +38,10 @@ import type {
   Progress,
   Reply,
   Request,
-  SourceRef,
 } from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
 import { Pages, RowIndex } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
-
-export type OpenSource = (ref: SourceRef) => Promise<ByteSource>;
 
 /** How often a pass posts how far it has got. The status bar needs no more. */
 const PROGRESS_MS = 100;

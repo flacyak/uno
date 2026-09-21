@@ -16,7 +16,8 @@
 import { logOf, newManifest, readContainer, sourceId, writeDocument } from "../document/index.ts";
 import type { Document, Held, Logged, State } from "../document/index.ts";
 import type { Edit } from "../sheet/index.ts";
-import { bytesSource } from "../store/index.ts";
+import { bytesSource, openWith } from "../store/index.ts";
+import type { ByteSource, FileHandler } from "../store/index.ts";
 import type {
   Opening,
   Changed,
@@ -34,7 +35,7 @@ import type {
 import { formatBytes, messageOf } from "./protocol.ts";
 import type { Tuning } from "./rows.ts";
 import { View } from "./view.ts";
-import type { Carried, OpenSource, Part } from "./view.ts";
+import type { Carried, Part } from "./view.ts";
 
 /**
  * The largest .uno read whole.
@@ -148,10 +149,21 @@ export class Workspace {
   private closed = false;
 
   constructor(
-    private readonly openSource: OpenSource,
+    /** Every kind of place this engine can open a file from. */
+    private readonly handlers: readonly FileHandler[],
     private readonly port: Port<Request, Reply>,
     private readonly tuning: Tuning,
   ) {}
+
+  /**
+   * openSource opens a ref through whichever handler claims it: a path on a
+   * disk, an object in a bucket, a dropped Blob. It is the only way a source or
+   * a .uno comes in, so what this engine can read is exactly the handlers its
+   * platform listed.
+   */
+  private openSource(ref: SourceRef): Promise<ByteSource> {
+    return openWith(this.handlers, ref);
+  }
 
   // ------------------------------------------------------------ sources
 

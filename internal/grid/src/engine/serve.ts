@@ -1,23 +1,23 @@
 // The engine: one workspace and its log, served to one client.
 //
 // `serve` is what a worker does, minus the worker. A platform's entry file
-// builds a Port from whatever its runtime hands it, says how to open a
-// SourceRef, and calls this. Electron's utility process and a browser's Web
-// Worker are each a few lines around the same call.
+// builds a Port from whatever its runtime hands it, lists the FileHandlers it
+// can offer -- a disk, a bucket -- and calls this. Electron's utility process
+// and a browser's Web Worker are each a few lines around the same call.
 
 import type { Port, Reply, Request } from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
 import { TUNING } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
-import type { OpenSource } from "./view.ts";
+import type { FileHandler } from "../store/index.ts";
 import { Workspace } from "./workspace.ts";
 
 export function serve(
   port: Port<Request, Reply>,
-  openSource: OpenSource,
+  handlers: readonly FileHandler[],
   tuning: Tuning = TUNING,
 ): void {
-  const workspace = new Workspace(openSource, port, tuning);
+  const workspace = new Workspace(handlers, port, tuning);
 
   async function handle(msg: Request): Promise<void> {
     switch (msg.t) {

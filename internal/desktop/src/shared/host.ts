@@ -5,7 +5,8 @@
 //
 // No file's bytes cross this on the way in. `open` says where a file is, and
 // the engine `connect` starts reads it from there, so a 30 GB CSV costs the
-// renderer a name and a path. Nor on the way out: a .uno points at its sources
+// renderer a name and a path. An object in S3 is the same: the page hands the
+// engine an s3:// URL, and the engine, which holds the credentials, reads it. Nor on the way out: a .uno points at its sources
 // rather than carrying them, so what `save` hands over is the log and a few
 // paths whatever the data behind them weighs.
 //

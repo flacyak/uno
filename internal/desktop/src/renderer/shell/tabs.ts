@@ -11,7 +11,8 @@ export interface TabActions {
   toggle(): void;
   select(tab: Tab): void;
   remove(tab: Tab): void;
-  add(): void;
+  /** The + was clicked: offer a file or an object in S3, hung off `plus`. */
+  add(plus: HTMLElement): void;
   /** Point a source at a file: one whose file has gone, or one that changed
    * under the log. */
   relink(tab: Tab): void;
@@ -26,8 +27,8 @@ export function tabStrip(w: Workspace, hint: string, act: TabActions): HTMLEleme
   const add = document.createElement("span");
   add.className = "tab-add";
   add.textContent = "+";
-  add.title = "Add a source · Ctrl+Shift+O";
-  add.addEventListener("click", () => act.add());
+  add.title = "Add a source: a file, or an object in S3";
+  add.addEventListener("click", () => act.add(add));
 
   const grow = document.createElement("span");
   grow.className = "grow";

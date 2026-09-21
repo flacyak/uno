@@ -22,6 +22,7 @@ import { command } from "../keys.ts";
 import type { Command } from "../keys.ts";
 import { Workspace } from "../workspace.ts";
 import type { Tab } from "../workspace.ts";
+import { AddMenu } from "./add.ts";
 import { bannerParts, offerKey } from "./banner.ts";
 import { wireDrop } from "./drop.ts";
 import { Finder } from "./find.ts";
@@ -47,6 +48,8 @@ export class Shell {
   private warned: Workspace | Tab | undefined;
   /** How keys are read, which the grid and the status bar both follow. */
   private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
+  /** The + menu, while it is open. */
+  private adding: AddMenu | undefined;
 
   private readonly status: StatusBar;
   private readonly finder: Finder;
@@ -144,6 +147,23 @@ export class Shell {
     } catch (err) {
       this.say(message(err), true);
     }
+  }
+
+  /**
+   * offerAdd opens the + menu: a file off this machine, or an object in S3. An
+   * object is opened by the engine, which holds the credentials; the page only
+   * ever sees its URL.
+   */
+  private offerAdd(plus: HTMLElement): void {
+    this.adding?.close();
+    this.adding = new AddMenu(plus, {
+      file: () => void this.add(),
+      remote: (ref) => void this.addSources([ref]),
+      closed: () => {
+        this.adding = undefined;
+        this.grid?.focus();
+      },
+    });
   }
 
   /**
@@ -631,7 +651,7 @@ export class Shell {
             toggle: () => this.toggleMode(),
             select: (tab) => this.select(tab),
             remove: (tab) => void this.remove(tab),
-            add: () => void this.add(),
+            add: (plus) => this.offerAdd(plus),
             relink: (tab) => void this.relink(tab),
           });
     this.tabs.replaceChildren(...strip);

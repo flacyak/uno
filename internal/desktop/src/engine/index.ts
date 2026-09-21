@@ -1,12 +1,20 @@
 // The engine's entry in Electron: a utility process that owns one file.
 //
-// The engine itself is `serve` in @uno/grid. This file holds the two facts only
-// this runtime knows: the port arrives as a MessagePortMain on parentPort, and
-// a file is opened by path through Node.
+// The engine itself is `serve` in @uno/grid. This file holds the facts only this
+// runtime knows: the port arrives as a MessagePortMain on parentPort, and what
+// the process can open -- files on this machine's disks, and objects in S3 read
+// with whatever AWS credentials this machine already has.
+//
+// There is no blob handler: every file the desktop hands its engine has a
+// path, and a Blob that arrives anyway is refused by name.
+//
+// The credentials are read here, in the engine's own process. The renderer
+// asks for an s3:// URL and gets rows back; no key ever crosses into the page.
 
 import { serve } from "@uno/grid/engine";
 import type { Reply, Request } from "@uno/grid/engine";
-import { nodeSource } from "@uno/grid/store/node";
+import { awsCredentials, localFiles } from "@uno/grid/store/node";
+import { s3Files } from "@uno/grid/store/s3";
 
 process.parentPort.once("message", (e) => {
   const port = e.ports[0];
@@ -28,9 +36,14 @@ process.parentPort.once("message", (e) => {
       },
       close: () => port.close(),
     },
-    (ref) =>
-      "path" in ref
-        ? nodeSource(ref.path)
-        : Promise.reject(new Error(`${ref.name}: the desktop engine opens files by path`)),
+    [
+      localFiles(),
+      s3Files({
+        credentials: awsCredentials(),
+        // The same variables the AWS CLI reads, so MinIO or a local stand-in is
+        // pointed at the way every other tool on the machine is.
+        endpoint: process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"],
+      }),
+    ],
   );
 });

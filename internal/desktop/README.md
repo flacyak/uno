@@ -49,6 +49,37 @@ What a `.uno` gives up for this is travelling on its own. Sending somebody the
 file without the data it points at gets them the tabs, the edits and the log,
 and no rows.
 
+## Sources in S3
+
+The `+` at the end of the tab strip offers a file or an S3 URL. An S3 URL is
+`s3://bucket/key` or the https address the console shows, and the object opens
+as a view the same way a file on disk does: a HEAD for its size, then ranged
+GETs as the index and the grid need them. Nothing is downloaded whole, and a
+workspace saves the `s3://` URL rather than a copy.
+
+The engine process reads the object, using whatever AWS credentials this
+machine already has: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (plus
+`AWS_SESSION_TOKEN`), or the `AWS_PROFILE` (or `default`) keys in
+`~/.aws/credentials`. The region comes from `AWS_REGION` or the profile's config,
+and a bucket somewhere else says so once and is followed. uno stores no keys,
+and none reach the renderer. SSO profiles are refused with the
+`aws configure export-credentials` command that gets around them.
+`AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` points it at MinIO or another
+S3-compatible store.
+
+Every range is asked for as the version of the object that was opened, so an
+export rewritten in the bucket mid-read is an error that says so, never half
+of one file and half of another.
+
+Every file uno reads goes through a `FileHandler` from `@uno/grid/store`:
+sources, `.uno` files, formulas in the library, and the `~/.aws` config. There
+are three handlers. `localFiles` (in `store/node`) reads paths on disk,
+`s3Files` (in `store/s3`) reads objects in a bucket, and `blobFiles` reads
+dropped bytes that have no path. Each one only reads the refs it recognises.
+The desktop engine lists `localFiles` and `s3Files`, so a Blob that reaches it is
+refused by name. A test in each package fails if anything outside a handler
+starts reading files on its own.
+
 ## When a source's file moves
 
 A source whose file is not where the workspace left it still opens: it keeps its
