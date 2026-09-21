@@ -40,6 +40,11 @@ export function compare(
 
 /** The unit of wall-clock metrics, which vary by machine. */
 const CLOCK = 'ms';
+/**
+ * The fraction a wall-clock number moves between two runs on one runner
+ * with nothing changed. A change under it is reported as noise.
+ */
+const NOISE = 0.05;
 /** Fraction digits shown for a number with a fractional part. */
 const DIGITS = 2;
 const PERCENT = 100;
@@ -51,17 +56,23 @@ function shown(value: number | undefined): string {
     : value.toLocaleString('en-US', { maximumFractionDigits: DIGITS });
 }
 
-/** One word for a change, plus a percentage. Smaller is better. */
+/**
+ * One word for a change, plus a percentage. Smaller is better. A wall-clock
+ * change too small to tell from the runner's own variation is noise.
+ */
 function verdict(c: Change): string {
   if (c.base === undefined) return 'new';
   if (c.head === undefined) return 'gone';
   if (c.head === c.base) return 'same';
+  const fraction = c.base === 0 ? undefined : (c.head - c.base) / c.base;
   const by =
-    c.base === 0
+    fraction === undefined
       ? ''
-      : ` ${Math.abs(((c.head - c.base) / c.base) * PERCENT).toFixed(1)}%`;
-  const noisy = c.unit === CLOCK ? ' (wall clock)' : '';
-  return `${c.head < c.base ? 'better' : 'worse'}${by}${noisy}`;
+      : ` ${(Math.abs(fraction) * PERCENT).toFixed(1)}%`;
+  if (c.unit !== CLOCK) return `${c.head < c.base ? 'better' : 'worse'}${by}`;
+  if (fraction !== undefined && Math.abs(fraction) < NOISE)
+    return `within noise${by} (wall clock)`;
+  return `${c.head < c.base ? 'better' : 'worse'}${by} (wall clock)`;
 }
 
 /** The heading and the lead sentence of each kind's table. */

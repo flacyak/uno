@@ -47,3 +47,33 @@ test('with nothing to compare with, the table says so and still shows the number
   expect(table).toContain('has no efficiency tests to compare with');
   expect(table).toContain('| band jump: requests | requests |  | 1 | new |');
 });
+
+test('a wall-clock change under five percent is noise, and a larger one is said', () => {
+  const was: Metric[] = [{ name: 'scan: ms', unit: 'ms', value: 100 }];
+  const rows = (now: number): string =>
+    markdown(compare(was, [{ ...was[0]!, value: now }]), true, 'performance');
+  expect(rows(104)).toContain(
+    '| scan: ms | ms | 100 | 104 | within noise 4.0% (wall clock) |',
+  );
+  expect(rows(96)).toContain(
+    '| scan: ms | ms | 100 | 96 | within noise 4.0% (wall clock) |',
+  );
+  expect(rows(106)).toContain(
+    '| scan: ms | ms | 100 | 106 | worse 6.0% (wall clock) |',
+  );
+  expect(rows(90)).toContain(
+    '| scan: ms | ms | 100 | 90 | better 10.0% (wall clock) |',
+  );
+});
+
+test('a performance table is headed as one', () => {
+  const table = markdown(
+    compare([], [{ name: 'scan: ms', unit: 'ms', value: 1 }]),
+    false,
+    'performance',
+  );
+  expect(table).toContain('### Performance');
+  expect(table).toContain(
+    'What this change takes. The branch it is going into has no performance tests to compare with.',
+  );
+});
