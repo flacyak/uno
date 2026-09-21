@@ -1,0 +1,4 @@
+[submodule "apps/www"]
+	path = apps/www
+	url = https://github.com/flacyak/uno-hosted.git
+	branch = main
