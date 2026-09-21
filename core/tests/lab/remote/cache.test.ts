@@ -68,6 +68,16 @@ function noise(size: number, random: () => number): Uint8Array {
   return Uint8Array.from({ length: size }, () => Math.floor(random() * BYTE));
 }
 
+/**
+ * Asserts `got` is `want`, byte for byte. Equal bytes are compared at once;
+ * only a mismatch pays for the element-by-element diff.
+ */
+function expectBytes(got: Uint8Array, want: Uint8Array, seed: number): void {
+  if (!Buffer.from(got).equals(want)) {
+    expect(got, `seed ${seed}`).toEqual(want);
+  }
+}
+
 describe('cachedSource', () => {
   const SEEDS = 40;
   const READS = 30;
@@ -90,7 +100,7 @@ describe('cachedSource', () => {
       const cold = cachedSource(counted(bytes).source, PATH, store, pageBytes);
       for (const [offset, length] of asks) {
         const want = bytes.subarray(offset, Math.min(offset + length, size));
-        expect(await cold.read(offset, length), `seed ${seed}`).toEqual(want);
+        expectBytes(await cold.read(offset, length), want, seed);
       }
       await cold.close();
 
@@ -98,7 +108,7 @@ describe('cachedSource', () => {
       const kept = cachedSource(again.source, PATH, store, pageBytes);
       for (const [offset, length] of asks) {
         const want = bytes.subarray(offset, Math.min(offset + length, size));
-        expect(await kept.read(offset, length), `seed ${seed}`).toEqual(want);
+        expectBytes(await kept.read(offset, length), want, seed);
       }
       expect(again.reads, `seed ${seed}: kept pages are read locally`).toEqual(
         [],
