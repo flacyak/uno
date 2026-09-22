@@ -277,11 +277,17 @@ test("reads every way an object's address gets pasted", () => {
     'https://acme-exports.s3.eu-west-1.amazonaws.com/2025/q3/sales%20q3.csv',
     'https://acme-exports.s3-eu-west-1.amazonaws.com/2025/q3/sales%20q3.csv',
     'https://s3.eu-west-1.amazonaws.com/acme-exports/2025/q3/sales%20q3.csv',
-    '  s3://acme-exports/2025/q3/sales q3.csv  ',
   ]) {
     expect(s3Location(url), url).toEqual(want);
   }
   expect(s3Url(want)).toBe('s3://acme-exports/2025/q3/sales q3.csv');
+});
+
+// S3 keeps "reports/q3 " apart from "reports/q3", so the address the lister
+// writes for the one has to read back as the one.
+test('a key ending in a space reads back as that key', () => {
+  const loc = { bucket: 'acme-exports', key: 'reports/q3 ' };
+  expect(s3Location(s3Url(loc))).toEqual(loc);
 });
 
 test('refuses what is not an object in S3', () => {
