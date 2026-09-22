@@ -973,6 +973,7 @@ export class Shell {
   private async pointAt(tab: Tab, ref: SourceRef, said?: (fresh: Tab) => string): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.keepSelection(w, tab);
     try {
       const fresh = await w.relink(tab, ref);
       if (this.workspace !== w) return;
@@ -992,12 +993,22 @@ export class Shell {
   }
 
   /**
+   * keepSelection writes the grid's selection onto the showing tab. A tab's
+   * cell is otherwise saved only when it is left, so a tab replaced in place
+   * while showing would come back at a stale one.
+   */
+  private keepSelection(w: Workspace, tab: Tab): void {
+    if (w.active === tab && this.grid !== undefined) tab.cell = this.grid.selection();
+  }
+
+  /**
    * append adds files to the end of a multi-file tab. Files that read
    * differently from the tab's first are refused and the tab is left as it was.
    */
   private async append(tab: Tab, files: readonly SingleRef[]): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.keepSelection(w, tab);
     try {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;
