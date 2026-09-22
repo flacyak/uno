@@ -179,6 +179,10 @@ function objects(): Map<string, Uint8Array> {
     ['shop/2025/orders-01.csv', ONE],
     ['shop/2025/orders-02.csv', ONE],
     ['shop/archive/old.csv', ONE],
+    // An object and a folder of the same name, which a prefix with no slash
+    // at its end lists together.
+    ['reports', ONE],
+    ['reports/q3.csv', ONE],
   ]);
   for (const [key] of AWKWARD_KEYS) all.set(`odd/${key}`, bytes);
   for (const [key] of DOT_KEYS) all.set(`dots/${key}`, ONE);
@@ -270,9 +274,25 @@ describe('browsing a bucket', () => {
       'big',
       'dots',
       'odd',
+      'reports',
       'shop',
+      'reports',
     ]);
-    expect(listing.entries.every((e) => e.folder)).toBe(true);
+    expect(listing.entries.map((e) => e.folder)).toEqual([
+      ...Array.from({ length: 6 }, () => true),
+      false,
+    ]);
+  });
+
+  // Only a key ending in a slash is a folder marker. One equal to a prefix
+  // typed without a slash is an object of that name.
+  test('an object named as a prefix is listed beside the folder', async () => {
+    const listing = await lister().list(`s3://${BUCKET}/reports`);
+
+    expect(listing.entries.map((e) => [e.name, e.path, e.folder])).toEqual([
+      ['reports', `s3://${BUCKET}/reports/`, true],
+      ['reports', `s3://${BUCKET}/reports`, false],
+    ]);
   });
 
   // 2,500 keys at a thousand a page.
