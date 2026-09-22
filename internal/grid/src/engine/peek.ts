@@ -19,6 +19,7 @@
 // test rather than a fixture on a disk.
 
 import { openFormat } from "../ingest/index.ts";
+import type { HeaderMode } from "../ingest/index.ts";
 import type { Peeked } from "./protocol.ts";
 import { bytesSource, openWith } from "../store/index.ts";
 import type { FileHandler, FileRef } from "../store/index.ts";
@@ -92,8 +93,9 @@ export async function peekHead(
   name: string,
   head: Head,
   rows: number = PEEK_ROWS,
+  header: HeaderMode = "first",
 ): Promise<Peeked> {
-  const format = await openFormat(name, bytesSource(head.bytes));
+  const format = await openFormat(name, bytesSource(head.bytes), header);
 
   // Whether the window holds the whole file is what decides how the last
   // record in it is treated below, so it is worked out once, up front.
@@ -137,5 +139,8 @@ export async function peek(
   ref: FileRef,
   limits: PeekLimits = {},
 ): Promise<Peeked> {
-  return peekHead(ref.name, await readHead(handlers, ref, limits.bytes), limits.rows);
+  // Several files read as one say whether they have a header row, and a peek
+  // at them shows what an open would: with none, the first line is a row.
+  const header = "parts" in ref ? ref.header : "first";
+  return peekHead(ref.name, await readHead(handlers, ref, limits.bytes), limits.rows, header);
 }
