@@ -28,3 +28,13 @@ export const FIXTURE = fileURLToPath(
   new URL('./sales-q3.csv', import.meta.url),
 );
 export const bytes = new Uint8Array(readFileSync(FIXTURE));
+
+/** The fixture's rows `repeats` times over, under one header. */
+export function repeated(repeats: number): Uint8Array<ArrayBuffer> {
+  const header = bytes.indexOf(0x0a) + 1;
+  const body = bytes.subarray(header);
+  const out = new Uint8Array(header + body.length * repeats);
+  out.set(bytes.subarray(0, header));
+  for (let i = 0; i < repeats; i++) out.set(body, header + i * body.length);
+  return out;
+}
