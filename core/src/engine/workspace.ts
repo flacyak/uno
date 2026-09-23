@@ -421,7 +421,7 @@ export class Workspace {
         );
       } else {
         const bytes = bytesSource(src.raw);
-        view = await View.open({
+        const opening = View.open({
           id: src.id,
           name: src.name,
           path: '',
@@ -432,6 +432,7 @@ export class Workspace {
           began: performance.now(),
           telemetry: this.telemetry,
         });
+        view = await Effect.runPromise(opening);
       }
       view.opened.link = linkOf(view, src);
       return view;
@@ -490,7 +491,7 @@ export class Workspace {
     // first answer is in it.
     const began = performance.now();
     const path = 'path' in ref ? ref.path : '';
-    const view = await View.open({
+    const opening = View.open({
       id,
       name: ref.name,
       path,
@@ -504,6 +505,7 @@ export class Workspace {
       parts: 'parts' in ref ? ref : undefined,
       signal,
     });
+    const view = await Effect.runPromise(opening);
     view.connection = this.through(ref);
     if ('parts' in ref) {
       view.opened.parts = ref.parts.map((part) => ({
