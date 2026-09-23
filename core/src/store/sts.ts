@@ -9,7 +9,7 @@
  * the token or role in.
  */
 
-import { Data } from 'effect';
+import { Data, Effect } from 'effect';
 
 import { parseTime } from '@go';
 import { encodeQuery, signV4 } from './s3.ts';
@@ -176,7 +176,9 @@ export async function assumeRole(
     'sts',
     new Date(),
   );
-  return sessionIn(await go(url, { method: 'GET', headers }), ask.roleArn);
+  return Effect.runPromise(
+    sessionIn(await go(url, { method: 'GET', headers }), ask.roleArn),
+  );
 }
 
 /** What AssumeRoleWithWebIdentity is asked for. */
@@ -220,7 +222,7 @@ export async function assumeRoleWithWebIdentity(
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: encodeQuery(query),
   });
-  return sessionIn(res, ask.roleArn);
+  return Effect.runPromise(sessionIn(res, ask.roleArn));
 }
 
 /**
@@ -308,34 +310,40 @@ export type StsFailure = SessionNameRefused | StsRefused | StsUnreadable;
  * @param roleArn the role, for the error
  * @return the session the answer holds
  */
-async function sessionIn(res: Response, roleArn: string): Promise<Session> {
-  const body = await res.text();
-  if (!res.ok) {
-    throw new StsRefused({
-      roleArn,
-      code: text(body, 'Code') ?? `HTTP ${res.status}`,
-      detail: text(body, 'Message'),
-    });
-  }
+function sessionIn(
+  res: Response,
+  roleArn: string,
+): Effect.Effect<Session, StsRefused | StsUnreadable> {
+  return Effect.gen(function* () {
+    const body = yield* Effect.promise(() => res.text());
+    if (!res.ok) {
+      return yield* new StsRefused({
+        roleArn,
+        code: text(body, 'Code') ?? `HTTP ${res.status}`,
+        detail: text(body, 'Message'),
+      });
+    }
 
-  // A missing Credentials element reads as empty, so every field is missing.
-  const credentials = text(body, 'Credentials') ?? '';
-  const id = text(credentials, 'AccessKeyId');
-  const secret = text(credentials, 'SecretAccessKey');
-  const token = text(credentials, 'SessionToken');
-  const expiration = parseTime(text(credentials, 'Expiration'));
-  if (
-    id === undefined ||
-    secret === undefined ||
-    token === undefined ||
-    expiration === undefined
-  ) {
-    throw new StsUnreadable({ roleArn });
-  }
-  return {
-    accessKeyId: id,
-    secretAccessKey: secret,
-    sessionToken: token,
-    expiration,
-  };
+    // A missing Credentials element reads as empty, so every field is
+    // missing.
+    const credentials = text(body, 'Credentials') ?? '';
+    const id = text(credentials, 'AccessKeyId');
+    const secret = text(credentials, 'SecretAccessKey');
+    const token = text(credentials, 'SessionToken');
+    const expiration = parseTime(text(credentials, 'Expiration'));
+    if (
+      id === undefined ||
+      secret === undefined ||
+      token === undefined ||
+      expiration === undefined
+    ) {
+      return yield* new StsUnreadable({ roleArn });
+    }
+    return {
+      accessKeyId: id,
+      secretAccessKey: secret,
+      sessionToken: token,
+      expiration,
+    };
+  });
 }
