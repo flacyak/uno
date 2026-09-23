@@ -127,6 +127,18 @@ export function s3Url(loc: S3Location): string {
 const TRIES = 3;
 /** The wait before the second try. It doubles for the third. */
 const BACKOFF_MS = 200;
+/**
+ * How many times one request follows a bucket to another region. A bucket is
+ * in one place, so being sent somewhere new twice over means the answers are
+ * not about where the bucket is, and asking again only makes a loop.
+ */
+const MOVES = 1;
+/**
+ * How much of a refusal is read while looking for the region in it. The reply
+ * that matters is a few hundred bytes; anything longer is something else, and
+ * reading all of it is a download uno did not ask for.
+ */
+const REFUSAL_BYTES = 64 << 10;
 
 /**
  * s3Files opens objects in S3 for reading. It claims s3:// URLs and the https
@@ -138,38 +150,59 @@ export function s3Files(opts: S3Options): FileHandler {
    * request to a bucket in another region pays for the redirect. */
   const regions = new Map<string, string>();
 
+  /** One signed request, sent once. */
+  async function send(
+    loc: S3Location,
+    method: "HEAD" | "GET",
+    extra: Record<string, string>,
+    creds: AwsCredentials,
+    region: string,
+  ): Promise<Response> {
+    const url = objectUrl(loc, region, opts.endpoint);
+    const headers = signV4(
+      { method, url, headers: { ...extra, "x-amz-content-sha256": EMPTY_SHA256 } },
+      creds,
+      region,
+      "s3",
+      new Date(),
+    );
+    return go(url, { method, headers });
+  }
+
   async function request(
     loc: S3Location,
     method: "HEAD" | "GET",
     extra: Record<string, string>,
   ): Promise<Response> {
+    let moves = 0;
     for (let attempt = 1; ; attempt++) {
       const creds = await opts.credentials();
       const region = regions.get(loc.bucket) ?? creds.region;
-      const url = objectUrl(loc, region, opts.endpoint);
-      const headers = signV4(
-        { method, url, headers: { ...extra, "x-amz-content-sha256": EMPTY_SHA256 } },
-        creds,
-        region,
-        "s3",
-        new Date(),
-      );
 
       let res: Response;
       try {
-        res = await go(url, { method, headers });
+        res = await send(loc, method, extra, creds, region);
       } catch (err) {
         if (attempt >= TRIES) throw err;
         await wait(BACKOFF_MS << (attempt - 1));
         continue;
       }
 
-      // The bucket is somewhere other than where it was asked for. S3 says
+      // The bucket is somewhere other than where it was asked for. It says
       // where, once, and every request after goes straight there.
-      const moved = res.headers.get("x-amz-bucket-region");
-      if ((res.status === 301 || res.status === 400) && moved !== null && moved !== region) {
-        regions.set(loc.bucket, moved);
-        continue;
+      if ((res.status === 301 || res.status === 400) && moves < MOVES) {
+        const moved = await whereItWent(res, () =>
+          // A reply to a HEAD carries no body, and a HEAD is what open() sends
+          // first, so a bucket that only names its region in the body has to
+          // be asked a way that can answer. One byte is enough of an ask: the
+          // refusal comes back instead of the byte.
+          send(loc, "GET", { range: "bytes=0-0" }, creds, region),
+        );
+        if (moved !== undefined && moved !== region) {
+          moves++;
+          regions.set(loc.bucket, moved);
+          continue;
+        }
       }
       if (res.status >= 500 && attempt < TRIES) {
         await wait(BACKOFF_MS << (attempt - 1));
@@ -228,6 +261,117 @@ export function s3Files(opts: S3Options): FileHandler {
       };
     },
   };
+}
+
+/**
+ * whereItWent reads a refusal for the region the bucket is actually in, and
+ * answers undefined when the refusal does not name one uno can use.
+ *
+ * AWS says it in `x-amz-bucket-region` and that is the end of it. Everything
+ * else -- an older PermanentRedirect, MinIO, R2, a proxy that drops headers it
+ * does not recognise -- says it only in the XML body, and a bucket whose
+ * refusal is never read is a bucket that cannot be opened at all, because
+ * every request uno sends after the first is signed the same wrong way.
+ *
+ * The body is the least trustworthy thing in the exchange, though. The region
+ * becomes a hostname, so a body that chooses it chooses where the next
+ * request goes -- signed, with the session token on it. Hence isRegion: what
+ * comes out of here is a word that can only ever be one label of the host uno
+ * already meant to talk to.
+ */
+async function whereItWent(
+  res: Response,
+  probe: () => Promise<Response>,
+): Promise<string | undefined> {
+  const header = res.headers.get("x-amz-bucket-region");
+  if (header !== null) return isRegion(header) ? header : undefined;
+
+  let body = await refusalBody(res);
+  if (body === "") {
+    // Nothing to read, which is every HEAD. Ask again in a way that can carry
+    // an answer. A probe that somehow succeeds is not a redirect at all.
+    const again = await probe().catch(() => undefined);
+    if (again === undefined) return undefined;
+    if (again.ok) {
+      await again.body?.cancel();
+      return undefined;
+    }
+    body = await refusalBody(again);
+  }
+  return regionIn(body);
+}
+
+/** As much of a refusal as is worth reading, as text. */
+async function refusalBody(res: Response): Promise<string> {
+  const reader = res.body?.getReader();
+  if (reader === undefined) return "";
+  const parts: Uint8Array[] = [];
+  let read = 0;
+  try {
+    while (read < REFUSAL_BYTES) {
+      const next = await reader.read();
+      if (next.done) break;
+      parts.push(next.value);
+      read += next.value.length;
+    }
+  } catch {
+    // A refusal that stops halfway is one uno cannot follow, which is the
+    // same answer as a refusal that does not say where the bucket is.
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  const all = new Uint8Array(read);
+  let at = 0;
+  for (const part of parts) {
+    all.set(part, at);
+    at += part.length;
+  }
+  return new TextDecoder().decode(all);
+}
+
+/**
+ * regionIn finds the region in the three places a refusal puts it: the
+ * element, the sentence, and inside the endpoint it says to use instead.
+ *
+ * Each is asked in turn and the first to say anything is the answer, right or
+ * wrong -- a reply that names a region uno cannot use is not one to keep
+ * reading for a second opinion.
+ */
+function regionIn(xml: string): string | undefined {
+  const element = /<Region>([^<]*)<\/Region>/i.exec(xml)?.[1];
+  if (element !== undefined) return isRegion(element) ? element : undefined;
+
+  // "the region 'us-east-1' is wrong; expecting 'eu-west-1'"
+  const expecting = /expecting '([^']*)'/i.exec(xml)?.[1];
+  if (expecting !== undefined) return isRegion(expecting) ? expecting : undefined;
+
+  const endpoint = /<Endpoint>([^<]*)<\/Endpoint>/i.exec(xml)?.[1];
+  return endpoint === undefined ? undefined : regionInHost(endpoint);
+}
+
+/**
+ * regionInHost reads the region out of an endpoint, which is where a
+ * PermanentRedirect keeps it: bucket.s3.eu-west-1.amazonaws.com, and the
+ * s3-eu-west-1.amazonaws.com it was spelled as before 2019.
+ *
+ * s3.amazonaws.com names no region -- it is the global endpoint -- so it
+ * answers undefined rather than guessing us-east-1.
+ */
+function regionInHost(host: string): string | undefined {
+  const region = /(?:^|\.)s3[.-]([a-z0-9-]+)\.amazonaws\.com$/i.exec(host.trim())?.[1];
+  return region !== undefined && isRegion(region) ? region : undefined;
+}
+
+/**
+ * isRegion says whether a word is shaped like one. It is the whole of the
+ * defence around a region out of a body: what passes here is spliced into
+ * `https://<bucket>.s3.<region>.amazonaws.com`, so it has to be a thing that
+ * cannot end the host, open a path, or be a host of its own. Letters, digits
+ * and inner hyphens do all of that. `auto`, which is what R2 signs as, is a
+ * region by this reading, and it has to be.
+ */
+function isRegion(word: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(word);
 }
 
 /** What S3's status codes mean to the person who pasted the URL. */
