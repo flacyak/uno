@@ -16,30 +16,45 @@
     <!-- tabindex, because the grid handles arrow keys and needs the focus to
          receive them. -->
     <div id="app" tabindex="0">
-      <div class="win-tabs" id="tabs"></div>
+      <!-- Three columns: the sidebar, the sheet, and the sources panel. Each
+           begins with a head one row high, so the heads make one line across
+           the top of the window, with the × at its end. -->
+      <div class="win-frame">
+        <!-- The workspaces opened on this machine, most recent first. The one
+             open lists its sources under it. -->
+        <aside id="sidebar" class="sidebar">
+          <div class="sidebar-head col-head">Workspaces</div>
+          <div class="sidebar-list" id="workspaces"></div>
+          <button id="new" class="sidebar-new" type="button">
+            <span class="plus">+</span>New workspace
+          </button>
+        </aside>
 
-      <!-- The recogniser's question. Shown in transform, when it has one. -->
-      <div class="banner" id="banner" hidden></div>
+        <!-- The sheet: the grid, or the empty state, under the recogniser's
+             question while it has one. -->
+        <div class="win-sheet">
+          <!-- Shown in transform, when the recogniser has something to ask. -->
+          <div class="banner" id="banner" hidden></div>
 
-      <!-- The grid, or the empty state, with the sources panel beside it on the
-           right while it is open. -->
-      <div class="win-body">
-        <div class="dropzone" id="empty">
-          <h1>Drop a spreadsheet</h1>
-          <p>or <a href="#" id="open">open one</a></p>
-          <p class="exts">csv &middot; tsv &middot; uno</p>
+          <div class="dropzone" id="empty">
+            <h1>Drop a spreadsheet</h1>
+            <p>or <a href="#" id="open">open one</a></p>
+            <p class="exts">csv &middot; tsv &middot; uno</p>
+          </div>
+
+          <!-- tabindex, because the grid listens for arrow keys here and a
+               plain div cannot take focus. -->
+          <div id="content" tabindex="0" hidden></div>
         </div>
 
-        <!-- tabindex, because the grid listens for arrow keys here and a plain
-             div cannot take focus. -->
-        <div id="content" tabindex="0" hidden></div>
-
+        <!-- The sources panel, on the right while it is open. -->
         <aside id="panel" class="panel" hidden></aside>
       </div>
 
       <div class="win-status">
-        <!-- Settings: the places sources come from, and the theme. -->
+        <!-- Settings: the places sources come from, the theme, and the keys. -->
         <button id="settings" class="settings-toggle" type="button"></button>
+        <button id="sidebar-toggle" class="side-toggle" type="button"></button>
         <span id="status-mode" class="mode"></span>
         <!-- The : command line. While it is open it stands in for the file's line. -->
         <input
@@ -57,7 +72,25 @@
         <!-- Keys waiting for the rest of a command, where vim's showcmd puts them. -->
         <span id="status-keys" class="keys"></span>
         <span id="status-cell"></span>
+        <!-- The switch between view and transform, while a workspace is open. -->
+        <span id="mode-switch" class="seg" hidden>
+          <span data-mode="view">View</span><span data-mode="transform">Transform</span>
+        </span>
+        <button id="panel-toggle" class="panel-toggle" type="button"></button>
       </div>
+
+      <!-- The window has no frame of its own, so closing it is here. -->
+      <button id="close" class="win-close" type="button" aria-label="Close uno">
+        <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
+          <path
+            d="M2 2l6 6M8 2l-6 6"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
     </div>
 
     <script type="module" src="/src/renderer/main.ts"></script>

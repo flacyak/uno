@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
-// The settings control and its menu: the top-level sources, the four themes
-// and the appearance, opened upward from the bottom left.
+// The settings control and its menu: the top-level sources, the four themes,
+// the appearance and the keys, opened upward from the bottom left.
 //
 // What is under test is what the menu offers and what choosing does: a theme
 // is worn the moment it is chosen, a source opens the panel on it, and the
@@ -10,6 +10,7 @@
 import { beforeEach, expect, test } from "vite-plus/test";
 
 import { Settings } from "../src/renderer/shell/settings.ts";
+import type { InputName } from "../src/renderer/input/index.ts";
 import type { SettingsAsks } from "../src/renderer/shell/settings.ts";
 import type { Connection } from "../src/renderer/sources.ts";
 import { Theming } from "../src/renderer/theme.ts";
@@ -57,6 +58,14 @@ class Asked implements SettingsAsks {
   closed(): void {
     this.said.push("closed");
   }
+  reads: InputName = "default";
+  input(): InputName {
+    return this.reads;
+  }
+  setInput(name: InputName): void {
+    this.said.push(`input ${name}`);
+    this.reads = name;
+  }
 }
 
 let asked: Asked;
@@ -97,7 +106,7 @@ test("the control is a gear, labelled, and the menu is closed until it is clicke
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
 });
 
-test("clicked, it opens on every top-level source, the four themes and the appearance", async () => {
+test("clicked, it opens on every top-level source, the four themes, the appearance and the keys", async () => {
   toggle.click();
   await settle();
   expect(menu().hidden).toBe(false);
@@ -106,6 +115,7 @@ test("clicked, it opens on every top-level source, the four themes and the appea
     Sources: ["ACME exports|s3 · eu-west-1", "Finance lake|s3", "+ Connect a bucket|"],
     Theme: ["Paper Ember|✓", "Tokyo Night|", "Sakura|", "Catppuccin Frappé|"],
     Appearance: ["System", "Light", "Dark"],
+    Keys: ["Default", "Vim-style"],
   });
   // The keys land in the menu, on its first item.
   expect(document.activeElement?.textContent).toContain("ACME exports");
@@ -141,8 +151,23 @@ test("the appearance puts the theme in a mode, and says which it is in", async (
   menu().querySelector<HTMLButtonElement>('[data-appearance="dark"]')!.click();
   expect(theming.mode).toBe("dark");
   expect(document.documentElement.style.getPropertyValue("--paper")).toBe("#211e1c");
-  const on = [...menu().querySelectorAll(".seg button.on")].map((b) => b.textContent);
+  const on = [...menu().querySelectorAll("[data-appearance].on")].map((b) => b.textContent);
   expect(on).toEqual(["Dark"]);
+});
+
+// The window has no menu bar to pick an input strategy from, so it is here.
+test("the keys are read another way the moment one is chosen, and it is marked", async () => {
+  toggle.click();
+  await settle();
+  const on = (): (string | null)[] =>
+    [...menu().querySelectorAll("[data-input].on")].map((b) => b.textContent);
+  expect(on()).toEqual(["Default"]);
+
+  menu().querySelector<HTMLButtonElement>('[data-input="vim-style"]')!.click();
+
+  expect(asked.said.at(-1)).toBe("input vim-style");
+  expect(on()).toEqual(["Vim-style"]);
+  expect(menu().hidden).toBe(false);
 });
 
 test("a chip shows each theme's colours in the mode worn now", async () => {
@@ -204,7 +229,7 @@ test("the arrows walk the items, round the ends", async () => {
     menu().dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
   };
   key("ArrowUp");
-  expect(document.activeElement?.textContent).toBe("Dark");
+  expect(document.activeElement?.textContent).toBe("Vim-style");
   key("ArrowDown");
   expect(document.activeElement?.textContent).toContain("ACME exports");
   key("ArrowDown");

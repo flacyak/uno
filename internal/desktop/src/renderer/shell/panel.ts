@@ -1,5 +1,5 @@
-// The panel's column: the three sections of `Sources` drawn as one list beside
-// the grid, a filter over all of them, the keys that walk it, and underneath,
+// The panel's column: its head, the three sections of `Sources` drawn as one
+// list beside the grid, a filter over all of them, the keys that walk it, and underneath,
 // the front of the file picked and the buttons that add what is picked: a tab
 // each, or one tab reading them all, with how they are read chosen beside it.
 //
@@ -212,7 +212,13 @@ export class Panel {
         void this.sources.open(connectionLine(saved)).then(() => this.reveal());
     });
 
-    root.append(form, this.list, this.peek, this.foot, this.connecting.el);
+    // The head every column of the window begins with, which is also what
+    // keeps the filter out from under the × at the window's top right.
+    const head = document.createElement("div");
+    head.className = "panel-head col-head";
+    head.textContent = "Sources";
+
+    root.append(head, form, this.list, this.peek, this.foot, this.connecting.el);
   }
 
   /**

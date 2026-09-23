@@ -1,5 +1,5 @@
-// The renderer's entry: the page's base styles, the shell, and the menu wired to
-// it. What loads from here is what the empty window needs; the grid comes with
+// The renderer's entry: the page's base styles, the shell, and the menu's keys
+// wired to it. What loads from here is what the empty window needs; the grid comes with
 // the first file (see shell/shell.ts).
 
 import "./base.css";
@@ -41,6 +41,8 @@ if (bridge === undefined) {
   menu?.onOpenPath((path) => void shell.openPath(path));
   menu?.onAddPaths((paths) => void shell.addPaths(paths));
   menu?.onInput((name) => shell.setInput(name));
+  // Settings changes how keys are read too, and the menu's check follows it.
+  shell.onInput = (name) => menu?.inputChosen(name);
   menu?.inputChosen(shell.inputName);
 
   document.querySelector("#open")?.addEventListener("click", () => void shell.open());

@@ -3,6 +3,12 @@
 
 import type { Check } from "./check.ts";
 
+/**
+ * A row of the fixture far enough down that no window is tall enough to show
+ * it from the top of the file, so zb and zz have room to place it.
+ */
+const DEEP_ROW = 2000;
+
 export const VIM_STYLE: Check[] = [
   {
     name: "Edit → Input → Vim-style reads keys the vim way, and is kept",
@@ -154,19 +160,23 @@ export const VIM_STYLE: Check[] = [
     name: "zt, zb and zz scroll the row into place, and H, L and M find it there",
     script: `
       const row = () => Number(text("#status-cell").split("row ")[1].replace(/,/g, ""));
+      const DEEP_ROW = ${DEEP_ROW};
       // Sent without waiting a frame between keys. The grid lays out as each key
       // lands, and the recogniser's banner comes and goes as offers arrive: one
       // arriving between zb and L would move the rows under L.
       const grid = document.querySelector("#content");
       const key = (k) => grid.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
 
-      // 30G left row 29 one above the bottom of the screen, far from its top.
+      // A row with more rows above it than any window shows, so it can be put
+      // at the bottom of the screen and in its middle however tall the window is.
+      for (const k of String(DEEP_ROW) + "G") key(k);
+      if (row() !== DEEP_ROW) return DEEP_ROW + "G went to row " + row();
       for (const [scroll, find] of [["t", "H"], ["b", "L"], ["z", "M"]]) {
         key("z");
         key(scroll);
-        if (row() !== 29) return "z" + scroll + " moved the selection to row " + row();
+        if (row() !== DEEP_ROW) return "z" + scroll + " moved the selection to row " + row();
         key(find);
-        if (row() !== 29) return "z" + scroll + " then " + find + " went to row " + row();
+        if (row() !== DEEP_ROW) return "z" + scroll + " then " + find + " went to row " + row();
       }
 
       key("H");
@@ -413,7 +423,8 @@ export const VIM_STYLE: Check[] = [
     `,
   },
   {
-    // A check that fails here opens the file dialog instead, and the run times out.
+    // A check that fails here opens the run's second export in the fixture's
+    // place, and every check after it says so.
     name: "Ctrl+O over unsaved edits says so, and opens nothing",
     send: ["menu:open"],
     script: `
