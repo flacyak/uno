@@ -68,11 +68,20 @@ export function s3Location(url: string): S3Location | undefined {
     return undefined;
   }
   if (u.protocol !== "https:") return undefined;
-  const path = decodeURIComponent(u.pathname.slice(1));
+  // The path stays as it was pasted until a branch below knows what part of it
+  // is the bucket and what part is the key, because where the bucket ends is a
+  // question about the raw path: a %2F inside a bucket name is not the slash
+  // that separates it from the key, and decoding first would make it look like
+  // one. Decoding is per part, once the split has already happened.
+  const path = u.pathname.slice(1);
 
   // bucket.s3.amazonaws.com, bucket.s3.us-west-2.amazonaws.com, bucket.s3-us-west-2.amazonaws.com
   const virtual = /^(.+)\.s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$/.exec(u.hostname);
-  if (virtual !== null) return path === "" ? undefined : { bucket: virtual[1]!, key: path };
+  if (virtual !== null) {
+    if (path === "") return undefined;
+    const key = decoded(path);
+    return key === undefined ? undefined : { bucket: virtual[1]!, key };
+  }
 
   // s3.amazonaws.com/bucket/key, s3.us-west-2.amazonaws.com/bucket/key
   if (
@@ -81,9 +90,32 @@ export function s3Location(url: string): S3Location | undefined {
   ) {
     const slash = path.indexOf("/");
     if (slash <= 0 || slash === path.length - 1) return undefined;
-    return { bucket: path.slice(0, slash), key: path.slice(slash + 1) };
+    const bucket = decoded(path.slice(0, slash));
+    const key = decoded(path.slice(slash + 1));
+    if (bucket === undefined || key === undefined) return undefined;
+    return { bucket, key };
   }
   return undefined;
+}
+
+/**
+ * decoded undoes the %XX escaping of one part of an https URL, and answers
+ * undefined when that part is not escaping uno can read.
+ *
+ * A key is allowed to hold a per cent sign, and a browser shows one that was
+ * never escaped -- `100%.csv` -- so a pasted address is quite often not valid
+ * escaping at all. decodeURIComponent raises URIError for those, and this is
+ * reached from handles(), which is asked about every source in a workspace
+ * before one of them is opened. A throw there is not a bad S3 URL, it is no
+ * handler chosen for any source at all, local files included. So an address
+ * uno cannot read is simply not an address uno claims.
+ */
+function decoded(part: string): string | undefined {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return undefined;
+  }
 }
 
 /** s3Url is the one form a .uno writes down, whichever form was pasted. */
@@ -155,6 +187,16 @@ export function s3Files(opts: S3Options): FileHandler {
       const loc = "path" in ref ? s3Location(ref.path) : undefined;
       if (loc === undefined) throw new Error(`${ref.name}: not an object in S3`);
       const url = s3Url(loc);
+      // Refused here, before a single request goes out, because the request
+      // would be the wrong one and nothing downstream could tell.
+      const dot = dotSegment(loc.key);
+      if (dot !== undefined) {
+        throw new Error(
+          `${url}: uno cannot address a key with a ${dot} segment in it · S3 can hold one, ` +
+            `but every URL on the way to it resolves the segment away, so the object that ` +
+            `came back would be a different one · copy it to a key without ${dot} in a segment`,
+        );
+      }
 
       const head = await request(loc, "HEAD", {});
       if (!head.ok) throw new Error(`${url}: ${refusal(head.status)}`);
@@ -198,6 +240,30 @@ function refusal(status: number): string {
     default:
       return `S3 answered ${status}`;
   }
+}
+
+/**
+ * dotSegment answers with the `.` or `..` segment a key carries, when it
+ * carries one, so it can be named in the refusal.
+ *
+ * A key is any UTF-8 string, so `2025/quarterly/../sales-q3.csv` is a perfectly
+ * ordinary name for an object and S3 will serve it. A URL is not a key though.
+ * The WHATWG URL parser resolves dot segments while it parses, so `new URL` has
+ * already turned that path into `2025/sales-q3.csv` by the time anything here
+ * signs it -- and because the signature is then taken over the collapsed path,
+ * S3 agrees with it and answers 200. There is no 403 to notice, just the wrong
+ * object presented as the right one, which is the worst shape a bug can take in
+ * something people read numbers out of.
+ *
+ * It cannot be spelled around. The URL spec matches `%2e` as a dot when it
+ * looks for these segments, so `%2E%2E` collapses the same way, and `new
+ * Request("https://h/a/../b").url` collapses too -- so fetch cannot be handed a
+ * path it will leave alone either. Only a transport that writes the request
+ * line itself could ask for such a key, and one more transport is a great deal
+ * to carry for a key nobody meant to create. uno refuses instead, and says so.
+ */
+function dotSegment(key: string): string | undefined {
+  return key.split("/").find((segment) => /^(?:\.|%2e){1,2}$/i.test(segment));
 }
 
 function objectUrl(loc: S3Location, region: string, endpoint: string | undefined): URL {
