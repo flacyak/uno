@@ -11,7 +11,7 @@
  * View.
  */
 
-import { Cause, Effect, Exit } from 'effect';
+import { Effect } from 'effect';
 
 import {
   isAbsolute,
@@ -198,24 +198,28 @@ export class Workspace {
 
   /**
    * open adds a file to the workspace and returns what it opened. A .uno
-   * opens every source it holds, and only into an empty workspace. Aborting
-   * `signal` refuses an open still in flight as cancelled.
+   * opens every source it holds, and only into an empty workspace.
+   *
+   * The engine's edge runs it with a cancel as its interruption. The open
+   * honours one as its turn begins and while the view waits for its sample
+   * rows; a cancel at any other point is left unheard, and the open is
+   * answered.
    */
-  open(ref: SourceRef, signal?: AbortSignal): Promise<Opening> {
-    return this.serially(async () => {
-      if (signal?.aborted)
-        throw new Refusal({ t: 'cancelled', name: ref.name });
-      // A .uno open honours a cancel only before its turn, since the shell
-      // never lists one as opening.
-      if (isWorkspace(ref)) return this.openWorkspace(ref);
-      const id = sourceId(ref.name, this.sources.keys());
-      const opening = this.view(id, ref, undefined, false);
-      const view =
-        signal === undefined
-          ? await Effect.runPromise(opening)
-          : await cancellable(opening, signal, ref.name);
-      return { opened: [this.keep(view)], showing: id };
-    });
+  open(ref: SourceRef): Effect.Effect<Opening, unknown> {
+    return this.turn(
+      Effect.gen({ self: this }, function* () {
+        // A cancel that arrived while the open waited for its turn lands
+        // here, before anything is opened. A .uno open can be cancelled here
+        // alone, since the shell never lists one as opening.
+        yield* Effect.interruptible(Effect.void);
+        if (isWorkspace(ref)) {
+          return yield* awaited(() => this.openWorkspace(ref));
+        }
+        const id = sourceId(ref.name, this.sources.keys());
+        const view = yield* this.view(id, ref, undefined, false);
+        return { opened: [this.keep(view)], showing: id };
+      }),
+    );
   }
 
   /**
@@ -776,30 +780,6 @@ export class Workspace {
   private serially<T>(fn: () => Promise<T>): Promise<T> {
     return Effect.runPromise(this.turn(awaited(fn)));
   }
-}
-
-/**
- * cancellable runs an open with `signal`'s abort reaching it as an
- * interruption, and turns an interrupted open back into the refusal the
- * client expects. The open is run uninterruptible, so a cancel lands only
- * where the open lets it.
- */
-async function cancellable<A>(
-  open: Effect.Effect<A, unknown>,
-  signal: AbortSignal,
-  name: string,
-): Promise<A> {
-  const exit = await Effect.runPromiseExit(open, {
-    signal,
-    uninterruptible: true,
-  });
-  if (Exit.isFailure(exit)) {
-    if (Cause.hasInterrupts(exit.cause)) {
-      throw new Refusal({ t: 'cancelled', name });
-    }
-    throw Cause.squash(exit.cause);
-  }
-  return exit.value;
 }
 
 /** pathsOf returns every address a .uno source reads from. A carried source has none. */
