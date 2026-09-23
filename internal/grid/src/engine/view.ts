@@ -9,7 +9,7 @@
 
 import type { HeldPart } from "../document/index.ts";
 import { trimSpace } from "../go/index.ts";
-import { openFormat } from "../ingest/index.ts";
+import { headerOf, openFormat } from "../ingest/index.ts";
 import type { Format } from "../ingest/index.ts";
 import { isNumber } from "../num/index.ts";
 import { MIN_EXAMPLES, Survey, gather } from "../pattern/index.ts";
@@ -27,7 +27,7 @@ import {
 } from "../sheet/index.ts";
 import type { Edit, Written } from "../sheet/index.ts";
 import { isRemote, multiOf } from "../store/index.ts";
-import type { ByteSource, HeaderMode, PartsRef } from "../store/index.ts";
+import type { ByteSource, HeaderMode, PartMap, PartsRef } from "../store/index.ts";
 import { indexPass } from "./pass.ts";
 import type {
   Changed,
@@ -54,7 +54,36 @@ const PROGRESS_MS = 100;
 /** How long a pass computes before it lets a waiting request through. */
 const SLICE_MS = 8;
 
+/**
+ * What the column saying which file each row came from is headed, in a source
+ * of several files that asked for one.
+ */
+export const FILE_COLUMN = "_file";
+
+/** What that column shows, as the end of a sentence refusing an edit to it. */
+const FILE_SHOWS = "which file each row came from";
+
 type Waiter = () => boolean;
+
+/** Run is a run of a block's rows that came from one part. */
+interface Run {
+  /** The first row of the run, counting from 0 at the block's first. */
+  row: number;
+  /** Which part, counting from 0. */
+  part: number;
+}
+
+/**
+ * Crossing is the runs of a block that holds rows of more than one part,
+ * kept because finding them reads the block's bytes a second time. It is
+ * good for the bytes and the map it was found in, and found again for others.
+ */
+interface Crossing {
+  map: PartMap;
+  start: number;
+  end: number;
+  runs: Run[];
+}
 
 /** A source as a .uno left it: its part of the log, and its bytes where the
  * workspace carried them rather than pointing at the file. */
@@ -94,6 +123,7 @@ export interface FilePart extends Kept {
 
   parts?: never;
   header?: never;
+  fileColumn?: never;
 }
 
 /** What a save writes of several files read as one: where each part is, which
@@ -101,6 +131,8 @@ export interface FilePart extends Kept {
 export interface JoinedPart extends Kept {
   parts: HeldPart[];
   header: HeaderMode;
+  /** Whether it shows a `_file` column. Left out where it does not. */
+  fileColumn?: boolean;
 
   raw?: never;
   path?: never;
@@ -135,6 +167,10 @@ export class View {
    */
   parts: PartsRef | undefined;
 
+  /** Where the parts change in each block read so far that more than one has
+   * rows in. */
+  private readonly crossings = new Map<number, Crossing>();
+
   private transform = false;
   private survey: AbortController | undefined;
   /** The find running now. A newer one stops it. */
@@ -164,7 +200,8 @@ export class View {
    * `source` from here on, and closes it if the open fails. `telemetry` is
    * told how long the index took once it has finished. `header` says whether
    * the first line names the columns, which it does unless the source was
-   * added as having no header row.
+   * added as having no header row. `parts` is the files `source` joins, for
+   * several read as one, and says whether they are shown a `_file` column.
    */
   static async open(
     id: string,
@@ -176,9 +213,11 @@ export class View {
     tuning: Tuning,
     telemetry: Telemetry = unmeasured,
     header: HeaderMode = "first",
+    parts?: PartsRef,
   ): Promise<View> {
     const v = new View(id, name, path, port);
     v.carried = carried?.raw;
+    v.parts = parts;
 
     // What to blame in an error: the .uno a source came out of, where there is
     // one. A file opened on its own, or picked to replace a source that lost
@@ -198,7 +237,7 @@ export class View {
     v.format = format;
     v.index = new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
-    v.schema = new Schema(format.columns, 0);
+    v.schema = schemaOf(format, parts);
 
     let told = 0;
     let started = false;
@@ -296,14 +335,15 @@ export class View {
     count: number,
   ): Promise<{ generation: number; rows: string[][]; raws: Array<string[] | null> }> {
     const source = await this.pages.rows(first, count);
+    const files = await this.files(Math.max(0, first), source.length);
     const schema = this.schema;
     const generation = this.generation;
 
-    if (schema.empty) return { generation, rows: source, raws: [] };
+    if (schema.empty && files === undefined) return { generation, rows: source, raws: [] };
 
     const rows: string[][] = [];
     const raws: Array<string[] | null> = [];
-    for (const f of finishRows(schema, first, source)) {
+    for (const f of finishRows(schema, first, source, files)) {
       rows.push(f.shown as string[]);
       raws.push(f.shown === f.raw ? null : (f.raw as string[]));
     }
@@ -313,14 +353,86 @@ export class View {
   /** columns names each column from the sample, as the log now leaves it. */
   private async columns(): Promise<ColumnInfo[]> {
     const source = await this.pages.rows(0, SAMPLE_ROWS);
+    const files = await this.files(0, source.length);
     const schema = this.schema;
-    const shown = finishRows(schema, 0, source).map((f) => f.shown);
+    const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
 
     return schema.headers.map((header, col) => {
       const { kind, flagged } = inferKind(shown.length, (row) => shown[row]![col] ?? "");
       const binding = schema.binding(col);
       return binding === undefined ? { header, kind, flagged } : { header, kind, flagged, binding };
     });
+  }
+
+  /**
+   * files is the `_file` cell of each of `count` readable rows from `first`:
+   * the name of the part the row's first byte is in. Undefined for a source
+   * that shows no such column.
+   *
+   * It is asked of the parts and the map as they are when the rows are read,
+   * and no cell of it is kept.
+   */
+  private async files(first: number, count: number): Promise<string[] | undefined> {
+    if (this.schema.supplied === undefined) return undefined;
+    const ref = this.parts;
+    const multi = multiOf(this.source);
+    if (ref === undefined || multi === undefined) {
+      throw new Error(
+        `${this.name} is read as one by something that does not say how its files join, so it cannot show ${FILE_SHOWS}`,
+      );
+    }
+
+    const names: string[] = [];
+    const end = first + count;
+    for (let row = first; row < end;) {
+      const block = this.index.blockOf(row);
+      const [from, to] = this.index.rowsOf(block);
+      const runs = await this.runsIn(block, multi.map);
+      for (let run = 0; row < Math.min(to, end); row++) {
+        while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
+        names.push(ref.parts[runs[run]!.part]?.ref.name ?? "");
+      }
+    }
+    return names;
+  }
+
+  /**
+   * runsIn says which part each row of a block came from, as runs of rows.
+   *
+   * Nearly every block lies inside one part, and where it starts says which
+   * with nothing read. A block that holds a boundary is read again as far as
+   * its last part and scanned for where its rows start, since the index keeps
+   * an offset for a block and none for a row.
+   */
+  private async runsIn(block: number, map: PartMap): Promise<Run[]> {
+    const [start, end] = this.index.bytesOf(block);
+    const first = map.partAt(start);
+    const last = map.partAt(end - 1);
+    if (first === undefined || last === undefined) {
+      throw new Error(`${this.name}: its rows run past the files it is read from`);
+    }
+    if (first === last) return [{ row: 0, part: first }];
+
+    const known = this.crossings.get(block);
+    if (known !== undefined && known.map === map && known.start === start && known.end === end) {
+      return known.runs;
+    }
+
+    // Every row from the last part's first byte on is that part's, so only
+    // the rows before it are looked for.
+    const until = map.spans[last]!.start;
+    const runs: Run[] = [];
+    let row = 0;
+    const scanner = this.format.scanner((offset) => {
+      const part = map.partAt(offset)!;
+      if (runs.at(-1)?.part !== part) runs.push({ row, part });
+      row++;
+    });
+    scanner.push(await this.source.read(start, until - start), start);
+    runs.push({ row, part: last });
+
+    this.crossings.set(block, { map, start, end, runs });
+    return runs;
   }
 
   // ------------------------------------------------------------ changing
@@ -350,7 +462,8 @@ export class View {
       const edits = this.schema.edits();
       const last = edits.pop();
       if (last === undefined) throw new Error("there is nothing to undo");
-      this.schema = Schema.of(this.format.columns, this.schema.rows, edits);
+      const was = this.schema;
+      this.schema = Schema.of(was.headers, was.rows, edits, was.supplied);
       this.undone.push(last);
       return this.changed(last);
     });
@@ -577,11 +690,12 @@ export class View {
       const block = index.blockOf(row);
       const [from, end] = index.rowsOf(block);
       const records = await this.pages.records(block, false);
+      const files = await this.files(from, records.length);
       if (abort.signal.aborted) return { row: null, searched, complete: false };
 
       // The block is finished whole, so a bound column is computed once over it
       // rather than once for every row the search steps through.
-      const finished = finishRows(schema, from, records);
+      const finished = finishRows(schema, from, records, files);
       for (; down ? row < end : row >= from; row += req.dir) {
         searched++;
         if (matches(finished[row - from]!.shown[req.col] ?? "")) {
@@ -710,7 +824,9 @@ export class View {
    * carry one, and writing the others down without it would save a different
    * table from the one that is open.
    */
-  private async joined(ref: PartsRef): Promise<{ parts: HeldPart[]; header: HeaderMode }> {
+  private async joined(
+    ref: PartsRef,
+  ): Promise<{ parts: HeldPart[]; header: HeaderMode; fileColumn?: boolean }> {
     const count = ref.parts.length;
     const multi = multiOf(this.source);
     if (multi === undefined) {
@@ -748,6 +864,9 @@ export class View {
         };
       }),
       header: ref.header,
+      // The choice is part of what the source is. What the column shows is
+      // worked out from the parts again, so none of it is written.
+      fileColumn: ref.fileColumn === true ? true : undefined,
     };
   }
 
@@ -783,6 +902,23 @@ export class View {
     this.failed ??= err instanceof Error ? err : new Error(String(err));
     this.wake();
   }
+}
+
+/**
+ * schemaOf is the empty log of a source just opened, over the columns it
+ * shows: the file's, and after them a `_file` column where several files read
+ * as one asked for it.
+ *
+ * The column goes last, so every column the files have keeps the number an
+ * edit names it by. It is named as a header's columns are, each once: a file
+ * with a `_file` of its own keeps the name, and this one takes a suffix.
+ */
+function schemaOf(format: Format, parts: PartsRef | undefined): Schema {
+  if (parts?.fileColumn !== true) return new Schema(format.columns, 0);
+  return new Schema(headerOf([...format.columns, FILE_COLUMN]), 0, {
+    col: format.columns.length,
+    shows: FILE_SHOWS,
+  });
 }
 
 /** deepest is one past the last row a log names, and 0 for a log that names

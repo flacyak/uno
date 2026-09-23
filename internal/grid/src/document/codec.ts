@@ -171,6 +171,7 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
       };
     }),
     header: src.header,
+    fileColumn: src.fileColumn ? true : undefined,
     rows: src.rows,
     cols: src.cols,
     state,
@@ -346,6 +347,7 @@ function partsSource(src: HeldParts, at: string): PartsSource {
       unterminated: part.unterminated,
     })),
     header: src.header,
+    fileColumn: src.fileColumn === true,
     rows: src.rows,
     cols: src.cols,
   };
@@ -609,7 +611,11 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
     );
   }
-  return { ...base, parts, header };
+  const fileColumn = s["fileColumn"];
+  if (fileColumn !== undefined && typeof fileColumn !== "boolean") {
+    throw new Error(`${source}: fileColumn is neither true nor false`);
+  }
+  return { ...base, parts, header, fileColumn: fileColumn ?? false };
 }
 
 /**
@@ -757,6 +763,7 @@ function sourceJSON(s: Source): unknown {
       connection: s.connection === "" ? undefined : s.connection,
       parts: s.parts.map(partJSON),
       header: s.header,
+      fileColumn: s.fileColumn ? true : undefined,
       rows: s.rows,
       cols: s.cols,
     };
