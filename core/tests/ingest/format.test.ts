@@ -70,6 +70,12 @@ test("the byte order mark is not part of the first column's name", async () => {
 });
 
 // A header longer than PEEK is read in full.
+// One mark is the file's, and the decoder strips that one alone.
+test('a second byte order mark is a character of the header', async () => {
+  const f = await open('f.csv', '\uFEFF\uFEFFa,b\n1,2\n');
+  expect(f.columns).toEqual(['\uFEFFa', 'b']);
+});
+
 test('a header longer than the first read is still read whole', async () => {
   const names = Array.from({ length: 5000 }, (_, i) => `column number ${i}`);
   const header = names.join(',');
