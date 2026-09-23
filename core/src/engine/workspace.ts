@@ -757,18 +757,24 @@ export class Workspace {
   }
 
   /**
-   * serially runs `fn` as the next turn of the queue, and refuses it if the
+   * turn runs an effect as the next turn of the queue, and refuses it if the
    * workspace was closed by the time its turn came.
    */
-  private serially<T>(fn: () => Promise<T>): Promise<T> {
-    return Effect.runPromise(
-      this.turns.next(
-        awaited(async () => {
-          this.live();
-          return fn();
-        }),
+  private turn<A, E>(
+    effect: Effect.Effect<A, E>,
+  ): Effect.Effect<A, E | Refusal> {
+    return this.turns.next(
+      Effect.suspend((): Effect.Effect<A, E | Refusal> =>
+        this.closed
+          ? Effect.fail(new Refusal({ t: 'workspace-closed' }))
+          : effect,
       ),
     );
+  }
+
+  /** serially runs `fn` as the next turn of the queue. */
+  private serially<T>(fn: () => Promise<T>): Promise<T> {
+    return Effect.runPromise(this.turn(awaited(fn)));
   }
 }
 
