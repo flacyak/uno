@@ -143,8 +143,6 @@ export interface OpenAsk {
   header?: HeaderMode;
   /** Set for a source over several files. */
   parts?: PartsRef;
-  /** Aborted to cancel the open while it still waits for its sample rows. */
-  signal?: AbortSignal;
 }
 
 export class View {
@@ -208,8 +206,10 @@ export class View {
 
   /**
    * open detects the format, starts indexing, waits for the sample rows,
-   * replays any carried edits, and returns the view. Whatever ends the open
-   * short of a view closes it, which stops the index and closes the bytes.
+   * replays any carried edits, and returns the view. A cancel reaches it as
+   * an interruption, which lands at the wait for the sample rows. Whatever
+   * ends the open short of a view closes it, which stops the index and
+   * closes the bytes.
    */
   static open(ask: OpenAsk): Effect.Effect<View, unknown> {
     const v = new View(ask.id, ask.name, ask.path, ask.port, ask.began);
@@ -260,21 +260,6 @@ export class View {
     v.index = new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.schema = schemaOf(format, ask.parts);
-
-    // A cancel fails the wait below with its refusal, kept ahead of the
-    // close's own, and closes the view, which stops the index.
-    const signal = ask.signal;
-    const cancelled = (): void => {
-      v.fail(new Refusal({ t: 'cancelled', name }));
-      // A close that fails is reported by the open's own catch, which closes
-      // again and awaits it, so the listener's call must not surface it as
-      // an unhandled rejection.
-      v.close().catch(() => undefined);
-    };
-    // The file open and the format sniff take no signal, so an abort during
-    // them takes effect here, once they return.
-    if (signal?.aborted) cancelled();
-    else signal?.addEventListener('abort', cancelled, { once: true });
 
     let told = 0;
     let started = false;
@@ -330,14 +315,15 @@ export class View {
     });
 
     // Wait until the index covers the sample rows and the deepest row the
-    // carried edits name. Carried bytes wait for the whole index.
+    // carried edits name. Carried bytes wait for the whole index. The open
+    // is run uninterruptible, and this wait is the one step a cancel can
+    // interrupt: everything around it runs to its end.
     const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
     const whole = carried?.raw !== undefined;
-    yield* v.until(
-      () => index.complete || (!whole && index.readable() >= want),
+    yield* Effect.interruptible(
+      v.until(() => index.complete || (!whole && index.readable() >= want)),
     );
     // From here the open is answered, so a cancel is left unheard.
-    signal?.removeEventListener('abort', cancelled);
     started = true;
 
     if (carried !== undefined) {

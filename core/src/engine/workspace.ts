@@ -11,7 +11,7 @@
  * View.
  */
 
-import { Effect } from 'effect';
+import { Cause, Effect, Exit } from 'effect';
 
 import {
   isAbsolute,
@@ -503,9 +503,11 @@ export class Workspace {
       telemetry: this.telemetry,
       header: headerModeOf(ref),
       parts: 'parts' in ref ? ref : undefined,
-      signal,
     });
-    const view = await Effect.runPromise(opening);
+    const view =
+      signal === undefined
+        ? await Effect.runPromise(opening)
+        : await cancellable(opening, signal, ref.name);
     view.connection = this.through(ref);
     if ('parts' in ref) {
       view.opened.parts = ref.parts.map((part) => ({
@@ -758,6 +760,30 @@ export class Workspace {
       ),
     );
   }
+}
+
+/**
+ * cancellable runs an open with `signal`'s abort reaching it as an
+ * interruption, and turns an interrupted open back into the refusal the
+ * client expects. The open is run uninterruptible, so a cancel lands only
+ * where the open lets it.
+ */
+async function cancellable<A>(
+  open: Effect.Effect<A, unknown>,
+  signal: AbortSignal,
+  name: string,
+): Promise<A> {
+  const exit = await Effect.runPromiseExit(open, {
+    signal,
+    uninterruptible: true,
+  });
+  if (Exit.isFailure(exit)) {
+    if (Cause.hasInterrupts(exit.cause)) {
+      throw new Refusal({ t: 'cancelled', name });
+    }
+    throw Cause.squash(exit.cause);
+  }
+  return exit.value;
 }
 
 /** pathsOf returns every address a .uno source reads from. A carried source has none. */
