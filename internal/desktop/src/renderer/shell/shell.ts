@@ -16,6 +16,7 @@ import { NO_ROW } from "@uno/grid/sheet";
 
 import { covers } from "@uno/grid/library";
 import type { Connection } from "@uno/grid/library";
+import type { SingleRef } from "@uno/grid/store";
 import { s3Location } from "@uno/grid/store/s3";
 
 import type { Host } from "../../shared/host.ts";
@@ -127,11 +128,10 @@ export class Shell {
           const tab = this.tabAt(id);
           if (tab !== undefined) this.select(tab);
         },
-        add: (refs, one) => {
-          // One source reading several files is phase 4. Until then the
-          // button says what it would do and the shell says it cannot yet.
-          if (one) this.say("Add as one needs multi-file sources, which are not built yet", true);
-          else void this.addSources([...refs]);
+        add: (refs) => this.addSources([...refs]),
+        append: (id, files) => {
+          const tab = this.tabAt(id);
+          if (tab !== undefined) void this.append(tab, files);
         },
         reload: (id) => {
           const tab = this.tabAt(id);
@@ -199,9 +199,12 @@ export class Shell {
     this.wireKeys();
     // Coming back to the window is when a person has had the chance to change
     // something in a bucket, so it is when the buckets are asked.
+    // It is when a folder has had the chance to grow, too.
     window.addEventListener(
       "focus",
-      settled(NEWER_AFTER_MS, () => this.askNewer()),
+      settled(NEWER_AFTER_MS, async () => {
+        await Promise.all([this.askNewer(), this.sources.askGrown()]);
+      }),
     );
     this.paintStatus();
   }
@@ -369,23 +372,29 @@ export class Shell {
    * addSources puts files in the open workspace as sources, beside the ones
    * already there, and shows the last. With no workspace open the first file
    * opens one. A .uno is a workspace of its own, so it is refused by name.
+   * It answers whether every one of them opened.
    */
-  private async addSources(refs: SourceRef[]): Promise<void> {
+  private async addSources(refs: SourceRef[]): Promise<boolean> {
     const uno = refs.find(isWorkspace);
     if (uno !== undefined) {
       this.say(`${uno.name} is a workspace of its own · open it rather than adding it`, true);
-      return;
+      return false;
     }
 
     let rest = refs;
     if (this.workspace === undefined) {
       const [first, ...others] = refs;
-      if (first === undefined) return;
+      if (first === undefined) return false;
       await this.load(first, "");
       rest = others;
     }
     const w = this.workspace;
-    if (w === undefined || rest.length === 0) return;
+    if (w === undefined) return false;
+    if (rest.length === 0) {
+      // Files added as one may already have more beside them.
+      void this.sources.askGrown();
+      return true;
+    }
 
     let shown: Tab | undefined;
     const failed: string[] = [];
@@ -396,12 +405,14 @@ export class Shell {
         failed.push(message(err));
       }
     }
-    if (this.workspace !== w) return; // another open replaced it meanwhile
+    if (this.workspace !== w) return false; // another open replaced it meanwhile
 
     if (shown !== undefined) this.select(shown);
     else this.paintTabs();
     if (failed.length > 0) this.say(failed.join(" · "), true);
     else this.say(`added ${rest.map((r) => r.name).join(", ")}`);
+    void this.sources.askGrown();
+    return failed.length === 0;
   }
 
   /**
@@ -611,8 +622,8 @@ export class Shell {
   togglePanel(): void {
     this.panel.toggle();
     // A connection saved in another window, or put in the folder by hand, is
-    // listed the next time the panel opens.
-    if (this.panel.open) void this.refreshConnections();
+    // listed the next time the panel opens, and so is what a folder gained.
+    if (this.panel.open) this.refreshPanel();
     this.paintTabs();
     this.grid?.repaint();
   }
@@ -625,10 +636,17 @@ export class Shell {
   showPanel(): void {
     if (this.panel.open) {
       this.panel.show();
-      void this.refreshConnections();
+      this.refreshPanel();
       return;
     }
     this.togglePanel();
+  }
+
+  /** refreshPanel asks again for what the panel shows that it does not own:
+   * the connections, and the files each tab of several could append. */
+  private refreshPanel(): void {
+    void this.refreshConnections();
+    void this.sources.askGrown();
   }
 
   /**
@@ -744,6 +762,29 @@ export class Shell {
     } catch (err) {
       this.say(message(err), true);
     }
+  }
+
+  /**
+   * append adds the files a tab's folder has gained at its end, from the
+   * panel's offer. The rows extend and the edits stay on the cells they were
+   * made to; files that do not read the way the tab's first does are refused
+   * and the tab is left as it was.
+   */
+  private async append(tab: Tab, files: readonly SingleRef[]): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined) return;
+    try {
+      const fresh = await w.append(tab, files);
+      if (this.workspace !== w) return;
+      this.say(`appended ${files.map((f) => f.name).join(", ")} to ${fresh.name}`);
+      if (w.active === fresh) this.showActive();
+      else this.paintTabs();
+      this.paintStatus();
+    } catch (err) {
+      this.say(message(err), true);
+    }
+    // What was offered is appended, or was refused and may be offered again.
+    void this.sources.askGrown();
   }
 
   // ----------------------------------------------------------------- input
@@ -976,7 +1017,8 @@ export class Shell {
 
 /** isWorkspace says whether a file is a .uno, which opens as a workspace of its own. */
 function isWorkspace(ref: SourceRef): boolean {
-  return ref.name.toLowerCase().endsWith(".uno");
+  // Several files read as one are a source whatever they are called.
+  return !("parts" in ref) && ref.name.toLowerCase().endsWith(".uno");
 }
 
 /** refAt names a file by path the way a dialog would have. */
