@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
+    "effect": "^4.0.6",
     "fflate": "^0.8.2"
   },
   "devDependencies": {
