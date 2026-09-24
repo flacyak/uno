@@ -21,15 +21,21 @@
       <!-- The recogniser's question. Shown in transform, when it has one. -->
       <div class="banner" id="banner" hidden></div>
 
-      <div class="dropzone" id="empty">
-        <h1>Drop a spreadsheet</h1>
-        <p>or <a href="#" id="open">open one</a></p>
-        <p class="exts">csv &middot; tsv &middot; uno</p>
-      </div>
+      <!-- The grid, or the empty state, with the sources panel beside it on the
+           right while it is open. -->
+      <div class="win-body">
+        <div class="dropzone" id="empty">
+          <h1>Drop a spreadsheet</h1>
+          <p>or <a href="#" id="open">open one</a></p>
+          <p class="exts">csv &middot; tsv &middot; uno</p>
+        </div>
 
-      <!-- tabindex, because the grid listens for arrow keys here and a plain
-           div cannot take focus. -->
-      <div id="content" tabindex="0" hidden></div>
+        <!-- tabindex, because the grid listens for arrow keys here and a plain
+             div cannot take focus. -->
+        <div id="content" tabindex="0" hidden></div>
+
+        <aside id="panel" class="panel" hidden></aside>
+      </div>
 
       <div class="win-status">
         <span id="status-mode" class="mode"></span>

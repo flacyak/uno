@@ -171,6 +171,13 @@ function buildMenu(win: BrowserWindow): void {
           registerAccelerator: false,
           click: send("menu:mode"),
         },
+        // The same, for the same reason: the page binds the key.
+        {
+          label: "Sources",
+          accelerator: "CmdOrCtrl+Shift+B",
+          registerAccelerator: false,
+          click: send("menu:sources"),
+        },
         { type: "separator" },
         // No accelerator. The reload role binds Ctrl+R, which is redo whichever
         // way the grid reads keys, and a reload loses the open workspace.

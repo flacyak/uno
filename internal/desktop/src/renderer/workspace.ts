@@ -18,11 +18,13 @@ import type {
   Found,
   Link,
   Offer,
+  Peeked,
   SourceHandle,
   SourceRef,
 } from "@uno/grid/engine";
 import { NO_ROW, Op, editEquals } from "@uno/grid/sheet";
 import type { Edit } from "@uno/grid/sheet";
+import type { Listing } from "@uno/grid/store";
 
 import type { Cell, Rows } from "./grid/rows.ts";
 
@@ -229,6 +231,17 @@ export class Workspace {
     this.relinked.add(fresh.id);
     if (this.showing === tab) this.showing = fresh;
     return fresh;
+  }
+
+  /** list is one page of a folder or a prefix, asked of this workspace's
+   * engine. With peek, it makes a workspace the panel's `Listings`. */
+  list(path: string, cursor?: string): Promise<Listing> {
+    return this.engine.list(path, cursor);
+  }
+
+  /** peek is the front of a file, asked of this workspace's engine. */
+  peek(ref: SourceRef): Promise<Peeked> {
+    return this.engine.peek(ref);
   }
 
   /** The sources, in the order the strip shows them. */
