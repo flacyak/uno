@@ -57,6 +57,18 @@ export function serve(port: Port<Request, Reply>, sources: Sources, tuning: Tuni
         port.post({ t: "found", id: msg.id, found: await workspace.find(msg.source, msg.find) });
         return;
       }
+      // list and stat go to sources and never to workspace. Workspace runs
+      // everything that touches the log one at a time, and a save of a
+      // carried source holds that queue for as long as the bytes take -- a
+      // panel scrolling a folder must not wait behind it.
+      case "list": {
+        port.post({ t: "listed", id: msg.id, listing: await sources.list(msg.path, msg.cursor) });
+        return;
+      }
+      case "stat": {
+        port.post({ t: "statted", id: msg.id, entry: await sources.stat(msg.path) });
+        return;
+      }
       case "mode": {
         workspace.mode(msg.transform);
         return;
