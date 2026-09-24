@@ -287,6 +287,27 @@ function homeOf(env: Env): string {
 }
 
 /**
+ * What the credential chain can fail with, from any step: a profile's
+ * settings, its credential_process or SSO sign-in, the host's endpoints, the
+ * STS exchange, or the chain having nothing at all.
+ */
+export type ChainFailure =
+  | TokenFileMissing
+  | MfaRefused
+  | SourceLoop
+  | SourceNoWayIn
+  | CredentialSourceEmpty
+  | CredentialSourceUnknown
+  | NoSourceProfile
+  | ProcessFailure
+  | SsoSessionMissing
+  | SsoSettingMissing
+  | SsoFailure
+  | StsFailure
+  | ContainerFailure
+  | InstanceFailure;
+
+/**
  * profileSession signs in as one named profile the way the AWS CLI does,
  * when the profile offers one of the ways below, and returns undefined
  * otherwise.
