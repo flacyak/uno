@@ -355,10 +355,16 @@ The Vite plugin compiles the messages for the dev server, the renderer build and
 `scripts/messages.js` holds the compiler's options and compiles them for the Electron bundles and the check.
 The plugin that reads the JSON is loaded from `node_modules`, so a build fetches nothing.
 
-uno speaks English and Spanish.
-A language is one file: `messages/es.json` holds every message `messages/en.json` does, in Spanish.
+uno speaks American English, British English, Spanish, Brazilian Portuguese and European Portuguese.
+A language is one file: `messages/es.json` holds every message `messages/en-US.json` does, in Spanish.
 Adding another is copying the English file to the new locale's name, translating it, and adding the locale to `project.inlang/settings.json`.
-Settings lists it from there under the name it calls itself, and a system that prefers it starts in it.
+Settings lists it from there under the name it calls itself.
+
+A new install follows the system.
+The first of the system's languages uno has is the one it starts in: the language and region exactly, or failing that the same language in the first region listed, which is the one most of its speakers are in.
+So en-AU reads American English, pt reads Brazilian Portuguese, and es-MX reads Spanish.
+A system that prefers none of them gets American English.
+The two English files say the same today, and differ only where someone edits one.
 
 `messages/en-XA.json` is the pseudo-locale, written from the English by `scripts/pseudo.js` before every compile and not committed.
 Every letter in it wears an accent, every message is a third longer, and each sits in `⟦ ⟧`.

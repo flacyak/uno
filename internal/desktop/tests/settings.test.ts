@@ -215,7 +215,7 @@ test("a language is listed under the name it calls itself, marked as that langua
   await settle();
   languageItem(PSEUDO_LOCALE).click();
   // Still English under English, whatever the menu around it is in.
-  expect(languageItem(baseLocale).querySelector(".name")?.textContent).toBe("English");
+  expect(languageItem(baseLocale).querySelector(".name")?.textContent).toBe("American English");
   expect(languageItem(baseLocale).lang).toBe(baseLocale);
   expect(languageItem("system").lang).toBe("");
 });
