@@ -21,6 +21,7 @@ import type {
   SourceRef,
 } from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
+import type { Entry, Listing } from "../store/index.ts";
 
 interface Waiter<T> {
   resolve(value: T): void;
@@ -102,6 +103,26 @@ export class Engine {
     const r = await this.ask((id) => ({ t: "save", id, place, limit }));
     if (r.t !== "saved") throw new Error(`the engine answered a save with ${r.t}`);
     return r.bytes;
+  }
+
+  /**
+   * list answers one page of a folder or a prefix. It lives on Engine and not
+   * on SourceHandle because it is asked before there is a source: a panel
+   * browsing its way toward something to open, not a source already in the
+   * workspace.
+   */
+  async list(path: string, cursor?: string): Promise<Listing> {
+    const r = await this.ask((id) => ({ t: "list", id, path, cursor }));
+    if (r.t !== "listed") throw new Error(`the engine answered a list with ${r.t}`);
+    return r.listing;
+  }
+
+  /** stat answers the size and version of a path now, without opening it: the
+   * same reason as list, before there is a source to ask instead. */
+  async stat(path: string): Promise<Entry> {
+    const r = await this.ask((id) => ({ t: "stat", id, path }));
+    if (r.t !== "statted") throw new Error(`the engine answered a stat with ${r.t}`);
+    return r.entry;
   }
 
   /** close ends the connection. The worker behind it goes when its port does. */
