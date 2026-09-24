@@ -12,8 +12,15 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
 
 import { readContainer } from "../../src/document/index.ts";
-import { EMPTY_SHA256, s3Files, s3Location, s3Url, signV4 } from "../../src/store/s3.ts";
-import { awsCredentials, localFiles } from "../../src/store/node.ts";
+import {
+  EMPTY_SHA256,
+  s3Files,
+  s3Location,
+  s3Provider,
+  s3Url,
+  signV4,
+} from "../../src/store/s3.ts";
+import { awsCredentials, diskProvider } from "../../src/store/node.ts";
 import { bytes, connect, indexed, openOne, sales } from "../engine/harness.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { AWKWARD_KEYS, DOT_KEYS } from "./awkward.ts";
@@ -168,13 +175,13 @@ describe("a source in a bucket", () => {
   });
   afterAll(() => b.close());
 
-  const handlers = () => [
-    localFiles(),
-    s3Files({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint }),
+  const providers = () => [
+    diskProvider(),
+    s3Provider({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint }),
   ];
 
   test("opens as a view, read in ranges, and matches the file it is", async () => {
-    const { engine, done } = connect(undefined, handlers());
+    const { engine, done } = connect(undefined, providers());
     try {
       b.seen.length = 0;
       const src = await openOne(engine, {
@@ -201,7 +208,7 @@ describe("a source in a bucket", () => {
   // The bucket is in eu-west-1 and the credentials say us-east-1. S3 says so
   // once, and uno goes straight there after.
   test("follows the bucket to its region once", async () => {
-    const { engine, done } = connect(undefined, handlers());
+    const { engine, done } = connect(undefined, providers());
     try {
       b.seen.length = 0;
       await openOne(engine, { name: "sales-q3.csv", path: `s3://${BUCKET}/2025/sales-q3.csv` });
@@ -244,7 +251,7 @@ describe("a source in a bucket", () => {
     const dir = await mkdtemp(join(tmpdir(), "uno-s3-"));
     const url = `s3://${BUCKET}/2025/sales-q3.csv`;
 
-    const first = connect(undefined, handlers());
+    const first = connect(undefined, providers());
     let uno: Uint8Array;
     try {
       const src = await openOne(first.engine, { name: "sales-q3.csv", path: url });
@@ -260,7 +267,7 @@ describe("a source in a bucket", () => {
     expect(readContainer("q3.uno", uno).manifest.sources[0]!.path).toBe(url);
     await writeFile(join(dir, "q3.uno"), uno);
 
-    const second = connect(undefined, handlers());
+    const second = connect(undefined, providers());
     try {
       const src = await openOne(second.engine, { name: "q3.uno", path: join(dir, "q3.uno") });
       expect(src.opened.link).toEqual({ path: url });
@@ -274,7 +281,7 @@ describe("a source in a bucket", () => {
   // is still there, edits and all, and says what stopped it.
   test("an engine with no S3 keeps the source and says so", async () => {
     const dir = await mkdtemp(join(tmpdir(), "uno-s3-"));
-    const first = connect(undefined, handlers());
+    const first = connect(undefined, providers());
     let uno: Uint8Array;
     try {
       const src = await openOne(first.engine, {
