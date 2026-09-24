@@ -6,7 +6,7 @@
  * a fresh random length for every chunk, and offsets past 2^31 and 2^32.
  */
 
-import { describe, expect, test } from 'vite-plus/test';
+import { describe, expect, test, vi } from 'vite-plus/test';
 
 import { RecordScanner } from '@ingest/scan';
 import {
@@ -84,6 +84,15 @@ function expectEveryStart(
 
 const SEEDS = 4000;
 const MAX_TOKENS = 60;
+/**
+ * How long a sweep over SEEDS random texts may take. The two sweeps run in
+ * about 2.5 s and 1.5 s alone, and the first took over 5 s under the full
+ * parallel run, so the default 5 s failed the file now and then. The budget
+ * sits well above both, and is the file's, since the second sweep's header
+ * does not fit the line with an options object.
+ */
+const SWEEP_MS = 30_000;
+vi.setConfig({ testTimeout: SWEEP_MS });
 
 describe('every start state of a chunk scan matches RecordScanner', () => {
   test('on gnarly chunks, with every separator', () => {
