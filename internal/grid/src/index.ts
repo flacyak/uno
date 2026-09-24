@@ -16,3 +16,4 @@ export * as pattern from "./pattern/index.ts";
 export * as document from "./document/index.ts";
 export * as library from "./library/index.ts";
 export * as store from "./store/index.ts";
+export * as plugin from "./plugin/index.ts";

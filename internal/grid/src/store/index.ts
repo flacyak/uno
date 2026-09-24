@@ -3,12 +3,22 @@
 // Everything under src/ but this module works on bytes and strings, so it runs
 // unchanged in a browser. What a machine adds is somewhere files are, and every
 // file uno reads -- a source, a .uno, a formula in the library -- is opened
-// through a FileHandler. There is no second way in: a platform that has not
-// listed a handler for a kind of place cannot read from it, and says so by name.
+// through a FileHandler, and every place uno browses is browsed through a
+// Lister. There is no second way in: a platform that has not listed a handler
+// or a lister for a kind of place cannot reach it, and says so by name.
 
 import { compareStrings } from "../go/index.ts";
 import type { Formula } from "../library/index.ts";
 import { EXT, fileName, formatFormula, parseFormula } from "../library/index.ts";
+import { OPENS, claim } from "./claim.ts";
+// Type only, and one way on purpose: the plugin package composes what is here,
+// and nothing here reaches back into it at run time.
+import type { Provider } from "../plugin/index.ts";
+
+// Browsing is its own interface, in its own module, and belongs to the same
+// seam: a platform that lists no lister for a kind of place cannot browse it.
+export { listWith, statWith } from "./list.ts";
+export type { Entry, Listing, Lister } from "./list.ts";
 
 /**
  * FileStore is a folder uno keeps files of its own in: the formula library.
@@ -99,14 +109,12 @@ export function isRemote(path: string): boolean {
  * machine with S3 set up, opened on one without, has to say which kind of
  * place it cannot reach rather than "file not found".
  */
-export function openWith(handlers: readonly FileHandler[], ref: FileRef): Promise<ByteSource> {
-  const handler = handlers.find((h) => h.handles(ref));
-  if (handler === undefined) {
-    const where = "path" in ref ? ref.path : ref.name;
-    const kinds = handlers.map((h) => h.label).join(", ");
-    return Promise.reject(new Error(`${where}: nothing here opens it · this build reads ${kinds}`));
-  }
-  return handler.open(ref);
+export async function openWith(
+  handlers: readonly FileHandler[],
+  ref: FileRef,
+): Promise<ByteSource> {
+  const where = "path" in ref ? ref.path : ref.name;
+  return claim(handlers, where, (h) => h.handles(ref), OPENS).open(ref);
 }
 
 /**
@@ -140,6 +148,17 @@ export function blobFiles(): FileHandler {
         ? Promise.resolve(blobSource(ref.blob))
         : Promise.reject(new Error(`${ref.path}: not a dropped file`)),
   };
+}
+
+/**
+ * blobProvider is the dropped-file provider: a handler and nothing to browse.
+ *
+ * It is the case that proves `browse` is allowed to be missing. A Blob has no
+ * folder it came from and no path to name one with, so there is nothing here a
+ * person could look in.
+ */
+export function blobProvider(): Provider {
+  return { name: "blob", label: "dropped files", files: blobFiles() };
 }
 
 /** blobSource reads a Blob: a File a person dropped, or bytes a test holds. */

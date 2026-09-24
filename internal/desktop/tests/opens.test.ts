@@ -2,8 +2,8 @@
 //
 // Main writes saves and screenshots, and asks dialogs for paths. Every read --
 // a source, a .uno, an object in S3 -- happens in the engine, through the
-// FileHandlers that src/engine/index.ts lists. This fails the day something
-// here reaches for a file on its own.
+// providers that src/engine/index.ts lists. This fails the day something here
+// reaches for a file on its own.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -31,8 +31,12 @@ test("nothing in the desktop reads a file except through the engine's handlers",
   expect(found).toEqual([]);
 });
 
-test("the engine lists the handlers it opens with", () => {
+// What the desktop can reach is a list written here and nowhere else. It is
+// providers now rather than handlers, so browsing arrives with the same list
+// rather than a second one somebody has to remember to keep in step.
+test("the engine lists the providers it reaches through", () => {
   const entry = readFileSync(join(SRC, "engine/index.ts"), "utf8");
-  expect(entry).toMatch(/localFiles\(\)/);
-  expect(entry).toMatch(/s3Files\(/);
+  expect(entry).toMatch(/sources\(\[/);
+  expect(entry).toMatch(/diskProvider\(\)/);
+  expect(entry).toMatch(/s3Provider\(/);
 });
