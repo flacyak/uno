@@ -20,7 +20,7 @@
 // MessagePort. There is no mock engine here: `serve` is the same function
 // src/engine/index.ts hands its provider list to, and a disk provider reads
 // the same bytes off the same fixture path a real open would.
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +33,7 @@ import { connectionsIn, saveConnection } from "@uno/grid/store";
 import { diskProvider, nodeStore } from "@uno/grid/store/node";
 
 import type { Host } from "../../src/shared/host.ts";
+import { bodyMarkup } from "../markup.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -43,20 +44,6 @@ export const FIXTURE = join(HERE, "..", "..", "..", "grid", "tests", "testdata",
  * asked, mirroring index.ts's own FIRST_ROWS_MS and POLL_MS. */
 const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
-
-/**
- * Body markup, read from the real index.html and not retyped: a second copy
- * drifts from what Shell actually queries (`#app`, `#workspaces`, `#banner`,
- * `#empty`, `#content`, and the status bar's ids) without anyone noticing.
- */
-function bodyMarkup(): string {
-  const html = readFileSync(join(HERE, "..", "..", "index.html"), "utf8");
-  const open = html.indexOf("<body>") + "<body>".length;
-  const close = html.indexOf("</body>");
-  // The module script that boots main.ts is the one piece of the body this
-  // harness must not run -- see the file header on why.
-  return html.slice(open, close).replace(/<script[\s\S]*?<\/script>\s*/, "");
-}
 
 /**
  * Stands in for the row a real CSS engine would compute. happy-dom parses and
