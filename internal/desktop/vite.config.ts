@@ -1,7 +1,6 @@
-import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { defineConfig } from "vite-plus";
 
-import { MESSAGES } from "./scripts/messages.js";
+import { messagesPlugins } from "./scripts/messages.js";
 
 export default defineConfig({
   // The renderer is an ordinary web app: index.html at the package root, built
@@ -10,7 +9,7 @@ export default defineConfig({
   base: "./",
   // The app's text, compiled from messages/ before anything imports it, and
   // again when a message changes under the dev server.
-  plugins: [paraglideVitePlugin(MESSAGES)],
+  plugins: messagesPlugins(),
   build: {
     outDir: "out/renderer",
     emptyOutDir: true,
