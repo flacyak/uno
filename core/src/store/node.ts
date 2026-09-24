@@ -29,9 +29,10 @@ import {
   CONTAINER_HOST,
   IMDS_IPV4,
   IMDS_IPV6,
-  containerCredentials,
-  instanceCredentials,
+  askContainer,
+  askInstance,
 } from './metadata.ts';
+import type { ContainerFailure, InstanceFailure } from './metadata.ts';
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import {
   assumeRole,
@@ -387,7 +388,9 @@ async function hostSession(
       region,
     );
   }
-  const session = (await containerSession(env)) ?? (await instanceSession(env));
+  const session =
+    (await Effect.runPromise(containerSession(env))) ??
+    (await Effect.runPromise(instanceSession(env)));
   return session === undefined ? undefined : held(session, region);
 }
 
@@ -466,27 +469,31 @@ function webIdentitySession(
  * @param env the environment
  * @return the task's session, or undefined off a container
  */
-async function containerSession(env: Env): Promise<Session | undefined> {
-  const relative = envVar(env, 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI');
-  const url =
-    relative === undefined
-      ? envVar(env, 'AWS_CONTAINER_CREDENTIALS_FULL_URI')
-      : CONTAINER_HOST + relative;
-  if (url === undefined) return undefined;
-  const tokenFile = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE');
-  let authorization = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN');
-  if (tokenFile !== undefined) {
-    const text = await readText(tokenFile);
-    if (text === undefined) {
-      throw new TokenFileMissing({
-        named: 'the environment',
-        kind: 'container',
-        file: tokenFile,
-      });
+function containerSession(
+  env: Env,
+): Effect.Effect<Session | undefined, TokenFileMissing | ContainerFailure> {
+  return Effect.gen(function* () {
+    const relative = envVar(env, 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI');
+    const url =
+      relative === undefined
+        ? envVar(env, 'AWS_CONTAINER_CREDENTIALS_FULL_URI')
+        : CONTAINER_HOST + relative;
+    if (url === undefined) return undefined;
+    const tokenFile = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE');
+    let authorization = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN');
+    if (tokenFile !== undefined) {
+      const text = yield* Effect.promise(() => readText(tokenFile));
+      if (text === undefined) {
+        return yield* new TokenFileMissing({
+          named: 'the environment',
+          kind: 'container',
+          file: tokenFile,
+        });
+      }
+      authorization = text.trim();
     }
-    authorization = text.trim();
-  }
-  return containerCredentials(url, authorization);
+    return yield* askContainer(url, authorization);
+  });
 }
 
 /**
@@ -496,15 +503,17 @@ async function containerSession(env: Env): Promise<Session | undefined> {
  * @param env the environment
  * @return the instance's session, or undefined
  */
-function instanceSession(env: Env): Promise<Session | undefined> {
+function instanceSession(
+  env: Env,
+): Effect.Effect<Session | undefined, InstanceFailure> {
   if (env['AWS_EC2_METADATA_DISABLED']?.toLowerCase() === 'true')
-    return Promise.resolve(undefined);
+    return Effect.succeed(undefined);
   const ipv6 =
     env['AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE']?.toLowerCase() === 'ipv6';
   const endpoint =
     envVar(env, 'AWS_EC2_METADATA_SERVICE_ENDPOINT') ??
     (ipv6 ? IMDS_IPV6 : IMDS_IPV4);
-  return instanceCredentials(endpoint);
+  return askInstance(endpoint);
 }
 
 /**
@@ -692,7 +701,7 @@ async function roleSession(
     }
     source = found;
   } else if (credentialSource === 'Ec2InstanceMetadata') {
-    const session = await instanceSession(env);
+    const session = await Effect.runPromise(instanceSession(env));
     if (session === undefined) {
       throw new Error(
         `the AWS profile ${profile} takes its credentials from the instance it runs on, and no instance metadata service with a role answered`,
@@ -700,7 +709,7 @@ async function roleSession(
     }
     source = session;
   } else if (credentialSource === 'EcsContainer') {
-    const session = await containerSession(env);
+    const session = await Effect.runPromise(containerSession(env));
     if (session === undefined) {
       throw new Error(
         `the AWS profile ${profile} takes its credentials from its container, and the environment names no container endpoint`,
