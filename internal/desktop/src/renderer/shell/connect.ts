@@ -16,7 +16,7 @@ import type { Connection } from "@uno/grid/library";
 import { validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
-import { num } from "../locale.ts";
+import { m } from "../../paraglide/messages.js";
 
 /** What the form needs of the engine and the host. The shell decides how. */
 export interface ConnectAsks {
@@ -96,10 +96,15 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
 
 /** triedLine is what a test that worked says: the folder, and what it held. */
 export function triedLine(tried: Tried): string {
-  const where = tried.connection.prefix === "" ? "the bucket" : tried.connection.prefix;
-  const count = (n: number, one: string): string => `${num(n)} ${one}${n === 1 ? "" : "s"}`;
-  const more = tried.more ? ", and more" : "";
-  return `listed ${where} · ${count(tried.folders, "folder")}, ${count(tried.files, "file")}${more}`;
+  const held = {
+    folders: m.folders_count({ count: tried.folders }),
+    files: m.files_count({ count: tried.files }),
+  };
+  const found = tried.more ? m.connect_found_more(held) : m.connect_found(held);
+  const prefix = tried.connection.prefix;
+  return prefix === ""
+    ? m.connect_listed_bucket({ found })
+    : m.connect_listed_prefix({ prefix, found });
 }
 
 /** Where the form is: waiting to be tried, trying, tried and fine, or refused. */

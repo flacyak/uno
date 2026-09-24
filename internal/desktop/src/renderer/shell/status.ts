@@ -10,6 +10,7 @@
 
 import "./status.css";
 
+import { m } from "../../paraglide/messages.js";
 import type { Grid } from "../grid/index.ts";
 import type { InputStrategy } from "../input/index.ts";
 import type { Lead } from "../keys.ts";
@@ -117,7 +118,7 @@ export class StatusBar {
     }
     const { row, col } = grid.selection();
     const header = w.rows.columns[col]?.header ?? "";
-    this.cell.textContent = `${header} · row ${num(row + 1)}`;
+    this.cell.textContent = `${header} · ${m.status_row({ row: num(row + 1) })}`;
   }
 
   /** switches draws the mode switch as the workspace has it, and each column's
@@ -132,7 +133,7 @@ export class StatusBar {
     }
 
     this.side.classList.toggle("on", open.sidebar);
-    this.side.title = `${open.sidebar ? "Close" : "Open"} the sidebar · Ctrl+B`;
+    this.side.title = open.sidebar ? m.sidebar_close_hint() : m.sidebar_open_hint();
     this.side.setAttribute("aria-label", "Sidebar");
     this.side.setAttribute("aria-pressed", String(open.sidebar));
 
