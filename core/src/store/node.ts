@@ -16,7 +16,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { Data } from 'effect';
+import { Data, Effect } from 'effect';
 
 import { compareStrings, parseTime } from '@go';
 import type { AuthMode, Connection } from '@library';
@@ -35,11 +35,11 @@ import {
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import {
   assumeRole,
-  assumeRoleWithWebIdentity,
   signInAgain,
   ssoRoleCredentials,
+  webIdentityExchange,
 } from './sts.ts';
-import type { Session } from './sts.ts';
+import type { Session, StsFailure } from './sts.ts';
 import { unreachable } from '@never';
 
 /**
@@ -382,7 +382,10 @@ async function hostSession(
       sessionName: envVar(env, 'AWS_ROLE_SESSION_NAME'),
       region,
     };
-    return held(await webIdentitySession(env, ask, 'the environment'), region);
+    return held(
+      await Effect.runPromise(webIdentitySession(env, ask, 'the environment')),
+      region,
+    );
   }
   const session = (await containerSession(env)) ?? (await instanceSession(env));
   return session === undefined ? undefined : held(session, region);
@@ -429,29 +432,31 @@ interface WebIdentityFile {
  * @param named who names the file, for an error
  * @return the role's session
  */
-async function webIdentitySession(
+function webIdentitySession(
   env: Env,
   ask: WebIdentityFile,
   named: string,
-): Promise<Session> {
-  const token = await readText(ask.tokenFile);
-  if (token === undefined) {
-    throw new TokenFileMissing({
-      named,
-      kind: 'web identity',
-      file: ask.tokenFile,
-    });
-  }
-  return assumeRoleWithWebIdentity(
-    {
-      roleArn: ask.roleArn,
-      sessionName: ask.sessionName ?? `uno-${Date.now()}`,
-      token: token.trim(),
-      durationSeconds: ask.durationSeconds,
-      region: ask.region,
-    },
-    { endpoint: env['AWS_ENDPOINT_URL_STS'] },
-  );
+): Effect.Effect<Session, TokenFileMissing | StsFailure> {
+  return Effect.gen(function* () {
+    const token = yield* Effect.promise(() => readText(ask.tokenFile));
+    if (token === undefined) {
+      return yield* new TokenFileMissing({
+        named,
+        kind: 'web identity',
+        file: ask.tokenFile,
+      });
+    }
+    return yield* webIdentityExchange(
+      {
+        roleArn: ask.roleArn,
+        sessionName: ask.sessionName ?? `uno-${Date.now()}`,
+        token: token.trim(),
+        durationSeconds: ask.durationSeconds,
+        region: ask.region,
+      },
+      { endpoint: env['AWS_ENDPOINT_URL_STS'] },
+    );
+  });
 }
 
 /**
@@ -652,7 +657,9 @@ async function roleSession(
       durationSeconds: duration === undefined ? undefined : Number(duration),
       region: regionOf(env, files, profile),
     };
-    return webIdentitySession(env, ask, `the AWS profile ${profile}`);
+    return Effect.runPromise(
+      webIdentitySession(env, ask, `the AWS profile ${profile}`),
+    );
   }
 
   let source: Omit<AwsCredentials, 'region'>;
