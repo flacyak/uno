@@ -37,6 +37,7 @@ import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import {
   NotSignedIn,
   assumeRole,
+  roleExchange,
   ssoExchange,
   webIdentityExchange,
 } from './sts.ts';
@@ -341,8 +342,13 @@ function profileSession(
     if (roleArn !== undefined) {
       const setting = (key: string): string | undefined =>
         fromConfig?.get(key) ?? p?.get(key);
-      const session = yield* Effect.promise(() =>
-        roleSession(env, files, profile, roleArn, setting, through),
+      const session = yield* roleSession(
+        env,
+        files,
+        profile,
+        roleArn,
+        setting,
+        through,
       );
       return held(session, region, as);
     }
@@ -922,54 +928,57 @@ function fromCredentialSource(
  * @param through the profiles already on the chain
  * @return the role's session
  */
-async function roleSession(
+function roleSession(
   env: Env,
   files: AwsFiles,
   profile: string,
   roleArn: string,
   setting: (key: string) => string | undefined,
   through: readonly string[],
-): Promise<Session> {
-  const chain = [...through, profile];
-  if (setting('mfa_serial') !== undefined)
-    throw new MfaRefused({ profile, roleArn });
+): Effect.Effect<Session, ChainFailure> {
+  return Effect.gen(function* () {
+    const chain = [...through, profile];
+    if (setting('mfa_serial') !== undefined)
+      return yield* new MfaRefused({ profile, roleArn });
 
-  // A profile with a web identity token has no source: the token says who
-  // is asking.
-  const tokenFile = setting('web_identity_token_file');
-  if (tokenFile !== undefined) {
+    // A profile with a web identity token has no source: the token says who
+    // is asking.
+    const tokenFile = setting('web_identity_token_file');
+    if (tokenFile !== undefined) {
+      const duration = setting('duration_seconds');
+      const ask: WebIdentityFile = {
+        roleArn,
+        tokenFile,
+        sessionName: setting('role_session_name'),
+        durationSeconds: duration === undefined ? undefined : Number(duration),
+        region: regionOf(env, files, profile),
+      };
+      return yield* webIdentitySession(env, ask, `the AWS profile ${profile}`);
+    }
+
+    const sourceProfile = setting('source_profile');
+    const source =
+      sourceProfile === undefined
+        ? yield* fromCredentialSource(
+            env,
+            profile,
+            setting('credential_source'),
+          )
+        : yield* fromSourceProfile(env, files, profile, sourceProfile, chain);
+
     const duration = setting('duration_seconds');
-    const ask: WebIdentityFile = {
-      roleArn,
-      tokenFile,
-      sessionName: setting('role_session_name'),
-      durationSeconds: duration === undefined ? undefined : Number(duration),
-      region: regionOf(env, files, profile),
-    };
-    return Effect.runPromise(
-      webIdentitySession(env, ask, `the AWS profile ${profile}`),
+    return yield* roleExchange(
+      {
+        roleArn,
+        sessionName: setting('role_session_name') ?? `uno-${Date.now()}`,
+        externalId: setting('external_id'),
+        durationSeconds: duration === undefined ? undefined : Number(duration),
+        region: regionOf(env, files, profile),
+      },
+      source,
+      { endpoint: env['AWS_ENDPOINT_URL_STS'] },
     );
-  }
-
-  const sourceProfile = setting('source_profile');
-  const source = await Effect.runPromise(
-    sourceProfile === undefined
-      ? fromCredentialSource(env, profile, setting('credential_source'))
-      : fromSourceProfile(env, files, profile, sourceProfile, chain),
-  );
-
-  const duration = setting('duration_seconds');
-  return assumeRole(
-    {
-      roleArn,
-      sessionName: setting('role_session_name') ?? `uno-${Date.now()}`,
-      externalId: setting('external_id'),
-      durationSeconds: duration === undefined ? undefined : Number(duration),
-      region: regionOf(env, files, profile),
-    },
-    source,
-    { endpoint: env['AWS_ENDPOINT_URL_STS'] },
-  );
+  });
 }
 
 /**
