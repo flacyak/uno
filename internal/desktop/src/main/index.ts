@@ -303,6 +303,17 @@ void app.whenReady().then(async () => {
       : (await import("./preview.ts")).runPreview;
     const quit = (code: number): void => app.exit(code);
 
+    // Save As asks a dialog where to save, and a driven window can never answer
+    // one: it ignores the window system, so the modal stands until the deadline
+    // kills the app. The run is told where instead. The handler registered above
+    // is the app's and knows nothing about this; it is replaced here, in the one
+    // place that already knows what a test is. See smoke/save.ts.
+    const { savePathFor } = await import("./smoke/save.ts");
+    ipcMain.removeHandler("file:pick-save");
+    ipcMain.handle("file:pick-save", (_event, suggestedName: string) =>
+      savePathFor(process.env, suggestedName),
+    );
+
     win.webContents.once("did-finish-load", () => {
       void driven.then(
         () => run(win, quit),
