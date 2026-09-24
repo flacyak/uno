@@ -7,6 +7,10 @@
  * guard test in tests/store/opens.test.ts checks that. Every file read is in
  * store/node.ts, which reads the environment and a token file and passes
  * them in.
+ *
+ * An endpoint is asked as an Effect that fails with what it said. The
+ * function named for the endpoint's credentials runs it as a Promise, at
+ * the store's edge.
  */
 
 import { Data, Duration, Effect } from 'effect';
@@ -43,8 +47,8 @@ export interface HostOptions {
 }
 
 /**
- * instanceCredentials asks the instance metadata service for the keys of the
- * role the instance runs as. IMDSv2 is asked first; a service that turns the
+ * askInstance asks the instance metadata service for the keys of the role
+ * the instance runs as. IMDSv2 is asked first; a service that turns the
  * token request away is asked the v1 way. Undefined where nothing of the
  * kind answers, or the instance has no role, so the chain goes on to say
  * there are no credentials.
@@ -52,46 +56,58 @@ export interface HostOptions {
  * @param opts how requests go out
  * @return the role's session, or undefined where nothing answers or no role is attached
  */
-export async function instanceCredentials(
+export function askInstance(
+  endpoint: string,
+  opts: HostOptions = {},
+): Effect.Effect<Session | undefined, InstanceFailure> {
+  return Effect.gen(function* () {
+    const go = opts.fetch ?? fetch;
+    const base = endpoint.replace(/\/+$/, '');
+    const service = 'the instance metadata service';
+
+    // Nothing answering means this is not an instance.
+    const token = yield* ask(go, service, `${base}/latest/api/token`, {
+      method: 'PUT',
+      headers: { 'x-aws-ec2-metadata-token-ttl-seconds': String(TOKEN_TTL_S) },
+    }).pipe(Effect.catchTag('NoAnswer', () => Effect.succeed(undefined)));
+    if (token === undefined) return undefined;
+    const headers: Record<string, string> = {};
+    if (token.ok)
+      headers['x-aws-ec2-metadata-token'] = (yield* text(token)).trim();
+    else yield* drop(token); // v2 turned off, or a proxy in the way: ask the v1 way
+
+    const at = `${base}/latest/meta-data/iam/security-credentials/`;
+    const roles = yield* ask(go, service, at, { headers });
+    if (!roles.ok) {
+      yield* drop(roles);
+      return undefined; // no role attached, or something other than IMDS at this address
+    }
+    const role = (yield* text(roles)).split('\n')[0]!.trim();
+    if (role === '') return undefined;
+    const keys = yield* ask(go, service, at + encodeURIComponent(role), {
+      headers,
+    });
+    const who = `the instance's role ${role}`;
+    if (!keys.ok) {
+      yield* drop(keys);
+      return yield* new InstanceRefused({ who, status: keys.status });
+    }
+    return yield* sessionIn(yield* text(keys), who);
+  });
+}
+
+/**
+ * instanceCredentials runs askInstance as a Promise, for a caller outside
+ * the store.
+ * @param endpoint where the service is
+ * @param opts how requests go out
+ * @return the role's session, or undefined where nothing answers or no role is attached
+ */
+export function instanceCredentials(
   endpoint: string,
   opts: HostOptions = {},
 ): Promise<Session | undefined> {
-  const go = opts.fetch ?? fetch;
-  const base = endpoint.replace(/\/+$/, '');
-  const headers: Record<string, string> = {};
-
-  let token: Response;
-  try {
-    token = await go(`${base}/latest/api/token`, {
-      method: 'PUT',
-      headers: { 'x-aws-ec2-metadata-token-ttl-seconds': String(TOKEN_TTL_S) },
-      signal: AbortSignal.timeout(HOST_MS),
-    });
-  } catch {
-    return undefined; // nothing answered: this is not an instance
-  }
-  if (token.ok)
-    headers['x-aws-ec2-metadata-token'] = (await token.text()).trim();
-  else await token.body?.cancel(); // v2 turned off, or a proxy in the way: ask the v1 way
-
-  const at = `${base}/latest/meta-data/iam/security-credentials/`;
-  const roles = await go(at, { headers, signal: AbortSignal.timeout(HOST_MS) });
-  if (!roles.ok) {
-    await roles.body?.cancel();
-    return undefined; // no role attached, or something other than IMDS at this address
-  }
-  const role = (await roles.text()).split('\n')[0]!.trim();
-  if (role === '') return undefined;
-  const keys = await go(at + encodeURIComponent(role), {
-    headers,
-    signal: AbortSignal.timeout(HOST_MS),
-  });
-  const who = `the instance's role ${role}`;
-  if (!keys.ok) {
-    await keys.body?.cancel();
-    throw new InstanceRefused({ who, status: keys.status });
-  }
-  return Effect.runPromise(sessionIn(await keys.text(), who));
+  return Effect.runPromise(askInstance(endpoint, opts));
 }
 
 /** The instance metadata service named the role and would not hand out its keys. */
