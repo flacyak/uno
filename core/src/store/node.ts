@@ -370,28 +370,32 @@ function held(
  * @param region the region the session signs for
  * @return the host's session, or undefined
  */
-async function hostSession(
+function hostSession(
   env: Env,
   region: string,
-): Promise<Held | undefined> {
-  const tokenFile = envVar(env, 'AWS_WEB_IDENTITY_TOKEN_FILE');
-  const roleArn = envVar(env, 'AWS_ROLE_ARN');
-  if (tokenFile !== undefined && roleArn !== undefined) {
-    const ask = {
-      roleArn,
-      tokenFile,
-      sessionName: envVar(env, 'AWS_ROLE_SESSION_NAME'),
-      region,
-    };
-    return held(
-      await Effect.runPromise(webIdentitySession(env, ask, 'the environment')),
-      region,
-    );
-  }
-  const session =
-    (await Effect.runPromise(containerSession(env))) ??
-    (await Effect.runPromise(instanceSession(env)));
-  return session === undefined ? undefined : held(session, region);
+): Effect.Effect<
+  Held | undefined,
+  TokenFileMissing | StsFailure | ContainerFailure | InstanceFailure
+> {
+  return Effect.gen(function* () {
+    const tokenFile = envVar(env, 'AWS_WEB_IDENTITY_TOKEN_FILE');
+    const roleArn = envVar(env, 'AWS_ROLE_ARN');
+    if (tokenFile !== undefined && roleArn !== undefined) {
+      const ask = {
+        roleArn,
+        tokenFile,
+        sessionName: envVar(env, 'AWS_ROLE_SESSION_NAME'),
+        region,
+      };
+      return held(
+        yield* webIdentitySession(env, ask, 'the environment'),
+        region,
+      );
+    }
+    const session =
+      (yield* containerSession(env)) ?? (yield* instanceSession(env));
+    return session === undefined ? undefined : held(session, region);
+  });
 }
 
 /**
@@ -955,7 +959,7 @@ export function awsCredentials(
       return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
     const fromProfile = await profileSession(env, files, profile);
     if (fromProfile !== undefined) return fromProfile;
-    const fromHost = await hostSession(env, region);
+    const fromHost = await Effect.runPromise(hostSession(env, region));
     if (fromHost !== undefined) return fromHost;
     throw new Error(
       `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, ` +
