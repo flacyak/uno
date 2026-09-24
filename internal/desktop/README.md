@@ -355,6 +355,11 @@ The Vite plugin compiles the messages for the dev server, the renderer build and
 `scripts/messages.js` holds the compiler's options and compiles them for the Electron bundles and the check.
 The plugin that reads the JSON is loaded from `node_modules`, so a build fetches nothing.
 
+uno speaks English and Spanish.
+A language is one file: `messages/es.json` holds every message `messages/en.json` does, in Spanish.
+Adding another is copying the English file to the new locale's name, translating it, and adding the locale to `project.inlang/settings.json`.
+Settings lists it from there under the name it calls itself, and a system that prefers it starts in it.
+
 `messages/en-XA.json` is the pseudo-locale, written from the English by `scripts/pseudo.js` before every compile and not committed.
 Every letter in it wears an accent, every message is a third longer, and each sits in `⟦ ⟧`.
 On screen, text with no accents never went through a message, and text with a bracket missing was cut short by a layout that only fitted the English.
@@ -422,6 +427,10 @@ emptied first, so the connection it saves never lands among yours and a file a
 previous run left behind is not taken as evidence. `vp run preview` does the
 same under `out/preview-data/`, since the GIF it films is published and the
 theme its story tries must not become the one your own uno opens in.
+
+The run is in English whatever the machine it runs on prefers, since its checks read what the window says.
+`scripts/launch.js` pins it, with a switch where a switch decides and `LANGUAGE` on Linux, where Chromium reads the environment first.
+One check chooses Español in settings and reads the window in Spanish, then goes back.
 
 It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
