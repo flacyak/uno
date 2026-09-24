@@ -25,6 +25,7 @@ import type { Grid, GridEvents } from "../grid/index.ts";
 import { strategy } from "../input/index.ts";
 import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
+import { Language, offered } from "../language.ts";
 import type { Command } from "../keys.ts";
 import { list, num } from "../locale.ts";
 import { Recents } from "../recents.ts";
@@ -109,6 +110,8 @@ export class Shell {
   private readonly panel: Panel;
   /** The theme the page wears, which the settings menu changes. */
   readonly theming: Theming;
+  /** The language the app speaks, which the settings menu changes. */
+  readonly language: Language;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly workspaces = must(document.querySelector<HTMLElement>("#workspaces"));
@@ -117,6 +120,9 @@ export class Shell {
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
 
   constructor(private readonly host: Host) {
+    // First of all, so every word written after it is in the language chosen.
+    this.language = new Language(localStorage, navigator.languages, offered(import.meta.env.DEV));
+    this.language.onChange(() => this.relabel());
     // The page's own words, before the rest is drawn beside them.
     labelPage();
 
@@ -216,7 +222,8 @@ export class Shell {
     );
     // It wires itself to the control and asks through these, so the shell
     // holds nothing of it.
-    new Settings(must(document.querySelector<HTMLButtonElement>("#settings")), this.theming, {
+    const settings = must(document.querySelector<HTMLButtonElement>("#settings"));
+    new Settings(settings, this.theming, this.language, {
       connections: async () => {
         await this.refreshConnections();
         return this.known.map(connectionLine);
@@ -1149,6 +1156,26 @@ export class Shell {
   /** Rows landed or the index moved: the body and the status bar, nothing else. */
   private repaint(): void {
     this.grid?.repaint();
+    this.paintStatus();
+  }
+
+  /**
+   * relabel writes the window again in the language the app is in now, with
+   * everything open left open. What is painted is painted again, and what was
+   * written once is written again.
+   */
+  private relabel(): void {
+    labelPage();
+    // A menu or a form left open was built in the language before.
+    this.menu?.close();
+    this.formula?.close();
+    // So was what the bar last said, and a sentence is not translated after it is said.
+    this.say("");
+    this.panel.relabel();
+    // The header's hints, which the grid draws once for a file.
+    this.grid?.refresh();
+    this.paintTabs();
+    this.paintBanner();
     this.paintStatus();
   }
 

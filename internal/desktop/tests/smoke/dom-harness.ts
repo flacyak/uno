@@ -32,6 +32,7 @@ import { sources } from "@uno/grid/plugin";
 import { connectionsIn, saveConnection } from "@uno/grid/store";
 import { diskProvider, nodeStore } from "@uno/grid/store/node";
 
+import type { Shell } from "../../src/renderer/shell/shell.ts";
 import type { Host } from "../../src/shared/host.ts";
 import { bodyMarkup } from "../markup.ts";
 
@@ -85,9 +86,10 @@ function fakeLayout(): void {
  * bootShell wires a real Shell to a real engine over a real (Node) channel,
  * opens the fixture, and waits for its first rows to land -- the same
  * condition runSmoke's own prelude waits on in index.ts, since nothing here
- * runs that prelude for it.
+ * runs that prelude for it. It answers the shell, for a test that drives what
+ * no check on `Page` reaches.
  */
-export async function bootShell(): Promise<void> {
+export async function bootShell(): Promise<Shell> {
   document.body.innerHTML = bodyMarkup();
   fakeLayout();
 
@@ -123,7 +125,7 @@ export async function bootShell(): Promise<void> {
 
   const start = performance.now();
   while (performance.now() - start < FIRST_ROWS_MS) {
-    if (document.querySelector("tbody tr:not(.pending)") !== null) return;
+    if (document.querySelector("tbody tr:not(.pending)") !== null) return shell;
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
   throw new Error(`no rows were drawn within ${FIRST_ROWS_MS / 1000}s`);
