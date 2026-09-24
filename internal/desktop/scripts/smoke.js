@@ -16,6 +16,8 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { displayMissing, electronEnv, verdict } from "./launch.js";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
 const fixture = join(pkg, "../grid/tests/testdata/sales-q3.csv");
@@ -28,16 +30,14 @@ const scratch = join(pkg, "out/smoke");
 await mkdir(scratch, { recursive: true });
 const electron = (await import("electron")).default;
 
-// Electron needs a display. On a headless machine this is the one thing that
-// has to be arranged from outside, so say so plainly rather than time out.
-if (process.env["DISPLAY"] === undefined && process.platform === "linux") {
+if (displayMissing(process.env, process.platform)) {
   console.error("smoke: no DISPLAY. Run under Xvfb, or on a desktop session.");
   process.exit(2);
 }
 
 const child = spawn(electron, [pkg, fixture], {
   stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, UNO_SMOKE: scratch, UNO_SMOKE_SOURCE: second },
+  env: electronEnv(process.env, { UNO_SMOKE: scratch, UNO_SMOKE_SOURCE: second }),
 });
 
 console.log(`smoke: electron pid ${child.pid}`);
@@ -60,12 +60,9 @@ const deadline = setTimeout(() => {
 const code = await new Promise((resolve) => child.on("close", resolve));
 clearTimeout(deadline);
 
-if (code !== 0) {
-  console.error(`smoke: FAILED (exit ${code})`);
-  process.exit(1);
-}
-if (!out.includes("smoke: all checks passed")) {
-  console.error("smoke: FAILED (the app exited cleanly without reporting)");
+const failed = verdict("smoke", code, out, "smoke: all checks passed");
+if (failed !== undefined) {
+  console.error(failed);
   process.exit(1);
 }
 console.log("smoke: ok");

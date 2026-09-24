@@ -11,6 +11,8 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { displayMissing, electronEnv, verdict } from "./launch.js";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
 const root = resolve(pkg, "../..");
@@ -37,16 +39,14 @@ await mkdir(takes, { recursive: true });
 
 const electron = (await import("electron")).default;
 
-// Electron needs a display. On a headless machine this is the one thing that has
-// to be arranged from outside, so say so plainly rather than time out.
-if (process.env["DISPLAY"] === undefined && process.platform === "linux") {
+if (displayMissing(process.env, process.platform)) {
   console.error("preview: no DISPLAY. Run under Xvfb, or on a desktop session.");
   process.exit(2);
 }
 
 const child = spawn(electron, [pkg, fixture], {
   stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, UNO_PREVIEW: frames },
+  env: electronEnv(process.env, { UNO_PREVIEW: frames }),
 });
 
 console.log(`preview: electron pid ${child.pid}`);
@@ -68,12 +68,9 @@ const deadline = setTimeout(() => {
 const code = await new Promise((r) => child.on("close", r));
 clearTimeout(deadline);
 
-if (code !== 0) {
-  console.error(`preview: FAILED (exit ${code})`);
-  process.exit(1);
-}
-if (!out.includes("preview: rolled")) {
-  console.error("preview: FAILED (the app exited cleanly without reporting)");
+const failed = verdict("preview", code, out, "preview: rolled");
+if (failed !== undefined) {
+  console.error(failed);
   process.exit(1);
 }
 

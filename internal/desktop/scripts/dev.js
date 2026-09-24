@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "vite";
 
 import { bundleElectron } from "./bundle.js";
+import { electronEnv } from "./launch.js";
 
 const server = await createServer({ configFile: "vite.config.ts" });
 await server.listen();
@@ -30,7 +31,7 @@ await bundleElectron({ watch: true });
 
 const electron = spawn((await import("electron")).default, ["."], {
   stdio: "inherit",
-  env: { ...process.env, UNO_RENDERER_URL: url },
+  env: electronEnv(process.env, { UNO_RENDERER_URL: url }),
 });
 
 console.log(`electron pid ${electron.pid}`);
