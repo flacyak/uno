@@ -35,8 +35,8 @@ import {
 import type { ContainerFailure, InstanceFailure } from './metadata.ts';
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import {
+  NotSignedIn,
   assumeRole,
-  signInAgain,
   ssoRoleCredentials,
   webIdentityExchange,
 } from './sts.ts';
@@ -536,6 +536,34 @@ function envVar(env: Env, name: string): string | undefined {
   return value === undefined || value === '' ? undefined : value;
 }
 
+/** A profile that names an sso-session section ~/.aws/config does not have. */
+export class SsoSessionMissing extends Data.TaggedError('SsoSessionMissing')<{
+  profile: string;
+  named: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; named: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} names sso-session ${parts.named}, which ~/.aws/config does not have`,
+    });
+  }
+}
+
+/** An SSO profile with one of its four settings left out. */
+export class SsoSettingMissing extends Data.TaggedError('SsoSettingMissing')<{
+  profile: string;
+  setting: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; setting: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} signs in through SSO and has no ${parts.setting}`,
+    });
+  }
+}
+
 /**
  * ssoSession reads the token `aws sso login` cached for a profile and trades
  * it at the SSO portal for the profile's role.
@@ -558,12 +586,11 @@ async function ssoSession(
   section: Map<string, string>,
 ): Promise<Session> {
   const named = section.get('sso_session');
-  const portal =
-    named === undefined ? section : files.config.get(`sso-session ${named}`);
-  if (portal === undefined) {
-    throw new Error(
-      `the AWS profile ${profile} names sso-session ${named}, which ~/.aws/config does not have`,
-    );
+  let portal = section;
+  if (named !== undefined) {
+    const found = files.config.get(`sso-session ${named}`);
+    if (found === undefined) throw new SsoSessionMissing({ profile, named });
+    portal = found;
   }
   const startUrl = portal.get('sso_start_url');
   const ssoRegion = portal.get('sso_region');
@@ -575,34 +602,30 @@ async function ssoSession(
     ['sso_account_id', accountId],
     ['sso_role_name', roleName],
   ].find(([, v]) => v === undefined)?.[0];
-  if (missing !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} signs in through SSO and has no ${missing}`,
-    );
-  }
+  if (missing !== undefined)
+    throw new SsoSettingMissing({ profile, setting: missing });
 
   const cacheKey = named ?? startUrl!;
   const name = createHash('sha1').update(cacheKey).digest('hex') + '.json';
   const path = join(homeOf(env), '.aws', 'sso', 'cache', name);
   const text = await readText(path);
   if (text === undefined)
-    throw new Error(signInAgain(profile, 'uno found no SSO sign-in for it'));
+    throw new NotSignedIn({ profile, why: 'uno found no SSO sign-in for it' });
   // A cache file that fails to parse is refused like a missing sign-in.
   const token = cachedToken(text);
   // Older CLIs wrote the time with a UTC suffix, where newer write Z.
   const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, 'Z'));
   if (typeof token?.accessToken !== 'string' || expires === undefined) {
-    throw new Error(
-      signInAgain(profile, 'its cached SSO sign-in could not be read'),
-    );
+    throw new NotSignedIn({
+      profile,
+      why: 'its cached SSO sign-in could not be read',
+    });
   }
   if (expires.getTime() <= Date.now()) {
-    throw new Error(
-      signInAgain(
-        profile,
-        `its SSO sign-in expired at ${expires.toISOString()}`,
-      ),
-    );
+    throw new NotSignedIn({
+      profile,
+      why: `its SSO sign-in expired at ${expires.toISOString()}`,
+    });
   }
 
   return ssoRoleCredentials(
