@@ -14,7 +14,7 @@ import type { Format } from "../ingest/index.ts";
 import { isNumber } from "../num/index.ts";
 import { MIN_EXAMPLES, Survey, gather } from "../pattern/index.ts";
 import type { Example } from "../pattern/index.ts";
-import { describe as describeProgram, text as programText } from "../program/index.ts";
+import { described as describedProgram, text as programText } from "../program/index.ts";
 import {
   NO_ROW,
   Op,
@@ -42,7 +42,8 @@ import type {
   Reply,
   Request,
 } from "./protocol.ts";
-import { messageOf } from "./protocol.ts";
+import { FILE_SHOWS, Refusal, saidOf } from "../said/index.ts";
+import type { Said } from "../said/index.ts";
 import { Pages, RowIndex } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
 import { BYTES, INDEX, INDEXED, MILLISECONDS, unmeasured } from "./telemetry.ts";
@@ -59,9 +60,6 @@ const SLICE_MS = 8;
  * of several files that asked for one.
  */
 export const FILE_COLUMN = "_file";
-
-/** What that column shows, as the end of a sentence refusing an edit to it. */
-const FILE_SHOWS = "which file each row came from";
 
 type Waiter = () => boolean;
 
@@ -222,15 +220,18 @@ export class View {
     // What to blame in an error: the .uno a source came out of, where there is
     // one. A file opened on its own, or picked to replace a source that lost
     // its own, speaks for itself.
-    const from = carried === undefined || carried.container === "" ? "" : `${carried.container}: `;
+    // What goes wrong reading a source a .uno carried is said of the .uno too.
+    const container = carried === undefined ? "" : carried.container;
+    const within = (why: Said): Said =>
+      container === "" ? why : { t: "about", subject: container, why };
 
     let format: Format;
     try {
       format = await openFormat(name, source, header);
     } catch (err) {
       await source.close();
-      if (from === "") throw err;
-      throw new Error(`${from}${name}: ${messageOf(err)}`);
+      if (container === "") throw err;
+      throw new Refusal(within({ t: "about", subject: name, why: saidOf(err) }));
     }
 
     v.source = source;
@@ -281,7 +282,11 @@ export class View {
       // Before the open answers, the open fails with it instead. A view that
       // was closed has nothing to report: its close is what cut the read short.
       if (started && !v.abort.signal.aborted) {
-        port.post({ t: "error", source: id, message: `${name}: ${messageOf(err)}` });
+        port.post({
+          t: "error",
+          source: id,
+          said: { t: "about", subject: name, why: saidOf(err) },
+        });
       }
     });
 
@@ -305,7 +310,7 @@ export class View {
         try {
           v.schema.replay(carried.edits);
         } catch (err) {
-          throw new Error(`${from}replaying edits to ${name}: ${messageOf(err)}`);
+          throw new Refusal(within({ t: "replaying", name, why: saidOf(err) }));
         }
       }
 
@@ -313,7 +318,7 @@ export class View {
         source: id,
         name,
         size: source.size,
-        label: format.label,
+        label: { t: "read", delimiter: format.delimiter, header: format.header },
         columns: await v.columns(),
         progress: progressOf(index),
         edits: carried?.edits ?? [],
@@ -377,9 +382,7 @@ export class View {
     const ref = this.parts;
     const multi = multiOf(this.source);
     if (ref === undefined || multi === undefined) {
-      throw new Error(
-        `${this.name} is read as one by something that does not say how its files join, so it cannot show ${FILE_SHOWS}`,
-      );
+      throw new Refusal({ t: "joins-unknown-for-column", name: this.name });
     }
 
     const names: string[] = [];
@@ -409,7 +412,7 @@ export class View {
     const first = map.partAt(start);
     const last = map.partAt(end - 1);
     if (first === undefined || last === undefined) {
-      throw new Error(`${this.name}: its rows run past the files it is read from`);
+      throw new Refusal({ t: "rows-past-files", name: this.name });
     }
     if (first === last) return [{ row: 0, part: first }];
 
@@ -461,7 +464,7 @@ export class View {
       this.refuseInView();
       const edits = this.schema.edits();
       const last = edits.pop();
-      if (last === undefined) throw new Error("there is nothing to undo");
+      if (last === undefined) throw new Refusal({ t: "nothing-to-undo" });
       const was = this.schema;
       this.schema = Schema.of(was.headers, was.rows, edits, was.supplied);
       this.undone.push(last);
@@ -478,7 +481,7 @@ export class View {
     return this.serially(async () => {
       this.refuseInView();
       const e = this.undone.pop();
-      if (e === undefined) throw new Error("there is nothing to redo");
+      if (e === undefined) throw new Refusal({ t: "nothing-to-redo" });
 
       const index = this.index;
       this.schema.rows = index.complete ? index.counted : index.readable();
@@ -534,7 +537,7 @@ export class View {
   /** The grid offers editing only in transform, so an edit in view is refused
    * here too rather than trusted. */
   private refuseInView(): void {
-    if (!this.transform) throw new Error("the file is in view · Ctrl+E to transform");
+    if (!this.transform) throw new Refusal({ t: "in-view" });
   }
 
   private serially<T>(fn: () => Promise<T>): Promise<T> {
@@ -570,7 +573,7 @@ export class View {
     this.survey = abort;
     this.surveyColumns(cols, byCol, abort.signal, generation).catch((err: unknown) => {
       if (!abort.signal.aborted) {
-        this.port.post({ t: "error", source: this.id, message: messageOf(err) });
+        this.port.post({ t: "error", source: this.id, said: saidOf(err) });
       }
     });
   }
@@ -649,7 +652,7 @@ export class View {
         col: p.col,
         header: p.header,
         program: programText(p.prog),
-        description: describeProgram(p.prog),
+        description: describedProgram(p.prog),
         affects: p.affects,
         sample: p.sample,
         ambiguous: p.ambiguous,
@@ -830,16 +833,18 @@ export class View {
     const count = ref.parts.length;
     const multi = multiOf(this.source);
     if (multi === undefined) {
-      throw new Error(
-        `${this.name} is ${count} files read as one by something that does not say how they join, so a workspace cannot save it`,
-      );
+      throw new Refusal({ t: "joins-unknown-for-save", name: this.name, count });
     }
 
     const files = ref.parts.map(({ ref: file }, i) => {
       if (!("path" in file)) {
-        throw new Error(
-          `${this.name}: ${file.name} (part ${i + 1} of ${count}) is a dropped file with no path, and a workspace points at each part of several files read as one`,
-        );
+        throw new Refusal({
+          t: "part-has-no-path",
+          name: this.name,
+          file: file.name,
+          part: i + 1,
+          count,
+        });
       }
       return file;
     });
@@ -901,7 +906,7 @@ export class View {
     this.abort.abort();
     this.survey?.abort();
     this.finding?.abort();
-    this.fail(new Error("the file was closed"));
+    this.fail(new Refusal({ t: "file-closed" }));
     await this.source.close();
   }
 

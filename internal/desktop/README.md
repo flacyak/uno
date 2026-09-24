@@ -362,6 +362,10 @@ On screen, text with no accents never went through a message, and text with a br
 `tests/smoke/pseudo.test.ts` starts the real shell over the real engine, changes the language to the pseudo-locale, and fails on any plain letters left in the window.
 What it finds is a sentence written into the code, or one written once and not written again when the language changed.
 
+What the engine says arrives as data, a `Said` from `@uno/grid/said`, and `src/renderer/said.ts` writes each kind through a message.
+`tests/said.test.ts` says a sample of every kind both ways, and the desktop's English has to be the engine's.
+A diagnostic the engine has given no kind yet arrives as text and is shown as it was written, in English.
+
 `tests/messages.test.ts` holds each language's file to the English one: the same messages, the same inputs, and a form for every plural the language has.
 
 ## Running it
