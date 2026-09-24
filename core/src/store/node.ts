@@ -850,6 +850,66 @@ function fromSourceProfile(
 }
 
 /**
+ * fromCredentialSource is the credentials of the credential_source a role
+ * profile names: the environment's keys, the instance's role, or the
+ * container's. A source with nothing in it, one uno does not know, and a
+ * profile naming no source at all are each refused by name.
+ * @param env the environment
+ * @param profile the profile naming the role
+ * @param credentialSource its credential_source, if any
+ * @return the source's credentials
+ */
+function fromCredentialSource(
+  env: Env,
+  profile: string,
+  credentialSource: string | undefined,
+): Effect.Effect<
+  Omit<AwsCredentials, 'region'>,
+  | CredentialSourceEmpty
+  | CredentialSourceUnknown
+  | NoSourceProfile
+  | TokenFileMissing
+  | ContainerFailure
+  | InstanceFailure
+> {
+  return Effect.gen(function* () {
+    if (credentialSource === 'Environment') {
+      const found = envKeys(env, DEFAULT_REGION);
+      if (found === undefined)
+        return yield* new CredentialSourceEmpty({
+          profile,
+          source: 'Environment',
+        });
+      return found;
+    }
+    if (credentialSource === 'Ec2InstanceMetadata') {
+      const session = yield* instanceSession(env);
+      if (session === undefined)
+        return yield* new CredentialSourceEmpty({
+          profile,
+          source: 'Ec2InstanceMetadata',
+        });
+      return session;
+    }
+    if (credentialSource === 'EcsContainer') {
+      const session = yield* containerSession(env);
+      if (session === undefined)
+        return yield* new CredentialSourceEmpty({
+          profile,
+          source: 'EcsContainer',
+        });
+      return session;
+    }
+    if (credentialSource !== undefined)
+      return yield* new CredentialSourceUnknown({
+        profile,
+        source: credentialSource,
+      });
+    return yield* new NoSourceProfile({ profile });
+  });
+}
+
+/**
  * roleSession assumes the role a profile names with the credentials of its
  * source_profile, which may be any kind of profile, including another role.
  * A chain that comes back to a profile already on it is refused naming the
@@ -891,36 +951,12 @@ async function roleSession(
     );
   }
 
-  let source: Omit<AwsCredentials, 'region'>;
   const sourceProfile = setting('source_profile');
-  const credentialSource = setting('credential_source');
-  if (sourceProfile !== undefined) {
-    source = await Effect.runPromise(
-      fromSourceProfile(env, files, profile, sourceProfile, chain),
-    );
-  } else if (credentialSource === 'Environment') {
-    const found = envKeys(env, DEFAULT_REGION);
-    if (found === undefined)
-      throw new CredentialSourceEmpty({ profile, source: 'Environment' });
-    source = found;
-  } else if (credentialSource === 'Ec2InstanceMetadata') {
-    const session = await Effect.runPromise(instanceSession(env));
-    if (session === undefined)
-      throw new CredentialSourceEmpty({
-        profile,
-        source: 'Ec2InstanceMetadata',
-      });
-    source = session;
-  } else if (credentialSource === 'EcsContainer') {
-    const session = await Effect.runPromise(containerSession(env));
-    if (session === undefined)
-      throw new CredentialSourceEmpty({ profile, source: 'EcsContainer' });
-    source = session;
-  } else if (credentialSource !== undefined) {
-    throw new CredentialSourceUnknown({ profile, source: credentialSource });
-  } else {
-    throw new NoSourceProfile({ profile });
-  }
+  const source = await Effect.runPromise(
+    sourceProfile === undefined
+      ? fromCredentialSource(env, profile, setting('credential_source'))
+      : fromSourceProfile(env, files, profile, sourceProfile, chain),
+  );
 
   const duration = setting('duration_seconds');
   return assumeRole(
