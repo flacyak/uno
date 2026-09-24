@@ -17,7 +17,8 @@ import { expect, test } from "vite-plus/test";
 
 import type { Entry } from "../../src/store/index.ts";
 import { readAll } from "../../src/store/index.ts";
-import { diskLister, localFiles } from "../../src/store/node.ts";
+import { diskLister } from "../../src/store/disklister.ts";
+import { localFiles } from "../../src/store/node.ts";
 
 const TESTDATA = fileURLToPath(new URL("../testdata/", import.meta.url));
 
