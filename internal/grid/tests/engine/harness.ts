@@ -1,9 +1,6 @@
 // What the engine tests share: a real MessageChannel between a client and
 // `serve`, the fixture, and a way to compare rows with what a Sheet builds.
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
 import { Engine, messagePort, serve } from "../../src/engine/index.ts";
 import type {
   MessagePortLike,
@@ -18,9 +15,12 @@ import type { Sheet } from "../../src/sheet/index.ts";
 import { blobFiles } from "../../src/store/index.ts";
 import type { FileHandler } from "../../src/store/index.ts";
 import { localFiles } from "../../src/store/node.ts";
+import { bytes, FIXTURE } from "../testdata/sales-q3.ts";
 
-export const FIXTURE = fileURLToPath(new URL("../testdata/sales-q3.csv", import.meta.url));
-export const bytes = new Uint8Array(readFileSync(FIXTURE));
+// The fixture and its bytes live in testdata/sales-q3.ts, beside the facts
+// about what it holds. They are passed on from here because most of the tests
+// that want them want the rest of this file too.
+export { bytes, FIXTURE };
 export const sales = read("sales-q3.csv", bytes);
 
 /** The rows a viewport shows. */
