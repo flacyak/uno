@@ -1454,6 +1454,26 @@ function unsigned(c: Connection, env: Env): Signing {
 }
 
 /**
+ * A connection that signs in with a role, on the desktop, where only uno's
+ * hosted engine takes one on. The sentence says what to connect it with
+ * instead.
+ */
+export class RoleOnDesktop extends Data.TaggedError('RoleOnDesktop')<{
+  connection: string;
+  roleArn: string;
+  message: string;
+}> {
+  constructor(parts: { connection: string; roleArn: string }) {
+    super({
+      ...parts,
+      message:
+        `${parts.connection} signs in with a role, which only uno's hosted engine takes on · ` +
+        `on the desktop, connect it with a profile that can assume ${parts.roleArn}`,
+    });
+  }
+}
+
+/**
  * connectionAuth is the desktop's ways of signing in: `machine`, `profile`
  * and `public`. `role` is refused. It is the hosted engine's.
  * @param env the environment, process.env by default
@@ -1482,10 +1502,10 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
         case 'public':
           return unsigned(c, env);
         case 'role':
-          throw new Error(
-            `${who(c)} signs in with a role, which only uno's hosted engine takes on · ` +
-              `on the desktop, connect it with a profile that can assume ${c.auth.roleArn}`,
-          );
+          throw new RoleOnDesktop({
+            connection: who(c),
+            roleArn: c.auth.roleArn,
+          });
         default:
           return unreachable(c.auth);
       }
@@ -1513,6 +1533,41 @@ export interface HostedOptions {
 }
 
 /**
+ * An address no connection covers, on the hosted engine, which has no
+ * machine of its own to sign with.
+ */
+export class OutsideEveryConnection extends Data.TaggedError(
+  'OutsideEveryConnection',
+)<{ message: string }> {
+  constructor() {
+    super({
+      message:
+        "uno's hosted engine reads only the buckets a connection covers · " +
+        'it signs in with a role in your account, not with a machine of its own',
+    });
+  }
+}
+
+/**
+ * A connection that signs in as a machine or a profile, on the hosted
+ * engine, which is no machine of anyone's. The sentence says what to connect
+ * it with instead.
+ */
+export class MachineOnHosted extends Data.TaggedError('MachineOnHosted')<{
+  connection: string;
+  message: string;
+}> {
+  constructor(parts: { connection: string }) {
+    super({
+      ...parts,
+      message:
+        `${parts.connection} signs in as a machine of its own, which uno's hosted engine is not · ` +
+        'connect it with a role in your account that uno may assume',
+    });
+  }
+}
+
+/**
  * hostedAuth is the hosted engine's ways of signing in: `role` and `public`.
  * A `role` connection is assumed through STS with the tenant's external ID,
  * as a session named for the person, and its keys are kept until shortly
@@ -1529,12 +1584,7 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   return {
     modes: ['role', 'public'],
     machine() {
-      return Promise.reject(
-        new Error(
-          "uno's hosted engine reads only the buckets a connection covers · " +
-            'it signs in with a role in your account, not with a machine of its own',
-        ),
-      );
+      return Promise.reject(new OutsideEveryConnection());
     },
     async of(c) {
       switch (c.auth.mode) {
@@ -1568,10 +1618,7 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
           return unsigned(c, env);
         case 'machine':
         case 'profile':
-          throw new Error(
-            `${who(c)} signs in as a machine of its own, which uno's hosted engine is not · ` +
-              'connect it with a role in your account that uno may assume',
-          );
+          throw new MachineOnHosted({ connection: who(c) });
         default:
           return unreachable(c.auth);
       }
