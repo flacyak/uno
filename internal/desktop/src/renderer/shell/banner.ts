@@ -28,18 +28,18 @@ export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void
     ? m.cells_count({ count: offer.affects })
     : m.offer_cells_at_least({ affected: num(offer.affects), scanned: offer.scanned });
   const parts = [offer.description, count];
-  if (offer.ambiguous) parts.push("another rule fits these examples too");
+  if (offer.ambiguous) parts.push(m.offer_ambiguous());
 
   const grow = document.createElement("span");
   grow.className = "grow";
 
   const applyButton = document.createElement("button");
   applyButton.className = "primary";
-  applyButton.textContent = "Apply";
+  applyButton.textContent = m.action_apply();
   applyButton.addEventListener("click", apply);
 
   const later = document.createElement("button");
-  later.textContent = "Not now";
+  later.textContent = m.action_not_now();
   later.addEventListener("click", dismiss);
 
   return [header, document.createTextNode(` · ${parts.join(" · ")}`), grow, applyButton, later];
