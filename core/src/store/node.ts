@@ -605,39 +605,63 @@ async function ssoSession(
   if (missing !== undefined)
     throw new SsoSettingMissing({ profile, setting: missing });
 
-  const cacheKey = named ?? startUrl!;
-  const name = createHash('sha1').update(cacheKey).digest('hex') + '.json';
-  const path = join(homeOf(env), '.aws', 'sso', 'cache', name);
-  const text = await readText(path);
-  if (text === undefined)
-    throw new NotSignedIn({ profile, why: 'uno found no SSO sign-in for it' });
-  // A cache file that fails to parse is refused like a missing sign-in.
-  const token = cachedToken(text);
-  // Older CLIs wrote the time with a UTC suffix, where newer write Z.
-  const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, 'Z'));
-  if (typeof token?.accessToken !== 'string' || expires === undefined) {
-    throw new NotSignedIn({
-      profile,
-      why: 'its cached SSO sign-in could not be read',
-    });
-  }
-  if (expires.getTime() <= Date.now()) {
-    throw new NotSignedIn({
-      profile,
-      why: `its SSO sign-in expired at ${expires.toISOString()}`,
-    });
-  }
-
+  const accessToken = await Effect.runPromise(
+    cachedSignIn(env, profile, named ?? startUrl!),
+  );
   return ssoRoleCredentials(
     {
       profile,
       region: ssoRegion!,
       accountId: accountId!,
       roleName: roleName!,
-      accessToken: token.accessToken,
+      accessToken,
     },
     { endpoint: env['AWS_ENDPOINT_URL_SSO'] },
   );
+}
+
+/**
+ * cachedSignIn is the access token `aws sso login` cached under `cacheKey`
+ * in ~/.aws/sso/cache. A token that is missing, unreadable or expired fails
+ * with NotSignedIn, which says how to sign in again.
+ * @param env the environment, for the home folder
+ * @param profile the profile, for the refusal
+ * @param cacheKey the sso-session name or start URL the token is cached under
+ * @return the access token
+ */
+function cachedSignIn(
+  env: Env,
+  profile: string,
+  cacheKey: string,
+): Effect.Effect<string, NotSignedIn> {
+  return Effect.gen(function* () {
+    const name = createHash('sha1').update(cacheKey).digest('hex') + '.json';
+    const path = join(homeOf(env), '.aws', 'sso', 'cache', name);
+    const text = yield* Effect.promise(() => readText(path));
+    if (text === undefined) {
+      return yield* new NotSignedIn({
+        profile,
+        why: 'uno found no SSO sign-in for it',
+      });
+    }
+    // A cache file that fails to parse is refused like a missing sign-in.
+    const token = cachedToken(text);
+    // Older CLIs wrote the time with a UTC suffix, where newer write Z.
+    const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, 'Z'));
+    if (typeof token?.accessToken !== 'string' || expires === undefined) {
+      return yield* new NotSignedIn({
+        profile,
+        why: 'its cached SSO sign-in could not be read',
+      });
+    }
+    if (expires.getTime() <= Date.now()) {
+      return yield* new NotSignedIn({
+        profile,
+        why: `its SSO sign-in expired at ${expires.toISOString()}`,
+      });
+    }
+    return token.accessToken;
+  });
 }
 
 /**
