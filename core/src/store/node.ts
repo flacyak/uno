@@ -330,8 +330,13 @@ async function profileSession(
   if (own !== undefined)
     return { creds: { ...own.creds, as }, until: own.until };
   const command = fromConfig?.get('credential_process');
-  if (command !== undefined)
-    return held(await processCredentials(profile, command), region, as);
+  if (command !== undefined) {
+    return held(
+      await Effect.runPromise(processCredentials(profile, command)),
+      region,
+      as,
+    );
+  }
   if (
     fromConfig?.has('sso_session') === true ||
     fromConfig?.has('sso_start_url') === true
@@ -851,43 +856,44 @@ interface Printed {
  * @param command the credential_process line
  * @return the keys printed
  */
-async function processCredentials(
+function processCredentials(
   profile: string,
   command: string,
-): Promise<Printed> {
-  /** fail is the refusal of what this profile's credential_process printed. */
-  const fail = (why: string): ProcessUnreadable =>
-    new ProcessUnreadable({ profile, why });
-  const words = splitCommand(command);
-  const [program, ...args] = words;
-  if (program === undefined) throw new ProcessEmpty({ profile });
-  const out = await Effect.runPromise(runProcess(profile, program, args));
+): Effect.Effect<Printed, ProcessFailure> {
+  return Effect.gen(function* () {
+    /** fail is the refusal of what this profile's credential_process printed. */
+    const fail = (why: string): ProcessUnreadable =>
+      new ProcessUnreadable({ profile, why });
+    const words = splitCommand(command);
+    const [program, ...args] = words;
+    if (program === undefined) return yield* new ProcessEmpty({ profile });
+    const out = yield* runProcess(profile, program, args);
 
-  let o: Record<string, unknown>;
-  try {
-    o = JSON.parse(out) as Record<string, unknown>;
-  } catch {
-    throw fail('did not print JSON');
-  }
-  if (o['Version'] !== 1) {
-    throw fail(
-      `printed version ${JSON.stringify(o['Version'])} · uno reads version 1`,
-    );
-  }
-  const id = o['AccessKeyId'];
-  const secret = o['SecretAccessKey'];
-  if (typeof id !== 'string' || typeof secret !== 'string') {
-    throw fail('printed no AccessKeyId and SecretAccessKey');
-  }
-  const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
-  if (typeof o['SessionToken'] === 'string')
-    printed.sessionToken = o['SessionToken'];
-  if (typeof o['Expiration'] === 'string') {
-    const at = parseTime(o['Expiration']);
-    if (at === undefined) throw fail('printed an Expiration uno cannot read');
-    printed.expiration = at;
-  }
-  return printed;
+    const o = yield* Effect.try({
+      try: () => JSON.parse(out) as Record<string, unknown>,
+      catch: () => fail('did not print JSON'),
+    });
+    if (o['Version'] !== 1) {
+      return yield* fail(
+        `printed version ${JSON.stringify(o['Version'])} · uno reads version 1`,
+      );
+    }
+    const id = o['AccessKeyId'];
+    const secret = o['SecretAccessKey'];
+    if (typeof id !== 'string' || typeof secret !== 'string') {
+      return yield* fail('printed no AccessKeyId and SecretAccessKey');
+    }
+    const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
+    if (typeof o['SessionToken'] === 'string')
+      printed.sessionToken = o['SessionToken'];
+    if (typeof o['Expiration'] === 'string') {
+      const at = parseTime(o['Expiration']);
+      if (at === undefined)
+        return yield* fail('printed an Expiration uno cannot read');
+      printed.expiration = at;
+    }
+    return printed;
+  });
 }
 
 /**
