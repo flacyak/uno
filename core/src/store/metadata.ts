@@ -9,7 +9,7 @@
  * them in.
  */
 
-import { Data, Effect } from 'effect';
+import { Data, Duration, Effect } from 'effect';
 
 import { parseTime } from '@go';
 import type { Session } from './sts.ts';
@@ -137,20 +137,43 @@ export async function containerCredentials(
   ) {
     throw new NotThisHost({ who });
   }
-  let res: Response;
-  try {
-    res = await go(u, {
+  const res = await Effect.runPromise(
+    ask(go, who, u, {
       headers: authorization === undefined ? {} : { authorization },
-      signal: AbortSignal.timeout(HOST_MS),
-    });
-  } catch (err) {
-    throw new NoAnswer({ who, reason: (err as Error).message });
-  }
+    }),
+  );
   if (!res.ok) {
     await res.body?.cancel();
     throw new HostRefused({ who, code: String(res.status) });
   }
   return Effect.runPromise(sessionIn(await res.text(), who));
+}
+
+/**
+ * ask sends one request to a host endpoint and gives it HOST_MS to answer.
+ * It fails with NoAnswer where nothing answers in time or the connection
+ * fails, with the runtime's own account of it as the reason.
+ * @param go how the request goes out
+ * @param who the endpoint, for the failure
+ * @param url where the request goes
+ * @param init the request's method and headers
+ * @return the answer
+ */
+function ask(
+  go: typeof fetch,
+  who: string,
+  url: string | URL,
+  init: RequestInit,
+): Effect.Effect<Response, NoAnswer> {
+  return Effect.tryPromise({
+    try: (signal) => go(url, { ...init, signal }),
+    catch: (err) => new NoAnswer({ who, reason: (err as Error).message }),
+  }).pipe(
+    Effect.timeout(Duration.millis(HOST_MS)),
+    Effect.catchTag('TimeoutError', (timedOut) =>
+      Effect.fail(new NoAnswer({ who, reason: timedOut.message })),
+    ),
+  );
 }
 
 /** The container endpoint the environment names is not a URL. */
