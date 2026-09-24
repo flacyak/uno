@@ -2,6 +2,7 @@
 // window that takes no input from the person at the desktop.
 
 import type { Check, Input } from "./check.ts";
+import { DATE, DOM_ROWS, REP, ROWS, UNITS } from "./fixture.ts";
 
 /** A point over a cell in the grid, and a turn of the wheel up it. */
 const OVER_GRID = { x: 400, y: 300 };
@@ -22,73 +23,77 @@ const PERSON: readonly Input[] = [
 export const OPEN: Check[] = [
   {
     name: "the preload bridge is there",
-    script: `return typeof window.uno?.open === "function" ? "" : "window.uno is missing"`,
+    run: async (page) => ((await page.bridgeExposed()) ? "" : "window.uno is missing"),
   },
   {
     name: "the fixture opened",
-    script: `
-      const s = document.querySelector("#status-file").textContent;
+    run: async (page) => {
+      const s = await page.text("#status-file");
       return s.includes(ROWS.toLocaleString() + " rows") ? "" : "status bar says: " + s;
-    `,
+    },
   },
   {
     // The file is still on disk, so a workspace nobody has touched has nothing to lose.
     name: "a file just opened has nothing unsaved",
-    script: `return document.querySelector(".tab .dirty") === null ? "" : "the tab has a dirty dot"`,
+    run: async (page) => ((await page.count(".tab .dirty")) === 0 ? "" : "the tab has a dirty dot"),
   },
   {
     name: "the delimiter was sniffed from the bytes",
-    script: `
-      const s = document.querySelector("#status-file").textContent;
+    run: async (page) => {
+      const s = await page.text("#status-file");
       return s.includes("delimiter ','") ? "" : "status bar says: " + s;
-    `,
+    },
   },
   {
     name: "the columns are named and badged",
-    script: `
-      const heads = [...document.querySelectorAll("thead th .colhead")]
-        .map((h) => h.firstChild.textContent);
-      return JSON.stringify(heads) === JSON.stringify(
-        ["date","region","rep","channel","units","revenue"]
-      ) ? "" : "headers are " + JSON.stringify(heads);
-    `,
+    run: async (page) => {
+      const heads = await page.ownText("thead th .colhead");
+      const want = ["date", "region", "rep", "channel", "units", "revenue"];
+      return JSON.stringify(heads) === JSON.stringify(want)
+        ? ""
+        : "headers are " + JSON.stringify(heads);
+    },
   },
   {
     name: "units is flagged as numeric data in a costume",
-    script: `
-      const badges = [...document.querySelectorAll("thead th .badge")];
-      const units = badges[UNITS];
-      return units.classList.contains("flagged") && units.textContent === "text"
-        ? ""
-        : "units badge is " + units.textContent + " flagged=" + units.classList.contains("flagged");
-    `,
+    run: async (page) => {
+      const badges = await page.allText("thead th .badge");
+      const flagged = await page.hasClass("thead th .badge", "flagged", UNITS);
+      const unit = badges[UNITS] ?? "";
+      return flagged && unit === "text" ? "" : "units badge is " + unit + " flagged=" + flagged;
+    },
   },
   {
     name: "the first row shows what the file holds",
-    script: `
-      const cells = [...document.querySelectorAll("tbody tr")[0].children]
-        .map((c) => c.textContent);
-      return cells[GUTTER + DATE] === "2026-07-01" && cells[GUTTER + UNITS] === "1,204"
-        ? ""
-        : "row 1 is " + JSON.stringify(cells);
-    `,
+    run: async (page) => {
+      const [row] = await page.rows();
+      // The gutter goes back in front, so a failure reads exactly as the row it names.
+      const cells = [row?.gutter ?? "", ...(row?.cells ?? [])];
+      const date = row?.cells[DATE] ?? "";
+      const units = row?.cells[UNITS] ?? "";
+      return date === "2026-07-01" && units === "1,204" ? "" : "row 1 is " + JSON.stringify(cells);
+    },
   },
   {
     name: "it opens in view, where typing changes nothing",
-    script: `
-      const mode = text("#status-mode");
+    run: async (page) => {
+      const mode = await page.text("#status-mode");
       if (mode !== "VIEW") return "the status bar's mode is " + JSON.stringify(mode);
 
-      document.querySelectorAll("tbody tr")[0].children[GUTTER + UNITS].click();
-      await frame();
-      await press("9");
+      await page.clickCell(0, UNITS);
+      await page.settle(2);
+      await page.press("9");
 
-      if (document.querySelector(".cell-editor") !== null) return "typing in view opened an editor";
-      const said = text("#status-msg");
-      return said === "View · Ctrl+E to transform" ? "" : "the status bar says " + JSON.stringify(said);
-    `,
+      if ((await page.editorValue()) !== undefined) return "typing in view opened an editor";
+      const said = await page.text("#status-msg");
+      return said === "View · Ctrl+E to transform"
+        ? ""
+        : "the status bar says " + JSON.stringify(said);
+    },
   },
   {
+    // Needs the real preload bridge -- `webUtils.getPathForFile` -- which only
+    // a real Electron window exposes. Window-bound.
     name: "a file that is not on disk is refused by name",
     script: `
       try {
@@ -101,14 +106,17 @@ export const OPEN: Check[] = [
   },
   {
     name: "only the visible rows are in the DOM",
-    script: `
-      const n = document.querySelectorAll("tbody tr").length;
+    run: async (page) => {
+      const n = await page.count("tbody tr");
       // A viewport shows a few dozen. Anything near 4,812 means the virtualiser
       // is not virtualising, which is the whole reason it exists.
       return n > 0 && n < DOM_ROWS ? "" : n + " rows in the DOM";
-    `,
+    },
   },
   {
+    // Compares getBoundingClientRect() of the header against the scroller: real
+    // layout, which nothing but a real window can give an honest answer to.
+    // Window-bound.
     name: "scrolling to the end renders the last row",
     script: `
       const sc = document.querySelector(".grid-scroll");
@@ -139,24 +147,22 @@ export const OPEN: Check[] = [
   },
   {
     name: "the selection follows a click",
-    script: `
-      const sc = document.querySelector(".grid-scroll");
-      sc.scrollTop = 0;
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    run: async (page) => {
+      await page.scrollTo(0);
+      await page.settle(2);
+      await page.clickCell(2, REP);
+      await page.settle(1);
 
-      const cell = document.querySelectorAll("tbody tr")[2].children[GUTTER + REP];
-      cell.click();
-      await new Promise((r) => requestAnimationFrame(r));
-
-      const status = document.querySelector("#status-cell").textContent;
-      const selected = document.querySelectorAll("td.sel").length;
+      const status = await page.text("#status-cell");
+      const selected = await page.count("td.sel");
       return status === "rep · row 3" && selected === 1
         ? ""
         : "status is " + JSON.stringify(status) + " with " + selected + " selected";
-    `,
+    },
   },
   {
-    // Whoever is at the desktop keeps working while this runs. See src/main/driven.ts.
+    // Whether a person's own input reaches a driven window is exactly what
+    // `input.through` decides. Window-bound: see src/main/driven.ts.
     name: "a person's key, click and wheel do not reach the page",
     input: { events: PERSON, through: false },
     script: `
@@ -168,7 +174,8 @@ export const OPEN: Check[] = [
   },
   {
     // Without this, the check before it would pass on input that went nowhere.
-    // The wheel stays out: its scroll follows it later, and through does not wait.
+    // The wheel stays out: its scroll follows it later, and through does not
+    // wait. Window-bound, for the same reason as the check above.
     name: "the same key and click let through do reach it",
     input: { events: PERSON.filter((e) => e.type !== "mouseWheel"), through: true },
     script: `
