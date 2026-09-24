@@ -16,6 +16,8 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { Data } from 'effect';
+
 import { compareStrings, parseTime } from '@go';
 import type { AuthMode, Connection } from '@library';
 import { covering } from '@library';
@@ -386,6 +388,29 @@ async function hostSession(
   return session === undefined ? undefined : held(session, region);
 }
 
+/**
+ * A token file that is not there: a web identity token or a container
+ * endpoint's token, named by the environment or by a profile.
+ */
+export class TokenFileMissing extends Data.TaggedError('TokenFileMissing')<{
+  /** Who names the file: the environment, or `the AWS profile x`. */
+  named: string;
+  kind: 'web identity' | 'container';
+  file: string;
+  message: string;
+}> {
+  constructor(parts: {
+    named: string;
+    kind: 'web identity' | 'container';
+    file: string;
+  }) {
+    super({
+      ...parts,
+      message: `${parts.named} names the ${parts.kind} token file ${parts.file}, which is not there`,
+    });
+  }
+}
+
 /** What a web identity session is asked for, and where its token is. */
 interface WebIdentityFile {
   roleArn: string;
@@ -411,9 +436,11 @@ async function webIdentitySession(
 ): Promise<Session> {
   const token = await readText(ask.tokenFile);
   if (token === undefined) {
-    throw new Error(
-      `${named} names the web identity token file ${ask.tokenFile}, which is not there`,
-    );
+    throw new TokenFileMissing({
+      named,
+      kind: 'web identity',
+      file: ask.tokenFile,
+    });
   }
   return assumeRoleWithWebIdentity(
     {
@@ -446,9 +473,11 @@ async function containerSession(env: Env): Promise<Session | undefined> {
   if (tokenFile !== undefined) {
     const text = await readText(tokenFile);
     if (text === undefined) {
-      throw new Error(
-        `the environment names the container token file ${tokenFile}, which is not there`,
-      );
+      throw new TokenFileMissing({
+        named: 'the environment',
+        kind: 'container',
+        file: tokenFile,
+      });
     }
     authorization = text.trim();
   }
