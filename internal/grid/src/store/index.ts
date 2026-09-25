@@ -8,8 +8,16 @@
 // or a lister for a kind of place cannot reach it, and says so by name.
 
 import { compareStrings } from "../go/index.ts";
-import type { Formula } from "../library/index.ts";
-import { EXT, fileName, formatFormula, parseFormula } from "../library/index.ts";
+import type { Connection, Formula } from "../library/index.ts";
+import {
+  EXT,
+  fileName,
+  formatConnection,
+  formatFormula,
+  parseConnection,
+  parseFormula,
+  stampConnection,
+} from "../library/index.ts";
 import { OPENS, claim } from "./claim.ts";
 // Type only, and one way on purpose: the plugin package composes what is here,
 // and nothing here reaches back into it at run time.
@@ -21,7 +29,8 @@ export { listWith, statWith } from "./list.ts";
 export type { Entry, Listing, Lister } from "./list.ts";
 
 /**
- * FileStore is a folder uno keeps files of its own in: the formula library.
+ * FileStore is a folder uno keeps files of its own in: the formula library, and
+ * the connections beside it.
  *
  * Reading goes through `files`, the same handlers every other open goes
  * through. What the store adds is the two things a handler never does, writing
@@ -245,6 +254,86 @@ export async function loadLibrary(store: FileStore, dir: string): Promise<Librar
 export async function saveFormula(store: FileStore, dir: string, f: Formula): Promise<Formula> {
   const name = fileName(f.id);
   const { text, stamped } = formatFormula(f);
+  await store.write(join(dir, name), encoder.encode(text));
+  return stamped;
+}
+
+/** What `loadConnections` could not read, alongside what it could. */
+export interface ConnectionLoad {
+  connections: Connection[];
+  /** One entry per file that failed, naming it, the way a library load has. */
+  failed: Error[];
+}
+
+/**
+ * loadConnections reads every .unof in dir as a connection.
+ *
+ * It is loadLibrary's rules for the same reasons: one bad file costs one
+ * connection and not the rest, a folder that does not exist is no connections
+ * rather than a fault, and the list comes back in id order.
+ *
+ * One rule is its own. Two files with the same id are two answers to "which
+ * connection is acme-exports", and a workspace names its connection by id, so
+ * only one of them loads and each other one is a failure naming both. The one
+ * that loads is the file named after its id, since that is the file a save
+ * writes to; a copy beside it is the stranger. With no such file, the first in
+ * name order loads, so the answer never depends on how the directory lists.
+ */
+export async function loadConnections(store: FileStore, dir: string): Promise<ConnectionLoad> {
+  const read: Array<{ file: string; connection: Connection }> = [];
+  const failed: Error[] = [];
+
+  // In name order, so which of two files with one id is the failure does not
+  // depend on the order the directory gave them in.
+  const entries = (await store.list(dir)).toSorted(compareStrings);
+  for (const entry of entries) {
+    if (!entry.toLowerCase().endsWith(EXT)) continue;
+    try {
+      const bytes = await readAll(store.files, { name: entry, path: join(dir, entry) });
+      read.push({ file: entry, connection: parseConnection(entry, decoder.decode(bytes)) });
+    } catch (err) {
+      failed.push(err as Error);
+    }
+  }
+
+  // The file a save would write to goes first for its id; the rest keep name order.
+  const own = (r: { file: string; connection: Connection }): number =>
+    r.file === r.connection.id + EXT ? 0 : 1;
+  const byId = new Map<string, string>();
+  const connections: Connection[] = [];
+  for (const { file, connection } of read.toSorted((a, b) => own(a) - own(b))) {
+    const first = byId.get(connection.id);
+    if (first !== undefined) {
+      failed.push(
+        new Error(
+          `${file} is connection ${JSON.stringify(connection.id)} too, and ${first} already is · rename one of their ids`,
+        ),
+      );
+      continue;
+    }
+    byId.set(connection.id, file);
+    connections.push(connection);
+  }
+  connections.sort((a, b) => compareStrings(a.id, b.id));
+  return { connections, failed };
+}
+
+/**
+ * saveConnection writes c to <dir>/<id>.unof and hands back the stamped copy.
+ *
+ * It goes through the store's atomic write, so a crash leaves either the
+ * connection that was there or the new one and never half of either. The file
+ * is formatted before anything is written, which is where a connection holding
+ * a key is refused: a refused save writes nothing at all.
+ */
+export async function saveConnection(
+  store: FileStore,
+  dir: string,
+  c: Connection,
+): Promise<Connection> {
+  const name = fileName(c.id, "connection");
+  const stamped = stampConnection(c);
+  const text = formatConnection(stamped);
   await store.write(join(dir, name), encoder.encode(text));
   return stamped;
 }
