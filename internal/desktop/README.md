@@ -195,6 +195,14 @@ why in the engine's own words -- a 403, no such bucket, an expired SSO sign-in -
 and saves nothing, so every connection in the folder is one that worked. The
 saved connection keeps the region the test found, and the panel browses it.
 
+Save gives the list its place back while the connection is tested and written:
+it is listed after the others, dimmed and saying `connecting…`, with the same
+bar along the bottom of its line that a source has while it opens. Kept, the
+line is the connection's and its folder is browsed. Refused, the bar shakes and
+drains and the line stays, dimmed and saying `failed`, with why under the list.
+Enter on it, or `Edit connection`, brings the form back as it was left, and
+saving it tries the connection again. Cancel there gives it up.
+
 A `.uno` travels, and whoever opens one did not choose the buckets it names.
 So each S3 source in it is matched, when it opens, to the connection covering
 its bucket and folder, read the way the S3 handler reads an address. One no
@@ -248,6 +256,10 @@ A workspace holds as many sources as the work needs, each in a tab of its own.
 Ctrl+Shift+O adds one or more beside the file already open, and so does the `+ add source` under the tabs in the sidebar.
 Dropping files on the window adds them too, and `uno ads.csv shop.csv bank.csv` opens all three as one workspace.
 A `.uno` is a workspace of its own, so it opens rather than being added.
+
+A source that was asked for is listed from that moment, dimmed, in the sidebar under the workspace's sources and in the sources panel under its tabs, where it says `opening…`.
+A bar along the bottom of its line fills and starts again until the source has opened, and then the line is its tab's.
+An object in a bucket a long way off is the one that waits long enough to see it.
 
 One engine serves every source in the workspace, and the log is one list in the order the edits were made, with each line naming the source it changed.
 Each tab edits, undoes and redoes its own source, and View / Transform switches all of them together.

@@ -236,6 +236,17 @@
   border-color: var(--accent);
 }
 
+/* Why a connection was refused, in the engine's own words: a sentence, so it
+ * has a line of the foot to itself above the button that edits it. */
+.panel-foot .why {
+  flex: 1 0 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--flag);
+}
+
 /* An offer to append what a tab's folder has gained: a sentence, so it has a
  * line of the foot to itself, above the tab's other buttons, and a folder
  * with a long name runs on to a second rather than being cut short. */

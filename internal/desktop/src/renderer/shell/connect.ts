@@ -31,6 +31,21 @@ export interface ConnectAsks {
   known(): readonly Connection[];
 }
 
+/**
+ * What the form says of a save while it is under way. A save takes a test and
+ * a write, and the form steps aside for both, so that the connection is seen
+ * arriving where it will be listed.
+ */
+export interface ConnectTells {
+  /** A save began, and the form has stepped aside for this connection. */
+  keeping(draft: Connection): void;
+  /**
+   * The save was refused, and why. The form stays aside, as it was left, until
+   * `reopen` brings it back to be edited and saved again.
+   */
+  refused(draft: Connection, why: string): void;
+}
+
 /** What the form can be opened with: a bucket somebody already named. */
 export interface Filled {
   bucket?: string;
@@ -140,11 +155,14 @@ export class ConnectForm {
   private tries = 0;
   /** Whether the person picked a profile, so the names arriving do not undo it. */
   private picked = false;
+  /** The connection a save has stepped aside for, until it is kept or refused. */
+  private keeping: Connection | undefined;
 
   constructor(
     private readonly asks: ConnectAsks,
     /** Called when the form is done: with what was saved, or nothing for Cancel. */
     private readonly done: (saved: Connection | undefined) => void,
+    private readonly tells: ConnectTells,
   ) {
     const el = this.el;
     el.className = "panel-connect";
@@ -228,6 +246,7 @@ export class ConnectForm {
     this.prefix.value = filled.prefix ?? "";
     this.status = { t: "untried" };
     this.tries++;
+    this.keeping = undefined;
     this.picked = false;
     this.el.hidden = false;
     this.options([]);
@@ -243,6 +262,7 @@ export class ConnectForm {
   hide(): void {
     this.el.hidden = true;
     this.tries++;
+    this.keeping = undefined;
   }
 
   /** The fields as a connection, or the reason they are not one yet. */
@@ -292,26 +312,59 @@ export class ConnectForm {
   /**
    * save keeps the connection the test found, with its region in it. What has
    * not been tested is tested first, and a test that fails saves nothing.
+   *
+   * The form steps aside while it does, and stays aside when the test or the
+   * write is refused, as it was left and holding why, for `reopen`. A form
+   * opened again or closed meanwhile has given this save up, and what lands
+   * for it is dropped.
    */
   private async save(): Promise<void> {
     const draft = this.draft();
+    if (typeof draft === "string") {
+      this.status = { t: "refused", why: draft };
+      this.paint();
+      return;
+    }
     const s = this.status;
-    const tried =
-      s.t === "tried" && typeof draft !== "string" && s.draft === key(draft)
-        ? s.tried
-        : await this.test();
-    if (tried === undefined) return;
-    const mine = this.tries;
+    const tested = s.t === "tried" && s.draft === key(draft) ? s.tried : undefined;
+
+    this.keeping = draft;
+    this.el.hidden = true;
+    this.tells.keeping(draft);
+
+    const tried = tested ?? (await this.test());
+    if (this.keeping !== draft) return;
+    // A test that came back with nothing for this save was refused, and said why.
+    if (tried === undefined) {
+      return this.refuse(draft, this.status.t === "refused" ? this.status.why : "");
+    }
     try {
       const saved = await this.asks.save(tried.connection);
-      if (mine !== this.tries) return;
+      if (this.keeping !== draft) return;
       this.hide();
       this.done(saved);
     } catch (err) {
-      if (mine !== this.tries) return;
-      this.status = { t: "refused", why: message(err) };
-      this.paint();
+      if (this.keeping !== draft) return;
+      this.refuse(draft, message(err));
     }
+  }
+
+  /** refuse ends the save the form stepped aside for, and says why to whoever holds it. */
+  private refuse(draft: Connection, why: string): void {
+    this.keeping = undefined;
+    this.status = { t: "refused", why };
+    this.tells.refused(draft, why);
+  }
+
+  /**
+   * reopen brings the form back as it was left when its save was refused,
+   * saying why, with the keys in the bucket: the connection is edited, and
+   * saving it is trying it again.
+   */
+  reopen(): void {
+    this.el.hidden = false;
+    this.paint();
+    this.bucket.focus();
   }
 
   private cancel(): void {

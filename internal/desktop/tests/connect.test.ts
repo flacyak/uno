@@ -249,10 +249,12 @@ test.each([
   form().requestSubmit();
   await settle();
 
-  expect(result()).toBe(`✗ ${why}`);
   expect(asks.tried).toHaveLength(1);
   expect(asks.saved).toEqual([]);
-  expect(form().hidden).toBe(false);
+  // The reason is under the refused connection's line, and in the form it is
+  // edited from.
+  expect(root.querySelector(".panel-foot .why")!.textContent).toBe(`✗ ${why}`);
+  expect(result()).toBe(`✗ ${why}`);
 });
 
 test("fields that are not a connection are said before anything is asked", async () => {
@@ -287,6 +289,97 @@ test("save tests first, keeps the connection the test found, and browses it", as
   expect(root.querySelector<HTMLElement>(".panel-list")!.hidden).toBe(false);
   expect(listed.asked).toEqual(["s3://acme-exports/shop/"]);
   expect(sources.crumb.map((c) => c.name)).toEqual(["acme-exports / shop"]);
+});
+
+test("a save steps aside for a line that says connecting, until it is kept or refused", async () => {
+  const list = root.querySelector<HTMLElement>(".panel-list")!;
+  const line = (cls: string): HTMLElement | null =>
+    root.querySelector<HTMLElement>(`.panel-row.${cls}`);
+  const foot = (): HTMLElement => root.querySelector<HTMLElement>(".panel-foot")!;
+  // The bucket answers when the test says so, as one a long way off does.
+  let answer: { worked(): void; refused(why: string): void } | undefined;
+  asks.tryConnection = (c) =>
+    new Promise<Tried>((resolve, reject) => {
+      answer = {
+        worked: () =>
+          resolve({ connection: { ...c, region: REGION }, folders: 3, files: 41, more: false }),
+        refused: (why) => reject(new Error(why)),
+      };
+    });
+
+  panel.connect();
+  type("bucket", "acme-exprots");
+  type("prefix", "shop");
+  press("Save connection");
+  await settle();
+
+  // The list has the form's place, the connection is its last line before the
+  // one that connects another, and the keys are on it.
+  expect(form().hidden).toBe(true);
+  expect(list.hidden).toBe(false);
+  expect(line("opening")!.children[0]!.textContent).toBe("acme-exprots / shop");
+  expect(line("opening")!.children[1]!.textContent).toBe("connecting…");
+  expect(line("opening")!.classList.contains("sel")).toBe(true);
+  expect(sources.isConnect(sources.place.line + 1)).toBe(true);
+
+  // A click on it while it connects opens nothing.
+  line("opening")!.click();
+  expect(form().hidden).toBe(true);
+
+  // Refused, the line stays and says so, with why under the list and on hover.
+  answer!.refused("404 · no such bucket");
+  await settle();
+  expect(line("opening")).toBeNull();
+  expect(line("failed")!.children[0]!.textContent).toBe("acme-exprots / shop");
+  expect(line("failed")!.children[1]!.textContent).toBe("failed");
+  expect(line("failed")!.title).toBe("404 · no such bucket");
+  expect(form().hidden).toBe(true);
+  expect(foot().hidden).toBe(false);
+  expect(foot().querySelector(".why")!.textContent).toBe("✗ 404 · no such bucket");
+  expect(asks.saved).toEqual([]);
+
+  // Enter on it brings the form back as it was left, saying why, to be edited.
+  list.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  expect(form().hidden).toBe(false);
+  expect(list.hidden).toBe(true);
+  expect(result()).toBe("✗ 404 · no such bucket");
+  expect(field("bucket").value).toBe("acme-exprots");
+  expect(document.activeElement).toBe(field("bucket"));
+
+  // Edited and saved, it is tried again, kept and browsed, and no line is left waiting.
+  type("bucket", "acme-exports");
+  press("Save connection");
+  await settle();
+  expect(line("failed")).toBeNull();
+  expect(line("opening")!.children[0]!.textContent).toBe("acme-exports / shop");
+  answer!.worked();
+  await settle();
+  await new Promise((r) => requestAnimationFrame(r));
+  expect(asks.saved.map((c) => c.id)).toEqual(["acme-exports"]);
+  expect(line("opening")).toBeNull();
+  expect(form().hidden).toBe(true);
+  expect(sources.crumb.map((c) => c.name)).toEqual(["acme-exports / shop"]);
+});
+
+test("the button under a refused connection edits it, and Cancel gives it up", async () => {
+  asks.refusal = "403 · AccessDenied";
+  panel.connect({ bucket: "acme-exports" });
+  press("Save connection");
+  await settle();
+
+  const edit = [...root.querySelectorAll<HTMLButtonElement>(".panel-foot button")].find(
+    (b) => b.textContent === "Edit connection",
+  )!;
+  edit.click();
+  expect(form().hidden).toBe(false);
+  expect(result()).toBe("✗ 403 · AccessDenied");
+
+  press("Cancel");
+  await settle();
+  await new Promise((r) => requestAnimationFrame(r));
+  expect(form().hidden).toBe(true);
+  expect(sources.connecting).toBeUndefined();
+  expect(root.querySelector(".panel-row.failed")).toBeNull();
 });
 
 test("a test already passed for what is on screen is not asked again on save", async () => {

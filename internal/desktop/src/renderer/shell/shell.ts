@@ -31,6 +31,7 @@ import { list, num } from "../locale.ts";
 import { Recents } from "../recents.ts";
 import { say } from "../said.ts";
 import { Sources, connectionLine } from "../sources.ts";
+import type { Arriving } from "../sources.ts";
 import { NEWER_AFTER_MS } from "../timing.ts";
 import { Workspace, reloaded } from "../workspace.ts";
 import type { Tab } from "../workspace.ts";
@@ -46,6 +47,7 @@ import type { MenuItem, MenuPlace } from "./menu.ts";
 import { Panel } from "./panel.ts";
 import { Settings } from "./settings.ts";
 import { sidebarRows } from "./sidebar.ts";
+import type { SidebarActions } from "./sidebar.ts";
 import { StatusBar } from "./status.ts";
 import { baseName, message, must, settled } from "./util.ts";
 
@@ -76,6 +78,8 @@ export class Shell {
   private gridLoading: Promise<Grid> | undefined;
   /** Counts opens, so one that finishes after a later one does not replace it. */
   private opens = 0;
+  /** The sources being opened, which the sidebar and the panel list until each has. */
+  private arriving: readonly Arriving[] = [];
   /** The offer a person said "not now" to, so it stays gone until it changes. */
   private dismissed = "";
   /** What was warned about, for as long as the warning is on screen: the tab
@@ -161,6 +165,7 @@ export class Shell {
       () => this.workspace?.sources ?? [],
       [],
       () => this.panel.draw(),
+      () => this.arriving,
     );
     this.panel = new Panel(
       must(document.querySelector<HTMLElement>("#panel")),
@@ -567,11 +572,35 @@ export class Shell {
       return false;
     }
 
+    // Each is listed in the sidebar and in the panel as opening from now
+    // until it has opened or been refused, in the order they are opened in.
+    const coming = refs.map((ref): Arriving => ({ name: ref.name }));
+    this.arriving = [...this.arriving, ...coming];
+    this.paintTabs();
+    const settled = (): void => {
+      const line = coming.shift();
+      this.arriving = this.arriving.filter((a) => a !== line);
+      this.paintTabs();
+    };
+    try {
+      return await this.addEach(refs, settled);
+    } finally {
+      // Whatever was never reached -- another open took the workspace's place.
+      while (coming.length > 0) settled();
+    }
+  }
+
+  /**
+   * addEach opens the files one after another and says `settled` as each one
+   * has opened or been refused. It answers whether every one of them opened.
+   */
+  private async addEach(refs: SourceRef[], settled: () => void): Promise<boolean> {
     let rest = refs;
     if (this.workspace === undefined) {
       const [first, ...others] = refs;
       if (first === undefined) return false;
       await this.load(first, "");
+      settled();
       rest = others;
     }
     const w = this.workspace;
@@ -590,6 +619,7 @@ export class Shell {
       } catch (err) {
         failed.push(message(err));
       }
+      settled();
     }
     if (this.workspace !== w) return false; // another open replaced it meanwhile
 
@@ -1190,15 +1220,17 @@ export class Shell {
 
   /** paintTabs draws the sidebar: the workspaces, and the open one's tabs. */
   private paintTabs(): void {
-    const rows = sidebarRows(this.workspace, this.recents.all, {
+    const act: SidebarActions = {
       open: (path) => void this.openRecent(path),
       menu: (path, place) => this.offerWorkspace(path, place),
       select: (tab) => this.select(tab),
       remove: (tab) => void this.remove(tab),
       add: (plus) => this.offerAdd(plus),
       repoint: (tab) => this.repoint(tab),
-    });
-    this.workspaces.replaceChildren(...rows);
+    };
+    this.workspaces.replaceChildren(
+      ...sidebarRows(this.workspace, this.recents.all, act, this.arriving),
+    );
     // The panel lists the tabs too, and whatever changed the sidebar changed them.
     this.panel.draw();
   }
