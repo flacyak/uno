@@ -1027,6 +1027,7 @@ export class ProcessEmpty extends Data.TaggedError('ProcessEmpty')<{
   profile: string;
   message: string;
 }> {
+  /** @param parts The profile. */
   constructor(parts: { profile: string }) {
     super({
       ...parts,
@@ -1037,14 +1038,15 @@ export class ProcessEmpty extends Data.TaggedError('ProcessEmpty')<{
 
 /**
  * A credential_process that did not run to a good end: there is no such
- * program, it ran out of time, or it failed, with the first line it wrote to
- * stderr as `why`.
+ * program, it ran out of time, or it failed.
  */
 export class ProcessFailed extends Data.TaggedError('ProcessFailed')<{
   profile: string;
+  /** What went wrong, or the first line the program wrote to stderr. */
   why: string;
   message: string;
 }> {
+  /** @param parts The profile and what went wrong. */
   constructor(parts: { profile: string; why: string }) {
     super({
       ...parts,
@@ -1055,13 +1057,15 @@ export class ProcessFailed extends Data.TaggedError('ProcessFailed')<{
 
 /**
  * A credential_process that ran and printed something other than the CLI's
- * version 1 JSON: `why` says what was wrong with it.
+ * version 1 JSON.
  */
 export class ProcessUnreadable extends Data.TaggedError('ProcessUnreadable')<{
   profile: string;
+  /** What was wrong with what it printed. */
   why: string;
   message: string;
 }> {
+  /** @param parts The profile and what was wrong with what it printed. */
   constructor(parts: { profile: string; why: string }) {
     super({
       ...parts,
@@ -1082,20 +1086,18 @@ interface Printed {
 }
 
 /**
- * processCredentials runs a profile's credential_process and reads the keys
- * it prints. The command is split into words the way a shell would and run
- * directly, as a program and its arguments. The output must be the CLI's
- * version 1 JSON.
- * @param profile the profile, for errors
- * @param command the credential_process line
- * @return the keys printed
+ * Runs a profile's credential_process and reads the keys it prints. The
+ * command is split into words the way a shell would and run directly, as a
+ * program and its arguments. The output must be the CLI's version 1 JSON.
+ * @param profile The profile, for errors.
+ * @param command The credential_process line.
  */
 function processCredentials(
   profile: string,
   command: string,
 ): Effect.Effect<Printed, ProcessFailure> {
   return Effect.gen(function* () {
-    /** fail is the refusal of what this profile's credential_process printed. */
+    // A refusal of what this profile's credential_process printed.
     const fail = (why: string): ProcessUnreadable =>
       new ProcessUnreadable({ profile, why });
     const words = splitCommand(command);
@@ -1131,14 +1133,11 @@ function processCredentials(
 }
 
 /**
- * runProcess runs a credential_process program with its arguments and gives
- * it PROCESS_MS to answer, succeeding with what it printed. It fails with
+ * Runs a credential_process program with its arguments and gives it
+ * PROCESS_MS to answer, succeeding with what it printed. It fails with
  * ProcessFailed where there is no such program, it ran out of time, or it
  * failed: the first line it wrote to stderr says why.
- * @param profile the profile, for the failure
- * @param program the program
- * @param args its arguments
- * @return what the program printed
+ * @param profile The profile, for the failure.
  */
 function runProcess(
   profile: string,
