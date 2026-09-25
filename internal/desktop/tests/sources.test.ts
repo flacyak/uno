@@ -7,7 +7,7 @@ import { expect, test } from "vite-plus/test";
 import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { Entry, Listing } from "@uno/grid/store";
 
-import type { Connection, Listings, Open } from "../src/renderer/sources.ts";
+import type { Arriving, Connection, Listings, Open } from "../src/renderer/sources.ts";
 import { Sources, joinedName, stateOf, trailTo } from "../src/renderer/sources.ts";
 
 const ACME: Connection = {
@@ -304,6 +304,36 @@ test("the keys stay on a line that exists when a tab closes under them", () => {
   tabs = [TABS[0]!];
 
   expect(panel.place).toEqual({ section: "workspace", line: 0 });
+});
+
+test("a source still opening is a workspace line after the tabs, until it has opened", () => {
+  let arriving: readonly Arriving[] = [{ name: "orders-2025.csv" }, { name: "ads-q4.csv" }];
+  const panel = new Sources(
+    new Stand(),
+    () => TABS,
+    [ACME],
+    () => {},
+    () => arriving,
+  );
+
+  expect(panel.opening.map((a) => a.name)).toEqual(["orders-2025.csv", "ads-q4.csv"]);
+  expect(panel.count("workspace")).toBe(TABS.length + 2);
+
+  // The keys can rest on its line, and nothing is offered there: it is no tab yet.
+  panel.focus("workspace", TABS.length);
+  expect(panel.place).toEqual({ section: "workspace", line: TABS.length });
+  expect(panel.doings).toEqual([]);
+
+  // A filter keeps the ones it matches, as it does the tabs.
+  panel.search("q4");
+  expect(panel.opening.map((a) => a.name)).toEqual(["ads-q4.csv"]);
+  panel.search("");
+  panel.focus("workspace", TABS.length);
+
+  // Opened, its line is gone and the keys are back on a line that exists.
+  arriving = [];
+  expect(panel.count("workspace")).toBe(TABS.length);
+  expect(panel.place).toEqual({ section: "workspace", line: TABS.length - 1 });
 });
 
 /** The entry on the page by that name, since a toggle takes the entry itself. */

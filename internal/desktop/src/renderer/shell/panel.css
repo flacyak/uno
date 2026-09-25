@@ -1,5 +1,5 @@
-/* The panel: a column on the right of the grid, its head, the filter under
- * it, and the sections as one virtualised list. `--panel-row-h` is set by panel.ts, which
+/* The panel: the column on the right of the grid, under the end of the
+ * window's top line, its head, the filter under it, and the sections as one virtualised list. `--panel-row-h` is set by panel.ts, which
  * does arithmetic with it. */
 
 /* `min-width: 0`, or the peek's table, as wide as the file's header, would
@@ -8,7 +8,7 @@
   /* Above the scrim base.css lays over the workspace while the keys are here. */
   position: relative;
   z-index: 2;
-  flex: 0 0 330px;
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -35,10 +35,9 @@
   }
 }
 
-/* The head reaches the top right of the window, where the × is, and ends
- * short of it. */
+/* The head is in line with the filter and the list under it. */
 .panel-head {
-  padding: 0 var(--corner) 0 12px;
+  padding: 0 12px;
 }
 
 .panel-filter {
@@ -234,6 +233,17 @@
   color: var(--surface);
   background: var(--accent);
   border-color: var(--accent);
+}
+
+/* Why a connection was refused, in the engine's own words: a sentence, so it
+ * has a line of the foot to itself above the button that edits it. */
+.panel-foot .why {
+  flex: 1 0 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--flag);
 }
 
 /* An offer to append what a tab's folder has gained: a sentence, so it has a

@@ -46,7 +46,8 @@
 }
 
 .ws .name,
-.tab .name {
+.tab .name,
+.tab-opening .name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,8 +90,11 @@
 }
 
 /* A source of the open workspace, hung under it on a rule the way a folder's
- * files are. Marks and dots keep their width; the name is what is cut short. */
-.tab {
+ * files are. Marks and dots keep their width; the name is what is cut short.
+ * One still opening has the same line, and is no tab yet: arriving.css has
+ * the bar that fills along the bottom of it. */
+.tab,
+.tab-opening {
   position: relative;
   display: flex;
   align-items: center;
@@ -107,7 +111,8 @@
   flex-shrink: 0;
 }
 
-.tab .name {
+.tab .name,
+.tab-opening .name {
   flex: 1 1 auto;
 }
 

@@ -393,11 +393,11 @@ void app.whenReady().then(async () => {
     // A take is filmed in the shape the design is drawn in, and the window is
     // not on screen yet. One with a single size it can be is one a tiling
     // window manager floats at that size, rather than fitting it to a tile
-    // that changes when a window beside it opens or closes mid-take.
-    if (!smoke) {
-      win.setMinimumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-      win.setMaximumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-    }
+    // that changes when a window beside it opens or closes mid-take. The smoke
+    // run measures what is laid out, so it is held to the same shape: in a
+    // tile, whether the panel's foot fits depended on what else was open.
+    win.setMinimumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+    win.setMaximumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
     const run = smoke
       ? (await import("./smoke/index.ts")).runSmoke
       : (await import("./preview.ts")).runPreview;
