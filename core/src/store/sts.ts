@@ -51,12 +51,9 @@ export interface SsoAsk {
 }
 
 /**
- * ssoExchange trades an SSO access token for a role's temporary keys
- * through the SSO portal's GetRoleCredentials. A 401 or 403 means the sign-in
- * has expired or been revoked, and the failure says to sign in again.
- * @param ask the profile's portal, account and role, with its access token
- * @param opts where the exchange is sent and how requests go out
- * @return the role's temporary keys
+ * Trades an SSO access token for a role's temporary keys through the SSO
+ * portal's GetRoleCredentials. A 401 or 403 means the sign-in has expired or
+ * been revoked, and the failure says to sign in again.
  */
 export function ssoExchange(
   ask: SsoAsk,
@@ -90,13 +87,7 @@ export function ssoExchange(
   });
 }
 
-/**
- * ssoRoleCredentials runs ssoExchange as a Promise, for a caller outside the
- * store.
- * @param ask the profile's portal, account and role, with its access token
- * @param opts where the exchange is sent and how requests go out
- * @return the role's temporary keys
- */
+/** Runs ssoExchange as a Promise, for a caller outside the store. */
 export function ssoRoleCredentials(
   ask: SsoAsk,
   opts: ExchangeOptions = {},
@@ -105,11 +96,10 @@ export function ssoRoleCredentials(
 }
 
 /**
- * ssoSessionIn reads the portal's answer to GetRoleCredentials: the session
- * it holds, or the refusal where it holds none uno can read.
- * @param res the portal's answer, with a success status
- * @param profile the profile, for the error
- * @return the session the answer holds
+ * Reads the portal's answer to GetRoleCredentials: the session it holds, or
+ * the refusal where it holds none uno can read.
+ * @param res The portal's answer, with a success status.
+ * @param profile The profile, for the error.
  */
 function ssoSessionIn(
   res: Response,
@@ -142,27 +132,28 @@ function ssoSessionIn(
 }
 
 /**
- * An SSO sign-in that has lapsed or was never made, with the command that
- * signs in again. `why` says what is wrong with it. Raised here when the
- * portal turns the sign-in away, and by store/node.ts for a cached sign-in
- * that is missing, unreadable or expired.
+ * An SSO sign-in that has lapsed or was never made. The sentence says what is
+ * wrong with it and gives the command that signs in again. Raised here when
+ * the portal turns the sign-in away, and by store/node.ts for a cached
+ * sign-in that is missing, unreadable or expired.
  */
 export class NotSignedIn extends Data.TaggedError('NotSignedIn')<{
   profile: string;
+  /** What is wrong with the sign-in. */
   why: string;
   message: string;
 }> {
+  /** @param parts The profile and what is wrong with its sign-in. */
   constructor(parts: { profile: string; why: string }) {
     super({ ...parts, message: signInAgain(parts.profile, parts.why) });
   }
 }
 
 /**
- * signInAgain is NotSignedIn's sentence: what is wrong with the sign-in,
- * and the command that fixes it.
- * @param profile the profile's name
- * @param why what is wrong with the sign-in
- * @return the message, with the command that signs in again
+ * Builds NotSignedIn's sentence: what is wrong with the sign-in, and the
+ * command that fixes it.
+ * @param why What is wrong with the sign-in.
+ * @return The sentence, with the command that signs in again.
  */
 function signInAgain(profile: string, why: string): string {
   return `the AWS profile ${profile} is not signed in · ${why} · sign in with \`aws sso login --profile ${profile}\``;
@@ -174,6 +165,7 @@ export class SsoPortalRefused extends Data.TaggedError('SsoPortalRefused')<{
   status: number;
   message: string;
 }> {
+  /** @param parts The profile and the status the portal answered. */
   constructor(parts: { profile: string; status: number }) {
     super({
       ...parts,
@@ -187,6 +179,7 @@ export class SsoUnreadable extends Data.TaggedError('SsoUnreadable')<{
   profile: string;
   message: string;
 }> {
+  /** @param parts The profile. */
   constructor(parts: { profile: string }) {
     super({
       ...parts,
