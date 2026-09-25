@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
-import { BUCKET, KEYS, bucket, standinEnv } from "../../grid/tests/store/standin.ts";
+import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "../../grid/tests/store/standin.ts";
 import { displayMissing, electronEnv, verdict } from "./launch.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -199,13 +199,29 @@ if (saved === undefined) {
 
 const at = join(scratch, saved);
 const doc = readContainer(saved, await readFile(at), at);
-const pointers = doc.manifest.sources.map((s) => ({ name: s.name, path: s.path }));
+const pointers = doc.manifest.sources.map((s) => ({
+  name: s.name,
+  path: s.path,
+  version: s.version,
+  connection: s.connection,
+}));
 
 const trouble = [];
-if (!pointers.some((s) => s.path === object)) {
+const remote = pointers.find((s) => s.path === object);
+if (remote === undefined) {
   trouble.push(
     `the object was saved as ${JSON.stringify(pointers.map((s) => s.path))}, not ${object}`,
   );
+} else {
+  // Which bytes it was read as goes into the save with it. It was added before
+  // any connection was made, so it names none.
+  const version = etagOf(await readFile(second));
+  if (remote.version !== version) {
+    trouble.push(`the object was saved as version ${remote.version}, not ${version}`);
+  }
+  if (remote.connection !== "") {
+    trouble.push(`the object was saved through ${remote.connection}, which was never made`);
+  }
 }
 // The local fixture is nowhere near the scratch directory, so the only true
 // thing to write down for it is where it is.
