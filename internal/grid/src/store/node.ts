@@ -15,11 +15,13 @@ import { mkdtemp, open, readdir, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
+import type { Connection } from "../library/index.ts";
+import { covering } from "../library/index.ts";
 import type { Provider } from "../plugin/index.ts";
 import { diskLister } from "./disklister.ts";
 import type { ByteSource, FileHandler, FileStore } from "./index.ts";
 import { isRemote, readAll } from "./index.ts";
-import type { AwsCredentials } from "./s3.ts";
+import type { AwsCredentials, S3Location, Signing } from "./s3.ts";
 
 /**
  * localFiles opens files on this machine's disks, by path, for reading. It
@@ -148,69 +150,223 @@ export function nodeStore(): FileStore {
 /** How long credentials read from disk are reused before they are read again. */
 const CREDENTIALS_MS = 60_000;
 
+/** The region a request is signed for when nothing else has said one. */
+const DEFAULT_REGION = "us-east-1";
+
+type Env = Record<string, string | undefined>;
+
+/** The two files the AWS CLI reads, as sections of keys. */
+interface AwsFiles {
+  /** ~/.aws/config, where a named profile's section is `profile <name>`. */
+  config: Map<string, Map<string, string>>;
+  /** ~/.aws/credentials, where it is `<name>`. */
+  credentials: Map<string, Map<string, string>>;
+}
+
+/** Where the AWS files are, the way the CLI finds them: the variables, then ~/.aws. */
+async function awsFiles(env: Env): Promise<AwsFiles> {
+  const aws = join(env["HOME"] ?? env["USERPROFILE"] ?? homedir(), ".aws");
+  return {
+    config: await ini(env["AWS_CONFIG_FILE"] ?? join(aws, "config")),
+    credentials: await ini(env["AWS_SHARED_CREDENTIALS_FILE"] ?? join(aws, "credentials")),
+  };
+}
+
+/** The config section a profile's settings are in: `default`, or `profile <name>`. */
+function configOf(files: AwsFiles, profile: string): Map<string, string> | undefined {
+  return files.config.get(profile === "default" ? "default" : `profile ${profile}`);
+}
+
+/** The region a profile signs for: the environment first, as the CLI has it, then its config. */
+function regionOf(env: Env, files: AwsFiles, profile: string): string {
+  return (
+    env["AWS_REGION"] ??
+    env["AWS_DEFAULT_REGION"] ??
+    configOf(files, profile)?.get("region") ??
+    DEFAULT_REGION
+  );
+}
+
+/**
+ * profileKeys reads one named profile's credentials out of the AWS files, or
+ * answers undefined for a profile with none, which each caller words for
+ * itself: the chain found nothing, or the profile a connection named has none.
+ *
+ * Keys in ~/.aws/credentials, or in the profile's config section, are read as
+ * they are. A profile that signs in some other way -- SSO, a program to run --
+ * is refused by name with the command that turns it into keys this can read.
+ */
+function profileKeys(env: Env, files: AwsFiles, profile: string): AwsCredentials | undefined {
+  const p = files.credentials.get(profile);
+  const fromConfig = configOf(files, profile);
+  const key = p?.get("aws_access_key_id") ?? fromConfig?.get("aws_access_key_id");
+  const secret = p?.get("aws_secret_access_key") ?? fromConfig?.get("aws_secret_access_key");
+  if (key !== undefined && secret !== undefined) {
+    const token = p?.get("aws_session_token") ?? fromConfig?.get("aws_session_token");
+    const region = regionOf(env, files, profile);
+    const as = `the AWS profile ${profile}`;
+    return { accessKeyId: key, secretAccessKey: secret, sessionToken: token, region, as };
+  }
+  if (fromConfig?.has("sso_session") === true || fromConfig?.has("sso_start_url") === true) {
+    throw new Error(
+      `the AWS profile ${profile} signs in through SSO, which uno does not follow yet · ` +
+        `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
+    );
+  }
+  return undefined;
+}
+
+/**
+ * cached reuses what `read` answered for CREDENTIALS_MS, so a request per
+ * range does not read ~/.aws per range, and a key rotated on disk is picked
+ * up within the minute.
+ */
+function cached(read: () => Promise<AwsCredentials>): () => Promise<AwsCredentials> {
+  let kept: { at: number; creds: AwsCredentials } | undefined;
+  return async () => {
+    if (kept !== undefined && Date.now() - kept.at < CREDENTIALS_MS) return kept.creds;
+    const creds = await read();
+    kept = { at: Date.now(), creds };
+    return creds;
+  };
+}
+
 /**
  * awsCredentials finds AWS credentials the way the AWS CLI does, as far as a
  * person with keys is concerned: the environment first, then the profile in
  * ~/.aws/credentials that AWS_PROFILE names, or `default`.
  *
- * uno stores nothing. What it can read is what the person already set up for
- * every other tool, and it is read in the engine's process, so a key never
- * reaches the page that draws the grid.
- *
- * SSO and credential_process profiles are not followed. Each is a program to
- * run and a token to exchange, and a profile that needs one is refused by name
- * with the command that turns it into keys this can read.
+ * This is the `machine` way of signing in, and what a request covered by no
+ * connection signs with. uno stores nothing. What it can read is what the
+ * person already set up for every other tool, and it is read in the engine's
+ * process, so a key never reaches the page that draws the grid.
  */
-export function awsCredentials(
-  env: Record<string, string | undefined> = process.env,
-): () => Promise<AwsCredentials> {
-  let kept: { at: number; creds: AwsCredentials } | undefined;
-
-  return async () => {
-    if (kept !== undefined && Date.now() - kept.at < CREDENTIALS_MS) return kept.creds;
-
+export function awsCredentials(env: Env = process.env): () => Promise<AwsCredentials> {
+  return cached(async () => {
     const profile = env["AWS_PROFILE"] ?? env["AWS_DEFAULT_PROFILE"] ?? "default";
-    const aws = join(homedir(), ".aws");
-    const config = await ini(env["AWS_CONFIG_FILE"] ?? join(aws, "config"));
-    const fromConfig = config.get(profile === "default" ? "default" : `profile ${profile}`);
-    const region =
-      env["AWS_REGION"] ?? env["AWS_DEFAULT_REGION"] ?? fromConfig?.get("region") ?? "us-east-1";
-
-    let creds: AwsCredentials | undefined;
+    const files = await awsFiles(env);
     const id = env["AWS_ACCESS_KEY_ID"];
     const secret = env["AWS_SECRET_ACCESS_KEY"];
     if (id !== undefined && id !== "" && secret !== undefined && secret !== "") {
-      creds = {
+      return {
         accessKeyId: id,
         secretAccessKey: secret,
         sessionToken: env["AWS_SESSION_TOKEN"],
-        region,
+        region: regionOf(env, files, profile),
       };
-    } else {
-      const file = await ini(env["AWS_SHARED_CREDENTIALS_FILE"] ?? join(aws, "credentials"));
-      const p = file.get(profile);
-      const key = p?.get("aws_access_key_id") ?? fromConfig?.get("aws_access_key_id");
-      const sec = p?.get("aws_secret_access_key") ?? fromConfig?.get("aws_secret_access_key");
-      if (key !== undefined && sec !== undefined) {
-        const token = p?.get("aws_session_token") ?? fromConfig?.get("aws_session_token");
-        creds = { accessKeyId: key, secretAccessKey: sec, sessionToken: token, region };
-      } else if (
-        fromConfig?.has("sso_session") === true ||
-        fromConfig?.has("sso_start_url") === true
-      ) {
-        throw new Error(
-          `the AWS profile ${profile} signs in through SSO, which uno does not follow yet · ` +
-            `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
-        );
-      }
     }
-    if (creds === undefined) {
+    const creds = profileKeys(env, files, profile);
+    if (creds !== undefined) return creds;
+    throw new Error(
+      `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or put keys for the ${profile} profile in ~/.aws/credentials`,
+    );
+  });
+}
+
+/**
+ * profileCredentials signs in as one named profile, whatever AWS_PROFILE says
+ * and whatever keys are in the environment: a connection that names a profile
+ * means that one.
+ */
+export function profileCredentials(
+  profile: string,
+  env: Env = process.env,
+): () => Promise<AwsCredentials> {
+  return cached(async () => {
+    const files = await awsFiles(env);
+    const creds = profileKeys(env, files, profile);
+    if (creds !== undefined) return creds;
+    if (!files.credentials.has(profile) && configOf(files, profile) === undefined) {
       throw new Error(
-        `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or put keys for the ${profile} profile in ~/.aws/credentials`,
+        `there is no AWS profile called ${profile} in ~/.aws/config or ~/.aws/credentials`,
       );
     }
-    kept = { at: Date.now(), creds };
-    return creds;
+    throw new Error(
+      `the AWS profile ${profile} has no keys uno can read · put aws_access_key_id and aws_secret_access_key for it in ~/.aws/credentials`,
+    );
+  });
+}
+
+/**
+ * ConnectionAuth signs in the way a connection says to, keeping one set of
+ * credentials per way so two connections on one profile read it once.
+ */
+export interface ConnectionAuth {
+  /** The machine's chain: what a request no connection covers signs with. */
+  machine(): Promise<AwsCredentials>;
+  /** How a request through `c` goes out. Refuses a way this platform does not sign in. */
+  of(c: Connection): Promise<Signing>;
+}
+
+/**
+ * connectionAuth is the desktop's ways of signing in: `machine`, `profile` and
+ * `public`. `role` is the hosted engine's, taken on with the requesting
+ * account's external ID, and is refused here by name rather than tried with
+ * whatever this machine has.
+ */
+export function connectionAuth(env: Env = process.env): ConnectionAuth {
+  const machine = awsCredentials(env);
+  const profiles = new Map<string, () => Promise<AwsCredentials>>();
+  const who = (c: Connection): string => (c.name === "" ? c.id : c.name);
+
+  return {
+    machine,
+    async of(c) {
+      switch (c.auth.mode) {
+        case "machine": {
+          const creds = await machine();
+          return {
+            ...creds,
+            region: c.region ?? creds.region,
+            as: `${who(c)} (this machine's AWS credentials)`,
+          };
+        }
+        case "profile": {
+          const name = c.auth.profile;
+          let read = profiles.get(name);
+          if (read === undefined) {
+            read = profileCredentials(name, env);
+            profiles.set(name, read);
+          }
+          const creds = await read();
+          return {
+            ...creds,
+            region: c.region ?? creds.region,
+            as: `${who(c)} (the AWS profile ${name})`,
+          };
+        }
+        case "public":
+          return {
+            unsigned: true,
+            region: c.region ?? env["AWS_REGION"] ?? env["AWS_DEFAULT_REGION"] ?? DEFAULT_REGION,
+            as: `${who(c)} (read without signing in)`,
+          };
+        case "role":
+          throw new Error(
+            `${who(c)} signs in with a role, which only uno's hosted engine takes on · ` +
+              `on the desktop, connect it with a profile that can assume ${c.auth.roleArn}`,
+          );
+      }
+    },
+  };
+}
+
+/**
+ * connectionSigning is how the desktop's S3 provider signs each request: with
+ * the connection that covers where it is going, and with the machine's chain
+ * where none does -- an address somebody pasted, a bucket nobody connected.
+ *
+ * `connections` is asked on every request rather than handed over once, so a
+ * connection saved while the engine runs is the one its next request uses.
+ */
+export function connectionSigning(
+  connections: () => readonly Connection[],
+  env: Env = process.env,
+  auth: ConnectionAuth = connectionAuth(env),
+): (loc: S3Location) => Promise<Signing> {
+  return (loc) => {
+    const c = covering(connections(), loc.bucket, loc.key);
+    return c === undefined ? auth.machine() : auth.of(c);
   };
 }
 

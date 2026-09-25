@@ -35,15 +35,43 @@ export interface AwsCredentials {
   /** For temporary credentials: an assumed role, an SSO session exported to env. */
   sessionToken?: string;
   region: string;
+  /**
+   * Who these are, in words, for a refusal to name: "the AWS profile finance".
+   * Absent for whatever the machine's chain turned up, which a refusal calls
+   * "the AWS credentials uno found".
+   */
+  as?: string;
 }
+
+/**
+ * Anonymous is how a bucket anybody may read is asked: in a region, and with no
+ * signature at all. Signing with somebody's keys would work too, and would put
+ * their name in the bucket owner's logs for a read that never needed it.
+ */
+export interface Anonymous {
+  readonly unsigned: true;
+  region: string;
+  as?: string;
+}
+
+/** How one request goes out: signed with credentials, or not signed at all. */
+export type Signing = AwsCredentials | Anonymous;
+
+/** What a refusal calls the credentials when nothing said whose they are. */
+const FOUND = "the AWS credentials uno found";
 
 export interface S3Options {
   /**
    * Asked before every request, so credentials that rotate -- a session token
    * that expires in the middle of indexing 30 GB -- are picked up without
    * reopening anything. Whoever supplies them is the one to cache.
+   *
+   * It is told where the request is going -- the object, or the prefix a
+   * listing asks about -- because which credentials to use is a question about
+   * where: two buckets in one workspace can belong to two connections that
+   * sign in two different ways.
    */
-  credentials: () => Promise<AwsCredentials>;
+  credentials: (loc: S3Location) => Promise<Signing>;
   /**
    * An S3-compatible endpoint to use instead of AWS: MinIO, a local stand-in
    * for tests. Requests to it are path-style, `<endpoint>/<bucket>/<key>`.
@@ -174,6 +202,8 @@ export interface S3Requests {
   object(loc: S3Location, method: "HEAD" | "GET", extra: Record<string, string>): Promise<Response>;
   /** The bucket itself with a query on it, which is what a listing asks for. */
   bucket(bucket: string, query: Record<string, string>): Promise<Response>;
+  /** Who a request to `loc` goes out as, in words, for a refusal to name. */
+  who(loc: S3Location): Promise<string>;
 }
 
 /**
@@ -196,10 +226,11 @@ export function s3Requests(opts: S3Options): S3Requests {
     at: (region: string) => URL,
     method: "HEAD" | "GET",
     extra: Record<string, string>,
-    creds: AwsCredentials,
+    creds: Signing,
     region: string,
   ): Promise<Response> {
     const url = at(region);
+    if ("unsigned" in creds) return go(url, { method, headers: extra });
     const headers = signV4(
       { method, url, headers: { ...extra, "x-amz-content-sha256": EMPTY_SHA256 } },
       creds,
@@ -220,14 +251,15 @@ export function s3Requests(opts: S3Options): S3Requests {
    * question, and a signature is only valid for the host it named.
    */
   async function request(
-    bucket: string,
+    loc: S3Location,
     at: (region: string) => URL,
     method: "HEAD" | "GET",
     extra: Record<string, string>,
   ): Promise<Response> {
+    const bucket = loc.bucket;
     let moves = 0;
     for (let attempt = 1; ; attempt++) {
-      const creds = await opts.credentials();
+      const creds = await opts.credentials(loc);
       const region = regions.get(bucket) ?? creds.region;
 
       let res: Response;
@@ -265,11 +297,18 @@ export function s3Requests(opts: S3Options): S3Requests {
 
   return {
     object: (loc, method, extra) =>
-      request(loc.bucket, (region) => objectUrl(loc, region, opts.endpoint), method, extra),
+      request(loc, (region) => objectUrl(loc, region, opts.endpoint), method, extra),
     // A listing is a GET, so its refusal carries a body, so the region in one
-    // is there to be read without the extra ask a HEAD needs.
+    // is there to be read without the extra ask a HEAD needs. It is signed as
+    // the prefix it asks about, which is the place a connection covers.
     bucket: (bucket, query) =>
-      request(bucket, (region) => listUrl(bucket, query, region, opts.endpoint), "GET", {}),
+      request(
+        { bucket, key: query["prefix"] ?? "" },
+        (region) => listUrl(bucket, query, region, opts.endpoint),
+        "GET",
+        {},
+      ),
+    who: async (loc) => (await opts.credentials(loc)).as ?? FOUND,
   };
 }
 
@@ -294,7 +333,7 @@ export function s3Files(opts: S3Options): FileHandler {
       if (cannot !== undefined) throw cannot;
 
       const head = await send.object(loc, "HEAD", {});
-      if (!head.ok) throw new Error(`${url}: ${refusal(head.status)}`);
+      if (!head.ok) throw new Error(`${url}: ${refusal(head.status, await send.who(loc))}`);
       const size = Number(head.headers.get("content-length") ?? "NaN");
       if (!Number.isFinite(size)) throw new Error(`${url}: S3 did not say how big it is`);
       // Every range after this one is asked for as this version of the object.
@@ -314,7 +353,7 @@ export function s3Files(opts: S3Options): FileHandler {
           if (res.status === 412) {
             throw new Error(`${url} changed in the bucket since it was opened · open it again`);
           }
-          if (!res.ok) throw new Error(`${url}: ${refusal(res.status)}`);
+          if (!res.ok) throw new Error(`${url}: ${refusal(res.status, await send.who(loc))}`);
           const bytes = new Uint8Array(await res.arrayBuffer());
           // A server that ignored the range sent the whole object.
           return res.status === 200 && bytes.length === size ? bytes.subarray(offset, end) : bytes;
@@ -437,15 +476,17 @@ function isRegion(word: string): boolean {
 }
 
 /**
- * What S3's status codes mean to the person who pasted the URL.
+ * What S3's status codes mean to the person who pasted the URL. `who` is
+ * whose credentials were turned away, so a person with two profiles is told
+ * which one could not read it.
  *
  * Shared with the lister's `stat`, which sends the same HEAD of the same object
  * and has to say the same thing about a 403 as opening it does.
  */
-export function refusal(status: number): string {
+export function refusal(status: number, who = FOUND): string {
   switch (status) {
     case 403:
-      return "access denied · the AWS credentials uno found cannot read it";
+      return `access denied · ${who} cannot read it`;
     case 404:
       return "no such object in that bucket";
     default:
