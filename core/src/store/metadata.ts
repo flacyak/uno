@@ -212,9 +212,11 @@ function drop(res: Response): Effect.Effect<void> {
 
 /** The container endpoint the environment names is not a URL. */
 export class NotAUrl extends Data.TaggedError('NotAUrl')<{
+  /** The endpoint, as the sentence names it. */
   who: string;
   message: string;
 }> {
+  /** @param parts The endpoint. */
   constructor(parts: { who: string }) {
     super({ ...parts, message: `${parts.who} is not a URL` });
   }
@@ -225,9 +227,11 @@ export class NotAUrl extends Data.TaggedError('NotAUrl')<{
  * plain http to a host other than this one.
  */
 export class NotThisHost extends Data.TaggedError('NotThisHost')<{
+  /** The endpoint, as the sentence names it. */
   who: string;
   message: string;
 }> {
+  /** @param parts The endpoint. */
   constructor(parts: { who: string }) {
     super({
       ...parts,
@@ -238,13 +242,16 @@ export class NotThisHost extends Data.TaggedError('NotThisHost')<{
 
 /**
  * Nothing answered at the endpoint within the second it is given, or the
- * connection failed. `reason` is the runtime's own account of it.
+ * connection failed.
  */
 export class NoAnswer extends Data.TaggedError('NoAnswer')<{
+  /** The endpoint, as the sentence names it. */
   who: string;
+  /** The runtime's own account of it. */
   reason: string;
   message: string;
 }> {
+  /** @param parts The endpoint and the runtime's account of the failure. */
   constructor(parts: { who: string; reason: string }) {
     super({
       ...parts,
@@ -258,11 +265,15 @@ export class NoAnswer extends Data.TaggedError('NoAnswer')<{
  * Message the instance metadata service puts in a body.
  */
 export class HostRefused extends Data.TaggedError('HostRefused')<{
+  /** The endpoint, as the sentence names it. */
   who: string;
+  /** The status, or the Code the instance metadata service answered. */
   code: string;
+  /** The Message beside the Code, where there is one. */
   detail?: string;
   message: string;
 }> {
+  /** @param parts The endpoint, the status or Code, and the Message if any. */
   constructor(parts: { who: string; code: string; detail?: string }) {
     super({
       ...parts,
@@ -273,9 +284,11 @@ export class HostRefused extends Data.TaggedError('HostRefused')<{
 
 /** The endpoint answered with something other than JSON. */
 export class NotJson extends Data.TaggedError('NotJson')<{
+  /** The endpoint, as the sentence names it. */
   who: string;
   message: string;
 }> {
+  /** @param parts The endpoint. */
   constructor(parts: { who: string }) {
     super({ ...parts, message: `${parts.who} did not answer with JSON` });
   }
@@ -283,9 +296,11 @@ export class NotJson extends Data.TaggedError('NotJson')<{
 
 /** The endpoint answered with JSON that holds no keys uno could read. */
 export class HostUnreadable extends Data.TaggedError('HostUnreadable')<{
+  /** The endpoint, as the sentence names it. */
   who: string;
   message: string;
 }> {
+  /** @param parts The endpoint. */
   constructor(parts: { who: string }) {
     super({
       ...parts,
@@ -315,12 +330,11 @@ export type ContainerFailure =
 export type HostFailure = InstanceFailure | ContainerFailure;
 
 /**
- * sessionIn reads the JSON both endpoints answer with: AccessKeyId,
- * SecretAccessKey, Token and Expiration. IMDS adds a Code, which says
- * Success for keys it could hand out.
- * @param body the JSON answered
- * @param who the endpoint, for an error
- * @return the session the body holds
+ * Reads the JSON both endpoints answer with: AccessKeyId, SecretAccessKey,
+ * Token and Expiration. IMDS adds a Code, which says Success for keys it
+ * could hand out.
+ * @param body The JSON answered.
+ * @param who The endpoint, for an error.
  */
 function sessionIn(
   body: string,
