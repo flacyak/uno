@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { expect, test } from "vite-plus/test";
 
@@ -58,6 +59,22 @@ test("one unreadable file costs one formula and not the library", async () => {
   expect(formulas.map((f) => f.id)).toEqual(["also-good", "good"]);
   expect(failed).toHaveLength(1);
   expect(failed[0]!.message, "the failure should name the file").toContain("broken.unof");
+});
+
+// A connection that ends up in the formula folder is not an empty formula.
+test("a connection in the formula folder is a failure, not a formula", async () => {
+  const store = nodeStore();
+  const dir = await scratch();
+
+  await saveFormula(store, dir, column("good", "Good", "a + b"));
+  const connection = fileURLToPath(new URL("../testdata/acme-exports.unof", import.meta.url));
+  await copyFile(connection, join(dir, "acme-exports.unof"));
+
+  const { formulas, failed } = await loadLibrary(store, dir);
+  expect(formulas.map((f) => f.id)).toEqual(["good"]);
+  expect(failed).toHaveLength(1);
+  expect(failed[0]!.message, "the failure should name the file").toContain("acme-exports.unof");
+  expect(failed[0]!.message, "the failure should name the kind").toContain('"connection"');
 });
 
 // A person who has never written a formula has no folder, and that is not a

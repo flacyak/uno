@@ -197,3 +197,15 @@ test("a file that is not readable is refused by name", () => {
   expect(() => parseFormula("broken.unof", "{not json")).toThrow(/broken\.unof/);
   expect(() => parseFormula("broken.unof", "[1,2,3]")).toThrow(/broken\.unof/);
 });
+
+// A connection is a .unof too. Read as a formula it would come back as an empty
+// column formula, so a kind this build does not know is refused by name.
+test("a kind this build does not know is refused by name", () => {
+  const text = JSON.stringify({ format: FORMAT_VERSION, id: "f", name: "F", kind: "connection" });
+  expect(() => parseFormula("f.unof", text)).toThrow(/f\.unof.*"connection"/);
+});
+
+test("a file with no kind is refused by name", () => {
+  const text = JSON.stringify({ format: FORMAT_VERSION, id: "f", name: "F", expr: "a" });
+  expect(() => parseFormula("f.unof", text)).toThrow(/f\.unof.*no kind/);
+});
