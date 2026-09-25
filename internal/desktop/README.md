@@ -49,6 +49,18 @@ What a `.uno` gives up for this is travelling on its own. Sending somebody the
 file without the data it points at gets them the tabs, the edits and the log,
 and no rows.
 
+## Settings
+
+The gear at the left of the status bar opens settings upward from the corner.
+It lists every top-level source -- the connections the panel browses from --
+and choosing one opens the panel browsing it, beside `+ Connect a bucket`.
+Below them are four themes, Paper Ember, Tokyo Night, Sakura and Catppuccin
+Frappé, taken with their authors' credit from [T3 Themes](https://t3themes.com),
+and an appearance of System, Light or Dark, since each theme has both. A theme
+is worn the moment it is chosen, and the choice is kept on this machine for the
+next launch. Paper Ember is worn until another is chosen. `src/renderer/theme.ts`
+has how each theme's colours map onto uno's.
+
 ## Sources in S3
 
 The `+` at the end of the tab strip offers a file or an S3 URL. An S3 URL is
@@ -280,7 +292,9 @@ mode, and `src/main/driven.ts` has the details.
 
 The run starts Electron with a `--user-data-dir` of its own under `out/smoke/`,
 emptied first, so the connection it saves never lands among yours and a file a
-previous run left behind is not taken as evidence.
+previous run left behind is not taken as evidence. `vp run preview` does the
+same under `out/preview-data/`, since the GIF it films is published and the
+theme its story tries must not become the one your own uno opens in.
 
 It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
