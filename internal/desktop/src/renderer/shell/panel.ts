@@ -250,8 +250,8 @@ export class Panel {
       },
     );
 
-    // The head every column of the window begins with, which is also what
-    // keeps the filter out from under the × at the window's top right.
+    // The head that says what the column is. It begins under the end of the
+    // window's top line, which index.html keeps for the × that closes the window.
     const head = document.createElement("div");
     head.className = "panel-head col-head";
     this.words.text(head, m.sources_title);
