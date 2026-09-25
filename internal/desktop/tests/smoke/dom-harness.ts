@@ -20,7 +20,7 @@
 // MessagePort. There is no mock engine here: `serve` is the same function
 // src/engine/index.ts hands its provider list to, and a disk provider reads
 // the same bytes off the same fixture path a real open would.
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +32,9 @@ import { sources } from "@uno/grid/plugin";
 import { connectionsIn, saveConnection } from "@uno/grid/store";
 import { diskProvider, nodeStore } from "@uno/grid/store/node";
 
+import type { Shell } from "../../src/renderer/shell/shell.ts";
 import type { Host } from "../../src/shared/host.ts";
+import { bodyMarkup } from "../markup.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -43,20 +45,6 @@ export const FIXTURE = join(HERE, "..", "..", "..", "grid", "tests", "testdata",
  * asked, mirroring index.ts's own FIRST_ROWS_MS and POLL_MS. */
 const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
-
-/**
- * Body markup, read from the real index.html and not retyped: a second copy
- * drifts from what Shell actually queries (`#app`, `#workspaces`, `#banner`,
- * `#empty`, `#content`, and the status bar's ids) without anyone noticing.
- */
-function bodyMarkup(): string {
-  const html = readFileSync(join(HERE, "..", "..", "index.html"), "utf8");
-  const open = html.indexOf("<body>") + "<body>".length;
-  const close = html.indexOf("</body>");
-  // The module script that boots main.ts is the one piece of the body this
-  // harness must not run -- see the file header on why.
-  return html.slice(open, close).replace(/<script[\s\S]*?<\/script>\s*/, "");
-}
 
 /**
  * Stands in for the row a real CSS engine would compute. happy-dom parses and
@@ -98,9 +86,10 @@ function fakeLayout(): void {
  * bootShell wires a real Shell to a real engine over a real (Node) channel,
  * opens the fixture, and waits for its first rows to land -- the same
  * condition runSmoke's own prelude waits on in index.ts, since nothing here
- * runs that prelude for it.
+ * runs that prelude for it. It answers the shell, for a test that drives what
+ * no check on `Page` reaches.
  */
-export async function bootShell(): Promise<void> {
+export async function bootShell(): Promise<Shell> {
   document.body.innerHTML = bodyMarkup();
   fakeLayout();
 
@@ -136,7 +125,7 @@ export async function bootShell(): Promise<void> {
 
   const start = performance.now();
   while (performance.now() - start < FIRST_ROWS_MS) {
-    if (document.querySelector("tbody tr:not(.pending)") !== null) return;
+    if (document.querySelector("tbody tr:not(.pending)") !== null) return shell;
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
   throw new Error(`no rows were drawn within ${FIRST_ROWS_MS / 1000}s`);

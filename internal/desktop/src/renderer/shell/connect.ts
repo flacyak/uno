@@ -16,6 +16,9 @@ import type { Connection } from "@uno/grid/library";
 import { validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
+import { m } from "../../paraglide/messages.js";
+import { Words, message } from "./util.ts";
+
 /** What the form needs of the engine and the host. The shell decides how. */
 export interface ConnectAsks {
   /** The names of the AWS profiles this machine has. */
@@ -92,13 +95,23 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
   };
 }
 
+/** A bucket's name as an example of one, in the field before anything is typed. */
+const EXAMPLE_BUCKET = "acme-exports";
+
+/** What stands for the region of a bucket the test could not place. */
+const UNKNOWN_REGION = "?";
+
 /** triedLine is what a test that worked says: the folder, and what it held. */
 export function triedLine(tried: Tried): string {
-  const where = tried.connection.prefix === "" ? "the bucket" : tried.connection.prefix;
-  const count = (n: number, one: string): string =>
-    `${n.toLocaleString()} ${one}${n === 1 ? "" : "s"}`;
-  const more = tried.more ? ", and more" : "";
-  return `listed ${where} · ${count(tried.folders, "folder")}, ${count(tried.files, "file")}${more}`;
+  const held = {
+    folders: m.folders_count({ count: tried.folders }),
+    files: m.files_count({ count: tried.files }),
+  };
+  const found = tried.more ? m.connect_found_more(held) : m.connect_found(held);
+  const prefix = tried.connection.prefix;
+  return prefix === ""
+    ? m.connect_listed_bucket({ found })
+    : m.connect_listed_prefix({ prefix, found });
 }
 
 /** Where the form is: waiting to be tried, trying, tried and fine, or refused. */
@@ -110,14 +123,18 @@ type Status =
 
 export class ConnectForm {
   readonly el = document.createElement("form");
-  private readonly bucket = input("bucket", "acme-exports");
-  private readonly prefix = input("prefix", "the whole bucket");
+  /** What the form says that does not change with what is typed in it. */
+  private readonly words = new Words();
+  private readonly bucket = input("bucket");
+  private readonly prefix = input("prefix");
   private readonly signIn = document.createElement("select");
   private readonly region = document.createElement("div");
   private readonly result = document.createElement("div");
   private readonly saving = document.createElement("div");
-  private readonly tryButton = button("Test", "");
-  private readonly saveButton = button("Save connection", "primary");
+  private readonly tryButton = button("");
+  private readonly saveButton = button("primary");
+  /** The profile names the engine last answered with, for the list to be drawn from again. */
+  private names: readonly string[] = [];
   private status: Status = { t: "untried" };
   /** Counts tries, so an answer for fields that have since changed is dropped. */
   private tries = 0;
@@ -133,20 +150,27 @@ export class ConnectForm {
     el.className = "panel-connect";
     el.hidden = true;
     el.noValidate = true;
-    el.setAttribute("aria-label", "connect a bucket");
+    const words = this.words;
+    words.attr(el, "aria-label", m.connect_form_aria);
 
     const title = document.createElement("div");
     title.className = "title";
-    title.textContent = "Connect a bucket";
+    words.text(title, m.connect_title);
 
-    this.signIn.setAttribute("aria-label", "sign in as");
+    words.attr(this.bucket, "aria-label", m.connect_bucket_aria);
+    this.bucket.placeholder = EXAMPLE_BUCKET;
+    words.attr(this.prefix, "aria-label", m.connect_prefix_aria);
+    words.placeholder(this.prefix, m.connect_prefix_placeholder);
+    words.text(this.tryButton, m.action_test);
+    words.text(this.saveButton, m.connect_save);
+    words.attr(this.signIn, "aria-label", m.connect_sign_in_aria);
     this.signIn.addEventListener("change", () => (this.picked = true));
     this.region.className = "value";
     this.result.className = "result";
     this.result.setAttribute("role", "status");
     this.saving.className = "fine";
 
-    const cancel = button("Cancel", "");
+    const cancel = words.text(button(""), m.action_cancel);
     cancel.type = "button";
     cancel.addEventListener("click", () => this.cancel());
     this.tryButton.type = "button";
@@ -157,10 +181,10 @@ export class ConnectForm {
 
     el.append(
       title,
-      field("Bucket", this.bucket),
-      field("Prefix", this.prefix),
-      field("Profile", this.signIn),
-      field("Region", this.region),
+      field(words, m.field_bucket, this.bucket),
+      field(words, m.field_prefix, this.prefix),
+      field(words, m.field_profile, this.signIn),
+      field(words, m.field_region, this.region),
       this.result,
       buttons,
       this.saving,
@@ -186,6 +210,13 @@ export class ConnectForm {
 
   get open(): boolean {
     return !this.el.hidden;
+  }
+
+  /** relabel writes the form again in the language the app is in now, as it stands. */
+  relabel(): void {
+    this.words.write();
+    this.options(this.names);
+    this.paint();
   }
 
   /**
@@ -220,11 +251,11 @@ export class ConnectForm {
       { bucket: this.bucket.value, prefix: this.prefix.value, signIn: this.signIn.value as SignIn },
       this.asks.known(),
     );
-    if (c.bucket === "") return "name the bucket to connect";
+    if (c.bucket === "") return m.connect_name_bucket();
     try {
       validConnection(c);
     } catch (err) {
-      return (err as Error).message;
+      return message(err);
     }
     return c;
   }
@@ -252,7 +283,7 @@ export class ConnectForm {
       return tried;
     } catch (err) {
       if (mine !== this.tries) return undefined;
-      this.status = { t: "refused", why: err instanceof Error ? err.message : String(err) };
+      this.status = { t: "refused", why: message(err) };
       this.paint();
       return undefined;
     }
@@ -278,7 +309,7 @@ export class ConnectForm {
       this.done(saved);
     } catch (err) {
       if (mine !== this.tries) return;
-      this.status = { t: "refused", why: err instanceof Error ? err.message : String(err) };
+      this.status = { t: "refused", why: message(err) };
       this.paint();
     }
   }
@@ -298,11 +329,12 @@ export class ConnectForm {
 
   /** options fills the profile list: the machine's own chain, each profile, and public. */
   private options(names: readonly string[]): void {
+    this.names = names;
     const was = this.signIn.value;
     const choices: Array<[SignIn, string]> = [
-      ["machine", "this machine's AWS setup"],
+      ["machine", m.connect_sign_in_machine()],
       ...names.map((n): [SignIn, string] => [`profile:${n}`, n]),
-      ["public", "public · no sign-in"],
+      ["public", m.connect_sign_in_public()],
     ];
     this.signIn.replaceChildren(
       ...choices.map(([value, label]) => {
@@ -326,13 +358,15 @@ export class ConnectForm {
   private paint(): void {
     const s = this.status;
     this.region.textContent =
-      s.t === "tried" ? `${s.tried.connection.region ?? "?"} · detected` : "detected by the test";
+      s.t === "tried"
+        ? m.connect_region_detected({ region: s.tried.connection.region ?? UNKNOWN_REGION })
+        : m.connect_region_pending();
     this.region.classList.toggle("found", s.t === "tried");
 
     this.result.className = `result ${s.t}`;
     this.result.textContent =
       s.t === "trying"
-        ? "listing…"
+        ? m.connect_listing()
         : s.t === "tried"
           ? `✓ ${triedLine(s.tried)}`
           : s.t === "refused"
@@ -343,11 +377,8 @@ export class ConnectForm {
 
     // Where it will go, once there is a bucket to name the file after.
     const draft = this.draft();
-    const where =
-      typeof draft === "string"
-        ? "Each connection is one file in connections/."
-        : `Saves as connections/${draft.id}.unof.`;
-    this.saving.textContent = `${where} The profile list is read from ~/.aws; uno stores the name, never the keys.`;
+    this.saving.textContent =
+      typeof draft === "string" ? m.connect_saving_each() : m.connect_saving_as({ id: draft.id });
   }
 }
 
@@ -356,29 +387,25 @@ function key(c: Connection): string {
   return JSON.stringify([c.bucket, c.prefix, c.auth]);
 }
 
-function input(name: string, placeholder: string): HTMLInputElement {
+/** input is one text field, by its name in the form. */
+function input(name: string): HTMLInputElement {
   const el = document.createElement("input");
   el.name = name;
-  el.placeholder = placeholder;
   el.spellcheck = false;
   el.autocomplete = "off";
-  el.setAttribute("aria-label", name);
   return el;
 }
 
-function button(label: string, cls: string): HTMLButtonElement {
+function button(cls: string): HTMLButtonElement {
   const el = document.createElement("button");
-  el.textContent = label;
   if (cls !== "") el.className = cls;
   return el;
 }
 
 /** field is one labelled row of the form. */
-function field(label: string, control: HTMLElement): HTMLElement {
+function field(words: Words, label: () => string, control: HTMLElement): HTMLElement {
   const row = document.createElement("label");
   row.className = "field";
-  const name = document.createElement("span");
-  name.textContent = label;
-  row.append(name, control);
+  row.append(words.text(document.createElement("span"), label), control);
   return row;
 }
