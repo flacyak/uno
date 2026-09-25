@@ -13,8 +13,9 @@
 
 import { serve } from "@uno/grid/engine";
 import type { Reply, Request } from "@uno/grid/engine";
-import { awsCredentials, localFiles } from "@uno/grid/store/node";
-import { s3Files } from "@uno/grid/store/s3";
+import { sources } from "@uno/grid/plugin";
+import { awsCredentials, diskProvider } from "@uno/grid/store/node";
+import { s3Provider } from "@uno/grid/store/s3";
 
 process.parentPort.once("message", (e) => {
   const port = e.ports[0];
@@ -36,14 +37,17 @@ process.parentPort.once("message", (e) => {
       },
       close: () => port.close(),
     },
-    [
-      localFiles(),
-      s3Files({
+    // What this build can reach, written in one place. The handler list is
+    // derived from it, and the lister list with it once there are listers to
+    // derive -- so browsing arrives here without this file being edited again.
+    sources([
+      diskProvider(),
+      s3Provider({
         credentials: awsCredentials(),
         // The same variables the AWS CLI reads, so MinIO or a local stand-in is
         // pointed at the way every other tool on the machine is.
         endpoint: process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"],
       }),
-    ],
+    ]).files,
   );
 });

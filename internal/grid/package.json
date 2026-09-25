@@ -23,6 +23,7 @@
     "./notation": "./dist/notation/index.mjs",
     "./num": "./dist/num/index.mjs",
     "./pattern": "./dist/pattern/index.mjs",
+    "./plugin": "./dist/plugin/index.mjs",
     "./program": "./dist/program/index.mjs",
     "./sheet": "./dist/sheet/index.mjs",
     "./store": "./dist/store/index.mjs",
