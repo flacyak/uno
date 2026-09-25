@@ -10,11 +10,11 @@
 // rather than carrying them, so what `save` hands over is the log and a few
 // paths whatever the data behind them weighs.
 //
-// The Electron implementation is `preload` plus `renderer/host.ts`; a web build
-// implements the same methods with the File System Access API and a Web Worker,
-// and shares every line of the renderer above it.
+// The Electron implementation is `preload` plus `renderer/host.ts`. A web
+// build implements the same methods by asking a server, over HTTP and a
+// WebSocket, and shares every line of the renderer above it.
 
-import type { SourceRef } from "@uno/grid/engine";
+import type { MessagePortLike, SourceRef } from "@uno/grid/engine";
 import type { Connection } from "@uno/grid/library";
 
 export interface Host {
@@ -31,8 +31,10 @@ export interface Host {
   dropped(file: File): SourceRef;
 
   /** Start an engine, a worker that owns one workspace. The port is the only way in
-   * or out of it, and closing the port ends the worker. */
-  connect(): Promise<MessagePort>;
+   * or out of it, and closing the port ends the worker. It is a MessagePort
+   * where the engine is a process beside the window, and a WebSocket dressed
+   * as one where the engine is on a server. */
+  connect(): Promise<MessagePortLike>;
 
   /**
    * Ask where to save. Undefined when the person cancelled.
