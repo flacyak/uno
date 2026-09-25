@@ -10,6 +10,7 @@ import type {
   SourceRef,
   Tuning,
 } from "../../src/engine/index.ts";
+import type { Connecting } from "../../src/engine/index.ts";
 import { read } from "../../src/ingest/index.ts";
 import { sources } from "../../src/plugin/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
@@ -42,14 +43,18 @@ export const TINY: Tuning = { chunkBytes: 4096, blockRows: 7, blockBytes: 512, c
 export function connect(
   tuning?: Tuning,
   providers: Provider[] = [diskProvider(), blobProvider()],
-  connections?: Connections,
+  connecting?: Connecting | Connections,
 ): { engine: Engine; done: () => void } {
   const { port1, port2 } = new MessageChannel();
   serve(
     messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
     sources(providers),
     tuning,
-    connections,
+    // A bare Connections is the common case in a test, and is wired the way
+    // a platform with nothing else to offer would wire it.
+    connecting === undefined || "connections" in connecting
+      ? connecting
+      : { connections: connecting },
   );
   const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
   return {

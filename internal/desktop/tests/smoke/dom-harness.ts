@@ -112,7 +112,7 @@ export async function bootShell(): Promise<void> {
     messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
     sources([diskProvider()]),
     undefined,
-    connectionsIn(nodeStore(), kept),
+    { connections: connectionsIn(nodeStore(), kept), profiles: () => Promise.resolve(["default"]) },
   );
 
   const host: Host = {
