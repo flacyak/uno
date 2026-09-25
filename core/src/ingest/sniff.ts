@@ -104,10 +104,11 @@ function isDigit(r: string | undefined): boolean {
 }
 
 /**
- * Encoding is a file's text encoding. "other" covers Windows-1252, Latin-1
- * and the rest.
+ * Encoding is a file's text encoding. UTF-8 is the standard, so a file that
+ * is not UTF-16 is read as UTF-8, and a byte that is not UTF-8 shows as the
+ * replacement character.
  */
-export type Encoding = 'utf-8' | 'utf-16le' | 'utf-16be' | 'other';
+export type Encoding = 'utf-8' | 'utf-16le' | 'utf-16be';
 
 const NUL = 0x00;
 
@@ -131,7 +132,7 @@ const UTF16_MIN_NULS = 2;
  * order mark decides. Otherwise the NULs do: UTF-16 has one in every ASCII
  * character, at odd offsets when little-endian and even when big-endian, and
  * they must come at least once per UTF16_UNITS_PER_NUL units. Otherwise it is
- * "utf-8" when the head decodes as UTF-8, and "other" when decoding fails.
+ * "utf-8".
  */
 export function sniffEncoding(head: Uint8Array): Encoding {
   if (head[0] === UTF16_MARK_LOW && head[1] === UTF16_MARK_HIGH)
@@ -151,13 +152,5 @@ export function sniffEncoding(head: Uint8Array): Encoding {
   if (most >= UTF16_MIN_NULS && most * UTF16_UNITS_PER_NUL >= units) {
     return second >= first ? 'utf-16le' : 'utf-16be';
   }
-
-  try {
-    // Streaming, so a character cut in half at the end of the head is
-    // accepted.
-    new TextDecoder('utf-8', { fatal: true }).decode(head, { stream: true });
-    return 'utf-8';
-  } catch {
-    return 'other';
-  }
+  return 'utf-8';
 }
