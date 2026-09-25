@@ -14,7 +14,9 @@ import { Engine, messagePort } from "@uno/grid/engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
 import { NO_ROW } from "@uno/grid/sheet";
 
+import { covers } from "@uno/grid/library";
 import type { Connection } from "@uno/grid/library";
+import { s3Location } from "@uno/grid/store/s3";
 
 import type { Host } from "../../shared/host.ts";
 import type { Grid, GridEvents } from "../grid/index.ts";
@@ -226,6 +228,16 @@ export class Shell {
   async saveConnection(c: Connection): Promise<Connection> {
     const saved = await this.host.saveConnection(c);
     await this.refreshConnections();
+    // The tabs that were waiting for this connection are read now: the person
+    // connecting the bucket is the person saying it may be read.
+    for (const tab of this.workspace?.sources ?? []) {
+      const path = tab.link?.path;
+      const loc =
+        path === undefined || tab.link?.connect === undefined ? undefined : s3Location(path);
+      if (loc !== undefined && covers(saved, loc.bucket, loc.key)) {
+        void this.pointAt(tab, refAt(path!), `${tab.name} reads from ${saved.name}`);
+      }
+    }
     return saved;
   }
 
@@ -633,7 +645,10 @@ export class Shell {
    */
   private repoint(tab: Tab): void {
     if (!this.panel.open) this.togglePanel();
-    this.panel.repoint(tab.id);
+    // A tab in a bucket nobody connected is not fixed by another file: its
+    // mark asks to connect the bucket, filled in.
+    if (tab.link?.connect !== undefined) this.panel.connectFor(tab.id);
+    else this.panel.repoint(tab.id);
   }
 
   /**
