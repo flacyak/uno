@@ -1251,6 +1251,7 @@ export class NoCredentials extends Data.TaggedError('NoCredentials')<{
   profile: string;
   message: string;
 }> {
+  /** @param parts The profile the chain looked for. */
   constructor(parts: { profile: string }) {
     super({
       ...parts,
@@ -1262,12 +1263,12 @@ export class NoCredentials extends Data.TaggedError('NoCredentials')<{
 }
 
 /**
- * awsCredentials finds credentials the way the AWS CLI does: the environment
- * first, then the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or
- * `default`, then the host the process runs on. This is the `machine` way
- * of signing in, and what a request outside every connection signs with.
- * @param env the environment, process.env by default
- * @return a function answering the credentials, reading again as they age
+ * Finds credentials the way the AWS CLI does: the environment first, then
+ * the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or `default`, then
+ * the host the process runs on. This is the `machine` way of signing in, and
+ * what a request outside every connection signs with.
+ * @param env The environment, process.env by default.
+ * @return A function answering the credentials, reading again as they age.
  */
 export function awsCredentials(
   env: Env = process.env,
@@ -1276,11 +1277,10 @@ export function awsCredentials(
 }
 
 /**
- * machineChain is the chain awsCredentials reads, as one Effect: the
- * environment, the profile, then the host, failing with NoCredentials where
- * none of them has any.
- * @param env the environment
- * @return the credentials, kept until shortly before they expire
+ * Runs the chain awsCredentials reads, as one Effect: the environment, the
+ * profile, then the host, failing with NoCredentials where none of them has
+ * any.
+ * @return The credentials, kept until shortly before they expire.
  */
 function machineChain(env: Env): Effect.Effect<Held, ChainFailure> {
   return Effect.gen(function* () {
@@ -1304,6 +1304,7 @@ export class NoSuchProfile extends Data.TaggedError('NoSuchProfile')<{
   profile: string;
   message: string;
 }> {
+  /** @param parts The profile. */
   constructor(parts: { profile: string }) {
     super({
       ...parts,
@@ -1320,6 +1321,7 @@ export class ProfileNoWayIn extends Data.TaggedError('ProfileNoWayIn')<{
   profile: string;
   message: string;
 }> {
+  /** @param parts The profile. */
   constructor(parts: { profile: string }) {
     super({
       ...parts,
@@ -1329,11 +1331,11 @@ export class ProfileNoWayIn extends Data.TaggedError('ProfileNoWayIn')<{
 }
 
 /**
- * profileCredentials signs in as one named profile, ignoring AWS_PROFILE and
- * any keys in the environment.
- * @param profile the profile to sign in as
- * @param env the environment, process.env by default
- * @return a function answering the credentials, reading again as they age
+ * Signs in as one named profile, ignoring AWS_PROFILE and any keys in the
+ * environment.
+ * @param profile The profile to sign in as.
+ * @param env The environment, process.env by default.
+ * @return A function answering the credentials, reading again as they age.
  */
 export function profileCredentials(
   profile: string,
@@ -1343,12 +1345,10 @@ export function profileCredentials(
 }
 
 /**
- * profileChain is the sign-in profileCredentials reads, as one Effect: the
- * profile's own way in, failing by name where the profile is not there or
- * offers none.
- * @param profile the profile to sign in as
- * @param env the environment
- * @return the credentials, kept until shortly before they expire
+ * Runs the sign-in profileCredentials reads, as one Effect: the profile's
+ * own way in, failing by name where the profile is not there or offers none.
+ * @param profile The profile to sign in as.
+ * @return The credentials, kept until shortly before they expire.
  */
 function profileChain(
   profile: string,
