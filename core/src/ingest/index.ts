@@ -69,7 +69,7 @@ export function read(
 
 /**
  * decoded decodes a file's bytes by their sniffed encoding: a UTF-8 byte
- * order mark is stripped, Windows-1252 is read as itself, and UTF-16 throws.
+ * order mark is stripped, and UTF-16 throws.
  */
 function decoded(name: string, bytes: Uint8Array): [string, Charset] {
   const decoders = decodersFor(name, sniffEncoding(bytes));

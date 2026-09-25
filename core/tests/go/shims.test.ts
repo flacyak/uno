@@ -101,6 +101,11 @@ describe('case mapping', () => {
   test('equalFold', () => {
     expect(equalFold('ABC', 'abc')).toBe(true);
     expect(equalFold('ABC', 'abd')).toBe(false);
+    // Runes that fold together only through their upper case.
+    expect(equalFold('ſ', 's')).toBe(true);
+    expect(equalFold('ς', 'σ')).toBe(true);
+    expect(equalFold('ϑ', 'θ')).toBe(true);
+    expect(equalFold('ß', 'ss')).toBe(false);
   });
 });
 
@@ -205,6 +210,10 @@ describe('quote', () => {
     ['nl\n', '"nl\\n"'],
     ['\u0007', '"\\a"'],
     ['\u0000', '"\\x00"'],
+    ['\u007f', '"\\x7f"'],
+    // Only a control character is \x. Go reads \xa0 as the byte 0xa0.
+    ['\u00a0', '"\\u00a0"'],
+    ['\u0085', '"\\u0085"'],
     ['€', '"€"'],
   ];
 
@@ -236,10 +245,27 @@ describe('unquote', () => {
     expect(() => unquote('"a')).toThrow();
     expect(() => unquote('"\\q"')).toThrow();
     expect(() => unquote('"\\x4"')).toThrow();
+    expect(
+      () => unquote('"\\\'"'),
+      'a quote escaped in a rune literal',
+    ).toThrow();
+    expect(() => unquote('"a\nb"'), 'a raw newline').toThrow();
+    expect(() => unquote('"\\400"'), 'octal above one byte').toThrow();
+    expect(() => unquote('"\\ud800"'), 'a surrogate').toThrow();
   });
 
   test('round-trips through quote', () => {
-    for (const s of ['', 'a', 'a"b', 'a\\b', '\t', '1,204', '€', '$1']) {
+    for (const s of [
+      '',
+      'a',
+      'a"b',
+      'a\\b',
+      '\t',
+      '1,204',
+      '€',
+      '$1',
+      '\u00a0',
+    ]) {
       expect(unquote(quote(s))).toBe(s);
     }
   });

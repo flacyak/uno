@@ -1,6 +1,7 @@
 /**
  * @fileoverview Files beyond plain UTF-8 through the engine: a byte order mark,
- * UTF-16, Windows-1252, a stray NUL, and a character cut by a chunk boundary.
+ * UTF-16, a Windows-1252 byte, a stray NUL, and a character cut by a chunk
+ * boundary.
  * Every row is compared with what `read` builds from the same bytes.
  */
 
@@ -17,11 +18,14 @@ const encoder = new TextEncoder();
 /** The UTF-8 byte order mark. */
 const UTF8_BOM = [0xef, 0xbb, 0xbf];
 
-/** é, € and the en dash as single Windows-1252 bytes. */
+/** é, € and the en dash as single Windows-1252 bytes, none of them UTF-8. */
 const E_ACUTE = 0xe9;
 const EURO = 0x80;
 const EN_DASH = 0x96;
 const NUL = 0x00;
+
+/** What a byte that is not UTF-8 is shown as. */
+const REPLACEMENT = '\uFFFD';
 
 function bytesOf(...parts: Array<string | number[]>): Uint8Array<ArrayBuffer> {
   const out: number[] = [];
@@ -123,7 +127,10 @@ for (const order of ['le', 'be'] as const) {
   });
 }
 
-test('a Windows-1252 file shows its characters, and says what it is', async () => {
+// UTF-8 is the standard. A file in Windows-1252 is read as UTF-8 all the
+// same, and each byte that is not UTF-8 shows as the replacement character,
+// in the sheet and through the engine alike.
+test('a Windows-1252 file is read as UTF-8, its bytes shown as the replacement character', async () => {
   const body = bytesOf(
     'city;price;note\nParis;12',
     [E_ACUTE],
@@ -133,29 +140,20 @@ test('a Windows-1252 file shows its characters, and says what it is', async () =
     [EURO, EN_DASH],
     '\n',
   );
+  const note = `caf${REPLACEMENT} ${REPLACEMENT}${REPLACEMENT}`;
   const sheet = read('f.csv', body);
-  expect(sheet.raw(0, 2)).toBe('café €–');
-  expect(sheet.source).toBe("Windows-1252 · delimiter ';'");
+  expect(sheet.raw(0, 2)).toBe(note);
+  expect(sheet.source).toBe("UTF-8 · delimiter ';'");
 
   const { src, done } = await open('f.csv', body);
   try {
-    expect(saidIn(src.opened.label)).toBe("Windows-1252 · delimiter ';'");
+    expect(saidIn(src.opened.label)).toBe("UTF-8 · delimiter ';'");
     expect(src.opened.columns.map((c) => c.header)).toEqual([
       'city',
       'price',
       'note',
     ]);
-    expect(await allRows(src)).toEqual([['Paris', '12é', 'café €–']]);
-    expect(
-      await src.find({
-        col: 2,
-        from: -1,
-        dir: 1,
-        match: { t: 'text', text: 'é' },
-      }),
-    ).toMatchObject({
-      row: 0,
-    });
+    expect(await allRows(src)).toEqual([['Paris', `12${REPLACEMENT}`, note]]);
   } finally {
     done();
   }
@@ -179,6 +177,35 @@ test('a UTF-8 header over Windows-1252 rows opens, with every row in its place',
   } finally {
     done();
   }
+});
+
+test('a UTF-8 byte order mark on a Windows-1252 file is not in the header or the rows', async () => {
+  const body = bytesOf(UTF8_BOM, 'a,b\n1,caf', [E_ACUTE], '\n2,x\n');
+  expect(sniffEncoding(body)).toBe('utf-8');
+  const sheet = read('f.csv', body);
+  expect(sheet.columns.map((c) => c.header)).toEqual(['a', 'b']);
+  expect(sheet.raw(0, 1)).toBe(`caf${REPLACEMENT}`);
+  // Under "none" the mark is not in the first row either.
+  expect(read('f.csv', body, 'none').raw(0, 0)).toBe('a');
+
+  const { src, done } = await open('f.csv', body);
+  try {
+    expect(src.opened.columns.map((c) => c.header)).toEqual(['a', 'b']);
+    expect(await allRows(src)).toEqual([
+      ['1', `caf${REPLACEMENT}`],
+      ['2', 'x'],
+    ]);
+  } finally {
+    done();
+  }
+});
+
+// A single NUL is as often a stray byte: `max(nuls) * 16 >= units` holds for
+// one in any head of 32 bytes or fewer.
+test('a short UTF-8 file with one NUL is not UTF-16', () => {
+  const body = bytesOf('id,name\n1,a', [NUL], '\n2,b\n');
+  expect(sniffEncoding(body)).toBe('utf-8');
+  expect(read('f.csv', body).raw(0, 1)).toBe('a\0');
 });
 
 test('a NUL in a UTF-8 file is a byte in its cell, and does not make the file UTF-16', async () => {

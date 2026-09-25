@@ -53,7 +53,7 @@ export interface S3Prefix {
  * the prefix. Undefined for anything else.
  */
 export function s3Prefix(path: string): S3Prefix | undefined {
-  const root = /^s3:\/\/([^/]+)\/?$/i.exec(path.trim());
+  const root = /^s3:\/\/([^/]+)\/?$/i.exec(path);
   if (root !== null) return { bucket: root[1]!, prefix: '' };
 
   const loc = s3Location(path);
@@ -99,7 +99,7 @@ async function listPrefix(
 
   const entries = [
     ...page.prefixes.map((prefix) => folderAt(where.bucket, prefix)),
-    ...page.keys.flatMap((key) => fileAt(where.bucket, where.prefix, key)),
+    ...page.keys.flatMap((key) => fileAt(where.bucket, key)),
   ].toSorted(byPageKey);
   return page.next === undefined ? { entries } : { entries, next: page.next };
 }
@@ -120,11 +120,12 @@ function folderAt(bucket: string, prefix: string): Entry {
 /**
  * fileAt is one key as a file entry, or none.
  *
- * It drops the folder marker: a key equal to the prefix, or ending in a
- * slash. `version` is the ETag from the listing.
+ * It drops a folder marker, a key ending in a slash. A key equal to a prefix
+ * with no slash at its end is an object of that name, and is kept.
+ * `version` is the ETag from the listing.
  */
-function fileAt(bucket: string, prefix: string, key: KeyEntry): Entry[] {
-  if (key.key === prefix || key.key.endsWith('/')) return [];
+function fileAt(bucket: string, key: KeyEntry): Entry[] {
+  if (key.key.endsWith('/')) return [];
   // Only the fields keyIn could read are present, so they carry over as is.
   const { key: k, ...facts } = key;
   return [

@@ -44,6 +44,16 @@ test("Ctrl+B under vim-style pages up and leaves the sidebar as it is", async ()
   expect(sidebarOpen()).toBe(true);
 });
 
+test("Ctrl+B under vim-style leaves the sidebar as it is with the keys in the panel too", async () => {
+  shell.showPanel();
+  const list = document.querySelector(".panel-list")!;
+  list.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true, cancelable: true }),
+  );
+  expect(sidebarOpen()).toBe(true);
+  shell.togglePanel();
+});
+
 test("Ctrl+B under the default keys toggles the sidebar", async () => {
   shell.setInput("default");
   await page.press("b", { ctrlKey: true });

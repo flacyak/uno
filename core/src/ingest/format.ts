@@ -20,10 +20,15 @@ const PEEK = 64 << 10;
 
 export type { Charset } from '@said';
 
+/** What decodes bytes: a TextDecoder, or one wrapped. */
+interface Decoder {
+  decode(bytes: Uint8Array): string;
+}
+
 /** The decoders a file is read with: one for its head, one for its records. */
 interface Decoders {
-  /** Strips a leading byte order mark. */
-  readonly head: TextDecoder;
+  /** Strips a leading byte order mark, and one only. */
+  readonly head: Decoder;
   /** Keeps one. Records start past any byte order mark, so a U+FEFF in one
    * is data. */
   readonly data: TextDecoder;
@@ -35,15 +40,6 @@ const UTF8: Decoders = {
   data: new TextDecoder('utf-8', { ignoreBOM: true }),
   charset: 'UTF-8',
 };
-
-/**
- * Bytes sniffed as "other" are read as Windows-1252, in which every byte is
- * a character, so one decoder serves both roles.
- */
-const WINDOWS_1252: Decoders = (() => {
-  const decoder = new TextDecoder('windows-1252');
-  return { head: decoder, data: decoder, charset: 'Windows-1252' };
-})();
 
 /**
  * UnsupportedEncodingError is thrown for an encoding beyond this build:
@@ -68,8 +64,6 @@ export function decodersFor(name: string, encoding: Encoding): Decoders {
   switch (encoding) {
     case 'utf-8':
       return UTF8;
-    case 'other':
-      return WINDOWS_1252;
     case 'utf-16le':
     case 'utf-16be':
       throw new UnsupportedEncodingError(name, encoding);
@@ -279,7 +273,6 @@ const ENCODING_NAMES: Readonly<Record<Encoding, string>> = {
   'utf-8': 'UTF-8',
   'utf-16le': 'UTF-16 little-endian',
   'utf-16be': 'UTF-16 big-endian',
-  other: 'neither UTF-8 nor UTF-16',
 };
 
 /** encodingName is an encoding's display name. */

@@ -70,6 +70,12 @@ test("the byte order mark is not part of the first column's name", async () => {
 });
 
 // A header longer than PEEK is read in full.
+// One mark is the file's, and the decoder strips that one alone.
+test('a second byte order mark is a character of the header', async () => {
+  const f = await open('f.csv', '\uFEFF\uFEFFa,b\n1,2\n');
+  expect(f.columns).toEqual(['\uFEFFa', 'b']);
+});
+
 test('a header longer than the first read is still read whole', async () => {
   const names = Array.from({ length: 5000 }, (_, i) => `column number ${i}`);
   const header = names.join(',');
@@ -156,14 +162,15 @@ describe('openFormat says the delimiter and the encoding it found', () => {
     });
   }
 
-  test('a file that is not UTF-8', async () => {
+  test('a file with a byte that is not UTF-8 is read as UTF-8 all the same', async () => {
     const latin = Uint8Array.of(
       ...encoder.encode('a,b\ncaf'),
       E_ACUTE_1252,
       LF,
     );
     const f = await openFormat('f.csv', blobSource(new Blob([latin])));
-    expect(f.encoding).toBe('other');
+    expect(f.encoding).toBe('utf-8');
+    expect(f.decode(latin.subarray(f.dataStart))[0]).toEqual(['caf\uFFFD']);
   });
 });
 
@@ -193,7 +200,11 @@ describe('sniffEncoding reads the encoding off the head', () => {
       [0x00, 0x61, 0x00, 0x2c, 0x00, 0x62],
       'utf-16be',
     ],
-    ['Windows-1252', [...encoder.encode('caf'), E_ACUTE_1252, LF], 'other'],
+    [
+      'a byte that is not UTF-8',
+      [...encoder.encode('caf'), E_ACUTE_1252, LF],
+      'utf-8',
+    ],
   ];
 
   for (const [title, bytes, encoding] of cases) {
@@ -227,11 +238,10 @@ test('a delimiter and an encoding each have a name a sentence can use', () => {
     'pipe',
     "':'",
   ]);
-  const encodings: Encoding[] = ['utf-8', 'utf-16le', 'utf-16be', 'other'];
+  const encodings: Encoding[] = ['utf-8', 'utf-16le', 'utf-16be'];
   expect(encodings.map(encodingName)).toEqual([
     'UTF-8',
     'UTF-16 little-endian',
     'UTF-16 big-endian',
-    'neither UTF-8 nor UTF-16',
   ]);
 });
