@@ -335,7 +335,7 @@ export class Workspace {
     try {
       const view =
         src.raw === undefined
-          ? await this.view(src.id, { name: src.name, path: src.path ?? "" }, carried)
+          ? await this.view(src.id, pointedAt(src), carried)
           : await View.open(
               src.id,
               src.name,
@@ -543,6 +543,18 @@ export class Workspace {
     this.queue = run.catch(() => undefined);
     return run;
   }
+}
+
+/**
+ * pointedAt is the ref a .uno's pointed-at source is opened by: where it is,
+ * and which bytes of it the log was made against, for a place that can hand
+ * those over again.
+ */
+function pointedAt(src: Held): SourceRef {
+  const path = src.path ?? "";
+  return src.version === undefined
+    ? { name: src.name, path }
+    : { name: src.name, path, version: src.version };
 }
 
 /**
