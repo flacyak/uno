@@ -7,6 +7,7 @@
 // Everything crosses as plain data, so the same messages run over an Electron
 // MessagePortMain, a Web Worker or a MessageChannel in vitest.
 
+import type { Connection } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
 import type { Entry, FileRef, Listing } from "../store/index.ts";
@@ -188,6 +189,16 @@ export interface Peeked {
   rows: string[][];
 }
 
+/**
+ * Loaded is what an engine read out of its connections folder: every
+ * connection it can sign in through, and a sentence for each file it could
+ * not read, since one broken file costs one connection and still wants saying.
+ */
+export interface Loaded {
+  connections: Connection[];
+  failed: string[];
+}
+
 export type Request =
   /**
    * Add a file to the workspace: read its header, begin indexing it. A .uno
@@ -230,6 +241,12 @@ export type Request =
    * a bucket is.
    */
   | { t: "peek"; id: number; ref: SourceRef }
+  /**
+   * The connections this engine signs in through, read again from where they
+   * are kept: asked once they have changed, so a connection saved a moment ago
+   * is one the engine uses without being started again.
+   */
+  | { t: "connections"; id: number }
   /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
   | { t: "mode"; transform: boolean }
   /** The workspace as a .uno, refusing carried sources larger than limit together. */
@@ -256,6 +273,8 @@ export type Reply =
   | { t: "listed"; id: number; listing: Listing }
   | { t: "statted"; id: number; entry: Entry }
   | { t: "peeked"; id: number; peeked: Peeked }
+  /** What a connections request read, and what it could not, one sentence a file. */
+  | { t: "loaded"; id: number; loaded: Loaded }
   /** Null when the source has nothing to ask. */
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }

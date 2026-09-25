@@ -14,13 +14,15 @@ import { Engine, messagePort } from "@uno/grid/engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
 import { NO_ROW } from "@uno/grid/sheet";
 
+import type { Connection } from "@uno/grid/library";
+
 import type { Host } from "../../shared/host.ts";
 import type { Grid, GridEvents } from "../grid/index.ts";
 import { strategy } from "../input/index.ts";
 import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
 import type { Command } from "../keys.ts";
-import { Sources } from "../sources.ts";
+import { Sources, connectionLine } from "../sources.ts";
 import { Workspace } from "../workspace.ts";
 import type { Tab } from "../workspace.ts";
 import { AddMenu } from "./add.ts";
@@ -32,9 +34,6 @@ import { Panel } from "./panel.ts";
 import { StatusBar } from "./status.ts";
 import { tabStrip } from "./tabs.ts";
 import { message, must } from "./util.ts";
-
-/** What the panel says when it is asked to browse before there is an engine to ask. */
-const NO_ENGINE = new Error("open a file first · browsing goes through its engine");
 
 /** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
 const INPUT_KEY = "uno.input";
@@ -55,6 +54,18 @@ export class Shell {
   private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
   /** The + menu, while it is open. */
   private adding: AddMenu | undefined;
+  /**
+   * An engine that holds no workspace, for the panel while nothing is open.
+   *
+   * Browsing and the connections go through an engine, because the engine is
+   * what holds the listers and the credentials. Before the first file there is
+   * no workspace to own one, and "open a file first" is a poor answer to a
+   * person who opened the panel to find that file. So one is started the first
+   * time it is wanted, and closed once a workspace brings its own.
+   */
+  private spare: Promise<Engine> | undefined;
+  /** What the last connections read said it could not read, so it is said once. */
+  private connectionTrouble = "";
 
   private readonly status: StatusBar;
   private readonly finder: Finder;
@@ -82,10 +93,10 @@ export class Shell {
 
     this.sources = new Sources(
       {
-        // Browsing goes through the open workspace's engine, which holds the
-        // listers and the credentials. The page never lists anything itself.
-        list: (path, cursor) => this.workspace?.list(path, cursor) ?? Promise.reject(NO_ENGINE),
-        peek: (ref) => this.workspace?.peek(ref) ?? Promise.reject(NO_ENGINE),
+        // Browsing goes through an engine, which holds the listers and the
+        // credentials. The page never lists anything itself.
+        list: async (path, cursor) => (await this.browser()).list(path, cursor),
+        peek: async (ref) => (await this.browser()).peek(ref),
       },
       () => this.workspace?.sources ?? [],
       [],
@@ -146,6 +157,67 @@ export class Shell {
     );
     this.wireKeys();
     this.paintStatus();
+  }
+
+  /**
+   * browser is the engine the panel asks: the open workspace's, or a spare one
+   * while nothing is open.
+   */
+  private browser(): Promise<Engine> {
+    const w = this.workspace;
+    if (w !== undefined) return Promise.resolve(w.engine);
+    this.spare ??= this.host.connect().then(
+      (port) => {
+        const engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
+        engine.onError = (msg) => this.say(msg, true);
+        return engine;
+      },
+      (err: unknown) => {
+        this.spare = undefined; // so the next ask tries again
+        throw err;
+      },
+    );
+    return this.spare;
+  }
+
+  /** closeSpare stops the spare engine, once a workspace has one of its own. */
+  private closeSpare(): void {
+    const spare = this.spare;
+    this.spare = undefined;
+    void spare?.then((engine) => engine.close()).catch(() => undefined);
+  }
+
+  /**
+   * refreshConnections asks the engine to read the connections again and
+   * lists them in the panel: when the panel opens, when a workspace comes with
+   * an engine of its own, and when one is saved.
+   *
+   * A file it could not read is said once, and not again every time the panel
+   * opens over the same broken file.
+   */
+  private async refreshConnections(): Promise<void> {
+    try {
+      const { connections, failed } = await (await this.browser()).connections();
+      this.sources.connections = connections.map(connectionLine);
+      this.panel.draw();
+      const trouble = failed.join(" · ");
+      if (trouble !== this.connectionTrouble) {
+        this.connectionTrouble = trouble;
+        if (trouble !== "") this.say(trouble, true);
+      }
+    } catch (err) {
+      this.say(message(err), true);
+    }
+  }
+
+  /**
+   * saveConnection keeps a connection and has the engine read them again, so
+   * it is listed and signed with at once, without a restart.
+   */
+  async saveConnection(c: Connection): Promise<Connection> {
+    const saved = await this.host.saveConnection(c);
+    await this.refreshConnections();
+    return saved;
   }
 
   /** The open tab with this id, which is how the panel names one. */
@@ -299,6 +371,9 @@ export class Shell {
 
       this.workspace?.close();
       this.workspace = w;
+      // The workspace's engine answers the panel from here on.
+      this.closeSpare();
+      void this.refreshConnections();
       this.dismissed = "";
       grid.show(w.rows, w.editable);
       this.empty.hidden = true;
@@ -464,6 +539,9 @@ export class Shell {
    */
   togglePanel(): void {
     this.panel.toggle();
+    // A connection saved in another window, or put in the folder by hand, is
+    // listed the next time the panel opens.
+    if (this.panel.open) void this.refreshConnections();
     this.paintTabs();
     this.grid?.repaint();
   }
@@ -474,7 +552,11 @@ export class Shell {
    * the keys back, so a second Ctrl+Shift+B is not a close.
    */
   showPanel(): void {
-    if (this.panel.open) return this.panel.show();
+    if (this.panel.open) {
+      this.panel.show();
+      void this.refreshConnections();
+      return;
+    }
     this.togglePanel();
   }
 
