@@ -1,6 +1,7 @@
 // Checks that a source in a bucket knows when it is out of date: a workspace
-// whose export was written over since it was saved opens saying so, and one
-// written over while it is open is marked when the window gets the focus back.
+// whose export was written over since it was saved opens saying so, one
+// written over while it is open is marked when the window gets the focus back,
+// and Reload reads the newer one with the edits replayed over it.
 //
 // They run after meets.ts, with acme-exports/2025/ connected, so the saved
 // workspace opens its object at once. The object is written over by smoke.js,
@@ -8,11 +9,19 @@
 
 import { join } from "node:path";
 
+import { NEWER_AFTER_MS } from "../../renderer/timing.ts";
 import type { Check } from "./check.ts";
 import { REMOTE } from "./sources.ts";
 
 /** The workspace sources.ts saved, with the object in it. */
 const SAVED = join(process.env["UNO_SMOKE"] ?? "", "sales-q3.uno");
+
+/**
+ * How long to wait for an ask that should find nothing: the page's own wait
+ * before asking, and as long again for one HEAD to the stand-in on this
+ * machine to come back.
+ */
+const ASKED_MS = NEWER_AFTER_MS * 2;
 
 /** The object the saved workspace points at, by its key in the stand-in. */
 const KEY = "2025/ads-q3.csv";
@@ -70,6 +79,29 @@ export const REFRESH: Check[] = [
       mark.click();
       const foot = () => [...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent);
       return (await until(() => foot()[0] === "Reload")) ? "" : "its line offers " + JSON.stringify(foot());
+    `,
+  },
+  {
+    // 3.5: Reload reads what the bucket holds now, says what it found, and
+    // the tab reads the newest -- the digit smoke.js changed twice now.
+    name: "Reload reads the newer version and says what changed",
+    shot: "refresh-reloaded",
+    script: `
+      ${REMOTE}
+      ${LINE}
+      const reload = [...document.querySelectorAll("#panel .panel-foot button")].find((b) => b.textContent === "Reload");
+      if (reload === undefined) return "no Reload on the line";
+      reload.click();
+      const said = /^reloaded ads-q3.csv · a new version, the same size( · d+ edits? replayed)?$/;
+      if (!(await arrives(() => said.test(text("#status-msg"))))) return "the status bar says " + JSON.stringify(text("#status-msg"));
+      if (tab("ads-q3.csv").querySelector(".trouble") !== null) return "the tab still wears its mark";
+      const first = () => document.querySelector("tbody tr:not(.pending) td:nth-child(2)")?.textContent;
+      if (!(await arrives(() => first() === "A3000"))) return "the first cell reads " + JSON.stringify(first());
+      // Nothing newer is left to find.
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((r) => setTimeout(r, ${ASKED_MS}));
+      const words = line("ads-q3.csv")?.children[1]?.textContent ?? "";
+      return /KB$/.test(words) ? "" : "after another focus the line says " + JSON.stringify(words);
     `,
   },
 ];

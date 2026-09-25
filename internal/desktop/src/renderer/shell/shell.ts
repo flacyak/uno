@@ -25,7 +25,8 @@ import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
 import type { Command } from "../keys.ts";
 import { Sources, connectionLine } from "../sources.ts";
-import { Workspace } from "../workspace.ts";
+import { NEWER_AFTER_MS } from "../timing.ts";
+import { Workspace, reloaded } from "../workspace.ts";
 import type { Tab } from "../workspace.ts";
 import { AddMenu } from "./add.ts";
 import { bannerParts, offerKey } from "./banner.ts";
@@ -41,14 +42,6 @@ import { message, must, settled } from "./util.ts";
 
 /** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
 const INPUT_KEY = "uno.input";
-
-/**
- * How long the window keeps the focus before its sources' buckets are asked
- * whether they hold something newer: long enough that alt-tabbing through
- * uno on the way somewhere else asks nothing, short enough that a person
- * coming back sees the mark before they look for it.
- */
-export const NEWER_AFTER_MS = 400;
 
 export class Shell {
   private workspace: Workspace | undefined;
@@ -292,7 +285,7 @@ export class Shell {
       if (path === undefined || tab.link?.connect === undefined) continue;
       const loc = s3Location(path);
       if (loc !== undefined && covers(saved, loc.bucket, loc.key)) {
-        void this.pointAt(tab, refAt(path), `${tab.name} reads from ${saved.name}`);
+        void this.pointAt(tab, refAt(path), () => `${tab.name} reads from ${saved.name}`);
       }
     }
     return saved;
@@ -714,12 +707,15 @@ export class Shell {
   /**
    * reload reads a tab's file again from where it already points, which is a
    * re-point at the same path: the log replays over whatever is there now. A
-   * file that came back after going missing is found again the same way.
+   * file that came back after going missing is found again the same way. It
+   * asks for no version, so an object is read as its bucket holds it now --
+   * the newer one a mark said was there, or the newest after a pinned one --
+   * and it says what it found.
    */
   private async reload(tab: Tab): Promise<void> {
     const path = tab.link?.path;
     if (path === undefined) return;
-    await this.pointAt(tab, refAt(path), `reloaded ${tab.name}`);
+    await this.pointAt(tab, refAt(path), (fresh) => reloaded(tab, fresh));
   }
 
   /**
@@ -727,7 +723,7 @@ export class Shell {
    * The edits replay over the file; one that cannot take them is refused and
    * the tab is left as it was.
    */
-  private async pointAt(tab: Tab, ref: SourceRef, said?: string): Promise<void> {
+  private async pointAt(tab: Tab, ref: SourceRef, said?: (fresh: Tab) => string): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
     try {
@@ -740,7 +736,7 @@ export class Shell {
       this.say(
         fresh.missing
           ? ""
-          : (said ?? `${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`),
+          : (said?.(fresh) ?? `${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`),
       );
       if (w.active === fresh) this.showActive();
       else this.paintTabs();

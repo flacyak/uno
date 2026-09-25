@@ -121,6 +121,13 @@ waits until the window has kept the focus for a moment, so alt-tabbing through
 uno on the way somewhere else asks nothing, and a bucket that cannot be reached
 leaves every tab as it was.
 
+Reload is pointing a tab at the same URL again, asking for no version, so it
+reads what the bucket holds now: the newer version a mark said was there, or
+the newest after one a save pinned. The log replays over it and the tab takes
+its version, and the status bar says what Reload found -- a new version and
+how its size moved, or no change in the bucket -- and how many edits replayed.
+The next save records the new version.
+
 ## Connections
 
 A connection is a bucket, a folder in it, and how to sign in, kept as one
