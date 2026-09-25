@@ -16,7 +16,7 @@ import { expect, test } from "vite-plus/test";
 import { parseConnection } from "../../src/library/index.ts";
 import { connectionsIn, saveConnection } from "../../src/store/index.ts";
 import { nodeStore } from "../../src/store/node.ts";
-import { connect } from "./harness.ts";
+import { connect, saidIn } from "./harness.ts";
 
 const ACME = fileURLToPath(new URL("../testdata/acme-exports.unof", import.meta.url));
 
@@ -68,7 +68,7 @@ test("a file that will not read is said, and the rest still load", async () => {
     const { connections, failed } = await engine.connections();
     expect(connections.map((c) => c.id)).toEqual(["acme-exports"]);
     expect(failed).toHaveLength(1);
-    expect(failed[0]).toMatch(/^broken\.unof is not a readable \.unof file/);
+    expect(saidIn(failed[0])).toMatch(/^broken\.unof is not a readable \.unof file/);
   } finally {
     done();
   }

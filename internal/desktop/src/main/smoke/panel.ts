@@ -130,7 +130,7 @@ export const PANEL: Check[] = [
       if (!(await until(() => want.every((p) => lines().some((l) => l.title.startsWith(p)))))) {
         return "the tabs read from " + JSON.stringify(lines().map((l) => l.title).filter((t) => t !== ""));
       }
-      return (await arrives(() => text("#status-file").startsWith(ROWS.toLocaleString() + " rows")))
+      return (await arrives(() => text("#status-file").startsWith(counted(ROWS) + " rows")))
         ? ""
         : "the status bar says " + JSON.stringify(text("#status-file"));
     `,

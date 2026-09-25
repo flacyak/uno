@@ -2,7 +2,7 @@
 // undo and redo. They pick up where open.ts leaves the window.
 
 import type { Check } from "./check.ts";
-import { COMMAS_LEFT, UNITS } from "./fixture.ts";
+import { COMMAS_LEFT, UNITS, counted } from "./fixture.ts";
 
 export const DEFAULT_INPUT: Check[] = [
   {
@@ -78,12 +78,10 @@ export const DEFAULT_INPUT: Check[] = [
       await type(2, "1455");
       await type(4, "2038");
 
-      await page.until([
-        { selector: "#banner", includes: COMMAS_LEFT.toLocaleString() + " cells" },
-      ]);
+      await page.until([{ selector: "#banner", includes: counted(COMMAS_LEFT) + " cells" }]);
       if (await page.hidden("#banner")) return "no banner after three fixes";
       const bannerText = await page.text("#banner");
-      if (!bannerText.includes("remove commas · " + COMMAS_LEFT.toLocaleString() + " cells")) {
+      if (!bannerText.includes("remove commas · " + counted(COMMAS_LEFT) + " cells")) {
         return "the banner says " + JSON.stringify(bannerText);
       }
 

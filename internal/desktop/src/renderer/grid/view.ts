@@ -8,6 +8,7 @@
 
 import type { Kind } from "@uno/grid/sheet";
 
+import { m } from "../../paraglide/messages.js";
 import {
   clampTop,
   firstRow,
@@ -143,7 +144,7 @@ export class View {
       const badge = el("span", column.flagged ? "badge flagged" : "badge");
       badge.textContent = column.kind;
       // The flag is the recogniser's opening: numeric data wearing a costume.
-      if (column.flagged) badge.title = "looks numeric, does not parse";
+      if (column.flagged) badge.title = m.column_flagged_hint();
       wrap.append(badge);
 
       th.append(wrap);

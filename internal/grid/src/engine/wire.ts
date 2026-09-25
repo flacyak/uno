@@ -19,7 +19,7 @@
 // and no more.
 
 import { formatBytes, messageOf } from "./protocol.ts";
-import type { MessagePortLike } from "./protocol.ts";
+import type { MessagePortLike, Reply } from "./protocol.ts";
 import { WHOLE_LIMIT } from "./workspace.ts";
 
 /**
@@ -265,6 +265,15 @@ function isRecord(value: unknown): value is { [key: string]: Json } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * trouble is something the socket has to say for itself, as the reply an
+ * engine sends when a thing nobody asked about fails. It is a diagnostic as
+ * written: the socket going is not yet a sentence with a kind of its own.
+ */
+function trouble(text: string): Reply {
+  return { t: "error", said: { t: "text", text } };
+}
+
 /** The part of a browser's web socket this uses. The `ws` package's has it too. */
 export interface WebSocketLike {
   binaryType: string;
@@ -298,14 +307,14 @@ export function socketPort(socket: WebSocketLike, limit = FRAME_LIMIT): MessageP
     try {
       message = decode(data);
     } catch (err) {
-      message = { t: "error", message: `the engine sent ${messageOf(err)}` };
+      message = trouble(`the engine sent ${messageOf(err)}`);
     }
     for (const fn of listeners) fn({ data: message });
   });
   socket.addEventListener("close", () => {
     if (closed) return;
     closed = true;
-    const gone = { t: "error", message: "the connection to the engine closed" };
+    const gone = trouble("the connection to the engine closed");
     for (const fn of listeners) fn({ data: gone });
   });
 

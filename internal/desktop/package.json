@@ -18,12 +18,14 @@
     "smoke": "node scripts/build.js && node scripts/smoke.js",
     "preview": "node scripts/build.js && node scripts/preview.js",
     "test": "vp test",
-    "check": "vp check"
+    "check": "node scripts/messages.js && vp check"
   },
   "dependencies": {
     "@uno/grid": "workspace:*"
   },
   "devDependencies": {
+    "@inlang/paraglide-js": "^2.25.4",
+    "@inlang/plugin-message-format": "^4.4.4",
     "@types/node": "^26.1.1",
     "electron": "^44.3.0",
     "happy-dom": "^20.14.5",
