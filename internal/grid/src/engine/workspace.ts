@@ -559,23 +559,41 @@ function pointedAt(src: Held): SourceRef {
 
 /**
  * linkOf is what the client is told about the file behind a source it just
- * reopened.
- *
- * A size that does not match the one in the manifest is the only check worth
- * running at open: it is free, and it catches the export that was written again
- * since. What it cannot tell is whether the rows moved, so it is reported and
- * nothing is refused over it. The log still replays, and a person looking at the
- * grid is better placed than uno to say whether it is the right file.
+ * reopened: where it is, which bytes were read, and how they differ from the
+ * ones the log was made against.
  */
 function linkOf(view: View, src: Held): Link | undefined {
   const link = view.opened.link;
   if (link === undefined) return undefined;
+  const changed = changeOf(view, src);
+  return changed === undefined ? link : { ...link, changed };
+}
+
+/**
+ * changeOf says how the bytes a source reopened differ from the ones its log
+ * was made against, or undefined where nothing says they do.
+ *
+ * A version is the test where the save recorded one: it catches an export
+ * written over at the same size, which a size never could, and a version
+ * that is the same is the same bytes. A file with no version -- one on a
+ * disk, or a workspace saved before versions were -- falls back to its size,
+ * the only check free at open.
+ *
+ * Either way it is said and not acted on. The log still replays, because a
+ * person looking at the grid is better placed than uno to say whether it is
+ * still the right file.
+ */
+function changeOf(view: View, src: Held): string | undefined {
   const was = src.bytes ?? 0;
-  if (was === 0 || was === view.size) return link;
-  return {
-    ...link,
-    changed: `${src.name} is ${formatBytes(view.size)} now and was ${formatBytes(was)} when the workspace was saved`,
-  };
+  const sizes =
+    was === 0 || was === view.size
+      ? undefined
+      : `it is ${formatBytes(view.size)} now and was ${formatBytes(was)}`;
+  if (src.version !== undefined && view.version !== undefined) {
+    if (src.version === view.version) return undefined;
+    return `${src.name} is not the version the workspace was saved against · ${sizes ?? "it is the same size"}`;
+  }
+  return sizes === undefined ? undefined : `${src.name} ${sizes} when the workspace was saved`;
 }
 
 /**

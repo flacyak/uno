@@ -140,7 +140,8 @@ let shutting;
 const shut = () => (shutting ??= standin.close());
 
 const child = spawn(electron, [pkg, `--user-data-dir=${data}`, fixture], {
-  stdio: ["ignore", "pipe", "pipe"],
+  // stdin carries smoke.js's answers to what the checks ask of it.
+  stdio: ["pipe", "pipe", "pipe"],
   env: electronEnv(process.env, {
     UNO_SMOKE: scratch,
     UNO_SMOKE_SOURCE: second,
@@ -160,8 +161,36 @@ const child = spawn(electron, [pkg, `--user-data-dir=${data}`, fixture], {
 console.log(`smoke: electron pid ${child.pid}`);
 
 let out = "";
+/**
+ * answer does what a check asked of this script, which holds the stand-in, and
+ * says so on the app's stdin: `rewrite <key>` writes the object at <key> over
+ * with the same bytes but one digit, the same size and a different ETag, as an
+ * export regenerated with one figure corrected would be.
+ */
+function answer(what) {
+  const [verb, key] = what.split(" ");
+  const was = standin.objects.get(key ?? "");
+  if (verb !== "rewrite" || was === undefined) {
+    child.stdin.write(`smoke: nothing here does ${what}\n`);
+    return;
+  }
+  const now = was.slice();
+  const body = now.indexOf(0x0a);
+  const at = now.findIndex((c, i) => i > body && c >= 0x30 && c <= 0x39);
+  now[at] = now[at] === 0x39 ? 0x30 : now[at] + 1;
+  standin.objects.set(key, now);
+  child.stdin.write(`smoke: done ${what}\n`);
+}
+
+let pending = "";
 child.stdout.on("data", (chunk) => {
   out += String(chunk);
+  pending += String(chunk);
+  const lines = pending.split("\n");
+  pending = lines.pop() ?? "";
+  for (const line of lines) {
+    if (line.startsWith("smoke: ask ")) answer(line.slice("smoke: ask ".length));
+  }
   process.stdout.write(chunk);
 });
 child.stderr.on("data", (chunk) => process.stderr.write(chunk));
