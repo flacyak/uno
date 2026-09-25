@@ -211,6 +211,8 @@ export class View {
    * A cancel reaches it as an interruption, which lands at the wait for the
    * sample rows. Whatever ends the open short of a view closes it, which
    * stops the index and closes the bytes.
+   * @param ask Everything the open needs: the source and its name, the port,
+   *     the tuning, when the open began, and what a .uno carried for it.
    * @return The Effect that opens the view, which its caller runs.
    */
   static open(ask: OpenAsk): Effect.Effect<View, unknown> {
