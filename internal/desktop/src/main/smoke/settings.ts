@@ -53,7 +53,7 @@ export const SETTINGS: Check[] = [
       if (m.bottom > bar.top) return "the menu reaches " + m.bottom + ", into the status bar at " + bar.top;
       if (Math.abs(m.left - g.left) > 1) return "the menu starts at " + m.left + ", the gear at " + g.left;
       const names = (s) => [...menu().querySelectorAll("section")[s].querySelectorAll(".item .name")].map((n) => n.textContent);
-      const sources = '["acme-exports","acme-exports / 2025","+ Connect a bucket"]';
+      const sources = '["acme-exports / 2025","acme-exports","+ Connect a bucket"]';
       if (!(await arrives(() => JSON.stringify(names(0)) === sources))) return "the sources are " + JSON.stringify(names(0));
       const themes = ${JSON.stringify(JSON.stringify(THEMES.map((t) => t.name)))};
       return JSON.stringify(names(1)) === themes ? "" : "the themes are " + JSON.stringify(names(1));
