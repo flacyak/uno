@@ -4,6 +4,7 @@
 // that a provider with nothing to browse contributes no lister rather than an
 // empty one, and that both refusals come out of the same sentence.
 
+import { dirname } from "node:path";
 import { expect, test } from "vite-plus/test";
 
 import type { Provider } from "../../src/plugin/index.ts";
@@ -42,7 +43,7 @@ test("wiring a provider wires both of its capabilities", () => {
   const store = sources([diskProvider(), s3]);
 
   expect(store.files.map((f) => f.label)).toEqual(["local files", "S3"]);
-  expect(store.browsers.map((l) => l.label)).toEqual(["S3"]);
+  expect(store.browsers.map((l) => l.label)).toEqual(["local files", "S3"]);
 });
 
 // A Blob is a file and nothing around it. A provider with nothing to browse
@@ -54,14 +55,23 @@ test("a provider with nothing to browse contributes no lister", () => {
   expect(store.browsers).toEqual([]);
 });
 
-// The disk lister is task 1.2. Until it exists the disk provider can open and
-// cannot browse, and that is the shape the registry is meant to carry.
-test("a provider whose lister is not built yet opens and refuses to browse", async () => {
+// One provider, both capabilities, reaching the same file: the fixture is
+// opened by the handler and found by the lister in the folder it sits in.
+test("a provider opens and browses the same place", async () => {
   const store = sources([diskProvider()]);
 
   expect(await store.open({ name: "sales-q3.csv", path: FIXTURE }).then((f) => f.size)).toBe(
     bytes.length,
   );
+  const listing = await store.list(dirname(FIXTURE));
+  expect(listing.entries.map((e) => e.path)).toContain(FIXTURE);
+});
+
+// The one provider that cannot browse, wired on its own: a build that reads
+// dropped bytes and nothing else says so rather than showing an empty folder.
+test("a build whose only provider cannot browse refuses to browse at all", async () => {
+  const store = sources([blobProvider()]);
+
   await expect(store.list("/home/jo/")).rejects.toThrow(
     "/home/jo/: nothing here browses it · this build browses nothing",
   );
@@ -84,7 +94,7 @@ test("opening and browsing refuse the same way", async () => {
     "x.csv: nothing here opens it · this build reads local files, S3",
   );
   await expect(store.list("gs://acme/")).rejects.toThrow(
-    "gs://acme/: nothing here browses it · this build browses S3",
+    "gs://acme/: nothing here browses it · this build browses local files, S3",
   );
 });
 
