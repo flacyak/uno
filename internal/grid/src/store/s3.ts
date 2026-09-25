@@ -24,6 +24,7 @@ import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
+import type { Connection } from "../library/index.ts";
 import type { Provider } from "../plugin/index.ts";
 import type { FileHandler } from "./index.ts";
 import { s3Lister } from "./s3lister.ts";
@@ -204,6 +205,8 @@ export interface S3Requests {
   bucket(bucket: string, query: Record<string, string>): Promise<Response>;
   /** Who a request to `loc` goes out as, in words, for a refusal to name. */
   who(loc: S3Location): Promise<string>;
+  /** Where a bucket is: one HEAD of it, followed once if it says it is elsewhere. */
+  where(bucket: string): Promise<string>;
 }
 
 /**
@@ -213,7 +216,7 @@ export interface S3Requests {
  * s3Files and s3Lister each make their own, so a bucket in another region is
  * followed there once by each rather than once between them. That is one extra
  * round trip, the first time a workspace both opens and browses such a bucket,
- * and task 2.9 spends it once for good by storing the region in the connection.
+ * and none at all for a bucket whose connection `locate` stored the region in.
  */
 export function s3Requests(opts: S3Options): S3Requests {
   const go = opts.fetch ?? fetch;
@@ -309,7 +312,42 @@ export function s3Requests(opts: S3Options): S3Requests {
         {},
       ),
     who: async (loc) => (await opts.credentials(loc)).as ?? FOUND,
+    // A HEAD of the bucket is HeadBucket, and S3 says where the bucket is in
+    // its answer to one whether or not the answer is yes. A bucket in another
+    // region is followed there by `request` first, and its answer then says
+    // the same thing again.
+    async where(bucket) {
+      const loc = { bucket, key: "" };
+      const res = await request(
+        loc,
+        (region) => new URL(`${bucketUrl(bucket, region, opts.endpoint)}/`),
+        "HEAD",
+        {},
+      );
+      const said = res.headers.get("x-amz-bucket-region");
+      if (said !== null && isRegion(said)) return said;
+      if (res.ok) return regions.get(bucket) ?? (await opts.credentials(loc)).region;
+      if (res.status === 404) throw new Error(`s3://${bucket}: no such bucket`);
+      if (res.status === 403) {
+        throw new Error(
+          `s3://${bucket}: access denied · ${(await opts.credentials(loc)).as ?? FOUND} cannot reach that bucket`,
+        );
+      }
+      throw new Error(`s3://${bucket}: S3 answered ${res.status} when asked where the bucket is`);
+    },
   };
+}
+
+/**
+ * locate is a connection with the region its bucket is in, asked of the bucket
+ * rather than typed: one HeadBucket, signed the way the connection signs in.
+ *
+ * It is done once, when a connection is made, and the region is kept in the
+ * connection. Every request through it after that goes straight to the right
+ * place, where one to a bucket nobody had asked about pays a redirect first.
+ */
+export async function locate(c: Connection, opts: S3Options): Promise<Connection> {
+  return { ...c, region: await s3Requests(opts).where(c.bucket) };
 }
 
 /**
