@@ -17,8 +17,20 @@ import { TUNING, serve } from "@uno/grid/engine";
 import type { Reply, Request } from "@uno/grid/engine";
 import { sources } from "@uno/grid/plugin";
 import { connectionsIn } from "@uno/grid/store";
-import { awsProfiles, connectionSigning, diskProvider, nodeStore } from "@uno/grid/store/node";
-import { s3Provider } from "@uno/grid/store/s3";
+import {
+  awsProfiles,
+  connectionAuth,
+  connectionSigning,
+  diskProvider,
+  nodeStore,
+} from "@uno/grid/store/node";
+import { s3Provider, tryConnection } from "@uno/grid/store/s3";
+
+/**
+ * Where S3 is: the same variables the AWS CLI reads, so MinIO or a local
+ * stand-in is pointed at the way every other tool on the machine is.
+ */
+const ENDPOINT = process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"];
 
 /**
  * Where the connections are kept, as main passed it. An engine started any
@@ -44,6 +56,9 @@ process.parentPort.once("message", (e) => {
   // is signed by the connection covering where it goes as that connection
   // stands now, and by the machine's own chain where no connection covers it.
   const kept = CONNECTIONS === undefined ? undefined : connectionsIn(nodeStore(), CONNECTIONS);
+  // One set of credentials per way of signing in, shared by every request and
+  // by a connection being tried, so trying one does not sign in twice.
+  const auth = connectionAuth();
 
   serve(
     {
@@ -59,10 +74,8 @@ process.parentPort.once("message", (e) => {
     sources([
       diskProvider(),
       s3Provider({
-        credentials: connectionSigning(() => kept?.all ?? []),
-        // The same variables the AWS CLI reads, so MinIO or a local stand-in is
-        // pointed at the way every other tool on the machine is.
-        endpoint: process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"],
+        credentials: connectionSigning(() => kept?.all ?? [], process.env, auth),
+        endpoint: ENDPOINT,
       }),
     ]),
     TUNING,
@@ -73,6 +86,7 @@ process.parentPort.once("message", (e) => {
           // Names only: the files are read here, and what else is in them
           // never leaves this process.
           profiles: () => awsProfiles(),
+          test: (c) => tryConnection(c, { sign: (x) => auth.of(x), endpoint: ENDPOINT }),
         },
   );
 });

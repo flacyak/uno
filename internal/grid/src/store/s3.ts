@@ -350,6 +350,46 @@ export async function locate(c: Connection, opts: S3Options): Promise<Connection
   return { ...c, region: await s3Requests(opts).where(c.bucket) };
 }
 
+/** What trying a connection before it is saved found. */
+export interface Tried {
+  /** The connection with its bucket's region in it, ready to save. */
+  connection: Connection;
+  /** How much the first page of its prefix held. */
+  folders: number;
+  files: number;
+  /** Whether the prefix had more than that first page. */
+  more: boolean;
+}
+
+/** What tryConnection needs: how a connection signs in, and where S3 is. */
+export interface TryOptions extends Omit<S3Options, "credentials"> {
+  /** How a request through `c` is signed, for a connection nobody has saved yet. */
+  sign: (c: Connection) => Promise<Signing>;
+}
+
+/**
+ * tryConnection is a connection tested before it is kept: where its bucket is,
+ * and one page of its prefix, both asked the way the connection signs in.
+ *
+ * Whatever stops it -- a 403, a bucket that is not there, an SSO sign-in that
+ * has expired -- is thrown in the words that stopped it, so the screen asking
+ * can say exactly that and keep nothing.
+ */
+export async function tryConnection(c: Connection, opts: TryOptions): Promise<Tried> {
+  const { sign, ...rest } = opts;
+  const located = await locate(c, { ...rest, credentials: () => sign(c) });
+  const where =
+    located.prefix === "" ? `s3://${located.bucket}` : `s3://${located.bucket}/${located.prefix}`;
+  const page = await s3Lister({ ...rest, credentials: () => sign(located) }).list(where);
+  const folders = page.entries.filter((e) => e.folder).length;
+  return {
+    connection: located,
+    folders,
+    files: page.entries.length - folders,
+    more: page.next !== undefined,
+  };
+}
+
 /**
  * s3Files opens objects in S3 for reading. It claims s3:// URLs and the https
  * URLs of objects on amazonaws.com.
