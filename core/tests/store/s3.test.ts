@@ -769,6 +769,97 @@ describe('a region out of a body never becomes a host', () => {
   });
 });
 
+// These use a stand-in fetch that answers from a script, so each failure on
+// the way is one the test wrote, and every call is counted.
+describe('a request that fails on the way is sent again', () => {
+  /** The HEAD reply for the fixture: its size and ETag, as S3 answers. */
+  const found = () =>
+    new Response(null, {
+      status: 200,
+      headers: { 'content-length': String(bytes.length), etag: etagOf(bytes) },
+    });
+  /** A reply that says `status` and nothing else. */
+  const answered = (status: number) => new Response(null, { status });
+  /** The 301 S3 sends for the wrong region, with the header alone. */
+  const moved = () =>
+    new Response(null, {
+      status: 301,
+      headers: { 'x-amz-bucket-region': HOME_REGION },
+    });
+  /** A fetch that threw: the network dropped the request. */
+  const dropped = () => Promise.reject(new TypeError('fetch failed'));
+
+  /**
+   * A fetch answering each call from the next entry of `script`. It records
+   * each call's host and how often the credentials had been asked by then,
+   * and throws once the script runs out.
+   */
+  function scripted(script: Array<() => Response | Promise<Response>>) {
+    const hosts: string[] = [];
+    const askedBefore: number[] = [];
+    let asked = 0;
+    const go: typeof fetch = (input) => {
+      hosts.push(new URL(input as URL).host);
+      askedBefore.push(asked);
+      const next = script[hosts.length - 1];
+      if (next === undefined) throw new Error('the script ran out');
+      return Promise.resolve(next());
+    };
+    const credentials = () => {
+      asked++;
+      return Promise.resolve(KEYS);
+    };
+    return { hosts, askedBefore, s3: s3Files({ credentials, fetch: go }) };
+  }
+
+  // The waits are the real ones, 200 ms and then 400 ms, so this test takes
+  // 600 ms.
+  test('sends again after a fetch that throws, and reaches the object the third time', async () => {
+    const { hosts, s3 } = scripted([dropped, dropped, found]);
+    const file = await s3.open(at('2025/sales-q3.csv'));
+    expect(file.size).toBe(bytes.length);
+    expect(hosts).toHaveLength(3);
+  });
+
+  // One real wait of 200 ms.
+  test('sends again after a 500, and takes the 200 that follows', async () => {
+    const { hosts, s3 } = scripted([() => answered(500), found]);
+    const file = await s3.open(at('2025/sales-q3.csv'));
+    expect(file.size).toBe(bytes.length);
+    expect(hosts).toHaveLength(2);
+  });
+
+  // 600 ms of real waits again. The refusal is the one a single 500 gets,
+  // and the credentials were asked afresh before each of the three sends.
+  // Writing the refusal asks for them once more, after the last send.
+  test('gives up after three 500s, asking for the credentials before each', async () => {
+    const { hosts, askedBefore, s3 } = scripted([
+      () => answered(500),
+      () => answered(500),
+      () => answered(500),
+    ]);
+    await expect(s3.open(at('2025/sales-q3.csv'))).rejects.toThrow(
+      `s3://${BUCKET}/2025/sales-q3.csv: S3 answered 500`,
+    );
+    expect(hosts).toHaveLength(3);
+    expect(askedBefore).toEqual([1, 2, 3]);
+  });
+
+  test('follows a 301 to the region it names, and remembers it for the bucket', async () => {
+    const { hosts, s3 } = scripted([moved, found, found]);
+    const file = await s3.open(at('2025/sales-q3.csv'));
+    expect(file.size).toBe(bytes.length);
+    expect(hosts).toEqual([
+      `${BUCKET}.s3.${KEYS.region}.amazonaws.com`,
+      `${BUCKET}.s3.${HOME_REGION}.amazonaws.com`,
+    ]);
+    // The next object in the bucket goes straight there.
+    await s3.open(at('2025/other.csv'));
+    expect(hosts.at(-1)).toBe(`${BUCKET}.s3.${HOME_REGION}.amazonaws.com`);
+    expect(hosts).toHaveLength(3);
+  });
+});
+
 /** The UTF-8 bytes of a string. */
 function utf8(s: string): Uint8Array {
   return new TextEncoder().encode(s);
