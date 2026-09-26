@@ -146,7 +146,7 @@ test("a source of parts has no link, and is not re-pointed yet", async () => {
       `${NAME} is ${PARTS} files read as one, and sales-q3.csv cannot be pointed at one yet`,
     );
     await expect(engine.relink(three, { name: "sales-q3.csv", path: FIXTURE })).rejects.toThrow(
-      `${NAME} is ${PARTS} files read as one, and cannot be pointed at another file yet`,
+      `${NAME} is ${PARTS} files read as one, and sales-q3.csv is one file`,
     );
 
     // Both are still what they were.
