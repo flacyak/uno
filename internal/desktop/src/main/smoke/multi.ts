@@ -117,6 +117,12 @@ export const MULTI: Check[] = [
       ${REMOTE}
       ${LINES}
       const tabs = document.querySelectorAll(".tab").length;
+      // Asked for here, where the source is made, which is the one place it can be.
+      const file = [...foot().querySelectorAll(".choices input")].at(-1);
+      file.click();
+      if (!(await until(() => [...foot().querySelectorAll(".choices input")].at(-1)?.checked === true))) {
+        return "the _file column is not ticked once clicked";
+      }
       buttons().find((b) => b.textContent === "Add as one").click();
       const active = () => document.querySelector(".tab.active")?.textContent ?? "";
       if (!(await arrives(() => active().startsWith(${JSON.stringify(TAB)})))) {
@@ -133,7 +139,10 @@ export const MULTI: Check[] = [
         return "the status bar says " + JSON.stringify(text("#status-file"));
       }
       const head = [...document.querySelectorAll("thead th .colhead")].map((h) => h.firstChild.textContent);
-      if (JSON.stringify(head) !== '["date","region","rep","channel","units","revenue"]') return "the header is " + JSON.stringify(head);
+      if (JSON.stringify(head) !== '["date","region","rep","channel","units","revenue","_file"]') return "the header is " + JSON.stringify(head);
+      // The first row drawn is the first object's, and says so.
+      const first = () => document.querySelector("tbody tr:not(.pending)")?.lastElementChild?.textContent;
+      if (!(await arrives(() => first() === ${JSON.stringify(NAMES[0])}))) return "the first row's _file says " + JSON.stringify(first());
       const meta = () => line(WORKSPACE, ${JSON.stringify(TAB)})?.meta;
       return (await arrives(() => meta() === "${PARTS} files")) ? "" : "its line says " + JSON.stringify(meta());
     `,
@@ -151,6 +160,10 @@ export const MULTI: Check[] = [
       if (meta() !== "${PARTS} files") return "before the focus its line says " + JSON.stringify(meta());
       window.dispatchEvent(new Event("focus"));
       if (!(await arrives(() => meta() === "1 new file"))) return "after the focus its line says " + JSON.stringify(meta());
+
+      // The browser is still in the folder, and lists what it holds now.
+      const all = ${JSON.stringify(JSON.stringify(NAMES))};
+      if (!(await arrives(() => names(BROWSER) === all))) return "the folder lists " + names(BROWSER);
 
       line(WORKSPACE, ${JSON.stringify(TAB)}).el.click();
       const offer = ${JSON.stringify(`1 new file in ${FOLDER} · append`)};
@@ -196,7 +209,10 @@ export const MULTI: Check[] = [
       sc.scrollTop = sc.scrollHeight;
       const last = () => [...document.querySelectorAll("tbody tr")].at(-1);
       const drawn = () => last()?.children[0].textContent === ${JSON.stringify(String(ROWS_APPENDED))} && !last().classList.contains("pending");
-      return (await arrives(drawn)) ? "" : "the last row drawn is " + JSON.stringify(last()?.children[0].textContent);
+      if (!(await arrives(drawn))) return "the last row drawn is " + JSON.stringify(last()?.children[0].textContent);
+      // It came from the object that was appended, and its _file cell names it.
+      const from = last().lastElementChild.textContent;
+      return from === ${JSON.stringify(NAMES[PARTS])} ? "" : "the last row's _file says " + JSON.stringify(from);
     `,
   },
 ];
