@@ -14,7 +14,7 @@ import { sniffDelimiter } from "./sniff.ts";
 export { readAll } from "./csv.ts";
 export { headerOf, openFormat } from "./format.ts";
 export type { Format, Scanner } from "./format.ts";
-export { RecordScanner } from "./scan.ts";
+export { RecordScanner, bomLength } from "./scan.ts";
 export { sniffDelimiter } from "./sniff.ts";
 
 /**
