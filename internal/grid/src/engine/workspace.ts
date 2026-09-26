@@ -513,13 +513,28 @@ export class Workspace {
 
   // ------------------------------------------------------------ lifetime
 
+  /**
+   * close closes every source, and nothing is opened after it.
+   *
+   * What the workspace holds is closed at once. An open already under way
+   * lands after that with a file of its own, so the queue is waited out and
+   * what it left is closed as well. Whatever was still waiting its turn is
+   * refused before it starts.
+   */
   async close(): Promise<void> {
     this.closed = true;
     await this.drop();
+    await this.queue;
+    await this.drop();
+  }
+
+  /** live refuses whatever is asked of a workspace that was closed. */
+  private live(): void {
+    if (this.closed) throw new Error("the workspace was closed");
   }
 
   private need(id: string): Source {
-    if (this.closed) throw new Error("the workspace was closed");
+    this.live();
     const source = this.sources.get(id);
     if (source === undefined) {
       const none = this.sources.size === 0;
@@ -539,7 +554,10 @@ export class Workspace {
   }
 
   private serially<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn);
+    const run = this.queue.then(() => {
+      this.live();
+      return fn();
+    });
     this.queue = run.catch(() => undefined);
     return run;
   }
