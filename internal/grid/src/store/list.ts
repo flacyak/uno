@@ -7,9 +7,9 @@
 // one another.
 //
 // Nothing here reads anything. It is the shape a lister has; the reading lives
-// in store/node.ts and store/s3.ts beside the handlers, the refusal when no
-// lister claims a path is store/claim.ts, and what plugs the two interfaces in
-// as one thing is the plugin package.
+// in store/disklister.ts and store/s3.ts, the refusal when no lister claims a
+// path is store/claim.ts, and what plugs the two interfaces in as one thing is
+// the plugin package.
 
 import { BROWSES, claim } from "./claim.ts";
 
