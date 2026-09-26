@@ -17,6 +17,8 @@ import type { Connection as Saved } from "@uno/grid/library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@uno/grid/store";
 import { s3Location, s3Url } from "@uno/grid/store/s3";
 
+import { num } from "./locale.ts";
+
 /**
  * Listings is the whole of what the panel needs an engine for.
  *
@@ -128,12 +130,12 @@ export interface Grown {
 
 /** newFiles is how many files a folder has gained, in words: "3 new files". */
 export function newFiles(n: number): string {
-  return `${n.toLocaleString()} new ${n === 1 ? "file" : "files"}`;
+  return `${num(n)} new ${n === 1 ? "file" : "files"}`;
 }
 
 /** fileCount is how many files a tab reads as one, in words: "3 files". */
 export function fileCount(n: number): string {
-  return `${n.toLocaleString()} ${n === 1 ? "file" : "files"}`;
+  return `${num(n)} ${n === 1 ? "file" : "files"}`;
 }
 
 /**

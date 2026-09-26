@@ -16,6 +16,8 @@ import type { Connection } from "@uno/grid/library";
 import { validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
+import { num } from "../locale.ts";
+
 /** What the form needs of the engine and the host. The shell decides how. */
 export interface ConnectAsks {
   /** The names of the AWS profiles this machine has. */
@@ -95,8 +97,7 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
 /** triedLine is what a test that worked says: the folder, and what it held. */
 export function triedLine(tried: Tried): string {
   const where = tried.connection.prefix === "" ? "the bucket" : tried.connection.prefix;
-  const count = (n: number, one: string): string =>
-    `${n.toLocaleString()} ${one}${n === 1 ? "" : "s"}`;
+  const count = (n: number, one: string): string => `${num(n)} ${one}${n === 1 ? "" : "s"}`;
   const more = tried.more ? ", and more" : "";
   return `listed ${where} · ${count(tried.folders, "folder")}, ${count(tried.files, "file")}${more}`;
 }

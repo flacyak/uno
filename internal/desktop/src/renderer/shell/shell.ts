@@ -19,12 +19,14 @@ import type { Connection } from "@uno/grid/library";
 import type { SingleRef } from "@uno/grid/store";
 import { s3Location } from "@uno/grid/store/s3";
 
+import { m } from "../../paraglide/messages.js";
 import type { Host } from "../../shared/host.ts";
 import type { Grid, GridEvents } from "../grid/index.ts";
 import { strategy } from "../input/index.ts";
 import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
 import type { Command } from "../keys.ts";
+import { num } from "../locale.ts";
 import { Recents } from "../recents.ts";
 import { Sources, connectionLine } from "../sources.ts";
 import { NEWER_AFTER_MS } from "../timing.ts";
@@ -34,7 +36,6 @@ import { bannerParts, offerKey } from "./banner.ts";
 import { wireDrop } from "./drop.ts";
 import { Finder } from "./find.ts";
 import type { Showing } from "./find.ts";
-import { m } from "../../paraglide/messages.js";
 import { Theming } from "../theme.ts";
 import { FormulaForm } from "./formula.ts";
 import { PopMenu, below } from "./menu.ts";
@@ -660,7 +661,7 @@ export class Shell {
         this.say(
           wanted === "end"
             ? `indexing ${w.indexed()}% · G again when it finishes`
-            : `row ${(wanted + 1).toLocaleString()} is not indexed yet`,
+            : `row ${num(wanted + 1)} is not indexed yet`,
         );
       },
       onAction: (action) => {
@@ -865,7 +866,10 @@ export class Shell {
     if (w === undefined) return;
     if (tab.edited > 0 && this.warned !== tab) {
       const n = tab.edited;
-      this.say(`${tab.name} has ${n} ${n === 1 ? "edit" : "edits"} · × again to remove it`, true);
+      this.say(
+        `${tab.name} has ${num(n)} ${n === 1 ? "edit" : "edits"} · × again to remove it`,
+        true,
+      );
       this.warned = tab;
       return;
     }
