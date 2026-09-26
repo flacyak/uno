@@ -296,6 +296,49 @@ export class Workspace {
     });
   }
 
+  /**
+   * append adds files at the end of a source that is several read as one.
+   *
+   * The parts it has keep their places in the list, so every row keeps its
+   * number, and the log is replayed as it stands over the longer source:
+   * nothing in it is rewritten and nothing is added to it. The id stays, which
+   * is what keeps the log attached, as it does through a relink.
+   *
+   * A file is held to the first part as it would have been had the source
+   * been opened with it. One that reads differently is refused naming it and
+   * what differs, and so is a file the source already reads, whose rows would
+   * be there twice. A refused append leaves the source as it was.
+   */
+  append(id: string, files: readonly SingleRef[]): Promise<Opened> {
+    return this.serially(async () => {
+      const was = this.need(id);
+      if (!(was instanceof View)) {
+        throw new Error(`${was.name} has no file behind it, so nothing can be appended to it`);
+      }
+      const ref = was.extended(files);
+      if (ref === undefined) {
+        throw new Error(`${was.name} is one file · files are appended only to several read as one`);
+      }
+      if (files.length === 0) throw new Error(`no file was given to append to ${was.name}`);
+      const had = ref.parts.length - files.length;
+      files.forEach((file, i) => {
+        if (!("path" in file)) return;
+        const at = ref.parts.findIndex((part) => "path" in part.ref && part.ref.path === file.path);
+        if (at < had) throw new Error(`${file.name} is already part ${at + 1} of ${was.name}`);
+        if (at < had + i) throw new Error(`${file.name} is given twice to append to ${was.name}`);
+      });
+
+      const view = await this.view(id, ref, { container: "", edits: was.log });
+
+      // Only once the longer one is open, so a refused append leaves the
+      // source showing what it was showing before.
+      this.sources.set(id, view);
+      if (this.transform) view.mode(true);
+      await was.close();
+      return view.opened;
+    });
+  }
+
   /** A .uno's sources: each opened from the file it points at, or carried. */
   private async openWorkspace(ref: SourceRef): Promise<Opening> {
     if (this.sources.size > 0) {
