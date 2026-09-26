@@ -25,6 +25,7 @@ describe("isNumber rejects what a spreadsheet does not mean", () => {
     "(5",
     "5)",
     "(5)-",
+    "1e400",
   ]) {
     test(`refuses ${JSON.stringify(v)}`, () => {
       expect(isNumber(v)).toBe(false);
