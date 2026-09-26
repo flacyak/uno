@@ -156,7 +156,15 @@ beforeEach(() => {
     root,
     sources,
     () => "default",
-    { select: noop, add: noop, reload: noop, repoint: noop, remove: noop, closed: noop },
+    {
+      select: noop,
+      add: () => Promise.resolve(false),
+      append: noop,
+      reload: noop,
+      repoint: noop,
+      remove: noop,
+      closed: noop,
+    },
     asks,
   );
   panel.show();
@@ -346,7 +354,15 @@ test("a tab in a bucket nobody connected offers Connect, filled in with its fold
     root,
     sources,
     () => "default",
-    { select: noop, add: noop, reload: noop, repoint: noop, remove: noop, closed: noop },
+    {
+      select: noop,
+      add: () => Promise.resolve(false),
+      append: noop,
+      reload: noop,
+      repoint: noop,
+      remove: noop,
+      closed: noop,
+    },
     asks,
   );
   panel.show();
@@ -406,7 +422,8 @@ test("c on a tab waiting for its bucket connects it, and r does not read it", as
     () => "default",
     {
       select: noop,
-      add: noop,
+      add: () => Promise.resolve(false),
+      append: noop,
       reload: (id) => reloaded.push(id),
       repoint: noop,
       remove: noop,

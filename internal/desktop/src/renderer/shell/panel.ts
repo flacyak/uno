@@ -1,6 +1,7 @@
 // The panel's column: the three sections of `Sources` drawn as one list beside
 // the grid, a filter over all of them, the keys that walk it, and underneath,
-// the front of the file picked and the buttons that add what is picked.
+// the front of the file picked and the buttons that add what is picked: a tab
+// each, or one tab reading them all, with how they are read chosen beside it.
 //
 // The list is virtualised the way the grid is. A prefix of 200,000 objects is
 // the rows on screen and a few either side, and scrolling writes text into the
@@ -11,11 +12,21 @@ import "./panel.css";
 
 import { formatBytes } from "@uno/grid/engine";
 import type { Peeked, SourceRef } from "@uno/grid/engine";
+import type { SingleRef } from "@uno/grid/store";
 
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
-import { SECTIONS, STATE_WORDS, connectionLine, stateOf } from "../sources.ts";
-import type { Button, Connection, Doing, Place, Section, Sources, TabAction } from "../sources.ts";
+import { SECTIONS, STATE_WORDS, connectionLine, fileCount, newFiles, stateOf } from "../sources.ts";
+import type {
+  Button,
+  Connection,
+  Doing,
+  Joining,
+  Place,
+  Section,
+  Sources,
+  TabAction,
+} from "../sources.ts";
 import { NEWER } from "../workspace.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
@@ -35,8 +46,15 @@ const DOING_KEYS: Record<string, Doing> = {
   r: "reload",
   c: "connect",
   p: "repoint",
+  a: "append",
   Delete: "remove",
 };
+
+/** What each choice about files added as one says, and says to whoever hovers. */
+const HEADER_ROW = "header row";
+const HEADER_ROW_HINT = "the first line of each file names the columns";
+const FILE_COLUMN = "_file column";
+const FILE_COLUMN_HINT = "a column that says which file each row came from";
 
 const TITLES: Record<Section, string> = {
   workspace: "In this workspace",
@@ -48,8 +66,13 @@ const TITLES: Record<Section, string> = {
 export interface PanelActions {
   /** Show the tab with this id. */
   select(id: string): void;
-  /** Add files to the workspace: a tab each, or `one` source between them. */
-  add(refs: readonly SourceRef[], one: boolean): void;
+  /**
+   * Add sources to the workspace, a tab each: files, or several read as one.
+   * It answers whether every one of them opened.
+   */
+  add(refs: readonly SourceRef[]): Promise<boolean>;
+  /** Add files at the end of the tab with this id, which reads several as one. */
+  append(id: string, files: readonly SingleRef[]): void;
   /** Read the tab with this id from its file again. */
   reload(id: string): void;
   /** Point the tab with this id at another file. */
@@ -344,6 +367,7 @@ export class Panel {
       case "r":
       case "c":
       case "p":
+      case "a":
       case "Delete": {
         const does = DOING_KEYS[e.key];
         const action = this.sources.doings.find((a) => a.does === does);
@@ -399,7 +423,8 @@ export class Panel {
    * choose is Enter on the line the keys are on: a tab is shown, a connection
    * is browsed and a folder entered. On a file it adds what is picked, a tab
    * each, or the file itself when nothing is, so a single file never needs
-   * Space first.
+   * Space first. Adding what is picked as one is its own button's, since it
+   * is the choice that is not the usual one.
    */
   private choose(): void {
     const { section, line } = this.sources.place;
@@ -474,7 +499,7 @@ export class Panel {
 
   /** press hands a button's files to the shell: to add, or to point a tab at. */
   private press(b: Button): void {
-    if (b.to === undefined) return this.act.add(b.refs, b.one);
+    if (b.to === undefined) return this.add(b.refs);
     this.sources.stop();
     this.act.repoint(b.to, b.refs[0]!);
   }
@@ -485,9 +510,21 @@ export class Panel {
    */
   private give(ref: SourceRef): void {
     const to = this.sources.repointing;
-    if (to === undefined) return this.act.add([ref], false);
+    if (to === undefined) return this.add([ref]);
     this.sources.stop();
     this.act.repoint(to.id, ref);
+  }
+
+  /**
+   * add hands sources to the shell to open, and lets go of the files once
+   * they have. Ones that did not open stay picked: a file that does not read
+   * the way the others do is unpicked, or the header row unticked, and the
+   * rest are added again.
+   */
+  private add(refs: readonly SourceRef[]): void {
+    void this.act.add(refs).then((opened) => {
+      if (opened) this.sources.added(refs);
+    });
   }
 
   /** doing is one of a tab's buttons, or its key. Re-pointing starts in the browser. */
@@ -501,6 +538,8 @@ export class Panel {
         return this.repoint(a.id);
       case "connect":
         return this.connectFor(a.id);
+      case "append":
+        return this.act.append(a.id, a.files ?? []);
     }
   }
 
@@ -544,32 +583,59 @@ export class Panel {
 
   /**
    * paintFoot draws what can be done to the tab the keys are on, then the
-   * buttons for what is picked, and nothing while there is neither.
+   * buttons for what is picked, and nothing while there is neither. An offer
+   * to append has a line to itself above the rest, since it is a sentence and
+   * not a word, and so do the choices about files added as one.
    */
   private paintFoot(): void {
     const doings = this.sources.doings;
     const buttons = this.sources.buttons;
+    const joining = this.sources.joining;
+    // What a button was drawn for is asked of the panel again when it is
+    // pressed, so the choices a person ticks need no redraw, and keep the
+    // keys while they are ticked.
     const key = [
-      ...doings.map((a) => a.does + a.id),
-      ...buttons.map(
-        (b) => b.label + (b.to ?? "") + b.refs.map((r) => ("path" in r ? r.path : r.name)).join(),
-      ),
+      ...doings.map((a) => a.does + a.id + a.label),
+      ...buttons.map((b) => b.label + (b.to ?? "") + b.refs.map(placeOf).join()),
+      joining === undefined ? "" : "joining",
     ].join("|");
     if (key === this.drawnFoot) return;
     this.drawnFoot = key;
     this.foot.hidden = doings.length === 0 && buttons.length === 0;
     this.foot.replaceChildren(
       ...doings.map((a) => {
-        const el = text("button", "", a.label);
+        const el = text("button", a.does === "append" ? "wide" : "", a.label);
         el.addEventListener("click", () => this.doing(a));
         return el;
       }),
-      ...buttons.map((b) => {
+      ...(joining === undefined ? [] : [this.choices(joining)]),
+      ...buttons.map((b, i) => {
         const el = text("button", b.one ? "" : "primary", b.label);
-        el.addEventListener("click", () => this.press(b));
+        // The button as it stands when pressed, with the choices as they are
+        // then, and not as they were when it was drawn.
+        el.addEventListener("click", () => this.press(this.sources.buttons[i] ?? b));
         return el;
       }),
     );
+  }
+
+  /**
+   * choices is the line above "Add as one" that says how the files are read
+   * as one: whether each has a header row, and whether a `_file` column says
+   * which file a row came from.
+   */
+  private choices(joining: Joining): HTMLElement {
+    const line = text("div", "choices", "");
+    line.append(
+      text("span", "", "as one"),
+      choice(HEADER_ROW, HEADER_ROW_HINT, joining.header === "first", (on) =>
+        this.sources.join({ header: on ? "first" : "none" }),
+      ),
+      choice(FILE_COLUMN, FILE_COLUMN_HINT, joining.fileColumn, (on) =>
+        this.sources.join({ fileColumn: on }),
+      ),
+    );
+    return line;
   }
 
   private paint(el: HTMLElement, index: number, at: Place): void {
@@ -600,9 +666,12 @@ export class Panel {
       if (tab !== undefined) {
         const state = stateOf(tab);
         if (state !== "fine") cls += ` ${state}`;
-        // Where it lives, and what is wrong with it, for whoever hovers.
+        else if (this.sources.grown(tab) !== undefined) cls += " grown";
+        // Where it lives, and what is wrong with it, for whoever hovers. A
+        // tab of several files lives in each of them.
         title = [
           tab.link?.path,
+          ...(tab.parts ?? []).map((part) => part.path || part.name),
           tab.link?.missing ?? (tab.newer === undefined ? undefined : NEWER),
           tab.link?.changed,
         ]
@@ -626,6 +695,11 @@ export class Panel {
         if (t === undefined) return ["", ""];
         const state = stateOf(t);
         if (state !== "fine") return [t.name, STATE_WORDS[state]];
+        // Several files say how many they are, and how many more there are
+        // to append once their folder has gained some.
+        const grown = this.sources.grown(t);
+        if (grown !== undefined) return [t.name, newFiles(grown.files.length)];
+        if (t.parts !== undefined) return [t.name, fileCount(t.parts.length)];
         return [t.name, t.bytes === undefined ? "" : formatBytes(t.bytes)];
       }
       case "connections": {
@@ -661,6 +735,31 @@ export class Panel {
         return "this folder is empty";
     }
   }
+}
+
+/** Where a ref's bytes are, as one string: its path, or each of its parts'. */
+function placeOf(ref: SourceRef): string {
+  if ("parts" in ref) return ref.parts.map((part) => placeOf(part.ref)).join();
+  return "path" in ref ? ref.path : ref.name;
+}
+
+/** choice is one ticked or unticked thing, and what is told when it changes. */
+function choice(
+  label: string,
+  hint: string,
+  on: boolean,
+  changed: (on: boolean) => void,
+): HTMLElement {
+  const el = document.createElement("label");
+  el.title = hint;
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = on;
+  box.addEventListener("change", () => changed(box.checked));
+  // Space ticks it, and the grid's keys and the shell's chords stay out of it.
+  box.addEventListener("keydown", (e) => e.stopPropagation());
+  el.append(box, label);
+  return el;
 }
 
 function text(tag: string, cls: string, content: string): HTMLElement {

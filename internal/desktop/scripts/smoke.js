@@ -41,6 +41,20 @@ const KEY = "2025/ads-q3.csv";
 const BESIDE = ["2025/ads-q4.csv", "2025/sales-q3.csv"];
 
 /**
+ * The objects that are not in the bucket when the run starts and land in it
+ * when a check asks: the fixture cut into three parts, which are added as
+ * one tab, and a fourth that arrives after them and is appended. The fourth
+ * is the first part's bytes again, under the name that sorts after the third.
+ */
+const PARTS = [1, 2, 3].map((n) => join(pkg, `../grid/tests/testdata/sales-q3-part-${n}.csv`));
+const ARRIVING = new Map([
+  ...(await Promise.all(
+    PARTS.map(async (path, i) => [`shop/2025/sales-q3-part-${i + 1}.csv`, await readFile(path)]),
+  )),
+  [`shop/2025/sales-q3-part-${PARTS.length + 1}.csv`, await readFile(PARTS[0])],
+]);
+
+/**
  * A second, public bucket, and the object a colleague's workspace names in it
  * that has since been deleted. Connecting the bucket works -- it lists -- and
  * reading the object does not, which is what the last checks are about.
@@ -165,10 +179,18 @@ let out = "";
  * answer does what a check asked of this script, which holds the stand-in, and
  * says so on the app's stdin: `rewrite <key>` writes the object at <key> over
  * with the same bytes but one digit, the same size and a different ETag, as an
- * export regenerated with one figure corrected would be.
+ * export regenerated with one figure corrected would be, and `put <key> ...`
+ * puts each object held back for those keys into the bucket, as an export
+ * landing in its folder would.
  */
 function answer(what) {
-  const [verb, key] = what.split(" ");
+  const [verb, ...keys] = what.split(" ");
+  if (verb === "put" && keys.length > 0 && keys.every((k) => ARRIVING.has(k))) {
+    for (const k of keys) standin.objects.set(k, ARRIVING.get(k));
+    child.stdin.write(`smoke: done ${what}\n`);
+    return;
+  }
+  const [key] = keys;
   const was = standin.objects.get(key ?? "");
   if (verb !== "rewrite" || was === undefined) {
     child.stdin.write(`smoke: nothing here does ${what}\n`);

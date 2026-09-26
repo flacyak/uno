@@ -22,6 +22,7 @@ import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
 import { COMMAS_LEFT, DATE, DOM_ROWS, GUTTER, REGION, REP, ROWS, UNITS } from "./fixture.ts";
 import { MEETS } from "./meets.ts";
+import { MULTI } from "./multi.ts";
 import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
 import { REFRESH } from "./refresh.ts";
@@ -60,6 +61,7 @@ const CHECKS: Check[] = [
   ...SETTINGS,
   ...MEETS,
   ...REFRESH,
+  ...MULTI,
 ];
 
 /**

@@ -84,7 +84,12 @@ interface Drawn {
   root: HTMLElement;
   list: HTMLElement;
   chosen: string[];
+  /** What was added, and whether it was one source of several files. */
   added: { names: string[]; one: boolean }[];
+  /** Every ref the buttons handed over to add, in order. */
+  refs: SourceRef[];
+  /** Whether the shell says what it was handed opened. It does not, until a test says so. */
+  opens: { all: boolean };
   /** What the tab buttons and keys asked of the shell, as `does id [path]`. */
   done: string[];
   closed: () => number;
@@ -114,6 +119,8 @@ function draw(
   );
   const chosen: string[] = [];
   const added: { names: string[]; one: boolean }[] = [];
+  const handed: SourceRef[] = [];
+  const opens = { all: false };
   const done: string[] = [];
   let closed = 0;
   panel = new Panel(
@@ -122,7 +129,12 @@ function draw(
     () => input.name,
     {
       select: (id) => chosen.push(id),
-      add: (refs, one) => added.push({ names: refs.map((r) => r.name), one }),
+      add: (refs) => {
+        handed.push(...refs);
+        added.push({ names: refs.map((r) => r.name), one: refs.some((r) => "parts" in r) });
+        return Promise.resolve(opens.all);
+      },
+      append: (id, files) => done.push(`append ${id} ${files.map((f) => f.name).join(",")}`),
       reload: (id) => done.push(`reload ${id}`),
       repoint: (id, ref) => done.push(`repoint ${id} ${"path" in ref ? ref.path : ref.name}`),
       remove: (id) => done.push(`remove ${id}`),
@@ -133,7 +145,19 @@ function draw(
   const list = root.querySelector<HTMLElement>(".panel-list")!;
   Object.defineProperty(list, "clientHeight", { value: VIEWPORT });
   panel.show();
-  return { panel, sources, bucket, root, list, chosen, added, done, closed: () => closed };
+  return {
+    panel,
+    sources,
+    bucket,
+    root,
+    list,
+    chosen,
+    added,
+    refs: handed,
+    opens,
+    done,
+    closed: () => closed,
+  };
 }
 
 function press(el: HTMLElement, key: string): void {
@@ -414,8 +438,9 @@ test("Space picks files, marks them, peeks at one, and the buttons add them", as
   const [each, one] = d.root.querySelectorAll<HTMLButtonElement>(".panel-foot button");
   one!.click();
   each!.click();
+  // As one, they are one source named for what their names share.
   expect(d.added).toEqual([
-    { names: ["orders-000000.csv", "orders-000002.csv"], one: true },
+    { names: ["orders.csv"], one: true },
     { names: ["orders-000000.csv", "orders-000002.csv"], one: false },
   ]);
 
@@ -424,6 +449,82 @@ test("Space picks files, marks them, peeks at one, and the buttons add them", as
   press(d.list, "ArrowUp");
   press(d.list, "Enter");
   expect(d.added[2]).toEqual({ names: ["orders-000000.csv", "orders-000002.csv"], one: false });
+});
+
+/** The line of choices above "Add as one", and its two boxes. */
+function choices(root: HTMLElement): { said: string; boxes: HTMLInputElement[] } | undefined {
+  const line = root.querySelector<HTMLElement>(".panel-foot .choices");
+  if (line === null) return undefined;
+  return { said: line.textContent ?? "", boxes: [...line.querySelectorAll("input")] };
+}
+
+test("files added as one have a header row and no _file column until the choices say otherwise", async () => {
+  const d = draw(new Bucket(objects(3)));
+  await browse(d);
+
+  // One file is one source however it is added, so there is nothing to choose.
+  press(d.list, " ");
+  await settle();
+  expect(choices(d.root)).toBeUndefined();
+
+  press(d.list, "ArrowDown");
+  press(d.list, " ");
+  await settle();
+  const shown = choices(d.root)!;
+  expect(shown.said).toBe("as oneheader row_file column");
+  expect(shown.boxes.map((box) => box.checked)).toEqual([true, false]);
+
+  const one = (): HTMLButtonElement =>
+    [...d.root.querySelectorAll<HTMLButtonElement>(".panel-foot button")].find(
+      (b) => b.textContent === "Add as one",
+    )!;
+  const parts = [
+    { ref: { name: "orders-000000.csv", path: "s3://acme-exports/orders-000000.csv" } },
+    { ref: { name: "orders-000001.csv", path: "s3://acme-exports/orders-000001.csv" } },
+  ];
+  one().click();
+  expect(d.refs).toEqual([{ name: "orders.csv", parts, header: "first" }]);
+
+  // Ticking redraws nothing, so the boxes are the ones that were ticked.
+  shown.boxes[0]!.click();
+  shown.boxes[1]!.click();
+  await settle();
+  expect(choices(d.root)!.boxes).toEqual(shown.boxes);
+  one().click();
+  expect(d.refs[1]).toEqual({ name: "orders.csv", parts, header: "none", fileColumn: true });
+
+  // The choices are as they were left for the next files picked.
+  press(d.list, " ");
+  press(d.list, "ArrowDown");
+  press(d.list, " ");
+  await settle();
+  expect(choices(d.root)!.boxes.map((box) => box.checked)).toEqual([false, true]);
+});
+
+test("files that were added are let go of, and ones that did not open stay picked", async () => {
+  const d = draw(new Bucket(objects(3)));
+  await browse(d);
+  press(d.list, " ");
+  press(d.list, "ArrowDown");
+  press(d.list, " ");
+  await settle();
+  const one = (): HTMLButtonElement =>
+    [...d.root.querySelectorAll<HTMLButtonElement>(".panel-foot button")].find(
+      (b) => b.textContent === "Add as one",
+    )!;
+
+  // Refused, as parts that do not agree are: they are still there to change.
+  one().click();
+  await settle();
+  expect(d.sources.selected.map((e) => e.name)).toEqual(["orders-000000.csv", "orders-000001.csv"]);
+  expect(buttons(d.root)).toEqual(["Add 2", "Add as one"]);
+
+  d.opens.all = true;
+  one().click();
+  await settle();
+  expect(d.sources.selected).toEqual([]);
+  expect(buttons(d.root)).toEqual([]);
+  expect(d.root.querySelector(".panel-row.picked")).toBeNull();
 });
 
 test("Enter on a file nothing reads adds nothing", async () => {
@@ -465,6 +566,52 @@ test("each tab's line says its size, or that its file changed or is missing", ()
   expect(row(d.root, "google-ads.csv")!.title).toBe(
     "s3://acme-exports/ads/google-ads.csv · google-ads.csv is not there",
   );
+});
+
+/** A tab reading the folder's first two objects as one, beside one that reads a file. */
+const JOINED: Open[] = [
+  { id: "a", name: "ledger-2025.csv", link: { path: "/home/jo/ledger-2025.csv" }, bytes: 2048 },
+  {
+    id: "m",
+    name: "orders.csv",
+    bytes: 4096,
+    parts: objects(2).map((o) => ({ name: o.name, path: o.path })),
+  },
+];
+
+test("a tab of several files says how many, and offers what its folder has gained", async () => {
+  const d = draw(new Bucket(objects(2)), { name: "default" }, JOINED);
+  const meta = (): string | null => row(d.root, "orders.csv")!.children[1]!.textContent;
+
+  await d.sources.askGrown();
+  await settle();
+  expect(meta()).toBe("2 files");
+  expect(row(d.root, "orders.csv")!.classList.contains("grown")).toBe(false);
+  expect(row(d.root, "orders.csv")!.title).toBe(
+    "s3://acme-exports/orders-000000.csv · s3://acme-exports/orders-000001.csv",
+  );
+  // Its parts are the source, so there is no other file to point it at.
+  press(d.list, "ArrowDown");
+  expect(buttons(d.root)).toEqual(["Remove"]);
+  press(d.list, "a");
+  expect(d.done).toEqual([]);
+
+  // Two more land in the folder, after the last it reads.
+  const grown = draw(new Bucket(objects(4)), { name: "default" }, JOINED);
+  await grown.sources.askGrown();
+  await settle();
+  expect(row(grown.root, "orders.csv")!.children[1]!.textContent).toBe("2 new files");
+  expect(row(grown.root, "orders.csv")!.classList.contains("grown")).toBe(true);
+
+  press(grown.list, "ArrowDown");
+  expect(buttons(grown.root)).toEqual(["2 new files in acme-exports/ · append", "Remove"]);
+  const offer = grown.root.querySelector<HTMLButtonElement>(".panel-foot button.wide")!;
+  expect(offer.textContent).toBe("2 new files in acme-exports/ · append");
+
+  offer.click();
+  press(grown.list, "a");
+  const asked = "append m orders-000002.csv,orders-000003.csv";
+  expect(grown.done).toEqual([asked, asked]);
 });
 
 test("the keys on a tab offer its buttons, and r and Delete reload and remove it", () => {
