@@ -35,6 +35,8 @@ import type {
 import { formatBytes, messageOf } from "./protocol.ts";
 import type { Meeting, Unconnected } from "../store/s3.ts";
 import type { Tuning } from "./rows.ts";
+import { unmeasured } from "./telemetry.ts";
+import type { Telemetry } from "./telemetry.ts";
 import { View } from "./view.ts";
 import type { Carried, Part } from "./view.ts";
 
@@ -178,6 +180,8 @@ export class Workspace {
      * undefined for an address that is not in a bucket.
      */
     private readonly meet?: (path: string) => Meeting | undefined,
+    /** Told how long each source took to index. */
+    private readonly telemetry: Telemetry = unmeasured,
   ) {}
 
   /**
@@ -367,6 +371,7 @@ export class Workspace {
                 carried,
                 this.port,
                 this.tuning,
+                this.telemetry,
               );
       view.opened.link = linkOf(view, src);
       return view;
@@ -418,7 +423,16 @@ export class Workspace {
   private async view(id: string, ref: SourceRef, carried: Carried | undefined): Promise<View> {
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
-    const view = await View.open(id, ref.name, path, source, carried, this.port, this.tuning);
+    const view = await View.open(
+      id,
+      ref.name,
+      path,
+      source,
+      carried,
+      this.port,
+      this.tuning,
+      this.telemetry,
+    );
     view.connection = this.through(ref);
     view.parts = "parts" in ref ? ref : undefined;
     return view;
