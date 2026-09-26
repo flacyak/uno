@@ -21,7 +21,7 @@
 
 /** The seven colours a palette gives; the rest of uno's tokens are mixed from them. */
 export interface Palette {
-  /** The chrome: the tab strip, the status bar, a column's header. */
+  /** The chrome: the sidebar, the status bar, a column's header. */
   sunken: string;
   /** The ground the panel and the empty window sit on. */
   paper: string;

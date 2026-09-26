@@ -46,7 +46,7 @@ const POLL_MS = 50;
 
 /**
  * Body markup, read from the real index.html and not retyped: a second copy
- * drifts from what Shell actually queries (`#app`, `#tabs`, `#banner`,
+ * drifts from what Shell actually queries (`#app`, `#workspaces`, `#banner`,
  * `#empty`, `#content`, and the status bar's ids) without anyone noticing.
  */
 function bodyMarkup(): string {
@@ -125,6 +125,9 @@ export async function bootShell(): Promise<void> {
     pickSave: () => Promise.resolve(undefined),
     save: () => Promise.resolve(),
     saveConnection: (c) => saveConnection(nodeStore(), kept, c),
+    quit: () => {
+      throw new Error("quit() is window-bound and not used by any run check");
+    },
   };
 
   const { Shell } = await import("../../src/renderer/shell/shell.ts");

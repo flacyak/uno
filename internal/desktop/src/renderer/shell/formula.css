@@ -1,0 +1,116 @@
+/* The formula form, hung off the page where the workspace was right-clicked. */
+
+.formula {
+  position: fixed;
+  z-index: 10;
+  width: 320px;
+  margin: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.18);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.formula .title {
+  margin-bottom: 8px;
+  padding: 6px 8px 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formula .field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+}
+
+.formula .what {
+  flex: 0 0 48px;
+  color: var(--ink-3);
+}
+
+.formula select,
+.formula input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  outline: none;
+}
+
+.formula select:focus,
+.formula input:focus {
+  border-color: var(--accent);
+}
+
+.formula input::placeholder {
+  color: var(--ink-3);
+}
+
+/* What an expression may hold, until the engine has refused one: then why,
+ * in its words. Two lines at most, the whole of it a hover away. */
+.formula .note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 16px;
+  margin: 4px 8px 0 64px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+.formula .note.err {
+  color: var(--flag);
+}
+
+.formula .buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 10px 8px 4px;
+}
+
+.formula button {
+  padding: 3px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.formula button.primary {
+  color: var(--accent);
+  background: var(--accent-b);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.formula button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.formula button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
