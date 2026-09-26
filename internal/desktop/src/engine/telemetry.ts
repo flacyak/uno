@@ -11,7 +11,8 @@
 // whether the bytes were on a disk or in a bucket, the count and size of the
 // requests made to S3. No file name, path, bucket or key is in it.
 
-import { METRICS_PATH, Meter, otlpHeaders } from "@uno/grid/engine";
+import { Meter, collector } from "@uno/grid/engine";
+import type { Collector } from "@uno/grid/engine";
 import type { Telemetry } from "@uno/grid/engine";
 
 /** How often the totals are sent while the engine runs. */
@@ -43,7 +44,9 @@ function statusClass(status: number): string {
 
 /**
  * exporting reads where to send from `env`, and answers undefined where it
- * names no collector.
+ * names no collector. An endpoint that is set and cannot be read is said
+ * once, on stderr, and nothing is measured: a setting somebody got wrong must
+ * not stop a file from opening.
  *
  * `go` is how a request goes out, the runtime's own fetch unless said: both
  * the sends to the collector and the requests to S3 that are counted on their
@@ -54,14 +57,18 @@ export function exporting(
   version: string,
   go: typeof fetch = fetch,
 ): Exporting | undefined {
-  const endpoint = env["OTEL_EXPORTER_OTLP_ENDPOINT"];
-  if (endpoint === undefined || endpoint === "") return undefined;
+  let to: Collector | undefined;
+  try {
+    to = collector(env);
+  } catch (err) {
+    console.error(
+      `uno sends no measurements · ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  if (to === undefined) return undefined;
 
-  const url = `${endpoint.replace(/\/+$/, "")}${METRICS_PATH}`;
-  const headers = {
-    ...otlpHeaders(env["OTEL_EXPORTER_OTLP_HEADERS"]),
-    "content-type": "application/json",
-  };
+  const { url } = to;
+  const headers = { ...to.headers, "content-type": "application/json" };
   const meter = new Meter({ service: "uno-engine", attributes: { "service.version": version } });
 
   async function flush(): Promise<void> {
