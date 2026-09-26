@@ -121,16 +121,27 @@ export function finish(schema: Schema, row: number, source: readonly string[]): 
  *
  * A row nothing touched comes back as the source itself, with no copy, so a
  * file with an empty log reads as fast as it did before there was a log.
+ *
+ * `supplied` is the cell of the schema's supplied column for each row of the
+ * block, from whoever holds the rows. It is written into the row as it is
+ * finished and kept nowhere, the way a formula's answer is, and a formula
+ * that names the column reads it there. A schema with such a column copies
+ * every row, since the source has no cell for it.
  */
 export function finishRows(
   schema: Schema,
   first: number,
   sources: readonly (readonly string[])[],
+  supplied?: readonly string[],
 ): Finished[] {
-  if (schema.empty) return sources.map((source) => ({ raw: source, shown: source }));
+  if (schema.empty && schema.supplied === undefined) {
+    return sources.map((source) => ({ raw: source, shown: source }));
+  }
 
   const order = schema.computedColumns();
-  const out = sources.map((source, i) => finishCells(schema, first + i, source, order.length > 0));
+  const out = sources.map((source, i) =>
+    finishCells(schema, first + i, source, order.length > 0, supplied?.[i] ?? ""),
+  );
   if (order.length === 0 || out.length === 0) return out;
 
   // A formula reads what a cell shows, not what it stores: a column it names may
@@ -156,17 +167,25 @@ export function finishRows(
 /**
  * finishCells applies everything in the log but formulas to one row. shown is
  * a copy of raw wherever a formula is about to write into it.
+ *
+ * `supplied` is the row's cell of the schema's supplied column. Nothing is
+ * stored there and nothing in the log can change it, so it reads the same
+ * both ways, whatever the source row has at that place.
  */
 function finishCells(
   schema: Schema,
   row: number,
   source: readonly string[],
   computed: boolean,
+  supplied: string,
 ): Finished {
   const width = schema.headers.length;
   const written = schema.writtenIn(row);
+  const fill = schema.supplied?.col;
   const raw: string[] = [];
-  for (let c = 0; c < width; c++) raw.push(stored(schema, c, written?.get(c), source));
+  for (let c = 0; c < width; c++) {
+    raw.push(c === fill ? supplied : stored(schema, c, written?.get(c), source));
+  }
 
   let notes = false;
   if (written !== undefined) {
