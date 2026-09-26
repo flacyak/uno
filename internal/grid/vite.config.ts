@@ -15,6 +15,11 @@ export default defineConfig({
     },
     exports: true,
   },
+  test: {
+    // Fails a test file that leaves a file open, which Node otherwise reports
+    // as a warning in some later run.
+    setupFiles: ["tests/handles.ts"],
+  },
   lint: {
     options: {
       typeAware: true,
