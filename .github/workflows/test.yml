@@ -5,6 +5,15 @@ on:
     branches: [main]
 
 jobs:
+  # Build, typecheck, and the 117 tests across grid + desktop -- all
+  # display-free, including a happy-dom harness that boots the real renderer
+  # over the real engine. None of it needs a display, Xvfb, root, or
+  # Electron's 283 MB runtime binary: the desktop build marks electron
+  # external (scripts/bundle.js), nothing under tests/ imports it at runtime,
+  # and typecheck only needs the npm package's .d.ts files, which install
+  # regardless of whether the binary download ran. That makes this job a
+  # candidate for a smaller, cheaper runner than ubuntu-latest -- not decided
+  # here, so it stays on ubuntu-latest for now.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -12,10 +21,28 @@ jobs:
 
       # The repo root is the pnpm workspace root, and the vp version is read from
       # the catalog every package points at.
+      #
+      # ELECTRON_SKIP_BINARY_DOWNLOAD skips the ~283 MB fetch in electron's
+      # postinstall. Nothing this job runs spawns the binary, so there is
+      # nothing to fetch it for; the package itself -- including the .d.ts
+      # files `vp run check` needs -- still installs normally, since only the
+      # binary fetch is gated by this variable.
+      #
+      # cache-save is off here on purpose. Electron's binary is a build side
+      # effect that lives inside the pnpm store path, so with the download
+      # skipped, a cache saved from this job would poison the entry the smoke
+      # job restores: it would find an electron package with no dist/ and
+      # fail trying to spawn a binary that was never downloaded, which would
+      # look like a broken app rather than a broken cache. Restoring stays on,
+      # so this job still benefits from whatever the smoke job saved; it just
+      # never writes back, so it can never be the one that poisons it.
       - uses: voidzero-dev/setup-vp@v1.19.0
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         with:
           version-file: pnpm-workspace.yaml
           cache: true
+          cache-save: false
           run-install: true
 
       # The same root scripts anyone runs locally; see package.json.
@@ -31,6 +58,34 @@ jobs:
 
       - name: Test
         run: vp run test
+
+  # The one thing the job above cannot cover: does the real app actually run?
+  # `vp run smoke` boots the real built main, preload, and renderer bundle
+  # against a real fixture in a real (virtual) display, so it needs the two
+  # things `test` deliberately skips: a display and Electron's actual binary.
+  # `needs: test` means a PR that fails typecheck, lint, or the unit tests
+  # never spins up this heavier, slower job at all.
+  smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # A normal install with the binary download and cache saving both left
+      # on: this is the job that actually needs Electron working, so it is
+      # the one that should own writing the shared cache entry.
+      - uses: voidzero-dev/setup-vp@v1.19.0
+        with:
+          version-file: pnpm-workspace.yaml
+          cache: true
+          run-install: true
+
+      # Jobs run on separate, fresh runners, so none of the `test` job's build
+      # output carries over here. @uno/grid's exports point at dist/, which is
+      # not committed, so the desktop package has nothing to bundle against
+      # until this runs.
+      - name: Build
+        run: vp run build
 
       # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox
       # is built on, and Electron exits rather than run without one.
