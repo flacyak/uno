@@ -163,6 +163,9 @@ const child = spawn(electron, [pkg, `--user-data-dir=${data}`, fixture], {
     // that can tell the checks what to add.
     UNO_SMOKE_OBJECT: object,
     UNO_SMOKE_SENT: sent,
+    // What the + at the foot of the sidebar opens, in place of the dialog a
+    // driven window cannot answer.
+    UNO_DRIVEN_OPEN: second,
     // The endpoint and the keys the engine signs with. A utility process
     // inherits the app's environment, so this is the whole of pointing uno at
     // the stand-in.

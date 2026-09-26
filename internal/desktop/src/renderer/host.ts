@@ -28,6 +28,7 @@ export function electronHost(bridge: Bridge): Host {
     dropped: (file) => bridge.dropped(file),
     pickSave: (suggestedName) => bridge.pickSave(suggestedName),
     save: (path, bytes) => bridge.save(path, bytes),
+    quit: () => bridge.quit(),
     // Stamped and formatted here, so a connection holding a key is refused
     // before it leaves the page; main reads the text back before it writes.
     async saveConnection(c) {

@@ -60,11 +60,11 @@ const PRELOAD_SENDS = new Set(captures(/ipcRenderer\.(?:invoke|send)\("([^"]+)"/
 // of file:pick-save is not double-counted here.
 const MAIN_HANDLES = new Set(captures(/ipcMain\.(?:handle|on)\("([^"]+)"/g, MAIN));
 
-test("the renderer -> main extraction found the seven channels this file assumes", () => {
+test("the renderer -> main extraction found the eight channels this file assumes", () => {
   // Non-empty and sized on purpose: a regex that stops matching would
   // otherwise leave every "is it registered" assertion below trivially true.
-  expect(PRELOAD_SENDS.size).toBe(7);
-  expect(MAIN_HANDLES.size).toBe(7);
+  expect(PRELOAD_SENDS.size).toBe(8);
+  expect(MAIN_HANDLES.size).toBe(8);
 });
 
 test("every channel the renderer sends has a receiver in main", () => {
@@ -132,19 +132,16 @@ test("MenuChannel in the renderer names the same six channels as preload's union
   expect([...RENDERER_MENU_UNION].sort()).toEqual([...PRELOAD_MENU_UNION].sort());
 });
 
-// ---------------------------------------------------------- file:pick-save
+// ------------------------------------------------- file:pick-save, file:open
 
-test("the driven branch's removeHandler names a channel main actually handles", () => {
-  // A typo here leaves registerFileHandlers' dialog.showSaveDialog live during
-  // a smoke or preview run. Nobody at a driven window can answer that dialog,
-  // so the run hangs on it until its deadline kills it, and the failure would
-  // say nothing about a renamed channel.
-  const removed = requireOne(
-    /ipcMain\.removeHandler\("([^"]+)"\)/,
-    MAIN,
-    "the driven branch's removeHandler",
-  );
-  expect(MAIN_HANDLES.has(removed)).toBe(true);
+test("each of the driven branch's removeHandlers names a channel main actually handles", () => {
+  // A typo here leaves registerFileHandlers' dialog live during a smoke or
+  // preview run. Nobody at a driven window can answer that dialog, so the run
+  // hangs on it until its deadline kills it, and the failure would say nothing
+  // about a renamed channel.
+  const removed = captures(/ipcMain\.removeHandler\("([^"]+)"\)/g, MAIN);
+  expect(removed.toSorted()).toEqual(["file:open", "file:pick-save"]);
+  expect(removed.filter((c) => !MAIN_HANDLES.has(c))).toEqual([]);
 });
 
 // ------------------------------------------------------------- smoke checks

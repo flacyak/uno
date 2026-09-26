@@ -45,7 +45,7 @@ const FRAME_INTERVAL = 60;
  * opening frame and one for each of those three, and a take with fewer is one
  * where a beat did nothing.
  */
-const MIN_DISTINCT: Record<string, number> = { edit: 8, browse: 8, refresh: 4 };
+const MIN_DISTINCT: Record<string, number> = { edit: 8, browse: 8, refresh: 4, sidebar: 8 };
 
 /**
  * The edit story, as offsets from the moment the camera rolls.
@@ -109,6 +109,36 @@ const REFRESH = {
   reload: 9_400, // the line says newer in bucket, and the status bar says Reload reads it
   end: 13_400, // the corrected figure, and what Reload found, have been read
 };
+
+/**
+ * The sidebar story, in the same form: the workspaces opened on this machine
+ * in the sidebar, one click between them, a formula put into one from a right
+ * click, the sidebar closed for the width and opened again, a new workspace
+ * from the + at its foot, and the × that closes the window.
+ *
+ * scripts/preview.js lays the workspaces out and names them in
+ * UNO_PREVIEW_WORKSPACES, in the order they are opened before the camera
+ * rolls, so the last is the one the take begins on. Its export ends in an
+ * empty commission column, which is the column the formula goes into.
+ */
+const SIDEBAR = {
+  other: 1_800, // the list and the open workspace's source have been read
+  back: 4_000, // another workspace's rows; and back, one click
+  column: 5_300, // a click in the column the formula is for
+  menu: 6_200, // a right click on the workspace
+  formula: 7_600, // Insert formula…
+  typed: 8_800, // the form is open on the selected column; the expression is typed
+  insert: 11_200, // Enter, which is Insert
+  save: 13_800, // the column is computed, and wears fx; Ctrl+S keeps it
+  fold: 15_400, // the sidebar closed, and the grid has its width
+  unfold: 17_000,
+  plus: 18_600, // the + at the foot: a file as a new workspace
+  close: 21_600, // it is not saved yet, and says so; the pointer goes to the ×
+  end: 23_600,
+};
+
+/** What the sidebar story's formula computes the commission column from. */
+const SIDEBAR_FORMULA = "revenue / 20";
 
 /** The object the refresh story's workspace points at, by its key in the stand-in. */
 const REFRESH_KEY = "2025/ads-q3.csv";
@@ -193,8 +223,11 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // window. The edit story waits for rows; the browse story opens a workspace
   // whose source is missing, so it has none, and waits for the tab's ! instead.
   const story = process.env["UNO_PREVIEW_STORY"] ?? "edit";
-  const ready = story === "edit" ? "tbody tr:not(.pending)" : ".tab .trouble";
+  // The sidebar story opens its workspaces itself, the last of them with rows.
+  const ready =
+    story === "edit" || story === "sidebar" ? "tbody tr:not(.pending)" : ".tab .trouble";
   try {
+    if (story === "sidebar") await openWorkspaces(win);
     await win.webContents.executeJavaScript(`
       (async () => {
         for (let i = 0; i < 120; i++) {
@@ -215,8 +248,7 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // One clock. The camera and the script start together and never consult each
   // other again, which is the whole reason for filming from inside the process.
   const start = Date.now();
-  const end = story === "browse" ? BROWSE.end : story === "refresh" ? REFRESH.end : BEAT.end;
-  const script = story === "browse" ? playBrowse : story === "refresh" ? playRefresh : play;
+  const { end, script } = STORIES[story] ?? STORIES["edit"]!;
   let shots: (Shot & { hash: string })[];
   try {
     [shots] = await Promise.all([film(win, dir, rect, start, end), script(win, start)]);
@@ -271,14 +303,50 @@ const SETTLE_READS = 60;
 /** How many readings in a row have to agree before the size is taken as settled. */
 const STABLE_READS = 6;
 
-async function settle(win: BrowserWindow): Promise<Rectangle> {
-  // Ask for the shape the design is drawn in. A tiling window manager will
-  // refuse, which is its right.
-  win.setContentSize(WANT_WIDTH, WANT_HEIGHT);
+/**
+ * How many times settle asks for the shape again after measuring what it got.
+ * One correction is what a frameless window under Wayland takes: it comes up
+ * wider and taller than it was asked to be by a margin of its own, the same
+ * every time, so asking for that much less lands on the shape.
+ */
+const SHAPE_TRIES = 3;
 
-  // Stopped means the same size for a while, not twice in a row: a tiling
-  // window manager can take the size it was asked for and change it a few
-  // hundred milliseconds later, after two readings have already agreed.
+async function settle(win: BrowserWindow): Promise<Rectangle> {
+  // Ask for the shape the design is drawn in, as the only size the window can
+  // be: main pinned it so before it was shown, which is what has a tiling
+  // window manager float it. What comes back is measured, and what it is out
+  // by is taken off the next ask.
+  let width = WANT_WIDTH;
+  let height = WANT_HEIGHT;
+  let got = { width: 0, height: 0 };
+  for (let i = 0; i < SHAPE_TRIES; i++) {
+    win.setMinimumSize(width, height);
+    win.setMaximumSize(width, height);
+    win.setContentSize(width, height);
+    await stopped(win);
+
+    got = (await win.webContents.capturePage()).getSize();
+    if (got.width === WANT_WIDTH && got.height === WANT_HEIGHT) break;
+    width -= got.width - WANT_WIDTH;
+    height -= got.height - WANT_HEIGHT;
+  }
+
+  if (got.width !== WANT_WIDTH || got.height !== WANT_HEIGHT) {
+    console.warn(
+      `preview: filming at ${got.width}x${got.height}, not ${WANT_WIDTH}x${WANT_HEIGHT} --` +
+        " the window manager placed the window. Float it for a take that matches the design.",
+    );
+  }
+  return { x: 0, y: 0, ...got };
+}
+
+/**
+ * stopped waits for the window to stop being resized. Stopped means the same
+ * size for a while, not twice in a row: a tiling window manager can take the
+ * size it was asked for and change it a few hundred milliseconds later, after
+ * two readings have already agreed.
+ */
+async function stopped(win: BrowserWindow): Promise<void> {
   let last = "";
   let same = 0;
   for (let i = 0; i < SETTLE_READS && same < STABLE_READS; i++) {
@@ -288,15 +356,6 @@ async function settle(win: BrowserWindow): Promise<Rectangle> {
     last = now;
     await sleep(SETTLE_MS);
   }
-
-  const { width, height } = (await win.webContents.capturePage()).getSize();
-  if (width !== WANT_WIDTH || height !== WANT_HEIGHT) {
-    console.warn(
-      `preview: filming at ${width}x${height}, not ${WANT_WIDTH}x${WANT_HEIGHT} --` +
-        " the window manager placed the window. Float it for a take that matches the design.",
-    );
-  }
-  return { x: 0, y: 0, width, height };
 }
 
 /**
@@ -513,6 +572,91 @@ async function playRefresh(win: BrowserWindow, start: number): Promise<void> {
   await at(REFRESH.end);
 }
 
+/**
+ * openWorkspaces opens each workspace the sidebar story lists, in order,
+ * before the camera rolls: opening one is what puts it in the sidebar, and a
+ * take that began on an empty list would have nothing to show moving between.
+ */
+async function openWorkspaces(win: BrowserWindow): Promise<void> {
+  const paths = JSON.parse(process.env["UNO_PREVIEW_WORKSPACES"] ?? "[]") as string[];
+  for (const path of paths) {
+    win.webContents.send("menu:open-path", path);
+    await win.webContents.executeJavaScript(`
+      (async () => {
+        const open = () => document.querySelector(".ws.open")?.dataset.path === ${JSON.stringify(path)};
+        for (let i = 0; i < 120 && !open(); i++) await new Promise((r) => setTimeout(r, 50));
+        if (!open()) throw new Error("${path} never opened");
+      })()
+    `);
+  }
+}
+
+/**
+ * playSidebar performs the sidebar story, by the pointer: a click on another
+ * workspace and back, a right click for the formula form, the expression
+ * typed and entered, a save, the sidebar's switch, the + and the ×.
+ */
+async function playSidebar(win: BrowserWindow, start: number): Promise<void> {
+  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
+
+  win.webContents.send("menu:input", "default");
+
+  // The workspaces under the open one, most recent first: the first of them,
+  // then the one the take began on, which is first of them in its turn.
+  await at(SIDEBAR.other);
+  await click(win, ".ws:not(.open)");
+  await at(SIDEBAR.back);
+  await click(win, ".ws:not(.open)");
+
+  // The formula form opens on the column selected, so the empty one is.
+  await at(SIDEBAR.column);
+  await click(win, "tbody tr:first-child td:last-child");
+
+  await at(SIDEBAR.menu);
+  await click(win, ".ws.open", "right");
+  await at(SIDEBAR.formula);
+  await click(win, ".pop-menu .pop-item");
+
+  // The form opened with the keys in the expression.
+  await at(SIDEBAR.typed);
+  for (const ch of SIDEBAR_FORMULA) {
+    through(win, () => win.webContents.sendInputEvent({ type: "char", keyCode: ch }));
+    await sleep(KEYSTROKE);
+  }
+  await at(SIDEBAR.insert);
+  press(win, "Return");
+
+  // Ctrl+S is an accelerator, which is main's, so it is sent as the menu sends it.
+  await at(SIDEBAR.save);
+  win.webContents.send("menu:save");
+
+  await at(SIDEBAR.fold);
+  await click(win, "#sidebar-toggle");
+  await at(SIDEBAR.unfold);
+  await click(win, "#sidebar-toggle");
+
+  // The dialog the + asks is answered by scripts/preview.js: see smoke/pick.ts.
+  await at(SIDEBAR.plus);
+  await click(win, "#new");
+
+  // The pointer arrives at the × and stays there. Pressing it would end the take.
+  await at(SIDEBAR.close);
+  await hover(win, "#close");
+
+  await at(SIDEBAR.end);
+}
+
+/** What each story is: how long it runs, and what plays it. */
+const STORIES: Record<
+  string,
+  { end: number; script: (win: BrowserWindow, start: number) => Promise<void> }
+> = {
+  edit: { end: BEAT.end, script: play },
+  browse: { end: BROWSE.end, script: playBrowse },
+  refresh: { end: REFRESH.end, script: playRefresh },
+  sidebar: { end: SIDEBAR.end, script: playSidebar },
+};
+
 /** The pause between the pointer arriving at a button and pressing it. */
 const HOVER = 250;
 
@@ -524,7 +668,21 @@ const HOVER = 250;
  * event, so a button that was covered or disabled would fail to respond here
  * exactly as it would under a real mouse.
  */
-async function click(win: BrowserWindow, selector: string): Promise<void> {
+async function click(
+  win: BrowserWindow,
+  selector: string,
+  button: "left" | "right" = "left",
+): Promise<void> {
+  const { x, y } = await hover(win, selector);
+  await sleep(HOVER);
+  through(win, () => {
+    win.webContents.sendInputEvent({ type: "mouseDown", x, y, button, clickCount: 1 });
+    win.webContents.sendInputEvent({ type: "mouseUp", x, y, button, clickCount: 1 });
+  });
+}
+
+/** hover moves the pointer onto the element under a selector, and says where that is. */
+async function hover(win: BrowserWindow, selector: string): Promise<{ x: number; y: number }> {
   // Found or not is answered rather than thrown: an error thrown in the page
   // arrives here as "Script failed to execute", which names nothing.
   const at = (await win.webContents.executeJavaScript(`
@@ -535,15 +693,10 @@ async function click(win: BrowserWindow, selector: string): Promise<void> {
       return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
     })()
   `)) as { x: number; y: number } | null;
-  if (at === null) throw new Error(`nothing to click at ${selector}`);
+  if (at === null) throw new Error(`nothing to point at ${selector}`);
   const { x, y } = at;
-
   through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
-  await sleep(HOVER);
-  through(win, () => {
-    win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
-    win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
-  });
+  return at;
 }
 
 /** One cell corrected without ever leaving the keyboard. */

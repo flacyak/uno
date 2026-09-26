@@ -1,5 +1,5 @@
 // The settings control at the bottom left, and the menu it opens: the places
-// sources come from, and how the page looks.
+// sources come from, how the page looks, and how the grid reads keys.
 //
 // It works the way T3 Code's does. One control in the corner opens upward into
 // a menu. A theme is worn the moment it is chosen, so choosing is also
@@ -10,12 +10,17 @@
 // which is where browsing starts. Choosing one opens the panel browsing it,
 // and the menu offers to connect another the way the panel does.
 //
+// The keys are the input strategy. The window has no menu bar to pick one
+// from, so it is picked here.
+//
 // It hangs off the page rather than the status bar, as the + menu does,
 // because the status bar is written again on every edit and would take an
 // open menu down with it.
 
 import "./settings.css";
 
+import { INPUTS } from "../input/index.ts";
+import type { InputName } from "../input/index.ts";
 import type { Connection } from "../sources.ts";
 import { APPEARANCES, THEMES } from "../theme.ts";
 import type { Appearance, Theming } from "../theme.ts";
@@ -30,6 +35,10 @@ export interface SettingsAsks {
   connect(): void;
   /** The menu closed, so the keys go back to where they were. */
   closed(): void;
+  /** How the grid reads keys now. */
+  input(): InputName;
+  /** Read keys another way, from here on and at the next launch. */
+  setInput(name: InputName): void;
 }
 
 /** What each appearance says on its button. */
@@ -172,7 +181,7 @@ export class Settings {
     const focused = this.items().indexOf(document.activeElement as HTMLButtonElement);
 
     const title = element("div", "title", "Settings");
-    this.box.replaceChildren(title, this.sources(), this.themes(), this.appearances());
+    this.box.replaceChildren(title, this.sources(), this.themes(), this.appearances(), this.keys());
 
     if (focused >= 0) this.items()[Math.min(focused, this.items().length - 1)]?.focus();
   }
@@ -246,6 +255,25 @@ export class Settings {
       button.setAttribute("aria-pressed", String(a === this.theming.appearance));
       button.dataset["appearance"] = a;
       button.addEventListener("click", () => this.theming.appear(a));
+      seg.append(button);
+    }
+    section.append(seg);
+    return section;
+  }
+
+  /** How the grid reads keys: a spreadsheet's, or vim's. */
+  private keys(): HTMLElement {
+    const section = heading("Keys");
+    const seg = element("div", "seg", "");
+    const now = this.asks.input();
+    for (const { name, label } of INPUTS) {
+      const button = element("button", name === now ? "on" : "", label);
+      button.setAttribute("aria-pressed", String(name === now));
+      button.dataset["input"] = name;
+      button.addEventListener("click", () => {
+        this.asks.setInput(name);
+        this.paint();
+      });
       seg.append(button);
     }
     section.append(seg);
