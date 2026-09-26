@@ -401,6 +401,31 @@ test("parts in UTF-8 agree whether or not each has a character past ASCII", asyn
   expect(decoder.decode(await source.read(0, source.size))).toBe("city,total\nLyon,5\nOrléans,6\n");
 });
 
+// A feature export is thousands of columns wide, and its parts written by two
+// tools can carry the same columns in two orders. Saying so is two sorts of the
+// header, whatever its width: a check that sorted the part's header once per
+// column took seconds at ten thousand of them.
+const WIDE_COLUMNS = 10_000;
+/** Long enough to be sure of on a slow machine, and well short of the seconds a
+ * sort per column takes. */
+const WIDE_MS = 1_000;
+test(
+  "a wide header in another order is refused as reordered in the time two sorts take",
+  { timeout: 10 * WIDE_MS },
+  async () => {
+    const names = Array.from({ length: WIDE_COLUMNS }, (_, i) => `f${i}`);
+    const first = `${names.join(",")}\n${names.map((_, i) => i).join(",")}\n`;
+    const reversed = names.toReversed();
+    const part = `${reversed.join(",")}\n${reversed.map((_, i) => i).join(",")}\n`;
+    const began = performance.now();
+    const err = await refusal(() => open("first", [first, part]));
+    const took = performance.now() - began;
+    expect(err.differs.kind).toBe("reordered");
+    expect(err.differs.kind === "reordered" ? err.differs.columns.length : 0).toBe(WIDE_COLUMNS);
+    expect(took, `took ${took.toFixed(0)} ms`).toBeLessThan(WIDE_MS);
+  },
+);
+
 test("with no header row, a part of blank lines has no row to hold to the first part's", async () => {
   const source = await open("none", ["1,2\n", "\n\n", "3,4\n"]);
   expect(decoder.decode(await source.read(0, source.size))).toBe("1,2\n\n\n3,4\n");
