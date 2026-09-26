@@ -324,6 +324,8 @@ class Parts {
   private first: Promise<Format | undefined> | undefined;
   /** The part that was found not to agree, which refuses the whole source. */
   private refused: DisagreementError | undefined;
+  /** Whether `close` has been called, after which no part is opened or read. */
+  private closed = false;
   private readonly handlers: readonly FileHandler[];
   private readonly parts: readonly Part[];
   private readonly header: HeaderMode;
@@ -353,6 +355,8 @@ class Parts {
   async read(i: number, offset: number, length: number): Promise<Uint8Array> {
     if (this.refused !== undefined) throw this.refused;
     const source = await this.source(i);
+    // Closed while the part was opening, and the part with it.
+    if (this.closed) throw new ClosedError();
     let bytes: Uint8Array;
     try {
       bytes = await source.read(offset, length);
@@ -374,9 +378,14 @@ class Parts {
     return versions;
   }
 
-  /** close closes every part that was opened, and waits for one still opening
-   * to close that too. */
+  /**
+   * close closes every part that was opened, and waits for one still opening
+   * to close that too. Nothing is opened after it: a read still on its way,
+   * as an index's is when its view is closed, is refused, since a part opened
+   * for it would have nobody left to close it.
+   */
   async close(): Promise<void> {
+    this.closed = true;
     const opening = this.sources.flatMap((s) => (s === undefined ? [] : [s]));
     for (let i = 0; i < this.sources.length; i++) this.sources[i] = undefined;
     const settled = await Promise.allSettled(opening);
@@ -386,8 +395,10 @@ class Parts {
   /**
    * Part `i`, opened the first time it is asked for. An open that fails is
    * forgotten, so the next read asks again rather than repeating the failure.
+   * Once the source is closed no part is opened, and the asking is refused.
    */
   private source(i: number): Promise<ByteSource> {
+    if (this.closed) return Promise.reject(new ClosedError());
     return (this.sources[i] ??= this.open(i).catch((err: unknown) => {
       this.sources[i] = undefined;
       throw this.failed(i, err);
@@ -495,6 +506,8 @@ class Parts {
   /** failed is `err` with the part it happened to named, once. */
   private failed(i: number, err: unknown): Error {
     if (err instanceof PartError || err instanceof DisagreementError) return err;
+    // The whole source was closed, which is no one part's failure.
+    if (err instanceof ClosedError) return err;
     const message = err instanceof Error ? err.message : String(err);
     return new PartError(this.named(i, message), { cause: err });
   }
@@ -502,6 +515,13 @@ class Parts {
 
 /** An error that already names its part, so it is not named again on the way out. */
 class PartError extends Error {}
+
+/** The refusal of a read that reaches a source after it was closed. */
+class ClosedError extends Error {
+  constructor() {
+    super("the source was closed");
+  }
+}
 
 /**
  * disagreement says how a later part reads differently from the first, or
