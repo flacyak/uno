@@ -14,8 +14,9 @@ import type { Entry, FileRef, Listing } from "../store/index.ts";
 import type { Tried, Unconnected } from "../store/s3.ts";
 
 /**
- * SourceRef says where a file is without holding any of it: a FileRef, which
- * the engine opens through whichever of its FileHandlers claims it.
+ * SourceRef says where a source's bytes are without holding any of them: a
+ * FileRef, one file or several read as one, which the engine opens through
+ * whichever of its FileHandlers claims it.
  */
 export type SourceRef = FileRef;
 
@@ -44,7 +45,9 @@ export interface Progress {
  *
  * A source the workspace carries has no link at all: there is no file to be
  * wrong about. One that points at a file has a link with neither `missing` nor
- * `changed` set while everything is as it was.
+ * `changed` set while everything is as it was. Several files read as one have
+ * no link either, since a link is one path, so nothing is asked or said about
+ * their files changing.
  */
 export interface Link {
   /** Where the file is, as this machine names it. */

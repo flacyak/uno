@@ -25,7 +25,7 @@ import {
   valueAt,
 } from "../sheet/index.ts";
 import type { Edit, Written } from "../sheet/index.ts";
-import type { ByteSource } from "../store/index.ts";
+import type { ByteSource, PartsRef } from "../store/index.ts";
 import { indexPass } from "./pass.ts";
 import type {
   Changed,
@@ -100,6 +100,13 @@ export class View {
 
   /** The id of the connection the file was read through, when one covered it. */
   connection: string | undefined;
+
+  /**
+   * The parts it was opened from, for a source that is several files read as
+   * one. Such a source has files behind it and no one path to them, so `path`
+   * is empty and this is what says where its bytes are.
+   */
+  parts: PartsRef | undefined;
 
   private transform = false;
   private survey: AbortController | undefined;
@@ -579,7 +586,7 @@ export class View {
   /** How many bytes a save would have to copy into the container, which for a
    * source with a file behind it is none. */
   get carries(): number {
-    return this.path === "" ? this.size : 0;
+    return this.path === "" && this.parts === undefined ? this.size : 0;
   }
 
   /** The log as it stands: what a relink replays over whatever file it is
@@ -605,9 +612,19 @@ export class View {
    * so the wait is nothing and the row count in the manifest comes out exact. A
    * pointed-at source reports how far the index has got, and nothing replays
    * against that number, so a save never blocks on a scan of 30 GB.
+   *
+   * Several files read as one are refused. They would be written as their
+   * parts, each pointed at, and a .uno has nowhere to put those yet: carrying
+   * the join in their place would save a different source from the one that
+   * is open.
    */
   part(): Promise<Part> {
     return this.serially(async () => {
+      if (this.parts !== undefined) {
+        throw new Error(
+          `${this.name} is ${this.parts.parts.length} files read as one, and a workspace cannot save one yet`,
+        );
+      }
       const carry = this.path === "";
       if (carry) await this.until(() => this.index.complete);
       return {

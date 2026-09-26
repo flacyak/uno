@@ -15,7 +15,9 @@
 import { bomLength, delimiterName, encodingName, openFormat, peekFormat } from "../ingest/index.ts";
 import type { Encoding, Format } from "../ingest/index.ts";
 import { openWith } from "./index.ts";
-import type { ByteSource, FileHandler, FileRef } from "./index.ts";
+import type { ByteSource, FileHandler, SingleRef } from "./index.ts";
+// Type only, the way every provider factory beside its transport has it.
+import type { Provider } from "../plugin/index.ts";
 
 /**
  * Whether the parts have a header row.
@@ -54,8 +56,9 @@ export interface Extent {
  * then. A part without one is opened and measured as the source opens.
  */
 export interface Part {
-  /** Where the part is, and which version of it where a save recorded one. */
-  ref: FileRef;
+  /** Where the part is, and which version of it where a save recorded one.
+   * One file, always: a part is never several files itself. */
+  ref: SingleRef;
   extent?: Extent;
 }
 
@@ -632,4 +635,67 @@ function concat(pieces: readonly Uint8Array[]): Uint8Array {
     at += p.length;
   }
   return out;
+}
+
+// ------------------------------------------------------------ the handler
+
+/** What a person would call a source of several files, for an error that names it. */
+const LABEL = "several files as one";
+
+/** Every source `multiFiles` opened, so one can be told from any other ByteSource. */
+const joined = new WeakMap<ByteSource, MultiSource>();
+
+/**
+ * multiFiles opens a ref of several parts as one file. It claims every ref
+ * that has parts, and opens each part through `handlers`, so a part is
+ * whatever those open: a platform lists it after the handlers it is given.
+ *
+ * It is a handler like the others so that reading several files as one is a
+ * platform's decision. An engine that does not list it refuses such a ref by
+ * name rather than opening its first part.
+ *
+ * What it opens is a MultiSource, and `multiOf` hands that back to a caller
+ * that got it through `openWith` as a ByteSource.
+ */
+export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
+  return {
+    label: LABEL,
+    handles: (ref) => "parts" in ref,
+
+    async open(ref) {
+      if (!("parts" in ref)) throw new Error(`${ref.name}: not several files read as one`);
+      const { name, parts, header } = ref;
+      if (parts.length === 0) {
+        throw new Error(`${name} has no parts · several files read as one needs at least one`);
+      }
+      // A ref is plain data that crossed a channel or came out of a file, so
+      // what its type rules out is still looked for.
+      const nested = parts.findIndex((part) => "parts" in part.ref);
+      if (nested >= 0) {
+        throw new Error(
+          `${name}: ${parts[nested]!.ref.name} (part ${nested + 1} of ${parts.length}) is several files itself · a part is one file`,
+        );
+      }
+      const source = await openMulti(handlers, parts, header);
+      joined.set(source, source);
+      return source;
+    },
+  };
+}
+
+/**
+ * multiOf is the MultiSource behind a source `multiFiles` opened -- its map,
+ * its extents, each part's version -- and undefined for any other source.
+ */
+export function multiOf(source: ByteSource): MultiSource | undefined {
+  return joined.get(source);
+}
+
+/**
+ * multiProvider is several files read as one, plugged in over the providers a
+ * platform lists: a handler and nothing to browse, since its parts are browsed
+ * where they are.
+ */
+export function multiProvider(providers: readonly Provider[]): Provider {
+  return { name: "multi", label: LABEL, files: multiFiles(providers.map((p) => p.files)) };
 }
