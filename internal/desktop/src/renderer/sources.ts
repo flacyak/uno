@@ -152,6 +152,19 @@ export class Sources {
   private waiting = false;
   private refused = "";
   /**
+   * Where the next page of the place being browsed starts, as the lister said,
+   * or undefined once the last page has landed. A listing is one page however
+   * big the prefix is, so this is all that stands between the first page and
+   * the rest of a folder of 200,000.
+   */
+  private cursor: string | undefined;
+  /**
+   * Whether a later page is on its way. The view asks for more on every scroll
+   * event near the end of the list, which is many a second, and this is what
+   * makes all but the first of them nothing.
+   */
+  private paging = false;
+  /**
    * The selected files, held as paths and read back through the page, so that
    * what comes out is in listing order however it was picked: *Add as one*
    * takes the files in the order it is handed them, and the order on screen is
@@ -171,7 +184,10 @@ export class Sources {
    *
    * A prefix can be 200,000 entries, and every draw and every key reads this
    * list, so it is filtered once per page and per filter rather than once per
-   * read. The page is the key because a listing that lands replaces it.
+   * read. The page is the key because a listing that lands replaces it, and a
+   * later page that lands replaces it too: `more` hands `found` a new array
+   * rather than pushing onto this one, so the entries kept from it are
+   * filtered afresh instead of served short of the page that arrived.
    */
   private kept: { from: readonly Entry[]; query: string; entries: readonly Entry[] } | undefined;
 
@@ -261,10 +277,22 @@ export class Sources {
     return this.trail[this.trail.length - 1]?.path ?? "";
   }
 
-  /** Whether a page is on its way, so an ask in flight does not read as an
-   * empty folder. */
+  /**
+   * Whether the first page is on its way, so an ask in flight does not read as
+   * an empty folder.
+   *
+   * It is the first page only. The view says "reading…" when the browser has
+   * no lines, and while a later page is coming the folder already has the
+   * lines of the pages before it; whether there are more to come is `more`.
+   */
   get reading(): boolean {
     return this.waiting;
+  }
+
+  /** Whether the place being browsed has a page still to come, for the view to
+   * ask for as the list nears its end. */
+  get more(): boolean {
+    return this.cursor !== undefined;
   }
 
   /** Why the place being browsed has no entries, when the answer was a refusal
@@ -441,6 +469,10 @@ export class Sources {
     this.kept = undefined;
     this.refused = "";
     this.waiting = true;
+    // The cursor was the last folder's, and a page still on its way for that
+    // folder is dropped when it lands, so nothing is waited on here any more.
+    this.cursor = undefined;
+    this.paging = false;
     this.forget();
     if (this.at.section === "browser") this.at = { section: "browser", line: 0 };
     this.changed();
@@ -449,6 +481,7 @@ export class Sources {
       const listing = await this.listings.list(path);
       if (mine !== this.asked) return;
       this.found = listing.entries;
+      this.cursor = listing.next;
     } catch (err) {
       if (mine !== this.asked) return;
       // A place that cannot be reached names itself in the refusal, and the
@@ -458,6 +491,46 @@ export class Sources {
       this.refused = err instanceof Error ? err.message : String(err);
     }
     this.waiting = false;
+    this.changed();
+  }
+
+  /**
+   * next asks for the page after the ones the place being browsed has, and adds
+   * it to the end of them.
+   *
+   * It does nothing when there is no next page or one is already coming, and
+   * sends nothing: the view calls it as the list scrolls near its end, so
+   * nearly every call is one of those. A page that lands after the person has
+   * browsed somewhere else is dropped by the same count a first page is, since
+   * appending it would put one folder's entries under another's crumb.
+   *
+   * The selection is held by path and the keys by line, and a page is only
+   * ever added after the lines already there, so neither moves when it lands.
+   */
+  async next(): Promise<void> {
+    const cursor = this.cursor;
+    if (cursor === undefined || this.paging) return;
+    const mine = this.asked;
+    this.paging = true;
+
+    try {
+      const listing = await this.listings.list(this.path, cursor);
+      if (mine !== this.asked) return;
+      // A new array rather than a push: the filter's cache knows a page by its
+      // identity, and would go on serving what it kept before this page came.
+      this.found = [...this.found, ...listing.entries];
+      this.cursor = listing.next;
+      this.refused = "";
+    } catch (err) {
+      if (mine !== this.asked) return;
+      // The pages that did land are still true of the folder, so they stay,
+      // and so does the cursor: the next scroll to the end asks again, which
+      // is the retry a person would reach for anyway. The refusal is kept for
+      // the view to say where it says why a folder has no lines, which it only
+      // needs to when a filter has hidden all of them.
+      this.refused = err instanceof Error ? err.message : String(err);
+    }
+    this.paging = false;
     this.changed();
   }
 

@@ -52,6 +52,27 @@ const PAGES: Record<string, Entry[]> = {
 
 const Q3: Connection = { name: "q3", path: "s3://acme-exports/2025/q3", kind: "s3" };
 
+/**
+ * A prefix too big for one listing, as the lister pages it: each page is one
+ * list, and the cursor that asks for the next is its index.
+ */
+const BOOKS: Record<string, Entry[][]> = {
+  "s3://acme-exports/big": [
+    [
+      folder("archive", "s3://acme-exports/big/archive"),
+      file("a.csv", "s3://acme-exports/big/a.csv", 1),
+      file("b.csv", "s3://acme-exports/big/b.csv", 2),
+    ],
+    [
+      file("c.csv", "s3://acme-exports/big/c.csv", 3),
+      file("d.tsv", "s3://acme-exports/big/d.tsv", 4),
+    ],
+    [file("e.csv", "s3://acme-exports/big/e.csv", 5)],
+  ],
+};
+
+const BIG: Connection = { name: "big", path: "s3://acme-exports/big", kind: "s3" };
+
 /** What a peek of a file answers: its name as the one header, so a test can
  * tell whose front it is looking at. */
 function front(ref: SourceRef): Peeked {
@@ -63,19 +84,37 @@ function front(ref: SourceRef): Peeked {
  * asks pending until the test says which one is answered, which is the only
  * way to have two in flight at once on purpose. Peeks are held the same way,
  * by a switch of their own, so a listing can land while a peek waits.
+ *
+ * A later page is asked for, held and answered as `path@cursor`, so a test can
+ * tell it from the first page of the same folder. Setting `refuse` makes every
+ * listing asked for after it a refusal with that message.
  */
 class Stand implements Listings {
   readonly asked: string[] = [];
   readonly peeks: string[] = [];
   hold = false;
   holdPeeks = false;
+  refuse = "";
   private readonly held: { path: string; answer: () => void }[] = [];
 
-  list(path: string): Promise<Listing> {
-    this.asked.push(path);
-    const listing: Listing = { entries: PAGES[path] ?? [] };
-    if (!this.hold) return Promise.resolve(listing);
-    return new Promise((resolve) => this.held.push({ path, answer: () => resolve(listing) }));
+  list(path: string, cursor?: string): Promise<Listing> {
+    const key = cursor === undefined ? path : `${path}@${cursor}`;
+    this.asked.push(key);
+    const refused = this.refuse;
+    const listing = this.page(path, cursor);
+    const settle = (resolve: (l: Listing) => void, reject: (e: Error) => void) =>
+      refused === "" ? resolve(listing) : reject(new Error(refused));
+    if (!this.hold) return new Promise(settle);
+    return new Promise((resolve, reject) =>
+      this.held.push({ path: key, answer: () => settle(resolve, reject) }),
+    );
+  }
+
+  private page(path: string, cursor?: string): Listing {
+    const book = BOOKS[path];
+    if (book === undefined) return { entries: PAGES[path] ?? [] };
+    const i = cursor === undefined ? 0 : Number(cursor);
+    return { entries: book[i]!, next: i + 1 < book.length ? String(i + 1) : undefined };
   }
 
   peek(ref: SourceRef): Promise<Peeked> {
@@ -546,6 +585,181 @@ test("an address with no object in it is only a filter", () => {
 
   panel.search("s3://acme-exports");
   expect(panel.connections).toEqual([ACME]);
+});
+
+test("the pages of a big folder are added to it in order, each once, until the last", async () => {
+  const stand = new Stand();
+  let drawn = 0;
+  const panel = new Sources(
+    stand,
+    () => TABS,
+    [BIG],
+    () => drawn++,
+  );
+  await panel.open(BIG);
+
+  expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv"]);
+  expect(panel.more).toBe(true);
+
+  const before = drawn;
+  await panel.next();
+  expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv", "c.csv", "d.tsv"]);
+  expect(panel.more).toBe(true);
+  expect(drawn).toBeGreaterThan(before);
+
+  await panel.next();
+  expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv", "c.csv", "d.tsv", "e.csv"]);
+  expect(panel.more).toBe(false);
+  expect(panel.count("browser")).toBe(6);
+  expect(stand.asked).toEqual([
+    "s3://acme-exports/big",
+    "s3://acme-exports/big@1",
+    "s3://acme-exports/big@2",
+  ]);
+});
+
+test("asking for more at the end of a folder sends nothing", async () => {
+  const stand = new Stand();
+  const panel = new Sources(stand, () => TABS, [Q3]);
+  await panel.open(Q3);
+
+  expect(panel.more).toBe(false);
+  await panel.next();
+  await panel.next();
+
+  expect(stand.asked).toEqual(["s3://acme-exports/2025/q3"]);
+  expect(panel.entries).toHaveLength(5);
+});
+
+test("asking for more before anything is browsed, or while the first page is coming, sends nothing", async () => {
+  const stand = new Stand();
+  const panel = new Sources(stand, () => TABS, [BIG]);
+
+  await panel.next();
+  expect(stand.asked).toEqual([]);
+
+  stand.hold = true;
+  const first = panel.open(BIG);
+  await panel.next();
+  expect(stand.asked).toEqual(["s3://acme-exports/big"]);
+  stand.answer("s3://acme-exports/big");
+  await first;
+});
+
+test("many asks for more while a page is on its way send one request", async () => {
+  const stand = new Stand();
+  const panel = new Sources(stand, () => TABS, [BIG]);
+  await panel.open(BIG);
+  stand.hold = true;
+
+  // A scroll near the end of the list fires many times before a page lands.
+  const asks = [panel.next(), panel.next(), panel.next()];
+  expect(stand.asked).toEqual(["s3://acme-exports/big", "s3://acme-exports/big@1"]);
+  expect(panel.reading).toBe(false);
+
+  stand.answer("s3://acme-exports/big@1");
+  await Promise.all(asks);
+
+  expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv", "c.csv", "d.tsv"]);
+});
+
+test("a later page for a folder nobody is in any more is not added to the one they are in", async () => {
+  const stand = new Stand();
+  const panel = new Sources(stand, () => TABS, [BIG]);
+  await panel.open(BIG);
+  stand.hold = true;
+
+  const more = panel.next();
+  const into = panel.enter(named(panel, "archive"));
+  stand.answer("s3://acme-exports/big/archive");
+  await into;
+  stand.answer("s3://acme-exports/big@1");
+  await more;
+
+  expect(panel.path).toBe("s3://acme-exports/big/archive");
+  expect(panel.entries).toEqual([]);
+  expect(panel.more).toBe(false);
+});
+
+test("browsing starts every folder from its first page, whatever was paged before", async () => {
+  const stand = new Stand();
+  const panel = new Sources(stand, () => TABS, [BIG, Q3]);
+  await panel.open(BIG);
+  await panel.next();
+
+  await panel.open(Q3);
+  expect(panel.more).toBe(false);
+
+  // Back to the big folder: its first page again, and the cursor is the one it
+  // hands back rather than wherever paging had got to last time.
+  await panel.open(BIG);
+  expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv"]);
+  await panel.next();
+
+  expect(stand.asked).toEqual([
+    "s3://acme-exports/big",
+    "s3://acme-exports/big@1",
+    "s3://acme-exports/2025/q3",
+    "s3://acme-exports/big",
+    "s3://acme-exports/big@1",
+  ]);
+});
+
+test("the selection and the keys stay where they were when a page lands", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [BIG]);
+  await panel.open(BIG);
+  await panel.toggle(named(panel, "b.csv"));
+  panel.focus("browser", 2);
+
+  await panel.next();
+
+  expect(panel.place).toEqual({ section: "browser", line: 2 });
+  expect(panel.entries[panel.place.line]!.name).toBe("b.csv");
+  expect(names(panel.selected)).toEqual(["b.csv"]);
+  expect(panel.peeked?.header).toEqual(["b.csv"]);
+
+  // A file from the new page can join it, and they come back in listing order.
+  await panel.toggle(named(panel, "c.csv"));
+  expect(names(panel.selected)).toEqual(["b.csv", "c.csv"]);
+});
+
+test("a search on while a page lands sees the new entries, not what it kept before", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [BIG]);
+  await panel.open(BIG);
+  panel.search("csv");
+  const before = panel.entries;
+  expect(names(before)).toEqual(["a.csv", "b.csv"]);
+
+  await panel.next();
+
+  expect(names(panel.entries)).toEqual(["a.csv", "b.csv", "c.csv"]);
+  // The page before is left as it was, since something may still be drawing it.
+  expect(names(before)).toEqual(["a.csv", "b.csv"]);
+});
+
+test("a later page that fails keeps what was shown, and the next ask tries it again", async () => {
+  const stand = new Stand();
+  const panel = new Sources(stand, () => TABS, [BIG]);
+  await panel.open(BIG);
+
+  stand.refuse = "the credentials for acme-exports have expired";
+  await panel.next();
+
+  expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv"]);
+  expect(panel.trouble).toBe("the credentials for acme-exports have expired");
+  expect(panel.more).toBe(true);
+  expect(panel.reading).toBe(false);
+
+  stand.refuse = "";
+  await panel.next();
+
+  expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv", "c.csv", "d.tsv"]);
+  expect(panel.trouble).toBe("");
+  expect(stand.asked).toEqual([
+    "s3://acme-exports/big",
+    "s3://acme-exports/big@1",
+    "s3://acme-exports/big@1",
+  ]);
 });
 
 // No DOM, and it has to stay that way: the panel is the part of the shell whose
