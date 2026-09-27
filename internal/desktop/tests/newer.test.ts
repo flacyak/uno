@@ -21,8 +21,9 @@ import { s3Provider } from "@uno/grid/store/s3";
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
 import { KEYS, bucket, etagOf } from "../../grid/tests/store/standin.ts";
 import type { Bucket } from "../../grid/tests/store/standin.ts";
-import { STATE_WORDS, stateOf } from "../src/renderer/sources.ts";
-import { NEWER, Workspace, reloaded } from "../src/renderer/workspace.ts";
+import { m } from "../src/paraglide/messages.js";
+import { stateOf, stateWord } from "../src/renderer/sources.ts";
+import { Workspace, reloaded } from "../src/renderer/workspace.ts";
 
 const ADS = "Ad_Date,Cost\n2024-11-16,$12.50\n2024-11-17,$8.00\n";
 /** The same export regenerated with one figure corrected: the same size. */
@@ -98,9 +99,9 @@ test("replacing the object in the bucket marks its tab on the next ask", async (
     expect(await w.askNewer()).toBe(true);
     expect(remote.newer).toBe(etagOf(enc.encode(ADS_AGAIN)));
     expect(stateOf(remote)).toBe("newer");
-    expect(STATE_WORDS.newer).toBe("newer in bucket");
+    expect(stateWord("newer")).toBe("newer in bucket");
     w.show(remote);
-    expect(w.status()).toContain(NEWER);
+    expect(w.status()).toContain(m.newer_version());
 
     // Asked again with nothing new, the mark stays and nothing is repainted.
     expect(await w.askNewer()).toBe(false);

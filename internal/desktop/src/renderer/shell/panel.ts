@@ -10,13 +10,14 @@
 
 import "./panel.css";
 
-import { formatBytes } from "@uno/grid/engine";
 import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { SingleRef } from "@uno/grid/store";
 
+import { m } from "../../paraglide/messages.js";
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
-import { SECTIONS, STATE_WORDS, connectionLine, fileCount, newFiles, stateOf } from "../sources.ts";
+import { bytes } from "../locale.ts";
+import { SECTIONS, connectionLine, fileCount, newFiles, stateOf, stateWord } from "../sources.ts";
 import type {
   Button,
   Connection,
@@ -27,7 +28,6 @@ import type {
   Sources,
   TabAction,
 } from "../sources.ts";
-import { NEWER } from "../workspace.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
 
@@ -51,16 +51,20 @@ const DOING_KEYS: Record<string, Doing> = {
 };
 
 /** What each choice about files added as one says, and says to whoever hovers. */
-const HEADER_ROW = "header row";
-const HEADER_ROW_HINT = "the first line of each file names the columns";
-const FILE_COLUMN = "_file column";
-const FILE_COLUMN_HINT = "a column that says which file each row came from";
 
-const TITLES: Record<Section, string> = {
-  workspace: "In this workspace",
-  connections: "Connections",
-  browser: "Browser",
-};
+function titleOf(section: Section): string {
+  switch (section) {
+    case "workspace":
+      return m.section_workspace();
+    case "connections":
+      return m.section_connections();
+    case "browser":
+      return m.section_browser();
+  }
+}
+
+/** What stands where a size would be, for an entry whose size is not known. */
+const NO_SIZE = "—";
 
 /** What choosing a line does. The shell decides; the panel only asks. */
 export interface PanelActions {
@@ -169,11 +173,11 @@ export class Panel {
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
     // An object's address is added rather than filtered by, so the box says so.
-    this.input.placeholder = "filter, or paste s3://…";
-    this.input.setAttribute("aria-label", "filter sources");
+    this.input.placeholder = m.panel_filter_placeholder();
+    this.input.setAttribute("aria-label", m.panel_filter_aria());
     const go = document.createElement("button");
     go.type = "submit";
-    go.textContent = "Filter";
+    go.textContent = m.action_filter();
     form.append(this.input, go);
     // Enter in the box and the button are one submit, and neither leaves the page.
     form.addEventListener("submit", (e) => {
@@ -216,7 +220,7 @@ export class Panel {
     // keeps the filter out from under the × at the window's top right.
     const head = document.createElement("div");
     head.className = "panel-head col-head";
-    head.textContent = "Sources";
+    head.textContent = m.sources_title();
 
     root.append(head, form, this.list, this.peek, this.foot, this.connecting.el);
   }
@@ -569,7 +573,7 @@ export class Panel {
     this.peek.hidden = now === undefined;
     if (now === undefined) return this.peek.replaceChildren();
     if (now === "reading") {
-      this.peek.replaceChildren(text("div", "note", "reading the front of it…"));
+      this.peek.replaceChildren(text("div", "note", m.panel_peeking()));
       return;
     }
 
@@ -633,11 +637,11 @@ export class Panel {
   private choices(joining: Joining): HTMLElement {
     const line = text("div", "choices", "");
     line.append(
-      text("span", "", "as one"),
-      choice(HEADER_ROW, HEADER_ROW_HINT, joining.header === "first", (on) =>
+      text("span", "", m.panel_as_one()),
+      choice(m.panel_header_row(), m.panel_header_row_hint(), joining.header === "first", (on) =>
         this.sources.join({ header: on ? "first" : "none" }),
       ),
-      choice(FILE_COLUMN, FILE_COLUMN_HINT, joining.fileColumn, (on) =>
+      choice(m.panel_file_column(), m.panel_file_column_hint(), joining.fileColumn, (on) =>
         this.sources.join({ fileColumn: on }),
       ),
     );
@@ -655,7 +659,8 @@ export class Panel {
     if (row.t === "head") {
       cls += " head";
       const pointing = row.section === "browser" ? this.sources.repointing : undefined;
-      name = pointing === undefined ? TITLES[row.section] : `Point ${pointing.name} at…`;
+      name =
+        pointing === undefined ? titleOf(row.section) : m.panel_point_at({ name: pointing.name });
       if (row.section === "browser") meta = this.sources.crumb.map((c) => c.name).join(" / ");
     } else if (row.t === "note") {
       cls += " note";
@@ -678,7 +683,7 @@ export class Panel {
         title = [
           tab.link?.path,
           ...(tab.parts ?? []).map((part) => part.path || part.name),
-          tab.link?.missing ?? (tab.newer === undefined ? undefined : NEWER),
+          tab.link?.missing ?? (tab.newer === undefined ? undefined : m.newer_version()),
           tab.link?.changed,
         ]
           .filter((t) => t !== undefined)
@@ -700,16 +705,16 @@ export class Panel {
         const t = this.sources.tabs[line];
         if (t === undefined) return ["", ""];
         const state = stateOf(t);
-        if (state !== "fine") return [t.name, STATE_WORDS[state]];
+        if (state !== "fine") return [t.name, stateWord(state)];
         // Several files say how many they are, and how many more there are
         // to append once their folder has gained some.
         const grown = this.sources.grown(t);
         if (grown !== undefined) return [t.name, newFiles(grown.files.length)];
         if (t.parts !== undefined) return [t.name, fileCount(t.parts.length)];
-        return [t.name, t.bytes === undefined ? "" : formatBytes(t.bytes)];
+        return [t.name, t.bytes === undefined ? "" : bytes(t.bytes)];
       }
       case "connections": {
-        if (this.sources.isConnect(line)) return ["+ Connect a bucket", ""];
+        if (this.sources.isConnect(line)) return [m.connect_action(), ""];
         const c = this.sources.connections[line];
         if (c === undefined) return ["", ""];
         return [c.name, c.where === undefined ? c.kind : `${c.kind} · ${c.where}`];
@@ -718,7 +723,7 @@ export class Panel {
         const e = this.sources.entries[line];
         if (e === undefined) return ["", ""];
         if (e.folder) return [`${e.name}/`, ""];
-        return [e.name, e.bytes === undefined ? "—" : formatBytes(e.bytes)];
+        return [e.name, e.bytes === undefined ? NO_SIZE : bytes(e.bytes)];
       }
     }
   }
@@ -727,18 +732,18 @@ export class Panel {
   private note(section: Section): string {
     const s = this.sources;
     if (section === "browser") {
-      if (s.reading) return "reading…";
+      if (s.reading) return m.reading();
       if (s.trouble !== "") return s.trouble;
-      if (s.path === "") return "choose a connection to browse it";
+      if (s.path === "") return m.panel_choose_connection();
     }
-    if (s.filter !== "") return `nothing matches "${s.filter}"`;
+    if (s.filter !== "") return m.panel_nothing_matches({ filter: s.filter });
     switch (section) {
       case "workspace":
-        return "no sources open";
+        return m.panel_no_sources();
       case "connections":
-        return "no connections yet";
+        return m.no_connections();
       case "browser":
-        return "this folder is empty";
+        return m.panel_folder_empty();
     }
   }
 }
