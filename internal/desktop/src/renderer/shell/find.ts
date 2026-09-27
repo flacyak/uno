@@ -102,6 +102,9 @@ export class Finder {
     const on = this.showing();
     if (on === undefined) return;
     const { workspace: w, grid } = on;
+    // The find reads the tab showing now, and the row it finds is a row of
+    // that tab: one the person has since left is not moved to in the other.
+    const tab = w.active;
     const { row, col } = grid.selection();
     const asked = ++this.finds;
 
@@ -110,7 +113,7 @@ export class Finder {
     const slow = setTimeout(() => this.say(m.searching()), 200);
     try {
       const found = await w.find({ col, from: row, dir, match });
-      if (asked !== this.finds || this.showing()?.workspace !== w) return;
+      if (asked !== this.finds || this.showing()?.workspace !== w || w.active !== tab) return;
       if (found.row !== null) {
         grid.moveTo(found.row, col);
         this.say("");
