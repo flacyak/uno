@@ -178,6 +178,17 @@ export const OPEN: Check[] = [
       if (!(await until(() => text("#status-cell") !== "rep · row 3"))) {
         return "the selection is still at " + text("#status-cell");
       }
+      // The key lands first and the click after it, on its own time. Moving
+      // the selection back before the click has landed is moving it back
+      // twice, the second time too late, so the selection is waited on until
+      // it has stopped moving.
+      let was = text("#status-cell");
+      for (let same = 0; same < SETTLE_FRAMES; ) {
+        await frame();
+        const now = text("#status-cell");
+        same = now === was ? same + 1 : 0;
+        was = now;
+      }
 
       // Back where the checks after this one expect.
       document.querySelectorAll("tbody tr")[2].children[GUTTER + REP].click();
