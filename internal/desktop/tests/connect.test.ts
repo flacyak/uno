@@ -11,7 +11,7 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import type { Peeked, SourceRef } from "@uno/grid/engine";
+import type { Peeked, Said, SourceRef } from "@uno/grid/engine";
 import type { Connection } from "@uno/grid/library";
 import type { Listing } from "@uno/grid/store";
 import type { Tried } from "@uno/grid/store/s3";
@@ -335,8 +335,11 @@ test("a tab in a bucket nobody connected offers Connect, filled in with its fold
     name: "orders.csv",
     link: {
       path: "s3://acme-exports/shop/orders.csv",
-      missing:
-        "q4-close.uno reads s3://acme-exports/…, which no connection covers · connect acme-exports to read it",
+      missing: {
+        t: "bucket-unconnected",
+        container: "q4-close.uno",
+        bucket: "acme-exports",
+      } satisfies Said,
       connect: { bucket: "acme-exports", prefix: "shop/" },
     },
   };
@@ -402,7 +405,11 @@ test("c on a tab waiting for its bucket connects it, and r does not read it", as
     name: "orders.csv",
     link: {
       path: "s3://acme-exports/shop/orders.csv",
-      missing: "q4-close.uno reads s3://acme-exports/…",
+      missing: {
+        t: "bucket-unconnected",
+        container: "q4-close.uno",
+        bucket: "acme-exports",
+      } satisfies Said,
       connect: { bucket: "acme-exports", prefix: "shop/" },
     },
   };

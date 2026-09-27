@@ -7,6 +7,7 @@ import type { Offer } from "@uno/grid/engine";
 
 import { m } from "../../paraglide/messages.js";
 import { num } from "../locale.ts";
+import { say } from "../said.ts";
 
 /** An offer is the same question while its source, column and program are. */
 export function offerKey(offer: Offer): string {
@@ -27,7 +28,7 @@ export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void
   const count = offer.complete
     ? m.cells_count({ count: offer.affects })
     : m.offer_cells_at_least({ affected: num(offer.affects), scanned: offer.scanned });
-  const parts = [offer.description, count];
+  const parts = [say(offer.description), count];
   if (offer.ambiguous) parts.push(m.offer_ambiguous());
 
   const grow = document.createElement("span");

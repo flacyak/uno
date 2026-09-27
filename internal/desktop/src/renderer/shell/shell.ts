@@ -29,6 +29,7 @@ import { Language, offered } from "../language.ts";
 import type { Command } from "../keys.ts";
 import { list, num } from "../locale.ts";
 import { Recents } from "../recents.ts";
+import { say } from "../said.ts";
 import { Sources, connectionLine } from "../sources.ts";
 import { NEWER_AFTER_MS } from "../timing.ts";
 import { Workspace, reloaded } from "../workspace.ts";
@@ -287,7 +288,7 @@ export class Shell {
     this.spare ??= this.host.connect().then(
       (port) => {
         const engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
-        engine.onError = (msg) => this.say(msg, true);
+        engine.onError = (heard) => this.say(say(heard), true);
         return engine;
       },
       (err: unknown) => {
@@ -319,7 +320,7 @@ export class Shell {
       this.known = connections;
       this.sources.connections = connections.map(connectionLine);
       this.panel.draw();
-      const trouble = failed.join(" · ");
+      const trouble = failed.map(say).join(" · ");
       if (trouble !== this.connectionTrouble) {
         this.connectionTrouble = trouble;
         if (trouble !== "") this.say(trouble, true);
@@ -608,7 +609,7 @@ export class Shell {
       const port = await this.host.connect();
       engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
       let opened: Workspace | undefined;
-      engine.onError = (msg) => this.say(msg, true);
+      engine.onError = (heard) => this.say(say(heard), true);
 
       const w = await Workspace.open(
         ref,

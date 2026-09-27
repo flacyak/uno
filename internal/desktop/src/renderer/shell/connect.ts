@@ -17,7 +17,7 @@ import { validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
 import { m } from "../../paraglide/messages.js";
-import { Words } from "./util.ts";
+import { Words, message } from "./util.ts";
 
 /** What the form needs of the engine and the host. The shell decides how. */
 export interface ConnectAsks {
@@ -255,7 +255,7 @@ export class ConnectForm {
     try {
       validConnection(c);
     } catch (err) {
-      return (err as Error).message;
+      return message(err);
     }
     return c;
   }
@@ -283,7 +283,7 @@ export class ConnectForm {
       return tried;
     } catch (err) {
       if (mine !== this.tries) return undefined;
-      this.status = { t: "refused", why: err instanceof Error ? err.message : String(err) };
+      this.status = { t: "refused", why: message(err) };
       this.paint();
       return undefined;
     }
@@ -309,7 +309,7 @@ export class ConnectForm {
       this.done(saved);
     } catch (err) {
       if (mine !== this.tries) return;
-      this.status = { t: "refused", why: err instanceof Error ? err.message : String(err) };
+      this.status = { t: "refused", why: message(err) };
       this.paint();
     }
   }

@@ -1,11 +1,12 @@
 // What the engine tests share: a real MessageChannel between a client and
 // `serve`, the fixture, and a way to compare rows with what a Sheet builds.
 
-import { Engine, messagePort, serve } from "../../src/engine/index.ts";
+import { Engine, english, messagePort, serve } from "../../src/engine/index.ts";
 import type {
   MessagePortLike,
   Reply,
   Request,
+  Said,
   SourceHandle,
   SourceRef,
   Tuning,
@@ -101,4 +102,9 @@ export function sheetRows(
 /** Rows as wide as the header, the way a Sheet reads a short one: padded with "". */
 export function widened(rows: string[][]): string[][] {
   return rows.map((r) => sales.columns.map((_, col) => r[col] ?? ""));
+}
+
+/** What the engine said, in English, or undefined where it said nothing. */
+export function saidIn(said: Said | undefined): string | undefined {
+  return said === undefined ? undefined : english(said);
 }

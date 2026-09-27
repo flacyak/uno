@@ -6,6 +6,7 @@ import { setImmediate as turn } from "node:timers/promises";
 
 import { expect, test } from "vite-plus/test";
 
+import { english } from "../../src/engine/index.ts";
 import type { SourceRef } from "../../src/engine/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
 import { blobProvider, multiProvider } from "../../src/store/index.ts";
@@ -260,7 +261,7 @@ test("a source of parts removed while it is indexing leaves no part open", async
   const single = [disk.provider, blobProvider()];
   const { engine, done } = connect(TINY, [...single, multiProvider(single)]);
   const errors: string[] = [];
-  engine.onError = (message) => errors.push(message);
+  engine.onError = (said) => errors.push(english(said));
   try {
     // Bytes in hand, so every file the disk opens is a part.
     const whole = await openOne(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
