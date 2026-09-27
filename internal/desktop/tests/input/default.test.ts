@@ -11,7 +11,7 @@ import type { Action, Mode, Press } from "../../src/renderer/keys.ts";
 const LOCKED = defaultInput.locked;
 
 function key(name: string, more: Partial<Press> = {}): Press {
-  return { key: name, ctrl: false, alt: false, meta: false, repeat: false, ...more };
+  return { key: name, ctrl: false, alt: false, meta: false, shift: false, repeat: false, ...more };
 }
 
 function action(mode: Mode, press: Press): Action | undefined {
@@ -36,6 +36,7 @@ test("the arrows, Tab, PgUp, PgDn, Home and End move, one step at a time", () =>
   const move = (motion: string) => ({ t: "move", motion, count: undefined });
   expect(action("view", key("ArrowDown"))).toEqual(move("down"));
   expect(action("view", key("Tab"))).toEqual(move("right"));
+  expect(action("view", key("Tab", { shift: true }))).toEqual(move("left"));
   expect(action("transform", key("PageUp"))).toEqual(move("page-up"));
   expect(action("transform", key("End"))).toEqual(move("end"));
 });
