@@ -1,0 +1,147 @@
+/* What is on its way: a source that was asked for and has not opened yet, in
+ * the sidebar and in the sources panel, and a connection being tried and kept,
+ * in the panel. Each is listed where its tab or its line will be, dimmed, with
+ * a bar along the bottom of its line that fills from the left and starts again
+ * until what it is waiting for takes the line's place. How long that takes is
+ * not known ahead of it, so the bar says that something is coming and never
+ * how much of it has. The text gives up the bar's height, so the two never
+ * touch in a line that is kept at one height. */
+:is(.panel-row.opening, .tab-opening),
+.panel-row.failed {
+  --opening-bar-h: 4px;
+  --opening-bar-w: calc(100% - var(--opening-bar-left) - var(--opening-bar-right));
+  position: relative;
+  padding-bottom: calc(var(--opening-bar-h) + 2px);
+}
+
+/* The bar runs under the text, from where it starts to where it ends, which
+ * is each line's own padding. */
+.panel-row:is(.opening, .failed) {
+  --opening-bar-left: 6px;
+  --opening-bar-right: 6px;
+}
+
+.tab-opening {
+  --opening-bar-left: 10px;
+  --opening-bar-right: 8px;
+}
+
+:is(.panel-row.opening, .tab-opening) {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* It stays dimmed with the keys on its line, since there is nothing there to
+ * choose yet. */
+.panel-list:focus .panel-row.sel.opening,
+.panel-list:focus .panel-row.sel.opening > :last-child {
+  color: var(--ink-3);
+}
+
+:is(.panel-row.opening, .tab-opening)::before,
+:is(.panel-row.opening, .tab-opening)::after,
+.panel-row.failed::before,
+.panel-row.failed::after {
+  content: "";
+  position: absolute;
+  left: var(--opening-bar-left);
+  bottom: 2px;
+  width: var(--opening-bar-w);
+  height: var(--opening-bar-h);
+  border-radius: 999px;
+}
+
+:is(.panel-row.opening, .tab-opening)::before,
+.panel-row.failed::before {
+  background: var(--rule);
+}
+
+/* The fill grows by its width, so both its ends are round however much of the
+ * bar it covers, where one scaled along its length would have them squashed. */
+:is(.panel-row.opening, .tab-opening)::after {
+  background: var(--accent);
+  animation: opening-fill 1.5s ease-in-out infinite;
+}
+
+@keyframes opening-fill {
+  from {
+    width: 0;
+    opacity: 1;
+  }
+  75% {
+    width: var(--opening-bar-w);
+    opacity: 1;
+  }
+  to {
+    width: var(--opening-bar-w);
+    opacity: 0;
+  }
+}
+
+/* A connection that was refused: its line stays where it was connecting,
+ * still dimmed, flagged the way a tab whose file has gone is. The bar takes
+ * the flag's colour, shakes once the way a head does, and drains, and the
+ * empty track is left under the line. Choosing the line edits the connection. */
+.panel-row.failed {
+  /* How far the bar goes to either side as it shakes, and how long it shakes for. */
+  --failed-shake: 4px;
+  --failed-shake-for: 420ms;
+}
+
+.panel-row.failed > :first-child {
+  color: var(--ink-3);
+}
+
+.panel-row.failed > :first-child::before {
+  content: "! ";
+  color: var(--flag);
+}
+
+.panel-row.failed > :last-child,
+.panel-list:focus .panel-row.sel.failed > :last-child {
+  color: var(--flag);
+}
+
+.panel-row.failed::before {
+  animation: failed-shake var(--failed-shake-for) ease-in-out;
+}
+
+/* The drain waits for the shake, filled, and leaves the bar empty. */
+.panel-row.failed::after {
+  width: 0;
+  background: var(--flag);
+  animation:
+    failed-shake var(--failed-shake-for) ease-in-out,
+    failed-drain 480ms ease-in var(--failed-shake-for) backwards;
+}
+
+@keyframes failed-shake {
+  20%,
+  60% {
+    transform: translateX(calc(-1 * var(--failed-shake)));
+  }
+  40%,
+  80% {
+    transform: translateX(var(--failed-shake));
+  }
+}
+
+@keyframes failed-drain {
+  from {
+    width: var(--opening-bar-w);
+  }
+}
+
+/* Without motion the bar is filled and faint while it waits, which still says
+ * the line is waiting on something, and empty at once when it is refused. */
+@media (prefers-reduced-motion: reduce) {
+  :is(.panel-row.opening, .tab-opening)::after {
+    animation: none;
+    opacity: 0.45;
+  }
+
+  .panel-row.failed::before,
+  .panel-row.failed::after {
+    animation: none;
+  }
+}

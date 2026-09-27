@@ -63,6 +63,35 @@ export interface Open {
 }
 
 /**
+ * Arriving is a source that was asked for and has not opened yet: a line in
+ * the workspace section under the tabs, which says it is on its way and takes
+ * no choosing until its tab stands in its place.
+ */
+export interface Arriving {
+  readonly name: string;
+  /**
+   * Why it never arrived, for a connection that was refused: its line stays,
+   * says so, and is chosen to edit the connection and try it again.
+   */
+  readonly failed?: string;
+}
+
+/** What an arriving source's line says beside its name. */
+export function opening(): string {
+  return m.sources_opening();
+}
+
+/** What the line of a connection being tried and kept says beside its name. */
+export function connecting(): string {
+  return m.sources_connecting();
+}
+
+/** What the line of a connection that was refused says beside its name. */
+export function failed(): string {
+  return m.sources_failed();
+}
+
+/**
  * State is what a workspace line says about the file behind a tab: it reads,
  * it is not the file the log was written against, it is not there, it is in a
  * bucket no connection covers and nothing has been read from it, or the
@@ -412,6 +441,8 @@ export class Sources {
    * parts that no longer exists, and is not read.
    */
   private readonly gained = new Map<string, { after: string; grown: Grown }>();
+  /** The connection being tried and kept, or the one that was refused, while there is one. */
+  private trying: Arriving | undefined;
 
   constructor(
     private readonly listings: Listings,
@@ -421,6 +452,8 @@ export class Sources {
     connections: readonly Connection[] = [],
     /** Called when a listing lands, so whoever draws can draw it. */
     private readonly changed: () => void = () => {},
+    /** The sources being opened, read as they are drawn, the way the tabs are. */
+    private readonly arriving: () => readonly Arriving[] = () => [],
   ) {
     this.saved = connections;
   }
@@ -430,6 +463,16 @@ export class Sources {
     const q = this.query;
     const all = this.opened();
     return q === "" ? all : all.filter((t) => matches(t.name, q));
+  }
+
+  /**
+   * The sources still opening that the filter keeps, which are the workspace
+   * section's last lines: each is where its tab will be.
+   */
+  get opening(): readonly Arriving[] {
+    const q = this.query;
+    const all = this.arriving();
+    return q === "" ? all : all.filter((a) => matches(a.name, q));
   }
 
   /** The places that can be browsed, as far as the filter keeps them. A
@@ -446,6 +489,28 @@ export class Sources {
   }
 
   /**
+   * The connection being tried and kept, where the filter keeps it: the line
+   * after the connections, which says it is on its way and takes no choosing
+   * until it is one of them. Refused, it stays there saying so, until it is
+   * edited and kept or given up.
+   */
+  get connecting(): Arriving | undefined {
+    const trying = this.trying;
+    if (trying === undefined || this.query === "") return trying;
+    return matches(trying.name, this.query) ? trying : undefined;
+  }
+
+  /** connect says which connection is being tried and kept, or was refused, or that none is now. */
+  connect(trying: Arriving | undefined): void {
+    this.trying = trying;
+  }
+
+  /** How many lines the connections section has before the one that connects another. */
+  private get connected(): number {
+    return this.connections.length + (this.connecting === undefined ? 0 : 1);
+  }
+
+  /**
    * Whether a connections line is the one after them all, which connects a
    * bucket rather than browsing one. It is a line and not a button in the
    * section's title, so that it is reached the way every other line is: with
@@ -454,7 +519,7 @@ export class Sources {
    * it is.
    */
   isConnect(line: number): boolean {
-    return this.query === "" && line === this.connections.length;
+    return this.query === "" && line === this.connected;
   }
 
   /** The browser: the page of the place being browsed, folders first, as far
@@ -830,9 +895,9 @@ export class Sources {
   count(section: Section): number {
     switch (section) {
       case "workspace":
-        return this.tabs.length;
+        return this.tabs.length + this.opening.length;
       case "connections":
-        return this.connections.length + (this.query === "" ? 1 : 0);
+        return this.connected + (this.query === "" ? 1 : 0);
       case "browser":
         return this.entries.length;
     }
