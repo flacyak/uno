@@ -60,16 +60,38 @@ export const CONNECTIONS: Check[] = [
     `,
   },
   {
-    name: "a test that fails names the reason and saves nothing",
+    name: "a save that is refused leaves a failed line that names the reason and saves nothing",
     shot: "connect-refused",
     script: `
       ${REMOTE}
       ${LINES}
       type("bucket", "acme-nowhere");
       form().requestSubmit();
+      // The form steps aside for the connection's line, which fails where it
+      // was connecting and says why under the list.
       const want = "✗ s3://acme-nowhere: no such bucket";
-      if (!(await arrives(() => result() === want))) return "the form says " + JSON.stringify(result());
-      return form().hidden ? "the form closed over a failed test" : "";
+      const failed = () => document.querySelector("#panel .panel-row.failed");
+      const why = () => document.querySelector("#panel .panel-foot .why")?.textContent ?? "";
+      if (!(await arrives(() => failed() !== null && why() === want))) {
+        return "the panel says " + JSON.stringify(why()) + " under " + JSON.stringify(failed()?.textContent ?? "no failed line");
+      }
+      if (failed().children[1].textContent !== "failed") return "the line says " + JSON.stringify(failed().children[1].textContent);
+      if (!failed().classList.contains("sel")) return "the keys are not on the failed line";
+      if (!form().hidden) return "the form stayed over the failed line";
+      return "";
+    `,
+  },
+  {
+    name: "Enter on the failed line brings the form back as it was left, to be edited",
+    script: `
+      ${REMOTE}
+      ${LINES}
+      document.querySelector("#panel .panel-list")
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      if (!(await arrives(() => !form().hidden))) return "the form did not come back";
+      if (field("bucket").value !== "acme-nowhere") return "the bucket reads " + JSON.stringify(field("bucket").value);
+      const want = "✗ s3://acme-nowhere: no such bucket";
+      return result() === want ? "" : "the form says " + JSON.stringify(result());
     `,
   },
   {

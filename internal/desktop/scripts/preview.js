@@ -4,7 +4,7 @@
 // half that lives outside it: set the scene, start the real built app on it,
 // then turn the frames it left behind into a GIF.
 //
-// There are four stories. `browse`, the README's, finds a workspace's moved
+// There are seven stories. `browse`, the README's, finds a workspace's moved
 // export again through the sources panel, then tries the themes in settings.
 // `sidebar` moves between the workspaces in the sidebar, puts a formula into
 // one from a right click, and makes a new one from the + at its foot; it goes
@@ -12,9 +12,17 @@
 // fixture and applies the offer to fix the rest. `refresh` reopens a workspace
 // whose export in a bucket was regenerated since, sees it regenerated again on
 // coming back to the window, and reloads it; it is filmed against the stand-in
-// bucket, and goes to out/refresh.gif rather than the README's.
+// bucket, and goes to out/refresh.gif rather than the README's. `opening`
+// adds an export from a bucket made slow, and watches its line in the sources
+// panel while it opens; it is filmed against the stand-in too, and goes to
+// out/opening.gif. `connecting` connects that slow bucket from the panel's
+// form, and watches the connection's line while it is tried and kept; it goes
+// to out/connecting.gif. `refused` is that with the bucket's name mistyped:
+// the line fails, and is chosen to edit the connection; it goes to
+// out/refused.gif.
 //
-// Usage: node scripts/preview.js [browse|sidebar|edit|refresh]   (after node scripts/build.js)
+// Usage: node scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
+// (after node scripts/build.js)
 
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -36,7 +44,9 @@ const root = resolve(pkg, "../..");
 const testdata = join(pkg, "../grid/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 
-const STORIES = ["browse", "sidebar", "edit", "refresh"];
+const STORIES = ["browse", "sidebar", "edit", "refresh", "opening", "connecting", "refused"];
+/** The stories filmed against the stand-in bucket, whose GIFs go to out/. */
+const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
   console.error(`preview: no story called ${story} · ${STORIES.join(", ")}`);
@@ -47,10 +57,9 @@ if (!STORIES.includes(story)) {
 // the shots of this app go.
 const frames = join(pkg, "out/preview");
 const takes = join(root, "docs");
-const gif =
-  story === "refresh"
-    ? join(pkg, "out/refresh.gif")
-    : join(takes, story === "sidebar" ? "sidebar.gif" : "preview.gif");
+const gif = AGAINST_BUCKET.includes(story)
+  ? join(pkg, `out/${story}.gif`)
+  : join(takes, story === "sidebar" ? "sidebar.gif" : "preview.gif");
 
 /** What the GIF is resampled to. Twelve is enough for a caret and a scroll to
  * look continuous, and low enough that sixteen seconds of a mostly still window
@@ -271,12 +280,60 @@ async function stageRefresh() {
   return { uno, standin, connection };
 }
 
-const refresh = story === "refresh" ? await stageRefresh() : undefined;
+/** The exports the opening story's bucket holds, by key: the first is the one added. */
+const OPENING_KEYS = ["2025/ads-q3.csv", "2025/ads-q4.csv", "2025/orders-q3.csv"];
+
+/**
+ * stageOpening lays out the opening story: the stand-in bucket holding three
+ * exports, the connection this machine has to it, and the fixture on disk to
+ * open first. It answers in stageRefresh's shape, with the fixture where the
+ * .uno is. The connecting story is the same scene with no connection kept,
+ * since making one is its story.
+ */
+async function stageOpening(connected) {
+  const { BUCKET, bucket } = await import("../../grid/tests/store/standin.ts");
+  const { HOME_REGION } = await import("../../grid/tests/store/regions.ts");
+
+  const ads = await readFile(join(testdata, "google-ads-sales.csv"));
+  const standin = await bucket(
+    undefined,
+    undefined,
+    new Map(OPENING_KEYS.map((key) => [key, ads])),
+  );
+  // Under the temp folder, as the browse story's files are: a path into
+  // somebody's home folder does not belong in a published GIF.
+  const dir = join(tmpdir(), "uno-preview", "opening");
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  const csv = join(dir, "sales-q3.csv");
+  await copyFile(fixture, csv);
+
+  const connection = {
+    format: 1,
+    id: BUCKET,
+    name: `${BUCKET} / 2025`,
+    provider: "s3",
+    bucket: BUCKET,
+    prefix: "2025/",
+    region: HOME_REGION,
+    auth: { mode: "machine" },
+    created: undefined,
+    modified: undefined,
+  };
+  return { uno: csv, standin, connection: connected ? connection : undefined };
+}
+
+const remote =
+  story === "refresh"
+    ? await stageRefresh()
+    : AGAINST_BUCKET.includes(story)
+      ? await stageOpening(story === "opening")
+      : undefined;
 const sidebar = story === "sidebar" ? await stageSidebar() : undefined;
 // The sidebar story opens its own workspaces once the window is up, so it is
 // started on none.
 const opened =
-  sidebar !== undefined ? [] : [story === "browse" ? await stage() : (refresh?.uno ?? fixture)];
+  sidebar !== undefined ? [] : [story === "browse" ? await stage() : (remote?.uno ?? fixture)];
 
 const electron = (await import("electron")).default;
 
@@ -292,22 +349,24 @@ if (displayMissing(process.env, process.platform)) {
 const data = join(pkg, "out/preview-data");
 await rm(data, { recursive: true, force: true });
 
-// The refresh story's machine: the connection to the bucket, AWS files of its
-// own so no profile of whoever films it can reach a published GIF, and the
-// stand-in's address and keys.
+// A story told against the bucket has a machine of its own: the connection to
+// the bucket, AWS files of its own so no profile of whoever films it can reach
+// a published GIF, and the stand-in's address and keys.
 let aws = {};
-if (refresh !== undefined) {
+if (remote !== undefined) {
   const { saveConnection } = await import("@uno/grid/store");
   const { nodeStore } = await import("@uno/grid/store/node");
   const { standinEnv } = await import("../../grid/tests/store/standin.ts");
   await mkdir(join(data, "connections"), { recursive: true });
-  await saveConnection(nodeStore(), join(data, "connections"), refresh.connection);
+  if (remote.connection !== undefined) {
+    await saveConnection(nodeStore(), join(data, "connections"), remote.connection);
+  }
   const files = join(data, "aws");
   await mkdir(files, { recursive: true });
   await writeFile(join(files, "config"), "");
   await writeFile(join(files, "credentials"), "");
   aws = {
-    ...standinEnv(refresh.standin),
+    ...standinEnv(remote.standin),
     AWS_CONFIG_FILE: join(files, "config"),
     AWS_SHARED_CREDENTIALS_FILE: join(files, "credentials"),
   };
@@ -348,8 +407,12 @@ child.stdout.on("data", (b) => {
     const what = line.startsWith("preview: ask ") ? line.slice("preview: ask ".length) : undefined;
     if (what === undefined) continue;
     const [verb, key] = what.split(" ");
-    if (verb === "rewrite" && refresh?.standin.objects.has(key)) {
-      rewrite(refresh.standin.objects, key);
+    if (verb === "rewrite" && remote?.standin.objects.has(key)) {
+      rewrite(remote.standin.objects, key);
+      child.stdin.write(`preview: done ${what}\n`);
+    } else if (verb === "latency" && remote !== undefined && Number(key) >= 0) {
+      // How long the stand-in takes over each answer from here on, in ms.
+      remote.standin.latency = Number(key);
       child.stdin.write(`preview: done ${what}\n`);
     } else {
       child.stdin.write(`preview: nothing here does ${what}\n`);
@@ -368,7 +431,7 @@ const deadline = setTimeout(() => {
 
 const code = await new Promise((r) => child.on("close", r));
 clearTimeout(deadline);
-await refresh?.standin.close();
+await remote?.standin.close();
 
 const failed = verdict("preview", code, out, "preview: rolled");
 if (failed !== undefined) {
