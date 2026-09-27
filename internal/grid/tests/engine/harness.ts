@@ -11,10 +11,11 @@ import type {
   Tuning,
 } from "../../src/engine/index.ts";
 import { read } from "../../src/ingest/index.ts";
+import { sources } from "../../src/plugin/index.ts";
+import type { Provider } from "../../src/plugin/index.ts";
 import type { Sheet } from "../../src/sheet/index.ts";
-import { blobFiles } from "../../src/store/index.ts";
-import type { FileHandler } from "../../src/store/index.ts";
-import { localFiles } from "../../src/store/node.ts";
+import { blobProvider } from "../../src/store/index.ts";
+import { diskProvider } from "../../src/store/node.ts";
 import { bytes, FIXTURE } from "../testdata/sales-q3.ts";
 
 // The fixture and its bytes live in testdata/sales-q3.ts, beside the facts
@@ -29,12 +30,24 @@ export const SCREEN = 22;
 /** Small enough that the 240 KB fixture spans hundreds of blocks and the cache has to evict. */
 export const TINY: Tuning = { chunkBytes: 4096, blockRows: 7, blockBytes: 512, cacheBytes: 8192 };
 
+/**
+ * connect wires a client to an engine over a real channel.
+ *
+ * What it is handed is providers and not handlers, because that is what a
+ * platform hands `serve`: opening and browsing are one decision, and a test
+ * that wired the handler and forgot the lister would be testing an engine no
+ * platform builds.
+ */
 export function connect(
   tuning?: Tuning,
-  handlers: FileHandler[] = [localFiles(), blobFiles()],
+  providers: Provider[] = [diskProvider(), blobProvider()],
 ): { engine: Engine; done: () => void } {
   const { port1, port2 } = new MessageChannel();
-  serve(messagePort<Request, Reply>(port1 as unknown as MessagePortLike), handlers, tuning);
+  serve(
+    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
+    sources(providers),
+    tuning,
+  );
   const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
   return {
     engine,

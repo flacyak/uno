@@ -39,8 +39,8 @@ import { join } from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { readContainer } from "../../src/document/index.ts";
-import { awsCredentials, localFiles } from "../../src/store/node.ts";
-import { s3Files, s3Location } from "../../src/store/s3.ts";
+import { awsCredentials, diskProvider } from "../../src/store/node.ts";
+import { s3Files, s3Location, s3Provider } from "../../src/store/s3.ts";
 import { bytes, connect, indexed, openOne, sales, sheetRows, widened } from "../engine/harness.ts";
 import { LAST_ROW, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { AWKWARD_KEYS } from "./awkward.ts";
@@ -119,14 +119,14 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
     const loc = s3Location(url);
     const name = loc?.key.slice(loc.key.lastIndexOf("/") + 1) ?? url;
 
-    /** Handlers with the machine's credentials, and every request they send. */
-    function handlers() {
+    /** Providers with the machine's credentials, and every request they send. */
+    function providers() {
       const seen: Exchange[] = [];
-      const files = [
-        localFiles(),
-        s3Files({ credentials: awsCredentials(), fetch: watched(seen) }),
+      const wired = [
+        diskProvider(),
+        s3Provider({ credentials: awsCredentials(), fetch: watched(seen) }),
       ];
-      return { files, seen };
+      return { wired, seen };
     }
 
     test(
@@ -135,8 +135,8 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
         expect(loc, `${url} is not an s3:// URL`).toBeDefined();
         const dir = await mkdtemp(join(tmpdir(), "uno-s3-live-"));
 
-        const first = handlers();
-        const a = connect(undefined, first.files);
+        const first = providers();
+        const a = connect(undefined, first.wired);
         let uno: Uint8Array;
         try {
           const src = await openOne(a.engine, { name, path: url });
@@ -169,7 +169,7 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
         expect(uno.length).toBeLessThan(bytes.length);
         await writeFile(join(dir, "q3.uno"), uno);
 
-        const b = connect(undefined, handlers().files);
+        const b = connect(undefined, providers().wired);
         try {
           const src = await openOne(b.engine, { name: "q3.uno", path: join(dir, "q3.uno") });
           expect(src.opened.link).toEqual({ path: url });
@@ -199,8 +199,8 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
       expect(loc, `${ELSEWHERE} is not an s3:// URL`).toBeDefined();
       const seen: Exchange[] = [];
       const { engine, done } = connect(undefined, [
-        localFiles(),
-        s3Files({ credentials: awsCredentials(), fetch: watched(seen) }),
+        diskProvider(),
+        s3Provider({ credentials: awsCredentials(), fetch: watched(seen) }),
       ]);
       try {
         const src = await openOne(engine, { name, path: ELSEWHERE });
@@ -304,8 +304,8 @@ describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
       const key = AWKWARD_KEYS[0]![0];
       const url = `${PREFIX.replace(/\/+$/, "")}/${key}`;
       const { engine, done } = connect(undefined, [
-        localFiles(),
-        s3Files({ credentials: awsCredentials() }),
+        diskProvider(),
+        s3Provider({ credentials: awsCredentials() }),
       ]);
       try {
         const src = await openOne(engine, { name: key, path: url });

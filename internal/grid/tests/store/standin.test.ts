@@ -7,8 +7,8 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { awsCredentials, localFiles } from "../../src/store/node.ts";
-import { s3Files } from "../../src/store/s3.ts";
+import { awsCredentials, diskProvider } from "../../src/store/node.ts";
+import { s3Files, s3Provider } from "../../src/store/s3.ts";
 import { bytes, connect, indexed, openOne, sales } from "../engine/harness.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { HOME_REGION } from "./regions.ts";
@@ -67,8 +67,8 @@ test("reads an object out of the bucket that environment names", async () => {
   const b = await bucket();
   const env = standinEnv(b);
   const { engine, done } = connect(undefined, [
-    localFiles(),
-    s3Files({ credentials: awsCredentials(env), endpoint: env["AWS_ENDPOINT_URL_S3"] }),
+    diskProvider(),
+    s3Provider({ credentials: awsCredentials(env), endpoint: env["AWS_ENDPOINT_URL_S3"] }),
   ]);
   try {
     const src = await openOne(engine, at("2025/sales-q3.csv"));

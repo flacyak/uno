@@ -37,9 +37,8 @@ process.parentPort.once("message", (e) => {
       },
       close: () => port.close(),
     },
-    // What this build can reach, written in one place. The handler list is
-    // derived from it, and the lister list with it once there are listers to
-    // derive -- so browsing arrives here without this file being edited again.
+    // What this build can reach, written in one place: both the handler list
+    // and the lister list come off this same set of providers.
     sources([
       diskProvider(),
       s3Provider({
@@ -48,6 +47,6 @@ process.parentPort.once("message", (e) => {
         // pointed at the way every other tool on the machine is.
         endpoint: process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"],
       }),
-    ]).files,
+    ]),
   );
 });
