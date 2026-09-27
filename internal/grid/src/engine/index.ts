@@ -23,6 +23,7 @@ export type {
   Offer,
   Opened,
   Opening,
+  Peeked,
   Place,
   Port,
   Progress,
