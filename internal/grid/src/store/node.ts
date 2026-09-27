@@ -577,13 +577,31 @@ export function splitCommand(line: string): string[] {
  * read off the disk, so a key rotated there is picked up within it, and until
  * shortly before expiry for keys AWS handed out, so a request per range does
  * not trade a token per range.
+ *
+ * Asks that land while one read is on its way share it. Forty sources opening
+ * at once ask forty times before the first answer is back, and each ask that
+ * read on its own would be a program run, a portal call or an AssumeRole of
+ * its own: a credential_process that asks a vault for its answer would ask
+ * forty times. A read that fails answers everybody waiting on it with the
+ * failure, and is not kept, so the next ask reads again.
  */
 function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
   let kept: Held | undefined;
+  let reading: Promise<Held> | undefined;
   return async () => {
     if (kept !== undefined && Date.now() < kept.until) return kept.creds;
-    kept = await read();
-    return kept.creds;
+    reading ??= read().then(
+      (held) => {
+        kept = held;
+        reading = undefined;
+        return held;
+      },
+      (err: unknown) => {
+        reading = undefined;
+        throw err;
+      },
+    );
+    return (await reading).creds;
   };
 }
 
