@@ -776,6 +776,9 @@ export class Shell {
     // Here rather than as menu accelerators, so the key reaches the page. The
     // cell editor stops its own keys, so these never fire while typing in one.
     window.addEventListener("keydown", (e) => {
+      // A key the grid read is not read again here: Ctrl+B pages up under
+      // vim-style, and the sidebar stays as it is.
+      if (e.defaultPrevented) return;
       // Ctrl+PageDown and Ctrl+PageUp are how a browser or an editor moves between
       // tabs, and Ctrl+Tab too. Neither input strategy reads them.
       if (e.ctrlKey && !e.altKey && !e.metaKey && this.workspace !== undefined) {
