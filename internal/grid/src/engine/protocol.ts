@@ -9,7 +9,7 @@
 
 import type { Change } from "../pattern/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
-import type { FileRef } from "../store/index.ts";
+import type { Entry, FileRef, Listing } from "../store/index.ts";
 
 /**
  * SourceRef says where a file is without holding any of it: a FileRef, which
@@ -192,6 +192,15 @@ export type Request =
   | { t: "redo"; id: number; source: string }
   /** The next matching row in a column, read from the file rather than any band. */
   | { t: "find"; id: number; source: string; find: FindRequest }
+  /**
+   * One page of a folder or a prefix. It names a path and not a source,
+   * because it is asked before there is one: a panel browsing its way toward
+   * something to open.
+   */
+  | { t: "list"; id: number; path: string; cursor?: string }
+  /** Size and version of a path now, without reading it: the same way, and for
+   * the same reason. */
+  | { t: "stat"; id: number; path: string }
   /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
   | { t: "mode"; transform: boolean }
   /** The workspace as a .uno, refusing carried sources larger than limit together. */
@@ -215,6 +224,8 @@ export type Reply =
     }
   | { t: "changed"; id: number; source: string; changed: Changed }
   | { t: "found"; id: number; found: Found }
+  | { t: "listed"; id: number; listing: Listing }
+  | { t: "statted"; id: number; entry: Entry }
   /** Null when the source has nothing to ask. */
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }
