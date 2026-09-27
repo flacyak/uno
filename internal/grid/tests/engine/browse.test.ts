@@ -255,8 +255,9 @@ function held(): { provider: Provider; hold: () => void; release: () => void } {
 
 // The proof this task exists for. A save holds the workspace's queue for as
 // long as the bytes take, and browsing must not wait behind it: the open sent
-// after the save is still waiting when the listing has already come back.
-test("a list sent while a save is running is answered before the save finishes", async () => {
+// after the save is still waiting when the listing and the peek have already
+// come back.
+test("a list and a peek sent while a save is running are answered first", async () => {
   const dir = await folder();
   const bytesInHand = held();
   const w = wire([bytesInHand.provider, paged(1000)]);
@@ -275,9 +276,13 @@ test("a list sent while a save is running is answered before the save finishes",
     // control: whatever is true of the listing must not be true of this.
     w.send({ t: "open", id: 3, ref: { name: "sales-q3.csv", path: FIXTURE } });
     w.send({ t: "list", id: 4, path: dir });
+    // A peek opens a file of its own through a handler, which is the one of the
+    // three that could plausibly have been put in the queue with the opens.
+    w.send({ t: "peek", id: 5, ref: { name: "sales-q3.csv", path: FIXTURE } });
 
     const listed = await w.reply(4);
     expect(listed.t).toBe("listed");
+    expect((await w.reply(5)).t).toBe("peeked");
     expect(w.seen.map((r) => r.t)).not.toContain("saved");
     expect(w.seen.filter((r) => r.t === "opened")).toHaveLength(1);
 
@@ -359,32 +364,112 @@ test("an engine with no workspace behind it still browses", async () => {
 
 // ------------------------------------------------------------ peek
 //
-// The peek request and its reply are the protocol's, and the reading behind
-// them is not built yet: opening a file, taking 64 KB of it and detecting what
-// it is has a task of its own. What is under test here is the route -- that a
-// peek crosses, is answered outside the queue like the other two, and comes
-// back against the id that asked -- so that the only thing left to do is fill
-// in the answer.
+// A peek is the third request that names no source, and the one that reads. It
+// opens a file through a handler, takes the front of it and closes it again, so
+// what crosses the channel is a header and twenty rows and never any bytes.
+// What the module behind it does with those bytes is peek.test.ts; what is here
+// is the route -- the reply, its id, and the ref that may have no path.
 
-test("a peek is refused by an engine that cannot peek yet, against its own id", async () => {
+/** The six columns sales-q3.csv has, and the first row under them. */
+const COLUMNS = ["date", "region", "rep", "channel", "units", "revenue"];
+const FIRST_ROW = ["2026-07-01", "West", "Ada Okafor", "direct", "1,204", "48160.00"];
+
+test("a peek comes back as a header and the rows under it", async () => {
   const w = wire([diskProvider()]);
   try {
     w.send({ t: "peek", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
     const r = await w.reply(1);
 
-    expect(r).toMatchObject({ t: "error", id: 1 });
-    if (r.t !== "error") return;
-    expect(r.message).toContain("sales-q3.csv");
-    expect(r.message).toContain("peek");
+    expect(r.t).toBe("peeked");
+    if (r.t !== "peeked") return;
+    expect(r.peeked.header).toEqual(COLUMNS);
+    expect(r.peeked.rows).toHaveLength(20);
+    expect(r.peeked.rows[0]).toEqual(FIRST_ROW);
+    // Every row as wide as the header, which is what the grid would draw.
+    expect(r.peeked.rows.every((row) => row.length === COLUMNS.length)).toBe(true);
+    // The sentence an opened source carries, so a preview and a tab agree.
+    expect(r.peeked.label).toBe("UTF-8 · delimiter ','");
   } finally {
     w.close();
   }
 });
 
-test("the client's peek rejects with what the engine said", async () => {
+// The request names a ref and not a path for this case: bytes dropped into a
+// page are looked at the same way an object in a bucket is, and have no path to
+// be named by.
+test("a peek of bytes in hand needs no path", async () => {
+  const w = wire([blobProvider()]);
+  try {
+    w.send({ t: "peek", id: 1, ref: { name: "dropped.csv", blob: new Blob([bytes]) } });
+    const r = await w.reply(1);
+
+    expect(r.t).toBe("peeked");
+    if (r.t !== "peeked") return;
+    expect(r.peeked.header).toEqual(COLUMNS);
+    expect(r.peeked.rows[0]).toEqual(FIRST_ROW);
+  } finally {
+    w.close();
+  }
+});
+
+// A peek opens through a handler, so it is refused by the sentence an open is
+// refused by, against the id that asked.
+test("a peek at a file nothing opens is refused by name, against the id that asked", async () => {
+  const w = wire([diskProvider()]);
+  try {
+    w.send({ t: "peek", id: 7, ref: { name: "q3.csv", path: "s3://acme/exports/q3.csv" } });
+    const r = await w.reply(7);
+
+    expect(r).toEqual({
+      t: "error",
+      id: 7,
+      message: "s3://acme/exports/q3.csv: nothing here opens it · this build reads local files",
+    });
+  } finally {
+    w.close();
+  }
+});
+
+test("the client peeks a file and is handed the header and the rows", async () => {
   const { engine, done } = connect(undefined, [diskProvider()]);
   try {
-    await expect(engine.peek({ name: "sales-q3.csv", path: FIXTURE })).rejects.toThrow("peek");
+    const peeked = await engine.peek({ name: "sales-q3.csv", path: FIXTURE });
+    expect(peeked.header).toEqual(COLUMNS);
+    expect(peeked.rows).toHaveLength(20);
+    expect(peeked.rows[0]).toEqual(FIRST_ROW);
+  } finally {
+    done();
+  }
+});
+
+// A peek adds nothing to the workspace: it is what somebody looks at before
+// deciding whether to.
+test("a peek leaves the workspace holding nothing", async () => {
+  const { engine, done } = connect(undefined, [diskProvider()]);
+  try {
+    await engine.peek({ name: "sales-q3.csv", path: FIXTURE });
+    const source = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
+    // A source is named after its file, and a second file of the same name is
+    // sales-q3_2. So this id is the proof: the peek added nothing to be told
+    // apart from.
+    expect(source.opened.source).toBe("sales-q3");
+  } finally {
+    done();
+  }
+});
+
+test("a refused peek rejects the caller rather than reaching onError", async () => {
+  const { engine, done } = connect(undefined, [diskProvider()]);
+  try {
+    let unwaited: string | undefined;
+    engine.onError = (message) => {
+      unwaited = message;
+    };
+
+    await expect(engine.peek({ name: "q3.csv", path: "s3://acme/q3.csv" })).rejects.toThrow(
+      "s3://acme/q3.csv: nothing here opens it · this build reads local files",
+    );
+    expect(unwaited).toBeUndefined();
   } finally {
     done();
   }
