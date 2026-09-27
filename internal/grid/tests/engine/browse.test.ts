@@ -7,9 +7,10 @@
 // a 30 GB save runs has to keep answering, and a save holds that queue for as
 // long as it takes.
 //
-// Everything here sends raw messages over the channel, because what is under
-// test is the protocol itself: which message comes back, with which id, and in
-// what order.
+// The first half sends raw messages over the channel, because what is under
+// test there is the protocol itself: which message comes back, with which id,
+// and in what order. The second half goes through the client, which is the
+// same thing turned back into promises.
 //
 // The folder every listing here browses is a temp directory with the testdata
 // fixtures copied into it. Nothing is symlinked: the sizes checked below are
@@ -28,8 +29,8 @@ import type { Provider } from "../../src/plugin/index.ts";
 import { blobProvider, blobSource } from "../../src/store/index.ts";
 import type { ByteSource, FileRef } from "../../src/store/index.ts";
 import { diskLister } from "../../src/store/disklister.ts";
-import { localFiles } from "../../src/store/node.ts";
-import { bytes, FIXTURE } from "./harness.ts";
+import { diskProvider, localFiles } from "../../src/store/node.ts";
+import { bytes, connect, FIXTURE, openOne } from "./harness.ts";
 
 const TESTDATA = fileURLToPath(new URL("../testdata/", import.meta.url));
 
@@ -285,5 +286,73 @@ test("a list sent while a save is running is answered before the save finishes",
     expect((await w.reply(3)).t).toBe("opened");
   } finally {
     w.close();
+  }
+});
+
+// ------------------------------------------------------------ through the client
+
+test("the client lists a folder and stats a file in it", async () => {
+  const dir = await folder();
+  const { engine, done } = connect(undefined, [diskProvider()]);
+  try {
+    const listing = await engine.list(dir);
+    expect(listing.entries.map((e) => e.name)).toEqual(ORDER);
+
+    const entry = await engine.stat(join(dir, "sales-q3.csv"));
+    expect(entry.bytes).toBe(bytes.length);
+    expect(entry.folder).toBe(false);
+  } finally {
+    done();
+  }
+});
+
+test("the client pages a folder with the cursor it was given", async () => {
+  const dir = await folder();
+  const { engine, done } = connect(undefined, [paged(2)]);
+  try {
+    const first = await engine.list(dir);
+    expect(first.entries.map((e) => e.name)).toEqual(ORDER.slice(0, 2));
+    expect(first.next).toBeDefined();
+
+    const second = await engine.list(dir, first.next);
+    expect(second.entries.map((e) => e.name)).toEqual(ORDER.slice(2, 4));
+  } finally {
+    done();
+  }
+});
+
+// A refusal belongs to whoever asked for it. `onError` is for the failures
+// nothing was waiting on -- an index, a survey -- and a panel that browsed
+// somewhere it cannot reach has a promise to reject.
+test("a refused listing rejects the caller rather than reaching onError", async () => {
+  const { engine, done } = connect(undefined, [diskProvider()]);
+  try {
+    let unwaited: string | undefined;
+    engine.onError = (message) => {
+      unwaited = message;
+    };
+
+    await expect(engine.list("s3://acme/exports/")).rejects.toThrow(
+      "s3://acme/exports/: nothing here browses it · this build browses local files",
+    );
+    expect(unwaited).toBeUndefined();
+  } finally {
+    done();
+  }
+});
+
+// Browsing is answered beside the workspace and not out of it, so an engine
+// that has never opened anything still lists.
+test("an engine with no workspace behind it still browses", async () => {
+  const dir = await folder();
+  const { engine, done } = connect(undefined, [diskProvider()]);
+  try {
+    expect((await engine.list(dir)).entries).toHaveLength(ORDER.length);
+    // And the file the listing named opens, from the path the listing gave.
+    const entry = (await engine.list(dir)).entries.find((e) => e.name === "sales-q3.csv")!;
+    const source = await openOne(engine, { name: entry.name, path: entry.path });
+    expect(source.opened.size).toBe(bytes.length);
+  } finally {
+    done();
   }
 });
