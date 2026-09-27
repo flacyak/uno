@@ -19,7 +19,7 @@
          those in the language the app is in. -->
     <div id="app" tabindex="0">
       <!-- Three columns: the sidebar, the sheet, and the sources panel. Each
-           begins with a head one row high, so the heads make one line across
+           begins with a band one row high, so the bands make one line across
            the top of the window, with the × at its end. -->
       <div class="win-frame">
         <!-- The workspaces opened on this machine, most recent first. The one
@@ -49,8 +49,13 @@
           <div id="content" tabindex="0" hidden></div>
         </div>
 
-        <!-- The sources panel, on the right while it is open. -->
-        <aside id="panel" class="panel" hidden></aside>
+        <!-- The sources panel, on the right while it is open, under the end
+             of the window's top line: the × there closes the window, so the
+             panel begins below it and is not what the × seems to close. -->
+        <div class="win-side">
+          <div class="win-top col-head"></div>
+          <aside id="panel" class="panel" hidden></aside>
+        </div>
       </div>
 
       <div class="win-status">
