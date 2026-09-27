@@ -23,7 +23,7 @@ import { PSEUDO_LOCALE, pseudoMessages } from "./pseudo.js";
 const PACKAGE = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** The locale every other one is translated from. */
-const BASE_LOCALE = "en";
+const BASE_LOCALE = "en-US";
 
 /** @param {string} locale */
 const messageFile = (locale) => join(PACKAGE, "messages", `${locale}.json`);
