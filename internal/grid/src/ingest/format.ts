@@ -9,6 +9,7 @@
 // CSV and TSV are the only format today. JSON Lines and Parquet come next, and a
 // format converter writes through the same seam from the other side.
 
+import { english } from "../said/index.ts";
 import type { ByteSource } from "../store/index.ts";
 import { readAll } from "./csv.ts";
 import { RecordScanner, bomLength } from "./scan.ts";
@@ -213,12 +214,8 @@ export function extensionOf(name: string): string {
  * first row, where somebody should be told to look.
  */
 export function describe(comma: string, header: HeaderMode = "first"): string {
-  const read = comma === "\t" ? "UTF-8 · tab-separated" : `UTF-8 · delimiter '${comma}'`;
-  return header === "first" ? read : `${read}${NO_HEADER}`;
+  return english({ t: "read", delimiter: comma, header });
 }
-
-/** What is added to how a file was read when it was read as having no header row. */
-const NO_HEADER = " · no header row";
 
 /** What each delimiter worth guessing is called. */
 const DELIMITER_NAMES: ReadonlyMap<string, string> = new Map([

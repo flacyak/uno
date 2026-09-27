@@ -1,0 +1,499 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "saved_path": "saved {path}",
+  "rows_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} row",
+        "plural=other": "{n} rows"
+      }
+    }
+  ],
+  "rows_count_about": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "≈{n} row",
+        "plural=other": "≈{n} rows"
+      }
+    }
+  ],
+  "columns_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} column",
+        "plural=other": "{n} columns"
+      }
+    }
+  ],
+  "edits_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} edit",
+        "plural=other": "{n} edits"
+      }
+    }
+  ],
+  "cells_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} cell",
+        "plural=other": "{n} cells"
+      }
+    }
+  ],
+  "files_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} file",
+        "plural=other": "{n} files"
+      }
+    }
+  ],
+  "files_new_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} new file",
+        "plural=other": "{n} new files"
+      }
+    }
+  ],
+  "folders_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} folder",
+        "plural=other": "{n} folders"
+      }
+    }
+  ],
+  "indexing_percent": "indexing {percent}%",
+  "offer_cells_at_least": [
+    {
+      "declarations": [
+        "input scanned",
+        "input affected",
+        "local plural = scanned: plural",
+        "local n = scanned: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "at least {affected} in the first row",
+        "plural=other": "at least {affected} in the first {n} rows"
+      }
+    }
+  ],
+  "connect_found": "{folders}, {files}",
+  "connect_found_more": "{folders}, {files}, and more",
+  "connect_listed_bucket": "listed the bucket · {found}",
+  "connect_listed_prefix": "listed {prefix} · {found}",
+  "sources_append_new": [
+    {
+      "declarations": [
+        "input count",
+        "input folder",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} new file in {folder} · append",
+        "plural=other": "{n} new files in {folder} · append"
+      }
+    }
+  ],
+  "find_unparsed_date_below": "nothing below row {row} in {column} fails to parse as a date",
+  "find_unparsed_date_above": "nothing above row {row} in {column} fails to parse as a date",
+  "find_unparsed_number_below": "nothing below row {row} in {column} fails to parse as a number",
+  "find_unparsed_number_above": "nothing above row {row} in {column} fails to parse as a number",
+  "find_text_below": "\"{text}\" is not below row {row} in {column}",
+  "find_text_above": "\"{text}\" is not above row {row} in {column}",
+  "find_searched_rows": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "searched {n} row",
+        "plural=other": "searched {n} rows"
+      }
+    }
+  ],
+  "sidebar_close_hint": "Close the sidebar · Ctrl+B",
+  "sidebar_open_hint": "Open the sidebar · Ctrl+B",
+  "status_row": "row {row}",
+  "reloaded_name": "reloaded {name}",
+  "reload_same_size": "the same size",
+  "reload_size_moved": "{now}, was {was}",
+  "reload_no_change": "no change in the bucket",
+  "reload_new_version_same_size": "a new version, the same size",
+  "reload_new_version_size_moved": "a new version, {now}, was {was}",
+  "edits_replayed": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} edit replayed",
+        "plural=other": "{n} edits replayed"
+      }
+    }
+  ],
+  "source_has_edits": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} has {n} edit · × again to remove it",
+        "plural=other": "{name} has {n} edits · × again to remove it"
+      }
+    }
+  ],
+  "unsaved_edits_key_again": "unsaved edits · Ctrl+S first, or {key} again to drop them",
+  "unsaved_edits_click_again": "unsaved edits · Ctrl+S first, or click again to drop them",
+  "size_bytes": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} byte",
+        "plural=other": "{n} bytes"
+      }
+    }
+  ],
+  "size_kb": "{size} KB",
+  "size_mb": "{size} MB",
+  "size_gb": "{size} GB",
+  "size_tb": "{size} TB",
+  "action_apply": "Apply",
+  "action_not_now": "Not now",
+  "action_cancel": "Cancel",
+  "action_test": "Test",
+  "action_insert": "Insert",
+  "action_filter": "Filter",
+  "action_reload": "Reload",
+  "action_repoint": "Re-point",
+  "action_remove": "Remove",
+  "sources_title": "Sources",
+  "settings_title": "Settings",
+  "reading": "reading…",
+  "no_connections": "no connections yet",
+  "connect_action": "+ Connect a bucket",
+  "this_column": "this column",
+  "the_column": "the column",
+  "no_rows": "no rows",
+  "unsaved_edits": "unsaved edits",
+  "unsaved_changes": "unsaved changes",
+  "newer_version": "a newer version is in the bucket · Reload reads it",
+  "menu_file": "File…",
+  "menu_browse_sources": "Browse sources…",
+  "menu_insert_formula": "Insert formula…",
+  "menu_remove_from_list": "Remove from list",
+  "menu_add_source": "Add source…",
+  "menu_save": "Save",
+  "menu_save_as": "Save as…",
+  "menu_open": "Open",
+  "no_file_open": "no file open",
+  "mode_view": "VIEW",
+  "mode_transform": "TRANSFORM",
+  "mode_insert": "INSERT",
+  "locked_default": "View · Ctrl+E to transform",
+  "locked_vim": "View · i or Ctrl+E to transform",
+  "switch_hint_vim": "i to transform · Esc to view · Ctrl+E",
+  "sidebar_aria": "Sidebar",
+  "panel_close_hint": "Close the sources panel",
+  "panel_open_hint": "Sources: what is open, and where files come from · Ctrl+Shift+B",
+  "point_at_file_to_see_rows": "point it at a file to see its rows",
+  "source_reads_from": "{name} reads from {from}",
+  "source_no_file_point_first": "{name} has no file behind it · point it at one first",
+  "source_no_longer_open": "{name} is no longer open",
+  "column_computed_from": "{column} is computed from {expr}",
+  "workspace_not_a_source": "{name} is a workspace of its own · open it rather than adding it",
+  "added_names": "added {names}",
+  "removed_name": "removed {name}",
+  "appended_to": "appended {files} to {name}",
+  "indexing_g_again": "indexing {percent}% · G again when it finishes",
+  "row_not_indexed": "row {row} is not indexed yet",
+  "nothing_to_apply": "nothing to apply",
+  "unsaved_edits_command": "unsaved edits · :w first, or :e! to drop them",
+  "not_a_command": "not a command: :{text}",
+  "offer_source_gone": "the source that offer was about is gone",
+  "drop_not_spreadsheet": "{name} is not a spreadsheet uno can open",
+  "host_unreachable": "uno could not reach its host process.",
+  "workspace_file_stem": "workspace",
+  "mark_not_set": "mark {name} is not set",
+  "nothing_yanked": "nothing yanked",
+  "computed_nothing_to_type": "{column} is computed from a formula · nothing to type over",
+  "row_still_loading": "row {row} is still loading",
+  "yank_clipboard_refused": "yanked, but the system clipboard refused it",
+  "column_flagged_hint": "looks numeric, does not parse",
+  "offer_ambiguous": "another rule fits these examples too",
+  "find_column_is_text": "{column} is text · every value in it parses",
+  "nothing_searched": "nothing searched yet",
+  "searching": "searching…",
+  "connect_title": "Connect a bucket",
+  "connect_form_aria": "connect a bucket",
+  "connect_bucket_aria": "bucket",
+  "connect_prefix_aria": "prefix",
+  "connect_prefix_placeholder": "the whole bucket",
+  "connect_sign_in_aria": "sign in as",
+  "connect_save": "Save connection",
+  "field_bucket": "Bucket",
+  "field_prefix": "Prefix",
+  "field_profile": "Profile",
+  "field_region": "Region",
+  "connect_name_bucket": "name the bucket to connect",
+  "connect_sign_in_machine": "this machine's AWS setup",
+  "connect_sign_in_public": "public · no sign-in",
+  "connect_region_detected": "{region} · detected",
+  "connect_region_pending": "detected by the test",
+  "connect_listing": "listing…",
+  "connect_saving_each": "Each connection is one file in connections/. The profile list is read from ~/.aws; uno stores the name, never the keys.",
+  "connect_saving_as": "Saves as connections/{id}.unof. The profile list is read from ~/.aws; uno stores the name, never the keys.",
+  "formula_title": "Insert formula",
+  "formula_title_source": "Insert formula · {source}",
+  "formula_column": "column",
+  "formula_expression_aria": "expression",
+  "formula_hint": "columns by name · + - * / ( )",
+  "formula_needs_expression": "an expression to compute the column from",
+  "section_workspace": "In this workspace",
+  "section_connections": "Connections",
+  "section_browser": "Browser",
+  "panel_filter_placeholder": "filter, or paste s3://…",
+  "panel_filter_aria": "filter sources",
+  "panel_peeking": "reading the front of it…",
+  "panel_as_one": "as one",
+  "panel_header_row": "header row",
+  "panel_header_row_hint": "the first line of each file names the columns",
+  "panel_file_column": "_file column",
+  "panel_file_column_hint": "a column that says which file each row came from",
+  "panel_point_at": "Point {name} at…",
+  "panel_choose_connection": "choose a connection to browse it",
+  "panel_nothing_matches": "nothing matches \"{filter}\"",
+  "panel_no_sources": "no sources open",
+  "panel_folder_empty": "this folder is empty",
+  "state_changed": "changed",
+  "state_missing": "missing",
+  "state_unconnected": "not connected",
+  "state_newer": "newer in bucket",
+  "sources_connect_bucket": "Connect {bucket}",
+  "sources_point_here": "Point {name} here",
+  "sources_add_count": "Add {count}",
+  "sources_add_as_one": "Add as one",
+  "settings_theme": "Theme",
+  "settings_theme_credit": "{name} · by {author} on T3 Themes",
+  "settings_appearance": "Appearance",
+  "appearance_system": "System",
+  "appearance_light": "Light",
+  "appearance_dark": "Dark",
+  "settings_keys": "Keys",
+  "input_default": "Default",
+  "input_vim_style": "Vim-style",
+  "not_saved": "not saved",
+  "no_workspaces": "no workspaces yet",
+  "sidebar_add_source": "+ add source",
+  "sidebar_add_source_hint": "Add a source: a file, or an object in S3",
+  "sidebar_not_saved_hint": "not saved · Ctrl+S keeps it as a workspace",
+  "sidebar_open_line_hint": "click to open its line in the sources panel",
+  "sidebar_point_hint": "click to point it at a file in the sources panel",
+  "sidebar_remove_source": "Remove {name} from the workspace",
+  "workspaces_title": "Workspaces",
+  "new_workspace": "New workspace",
+  "empty_title": "Drop a spreadsheet",
+  "empty_or_open": "or {#link}open one{/link}",
+  "switch_view": "View",
+  "switch_transform": "Transform",
+  "command_aria": "command",
+  "close_window_aria": "Close uno",
+  "settings_language": "Language",
+  "language_system": "System",
+  "native_file": "File",
+  "native_open": "Open…",
+  "native_add_source": "Add Source…",
+  "native_save": "Save",
+  "native_save_as": "Save As…",
+  "native_close_window": "Close Window",
+  "native_quit": "Quit",
+  "native_exit": "Exit",
+  "native_edit": "Edit",
+  "native_undo": "Undo",
+  "native_redo": "Redo",
+  "native_cut": "Cut",
+  "native_copy": "Copy",
+  "native_paste": "Paste",
+  "native_input": "Input",
+  "native_view": "View",
+  "native_view_transform": "View / Transform",
+  "native_reload": "Reload",
+  "native_toggle_devtools": "Toggle Developer Tools",
+  "native_actual_size": "Actual Size",
+  "native_zoom_in": "Zoom In",
+  "native_zoom_out": "Zoom Out",
+  "native_toggle_full_screen": "Toggle Full Screen",
+  "dialog_open": "Open",
+  "dialog_add_source": "Add Source",
+  "dialog_save_as": "Save As",
+  "filter_spreadsheets_and_workspaces": "Spreadsheets and workspaces",
+  "filter_spreadsheets": "Spreadsheets",
+  "filter_all_files": "All files",
+  "filter_workspace": "uno workspace",
+  "dropped_not_a_file": "{name} is not a file on this machine",
+  "read_delimiter": "UTF-8 · delimiter '{delimiter}'",
+  "read_delimiter_no_header": "UTF-8 · delimiter '{delimiter}' · no header row",
+  "read_tabs": "UTF-8 · tab-separated",
+  "read_tabs_no_header": "UTF-8 · tab-separated · no header row",
+  "said_about": "{subject}: {why}",
+  "said_replaying": "replaying edits to {name}: {why}",
+  "program_nothing": "change nothing",
+  "program_then": "{before}, then {after}",
+  "step_trim": "trim the spaces off both ends",
+  "step_upper": "upper-case it",
+  "step_lower": "lower-case it",
+  "step_remove": "remove {what}",
+  "step_remove_from_start": "remove {what} from the start",
+  "step_remove_from_end": "remove {what} from the end",
+  "step_replace": "replace {what} with {with}",
+  "step_replace_from_start": "replace {what} from the start with {with}",
+  "step_replace_from_end": "replace {what} from the end with {with}",
+  "quoted": "\"{text}\"",
+  "chars_commas": "commas",
+  "chars_full_stops": "full stops",
+  "chars_dollar_signs": "dollar signs",
+  "chars_pound_signs": "pound signs",
+  "chars_euro_signs": "euro signs",
+  "chars_percent_signs": "percent signs",
+  "chars_underscores": "underscores",
+  "chars_apostrophes": "apostrophes",
+  "chars_spaces": "spaces",
+  "chars_asterisks": "asterisks",
+  "chars_hashes": "hashes",
+  "chars_slashes": "slashes",
+  "chars_dashes": "dashes",
+  "chars_plus_signs": "plus signs",
+  "chars_brackets": "brackets",
+  "chars_quotes": "quotes",
+  "changed_version_same_size": "{name} is not the version the workspace was saved against · it is the same size",
+  "changed_version_sizes": "{name} is not the version the workspace was saved against · it is {now} now and was {was}",
+  "changed_size": "{name} is {now} now and was {was} when the workspace was saved",
+  "refused_only_source": "{name} is the only source here, and a workspace needs one",
+  "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
+  "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
+  "refused_append_nothing": "no file was given to append to {name}",
+  "refused_append_already_part": "{file} is already part {part} of {name}",
+  "refused_append_twice": "{file} is given twice to append to {name}",
+  "refused_workspace_too_large": "{name} is {size}, over the {limit} a workspace can be read whole",
+  "refused_no_file_open": "no file is open",
+  "refused_carried_too_large": "{name} is {size}, over the {limit} a workspace can carry for a source it has no file to point at",
+  "refused_carried_together_too_large": [
+    {
+      "declarations": [
+        "input count",
+        "input size",
+        "input limit",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "the {n} source with no file behind it comes to {size}, over the {limit} a workspace can carry",
+        "plural=other": "the {n} sources with no file behind them come to {size}, over the {limit} a workspace can carry"
+      }
+    }
+  ],
+  "refused_workspace_closed": "the workspace was closed",
+  "refused_no_such_source": "no source called {id} is open",
+  "refused_source_absent": "{name} has no file behind it · point it at one to read its rows",
+  "refused_point_one_at_several": [
+    {
+      "declarations": [
+        "input count",
+        "input file",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{file} is {n} file read as one, and {name} cannot be pointed at one yet",
+        "plural=other": "{file} is {n} files read as one, and {name} cannot be pointed at one yet"
+      }
+    }
+  ],
+  "refused_point_several_at_one": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input file",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} is {n} file read as one, and {file} is one file",
+        "plural=other": "{name} is {n} files read as one, and {file} is one file"
+      }
+    }
+  ],
+  "refused_point_several_at_other": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input given",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} is {n} file read as one, and cannot be pointed at {given}",
+        "plural=other": "{name} is {n} files read as one, and cannot be pointed at {given}"
+      }
+    }
+  ],
+  "refused_log_lost_edit": "the log lost track of an edit to {source}",
+  "refused_bucket_unconnected": "{container} reads s3://{bucket}/…, which no connection covers · connect {bucket} to read it",
+  "refused_joins_unknown_for_column": "{name} is read as one by something that does not say how its files join, so it cannot show which file each row came from",
+  "refused_joins_unknown_for_save": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} is {n} file read as one by something that does not say how they join, so a workspace cannot save it",
+        "plural=other": "{name} is {n} files read as one by something that does not say how they join, so a workspace cannot save it"
+      }
+    }
+  ],
+  "refused_rows_past_files": "{name}: its rows run past the files it is read from",
+  "refused_part_has_no_path": "{name}: {file} (part {part} of {count}) is a dropped file with no path, and a workspace points at each part of several files read as one",
+  "refused_nothing_to_undo": "there is nothing to undo",
+  "refused_nothing_to_redo": "there is nothing to redo",
+  "refused_in_view": "the file is in view · Ctrl+E to transform",
+  "refused_file_closed": "the file was closed",
+  "refused_changed_on_disk": "{name} changed on disk after it was opened",
+  "refused_keeps_no_connections": "this engine keeps no connections · its platform gave it nowhere to read them from",
+  "refused_offers_no_profiles": "this engine has no AWS profiles to offer · its platform signs in another way",
+  "refused_tries_no_connection": "this engine cannot try a connection · its platform connects to nothing"
+}

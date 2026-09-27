@@ -22,7 +22,8 @@ import type {
   Request,
   SourceRef,
 } from "./protocol.ts";
-import { messageOf } from "./protocol.ts";
+import { Refusal, saidOf } from "../said/index.ts";
+import type { Said } from "../said/index.ts";
 import type { Connection } from "../library/index.ts";
 import type { Entry, Listing, SingleRef } from "../store/index.ts";
 import type { Tried } from "../store/s3.ts";
@@ -48,7 +49,7 @@ export interface Added {
 
 export class Engine {
   /** A failure nothing was waiting on: an index, a survey, or a band request. */
-  onError: (message: string) => void = () => {};
+  onError: (said: Said) => void = () => {};
 
   private next = 1;
   private readonly waiting = new Map<number, Waiter<Reply>>();
@@ -239,12 +240,12 @@ export class Engine {
       }
 
       case "error": {
-        const err = new Error(msg.message);
         if (msg.id !== undefined) {
-          this.waiting.get(msg.id)?.reject(err);
+          // A Refusal again on this side of the port, so what it says is still data.
+          this.waiting.get(msg.id)?.reject(new Refusal(msg.said));
           this.waiting.delete(msg.id);
         } else {
-          this.onError(msg.message);
+          this.onError(msg.said);
         }
         return;
       }
@@ -474,7 +475,7 @@ export class Band {
         // either. Asking again sixty times a second would say nothing new.
         this.asking = false;
         this.broken = true;
-        this.source.engine.onError(messageOf(err));
+        this.source.engine.onError(saidOf(err));
       },
     );
   }

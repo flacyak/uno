@@ -14,6 +14,7 @@ import {
   Engine,
   decode,
   encode,
+  english,
   frameBytes,
   messagePort,
   serve,
@@ -245,7 +246,7 @@ test("a message over the limit is refused where it is sent, and the engine stays
 test("a socket that closes under the client says so once", async () => {
   const { engine, far } = overSockets();
   const said: string[] = [];
-  engine.onError = (message) => said.push(message);
+  engine.onError = (heard) => said.push(english(heard));
   far.close();
   await expect.poll(() => said).toEqual(["the connection to the engine closed"]);
 });

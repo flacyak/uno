@@ -6,7 +6,8 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { NOT_SAVED, NO_WORKSPACES, sidebarRows } from "../src/renderer/shell/sidebar.ts";
+import { m } from "../src/paraglide/messages.js";
+import { sidebarRows } from "../src/renderer/shell/sidebar.ts";
 import type { SidebarActions } from "../src/renderer/shell/sidebar.ts";
 import type { Tab, Workspace } from "../src/renderer/workspace.ts";
 
@@ -62,7 +63,7 @@ const names = (els: HTMLElement[]): string[] =>
 
 test("with nothing open and nothing opened before, the list says so", () => {
   const { els } = list(undefined);
-  expect(els.map((el) => el.textContent)).toEqual([NO_WORKSPACES]);
+  expect(els.map((el) => el.textContent)).toEqual([m.no_workspaces()]);
 });
 
 test("the open workspace comes first with its sources under it, then the others, most recent first", () => {
@@ -87,7 +88,7 @@ test("a workspace's line names the folder it is in, and its whole path on hover"
 test("a workspace never saved is named for its first source, and says it is not saved", () => {
   const { els } = list(workspace("", [tab("b", "google-ads.csv")]), ["/work/liquidity.uno"]);
   expect(els[0]!.querySelector(".name")?.textContent).toBe("google-ads");
-  expect(els[0]!.querySelector(".meta")?.textContent).toBe(NOT_SAVED);
+  expect(els[0]!.querySelector(".meta")?.textContent).toBe(m.not_saved());
   expect(names(els).at(-1)).toBe("ws:liquidity");
 });
 
@@ -139,7 +140,7 @@ test("the last source has no ×, and one of several asks to be removed without b
 test("the ! mark asks to re-point the tab from the panel, and does not select it", () => {
   const { els, asked } = one({
     path: "s3://acme-exports/ads/google-ads.csv",
-    missing: "google-ads.csv is not there",
+    missing: { t: "text", text: "google-ads.csv is not there" },
   });
   const mark = els[1]!.querySelector<HTMLElement>(".trouble")!;
   expect(mark.className).toBe("trouble gone");

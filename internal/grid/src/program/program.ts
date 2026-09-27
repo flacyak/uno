@@ -1,5 +1,7 @@
 import type { Step } from "./steps.ts";
-import { describeStep, runStep, stepText } from "./steps.ts";
+import { english } from "../said/index.ts";
+import type { Said } from "../said/index.ts";
+import { describedStep, runStep, stepText } from "./steps.ts";
 
 /**
  * Program is a pipeline applied left to right. The empty Program is valid and
@@ -40,6 +42,10 @@ export function text(p: Program): string {
  * notation they can learn than a description that glosses over what it does.
  */
 export function describe(p: Program): string {
-  if (p.length === 0) return "change nothing";
-  return p.map(describeStep).join(", then ");
+  return english(described(p));
+}
+
+/** described is what `describe` says, as data for a client to say in another language. */
+export function described(p: Program): Said {
+  return { t: "program", steps: p.map(describedStep) };
 }

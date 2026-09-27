@@ -7,9 +7,11 @@
 
 import "./grid.css";
 
+import { m } from "../../paraglide/messages.js";
 import type { InputStrategy } from "../input/strategy.ts";
 import { NOTHING, changeOf, isJump, replay, showing, target } from "../keys.ts";
 import type { Action, Caret, Change, Motion, Pending } from "../keys.ts";
+import { num } from "../locale.ts";
 import type { Cell, GridEvents, Rows } from "./rows.ts";
 import { View } from "./view.ts";
 
@@ -179,7 +181,7 @@ export class Grid {
         return;
       case "to-mark": {
         const mark = this.marks.get(action.name);
-        if (mark === undefined) this.events.onSay(`mark ${action.name} is not set`, true);
+        if (mark === undefined) this.events.onSay(m.mark_not_set({ name: action.name }), true);
         else this.jump(mark.row, mark.col);
         return;
       }
@@ -193,7 +195,7 @@ export class Grid {
         this.yank();
         return;
       case "put":
-        if (this.register === undefined) this.events.onSay("nothing yanked", true);
+        if (this.register === undefined) this.events.onSay(m.nothing_yanked(), true);
         else this.write({ t: "set", value: this.register });
         return;
       case "repeat":
@@ -317,20 +319,22 @@ export class Grid {
    * would start from "", and appending to that would write over the real cell.
    */
   private refusal(source: Rows): string {
-    if (source.rows() === 0) return "no rows";
+    if (source.rows() === 0) return m.no_rows();
     // A derived column stores nothing to type over. The sheet would refuse it;
     // saying so before the keystroke is kinder than after it.
     if (source.binding(this.selCol) !== undefined) {
-      return `${source.columns[this.selCol]?.header ?? "this column"} is computed from a formula · nothing to type over`;
+      return m.computed_nothing_to_type({
+        column: source.columns[this.selCol]?.header ?? m.this_column(),
+      });
     }
     return this.unreadable(source);
   }
 
   /** unreadable says why the selected cell has no value here, or "" when it has one. */
   private unreadable(source: Rows): string {
-    if (source.rows() === 0) return "no rows";
+    if (source.rows() === 0) return m.no_rows();
     if (source.ready?.(this.selRow) === false) {
-      return `row ${(this.selRow + 1).toLocaleString()} is still loading`;
+      return m.row_still_loading({ row: num(this.selRow + 1) });
     }
     return "";
   }
@@ -376,7 +380,7 @@ export class Grid {
     // The register is uno's copy. The system clipboard is a courtesy a page can
     // be refused, without focus or permission.
     void navigator.clipboard.writeText(value).catch(() => {
-      this.events.onSay("yanked, but the system clipboard refused it", true);
+      this.events.onSay(m.yank_clipboard_refused(), true);
     });
   }
 
