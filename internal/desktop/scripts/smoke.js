@@ -27,7 +27,13 @@ import { fileURLToPath } from "node:url";
 
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
 import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "../../grid/tests/store/standin.ts";
-import { displayMissing, electronEnv, verdict } from "./launch.js";
+import {
+  DRIVEN_LANGUAGE_ENV,
+  DRIVEN_LANGUAGE_SWITCH,
+  displayMissing,
+  electronEnv,
+  verdict,
+} from "./launch.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
@@ -153,10 +159,11 @@ console.log(`smoke: stand-in S3 at ${standin.endpoint}, holding ${object}`);
 let shutting;
 const shut = () => (shutting ??= standin.close());
 
-const child = spawn(electron, [pkg, `--user-data-dir=${data}`, fixture], {
+const child = spawn(electron, [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, fixture], {
   // stdin carries smoke.js's answers to what the checks ask of it.
   stdio: ["pipe", "pipe", "pipe"],
   env: electronEnv(process.env, {
+    ...DRIVEN_LANGUAGE_ENV,
     UNO_SMOKE: scratch,
     UNO_SMOKE_SOURCE: second,
     // Only this script knows where the bucket came up, so it is the only thing

@@ -22,7 +22,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { displayMissing, electronEnv, verdict } from "./launch.js";
+import {
+  DRIVEN_LANGUAGE_ENV,
+  DRIVEN_LANGUAGE_SWITCH,
+  displayMissing,
+  electronEnv,
+  verdict,
+} from "./launch.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
@@ -317,10 +323,11 @@ const scene =
         UNO_DRIVEN_OPEN: sidebar.fresh,
       };
 
-const child = spawn(electron, [pkg, `--user-data-dir=${data}`, ...opened], {
+const child = spawn(electron, [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, ...opened], {
   // stdin carries this script's answers to what the story asks of it.
   stdio: ["pipe", "pipe", "pipe"],
   env: electronEnv(process.env, {
+    ...DRIVEN_LANGUAGE_ENV,
     UNO_PREVIEW: frames,
     UNO_PREVIEW_STORY: story,
     ...aws,
