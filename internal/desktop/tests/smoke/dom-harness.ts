@@ -110,7 +110,7 @@ export async function bootShell(): Promise<Shell> {
     dropped: () => {
       throw new Error("dropped() is window-bound and not used by any run check");
     },
-    connect: () => Promise.resolve(port1 as unknown as MessagePort),
+    connect: () => Promise.resolve(port1 as unknown as MessagePortLike),
     pickSave: () => Promise.resolve(undefined),
     save: () => Promise.resolve(),
     saveConnection: (c) => saveConnection(nodeStore(), kept, c),
