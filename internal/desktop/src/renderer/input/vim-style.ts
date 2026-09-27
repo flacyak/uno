@@ -31,6 +31,10 @@ function interpret(mode: Mode, pending: Pending, press: Press): Step | undefined
   const count = pending.count === "" ? undefined : Number(pending.count);
 
   if (press.ctrl) {
+    // Shift in a chord names another key: Ctrl+Shift+B is the panel's, and
+    // read as Ctrl+b it would page up under it. CapsLock is why the case of
+    // the letter itself says nothing.
+    if (press.shift) return undefined;
     // Redo, which is why the reload item gave up Ctrl+R.
     if (key.toLowerCase() === "r") return done(change(mode, press, { t: "redo" }));
     const motion = ctrlMotion(key);
