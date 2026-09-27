@@ -11,10 +11,16 @@
 // read, one close -- because a person scanning a folder pays for that once per
 // object regardless of which object they land on.
 //
-// Working out what the bytes it hands back actually are is the other half, and
-// it reaches no handler at all.
+// `peekHead` is the half that is bytes and nothing else: detect the format the
+// way an open would, name the columns, and hand back the rows the window
+// happened to hold. It never touches a handler, which is what lets every
+// awkward shape a real file can put in front of it -- a row cut in two, a
+// quoted field cut in two, a header with nothing under it -- be a string in a
+// test rather than a fixture on a disk.
 
-import { openWith } from "../store/index.ts";
+import { openFormat } from "../ingest/index.ts";
+import type { Peeked } from "./protocol.ts";
+import { bytesSource, openWith } from "../store/index.ts";
 import type { FileHandler, FileRef } from "../store/index.ts";
 
 /**
@@ -28,10 +34,19 @@ import type { FileHandler, FileRef } from "../store/index.ts";
  */
 export const PEEK_BYTES = 64 << 10;
 
+/** How many rows under the header a peek answers with. */
+export const PEEK_ROWS = 20;
+
 /** The front of a file, and how big the whole file is. */
 export interface Head {
   bytes: Uint8Array;
   size: number;
+}
+
+/** What a caller may narrow from the defaults `peek` otherwise reads and answers with. */
+export interface PeekLimits {
+  bytes?: number;
+  rows?: number;
 }
 
 /**
@@ -58,4 +73,69 @@ export async function readHead(
   } finally {
     await file.close();
   }
+}
+
+/**
+ * peekHead turns a head already in hand into the header and rows a panel
+ * shows, without opening anything.
+ *
+ * The format is detected by handing `openFormat` a `bytesSource` over the
+ * head's bytes rather than the file the head came from. That is the trick
+ * that keeps a peek's cost at the one read `readHead` already paid for: a
+ * bytes-source says its size is however many bytes it holds, so the format
+ * reader believes the window is the whole file and never asks it for more.
+ * Pointing `openFormat` at the real file would let it grow its own read to
+ * chase a header that runs past 64 KB, which is exactly the second request a
+ * peek exists to not make.
+ */
+export async function peekHead(
+  name: string,
+  head: Head,
+  rows: number = PEEK_ROWS,
+): Promise<Peeked> {
+  const format = await openFormat(name, bytesSource(head.bytes));
+
+  // Whether the window holds the whole file is what decides how the last
+  // record in it is treated below, so it is worked out once, up front.
+  const whole = head.bytes.length >= head.size;
+
+  const starts: number[] = [];
+  const scanner = format.scanner((offset) => {
+    if (starts.length <= rows) starts.push(offset); // bounded: one more than wanted is enough
+  });
+  scanner.push(head.bytes.subarray(format.dataStart), format.dataStart);
+
+  let records: string[][] = [];
+  if (starts.length > 0) {
+    // The window ends where the bytes ran out and not where a row did, so the
+    // last record in it is usually half of one -- unless the window reached
+    // the true end of the file, in which case there is nothing after that
+    // last record to have cut it short. Drawing the half would put a value on
+    // screen that the file does not actually contain, so it is dropped rather
+    // than shown: every row this returns is a whole one, or there are none.
+    const stop =
+      starts.length > rows
+        ? starts[rows]! // one more start than asked for bounds the last wanted row exactly
+        : whole
+          ? head.bytes.length
+          : starts[starts.length - 1]!; // drop the record the window cut off
+    records = format.decode(head.bytes.subarray(starts[0], stop));
+  }
+
+  // A row as wide as the header is what the grid draws, so a preview and an
+  // opened tab agree about the same file: short rows are padded, and fields
+  // past the header's width are dropped.
+  const width = format.columns.length;
+  const rowsOut = records.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ""));
+
+  return { label: format.label, header: format.columns, rows: rowsOut };
+}
+
+/** peek reads the front of ref and answers with what it holds: one open, one read, one close. */
+export async function peek(
+  handlers: readonly FileHandler[],
+  ref: FileRef,
+  limits: PeekLimits = {},
+): Promise<Peeked> {
+  return peekHead(ref.name, await readHead(handlers, ref, limits.bytes), limits.rows);
 }

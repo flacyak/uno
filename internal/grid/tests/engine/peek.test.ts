@@ -1,20 +1,28 @@
-// The front of a file, read once and let go of.
+// What a file holds, before anything is added to the workspace.
 //
 // A peek is the answer to a selection in a panel: somebody clicking down a
 // folder of four hundred objects asks the same question of each one, so a
 // 30 GB export and a 30 KB one have to cost the same. That is the whole design,
-// and `readHead` is the half of it that touches a handler -- open once, read
-// the front, close, whatever the file turns out to be.
+// and it is why this module is two halves rather than one function.
 //
-// Everything checked here is about cost: how many reads went out, how long they
-// were, and that the file was let go of afterwards. They are the only promises
-// the front of a file can break, and every one of them is invisible from the
-// answer -- a peek that read the whole object to find its rows would return the
-// same header.
+// `readHead` is the half that touches a handler: open once, read the front, and
+// close, whatever the file turns out to be. Everything checked about it here is
+// about cost -- how many reads went out, how long they were, and that the file
+// was let go of afterwards -- because that is the only promise the front of a
+// file can break.
+//
+// `peekHead` is the half that is bytes and nothing else: detect the format the
+// way an open would, name the columns, and hand back the rows the window
+// happened to hold. It is handed a head rather than a file so that every awkward
+// shape -- a row cut in two, a quoted field cut in two, a header with nothing
+// under it -- is a string in this file rather than a fixture on a disk.
 
 import { expect, test } from "vite-plus/test";
 
-import { PEEK_BYTES, readHead } from "../../src/engine/peek.ts";
+import { PEEK_BYTES, PEEK_ROWS, peek, peekHead, readHead } from "../../src/engine/peek.ts";
+import type { Head } from "../../src/engine/peek.ts";
+import { headerOf, readAll } from "../../src/ingest/index.ts";
+import { blobFiles } from "../../src/store/index.ts";
 import type { ByteSource, FileHandler, FileRef } from "../../src/store/index.ts";
 import { localFiles } from "../../src/store/node.ts";
 import { FIXTURE, bytes } from "./harness.ts";
@@ -27,6 +35,19 @@ import { FIXTURE, bytes } from "./harness.ts";
  * hide in it. The real 2.5 GB file is read where a machine has one.
  */
 const HUGE = 2_500_118_439;
+
+const encoder = new TextEncoder();
+
+/** A head built out of text, cut to `limit` bytes the way a read of one would be. */
+function head(text: string, limit = PEEK_BYTES): Head {
+  const all = encoder.encode(text);
+  return { bytes: all.subarray(0, Math.min(limit, all.length)), size: all.length };
+}
+
+/** What sales-q3.csv holds, read the way `read` reads it, to compare a peek with. */
+const records = readAll(new TextDecoder().decode(bytes), ",");
+const HEADER = headerOf(records[0]!);
+const FIRST_ROWS = records.slice(1, PEEK_ROWS + 1).map((r) => HEADER.map((_, i) => r[i] ?? ""));
 
 /** One read a source was asked for. */
 interface Read {
@@ -180,4 +201,144 @@ test("a ref nothing opens is refused by name", async () => {
   ).rejects.toThrow(
     "s3://acme/exports/q3.csv: nothing here opens it · this build reads local files",
   );
+});
+
+// ------------------------------------------------------------ the rows in it
+
+test("the fixture peeks as its six headers and the twenty rows under them", async () => {
+  const peeked = await peek([localFiles()], { name: "sales-q3.csv", path: FIXTURE });
+
+  expect(peeked.header).toEqual(HEADER);
+  expect(peeked.header).toHaveLength(6);
+  expect(peeked.rows).toEqual(FIRST_ROWS);
+  expect(peeked.rows).toHaveLength(PEEK_ROWS);
+  // The same sentence an opened source carries, so the panel and the tab say
+  // the same thing about the same file.
+  expect(peeked.label).toBe("UTF-8 · delimiter ','");
+});
+
+test("a peek of bytes in hand needs no path", async () => {
+  const peeked = await peek([blobFiles()], { name: "sales-q3.csv", blob: new Blob([bytes]) });
+  expect(peeked.header).toEqual(HEADER);
+  expect(peeked.rows).toEqual(FIRST_ROWS);
+});
+
+// The window ends where the bytes ran out and not where a row did, so the last
+// record in it is usually half of one. Drawing half a row would put a cell on
+// screen holding a value the file does not have in it.
+test("a row the window cut in half is left out", async () => {
+  const text = "a,b\n1,2\n3,4\n5,6\n";
+
+  expect((await peekHead("cut.csv", head(text, 14))).rows).toEqual([
+    ["1", "2"],
+    ["3", "4"],
+  ]);
+  // One byte later is the same answer: the row is whole only once the byte
+  // after it has been seen.
+  expect((await peekHead("cut.csv", head(text, 15))).rows).toEqual([
+    ["1", "2"],
+    ["3", "4"],
+  ]);
+});
+
+// A cut inside quotes is the case a line-counting peek gets wrong: the bytes
+// look like a row that ends, and the file says it does not.
+test("a quoted field the window cut in half is left out", async () => {
+  const text = 'a,b\n1,"x,y"\n2,"z,w"\n';
+  const peeked = await peekHead("quoted.csv", head(text, 16));
+  expect(peeked.rows).toEqual([["1", "x,y"]]);
+});
+
+// Nothing was cut, because there is nothing after it: the last row of a file
+// that ends without a newline is a whole row.
+test("the last row of a file the window reached the end of is kept", async () => {
+  expect((await peekHead("end.csv", head("a,b\n1,2\n3,4"))).rows).toEqual([
+    ["1", "2"],
+    ["3", "4"],
+  ]);
+});
+
+test("a file with fewer than twenty rows peeks as the rows it has", async () => {
+  const peeked = await peekHead("short.csv", head("a,b\n1,2\n3,4\n"));
+  expect(peeked.header).toEqual(["a", "b"]);
+  expect(peeked.rows).toHaveLength(2);
+});
+
+test("twenty is the default, and a caller may ask for fewer", async () => {
+  const text = `a,b\n${Array.from({ length: 50 }, (_, i) => `${i},x`).join("\n")}\n`;
+
+  expect((await peekHead("many.csv", head(text))).rows).toHaveLength(PEEK_ROWS);
+  expect((await peekHead("many.csv", head(text), 3)).rows).toEqual([
+    ["0", "x"],
+    ["1", "x"],
+    ["2", "x"],
+  ]);
+});
+
+// The grid draws a row as wide as its header, so a peek that did anything else
+// would be showing a different table from the one an open gives.
+test("a row is as wide as the header, short or long", async () => {
+  const peeked = await peekHead("ragged.csv", head("a,b,c\n1\n2,3,4,5\n6,7,8\n"));
+  expect(peeked.header).toEqual(["a", "b", "c"]);
+  expect(peeked.rows).toEqual([
+    ["1", "", ""],
+    ["2", "3", "4"],
+    ["6", "7", "8"],
+  ]);
+});
+
+test("a header with nothing under it peeks as a header and no rows", async () => {
+  for (const text of ["a,b,c\n", "a,b,c"]) {
+    const peeked = await peekHead("headers.csv", head(text));
+    expect(peeked.header).toEqual(["a", "b", "c"]);
+    expect(peeked.rows).toEqual([]);
+  }
+});
+
+// The same sentence `read` gives a whole empty file. A peek that answered with
+// no columns would be drawn as a file that has none, which is the quieter lie.
+test("an empty file is refused by name", async () => {
+  await expect(peekHead("empty.csv", head(""))).rejects.toThrow("empty.csv: file is empty");
+});
+
+test("the delimiter comes from the name for a .tsv and from the bytes otherwise", async () => {
+  const tsv = await peekHead("q3.tsv", head("a\tb\n1\t2\n"));
+  expect(tsv.label).toBe("UTF-8 · tab-separated");
+  expect(tsv.header).toEqual(["a", "b"]);
+
+  const semis = await peekHead("q3.csv", head("a;b\n1;2\n3;4\n"));
+  expect(semis.label).toBe("UTF-8 · delimiter ';'");
+  expect(semis.rows).toEqual([
+    ["1", "2"],
+    ["3", "4"],
+  ]);
+});
+
+test("a byte order mark is not part of the first column's name", async () => {
+  const peeked = await peekHead("bom.csv", head("﻿a,b\n1,2\n"));
+  expect(peeked.header).toEqual(["a", "b"]);
+  expect(peeked.rows).toEqual([["1", "2"]]);
+});
+
+// JSON is not a format uno reads yet, and a peek says so in the words an open
+// says it in rather than showing an empty table.
+test("a format uno cannot read is refused by name", async () => {
+  await expect(peekHead("events.json", head("[]"))).rejects.toThrow(
+    "events.json: JSON is not supported yet",
+  );
+});
+
+// A header longer than the window is a real file -- a few thousand columns, or
+// a name with a newline in it -- and an open grows its read until it has the
+// whole header. A peek cannot: growing is a second request, and one request is
+// the promise. So it answers with the names the window did hold and no rows,
+// rather than paying twice or waiting.
+test("a header the window did not reach the end of peeks as no rows", async () => {
+  const wide = `${Array.from({ length: 200 }, (_, i) => `column_${i}`).join(",")}\n1,2,3\n`;
+
+  const peeked = await peekHead("wide.csv", head(wide, 64));
+
+  expect(peeked.rows).toEqual([]);
+  expect(peeked.header[0]).toBe("column_0");
+  expect(peeked.header.length).toBeLessThan(200);
 });
