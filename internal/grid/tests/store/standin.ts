@@ -2,10 +2,11 @@
 //
 // Reaching a real bucket costs credentials, a network and somebody's money, so
 // nothing but s3.live.test.ts does it. Everything else runs against this: it
-// checks every request's signature the way S3 does, answers ranges, redirects a
-// request signed for the wrong region, and serves objects out of a Map. A test
-// that reads bytes out of it has proved the signature was right, because a
-// signature that is wrong in one byte gets a 403 here too.
+// checks every request's signature the way S3 does, answers ranges, lists a
+// prefix the way ListObjectsV2 does, redirects a request signed for the wrong
+// region, and serves objects out of a Map. A test that reads bytes out of it has
+// proved the signature was right, because a signature that is wrong in one byte
+// gets a 403 here too.
 //
 // It lives beside the tests rather than inside one because the desktop smoke
 // run starts the same server, and two stand-ins that drift apart would be two
@@ -15,6 +16,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
+import { compareStrings } from "../../src/go/index.ts";
 import { signV4 } from "../../src/store/s3.ts";
 import type { AwsCredentials } from "../../src/store/s3.ts";
 import { bytes } from "../testdata/sales-q3.ts";
@@ -30,14 +32,29 @@ export const KEYS: AwsCredentials = {
 /** Where the stand-in keeps its one bucket. regions.ts says which region. */
 export const BUCKET = "acme-exports";
 
+/**
+ * When every object in the stand-in was last written.
+ *
+ * One stamp for all of them, so a test can say what a listing's `modified` has
+ * to be rather than that it is a Date of some kind.
+ */
+export const MODIFIED = "2026-09-20T12:00:00.000Z";
+
 /** How the stand-in turns a request away by default: the way AWS does it. */
 export const MOVED: Misdirect = { status: 301, headers: { "x-amz-bucket-region": "$REGION" } };
 
 export interface Bucket {
   endpoint: string;
   /** Every request that reached it: the raw target too, for counting and for
-   * checking that a key arrived on the wire exactly as it was written. */
-  seen: Array<{ method: string; path: string; range: string | undefined; region: string }>;
+   * checking that a key arrived on the wire exactly as it was written, and the
+   * raw query, which is the whole of what a listing asked for. */
+  seen: Array<{
+    method: string;
+    path: string;
+    query: string | undefined;
+    range: string | undefined;
+    region: string;
+  }>;
   /** What each key holds. Change one to rewrite the object under a reader. */
   objects: Map<string, Uint8Array>;
   close(): Promise<void>;
@@ -69,7 +86,13 @@ export async function bucket(
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const auth = req.headers["authorization"] ?? "";
     const region = /Credential=[^/]+\/\d{8}\/([^/]+)\//.exec(auth)?.[1];
-    seen.push({ method: req.method!, path: raw, range, region: region ?? "" });
+    seen.push({
+      method: req.method!,
+      path: raw,
+      query: req.url!.split("?")[1],
+      range,
+      region: region ?? "",
+    });
 
     // S3 checks the signature before anything else, and so does this.
     const signed = /SignedHeaders=([^,]+)/.exec(auth)?.[1]?.split(";") ?? [];
@@ -106,6 +129,28 @@ export async function bucket(
     }
 
     const [, name, ...rest] = raw.split("/");
+    if (url.searchParams.has("list-type")) {
+      if (name !== BUCKET) {
+        res.writeHead(404).end();
+        return;
+      }
+      // Anything but ListObjectsV2 is a request this stand-in has never been
+      // asked to answer, and answering it with an empty listing would let a
+      // caller that asked for the wrong thing look like it worked.
+      if (url.searchParams.get("list-type") !== "2") {
+        res.writeHead(400).end();
+        return;
+      }
+      const body = listing(objects, url);
+      res
+        .writeHead(200, {
+          "content-type": "application/xml",
+          "content-length": Buffer.byteLength(body),
+        })
+        .end(body);
+      return;
+    }
+
     const key = rest.map((seg) => decodeURIComponent(seg)).join("/");
     const body = name === BUCKET ? objects.get(key) : undefined;
     if (body === undefined) {
@@ -134,6 +179,92 @@ export async function bucket(
     objects,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
+}
+
+/**
+ * listing is ListObjectsV2 over the Map: a prefix, a delimiter, max-keys, and a
+ * continuation token, paged the one way S3 pages.
+ *
+ * Keys and the prefixes they fold into are one sequence in one order, and the
+ * page is a window on that sequence -- which is why a listing cannot promise
+ * folders first across pages, and why this is modelled rather than answered in
+ * whatever order was convenient.
+ *
+ * The token is the last item of the page in base64, which is not what AWS puts
+ * in one but is the same shape of thing: opaque, and full of the characters --
+ * `+`, `/`, `=` -- that a caller has to send back in a signed query without
+ * rewriting any of them.
+ */
+function listing(objects: Map<string, Uint8Array>, url: URL): string {
+  const prefix = url.searchParams.get("prefix") ?? "";
+  const delimiter = url.searchParams.get("delimiter") ?? "";
+  const max = Math.max(1, Number(url.searchParams.get("max-keys") ?? "1000"));
+  const token = url.searchParams.get("continuation-token");
+  const after = token === null ? "" : Buffer.from(token, "base64").toString("utf8");
+
+  const items: string[] = [];
+  // Which of them are prefixes rather than keys. It is whether the key was
+  // folded and not whether it ends in a slash: the marker object a console
+  // leaves behind is called `shop/`, and listing `shop/` has no delimiter left
+  // after the prefix to fold it on, so S3 hands that one back as a key.
+  const folded = new Set<string>();
+  for (const key of [...objects.keys()].toSorted(compareStrings)) {
+    if (!key.startsWith(prefix)) continue;
+    const cut = delimiter === "" ? -1 : key.indexOf(delimiter, prefix.length);
+    const item = cut === -1 ? key : key.slice(0, cut + delimiter.length);
+    if (cut !== -1) folded.add(item);
+    // Sorted, so every key that folds into one prefix arrives in a run.
+    if (items.at(-1) !== item) items.push(item);
+  }
+
+  const from = after === "" ? 0 : items.findIndex((i) => compareStrings(i, after) > 0);
+  const page = from === -1 ? [] : items.slice(from, from + max);
+  const more = from !== -1 && from + max < items.length;
+  const last = page.at(-1);
+
+  const parts = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">`,
+    `<Name>${xml(BUCKET)}</Name>`,
+    `<Prefix>${xml(prefix)}</Prefix>`,
+    `<Delimiter>${xml(delimiter)}</Delimiter>`,
+    `<MaxKeys>${max}</MaxKeys>`,
+    `<KeyCount>${page.length}</KeyCount>`,
+    `<IsTruncated>${more}</IsTruncated>`,
+  ];
+  if (more && last !== undefined) {
+    parts.push(
+      `<NextContinuationToken>${xml(Buffer.from(last, "utf8").toString("base64"))}</NextContinuationToken>`,
+    );
+  }
+  for (const item of page) {
+    if (folded.has(item)) {
+      parts.push(`<CommonPrefixes><Prefix>${xml(item)}</Prefix></CommonPrefixes>`);
+      continue;
+    }
+    const body = objects.get(item)!;
+    parts.push(
+      `<Contents><Key>${xml(item)}</Key><LastModified>${MODIFIED}</LastModified>` +
+        `<ETag>${xml(`"${body.length}-${body[0]}"`)}</ETag><Size>${body.length}</Size>` +
+        `<StorageClass>STANDARD</StorageClass></Contents>`,
+    );
+  }
+  parts.push(`</ListBucketResult>`);
+  return parts.join("");
+}
+
+/**
+ * xml escapes what XML cannot carry raw.
+ *
+ * A key is any UTF-8 string, so `a&b.csv` and a quoted ETag both have to go out
+ * escaped -- which is the half of the reply the reader has to undo, and a
+ * stand-in that skipped it would never let it prove that it does.
+ */
+function xml(text: string): string {
+  return text.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!,
+  );
 }
 
 /** A ref to an object in the stand-in's bucket. */

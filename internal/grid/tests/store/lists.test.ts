@@ -1,9 +1,11 @@
 // Browsing picks a lister the way opening picks a handler, and refuses by name
 // when nothing claims the path.
 //
-// There is no real lister yet -- the disk and S3 ones are next -- so these are
-// stand-ins that record what they were asked. What is under test is the
-// choosing and the refusal, which is the whole of the module.
+// The listers these drive are stubs that record what they were asked, and stay
+// stubs now that the disk's and the bucket's are real: what is under test is the
+// choosing and the refusal, which is the whole of the module, and a stub is the
+// only way to be sure the lister that did not claim a path was never asked.
+// What a real listing looks like is disk.test.ts and s3list.test.ts.
 
 import { expect, test } from "vite-plus/test";
 
