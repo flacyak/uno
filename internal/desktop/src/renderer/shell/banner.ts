@@ -5,6 +5,10 @@ import "./banner.css";
 
 import type { Offer } from "@uno/grid/engine";
 
+import { m } from "../../paraglide/messages.js";
+import { num } from "../locale.ts";
+import { say } from "../said.ts";
+
 /** An offer is the same question while its source, column and program are. */
 export function offerKey(offer: Offer): string {
   return `${offer.source}:${offer.col}:${offer.program}`;
@@ -21,23 +25,22 @@ export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void
   const header = document.createElement("b");
   header.textContent = offer.header;
 
-  const n = offer.affects.toLocaleString();
   const count = offer.complete
-    ? `${n} ${offer.affects === 1 ? "cell" : "cells"}`
-    : `at least ${n} in the first ${offer.scanned.toLocaleString()} rows`;
-  const parts = [offer.description, count];
-  if (offer.ambiguous) parts.push("another rule fits these examples too");
+    ? m.cells_count({ count: offer.affects })
+    : m.offer_cells_at_least({ affected: num(offer.affects), scanned: offer.scanned });
+  const parts = [say(offer.description), count];
+  if (offer.ambiguous) parts.push(m.offer_ambiguous());
 
   const grow = document.createElement("span");
   grow.className = "grow";
 
   const applyButton = document.createElement("button");
   applyButton.className = "primary";
-  applyButton.textContent = "Apply";
+  applyButton.textContent = m.action_apply();
   applyButton.addEventListener("click", apply);
 
   const later = document.createElement("button");
-  later.textContent = "Not now";
+  later.textContent = m.action_not_now();
   later.addEventListener("click", dismiss);
 
   return [header, document.createTextNode(` · ${parts.join(" · ")}`), grow, applyButton, later];

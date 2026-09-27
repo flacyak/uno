@@ -9,8 +9,12 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
+import { PSEUDO_LOCALE, PSEUDO_OPEN } from "../scripts/pseudo.js";
+import { m } from "../src/paraglide/messages.js";
+import { baseLocale } from "../src/paraglide/runtime.js";
 import { Settings } from "../src/renderer/shell/settings.ts";
 import type { InputName } from "../src/renderer/input/index.ts";
+import { LANGUAGE_KEY, Language, languageName, offered } from "../src/renderer/language.ts";
 import type { SettingsAsks } from "../src/renderer/shell/settings.ts";
 import type { Connection } from "../src/renderer/sources.ts";
 import { Theming } from "../src/renderer/theme.ts";
@@ -68,8 +72,13 @@ class Asked implements SettingsAsks {
   }
 }
 
+/** A system that prefers the base locale, so each test starts in English. */
+const SYSTEM_LANGUAGES = ["en-US"];
+
 let asked: Asked;
 let theming: Theming;
+let language: Language;
+let spoken: Kept;
 let toggle: HTMLButtonElement;
 
 beforeEach(() => {
@@ -78,7 +87,10 @@ beforeEach(() => {
   toggle = document.querySelector<HTMLButtonElement>("#settings")!;
   asked = new Asked();
   theming = new Theming(new Kept(), light, document.documentElement);
-  new Settings(toggle, theming, asked);
+  spoken = new Kept();
+  // Every language, the pseudo-locale among them, as where the app is worked on offers.
+  language = new Language(spoken, SYSTEM_LANGUAGES, offered(true));
+  new Settings(toggle, theming, language, asked);
 });
 
 const menu = (): HTMLElement => document.querySelector<HTMLElement>(".settings")!;
@@ -106,7 +118,7 @@ test("the control is a gear, labelled, and the menu is closed until it is clicke
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
 });
 
-test("clicked, it opens on every top-level source, the four themes, the appearance and the keys", async () => {
+test("clicked, it opens on every top-level source, the four themes, the appearance, the keys and the languages", async () => {
   toggle.click();
   await settle();
   expect(menu().hidden).toBe(false);
@@ -116,6 +128,7 @@ test("clicked, it opens on every top-level source, the four themes, the appearan
     Theme: ["Paper Ember|✓", "Tokyo Night|", "Sakura|", "Catppuccin Frappé|"],
     Appearance: ["System", "Light", "Dark"],
     Keys: ["Default", "Vim-style"],
+    Language: ["System|✓", ...offered(true).map((locale) => `${languageName(locale)}|`)],
   });
   // The keys land in the menu, on its first item.
   expect(document.activeElement?.textContent).toContain("ACME exports");
@@ -168,6 +181,53 @@ test("the keys are read another way the moment one is chosen, and it is marked",
   expect(asked.said.at(-1)).toBe("input vim-style");
   expect(on()).toEqual(["Vim-style"]);
   expect(menu().hidden).toBe(false);
+});
+
+const languageItem = (choice: string): HTMLElement =>
+  menu().querySelector<HTMLElement>(`[data-language="${choice}"]`)!;
+
+test("a language is spoken the moment it is chosen: the open menu, its control, and the choice kept", async () => {
+  toggle.click();
+  await settle();
+  languageItem(PSEUDO_LOCALE).click();
+
+  // The menu stays open, written again in the language chosen.
+  expect(menu().hidden).toBe(false);
+  expect(menu().querySelector(".title")?.textContent).toBe(m.settings_title());
+  expect(m.settings_title().startsWith(PSEUDO_OPEN)).toBe(true);
+  expect(Object.keys(sections())).toEqual([
+    m.sources_title(),
+    m.settings_theme(),
+    m.settings_appearance(),
+    m.settings_keys(),
+    m.settings_language(),
+  ]);
+  expect(toggle.getAttribute("aria-label")).toBe(m.settings_title());
+  expect(toggle.title).toBe(m.settings_title());
+
+  expect(languageItem(PSEUDO_LOCALE).getAttribute("aria-checked")).toBe("true");
+  expect(languageItem("system").getAttribute("aria-checked")).toBe("false");
+  expect(spoken.getItem(LANGUAGE_KEY)).toBe(PSEUDO_LOCALE);
+});
+
+test("a language is listed under the name it calls itself, marked as that language", async () => {
+  toggle.click();
+  await settle();
+  languageItem(PSEUDO_LOCALE).click();
+  // Still English under English, whatever the menu around it is in.
+  expect(languageItem(baseLocale).querySelector(".name")?.textContent).toBe("American English");
+  expect(languageItem(baseLocale).lang).toBe(baseLocale);
+  expect(languageItem("system").lang).toBe("");
+});
+
+test("System follows the system's language again", async () => {
+  toggle.click();
+  await settle();
+  languageItem(PSEUDO_LOCALE).click();
+  languageItem("system").click();
+  expect(menu().querySelector(".title")?.textContent).toBe("Settings");
+  expect(languageItem("system").getAttribute("aria-checked")).toBe("true");
+  expect(spoken.getItem(LANGUAGE_KEY)).toBe("system");
 });
 
 test("a chip shows each theme's colours in the mode worn now", async () => {
@@ -229,7 +289,7 @@ test("the arrows walk the items, round the ends", async () => {
     menu().dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
   };
   key("ArrowUp");
-  expect(document.activeElement?.textContent).toBe("Vim-style");
+  expect(document.activeElement?.textContent).toContain(languageName(PSEUDO_LOCALE));
   key("ArrowDown");
   expect(document.activeElement?.textContent).toContain("ACME exports");
   key("ArrowDown");

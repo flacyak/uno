@@ -45,7 +45,7 @@ function objects(n: number): Entry[] {
 }
 
 const PEEKED: Peeked = {
-  label: "UTF-8 · delimiter ','",
+  label: { t: "read", delimiter: ",", header: "first" },
   header: ["date", "amount"],
   rows: [["2025-10-01", "12.00"]],
 };
@@ -544,12 +544,15 @@ const STATED: Open[] = [
   {
     id: "b",
     name: "google-ads.csv",
-    link: { path: "s3://acme-exports/ads/google-ads.csv", missing: "google-ads.csv is not there" },
+    link: {
+      path: "s3://acme-exports/ads/google-ads.csv",
+      missing: { t: "text", text: "google-ads.csv is not there" },
+    },
   },
   {
     id: "c",
     name: "q3.csv",
-    link: { path: "/home/jo/q3.csv", changed: "q3.csv is 12 bytes bigger" },
+    link: { path: "/home/jo/q3.csv", changed: { t: "text", text: "q3.csv is 12 bytes bigger" } },
     bytes: 12,
   },
 ];
