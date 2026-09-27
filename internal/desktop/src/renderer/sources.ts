@@ -7,23 +7,27 @@
 //
 // It holds no widgets, for the reason the workspace holds none. Browsing is
 // where the mistakes are -- a listing that lands after the person has moved on,
-// a crumb that says one place while the entries are another -- and all of it is
-// tested here without a window.
+// a crumb that says one place while the entries are another, a peek of a file
+// nobody has selected any more -- and all of it is tested here without a
+// window.
 
+import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { Entry, Listing } from "@uno/grid/store";
 
 /**
  * Listings is the whole of what the panel needs an engine for.
  *
- * `Engine.list` is one without being told so, which is the point: a test
- * browses a stand-in that answers out of a map, and the panel never holds an
- * engine it could reach further into. It is narrower than store's `Lister` as
- * well, since which lister claims a path is the engine's business and the panel
- * only ever has a path and asks.
+ * `Engine.list` and `Engine.peek` are ones without being told so, which is the
+ * point: a test browses a stand-in that answers out of a map, and the panel
+ * never holds an engine it could reach further into. It is narrower than
+ * store's `Lister` as well, since which lister claims a path is the engine's
+ * business and the panel only ever has a path and asks.
  */
 export interface Listings {
   /** One page of a folder or a prefix. */
   list(path: string, cursor?: string): Promise<Listing>;
+  /** The front of one file: how it reads, its header, and its first rows. */
+  peek(ref: SourceRef): Promise<Peeked>;
 }
 
 /**
@@ -75,6 +79,37 @@ export interface Crumb {
   path: string;
 }
 
+/**
+ * Button is one of the two under the browser: what it says, and the files it
+ * hands back.
+ *
+ * The panel picks the files and puts them in order; opening them is the
+ * shell's, since a tab belongs to the workspace and the panel has never held
+ * one.
+ */
+export interface Button {
+  /** What it says: "Add 3", "Add as one". */
+  label: string;
+  /** Whether the files are one source between them, or a tab each. */
+  one: boolean;
+  /** The files it hands back, in the order they are listed. */
+  refs: readonly SourceRef[];
+}
+
+/**
+ * READS is the extensions ingest opens today, which is what a file has to be
+ * before a person can pick it.
+ *
+ * The judgement is here rather than asked of ingest because ingest has no test
+ * of a name to ask: `openFormat` reads the extension, then the bytes, and
+ * refuses JSON by name, which is an answer that costs a read and arrives long
+ * after the line was drawn. A PDF is still listed -- it is in the folder, and
+ * a folder that hides what is in it is the worse lie -- and refusing it here
+ * is why the button underneath cannot offer to open one. When ingest grows
+ * JSON Lines or Parquet, this grows with them.
+ */
+const READS: readonly string[] = [".csv", ".tsv"];
+
 /** A line that exists, for a count of lines that may have changed under it. */
 function bound(line: number, count: number): number {
   return Math.max(0, Math.min(line, count - 1));
@@ -92,6 +127,17 @@ export class Sources {
   private asked = 0;
   private waiting = false;
   private refused = "";
+  /**
+   * The selected files, held as paths and read back through the page, so that
+   * what comes out is in listing order however it was picked: *Add as one*
+   * takes the files in the order it is handed them, and the order on screen is
+   * the only one a person meant by picking them.
+   */
+  private readonly picks = new Set<string>();
+  private shown: Peeked | undefined;
+  private looking = false;
+  /** Which peek is wanted, counted the way a listing's ask is. */
+  private looked = 0;
 
   constructor(
     private readonly listings: Listings,
@@ -144,6 +190,60 @@ export class Sources {
    * rather than a page. */
   get trouble(): string {
     return this.refused;
+  }
+
+  /**
+   * The files that are selected, in the order they are listed rather than the
+   * order they were picked in.
+   *
+   * Every draw asks, through the buttons, and a page can be 200,000 entries,
+   * so with nothing picked it answers without walking the page at all.
+   */
+  get selected(): readonly Entry[] {
+    if (this.picks.size === 0) return [];
+    return this.found.filter((e) => this.picks.has(e.path));
+  }
+
+  /** Whether an entry is selected, for the line that draws it. */
+  chosen(entry: Entry): boolean {
+    return this.picks.has(entry.path);
+  }
+
+  /**
+   * selectable says whether a line can be picked at all. A folder is somewhere
+   * to go rather than something to add, and a file no reader opens is refused
+   * here so that nothing further down has to.
+   */
+  selectable(entry: Entry): boolean {
+    if (entry.folder) return false;
+    const dot = entry.name.lastIndexOf(".");
+    return dot > 0 && READS.includes(entry.name.slice(dot).toLowerCase());
+  }
+
+  /**
+   * The buttons under the browser: none while nothing is selected, "Add 1" for
+   * a file on its own, and "Add 3" beside "Add as one" for more than one. One
+   * file is one source whichever way it is added, so there is no second thing
+   * to offer for it.
+   */
+  get buttons(): readonly Button[] {
+    const refs = this.selected.map((e) => ({ name: e.name, path: e.path }));
+    if (refs.length === 0) return [];
+    const each: Button = { label: `Add ${refs.length}`, one: false, refs };
+    if (refs.length === 1) return [each];
+    return [each, { label: "Add as one", one: true, refs }];
+  }
+
+  /** The front of the one selected file, once it has landed: what is read
+   * before anything is added. Nothing while none or several are selected. */
+  get peeked(): Peeked | undefined {
+    return this.shown;
+  }
+
+  /** Whether a peek is on its way, so an ask in flight does not read as a file
+   * with nothing in it. */
+  get peeking(): boolean {
+    return this.looking;
   }
 
   /**
@@ -251,6 +351,7 @@ export class Sources {
     this.found = [];
     this.refused = "";
     this.waiting = true;
+    this.forget();
     if (this.at.section === "browser") this.at = { section: "browser", line: 0 };
     this.changed();
 
@@ -267,6 +368,64 @@ export class Sources {
       this.refused = err instanceof Error ? err.message : String(err);
     }
     this.waiting = false;
+    this.changed();
+  }
+
+  /**
+   * toggle puts a file in the selection or takes it out, which is what Space
+   * on a browser line does. A line that cannot be picked is left alone rather
+   * than complained about: it is drawn like the rest, and Space on it does
+   * nothing.
+   */
+  async toggle(entry: Entry): Promise<void> {
+    if (!this.selectable(entry)) return;
+    if (!this.picks.delete(entry.path)) this.picks.add(entry.path);
+    await this.look();
+  }
+
+  /**
+   * forget drops the selection and whatever was asked for it, which is what
+   * browsing somewhere else means: the paths on screen are not the ones that
+   * were chosen, and a file picked in the folder just left is not a file this
+   * one holds.
+   */
+  private forget(): void {
+    this.picks.clear();
+    this.shown = undefined;
+    this.looking = false;
+    this.looked++;
+  }
+
+  /**
+   * look asks for the front of the one selected file, and takes the answer
+   * only if it is still the file that is selected.
+   *
+   * A person reads down a folder by picking, and each pick outruns the last: a
+   * peek of the file above would otherwise land under the name of the file
+   * below it, which is the worst lie the panel can tell, since showing it at
+   * all is so that the file is chosen by what is in it. So peeks are numbered
+   * the way listings are, and only the last one is shown.
+   */
+  private async look(): Promise<void> {
+    const mine = ++this.looked;
+    const picked = this.selected;
+    const one = picked.length === 1 ? picked[0] : undefined;
+    this.shown = undefined;
+    this.looking = one !== undefined;
+    this.changed();
+    if (one === undefined) return;
+
+    try {
+      const peeked = await this.listings.peek({ name: one.name, path: one.path });
+      if (mine !== this.looked) return;
+      this.shown = peeked;
+    } catch {
+      // A file that cannot be read has nothing to show, and the panel says
+      // nothing of it: adding it is still allowed, and the same failure is
+      // worth a sentence where the tab opens rather than twice.
+      if (mine !== this.looked) return;
+    }
+    this.looking = false;
     this.changed();
   }
 }
