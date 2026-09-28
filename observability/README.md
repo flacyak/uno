@@ -13,8 +13,10 @@ Both are sent as OpenTelemetry metrics over OTLP/HTTP, which Grafana Cloud and t
 
 ## What is sent, and when
 
-Nothing is sent unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
-That is the variable every OpenTelemetry tool reads, so a build on a machine nobody set up sends nothing.
+Nothing is sent unless `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` is set.
+Those are the variables every OpenTelemetry tool reads, so a build on a machine nobody set up sends nothing.
+The metrics-only variables, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `_HEADERS` and `_PROTOCOL`, stand over the general ones where both are set, and the metrics address is used whole, with no path put after it.
+Metrics go as OTLP over HTTP, so a protocol setting other than `http/json` or `http/protobuf` is refused by name.
 
 A measurement says what was done and how long it took.
 It carries the kind of request, whether the bytes were on a disk or in a bucket, and the count and size of requests to S3.
