@@ -931,8 +931,9 @@ export class Shell {
       return;
     }
     try {
-      const showing = w.active === tab;
-      await w.remove(tab);
+      // Whether the tab was on screen is the workspace's answer, not a look
+      // taken before asking: Ctrl+Tab pressed meanwhile moves what is.
+      const showing = await w.remove(tab);
       if (this.workspace !== w) return;
       this.say(m.removed_name({ name: tab.name }));
       // Taking out the tab on screen puts its neighbour there.
@@ -1088,12 +1089,17 @@ export class Shell {
   private async history(which: "undo" | "redo"): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    // The edit is the showing tab's, and so is the cell it changed: one the
+    // person has since left is not moved to in the other.
+    const tab = w.active;
     try {
       const edit = await (which === "undo" ? w.undo() : w.redo());
       // One cell came back, so show it. An apply names a whole column and no row,
       // and the selection stays where it is.
       const on = this.showing();
-      if (edit.row !== NO_ROW && on?.workspace === w) on.grid.moveTo(edit.row, edit.col);
+      if (edit.row !== NO_ROW && on?.workspace === w && w.active === tab) {
+        on.grid.moveTo(edit.row, edit.col);
+      }
       this.say("");
     } catch (err) {
       this.say(message(err), true);
