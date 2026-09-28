@@ -7,6 +7,7 @@
 // that object.
 
 import type { Check } from "./check.ts";
+import { REMOTE } from "./sources.ts";
 
 /** What the panel's lines say, and a key pressed where the panel reads them. */
 const LINES = `
@@ -16,7 +17,7 @@ const LINES = `
     let at = -1;
     return [...document.querySelectorAll("#panel .panel-row")].map((r) => ({
       section: r.classList.contains("head") ? ++at : at,
-      cls: r.className, name: r.children[0].textContent, meta: r.children[1].textContent,
+      cls: r.className, name: r.children[0].textContent, meta: r.children[1].textContent, title: r.title,
     }));
   };
   const WORKSPACE = 0, BROWSER = 2;
@@ -94,6 +95,32 @@ export const PANEL: Check[] = [
       if (rows !== 20) return "the peek has " + rows + " rows";
       const foot = [...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent);
       return JSON.stringify(foot) === '["Add 1"]' ? "" : "the buttons are " + JSON.stringify(foot);
+    `,
+  },
+  {
+    name: "two objects picked are added as a tab each, out of the bucket",
+    script: `
+      ${REMOTE}
+      ${LINES}
+      await key("ArrowUp");
+      await key(" ");
+      const buttons = () => [...document.querySelectorAll("#panel .panel-foot button")];
+      const labels = buttons().map((b) => b.textContent);
+      if (JSON.stringify(labels) !== '["Add 2","Add as one"]') return "the buttons are " + JSON.stringify(labels);
+      if (!document.querySelector("#panel .panel-peek").hidden) return "two picks still show a peek";
+
+      buttons()[0].click();
+      if (!(await arrives(() => document.querySelectorAll(".tab").length === 4))) {
+        return "the strip has " + document.querySelectorAll(".tab").length + " tabs · " + JSON.stringify(text("#status-msg"));
+      }
+      // A tab's line says where it reads from to whoever hovers.
+      const want = ["s3://acme-exports/2025/ads-q4.csv", "s3://acme-exports/2025/sales-q3.csv"];
+      if (!(await until(() => want.every((p) => lines().some((l) => l.title.startsWith(p)))))) {
+        return "the tabs read from " + JSON.stringify(lines().map((l) => l.title).filter((t) => t !== ""));
+      }
+      return (await arrives(() => text("#status-file").startsWith(ROWS.toLocaleString() + " rows")))
+        ? ""
+        : "the status bar says " + JSON.stringify(text("#status-file"));
     `,
   },
 ];

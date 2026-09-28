@@ -44,7 +44,7 @@ const SAVED = join(SCRATCH, "sales-q3.uno");
  * app catching up with itself and too small for a signed request, a bucket, and
  * 2,600 rows on the way back.
  */
-const REMOTE = `
+export const REMOTE = `
   const arrives = async (ok) => {
     for (let i = 0; i < 4; i++) if (await until(ok)) return true;
     return false;
