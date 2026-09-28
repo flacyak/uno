@@ -63,3 +63,18 @@ test("Tab walks the controls round the ends, and never leaves the form", () => {
   expect(document.activeElement).toBe(controls[0]);
   expect(document.querySelector(".formula")).toBe(box);
 });
+
+// A disabled control takes no focus, so a step that stopped on it would stop
+// there for good: Insert is disabled while an insert is on its way.
+test("Tab steps over a control that is disabled", () => {
+  const { box } = form();
+  const controls = [...box.querySelectorAll<HTMLElement>("select, input, button")];
+  controls[1]!.setAttribute("disabled", "");
+  controls[0]!.focus();
+  box.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+  expect(document.activeElement).toBe(controls[2]);
+  box.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }),
+  );
+  expect(document.activeElement).toBe(controls[0]);
+});
