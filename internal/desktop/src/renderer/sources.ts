@@ -12,6 +12,7 @@
 // window.
 
 import type { Link, Peeked, SourceRef } from "@uno/grid/engine";
+import type { Connection as Saved } from "@uno/grid/library";
 import type { Entry, Listing } from "@uno/grid/store";
 import { s3Location, s3Url } from "@uno/grid/store/s3";
 
@@ -80,11 +81,13 @@ export interface TabAction {
  * Connection is a place that can be browsed, as its line reads:
  * `acme-exports · s3 · eu-west-1`, `~/exports · disk`.
  *
- * Whoever opens the panel hands these in. Where they are kept between sessions
- * is a saved-connection store that does not exist yet, and the panel is none
- * the worse for it: what it needs is a path to ask about.
+ * Whoever opens the panel hands these in: the shell reads them off the engine,
+ * which keeps them in the connections folder, and turns each into a line with
+ * `connectionLine`. What the panel needs of one is a path to ask about.
  */
 export interface Connection {
+  /** The .unof it was read from, by id. */
+  id?: string;
   /** What a person calls it: the bucket, the folder. */
   name: string;
   /** Where browsing it starts: s3://acme-exports, /home/jo/exports. */
@@ -93,6 +96,22 @@ export interface Connection {
   kind: string;
   /** Where that place is, for a kind that is somewhere: "eu-west-1". */
   where?: string;
+}
+
+/**
+ * connectionLine is a saved connection as the panel lists it: its name, the
+ * folder browsing it starts in, and where its bucket is once that is known.
+ */
+export function connectionLine(c: Saved): Connection {
+  const path = c.prefix === "" ? `s3://${c.bucket}` : `s3://${c.bucket}/${c.prefix}`;
+  const line: Connection = {
+    id: c.id,
+    name: c.name === "" ? c.id : c.name,
+    path,
+    kind: c.provider,
+  };
+  if (c.region !== undefined) line.where = c.region;
+  return line;
 }
 
 /** The sections, in the order they are drawn and moved through. */

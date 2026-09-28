@@ -19,6 +19,7 @@
 // Usage: node scripts/smoke.js   (after node scripts/build.js)
 
 import { readContainer } from "@uno/grid/document";
+import { parseConnection } from "@uno/grid/library";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -50,6 +51,13 @@ for (const name of await readdir(scratch)) {
   if (name.endsWith(".uno")) await rm(join(scratch, name));
 }
 
+// The app's own data -- its connections folder, the page's storage -- for this
+// run only, and emptied first for the reason the .uno above is: a connection
+// the last run saved would be evidence this one never produced. It also keeps
+// the run out of the connections of whoever is at the desktop.
+const data = join(scratch, "data");
+await rm(data, { recursive: true, force: true });
+
 const electron = (await import("electron")).default;
 
 if (displayMissing(process.env, process.platform)) {
@@ -78,7 +86,7 @@ console.log(`smoke: stand-in S3 at ${standin.endpoint}, holding ${object}`);
 let shutting;
 const shut = () => (shutting ??= standin.close());
 
-const child = spawn(electron, [pkg, fixture], {
+const child = spawn(electron, [pkg, `--user-data-dir=${data}`, fixture], {
   stdio: ["ignore", "pipe", "pipe"],
   env: electronEnv(process.env, {
     UNO_SMOKE: scratch,
@@ -151,10 +159,21 @@ else if (local.path !== fixture) {
   trouble.push(`sales-q3.csv points at ${JSON.stringify(local.path)}, not the absolute ${fixture}`);
 }
 
+// The connection the checks saved, read back off the disk the same way: it is
+// in the run's own folder, it is a connection, and it holds no key.
+const kept = join(data, "connections", "acme-exports.unof");
+try {
+  const c = parseConnection("acme-exports.unof", await readFile(kept, "utf8"));
+  if (c.bucket !== BUCKET) trouble.push(`${kept} connects to ${c.bucket}, not ${BUCKET}`);
+} catch (err) {
+  trouble.push(`the saved connection did not read back: ${err.message}`);
+}
+
 if (trouble.length > 0) {
   for (const line of trouble) console.error(`smoke: FAILED (${line})`);
   process.exit(1);
 }
 
 console.log(`smoke: ${saved} points at ${pointers.map((s) => s.path).join(", ")}`);
+console.log(`smoke: ${kept} reads back as a connection to ${BUCKET}`);
 console.log("smoke: ok");

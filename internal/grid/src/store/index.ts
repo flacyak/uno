@@ -338,6 +338,48 @@ export async function saveConnection(
   return stamped;
 }
 
+/**
+ * Connections is the connections an engine signs in through, as they stand,
+ * and the folder they are read again from when somebody says they changed.
+ *
+ * It is one object rather than a list handed around, because two things read
+ * it at different times -- the handler signing a request, the workspace
+ * deciding whether a .uno may read a bucket -- and both have to see a
+ * connection saved a moment ago without the engine being started again.
+ */
+export interface Connections {
+  /** The connections the last load read, in id order. */
+  readonly all: readonly Connection[];
+  /** Read the folder again. What it could read replaces what was there. */
+  load(): Promise<ConnectionLoad>;
+}
+
+/**
+ * connectionsIn keeps the connections in one folder of a store, and holds none
+ * until the first load.
+ *
+ * Loads run one at a time, so two asked for together land in the order they
+ * were asked for and the later one is what stays.
+ */
+export function connectionsIn(store: FileStore, dir: string): Connections {
+  let all: readonly Connection[] = [];
+  let queue: Promise<unknown> = Promise.resolve();
+  return {
+    get all() {
+      return all;
+    },
+    load() {
+      const run = queue.then(async () => {
+        const read = await loadConnections(store, dir);
+        all = read.connections;
+        return read;
+      });
+      queue = run.catch(() => undefined);
+      return run;
+    },
+  };
+}
+
 function join(dir: string, name: string): string {
   if (dir === "") return name;
   return dir.endsWith("/") ? dir + name : dir + "/" + name;

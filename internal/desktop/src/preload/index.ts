@@ -33,6 +33,8 @@ const bridge: Bridge = {
     ipcRenderer.invoke("file:pick-save", suggestedName) as Promise<string | undefined>,
 
   save: (path, bytes) => ipcRenderer.invoke("file:save", path, bytes) as Promise<void>,
+
+  saveConnection: (id, text) => ipcRenderer.invoke("connections:save", id, text) as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld("uno", bridge);

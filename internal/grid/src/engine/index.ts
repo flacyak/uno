@@ -20,6 +20,7 @@ export type {
   Found,
   MessagePortLike,
   Link,
+  Loaded,
   Offer,
   Opened,
   Opening,
