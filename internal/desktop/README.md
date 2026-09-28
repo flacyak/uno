@@ -70,7 +70,11 @@ and a bucket somewhere else says so once and is followed. uno stores no keys,
 and none reach the renderer. An SSO profile signs in with the token the last
 `aws sso login` cached: uno trades it at the SSO portal for the role's keys and
 reuses them until shortly before they expire. uno never signs in for anybody, so
-an expired or missing sign-in says to run `aws sso login --profile <name>`.
+an expired or missing sign-in says to run `aws sso login --profile <name>`. A
+profile with a `credential_process` runs that program, split into words the way
+a shell would but run without one, and reads the version 1 JSON it prints; the
+keys are reused until shortly before they expire, and the program is run again
+only then.
 `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` points it at MinIO or another
 S3-compatible store.
 
