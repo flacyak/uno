@@ -8,7 +8,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { Entry, Listing } from "@uno/grid/store";
 
 import type { Connection, Listings, Open } from "../src/renderer/sources.ts";
-import { Sources } from "../src/renderer/sources.ts";
+import { Sources, stateOf, trailTo } from "../src/renderer/sources.ts";
 
 const ACME: Connection = {
   name: "acme-exports",
@@ -49,6 +49,14 @@ const PAGES: Record<string, Entry[]> = {
     file("sep.CSV", "s3://acme-exports/2025/q3/sep.CSV", 400),
   ],
 };
+
+// A prefix as the S3 lister names it, with its trailing slash, which is where
+// re-pointing a tab whose object was in it starts.
+PAGES["s3://acme-exports/ads/"] = [
+  file("ads-2025-10.csv", "s3://acme-exports/ads/ads-2025-10.csv", 512),
+  file("ads-2025-11.csv", "s3://acme-exports/ads/ads-2025-11.csv", 640),
+  file("notes.pdf", "s3://acme-exports/ads/notes.pdf", 80),
+];
 
 const Q3: Connection = { name: "q3", path: "s3://acme-exports/2025/q3", kind: "s3" };
 
@@ -784,6 +792,151 @@ test("a later page that fails keeps what was shown, and the next ask tries it ag
 // No DOM, and it has to stay that way: the panel is the part of the shell whose
 // browsing is worth testing, and it is only testable at all while it can be
 // built without a document.
+// ------------------------------------------------------------ in this workspace
+
+/** Three tabs: one that reads, one whose object is gone, one whose file changed. */
+const STATED: Open[] = [
+  { id: "a", name: "ledger.csv", link: { path: "/home/jo/exports/ledger.csv" }, bytes: 4096 },
+  {
+    id: "b",
+    name: "ads.csv",
+    link: { path: "s3://acme-exports/ads/ads.csv", missing: "ads.csv is not there" },
+  },
+  {
+    id: "c",
+    name: "q3.csv",
+    link: { path: "/home/jo/exports/q3.csv", changed: "q3.csv is 12 bytes bigger" },
+    bytes: 12,
+  },
+];
+
+test("each tab's line says whether its file reads, changed, or is missing", () => {
+  expect(STATED.map(stateOf)).toEqual(["fine", "missing", "changed"]);
+  // A tab carried in the workspace has no file to have gone wrong.
+  expect(stateOf({ id: "d", name: "carried.csv" })).toBe("fine");
+});
+
+test("the keys on a tab offer reload, re-point and remove, and nothing elsewhere", async () => {
+  const panel = new Sources(new Stand(), () => STATED, [ACME]);
+
+  panel.focus("workspace", 1);
+  expect(panel.doings).toEqual([
+    { label: "Reload", does: "reload", id: "b" },
+    { label: "Re-point", does: "repoint", id: "b" },
+    { label: "Remove", does: "remove", id: "b" },
+  ]);
+
+  panel.focus("connections");
+  expect(panel.doings).toEqual([]);
+});
+
+test("a tab with no file has nothing to reload, and the last tab cannot be removed", () => {
+  const carried: Open = { id: "d", name: "carried.csv" };
+  const panel = new Sources(new Stand(), () => [carried]);
+
+  expect(panel.doings).toEqual([{ label: "Re-point", does: "repoint", id: "d" }]);
+});
+
+test("the trail to an object starts at its bucket and keeps each prefix's slash", () => {
+  expect(trailTo("s3://acme-exports/shop/2025/orders.csv")).toEqual([
+    { name: "acme-exports", path: "s3://acme-exports" },
+    { name: "shop", path: "s3://acme-exports/shop/" },
+    { name: "2025", path: "s3://acme-exports/shop/2025/" },
+  ]);
+  expect(trailTo("s3://acme-exports/top.csv")).toEqual([
+    { name: "acme-exports", path: "s3://acme-exports" },
+  ]);
+  expect(trailTo("/home/jo/exports/q3.csv")).toEqual([
+    { name: "exports", path: "/home/jo/exports" },
+  ]);
+  expect(trailTo("C:\\exports\\q3.csv")).toEqual([{ name: "exports", path: "C:\\exports" }]);
+  expect(trailTo("q3.csv")).toBeUndefined();
+});
+
+test("re-pointing a missing object browses the prefix it was in, with the keys there", async () => {
+  const stand = new Stand();
+  const panel = new Sources(stand, () => STATED, [ACME]);
+
+  await panel.repoint(STATED[1]!);
+
+  expect(panel.repointing?.id).toBe("b");
+  expect(stand.asked).toEqual(["s3://acme-exports/ads/"]);
+  expect(panel.crumb.map((c) => c.name)).toEqual(["acme-exports", "ads"]);
+  expect(names(panel.entries)).toEqual(["ads-2025-10.csv", "ads-2025-11.csv", "notes.pdf"]);
+  expect(panel.place).toEqual({ section: "browser", line: 0 });
+
+  // Up goes as far as the bucket, as it would from the connection.
+  await panel.up();
+  expect(stand.asked).toEqual(["s3://acme-exports/ads/", "s3://acme-exports"]);
+});
+
+test("picking for a tab is one file, and the button points the tab at it", async () => {
+  const panel = new Sources(new Stand(), () => STATED, [ACME]);
+  await panel.repoint(STATED[1]!);
+
+  await panel.toggle(named(panel, "ads-2025-10.csv"));
+  await panel.toggle(named(panel, "ads-2025-11.csv"));
+
+  expect(names(panel.selected)).toEqual(["ads-2025-11.csv"]);
+  expect(panel.buttons).toEqual([
+    {
+      label: "Point ads.csv here",
+      one: false,
+      refs: [{ name: "ads-2025-11.csv", path: "s3://acme-exports/ads/ads-2025-11.csv" }],
+      to: "b",
+    },
+  ]);
+
+  // Picking it again lets it go, as it does when adding.
+  await panel.toggle(named(panel, "ads-2025-11.csv"));
+  expect(panel.buttons).toEqual([]);
+});
+
+test("stopping goes back to adding, and lets go of what was picked", async () => {
+  const panel = new Sources(new Stand(), () => STATED, [ACME]);
+  await panel.repoint(STATED[1]!);
+  await panel.toggle(named(panel, "ads-2025-10.csv"));
+
+  panel.stop();
+
+  expect(panel.repointing).toBeUndefined();
+  expect(panel.selected).toEqual([]);
+  // The folder stays, so adding from it is one pick away.
+  expect(names(panel.entries)).toEqual(["ads-2025-10.csv", "ads-2025-11.csv", "notes.pdf"]);
+
+  await panel.toggle(named(panel, "ads-2025-10.csv"));
+  await panel.toggle(named(panel, "ads-2025-11.csv"));
+  expect(panel.buttons.map((b) => b.label)).toEqual(["Add 2", "Add as one"]);
+});
+
+test("a tab that closes while it is picked for is not picked for any more", async () => {
+  let tabs = STATED;
+  const panel = new Sources(new Stand(), () => tabs, [ACME]);
+  await panel.repoint(STATED[1]!);
+  await panel.toggle(named(panel, "ads-2025-10.csv"));
+
+  tabs = [STATED[0]!, STATED[2]!];
+
+  expect(panel.repointing).toBeUndefined();
+  expect(panel.buttons.map((b) => b.label)).toEqual(["Add 1"]);
+});
+
+test("re-pointing a tab with no file to start from picks from where the browser is", async () => {
+  const stand = new Stand();
+  const carried: Open = { id: "d", name: "carried.csv" };
+  const panel = new Sources(stand, () => [...TABS, carried], [Q3]);
+  await panel.open(Q3);
+  await panel.toggle(named(panel, "jul.csv"));
+  await panel.toggle(named(panel, "aug.tsv"));
+
+  await panel.repoint(carried);
+
+  expect(stand.asked).toEqual(["s3://acme-exports/2025/q3"]);
+  expect(panel.selected).toEqual([]);
+  expect(panel.place.section).toBe("browser");
+  expect(panel.repointing?.id).toBe("d");
+});
+
 test("the panel reaches for no document and no window", () => {
   const src = readFileSync(
     fileURLToPath(new URL("../src/renderer/sources.ts", import.meta.url)),
