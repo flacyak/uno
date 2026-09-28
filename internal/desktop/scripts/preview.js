@@ -1,13 +1,18 @@
 // Shooting docs/preview.gif.
 //
 // The app films itself -- see src/main/preview.ts for why -- and this is the
-// half that lives outside it: start the real built app on the real fixture, then
-// turn the frames it left behind into a GIF.
+// half that lives outside it: set the scene, start the real built app on it,
+// then turn the frames it left behind into a GIF.
 //
-// Usage: node scripts/preview.js   (after node scripts/build.js)
+// There are two stories. `browse`, the README's, finds a workspace's moved
+// export again through the sources panel. `edit` fixes three cells of the
+// fixture and applies the offer to fix the rest.
+//
+// Usage: node scripts/preview.js [browse|edit]   (after node scripts/build.js)
 
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,7 +21,14 @@ import { displayMissing, electronEnv, verdict } from "./launch.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
 const root = resolve(pkg, "../..");
-const fixture = join(pkg, "../grid/tests/testdata/sales-q3.csv");
+const testdata = join(pkg, "../grid/tests/testdata");
+const fixture = join(testdata, "sales-q3.csv");
+
+const story = process.argv[2] ?? "browse";
+if (story !== "browse" && story !== "edit") {
+  console.error(`preview: no story called ${story} · browse or edit`);
+  process.exit(2);
+}
 
 // The frames are scratch; the GIF is the artefact, and it goes where the rest of
 // the shots of this app go.
@@ -37,6 +49,62 @@ await rm(frames, { recursive: true, force: true });
 await mkdir(frames, { recursive: true });
 await mkdir(takes, { recursive: true });
 
+/**
+ * stage lays out the folder the browse story is filmed in: a workspace saved
+ * over the fixture with three cells fixed, and the fixture renamed since, the
+ * way an export gets a "-final" on the end the week after. Beside it, another
+ * export and a folder of last year's.
+ *
+ * The workspace is saved by the engine itself, so the scene is a real .uno and
+ * a real missing source rather than one written by hand to look like one. It
+ * returns the .uno's path, which is what the app opens.
+ */
+async function stage() {
+  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
+  const { sources } = await import("@uno/grid/plugin");
+  const { Op } = await import("@uno/grid/sheet");
+  const { diskProvider } = await import("@uno/grid/store/node");
+
+  // Under the temp folder rather than out/, because the status bar says where a
+  // missing file was, and the GIF is published: a path into somebody's home
+  // folder does not belong in it.
+  const dir = join(tmpdir(), "uno-preview", "exports");
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(join(dir, "2024"), { recursive: true });
+  const csv = join(dir, "sales-q3.csv");
+  const uno = join(dir, "q3-close.uno");
+  await copyFile(fixture, csv);
+  await copyFile(join(testdata, "google-ads-sales.csv"), join(dir, "google-ads.csv"));
+  await copyFile(join(testdata, "google-ads-sales.csv"), join(dir, "2024", "google-ads-2024.csv"));
+
+  const { port1, port2 } = new MessageChannel();
+  serve(messagePort(port1), sources([diskProvider()]));
+  const engine = new Engine(messagePort(port2));
+  try {
+    const {
+      sources: [src],
+    } = await engine.open({ name: "sales-q3.csv", path: csv });
+    engine.mode(true);
+    // The three the edit story fixes: `units` with a thousands separator in it.
+    for (const [row, now] of [
+      [0, "1204"],
+      [2, "1455"],
+      [4, "2038"],
+    ]) {
+      await src.edit({ op: Op.Set, row, col: 4, now });
+    }
+    const cells = [{ source: src.id, row: 4, col: 4 }];
+    await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
+  } finally {
+    engine.close();
+    port1.close();
+  }
+  await rename(csv, join(dir, "sales-q3-final.csv"));
+  return uno;
+}
+
+const opened = story === "browse" ? await stage() : fixture;
+
 const electron = (await import("electron")).default;
 
 if (displayMissing(process.env, process.platform)) {
@@ -44,9 +112,9 @@ if (displayMissing(process.env, process.platform)) {
   process.exit(2);
 }
 
-const child = spawn(electron, [pkg, fixture], {
+const child = spawn(electron, [pkg, opened], {
   stdio: ["ignore", "pipe", "pipe"],
-  env: electronEnv(process.env, { UNO_PREVIEW: frames }),
+  env: electronEnv(process.env, { UNO_PREVIEW: frames, UNO_PREVIEW_STORY: story }),
 });
 
 console.log(`preview: electron pid ${child.pid}`);

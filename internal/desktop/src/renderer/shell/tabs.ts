@@ -13,9 +13,9 @@ export interface TabActions {
   remove(tab: Tab): void;
   /** The + was clicked: offer a file or an object in S3, hung off `plus`. */
   add(plus: HTMLElement): void;
-  /** Point a source at a file: one whose file has gone, or one that changed
-   * under the log. */
-  relink(tab: Tab): void;
+  /** Point a source at a file, from the sources panel: one whose file has
+   * gone, or one that changed under the log. */
+  repoint(tab: Tab): void;
   /** Open or close the sources panel. */
   panel(): void;
 }
@@ -76,17 +76,17 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: TabActions): HTML
   tab.addEventListener("click", () => act.select(t));
 
   // A source whose file is gone, or is not the file the log was written
-  // against. Clicking the mark asks where the file is now; the tab itself still
-  // selects, because its edits are worth looking at either way.
+  // against. Clicking the mark opens the panel on it to pick where the file is
+  // now; the tab itself still selects, because its edits are worth looking at either way.
   const trouble = t.trouble;
   if (trouble !== undefined) {
     const mark = document.createElement("span");
     mark.className = t.missing ? "trouble gone" : "trouble";
     mark.textContent = "!";
-    mark.title = `${trouble} · click to point it at a file`;
+    mark.title = `${trouble} · click to point it at a file in the sources panel`;
     mark.addEventListener("click", (e) => {
       e.stopPropagation();
-      act.relink(t);
+      act.repoint(t);
     });
     tab.append(mark);
   }

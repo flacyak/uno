@@ -187,6 +187,17 @@ export class Panel {
     else this.show();
   }
 
+  /**
+   * repoint opens the panel picking a file for the tab with this id, in the
+   * folder its file was in: a tab's ! mark, and its line's Re-point.
+   */
+  repoint(id: string): void {
+    const tab = this.sources.tabs.find((t) => t.id === id);
+    if (tab === undefined) return;
+    if (!this.open) this.show();
+    void this.sources.repoint(tab).then(() => this.reveal());
+  }
+
   /** draw lays the list out on the next frame, once however often it is asked. */
   draw(): void {
     if (this.frame !== 0 || this.root.hidden) return;
@@ -405,10 +416,8 @@ export class Panel {
         return this.act.reload(a.id);
       case "remove":
         return this.act.remove(a.id);
-      case "repoint": {
-        const tab = this.sources.tabs.find((t) => t.id === a.id);
-        if (tab !== undefined) void this.sources.repoint(tab).then(() => this.reveal());
-      }
+      case "repoint":
+        return this.repoint(a.id);
     }
   }
 

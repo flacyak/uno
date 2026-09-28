@@ -511,3 +511,26 @@ test("Esc while picking for a tab gives that up, and a second closes the panel",
   press(d.list, "Escape");
   expect(d.root.hidden).toBe(true);
 });
+
+test("a tab's ! mark opens a closed panel picking for that tab, where its file was", async () => {
+  const d = draw(new Bucket(objects(2)), { name: "default" }, STATED);
+  d.panel.hide();
+
+  d.panel.repoint("b");
+  await settle();
+
+  expect(d.root.hidden).toBe(false);
+  expect(d.sources.repointing?.id).toBe("b");
+  expect(d.sources.crumb.map((c) => c.name)).toEqual(["acme-exports", "ads"]);
+  expect(lines(d.root)).toContain("Point google-ads.csv at…");
+});
+
+test("a tab that has gone is not picked for", async () => {
+  const d = draw(new Bucket([]), { name: "default" }, STATED);
+  d.panel.hide();
+
+  d.panel.repoint("gone");
+
+  expect(d.root.hidden).toBe(true);
+  expect(d.sources.repointing).toBeUndefined();
+});
