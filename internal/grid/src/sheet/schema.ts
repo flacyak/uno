@@ -103,10 +103,20 @@ export class Schema {
     return e;
   }
 
-  /** replay folds a saved log in, keeping each edit's own number. */
+  /**
+   * replay folds a saved log in, keeping each edit's own number.
+   *
+   * Each edit is kept as soon as it is folded, so a log refused partway leaves
+   * the edits before the refusal both folded and kept, and what the Schema
+   * shows agrees with what it would write. One at a time rather than spread
+   * into one push, since a column pasted in a cell at a time is a log longer
+   * than a call can take as arguments.
+   */
   replay(edits: readonly Edit[]): void {
-    for (const e of edits) this.fold(e);
-    this.log.push(...edits);
+    for (const e of edits) {
+      this.fold(e);
+      this.log.push(e);
+    }
   }
 
   // ------------------------------------------------------------ reading
