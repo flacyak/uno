@@ -86,14 +86,14 @@ test("no handler in main goes uncalled from preload", () => {
 // channel of its own. A regex hunting only literal webContents.send("...")
 // calls finds engine:port (via postMessage), menu:open-path and
 // menu:add-paths (registerFileHandlers' direct sends), and menu:input (from
-// inside pick's own definition) -- but not the five sent through `send`,
+// inside pick's own definition) -- but not the six sent through `send`,
 // which would wrongly read as orphaned. So both shapes are read together.
 const MAIN_SENDS = new Set([
   ...captures(/(?:webContents\.send|sender\.postMessage)\("([^"]+)"/g, MAIN),
   ...captures(/\bsend\("([^"]+)"\)/g, MAIN),
 ]);
 
-// unoMenu.on's own parameter is named `channel`, not a literal, so its five
+// unoMenu.on's own parameter is named `channel`, not a literal, so its six
 // channels exist nowhere but the union type it is declared with -- there is
 // no ipcRenderer.on("menu:open", ...) to find literally.
 const PRELOAD_MENU_UNION = unionMembers(
@@ -105,9 +105,9 @@ const PRELOAD_LISTENS = new Set([
   ...PRELOAD_MENU_UNION,
 ]);
 
-test("the main -> renderer extraction found the nine channels this file assumes", () => {
-  expect(MAIN_SENDS.size).toBe(9);
-  expect(PRELOAD_LISTENS.size).toBe(9);
+test("the main -> renderer extraction found the ten channels this file assumes", () => {
+  expect(MAIN_SENDS.size).toBe(10);
+  expect(PRELOAD_LISTENS.size).toBe(10);
 });
 
 test("every channel main sends is listened for in preload", () => {
@@ -123,12 +123,12 @@ test("every channel preload listens for is sent by main somewhere", () => {
 // -------------------------------------------------------------- MenuChannel
 
 const RENDERER_MENU_UNION = unionMembers(
-  requireOne(/type MenuChannel = ([^;]+);/, RENDERER_MAIN, "MenuChannel"),
+  requireOne(/type MenuChannel =\s*([^;]+);/, RENDERER_MAIN, "MenuChannel"),
 );
 
-test("MenuChannel in the renderer names the same five channels as preload's union", () => {
-  expect(RENDERER_MENU_UNION.length).toBe(5);
-  expect(PRELOAD_MENU_UNION.length).toBe(5);
+test("MenuChannel in the renderer names the same six channels as preload's union", () => {
+  expect(RENDERER_MENU_UNION.length).toBe(6);
+  expect(PRELOAD_MENU_UNION.length).toBe(6);
   expect([...RENDERER_MENU_UNION].sort()).toEqual([...PRELOAD_MENU_UNION].sort());
 });
 

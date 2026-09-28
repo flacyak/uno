@@ -8,7 +8,13 @@ import { electronHost } from "./host.ts";
 import type { InputName } from "./input/index.ts";
 import { Shell } from "./shell/shell.ts";
 
-type MenuChannel = "menu:open" | "menu:add" | "menu:save" | "menu:save-as" | "menu:mode";
+type MenuChannel =
+  | "menu:open"
+  | "menu:add"
+  | "menu:save"
+  | "menu:save-as"
+  | "menu:mode"
+  | "menu:sources";
 
 interface MenuBridge {
   on(channel: MenuChannel, fn: () => void): void;
@@ -31,6 +37,7 @@ if (bridge === undefined) {
   menu?.on("menu:save", () => void shell.save());
   menu?.on("menu:save-as", () => void shell.saveAs());
   menu?.on("menu:mode", () => shell.toggleMode());
+  menu?.on("menu:sources", () => shell.showPanel());
   menu?.onOpenPath((path) => void shell.openPath(path));
   menu?.onAddPaths((paths) => void shell.addPaths(paths));
   menu?.onInput((name) => shell.setInput(name));

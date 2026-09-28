@@ -1,6 +1,6 @@
 // The tab strip: a tab for each source in the workspace, the dot that says one
-// has unsaved work, a way to add another, and the switch between view and
-// transform.
+// has unsaved work, a way to add another, the switch between view and
+// transform, and the one that opens the sources panel.
 
 import "./tabs.css";
 
@@ -16,10 +16,20 @@ export interface TabActions {
   /** Point a source at a file: one whose file has gone, or one that changed
    * under the log. */
   relink(tab: Tab): void;
+  /** Open or close the sources panel. */
+  panel(): void;
 }
 
-/** tabStrip is what the strip holds for a workspace. `hint` is the switch's tooltip. */
-export function tabStrip(w: Workspace, hint: string, act: TabActions): HTMLElement[] {
+/**
+ * tabStrip is what the strip holds for a workspace. `hint` is the switch's
+ * tooltip, and `panel` whether the sources panel is open.
+ */
+export function tabStrip(
+  w: Workspace,
+  hint: string,
+  panel: boolean,
+  act: TabActions,
+): HTMLElement[] {
   // The last source stays, so it has no × to offer.
   const removable = w.sources.length > 1;
   const tabs = w.sources.map((t) => tabFor(w, t, removable, act));
@@ -47,7 +57,15 @@ export function tabStrip(w: Workspace, hint: string, act: TabActions): HTMLEleme
     seg.append(option);
   }
 
-  return [...tabs, add, grow, seg];
+  const sources = document.createElement("span");
+  sources.className = panel ? "panel-toggle on" : "panel-toggle";
+  sources.title = panel
+    ? "Close the sources panel"
+    : "Sources: what is open, and where files come from";
+  sources.setAttribute("role", "button");
+  sources.addEventListener("click", () => act.panel());
+
+  return [...tabs, add, grow, seg, sources];
 }
 
 function tabFor(w: Workspace, t: Tab, removable: boolean, act: TabActions): HTMLElement {
