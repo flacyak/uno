@@ -17,7 +17,7 @@ one codebase.
 | `engine`   | open a file without loading it: index, pages, passes     |
 | `pattern`  | the recogniser: watch edits, propose the rest            |
 | `document` | the `.uno` codec, `Uint8Array` in and out                |
-| `library`  | the `.unof` codec, string in and out                     |
+| `library`  | the `.unof` codecs, formulas and connections, as strings |
 | `store`    | the `FileStore` and `ByteSource` seams                   |
 
 Everything above `store` is pure. This let's it share the same code across
