@@ -14,8 +14,8 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
-import { SECTIONS } from "../sources.ts";
-import type { Place, Section, Sources } from "../sources.ts";
+import { SECTIONS, stateOf } from "../sources.ts";
+import type { Button, Place, Section, Sources, TabAction } from "../sources.ts";
 
 /**
  * One line's height, in one place. The stylesheet is handed it as
@@ -36,6 +36,12 @@ export interface PanelActions {
   select(id: string): void;
   /** Add files to the workspace: a tab each, or `one` source between them. */
   add(refs: readonly SourceRef[], one: boolean): void;
+  /** Read the tab with this id from its file again. */
+  reload(id: string): void;
+  /** Point the tab with this id at another file. */
+  repoint(id: string, ref: SourceRef): void;
+  /** Take the tab with this id out of the workspace. */
+  remove(id: string): void;
   /** The panel closed, so the keys go back to the grid. */
   closed(): void;
 }
@@ -200,7 +206,7 @@ export class Panel {
     const pasted = this.sources.pasted;
     if (pasted !== undefined) {
       this.input.value = "";
-      this.act.add([pasted], false);
+      this.give(pasted);
     }
     this.list.scrollTop = 0;
     this.layout();
@@ -246,6 +252,17 @@ export class Panel {
       case " ":
         this.pick();
         break;
+      // What can be done to a tab, from its line. Anywhere else there is no
+      // tab, and the key goes on as one the panel does not read.
+      case "r":
+      case "p":
+      case "Delete": {
+        const does = e.key === "r" ? "reload" : e.key === "p" ? "repoint" : "remove";
+        const action = this.sources.doings.find((a) => a.does === does);
+        if (action === undefined) return;
+        this.doing(action);
+        break;
+      }
       case "Backspace":
         void this.sources.up();
         break;
@@ -254,7 +271,9 @@ export class Panel {
         this.input.select();
         break;
       case "Escape":
-        this.hide();
+        // Picking a file for a tab is given up before the panel is closed.
+        if (this.sources.repointing !== undefined) this.sources.stop();
+        else this.hide();
         break;
       default:
         return;
@@ -312,9 +331,7 @@ export class Panel {
         if (entry === undefined) return;
         if (entry.folder) void this.sources.enter(entry);
         else if (this.sources.selected.length > 0) this.press(this.sources.buttons[0]!);
-        else if (this.sources.selectable(entry)) {
-          this.act.add([{ name: entry.name, path: entry.path }], false);
-        }
+        else if (this.sources.selectable(entry)) this.give({ name: entry.name, path: entry.path });
       }
     }
   }
@@ -363,9 +380,36 @@ export class Panel {
     this.paintFoot();
   }
 
-  /** press hands a button's files to the shell. */
-  private press(b: { refs: readonly SourceRef[]; one: boolean }): void {
-    this.act.add(b.refs, b.one);
+  /** press hands a button's files to the shell: to add, or to point a tab at. */
+  private press(b: Button): void {
+    if (b.to === undefined) return this.act.add(b.refs, b.one);
+    this.sources.stop();
+    this.act.repoint(b.to, b.refs[0]!);
+  }
+
+  /**
+   * give is one file chosen without the buttons, by Enter or by its address:
+   * the tab being picked for is pointed at it, and otherwise it is added.
+   */
+  private give(ref: SourceRef): void {
+    const to = this.sources.repointing;
+    if (to === undefined) return this.act.add([ref], false);
+    this.sources.stop();
+    this.act.repoint(to.id, ref);
+  }
+
+  /** doing is one of a tab's buttons, or its key. Re-pointing starts in the browser. */
+  private doing(a: TabAction): void {
+    switch (a.does) {
+      case "reload":
+        return this.act.reload(a.id);
+      case "remove":
+        return this.act.remove(a.id);
+      case "repoint": {
+        const tab = this.sources.tabs.find((t) => t.id === a.id);
+        if (tab !== undefined) void this.sources.repoint(tab).then(() => this.reveal());
+      }
+    }
   }
 
   /** paintPeek draws the header and first rows of the one picked file. */
@@ -395,16 +439,28 @@ export class Panel {
     this.peek.replaceChildren(text("div", "note", now.label), wrap);
   }
 
-  /** paintFoot draws the buttons for what is picked, and nothing while nothing is. */
+  /**
+   * paintFoot draws what can be done to the tab the keys are on, then the
+   * buttons for what is picked, and nothing while there is neither.
+   */
   private paintFoot(): void {
+    const doings = this.sources.doings;
     const buttons = this.sources.buttons;
-    const key = buttons
-      .map((b) => b.label + b.refs.map((r) => ("path" in r ? r.path : r.name)).join())
-      .join("|");
+    const key = [
+      ...doings.map((a) => a.does + a.id),
+      ...buttons.map(
+        (b) => b.label + (b.to ?? "") + b.refs.map((r) => ("path" in r ? r.path : r.name)).join(),
+      ),
+    ].join("|");
     if (key === this.drawnFoot) return;
     this.drawnFoot = key;
-    this.foot.hidden = buttons.length === 0;
+    this.foot.hidden = doings.length === 0 && buttons.length === 0;
     this.foot.replaceChildren(
+      ...doings.map((a) => {
+        const el = text("button", "", a.label);
+        el.addEventListener("click", () => this.doing(a));
+        return el;
+      }),
       ...buttons.map((b) => {
         const el = text("button", b.one ? "" : "primary", b.label);
         el.addEventListener("click", () => this.press(b));
@@ -418,11 +474,13 @@ export class Panel {
     el.dataset["row"] = String(index);
     let name = "";
     let meta = "";
+    let title = "";
     let cls = "panel-row";
 
     if (row.t === "head") {
       cls += " head";
-      name = TITLES[row.section];
+      const pointing = row.section === "browser" ? this.sources.repointing : undefined;
+      name = pointing === undefined ? TITLES[row.section] : `Point ${pointing.name} at…`;
       if (row.section === "browser") meta = this.sources.crumb.map((c) => c.name).join(" / ");
     } else if (row.t === "note") {
       cls += " note";
@@ -434,10 +492,20 @@ export class Panel {
         if (this.sources.chosen(entry)) cls += " picked";
         else if (!this.sources.selectable(entry)) cls += " off";
       }
+      const tab = row.section === "workspace" ? this.sources.tabs[row.line] : undefined;
+      if (tab !== undefined) {
+        const state = stateOf(tab);
+        if (state !== "fine") cls += ` ${state}`;
+        // Where it lives, and what is wrong with it, for whoever hovers.
+        title = [tab.link?.path, tab.link?.missing ?? tab.link?.changed]
+          .filter((t) => t !== undefined)
+          .join(" · ");
+      }
       [name, meta] = this.line(row.section, row.line);
     }
 
     if (el.className !== cls) el.className = cls;
+    if (el.title !== title) el.title = title;
     set(el.children[0]!, name);
     set(el.children[1]!, meta);
   }
@@ -445,8 +513,13 @@ export class Panel {
   /** line is what one line of a section says: its name, and what is beside it. */
   private line(section: Section, line: number): [string, string] {
     switch (section) {
-      case "workspace":
-        return [this.sources.tabs[line]?.name ?? "", ""];
+      case "workspace": {
+        const t = this.sources.tabs[line];
+        if (t === undefined) return ["", ""];
+        const state = stateOf(t);
+        if (state !== "fine") return [t.name, state];
+        return [t.name, t.bytes === undefined ? "" : formatBytes(t.bytes)];
+      }
       case "connections": {
         const c = this.sources.connections[line];
         if (c === undefined) return ["", ""];

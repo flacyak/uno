@@ -69,6 +69,11 @@ export class Tab {
     return this.source.opened.name;
   }
 
+  /** How big the file behind this source was when it opened. */
+  get bytes(): number {
+    return this.source.opened.size;
+  }
+
   /** The file behind this source, for a tab that points at one. */
   get link(): Link | undefined {
     return this.source.opened.link;
