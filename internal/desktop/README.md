@@ -74,7 +74,12 @@ an expired or missing sign-in says to run `aws sso login --profile <name>`. A
 profile with a `credential_process` runs that program, split into words the way
 a shell would but run without one, and reads the version 1 JSON it prints; the
 keys are reused until shortly before they expire, and the program is run again
-only then.
+only then. A profile with `role_arn` takes on that role through STS with the
+credentials of its `source_profile`, which can be keys, a program, an SSO sign-in
+or another role, or with the environment's keys when `credential_source` is
+`Environment`. The profile's `external_id` and `role_session_name` are sent as
+they are. `mfa_serial` is refused by name, since the engine has nobody to ask for
+a code.
 `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` points it at MinIO or another
 S3-compatible store.
 

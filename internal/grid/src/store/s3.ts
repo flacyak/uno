@@ -668,8 +668,10 @@ function encodePath(key: string): string {
 }
 
 /** RFC 3986 unreserved characters stay; everything else is %XX, which is
- * stricter than encodeURIComponent about !'()*. */
-function encode(s: string): string {
+ * stricter than encodeURIComponent about !'()*. It is what SigV4 signs a query
+ * as, so any query a signed request carries is written with it: here, and the
+ * AssumeRole query in store/sts.ts. */
+export function encode(s: string): string {
   return encodeURIComponent(s).replace(
     /[!'()*]/g,
     (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
