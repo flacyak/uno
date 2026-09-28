@@ -51,10 +51,12 @@ export function connect(
   const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
   return {
     engine,
-    done: () => {
-      engine.close();
-      port1.close();
-    },
+    // Only the client's end is closed. It posts the close request first, and
+    // closing one end of a channel closes the other once what was already
+    // posted has been delivered. Closing the engine's end here as well would
+    // drop that request unread, and the workspace would never close the files
+    // it holds.
+    done: () => engine.close(),
   };
 }
 
