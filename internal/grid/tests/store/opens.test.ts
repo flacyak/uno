@@ -40,8 +40,9 @@ const ALLOWED: Array<[RegExp, string[]]> = [
   // The local handler's descriptor and the store's atomic write, and beside
   // them the disk lister's readdir and stat.
   [/\bfrom "node:fs(\/promises)?"/, ["store/node.ts", "store/disklister.ts"]],
-  // The S3 handler's requests, and the S3 lister's ListObjectsV2.
-  [/\bfetch\b/, ["store/s3.ts"]],
+  // The S3 handler's requests, and the S3 lister's ListObjectsV2. Beside
+  // them, the exchanges that turn a sign-in into keys: the SSO portal.
+  [/\bfetch\b/, ["store/s3.ts", "store/sts.ts"]],
   // The blob handler.
   [/\.slice\([^)]*\)\.arrayBuffer\(/, ["store/index.ts"]],
 ];
