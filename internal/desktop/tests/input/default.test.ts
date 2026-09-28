@@ -56,6 +56,8 @@ test("Esc, the shell's chords and keys that type nothing are not the grid's", ()
     key("Escape"),
     key("e", { ctrl: true }),
     key("z", { ctrl: true }),
+    key("B", { ctrl: true, shift: true }),
+    key("C", { ctrl: true, shift: true }),
     key("Shift"),
     key("a", { alt: true }),
   ]) {

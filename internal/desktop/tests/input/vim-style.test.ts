@@ -202,6 +202,13 @@ test("chords and keys that type nothing are not the grid's, and keep what is pen
   expect(
     vimStyle.interpret("transform", waiting, { ...base, key: "a", alt: true }),
   ).toBeUndefined();
+  // Ctrl+Shift+B is the panel's. Read as Ctrl+b it would page up under it.
+  expect(
+    vimStyle.interpret("transform", waiting, { ...base, key: "B", ctrl: true, shift: true }),
+  ).toBeUndefined();
+  expect(
+    vimStyle.interpret("transform", waiting, { ...base, key: "b", ctrl: true })?.action,
+  ).toEqual({ t: "move", motion: "page-up", count: 5 });
 });
 
 test("Enter and Esc both keep the typing, except while an input method is composing", () => {
