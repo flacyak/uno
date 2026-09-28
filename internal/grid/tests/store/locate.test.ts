@@ -1,0 +1,123 @@
+// Where a connection's bucket is, asked once when it is made and kept in it.
+//
+// The stand-in lives in eu-west-1, and the credentials say us-east-1, which is
+// the ordinary case: a person's default region and the region a bucket was
+// made in are two decisions made by two people. What is under test is that the
+// connection finds out without being told, says so in its file, and that every
+// request through it afterwards goes straight to the bucket.
+
+import { afterAll, beforeAll, beforeEach, expect, test } from "vite-plus/test";
+
+import type { Connection } from "../../src/library/index.ts";
+import { formatConnection } from "../../src/library/index.ts";
+import { connectionSigning, diskProvider } from "../../src/store/node.ts";
+import { locate, s3Provider } from "../../src/store/s3.ts";
+import type { S3Options } from "../../src/store/s3.ts";
+import { connect, indexed, openOne } from "../engine/harness.ts";
+import { HOME_REGION, REGION_FORMATS, rendered } from "./regions.ts";
+import { BUCKET, KEYS, bucket } from "./standin.ts";
+import type { Bucket } from "./standin.ts";
+
+let b: Bucket;
+let from = 0;
+beforeAll(async () => {
+  b = await bucket();
+});
+afterAll(() => b.close());
+beforeEach(() => {
+  from = b.seen.length;
+});
+
+/** What this test sent, as method, path and the region it was signed for. */
+function sent(): string[] {
+  return b.seen.slice(from).map((r) => `${r.method} ${r.path} ${r.region}`);
+}
+
+/** The machine's keys, which say us-east-1, as the draft connection signs in. */
+const MACHINE = { ...KEYS, region: "us-east-1" };
+
+function draft(region?: string): Connection {
+  const c: Connection = {
+    format: 1,
+    id: "acme-exports",
+    name: "ACME exports",
+    provider: "s3",
+    bucket: BUCKET,
+    prefix: "2025/",
+    auth: { mode: "machine" },
+    created: undefined,
+    modified: undefined,
+  };
+  if (region !== undefined) c.region = region;
+  return c;
+}
+
+function options(endpoint = b.endpoint): S3Options {
+  return { credentials: () => Promise.resolve(MACHINE), endpoint };
+}
+
+// The task's own sentence.
+test("a bucket in another region is connected without typing its region", async () => {
+  const c = await locate(draft(), options());
+  expect(c.region).toBe(HOME_REGION);
+  expect(JSON.parse(formatConnection(c))["region"]).toBe(HOME_REGION);
+});
+
+// Once, and nothing but the bucket: no listing, no object, and one redirect
+// from where the credentials pointed to where the bucket is.
+test("it costs a HeadBucket, followed once", async () => {
+  await locate(draft(), options());
+  expect(sent()).toEqual([`HEAD /${BUCKET}/ us-east-1`, `HEAD /${BUCKET}/ ${HOME_REGION}`]);
+});
+
+// The point of keeping it: a connection that knows its region sends every
+// request there, and one that does not pays a redirect on its first.
+test("a connection holding its region sends its first request straight there", async () => {
+  const env = {
+    AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
+    AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
+    AWS_REGION: "us-east-1",
+    AWS_PROFILE: undefined,
+    AWS_CONFIG_FILE: "/nonexistent/config",
+    AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/credentials",
+  };
+  const ref = { name: "sales-q3.csv", path: `s3://${BUCKET}/2025/sales-q3.csv` };
+
+  for (const [c, redirects] of [
+    [await locate(draft(), options()), 0],
+    [draft(), 1],
+  ] as const) {
+    from = b.seen.length;
+    const s3 = s3Provider({ credentials: connectionSigning(() => [c], env), endpoint: b.endpoint });
+    const { engine, done } = connect(undefined, [diskProvider(), s3]);
+    try {
+      await indexed(await openOne(engine, ref));
+      const away = b.seen.slice(from).filter((r) => r.region !== HOME_REGION);
+      expect(away, c.region ?? "no region").toHaveLength(redirects);
+    } finally {
+      done();
+    }
+  }
+});
+
+// A bucket that names its region only in a refusal's body is asked again in
+// a way that carries one, which is regions.ts's whole reason to exist.
+test("a bucket that says where it is only in a body is followed there too", async () => {
+  const format = REGION_FORMATS.find(
+    (f) => f.follow && f.reply.headers?.["x-amz-bucket-region"] === undefined,
+  );
+  expect(format, "regions.ts has a body-only format to follow").toBeDefined();
+  const other = await bucket(format!.reply);
+  try {
+    expect((await locate(draft(), options(other.endpoint))).region).toBe(HOME_REGION);
+    expect(rendered(format!.reply, HOME_REGION).body).toContain(HOME_REGION);
+  } finally {
+    await other.close();
+  }
+});
+
+test("a bucket that is not there is said, and nothing is stored", async () => {
+  await expect(locate({ ...draft(), bucket: "acme-nowhere" }, options())).rejects.toThrow(
+    "s3://acme-nowhere: no such bucket",
+  );
+});
