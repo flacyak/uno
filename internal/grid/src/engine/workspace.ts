@@ -13,7 +13,15 @@
 // path are all still here, and `relink` turns it back into a View. Losing a path
 // must not cost the work done through it.
 
-import { logOf, newManifest, readContainer, sourceId, writeDocument } from "../document/index.ts";
+import {
+  isAbsolute,
+  logOf,
+  newManifest,
+  readContainer,
+  samePath,
+  sourceId,
+  writeDocument,
+} from "../document/index.ts";
 import type { Document, Held, HeldFile, HeldParts, Logged, State } from "../document/index.ts";
 import type { Edit } from "../sheet/index.ts";
 import { bytesSource, multiOf, openWith, partMap } from "../store/index.ts";
@@ -614,6 +622,7 @@ export class Workspace {
           ? { ...held, parts: part.parts, header: part.header, fileColumn: part.fileColumn }
           : { ...held, raw: part.raw, path: part.path, bytes: part.bytes, version: part.version };
       });
+      this.refuseWhere(held, place.at);
 
       const doc: Document = {
         manifest: { ...newManifest(), created: this.created },
@@ -653,6 +662,36 @@ export class Workspace {
       bytes: total,
       limit,
     });
+  }
+
+  /**
+   * refuseWhere stops a save that would write the .uno over a file the
+   * workspace reads, or point at a file by a path that is true from nowhere.
+   *
+   * The first would destroy the source, and the dialog makes it easy: it opens
+   * on the folder the data is in, where sales.csv is a name already there. The
+   * second is a file opened by a path relative to the process that opened it,
+   * `uno data/sales.csv` from a terminal. Written down as it is, the path would
+   * be read back from the .uno's own folder, and the file is not there: the
+   * manifest only ever holds a path that is absolute or under that folder.
+   */
+  private refuseWhere(held: readonly Held[], at: string): void {
+    for (const src of held) {
+      for (const path of pathsOf(src)) {
+        if (!isAbsolute(path)) {
+          throw new Refusal({
+            t: "text",
+            text: `${src.name} was opened by ${path}, which is relative to nowhere a workspace can point from · open it by its full path`,
+          });
+        }
+        if (at !== "" && samePath(path, at)) {
+          throw new Refusal({
+            t: "text",
+            text: `${at} is where ${src.name} is read from · saving the workspace there would write over it`,
+          });
+        }
+      }
+    }
   }
 
   // ------------------------------------------------------------ lifetime
