@@ -336,7 +336,13 @@ export type Reply =
 /** One end of a connection, whatever the runtime calls it. */
 export interface Port<In, Out> {
   post(msg: Out): void;
-  listen(fn: (msg: In) => void): void;
+  /**
+   * listen hands every message to `fn`, and tells `gone` once when the far end
+   * has gone first -- the process behind it exited, or the socket closed --
+   * so what was waiting on an answer is not left waiting for one that cannot
+   * come. A port that closes itself tells nobody: it knew.
+   */
+  listen(fn: (msg: In) => void, gone?: () => void): void;
   close(): void;
 }
 
@@ -344,6 +350,8 @@ export interface Port<In, Out> {
 export interface MessagePortLike {
   postMessage(msg: unknown): void;
   addEventListener(type: "message", fn: (e: { data: unknown }) => void): void;
+  /** Fired once either end has closed, which is when the other end went. */
+  addEventListener(type: "close", fn: () => void): void;
   start(): void;
   close(): void;
 }
@@ -351,8 +359,9 @@ export interface MessagePortLike {
 export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
   return {
     post: (msg) => p.postMessage(msg),
-    listen: (fn) => {
+    listen: (fn, gone) => {
       p.addEventListener("message", (e) => fn(e.data as In));
+      if (gone !== undefined) p.addEventListener("close", gone);
       p.start();
     },
     close: () => p.close(),
