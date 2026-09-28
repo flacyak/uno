@@ -247,6 +247,8 @@ export type Request =
    * is one the engine uses without being started again.
    */
   | { t: "connections"; id: number }
+  /** The names of the AWS profiles the engine's machine has, for a person picking one. */
+  | { t: "profiles"; id: number }
   /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
   | { t: "mode"; transform: boolean }
   /** The workspace as a .uno, refusing carried sources larger than limit together. */
@@ -275,6 +277,8 @@ export type Reply =
   | { t: "peeked"; id: number; peeked: Peeked }
   /** What a connections request read, and what it could not, one sentence a file. */
   | { t: "loaded"; id: number; loaded: Loaded }
+  /** Profile names, and nothing else out of the files they are in. */
+  | { t: "names"; id: number; names: string[] }
   /** Null when the source has nothing to ask. */
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }

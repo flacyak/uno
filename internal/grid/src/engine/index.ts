@@ -35,4 +35,5 @@ export type {
 export { Pages, RowIndex, TUNING } from "./rows.ts";
 export type { Tuning } from "./rows.ts";
 export { serve } from "./serve.ts";
+export type { Connecting } from "./serve.ts";
 export { WHOLE_LIMIT } from "./workspace.ts";

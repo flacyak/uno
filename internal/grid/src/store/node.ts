@@ -552,6 +552,29 @@ export function profileCredentials(
 }
 
 /**
+ * awsProfiles names the profiles this machine has, for a person choosing which
+ * one a connection signs in as, and answers nothing else out of the files.
+ *
+ * A profile is a `[profile <name>]` or `[default]` section of ~/.aws/config, or
+ * any section of ~/.aws/credentials. The other sections of config --
+ * sso-session, services -- are not profiles and are not named. `default`
+ * comes first, since it is the one a person means when they did not say, and
+ * the rest in name order.
+ */
+export async function awsProfiles(env: Env = process.env): Promise<string[]> {
+  const files = await awsFiles(env);
+  const names = new Set<string>();
+  for (const section of files.config.keys()) {
+    if (section === "default") names.add(section);
+    else if (section.startsWith("profile ")) names.add(section.slice("profile ".length).trim());
+  }
+  for (const section of files.credentials.keys()) names.add(section);
+  return [...names].toSorted((a, b) =>
+    a === "default" ? -1 : b === "default" ? 1 : a < b ? -1 : a > b ? 1 : 0,
+  );
+}
+
+/**
  * ConnectionAuth signs in the way a connection says to, keeping one set of
  * credentials per way so two connections on one profile read it once.
  */
