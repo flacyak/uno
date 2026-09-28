@@ -235,6 +235,26 @@ test("a header that is all a part holds is left out, and the part gives no rows"
   expect(await joined("first", "a,b", "a,b\n1,2\n")).toBe("a,b\n1,2\n");
 });
 
+// An export with no rows for the day is a file of nothing, a newline or two,
+// or the mark an editor writes before anything: the same nothing each time.
+test("a later part with no record in it gives no rows, whatever its bytes are", async () => {
+  expect(await joined("first", "a,b\n1,2\n", "\n\n", "a,b\n3,4\n")).toBe("a,b\n1,2\n\n\n3,4\n");
+  expect(await joined("first", "a,b\n1,2\n", "\r", "a,b\n3,4\n")).toBe("a,b\n1,2\n\r\n3,4\n");
+  const { files, parts } = texts("a,b\n1,2\n", "", "a,b\n3,4\n");
+  files.set("b.csv", Uint8Array.of(...BOM, ...encoder.encode("\n")));
+  const source = await openMulti([memory(files).handler], parts, "first");
+  expect(source.extents[1]).toEqual({
+    bytes: BOM.length + 1,
+    skip: BOM.length,
+    unterminated: false,
+  });
+  expect(decoder.decode(await source.read(0, source.size))).toBe("a,b\n1,2\n\n3,4\n");
+  // The first part is the header every other is held to, so it has to have one.
+  await expect(joined("first", "\n\n", "a,b\n3,4\n")).rejects.toThrow(
+    "a.csv (part 1 of 2): a.csv: file is empty",
+  );
+});
+
 test("a repeated header is the same header however it is written", async () => {
   expect(await joined("first", "a,b\r\n1,2\r\n", '"a","b"\n3,4\n')).toBe("a,b\r\n1,2\r\n3,4\n");
   // A byte order mark in front of a later part's header goes with the header.
