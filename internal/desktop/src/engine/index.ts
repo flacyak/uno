@@ -17,7 +17,7 @@ import { TUNING, serve } from "@uno/grid/engine";
 import type { Reply, Request } from "@uno/grid/engine";
 import { sources } from "@uno/grid/plugin";
 import { connectionsIn } from "@uno/grid/store";
-import { connectionSigning, diskProvider, nodeStore } from "@uno/grid/store/node";
+import { awsProfiles, connectionSigning, diskProvider, nodeStore } from "@uno/grid/store/node";
 import { s3Provider } from "@uno/grid/store/s3";
 
 /**
@@ -66,6 +66,13 @@ process.parentPort.once("message", (e) => {
       }),
     ]),
     TUNING,
-    kept,
+    kept === undefined
+      ? undefined
+      : {
+          connections: kept,
+          // Names only: the files are read here, and what else is in them
+          // never leaves this process.
+          profiles: () => awsProfiles(),
+        },
   );
 });
