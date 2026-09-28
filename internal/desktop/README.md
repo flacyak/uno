@@ -90,6 +90,15 @@ A connection is a bucket, a folder in it, and how to sign in, kept as one
 can be sent to a colleague the way a formula is. The panel's Connections section
 lists every connection the engine loaded, and choosing one browses its folder.
 
+`+ Connect a bucket`, the last line of the section, opens the connect screen in
+the list's place: a bucket, a prefix, and a profile from the list the engine
+reads out of `~/.aws` (names only), or this machine's own setup, or public. Test
+finds the bucket's region with one HeadBucket and lists the prefix, and Save
+tests first when what is on screen has not been tested. A test that fails says
+why in the engine's own words -- a 403, no such bucket, an expired SSO sign-in --
+and saves nothing, so every connection in the folder is one that worked. The
+saved connection keeps the region the test found, and the panel browses it.
+
 Main writes a connection atomically, after reading the text back as a
 connection, so the page cannot put a key or a mismatched id in the folder. The
 engine reads the folder when it starts and again whenever the renderer says it

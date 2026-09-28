@@ -21,11 +21,12 @@
 import { readContainer } from "@uno/grid/document";
 import { parseConnection } from "@uno/grid/library";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BUCKET, bucket, standinEnv } from "../../grid/tests/store/standin.ts";
+import { HOME_REGION } from "../../grid/tests/store/regions.ts";
+import { BUCKET, KEYS, bucket, standinEnv } from "../../grid/tests/store/standin.ts";
 import { displayMissing, electronEnv, verdict } from "./launch.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,6 +58,19 @@ for (const name of await readdir(scratch)) {
 // the run out of the connections of whoever is at the desktop.
 const data = join(scratch, "data");
 await rm(data, { recursive: true, force: true });
+
+// The AWS files the engine reads, for this run only: one profile, finance,
+// holding the stand-in's keys. The connect screen lists the profiles it finds
+// and the screenshot is published, so a run must never show the names in the
+// ~/.aws of whoever started it -- and the profile is what the checks sign in as.
+const aws = join(scratch, "aws");
+await rm(aws, { recursive: true, force: true });
+await mkdir(aws, { recursive: true });
+await writeFile(join(aws, "config"), `[profile finance]\nregion = ${HOME_REGION}\n`);
+await writeFile(
+  join(aws, "credentials"),
+  `[finance]\naws_access_key_id = ${KEYS.accessKeyId}\naws_secret_access_key = ${KEYS.secretAccessKey}\n`,
+);
 
 const electron = (await import("electron")).default;
 
@@ -98,6 +112,8 @@ const child = spawn(electron, [pkg, `--user-data-dir=${data}`, fixture], {
     // inherits the app's environment, so this is the whole of pointing uno at
     // the stand-in.
     ...standinEnv(standin),
+    AWS_CONFIG_FILE: join(aws, "config"),
+    AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
   }),
 });
 
@@ -165,6 +181,15 @@ const kept = join(data, "connections", "acme-exports.unof");
 try {
   const c = parseConnection("acme-exports.unof", await readFile(kept, "utf8"));
   if (c.bucket !== BUCKET) trouble.push(`${kept} connects to ${c.bucket}, not ${BUCKET}`);
+  // Saved from the connect screen: signing in as the profile chosen, and with
+  // the region the test found rather than one anybody typed.
+  if (c.auth.mode !== "profile" || c.auth.profile !== "finance") {
+    trouble.push(`${kept} signs in as ${JSON.stringify(c.auth)}, not the finance profile`);
+  }
+  if (c.region !== HOME_REGION)
+    trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
+  const refused = await readdir(join(data, "connections"));
+  if (refused.length !== 1) trouble.push(`the connections folder holds ${JSON.stringify(refused)}`);
 } catch (err) {
   trouble.push(`the saved connection did not read back: ${err.message}`);
 }

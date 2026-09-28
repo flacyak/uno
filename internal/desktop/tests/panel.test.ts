@@ -11,6 +11,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { Entry, Listing } from "@uno/grid/store";
 
 import type { InputName } from "../src/renderer/input/index.ts";
+import type { ConnectAsks } from "../src/renderer/shell/connect.ts";
 import { Panel, rowAt, rowCount, rowOf, spans } from "../src/renderer/shell/panel.ts";
 import type { Connection, Listings, Open } from "../src/renderer/sources.ts";
 import { Sources } from "../src/renderer/sources.ts";
@@ -89,6 +90,14 @@ interface Drawn {
   closed: () => number;
 }
 
+/** A connect form's asks for a panel that never connects anything. connect.test.ts drives the form. */
+const NOT_CONNECTING: ConnectAsks = {
+  profiles: () => Promise.resolve([]),
+  tryConnection: () => Promise.reject(new Error("not tried in this test")),
+  save: () => Promise.reject(new Error("not saved in this test")),
+  known: () => [],
+};
+
 function draw(
   bucket = new Bucket([]),
   input: { name: InputName } = { name: "default" },
@@ -107,14 +116,20 @@ function draw(
   const added: { names: string[]; one: boolean }[] = [];
   const done: string[] = [];
   let closed = 0;
-  panel = new Panel(root, sources, () => input.name, {
-    select: (id) => chosen.push(id),
-    add: (refs, one) => added.push({ names: refs.map((r) => r.name), one }),
-    reload: (id) => done.push(`reload ${id}`),
-    repoint: (id, ref) => done.push(`repoint ${id} ${"path" in ref ? ref.path : ref.name}`),
-    remove: (id) => done.push(`remove ${id}`),
-    closed: () => closed++,
-  });
+  panel = new Panel(
+    root,
+    sources,
+    () => input.name,
+    {
+      select: (id) => chosen.push(id),
+      add: (refs, one) => added.push({ names: refs.map((r) => r.name), one }),
+      reload: (id) => done.push(`reload ${id}`),
+      repoint: (id, ref) => done.push(`repoint ${id} ${"path" in ref ? ref.path : ref.name}`),
+      remove: (id) => done.push(`remove ${id}`),
+      closed: () => closed++,
+    },
+    NOT_CONNECTING,
+  );
   const list = root.querySelector<HTMLElement>(".panel-list")!;
   Object.defineProperty(list, "clientHeight", { value: VIEWPORT });
   panel.show();
@@ -205,6 +220,7 @@ test("the three sections are drawn from what the panel holds, sizes and all", as
     "Connections",
     "acme-exports",
     "~/exports",
+    "+ Connect a bucket",
     "Browser",
     "orders-000000.csv",
     "orders-000001.csv",
