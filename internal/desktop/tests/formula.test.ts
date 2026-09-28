@@ -5,6 +5,7 @@
 
 import { expect, test } from "vite-plus/test";
 
+import { m } from "../src/paraglide/messages.js";
 import { FormulaForm } from "../src/renderer/shell/formula.ts";
 
 function form(): { asked: string[]; box: HTMLFormElement } {
@@ -38,6 +39,16 @@ test("Esc closes it and inserts nothing", () => {
   box.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(asked).toEqual(["closed"]);
   expect(document.querySelector(".formula")).toBeNull();
+});
+
+test("a blank header is offered by its place, as the grid names it", () => {
+  document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
+  new FormulaForm({ left: 0, top: 0 }, "q3.csv", [{ header: "" }, { header: "qty" }], 0, {
+    insert: () => Promise.resolve(),
+    closed: () => undefined,
+  });
+  const options = [...document.querySelectorAll<HTMLOptionElement>(".formula option")];
+  expect(options.map((o) => o.textContent)).toEqual([m.column_unnamed({ number: 1 }), "qty"]);
 });
 
 // The form hangs off the end of the page, so Tab would otherwise carry the
