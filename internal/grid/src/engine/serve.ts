@@ -13,7 +13,9 @@ import { TUNING } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
 import { peek } from "./peek.ts";
 import type { Sources } from "../plugin/index.ts";
+import type { Connection } from "../library/index.ts";
 import type { Connections } from "../store/index.ts";
+import type { Tried } from "../store/s3.ts";
 import { Workspace } from "./workspace.ts";
 
 /**
@@ -33,6 +35,12 @@ export interface Connecting {
    * hosted engine signs in with roles.
    */
   profiles?: () => Promise<string[]>;
+  /**
+   * Try a connection before it is saved: where its bucket is and a page of its
+   * prefix, signed the way it says to sign in. Absent where the platform
+   * connects to nothing it could try.
+   */
+  test?: (c: Connection) => Promise<Tried>;
 }
 
 /**
@@ -144,6 +152,15 @@ export function serve(
           );
         }
         port.post({ t: "names", id: msg.id, names: await connecting.profiles() });
+        return;
+      }
+      // Beside list for the same reason: it is a listing, and a save must
+      // not hold it up.
+      case "try": {
+        if (connecting?.test === undefined) {
+          throw new Error("this engine cannot try a connection · its platform connects to nothing");
+        }
+        port.post({ t: "tried", id: msg.id, tried: await connecting.test(msg.connection) });
         return;
       }
       case "mode": {

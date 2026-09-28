@@ -90,6 +90,22 @@ const PRELUDE = `
 `;
 
 /**
+ * shoot writes a picture of the window into the run's folder, as <name>.png.
+ * After two frames, so the check's last change is drawn.
+ */
+async function shoot(win: BrowserWindow, name: string): Promise<void> {
+  const dir = process.env["UNO_SMOKE"];
+  if (dir === undefined || dir === "") return;
+  await win.webContents.executeJavaScript(
+    "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))",
+  );
+  const image = await win.webContents.capturePage();
+  const path = join(dir, `${name}.png`);
+  await writeFile(path, image.toPNG());
+  console.log(`smoke: screenshot ${path}`);
+}
+
+/**
  * run drives the window, reports to stdout, and quits with a status the shell
  * can read.
  *
@@ -139,6 +155,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
 
       if (failure === "") {
         console.log(`  ok   ${check.name}`);
+        if (check.shot !== undefined) await shoot(win, check.shot);
       } else {
         console.error(`  FAIL ${check.name}: ${failure}`);
         failed++;
@@ -151,13 +168,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
 
   // A picture of the window, because a list of green ticks does not show
   // whether the thing is laid out like the design says.
-  const shotDir = process.env["UNO_SMOKE"];
-  if (shotDir !== undefined && shotDir !== "") {
-    const image = await win.webContents.capturePage();
-    const path = join(shotDir, "window.png");
-    await writeFile(path, image.toPNG());
-    console.log(`smoke: screenshot ${path}`);
-  }
+  await shoot(win, "window");
 
   if (failed === 0) console.log("smoke: all checks passed");
   else console.error(`smoke: ${failed} check(s) failed`);

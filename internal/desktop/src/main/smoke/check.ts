@@ -30,4 +30,10 @@ export interface Check {
    * index.ts's PRELUDE. Exactly one of `run` or `script` is set.
    */
   script?: string;
+  /**
+   * A picture of the window to take once the check passes, named so: for the
+   * states a list of green ticks cannot show -- a form half filled in, the
+   * line a refusal left. Written beside window.png.
+   */
+  shot?: string;
 }

@@ -14,8 +14,10 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
-import { SECTIONS, stateOf } from "../sources.ts";
+import { SECTIONS, connectionLine, stateOf } from "../sources.ts";
 import type { Button, Place, Section, Sources, TabAction } from "../sources.ts";
+import { ConnectForm } from "./connect.ts";
+import type { ConnectAsks, Filled } from "./connect.ts";
 
 /**
  * One line's height, in one place. The stylesheet is handed it as
@@ -112,6 +114,10 @@ export class Panel {
   private pool: HTMLElement[] = [];
   private laid: Span[] = [];
   private frame = 0;
+  /** The filter box's form, hidden with the list while a bucket is being connected. */
+  private readonly filter = document.createElement("form");
+  /** Connecting a bucket, which takes the list's place while it is open. */
+  private readonly connecting: ConnectForm;
 
   constructor(
     private readonly root: HTMLElement,
@@ -119,15 +125,16 @@ export class Panel {
     /** How keys are read now, so j and k move only for someone reading them vim's way. */
     private readonly keys: () => InputName,
     private readonly act: PanelActions,
+    asks: ConnectAsks,
   ) {
     root.style.setProperty("--panel-row-h", `${ROW_H}px`);
 
-    const form = document.createElement("form");
+    const form = this.filter;
     form.className = "panel-filter";
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
     // An object's address is added rather than filtered by, so the box says so.
-    this.input.placeholder = "filter, or paste s3://bucket/key";
+    this.input.placeholder = "filter, or paste s3://…";
     this.input.setAttribute("aria-label", "filter sources");
     const go = document.createElement("button");
     go.type = "submit";
@@ -162,16 +169,49 @@ export class Panel {
     this.foot.className = "panel-foot";
     this.foot.hidden = true;
 
-    root.append(form, this.list, this.peek, this.foot);
+    // A connection saved is browsed at once, from where it starts: saving one
+    // is how a person says they want to look in it.
+    this.connecting = new ConnectForm(asks, (saved) => {
+      this.showList();
+      if (saved !== undefined)
+        void this.sources.open(connectionLine(saved)).then(() => this.reveal());
+    });
+
+    root.append(form, this.list, this.peek, this.foot, this.connecting.el);
+  }
+
+  /**
+   * connect opens the form that connects a bucket, in the list's place, filled
+   * in with what the caller already knows.
+   */
+  connect(filled: Filled = {}): void {
+    if (!this.open) this.show();
+    this.filter.hidden = true;
+    this.list.hidden = true;
+    this.peek.hidden = true;
+    this.foot.hidden = true;
+    this.connecting.show(filled);
+  }
+
+  /** showList puts the list back where the form was, with the keys in it. */
+  private showList(): void {
+    this.connecting.hide();
+    this.filter.hidden = false;
+    this.list.hidden = false;
+    this.drawnPeek = undefined;
+    this.drawnFoot = "";
+    this.layout();
+    this.list.focus();
   }
 
   get open(): boolean {
     return !this.root.hidden;
   }
 
-  /** show opens the panel with the keys in its list. */
+  /** show opens the panel with the keys in its list, or in the form while one is open. */
   show(): void {
     this.root.hidden = false;
+    if (this.connecting.open) return;
     this.layout();
     this.list.focus();
   }
@@ -333,6 +373,7 @@ export class Panel {
         return;
       }
       case "connections": {
+        if (this.sources.isConnect(line)) return this.connect();
         const to = this.sources.connections[line];
         if (to !== undefined) void this.sources.open(to);
         return;
@@ -364,6 +405,9 @@ export class Panel {
    * element and written into.
    */
   private layout(): void {
+    // The form has the list's place, and a listing that lands meanwhile is
+    // drawn when the list comes back rather than under the form.
+    if (this.connecting.open) return;
     this.laid = spans((s) => this.sources.count(s));
     const total = rowCount(this.laid);
     this.sizer.style.height = `${total * ROW_H}px`;
@@ -501,6 +545,7 @@ export class Panel {
         if (this.sources.chosen(entry)) cls += " picked";
         else if (!this.sources.selectable(entry)) cls += " off";
       }
+      if (row.section === "connections" && this.sources.isConnect(row.line)) cls += " action";
       const tab = row.section === "workspace" ? this.sources.tabs[row.line] : undefined;
       if (tab !== undefined) {
         const state = stateOf(tab);
@@ -530,6 +575,7 @@ export class Panel {
         return [t.name, t.bytes === undefined ? "" : formatBytes(t.bytes)];
       }
       case "connections": {
+        if (this.sources.isConnect(line)) return ["+ Connect a bucket", ""];
         const c = this.sources.connections[line];
         if (c === undefined) return ["", ""];
         return [c.name, c.where === undefined ? c.kind : `${c.kind} · ${c.where}`];
