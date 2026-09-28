@@ -96,13 +96,23 @@ export async function bootShell(): Promise<Shell> {
   // A connections folder of its own, the way main hands the desktop's engine
   // one, so the shell's connection reads are answered rather than refused.
   const kept = mkdtempSync(join(tmpdir(), "uno-dom-connections-"));
-  const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
-    sources([diskProvider()]),
-    undefined,
-    { connections: connectionsIn(nodeStore(), kept), profiles: () => Promise.resolve(["default"]) },
-  );
+  // An engine of its own on a channel of its own per connect, as main makes a
+  // MessageChannelMain per "engine:connect". The shell closes a workspace's
+  // engine when the next file opens, and a port shared between the two would
+  // close the new engine with the old.
+  const connect = (): MessagePortLike => {
+    const { port1, port2 } = new MessageChannel();
+    serve(
+      messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
+      sources([diskProvider()]),
+      undefined,
+      {
+        connections: connectionsIn(nodeStore(), kept),
+        profiles: () => Promise.resolve(["default"]),
+      },
+    );
+    return port1 as unknown as MessagePortLike;
+  };
 
   const host: Host = {
     open: () => Promise.resolve(undefined),
@@ -110,7 +120,7 @@ export async function bootShell(): Promise<Shell> {
     dropped: () => {
       throw new Error("dropped() is window-bound and not used by any run check");
     },
-    connect: () => Promise.resolve(port1 as unknown as MessagePortLike),
+    connect: () => Promise.resolve(connect()),
     pickSave: () => Promise.resolve(undefined),
     save: () => Promise.resolve(),
     saveConnection: (c) => saveConnection(nodeStore(), kept, c),
