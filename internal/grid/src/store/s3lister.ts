@@ -118,7 +118,10 @@ async function listPrefix(
     ...(where.prefix === "" ? {} : { prefix: where.prefix }),
     ...(cursor === undefined ? {} : { "continuation-token": cursor }),
   });
-  if (!res.ok) throw new Error(`${path}: ${cannotList(res.status)}`);
+  if (!res.ok) {
+    const who = await send.who({ bucket: where.bucket, key: where.prefix });
+    throw new Error(`${path}: ${cannotList(res.status, who)}`);
+  }
   const page = readListing(await res.text());
 
   // A bucket that says there is more and does not say where it starts would
@@ -232,7 +235,7 @@ async function statObject(send: S3Requests, path: string): Promise<Entry> {
 
   const url = s3Url(loc);
   const head = await send.object(loc, "HEAD", {});
-  if (!head.ok) throw new Error(`${url}: ${refusal(head.status)}`);
+  if (!head.ok) throw new Error(`${url}: ${refusal(head.status, await send.who(loc))}`);
   const bytes = Number(head.headers.get("content-length") ?? "NaN");
   if (!Number.isFinite(bytes)) throw new Error(`${url}: S3 did not say how big it is`);
 
@@ -269,10 +272,10 @@ function lastSegment(key: string): string {
  * not an error. A 403 is `s3:ListBucket` rather than `s3:GetObject`, which is
  * the permission people forget, so it says which one it wanted.
  */
-function cannotList(status: number): string {
+function cannotList(status: number, who: string): string {
   switch (status) {
     case 403:
-      return "access denied · the AWS credentials uno found cannot list that bucket (s3:ListBucket)";
+      return `access denied · ${who} cannot list that bucket (s3:ListBucket)`;
     case 404:
       return "no such bucket";
     default:

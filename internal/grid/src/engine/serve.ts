@@ -32,11 +32,14 @@ export function serve(
   connections?: Connections,
 ): void {
   const workspace = new Workspace(sources.files, port, tuning);
-  // Started now so the first request that signs finds them read. A folder that
-  // cannot be read is said when somebody asks, not to nobody at start.
-  void connections?.load().catch(() => undefined);
+  // Read before anything is answered, so the first request that signs -- a
+  // .uno opened the moment the engine is up -- is signed by its connection and
+  // not by whatever the machine has. A folder that cannot be read is said when
+  // somebody asks for the connections, not to nobody at start.
+  const ready = connections?.load().catch(() => undefined);
 
   async function handle(msg: Request): Promise<void> {
+    await ready;
     switch (msg.t) {
       case "open": {
         port.post({ t: "opened", id: msg.id, added: await workspace.open(msg.ref) });

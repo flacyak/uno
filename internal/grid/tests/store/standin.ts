@@ -40,6 +40,18 @@ export const BUCKET = "acme-exports";
  */
 export const MODIFIED = "2026-09-20T12:00:00.000Z";
 
+/**
+ * Beside is another bucket in the same stand-in: its own objects, and who may
+ * read it. A bucket with keys answers only a request signed with those keys,
+ * the way a bucket policy naming one role does, and a public one answers a
+ * request with no signature at all.
+ */
+export interface Beside {
+  objects: Map<string, Uint8Array>;
+  keys?: AwsCredentials;
+  public?: boolean;
+}
+
 /** How the stand-in turns a request away by default: the way AWS does it. */
 export const MOVED: Misdirect = { status: 301, headers: { "x-amz-bucket-region": "$REGION" } };
 
@@ -54,6 +66,8 @@ export interface Bucket {
     query: string | undefined;
     range: string | undefined;
     region: string;
+    /** The access key id it was signed with, or "" for a request not signed at all. */
+    key: string;
   }>;
   /** What each key holds. Change one to rewrite the object under a reader. */
   objects: Map<string, Uint8Array>;
@@ -74,8 +88,19 @@ export async function bucket(
   misdirect: Misdirect = MOVED,
   home = HOME_REGION,
   objects: Map<string, Uint8Array> = new Map([["2025/sales-q3.csv", bytes]]),
+  beside: Record<string, Beside> = {},
 ): Promise<Bucket> {
   const seen: Bucket["seen"] = [];
+  /** Every bucket it holds, and every key it knows the secret of. */
+  const buckets = new Map<string, Beside>([
+    [BUCKET, { objects, keys: KEYS }],
+    ...Object.entries(beside),
+  ]);
+  const secrets = new Map(
+    [KEYS, ...Object.values(beside).flatMap((b) => (b.keys === undefined ? [] : [b.keys]))].map(
+      (k) => [k.accessKeyId, k],
+    ),
+  );
 
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const range = req.headers["range"];
@@ -86,15 +111,35 @@ export async function bucket(
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const auth = req.headers["authorization"] ?? "";
     const region = /Credential=[^/]+\/\d{8}\/([^/]+)\//.exec(auth)?.[1];
+    const key = /Credential=([^/]+)\//.exec(auth)?.[1] ?? "";
     seen.push({
       method: req.method!,
       path: raw,
       query: req.url!.split("?")[1],
       range,
       region: region ?? "",
+      key,
     });
+    const [, name, ...rest] = raw.split("/");
+    const held = buckets.get(name ?? "");
+
+    // A request with no signature is somebody reading a public bucket, and
+    // nothing else is ever answered without one.
+    if (auth === "") {
+      if (held?.public === true) {
+        serve(held, name!, rest, url, req, res);
+        return;
+      }
+      res.writeHead(403).end();
+      return;
+    }
 
     // S3 checks the signature before anything else, and so does this.
+    const signer = secrets.get(key);
+    if (signer === undefined) {
+      res.writeHead(403).end();
+      return;
+    }
     const signed = /SignedHeaders=([^,]+)/.exec(auth)?.[1]?.split(";") ?? [];
     const again = signV4(
       {
@@ -106,7 +151,7 @@ export async function bucket(
             .map((h) => [h, String(req.headers[h])]),
         ),
       },
-      KEYS,
+      signer,
       region ?? "",
       "s3",
       amzDate(String(req.headers["x-amz-date"])),
@@ -128,12 +173,30 @@ export async function bucket(
       return;
     }
 
-    const [, name, ...rest] = raw.split("/");
+    // A good signature from somebody the bucket does not let in: a real key,
+    // for another bucket.
+    if (held !== undefined && held.public !== true && held.keys?.accessKeyId !== key) {
+      res.writeHead(403).end();
+      return;
+    }
+    if (held === undefined) {
+      res.writeHead(404).end();
+      return;
+    }
+    serve(held, name!, rest, url, req, res);
+  });
+
+  /** What a bucket answers, once the request is one it lets in. */
+  function serve(
+    held: Beside,
+    name: string,
+    rest: string[],
+    url: URL,
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): void {
+    const range = req.headers["range"];
     if (url.searchParams.has("list-type")) {
-      if (name !== BUCKET) {
-        res.writeHead(404).end();
-        return;
-      }
       // Anything but ListObjectsV2 is a request this stand-in has never been
       // asked to answer, and answering it with an empty listing would let a
       // caller that asked for the wrong thing look like it worked.
@@ -141,7 +204,7 @@ export async function bucket(
         res.writeHead(400).end();
         return;
       }
-      const body = listing(objects, url);
+      const body = listing(name, held.objects, url);
       res
         .writeHead(200, {
           "content-type": "application/xml",
@@ -152,7 +215,7 @@ export async function bucket(
     }
 
     const key = rest.map((seg) => decodeURIComponent(seg)).join("/");
-    const body = name === BUCKET ? objects.get(key) : undefined;
+    const body = held.objects.get(key);
     if (body === undefined) {
       res.writeHead(404).end();
       return;
@@ -169,7 +232,7 @@ export async function bucket(
     const m = /^bytes=(\d+)-(\d+)$/.exec(range ?? "");
     const part = m === null ? body : body.subarray(Number(m[1]), Number(m[2]) + 1);
     res.writeHead(m === null ? 200 : 206, { "content-length": part.length, etag }).end(part);
-  });
+  }
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
@@ -195,7 +258,7 @@ export async function bucket(
  * `+`, `/`, `=` -- that a caller has to send back in a signed query without
  * rewriting any of them.
  */
-function listing(objects: Map<string, Uint8Array>, url: URL): string {
+function listing(name: string, objects: Map<string, Uint8Array>, url: URL): string {
   const prefix = url.searchParams.get("prefix") ?? "";
   const delimiter = url.searchParams.get("delimiter") ?? "";
   const max = Math.max(1, Number(url.searchParams.get("max-keys") ?? "1000"));
@@ -225,7 +288,7 @@ function listing(objects: Map<string, Uint8Array>, url: URL): string {
   const parts = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">`,
-    `<Name>${xml(BUCKET)}</Name>`,
+    `<Name>${xml(name)}</Name>`,
     `<Prefix>${xml(prefix)}</Prefix>`,
     `<Delimiter>${xml(delimiter)}</Delimiter>`,
     `<MaxKeys>${max}</MaxKeys>`,

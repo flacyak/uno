@@ -11,6 +11,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import {
   FORMAT_VERSION,
+  covering,
   formatConnection,
   parseConnection,
   stampConnection,
@@ -210,4 +211,32 @@ test("a save stamps modified and keeps when it was created", () => {
 
   const fresh = stampConnection({ ...c, created: undefined, modified: undefined }, now);
   expect(fresh.created).toEqual(now);
+});
+
+describe("which connection covers an address", () => {
+  const base = parseConnection("acme-exports.unof", fixture("acme-exports"));
+  const shop = { ...base, id: "shop", prefix: "shop/" };
+  const orders = { ...base, id: "orders", prefix: "shop/2025/" };
+  const whole = { ...base, id: "whole", prefix: "" };
+
+  test("the one whose bucket it is in and whose prefix its key starts with", () => {
+    expect(covering([shop], "acme-exports", "shop/a.csv")?.id).toBe("shop");
+    expect(covering([shop], "acme-finance", "shop/a.csv")).toBeUndefined();
+  });
+
+  // The trailing slash 2.2 insists on is what keeps shop/ off shop-old/.
+  test("a prefix is a folder, not the start of a name", () => {
+    expect(covering([shop], "acme-exports", "shop-old/a.csv")).toBeUndefined();
+  });
+
+  test("of several, the longest prefix, whatever order they are listed in", () => {
+    for (const list of [
+      [whole, shop, orders],
+      [orders, whole, shop],
+    ]) {
+      expect(covering(list, "acme-exports", "shop/2025/a.csv")?.id).toBe("orders");
+      expect(covering(list, "acme-exports", "shop/2024/a.csv")?.id).toBe("shop");
+      expect(covering(list, "acme-exports", "refunds/a.csv")?.id).toBe("whole");
+    }
+  });
 });
