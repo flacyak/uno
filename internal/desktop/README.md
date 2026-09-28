@@ -57,8 +57,13 @@ as a view the same way a file on disk does: a HEAD for its size, then ranged
 GETs as the index and the grid need them. Nothing is downloaded whole, and a
 workspace saves the `s3://` URL rather than a copy.
 
-The engine process reads the object, using whatever AWS credentials this
-machine already has: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (plus
+The engine process reads the object. A connection that covers it, by bucket
+and the longest prefix its key starts with, says how to sign in: `machine`,
+a named `profile`, or `public`, which reads an open bucket without signing at
+all. A `role` connection is for uno's hosted engine and is refused by name on
+the desktop. Two connections on two profiles read two buckets in one
+workspace, each signed as its own profile. Where no connection covers an
+object, it is read with whatever AWS credentials this machine already has: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (plus
 `AWS_SESSION_TOKEN`), or the `AWS_PROFILE` (or `default`) keys in
 `~/.aws/credentials`. The region comes from `AWS_REGION` or the profile's config,
 and a bucket somewhere else says so once and is followed. uno stores no keys,

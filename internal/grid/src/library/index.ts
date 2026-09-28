@@ -18,6 +18,8 @@ import { compareStrings, nowTruncated, parseTime, rfc3339, runes } from "../go/i
 // re-exported here so that `@uno/grid/library` is every kind of .unof.
 export {
   CONNECTION_KIND,
+  covering,
+  covers,
   formatConnection,
   parseConnection,
   secretIn,
