@@ -10,11 +10,13 @@
 // tests/store/opens.test.ts holds them to: reaching a disk is allowed inside the
 // seam and nowhere else.
 
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdtemp, open, readdir, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { promisify } from "node:util";
 
 import type { Connection } from "../library/index.ts";
 import { covering } from "../library/index.ts";
@@ -150,6 +152,8 @@ export function nodeStore(): FileStore {
   };
 }
 
+const execFileAsync = promisify(execFile);
+
 /** How long credentials read from disk are reused before they are read again. */
 const CREDENTIALS_MS = 60_000;
 
@@ -215,9 +219,10 @@ function homeOf(env: Env): string {
  * has nothing uno can use.
  *
  * Keys in ~/.aws/credentials, or in the profile's config section, are read as
- * they are and read again a minute later. An SSO profile trades the token its
- * last `aws sso login` left behind for a role's keys, reused until shortly
- * before they expire.
+ * they are and read again a minute later. A credential_process profile runs
+ * the program it names and reads the keys it prints. An SSO profile trades
+ * the token its last `aws sso login` left behind for a role's keys. Keys that
+ * expire are reused until shortly before they do.
  */
 async function profileSession(
   env: Env,
@@ -236,6 +241,14 @@ async function profileSession(
     return {
       creds: { accessKeyId: key, secretAccessKey: secret, sessionToken: token, region, as },
       until: Date.now() + CREDENTIALS_MS,
+    };
+  }
+  const command = fromConfig?.get("credential_process");
+  if (command !== undefined) {
+    const { expiration, ...keys } = await processCredentials(profile, command);
+    return {
+      creds: { ...keys, region, as },
+      until: expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS,
     };
   }
   if (fromConfig?.has("sso_session") === true || fromConfig?.has("sso_start_url") === true) {
@@ -317,6 +330,136 @@ async function ssoSession(
 }
 
 /**
+ * How long a credential_process program is given to answer. A program that
+ * asks a vault or a hardware key can take a few seconds; one that has not
+ * answered in thirty is waiting on something that is not coming, and a range
+ * read waiting behind it would look like uno had hung.
+ */
+const PROCESS_MS = 30_000;
+
+/** The most a credential_process program may print. Its answer is a few hundred bytes. */
+const PROCESS_BYTES = 1 << 20;
+
+/** Keys a program printed, and when they stop working, where it said. */
+interface Printed {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+  expiration?: Date;
+}
+
+/**
+ * processCredentials runs a profile's credential_process and reads the keys it
+ * prints, which is how the AWS CLI hands signing in to another program: a
+ * vault, a hardware key, a company's own tool.
+ *
+ * The command is split into words the way a shell would split it, quotes and
+ * all, and run without a shell, so nothing in ~/.aws/config is ever handed to
+ * one to interpret. What it prints is the CLI's version 1 answer, and anything
+ * else is refused by name rather than guessed at.
+ */
+async function processCredentials(profile: string, command: string): Promise<Printed> {
+  const words = splitCommand(command);
+  const [program, ...args] = words;
+  if (program === undefined) {
+    throw new Error(`the AWS profile ${profile} has an empty credential_process`);
+  }
+
+  let out: string;
+  try {
+    const run = await execFileAsync(program, args, {
+      timeout: PROCESS_MS,
+      maxBuffer: PROCESS_BYTES,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    out = run.stdout;
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException & { stderr?: string; killed?: boolean };
+    const why =
+      e.code === "ENOENT"
+        ? `there is no program called ${program}`
+        : e.killed === true
+          ? `it did not answer within ${PROCESS_MS / 1000} seconds`
+          : (e.stderr?.trim().split("\n")[0] ?? "") || e.message;
+    throw new Error(`the AWS profile ${profile}'s credential_process failed · ${why}`);
+  }
+
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(out) as Record<string, unknown>;
+  } catch {
+    throw new Error(`the AWS profile ${profile}'s credential_process did not print JSON`);
+  }
+  if (o["Version"] !== 1) {
+    throw new Error(
+      `the AWS profile ${profile}'s credential_process printed version ${JSON.stringify(o["Version"])} · uno reads version 1`,
+    );
+  }
+  const id = o["AccessKeyId"];
+  const secret = o["SecretAccessKey"];
+  if (typeof id !== "string" || typeof secret !== "string") {
+    throw new Error(
+      `the AWS profile ${profile}'s credential_process printed no AccessKeyId and SecretAccessKey`,
+    );
+  }
+  const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
+  if (typeof o["SessionToken"] === "string") printed.sessionToken = o["SessionToken"];
+  if (typeof o["Expiration"] === "string") {
+    const at = new Date(o["Expiration"]);
+    if (Number.isNaN(at.getTime())) {
+      throw new Error(
+        `the AWS profile ${profile}'s credential_process printed an Expiration uno cannot read`,
+      );
+    }
+    printed.expiration = at;
+  }
+  return printed;
+}
+
+/**
+ * splitCommand splits a command line into words the way a POSIX shell would,
+ * and does nothing else a shell does: single quotes keep everything, double
+ * quotes keep everything but a backslash before a quote or a backslash, and a
+ * backslash outside quotes keeps the next character. There is no expansion,
+ * no globbing, and no second command after a semicolon, which stays a word.
+ */
+export function splitCommand(line: string): string[] {
+  const words: string[] = [];
+  let word = "";
+  let open = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (c === "'") {
+      const end = line.indexOf("'", i + 1);
+      if (end < 0) throw new Error(`credential_process has a ' with no ' to close it`);
+      word += line.slice(i + 1, end);
+      i = end;
+      open = true;
+    } else if (c === '"') {
+      open = true;
+      for (i++; i < line.length && line[i] !== '"'; i++) {
+        if (line[i] === "\\" && (line[i + 1] === '"' || line[i + 1] === "\\")) i++;
+        word += line[i];
+      }
+      if (i >= line.length) throw new Error(`credential_process has a " with no " to close it`);
+    } else if (c === "\\" && i + 1 < line.length) {
+      word += line[++i];
+      open = true;
+    } else if (/\s/.test(c)) {
+      if (open) words.push(word);
+      word = "";
+      open = false;
+    } else {
+      word += c;
+      open = true;
+    }
+  }
+  if (open) words.push(word);
+  return words;
+}
+
+/**
  * cached reuses what `read` answered until it says to stop: a minute for keys
  * read off the disk, so a key rotated there is picked up within it, and until
  * shortly before expiry for keys AWS handed out, so a request per range does
@@ -385,7 +528,7 @@ export function profileCredentials(
       );
     }
     throw new Error(
-      `the AWS profile ${profile} has no way in uno can use · give it keys in ~/.aws/credentials, or an SSO sign-in`,
+      `the AWS profile ${profile} has no way in uno can use · give it keys in ~/.aws/credentials, a credential_process, or an SSO sign-in`,
     );
   });
 }
