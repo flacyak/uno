@@ -3,7 +3,6 @@
 // uno has two modes and a cell editor, and vim has normal mode and insert mode.
 // View is a normal mode that cannot write, transform is one that can, and the
 // editor is insert. `i` moves one level in and Esc moves one level back out.
-// The whole plan is resource/vim-motions.html.
 
 import { m } from "../../paraglide/messages.js";
 import { NOTHING, isCharacter, showing } from "../keys.ts";
