@@ -10,6 +10,7 @@
 // tests/store/opens.test.ts holds them to: reaching a disk is allowed inside the
 // seam and nowhere else.
 
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdtemp, open, readdir, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -22,6 +23,8 @@ import { diskLister } from "./disklister.ts";
 import type { ByteSource, FileHandler, FileStore } from "./index.ts";
 import { isRemote, readAll } from "./index.ts";
 import type { AwsCredentials, S3Location, Signing } from "./s3.ts";
+import { signInAgain, ssoRoleCredentials } from "./sts.ts";
+import type { Session } from "./sts.ts";
 
 /**
  * localFiles opens files on this machine's disks, by path, for reading. It
@@ -165,7 +168,7 @@ interface AwsFiles {
 
 /** Where the AWS files are, the way the CLI finds them: the variables, then ~/.aws. */
 async function awsFiles(env: Env): Promise<AwsFiles> {
-  const aws = join(env["HOME"] ?? env["USERPROFILE"] ?? homedir(), ".aws");
+  const aws = join(homeOf(env), ".aws");
   return {
     config: await ini(env["AWS_CONFIG_FILE"] ?? join(aws, "config")),
     credentials: await ini(env["AWS_SHARED_CREDENTIALS_FILE"] ?? join(aws, "credentials")),
@@ -187,54 +190,151 @@ function regionOf(env: Env, files: AwsFiles, profile: string): string {
   );
 }
 
+/** Credentials, and the moment they stop being reused and are asked for again. */
+interface Held {
+  creds: AwsCredentials;
+  until: number;
+}
+
 /**
- * profileKeys reads one named profile's credentials out of the AWS files, or
- * answers undefined for a profile with none, which each caller words for
- * itself: the chain found nothing, or the profile a connection named has none.
+ * How long before temporary credentials expire they are traded for new ones,
+ * so a range read in the last minute of a session is not signed with keys
+ * that lapse on the way to S3. Five minutes is what the AWS SDKs allow.
+ */
+const EARLY_MS = 5 * 60_000;
+
+/** The home folder the AWS files hang off, as the environment says it. */
+function homeOf(env: Env): string {
+  return env["HOME"] ?? env["USERPROFILE"] ?? homedir();
+}
+
+/**
+ * profileSession signs in as one named profile, the ways the AWS CLI does, or
+ * answers undefined for a profile with no way in at all, which each caller
+ * words for itself: the chain found nothing, or the profile a connection named
+ * has nothing uno can use.
  *
  * Keys in ~/.aws/credentials, or in the profile's config section, are read as
- * they are. A profile that signs in some other way -- SSO, a program to run --
- * is refused by name with the command that turns it into keys this can read.
+ * they are and read again a minute later. An SSO profile trades the token its
+ * last `aws sso login` left behind for a role's keys, reused until shortly
+ * before they expire.
  */
-function profileKeys(env: Env, files: AwsFiles, profile: string): AwsCredentials | undefined {
+async function profileSession(
+  env: Env,
+  files: AwsFiles,
+  profile: string,
+): Promise<Held | undefined> {
   const p = files.credentials.get(profile);
   const fromConfig = configOf(files, profile);
+  const region = regionOf(env, files, profile);
+  const as = `the AWS profile ${profile}`;
+
   const key = p?.get("aws_access_key_id") ?? fromConfig?.get("aws_access_key_id");
   const secret = p?.get("aws_secret_access_key") ?? fromConfig?.get("aws_secret_access_key");
   if (key !== undefined && secret !== undefined) {
     const token = p?.get("aws_session_token") ?? fromConfig?.get("aws_session_token");
-    const region = regionOf(env, files, profile);
-    const as = `the AWS profile ${profile}`;
-    return { accessKeyId: key, secretAccessKey: secret, sessionToken: token, region, as };
+    return {
+      creds: { accessKeyId: key, secretAccessKey: secret, sessionToken: token, region, as },
+      until: Date.now() + CREDENTIALS_MS,
+    };
   }
   if (fromConfig?.has("sso_session") === true || fromConfig?.has("sso_start_url") === true) {
-    throw new Error(
-      `the AWS profile ${profile} signs in through SSO, which uno does not follow yet · ` +
-        `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
-    );
+    const { expiration, ...keys } = await ssoSession(env, files, profile, fromConfig);
+    return { creds: { ...keys, region, as }, until: expiration.getTime() - EARLY_MS };
   }
   return undefined;
 }
 
 /**
- * cached reuses what `read` answered for CREDENTIALS_MS, so a request per
- * range does not read ~/.aws per range, and a key rotated on disk is picked
- * up within the minute.
+ * ssoSession reads the token `aws sso login` cached for a profile and trades
+ * it at the SSO portal for the profile's role.
+ *
+ * Two layouts name the portal. The current one puts it in an `[sso-session
+ * <name>]` section the profile names with sso_session, and caches the token
+ * under the SHA-1 of that name. The older one puts sso_start_url and
+ * sso_region in the profile itself and caches under the SHA-1 of the URL.
+ *
+ * uno never signs in for anybody. An expired or missing token is said, with
+ * the command that mends it, before the portal is asked anything.
  */
-function cached(read: () => Promise<AwsCredentials>): () => Promise<AwsCredentials> {
-  let kept: { at: number; creds: AwsCredentials } | undefined;
+async function ssoSession(
+  env: Env,
+  files: AwsFiles,
+  profile: string,
+  section: Map<string, string>,
+): Promise<Session> {
+  const named = section.get("sso_session");
+  const portal = named === undefined ? section : files.config.get(`sso-session ${named}`);
+  if (portal === undefined) {
+    throw new Error(
+      `the AWS profile ${profile} names sso-session ${named}, which ~/.aws/config does not have`,
+    );
+  }
+  const startUrl = portal.get("sso_start_url");
+  const ssoRegion = portal.get("sso_region");
+  const accountId = section.get("sso_account_id");
+  const roleName = section.get("sso_role_name");
+  const missing = [
+    ["sso_start_url", startUrl],
+    ["sso_region", ssoRegion],
+    ["sso_account_id", accountId],
+    ["sso_role_name", roleName],
+  ].find(([, v]) => v === undefined)?.[0];
+  if (missing !== undefined) {
+    throw new Error(`the AWS profile ${profile} signs in through SSO and has no ${missing}`);
+  }
+
+  const cacheKey = named ?? startUrl!;
+  const name = createHash("sha1").update(cacheKey).digest("hex") + ".json";
+  const path = join(homeOf(env), ".aws", "sso", "cache", name);
+  let token: { accessToken?: unknown; expiresAt?: unknown };
+  try {
+    const bytes = await readAll([localFiles()], { name, path });
+    token = JSON.parse(new TextDecoder().decode(bytes)) as typeof token;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
+  }
+  // Older CLIs wrote the time with a UTC suffix rather than a Z.
+  const expires = new Date(String(token.expiresAt).replace(/UTC$/, "Z"));
+  if (typeof token.accessToken !== "string" || Number.isNaN(expires.getTime())) {
+    throw new Error(signInAgain(profile, "its cached SSO sign-in could not be read"));
+  }
+  if (expires.getTime() <= Date.now()) {
+    throw new Error(signInAgain(profile, `its SSO sign-in expired at ${expires.toISOString()}`));
+  }
+
+  return ssoRoleCredentials(
+    {
+      profile,
+      region: ssoRegion!,
+      accountId: accountId!,
+      roleName: roleName!,
+      accessToken: token.accessToken,
+    },
+    { endpoint: env["AWS_ENDPOINT_URL_SSO"] },
+  );
+}
+
+/**
+ * cached reuses what `read` answered until it says to stop: a minute for keys
+ * read off the disk, so a key rotated there is picked up within it, and until
+ * shortly before expiry for keys AWS handed out, so a request per range does
+ * not trade a token per range.
+ */
+function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
+  let kept: Held | undefined;
   return async () => {
-    if (kept !== undefined && Date.now() - kept.at < CREDENTIALS_MS) return kept.creds;
-    const creds = await read();
-    kept = { at: Date.now(), creds };
-    return creds;
+    if (kept !== undefined && Date.now() < kept.until) return kept.creds;
+    kept = await read();
+    return kept.creds;
   };
 }
 
 /**
- * awsCredentials finds AWS credentials the way the AWS CLI does, as far as a
- * person with keys is concerned: the environment first, then the profile in
- * ~/.aws/credentials that AWS_PROFILE names, or `default`.
+ * awsCredentials finds AWS credentials the way the AWS CLI does: the
+ * environment first, then the profile AWS_PROFILE names, or `default`, signed
+ * in to whichever way that profile says.
  *
  * This is the `machine` way of signing in, and what a request covered by no
  * connection signs with. uno stores nothing. What it can read is what the
@@ -249,14 +349,17 @@ export function awsCredentials(env: Env = process.env): () => Promise<AwsCredent
     const secret = env["AWS_SECRET_ACCESS_KEY"];
     if (id !== undefined && id !== "" && secret !== undefined && secret !== "") {
       return {
-        accessKeyId: id,
-        secretAccessKey: secret,
-        sessionToken: env["AWS_SESSION_TOKEN"],
-        region: regionOf(env, files, profile),
+        creds: {
+          accessKeyId: id,
+          secretAccessKey: secret,
+          sessionToken: env["AWS_SESSION_TOKEN"],
+          region: regionOf(env, files, profile),
+        },
+        until: Date.now() + CREDENTIALS_MS,
       };
     }
-    const creds = profileKeys(env, files, profile);
-    if (creds !== undefined) return creds;
+    const held = await profileSession(env, files, profile);
+    if (held !== undefined) return held;
     throw new Error(
       `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or put keys for the ${profile} profile in ~/.aws/credentials`,
     );
@@ -274,15 +377,15 @@ export function profileCredentials(
 ): () => Promise<AwsCredentials> {
   return cached(async () => {
     const files = await awsFiles(env);
-    const creds = profileKeys(env, files, profile);
-    if (creds !== undefined) return creds;
+    const held = await profileSession(env, files, profile);
+    if (held !== undefined) return held;
     if (!files.credentials.has(profile) && configOf(files, profile) === undefined) {
       throw new Error(
         `there is no AWS profile called ${profile} in ~/.aws/config or ~/.aws/credentials`,
       );
     }
     throw new Error(
-      `the AWS profile ${profile} has no keys uno can read · put aws_access_key_id and aws_secret_access_key for it in ~/.aws/credentials`,
+      `the AWS profile ${profile} has no way in uno can use · give it keys in ~/.aws/credentials, or an SSO sign-in`,
     );
   });
 }
