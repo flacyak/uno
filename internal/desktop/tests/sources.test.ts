@@ -587,6 +587,25 @@ test("an address with no object in it is only a filter", () => {
   expect(panel.connections).toEqual([ACME]);
 });
 
+test("an address the URL parser chokes on is a filter, not a throw", () => {
+  // A bare per cent is a stray escape, and decoding a path that holds one
+  // raises a URIError rather than returning anything. The filter is where an
+  // address is pasted now, so a typo like this reaches the check before
+  // anything else, and a search that threw would leave the box doing nothing.
+  const panel = new Sources(new Stand(), () => TABS, [ACME]);
+
+  for (const typed of [
+    "https://example.com/100%.csv",
+    "https://s3.eu-west-1.amazonaws.com/acme/50%off.csv",
+    "https://acme-exports.s3.amazonaws.com/50%off.csv",
+    "https://s3.amazonaws.com/100%/ledger.csv",
+  ]) {
+    expect(() => panel.search(typed), typed).not.toThrow();
+    expect(panel.pasted, typed).toBeUndefined();
+    expect(panel.filter, typed).toBe(typed.toLowerCase());
+  }
+});
+
 test("the pages of a big folder are added to it in order, each once, until the last", async () => {
   const stand = new Stand();
   let drawn = 0;

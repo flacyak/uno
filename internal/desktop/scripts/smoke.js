@@ -33,7 +33,7 @@ const fixture = join(pkg, "../grid/tests/testdata/sales-q3.csv");
 // The export added beside it, for the checks that a workspace holds several.
 const second = join(pkg, "../grid/tests/testdata/google-ads-sales.csv");
 
-/** The object the + menu adds: the same export, in the bucket instead of on the disk. */
+/** The object pasted into the sources panel: the same export, in the bucket instead of on the disk. */
 const KEY = "2025/ads-q3.csv";
 
 // The screenshot goes somewhere it survives the run, because the point of

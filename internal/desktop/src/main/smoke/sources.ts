@@ -1,8 +1,8 @@
 // Checks that a workspace holds more than one source: a second export added
 // beside the first, a tab for each, moving between them, and taking one out.
 // Then the same again for a source that is not on this machine at all: an
-// object in a bucket, added from the + menu, drawn, saved as an `s3://` pointer
-// and read back from one.
+// object in a bucket, pasted into the sources panel the + menu opens, drawn,
+// saved as an `s3://` pointer and read back from one.
 //
 // They run last, over the fixture the checks before them left edited.
 
@@ -18,7 +18,7 @@ const ADS = process.env["UNO_SMOKE_SOURCE"] ?? "";
 
 /**
  * The same export again, as an object: the address a person would paste into
- * the + menu. smoke.js stands an S3 up in front of the fixture and names it
+ * the sources panel's filter. smoke.js stands an S3 up in front of the fixture and names it
  * here, so nothing in the app knows the bucket is a stand-in.
  */
 const OBJECT = process.env["UNO_SMOKE_OBJECT"] ?? "";
@@ -122,55 +122,47 @@ export const SOURCES: Check[] = [
     `,
   },
   {
-    name: "the + offers a file or an object in S3",
+    name: "the + offers a file or the sources panel",
     script: `
       document.querySelector(".tab-add").click();
       await frame();
       const menu = document.querySelector(".add-menu");
       if (menu === null) return "the + opened no menu";
       // The label is the item's first child: what follows it is the keys it
-      // answers to, which only File… has.
+      // answers to.
       const items = [...menu.querySelectorAll(".add-item")].map((i) => i.firstChild.textContent);
-      return JSON.stringify(items) === JSON.stringify(["File…", "S3 URL…"])
+      return JSON.stringify(items) === JSON.stringify(["File…", "Browse sources…"])
         ? ""
         : "the menu offers " + JSON.stringify(items);
     `,
   },
   {
-    // Nothing is signed, sent or charged for over a typo. The menu stays open
-    // with the box still showing, which is where the next check types.
-    name: "a typo is answered before any engine is asked",
+    name: "Browse sources… opens the panel with the keys in it",
     script: `
       const items = [...document.querySelectorAll(".add-item")];
-      const s3 = items.find((i) => i.firstChild.textContent === "S3 URL…");
-      if (s3 === undefined) return "the menu has no S3 URL… to choose";
-      s3.click();
+      const browse = items.find((i) => i.firstChild.textContent === "Browse sources…");
+      if (browse === undefined) return "the menu has no Browse sources… to choose";
+      browse.click();
       await frame();
 
-      const input = document.querySelector(".add-url");
-      if (input === null) return "S3 URL… asked nothing";
-      input.value = "ledger.csv";
-      // The menu stops the page's keys at its own box, so the PRELUDE's press --
-      // which aims at the editor, or at the grid behind it -- never arrives here.
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-      await frame();
-
-      const said = text(".add-hint.err");
-      if (said !== "not an S3 object · s3://bucket/key, or its https address") {
-        return "the hint reads " + JSON.stringify(said === "" ? text(".add-hint") : said);
-      }
-      const tabs = document.querySelectorAll(".tab").length;
-      return tabs === 1 ? "" : "a typo left the workspace with " + tabs + " tabs";
+      if (document.querySelector(".add-menu") !== null) return "the menu stayed open";
+      const panel = document.querySelector("#panel");
+      if (panel.hidden) return "the panel is still closed";
+      return document.activeElement === panel.querySelector(".panel-list")
+        ? ""
+        : "the keys are in " + (document.activeElement?.className ?? "nothing");
     `,
   },
   {
-    name: "the object in the bucket is added from the + menu, and its rows are drawn",
+    name: "the object in the bucket is added from the panel's filter, and its rows are drawn",
     script: `
       ${REMOTE}
-      const input = document.querySelector(".add-url");
-      if (input === null) return "the S3 URL box is gone";
-      input.value = ${JSON.stringify(OBJECT)};
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      const form = document.querySelector("#panel .panel-filter");
+      if (form === null) return "the panel has no filter box";
+      form.querySelector("input").value = ${JSON.stringify(OBJECT)};
+      // Enter in the box is the form's submit, and the PRELUDE's press aims at
+      // the grid, which the box stops keys short of.
+      form.requestSubmit();
 
       // Everything the engine can refuse comes back as one line, and this is
       // the only place a run leaves it: a 403 is the signature or the region, a

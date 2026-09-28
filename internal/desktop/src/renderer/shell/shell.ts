@@ -190,15 +190,14 @@ export class Shell {
   }
 
   /**
-   * offerAdd opens the + menu: a file off this machine, or an object in S3. An
-   * object is opened by the engine, which holds the credentials; the page only
-   * ever sees its URL.
+   * offerAdd opens the + menu: a file off this machine, or the sources panel,
+   * where an object in S3 is browsed to or its address pasted into the filter.
    */
   private offerAdd(plus: HTMLElement): void {
     this.adding?.close();
     this.adding = new AddMenu(plus, {
       file: () => void this.add(),
-      remote: (ref) => void this.addSources([ref]),
+      browse: () => this.showPanel(),
       closed: () => {
         this.adding = undefined;
         this.grid?.focus();
