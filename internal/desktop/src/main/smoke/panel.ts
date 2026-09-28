@@ -75,4 +75,25 @@ export const PANEL: Check[] = [
       return names(BROWSER).length === 3 ? "" : "the browser lists " + JSON.stringify(names(BROWSER));
     `,
   },
+  {
+    name: "Space on an object in the bucket peeks at its front",
+    script: `
+      ${LINES}
+      await key("ArrowDown");
+      await key("ArrowDown");
+      await key(" ");
+      const peek = document.querySelector("#panel .panel-peek");
+      const heads = () => [...peek.querySelectorAll("th")].map((th) => th.textContent);
+      // The fixture's header, which is only in sales-q3.csv: the other two
+      // objects are the ads export.
+      const want = ["date", "region", "rep", "channel", "units", "revenue"];
+      if (!(await until(() => JSON.stringify(heads()) === JSON.stringify(want)))) {
+        return "the peek shows " + JSON.stringify(peek.textContent.slice(0, 200));
+      }
+      const rows = peek.querySelectorAll("tbody tr").length;
+      if (rows !== 20) return "the peek has " + rows + " rows";
+      const foot = [...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent);
+      return JSON.stringify(foot) === '["Add 1"]' ? "" : "the buttons are " + JSON.stringify(foot);
+    `,
+  },
 ];
