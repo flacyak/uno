@@ -215,6 +215,11 @@ export async function bucket(
     }
 
     const key = rest.map((seg) => decodeURIComponent(seg)).join("/");
+    // A HEAD of the bucket itself is HeadBucket, which says where it is.
+    if (key === "" && req.method === "HEAD") {
+      res.writeHead(200, { "x-amz-bucket-region": home }).end();
+      return;
+    }
     const body = held.objects.get(key);
     if (body === undefined) {
       res.writeHead(404).end();
