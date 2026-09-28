@@ -261,6 +261,14 @@ async function profileSession(
       until: expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS,
     };
   }
+  const command = fromConfig?.get("credential_process");
+  if (command !== undefined) {
+    const { expiration, ...keys } = await processCredentials(profile, command);
+    return {
+      creds: { ...keys, region, as },
+      until: expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS,
+    };
+  }
   if (fromConfig?.has("sso_session") === true || fromConfig?.has("sso_start_url") === true) {
     const { expiration, ...keys } = await ssoSession(env, files, profile, fromConfig);
     return { creds: { ...keys, region, as }, until: expiration.getTime() - EARLY_MS };
@@ -337,109 +345,6 @@ async function ssoSession(
     },
     { endpoint: env["AWS_ENDPOINT_URL_SSO"] },
   );
-}
-
-/**
- * roleSession takes on the role a profile names, with the credentials of the
- * profile it names as source_profile -- which may be keys, a program, an SSO
- * sign-in, or another role, followed as far as the chain goes.
- *
- * A chain that comes back to a profile already on it would ask STS forever,
- * and is refused naming the whole loop. mfa_serial is refused by name: it
- * asks for a code from a device, and the engine has nobody to ask.
- */
-async function roleSession(
-  env: Env,
-  files: AwsFiles,
-  profile: string,
-  roleArn: string,
-  setting: (key: string) => string | undefined,
-  through: readonly string[],
-): Promise<Session> {
-  const chain = [...through, profile];
-  if (setting("mfa_serial") !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} asks for an MFA code to assume ${roleArn}, which uno cannot ask for · ` +
-        `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
-    );
-  }
-
-  let source: AwsCredentials;
-  const sourceProfile = setting("source_profile");
-  const credentialSource = setting("credential_source");
-  if (sourceProfile !== undefined) {
-    if (chain.includes(sourceProfile)) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from a loop · ${[...chain, sourceProfile].join(" → ")}`,
-      );
-    }
-    // A profile that is its own source means the keys beside its role_arn,
-    // which is how the CLI reads it too.
-    const held =
-      sourceProfile === profile
-        ? profileKeysOnly(env, files, profile)
-        : await profileSession(env, files, sourceProfile, chain);
-    if (held === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from ${sourceProfile}, which has no way in uno can use`,
-      );
-    }
-    source = held.creds;
-  } else if (credentialSource === "Environment") {
-    const id = env["AWS_ACCESS_KEY_ID"];
-    const secret = env["AWS_SECRET_ACCESS_KEY"];
-    if (id === undefined || id === "" || secret === undefined || secret === "") {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from the environment, which has no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY`,
-      );
-    }
-    source = {
-      accessKeyId: id,
-      secretAccessKey: secret,
-      sessionToken: env["AWS_SESSION_TOKEN"],
-      region: DEFAULT_REGION,
-    };
-  } else if (credentialSource !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} takes its credentials from ${credentialSource}, which uno does not reach · use source_profile or Environment`,
-    );
-  } else {
-    throw new Error(
-      `the AWS profile ${profile} names a role_arn and no source_profile to assume it with`,
-    );
-  }
-
-  const duration = setting("duration_seconds");
-  return assumeRole(
-    {
-      roleArn,
-      sessionName: setting("role_session_name") ?? `uno-${Date.now()}`,
-      externalId: setting("external_id"),
-      durationSeconds: duration === undefined ? undefined : Number(duration),
-      region: regionOf(env, files, profile),
-    },
-    source,
-    { endpoint: env["AWS_ENDPOINT_URL_STS"] },
-  );
-}
-
-/** A profile's own static keys, for a role profile that is its own source. */
-function profileKeysOnly(env: Env, files: AwsFiles, profile: string): Held | undefined {
-  const p = files.credentials.get(profile);
-  const fromConfig = configOf(files, profile);
-  const key = p?.get("aws_access_key_id") ?? fromConfig?.get("aws_access_key_id");
-  const secret = p?.get("aws_secret_access_key") ?? fromConfig?.get("aws_secret_access_key");
-  if (key === undefined || secret === undefined) return undefined;
-  const token = p?.get("aws_session_token") ?? fromConfig?.get("aws_session_token");
-  return {
-    creds: {
-      accessKeyId: key,
-      secretAccessKey: secret,
-      sessionToken: token,
-      region: regionOf(env, files, profile),
-    },
-    until: Date.now() + CREDENTIALS_MS,
-  };
 }
 
 /**
