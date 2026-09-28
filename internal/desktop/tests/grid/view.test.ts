@@ -12,6 +12,7 @@ import type { Kind } from "@uno/grid/sheet";
 import { OVERSCAN } from "../../src/renderer/grid/metrics.ts";
 import type { Rows } from "../../src/renderer/grid/rows.ts";
 import { View } from "../../src/renderer/grid/view.ts";
+import { m } from "../../src/paraglide/messages.js";
 
 /** The row height the view falls back to when the stylesheet is not loaded. */
 const ROW_H = 29;
@@ -131,4 +132,27 @@ test("a taller scroller draws more rows on the next frame", async () => {
   await frame();
 
   expect(drawn(scroller)).toBe(Math.ceil(900 / ROW_H) + OVERSCAN);
+});
+
+// ----------------------------------------------------------------- header
+
+test("a blank header is drawn as the column's place, and dressed as a name the file did not give", () => {
+  const { view, scroller } = make(600);
+  const rows = sheet(10, 3);
+  // What pandas writes for an index column, and a header of nothing but spaces.
+  const columns = [...rows.columns];
+  columns[0] = { ...columns[0]!, header: "" };
+  columns[2] = { ...columns[2]!, header: "   " };
+  view.show({ ...rows, columns }, false);
+
+  const names = [...scroller.querySelectorAll("thead th .colname")];
+  expect(names.map((n) => n.textContent)).toEqual([
+    m.column_unnamed({ number: 1 }),
+    "c1",
+    m.column_unnamed({ number: 3 }),
+  ]);
+  expect(names.map((n) => n.classList.contains("unnamed"))).toEqual([true, false, true]);
+  // Every column still wears its badge, and the body still has its cell.
+  expect(scroller.querySelectorAll("thead th .badge").length).toBe(3);
+  expect(scroller.querySelector("tbody tr")?.children.length).toBe(4);
 });
