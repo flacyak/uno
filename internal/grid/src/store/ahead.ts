@@ -76,6 +76,13 @@ export function readAhead(read: ReadRange, size: number, ahead = AHEAD): ReadRan
     for (const [offset, chunk] of held) {
       if (!recent.includes(chunk.for)) held.delete(offset);
     }
+    // A reader that has gone is not read ahead of either: its chunks were just
+    // let go, and asked for again they would be let go again at every read
+    // from somewhere else, bought for nobody.
+    if (!recent.includes(stream)) {
+      stream = undefined;
+      return;
+    }
     let at = stream.next;
     while (held.has(at)) at += held.get(at)!.length;
     while (held.size < ahead - 1 && at < size) {
