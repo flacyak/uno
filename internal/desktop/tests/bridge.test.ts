@@ -60,11 +60,11 @@ const PRELOAD_SENDS = new Set(captures(/ipcRenderer\.(?:invoke|send)\("([^"]+)"/
 // of file:pick-save is not double-counted here.
 const MAIN_HANDLES = new Set(captures(/ipcMain\.(?:handle|on)\("([^"]+)"/g, MAIN));
 
-test("the renderer -> main extraction found the six channels this file assumes", () => {
+test("the renderer -> main extraction found the seven channels this file assumes", () => {
   // Non-empty and sized on purpose: a regex that stops matching would
   // otherwise leave every "is it registered" assertion below trivially true.
-  expect(PRELOAD_SENDS.size).toBe(6);
-  expect(MAIN_HANDLES.size).toBe(6);
+  expect(PRELOAD_SENDS.size).toBe(7);
+  expect(MAIN_HANDLES.size).toBe(7);
 });
 
 test("every channel the renderer sends has a receiver in main", () => {

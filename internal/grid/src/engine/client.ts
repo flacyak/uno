@@ -11,6 +11,7 @@ import type {
   EditRequest,
   FindRequest,
   Found,
+  Loaded,
   Offer,
   Opened,
   Peeked,
@@ -137,6 +138,17 @@ export class Engine {
     const r = await this.ask((id) => ({ t: "peek", id, ref }));
     if (r.t !== "peeked") throw new Error(`the engine answered a peek with ${r.t}`);
     return r.peeked;
+  }
+
+  /**
+   * connections has the engine read its connections again and answers with
+   * them: asked at start, and after one is saved, so what the panel lists and
+   * what the engine signs with are the same list.
+   */
+  async connections(): Promise<Loaded> {
+    const r = await this.ask((id) => ({ t: "connections", id }));
+    if (r.t !== "loaded") throw new Error(`the engine answered a connections request with ${r.t}`);
+    return r.loaded;
   }
 
   /** close ends the connection. The worker behind it goes when its port does. */
