@@ -123,4 +123,37 @@ export const PANEL: Check[] = [
         : "the status bar says " + JSON.stringify(text("#status-file"));
     `,
   },
+  {
+    name: "Re-point on a tab's line points it at another object in the bucket",
+    script: `
+      ${REMOTE}
+      ${LINES}
+      const q3 = "s3://acme-exports/2025/ads-q3.csv", q4 = "s3://acme-exports/2025/ads-q4.csv";
+      const row = (path) => [...document.querySelectorAll("#panel .panel-row")].find((r) => r.title.startsWith(path));
+      const button = (label) => [...document.querySelectorAll("#panel .panel-foot button")].find((b) => b.textContent === label);
+      row(q4).click();
+      await frame();
+      if (button("Re-point") === undefined) return "the ads-q4.csv line offers no Re-point";
+      button("Re-point").click();
+      // The folder is on screen from the adding before, so what is waited for
+      // is the listing drawn under the re-point's title. A pick made in the
+      // old one is dropped when the new one lands.
+      if (!(await arrives(() => head(BROWSER).name === "Point ads-q4.csv at…" && names(BROWSER).includes("ads-q3.csv")))) {
+        return "the browser lists " + JSON.stringify(names(BROWSER)) + " · " + JSON.stringify(head(BROWSER));
+      }
+      // The keys are on the folder's first line, which is ads-q3.csv.
+      await key(" ");
+      if (!(await until(() => button("Point ads-q4.csv here") !== undefined))) {
+        return "the buttons are " + JSON.stringify([...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent));
+      }
+      button("Point ads-q4.csv here").click();
+
+      if (!(await arrives(() => text("#status-msg").endsWith("reads from " + q3)))) {
+        return "the status bar says " + JSON.stringify(text("#status-msg"));
+      }
+      const from = () => lines().map((l) => l.title).filter((t) => t !== "");
+      const moved = () => from().filter((t) => t.startsWith(q3)).length === 2 && !from().some((t) => t.startsWith(q4));
+      return (await until(moved)) ? "" : "the tabs read from " + JSON.stringify(from());
+    `,
+  },
 ];
