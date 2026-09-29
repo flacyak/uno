@@ -24,9 +24,13 @@ Everything above `store` is pure. This lets it share the same code across
 platforms. This property should continue. `store/node` and `store/disklister`
 are the only files that import `node:fs`, and `store/node` is the only one that
 runs a program, a profile's `credential_process`. `store/s3` and `store/sts`
-are the only ones that reach a network. `tests/store/opens.test.ts` holds each
-of them to that however a module is reached for, `import()` and `require()`
-included, and plants a violation of every rule to prove it is caught.
+are the only ones that reach a network. Two tests hold each of them to that,
+from one list in `tests/store/ways.ts`. `tests/store/opens.test.ts` reads the
+source, so it catches a way out however a module is written, `import()` and
+`require()` included, even in code no test runs. `tests/store/reaches.test.ts`
+runs the core as the desktop engine does, under plain Node with every file
+read, socket, program and request watched, so it catches a module whose name
+is put together at run time. Each plants a violation to prove it is caught.
 `store/node` is its own entry, so a browser build never pulls it in.
 
 ## The engine
