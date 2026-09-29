@@ -9,6 +9,13 @@ export type Input = Parameters<BrowserWindow["webContents"]["sendInputEvent"]>[0
 export interface Check {
   name: string;
   /**
+   * Something only smoke.js can do, asked of it before the check runs and
+   * answered once it is done: `rewrite <key>` writes the stand-in's object at
+   * <key> over with other bytes of the same size. The stand-in bucket lives in
+   * smoke.js, so a change a person would make in the bucket is made there.
+   */
+  ask?: string;
+  /**
    * A menu item's message and what it carries, sent before the check runs the
    * way the menu sends it. An accelerator is the main process's, so a key the
    * page dispatches never reaches one.
