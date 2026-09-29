@@ -18,7 +18,7 @@
 //
 // Usage: node scripts/smoke.js   (after node scripts/build.js)
 
-import { readContainer } from "@uno/grid/document";
+import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
 import { parseConnection } from "@uno/grid/library";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -39,6 +39,14 @@ const second = join(pkg, "../grid/tests/testdata/google-ads-sales.csv");
 const KEY = "2025/ads-q3.csv";
 /** Beside it, the two the panel browses to, peeks at and adds. */
 const BESIDE = ["2025/ads-q4.csv", "2025/sales-q3.csv"];
+
+/**
+ * A second, public bucket, and the object a colleague's workspace names in it
+ * that has since been deleted. Connecting the bucket works -- it lists -- and
+ * reading the object does not, which is what the last checks are about.
+ */
+const OPEN_BUCKET = "open-data";
+const GONE = `s3://${OPEN_BUCKET}/2025/gone.csv`;
 
 // The screenshot goes somewhere it survives the run, because the point of
 // taking one is to look at it.
@@ -72,6 +80,34 @@ await writeFile(
   `[finance]\naws_access_key_id = ${KEYS.accessKeyId}\naws_secret_access_key = ${KEYS.secretAccessKey}\n`,
 );
 
+// The workspace a colleague sent, written the way their uno would have: one
+// source pointed at, in a bucket this run has no connection to. It sits in a
+// folder of its own, since every .uno directly in the scratch folder is taken
+// for one this run saved.
+const sent = join(scratch, "sent", "gone.uno");
+await mkdir(dirname(sent), { recursive: true });
+await writeFile(
+  sent,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [
+      {
+        id: "gone",
+        name: "gone.csv",
+        path: GONE,
+        bytes: 0,
+        rows: 0,
+        cols: 0,
+        state: { active: { row: 0, col: 0 } },
+      },
+    ],
+    active: "gone",
+    log: [],
+    extra: new Map(),
+    at: sent,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 if (displayMissing(process.env, process.platform)) {
@@ -90,6 +126,9 @@ const standin = await bucket(
     [BESIDE[0], await readFile(second)],
     [BESIDE[1], await readFile(fixture)],
   ]),
+  {
+    [OPEN_BUCKET]: { objects: new Map([["2025/here.csv", await readFile(fixture)]]), public: true },
+  },
 );
 const object = `s3://${BUCKET}/${KEY}`;
 console.log(`smoke: stand-in S3 at ${standin.endpoint}, holding ${object}`);
@@ -108,6 +147,7 @@ const child = spawn(electron, [pkg, `--user-data-dir=${data}`, fixture], {
     // Only this script knows where the bucket came up, so it is the only thing
     // that can tell the checks what to add.
     UNO_SMOKE_OBJECT: object,
+    UNO_SMOKE_SENT: sent,
     // The endpoint and the keys the engine signs with. A utility process
     // inherits the app's environment, so this is the whole of pointing uno at
     // the stand-in.
@@ -188,10 +228,12 @@ try {
   }
   if (c.region !== HOME_REGION)
     trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
-  // The second, for 2025/ of the same bucket, keeps a file of its own, and the
-  // bucket that was refused left none.
+  // The second, for 2025/ of the same bucket, keeps a file of its own, as does
+  // the public bucket the sent workspace named, and the bucket that was refused
+  // left none.
   const folder = (await readdir(join(data, "connections"))).toSorted();
-  if (JSON.stringify(folder) !== '["acme-exports-2.unof","acme-exports.unof"]') {
+  const want = ["acme-exports-2.unof", "acme-exports.unof", `${OPEN_BUCKET}.unof`];
+  if (JSON.stringify(folder) !== JSON.stringify(want)) {
     trouble.push(`the connections folder holds ${JSON.stringify(folder)}`);
   }
   const second = parseConnection(

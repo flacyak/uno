@@ -235,7 +235,9 @@ export class Workspace {
     const fresh = this.tab(source, tab.savedLog);
     fresh.cell = tab.cell;
     this.tabs[i] = fresh;
-    this.relinked.add(fresh.id);
+    // One still with no file points where it did, so a save has nothing new
+    // to write for it.
+    if (!fresh.missing) this.relinked.add(fresh.id);
     if (this.showing === tab) this.showing = fresh;
     return fresh;
   }
@@ -419,7 +421,7 @@ export class Workspace {
     // report. What it has is a path that stopped working, which is the only
     // thing worth saying about it.
     // One in a bucket nobody connected already says what to do about it.
-    if (t.link?.connect !== undefined) return `${t.trouble}`;
+    if (t.link?.connect !== undefined) return t.trouble ?? "";
     if (t.missing) return `${t.trouble} · point it at a file to see its rows`;
 
     // Until the index reaches the end, the count is projected from how far it

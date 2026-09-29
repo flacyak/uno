@@ -262,10 +262,10 @@ export class Shell {
     // connecting the bucket is the person saying it may be read.
     for (const tab of this.workspace?.sources ?? []) {
       const path = tab.link?.path;
-      const loc =
-        path === undefined || tab.link?.connect === undefined ? undefined : s3Location(path);
+      if (path === undefined || tab.link?.connect === undefined) continue;
+      const loc = s3Location(path);
       if (loc !== undefined && covers(saved, loc.bucket, loc.key)) {
-        void this.pointAt(tab, refAt(path!), `${tab.name} reads from ${saved.name}`);
+        void this.pointAt(tab, refAt(path), `${tab.name} reads from ${saved.name}`);
       }
     }
     return saved;
@@ -704,7 +704,14 @@ export class Shell {
       const fresh = await w.relink(tab, ref);
       if (this.workspace !== w) return;
 
-      this.say(said ?? `${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`);
+      // A tab that waited for its bucket stops waiting once it is connected,
+      // read or not. One that still has no file says why on its own line, so
+      // the message beside it would only say it twice.
+      this.say(
+        fresh.missing
+          ? ""
+          : (said ?? `${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`),
+      );
       if (w.active === fresh) this.showActive();
       else this.paintTabs();
       this.paintStatus();

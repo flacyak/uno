@@ -15,7 +15,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
 import { SECTIONS, STATE_WORDS, connectionLine, stateOf } from "../sources.ts";
-import type { Button, Connection, Place, Section, Sources, TabAction } from "../sources.ts";
+import type { Button, Connection, Doing, Place, Section, Sources, TabAction } from "../sources.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
 
@@ -25,6 +25,17 @@ import type { ConnectAsks, Filled } from "./connect.ts";
  * arithmetic with it and two copies would disagree the first time one changed.
  */
 const ROW_H = 24;
+
+/**
+ * The key for each thing a tab's line offers. Connect is the key a tab waiting
+ * for its bucket has in Reload's place, since reloading it is not on offer.
+ */
+const DOING_KEYS: Record<string, Doing> = {
+  r: "reload",
+  c: "connect",
+  p: "repoint",
+  Delete: "remove",
+};
 
 const TITLES: Record<Section, string> = {
   workspace: "In this workspace",
@@ -315,9 +326,10 @@ export class Panel {
       // What can be done to a tab, from its line. Anywhere else there is no
       // tab, and the key goes on as one the panel does not read.
       case "r":
+      case "c":
       case "p":
       case "Delete": {
-        const does = e.key === "r" ? "reload" : e.key === "p" ? "repoint" : "remove";
+        const does = DOING_KEYS[e.key];
         const action = this.sources.doings.find((a) => a.does === does);
         if (action === undefined) return;
         this.doing(action);

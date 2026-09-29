@@ -185,3 +185,42 @@ test("the guard has nothing to say about a path on disk", () => {
   expect(guard(FIXTURE)).toBeUndefined();
   expect(guard(OBJECT)).toEqual({ bucket: BUCKET });
 });
+
+// Connecting the bucket is what the source waited for, so it stops waiting
+// whether or not its object is still there. One that has gone is missing like
+// any other, and says why -- not "connect acme-exports" once more, which would
+// send the person round the same form for a connection they already have.
+test("a source whose object has gone stops waiting once its bucket is connected, and says why", async () => {
+  const key = "2025/gone.csv";
+  const gone = `s3://${BUCKET}/${key}`;
+  b.objects.set(key, b.objects.get("2025/sales-q3.csv")!);
+  let file: string;
+  try {
+    file = await workspace(gone);
+  } finally {
+    b.objects.delete(key);
+  }
+  const { engine, done, store, dir } = await desktop();
+  try {
+    const { sources } = await engine.open({ name: "q4-close.uno", path: file });
+    const remote = sourceNamed(sources, "sales-q3.csv");
+    const at = { name: "sales-q3.csv", path: gone };
+
+    // Before it is connected, a failed read is only a failed read, and the
+    // source is still waiting for its bucket.
+    await expect(engine.relink(remote, at)).rejects.toThrow(
+      `${gone}: no such object in that bucket`,
+    );
+
+    await saveConnection(store, dir, EXPORTS);
+    await engine.connections();
+    const now = await engine.relink(remote, at);
+    expect(now.opened.link).toEqual({
+      path: gone,
+      missing: `${gone}: no such object in that bucket`,
+    });
+    expect(now.opened.edits).toHaveLength(1);
+  } finally {
+    done();
+  }
+});

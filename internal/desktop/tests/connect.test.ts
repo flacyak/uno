@@ -375,3 +375,59 @@ test("a tab in a bucket nobody connected offers Connect, filled in, and no Reloa
   expect(document.activeElement).toBe(field("prefix"));
   expect(asks.tried).toEqual([]);
 });
+
+// The keys reach it as the buttons do: c is Connect in Reload's place, and r,
+// which would read the bucket with this machine's credentials, does nothing.
+test("c on a tab waiting for its bucket connects it, and r does not read it", async () => {
+  const waiting = {
+    id: "q4",
+    name: "orders.csv",
+    link: {
+      path: "s3://acme-exports/shop/orders.csv",
+      missing: "q4-close.uno reads s3://acme-exports/…",
+      connect: { bucket: "acme-exports" },
+    },
+  };
+  document.body.innerHTML = `<aside id="panel" class="panel" hidden></aside>`;
+  root = document.querySelector<HTMLElement>("#panel")!;
+  sources = new Sources(
+    listed,
+    () => [waiting],
+    [],
+    () => panel.draw(),
+  );
+  const reloaded: string[] = [];
+  const noop = (): void => {};
+  panel = new Panel(
+    root,
+    sources,
+    () => "default",
+    {
+      select: noop,
+      add: noop,
+      reload: (id) => reloaded.push(id),
+      repoint: noop,
+      remove: noop,
+      closed: noop,
+    },
+    asks,
+  );
+  panel.show();
+  sources.focus("workspace", 0);
+  panel.draw();
+  const key = (k: string): void => {
+    root
+      .querySelector(".panel-list")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+  };
+
+  key("r");
+  await settle();
+  expect(reloaded).toEqual([]);
+  expect(form().hidden).toBe(true);
+
+  key("c");
+  await settle();
+  expect(form().hidden).toBe(false);
+  expect(field("bucket").value).toBe("acme-exports");
+});
