@@ -22,6 +22,7 @@ import { join } from "node:path";
 
 import type { BrowserWindow, Rectangle } from "electron";
 
+import { ask } from "./ask.ts";
 import { through } from "./driven.ts";
 
 /**
@@ -34,13 +35,17 @@ import { through } from "./driven.ts";
 const FRAME_INTERVAL = 60;
 
 /**
- * The fewest distinct frames a real take contains.
+ * The fewest distinct frames a real take of each story contains.
  *
  * Every other way this can fail is loud. A script that silently did nothing is
  * not: it yields two hundred identical frames and a perfectly valid GIF of a
- * still image, which is the one failure that would ship.
+ * still image, which is the one failure that would ship. The stories that type
+ * and scroll change the window many times over. The refresh story changes it
+ * once a beat -- the panel, the mark, the reload -- so a take of it has the
+ * opening frame and one for each of those three, and a take with fewer is one
+ * where a beat did nothing.
  */
-const MIN_DISTINCT = 8;
+const MIN_DISTINCT: Record<string, number> = { edit: 8, browse: 8, refresh: 4 };
 
 /**
  * The edit story, as offsets from the moment the camera rolls.
@@ -88,6 +93,25 @@ const BROWSE = {
   close: 27_900,
   end: 29_400,
 };
+
+/**
+ * The refresh story, in the same form: a colleague's workspace whose export in
+ * the bucket was regenerated since it was saved, then regenerated again while
+ * it is open, and read again with Reload.
+ *
+ * scripts/preview.js lays it out against the stand-in bucket and rewrites the
+ * object when the story asks it to.
+ */
+const REFRESH = {
+  panel: 2_200, // the ! on the tab and the reason in the status bar have been read
+  rewrite: 4_600, // the line says changed; somebody regenerates the export again
+  focus: 5_600, // and the person comes back to the window
+  reload: 9_400, // the line says newer in bucket, and the status bar says Reload reads it
+  end: 13_400, // the corrected figure, and what Reload found, have been read
+};
+
+/** The object the refresh story's workspace points at, by its key in the stand-in. */
+const REFRESH_KEY = "2025/ads-q3.csv";
 
 /**
  * The pacing inside one correction. Gaps, not offsets, because what matters
@@ -168,8 +192,8 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // later. Filming before it does would spend the opening beat on an empty
   // window. The edit story waits for rows; the browse story opens a workspace
   // whose source is missing, so it has none, and waits for the tab's ! instead.
-  const browse = process.env["UNO_PREVIEW_STORY"] === "browse";
-  const ready = browse ? ".tab .trouble" : "tbody tr:not(.pending)";
+  const story = process.env["UNO_PREVIEW_STORY"] ?? "edit";
+  const ready = story === "edit" ? "tbody tr:not(.pending)" : ".tab .trouble";
   try {
     await win.webContents.executeJavaScript(`
       (async () => {
@@ -191,13 +215,11 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // One clock. The camera and the script start together and never consult each
   // other again, which is the whole reason for filming from inside the process.
   const start = Date.now();
-  const end = browse ? BROWSE.end : BEAT.end;
+  const end = story === "browse" ? BROWSE.end : story === "refresh" ? REFRESH.end : BEAT.end;
+  const script = story === "browse" ? playBrowse : story === "refresh" ? playRefresh : play;
   let shots: (Shot & { hash: string })[];
   try {
-    [shots] = await Promise.all([
-      film(win, dir, rect, start, end),
-      browse ? playBrowse(win, start) : play(win, start),
-    ]);
+    [shots] = await Promise.all([film(win, dir, rect, start, end), script(win, start)]);
   } catch (err) {
     // A take that fails says why and ends now, rather than leaving the app
     // open for the script's deadline to find.
@@ -219,7 +241,7 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   console.log(`preview: ${shots.length} frames over ${(total / 1000).toFixed(1)}s (${fps}/s)`);
   console.log(`preview: ${distinct} distinct`);
 
-  if (distinct < MIN_DISTINCT) {
+  if (distinct < (MIN_DISTINCT[story] ?? 8)) {
     console.error(`preview: FAILED -- ${distinct} distinct frames is a film of a still image`);
     quit(1);
     return;
@@ -455,6 +477,40 @@ async function playBrowse(win: BrowserWindow, start: number): Promise<void> {
   press(win, "Escape");
 
   await at(BROWSE.end);
+}
+
+/**
+ * playRefresh performs the refresh story: the panel opened on the tab marked
+ * changed, the export regenerated in the bucket while it is open, the window
+ * coming back into focus and marking it newer, and Reload from the keys on its
+ * line.
+ *
+ * The window is driven and keeps the focus the whole take, so coming back to
+ * it is the focus event a window manager would deliver.
+ */
+async function playRefresh(win: BrowserWindow, start: number): Promise<void> {
+  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
+
+  win.webContents.send("menu:input", "default");
+
+  await at(REFRESH.panel);
+  through(win, () => {
+    const modifiers: ("control" | "shift")[] = ["control", "shift"];
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
+  });
+
+  await at(REFRESH.rewrite);
+  await ask("preview", `rewrite ${REFRESH_KEY}`);
+
+  await at(REFRESH.focus);
+  await win.webContents.executeJavaScript(`window.dispatchEvent(new Event("focus"))`);
+
+  // r on the tab's line, where the panel opened with the keys.
+  await at(REFRESH.reload);
+  press(win, "r");
+
+  await at(REFRESH.end);
 }
 
 /** The pause between the pointer arriving at a button and pressing it. */
