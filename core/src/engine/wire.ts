@@ -17,8 +17,6 @@
  * This file is encoding only, so both a page and a Node process import it.
  */
 
-import { formatBytes, messageOf } from './protocol.ts';
-import type { MessagePortLike, Reply } from './protocol.ts';
 import { WHOLE_LIMIT } from './workspace.ts';
 
 /**
@@ -311,91 +309,4 @@ function bytesAt(
 
 function isRecord(value: unknown): value is { [key: string]: Json } {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** trouble builds an unnumbered error reply for a frame that failed to decode. */
-function trouble(text: string): Reply {
-  return { t: 'error', said: { t: 'text', text } };
-}
-
-/** The event type and listener pairs a port accepts. */
-type Listening =
-  | ['message', (e: { data: unknown }) => void]
-  | ['close', () => void];
-
-/** The part of a browser web socket this uses. The `ws` package's has it too. */
-export interface WebSocketLike {
-  binaryType: string;
-  send(data: string | Blob): void;
-  close(): void;
-  addEventListener(type: 'message', fn: (e: { data: unknown }) => void): void;
-  addEventListener(type: 'close', fn: () => void): void;
-}
-
-/**
- * socketPort wraps an open web socket as a MessagePortLike.
- *
- * `postMessage` throws if the encoded frame is over `limit` bytes. A socket
- * close fires the port's close listeners.
- */
-export function socketPort(
-  socket: WebSocketLike,
-  limit = FRAME_LIMIT,
-): MessagePortLike {
-  const listeners: Array<(e: { data: unknown }) => void> = [];
-  const closes: Array<() => void> = [];
-  let closed = false;
-  /** The number of the last frame sent, and of the last one heard. */
-  let seq = 0;
-  let heard = 0;
-
-  socket.binaryType = 'arraybuffer';
-  socket.addEventListener('message', (e) => {
-    const data =
-      e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data;
-    if (typeof data !== 'string' && !(data instanceof Uint8Array)) return;
-    let message: unknown;
-    try {
-      const got = decode(data);
-      if (got.seq === undefined) return;
-      heard = got.seq;
-      message = got.message;
-    } catch (err) {
-      message = trouble(`the engine sent ${messageOf(err)}`);
-    }
-    for (const fn of listeners) fn({ data: message });
-  });
-  socket.addEventListener('close', () => {
-    if (closed) return;
-    closed = true;
-    for (const fn of closes) fn();
-  });
-
-  function addEventListener(...[type, fn]: Listening): void {
-    if (type === 'message') listeners.push(fn);
-    else closes.push(fn);
-  }
-
-  return {
-    postMessage(message) {
-      if (closed) return;
-      const frame = encode({ seq: seq + 1, ack: heard, message });
-      seq++;
-      const weight = frameBytes(frame);
-      if (weight > limit) {
-        throw new Error(
-          `${formatBytes(weight)} is over the ${formatBytes(limit)} this engine takes in one message`,
-        );
-      }
-      socket.send(typeof frame === 'string' ? frame : new Blob(frame));
-    },
-    addEventListener,
-    // A web socket delivers from the moment it opens, so start returns at once.
-    start: () => undefined,
-    close() {
-      if (closed) return;
-      closed = true;
-      socket.close();
-    },
-  };
 }
