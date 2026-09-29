@@ -166,9 +166,12 @@ starts reading files on its own.
 A source whose file is not where the workspace left it still opens: it keeps its
 id, its edits and its place in the log, and the tab wears a `!` that says what
 went wrong. Clicking the `!` asks where the file is now, and the edits replay
-over it. A file that has changed size since the save gets the same mark and its
-rows anyway, because only the person looking at them can say whether it is still
-the right file.
+over it. A file that is not the one the log was made against gets the same mark
+and its rows anyway, because only the person looking at them can say whether it
+is still the right file, and the status bar says what changed. An object whose
+save recorded a version is changed when its version is not that one, which
+catches an export regenerated at the same size. A file with no version, such as
+one on a disk, is changed when its size is not what the save measured.
 
 A file that cannot take the log -- one a quarter the size, whose last rows the
 log names -- is refused, and the source is left as it was. A wrong pick costs
