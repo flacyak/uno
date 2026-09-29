@@ -25,6 +25,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 import type { Connection } from "../library/index.ts";
+import { covering } from "../library/index.ts";
 import type { Provider } from "../plugin/index.ts";
 import type { FileHandler } from "./index.ts";
 import { s3Lister } from "./s3lister.ts";
@@ -387,6 +388,33 @@ export async function tryConnection(c: Connection, opts: TryOptions): Promise<Tr
     folders,
     files: page.entries.length - folders,
     more: page.next !== undefined,
+  };
+}
+
+/** A bucket an address is in that no connection covers. */
+export interface Unconnected {
+  bucket: string;
+}
+
+/**
+ * connectionGuard says of an address a .uno names whether it is in a bucket no
+ * connection covers, and answers undefined for one that is covered or is not
+ * in S3 at all.
+ *
+ * It reads addresses the way s3Files does, with s3Location, so every form the
+ * handler would open -- s3://, and the https ones -- is one this guards. A
+ * guard that parsed only s3:// would let a .uno written with an https address
+ * be read with this machine's credentials, which is what it exists to stop.
+ */
+export function connectionGuard(
+  connections: () => readonly Connection[],
+): (path: string) => Unconnected | undefined {
+  return (path) => {
+    const loc = s3Location(path);
+    if (loc === undefined) return undefined;
+    return covering(connections(), loc.bucket, loc.key) === undefined
+      ? { bucket: loc.bucket }
+      : undefined;
   };
 }
 

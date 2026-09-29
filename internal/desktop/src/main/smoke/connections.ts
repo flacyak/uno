@@ -1,5 +1,5 @@
-// Checks that a bucket is connected from the panel in a window: the form in
-// the list's place, a test that fails saying why and keeping nothing, one that
+// Checks that a bucket is connected from the panel in a window, after the one
+// the reopened workspace asked for in sources.ts: the form in the list's place, a test that fails saying why and keeping nothing, one that
 // works finding the region nobody typed, and the connection it saves listed
 // and browsed without a restart.
 //
@@ -34,12 +34,13 @@ const LINES = `
 
 export const CONNECTIONS: Check[] = [
   {
-    name: "the panel offers to connect a bucket before any is saved",
+    name: "the panel lists the connection the workspace was given, and offers another",
     script: `
       ${LINES}
+      await press("B", { ctrlKey: true, shiftKey: true });
       if (document.querySelector("#panel").hidden) return "the panel is closed";
       const got = named(CONNECTIONS).map((l) => l.name);
-      return JSON.stringify(got) === '["+ Connect a bucket"]' ? "" : "the connections section lists " + JSON.stringify(got);
+      return JSON.stringify(got) === '["acme-exports","+ Connect a bucket"]' ? "" : "the connections section lists " + JSON.stringify(got);
     `,
   },
   {
@@ -96,7 +97,7 @@ export const CONNECTIONS: Check[] = [
       ${LINES}
       [...form().querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
       const listed = () => named(CONNECTIONS).map((l) => l.name + " · " + l.meta);
-      const want = /^\\["acme-exports \\/ 2025 · s3 · [a-z0-9-]+","\\+ Connect a bucket · "\\]$/;
+      const want = /^\\["acme-exports · s3 · [a-z0-9-]+","acme-exports \\/ 2025 · s3 · [a-z0-9-]+","\\+ Connect a bucket · "\\]$/;
       if (!(await arrives(() => want.test(JSON.stringify(listed()))))) {
         return "the connections section lists " + JSON.stringify(listed()) + " · " + JSON.stringify(text("#status-msg"));
       }
