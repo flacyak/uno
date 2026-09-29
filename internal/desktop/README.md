@@ -113,6 +113,14 @@ after the object has been written over or deleted. A bucket without versioning
 keeps no copy, so the object is read as it is now. So is one whose recorded
 version the bucket no longer has, and it says which version it opened instead.
 
+Coming back to the window asks each object's bucket, one HEAD each, which
+version it holds now. A tab reading another one -- written over while it was
+open, or pinned to the version a save recorded -- wears the `!` mark and says
+`newer in bucket` on its panel line, where Reload reads the newer one. The ask
+waits until the window has kept the focus for a moment, so alt-tabbing through
+uno on the way somewhere else asks nothing, and a bucket that cannot be reached
+leaves every tab as it was.
+
 ## Connections
 
 A connection is a bucket, a folder in it, and how to sign in, kept as one

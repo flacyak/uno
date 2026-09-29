@@ -26,7 +26,7 @@
 import { compareStrings } from "../go/index.ts";
 import type { Entry, Lister, Listing } from "./list.ts";
 import type { S3Options, S3Requests } from "./s3.ts";
-import { refusal, s3Location, s3Requests, s3Url, unaddressable } from "./s3.ts";
+import { refusal, s3Location, s3Requests, s3Url, unaddressable, versionOf } from "./s3.ts";
 import { readListing } from "./s3xml.ts";
 import type { KeyEntry } from "./s3xml.ts";
 
@@ -239,7 +239,10 @@ async function statObject(send: S3Requests, path: string): Promise<Entry> {
   const bytes = Number(head.headers.get("content-length") ?? "NaN");
   if (!Number.isFinite(bytes)) throw new Error(`${url}: S3 did not say how big it is`);
 
-  const etag = head.headers.get("etag");
+  // The version is read the way the handler reads it at open -- the VersionId
+  // where the bucket keeps versions, the ETag otherwise -- because it is
+  // compared with the one a source was opened as, and two kinds never match.
+  const version = versionOf(head.headers);
   const modified = when(head.headers.get("last-modified"));
   return {
     name: lastSegment(loc.key),
@@ -247,7 +250,7 @@ async function statObject(send: S3Requests, path: string): Promise<Entry> {
     folder: false,
     bytes,
     ...(modified === undefined ? {} : { modified }),
-    ...(etag === null || etag === "" ? {} : { version: etag }),
+    ...(version === undefined || version === "" ? {} : { version }),
   };
 }
 

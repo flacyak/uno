@@ -162,3 +162,15 @@ test("an object in a bucket without versions is read as it is now, pinned to its
     done();
   }
 });
+
+// What "newer in the bucket" is decided from: stat has to answer in the kind a
+// source records, or every pinned source would look newer than itself.
+test("stat names a versioned object by its VersionId, and a plain one by its ETag", async () => {
+  const { engine, done } = connect(undefined, providers());
+  try {
+    expect((await engine.stat(VERSIONED)).version).toBe(versionIdOf(bytes));
+    expect((await engine.stat(PLAIN)).version).toBe(etagOf(bytes));
+  } finally {
+    done();
+  }
+});

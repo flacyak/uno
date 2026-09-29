@@ -47,27 +47,39 @@ export interface Open {
   readonly link?: Link;
   /** How big its file was when it opened. */
   readonly bytes?: number;
+  /**
+   * The version its bucket holds now, where that is not the one this tab
+   * reads: somebody has written the object over since it was opened, or the
+   * tab reads a version a save pinned. Asked when the window gets the focus.
+   */
+  readonly newer?: string;
 }
 
 /**
  * State is what a workspace line says about the file behind a tab: it reads,
- * it is not the file the log was written against, it is not there, or it is
- * in a bucket no connection covers and nothing has been read from it.
- *
- * Newer in the bucket is a fifth, once something asks the bucket (3.4).
+ * it is not the file the log was written against, it is not there, it is in a
+ * bucket no connection covers and nothing has been read from it, or the
+ * bucket holds a newer version than the one it reads.
  */
-export type State = "fine" | "changed" | "missing" | "unconnected";
+export type State = "fine" | "changed" | "missing" | "unconnected" | "newer";
 
 /** What a workspace line says beside a tab that is not fine. */
 export const STATE_WORDS: Record<Exclude<State, "fine">, string> = {
   changed: "changed",
   missing: "missing",
   unconnected: "not connected",
+  newer: "newer in bucket",
 };
 
+/**
+ * stateOf is the one state a line says, the most pressing first. Newer comes
+ * before changed because it is the one with something to do about it: Reload
+ * reads what the bucket holds now.
+ */
 export function stateOf(tab: Open): State {
   if (tab.link?.connect !== undefined) return "unconnected";
   if (tab.link?.missing !== undefined) return "missing";
+  if (tab.newer !== undefined) return "newer";
   if (tab.link?.changed !== undefined) return "changed";
   return "fine";
 }

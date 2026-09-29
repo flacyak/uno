@@ -4,6 +4,7 @@
 
 import "./tabs.css";
 
+import { NEWER } from "../workspace.ts";
 import type { Tab, Workspace } from "../workspace.ts";
 
 /** What the strip's controls do. The shell decides; the strip only asks. */
@@ -85,12 +86,17 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: TabActions): HTML
   // A source whose file is gone, or is not the file the log was written
   // against. Clicking the mark opens the panel on it to pick where the file is
   // now; the tab itself still selects, because its edits are worth looking at either way.
+  // One whose bucket holds a newer version wears the same mark, which opens
+  // the panel on its line, where Reload reads the newer one.
   const trouble = t.trouble;
-  if (trouble !== undefined) {
+  if (trouble !== undefined || t.newer !== undefined) {
     const mark = document.createElement("span");
     mark.className = t.missing ? "trouble gone" : "trouble";
     mark.textContent = "!";
-    mark.title = `${trouble} · click to point it at a file in the sources panel`;
+    mark.title =
+      t.newer !== undefined && !t.missing
+        ? `${NEWER} · click to open its line in the sources panel`
+        : `${trouble} · click to point it at a file in the sources panel`;
     mark.addEventListener("click", (e) => {
       e.stopPropagation();
       act.repoint(t);
