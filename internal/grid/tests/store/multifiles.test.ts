@@ -5,7 +5,7 @@
 // build that does not list the handler refuses the ref by name, and a part in
 // a bucket is signed by the connection that covers it, as it would be alone.
 
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
@@ -24,7 +24,6 @@ import {
 } from "../../src/store/index.ts";
 import type { FileHandler, FileRef, PartsRef, SingleRef } from "../../src/store/index.ts";
 import { connectionSigning, diskProvider, localFiles, nodeStore } from "../../src/store/node.ts";
-import type { AwsCredentials } from "../../src/store/s3.ts";
 import { connectionMeeting, s3Provider } from "../../src/store/s3.ts";
 import { TINY, connect, indexed, openOne, sales, sheetRows, widened } from "../engine/harness.ts";
 import { ROWS, bytes } from "../testdata/sales-q3.ts";
@@ -32,6 +31,7 @@ import { PARTS, PART_FIXTURES, PART_NAMES, partBytes } from "../testdata/sales-q
 import { HOME_REGION } from "./regions.ts";
 import { bucket } from "./standin.ts";
 import type { Bucket } from "./standin.ts";
+import { FINANCE, MARKETING, profilesEnv, twoProfiles } from "./profiles.ts";
 
 /** What the three parts are called as one source. */
 const NAME = "sales-q3";
@@ -224,18 +224,6 @@ test("multiProvider reads through the providers it is handed, and browses nothin
 
 // ------------------------------------------------------------ connections
 
-/** Two profiles, each with the keys to one bucket and not the other. */
-const FINANCE: AwsCredentials = {
-  accessKeyId: "AKIDFINANCE",
-  secretAccessKey: "finance/secret",
-  region: HOME_REGION,
-};
-const MARKETING: AwsCredentials = {
-  accessKeyId: "AKIDMARKETING",
-  secretAccessKey: "marketing/secret",
-  region: HOME_REGION,
-};
-
 const FINANCE_BUCKET = "acme-finance";
 const MARKETING_BUCKET = "acme-marketing";
 
@@ -247,37 +235,14 @@ beforeAll(async () => {
     [FINANCE_BUCKET]: { objects: new Map([[PART_NAMES[1]!, partBytes[1]!]]), keys: FINANCE },
     [MARKETING_BUCKET]: { objects: new Map([[PART_NAMES[2]!, partBytes[2]!]]), keys: MARKETING },
   });
-  aws = await mkdtemp(join(tmpdir(), "uno-multifiles-aws-"));
-  await writeFile(
-    join(aws, "credentials"),
-    [
-      "[finance]",
-      `aws_access_key_id = ${FINANCE.accessKeyId}`,
-      `aws_secret_access_key = ${FINANCE.secretAccessKey}`,
-      "[marketing]",
-      `aws_access_key_id = ${MARKETING.accessKeyId}`,
-      `aws_secret_access_key = ${MARKETING.secretAccessKey}`,
-      "",
-    ].join("\n"),
-  );
-  await writeFile(join(aws, "config"), "");
+  aws = await twoProfiles();
 });
 
 afterAll(() => b.close());
 
 /** A machine with the two profiles and no keys of its own. */
 function env(): Record<string, string | undefined> {
-  return {
-    HOME: aws,
-    AWS_CONFIG_FILE: join(aws, "config"),
-    AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
-    AWS_REGION: HOME_REGION,
-    AWS_PROFILE: undefined,
-    AWS_DEFAULT_PROFILE: undefined,
-    AWS_ACCESS_KEY_ID: undefined,
-    AWS_SECRET_ACCESS_KEY: undefined,
-    AWS_SESSION_TOKEN: undefined,
-  };
+  return profilesEnv(aws);
 }
 
 function connection(id: string, bucketName: string, profile: string): Connection {
