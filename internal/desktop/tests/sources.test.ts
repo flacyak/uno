@@ -84,7 +84,11 @@ const BIG: Connection = { name: "big", path: "s3://acme-exports/big", kind: "s3"
 /** What a peek of a file answers: its name as the one header, so a test can
  * tell whose front it is looking at. */
 function front(ref: SourceRef): Peeked {
-  return { label: { t: "read", delimiter: ",", header: "first" }, header: [ref.name], rows: [] };
+  return {
+    label: { t: "read", delimiter: ",", header: "first", charset: "UTF-8" },
+    header: [ref.name],
+    rows: [],
+  };
 }
 
 /**
