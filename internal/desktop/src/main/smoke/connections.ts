@@ -11,19 +11,9 @@
 // the saved file back from outside the app afterwards.
 
 import type { Check } from "./check.ts";
-import { REMOTE } from "./sources.ts";
 
 const LINES = `
-  const lines = () => {
-    let at = -1;
-    return [...document.querySelectorAll("#panel .panel-row")].map((r) => ({
-      el: r, section: r.classList.contains("head") ? ++at : at,
-      cls: r.className, name: r.children[0].textContent, meta: r.children[1].textContent,
-    }));
-  };
-  const CONNECTIONS = 1, BROWSER = 2;
   const note = (section) => lines().find((l) => l.section === section && l.cls.includes("note"))?.name;
-  const named = (section) => lines().filter((l) => l.section === section && !/\\b(head|note)\\b/.test(l.cls));
   const form = () => document.querySelector("#panel .panel-connect");
   const field = (name) => form().querySelector("input[name=" + name + "]");
   const result = () => form().querySelector(".result").textContent;
@@ -48,7 +38,6 @@ export const CONNECTIONS: Check[] = [
     name: "+ Connect a bucket opens the form in the list's place, with the run's one profile on offer",
     shot: "connect-open",
     script: `
-      ${REMOTE}
       ${LINES}
       named(CONNECTIONS).find((l) => l.name === "+ Connect a bucket").el.click();
       if (!(await until(() => form() !== null && !form().hidden))) return "the form did not open";
@@ -63,7 +52,6 @@ export const CONNECTIONS: Check[] = [
     name: "a save that is refused leaves a failed line that names the reason and saves nothing",
     shot: "connect-refused",
     script: `
-      ${REMOTE}
       ${LINES}
       type("bucket", "acme-nowhere");
       form().requestSubmit();
@@ -84,7 +72,6 @@ export const CONNECTIONS: Check[] = [
   {
     name: "Enter on the failed line brings the form back as it was left, to be edited",
     script: `
-      ${REMOTE}
       ${LINES}
       document.querySelector("#panel .panel-list")
         .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
@@ -98,7 +85,6 @@ export const CONNECTIONS: Check[] = [
     name: "a bucket is connected from the panel without typing its region",
     shot: "connect-tried",
     script: `
-      ${REMOTE}
       ${LINES}
       // The whole bucket, beside the 2025/ folder the reopened workspace was
       // given: a second connection to one bucket keeps a file of its own.
@@ -118,7 +104,6 @@ export const CONNECTIONS: Check[] = [
     name: "the saved connection is listed without a restart, and browsed at once",
     shot: "connect-saved",
     script: `
-      ${REMOTE}
       ${LINES}
       [...form().querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
       const listed = () => named(CONNECTIONS).map((l) => l.name + " · " + l.meta);
