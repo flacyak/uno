@@ -84,7 +84,11 @@ const BIG: Connection = { name: "big", path: "s3://acme-exports/big", kind: "s3"
 /** What a peek of a file answers: its name as the one header, so a test can
  * tell whose front it is looking at. */
 function front(ref: SourceRef): Peeked {
-  return { label: { t: "read", delimiter: ",", header: "first" }, header: [ref.name], rows: [] };
+  return {
+    label: { t: "read", delimiter: ",", header: "first", charset: "UTF-8" },
+    header: [ref.name],
+    rows: [],
+  };
 }
 
 /**
@@ -1190,4 +1194,109 @@ test("the panel reaches for no document and no window", () => {
   // The prose says "window" often enough; it is the code that has to be clean.
   const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
   expect(code).not.toMatch(/\bdocument\b|\bwindow\b|\bHTML[A-Za-z]*Element\b/);
+});
+
+test("the selected files are read once per page and per pick, not once per draw", async () => {
+  const panel = new Sources(new Stand(), () => TABS, [BIG]);
+  await panel.open(BIG);
+  await panel.toggle(named(panel, "a.csv"));
+
+  // Every draw asks, through the buttons and the choices, and a page can be
+  // 200,000 entries: the same page and the same picks are the same answer.
+  const once = panel.selected;
+  expect(names(once)).toEqual(["a.csv"]);
+  expect(panel.selected).toBe(once);
+
+  // A pick is a new answer, and so is a page that lands.
+  await panel.toggle(named(panel, "b.csv"));
+  const picked = panel.selected;
+  expect(picked).not.toBe(once);
+  expect(names(picked)).toEqual(["a.csv", "b.csv"]);
+  expect(panel.selected).toBe(picked);
+
+  await panel.next();
+  await panel.toggle(named(panel, "c.csv"));
+  expect(names(panel.selected)).toEqual(["a.csv", "b.csv", "c.csv"]);
+});
+
+// ------------------------------------------------------------ a big prefix
+
+/**
+ * A prefix of `n` files that counts how many times an entry's path is read,
+ * which is what every look through the page costs. A page can be 200,000
+ * entries, so what the selection asks of it is held to a bound rather than
+ * timed.
+ */
+class Prefix implements Listings {
+  reads = 0;
+  readonly entries: Entry[];
+
+  constructor(n: number) {
+    const read = (): void => {
+      this.reads++;
+    };
+    this.entries = Array.from({ length: n }, (_, i) => {
+      const name = `orders-${String(i).padStart(6, "0")}.csv`;
+      const path = `${ORDERS.path}/${name}`;
+      return {
+        name,
+        folder: false,
+        bytes: 1,
+        get path(): string {
+          read();
+          return path;
+        },
+      };
+    });
+  }
+
+  list(_path: string): Promise<Listing> {
+    return Promise.resolve({ entries: [...this.entries] });
+  }
+
+  peek(ref: SourceRef): Promise<Peeked> {
+    return Promise.resolve(front(ref));
+  }
+}
+
+const ORDERS: Connection = { name: "orders", path: "s3://acme-exports/orders", kind: "s3" };
+
+/** A page of this many, and how many of its files are picked, from the end. */
+const PAGE = 2_000;
+const PICKS = 50;
+/** The page read once over, with room for what each pick reads of its own entry. */
+const ONCE_OVER = 2 * PAGE;
+
+/** The last `PICKS` names of the page, in the page's order. */
+function lastNames(prefix: Prefix): string[] {
+  return names(prefix.entries.slice(PAGE - PICKS));
+}
+
+test("picking a file reads the page once over, not once per pick", async () => {
+  const prefix = new Prefix(PAGE);
+  const panel = new Sources(prefix, () => TABS, [ORDERS]);
+  await panel.open(ORDERS);
+
+  prefix.reads = 0;
+  for (let i = PAGE - 1; i >= PAGE - PICKS; i--) await panel.toggle(panel.entries[i]!);
+
+  expect(names(panel.selected)).toEqual(lastNames(prefix));
+  expect(prefix.reads).toBeLessThanOrEqual(ONCE_OVER);
+});
+
+test("a folder listed again checks every pick against the page as it is read, not against every entry", async () => {
+  const prefix = new Prefix(PAGE);
+  const panel = new Sources(prefix, () => TABS, [ORDERS]);
+  await panel.open(ORDERS);
+  for (let i = PAGE - 1; i >= PAGE - PICKS; i--) await panel.toggle(panel.entries[i]!);
+  const [gone, ...kept] = lastNames(prefix);
+
+  // The folder lost the first of the picked files since it was listed.
+  prefix.entries.splice(PAGE - PICKS, 1);
+  prefix.reads = 0;
+  await panel.askGrown();
+
+  expect(names(panel.selected)).toEqual(kept);
+  expect(names(panel.selected)).not.toContain(gone);
+  expect(prefix.reads).toBeLessThanOrEqual(ONCE_OVER);
 });

@@ -208,7 +208,7 @@ export const MULTI: Check[] = [
       const sc = document.querySelector(".grid-scroll");
       sc.scrollTop = sc.scrollHeight;
       const last = () => [...document.querySelectorAll("tbody tr")].at(-1);
-      const drawn = () => last()?.children[0].textContent === ${JSON.stringify(String(ROWS_APPENDED))} && !last().classList.contains("pending");
+      const drawn = () => last()?.children[0].textContent === ${JSON.stringify(counted(ROWS_APPENDED))} && !last().classList.contains("pending");
       if (!(await arrives(drawn))) return "the last row drawn is " + JSON.stringify(last()?.children[0].textContent);
       // It came from the object that was appended, and its _file cell names it.
       const from = last().lastElementChild.textContent;

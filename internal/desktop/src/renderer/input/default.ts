@@ -1,8 +1,9 @@
 // Default input: the keys a spreadsheet has.
 //
-// The arrows, Tab and the page keys move. Enter, F2 or a double click open the
-// editor on the value, typing over a cell replaces it, and in the editor Enter
-// keeps the typing and Esc throws it away. Ctrl+C copies the cell and Ctrl+R
+// The arrows, Tab, Shift+Tab and the page keys move. Enter, F2 or a double
+// click open the editor on the value, typing over a cell replaces it, and in
+// the editor Enter keeps the typing, Esc throws it away, and Tab keeps it and
+// moves on as it does on the grid. Ctrl+C copies the cell and Ctrl+R
 // records again what Ctrl+Z took back. Ctrl+E and Ctrl+Z are the shell's, and
 // work the same whichever strategy reads the grid's keys.
 
@@ -22,6 +23,9 @@ function interpret(mode: Mode, _pending: Pending, press: Press): Step | undefine
   const key = press.key;
 
   if (press.ctrl) {
+    // Shift in a chord names another key, Ctrl+Shift+B the panel's among them.
+    // CapsLock is why the case of the letter itself says nothing.
+    if (press.shift) return undefined;
     switch (key.toLowerCase()) {
       case "c":
         // Copying changes nothing, so view allows it.
@@ -39,10 +43,12 @@ function interpret(mode: Mode, _pending: Pending, press: Press): Step | undefine
     case "ArrowUp":
       return done(move("up"));
     case "ArrowRight":
-    case "Tab":
       return done(move("right"));
     case "ArrowLeft":
       return done(move("left"));
+    // The next cell, and with Shift the one before, as every spreadsheet has it.
+    case "Tab":
+      return done(move(press.shift ? "left" : "right"));
     case "PageDown":
       return done(move("page-down"));
     case "PageUp":

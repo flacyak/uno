@@ -125,8 +125,9 @@ export function say(s: Said): string {
 
     case "read": {
       const headed = s.header === "first";
-      if (s.delimiter === "\t") return headed ? m.read_tabs() : m.read_tabs_no_header();
-      const read = { delimiter: s.delimiter };
+      const tabs = { charset: s.charset };
+      if (s.delimiter === "\t") return headed ? m.read_tabs(tabs) : m.read_tabs_no_header(tabs);
+      const read = { charset: s.charset, delimiter: s.delimiter };
       return headed ? m.read_delimiter(read) : m.read_delimiter_no_header(read);
     }
 

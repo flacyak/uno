@@ -5,7 +5,7 @@
 // disagree about three things around the edges: what a replacement string
 // means, what units a match index is in, and which characters need escaping.
 
-import { runes } from "./strings.ts";
+import { MAX_BMP, SURROGATE_PAIR_UNITS, runes } from "./strings.ts";
 
 /**
  * META is exactly the set `regexp.QuoteMeta` escapes.
@@ -52,9 +52,31 @@ function globalize(re: RegExp): RegExp {
  * `String.replaceAll` with a string replacement expands `$&`, `$1` and `$'`. A
  * person who types `$1` into a cell has to get `$1` back, so the replacement
  * goes through a function, where JavaScript does no expansion.
+ *
+ * The function also keeps Go's rule for an empty match: one that sits where
+ * the previous match ended is not replaced, so `\d*` over "a12b" marks the
+ * digits once rather than twice. Replacing that match with nothing is the same
+ * as skipping it, and leaves the walk itself to the engine.
  */
 export function replaceAllLiteral(re: RegExp, s: string, lit: string): string {
-  return s.replace(globalize(re), () => lit);
+  let prevEnd = -1;
+  return s.replace(globalize(re), (m: string, ...rest: unknown[]) => {
+    const start = matchOffset(rest);
+    const abutting = m === "" && start === prevEnd;
+    prevEnd = start + m.length;
+    return abutting ? "" : lit;
+  });
+}
+
+/**
+ * matchOffset is the position a replacer is handed. It follows the captures,
+ * which are strings or undefined, and precedes the subject string and any
+ * named groups, so it is the one number among the arguments.
+ */
+function matchOffset(rest: readonly unknown[]): number {
+  const at = rest.find((a): a is number => typeof a === "number");
+  if (at === undefined) throw new Error("a replacer was called without an offset");
+  return at;
 }
 
 /**
@@ -102,7 +124,7 @@ export function findAllIndex(re: RegExp, s: string): Array<[number, number]> {
     if (empty) {
       // exec does not advance on an empty match; Go advances one rune.
       const here = s.codePointAt(start) ?? 0;
-      const next = here > 0xffff ? start + 2 : start + 1;
+      const next = here > MAX_BMP ? start + SURROGATE_PAIR_UNITS : start + 1;
       if (next > s.length) break;
       g.lastIndex = next;
     }

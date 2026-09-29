@@ -38,17 +38,22 @@ export function runeLen(s: string): number {
 export function compareStrings(a: string, b: string): number {
   if (a === b) return 0;
 
-  const x = runes(a);
-  const y = runes(b);
-  const n = Math.min(x.length, y.length);
-  for (let i = 0; i < n; i++) {
-    const c = x[i]!.codePointAt(0)!;
-    const d = y[i]!.codePointAt(0)!;
+  // Walked in place rather than split with `runes`: a sort calls this once per
+  // comparison, and the listers order every row of a page through it.
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n;) {
+    const c = a.codePointAt(i)!;
+    const d = b.codePointAt(i)!;
     if (c !== d) return c < d ? -1 : 1;
+    i += c > MAX_BMP ? SURROGATE_PAIR_UNITS : 1;
   }
-  if (x.length === y.length) return 0;
-  return x.length < y.length ? -1 : 1;
+  // The shorter is a prefix of the longer, and they are not the same string.
+  return a.length < b.length ? -1 : 1;
 }
+
+/** The last code point one UTF-16 unit holds; above it a pair does. */
+export const MAX_BMP = 0xffff;
+export const SURROGATE_PAIR_UNITS = 2;
 
 // unicode.IsLetter is category L and unicode.IsDigit is category Nd, so
 // `region` is a legal column name and `[a-zA-Z]` is not the test.
@@ -71,14 +76,13 @@ export function isSpace(r: string): boolean {
   return SPACE.test(r);
 }
 
+// Both ends at once. A `trim` step runs this over every cell of a column, so it
+// is one pattern rather than a `runes` array built and joined per call.
+const EDGE_SPACE = /^\p{White_Space}+|\p{White_Space}+$/gu;
+
 /** strings.TrimSpace: both ends, by unicode.IsSpace rather than by `trim()`. */
 export function trimSpace(s: string): string {
-  const r = runes(s);
-  let i = 0;
-  let j = r.length;
-  while (i < j && isSpace(r[i]!)) i++;
-  while (j > i && isSpace(r[j - 1]!)) j--;
-  return r.slice(i, j).join("");
+  return s.replace(EDGE_SPACE, "");
 }
 
 /**
