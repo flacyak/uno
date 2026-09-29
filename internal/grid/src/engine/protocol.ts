@@ -8,7 +8,7 @@
 // Everything crosses as plain data, so the same messages run over an Electron
 // MessagePortMain, a Web Worker or a MessageChannel in vitest.
 
-import type { Connection } from "../library/index.ts";
+import type { AuthMode, Connection } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
 import type { Said } from "../said/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
@@ -235,6 +235,33 @@ export interface Loaded {
 }
 
 /**
+ * SignIns is how an engine signs in to a bucket, for a person connecting one
+ * to choose from: the modes its platform takes on, the AWS profiles its
+ * machine has where `profile` is among them, and what a role has to trust
+ * where `role` is. Names and ARNs only: nothing that signs crosses the port.
+ */
+export interface SignIns {
+  /** The modes this engine signs in with, in the order to offer them. */
+  modes: AuthMode[];
+  /** The names of the AWS profiles this engine's machine has. Empty where `profile` is not among the modes. */
+  profiles: string[];
+  /**
+   * Whom a role has to trust, and with what external ID, where `role` is
+   * among the modes: the engine's own principal, and the ID that belongs to
+   * the account asking, for the trust policy a person writes in theirs.
+   */
+  trust?: Trust;
+}
+
+/** Trust is what a role's policy names before the hosted engine can take it on. */
+export interface Trust {
+  /** The ARN the policy lets assume the role: the engine's own. */
+  principal: string;
+  /** The external ID the policy's condition asks for. It is the account's, and never in a file. */
+  externalId: string;
+}
+
+/**
  * The most rows one `rows` request is answered with.
  *
  * A client reads a band of rows around its viewport and never more, so a
@@ -299,8 +326,8 @@ export type Request =
    * is one the engine uses without being started again.
    */
   | { t: "connections"; id: number }
-  /** The names of the AWS profiles the engine's machine has, for a person picking one. */
-  | { t: "profiles"; id: number }
+  /** How this engine signs in to a bucket, for a person connecting one. */
+  | { t: "signins"; id: number }
   /**
    * A connection tried before it is saved: where its bucket is, and a page of
    * its prefix, asked the way it signs in. Nothing is kept by asking.
@@ -335,8 +362,8 @@ export type Reply =
   | { t: "peeked"; id: number; peeked: Peeked }
   /** What a connections request read, and what it could not, one sentence a file. */
   | { t: "loaded"; id: number; loaded: Loaded }
-  /** Profile names, and nothing else out of the files they are in. */
-  | { t: "names"; id: number; names: string[] }
+  /** The ways of signing in on offer: modes, profile names and nothing else out of the files they are in, and a role's trust. */
+  | { t: "offered"; id: number; signins: SignIns }
   | { t: "tried"; id: number; tried: Tried }
   /** Null when the source has nothing to ask. */
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
