@@ -7,7 +7,7 @@
 // no stored row is rewritten, and the rows a client asks for next come back
 // changed, wherever in the file they are.
 
-import type { HeldPart } from "../document/index.ts";
+import type { HeldFile, HeldPart, HeldParts } from "../document/index.ts";
 import { trimSpace } from "../go/index.ts";
 import { headerOf, labelOf, openFormat } from "../ingest/index.ts";
 import type { Format } from "../ingest/index.ts";
@@ -96,47 +96,14 @@ export interface Carried {
   edits: Edit[];
 }
 
-/** What a save writes of one source: where its bytes are, its log, and the grid
- * they add up to. The bytes are one file or several read as one, and `parts`
- * is what says which. */
-export type Part = FilePart | JoinedPart;
-
-/** What a save writes of every source, whatever is behind it. */
-interface Kept {
-  /** The connection it was read through, as a hint for whoever opens the save. */
-  connection?: string;
-  edits: Edit[];
-  rows: number;
-  cols: number;
-}
-
-/** What a save writes of one file. Exactly one of `raw` and `path` is set. */
-export interface FilePart extends Kept {
-  raw?: Uint8Array;
-  path?: string;
-  /** What the file measures, for a save that points at it rather than copying it. */
-  bytes: number;
-  /** Which bytes of the file were read, where the place it is in can say. */
-  version?: string;
-
-  parts?: never;
-  header?: never;
-  fileColumn?: never;
-}
-
-/** What a save writes of several files read as one: where each part is, which
- * bytes of it were read, and how it sits in the join. */
-export interface JoinedPart extends Kept {
-  parts: HeldPart[];
-  header: HeaderMode;
-  /** Whether it shows a `_file` column. Left out where it does not. */
-  fileColumn?: boolean;
-
-  raw?: never;
-  path?: never;
-  bytes?: never;
-  version?: never;
-}
+/**
+ * Part is what a save writes of one source: what a workspace holds of it, less
+ * what the workspace gives it -- its id, its name, where its grid was left --
+ * and with its log. The bytes are one file or several read as one, and `parts`
+ * is what says which.
+ */
+export type Part = (Omit<HeldFile, Unsaved> | Omit<HeldParts, Unsaved>) & { edits: Edit[] };
+type Unsaved = "id" | "name" | "state";
 
 export class View {
   opened!: Opened;
