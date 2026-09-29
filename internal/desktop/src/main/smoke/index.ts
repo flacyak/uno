@@ -22,6 +22,7 @@ import { electronPage } from "./electron-page.ts";
 import { COMMAS_LEFT, DATE, DOM_ROWS, GUTTER, REGION, REP, ROWS, UNITS } from "./fixture.ts";
 import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
+import { SETTINGS } from "./settings.ts";
 import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
 
@@ -45,6 +46,7 @@ const CHECKS: Check[] = [
   ...SOURCES,
   ...PANEL,
   ...CONNECTIONS,
+  ...SETTINGS,
 ];
 
 /**
@@ -90,8 +92,17 @@ const PRELUDE = `
 `;
 
 /**
- * shoot writes a picture of the window into the run's folder, as <name>.png.
- * After two frames, so the check's last change is drawn.
+ * How long a shot waits after the page's frames for the compositor to put the
+ * last of them on screen. Two animation frames say the page has drawn its
+ * change; they do not say the window has, and capturePage returns whatever the
+ * window last showed. Without this, one shot in four of a theme changed a
+ * moment before came back as the frame before it.
+ */
+const COMPOSITED_MS = 120;
+
+/**
+ * shoot writes a picture of the window into the run's folder, as <name>.png,
+ * once the check's last change is drawn and composited.
  */
 async function shoot(win: BrowserWindow, name: string): Promise<void> {
   const dir = process.env["UNO_SMOKE"];
@@ -99,6 +110,7 @@ async function shoot(win: BrowserWindow, name: string): Promise<void> {
   await win.webContents.executeJavaScript(
     "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))",
   );
+  await new Promise((r) => setTimeout(r, COMPOSITED_MS));
   const image = await win.webContents.capturePage();
   const path = join(dir, `${name}.png`);
   await writeFile(path, image.toPNG());
