@@ -408,6 +408,25 @@ export class Sources {
    * the only one a person meant by picking them.
    */
   private readonly picks = new Set<string>();
+  /** Counts changes to the picks, so the selection kept below knows them by number. */
+  private picked = 0;
+  /**
+   * The selected files as last read, and the page and the picks they were
+   * read from. Every draw reads them, through the buttons and the choices,
+   * and a page can be 200,000 entries, so they are read once per page and
+   * per pick rather than once per draw.
+   */
+  private selection:
+    | { from: readonly Entry[]; picked: number; entries: readonly Entry[] }
+    | undefined;
+  /**
+   * Where each path sits in the page, and the page it was read from. The
+   * selection is the picks in the page's order, and this is what puts them in
+   * it without reading the page over for every pick; a folder listed again
+   * asks it which picks are still there. A later page goes on the end, so
+   * `next` carries it on by the page that landed rather than reading it all again.
+   */
+  private where: { from: readonly Entry[]; at: Map<string, number> } | undefined;
   private shown: Peeked | undefined;
   private looking = false;
   /** Which peek is wanted, counted the way a listing's ask is. */
@@ -627,12 +646,15 @@ export class Sources {
     const mine = this.asked;
     const was = this.found;
 
-    let entries: Entry[] = [];
+    const entries: Entry[] = [];
     let cursor: string | undefined;
     try {
       do {
         const page = await this.listings.list(path, cursor);
-        entries = [...entries, ...page.entries];
+        // Pushed rather than spread into a new array, which would copy
+        // everything read so far once per page: two hundred pages of a
+        // prefix are twenty million copies that way.
+        for (const entry of page.entries) entries.push(entry);
         cursor = page.next;
       } while (cursor !== undefined && entries.length < was.length);
     } catch {
@@ -643,8 +665,12 @@ export class Sources {
     if (mine !== this.asked || was !== this.found || this.paging) return;
     this.found = entries;
     this.cursor = cursor;
-    for (const pick of this.picks) {
-      if (!entries.some((entry) => entry.path === pick)) this.picks.delete(pick);
+    // A pick the folder no longer holds is let go of, asked of the page's
+    // index rather than of every entry per pick: a few picks at the end of a
+    // prefix of 200,000 were a second's stall on every focus that way.
+    if (this.picks.size > 0) {
+      const at = this.index();
+      for (const pick of this.picks) if (!at.has(pick)) this.unpick(pick);
     }
     if (this.at.section === "browser") {
       this.at = { section: "browser", line: bound(this.at.line, this.entries.length) };
@@ -799,7 +825,34 @@ export class Sources {
    */
   get selected(): readonly Entry[] {
     if (this.picks.size === 0) return [];
-    return this.found.filter((e) => this.picks.has(e.path));
+    const kept = this.selection;
+    if (kept !== undefined && kept.from === this.found && kept.picked === this.picked) {
+      return kept.entries;
+    }
+    const at = this.index();
+    const lines: number[] = [];
+    for (const pick of this.picks) {
+      const line = at.get(pick);
+      if (line !== undefined) lines.push(line);
+    }
+    lines.sort((a, b) => a - b);
+    const entries = lines.map((line) => this.found[line]!);
+    this.selection = { from: this.found, picked: this.picked, entries };
+    return entries;
+  }
+
+  /**
+   * index is where each path sits in the page, read once per page: a pick
+   * is then a sort of the picks, and not a read of the whole page.
+   */
+  private index(): ReadonlyMap<string, number> {
+    const found = this.found;
+    const where = this.where;
+    if (where !== undefined && where.from === found) return where.at;
+    const at = new Map<string, number>();
+    for (let line = 0; line < found.length; line++) at.set(found[line]!.path, line);
+    this.where = { from: found, at };
+    return at;
   }
 
   /** Whether an entry is selected, for the line that draws it. */
@@ -986,8 +1039,9 @@ export class Sources {
     const mine = ++this.asked;
     this.found = [];
     // The page the filter kept from is gone, and holding on to what it kept
-    // would keep up to a whole prefix alive for nothing.
+    // would keep up to a whole prefix alive for nothing. So would its index.
     this.kept = undefined;
+    this.where = undefined;
     this.refused = "";
     this.waiting = true;
     // The cursor was the last folder's, and a page still on its way for that
@@ -1039,7 +1093,9 @@ export class Sources {
       if (mine !== this.asked) return;
       // A new array rather than a push: the filter's cache knows a page by its
       // identity, and would go on serving what it kept before this page came.
-      this.found = [...this.found, ...listing.entries];
+      const was = this.found;
+      this.found = [...was, ...listing.entries];
+      this.carry(was, listing.entries);
       this.cursor = listing.next;
       this.refused = "";
     } catch (err) {
@@ -1056,6 +1112,18 @@ export class Sources {
   }
 
   /**
+   * carry brings the index on from the page it was read from to the page with
+   * `landed` on the end of it, by the entries that landed and not the whole.
+   * Without one there is nothing to carry, and the next pick reads the page.
+   */
+  private carry(was: readonly Entry[], landed: readonly Entry[]): void {
+    const where = this.where;
+    if (where === undefined || where.from !== was) return;
+    for (let i = 0; i < landed.length; i++) where.at.set(landed[i]!.path, was.length + i);
+    this.where = { from: this.found, at: where.at };
+  }
+
+  /**
    * toggle puts a file in the selection or takes it out, which is what Space
    * on a browser line does. A line that cannot be picked is left alone rather
    * than complained about: it is drawn like the rest, and Space on it does
@@ -1068,6 +1136,7 @@ export class Sources {
     if (this.repointing !== undefined) this.picks.clear();
     if (had) this.picks.delete(entry.path);
     else this.picks.add(entry.path);
+    this.picked++;
     await this.look();
   }
 
@@ -1080,9 +1149,14 @@ export class Sources {
   added(refs: readonly SourceRef[]): void {
     for (const ref of refs) {
       const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
-      for (const file of files) if ("path" in file) this.picks.delete(file.path);
+      for (const file of files) if ("path" in file) this.unpick(file.path);
     }
     void this.look();
+  }
+
+  /** unpick takes one file out of the selection, if it was in it. */
+  private unpick(path: string): void {
+    if (this.picks.delete(path)) this.picked++;
   }
 
   /**
@@ -1093,6 +1167,7 @@ export class Sources {
    */
   private forget(): void {
     this.picks.clear();
+    this.picked++;
     this.shown = undefined;
     this.looking = false;
     this.looked++;

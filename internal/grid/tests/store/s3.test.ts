@@ -6,6 +6,7 @@
 // fixture, checks every request's signature the way S3 would, and answers
 // ranges.
 
+import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
 import { readContainer } from "../../src/document/index.ts";
 import {
   EMPTY_SHA256,
+  encode,
   s3Files,
   s3Location,
   s3Provider,
@@ -71,6 +73,168 @@ test("signs S3's documented ranged GET the way S3 does", () => {
   );
   // fetch sets Host itself and throws if told to.
   expect(headers["host"]).toBeUndefined();
+});
+
+/** The documented S3 account, and the moment every example on that page is signed at. */
+const EXAMPLE = {
+  accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+  secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+};
+const EXAMPLE_DAY = new Date("2013-05-24T00:00:00Z");
+/** sha256 of "Welcome to Amazon S3.", the body of the documented PUT. */
+const WELCOME_SHA256 = "44ce7dd67c959e0d3524ffac1771dfbba87d2b6b4b4e99e42034a8b803f8b072";
+
+function signatureOf(headers: Record<string, string>): string | undefined {
+  return /Signature=([0-9a-f]{64})$/.exec(headers["authorization"] ?? "")?.[1];
+}
+
+// The other three examples on the same page. The PUT signs a real body hash
+// and a `$` in the key, the lifecycle GET a query with a name and no value,
+// and the listing a query of two names that have to come out in order.
+interface Example {
+  example: string;
+  method: string;
+  target: string;
+  headers: Record<string, string>;
+  signed: string;
+  signature: string;
+}
+const EXAMPLES: Example[] = [
+  {
+    example: "PUT Object",
+    method: "PUT",
+    target: "/test%24file.text",
+    headers: {
+      date: "Fri, 24 May 2013 00:00:00 GMT",
+      "x-amz-storage-class": "REDUCED_REDUNDANCY",
+      "x-amz-content-sha256": WELCOME_SHA256,
+    },
+    signed: "date;host;x-amz-content-sha256;x-amz-date;x-amz-storage-class",
+    signature: "98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd",
+  },
+  {
+    example: "GET Bucket Lifecycle",
+    method: "GET",
+    target: "/?lifecycle",
+    headers: { "x-amz-content-sha256": EMPTY_SHA256 },
+    signed: "host;x-amz-content-sha256;x-amz-date",
+    signature: "fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543",
+  },
+  {
+    example: "Get Bucket (List Objects)",
+    method: "GET",
+    target: "/?max-keys=2&prefix=J",
+    headers: { "x-amz-content-sha256": EMPTY_SHA256 },
+    signed: "host;x-amz-content-sha256;x-amz-date",
+    signature: "34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7",
+  },
+];
+test.each(EXAMPLES)(
+  "signs S3's documented $example the way S3 does",
+  ({ method, target, headers, signed, signature }) => {
+    const got = signV4(
+      { method, url: new URL(`https://examplebucket.s3.amazonaws.com${target}`), headers },
+      EXAMPLE,
+      "us-east-1",
+      "s3",
+      EXAMPLE_DAY,
+    );
+    expect(got["authorization"]).toBe(
+      "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, " +
+        `SignedHeaders=${signed}, Signature=${signature}`,
+    );
+  },
+);
+
+/**
+ * reference is the signature AWS's instructions give for a canonical request
+ * written out by hand, taken with node's own crypto rather than anything in
+ * store/s3.ts, so a probe below can hold the module to a request the
+ * documented examples do not reach.
+ */
+function reference(canonical: string, amzDate: string, scope: string, secret: string): string {
+  const mac = (key: Buffer | string, text: string): Buffer =>
+    createHmac("sha256", key).update(text).digest();
+  const toSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    scope,
+    createHash("sha256").update(canonical).digest("hex"),
+  ].join("\n");
+  let key = mac(`AWS4${secret}`, amzDate.slice(0, 8));
+  for (const part of scope.split("/").slice(1)) key = mac(key, part);
+  return mac(key, toSign).toString("hex");
+}
+
+// Query names are sorted before any value is looked at, so `prefix` comes
+// before `prefix-x` although `=` sorts after `-`.
+test("sorts a query by name first, then by value", () => {
+  const url = new URL("https://examplebucket.s3.amazonaws.com/?prefix-x=1&prefix=J&prefix=A");
+  const got = signV4(
+    { method: "GET", url, headers: { "x-amz-content-sha256": EMPTY_SHA256 } },
+    EXAMPLE,
+    "us-east-1",
+    "s3",
+    EXAMPLE_DAY,
+  );
+  const canonical = [
+    "GET",
+    "/",
+    "prefix=A&prefix=J&prefix-x=1",
+    "host:examplebucket.s3.amazonaws.com",
+    `x-amz-content-sha256:${EMPTY_SHA256}`,
+    "x-amz-date:20130524T000000Z",
+    "",
+    "host;x-amz-content-sha256;x-amz-date",
+    EMPTY_SHA256,
+  ].join("\n");
+  expect(signatureOf(got)).toBe(
+    reference(
+      canonical,
+      "20130524T000000Z",
+      "20130524/us-east-1/s3/aws4_request",
+      EXAMPLE.secretAccessKey,
+    ),
+  );
+});
+
+// A stand-in on a port, a session's token, a key with every character S3
+// users put in one, a token in the query with `/` and `+` in it, and the
+// last moment of a day: the host keeps its port, the token is signed, each
+// segment is encoded once with RFC 3986's unreserved set and nothing else,
+// and the date in the scope is the day of the x-amz-date.
+test("signs a session's request to a stand-in on a port, for an awkward key, at the end of a day", () => {
+  const key = "a b+c*d~e!f'g(h)i%j/k ü";
+  const url = new URL(
+    `http://localhost:9000/acme-exports/${key.split("/").map(encode).join("/")}` +
+      `?versionId=${encode("x/y+z=")}`,
+  );
+  const got = signV4(
+    { method: "GET", url, headers: { "x-amz-content-sha256": EMPTY_SHA256, Range: " bytes=0-9 " } },
+    { ...EXAMPLE, sessionToken: "FwoGZXIvYXdzEBYaD/+token==" },
+    "eu-west-1",
+    "s3",
+    new Date("2013-05-24T23:59:59.999Z"),
+  );
+  const canonical = [
+    "GET",
+    "/acme-exports/a%20b%2Bc%2Ad~e%21f%27g%28h%29i%25j/k%20%C3%BC",
+    "versionId=x%2Fy%2Bz%3D",
+    "host:localhost:9000",
+    "range:bytes=0-9",
+    `x-amz-content-sha256:${EMPTY_SHA256}`,
+    "x-amz-date:20130524T235959Z",
+    "x-amz-security-token:FwoGZXIvYXdzEBYaD/+token==",
+    "",
+    "host;range;x-amz-content-sha256;x-amz-date;x-amz-security-token",
+    EMPTY_SHA256,
+  ].join("\n");
+  expect(got["x-amz-security-token"]).toBe("FwoGZXIvYXdzEBYaD/+token==");
+  expect(got["authorization"]).toBe(
+    "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/eu-west-1/s3/aws4_request, " +
+      "SignedHeaders=host;range;x-amz-content-sha256;x-amz-date;x-amz-security-token, " +
+      `Signature=${reference(canonical, "20130524T235959Z", "20130524/eu-west-1/s3/aws4_request", EXAMPLE.secretAccessKey)}`,
+  );
 });
 
 // ------------------------------------------------------------ addresses

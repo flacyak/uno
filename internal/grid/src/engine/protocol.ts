@@ -234,6 +234,17 @@ export interface Loaded {
   failed: Said[];
 }
 
+/**
+ * The most rows one `rows` request is answered with.
+ *
+ * A client reads a band of rows around its viewport and never more, so a
+ * request for more than this is from something other than the client. It is
+ * refused at the port rather than answered, because answering it would build
+ * the whole readable part of a file into one reply, and for a large file that
+ * is more than the engine has.
+ */
+export const ROWS_AT_MOST = 2000;
+
 export type Request =
   /**
    * Add a file to the workspace: read its header, begin indexing it. A .uno
@@ -336,7 +347,13 @@ export type Reply =
 /** One end of a connection, whatever the runtime calls it. */
 export interface Port<In, Out> {
   post(msg: Out): void;
-  listen(fn: (msg: In) => void): void;
+  /**
+   * listen hands every message to `fn`, and tells `gone` once when the far end
+   * has gone first -- the process behind it exited, or the socket closed --
+   * so what was waiting on an answer is not left waiting for one that cannot
+   * come. A port that closes itself tells nobody: it knew.
+   */
+  listen(fn: (msg: In) => void, gone?: () => void): void;
   close(): void;
 }
 
@@ -344,6 +361,8 @@ export interface Port<In, Out> {
 export interface MessagePortLike {
   postMessage(msg: unknown): void;
   addEventListener(type: "message", fn: (e: { data: unknown }) => void): void;
+  /** Fired once either end has closed, which is when the other end went. */
+  addEventListener(type: "close", fn: () => void): void;
   start(): void;
   close(): void;
 }
@@ -351,8 +370,9 @@ export interface MessagePortLike {
 export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
   return {
     post: (msg) => p.postMessage(msg),
-    listen: (fn) => {
+    listen: (fn, gone) => {
       p.addEventListener("message", (e) => fn(e.data as In));
+      if (gone !== undefined) p.addEventListener("close", gone);
       p.start();
     },
     close: () => p.close(),

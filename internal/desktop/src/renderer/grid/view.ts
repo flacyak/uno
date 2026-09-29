@@ -5,10 +5,16 @@
 // widget.Table, and it is why what the grid reads has to stay a cache read: it
 // calls `display` once per visible cell on every frame, so anything done there
 // beyond reading an array is work multiplied by two hundred and then by sixty.
+//
+// Rows are virtualised and columns are not: every row in the pool holds a cell
+// for every column, so a sheet of 500 columns is about forty rows of 500 cells,
+// and each frame compares that many strings. The bound is the pool's height
+// times the sheet's width, and a frame writes only the cells whose text moved.
 
 import type { Kind } from "@uno/grid/sheet";
 
 import { m } from "../../paraglide/messages.js";
+import { num } from "../locale.ts";
 import {
   clampTop,
   firstRow,
@@ -23,6 +29,7 @@ import {
   topToScroller,
   visibleRange,
 } from "./metrics.ts";
+import { columnLabel, unnamed } from "./rows.ts";
 import type { Cell, Rows } from "./rows.ts";
 
 export class View {
@@ -79,6 +86,9 @@ export class View {
     // Scrolling is the hot path, so it schedules a frame rather than laying out
     // synchronously on every one of the events a trackpad produces.
     this.scroller.addEventListener("scroll", () => this.schedule(), { passive: true });
+    // The pool is sized to the scroller, so a window grown taller, or a panel
+    // closed beside the grid, needs more rows than were made for the old size.
+    new ResizeObserver(() => this.schedule()).observe(this.scroller);
 
     this.rowHeight = readRowHeight(this.scroller);
   }
@@ -92,6 +102,9 @@ export class View {
     if (!keep) {
       this.top = 0;
       this.scroller.scrollTop = 0;
+      // Along the row too: a fresh open starts at the first cell, and the
+      // selection is put there without a scroll to bring it on screen.
+      this.scroller.scrollLeft = 0;
       this.seen = 0;
     }
     this.pool = [];
@@ -130,7 +143,11 @@ export class View {
     for (const [col, column] of this.source.columns.entries()) {
       const th = document.createElement("th");
       const wrap = el("span", "colhead");
-      wrap.append(text(column.header));
+      // A blank header is named by its place, and dressed as a name the file
+      // did not give, so it is not read as one a formula can use.
+      const name = el("span", unnamed(column.header) ? "colname unnamed" : "colname");
+      name.textContent = columnLabel(column.header, col);
+      wrap.append(name);
 
       // A column a formula computes says so, and what from.
       const binding = this.source.binding(col);
@@ -186,7 +203,8 @@ export class View {
     this.seen = scrollTop;
     if (this.scaled) this.syncScroll(m.vMax, m.rMax);
 
-    const digits = String(total).length;
+    // As wide as the last row's number, grouped as the status bar groups it.
+    const digits = num(total).length;
     if (digits !== this.digits) {
       this.digits = digits;
       this.table.style.setProperty("--gutter-digits", String(digits));
@@ -272,7 +290,9 @@ export class View {
 
     const cells = tr.children;
     const gutter = cells[0] as HTMLTableCellElement;
-    const label = String(row + 1);
+    // Grouped the way every other count in the window is: the status bar
+    // says 4,812 rows, and the gutter beside them does not say 4812.
+    const label = num(row + 1);
     if (gutter.textContent !== label) gutter.textContent = label;
 
     for (let col = 0; col < source.cols(); col++) {
@@ -395,10 +415,6 @@ function el(tag: string, className: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = className;
   return node;
-}
-
-function text(value: string): Text {
-  return document.createTextNode(value);
 }
 
 /** The row height lives in the stylesheet, so the virtualiser asks for it

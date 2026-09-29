@@ -208,3 +208,65 @@ test("replay refuses a program it cannot read", () => {
   ).toThrow();
   expect(s.raw(0, UNITS), "the cell should be untouched").toBe("1,204");
 });
+
+// A log that fails partway has edits before the failure that were valid, and
+// the Schema has already folded them. They are kept in the log too, so what
+// the sheet shows and what it would save agree: a folded write the log does
+// not hold would come back the moment any later edit made the log non-empty.
+test("a replay that fails partway keeps the edits it folded", () => {
+  const s = fixture();
+  expect(() =>
+    s.replay([
+      { seq: 1, op: Op.Set, row: 0, col: UNITS, was: "1,204", now: "1204" },
+      { seq: 2, op: Op.Set, row: 9, col: UNITS, now: "x" },
+    ]),
+  ).toThrow();
+
+  expect(s.editCount()).toBe(1);
+  expect(s.raw(0, UNITS)).toBe("1204");
+  expect(s.edits().map((e) => e.seq)).toEqual([1]);
+});
+
+// A column pasted in a cell at a time is one line per cell, and a log that
+// long is longer than a call can take as arguments.
+const LONG_LOG = 200_000;
+
+test("replay takes a log longer than a call can spread", () => {
+  const s = fixture();
+  const edits: Edit[] = Array.from({ length: LONG_LOG }, (_, i) => ({
+    seq: i + 1,
+    op: Op.Set,
+    row: i % s.rows(),
+    col: UNITS,
+    now: `${i}`,
+  }));
+
+  s.replay(edits);
+  expect(s.editCount()).toBe(LONG_LOG);
+  const last = LONG_LOG - 1 - ((LONG_LOG - 1) % s.rows()); // the last edit into row 0
+  expect(s.raw(0, UNITS)).toBe(`${last}`);
+});
+
+// Typing into one cell reaches one row, and should cost about that. Before
+// this budget a set threw away every finished row and re-read a sample of
+// every column, so a paste of a thousand cells into a wide sheet took seconds.
+const WIDE = 20;
+const TALL = 5000;
+const SETS = 1000;
+/** Milliseconds for SETS sets. The old way took over two thousand. */
+const SETS_BUDGET = 400;
+
+test("a set costs its own row, not the sheet", () => {
+  const header = Array.from({ length: WIDE }, (_, c) => `c${c}`);
+  const rows = Array.from({ length: TALL }, (_, r) =>
+    Array.from({ length: WIDE }, (_, c) => `${r * WIDE + c}`),
+  );
+  const s = new Sheet("wide.csv", header, rows);
+
+  const began = performance.now();
+  for (let i = 0; i < SETS; i++) s.set(i % TALL, i % WIDE, `v${i}`);
+  const ms = performance.now() - began;
+
+  expect(s.raw(0, 0)).toBe("v0");
+  expect(ms).toBeLessThan(SETS_BUDGET);
+});

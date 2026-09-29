@@ -126,6 +126,29 @@ describe("the program is run again only once its keys expire", () => {
     expect(await ran()).toBe(1);
   });
 
+  // Forty sources opening at once, and four ranges in flight for each, all
+  // ask before the first answer is back. One run answers them all: a program
+  // that asks a vault or a hardware key for its answer is asked once.
+  test("keys asked for together, before the first answer is back, run it once", async () => {
+    const { env, ran } = await machine(later());
+    const creds = profileCredentials("vault", env);
+    const together = await Promise.all(Array.from({ length: 4 }, () => creds()));
+    expect(together.map((c) => c.accessKeyId)).toEqual(Array(4).fill(PRINTED.accessKeyId));
+    expect(await ran()).toBe(1);
+  });
+
+  // A run that fails answers everybody waiting with the failure, and the next
+  // ask after it runs the program again rather than repeating the failure.
+  test("a failed run is not kept, and the ask after it runs the program again", async () => {
+    const { env, ran } = await machine(later(), "fail");
+    const creds = profileCredentials("vault", env);
+    const settled = await Promise.allSettled([creds(), creds()]);
+    expect(settled.map((s) => s.status)).toEqual(["rejected", "rejected"]);
+    expect(await ran()).toBe(1);
+    await expect(creds()).rejects.toThrow("vault is sealed");
+    expect(await ran()).toBe(2);
+  });
+
   // Keys a minute from expiry would lapse on the way to S3, so each ask runs
   // the program for fresh ones.
   test("keys about to expire are not reused, and it runs each time", async () => {

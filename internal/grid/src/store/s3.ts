@@ -840,11 +840,24 @@ function hex(text: string): string {
   return bytesToHex(sha256(utf8ToBytes(text)));
 }
 
+/**
+ * canonicalQuery is the query as SigV4 signs it: each name and value encoded,
+ * sorted by name and then by value. The two are sorted apart rather than as
+ * one `name=value` string, because `=` sorts after `-` and `%` and every
+ * digit, which would put `prefix-x=1` ahead of `prefix=J` and S3 the other
+ * way round.
+ */
 function canonicalQuery(url: URL): string {
   return [...url.searchParams]
-    .map(([k, v]) => `${encode(k)}=${encode(v)}`)
-    .sort()
+    .map(([k, v]) => [encode(k), encode(v)] as const)
+    .sort(([k1, v1], [k2, v2]) => compare(k1, k2) || compare(v1, v2))
+    .map(([k, v]) => `${k}=${v}`)
     .join("&");
+}
+
+/** Code point order, which is what SigV4 sorts by: no locale, no collation. */
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /** encodePath encodes each segment of a key as SigV4 wants it, keeping the slashes. */

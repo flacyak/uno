@@ -194,6 +194,74 @@ test("a log damaged in the middle fails the open", () => {
   expect(() => readDocument("sales.csv", zipSync(entries))).toThrow();
 });
 
+// The zip's own checksum is not what fflate checks, and the manifest's hash is
+// what the save promised of the bytes. A byte flipped on disk must not open as
+// the file it was.
+test("a carried source that no longer matches its hash is refused by name", () => {
+  const { bytes } = saved("sales.csv");
+  const stored = zipSync(unzipSync(bytes), { level: 0 });
+  const at = Buffer.from(stored).indexOf("2026-07-01,East,987");
+  expect(at).toBeGreaterThan(0);
+  stored[at] = "9".charCodeAt(0);
+
+  let thrown: Error | undefined;
+  try {
+    readDocument("sales.uno", stored);
+  } catch (err) {
+    thrown = err as Error;
+  }
+  expect(thrown).toBeDefined();
+  expect(thrown!.message).toContain("sales.uno");
+  expect(thrown!.message).toContain("sales.csv");
+  expect(thrown!.message).toContain("sha256");
+});
+
+// Every build numbers a source's edits 1, 2, 3 and gives the next one the
+// number after the last, so a log numbered any other way is one nobody wrote,
+// and replaying it would hand a new edit a number already taken.
+describe("a log whose edits are not numbered in order", () => {
+  const withLog = (lines: string[]): Uint8Array => {
+    const { bytes } = saved("sales.csv");
+    const entries = unzipSync(bytes);
+    entries[LOG_ENTRY] = encoder.encode(lines.map((l) => l + "\n").join(""));
+    return zipSync(entries);
+  };
+  const refused = (lines: string[]): string => {
+    try {
+      readDocument("sales.uno", withLog(lines));
+    } catch (err) {
+      return (err as Error).message;
+    }
+    return "";
+  };
+  const edit = (seq: number, row: number): string =>
+    JSON.stringify({ seq, op: "set", row, col: UNITS, now: "1" });
+
+  test("is refused at the line that repeats a number", () => {
+    const message = refused([edit(1, 0), edit(1, 1)]);
+    expect(message).toContain(`${LOG_ENTRY} line 2`);
+    expect(message).toContain("edit 2");
+  });
+
+  test("is refused at the line that is out of order", () => {
+    const message = refused([edit(2, 0), edit(1, 1)]);
+    expect(message).toContain(`${LOG_ENTRY} line 1`);
+    expect(message).toContain("edit 1");
+  });
+
+  test("is refused at the line whose row is not a whole number", () => {
+    const message = refused([edit(1, 0.5)]);
+    expect(message).toContain(`${LOG_ENTRY} line 1`);
+    expect(message).toContain("row");
+  });
+
+  test("is read when numbered as every build numbers it", () => {
+    const back = readDocument("sales.uno", withLog([edit(1, 0), edit(2, 1)]));
+    expect(back.log).toHaveLength(2);
+    expect(only(back).raw(1, UNITS)).toBe("1");
+  });
+});
+
 test("a file that is not a zip is refused by name", () => {
   let thrown: Error | undefined;
   try {

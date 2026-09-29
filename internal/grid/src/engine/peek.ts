@@ -131,7 +131,12 @@ export async function peekHead(
   const rowsOut = records.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ""));
 
   return {
-    label: { t: "read", delimiter: format.delimiter, header: format.header },
+    label: {
+      t: "read",
+      delimiter: format.delimiter,
+      header: format.header,
+      charset: format.charset,
+    },
     header: format.columns,
     rows: rowsOut,
   };

@@ -140,5 +140,6 @@ export function isDate(v: string): boolean {
   const hh = Number(full[4]);
   const mm = Number(full[5]);
   const ss = Number(full[6]);
-  return hh <= 23 && mm <= 59 && ss <= 60; // Go accepts a leap second
+  // Go refuses a leap second: time.Parse answers "second out of range" to :60.
+  return hh <= 23 && mm <= 59 && ss <= 59;
 }
