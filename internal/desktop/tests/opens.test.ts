@@ -40,3 +40,14 @@ test("the engine lists the providers it reaches through", () => {
   expect(entry).toMatch(/diskProvider\(\)/);
   expect(entry).toMatch(/s3Provider\(/);
 });
+
+// The one program uno runs is a profile's credential_process, and it runs in
+// the engine, inside @uno/grid/store/node, where grid's guard holds it. The
+// desktop starts engines through Electron's utilityProcess and runs nothing
+// else, so a child_process import here is a second way to run one.
+test("nothing in the desktop runs a program of its own", () => {
+  const found = sources(SRC)
+    .filter((file) => /\bfrom "node:child_process"/.test(readFileSync(file, "utf8")))
+    .map((file) => relative(SRC, file));
+  expect(found).toEqual([]);
+});
