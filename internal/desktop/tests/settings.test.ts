@@ -309,3 +309,27 @@ test("connections that land after the menu closed are not drawn into it", async 
   expect(menu().hidden).toBe(true);
   expect(sections()["Sources"]).toEqual(["reading…", "+ Connect a bucket|"]);
 });
+
+// The menu hangs off the end of the page, so Tab would otherwise carry the
+// keys to the window's × behind it, with the menu left open.
+test("Tab walks the items round the ends, and never leaves the menu", async () => {
+  toggle.click();
+  await settle();
+  const items = [...menu().querySelectorAll<HTMLButtonElement>("button")];
+  const tab = (shiftKey: boolean): KeyboardEvent => {
+    const e = new KeyboardEvent("keydown", {
+      key: "Tab",
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    menu().dispatchEvent(e);
+    return e;
+  };
+  expect(document.activeElement).toBe(items[0]);
+  expect(tab(true).defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(items.at(-1));
+  expect(tab(false).defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(items[0]);
+  expect(menu().hidden).toBe(false);
+});

@@ -3,7 +3,6 @@
 // uno has two modes and a cell editor, and vim has normal mode and insert mode.
 // View is a normal mode that cannot write, transform is one that can, and the
 // editor is insert. `i` moves one level in and Esc moves one level back out.
-// The whole plan is resource/vim-motions.html.
 
 import { m } from "../../paraglide/messages.js";
 import { NOTHING, isCharacter, showing } from "../keys.ts";
@@ -31,6 +30,10 @@ function interpret(mode: Mode, pending: Pending, press: Press): Step | undefined
   const count = pending.count === "" ? undefined : Number(pending.count);
 
   if (press.ctrl) {
+    // Shift in a chord names another key: Ctrl+Shift+B is the panel's, and
+    // read as Ctrl+b it would page up under it. CapsLock is why the case of
+    // the letter itself says nothing.
+    if (press.shift) return undefined;
     // Redo, which is why the reload item gave up Ctrl+R.
     if (key.toLowerCase() === "r") return done(change(mode, press, { t: "redo" }));
     const motion = ctrlMotion(key);
@@ -48,10 +51,12 @@ function interpret(mode: Mode, pending: Pending, press: Press): Step | undefined
     case "ArrowUp":
       return done(move("up", count));
     case "ArrowRight":
-    case "Tab":
       return done(move("right", count));
     case "ArrowLeft":
       return done(move("left", count));
+    // The next cell, and with Shift the one before, as every spreadsheet has it.
+    case "Tab":
+      return done(move(press.shift ? "left" : "right", count));
     case "PageDown":
       return done(move("page-down", count));
     case "PageUp":

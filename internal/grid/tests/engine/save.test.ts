@@ -9,7 +9,7 @@
 import { strFromU8, unzipSync, zipSync } from "fflate";
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { expect, test } from "vite-plus/test";
 
 import {
@@ -24,6 +24,7 @@ import {
 } from "../../src/document/index.ts";
 import type { Document, Source } from "../../src/document/index.ts";
 import type { SourceHandle } from "../../src/engine/index.ts";
+import { sha256Hex } from "../../src/go/index.ts";
 import { read } from "../../src/ingest/index.ts";
 import { parse as parseProgram } from "../../src/program/index.ts";
 import { Op } from "../../src/sheet/index.ts";
@@ -465,9 +466,17 @@ test("a carried source that will not open keeps its bytes through a save", async
     extra: new Map(),
     at: "",
   });
-  // Swap the entry for something no decoder will take.
+  // Swap the entry for something no decoder will take, and keep the manifest
+  // honest about it: a hash that does not match is a damaged file, not a
+  // source that will not open.
   const entries = unzipSync(uno);
   entries["data/source.csv"] = broken;
+  const manifest = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as {
+    source: { bytes: number; sha256: string };
+  };
+  manifest.source.bytes = broken.length;
+  manifest.source.sha256 = sha256Hex(broken);
+  entries[MANIFEST_ENTRY] = new TextEncoder().encode(JSON.stringify(manifest));
 
   const { engine, done } = connect();
   try {
@@ -492,6 +501,48 @@ test("a .uno opens only into an empty workspace", async () => {
     await expect(
       engine.open({ name: "q3.uno", blob: new Blob([new Uint8Array(uno)]) }),
     ).rejects.toThrow("q3.uno is a workspace of its own");
+  } finally {
+    done();
+  }
+});
+
+// A .uno is written where the person says, and one of the places they can say
+// is the file a source is read from: the dialog offers the folder the data is
+// in, and sales.csv is a name that is already there.
+test("saving the workspace over one of its own files is refused", async () => {
+  const dir = await scratch();
+  const csv = join(dir, "ads.csv");
+  await writeFile(csv, ADS);
+
+  const { engine, done } = connect();
+  try {
+    const ads = await openOne(engine, { name: "ads.csv", path: csv });
+    await expect(engine.save(at(ads, 0, 0, csv), ROOMY)).rejects.toThrow(
+      `${csv} is where ads.csv is read from · saving the workspace there would write over it`,
+    );
+    // The same name in another folder is just a name.
+    const other = await scratch();
+    expect(listed(await engine.save(at(ads, 0, 0, join(other, "ads.csv")), ROOMY))).toHaveLength(1);
+  } finally {
+    done();
+  }
+});
+
+// A file opened by a path relative to the process that opened it -- `uno
+// data/sales.csv` from a terminal -- is nowhere a .uno can point from: written
+// down as it is, the path would be read back from the .uno's own folder.
+test("a source opened by a path that is true from nowhere is not pointed at", async () => {
+  const dir = await scratch();
+  const here = relative(process.cwd(), FIXTURE);
+
+  const { engine, done } = connect();
+  try {
+    const sales = await openOne(engine, { name: "sales-q3.csv", path: here });
+    for (const uno of [join(dir, "q3.uno"), ""]) {
+      await expect(engine.save(at(sales, 0, 0, uno), ROOMY)).rejects.toThrow(
+        `sales-q3.csv was opened by ${here}, which is relative to nowhere a workspace can point from · open it by its full path`,
+      );
+    }
   } finally {
     done();
   }
