@@ -41,13 +41,30 @@ test("the engine lists the providers it reaches through", () => {
   expect(entry).toMatch(/s3Provider\(/);
 });
 
+/**
+ * child_process named as a string, however it is reached for: `from`,
+ * `import()` or `require()`, with the `node:` prefix or without.
+ */
+const RUNS = /["'](node:)?child_process["']/;
+
 // The one program uno runs is a profile's credential_process, and it runs in
 // the engine, inside @uno/grid/store/node, where grid's guard holds it. The
 // desktop starts engines through Electron's utilityProcess and runs nothing
-// else, so a child_process import here is a second way to run one.
+// else, so child_process here is a second way to run one.
 test("nothing in the desktop runs a program of its own", () => {
   const found = sources(SRC)
-    .filter((file) => /\bfrom "node:child_process"/.test(readFileSync(file, "utf8")))
+    .filter((file) => RUNS.test(readFileSync(file, "utf8")))
     .map((file) => relative(SRC, file));
   expect(found).toEqual([]);
+});
+
+test("child_process is found however it is written", () => {
+  for (const line of [
+    'import { spawn } from "node:child_process";',
+    'import { spawn } from "child_process";',
+    'const { fork } = await import("node:child_process");',
+    "const cp = require('child_process');",
+  ]) {
+    expect(RUNS.test(line), line).toBe(true);
+  }
 });
