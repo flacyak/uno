@@ -37,7 +37,9 @@ let s: Sts;
 beforeAll(async () => {
   s = await sts(
     [INSTANCE],
-    new Map([[CUSTOMER, { callers: [INSTANCE.accessKeyId], externalId: EXTERNAL, session: SESSION }]]),
+    new Map([
+      [CUSTOMER, { callers: [INSTANCE.accessKeyId], externalId: EXTERNAL, session: SESSION }],
+    ]),
   );
 });
 afterAll(() => s.close());
