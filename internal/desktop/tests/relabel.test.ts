@@ -63,6 +63,10 @@ async function until(holds: () => boolean): Promise<boolean> {
 }
 
 async function edit(row: number, value: string): Promise<void> {
+  // The rows drawn are the ones scrolled to, so the row clicked is counted
+  // from the top of the file only once the grid is there.
+  await page.scrollTo(0);
+  await page.settle(2);
   await page.clickCell(row, UNITS);
   await page.settle(1);
   await page.press("Enter");
@@ -129,17 +133,22 @@ test("an edit, the selection, the scroll, a mark and the undo history survive a 
 });
 
 test("what the bar said before the change is not left in the language before", async () => {
-  await page.press("Escape");
+  // The command line is vim-style's: under the default keys a colon is typed
+  // into the cell.
+  shell.setInput("vim-style");
   await page.press(":");
   const cmd = document.querySelector<HTMLInputElement>("#status-cmd")!;
   cmd.value = ":nonsense";
-  cmd.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  cmd.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+  );
   await page.settle(1);
   expect(message()).toBe(m.not_a_command({ text: "nonsense" }));
 
   shell.language.choose("es");
   await page.settle(1);
   expect(message()).toBe("");
+  shell.setInput("default");
 });
 
 test("a change made twice before the first settles ends in the last, with one of everything", async () => {
@@ -193,12 +202,17 @@ test("the settings menu and the sources panel open through the change are in the
 });
 
 test("a find in flight finishes, in the language chosen while it ran", async () => {
-  await page.press("Escape");
+  // A search prompt is vim-style's too.
+  shell.setInput("vim-style");
   await page.press("/");
   const cmd = document.querySelector<HTMLInputElement>("#status-cmd")!;
   cmd.value = "/zzz-not-in-the-file";
-  cmd.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  cmd.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+  );
   shell.language.choose("pt-BR");
   expect(await until(() => message() !== "" && message() !== m.searching())).toBe(true);
-  expect(message()).toContain(m.find_text_below({ text: "zzz-not-in-the-file", header: "" }).slice(0, 4));
+  expect(message()).toContain(
+    m.find_text_below({ text: "zzz-not-in-the-file", row: "1", column: "" }).slice(0, 4),
+  );
 });
