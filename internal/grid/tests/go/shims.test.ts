@@ -171,12 +171,12 @@ describe("formatFloat", () => {
 describe("roundSignificant", () => {
   // This is what turns arithmetic showing its working into an answer, at the
   // significant digits a computed cell keeps.
-  const DIGITS = 10;
+  const DIGITS = 15;
 
   const cases: Array<[number, string]> = [
     [(40.0 - 31.2) / 40.0, "0.22"],
-    [1 / 3, "0.3333333333"],
-    [2 / 3, "0.6666666667"],
+    [1 / 3, "0.333333333333333"],
+    [2 / 3, "0.666666666666667"],
   ];
 
   for (const [v, want] of cases) {
