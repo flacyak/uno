@@ -78,8 +78,21 @@ export function versionIdOf(body: Uint8Array): string {
  * whole of what an ETag is for.
  */
 export function etagOf(body: Uint8Array): string {
-  return `"${createHash("md5").update(body).digest("hex")}"`;
+  let etag = etags.get(body);
+  if (etag === undefined) {
+    etag = `"${createHash("md5").update(body).digest("hex")}"`;
+    etags.set(body, etag);
+  }
+  return etag;
 }
+
+/**
+ * Each body's ETag, worked out once. S3 stores an object's ETag with it; a
+ * stand-in that hashed the whole object again for every ranged read would
+ * spend its time on that rather than answering, in the same process as the
+ * reader it is answering.
+ */
+const etags = new WeakMap<Uint8Array, string>();
 
 /** How the stand-in turns a request away by default: the way AWS does it. */
 export const MOVED: Misdirect = { status: 301, headers: { "x-amz-bucket-region": "$REGION" } };
@@ -100,6 +113,12 @@ export interface Bucket {
   }>;
   /** What each key holds. Change one to rewrite the object under a reader. */
   objects: Map<string, Uint8Array>;
+  /**
+   * What each answer waits before it goes, in ms: a bucket on the other side
+   * of an ocean, for a test about how many round trips a read costs. 0 unless
+   * a test sets it.
+   */
+  latency: number;
   close(): Promise<void>;
 }
 
@@ -142,7 +161,15 @@ export async function bucket(
     ),
   );
 
+  /** The latency a test set. */
+  const live = { latency: 0 };
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    if (live.latency > 0) setTimeout(() => answer(req, res), live.latency);
+    else answer(req, res);
+  });
+
+  /** One request, answered the way S3 would answer it. */
+  function answer(req: IncomingMessage, res: ServerResponse): void {
     const range = req.headers["range"];
     // req.url is the target as it was sent. Everything that looks at the path
     // works off this, because `new URL` would resolve away a `.` or `..`
@@ -225,7 +252,7 @@ export async function bucket(
       return;
     }
     serve(held, name!, rest, url, req, res);
-  });
+  }
 
   /** What a bucket answers, once the request is one it lets in. */
   function serve(
@@ -297,6 +324,12 @@ export async function bucket(
     endpoint: `http://127.0.0.1:${port}`,
     seen,
     objects,
+    get latency() {
+      return live.latency;
+    },
+    set latency(ms: number) {
+      live.latency = ms;
+    },
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }

@@ -28,6 +28,7 @@ import type { Connection } from "../library/index.ts";
 import { covering } from "../library/index.ts";
 import type { Provider } from "../plugin/index.ts";
 import type { FileHandler } from "./index.ts";
+import { readAhead } from "./ahead.ts";
 import { s3Lister } from "./s3lister.ts";
 
 /** Credentials and the region to sign for when a bucket has not said otherwise. */
@@ -81,6 +82,12 @@ export interface S3Options {
   endpoint?: string;
   /** How requests go out. Defaults to the runtime's own fetch. */
   fetch?: typeof fetch;
+  /**
+   * How many chunks a reader going through an object in order has in flight
+   * at once, the one it waits on included. AHEAD unless said; 1 reads one at
+   * a time, as a store that answers one request at a time would want.
+   */
+  ahead?: number;
 }
 
 /** Where an object is, whichever way its URL was written. */
@@ -478,29 +485,34 @@ export function s3Files(opts: S3Options): FileHandler {
       // index the first half of one file and the second half of another.
       const etag = head.headers.get("etag");
 
+      /** One range, asked for as the version opened. */
+      const range = async (offset: number, length: number): Promise<Uint8Array> => {
+        const end = Math.min(offset + length, size);
+        if (end <= offset) return new Uint8Array();
+        const res = await send.object(
+          loc,
+          "GET",
+          {
+            range: `bytes=${offset}-${end - 1}`,
+            ...(etag === null ? {} : { "if-match": etag }),
+          },
+          pinned,
+        );
+        if (res.status === 412) {
+          throw new Error(`${url} changed in the bucket since it was opened · open it again`);
+        }
+        if (!res.ok) throw new Error(`${url}: ${refusal(res.status, await send.who(loc))}`);
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        // A server that ignored the range sent the whole object.
+        return res.status === 200 && bytes.length === size ? bytes.subarray(offset, end) : bytes;
+      };
+
       return {
         size,
         version: versionOf(head.headers),
-        async read(offset, length) {
-          const end = Math.min(offset + length, size);
-          if (end <= offset) return new Uint8Array();
-          const res = await send.object(
-            loc,
-            "GET",
-            {
-              range: `bytes=${offset}-${end - 1}`,
-              ...(etag === null ? {} : { "if-match": etag }),
-            },
-            pinned,
-          );
-          if (res.status === 412) {
-            throw new Error(`${url} changed in the bucket since it was opened · open it again`);
-          }
-          if (!res.ok) throw new Error(`${url}: ${refusal(res.status, await send.who(loc))}`);
-          const bytes = new Uint8Array(await res.arrayBuffer());
-          // A server that ignored the range sent the whole object.
-          return res.status === 200 && bytes.length === size ? bytes.subarray(offset, end) : bytes;
-        },
+        // Indexing reads front to back, and each range is a round trip, so
+        // the next few are asked for while it scans this one.
+        read: readAhead(range, size, opts.ahead),
         close: () => Promise.resolve(),
       };
     },
