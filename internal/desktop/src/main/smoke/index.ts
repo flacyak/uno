@@ -11,10 +11,10 @@
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 
 import type { BrowserWindow } from "electron";
 
+import { ask } from "../ask.ts";
 import { through } from "../driven.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
@@ -29,9 +29,17 @@ import { SETTINGS } from "./settings.ts";
 import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
 
-/** How long the first rows get to arrive from the engine: tries, and the wait between them. */
-const DRAW_TRIES = 120;
-const DRAW_MS = 50;
+/**
+ * How long the first rows get to arrive from the engine, and how often the
+ * page is asked whether they have.
+ *
+ * A third of the 60 s smoke.js gives the whole run. A warm machine draws in
+ * well under a second, but a CI runner starting Electron for the first time
+ * has taken most of six, and a budget that close to what it needs fails on a
+ * slow morning rather than on a broken app.
+ */
+const FIRST_ROWS_MS = 20_000;
+const POLL_MS = 50;
 
 /**
  * What a person would look at to decide the app works.
@@ -122,23 +130,6 @@ async function shoot(win: BrowserWindow, name: string): Promise<void> {
   console.log(`smoke: screenshot ${path}`);
 }
 
-/** smoke.js's answers, a line each, read off this process's stdin. */
-let answers: AsyncIterator<string> | undefined;
-
-/**
- * ask has smoke.js do something only it can, and waits for it to be done: a
- * line out on stdout, which smoke.js reads, and one back on stdin once it has
- * acted. Waiting on the answer rather than a timer is what lets the check
- * after it rely on the change having happened.
- */
-async function ask(what: string): Promise<void> {
-  answers ??= createInterface({ input: process.stdin })[Symbol.asyncIterator]();
-  console.log(`smoke: ask ${what}`);
-  const next = await answers.next();
-  if (next.done === true) throw new Error(`smoke.js stopped answering before ${what}`);
-  if (next.value !== `smoke: done ${what}`) throw new Error(next.value.replace(/^smoke: /, ""));
-}
-
 /**
  * run drives the window, reports to stdout, and quits with a status the shell
  * can read.
@@ -153,16 +144,31 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   const page = electronPage(win);
 
   // The window has loaded, but the fixture's first rows come from an engine a
-  // moment later.
-  await win.webContents.executeJavaScript(`
+  // moment later. How long that took is said, so a slow start is a number in
+  // the log rather than a guess; one that never comes fails now, saying what
+  // the window showed instead, rather than leaving the run to its deadline.
+  const drawn = (await win.webContents.executeJavaScript(`
     (async () => {
-      for (let i = 0; i < ${DRAW_TRIES}; i++) {
-        if (document.querySelector("tbody tr:not(.pending)") !== null) return;
-        await new Promise((r) => setTimeout(r, ${DRAW_MS}));
+      const start = performance.now();
+      while (performance.now() - start < ${FIRST_ROWS_MS}) {
+        if (document.querySelector("tbody tr:not(.pending)") !== null) {
+          return { ms: Math.round(performance.now() - start) };
+        }
+        await new Promise((r) => setTimeout(r, ${POLL_MS}));
       }
-      throw new Error("no rows were ever drawn");
+      const text = (s) => document.querySelector(s)?.textContent ?? "";
+      return { showing: [text("#status-file"), text("#status-msg")].filter((t) => t !== "").join(" · ") };
     })()
-  `);
+  `)) as { ms: number } | { showing: string };
+  if (!("ms" in drawn)) {
+    console.error(
+      `  FAIL no rows were drawn within ${FIRST_ROWS_MS / 1000}s · the window shows ${JSON.stringify(drawn.showing)}`,
+    );
+    console.error("smoke: 1 check(s) failed");
+    quit(1);
+    return;
+  }
+  console.log(`smoke: first rows drawn ${(drawn.ms / 1000).toFixed(1)}s after the window loaded`);
 
   // The input strategy outlives the window. A run stopped partway through the
   // vim-style checks would leave the next one reading keys the vim way, so every
@@ -171,7 +177,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
 
   for (const check of CHECKS) {
     try {
-      if (check.ask !== undefined) await ask(check.ask);
+      if (check.ask !== undefined) await ask("smoke", check.ask);
       if (check.send !== undefined) win.webContents.send(...check.send);
       if (check.input !== undefined) {
         const { events } = check.input;

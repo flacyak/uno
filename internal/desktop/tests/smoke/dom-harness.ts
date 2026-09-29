@@ -39,10 +39,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** The same fixture scripts/smoke.js drives the real Electron path with. */
 export const FIXTURE = join(HERE, "..", "..", "..", "grid", "tests", "testdata", "sales-q3.csv");
 
-/** How long the first rows get to arrive from the engine, mirroring index.ts's
- * own DRAW_TRIES/DRAW_MS. */
-const DRAW_TRIES = 120;
-const DRAW_MS = 50;
+/** How long the first rows get to arrive from the engine, and how often it is
+ * asked, mirroring index.ts's own FIRST_ROWS_MS and POLL_MS. */
+const FIRST_ROWS_MS = 20_000;
+const POLL_MS = 50;
 
 /**
  * Body markup, read from the real index.html and not retyped: a second copy
@@ -131,9 +131,10 @@ export async function bootShell(): Promise<void> {
   const shell = new Shell(host);
   await shell.openPath(FIXTURE);
 
-  for (let i = 0; i < DRAW_TRIES; i++) {
+  const start = performance.now();
+  while (performance.now() - start < FIRST_ROWS_MS) {
     if (document.querySelector("tbody tr:not(.pending)") !== null) return;
-    await new Promise((resolve) => setTimeout(resolve, DRAW_MS));
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
-  throw new Error("no rows were ever drawn");
+  throw new Error(`no rows were drawn within ${FIRST_ROWS_MS / 1000}s`);
 }
