@@ -49,6 +49,18 @@ What a `.uno` gives up for this is travelling on its own. Sending somebody the
 file without the data it points at gets them the tabs, the edits and the log,
 and no rows.
 
+## Settings
+
+The gear at the left of the status bar opens settings upward from the corner.
+It lists every top-level source -- the connections the panel browses from --
+and choosing one opens the panel browsing it, beside `+ Connect a bucket`.
+Below them are four themes, Paper Ember, Tokyo Night, Sakura and Catppuccin
+Frappé, taken with their authors' credit from [T3 Themes](https://t3themes.com),
+and an appearance of System, Light or Dark, since each theme has both. A theme
+is worn the moment it is chosen, and the choice is kept on this machine for the
+next launch. Paper Ember is worn until another is chosen. `src/renderer/theme.ts`
+has how each theme's colours map onto uno's.
+
 ## Sources in S3
 
 The `+` at the end of the tab strip offers a file or an S3 URL. An S3 URL is

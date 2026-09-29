@@ -15,7 +15,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
 import { SECTIONS, STATE_WORDS, connectionLine, stateOf } from "../sources.ts";
-import type { Button, Place, Section, Sources, TabAction } from "../sources.ts";
+import type { Button, Connection, Place, Section, Sources, TabAction } from "../sources.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
 
@@ -191,6 +191,15 @@ export class Panel {
     this.peek.hidden = true;
     this.foot.hidden = true;
     this.connecting.show(filled);
+  }
+
+  /**
+   * browse lists a connection from where it starts, with the keys following
+   * it: the settings menu's sources. The form, if it was open, gives way.
+   */
+  browse(c: Connection): void {
+    if (this.connecting.open) this.showList();
+    void this.sources.open(c).then(() => this.reveal());
   }
 
   /** showList puts the list back where the form was, with the keys in it. */
