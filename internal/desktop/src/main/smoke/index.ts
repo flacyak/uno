@@ -11,10 +11,10 @@
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 
 import type { BrowserWindow } from "electron";
 
+import { ask } from "../ask.ts";
 import { through } from "../driven.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
@@ -122,23 +122,6 @@ async function shoot(win: BrowserWindow, name: string): Promise<void> {
   console.log(`smoke: screenshot ${path}`);
 }
 
-/** smoke.js's answers, a line each, read off this process's stdin. */
-let answers: AsyncIterator<string> | undefined;
-
-/**
- * ask has smoke.js do something only it can, and waits for it to be done: a
- * line out on stdout, which smoke.js reads, and one back on stdin once it has
- * acted. Waiting on the answer rather than a timer is what lets the check
- * after it rely on the change having happened.
- */
-async function ask(what: string): Promise<void> {
-  answers ??= createInterface({ input: process.stdin })[Symbol.asyncIterator]();
-  console.log(`smoke: ask ${what}`);
-  const next = await answers.next();
-  if (next.done === true) throw new Error(`smoke.js stopped answering before ${what}`);
-  if (next.value !== `smoke: done ${what}`) throw new Error(next.value.replace(/^smoke: /, ""));
-}
-
 /**
  * run drives the window, reports to stdout, and quits with a status the shell
  * can read.
@@ -171,7 +154,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
 
   for (const check of CHECKS) {
     try {
-      if (check.ask !== undefined) await ask(check.ask);
+      if (check.ask !== undefined) await ask("smoke", check.ask);
       if (check.send !== undefined) win.webContents.send(...check.send);
       if (check.input !== undefined) {
         const { events } = check.input;
