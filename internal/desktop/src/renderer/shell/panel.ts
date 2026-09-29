@@ -14,7 +14,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
-import { SECTIONS, connectionLine, stateOf } from "../sources.ts";
+import { SECTIONS, STATE_WORDS, connectionLine, stateOf } from "../sources.ts";
 import type { Button, Place, Section, Sources, TabAction } from "../sources.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
@@ -462,7 +462,20 @@ export class Panel {
         return this.act.remove(a.id);
       case "repoint":
         return this.repoint(a.id);
+      case "connect":
+        return this.connectFor(a.id);
     }
+  }
+
+  /**
+   * connectFor opens the connect form for the bucket a tab reads that no
+   * connection covers, with the bucket filled in: the tab's ! mark, and its
+   * line's Connect. A tab that has closed, or that needs no connection, opens
+   * nothing.
+   */
+  connectFor(id: string): void {
+    const bucket = this.sources.tabs.find((t) => t.id === id)?.link?.connect?.bucket;
+    if (bucket !== undefined) this.connect({ bucket });
   }
 
   /** paintPeek draws the header and first rows of the one picked file. */
@@ -571,7 +584,7 @@ export class Panel {
         const t = this.sources.tabs[line];
         if (t === undefined) return ["", ""];
         const state = stateOf(t);
-        if (state !== "fine") return [t.name, state];
+        if (state !== "fine") return [t.name, STATE_WORDS[state]];
         return [t.name, t.bytes === undefined ? "" : formatBytes(t.bytes)];
       }
       case "connections": {

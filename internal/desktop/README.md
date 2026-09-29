@@ -104,6 +104,15 @@ why in the engine's own words -- a 403, no such bucket, an expired SSO sign-in -
 and saves nothing, so every connection in the folder is one that worked. The
 saved connection keeps the region the test found, and the panel browses it.
 
+A `.uno` travels, and whoever opens one did not choose the buckets it names.
+So each S3 source in it is matched, when it opens, to the connection covering
+its bucket and folder, read the way the S3 handler reads an address. One no
+connection covers opens missing and not a single request reaches its bucket:
+its tab says `not connected`, the status bar names the bucket, and its line
+offers `Connect <bucket>` in place of Reload, which would have read it with this
+machine's credentials. The tab's `!` opens the connect screen with the bucket
+filled in, and once the connection is saved the tab reads, its edits replayed.
+
 Main writes a connection atomically, after reading the text back as a
 connection, so the page cannot put a key or a mismatched id in the folder. The
 engine reads the folder when it starts and again whenever the renderer says it

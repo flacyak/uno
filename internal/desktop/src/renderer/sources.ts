@@ -51,13 +51,22 @@ export interface Open {
 
 /**
  * State is what a workspace line says about the file behind a tab: it reads,
- * it is not the file the log was written against, or it is not there.
+ * it is not the file the log was written against, it is not there, or it is
+ * in a bucket no connection covers and nothing has been read from it.
  *
- * Newer in the bucket is a fourth, once something asks the bucket (3.4).
+ * Newer in the bucket is a fifth, once something asks the bucket (3.4).
  */
-export type State = "fine" | "changed" | "missing";
+export type State = "fine" | "changed" | "missing" | "unconnected";
+
+/** What a workspace line says beside a tab that is not fine. */
+export const STATE_WORDS: Record<Exclude<State, "fine">, string> = {
+  changed: "changed",
+  missing: "missing",
+  unconnected: "not connected",
+};
 
 export function stateOf(tab: Open): State {
+  if (tab.link?.connect !== undefined) return "unconnected";
   if (tab.link?.missing !== undefined) return "missing";
   if (tab.link?.changed !== undefined) return "changed";
   return "fine";
@@ -65,9 +74,10 @@ export function stateOf(tab: Open): State {
 
 /**
  * Doing is what can be done to the tab the keys are on, besides showing it:
- * read its file again, point it at another, or take it out.
+ * read its file again, point it at another, take it out, or connect the bucket
+ * it reads so that it can be read at all.
  */
-export type Doing = "reload" | "repoint" | "remove";
+export type Doing = "reload" | "repoint" | "remove" | "connect";
 
 /** One of the things a workspace line offers, as its button says it. */
 export interface TabAction {
@@ -346,7 +356,14 @@ export class Sources {
     if (tab === undefined) return [];
     const id = tab.id;
     const out: TabAction[] = [];
-    if (tab.link !== undefined) out.push({ label: "Reload", does: "reload", id });
+    // A tab in a bucket nobody connected is not reloaded, which would read it
+    // with this machine's credentials: it is connected, which is asking.
+    const unconnected = tab.link?.connect;
+    if (unconnected !== undefined) {
+      out.push({ label: `Connect ${unconnected.bucket}`, does: "connect", id });
+    } else if (tab.link !== undefined) {
+      out.push({ label: "Reload", does: "reload", id });
+    }
     out.push({ label: "Re-point", does: "repoint", id });
     if (this.opened().length > 1) out.push({ label: "Remove", does: "remove", id });
     return out;

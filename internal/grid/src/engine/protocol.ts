@@ -11,7 +11,7 @@ import type { Connection } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
 import type { Entry, FileRef, Listing } from "../store/index.ts";
-import type { Tried } from "../store/s3.ts";
+import type { Tried, Unconnected } from "../store/s3.ts";
 
 /**
  * SourceRef says where a file is without holding any of it: a FileRef, which
@@ -67,6 +67,14 @@ export interface Link {
    * it and saying so.
    */
   changed?: string;
+
+  /**
+   * The bucket a source reads that no connection covers, when that is why it
+   * is missing: a .uno somebody sent names a bucket, and nothing was read
+   * from it, because this machine has not made or accepted a connection to it.
+   * The panel offers to connect it with the bucket filled in.
+   */
+  connect?: Unconnected;
 }
 
 export interface Opened {
