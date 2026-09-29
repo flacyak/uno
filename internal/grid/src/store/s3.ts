@@ -200,8 +200,13 @@ export function s3Provider(opts: S3Options): Provider {
  * two would drift the way the two refusals in claim.ts had already begun to.
  */
 export interface S3Requests {
-  /** One object: HEAD for how big it is, GET for a range of it. */
-  object(loc: S3Location, method: "HEAD" | "GET", extra: Record<string, string>): Promise<Response>;
+  /** One object, or one version of it: HEAD for how big it is, GET for a range of it. */
+  object(
+    loc: S3Location,
+    method: "HEAD" | "GET",
+    extra: Record<string, string>,
+    version?: string,
+  ): Promise<Response>;
   /** The bucket itself with a query on it, which is what a listing asks for. */
   bucket(bucket: string, query: Record<string, string>): Promise<Response>;
   /** Who a request to `loc` goes out as, in words, for a refusal to name. */
@@ -300,8 +305,8 @@ export function s3Requests(opts: S3Options): S3Requests {
   }
 
   return {
-    object: (loc, method, extra) =>
-      request(loc, (region) => objectUrl(loc, region, opts.endpoint), method, extra),
+    object: (loc, method, extra, version) =>
+      request(loc, (region) => objectUrl(loc, region, opts.endpoint, version), method, extra),
     // A listing is a GET, so its refusal carries a body, so the region in one
     // is there to be read without the extra ask a HEAD needs. It is signed as
     // the prefix it asks about, which is the place a connection covers.
@@ -454,7 +459,17 @@ export function s3Files(opts: S3Options): FileHandler {
       const cannot = unaddressable(loc);
       if (cannot !== undefined) throw cannot;
 
-      const head = await send.object(loc, "HEAD", {});
+      // A VersionId a save recorded is asked for by name, so a workspace opens
+      // the bytes its log was made against even after the object is written
+      // over or deleted. A bucket that no longer has that version -- its
+      // versioning was turned off, or the version was deleted -- answers for
+      // the object as it is now, which says it is a different version.
+      let pinned = "path" in ref ? versionIdIn(ref.version) : undefined;
+      let head = await send.object(loc, "HEAD", {}, pinned);
+      if (pinned !== undefined && (head.status === 404 || head.status === 400)) {
+        pinned = undefined;
+        head = await send.object(loc, "HEAD", {});
+      }
       if (!head.ok) throw new Error(`${url}: ${refusal(head.status, await send.who(loc))}`);
       const size = Number(head.headers.get("content-length") ?? "NaN");
       if (!Number.isFinite(size)) throw new Error(`${url}: S3 did not say how big it is`);
@@ -469,10 +484,15 @@ export function s3Files(opts: S3Options): FileHandler {
         async read(offset, length) {
           const end = Math.min(offset + length, size);
           if (end <= offset) return new Uint8Array();
-          const res = await send.object(loc, "GET", {
-            range: `bytes=${offset}-${end - 1}`,
-            ...(etag === null ? {} : { "if-match": etag }),
-          });
+          const res = await send.object(
+            loc,
+            "GET",
+            {
+              range: `bytes=${offset}-${end - 1}`,
+              ...(etag === null ? {} : { "if-match": etag }),
+            },
+            pinned,
+          );
           if (res.status === 412) {
             throw new Error(`${url} changed in the bucket since it was opened · open it again`);
           }
@@ -499,6 +519,15 @@ export function versionOf(headers: Headers): string | undefined {
   const id = headers.get("x-amz-version-id");
   if (id !== null && id !== "" && id !== "null") return id;
   return headers.get("etag") ?? undefined;
+}
+
+/**
+ * versionIdIn is a recorded version that can be asked for again by name: a
+ * VersionId, and not an ETag, which S3 keeps no copy of the bytes behind.
+ */
+function versionIdIn(version: string | undefined): string | undefined {
+  if (version === undefined || version === "" || version.startsWith('"')) return undefined;
+  return version.startsWith("W/") ? undefined : version;
 }
 
 /**
@@ -690,8 +719,15 @@ function bucketUrl(bucket: string, region: string, endpoint: string | undefined)
   return `https://${bucket}.s3.${region}.amazonaws.com`;
 }
 
-function objectUrl(loc: S3Location, region: string, endpoint: string | undefined): URL {
-  return new URL(`${bucketUrl(loc.bucket, region, endpoint)}/${encodePath(loc.key)}`);
+/** The object's address, asking for one version of it where `version` is a VersionId. */
+function objectUrl(
+  loc: S3Location,
+  region: string,
+  endpoint: string | undefined,
+  version?: string,
+): URL {
+  const at = `${bucketUrl(loc.bucket, region, endpoint)}/${encodePath(loc.key)}`;
+  return new URL(version === undefined ? at : `${at}?versionId=${encode(version)}`);
 }
 
 /**
