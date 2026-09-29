@@ -37,10 +37,18 @@ import { Panel } from "./panel.ts";
 import { Settings } from "./settings.ts";
 import { StatusBar } from "./status.ts";
 import { tabStrip } from "./tabs.ts";
-import { message, must } from "./util.ts";
+import { message, must, settled } from "./util.ts";
 
 /** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
 const INPUT_KEY = "uno.input";
+
+/**
+ * How long the window keeps the focus before its sources' buckets are asked
+ * whether they hold something newer: long enough that alt-tabbing through
+ * uno on the way somewhere else asks nothing, short enough that a person
+ * coming back sees the mark before they look for it.
+ */
+export const NEWER_AFTER_MS = 400;
 
 export class Shell {
   private workspace: Workspace | undefined;
@@ -196,6 +204,25 @@ export class Shell {
       },
     });
     this.wireKeys();
+    // Coming back to the window is when a person has had the chance to change
+    // something in a bucket, so it is when the buckets are asked.
+    window.addEventListener(
+      "focus",
+      settled(NEWER_AFTER_MS, () => this.askNewer()),
+    );
+    this.paintStatus();
+  }
+
+  /**
+   * askNewer asks each remote source's bucket, one HEAD each, whether it holds
+   * a newer version than the tab reads, and repaints whatever that changed.
+   */
+  private async askNewer(): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined) return;
+    if (!(await w.askNewer()) || this.workspace !== w) return;
+    this.paintTabs();
+    this.panel.draw();
     this.paintStatus();
   }
 
@@ -678,6 +705,9 @@ export class Shell {
     // A tab in a bucket nobody connected is not fixed by another file: its
     // mark asks to connect the bucket, filled in.
     if (tab.link?.connect !== undefined) this.panel.connectFor(tab.id);
+    // One whose bucket holds a newer version has its answer on its own line:
+    // Reload reads it.
+    else if (tab.newer !== undefined && !tab.missing) this.panel.showTab(tab.id);
     else this.panel.repoint(tab.id);
   }
 

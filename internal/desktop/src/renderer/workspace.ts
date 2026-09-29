@@ -40,11 +40,20 @@ export const CARRY_LIMIT = 256 << 20;
 export type Mode = "view" | "transform";
 
 /** One source as the workspace shows it: a tab. */
+/** What the status bar says of a tab the bucket holds a newer version of. */
+export const NEWER = "a newer version is in the bucket · Reload reads it";
+
 export class Tab {
   /** The recogniser's question about this source, while it has one. */
   offer: Offer | null = null;
   /** Where the selection was when another tab was shown, so coming back finds it. */
   cell: Cell = { row: 0, col: 0 };
+  /**
+   * The version the bucket holds now, where it is not the one this tab reads.
+   * A tab reading the newest has none, and neither does one nobody has asked
+   * about. Reloading makes a new tab, which reads the newest.
+   */
+  newer: string | undefined;
 
   /** The log as the engine last reported it, and as it was at the last save. */
   private edits: Edit[];
@@ -253,6 +262,39 @@ export class Workspace {
     return this.engine.peek(ref);
   }
 
+  /**
+   * askNewer asks the bucket, one HEAD for each tab whose file has a version,
+   * which version it holds now, and marks each tab reading another one. It
+   * answers whether any mark came or went, so a caller repaints only then.
+   *
+   * A tab with no version -- a file on a disk, bytes carried in the .uno, a
+   * tab with no file behind it -- has nothing to ask about. A HEAD that fails
+   * leaves the tab as it was: the bucket being out of reach for a moment says
+   * nothing about what is in it.
+   */
+  async askNewer(): Promise<boolean> {
+    const remote = this.tabs.filter((t) => t.link?.version !== undefined && !t.missing);
+    const now = await Promise.all(
+      remote.map((t) =>
+        this.engine.stat(t.link!.path).then(
+          (entry) => ({ heard: true, version: entry.version }),
+          () => ({ heard: false, version: undefined }),
+        ),
+      ),
+    );
+    let moved = false;
+    remote.forEach((t, i) => {
+      const answer = now[i]!;
+      if (!answer.heard) return;
+      const newer = answer.version !== t.link!.version ? answer.version : undefined;
+      if (newer !== t.newer) {
+        t.newer = newer;
+        moved = true;
+      }
+    });
+    return moved;
+  }
+
   /** The sources, in the order the strip shows them. */
   get sources(): readonly Tab[] {
     return this.tabs;
@@ -437,7 +479,9 @@ export class Workspace {
     if (edits > 0) parts.push(`${edits} ${edits === 1 ? "edit" : "edits"}`);
     // A file that is not the one the log was made against still reads, and
     // says so where the person is looking, not only on the mark's hover.
-    const changed = t.link?.changed;
+    // The one with something to do about it goes first, as on its panel line:
+    // a newer version, which Reload reads, before a change it would replace.
+    const changed = t.newer === undefined ? t.link?.changed : NEWER;
     if (changed !== undefined) parts.push(changed);
     return parts.join(" · ");
   }
