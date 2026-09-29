@@ -12,6 +12,7 @@
 // run starts the same server, and two stand-ins that drift apart would be two
 // different S3s to be correct against.
 
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -50,6 +51,16 @@ export interface Beside {
   objects: Map<string, Uint8Array>;
   keys?: AwsCredentials;
   public?: boolean;
+}
+
+/**
+ * etagOf is the ETag the stand-in gives an object: the MD5 of its bytes in
+ * quotes, which is what S3 gives an object uploaded in one piece. A rewrite
+ * the same size as the file it replaced has a different one, which is the
+ * whole of what an ETag is for.
+ */
+export function etagOf(body: Uint8Array): string {
+  return `"${createHash("md5").update(body).digest("hex")}"`;
 }
 
 /** How the stand-in turns a request away by default: the way AWS does it. */
@@ -225,7 +236,7 @@ export async function bucket(
       res.writeHead(404).end();
       return;
     }
-    const etag = `"${body.length}-${body[0]}"`;
+    const etag = etagOf(body);
     if (req.headers["if-match"] !== undefined && req.headers["if-match"] !== etag) {
       res.writeHead(412).end();
       return;
@@ -313,7 +324,7 @@ function listing(name: string, objects: Map<string, Uint8Array>, url: URL): stri
     const body = objects.get(item)!;
     parts.push(
       `<Contents><Key>${xml(item)}</Key><LastModified>${MODIFIED}</LastModified>` +
-        `<ETag>${xml(`"${body.length}-${body[0]}"`)}</ETag><Size>${body.length}</Size>` +
+        `<ETag>${xml(etagOf(body))}</ETag><Size>${body.length}</Size>` +
         `<StorageClass>STANDARD</StorageClass></Contents>`,
     );
   }

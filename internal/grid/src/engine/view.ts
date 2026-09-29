@@ -33,6 +33,7 @@ import type {
   EditRequest,
   FindRequest,
   Found,
+  Link,
   Opened,
   Port,
   Progress,
@@ -71,6 +72,10 @@ export interface Part {
   path?: string;
   /** What the file measures, for a save that points at it rather than copying it. */
   bytes: number;
+  /** Which bytes of the file were read, where the place it is in can say. */
+  version?: string;
+  /** The connection it was read through, as a hint for whoever opens the save. */
+  connection?: string;
   edits: Edit[];
   rows: number;
   cols: number;
@@ -92,6 +97,9 @@ export class View {
   /** Where the file is, so a save can point at it. Empty for bytes with no file
    * behind them, which a save has to carry. */
   readonly path: string;
+
+  /** The id of the connection the file was read through, when one covered it. */
+  connection: string | undefined;
 
   private transform = false;
   private survey: AbortController | undefined;
@@ -208,7 +216,7 @@ export class View {
         progress: progressOf(index),
         edits: carried?.edits ?? [],
         generation: v.generation,
-        link: path === "" ? undefined : { path },
+        link: path === "" ? undefined : linkTo(path, source.version),
       };
       return v;
     } catch (err) {
@@ -562,6 +570,12 @@ export class View {
     return this.carried?.length ?? this.source.size;
   }
 
+  /** Which bytes of the file were read, where the place it is in can say.
+   * Undefined for bytes a save carries, which are their own version. */
+  get version(): string | undefined {
+    return this.path === "" ? undefined : this.source.version;
+  }
+
   /** How many bytes a save would have to copy into the container, which for a
    * source with a file behind it is none. */
   get carries(): number {
@@ -600,6 +614,8 @@ export class View {
         raw: carry ? (this.carried ?? (await this.source.read(0, this.source.size))) : undefined,
         path: carry ? undefined : this.path,
         bytes: this.size,
+        version: this.version,
+        connection: carry ? undefined : this.connection,
         edits: this.schema.edits(),
         rows: this.index.complete ? this.index.counted : this.index.readable(),
         cols: this.schema.headers.length,
@@ -657,4 +673,9 @@ function progressOf(index: RowIndex): Progress {
     rows: index.rows(),
     complete: index.complete,
   };
+}
+
+/** The link to a file just opened: where it is, and which bytes of it were read. */
+function linkTo(path: string, version: string | undefined): Link {
+  return version === undefined ? { path } : { path, version };
 }

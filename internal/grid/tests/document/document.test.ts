@@ -589,6 +589,113 @@ describe("a workspace that points at its sources", () => {
   });
 });
 
+// Which bytes a pointed-at source was read as, and the connection it came
+// through. Both are optional keys on a source, so a format 5 reader -- which
+// reads the keys it knows and nothing else -- opens the file as it always did.
+describe("a source's version and connection", () => {
+  const ETAG = '"9b2cf5d1e0a4c7f8b3a2d6e1c0f9a8b7"';
+
+  function pinned(): Document {
+    return {
+      manifest: newManifest(),
+      sources: [
+        {
+          id: "ads",
+          name: "ads-q3.csv",
+          path: "s3://acme-exports/2025/ads-q3.csv",
+          bytes: 235_000,
+          version: ETAG,
+          connection: "acme-exports",
+          rows: 2600,
+          cols: 13,
+          state: { active: { row: 0, col: 0 } },
+        },
+        {
+          id: "sales",
+          name: "sales.csv",
+          raw: encoder.encode(CSV_BODY),
+          // A carried source is its own version, so neither is written for it.
+          version: ETAG,
+          connection: "acme-exports",
+          rows: ROWS,
+          cols: COLS,
+          state: { active: ACTIVE },
+        },
+      ],
+      active: "ads",
+      log: [],
+      extra: new Map(),
+      at: "",
+    };
+  }
+
+  function manifestOf(bytes: Uint8Array): {
+    format: number;
+    sources: Array<Record<string, unknown>>;
+  } {
+    return JSON.parse(strFromU8(unzipSync(bytes)[MANIFEST_ENTRY]!)) as {
+      format: number;
+      sources: Array<Record<string, unknown>>;
+    };
+  }
+
+  test("round-trip on a pointed-at source, and stay off a carried one", () => {
+    const back = readContainer("q4.uno", writeDocument(pinned()));
+    expect(back.sources[0]!.version).toBe(ETAG);
+    expect(back.sources[0]!.connection).toBe("acme-exports");
+    expect(back.sources[1]!.version).toBeUndefined();
+    expect(back.sources[1]!.connection).toBeUndefined();
+  });
+
+  test("do not move the format, and sit beside what they describe", () => {
+    const m = manifestOf(writeDocument(pinned()));
+    expect(m.format).toBe(POINTED_VERSION);
+    // The connection beside the name, as a person reads a source, and the
+    // version beside the path it is a version of.
+    expect(Object.keys(m.sources[0]!)).toEqual([
+      "id",
+      "name",
+      "connection",
+      "bytes",
+      "path",
+      "version",
+      "rows",
+      "cols",
+    ]);
+    expect(Object.keys(m.sources[1]!)).toEqual([
+      "id",
+      "name",
+      "bytes",
+      "sha256",
+      "entry",
+      "rows",
+      "cols",
+    ]);
+  });
+
+  // What a build before these keys sees is the file with them taken out,
+  // because it reads a source's keys by name and has never heard of these.
+  // So taking them out must leave the same workspace.
+  test("taken out, leave the workspace a format 5 reader opened before", () => {
+    const entries = unzipSync(writeDocument(pinned()));
+    const m = manifestOf(zipSync(entries));
+    for (const s of m.sources) {
+      delete s["version"];
+      delete s["connection"];
+    }
+    entries[MANIFEST_ENTRY] = encoder.encode(JSON.stringify(m));
+
+    const full = readContainer("q4.uno", zipSync(unzipSync(writeDocument(pinned()))));
+    const bare = readContainer("q4.uno", zipSync(entries));
+    const without = (d: Document): unknown =>
+      d.sources.map(({ version: _v, connection: _c, ...rest }) => rest);
+    expect(without(bare)).toEqual(without(full));
+    expect(bare.sources[0]!.version).toBeUndefined();
+    expect(bare.log).toEqual(full.log);
+    expect(bare.active).toBe(full.active);
+  });
+});
+
 describe("a source's id", () => {
   test("is its file's name, without the extension", () => {
     expect(sourceId("sales-q3.csv", [])).toBe("sales-q3");

@@ -7,19 +7,20 @@
 // HEAD -- until a connection to it has been made. Then it is read like any
 // other.
 
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
+import { readContainer } from "../../src/document/index.ts";
 import type { SourceHandle } from "../../src/engine/index.ts";
 import type { Connection } from "../../src/library/index.ts";
 import { Op } from "../../src/sheet/index.ts";
 import { connectionsIn, saveConnection } from "../../src/store/index.ts";
 import { connectionSigning, diskProvider, nodeStore } from "../../src/store/node.ts";
-import { connectionGuard, s3Provider } from "../../src/store/s3.ts";
+import { connectionMeeting, s3Provider } from "../../src/store/s3.ts";
 import { HOME_REGION } from "../store/regions.ts";
-import { BUCKET, KEYS, bucket } from "../store/standin.ts";
+import { BUCKET, KEYS, bucket, etagOf } from "../store/standin.ts";
 import type { Bucket } from "../store/standin.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { FIXTURE, connect, indexed, openOne } from "./harness.ts";
@@ -67,7 +68,7 @@ async function desktop(saved: Connection[] = []) {
   });
   const wired = connect(undefined, [diskProvider(), s3], {
     connections: kept,
-    guard: connectionGuard(() => kept.all),
+    meet: connectionMeeting(() => kept.all),
   });
   return { ...wired, store, dir };
 }
@@ -186,12 +187,16 @@ test("an object named by its https address is guarded the same way", async () =>
   }
 });
 
-test("the guard has nothing to say about a path on disk", () => {
-  const guard = connectionGuard(() => []);
-  expect(guard(FIXTURE)).toBeUndefined();
-  // The folder the object is in is what connecting it offers to cover.
-  expect(guard(OBJECT)).toEqual({ bucket: BUCKET, prefix: "2025/" });
-  expect(guard(`s3://${BUCKET}/top.csv`)).toEqual({ bucket: BUCKET, prefix: "" });
+test("a path on disk meets no connection, and an object meets the one it is read through", () => {
+  const meet = connectionMeeting(() => [EXPORTS, { ...EXPORTS, id: "whole", prefix: "" }]);
+  expect(meet(FIXTURE)).toBeUndefined();
+  // The longest prefix, which is the connection the handler signs with.
+  expect(meet(OBJECT)).toEqual({ through: EXPORTS.id });
+  expect(meet(`s3://${BUCKET}/2024/x.csv`)).toEqual({ through: "whole" });
+  // With none, the folder the object is in is what connecting it offers to cover.
+  const none = connectionMeeting(() => []);
+  expect(none(OBJECT)).toEqual({ unconnected: { bucket: BUCKET, prefix: "2025/" } });
+  expect(none(`s3://${BUCKET}/top.csv`)).toEqual({ unconnected: { bucket: BUCKET, prefix: "" } });
 });
 
 // Connecting the bucket is what the source waited for, so it stops waiting
@@ -228,6 +233,67 @@ test("a source whose object has gone stops waiting once its bucket is connected,
       missing: `${gone}: no such object in that bucket`,
     });
     expect(now.opened.edits).toHaveLength(1);
+  } finally {
+    done();
+  }
+});
+
+// 3.1: which bytes a source was read as, and the connection it came through,
+// go into the save, so the next open can tell a rewrite from the file the log
+// was made against. A source that could not be read writes back what it was
+// given, and a file on disk has neither.
+test("a save records the version an object was read as and the connection it came through", async () => {
+  const { engine, done } = await desktop([EXPORTS]);
+  try {
+    const file = await workspace();
+    const { sources } = await engine.open({ name: "q4-close.uno", path: file });
+    await Promise.all(sources.map((s) => indexed(s)));
+    const remote = sourceNamed(sources, "sales-q3.csv");
+    const version = etagOf(b.objects.get("2025/sales-q3.csv")!);
+    expect(remote.opened.link).toEqual({ path: OBJECT, version });
+
+    const saved = readContainer(
+      "q4-close.uno",
+      await engine.save({ source: remote.id, cells: [], at: file }, 1 << 20),
+    );
+    const byName = new Map(saved.sources.map((s) => [s.name, s]));
+    expect(byName.get("sales-q3.csv")).toMatchObject({ version, connection: EXPORTS.id });
+    expect(byName.get("local.csv")!.version).toBeUndefined();
+    expect(byName.get("local.csv")!.connection).toBeUndefined();
+  } finally {
+    done();
+  }
+});
+
+test("a source waiting for its bucket saves the version and connection it was opened with", async () => {
+  // Saved on a machine that had the connection, opened on one that does not.
+  const had = await desktop([EXPORTS]);
+  let file: string;
+  try {
+    const first = await workspace();
+    const { sources } = await had.engine.open({ name: "q4-close.uno", path: first });
+    await Promise.all(sources.map((s) => indexed(s)));
+    file = join(await mkdtemp(join(tmpdir(), "uno-meets-pinned-")), "q4-close.uno");
+    await writeFile(
+      file,
+      await had.engine.save({ source: sources[0]!.id, cells: [], at: file }, 1 << 20),
+    );
+  } finally {
+    had.done();
+  }
+  const { engine, done } = await desktop();
+  try {
+    const { sources } = await engine.open({ name: "q4-close.uno", path: file });
+    const waiting = sourceNamed(sources, "sales-q3.csv");
+    expect(waiting.opened.link?.connect).toBeDefined();
+    const again = readContainer(
+      "q4-close.uno",
+      await engine.save({ source: waiting.id, cells: [], at: file }, 1 << 20),
+    );
+    const was = readContainer("q4-close.uno", await readFile(file));
+    const pick = (d: typeof was) => d.sources.find((s) => s.name === "sales-q3.csv")!;
+    expect(pick(again).version).toBe(pick(was).version);
+    expect(pick(again).connection).toBe(EXPORTS.id);
   } finally {
     done();
   }

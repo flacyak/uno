@@ -20,7 +20,7 @@ import { readListing } from "../../src/store/s3xml.ts";
 import { bytes } from "../testdata/sales-q3.ts";
 import { AWKWARD_KEYS, DOT_KEYS } from "./awkward.ts";
 import { HOME_REGION } from "./regions.ts";
-import { BUCKET, KEYS, MODIFIED, bucket } from "./standin.ts";
+import { BUCKET, KEYS, MODIFIED, bucket, etagOf } from "./standin.ts";
 import type { Bucket } from "./standin.ts";
 
 // ------------------------------------------------------------ the reader
@@ -245,7 +245,7 @@ describe("browsing a bucket", () => {
     expect(by.get("notes.txt")!.modified).toEqual(new Date(MODIFIED));
     // ListObjectsV2 gives the ETag away, so a listing answers "is the bucket's
     // copy the one this workspace read" without a stat per row.
-    expect(by.get("notes.txt")!.version).toBe(`"${ONE.length}-${ONE[0]}"`);
+    expect(by.get("notes.txt")!.version).toBe(etagOf(ONE));
     expect(by.get("2025")!.version, "a prefix has no version either").toBeUndefined();
   });
 
@@ -357,7 +357,7 @@ describe("browsing a bucket", () => {
     expect(one.name).toBe("sales-q3.csv");
     expect(one.folder).toBe(false);
     expect(one.bytes).toBe(bytes.length);
-    expect(one.version).toBe(`"${bytes.length}-${bytes[0]}"`);
+    expect(one.version).toBe(etagOf(bytes));
     expect(one.path).toBe(`s3://${BUCKET}/2025/sales-q3.csv`);
   });
 

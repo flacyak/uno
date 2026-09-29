@@ -69,6 +69,13 @@ as a view the same way a file on disk does: a HEAD for its size, then ranged
 GETs as the index and the grid need them. Nothing is downloaded whole, and a
 workspace saves the `s3://` URL rather than a copy.
 
+Beside the URL, a save writes down which bytes were read -- the object's
+VersionId where its bucket keeps versions, and its ETag otherwise -- and the id
+of the connection it was read through, as a hint. Both are optional keys on a
+source in `uno.json`, so the format stays 5 and a build before them opens the
+file as it always did. An ETag keeps its quotes, which is how the two are told
+apart.
+
 The engine process reads the object. A connection that covers it, by bucket
 and the longest prefix its key starts with, says how to sign in: `machine`,
 a named `profile`, or `public`, which reads an open bucket without signing at

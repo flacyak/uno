@@ -15,7 +15,7 @@ import { peek } from "./peek.ts";
 import type { Sources } from "../plugin/index.ts";
 import type { Connection } from "../library/index.ts";
 import type { Connections } from "../store/index.ts";
-import type { Tried, Unconnected } from "../store/s3.ts";
+import type { Meeting, Tried } from "../store/s3.ts";
 import { Workspace } from "./workspace.ts";
 
 /**
@@ -42,13 +42,15 @@ export interface Connecting {
    */
   test?: (c: Connection) => Promise<Tried>;
   /**
-   * Whether an address a .uno names is in a bucket no connection covers. A
-   * source there opens missing and reads nothing until the person connects
-   * it, so a workspace somebody sent cannot make uno read a bucket with this
-   * machine's credentials. The platform supplies it because it is the one
-   * that knows how its handlers read an address.
+   * Which connection an address is read through, or the bucket no connection
+   * covers. A .uno's source in such a bucket opens missing and reads nothing
+   * until the person connects it, so a workspace somebody sent cannot make
+   * uno read a bucket with this machine's credentials, and one that is
+   * covered is saved with its connection's id as a hint. The platform
+   * supplies it because it is the one that knows how its handlers read an
+   * address.
    */
-  guard?: (path: string) => Unconnected | undefined;
+  meet?: (path: string) => Meeting | undefined;
 }
 
 /**
@@ -66,7 +68,7 @@ export function serve(
   connecting?: Connecting,
 ): void {
   const connections = connecting?.connections;
-  const workspace = new Workspace(sources.files, port, tuning, connecting?.guard);
+  const workspace = new Workspace(sources.files, port, tuning, connecting?.meet);
   // Read before anything is answered, so the first request that signs -- a
   // .uno opened the moment the engine is up -- is signed by its connection and
   // not by whatever the machine has. A folder that cannot be read is said when
