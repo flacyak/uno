@@ -11,6 +11,30 @@
   -webkit-app-region: drag; /* the strip doubles as somewhere to grab the window */
 }
 
+/* A strip too narrow for every tab gives way in the tabs and never in the
+ * controls after them: the + , the mode switch and the panel toggle keep their
+ * width, the tab showing keeps its whole name, and the others are cut short,
+ * down to a width that can still be clicked, marks and dots kept whole. The switch hides its overflow,
+ * so without flex-shrink: 0 it was the one squeezed, to "Vie". */
+.tab-add,
+.seg,
+.panel-toggle,
+.tab.active,
+.tab > :not(.name) {
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 0 1 auto;
+  min-width: 72px;
+}
+
+.tab .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tab {
   display: inline-flex;
   align-items: center;

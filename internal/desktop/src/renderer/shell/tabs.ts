@@ -72,7 +72,14 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: TabActions): HTML
   const tab = document.createElement("span");
   tab.className = t === w.active ? "tab active" : "tab";
   tab.dataset["source"] = t.id;
-  tab.append(document.createTextNode(t.name));
+  // The name in a box of its own, so a strip too narrow for every tab cuts
+  // the names short rather than the switch beside them; the whole name is a
+  // hover away.
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = t.name;
+  tab.title = t.name;
+  tab.append(name);
   tab.addEventListener("click", () => act.select(t));
 
   // A source whose file is gone, or is not the file the log was written

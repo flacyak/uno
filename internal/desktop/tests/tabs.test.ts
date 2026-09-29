@@ -58,3 +58,12 @@ test("a tab with nothing wrong has no mark", () => {
   const { els } = strip({ path: "/home/jo/ledger-2025.csv" });
   expect(els[0]!.querySelector(".trouble")).toBeNull();
 });
+
+// A strip too narrow for every tab cuts the names short, so the name is in a
+// box that can be, and the whole of it is on the tab for whoever hovers.
+test("a tab's name is a box of its own, and whole in its title", () => {
+  const { els } = strip({ path: "/home/jo/ledger-2025.csv" });
+  const tab = els[0]!;
+  expect(tab.querySelector(".name")?.textContent).toBe(tab.title);
+  expect(tab.title).not.toBe("");
+});
