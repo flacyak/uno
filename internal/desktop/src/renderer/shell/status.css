@@ -13,6 +13,27 @@
   color: var(--ink-2);
 }
 
+/* One line, however narrow the window: nothing wraps, the mode and where the
+ * selection is keep their width, and the two sentences give way instead, each
+ * in proportion to its length, so neither vanishes while the other is whole.
+ * Each keeps its whole text in its title for whoever hovers. */
+.win-status > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.win-status #status-file,
+.win-status #status-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win-status #status-file,
+.win-status #status-msg {
+  flex-shrink: 1;
+}
+
 .win-status .sep {
   color: var(--ink-3);
 }

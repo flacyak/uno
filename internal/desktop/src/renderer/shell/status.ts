@@ -58,6 +58,8 @@ export class StatusBar {
   /** paint says what is open, which mode it is in, and where the selection is. */
   paint(w: Workspace | undefined, grid: Grid | undefined, input: InputStrategy): void {
     this.file.textContent = w === undefined ? "no file open" : w.status();
+    // A narrow window cuts the line short, and the whole of it is a hover away.
+    this.file.title = this.file.textContent;
     // A strategy that names the editor, as vim's INSERT, names transform with it
     // open, so the name wears transform's amber.
     const editing = grid?.editing() === true ? input.editing : undefined;
@@ -78,6 +80,7 @@ export class StatusBar {
   /** One line, and the only place the shell talks. */
   say(text: string, isError: boolean): void {
     this.msg.textContent = text;
+    this.msg.title = text;
     this.msg.className = isError ? "err" : "";
   }
 
