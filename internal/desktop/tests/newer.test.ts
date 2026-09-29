@@ -9,19 +9,13 @@ import { writeFile } from "node:fs/promises";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MessageChannel } from "node:worker_threads";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vite-plus/test";
 
-import { Engine, messagePort, serve } from "@uno/grid/engine";
-import type { MessagePortLike, Reply, Request } from "@uno/grid/engine";
-import { sources } from "@uno/grid/plugin";
-import { diskProvider } from "@uno/grid/store/node";
-import { s3Provider } from "@uno/grid/store/s3";
-
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
-import { KEYS, bucket, etagOf } from "../../grid/tests/store/standin.ts";
+import { bucket, etagOf } from "../../grid/tests/store/standin.ts";
 import type { Bucket } from "../../grid/tests/store/standin.ts";
 import { m } from "../src/paraglide/messages.js";
+import { bucketEngine } from "./bucket-engine.ts";
 import { stateOf, stateWord } from "../src/renderer/sources.ts";
 import { Workspace, reloaded } from "../src/renderer/workspace.ts";
 
@@ -48,26 +42,11 @@ beforeEach(() => {
   b.objects.set(KEY, enc.encode(ADS));
 });
 
-function engine(): Engine {
-  const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
-    sources([
-      diskProvider(),
-      s3Provider({
-        credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
-        endpoint: b.endpoint,
-      }),
-    ]),
-  );
-  return new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
-}
-
 /** A workspace of the object and a file on disk beside it. */
 async function both(): Promise<Workspace> {
   const w = await Workspace.open(
     { name: "google-ads.csv", path: OBJECT },
-    engine(),
+    bucketEngine(b),
     OBJECT,
     () => {},
     () => {},
