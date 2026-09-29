@@ -9,17 +9,13 @@ import { join } from "node:path";
 import { afterAll, expect, test } from "vite-plus/test";
 
 import { PARTS_VERSION, readContainer } from "../../src/document/index.ts";
-import type { SourceHandle } from "../../src/engine/index.ts";
 import { Op } from "../../src/sheet/index.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { PART_ROWS } from "../testdata/sales-q3-parts.ts";
-import { TINY, connect, indexed, openOne, sales } from "../engine/harness.ts";
+import { connect, everyRow, indexed, openOne, sales, TINY } from "../engine/harness.ts";
 import { COLUMNS, NAMES, SOURCE, asOne, onDisk, providers, rowsOnly } from "./parts.ts";
 
 const UNO = "rows.uno";
-
-/** How many rows are asked for at a time. */
-const PAGE = 500;
 
 /** More than any source here would need a save to carry. */
 const ROOMY = 1 << 20;
@@ -34,15 +30,6 @@ const EDITS = [
 const dirs: string[] = [];
 afterAll(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true }))));
 
-/** Every row of a source, as it shows them. */
-async function every(src: SourceHandle): Promise<string[][]> {
-  const rows: string[][] = [];
-  for (let first = 0; first < src.progress.rows; first += PAGE) {
-    rows.push(...(await src.rows(first, PAGE)).rows);
-  }
-  return rows;
-}
-
 test("headerless files save as having no header row, and reopen with every edit on its cell", async () => {
   const { dir, paths } = await onDisk();
   dirs.push(dir);
@@ -56,7 +43,7 @@ test("headerless files save as having no header row, and reopen with every edit 
     await indexed(src);
     first.engine.mode(true);
     for (const e of EDITS) await src.edit({ op: Op.Set, row: e.row, col: UNITS, now: e.now });
-    rows = await every(src);
+    rows = await everyRow(src);
     await writeFile(file, await first.engine.save({ source: src.id, cells: [], at: file }, ROOMY));
   } finally {
     first.done();
@@ -77,7 +64,7 @@ test("headerless files save as having no header row, and reopen with every edit 
     await indexed(src);
     expect(src.opened.columns.map((c) => c.header)).toEqual(COLUMNS);
     expect(src.progress).toMatchObject({ rows: ROWS, complete: true });
-    expect(await every(src)).toEqual(rows);
+    expect(await everyRow(src)).toEqual(rows);
 
     for (const e of EDITS) {
       expect((await src.rows(e.row, 1)).rows[0]![UNITS], `row ${e.row}`).toBe(e.now);
