@@ -15,6 +15,12 @@
 import { quote } from "../go/strconv.ts";
 import type { HeaderMode } from "../store/multi.ts";
 
+/**
+ * Charset is the name a file's text is read by, as the status bar shows it.
+ * The two are the same word in every language, so the name travels as data.
+ */
+export type Charset = "UTF-8" | "Windows-1252";
+
 /** The punctuation a description can call by name, as the plural it is called by. */
 export type CharName =
   | "commas"
@@ -57,7 +63,7 @@ export type Said =
   | { t: "replaying"; name: string; why: Said }
 
   // How a file was read, for the status bar.
-  | { t: "read"; delimiter: string; header: HeaderMode }
+  | { t: "read"; delimiter: string; header: HeaderMode; charset: Charset }
 
   // What a program does, for the recogniser's banner.
   | { t: "program"; steps: StepSaid[] }
@@ -187,7 +193,9 @@ export function english(s: Said): string {
     case "read": {
       // The quoting is Go's `%q` on a rune: a single-quoted character literal.
       const read =
-        s.delimiter === "\t" ? "UTF-8 · tab-separated" : `UTF-8 · delimiter '${s.delimiter}'`;
+        s.delimiter === "\t"
+          ? `${s.charset} · tab-separated`
+          : `${s.charset} · delimiter '${s.delimiter}'`;
       return s.header === "first" ? read : `${read} · no header row`;
     }
 
