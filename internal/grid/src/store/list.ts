@@ -11,7 +11,53 @@
 // claims a path is store/claim.ts, and what plugs the two interfaces in as one
 // thing is the plugin package.
 
+import { compareStrings } from "../go/index.ts";
 import { BROWSES, claim } from "./claim.ts";
+
+/**
+ * How many entries one page of a listing holds.
+ *
+ * A thousand, which is what ListObjectsV2 answers with when it is not told
+ * otherwise and what the disk pages at, so the panel scrolls a prefix and a
+ * folder at the same rate and neither feels like the other's special case. S3
+ * is sent it rather than left to default, because a page is what the panel
+ * draws and a bucket quietly changing its own default would change how far one
+ * scroll goes.
+ */
+export const PAGE = 1_000;
+
+/** Named is what the order of a listing is decided from: whether it is a folder, and what it is called. */
+export interface Named {
+  readonly name: string;
+  readonly folder: boolean;
+}
+
+/**
+ * pageKey is the order a listing promises, written as one string: folders
+ * first, then by name. `d` sorts before `f`, so one string compare is both
+ * halves of it.
+ *
+ * For the disk it is also the cursor, which is why it is a string and not a
+ * pair. A cursor that were an index would slide by one when somebody saved a
+ * file into the folder mid-scroll and a page would skip an entry; a key means
+ * "the entries from here on" and stays true whatever happened to the folder
+ * meanwhile. For a bucket it is only an order, and one that holds within a page
+ * rather than across a prefix, which it cannot help: a bucket pages its keys
+ * and the prefixes they fold into together, in one UTF-8 order, so a page after
+ * this one can hold a folder whose name sorts before a file on this one.
+ * Promising more would mean reading every page of a prefix before answering
+ * with the first, and for two million keys that is a listing nobody waits for.
+ * The disk pays a readdir per page to promise it everywhere; a bucket cannot be
+ * asked that way at any price.
+ */
+export function pageKey(named: Named): string {
+  return `${named.folder ? "d" : "f"}:${named.name}`;
+}
+
+/** byPageKey orders a page the way a listing promises: folders, then names. */
+export function byPageKey(a: Named, b: Named): number {
+  return compareStrings(pageKey(a), pageKey(b));
+}
 
 /**
  * Entry is one thing a listing found.

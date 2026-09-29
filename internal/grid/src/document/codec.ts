@@ -1,7 +1,14 @@
 import { Zip, deflateSync, unzipSync } from "fflate";
 import type { ZipInputFile } from "fflate";
 
-import { compareStrings, nowTruncated, parseTime, rfc3339, sha256Hex } from "../go/index.ts";
+import {
+  compareStrings,
+  concat,
+  nowTruncated,
+  parseTime,
+  rfc3339,
+  sha256Hex,
+} from "../go/index.ts";
 import { read as ingestRead } from "../ingest/index.ts";
 import type { Edit, Op, Sheet } from "../sheet/index.ts";
 import type {
@@ -347,13 +354,7 @@ function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
   if (failed !== undefined) throw failed;
   deflated = kept;
 
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, at);
-    at += chunk.length;
-  }
-  return out;
+  return concat(chunks);
 }
 
 /** The CRC-32 polynomial, reflected, which is how a zip entry's checksum is computed. */
