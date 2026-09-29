@@ -58,46 +58,40 @@ export interface Connecting {
   meet?: (path: string) => Meeting | undefined;
 }
 
+/** A reply less its id, which `serve` puts back from the request it answers. */
+type Unnumbered<R> = R extends { id: number } ? Omit<R, "id"> : never;
+type Answer = Unnumbered<Reply>;
+
 /**
- * The kinds of request an engine answers, as a record rather than a list so
- * that a kind added to the protocol and not here is a type error rather than
- * a request refused at the port.
+ * Handlers is one answer per kind of request, as a record rather than a
+ * switch so that a kind added to the protocol and not here is a type error
+ * rather than a request refused at the port. A handler answers with nothing
+ * where the request asks for nothing back.
  */
-const KINDS: Record<Request["t"], true> = {
-  open: true,
-  remove: true,
-  relink: true,
-  append: true,
-  rows: true,
-  edit: true,
-  undo: true,
-  redo: true,
-  find: true,
-  list: true,
-  stat: true,
-  peek: true,
-  connections: true,
-  profiles: true,
-  try: true,
-  mode: true,
-  save: true,
-  close: true,
+type Handlers = {
+  [K in Request["t"]]: (msg: Extract<Request, { t: K }>) => Promise<Answer | undefined>;
 };
+
+/** fieldOf is one field of a message off the port, or undefined where the message is not an object or has none. */
+function fieldOf(msg: unknown, key: string): unknown {
+  if (typeof msg !== "object" || msg === null || !(key in msg)) return undefined;
+  return (msg as Record<string, unknown>)[key];
+}
 
 /**
  * requestOf is what a message off the port is taken to be, or undefined for
  * one that is not a request at all.
  *
  * The far end of the port is a page, so what arrives is looked at before it
- * is believed: anything that is not an object, or is not of a kind in KINDS,
+ * is believed: anything that is not an object, or is not of a kind handled,
  * is refused here, before `handle` can throw on it or let it through to no
  * answer. What a request of a known kind holds besides is left to the
  * workspace, which refuses a field it cannot use in the sentence it would
  * refuse a wrong one with.
  */
-function requestOf(msg: unknown): Request | undefined {
-  if (typeof msg !== "object" || msg === null || !("t" in msg)) return undefined;
-  return typeof msg.t === "string" && Object.hasOwn(KINDS, msg.t) ? (msg as Request) : undefined;
+function requestOf(msg: unknown, handled: Handlers): Request | undefined {
+  const t = fieldOf(msg, "t");
+  return typeof t === "string" && Object.hasOwn(handled, t) ? (msg as Request) : undefined;
 }
 
 /**
@@ -115,18 +109,15 @@ function counted(field: string, value: unknown, least: number): void {
 
 /** idOf is the id a message carried, where it carried one a reply can be matched by. */
 function idOf(msg: unknown): number | undefined {
-  if (typeof msg !== "object" || msg === null || !("id" in msg)) return undefined;
-  return typeof msg.id === "number" ? msg.id : undefined;
+  const id = fieldOf(msg, "id");
+  return typeof id === "number" ? id : undefined;
 }
 
 /** notARequest says what a message was instead: its kind where it named one, and its type otherwise. */
 function notARequest(msg: unknown): Said {
-  const kind =
-    typeof msg === "object" && msg !== null && "t" in msg
-      ? typeof msg.t === "string"
-        ? msg.t
-        : typeof msg.t
-      : typeof msg;
+  const named = typeof msg === "object" && msg !== null && "t" in msg;
+  const t = fieldOf(msg, "t");
+  const kind = !named ? typeof msg : typeof t === "string" ? t : typeof t;
   return { t: "text", text: `not a request this engine answers: ${kind}` };
 }
 
@@ -156,137 +147,101 @@ export function serve(
   // somebody asks for the connections, not to nobody at start.
   const ready = connections?.load().catch(() => undefined);
 
+  const handlers: Handlers = {
+    open: async (m) => ({ t: "opened", added: await workspace.open(m.ref) }),
+    remove: async (m) => {
+      await workspace.remove(m.source);
+      return { t: "removed" };
+    },
+    relink: async (m) => ({ t: "relinked", opened: await workspace.relink(m.source, m.ref) }),
+    append: async (m) => ({ t: "appended", opened: await workspace.append(m.source, m.parts) }),
+    rows: async (m) => {
+      // Both numbers are held to be whole here, where a string would
+      // otherwise add itself to a count and read as the whole file.
+      counted("first", m.first, 0);
+      counted("count", m.count, 0);
+      if (m.count > ROWS_AT_MOST) {
+        throw new Refusal({
+          t: "text",
+          text: `a rows request asks for at most ${ROWS_AT_MOST} rows, not ${m.count}`,
+        });
+      }
+      return { t: "rows", first: m.first, ...(await workspace.rows(m.source, m.first, m.count)) };
+    },
+    edit: async (m) => {
+      // A row or column that is not a whole number compares as one and
+      // lands in the log as what it is, which the saved file then refuses.
+      // NO_ROW is the row a column operation names.
+      if (typeof m.edit !== "object" || m.edit === null) {
+        throw new Refusal({ t: "text", text: "an edit request carries no edit" });
+      }
+      counted("row", m.edit.row, NO_ROW);
+      counted("col", m.edit.col, 0);
+      return { t: "changed", source: m.source, changed: await workspace.edit(m.source, m.edit) };
+    },
+    undo: async (m) => ({
+      t: "changed",
+      source: m.source,
+      changed: await workspace.undo(m.source),
+    }),
+    redo: async (m) => ({
+      t: "changed",
+      source: m.source,
+      changed: await workspace.redo(m.source),
+    }),
+    find: async (m) => ({ t: "found", found: await workspace.find(m.source, m.find) }),
+    // list and stat go to sources and never to workspace. Workspace runs
+    // everything that touches the log one at a time, and a save of a
+    // carried source holds that queue for as long as the bytes take -- a
+    // panel scrolling a folder must not wait behind it.
+    list: async (m) => ({ t: "listed", listing: await sources.list(m.path, m.cursor) }),
+    stat: async (m) => ({ t: "statted", entry: await sources.stat(m.path) }),
+    // peek is handed sources.files for the same reason as list and stat
+    // above -- it must not queue behind a save. Unlike those two it opens
+    // a file of its own to read the front of it, but that file is closed
+    // again on the way out and never added to the workspace.
+    peek: async (m) => ({ t: "peeked", peeked: await peek(sources.files, m.ref) }),
+    // Beside list and stat for the same reason: reading a folder of small
+    // files must not wait behind a save.
+    connections: async () => {
+      if (connections === undefined) throw new Refusal({ t: "keeps-no-connections" });
+      const read = await connections.load();
+      return {
+        t: "loaded",
+        loaded: { connections: read.connections, failed: read.failed.map(saidOf) },
+      };
+    },
+    // A person choosing how a connection signs in picks a profile by name,
+    // and a name is all that crosses: ~/.aws is read in this process, and
+    // what is in it besides the names stays here.
+    profiles: async () => {
+      if (connecting?.profiles === undefined) throw new Refusal({ t: "offers-no-profiles" });
+      return { t: "names", names: await connecting.profiles() };
+    },
+    // Beside list for the same reason: it is a listing, and a save must
+    // not hold it up.
+    try: async (m) => {
+      if (connecting?.test === undefined) throw new Refusal({ t: "tries-no-connection" });
+      return { t: "tried", tried: await connecting.test(m.connection) };
+    },
+    mode: async (m) => {
+      workspace.mode(m.transform);
+      return undefined;
+    },
+    save: async (m) => ({ t: "saved", bytes: await workspace.save(m.place, m.limit) }),
+    close: async () => {
+      await workspace.close();
+      return undefined;
+    },
+  };
+
   async function handle(msg: Request): Promise<void> {
     await ready;
-    switch (msg.t) {
-      case "open": {
-        port.post({ t: "opened", id: msg.id, added: await workspace.open(msg.ref) });
-        return;
-      }
-      case "remove": {
-        await workspace.remove(msg.source);
-        port.post({ t: "removed", id: msg.id });
-        return;
-      }
-      case "relink": {
-        const opened = await workspace.relink(msg.source, msg.ref);
-        port.post({ t: "relinked", id: msg.id, opened });
-        return;
-      }
-      case "append": {
-        const opened = await workspace.append(msg.source, msg.parts);
-        port.post({ t: "appended", id: msg.id, opened });
-        return;
-      }
-      case "rows": {
-        // Both numbers are held to be whole here, where a string would
-        // otherwise add itself to a count and read as the whole file.
-        counted("first", msg.first, 0);
-        counted("count", msg.count, 0);
-        if (msg.count > ROWS_AT_MOST) {
-          throw new Refusal({
-            t: "text",
-            text: `a rows request asks for at most ${ROWS_AT_MOST} rows, not ${msg.count}`,
-          });
-        }
-        const r = await workspace.rows(msg.source, msg.first, msg.count);
-        port.post({ t: "rows", id: msg.id, first: msg.first, ...r });
-        return;
-      }
-      case "edit": {
-        // A row or column that is not a whole number compares as one and
-        // lands in the log as what it is, which the saved file then refuses.
-        // NO_ROW is the row a column operation names.
-        if (typeof msg.edit !== "object" || msg.edit === null) {
-          throw new Refusal({ t: "text", text: "an edit request carries no edit" });
-        }
-        counted("row", msg.edit.row, NO_ROW);
-        counted("col", msg.edit.col, 0);
-        const changed = await workspace.edit(msg.source, msg.edit);
-        port.post({ t: "changed", id: msg.id, source: msg.source, changed });
-        return;
-      }
-      case "undo": {
-        const changed = await workspace.undo(msg.source);
-        port.post({ t: "changed", id: msg.id, source: msg.source, changed });
-        return;
-      }
-      case "redo": {
-        const changed = await workspace.redo(msg.source);
-        port.post({ t: "changed", id: msg.id, source: msg.source, changed });
-        return;
-      }
-      case "find": {
-        port.post({ t: "found", id: msg.id, found: await workspace.find(msg.source, msg.find) });
-        return;
-      }
-      // list and stat go to sources and never to workspace. Workspace runs
-      // everything that touches the log one at a time, and a save of a
-      // carried source holds that queue for as long as the bytes take -- a
-      // panel scrolling a folder must not wait behind it.
-      case "list": {
-        port.post({ t: "listed", id: msg.id, listing: await sources.list(msg.path, msg.cursor) });
-        return;
-      }
-      case "stat": {
-        port.post({ t: "statted", id: msg.id, entry: await sources.stat(msg.path) });
-        return;
-      }
-      // peek is handed sources.files for the same reason as list and stat
-      // above -- it must not queue behind a save. Unlike those two it opens
-      // a file of its own to read the front of it, but that file is closed
-      // again on the way out and never added to the workspace.
-      case "peek": {
-        port.post({ t: "peeked", id: msg.id, peeked: await peek(sources.files, msg.ref) });
-        return;
-      }
-      // Beside list and stat for the same reason: reading a folder of small
-      // files must not wait behind a save.
-      case "connections": {
-        if (connections === undefined) {
-          throw new Refusal({ t: "keeps-no-connections" });
-        }
-        const read = await connections.load();
-        port.post({
-          t: "loaded",
-          id: msg.id,
-          loaded: { connections: read.connections, failed: read.failed.map(saidOf) },
-        });
-        return;
-      }
-      // A person choosing how a connection signs in picks a profile by name,
-      // and a name is all that crosses: ~/.aws is read in this process, and
-      // what is in it besides the names stays here.
-      case "profiles": {
-        if (connecting?.profiles === undefined) {
-          throw new Refusal({ t: "offers-no-profiles" });
-        }
-        port.post({ t: "names", id: msg.id, names: await connecting.profiles() });
-        return;
-      }
-      // Beside list for the same reason: it is a listing, and a save must
-      // not hold it up.
-      case "try": {
-        if (connecting?.test === undefined) {
-          throw new Refusal({ t: "tries-no-connection" });
-        }
-        port.post({ t: "tried", id: msg.id, tried: await connecting.test(msg.connection) });
-        return;
-      }
-      case "mode": {
-        workspace.mode(msg.transform);
-        return;
-      }
-      case "save": {
-        const bytes = await workspace.save(msg.place, msg.limit);
-        port.post({ t: "saved", id: msg.id, bytes });
-        return;
-      }
-      case "close": {
-        await workspace.close();
-        return;
-      }
-    }
+    // The table is typed by kind, and msg is the union, so the one pairing the
+    // compiler cannot see is said here: each handler takes its own kind.
+    const handler = handlers[msg.t] as (m: Request) => Promise<Answer | undefined>;
+    const answer = await handler(msg);
+    if (answer !== undefined && "id" in msg) port.post({ ...answer, id: msg.id });
   }
 
   /** took says how long a request of one kind took, and whether it was answered or refused. */
@@ -302,7 +257,7 @@ export function serve(
 
   port.listen((msg: unknown) => {
     const started = performance.now();
-    const request = requestOf(msg);
+    const request = requestOf(msg, handlers);
     // Refused by whatever id it carried, so nothing waits on it, and not
     // measured: what it called itself is not a kind of request, and a metric
     // must not grow an attribute for every string a page makes up.
