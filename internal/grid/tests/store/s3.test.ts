@@ -25,7 +25,7 @@ import { bytes, connect, indexed, openOne, sales } from "../engine/harness.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { AWKWARD_KEYS, DOT_KEYS } from "./awkward.ts";
 import { HOME_REGION, REGION_FORMATS } from "./regions.ts";
-import { at, BUCKET, bucket, KEYS } from "./standin.ts";
+import { at, BUCKET, bucket, etagOf, KEYS } from "./standin.ts";
 import type { Bucket } from "./standin.ts";
 
 // ------------------------------------------------------------ signing
@@ -193,7 +193,11 @@ describe("a source in a bucket", () => {
       await indexed(src);
 
       expect(src.progress.rows).toBe(ROWS);
-      expect(src.opened.link).toEqual({ path: `s3://${BUCKET}/2025/sales-q3.csv` });
+      // Which bytes were read goes with where they are, for a save to keep.
+      expect(src.opened.link).toEqual({
+        path: `s3://${BUCKET}/2025/sales-q3.csv`,
+        version: etagOf(bytes),
+      });
       const rows = (await src.rows(100, 3)).rows;
       expect(rows.map((r) => r[UNITS])).toEqual([100, 101, 102].map((r) => sales.raw(r, UNITS)));
 
@@ -272,7 +276,7 @@ describe("a source in a bucket", () => {
     const second = connect(undefined, providers());
     try {
       const src = await openOne(second.engine, { name: "q3.uno", path: join(dir, "q3.uno") });
-      expect(src.opened.link).toEqual({ path: url });
+      expect(src.opened.link).toEqual({ path: url, version: etagOf(bytes) });
       expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe("1204");
     } finally {
       second.done();

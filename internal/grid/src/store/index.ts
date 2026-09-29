@@ -61,6 +61,12 @@ export interface FileStore {
  */
 export interface ByteSource {
   readonly size: number;
+  /**
+   * Which bytes these are, where the place they come from can say: an S3
+   * VersionId, or an ETag in its quotes. Undefined for a file on disk, which
+   * has no version to ask for again.
+   */
+  readonly version?: string;
   /** Up to `length` bytes from `offset`. Fewer only where the file ends. */
   read(offset: number, length: number): Promise<Uint8Array>;
   close(): Promise<void>;

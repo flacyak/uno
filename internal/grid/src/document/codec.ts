@@ -101,6 +101,8 @@ export function readContainer(name: string, bytes: Uint8Array, at = ""): Documen
     raw: src.entry === "" ? undefined : readEntry(name, entries, src.entry),
     path: src.path === "" ? undefined : resolvedPath(src.path, at),
     bytes: src.bytes,
+    version: src.version === "" ? undefined : src.version,
+    connection: src.connection === "" ? undefined : src.connection,
     rows: src.rows,
     cols: src.cols,
     state: states.get(src.id) ?? { active: { row: 0, col: 0 } },
@@ -219,6 +221,9 @@ function manifestFor(d: Document): Manifest {
       entry:
         src.raw === undefined ? "" : single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
       path: src.path === undefined ? "" : storedPath(src.path, d.at),
+      // Both are about the file pointed at, so a carried source has neither.
+      version: src.path === undefined ? "" : (src.version ?? ""),
+      connection: src.path === undefined ? "" : (src.connection ?? ""),
       rows: src.rows,
       cols: src.cols,
     })),
@@ -380,6 +385,8 @@ function parseManifest(name: string, v: unknown): Manifest {
         sha256: asString(s["sha256"]),
         entry: asString(s["entry"]),
         path: asString(s["path"]),
+        version: asString(s["version"]),
+        connection: asString(s["connection"]),
         rows: asNumber(s["rows"]),
         cols: asNumber(s["cols"]),
       };
@@ -395,6 +402,8 @@ function parseManifest(name: string, v: unknown): Manifest {
         sha256: asString(s["sha256"]),
         entry: asString(s["entry"]),
         path: "",
+        version: "",
+        connection: "",
         rows: asNumber(sheet["rows"]),
         cols: asNumber(sheet["cols"]),
       },
@@ -518,10 +527,12 @@ function sourceJSON(s: Source): unknown {
   return {
     id: s.id,
     name: s.name,
+    connection: s.connection === "" ? undefined : s.connection,
     bytes: s.bytes,
     sha256: s.sha256 === "" ? undefined : s.sha256,
     entry: s.entry === "" ? undefined : s.entry,
     path: s.path === "" ? undefined : s.path,
+    version: s.version === "" ? undefined : s.version,
     rows: s.rows,
     cols: s.cols,
   };

@@ -122,6 +122,23 @@ export interface Source {
   path: string;
 
   /**
+   * Which bytes of the file the log was made against, where the place it is in
+   * can say: an S3 VersionId, or an ETag in its quotes. "" where there is
+   * none to record, which is every carried source and every file on a disk.
+   *
+   * Optional, as `connection` is: a format 5 reader ignores both and opens
+   * the workspace as it always did, so neither moves the format.
+   */
+  version: string;
+
+  /**
+   * The id of the connection the file was read through, as a hint. The
+   * connection's details stay in its own file, and an opener matches the
+   * address to its own connections regardless. "" where none covered it.
+   */
+  connection: string;
+
+  /**
    * The shape of the grid the file and the log add up to, so a recents list or
    * a file inspector can say how big a workspace is without decoding it.
    *
@@ -213,6 +230,11 @@ export interface Held {
   /** What the file measured, for a pointed-at source. Taken from `raw` for a
    * carried one. */
   bytes?: number;
+  /** Which bytes of it the log was made against, for a pointed-at source whose
+   * place can say. */
+  version?: string;
+  /** The connection it was read through, for a pointed-at source one covered. */
+  connection?: string;
   rows: number;
   cols: number;
   state: State;
