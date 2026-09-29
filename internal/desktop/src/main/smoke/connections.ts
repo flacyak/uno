@@ -1,7 +1,8 @@
-// Checks that a bucket is connected from the panel in a window, after the one
-// the reopened workspace asked for in sources.ts: the form in the list's place, a test that fails saying why and keeping nothing, one that
-// works finding the region nobody typed, and the connection it saves listed
-// and browsed without a restart.
+// Checks that a bucket is connected from the panel in a window, after the
+// folder the reopened workspace asked for in sources.ts: the form in the
+// list's place, a test that fails saying why and keeping nothing, one that
+// works finding the region nobody typed, and the whole bucket saved beside
+// that folder as a second connection, listed and browsed without a restart.
 //
 // They run after panel.ts, with the panel open over the stand-in bucket. The
 // run has a --user-data-dir and AWS files of its own (smoke.js), so the folder
@@ -40,7 +41,7 @@ export const CONNECTIONS: Check[] = [
       await press("B", { ctrlKey: true, shiftKey: true });
       if (document.querySelector("#panel").hidden) return "the panel is closed";
       const got = named(CONNECTIONS).map((l) => l.name);
-      return JSON.stringify(got) === '["acme-exports","+ Connect a bucket"]' ? "" : "the connections section lists " + JSON.stringify(got);
+      return JSON.stringify(got) === '["acme-exports / 2025","+ Connect a bucket"]' ? "" : "the connections section lists " + JSON.stringify(got);
     `,
   },
   {
@@ -77,13 +78,15 @@ export const CONNECTIONS: Check[] = [
     script: `
       ${REMOTE}
       ${LINES}
+      // The whole bucket, beside the 2025/ folder the reopened workspace was
+      // given: a second connection to one bucket keeps a file of its own.
       type("bucket", "acme-exports");
-      type("prefix", "2025");
+      type("prefix", "");
       const choose = form().querySelector("select");
       choose.value = "profile:finance";
       choose.dispatchEvent(new Event("change", { bubbles: true }));
       [...form().querySelectorAll("button")].find((b) => b.textContent === "Test").click();
-      const want = "✓ listed 2025/ · 0 folders, 3 files";
+      const want = "✓ listed the bucket · 1 folder, 0 files";
       if (!(await arrives(() => result() === want))) return "the form says " + JSON.stringify(result());
       const region = form().querySelector(".value").textContent;
       return /^[a-z0-9-]+ · detected$/.test(region) ? "" : "the region reads " + JSON.stringify(region);
@@ -97,15 +100,15 @@ export const CONNECTIONS: Check[] = [
       ${LINES}
       [...form().querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
       const listed = () => named(CONNECTIONS).map((l) => l.name + " · " + l.meta);
-      const want = /^\\["acme-exports · s3 · [a-z0-9-]+","acme-exports \\/ 2025 · s3 · [a-z0-9-]+","\\+ Connect a bucket · "\\]$/;
+      const want = /^\\["acme-exports \\/ 2025 · s3 · [a-z0-9-]+","acme-exports · s3 · [a-z0-9-]+","\\+ Connect a bucket · "\\]$/;
       if (!(await arrives(() => want.test(JSON.stringify(listed()))))) {
         return "the connections section lists " + JSON.stringify(listed()) + " · " + JSON.stringify(text("#status-msg"));
       }
       if (!form().hidden) return "the form is still open";
-      const files = JSON.stringify(["ads-q3.csv", "ads-q4.csv", "sales-q3.csv"]);
+      const files = JSON.stringify(["2025/"]);
       const got = () => JSON.stringify(named(BROWSER).map((l) => l.name));
       const crumb = () => lines().find((l) => l.section === BROWSER && l.cls.includes("head")).meta;
-      return (await arrives(() => crumb() === "acme-exports / 2025" && got() === files))
+      return (await arrives(() => crumb() === "acme-exports" && got() === files))
         ? ""
         : "the browser lists " + got() + " under " + JSON.stringify(crumb()) + " · " + JSON.stringify(note(BROWSER));
     `,
