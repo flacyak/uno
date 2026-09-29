@@ -490,13 +490,13 @@ export class Panel {
 
   /**
    * connectFor opens the connect form for the bucket a tab reads that no
-   * connection covers, with the bucket filled in: the tab's ! mark, and its
-   * line's Connect. A tab that has closed, or that needs no connection, opens
-   * nothing.
+   * connection covers, with the bucket and the object's folder filled in: the
+   * tab's ! mark, and its line's Connect. A tab that has closed, or that needs
+   * no connection, opens nothing.
    */
   connectFor(id: string): void {
-    const bucket = this.sources.tabs.find((t) => t.id === id)?.link?.connect?.bucket;
-    if (bucket !== undefined) this.connect({ bucket });
+    const wants = this.sources.tabs.find((t) => t.id === id)?.link?.connect;
+    if (wants !== undefined) this.connect({ bucket: wants.bucket, prefix: wants.prefix });
   }
 
   /** paintPeek draws the header and first rows of the one picked file. */

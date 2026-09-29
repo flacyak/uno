@@ -391,9 +391,15 @@ export async function tryConnection(c: Connection, opts: TryOptions): Promise<Tr
   };
 }
 
-/** A bucket an address is in that no connection covers. */
+/** A bucket an address is in that no connection covers, and the folder of it. */
 export interface Unconnected {
   bucket: string;
+  /**
+   * The folder the object is in, with its slash, or "" at the bucket's root.
+   * It is what connecting offers to cover: the narrowest connection that
+   * reads the object, which a person can widen to the whole bucket.
+   */
+  prefix: string;
 }
 
 /**
@@ -412,9 +418,8 @@ export function connectionGuard(
   return (path) => {
     const loc = s3Location(path);
     if (loc === undefined) return undefined;
-    return covering(connections(), loc.bucket, loc.key) === undefined
-      ? { bucket: loc.bucket }
-      : undefined;
+    if (covering(connections(), loc.bucket, loc.key) !== undefined) return undefined;
+    return { bucket: loc.bucket, prefix: loc.key.slice(0, loc.key.lastIndexOf("/") + 1) };
   };
 }
 

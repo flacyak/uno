@@ -228,9 +228,12 @@ try {
   }
   if (c.region !== HOME_REGION)
     trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
-  // The second, for 2025/ of the same bucket, keeps a file of its own, as does
-  // the public bucket the sent workspace named, and the bucket that was refused
-  // left none.
+  // Connected for the reopened workspace, so it covers the folder its object
+  // is in, as the form filled it in.
+  if (c.prefix !== "2025/") trouble.push(`${kept} covers ${JSON.stringify(c.prefix)}, not 2025/`);
+  // The second, for the whole of the same bucket, keeps a file of its own, as
+  // does the public bucket the sent workspace named, and the bucket that was
+  // refused left none.
   const folder = (await readdir(join(data, "connections"))).toSorted();
   const want = ["acme-exports-2.unof", "acme-exports.unof", `${OPEN_BUCKET}.unof`];
   if (JSON.stringify(folder) !== JSON.stringify(want)) {
@@ -240,8 +243,8 @@ try {
     "acme-exports-2.unof",
     await readFile(join(data, "connections", "acme-exports-2.unof"), "utf8"),
   );
-  if (second.prefix !== "2025/")
-    trouble.push(`acme-exports-2.unof covers ${second.prefix}, not 2025/`);
+  if (second.prefix !== "")
+    trouble.push(`acme-exports-2.unof covers ${second.prefix}, not the whole bucket`);
 } catch (err) {
   trouble.push(`the saved connection did not read back: ${err.message}`);
 }

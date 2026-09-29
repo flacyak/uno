@@ -321,7 +321,7 @@ test("Esc gives up, keeps nothing, and gives the list back its place", async () 
 // A .uno that names a bucket nobody connected opens that tab missing, having
 // read nothing. Its line offers to connect the bucket and does not offer to
 // reload, which would read it with this machine's credentials.
-test("a tab in a bucket nobody connected offers Connect, filled in, and no Reload", async () => {
+test("a tab in a bucket nobody connected offers Connect, filled in with its folder, and no Reload", async () => {
   const waiting = {
     id: "q4",
     name: "orders.csv",
@@ -329,7 +329,7 @@ test("a tab in a bucket nobody connected offers Connect, filled in, and no Reloa
       path: "s3://acme-exports/shop/orders.csv",
       missing:
         "q4-close.uno reads s3://acme-exports/…, which no connection covers · connect acme-exports to read it",
-      connect: { bucket: "acme-exports" },
+      connect: { bucket: "acme-exports", prefix: "shop/" },
     },
   };
   const tabs = [waiting, { id: "b", name: "ledger.csv" }];
@@ -372,6 +372,8 @@ test("a tab in a bucket nobody connected offers Connect, filled in, and no Reloa
   await settle();
   expect(form().hidden).toBe(false);
   expect(field("bucket").value).toBe("acme-exports");
+  // The object's folder, which a person can widen to the whole bucket.
+  expect(field("prefix").value).toBe("shop/");
   expect(document.activeElement).toBe(field("prefix"));
   expect(asks.tried).toEqual([]);
 });
@@ -385,7 +387,7 @@ test("c on a tab waiting for its bucket connects it, and r does not read it", as
     link: {
       path: "s3://acme-exports/shop/orders.csv",
       missing: "q4-close.uno reads s3://acme-exports/…",
-      connect: { bucket: "acme-exports" },
+      connect: { bucket: "acme-exports", prefix: "shop/" },
     },
   };
   document.body.innerHTML = `<aside id="panel" class="panel" hidden></aside>`;

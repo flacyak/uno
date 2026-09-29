@@ -123,8 +123,10 @@ connection covers opens missing and not a single request reaches its bucket:
 its tab says `not connected`, the status bar names the bucket, and its line
 offers `Connect <bucket>` in place of Reload, which would have read it with this
 machine's credentials, and `c` on the line is Connect as `r` is Reload. The
-tab's `!` opens the connect screen with the bucket filled in, and once the
-connection is saved the tab reads, its edits replayed. An object that has gone
+tab's `!` opens the connect screen with the bucket and the object's folder
+filled in, the narrowest connection that reads it, which can be widened to the
+whole bucket by clearing the prefix. Once the connection is saved the tab
+reads, its edits replayed. An object that has gone
 from the bucket since stops waiting all the same: the tab is missing, says what
 reading it said, and offers Reload and Re-point like any other.
 
