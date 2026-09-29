@@ -4,17 +4,7 @@
 import { expect, test } from "vite-plus/test";
 
 import { RECENTS_KEY, RECENTS_MAX, Recents } from "../src/renderer/recents.ts";
-import type { Keeps } from "../src/renderer/theme.ts";
-
-class Kept implements Keeps {
-  readonly map = new Map<string, string>();
-  getItem(key: string): string | null {
-    return this.map.get(key) ?? null;
-  }
-  setItem(key: string, value: string): void {
-    this.map.set(key, value);
-  }
-}
+import { Kept } from "./kept.ts";
 
 test("a workspace opened goes to the top, and is listed once", () => {
   const recents = new Recents(new Kept());

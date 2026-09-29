@@ -6,6 +6,8 @@
 
 import "./menu.css";
 
+import { clickAway, el, hang } from "./util.ts";
+
 /** One thing a menu offers, and the keys that do the same. */
 export interface MenuItem {
   label: string;
@@ -29,10 +31,8 @@ export function below(anchor: HTMLElement): MenuPlace {
 }
 
 export class PopMenu {
-  private readonly box = document.createElement("div");
-  private readonly away = (e: MouseEvent): void => {
-    if (!this.box.contains(e.target as Node)) this.close();
-  };
+  private readonly box = el("div", "pop-menu");
+  private disarm: () => void = () => {};
 
   constructor(
     place: MenuPlace,
@@ -40,7 +40,6 @@ export class PopMenu {
     /** The menu closed, so the keys go back to the grid. */
     private readonly closed: () => void,
   ) {
-    this.box.className = "pop-menu";
     this.box.setAttribute("role", "menu");
     this.box.addEventListener("keydown", (e) => {
       // The grid's keys and the shell's chords stay out of what is typed here.
@@ -56,33 +55,21 @@ export class PopMenu {
     this.box.tabIndex = -1;
     this.box.focus();
 
-    // Opened near the bottom or the right of the window, it moves in until
-    // the whole of it shows.
-    const { width, height } = this.box.getBoundingClientRect();
-    const left = Math.min(place.left, window.innerWidth - width - EDGE);
-    const top = Math.min(place.top, window.innerHeight - height - EDGE);
-    this.box.style.left = `${Math.max(EDGE, left)}px`;
-    this.box.style.top = `${Math.max(EDGE, top)}px`;
-
-    // After this click has finished, or it would close the menu it opened.
-    setTimeout(() => document.addEventListener("mousedown", this.away), 0);
+    hang(this.box, place, EDGE);
+    this.disarm = clickAway(this.box, () => this.close());
   }
 
   close(): void {
     if (!this.box.isConnected) return;
-    document.removeEventListener("mousedown", this.away);
+    this.disarm();
     this.box.remove();
     this.closed();
   }
 
   private item({ label, keys, choose }: MenuItem): HTMLElement {
-    const item = document.createElement("div");
-    item.className = "pop-item";
+    const item = el("div", "pop-item");
     item.setAttribute("role", "menuitem");
-    const k = document.createElement("span");
-    k.className = "keys";
-    k.textContent = keys ?? "";
-    item.append(label, k);
+    item.append(label, el("span", "keys", keys ?? ""));
     item.addEventListener("click", () => {
       this.close();
       choose();

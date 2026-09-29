@@ -1,7 +1,14 @@
 import { Zip, deflateSync, unzipSync } from "fflate";
 import type { ZipInputFile } from "fflate";
 
-import { compareStrings, nowTruncated, parseTime, rfc3339, sha256Hex } from "../go/index.ts";
+import {
+  compareStrings,
+  concat,
+  nowTruncated,
+  parseTime,
+  rfc3339,
+  sha256Hex,
+} from "../go/index.ts";
 import { read as ingestRead } from "../ingest/index.ts";
 import type { Edit, Op, Sheet } from "../sheet/index.ts";
 import type {
@@ -63,18 +70,10 @@ export function readDocument(name: string, bytes: Uint8Array, at = ""): Document
   // reason a restored workspace is guaranteed to match the one that was saved.
   const sheets = new Map<string, Sheet>();
   for (const src of doc.sources) {
-    if (src.raw === undefined) continue;
-    let sheet;
-    try {
-      sheet = ingestRead(src.name, src.raw);
-    } catch (err) {
-      throw new Error(`${name}: embedded ${src.name}: ${(err as Error).message}`);
-    }
-    try {
-      sheet.replay(logOf(doc.log, src.id));
-    } catch (err) {
-      throw new Error(`${name}: replaying edits to ${src.name}: ${(err as Error).message}`);
-    }
+    const raw = src.raw;
+    if (raw === undefined) continue;
+    const sheet = blamed(`${name}: embedded ${src.name}`, () => ingestRead(src.name, raw));
+    blamed(`${name}: replaying edits to ${src.name}`, () => sheet.replay(logOf(doc.log, src.id)));
     sheets.set(src.id, sheet);
   }
   return { ...doc, sheets };
@@ -93,12 +92,7 @@ export function readDocument(name: string, bytes: Uint8Array, at = ""): Document
  * and fails to open under its own name.
  */
 export function readContainer(name: string, bytes: Uint8Array, at = ""): Document {
-  let entries: Record<string, Uint8Array>;
-  try {
-    entries = unzipSync(bytes);
-  } catch (err) {
-    throw new Error(`${name} is not a readable .uno file: ${(err as Error).message}`);
-  }
+  const entries = blamed(`${name} is not a readable .uno file`, () => unzipSync(bytes));
 
   const manifest = readJSON(name, entries, MANIFEST_ENTRY);
 
@@ -347,13 +341,7 @@ function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
   if (failed !== undefined) throw failed;
   deflated = kept;
 
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, at);
-    at += chunk.length;
-  }
-  return out;
+  return concat(chunks);
 }
 
 /** The CRC-32 polynomial, reflected, which is how a zip entry's checksum is computed. */
@@ -463,19 +451,24 @@ function manifestFor(d: Document): Manifest {
   };
 }
 
-/** What the manifest says of one file, for a .uno going to `at`. */
+/**
+ * What the manifest says of one file, for a .uno going to `at`. The keys are
+ * in the order the Go struct has them, which is the order uno.json is written
+ * in, because a person is expected to open that file and read it.
+ */
 function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
   return {
     id: src.id,
     name: src.name,
+    // Both the connection and the version are about the file pointed at, so a
+    // carried source has neither.
+    connection: src.path === undefined ? "" : (src.connection ?? ""),
     bytes: src.raw?.length ?? src.bytes ?? 0,
     sha256: src.raw === undefined ? "" : sha256Hex(src.raw),
     entry:
       src.raw === undefined ? "" : single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
     path: src.path === undefined ? "" : storedPath(src.path, at),
-    // Both are about the file pointed at, so a carried source has neither.
     version: src.path === undefined ? "" : (src.version ?? ""),
-    connection: src.path === undefined ? "" : (src.connection ?? ""),
     rows: src.rows,
     cols: src.cols,
   };
@@ -556,10 +549,19 @@ function readEntry(name: string, entries: Record<string, Uint8Array>, entry: str
 
 function readJSON(name: string, entries: Record<string, Uint8Array>, entry: string): unknown {
   const b = readEntry(name, entries, entry);
+  return blamed(`${name}: ${entry}`, (): unknown => JSON.parse(decoder.decode(b)));
+}
+
+/**
+ * blamed runs `read`, and what it throws is thrown again with `about` in
+ * front: the file, the entry, the source the failure was about, which a dialog
+ * over twelve dropped files has to be able to say.
+ */
+function blamed<T>(about: string, read: () => T): T {
   try {
-    return JSON.parse(decoder.decode(b));
+    return read();
   } catch (err) {
-    throw new Error(`${name}: ${entry}: ${(err as Error).message}`);
+    throw new Error(`${about}: ${(err as Error).message}`);
   }
 }
 
@@ -654,6 +656,37 @@ function asString(v: unknown): string {
  * a negative one. */
 function isByteCount(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= 0;
+}
+
+function isText(v: unknown): v is string {
+  return typeof v === "string";
+}
+
+function isFlag(v: unknown): v is boolean {
+  return typeof v === "boolean";
+}
+
+/** What a field that is not what it should be is said to be, by the guard it failed. */
+const NOT = new Map<(v: unknown) => boolean, string>([
+  [isText, "is not text"],
+  [isFlag, "is neither true nor false"],
+  [isByteCount, "is not a number of bytes"],
+]);
+
+/**
+ * optional reads a field a record may leave out: undefined where it is not
+ * there, the value where `is` holds, and otherwise the refusal `where: key is
+ * not …`, in the guard's words.
+ */
+function optional<T>(
+  o: Record<string, unknown>,
+  key: string,
+  is: (v: unknown) => v is T,
+  where: string,
+): T | undefined {
+  const v = o[key];
+  if (v !== undefined && !is(v)) throw new Error(`${where}: ${key} ${NOT.get(is)}`);
+  return v;
 }
 
 /**
@@ -778,10 +811,7 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
     );
   }
-  const fileColumn = s["fileColumn"];
-  if (fileColumn !== undefined && typeof fileColumn !== "boolean") {
-    throw new Error(`${source}: fileColumn is neither true nor false`);
-  }
+  const fileColumn = optional(s, "fileColumn", isFlag, source);
   return { ...base, parts, header, fileColumn: fileColumn ?? false };
 }
 
@@ -805,22 +835,10 @@ function parsePart(which: string, raw: unknown): SourcePart {
   const bytes = p["bytes"];
   if (!isByteCount(bytes)) throw new Error(`${part} does not say how many bytes it is`);
 
-  const partName = p["name"];
-  if (partName !== undefined && typeof partName !== "string") {
-    throw new Error(`${part}: name is not text`);
-  }
-  const version = p["version"];
-  if (version !== undefined && typeof version !== "string") {
-    throw new Error(`${part}: version is not text`);
-  }
-  const skip = p["skip"];
-  if (skip !== undefined && !isByteCount(skip)) {
-    throw new Error(`${part}: skip is not a number of bytes`);
-  }
-  const unterminated = p["unterminated"];
-  if (unterminated !== undefined && typeof unterminated !== "boolean") {
-    throw new Error(`${part}: unterminated is neither true nor false`);
-  }
+  const partName = optional(p, "name", isText, part);
+  const version = optional(p, "version", isText, part);
+  const skip = optional(p, "skip", isByteCount, part);
+  const unterminated = optional(p, "unterminated", isFlag, part);
 
   return {
     name: partName ?? "",
@@ -897,9 +915,10 @@ function parseEdit(where: string, v: unknown): Edit {
 
 // ------------------------------------------------------------- writing
 
-// The key order below is the field order of the Go structs, because a person is
-// expected to open this file and read it. JSON.stringify follows insertion
-// order, so building the object in that order is the whole of what it takes.
+// The key order below, and in fileSource and partsSource above, is the field
+// order of the Go structs, because a person is expected to open this file and
+// read it. JSON.stringify follows insertion order, so building the object in
+// that order is the whole of what it takes.
 //
 // The one difference from Go's encoder is that it escapes `<`, `>` and `&` and
 // this does not. The bytes differ; the value any reader parses out does not.
@@ -929,50 +948,26 @@ function manifestJSON(m: Manifest): unknown {
   return { ...head, sources: m.sources.map(sourceJSON), sheet: m.sheet, edits };
 }
 
-/** omitempty over the half that does not apply, so a person reading uno.json
- * sees either an entry or a path and never an empty one of each. Several files
- * read as one have neither, and a list of parts where a file has its path. */
+/**
+ * sourceJSON leaves out the half that does not apply, so a person reading
+ * uno.json sees either an entry or a path and never an empty one of each.
+ * Several files read as one have neither, and a list of parts where a file has
+ * its path; of a part, most have no name the path does not say, no version,
+ * no header to leave out and a last row with its newline.
+ */
 function sourceJSON(s: Source): unknown {
   if (s.parts !== undefined) {
-    return {
-      id: s.id,
-      name: s.name,
-      connection: s.connection === "" ? undefined : s.connection,
-      parts: s.parts.map(partJSON),
-      header: s.header,
-      fileColumn: s.fileColumn ? true : undefined,
-      rows: s.rows,
-      cols: s.cols,
-    };
+    const parts = s.parts.map((p) => omitempty(p, "name", "version", "skip", "unterminated"));
+    return { ...omitempty(s, "connection", "fileColumn"), parts };
   }
-  return {
-    id: s.id,
-    name: s.name,
-    connection: s.connection === "" ? undefined : s.connection,
-    bytes: s.bytes,
-    sha256: s.sha256 === "" ? undefined : s.sha256,
-    entry: s.entry === "" ? undefined : s.entry,
-    path: s.path === "" ? undefined : s.path,
-    version: s.version === "" ? undefined : s.version,
-    rows: s.rows,
-    cols: s.cols,
-  };
+  return omitempty(s, "connection", "sha256", "entry", "path", "version");
 }
 
-/**
- * omitempty over what most parts do not have: a name the path does not say, a
- * version, a header to leave out, a last row with no newline. The first part
- * of a folder of exports on a disk is its path and its size.
- */
-function partJSON(p: SourcePart): unknown {
-  return {
-    name: p.name === "" ? undefined : p.name,
-    path: p.path,
-    bytes: p.bytes,
-    version: p.version === "" ? undefined : p.version,
-    skip: p.skip === 0 ? undefined : p.skip,
-    unterminated: p.unterminated ? true : undefined,
-  };
+/** omitempty is `o` without each of `keys` that holds its zero value -- "", 0 or false -- as Go's omitempty writes it. */
+function omitempty<T extends object>(o: T, ...keys: Array<keyof T>): Partial<T> {
+  const empty = new Set<PropertyKey>(keys);
+  const kept = Object.entries(o).filter(([k, v]) => !empty.has(k) || Boolean(v));
+  return Object.fromEntries(kept) as Partial<T>;
 }
 
 function stateJSON(d: Document, single: boolean): unknown {
