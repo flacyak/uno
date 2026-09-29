@@ -292,7 +292,9 @@ mode, and `src/main/driven.ts` has the details.
 
 The run starts Electron with a `--user-data-dir` of its own under `out/smoke/`,
 emptied first, so the connection it saves never lands among yours and a file a
-previous run left behind is not taken as evidence.
+previous run left behind is not taken as evidence. `vp run preview` does the
+same under `out/preview-data/`, since the GIF it films is published and the
+theme its story tries must not become the one your own uno opens in.
 
 It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
