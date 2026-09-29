@@ -20,9 +20,13 @@ one codebase.
 | `library`  | the `.unof` codecs, formulas and connections, as strings |
 | `store`    | the `FileStore` and `ByteSource` seams                   |
 
-Everything above `store` is pure. This let's it share the same code across
-platforms. This property should continue. `store/node` is the one file that
-imports `node:fs`, and it is its own entry so a browser build never pulls it in.
+Everything above `store` is pure. This lets it share the same code across
+platforms. This property should continue. `store/node` and `store/disklister`
+are the only files that import `node:fs`, and `store/node` is the only one that
+runs a program, a profile's `credential_process`. `store/s3` and `store/sts`
+are the only ones that reach a network. `tests/store/opens.test.ts` holds each
+of them to that, and plants a violation of every rule to prove it is caught.
+`store/node` is its own entry, so a browser build never pulls it in.
 
 ## The engine
 
