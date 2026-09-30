@@ -101,17 +101,15 @@ export type State = "fine" | "changed" | "missing" | "unconnected" | "newer";
 
 /** What a workspace line says beside a tab that is not fine. */
 export function stateWord(state: Exclude<State, "fine">): string {
-  switch (state) {
-    case "changed":
-      return m.state_changed();
-    case "missing":
-      return m.state_missing();
-    case "unconnected":
-      return m.state_unconnected();
-    case "newer":
-      return m.state_newer();
-  }
+  return STATE_WORDS[state]();
 }
+
+const STATE_WORDS: Record<Exclude<State, "fine">, () => string> = {
+  changed: m.state_changed,
+  missing: m.state_missing,
+  unconnected: m.state_unconnected,
+  newer: m.state_newer,
+};
 
 /**
  * stateOf is the one state a line says, the most pressing first. Newer comes
