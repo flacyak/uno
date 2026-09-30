@@ -10,7 +10,6 @@
 import { THEMES } from "../../renderer/theme.ts";
 import type { Check } from "./check.ts";
 import { LOCALE } from "./fixture.ts";
-import { REMOTE } from "./sources.ts";
 
 const MENU = `
   const menu = () => document.querySelector(".settings");
@@ -26,7 +25,6 @@ const WORN: Check[] = THEMES.flatMap((t) =>
     name: `${t.name} in ${mode} is what the page is drawn in`,
     shot: `settings-${t.id}-${mode}`,
     script: `
-        ${REMOTE}
         ${MENU}
         if (menu().hidden) gear().click();
         menu().querySelector('[data-appearance="${mode}"]').click();
@@ -44,7 +42,6 @@ export const SETTINGS: Check[] = [
     name: "the gear at the bottom left opens settings upward, on the run's connections and four themes",
     shot: "settings-open",
     script: `
-      ${REMOTE}
       ${MENU}
       const g = gear().getBoundingClientRect();
       if (g.left > 40 || window.innerHeight - g.bottom > 40) return "the gear is at " + g.left + "," + g.top;
