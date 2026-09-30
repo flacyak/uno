@@ -4,7 +4,7 @@ node_modules/
 resource/
 
 # the server and the web page, a repository of their own checked out here
-hosted/
+internal/www/
 
 # screenshot artefacts from `go test -tags screenshot ./internal/uitest/`
 .screenshots/
