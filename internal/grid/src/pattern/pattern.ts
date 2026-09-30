@@ -429,11 +429,7 @@ function split(r: Reading, outs: readonly string[]): void {
   const next: number[][] = [];
   for (const members of r.classes) {
     const byOut = new Map<string, number[]>();
-    for (const m of members) {
-      const group = byOut.get(outs[m]!);
-      if (group === undefined) byOut.set(outs[m]!, [m]);
-      else group.push(m);
-    }
+    for (const m of members) pushTo(byOut, outs[m]!, m);
     if (byOut.size === 1) {
       next.push(members);
       continue;
@@ -445,6 +441,13 @@ function split(r: Reading, outs: readonly string[]): void {
     }
   }
   r.classes = next;
+}
+
+/** pushTo adds a value to the list under a key, starting the list where there is none. */
+function pushTo<K, V>(m: Map<K, V[]>, k: K, v: V): void {
+  const have = m.get(k);
+  if (have === undefined) m.set(k, [v]);
+  else have.push(v);
 }
 
 function bySize(a: Program, b: Program): number {
@@ -487,9 +490,7 @@ export function gather(log: readonly Edit[]): Map<number, Example[]> {
     const c = key(e.row, e.col);
     if (!first.has(c)) {
       first.set(c, e.was ?? "");
-      const cells = order.get(e.col);
-      if (cells === undefined) order.set(e.col, [c]);
-      else cells.push(c);
+      pushTo(order, e.col, c);
     }
     last.set(c, e.now);
   }
@@ -502,9 +503,7 @@ export function gather(log: readonly Edit[]): Map<number, Example[]> {
       // A value typed and then typed back is not a demonstration.
       if (was === now) continue;
 
-      const have = out.get(col);
-      if (have === undefined) out.set(col, [{ was, now }]);
-      else have.push({ was, now });
+      pushTo(out, col, { was, now });
     }
   }
   return out;
