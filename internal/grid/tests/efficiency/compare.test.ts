@@ -1,4 +1,4 @@
-// The table a pull request is shown.
+// The Markdown table compare.ts builds.
 
 import { expect, test } from "vite-plus/test";
 

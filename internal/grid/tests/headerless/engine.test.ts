@@ -1,9 +1,6 @@
-// Files with no header row, opened in the engine.
-//
-// The engine is the real one over a real channel, reading three files on a
-// disk as one source said to have no header. What it shows is held to the
-// whole fixture read the ordinary way: the same rows, in the same order,
-// under columns the engine named itself.
+// Engine tests for headerless files. Three headerless parts on disk
+// are opened as one source, and what the engine shows is compared cell for
+// cell with sales-q3.csv read the ordinary way.
 
 import { rm } from "node:fs/promises";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vite-plus/test";
@@ -25,7 +22,7 @@ import {
 } from "../engine/harness.ts";
 import { COLUMNS, NAMES, SOURCE, asOne, marked, onDisk, providers, rowsOnly } from "./parts.ts";
 
-/** The first row of each part: the rows a reader that took a header would lose. */
+/** Row index of the first line of each part. */
 const FIRST_ROWS = [0, PART_ROWS, 2 * PART_ROWS];
 
 const NO_HEADER = "UTF-8 · delimiter ',' · no header row";
@@ -44,14 +41,14 @@ afterEach(() => {
   done = undefined;
 });
 
-/** An engine that reads disks, and several files as one. */
+/** A connected engine with disk, blob and multi-file providers. */
 function engine(): Engine {
   const made = connect(TINY, providers());
   done = made.done;
   return made.engine;
 }
 
-/** A row of the whole fixture, as the ordinary read of it holds it. */
+/** Row `row` of sales-q3.csv read with its header. */
 function expected(row: number): string[] {
   return Array.from({ length: COLS }, (_, col) => sales.raw(row, col));
 }
@@ -69,7 +66,7 @@ describe("three headerless files opened as one", () => {
     await indexed(src);
     expect(src.progress).toMatchObject({ rows: ROWS, complete: true });
 
-    // A row short of cells is shown as wide as the columns, as the grid draws it.
+    // widened pads short rows to the column count.
     const rows = widened(await everyRow(src));
     expect(rows).toHaveLength(ROWS);
     for (let row = 0; row < ROWS; row++) {
@@ -104,7 +101,7 @@ describe("three headerless files opened as one", () => {
     for (const row of [FIRST_ROWS[0]!, FIRST_ROWS[2]!]) {
       await src.edit({ op: Op.Set, row, col: UNITS, now: "7" });
       expect((await src.rows(row, 1)).rows[0]![UNITS]).toBe("7");
-      // The rows either side are what they were.
+      // The next row is unchanged.
       expect((await src.rows(row + 1, 1)).rows[0]![UNITS]).toBe(sales.raw(row + 1, UNITS));
     }
   });
@@ -113,7 +110,7 @@ describe("three headerless files opened as one", () => {
     const src = await openOne(engine(), asOne(paths));
     await indexed(src);
     const region = sales.raw(0, REGION);
-    // A search never matches the row it starts beside, so it looks up from row 1.
+    // find skips the row it starts from, so it starts at row 1 and searches up.
     const found = await src.find({
       col: REGION,
       from: 1,

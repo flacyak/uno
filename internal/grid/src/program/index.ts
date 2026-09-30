@@ -1,12 +1,8 @@
-// Package program is uno's transform language: the small string program a
-// pattern proposal names, and the one a .uno log stores.
+// Package program is uno's transform language: the string program a pattern
+// proposal names, and the one a .uno log stores.
 //
-// It is its own module rather than part of `sheet` because its text form is
-// public API. A program written into edits/log.jsonl has to be readable years
-// from now by a build whose synthesiser has been rewritten, or removed
-// entirely, so what the log carries is the program itself and replay is
-// interpretation rather than a second guess at it. Nothing here knows what a
-// sheet is.
+// Its text form is public API: a program in edits/log.jsonl is replayed by
+// parsing it. It works on one string at a time.
 
 export type { Program } from "./program.ts";
 export { apply, describe, described, text } from "./program.ts";

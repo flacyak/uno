@@ -1,6 +1,6 @@
-// The renderer's entry: the page's base styles, the shell, and the menu's keys
-// wired to it. What loads from here is what the empty window needs; the grid comes with
-// the first file (see shell/shell.ts).
+// Renderer entry point. Loads the base styles, creates the Shell, and wires
+// the menu bridge to it. The grid module loads with the first file (see
+// shell/shell.ts).
 
 import "./base.css";
 
@@ -29,7 +29,7 @@ interface MenuBridge {
 
 const bridge = window.uno;
 if (bridge === undefined) {
-  // Nothing here works without the bridge, and a blank window explains nothing.
+  // Everything runs through the bridge, so a missing one shows a message.
   document.body.textContent = m.host_unreachable();
 } else {
   const shell = new Shell(electronHost(bridge));
@@ -44,10 +44,10 @@ if (bridge === undefined) {
   menu?.onOpenPath((path) => void shell.openPath(path));
   menu?.onAddPaths((paths) => void shell.addPaths(paths));
   menu?.onInput((name) => shell.setInput(name));
-  // Settings changes how keys are read too, and the menu's check follows it.
+  // Keep the menu's input check mark in sync with the shell's input strategy.
   shell.onInput = (name) => menu?.inputChosen(name);
   menu?.inputChosen(shell.inputName);
-  // The menu and the dialogs are the main process's, in the language the page is in.
+  // Tell the main process the page's locale, so the menu and dialogs match.
   shell.language.onChange(() => menu?.languageChosen(shell.language.locale));
   menu?.languageChosen(shell.language.locale);
 

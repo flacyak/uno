@@ -1,13 +1,8 @@
-// The hosted engine's way of signing in: a role in the customer's account,
-// taken on with the account's external ID, and nothing of the machine it runs
-// on.
+// hostedAuth: the hosted engine signs in as a role in the customer's account,
+// assumed with the account's external ID.
 //
-// What is under test is the gate the whole hosted model rests on. A `role`
-// connection is assumed through STS -- the stand-in checks the signature and
-// the external ID the way STS does, so a session out of it proves both. An
-// address no connection covers, and a connection that names this machine, are
-// refused, so a .uno somebody sent cannot make the instance read a bucket with
-// its own role.
+// The stand-in STS checks the signature and the external ID. A machine or
+// profile connection, and an address outside every connection, are refused.
 
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
@@ -110,8 +105,7 @@ test("a public bucket is read unsigned", async () => {
   });
 });
 
-// The confused-deputy guard: nothing the engine holds reads a bucket a
-// connection does not cover, and a connection that names a machine is refused.
+// An address outside every connection is refused.
 test("an address no connection covers signs with no machine the engine has", async () => {
   await expect(auth().machine()).rejects.toThrow(
     "uno's hosted engine reads only the buckets a connection covers",

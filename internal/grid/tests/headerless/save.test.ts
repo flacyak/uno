@@ -1,8 +1,5 @@
-// Files with no header row, saved in a workspace and opened again.
-//
-// A .uno writes down that a source has no header row. An open that forgot it
-// would take the first line for names, and every edit in the log would land
-// one row below the cell it was made to.
+// A headerless source saved to a .uno records header mode "none", and
+// reopening it puts every logged edit on the same row.
 
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,10 +14,10 @@ import { COLUMNS, NAMES, SOURCE, asOne, onDisk, providers, rowsOnly } from "./pa
 
 const UNO = "rows.uno";
 
-/** More than any source here would need a save to carry. */
+/** Byte budget for save, larger than any source here. */
 const ROOMY = 1 << 20;
 
-/** The first row of the first file and of the last, and a row in the middle. */
+/** Edits on the first row of the first part, a middle row, and the first row of the last part. */
 const EDITS = [
   { row: 0, now: "986" },
   { row: PART_ROWS + 5, now: "77" },
@@ -35,7 +32,7 @@ test("headerless files save as having no header row, and reopen with every edit 
   dirs.push(dir);
   const file = join(dir, UNO);
 
-  // Opened, edited and saved.
+  // Open, edit and save.
   const first = connect(TINY, providers());
   let rows: string[][];
   try {
@@ -49,7 +46,7 @@ test("headerless files save as having no header row, and reopen with every edit 
     first.done();
   }
 
-  // What was written: no header row, and so nothing skipped in any part.
+  // The saved document records header "none" and skip 0 for every part.
   const doc = readContainer(UNO, new Uint8Array(await readFile(file)), file);
   expect(doc.manifest.format).toBe(PARTS_VERSION);
   expect(doc.sources[0]).toMatchObject({ id: SOURCE, header: "none", rows: ROWS });
@@ -57,7 +54,7 @@ test("headerless files save as having no header row, and reopen with every edit 
     NAMES.map((name, i) => [name, rowsOnly[i]!.length, 0]),
   );
 
-  // Opened again from the save alone.
+  // Reopen from the saved file.
   const second = connect(TINY, providers());
   try {
     const src = await openOne(second.engine, { name: UNO, path: file });
@@ -68,7 +65,7 @@ test("headerless files save as having no header row, and reopen with every edit 
 
     for (const e of EDITS) {
       expect((await src.rows(e.row, 1)).rows[0]![UNITS], `row ${e.row}`).toBe(e.now);
-      // The row below is untouched: an edit one row out would show here.
+      // The row below is unchanged.
       expect((await src.rows(e.row + 1, 1)).rows[0]![UNITS]).toBe(sales.raw(e.row + 1, UNITS));
     }
   } finally {

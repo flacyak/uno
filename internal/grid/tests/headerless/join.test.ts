@@ -1,9 +1,8 @@
-// Several files with no header row, read as one.
-//
-// With no header nothing is skipped: every line of every part is a row. What
-// the join still does is leave a later part's byte order mark out, give a part
-// that lacks its last newline one, and hold every part to the first one's
-// shape.
+// openMulti tests with header mode "none". Every part is read from its first
+// line. The
+// join still drops a later part's byte order mark, adds a missing final
+// newline, and refuses parts whose first row or delimiter differs from the
+// first part's.
 
 import { rm } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
@@ -20,20 +19,20 @@ import { BOM, COLUMNS, NAMES, allRows, marked, onDisk, rowsOnly } from "./parts.
 const HANDLERS = [localFiles()];
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
-/** Every byte of a source. */
+/** Reads every byte of a source. */
 const readAll = (src: ByteSource): Promise<Uint8Array> => src.read(0, src.size);
 
 const dirs: string[] = [];
 afterAll(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true }))));
 
-/** `files` on a disk, as the parts of one source. */
+/** Writes `files` to a temp dir and returns them as parts of one source. */
 async function parts(files: readonly Uint8Array[]): Promise<Part[]> {
   const { dir, paths } = await onDisk(files);
   dirs.push(dir);
   return paths.map((path, i) => ({ ref: { name: NAMES[i]!, path } }));
 }
 
-/** Opens `files` as one source with no header row, runs `fn` on it, and closes it. */
+/** Opens `files` as one headerless source, runs `fn` on it, and closes it. */
 async function joined<T>(files: readonly Uint8Array[], fn: (src: MultiSource) => Promise<T>) {
   const src = await openMulti(HANDLERS, await parts(files), "none");
   try {
@@ -72,7 +71,7 @@ describe("headerless parts joined", () => {
       format.scanner((offset) => starts.push(offset)).push(whole, 0);
       expect(starts).toHaveLength(ROWS);
 
-      // The first row of each part is a row, and is in the part it came from.
+      // The first row of each part maps back to that part.
       for (let part = 0; part < three.length; part++) {
         expect(src.map.partAt(starts[part * PART_ROWS]!), `part ${part + 1}`).toBe(part);
       }

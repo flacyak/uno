@@ -4,11 +4,8 @@ import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from "./steps.ts";
 import type { Program } from "./program.ts";
 
 /**
- * parse reads the text form.
- *
- * Patterns compile here rather than at apply time, so a damaged log fails at
- * replay with the line that broke it instead of halfway through rewriting a
- * column.
+ * parse reads the text form into a Program. Patterns are compiled here, so a
+ * bad pattern fails at parse time.
  */
 export function parse(src: string): Program {
   const p = new Parser(runes(src));
@@ -34,7 +31,7 @@ const ARGS: Record<string, (p: Parser) => Step> = {
   lower: () => ({ kind: "case", up: false }),
 };
 
-/** Parser is a scanner over the text form: five step names, each with its arguments. */
+/** Parser is a Scanner over the text form: a step name, then its arguments. */
 class Parser extends Scanner {
   constructor(s: string[]) {
     super(s, "program");
@@ -55,7 +52,7 @@ class Parser extends Scanner {
       throw new Error(`expected a step name at character ${at}, ${this.here()}`);
     }
     this.expect("(");
-    // Looked up as an own key, since a name is letters and "constructor" is.
+    // Own keys only: "constructor" is letters, and a prototype key.
     if (!Object.hasOwn(ARGS, name))
       throw new Error(`unknown step ${quote(name)} at character ${at}`);
     const st = ARGS[name]!(this);
@@ -78,9 +75,8 @@ class Parser extends Scanner {
   }
 
   /**
-   * concatArgs reads the parts. A single part is refused: concat of one thing
-   * is that thing, and two spellings of one program would both have to
-   * round-trip.
+   * concatArgs reads the parts of a concat. Fewer than two parts, or more
+   * than MAX_PARTS, is refused.
    */
   concatArgs(): Step {
     const parts: Step[] = [];
@@ -139,9 +135,8 @@ class Parser extends Scanner {
   }
 
   /**
-   * regexArg reads /.../ and unescapes only the delimiter. Everything else is
-   * handed to the engine untouched, so \d in a program means what it means
-   * everywhere else rather than what this parser decided it should.
+   * regexArg reads /.../ and unescapes only `\/`. Every other escape is
+   * passed to the engine as written.
    */
   private regexArg(): string {
     this.space();
@@ -173,8 +168,8 @@ class Parser extends Scanner {
       throw new Error(`expected a "string" at character ${this.i + 1}, ${this.here()}`);
     }
 
-    // `unquote` decides where the string ends, so the escape rules here are
-    // Go's rather than a second set invented for this file.
+    // Scanned to the closing quote, then read by `unquote`, so the escape
+    // rules are Go's.
     for (let j = this.i + 1; j < this.s.length; j++) {
       if (this.s[j] === "\\") {
         j++;

@@ -1,14 +1,11 @@
-// One open workspace: its sources, which one is showing, and where it goes back to.
+// One open workspace: its engine, its tabs, which tab is showing, and its
+// save state.
 //
-// A workspace is an engine and, for each source in it, the band of rows it
-// sends. The files and the log live in the engine, so view and transform read
-// the same rows the same way: transform unlocks editing and turns the
-// recogniser on, and loads nothing. An edit is a message and a new generation,
-// which is why applying a program to 50 million rows reaches the screen as fast
-// as typing into one cell.
+// Each tab wraps a source handle and the Band of rows the engine sends for
+// it. The files and the edit log live in the engine. Transform mode unlocks
+// editing and turns the recogniser on. An edit is one message to the engine.
 //
-// It holds no widgets, which is the property that let the Go build test its
-// shell without a window.
+// This file is plain logic, so tests run it directly.
 
 import { Band } from "@uno/grid/engine";
 import type {
@@ -33,22 +30,17 @@ import { bytes } from "./locale.ts";
 import { say } from "./said.ts";
 
 /**
- * The most a saved workspace carries, all such sources together.
- *
- * A .uno points at the files it can name, so this bounds only what is left:
- * bytes with no file behind them, which the container has to copy or lose. On
- * the desktop every source comes from a path, so nothing counts against it.
+ * The most bytes a saved .uno may embed for sources it must carry inline.
+ * On the desktop every source has a path, so the embedded total is zero.
  */
 export const CARRY_LIMIT = 256 << 20;
 
 export type Mode = "view" | "transform";
 
-/** One source as the workspace shows it: a tab. */
 /**
- * reloaded says what reading a tab's file again found, from the tab before
- * and the one that replaced it: a new version and how its size moved, or no
- * change at all, and the edits that replayed over it. An object says whether
- * its version moved; a file on a disk, which has none, says its size.
+ * Returns the status message after a reload, comparing the old tab with the
+ * new one: whether the version changed (for a file with a version), whether
+ * the size changed, and how many edits were replayed.
  */
 export function reloaded(was: Tab, now: Tab): string {
   const before = was.link?.version;
@@ -70,27 +62,27 @@ export function reloaded(was: Tab, now: Tab): string {
   return parts.join(" · ");
 }
 
+/** One source in the workspace. */
 export class Tab {
-  /** The recogniser's question about this source, while it has one. */
+  /** The recogniser's current offer for this source, if any. */
   offer: Offer | null = null;
-  /** Where the selection was when another tab was shown, so coming back finds it. */
+  /** The selected cell, saved when another tab is shown. */
   cell: Cell = { row: 0, col: 0 };
   /**
-   * The version the bucket holds now, where it is not the one this tab reads.
-   * A tab reading the newest has none, and neither does one nobody has asked
-   * about. Reloading makes a new tab, which reads the newest.
+   * The version the bucket holds now, when it differs from the one this tab
+   * reads. Undefined while the tab reads the newest or is still unchecked.
    */
   newer: string | undefined;
 
-  /** The log as the engine last reported it, and as it was at the last save. */
+  /** The edit log as last reported by the engine, and as it was at the last save. */
   private edits: Edit[];
   private savedEdits: Edit[];
 
   constructor(
     readonly source: SourceHandle,
     readonly band: Band,
-    /** The log the last save held, for a tab replacing one that was already
-     * here. A tab that has just opened was saved with whatever it opened with. */
+    /** The saved log carried over from a tab this one replaces. Defaults to
+     * the log the source opened with. */
     saved?: readonly Edit[],
   ) {
     this.edits = source.opened.edits.slice();
@@ -105,35 +97,33 @@ export class Tab {
     return this.source.opened.name;
   }
 
-  /** How big the file behind this source was when it opened. */
+  /** The file's size when the source opened. */
   get bytes(): number {
     return this.source.opened.size;
   }
 
-  /** The file behind this source, for a tab that points at one. */
+  /** The file behind this source, if it has one. */
   get link(): Link | undefined {
     return this.source.opened.link;
   }
 
-  /** The files this source reads as one, in order, for one that is several. */
+  /** The files read as one source, in order, for a multi-file source. */
   get parts(): readonly PartInfo[] | undefined {
     return this.source.opened.parts;
   }
 
-  /** What is wrong with the file behind this source, if anything: it is gone,
-   * or it is not the file the log was written against. */
+  /** The missing or changed message for the file, if either applies. */
   get trouble(): string | undefined {
     const wrong = this.link?.missing ?? this.link?.changed;
     return wrong === undefined ? undefined : say(wrong);
   }
 
-  /** Whether there is a grid behind this tab at all. */
+  /** Whether the file behind this tab is missing. */
   get missing(): boolean {
     return this.link?.missing !== undefined;
   }
 
-  /** The log the last save held, so a tab replacing this one keeps the same
-   * idea of what is unsaved. */
+  /** The edit log as of the last save. */
   get savedLog(): readonly Edit[] {
     return this.savedEdits;
   }
@@ -143,10 +133,8 @@ export class Tab {
   }
 
   /**
-   * dirty compares the log rather than counting it.
-   *
-   * Undo makes a count ambiguous: taking one edit back and making a different
-   * one lands on the same number and a different sheet.
+   * Whether the log differs from the saved log. Compared edit by edit, since
+   * undo followed by a different edit keeps the same length.
    */
   get dirty(): boolean {
     const a = this.edits;
@@ -170,46 +158,38 @@ export class Tab {
 }
 
 export class Workspace {
-  /** Where a save goes without asking. Empty until the workspace has been saved
-   * once, or was opened from a .uno. */
+  /** The path a plain save writes to. Empty until saved once or opened from a .uno. */
   path = "";
 
-  /** Never saved: every open lands in view. */
+  /** The mode is kept in memory only. Every open starts in view. */
   mode: Mode = "view";
 
-  /** In the order they were added, which is the order the sidebar shows. */
+  /** Tabs in the order they were added, which is the sidebar order. */
   private tabs: Tab[] = [];
   private showing!: Tab;
-  /** The sources the last save held, so adding or removing one is unsaved work too. */
+  /** The source ids as of the last save. */
   private savedSources: string[] = [];
   /**
-   * Sources pointed at a different file since the last save, or given more
-   * files at their end.
-   *
-   * The log does not change when a source is relinked or appended to, and
-   * neither does the list of sources, so nothing else here would notice. What
-   * changed is the path, or the parts, the .uno on disk still holds, and
-   * leaving that unsaved is how somebody finds the same missing file again
-   * tomorrow.
+   * Ids of sources relinked or appended to since the last save. Both changes
+   * leave the log and the source list as they were, so this set is what
+   * marks the workspace dirty for them.
    */
   private readonly relinked = new Set<string>();
 
   private constructor(
-    /** The engine this workspace owns. The panel browses and reads the
-     * connections through it while the workspace is open. */
+    /** The engine this workspace owns. The panel lists and peeks through it. */
     readonly engine: Engine,
-    /** Called when rows land or the index moves, so whoever draws can draw them. */
+    /** Called when rows land or index progress changes. */
     private readonly changed: () => void,
-    /** Called when a source's offer changes, with the tab it belongs to. */
+    /** Called when a source's offer changes, with its tab. */
     private readonly offered: (tab: Tab) => void,
   ) {}
 
   /**
-   * open reads a file through an engine the workspace owns from here on.
+   * Opens a file through the engine and returns the workspace.
    *
-   * `savePath` is where Ctrl+S writes without asking. It only applies to a .uno,
-   * since anything else has no workspace file to go back to, and a dropped .uno
-   * passes "" so its first save asks.
+   * `savePath` becomes `path` only when the file is a .uno. A dropped .uno
+   * passes "" so its first save prompts for a path.
    */
   static async open(
     ref: SourceRef,
@@ -220,17 +200,16 @@ export class Workspace {
   ): Promise<Workspace> {
     const w = new Workspace(engine, changed, offered);
     w.showing = await w.add(ref);
-    // What it opened with is nothing to lose: the file is still where it was.
-    // A source added after it is, until a save keeps it.
+    // The sources it opened with count as saved.
     w.savedSources = w.tabs.map((t) => t.id);
     if (ref.name.toLowerCase().endsWith(".uno")) w.path = savePath;
     return w;
   }
 
   /**
-   * add puts a file's sources in the workspace, and returns the one to show:
-   * the file just added, or the source a .uno was left on. What shows stays
-   * the caller's decision, since the grid has to follow it.
+   * Opens a ref and adds its sources as tabs. Returns the tab to show: the
+   * one the engine names, or the first added. The caller decides whether to
+   * show it.
    */
   async add(ref: SourceRef): Promise<Tab> {
     const { sources, showing } = await this.engine.open(ref);
@@ -250,11 +229,11 @@ export class Workspace {
   }
 
   /**
-   * remove takes a source out, and its edits out of the log. The engine keeps
-   * the last one, since a workspace of none has nothing to show or save.
+   * Removes a source from the engine and the tab list. The engine refuses to
+   * remove the last source.
    *
-   * It answers whether the tab was the one showing, as it is once the engine
-   * has answered: its neighbour shows then, and the grid has to follow.
+   * Returns true if the removed tab was the one showing. In that case the
+   * next tab (or the last) is now showing and the grid must redraw.
    */
   async remove(tab: Tab): Promise<boolean> {
     await this.engine.remove(tab.source);
@@ -268,36 +247,26 @@ export class Workspace {
   }
 
   /**
-   * relink points a tab at a file: one whose file has gone, or one whose file
-   * changed under the log.
-   *
-   * The tab is replaced rather than repaired, because its columns, its rows and
-   * its band all belong to the file behind it. What it keeps is its place in the
-   * sidebar, the cell it was left on, and what the last save held, so nothing
-   * about the session moves under the person doing it.
+   * Points a tab at a different file. The tab is replaced by a new one that
+   * keeps its sidebar position, selected cell and saved log.
    */
   async relink(tab: Tab, ref: SourceRef): Promise<Tab> {
-    // One still with no file points where it did, so a save has nothing new
-    // to write for it.
+    // Only a tab whose file is now found is marked relinked.
     return this.replace(tab, await this.engine.relink(tab.source, ref), (fresh) => !fresh.missing);
   }
 
   /**
-   * append adds files at the end of a tab that reads several as one.
-   *
-   * The tab is replaced, as a relinked one is and for the same reason: its
-   * rows and its band belong to the longer source. Its log is the one it had,
-   * every edit on the cell it was made to, and it keeps its place in the
-   * sidebar, the cell it was left on, and what the last save held.
+   * Adds files to the end of a multi-file tab. The tab is replaced by a new
+   * one that keeps its sidebar position, selected cell, log and saved log.
    */
   async append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
     return this.replace(tab, await this.engine.append(tab.source, [...files]), () => true);
   }
 
   /**
-   * replace puts a fresh tab over `source` where `tab` was: its place in the
-   * sidebar, the cell it was left on, and what the last save held all stay.
-   * `pointed` says whether the save now has somewhere new to write for it.
+   * Replaces `tab` with a new tab for `source` at the same position, with the
+   * same selected cell and saved log. `pointed` decides whether the new tab
+   * is marked relinked.
    */
   private replace(tab: Tab, source: SourceHandle, pointed: (fresh: Tab) => boolean): Tab {
     const i = this.tabs.indexOf(tab);
@@ -310,26 +279,21 @@ export class Workspace {
     return fresh;
   }
 
-  /** list is one page of a folder or a prefix, asked of this workspace's
-   * engine. With peek, it makes a workspace the panel's `Listings`. */
+  /** Lists one page of a folder or prefix through the engine. With `peek`,
+   * this makes the workspace a `Listings` for the panel. */
   list(path: string, cursor?: string): Promise<Listing> {
     return this.engine.list(path, cursor);
   }
 
-  /** peek is the front of a file, asked of this workspace's engine. */
+  /** Reads the front of a file through the engine. */
   peek(ref: SourceRef): Promise<Peeked> {
     return this.engine.peek(ref);
   }
 
   /**
-   * askNewer asks the bucket, one HEAD for each tab whose file has a version,
-   * which version it holds now, and marks each tab reading another one. It
-   * answers whether any mark came or went, so a caller repaints only then.
-   *
-   * A tab with no version -- a file on a disk, bytes carried in the .uno, a
-   * tab with no file behind it -- has nothing to ask about. A HEAD that fails
-   * leaves the tab as it was: the bucket being out of reach for a moment says
-   * nothing about what is in it.
+   * Stats each tab whose file has a version and sets `tab.newer` when the
+   * bucket now holds a different version. Returns whether any tab's `newer`
+   * changed. A failed stat leaves the tab unchanged.
    */
   async askNewer(): Promise<boolean> {
     const remote = this.tabs.filter((t) => t.link?.version !== undefined && !t.missing);
@@ -354,7 +318,7 @@ export class Workspace {
     return moved;
   }
 
-  /** The sources, in the order the sidebar shows them. */
+  /** The tabs in sidebar order. */
   get sources(): readonly Tab[] {
     return this.tabs;
   }
@@ -364,12 +328,12 @@ export class Workspace {
     return this.showing;
   }
 
-  /** show makes another tab the one the grid draws and every edit goes to. */
+  /** Makes a tab the showing one, if it belongs to this workspace. */
   show(tab: Tab): void {
     if (this.tabs.includes(tab)) this.showing = tab;
   }
 
-  /** The tab `step` places along from the one showing, wrapping at either end. */
+  /** The tab `step` places from the showing one, wrapping at both ends. */
   beside(step: number): Tab {
     const n = this.tabs.length;
     return this.tabs[(((this.tabs.indexOf(this.showing) + step) % n) + n) % n]!;
@@ -383,7 +347,7 @@ export class Workspace {
     return this.showing.band;
   }
 
-  /** The recogniser's question about the source showing. */
+  /** The showing tab's offer, in transform mode only. */
   get offer(): Offer | null {
     return this.mode === "transform" ? this.showing.offer : null;
   }
@@ -397,7 +361,7 @@ export class Workspace {
     this.engine.mode(true);
   }
 
-  /** view locks editing again. The log and the dirty dots stay. */
+  /** Switches to view mode and clears every offer. The log is kept. */
   view(): void {
     this.mode = "view";
     for (const t of this.tabs) t.offer = null;
@@ -405,8 +369,8 @@ export class Workspace {
   }
 
   /**
-   * set types a value into one cell. It shows at once, the engine records it,
-   * and a value the engine refuses is put back.
+   * Sets one cell. The band shows the value at once; if the engine refuses
+   * the edit, the band restores the old value and the error is rethrown.
    */
   async set(row: number, col: number, value: string): Promise<void> {
     const t = this.showing;
@@ -420,7 +384,7 @@ export class Workspace {
     t.band.settle(pending);
   }
 
-  /** apply runs an offered program over its column: one edit, however long the column. */
+  /** Applies an offered program to its column as one edit, and clears the offer. */
   async apply(offer: Offer): Promise<void> {
     const t = this.tabs.find((tab) => tab.id === offer.source);
     if (t === undefined) throw new Error(m.offer_source_gone());
@@ -431,18 +395,15 @@ export class Workspace {
   }
 
   /**
-   * bind computes a column of a source from an expression over the row's
-   * other columns: one edit, which undo takes back. The engine refuses an
-   * expression it cannot read, or one that names a column the source has not.
+   * Binds a column to an expression over the row's other columns, as one
+   * edit. The engine refuses an expression that fails to parse or names an
+   * unknown column.
    */
   async bind(tab: Tab, col: number, expr: string): Promise<void> {
     tab.landed(await tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }));
   }
 
-  /**
-   * undo takes the showing source's last edit back and returns it, so the cell
-   * it changed can be shown. The engine replays the rest; no row is read again.
-   */
+  /** Undoes the showing tab's last edit and returns that edit. */
   async undo(): Promise<Edit> {
     const t = this.showing;
     const changed = await t.source.undo();
@@ -450,7 +411,7 @@ export class Workspace {
     return changed.edit;
   }
 
-  /** redo records again the edit undo last took back, and returns it. */
+  /** Redoes the showing tab's last undone edit and returns it. */
   async redo(): Promise<Edit> {
     const t = this.showing;
     const changed = await t.source.redo();
@@ -458,7 +419,7 @@ export class Workspace {
     return changed.edit;
   }
 
-  /** find asks the engine for the next matching row in a column, read from the file. */
+  /** Asks the engine for the next matching row in the showing tab. */
   find(req: FindRequest): Promise<Found> {
     return this.showing.source.find(req);
   }
@@ -467,14 +428,14 @@ export class Workspace {
     this.engine.close();
   }
 
-  /** What a save without a path should suggest: named after the first source. */
+  /** The file name to suggest in a Save As dialog: the first tab's stem plus .uno. */
   get suggestedFileName(): string {
     const base = (this.tabs[0]?.name ?? "").replace(/\.[^.]*$/, "");
     return `${base || m.workspace_file_stem()}.uno`;
   }
 
-  /** Whether anything would be lost by closing: an edit, a source added or
-   * removed, or a source pointed at another file. */
+  /** Whether there is unsaved work: an edit, a source added or removed, or
+   * a source relinked or appended to. */
   get dirty(): boolean {
     const ids = this.tabs.map((t) => t.id);
     const same =
@@ -483,9 +444,8 @@ export class Workspace {
   }
 
   /**
-   * readingFrom is the source whose file is at `path`, for a save that would
-   * write the workspace over it. A source several files are read as is
-   * reading from each of them.
+   * Returns the tab whose file, or one of whose parts, is at `path`. Used to
+   * refuse saving the workspace over one of its own sources.
    */
   readingFrom(path: string): Tab | undefined {
     return this.tabs.find(
@@ -493,19 +453,18 @@ export class Workspace {
     );
   }
 
-  /** Whether a tab holds something the last save did not. */
+  /** Whether a tab has unsaved changes, was relinked, or was added since the last save. */
   unsaved(tab: Tab): boolean {
     return tab.dirty || this.relinked.has(tab.id) || !this.savedSources.includes(tab.id);
   }
 
   /**
-   * bytes asks the engine for the workspace as a .uno. `cell` is where the
-   * grid is on the tab showing; every other tab is where it was left.
+   * Serialises the workspace as a .uno. `cell` is the showing tab's selected
+   * cell; other tabs use their saved cell.
    *
-   * `at` is where the file is going, which the writer needs before it writes:
-   * a source under the same folder is pointed at relative to it, so the folder
-   * can be copied somewhere else whole. That is why Save As asks for the path
-   * first and serialises second.
+   * `at` is the path the file will be written to. The engine writes source
+   * paths under the same folder relative to it, so it must be known before
+   * serialising.
    */
   bytes(cell: Cell, at: string): Promise<Uint8Array> {
     this.showing.cell = cell;
@@ -519,7 +478,7 @@ export class Workspace {
     );
   }
 
-  /** Called once a save has landed, so the workspace stops reading as dirty. */
+  /** Records a completed save: sets the path and resets all dirty state. */
   saved(path: string): void {
     this.path = path;
     this.savedSources = this.tabs.map((t) => t.id);
@@ -527,26 +486,23 @@ export class Workspace {
     for (const t of this.tabs) t.saved();
   }
 
-  /** How far the index has read the showing file, as a whole percent. */
+  /** Index progress for the showing tab, as a whole percent. */
   indexed(): number {
     const p = this.showing.source.progress;
     return Math.floor((p.done / Math.max(1, p.total)) * 100);
   }
 
-  /** What the status bar reports about the file showing. */
+  /** The status bar text for the showing tab. */
   status(): string {
     const t = this.showing;
     const p = t.source.progress;
 
-    // A tab with no file behind it has no rows, no columns and no encoding to
-    // report. What it has is a path that stopped working, which is the only
-    // thing worth saying about it.
-    // One in a bucket nobody connected already says what to do about it.
+    // An unconnected or missing file reports only its trouble.
     if (t.link?.connect !== undefined) return t.trouble ?? "";
     if (t.missing) return `${t.trouble} · ${m.point_at_file_to_see_rows()}`;
 
-    // Until the index reaches the end, the count is projected from how far it
-    // has got, and says so.
+    // Until indexing completes, the row count is an estimate and is labelled
+    // as one.
     const parts: string[] = [
       p.complete ? m.rows_count({ count: p.rows }) : m.rows_count_about({ count: p.rows }),
       m.columns_count({ count: t.band.cols() }),
@@ -557,10 +513,8 @@ export class Workspace {
 
     const edits = t.edited;
     if (edits > 0) parts.push(m.edits_count({ count: edits }));
-    // A file that is not the one the log was made against still reads, and
-    // says so where the person is looking, not only on the mark's hover.
-    // The one with something to do about it goes first, as on its panel line:
-    // a newer version, which Reload reads, before a change it would replace.
+    // A newer version takes priority over a changed file, matching the
+    // panel's line.
     if (t.newer !== undefined) parts.push(m.newer_version());
     else if (t.link?.changed !== undefined) parts.push(say(t.link.changed));
     return parts.join(" · ");

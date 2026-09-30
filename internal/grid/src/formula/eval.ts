@@ -4,26 +4,15 @@ import type { Formula, Node } from "./ast.ts";
 import { text } from "./ast.ts";
 
 /**
- * Row is one row of whatever the caller holds. It is an interface, and a
- * deliberately small one, because `formula` must never learn what a sheet is:
- * `sheet` imports `formula` to bind a column, so an import the other way would
- * be a cycle.
- *
- * value returns the cell as it is stored -- a string -- and undefined when
- * there is no such column. Coercion happens here rather than at the caller, so
- * every binding reads a number the same way.
+ * Row is one row of cells, read by column name. `value` returns the cell as
+ * stored, or undefined for an unknown column.
  */
 export interface Row {
   value(col: string): string | undefined;
 }
 
 /**
- * The three ways one cell can fail.
- *
- * They are classes because the caller decides what a failure looks like: the
- * editor's preview says it in words beside the expression, and a bound column
- * shows it in the cell it happened in. `instanceof` is what Go spells
- * `errors.Is`.
+ * The ways a cell can fail. Callers test them with `instanceof`.
  */
 export class UnknownColumnError extends Error {}
 export class NotNumberError extends Error {}
@@ -31,13 +20,9 @@ export class DivideByZeroError extends Error {}
 export class EmptyFormulaError extends Error {}
 
 /**
- * Column is what a formula computed over a run of rows: one number per row, and
- * the reason for each row it could not compute.
- *
- * values is a Float64Array because a column of numbers is what this is, and one
- * contiguous allocation per term is the cost of a block rather than of a row.
- * errors is sparse: a row with nothing in it computed, and a row with an Error
- * shows the failure and not what values holds there.
+ * Column is a formula's result over a run of rows: one number per row, and
+ * for each row that failed, its error. `errors` is sparse. A row's value
+ * counts only where its error is undefined.
  */
 export interface Column {
   readonly values: Float64Array;
@@ -45,27 +30,20 @@ export interface Column {
 }
 
 /**
- * Columns is the source of the cells a column formula reads. column returns
- * every cell of the named column across the rows being computed, as stored,
- * and undefined when there is no such column. Like Row, it is how `formula`
- * reads a sheet without knowing what one is.
+ * Columns is the source a column formula reads. `column` returns every cell
+ * of the named column over the rows being computed, as stored, or undefined
+ * for an unknown column.
  */
 export interface Columns {
   column(name: string): readonly string[] | undefined;
 }
 
 /**
- * evaluateColumn computes the expression over n rows at once.
+ * evaluateColumn computes the expression over `n` rows at once. The tree is
+ * walked once per block, and each operator is one loop over two arrays.
  *
- * A formula is bound to a whole column, so it is computed a whole column at a
- * time: the tree is walked once per block rather than once per row, a name is
- * resolved once per reference rather than once per cell, and each operator is
- * a tight loop over two arrays.
- *
- * A row fails with the error a row-by-row walk would have thrown first. Terms
- * are computed left to right and depth first, the same order, and a row keeps
- * the first error it meets: a later term neither reads it nor replaces what it
- * says.
+ * A row keeps the first error it meets, in left-to-right, depth-first
+ * order, through every later term.
  */
 export function evaluateColumn(f: Formula, n: number, src: Columns): Column {
   const errors: (Error | undefined)[] = Array.from({ length: n });
@@ -78,17 +56,8 @@ export function evaluateColumn(f: Formula, n: number, src: Columns): Column {
 }
 
 /**
- * evaluate computes the expression for one row, which is what the editor's
- * preview asks.
- *
- * It is a column one row long rather than a second evaluator, so the preview
- * cannot disagree with the column it previews.
- *
- * It throws the row's failure, and the failure names the column, because
- * "not a number" over 4,812 rows is not a thing anyone can act on. That is the
- * opposite of what `program.apply` does with a value it does not fit: a program
- * is induced from a handful of rows and meets others as a matter of course, and
- * a formula is typed by a person against a column they chose.
+ * evaluate computes the expression for one row. It is evaluateColumn over a
+ * block of one, and it throws the row's error if there is one.
  */
 export function evaluate(f: Formula, row: Row): number {
   const { values, errors } = evaluateColumn(f, 1, {
@@ -140,8 +109,8 @@ function evalNode(
     }
 
     case "binary": {
-      // Both operands are fresh arrays nothing else holds, so the result is
-      // written over the left one rather than into a third.
+      // Both operands are fresh arrays, so the result is written over the
+      // left one.
       const left = evalNode(n.left, count, src, errors);
       const right = evalNode(n.right, count, src, errors);
       switch (n.op) {
@@ -155,16 +124,9 @@ function evalNode(
           for (let i = 0; i < count; i++) left[i] = left[i]! * right[i]!;
           return left;
         case "/": {
-          // Refused rather than left to produce Infinity or NaN. A column of
-          // infinities is a wrong answer that displays as one, and the divisor
-          // is named because on a bound column the person needs to know which
-          // cell was empty. A row that already failed keeps its first reason.
-          //
-          // The failure names the divisor rather than the cell, so it reads the
-          // same in every row, and the block shares one: an Error is the one
-          // allocation here that costs more than the arithmetic, and a divisor
-          // column that is still blank is an ordinary moment in building a
-          // sheet rather than a reason for it to compute ten times slower.
+          // A zero divisor is an error. The error names the divisor
+          // expression, and one Error object is shared by every failing row
+          // in the block. A row that already failed keeps its first error.
           let err: DivideByZeroError | undefined;
           for (let i = 0; i < count; i++) {
             if (right[i] === 0 && errors[i] === undefined) {

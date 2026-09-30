@@ -1,82 +1,55 @@
 /**
- * Edit is one recorded change, and the unit the .uno edit log stores.
+ * Edit is one recorded change, and one line of the .uno edit log.
  *
- * A sheet keeps every edit made to it in order, because that log plus the
- * immutable raw source is the whole truth of a saved workspace: replay rebuilds
- * it, and undo is truncate-and-replay rather than a stack held in memory.
+ * A sheet keeps every edit in order. Replay rebuilds the sheet from the raw
+ * source and the log, and undo truncates the log and replays.
  *
- * `was` is what makes an edit readable on its own, in a diff or an unzip,
- * without replaying anything up to it. Operations that change thousands of
- * cells at once will not carry one, so nothing may depend on it being present.
+ * `was` is the value before the edit, where the edit has one. A column
+ * operation leaves it undefined, so every reader treats it as optional.
  */
 export interface Edit {
   seq: number;
   op: Op;
-  /** Position today, NO_ROW on a column operation. */
+  /** The row, or NO_ROW for a column operation. */
   row: number;
   col: number;
   was?: string;
 
   /**
-   * now is the cell's new value under "set", the markdown source under "note",
-   * the program text under "apply" and the expression text under "bind".
-   *
-   * One field rather than four because they are the same thing at different
-   * scopes -- what this operation makes the data say -- and a second field
-   * would have to be empty in every line of every log written so far.
+   * The new value under "set", the markdown source under "note", the
+   * program text under "apply" and the expression text under "bind".
    */
   now: string;
 }
 
 /**
- * The operations.
- *
- * Each is spelled out in the file so a reader that predates one of them can
- * tell a row-spanning rule from a single cell rather than guessing from which
- * fields happen to be set.
+ * The operations, as spelled in the file.
  */
 export const Op = {
-  /** One cell, and the only operation the first release wrote. */
+  /** Sets one cell. */
   Set: "set",
 
   /**
-   * A program run over a whole column: the transformation the recogniser
-   * induced from a handful of edits and the person agreed to. It carries no
-   * `was`, because thousands of old values are not a field, which is why undo
-   * replays the log rather than reversing it.
+   * Runs a program over a whole column. Leaves `was` undefined.
    */
   Apply: "apply",
 
   /**
-   * Notation in one cell: markdown stored, symbols shown.
-   *
-   * It is one cell like Set and derived like Bind, and it is neither of them --
-   * setting a cell would lose the source the symbols came from, and binding
-   * would make a thing that reads no columns join a dependency graph.
+   * Puts notation in one cell: markdown is stored, the rendered symbols are
+   * shown. It stands alone, outside the dependency graph.
    */
   Note: "note",
 
   /**
-   * Makes a column derived: from here on it stores nothing of its own and shows
-   * what the expression computes.
-   *
-   * It is an operation and not a line of sheet state, though it looks like one.
-   * A binding is something a person did, so it has to be something they can
-   * undo, and undo is truncate-and-replay of this log. Putting it in state.json
-   * would have left Ctrl+Z unable to reach it.
+   * Binds a formula to a column. The column then shows what the expression
+   * computes in place of its stored values. It is logged so it can be
+   * undone.
    */
   Bind: "bind",
 
   /**
-   * Takes the formula back off a column, and the column goes back to showing
-   * the values stored under it.
-   *
-   * It is the inverse of Bind and not the absence of it. Undo is
-   * truncate-and-replay, so the only other way to take a binding off is to take
-   * back everything done since, and a column bound twenty edits ago by somebody
-   * else is exactly the one a person wants rid of without losing the twenty. It
-   * carries the expression it removed in `was`, so an unbind line says what it
-   * undid to anyone reading the log with unzip.
+   * Takes the formula off a column. The column shows its stored values
+   * again. `was` carries the expression removed.
    */
   Unbind: "unbind",
 } as const;
@@ -84,14 +57,11 @@ export const Op = {
 export type Op = (typeof Op)[keyof typeof Op];
 
 /**
- * NO_ROW is what a column-spanning operation stores in `row`.
- *
- * A log is read by people with unzip as well as by uno, and -1 says "this one
- * is not about a row" where a plausible 0 would quietly point at the first one.
+ * NO_ROW is what a column operation stores in `row`.
  */
 export const NO_ROW = -1;
 
-/** Structural equality over the log, for `logEquals`. */
+/** editEquals compares two edits field by field. A missing `was` equals "". */
 export function editEquals(a: Edit, b: Edit): boolean {
   return (
     a.seq === b.seq &&
