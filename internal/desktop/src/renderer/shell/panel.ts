@@ -15,7 +15,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { SingleRef } from "@uno/grid/store";
 
 import { m } from "../../paraglide/messages.js";
-import { firstRow, poolSize } from "../grid/metrics.ts";
+import { firstRow, fitPool, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
 import { bytes } from "../locale.ts";
 import { say } from "../said.ts";
@@ -574,13 +574,7 @@ export class Panel {
     this.sizer.style.height = `${total * ROW_H}px`;
 
     const want = poolSize(total, this.list.clientHeight, ROW_H);
-    while (this.pool.length < want) {
-      const row = el("div");
-      row.append(el("span"), el("span"));
-      this.pool.push(row);
-      this.rows.append(row);
-    }
-    while (this.pool.length > want) this.pool.pop()?.remove();
+    fitPool(this.pool, want, () => line(), this.rows);
 
     const first = firstRow(total, this.pool.length, this.list.scrollTop, ROW_H);
     this.rows.style.transform = `translateY(${first * ROW_H}px)`;
@@ -893,4 +887,11 @@ function choice(
 /** set writes text only when it changed, since the pool is repainted on every scroll. */
 function set(node: Element, text: string): void {
   if (node.textContent !== text) node.textContent = text;
+}
+
+/** line is one row of the list before anything is painted on it: a name and what stands beside it. */
+function line(): HTMLElement {
+  const row = el("div");
+  row.append(el("span"), el("span"));
+  return row;
 }
