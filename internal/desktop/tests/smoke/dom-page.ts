@@ -19,7 +19,7 @@ const WAIT_MS = 5_000;
 
 /** Two rAFs, which is how the grid schedules its layout, so a write made in
  * one is visible in the second's callback. */
-function frame(): Promise<void> {
+export function frame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });

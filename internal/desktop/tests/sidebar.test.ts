@@ -9,6 +9,7 @@ import { expect, test } from "vite-plus/test";
 import { m } from "../src/paraglide/messages.js";
 import { sidebarRows } from "../src/renderer/shell/sidebar.ts";
 import type { SidebarActions } from "../src/renderer/shell/sidebar.ts";
+import { stateOf } from "../src/renderer/sources.ts";
 import type { Tab, Workspace } from "../src/renderer/workspace.ts";
 
 function tab(id: string, name: string, link?: Tab["link"]): Tab {
@@ -21,6 +22,9 @@ function tab(id: string, name: string, link?: Tab["link"]): Tab {
     },
     get missing() {
       return link?.missing !== undefined;
+    },
+    get state() {
+      return stateOf({ id, name, link });
     },
   } as Tab;
 }
