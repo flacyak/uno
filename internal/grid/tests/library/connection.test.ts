@@ -195,6 +195,26 @@ describe("the values that reach outside the file", () => {
     expect(refused((o) => (o["region"] = "eu-west-1.evil.example"))).toThrow(/is not a region/);
   });
 
+  // The ARN is what the hosted engine asks STS to let it be, so one that is
+  // not a role's is refused before it is asked for.
+  test("a role that is not a role's ARN", () => {
+    for (const roleArn of ["uno-read", "arn:aws:iam::12345:role/uno-read", "arn:aws:s3:::bucket"]) {
+      expect(
+        refused((o) => (o["auth"] = { mode: "role", roleArn })),
+        roleArn,
+      ).toThrow(/is not a role's ARN/);
+    }
+    for (const roleArn of [
+      "arn:aws:iam::210987654321:role/uno-read",
+      "arn:aws-cn:iam::210987654321:role/finance/uno.read+x@y",
+    ]) {
+      expect(refused((o) => (o["auth"] = { mode: "role", roleArn }))().auth).toEqual({
+        mode: "role",
+        roleArn,
+      });
+    }
+  });
+
   test("an id that would name a path", () => {
     expect(refused((o) => (o["id"] = "../acme"))).toThrow(
       'acme-exports.unof: connection id "../acme" may not start with a dot',

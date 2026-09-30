@@ -173,7 +173,7 @@ const SAYS: Sentences<Said> = {
   "changed-on-disk": (s) => m.refused_changed_on_disk({ name: s.name }),
 
   "keeps-no-connections": m.refused_keeps_no_connections,
-  "offers-no-profiles": m.refused_offers_no_profiles,
+  "offers-no-sign-ins": m.refused_offers_no_sign_ins,
   "tries-no-connection": m.refused_tries_no_connection,
 };
 

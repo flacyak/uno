@@ -1,5 +1,5 @@
-// Connect a bucket, on the desktop: a bucket, a folder in it, how to sign in,
-// and a test that lists the folder before anything is kept.
+// Connect a bucket: a bucket, a folder in it, how to sign in, and a test that
+// lists the folder before anything is kept.
 //
 // It takes the panel's place while it is open, because connecting is the one
 // thing in the panel that is a form rather than a list, and a person filling
@@ -8,11 +8,14 @@
 // that has expired -- says why in the engine's own words and saves nothing, so
 // a connection in the folder is one that worked at least once.
 //
-// The profile list comes from the engine, which reads ~/.aws in its own
-// process and hands over names and nothing else (2.10). The region is not
-// asked for at all: the test finds it (2.9), and the connection keeps it.
+// The ways of signing in come from the engine, which is the one that signs:
+// the desktop's reads ~/.aws in its own process and hands over names and
+// nothing else (2.10), and the hosted one takes on a role in the person's
+// account and says what the role has to trust. The region is not asked for at
+// all: the test finds it (2.9), and the connection keeps it.
 
-import type { Connection } from "@uno/grid/library";
+import type { SignIns } from "@uno/grid/engine";
+import type { AuthMode, Connection } from "@uno/grid/library";
 import { validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
@@ -21,8 +24,8 @@ import { Words, el, message, option } from "./util.ts";
 
 /** What the form needs of the engine and the host. The shell decides how. */
 export interface ConnectAsks {
-  /** The names of the AWS profiles this machine has. */
-  profiles(): Promise<string[]>;
+  /** How the engine signs in: its modes, the AWS profiles its machine has, and what a role has to trust. */
+  signIns(): Promise<SignIns>;
   /** A connection tried without keeping it: its region, and a page of its prefix. */
   tryConnection(c: Connection): Promise<Tried>;
   /** Keep a connection, and hand back the copy that was written. */
@@ -53,17 +56,34 @@ export interface Filled {
 }
 
 /**
- * SignIn is the profile list's choice, as the select carries it: the machine's
- * own chain, a named profile, or no signing in at all.
+ * SignIn is the sign-in list's choice, as the select carries it: the machine's
+ * own chain, a named profile, a role in the person's account, or no signing
+ * in at all.
  */
-export type SignIn = "machine" | "public" | `profile:${string}`;
+export type SignIn = "machine" | "public" | "role" | `profile:${string}`;
 
 /** The fields as a person left them. */
 export interface Fields {
   bucket: string;
   prefix: string;
   signIn: SignIn;
+  /** The role's ARN, read when `signIn` is the role. */
+  roleArn?: string;
 }
+
+/** What the list offers for each way an engine signs in: one line, or one a profile. */
+const CHOICES: { [M in AuthMode]: (offered: SignIns) => Array<[SignIn, string]> } = {
+  machine: () => [["machine", m.connect_sign_in_machine()]],
+  profile: (offered) => offered.profiles.map((n) => [`profile:${n}`, n]),
+  role: () => [["role", m.connect_sign_in_role()]],
+  public: () => [["public", m.connect_sign_in_public()]],
+};
+
+/**
+ * What is on offer before the engine has said, and when it cannot say: a
+ * bucket anybody may read, which every engine reads unsigned.
+ */
+const PUBLIC_ONLY: SignIns = { modes: ["public"], profiles: [] };
 
 /**
  * folderOf is a prefix as a connection keeps it: no slash in front, and one on
@@ -91,9 +111,11 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
   const prefix = folderOf(fields.prefix);
   const again = known.find((c) => c.bucket === bucket && c.prefix === prefix);
   const auth: Connection["auth"] =
-    fields.signIn === "machine" || fields.signIn === "public"
-      ? { mode: fields.signIn }
-      : { mode: "profile", profile: fields.signIn.slice("profile:".length) };
+    fields.signIn === "role"
+      ? { mode: "role", roleArn: (fields.roleArn ?? "").trim() }
+      : fields.signIn === "machine" || fields.signIn === "public"
+        ? { mode: fields.signIn }
+        : { mode: "profile", profile: fields.signIn.slice("profile:".length) };
   if (again?.auth.mode === auth.mode && again.auth.extra !== undefined) {
     auth.extra = again.auth.extra;
   }
@@ -120,6 +142,9 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
 
 /** A bucket's name as an example of one, in the field before anything is typed. */
 const EXAMPLE_BUCKET = "acme-exports";
+
+/** A role's ARN as an example of one, which is also the shape the library holds one to. */
+const EXAMPLE_ROLE = "arn:aws:iam::123456789012:role/uno-read";
 
 /** What stands for the region of a bucket the test could not place. */
 const UNKNOWN_REGION = "?";
@@ -151,13 +176,18 @@ export class ConnectForm {
   private readonly bucket = input("bucket");
   private readonly prefix = input("prefix");
   private readonly signIn = document.createElement("select");
+  private readonly roleArn = input("roleArn");
+  /** The role's row, shown while the role is the way chosen. */
+  private readonly roleRow: HTMLElement;
+  /** What the role has to trust, under its ARN, once the engine has said. */
+  private readonly trust = el("div", "trust");
   private readonly region = document.createElement("div");
   private readonly result = document.createElement("div");
   private readonly saving = document.createElement("div");
   private readonly tryButton = el("button", "");
   private readonly saveButton = el("button", "primary");
-  /** The profile names the engine last answered with, for the list to be drawn from again. */
-  private names: readonly string[] = [];
+  /** The ways of signing in the engine last answered with, for the list to be drawn from again. */
+  private offered: SignIns = PUBLIC_ONLY;
   private status: Status = { t: "untried" };
   /** Counts tries, so an answer for fields that have since changed is dropped. */
   private tries = 0;
@@ -189,6 +219,9 @@ export class ConnectForm {
     words.text(this.saveButton, m.connect_save);
     words.attr(this.signIn, "aria-label", m.connect_sign_in_aria);
     this.signIn.addEventListener("change", () => (this.picked = true));
+    words.attr(this.roleArn, "aria-label", m.connect_role_aria);
+    this.roleArn.placeholder = EXAMPLE_ROLE;
+    this.roleRow = field(words, m.field_role, this.roleArn);
     this.region.className = "value";
     this.result.className = "result";
     this.result.setAttribute("role", "status");
@@ -206,7 +239,9 @@ export class ConnectForm {
       title,
       field(words, m.field_bucket, this.bucket),
       field(words, m.field_prefix, this.prefix),
-      field(words, m.field_profile, this.signIn),
+      field(words, m.field_sign_in, this.signIn),
+      this.roleRow,
+      this.trust,
       field(words, m.field_region, this.region),
       this.result,
       buttons,
@@ -238,28 +273,29 @@ export class ConnectForm {
   /** relabel writes the form again in the language the app is in now, as it stands. */
   relabel(): void {
     this.words.write();
-    this.options(this.names);
+    this.options(this.offered);
     this.paint();
   }
 
   /**
    * show opens the form, filled in with what the caller knows, and asks the
-   * engine for the profile names while the person types the bucket.
+   * engine how it signs in while the person types the bucket.
    */
   show(filled: Filled = {}): void {
     this.bucket.value = filled.bucket ?? "";
     this.prefix.value = filled.prefix ?? "";
+    this.roleArn.value = "";
     this.status = { t: "untried" };
     this.tries++;
     this.keeping = undefined;
     this.picked = false;
     this.el.hidden = false;
-    this.options([]);
+    this.options(PUBLIC_ONLY);
     this.paint();
-    void this.asks.profiles().then(
-      (names) => this.options(names),
-      // A machine with no ~/.aws still connects: as itself, or to a public bucket.
-      () => this.options([]),
+    void this.asks.signIns().then(
+      (offered) => this.options(offered),
+      // An engine that cannot say still reads a public bucket.
+      () => this.options(PUBLIC_ONLY),
     );
     (filled.bucket === undefined ? this.bucket : this.prefix).focus();
   }
@@ -273,10 +309,16 @@ export class ConnectForm {
   /** The fields as a connection, or the reason they are not one yet. */
   private draft(): Connection | string {
     const c = draftOf(
-      { bucket: this.bucket.value, prefix: this.prefix.value, signIn: this.signIn.value as SignIn },
+      {
+        bucket: this.bucket.value,
+        prefix: this.prefix.value,
+        signIn: this.signIn.value as SignIn,
+        roleArn: this.roleArn.value,
+      },
       this.asks.known(),
     );
     if (c.bucket === "") return m.connect_name_bucket();
+    if (c.auth.mode === "role" && c.auth.roleArn === "") return m.connect_name_role();
     try {
       validConnection(c);
     } catch (err) {
@@ -385,35 +427,46 @@ export class ConnectForm {
     this.paint();
   }
 
-  /** options fills the profile list: the machine's own chain, each profile, and public. */
-  private options(names: readonly string[]): void {
-    this.names = names;
+  /**
+   * options fills the sign-in list with what the engine offers, in its
+   * order: the machine's own chain, each profile, a role, public.
+   */
+  private options(offered: SignIns): void {
+    this.offered = offered;
     const was = this.signIn.value;
-    const choices: Array<[SignIn, string]> = [
-      ["machine", m.connect_sign_in_machine()],
-      ...names.map((n): [SignIn, string] => [`profile:${n}`, n]),
-      ["public", m.connect_sign_in_public()],
-    ];
+    const choices = offered.modes.flatMap((mode) => CHOICES[mode](offered));
     this.signIn.replaceChildren(...choices.map(([value, label]) => option(label, value)));
-    // A choice made before the names arrived is kept; otherwise `default` is
-    // what a person means when they did not say, where there is one.
+    // A choice made before the ways arrived is kept; otherwise `default` is
+    // what a person means when they did not say, where there is one, and the
+    // first way offered otherwise.
     const keep =
       this.picked && choices.some(([v]) => v === was)
         ? was
-        : names.includes("default")
+        : offered.profiles.includes("default")
           ? "profile:default"
-          : "machine";
+          : (choices[0]?.[0] ?? "public");
     this.signIn.value = keep;
-    // The names landing after a quick Test can move the choice to a profile
+    // The ways landing after a quick Test can move the choice to a profile
     // the test did not sign in with. A select moved is a field changed, and
     // takes the test back the way typing in one does. Only while the form is
     // on screen: a save has stepped aside with its draft already taken, and
-    // the names landing then are not an edit of it.
+    // the ways landing then are not an edit of it.
     if (this.open && this.signIn.value !== was) this.edited();
+    else this.paint();
   }
 
   private paint(): void {
     const s = this.status;
+    // The role's ARN is asked for while the role is the way chosen, and what
+    // the role has to trust is said under it once the engine has said.
+    const role = this.signIn.value === "role";
+    this.roleRow.hidden = !role;
+    const trust = this.offered.trust;
+    this.trust.hidden = !role || trust === undefined;
+    this.trust.textContent =
+      trust === undefined
+        ? ""
+        : m.connect_trust({ principal: trust.principal, externalId: trust.externalId });
     this.region.textContent =
       s.t === "tried"
         ? m.connect_region_detected({ region: s.tried.connection.region ?? UNKNOWN_REGION })
@@ -432,10 +485,15 @@ export class ConnectForm {
     this.tryButton.disabled = s.t === "trying";
     this.saveButton.disabled = s.t === "trying";
 
-    // Where it will go, once there is a bucket to name the file after.
+    // Where it will go, once there is a bucket to name the file after, and
+    // what the file holds of the way it signs in: a name or an ARN, never a key.
     const draft = this.draft();
-    this.saving.textContent =
+    const where =
       typeof draft === "string" ? m.connect_saving_each() : m.connect_saving_as({ id: draft.id });
+    const keys = this.offered.modes.includes("role")
+      ? m.connect_keys_role()
+      : m.connect_keys_profiles();
+    this.saving.textContent = `${where} ${keys}`;
   }
 }
 
