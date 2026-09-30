@@ -1,11 +1,12 @@
-/* The panel: the column on the right of the grid, under the end of the
- * window's top line, its head, the filter under it, and the sections as one virtualised list. `--panel-row-h` is set by panel.ts, which
- * does arithmetic with it. */
+/* The sources panel: the column on the right of the grid, with its head, the
+ * filter, and the sections as one virtualised list. `--panel-row-h` is set
+ * by panel.ts. */
 
-/* `min-width: 0`, or the peek's table, as wide as the file's header, would
- * widen the column and push the grid over every time a file is picked. */
+/* `min-width: 0`, or a wide peek table would widen the column and push the
+ * grid over. */
 .panel {
-  /* Above the scrim base.css lays over the workspace while the keys are here. */
+  /* Above the scrim base.css puts over the workspace while the panel has
+   * focus. */
   position: relative;
   z-index: 2;
   flex: 1 1 auto;
@@ -21,8 +22,7 @@
   animation: panel-in var(--panel-in) ease-out;
 }
 
-/* The panel comes in from the edge it sits on. The grid has given up the
- * width already, so nothing is laid out again while it moves. */
+/* The panel slides in from the right edge. */
 @keyframes panel-in {
   from {
     transform: translateX(100%);
@@ -35,7 +35,7 @@
   }
 }
 
-/* The head is in line with the filter and the list under it. */
+/* The head aligns with the filter and the list. */
 .panel-head {
   padding: 0 12px;
 }
@@ -135,8 +135,7 @@
   cursor: default;
 }
 
-/* The line the keys are on. Quiet while the keys are somewhere else, so it
- * still says where they will land. */
+/* The focused line. Muted until the list has focus. */
 .panel-row.sel {
   background: var(--rule-2);
 }
@@ -150,8 +149,7 @@
   color: var(--accent);
 }
 
-/* A file in the selection, and one nothing reads, which is listed but cannot
- * be picked. */
+/* A file in the selection, and a file of a kind the panel leaves unpicked. */
 .panel-row.picked {
   color: var(--accent);
 }
@@ -165,8 +163,8 @@
   cursor: default;
 }
 
-/* The front of the one picked file. Its own scroller, so a wide header does
- * not push the list sideways. */
+/* The first rows of the picked file. Its own scroller, so a wide header
+ * scrolls inside it and the list keeps its width. */
 .panel-peek {
   flex: 0 0 auto;
   max-height: 40%;
@@ -235,8 +233,7 @@
   border-color: var(--accent);
 }
 
-/* Why a connection was refused, in the engine's own words: a sentence, so it
- * has a line of the foot to itself above the button that edits it. */
+/* Why a connection was refused: a full-width line above the edit button. */
 .panel-foot .why {
   flex: 1 0 100%;
   min-width: 0;
@@ -246,9 +243,8 @@
   color: var(--flag);
 }
 
-/* An offer to append what a tab's folder has gained: a sentence, so it has a
- * line of the foot to itself, above the tab's other buttons, and a folder
- * with a long name runs on to a second rather than being cut short. */
+/* The append offer: a full-width line above the tab's other buttons, which
+ * wraps onto more lines. */
 .panel-foot button.wide {
   flex: 1 0 100%;
   min-width: 0;
@@ -257,8 +253,7 @@
   color: var(--accent);
 }
 
-/* How files added as one are read: a line of the foot above the buttons,
- * which says whose choices they are and then each of them. */
+/* The join choices: a full-width line above the buttons. */
 .panel-foot .choices {
   flex: 1 0 100%;
   display: flex;
@@ -289,16 +284,14 @@
   cursor: pointer;
 }
 
-/* A tab whose file changed under the log, one the bucket holds a newer version
- * of, and one whose file is gone: flagged the way the tab's own mark is, amber
- * and then filled. */
+/* A tab whose file changed, has a newer version, is missing, or has no
+ * connection: flagged like the tab's own mark. */
 .panel-row.changed > :last-child,
 .panel-row.newer > :last-child,
 .panel-row.missing > :last-child,
 .panel-row.unconnected > :last-child,
 .panel-list:focus .panel-row.sel:is(.changed, .newer, .missing, .unconnected) > :last-child {
-  /* The state keeps its colour with the keys on its line, which is when it is
-   * being read. */
+  /* The state keeps its colour while the line is focused. */
   color: var(--flag);
 }
 
@@ -315,19 +308,18 @@
   color: var(--ink-3);
 }
 
-/* A tab of several files whose folder has gained more: news rather than
- * trouble, so it is said in the accent and wears no mark. */
+/* A multi-file tab whose folder has gained files: in the accent, with no
+ * mark. */
 .panel-row.grown > :last-child {
   color: var(--accent);
 }
 
-/* The line after the connections, which connects another. */
+/* The Connect line after the connections. */
 .panel-row.action > :first-child {
   color: var(--accent);
 }
 
-/* Connecting a bucket, in the list's place: labelled fields, what the test
- * found, and the buttons, in the panel's own type and rules. */
+/* The connect form, in the list's place. */
 .panel-connect {
   flex: 1 1 auto;
   min-height: 0;
@@ -390,8 +382,8 @@
   color: var(--ink);
 }
 
-/* What a role has to trust, under its ARN: a principal and an external ID a
- * person copies into a policy, so the text is theirs to select. */
+/* What a role has to trust: a principal and an external ID to copy into a
+ * policy, so the text is selectable. */
 .panel-connect .trust {
   color: var(--ink-2);
   line-height: 1.45;
@@ -403,8 +395,8 @@
   display: none;
 }
 
-/* What the test said: nothing until it runs, then a line that is either the
- * folder's count or the reason nothing will be saved. */
+/* The test's result: empty until it runs, then the folder's count or the
+ * refusal. */
 .panel-connect .result {
   min-height: 1.5em;
   padding: 6px 8px;

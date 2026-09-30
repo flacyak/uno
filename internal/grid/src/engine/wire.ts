@@ -1,54 +1,44 @@
-// The engine's messages as the frames of a web socket.
+// Encoding of engine messages as web socket frames.
 //
-// A MessagePort carries a message by structured clone, so a Date, a Map, a
-// Uint8Array and a Blob arrive as what they were. A web socket carries text and
-// bytes, so the same messages are written down here: a message that is plain
-// data is one text frame of JSON, and one holding bytes is one binary frame,
-// the JSON first and the bytes after it, untouched.
+// A message made of JSON values is one text frame of JSON. A message holding
+// Uint8Array or Blob values is one binary frame: a 4-byte length, a JSON
+// envelope, then the bytes in order. One message is one frame, so each
+// frame is decoded on its own.
 //
-// One message is one frame either way, so nothing here keeps state between
-// frames and the order a socket promises is the order the messages have.
+// Dates, Maps, undefined, and non-finite numbers are tagged in the JSON so
+// they round-trip. Bytes ride beside the JSON, so a browser can send a
+// dropped file as a Blob and leave the socket to read it.
 //
-// The bytes ride beside the JSON rather than inside it as base64, which is
-// what lets a browser send a dropped file without reading it: the frame is a
-// Blob made of the header and the file, and the browser streams it.
-//
-// This file reads nothing and opens nothing: a socket is made by the platform
-// and handed in, the way a handler is, so the core still reaches no network.
-// Both ends import it, a page and a Node process, so it uses what both have
-// and no more.
+// This file is encoding only, so both a page and a Node process import it.
 
 import { formatBytes, messageOf } from "./protocol.ts";
 import type { MessagePortLike, Reply } from "./protocol.ts";
 import { WHOLE_LIMIT } from "./workspace.ts";
 
 /**
- * One frame: text, or the pieces of a binary one in order. The sender joins
- * the pieces the way its runtime does it best, a Blob of them in a page and
- * one buffer in Node.
+ * One frame: a text string, or the pieces of a binary frame in order. The
+ * sender joins the pieces: a Blob in a page, one buffer in Node.
  */
 export type Frame = string | Array<Uint8Array<ArrayBuffer> | Blob>;
 
-/** What a frame's JSON is allowed beside the bytes it carries. */
+/** Bytes allowed for a frame's JSON on top of the bytes it carries. */
 const HEADER_ALLOWANCE = 1 << 20;
 
 /**
- * The most one frame may weigh. It is a workspace read whole, which is the
- * largest thing anybody sends an engine: a .uno, or a file that has no path
- * and so has to be carried in one. Anything larger has an address, and is
- * opened by it.
+ * The largest frame accepted: a whole .uno or carried file, plus the JSON
+ * header.
  */
 export const FRAME_LIMIT = WHOLE_LIMIT + HEADER_ALLOWANCE;
 
-/** The key a written-down value wears, saying what it was. */
+/** The key that marks a tagged value in the JSON. */
 const TAG = "$";
 
-/** How many bytes of a binary frame say how long its JSON is. */
+/** Bytes at the start of a binary frame holding the JSON length. */
 const LENGTH_BYTES = 4;
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
-/** What a binary frame's JSON holds: the message, and how long each run of bytes after it is. */
+/** A binary frame's JSON: the message, and the length of each byte run after it. */
 interface Envelope {
   sizes: number[];
   message: Json;
@@ -58,11 +48,8 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 /**
- * encode writes a message down as a frame.
- *
- * It refuses, by name, a value it has no way to write: a class instance or a
- * function in a message is a mistake at the sender, and it is said there
- * rather than arriving as an empty object at the other end.
+ * encode writes a message as a frame. It throws on a value outside the
+ * encoding, such as a class instance or a function.
  */
 export function encode(message: unknown): Frame {
   const attached: Array<Uint8Array<ArrayBuffer> | Blob> = [];
@@ -76,7 +63,7 @@ export function encode(message: unknown): Frame {
   return [length, head, ...attached];
 }
 
-/** Whether bytes sit in memory of their own, which is what a Blob can be made of. */
+/** Whether the array is over a plain ArrayBuffer, which a Blob can be made of. */
 function owned(bytes: Uint8Array): bytes is Uint8Array<ArrayBuffer> {
   return bytes.buffer instanceof ArrayBuffer;
 }
@@ -85,13 +72,12 @@ function sizeOf(part: Uint8Array | Blob): number {
   return part instanceof Uint8Array ? part.byteLength : part.size;
 }
 
-/** The most bytes UTF-8 spends on one UTF-16 code unit. */
+/** The most bytes UTF-8 uses for one UTF-16 code unit. */
 const UTF8_BYTES_PER_UNIT = 3;
 
 /**
- * frameBytes is how much a frame weighs on the wire, without joining it. Text
- * is weighed at the most its characters could come to, which is right for
- * asking whether it fits and costs nothing to work out.
+ * frameBytes returns a frame's size on the wire from its pieces. Text is
+ * sized at its maximum UTF-8 length.
  */
 export function frameBytes(frame: Frame): number {
   if (typeof frame === "string") return frame.length * UTF8_BYTES_PER_UNIT;
@@ -99,11 +85,8 @@ export function frameBytes(frame: Frame): number {
 }
 
 /**
- * decode reads a frame back into the message it was.
- *
- * A frame that is not one this file wrote is refused in a sentence. What comes
- * back is `unknown`: this knows how values are written down and nothing about
- * which messages there are, so the caller says what it expected.
+ * decode reads a frame back into a message. It throws on a malformed frame.
+ * The result is `unknown`; the caller checks the message's shape.
  */
 export function decode(frame: string | Uint8Array): unknown {
   if (typeof frame === "string") return read(parse(frame), []);
@@ -143,14 +126,14 @@ function parse(text: string): Json {
   }
 }
 
-/** write turns a value into JSON, moving its bytes into `attached` and leaving their place. */
+/** write turns a value into JSON. Bytes are moved into `attached` and replaced by an index. */
 function write(value: unknown, attached: Array<Uint8Array<ArrayBuffer> | Blob>): Json {
   switch (typeof value) {
     case "string":
     case "boolean":
       return value;
     case "number":
-      // JSON has no NaN and no infinity, and would write each as null.
+      // JSON holds only finite numbers. NaN and infinity are tagged to survive.
       return Number.isFinite(value) ? value : { [TAG]: "number", v: String(value) };
     case "undefined":
       return { [TAG]: "undefined" };
@@ -172,8 +155,7 @@ function write(value: unknown, attached: Array<Uint8Array<ArrayBuffer> | Blob>):
     };
   }
   if (value instanceof Uint8Array) {
-    // As it is, where it has memory of its own, which is every array an
-    // engine or a page makes. One over shared memory is copied out of it.
+    // An array over a SharedArrayBuffer is copied to a plain one.
     attached.push(owned(value) ? value : new Uint8Array(value));
     return { [TAG]: "bytes", i: attached.length - 1 };
   }
@@ -188,15 +170,15 @@ function write(value: unknown, attached: Array<Uint8Array<ArrayBuffer> | Blob>):
   }
   const out: { [key: string]: Json } = {};
   for (const [k, v] of Object.entries(value)) {
-    // An absent key and an undefined one read the same, and JSON keeps neither.
+    // Undefined fields are dropped, as JSON.stringify would.
     if (v !== undefined) out[k] = write(v, attached);
   }
-  // An object of somebody's own that happens to have the tag as a key is
-  // wrapped, so it is never read back as one of the kinds above.
+  // A plain object with the tag as a key is wrapped so it reads back as a
+  // plain object.
   return TAG in out ? { [TAG]: "object", v: out } : out;
 }
 
-/** read is write, backwards. */
+/** read is the inverse of write. */
 function read(json: Json, attached: readonly Uint8Array[]): unknown {
   if (json === null || typeof json !== "object") return json;
   if (Array.isArray(json)) return json.map((v) => read(v, attached));
@@ -225,8 +207,7 @@ function read(json: Json, attached: readonly Uint8Array[]): unknown {
       return bytesAt(json["i"], attached);
     case "blob": {
       const type = json["type"];
-      // Copied out of the frame, so the frame can be let go once the message
-      // has been read and the Blob is all that holds the file.
+      // Copied out of the frame, so the frame can be freed while the Blob lives.
       return new Blob([new Uint8Array(bytesAt(json["i"], attached))], {
         type: typeof type === "string" ? type : "",
       });
@@ -244,7 +225,7 @@ function read(json: Json, attached: readonly Uint8Array[]): unknown {
 function fields(json: { [key: string]: Json }, attached: readonly Uint8Array[]): unknown {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(json)) {
-    // Defined rather than assigned, so a key called __proto__ is a key.
+    // defineProperty, so a key called __proto__ is an own property.
     Object.defineProperty(out, k, {
       value: read(v, attached),
       enumerable: true,
@@ -265,20 +246,15 @@ function isRecord(value: unknown): value is { [key: string]: Json } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * trouble is something the socket has to say for itself, as the reply an
- * engine sends when a thing nobody asked about fails. It is a diagnostic as
- * written: a frame that cannot be read is not yet a sentence with a kind of
- * its own.
- */
+/** trouble builds an unnumbered error reply for a frame that failed to decode. */
 function trouble(text: string): Reply {
   return { t: "error", said: { t: "text", text } };
 }
 
-/** What a port's listener is told, by what it listens for. */
+/** The event type and listener pairs a port accepts. */
 type Listening = ["message", (e: { data: unknown }) => void] | ["close", () => void];
 
-/** The part of a browser's web socket this uses. The `ws` package's has it too. */
+/** The part of a browser web socket this uses. The `ws` package's has it too. */
 export interface WebSocketLike {
   binaryType: string;
   send(data: string | Blob): void;
@@ -288,16 +264,10 @@ export interface WebSocketLike {
 }
 
 /**
- * socketPort is an open web socket as the port a client talks to its engine
- * through, the shape a MessagePort has.
+ * socketPort wraps an open web socket as a MessagePortLike.
  *
- * `limit` is the most one message may weigh, which is the engine's to say: a
- * message over it is refused here, in a sentence, where sending it would have
- * the engine drop the connection and every tab with it.
- *
- * A socket that closes under the client closes the port, the way a
- * MessagePort closes when the process behind it goes, and the client says so
- * from there.
+ * `postMessage` throws if the encoded frame is over `limit` bytes. A socket
+ * close fires the port's close listeners.
  */
 export function socketPort(socket: WebSocketLike, limit = FRAME_LIMIT): MessagePortLike {
   const listeners: Array<(e: { data: unknown }) => void> = [];
@@ -340,7 +310,7 @@ export function socketPort(socket: WebSocketLike, limit = FRAME_LIMIT): MessageP
       socket.send(typeof frame === "string" ? frame : new Blob(frame));
     },
     addEventListener,
-    // A web socket has no queue to start: it delivers as soon as it is open.
+    // A web socket delivers from the moment it opens, so start returns at once.
     start: () => undefined,
     close() {
       if (closed) return;

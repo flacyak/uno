@@ -1,4 +1,4 @@
-// What sales-q3.csv holds, for the tests that read it.
+// Facts about sales-q3.csv, for the tests that read it.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -9,21 +9,18 @@ export const CHANNEL = 3;
 export const UNITS = 4;
 export const REVENUE = 5;
 
-/** Data rows, not counting the header. */
+/** Data rows below the header. */
 export const ROWS = 4812;
 export const COLS = 6;
 export const LAST_ROW = ROWS - 1;
 
 /**
- * What remove commas changes in units once rows 0, 2 and 4 are fixed by hand:
- * 3,152 cells wear a separator, less those three.
+ * Cells in units that still have a thousands separator after rows 0, 2 and 4
+ * are fixed by hand: 3,152 minus those three.
  */
 export const COMMAS_LEFT = 3149;
 
-// The file itself. It lives here rather than in the engine harness because the
-// stand-in S3 serves it too, and the desktop smoke run starts that stand-in
-// with plain node -- which strips types rather than compiling them, and cannot
-// take the parameter properties the engine is written with. Nothing above this
-// line needs an import, and now nothing below it does either.
+// Path and bytes of the file. This module is also loaded by the stand-in S3
+// under plain node, so it must stay free of TypeScript-only syntax.
 export const FIXTURE = fileURLToPath(new URL("./sales-q3.csv", import.meta.url));
 export const bytes = new Uint8Array(readFileSync(FIXTURE));

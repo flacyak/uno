@@ -1,6 +1,5 @@
-// The engine over several files read as one: a ref of parts opens like any
-// other ref, through the handler a platform lists for it, and the engine
-// indexes and pages the join the way it does any file.
+// Several files read as one through the engine: a ref of parts opens through
+// the multi provider, and the join is indexed and paged like any file.
 
 import { setImmediate as turn } from "node:timers/promises";
 
@@ -35,7 +34,7 @@ const PAGE = 500;
 /** How many rows a peek is compared over. */
 const PEEKED = 5;
 
-/** More than any source here would need a save to carry. */
+/** A save limit larger than any carried source here. */
 const ROOMY = 1 << 20;
 
 /** The fixture's three parts on disk, as one ref. */
@@ -53,7 +52,7 @@ test("the engine opens three parts as the one table the whole file is", async ()
     expect(src.opened.name).toBe(NAME);
     expect(src.progress).toMatchObject({ rows: ROWS, readable: ROWS, complete: true });
     expect(src.opened.columns).toEqual(sales.columns);
-    // Every row, which crosses both boundaries, blocks and chunks alike.
+    // Every row, across both part boundaries.
     for (let first = 0; first < ROWS; first += PAGE) {
       const { rows } = await src.rows(first, PAGE);
       expect(widened(rows), `rows from ${first}`).toEqual(sheetRows(sales, first, PAGE, "raw"));
@@ -63,8 +62,6 @@ test("the engine opens three parts as the one table the whole file is", async ()
   }
 });
 
-// A part is whatever one file can be, and the ref crosses the channel with a
-// Blob in it as it does with a path.
 test("a part on disk and parts dropped in open as one source", async () => {
   const { engine, done } = connect(TINY, multiProviders());
   try {
@@ -86,8 +83,6 @@ test("a part on disk and parts dropped in open as one source", async () => {
   }
 });
 
-// The task's own sentence: the platform decides, and a build without the
-// handler says which source it cannot open and what it is missing.
 test("an engine that does not list multiFiles refuses a ref of parts by name", async () => {
   const { engine, done } = connect(TINY);
   try {
@@ -128,8 +123,8 @@ test("a peek of parts shows the top of the join", async () => {
   }
 });
 
-// What a source of parts does not do yet, each refused in words and with the
-// source left as it was. Saving one is in multisave.test.ts.
+// Relinking to or from a source of parts is refused. Saving one is covered in
+// multisave.test.ts.
 test("a source of parts has no link, and is not re-pointed yet", async () => {
   const { engine, done } = connect(TINY, multiProviders());
   try {
@@ -145,7 +140,7 @@ test("a source of parts has no link, and is not re-pointed yet", async () => {
       `${NAME} is ${PARTS} files read as one, and sales-q3.csv is one file`,
     );
 
-    // Both are still what they were.
+    // Both sources are unchanged.
     expect(widened((await three.rows(0, PAGE)).rows)).toEqual(sheetRows(sales, 0, PAGE, "raw"));
     await engine.remove(three);
     expect(
@@ -156,7 +151,6 @@ test("a source of parts has no link, and is not re-pointed yet", async () => {
   }
 });
 
-// Parts named like a workspace are still parts.
 test("a ref of parts called .uno opens as a source", async () => {
   const { engine, done } = connect(TINY, multiProviders());
   try {
@@ -170,24 +164,21 @@ test("a ref of parts called .uno opens as a source", async () => {
 
 // ------------------------------------------------------------ closing
 
-/** The one byte an open reads at a part's end, to see whether it ends in a newline. */
+/** The one byte an open reads at a part's end to check for a newline. */
 const MEASURED = 1;
 
 /**
- * watched is the disk with every open and close of a file counted, and with
- * the index caught at the first boundary: the read that takes the first part
- * to its end is made, and handed back only once `release` is called. That
- * read is the first half of one the index asked of the join, whose second
- * half is the part after it.
+ * watched is the disk provider with every open and close recorded. The read
+ * that reaches the end of the first part is held until `release` is called.
  */
 function watched(): {
   provider: Provider;
-  /** The name of every file opened, in the order they were. */
+  /** Every file opened, in order. */
   opened: string[];
   closed: string[];
-  /** Resolves once the read at the boundary has been made and is being held. */
+  /** Resolves once the read at the boundary is held. */
   reached: Promise<void>;
-  /** Resolves once as many files have been closed as there are parts. */
+  /** Resolves once PARTS files have been closed. */
   shut: Promise<void>;
   release: () => void;
 } {
@@ -214,7 +205,7 @@ function watched(): {
         label: disk.files.label,
         handles: (ref) => disk.files.handles(ref),
         async open(ref) {
-          // Counted as it is asked for, which is before the disk answers.
+          // Recorded before the disk answers.
           opened.push(ref.name);
           const source = await disk.files.open(ref);
           return {
@@ -247,10 +238,8 @@ function watched(): {
   };
 }
 
-// The index asks for a chunk that runs from one part into the next, and the
-// source is closed while the first half is still on its way. The second half
-// is then a read after the close, and a part opened for it is a file nothing
-// closes.
+// The source is removed while a read spanning two parts is held. Every part
+// must be closed afterwards.
 test("a source of parts removed while it is indexing leaves no part open", async () => {
   const disk = watched();
   const single = [disk.provider, blobProvider()];
@@ -258,7 +247,7 @@ test("a source of parts removed while it is indexing leaves no part open", async
   const errors: string[] = [];
   engine.onError = (said) => errors.push(english(said));
   try {
-    // Bytes in hand, so every file the disk opens is a part.
+    // Opened as a blob, so every disk open is a part.
     const whole = await openOne(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
     const three = await openOne(engine, THREE);
     await disk.reached;
@@ -266,9 +255,9 @@ test("a source of parts removed while it is indexing leaves no part open", async
 
     await engine.remove(three);
     disk.release();
-    // Everything the held read sets off as it lands, an open included.
+    // Let the released read and anything it triggers run.
     await turn();
-    // And whatever the engine had to say about it has arrived before this.
+    // Any error from the engine arrives before this reply.
     await whole.rows(0, PEEKED);
 
     expect(disk.opened.toSorted(), "no part is opened again").toEqual(PART_NAMES);

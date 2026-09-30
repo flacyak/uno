@@ -10,15 +10,9 @@ import type { Binary, Node } from "./ast.ts";
 import { Formula } from "./ast.ts";
 
 /**
- * parse reads the text form.
- *
- * Everything an expression can be wrong about is decided here rather than at
- * evaluation: an unclosed bracket, a name that is not a name, an operator with
- * nothing to its right. A binding that survives parse fails per row or not at
- * all, which is what lets the editor preview row one and mean it.
- *
- * It throws where Go returns an error. Callers wrap the message the way the Go
- * ones wrap the error, so what reaches a person is unchanged.
+ * parse reads the text form into a Formula. It throws on any syntax error:
+ * an unclosed bracket, a bad name, a dangling operator, or unread text at
+ * the end.
  */
 export function parse(src: string): Formula {
   const p = new Parser(runes(src));
@@ -26,9 +20,8 @@ export function parse(src: string): Formula {
 }
 
 /**
- * precedence orders the four operators and nothing else. Reporting 0 for
- * anything that is not one is how the expression loop knows it has reached the
- * end of what it is allowed to eat.
+ * precedence is 1 for + and -, 2 for * and /, and 0 for anything else. 0
+ * ends the expression loop.
  */
 function precedence(r: string): number {
   if (r === "+" || r === "-") return 1;
@@ -45,13 +38,8 @@ function isIdentRune(r: string): boolean {
 }
 
 /**
- * Parser is a scanner over the text form: four operators and three kinds of
- * term.
- *
- * Lexing happens inside the parser rather than ahead of it. There are no
- * keywords and no lookahead past one character, so a token list would be a
- * second representation of the same string, and the character offsets an error
- * points at would have to be carried through it.
+ * Parser is a scanner over the text form. Lexing happens inline, straight
+ * from the runes.
  */
 class Parser extends Scanner {
   constructor(s: string[]) {
@@ -59,13 +47,9 @@ class Parser extends Scanner {
   }
 
   /**
-   * expr climbs precedence: it reads a term, then keeps taking operators at
-   * least as binding as min and recursing one level tighter for their
-   * right-hand side.
-   *
-   * Recursing at prec+1 is what makes every operator left-associative, so
-   * `a - b - c` groups the way arithmetic reads it rather than the way the
-   * recursion falls out.
+   * expr parses by precedence climbing: it reads a term, then takes
+   * operators with precedence at least `min`, parsing each right-hand side
+   * at `prec + 1`. That makes every operator left-associative.
    */
   expr(min: number): Node {
     let left = this.term();
@@ -84,10 +68,9 @@ class Parser extends Scanner {
   }
 
   /**
-   * term reads one operand, including any leading minuses. A minus binds
-   * tighter than every binary operator, so -a * b is (-a) * b -- which is the
-   * same number either way for these four operators, and the reading a person
-   * expects.
+   * term reads one operand with any leading minuses: a bracketed
+   * expression, a number or a column name. A minus binds tighter than every
+   * binary operator.
    */
   private term(): Node {
     if (this.accept("-")) {
@@ -111,10 +94,8 @@ class Parser extends Scanner {
   }
 
   /**
-   * number reads a decimal literal, and only a decimal one. It refuses the
-   * exponent, hexadecimal and infinity forms a general parser would otherwise
-   * accept, for the reason `num.isNumber` does: none of them is a thing a
-   * person writes into a spreadsheet, and each is a thing a typo can be read as.
+   * number reads a decimal literal: digits with an optional fraction, and
+   * that form only.
    */
   private number(): Node {
     const start = this.i;
@@ -139,13 +120,8 @@ class Parser extends Scanner {
   }
 
   /**
-   * ident reads a column name. Letters, digits and underscores, never starting
-   * with a digit, because a name that starts with a digit could not be told
-   * from the number beside it.
-   *
-   * Letter is Unicode's letter rather than an ASCII range: a header is as
-   * likely to be région as it is to be region, and a build that could not
-   * reference it would be refusing the data it was given.
+   * ident reads a column name: letters, digits and underscores. Letter is
+   * Unicode's letter, so a header like région is accepted.
    */
   private ident(): string {
     const start = this.i;
