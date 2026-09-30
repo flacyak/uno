@@ -29,6 +29,7 @@ import {
   topToScroller,
   visibleRange,
 } from "./metrics.ts";
+import { el } from "../shell/util.ts";
 import { columnLabel, unnamed } from "./rows.ts";
 import type { Cell, Rows } from "./rows.ts";
 
@@ -74,7 +75,7 @@ export class View {
   ) {
     this.scroller = el("div", "grid-scroll");
     this.sizer = el("div", "grid-sizer");
-    this.table = document.createElement("table");
+    this.table = el("table");
     this.table.className = "grid";
     this.head = this.table.createTHead();
     this.body = this.table.createTBody();
@@ -137,33 +138,30 @@ export class View {
     this.head.replaceChildren();
     if (this.source === undefined) return;
 
-    const tr = document.createElement("tr");
+    const tr = el("tr");
     tr.append(el("th", "gutter"));
 
     for (const [col, column] of this.source.columns.entries()) {
-      const th = document.createElement("th");
       const wrap = el("span", "colhead");
       // A blank header is named by its place, and dressed as a name the file
       // did not give, so it is not read as one a formula can use.
-      const name = el("span", unnamed(column.header) ? "colname unnamed" : "colname");
-      name.textContent = columnLabel(column.header, col);
-      wrap.append(name);
+      const cls = unnamed(column.header) ? "colname unnamed" : "colname";
+      wrap.append(el("span", cls, columnLabel(column.header, col)));
 
       // A column a formula computes says so, and what from.
       const binding = this.source.binding(col);
       if (binding !== undefined) {
-        const fx = el("span", "badge bound");
-        fx.textContent = "fx";
+        const fx = el("span", "badge bound", "fx");
         fx.title = `= ${binding}`;
         wrap.append(fx);
       }
 
-      const badge = el("span", column.flagged ? "badge flagged" : "badge");
-      badge.textContent = column.kind;
+      const badge = el("span", column.flagged ? "badge flagged" : "badge", column.kind);
       // The flag is the recogniser's opening: numeric data wearing a costume.
       if (column.flagged) badge.title = m.column_flagged_hint();
       wrap.append(badge);
 
+      const th = el("th");
       th.append(wrap);
       tr.append(th);
     }
@@ -215,9 +213,9 @@ export class View {
     // Grow or shrink the pool. This runs on a resize and on the first draw, and
     // not while scrolling.
     while (this.pool.length < visible) {
-      const tr = document.createElement("tr");
+      const tr = el("tr");
       tr.append(el("td", "gutter"));
-      for (let c = 0; c < source.cols(); c++) tr.append(document.createElement("td"));
+      for (let c = 0; c < source.cols(); c++) tr.append(el("td"));
       this.pool.push(tr);
       this.body.append(tr);
     }
@@ -409,12 +407,6 @@ function className(kind: Kind, selected: boolean): string {
   const numeric = kind === "num" ? "num" : "";
   if (selected) return numeric === "" ? "sel" : "num sel";
   return numeric;
-}
-
-function el(tag: string, className: string): HTMLElement {
-  const node = document.createElement(tag);
-  node.className = className;
-  return node;
 }
 
 /** The row height lives in the stylesheet, so the virtualiser asks for it

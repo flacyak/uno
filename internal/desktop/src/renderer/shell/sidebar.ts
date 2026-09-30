@@ -10,7 +10,7 @@ import { opening } from "../sources.ts";
 import type { Arriving } from "../sources.ts";
 import type { Tab, Workspace } from "../workspace.ts";
 import type { MenuPlace } from "./menu.ts";
-import { baseName, folderName } from "./util.ts";
+import { baseName, el, folderName } from "./util.ts";
 
 /** The extension a workspace's name is shown without. */
 const UNO = /\.uno$/i;
@@ -59,9 +59,7 @@ export function sidebarRows(
     rows.push(...w.sources.map((t) => tabFor(w, t, removable, act)));
     rows.push(...arriving.map(arrivingRow));
 
-    const add = document.createElement("div");
-    add.className = "tab-add";
-    add.textContent = m.sidebar_add_source();
+    const add = el("div", "tab-add", m.sidebar_add_source());
     add.title = m.sidebar_add_source_hint();
     add.setAttribute("role", "button");
     add.addEventListener("click", () => act.add(add));
@@ -70,12 +68,7 @@ export function sidebarRows(
   for (const path of recents) {
     if (path !== w?.path) rows.push(recentRow(path, act));
   }
-  if (rows.length === 0) {
-    const note = document.createElement("div");
-    note.className = "note";
-    note.textContent = m.no_workspaces();
-    rows.push(note);
-  }
+  if (rows.length === 0) rows.push(el("div", "note", m.no_workspaces()));
   return rows;
 }
 
@@ -85,14 +78,10 @@ export function sidebarRows(
  * not a tab: nothing that counts or selects the sources finds it.
  */
 function arrivingRow(a: Arriving): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "tab-opening";
+  const row = el("div", "tab-opening");
   row.title = `${a.name} · ${opening()}`;
   row.setAttribute("aria-busy", "true");
-  const name = document.createElement("span");
-  name.className = "name";
-  name.textContent = a.name;
-  row.append(name);
+  row.append(el("span", "name", a.name));
   return row;
 }
 
@@ -107,12 +96,7 @@ function openRow(w: Workspace, act: SidebarActions): HTMLElement {
     act,
   );
   row.classList.add("open");
-  if (w.dirty) {
-    const dot = document.createElement("span");
-    dot.className = "dirty";
-    dot.title = m.unsaved_changes();
-    row.append(dot);
-  }
+  if (w.dirty) row.append(dirty(m.unsaved_changes()));
   return row;
 }
 
@@ -133,19 +117,11 @@ function workspaceRow(
   path: string,
   act: SidebarActions,
 ): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "ws";
+  const row = el("div", "ws");
   row.dataset["path"] = path;
   row.title = title;
   row.setAttribute("role", "button");
-
-  const label = document.createElement("span");
-  label.className = "name";
-  label.textContent = name;
-  const beside = document.createElement("span");
-  beside.className = "meta";
-  beside.textContent = meta;
-  row.append(label, beside);
+  row.append(el("span", "name", name), el("span", "meta", meta));
 
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -155,16 +131,12 @@ function workspaceRow(
 }
 
 function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): HTMLElement {
-  const tab = document.createElement("div");
-  tab.className = t === w.active ? "tab active" : "tab";
+  const tab = el("div", t === w.active ? "tab active" : "tab");
   tab.dataset["source"] = t.id;
   // The name in a box of its own, so a name longer than the sidebar is cut
   // short rather than the marks beside it; the whole name is a hover away.
-  const name = document.createElement("span");
-  name.className = "name";
-  name.textContent = t.name;
   tab.title = t.name;
-  tab.append(name);
+  tab.append(el("span", "name", t.name));
   tab.addEventListener("click", () => act.select(t));
 
   // A source whose file is gone, or is not the file the log was written
@@ -174,9 +146,7 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
   // the panel on its line, where Reload reads the newer one.
   const trouble = t.trouble;
   if (trouble !== undefined || t.newer !== undefined) {
-    const mark = document.createElement("span");
-    mark.className = t.missing ? "trouble gone" : "trouble";
-    mark.textContent = "!";
+    const mark = el("span", t.missing ? "trouble gone" : "trouble", "!");
     mark.title =
       t.newer !== undefined && !t.missing
         ? `${m.newer_version()} · ${m.sidebar_open_line_hint()}`
@@ -189,17 +159,10 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
   }
 
   // The dot is what says this source has unsaved work.
-  if (w.unsaved(t)) {
-    const dot = document.createElement("span");
-    dot.className = "dirty";
-    dot.title = m.unsaved_edits();
-    tab.append(dot);
-  }
+  if (w.unsaved(t)) tab.append(dirty(m.unsaved_edits()));
 
   if (removable) {
-    const close = document.createElement("span");
-    close.className = "close";
-    close.textContent = "×";
+    const close = el("span", "close", "×");
     close.title = m.sidebar_remove_source({ name: t.name });
     close.addEventListener("click", (e) => {
       e.stopPropagation(); // removing is not selecting
@@ -208,4 +171,11 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
     tab.append(close);
   }
   return tab;
+}
+
+/** The dot that says something has unsaved work, with what a hover says it is. */
+function dirty(hint: string): HTMLElement {
+  const dot = el("span", "dirty");
+  dot.title = hint;
+  return dot;
 }
