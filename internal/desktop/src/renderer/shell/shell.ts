@@ -11,7 +11,7 @@
 // for it, or for its stylesheet.
 
 import { Engine, messagePort } from "@uno/grid/engine";
-import type { Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
+import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
 import { NO_ROW } from "@uno/grid/sheet";
 
 import { covers } from "@uno/grid/library";
@@ -176,27 +176,12 @@ export class Shell {
       this.sources,
       () => this.input.name,
       {
-        select: (id) => {
-          const tab = this.tabAt(id);
-          if (tab !== undefined) this.select(tab);
-        },
+        select: (id) => this.withTab(id, (tab) => this.select(tab)),
         add: (refs) => this.addSources([...refs]),
-        append: (id, files) => {
-          const tab = this.tabAt(id);
-          if (tab !== undefined) void this.append(tab, files);
-        },
-        reload: (id) => {
-          const tab = this.tabAt(id);
-          if (tab !== undefined) void this.reload(tab);
-        },
-        repoint: (id, ref) => {
-          const tab = this.tabAt(id);
-          if (tab !== undefined) void this.pointAt(tab, ref);
-        },
-        remove: (id) => {
-          const tab = this.tabAt(id);
-          if (tab !== undefined) void this.remove(tab);
-        },
+        append: (id, files) => this.withTab(id, (tab) => void this.append(tab, files)),
+        reload: (id) => this.withTab(id, (tab) => void this.reload(tab)),
+        repoint: (id, ref) => this.withTab(id, (tab) => void this.pointAt(tab, ref)),
+        remove: (id) => this.withTab(id, (tab) => void this.remove(tab)),
         closed: () => {
           this.paintTabs();
           this.paintStatus();
@@ -295,11 +280,7 @@ export class Shell {
     const w = this.workspace;
     if (w !== undefined) return Promise.resolve(w.engine);
     this.spare ??= this.host.connect().then(
-      (port) => {
-        const engine = new Engine(messagePort<Reply, Request>(port));
-        engine.onError = (heard) => this.say(say(heard), true);
-        return engine;
-      },
+      (port) => this.engineOn(port),
       (err: unknown) => {
         this.spare = undefined; // so the next ask tries again
         throw err;
@@ -656,10 +637,8 @@ export class Shell {
     try {
       // Before the engine, so a grid that fails to load leaves no engine running.
       const grid = await this.loadGrid();
-      const port = await this.host.connect();
-      engine = new Engine(messagePort<Reply, Request>(port));
+      engine = this.engineOn(await this.host.connect());
       let opened: Workspace | undefined;
-      engine.onError = (heard) => this.say(say(heard), true);
 
       const w = await Workspace.open(
         ref,
@@ -698,9 +677,7 @@ export class Shell {
       engine?.close();
       if (open === this.opens) this.say(message(err), true);
     }
-    this.paintTabs();
-    this.paintBanner();
-    this.paintStatus();
+    this.paintAll();
   }
 
   /** loadGrid fetches the grid and its stylesheet the first time a file opens. */
@@ -845,9 +822,7 @@ export class Shell {
 
     grid.show(w.rows, w.editable, true);
     grid.focus();
-    this.paintTabs();
-    this.paintBanner();
-    this.paintStatus();
+    this.paintAll();
   }
 
   // ------------------------------------------------------------------ tabs
@@ -927,9 +902,7 @@ export class Shell {
     const { workspace: w, grid } = on;
     grid.show(w.rows, w.editable);
     grid.moveTo(w.active.cell.row, w.active.cell.col);
-    this.paintTabs();
-    this.paintBanner();
-    this.paintStatus();
+    this.paintAll();
   }
 
   /**
@@ -952,9 +925,7 @@ export class Shell {
       if (this.workspace !== w) return;
       this.say(m.removed_name({ name: tab.name }));
       // Taking out the tab on screen puts its neighbour there.
-      if (showing) this.showActive();
-      else this.paintTabs();
-      this.paintStatus();
+      this.shown(showing);
     } catch (err) {
       this.say(message(err), true);
     }
@@ -1011,9 +982,7 @@ export class Shell {
           : (said?.(fresh) ??
               m.source_reads_from({ name: fresh.name, from: "path" in ref ? ref.path : ref.name })),
       );
-      if (w.active === fresh) this.showActive();
-      else this.paintTabs();
-      this.paintStatus();
+      this.shown(w.active === fresh);
     } catch (err) {
       this.say(message(err), true);
     }
@@ -1032,9 +1001,7 @@ export class Shell {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;
       this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
-      if (w.active === fresh) this.showActive();
-      else this.paintTabs();
-      this.paintStatus();
+      this.shown(w.active === fresh);
     } catch (err) {
       this.say(message(err), true);
     }
@@ -1127,9 +1094,7 @@ export class Shell {
     const on = this.showing();
     if (on?.workspace !== w) return;
     on.grid.refresh();
-    this.paintTabs();
-    this.paintBanner();
-    this.paintStatus();
+    this.paintAll();
   }
 
   // ---------------------------------------------------------------- saving
@@ -1141,11 +1106,7 @@ export class Shell {
    * asking twice.
    */
   save(): Promise<void> {
-    if (this.saving !== undefined) return this.saving;
-    const on = this.showing();
-    if (on === undefined) return Promise.resolve();
-    this.saving = this.write(on, on.workspace.path === "" ? undefined : on.workspace.path);
-    return this.saving;
+    return this.saveTo((w) => (w.path === "" ? undefined : w.path));
   }
 
   /**
@@ -1156,10 +1117,15 @@ export class Shell {
    * written depends on where it is going.
    */
   saveAs(): Promise<void> {
+    return this.saveTo(() => undefined);
+  }
+
+  /** saveTo is one save at a time, of the workspace showing, to the path `where` picks for it. */
+  private saveTo(where: (w: Workspace) => string | undefined): Promise<void> {
     if (this.saving !== undefined) return this.saving;
     const on = this.showing();
     if (on === undefined) return Promise.resolve();
-    this.saving = this.write(on, undefined);
+    this.saving = this.write(on, where(on.workspace));
     return this.saving;
   }
 
@@ -1248,6 +1214,34 @@ export class Shell {
     this.panel.relabel();
     // The header's hints, which the grid draws once for a file.
     this.grid?.refresh();
+    this.paintAll();
+  }
+
+  /** withTab does something to the tab an id names, where the workspace still has it. */
+  private withTab(id: string, act: (tab: Tab) => void): void {
+    const tab = this.tabAt(id);
+    if (tab !== undefined) act(tab);
+  }
+
+  /** engineOn is an engine over a port, with what it says unasked said in the status bar. */
+  private engineOn(port: MessagePortLike): Engine {
+    const engine = new Engine(messagePort<Reply, Request>(port));
+    engine.onError = (heard) => this.say(say(heard), true);
+    return engine;
+  }
+
+  /**
+   * shown repaints after a tab changed: the grid where it is the one showing,
+   * the sidebar where it is not, and the status bar either way.
+   */
+  private shown(showing: boolean): void {
+    if (showing) this.showActive();
+    else this.paintTabs();
+    this.paintStatus();
+  }
+
+  /** paintAll draws everything the shell paints: the sidebar, the banner and the status bar. */
+  private paintAll(): void {
     this.paintTabs();
     this.paintBanner();
     this.paintStatus();
