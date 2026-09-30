@@ -37,20 +37,6 @@ const SCRATCH = process.env["UNO_SMOKE"] ?? "";
  */
 const SAVED = join(SCRATCH, "sales-q3.uno");
 
-/**
- * A wait for something coming over the network.
- *
- * The PRELUDE's `until` is counted in frames, which is the right size for the
- * app catching up with itself and too small for a signed request, a bucket, and
- * 2,600 rows on the way back.
- */
-export const REMOTE = `
-  const arrives = async (ok) => {
-    for (let i = 0; i < 4; i++) if (await until(ok)) return true;
-    return false;
-  };
-`;
-
 export const SOURCES: Check[] = [
   {
     name: "one source has no × to remove it with",
@@ -156,7 +142,6 @@ export const SOURCES: Check[] = [
   {
     name: "the object in the bucket is added from the panel's filter, and its rows are drawn",
     script: `
-      ${REMOTE}
       const form = document.querySelector("#panel .panel-filter");
       if (form === null) return "the panel has no filter box";
       form.querySelector("input").value = ${JSON.stringify(OBJECT)};
@@ -190,7 +175,6 @@ export const SOURCES: Check[] = [
     // everything above. These values are only in the object.
     name: "the rows came out of the bucket, not from beside it",
     script: `
-      ${REMOTE}
       document.querySelector(".grid-scroll").scrollTop = 0;
       await frame();
       if (!(await arrives(() => document.querySelector("tbody tr:not(.pending)") !== null))) {
@@ -212,7 +196,6 @@ export const SOURCES: Check[] = [
     name: "the workspace saves, object and all",
     send: ["menu:save"],
     script: `
-      ${REMOTE}
       if (!(await arrives(() => text("#status-msg").startsWith("saved ")))) {
         return "saving says " + JSON.stringify(text("#status-msg"));
       }
@@ -235,7 +218,6 @@ export const SOURCES: Check[] = [
     send: ["menu:open-path", SAVED],
     shot: "meets-waiting",
     script: `
-      ${REMOTE}
       // A load that works clears the line the save left. One that fails puts
       // its reason there and leaves the old workspace showing -- which holds
       // the same two tabs, and would otherwise look exactly like a reopen.
@@ -258,15 +240,14 @@ export const SOURCES: Check[] = [
     name: "Connect on its line connects the object's folder, filled in, and the object comes back",
     shot: "meets-connected",
     script: `
-      ${REMOTE}
       await press("B", { ctrlKey: true, shiftKey: true });
       const line = () => [...document.querySelectorAll("#panel .panel-row.unconnected")][0];
       if (!(await arrives(() => line() !== undefined))) return "no line says it is not connected";
       if (line().children[1].textContent !== "not connected") return "the line says " + JSON.stringify(line().textContent);
       line().click();
-      const button = () => [...document.querySelectorAll("#panel .panel-foot button")].find((b) => b.textContent === "Connect acme-exports");
+      const button = () => footButton("Connect acme-exports");
       if (!(await until(() => button() !== undefined))) {
-        return "the line offers " + JSON.stringify([...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent));
+        return "the line offers " + JSON.stringify(foot());
       }
       button().click();
       const form = document.querySelector("#panel .panel-connect");
