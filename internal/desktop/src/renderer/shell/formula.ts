@@ -14,7 +14,7 @@ import "./formula.css";
 import { m } from "../../paraglide/messages.js";
 import { columnLabel } from "../grid/rows.ts";
 import type { MenuPlace } from "./menu.ts";
-import { message, walk } from "./util.ts";
+import { el, message, option, walk } from "./util.ts";
 
 /** A column the form offers, with the expression it is computed from already. */
 export interface FormulaColumn {
@@ -62,14 +62,11 @@ export class FormulaForm {
     this.box.setAttribute("aria-label", m.formula_title());
     this.box.noValidate = true;
 
-    const title = element("div", "title", m.formula_title_source({ source }));
+    const title = el("div", "title", m.formula_title_source({ source }));
 
     for (const [i, c] of columns.entries()) {
-      const option = document.createElement("option");
-      option.value = String(i);
       // A blank header is named by its place here as it is in the grid.
-      option.textContent = columnLabel(c.header, i);
-      this.column.append(option);
+      this.column.append(option(columnLabel(c.header, i), String(i)));
     }
     this.column.value = String(Math.min(Math.max(selected, 0), columns.length - 1));
     this.column.setAttribute("aria-label", m.formula_column());
@@ -82,14 +79,14 @@ export class FormulaForm {
     this.expr.setAttribute("aria-label", m.formula_expression_aria());
     this.expr.addEventListener("input", () => this.say(m.formula_hint(), false));
 
-    const cancel = element("button", "", m.action_cancel());
+    const cancel = el("button", "", m.action_cancel());
     cancel.type = "button";
     cancel.addEventListener("click", () => this.close());
     this.submit.type = "submit";
     this.submit.className = "primary";
     this.submit.textContent = m.action_insert();
 
-    const buttons = element("div", "buttons", "");
+    const buttons = el("div", "buttons");
     buttons.append(cancel, this.submit);
     this.box.append(
       title,
@@ -187,20 +184,9 @@ export class FormulaForm {
   }
 }
 
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  cls: string,
-  text: string,
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  if (cls !== "") el.className = cls;
-  el.textContent = text;
-  return el;
-}
-
 /** field is one line of the form: what the control is, and the control. */
 function field(name: string, control: HTMLElement): HTMLElement {
-  const line = element("label", "field", "");
-  line.append(element("span", "what", name), control);
+  const line = el("label", "field");
+  line.append(el("span", "what", name), control);
   return line;
 }
