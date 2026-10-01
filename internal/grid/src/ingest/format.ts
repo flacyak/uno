@@ -12,7 +12,8 @@
 import type { ByteSource } from "../store/index.ts";
 import { readAll } from "./csv.ts";
 import { RecordScanner, bomLength } from "./scan.ts";
-import { sniffDelimiter } from "./sniff.ts";
+import { sniffDelimiter, sniffEncoding } from "./sniff.ts";
+import type { Encoding } from "./sniff.ts";
 
 /** How much of the head is read first, to sniff and to find the header. */
 const PEEK = 64 << 10;
@@ -33,6 +34,13 @@ export interface Scanner {
 export interface Format {
   /** How the bytes were read, for the status bar to show verbatim. */
   readonly label: string;
+  /** The character between fields: sniffed, or a tab for a .tsv. */
+  readonly delimiter: string;
+  /**
+   * The text encoding the head of the file is in. Every file is decoded as
+   * UTF-8 whatever this says, so it is here for a caller to refuse on.
+   */
+  readonly encoding: Encoding;
   /** The header row. */
   readonly columns: string[];
   /** The offset of the first data record, or the file's size when there is none. */
@@ -52,6 +60,16 @@ export interface Format {
  * rules, same sniff, same errors.
  */
 export async function openFormat(name: string, src: ByteSource): Promise<Format> {
+  const format = await peekFormat(name, src);
+  if (format === undefined) throw new Error(`${name}: file is empty`);
+  return format;
+}
+
+/**
+ * peekFormat is `openFormat` for a caller that has a use for a file with no
+ * record in it: it answers undefined for one, where `openFormat` refuses it.
+ */
+export async function peekFormat(name: string, src: ByteSource): Promise<Format | undefined> {
   const ext = extensionOf(name);
   if (ext === ".json") throw new Error(`${name}: JSON is not supported yet`);
 
@@ -70,11 +88,13 @@ export async function openFormat(name: string, src: ByteSource): Promise<Format>
     want = Math.min(want * 2, src.size);
     head = await src.read(0, want);
   }
-  if (dataStart < 0) throw new Error(`${name}: file is empty`);
+  if (dataStart < 0) return undefined;
 
   const columns = headerOf(readAll(headDecoder.decode(head.subarray(0, dataStart)), comma)[0]!);
   return {
     label: describe(comma),
+    delimiter: comma,
+    encoding: sniffEncoding(head),
     columns,
     dataStart,
     scanner: (begin) => new RecordScanner(comma, begin),
@@ -145,4 +165,29 @@ export function extensionOf(name: string): string {
 export function describe(comma: string): string {
   if (comma === "\t") return "UTF-8 · tab-separated";
   return `UTF-8 · delimiter '${comma}'`;
+}
+
+/** What each delimiter worth guessing is called. */
+const DELIMITER_NAMES: ReadonlyMap<string, string> = new Map([
+  [",", "comma"],
+  ["\t", "tab"],
+  [";", "semicolon"],
+  ["|", "pipe"],
+]);
+
+/** delimiterName is a delimiter in a word, for a sentence about it. */
+export function delimiterName(comma: string): string {
+  return DELIMITER_NAMES.get(comma) ?? `'${comma}'`;
+}
+
+const ENCODING_NAMES: Readonly<Record<Encoding, string>> = {
+  "utf-8": "UTF-8",
+  "utf-16le": "UTF-16 little-endian",
+  "utf-16be": "UTF-16 big-endian",
+  other: "neither UTF-8 nor UTF-16",
+};
+
+/** encodingName is an encoding as a sentence about it says it. */
+export function encodingName(encoding: Encoding): string {
+  return ENCODING_NAMES[encoding];
 }

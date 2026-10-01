@@ -316,15 +316,16 @@ test("a later part read first is opened with the first part, and no other", asyn
   expect(m.opened.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[2]]);
 });
 
-// With no header row there is nothing of the first part to hold it to.
-test("with no header row, a later part read first is opened alone", async () => {
+// With no header row it is still held to the first part's delimiter, encoding
+// and number of columns.
+test("with no header row, a later part read first is opened with the first part too", async () => {
   const m = memory(fixtureFiles());
   const unmeasured = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
   const { extents } = await openMulti([memory(fixtureFiles()).handler], unmeasured, "none");
   const parts = unmeasured.map((part, i) => ({ ...part, extent: extents[i]! }));
   const source = await openMulti([m.handler], parts, "none");
   await source.read(source.map.spans[1]!.start, HEADER_BYTES);
-  expect(m.opened).toEqual([PART_NAMES[1]]);
+  expect(m.opened.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[1]]);
 });
 
 test("a virtual newline is read without opening the part it ends", async () => {
@@ -415,7 +416,7 @@ test("a part whose header is not the first part's is refused by name", async () 
   const { files, parts } = texts("a,b\n1,2\n", "a,b\n3,4\n", "a,c\n5,6\n");
   const m = memory(files);
   await expect(openMulti([m.handler], parts, "first")).rejects.toThrow(
-    "c.csv (part 3 of 3): its header is not the first part's",
+    'c.csv (part 3 of 3): column 2 is "c" where a.csv has "b"',
   );
   expect(m.closed.toSorted(), "and what it opened is closed").toEqual(m.opened.toSorted());
 });

@@ -1,6 +1,15 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { headerOf, openFormat, read } from "../../src/ingest/index.ts";
+import {
+  delimiterName,
+  encodingName,
+  headerOf,
+  openFormat,
+  peekFormat,
+  read,
+  sniffEncoding,
+} from "../../src/ingest/index.ts";
+import type { Encoding } from "../../src/ingest/index.ts";
 import { blobSource } from "../../src/store/index.ts";
 
 /** What ingest/format.ts reads of a file before it knows how long the header is. */
@@ -124,4 +133,84 @@ describe("headerOf names every column once", () => {
       expect(headerOf(header)).toEqual(want);
     });
   }
+});
+
+describe("openFormat says the delimiter and the encoding it found", () => {
+  const cases: Array<[string, string, string]> = [
+    ["f.csv", "a,b,c\n1,2,3\n", ","],
+    ["f.csv", "a;b;c\n1;2;3\n", ";"],
+    ["f.csv", "a|b|c\n1|2|3\n", "|"],
+    ["f.csv", "a\tb\tc\n1\t2\t3\n", "\t"],
+    ["f.tsv", "a,b\n1,2\n", "\t"],
+    ["f.csv", "one column\n1\n", ","],
+  ];
+
+  for (const [name, text, delimiter] of cases) {
+    test(`${name} ${JSON.stringify(text)}`, async () => {
+      const f = await open(name, text);
+      expect(f.delimiter).toBe(delimiter);
+      expect(f.encoding).toBe("utf-8");
+    });
+  }
+
+  test("a file that is not UTF-8", async () => {
+    const latin = Uint8Array.of(...encoder.encode("a,b\ncaf"), E_ACUTE_1252, LF);
+    const f = await openFormat("f.csv", blobSource(new Blob([latin])));
+    expect(f.encoding).toBe("other");
+  });
+});
+
+/** é in Windows-1252, one byte that is no UTF-8. */
+const E_ACUTE_1252 = 0xe9;
+const LF = 0x0a;
+
+describe("sniffEncoding reads the encoding off the head", () => {
+  const cases: Array<[string, number[], Encoding]> = [
+    ["nothing at all", [], "utf-8"],
+    ["plain ASCII", [...encoder.encode("a,b\n1,2\n")], "utf-8"],
+    ["UTF-8 past ASCII", [...encoder.encode("café,naïve\n")], "utf-8"],
+    ["UTF-8 with a byte order mark", [0xef, 0xbb, 0xbf, ...encoder.encode("a,b\n")], "utf-8"],
+    ["a UTF-16 mark, low byte first", [0xff, 0xfe, 0x61, 0x00], "utf-16le"],
+    ["a UTF-16 mark, high byte first", [0xfe, 0xff, 0x00, 0x61], "utf-16be"],
+    ["UTF-16 with no mark, low byte first", [0x61, 0x00, 0x2c, 0x00, 0x62, 0x00], "utf-16le"],
+    ["UTF-16 with no mark, high byte first", [0x00, 0x61, 0x00, 0x2c, 0x00, 0x62], "utf-16be"],
+    ["Windows-1252", [...encoder.encode("caf"), E_ACUTE_1252, LF], "other"],
+  ];
+
+  for (const [title, bytes, encoding] of cases) {
+    test(title, () => {
+      expect(sniffEncoding(Uint8Array.from(bytes))).toBe(encoding);
+    });
+  }
+
+  test("a character the head cuts in half is not held against it", () => {
+    const whole = encoder.encode("café");
+    expect(sniffEncoding(whole.subarray(0, whole.length - 1))).toBe("utf-8");
+  });
+});
+
+test("peekFormat answers undefined for a file with no record, where openFormat refuses it", async () => {
+  for (const text of ["", "\n\n", "\uFEFF"]) {
+    expect(await peekFormat("f.csv", blobSource(new Blob([text])))).toBeUndefined();
+    await expect(open("f.csv", text)).rejects.toThrow("f.csv: file is empty");
+  }
+  const f = await peekFormat("f.csv", blobSource(new Blob(["a,b\n"])));
+  expect(f?.columns).toEqual(["a", "b"]);
+});
+
+test("a delimiter and an encoding each have a name a sentence can use", () => {
+  expect([",", "\t", ";", "|", ":"].map(delimiterName)).toEqual([
+    "comma",
+    "tab",
+    "semicolon",
+    "pipe",
+    "':'",
+  ]);
+  const encodings: Encoding[] = ["utf-8", "utf-16le", "utf-16be", "other"];
+  expect(encodings.map(encodingName)).toEqual([
+    "UTF-8",
+    "UTF-16 little-endian",
+    "UTF-16 big-endian",
+    "neither UTF-8 nor UTF-16",
+  ]);
 });

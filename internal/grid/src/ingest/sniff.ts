@@ -76,3 +76,53 @@ function fieldCount(lines: string[], sep: string): [number, boolean] {
   }
   return [want, want > 1];
 }
+
+/**
+ * Encoding is which text encoding a file's bytes are in. "other" is bytes
+ * that are neither UTF-8 nor UTF-16: Windows-1252, Latin-1, and the rest,
+ * which the bytes alone do not tell apart.
+ */
+export type Encoding = "utf-8" | "utf-16le" | "utf-16be" | "other";
+
+const NUL = 0x00;
+
+/** The two bytes UTF-16 opens with, in the order each byte order writes them. */
+const UTF16_MARK_LOW = 0xff;
+const UTF16_MARK_HIGH = 0xfe;
+
+/** How many bytes a UTF-16 code unit is. */
+const UTF16_UNIT_BYTES = 2;
+
+/**
+ * sniffEncoding guesses the encoding from the head of a file.
+ *
+ * A UTF-16 byte order mark settles it. Without one, a NUL settles it too: no
+ * UTF-8 table has one, and UTF-16 has one in every character of plain ASCII,
+ * second in each pair when it is little-endian and first when it is big.
+ * What is left is UTF-8 if it decodes as UTF-8. A UTF-8 byte order mark makes
+ * no difference: with it or without, the encoding is UTF-8.
+ *
+ * It answers for the head alone. A file that is plain ASCII as far as the
+ * head goes reads as UTF-8, which it is so far.
+ */
+export function sniffEncoding(head: Uint8Array): Encoding {
+  if (head[0] === UTF16_MARK_LOW && head[1] === UTF16_MARK_HIGH) return "utf-16le";
+  if (head[0] === UTF16_MARK_HIGH && head[1] === UTF16_MARK_LOW) return "utf-16be";
+
+  let first = 0;
+  let second = 0;
+  for (let i = 0; i < head.length; i++) {
+    if (head[i] !== NUL) continue;
+    if (i % UTF16_UNIT_BYTES === 0) first++;
+    else second++;
+  }
+  if (first + second > 0) return second >= first ? "utf-16le" : "utf-16be";
+
+  try {
+    // Streaming, so a character the head cuts in half is not held against it.
+    new TextDecoder("utf-8", { fatal: true }).decode(head, { stream: true });
+    return "utf-8";
+  } catch {
+    return "other";
+  }
+}
