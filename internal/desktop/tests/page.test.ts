@@ -20,9 +20,9 @@ beforeEach(() => {
 const text = (selector: string): string => document.querySelector(selector)?.textContent ?? "";
 
 test("the markup ships its elements without their words", () => {
-  // The dot, the + and the extensions are the same in every language, so they
+  // The dots, the + and the extensions are the same in every language, so they
   // are all the text the markup holds.
-  expect(document.body.textContent.replace(/\s+/g, " ").trim()).toBe("+ csv · tsv · uno ·");
+  expect(document.body.textContent.replace(/\s+/g, " ").trim()).toBe("+ csv · tsv · uno · ·");
 });
 
 test("labelPage writes the heads, the empty state and the switch", () => {
