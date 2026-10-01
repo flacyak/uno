@@ -39,12 +39,9 @@ export const MEETS: Check[] = [
       const connect = () => footButton("Connect open-data");
       if (!(await until(() => connect() !== undefined))) return "the line offers " + JSON.stringify(foot());
       connect().click();
-      const form = document.querySelector("#panel .panel-connect");
-      if (form.hidden) return "the form did not open";
-      const choose = form.querySelector("select");
-      choose.value = "public";
-      choose.dispatchEvent(new Event("change", { bubbles: true }));
-      [...form.querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
+      if (connectForm().hidden) return "the form did not open";
+      signInAs("public");
+      saveConnection();
 
       // The bucket lists, so the connection is kept, and the object is read at
       // once -- and is not there.
