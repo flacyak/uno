@@ -56,14 +56,28 @@ Each is one commit on the branch. Deltas are insertions and deletions over `src/
 14. grid node.ts envKeys, envRegion, readText, hold, fail, signed.
 15. grid multi partLabel and refuse; store/index readEach.
 16. desktop scripts: launch.js drive and rewrite; preview.js savedWorkspace, bucketConnection, freshDir. Smoke passes; edit and refresh stories roll.
+17. grid sheet/kind.ts: the date shapes are a table.
+18. grid library: each auth mode's block is read by one entry of a typed table.
+19. desktop main/files.ts: writeAtomic delegates to the node store's write.
+20. grid tests: harness everyRow and multiProviders.
+21. desktop tests: Kept stand-in and until in one place each.
+22. desktop tests: bucketEngine for the repoint and newer suites.
+23. grid tests: the two-profile machine fixture, tests/store/profiles.ts.
+24. grid said exports Sentences; the desktop's tables use it.
 
-Measured after step 16, against the baseline:
+Measured after step 24, against the baseline:
 
-| area                   | lines  | was    |
-| ---------------------- | ------ | ------ |
-| internal/grid/src      | 16905  | 16971  |
-| internal/desktop/src   | 13445  | 13697  |
-| all three with scripts | +2045 -2391 over 65 files |
+| area                 | lines  | was    |
+| -------------------- | ------ | ------ |
+| internal/grid/src    | 16902  | 16971  |
+| internal/desktop/src | 13427  | 13697  |
+| internal/grid/tests  | 20652  |        |
+| internal/desktop/tests | 7662 |        |
+| everything under internal | +2350 -2827 over 91 files, 25 commits |
+
+Tried and reverted: a key and radio helper for the main process menu and an override helper for the driven run's IPC handlers.
+tests/bridge.test.ts reads main/index.ts and counts the channel names written as literals beside `webContents.send` and `ipcMain.handle`, on purpose, so a helper that passes the channel through hides what that guard looks for.
+The same holds for a generic IPC invoke in the preload.
 
 A lesson from the deltas: a helper's doc comment costs lines. Keep a helper's comment to one line unless the why needs more.
 
@@ -71,9 +85,9 @@ A lesson from the deltas: a helper's doc comment costs lines. Keep a helper's co
 
 From the survey, not yet done, highest value first.
 
-- desktop renderer: text-field key guard shared by six handlers (~15, medium risk: the six differ in composing and preventDefault); frameOnce for the two next-frame redraws (~5); Theming and Language listener lists (~3).
-- desktop main/index.ts: menu item and radio helpers (~12). No unit test; the smoke run covers it.
+- desktop renderer: text-field key guard shared by six handlers (~15, medium risk: the six differ in composing and preventDefault, and the saving after the helper is a few lines); frameOnce for the two next-frame redraws (~5); Theming and Language listener lists (~3).
 - desktop smoke/vim-style.ts: the connection form filled three times across meets, sources and connections; the typed command repeated four times.
-- grid: telemetry kind table (~10, medium risk); sheet/kind.ts isDate as a table (~6); connection parseAuth profile and role as one rule (~12).
+- grid: telemetry's three switches over a kind as three small classes. Measured as line-neutral, so left as it is.
 - grid codec: field-table codec for sources (~25, medium risk: JSON key order must match the Go structs).
-- tests (28k lines) were left alone so far. Shared fixtures and helpers there are the next large pool, if a test's meaning is kept.
+- grid tests: a memory FileHandler stand-in in agree, multi and multifiles (each records something different, so a shared one needs hooks); standinProviders(b) for the three `providers` closures; a `listening(server)` for the three stand-in servers.
+- A scan for repeated windows (`python3` over the .ts files, four lines, two or more files) finds little left in src. The next pool is per-file repetition inside shell.ts, panel.ts and sources.ts, and the smoke checks' connection form and command typing.
