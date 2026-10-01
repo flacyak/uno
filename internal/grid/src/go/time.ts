@@ -10,7 +10,7 @@ export function nowTruncated(): Date {
  * truncated to the second: whole seconds only.
  */
 export function rfc3339(d: Date): string {
-  return d.toISOString().replace(/\.\d{3}Z$/, "Z");
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 // Go's zero time.Time: January 1 of year 1. Date.UTC reads a year under 100
@@ -36,7 +36,7 @@ export function isZeroTime(d: Date | undefined): boolean {
  * or zero time.
  */
 export function parseTime(s: string | undefined): Date | undefined {
-  if (s === undefined || s === "") return undefined;
+  if (s === undefined || s === '') return undefined;
   const d = new Date(s);
   return isZeroTime(d) ? undefined : d;
 }

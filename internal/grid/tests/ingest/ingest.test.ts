@@ -1,21 +1,21 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from 'vite-plus/test';
 
-import { read, readAll, sniffDelimiter } from "../../src/ingest/index.ts";
+import { read, readAll, sniffDelimiter } from '../../src/ingest/index.ts';
 
 /** Bytes the delimiter sniff looks at. */
 const PEEK = 64 << 10;
 
-describe("read sniffs the delimiter from the bytes", () => {
+describe('read sniffs the delimiter from the bytes', () => {
   const cases: Array<[string, string, string]> = [
-    ["comma", "a,b,c\n1,2,3\n", "UTF-8 · delimiter ','"],
-    ["semicolon", "a;b;c\n1;2;3\n", "UTF-8 · delimiter ';'"],
-    ["pipe", "a|b|c\n1|2|3\n", "UTF-8 · delimiter '|'"],
-    ["tab in a .csv", "a\tb\tc\n1\t2\t3\n", "UTF-8 · tab-separated"],
+    ['comma', 'a,b,c\n1,2,3\n', "UTF-8 · delimiter ','"],
+    ['semicolon', 'a;b;c\n1;2;3\n', "UTF-8 · delimiter ';'"],
+    ['pipe', 'a|b|c\n1|2|3\n', "UTF-8 · delimiter '|'"],
+    ['tab in a .csv', 'a\tb\tc\n1\t2\t3\n', 'UTF-8 · tab-separated'],
   ];
 
   for (const [name, body, wantSource] of cases) {
     test(name, () => {
-      const s = read("f.csv", body);
+      const s = read('f.csv', body);
       expect(s.cols()).toBe(3);
       expect(s.source).toBe(wantSource);
     });
@@ -23,33 +23,58 @@ describe("read sniffs the delimiter from the bytes", () => {
 });
 
 // A .tsv extension sets the delimiter to tab and skips the sniff.
-test("read trusts the .tsv extension", () => {
-  expect(read("f.tsv", "a\tb\n1\t2\n").cols()).toBe(2);
+test('read trusts the .tsv extension', () => {
+  expect(read('f.tsv', 'a\tb\n1\t2\n').cols()).toBe(2);
 });
 
 // The sniff counts delimiters outside quotes only.
-test("sniff ignores delimiters inside quotes", () => {
-  const s = read("f.csv", 'name,role\n"Okafor, Ada",lead\n"Iyer, Ben",eng\n');
+test('sniff ignores delimiters inside quotes', () => {
+  const s = read('f.csv', 'name,role\n"Okafor, Ada",lead\n"Iyer, Ben",eng\n');
   expect(s.cols()).toBe(2);
-  expect(s.raw(0, 0)).toBe("Okafor, Ada");
+  expect(s.raw(0, 0)).toBe('Okafor, Ada');
 });
 
 // A comma used as a decimal mark or after a surname is data when another
 // separator fits every line.
-describe("sniff reads a comma inside fields as data", () => {
+describe('sniff reads a comma inside fields as data', () => {
   const cases: Array<[string, string, string, string[]]> = [
-    ["decimals between semicolons", "1,5;2,5;3,5\n4,5;5,5;6,5\n", ";", ["1,5", "2,5", "3,5"]],
-    ["decimals and a name", "1,5;2,5;Müller\n3,5;4,5;Schmidt\n", ";", ["1,5", "2,5", "Müller"]],
-    ["a price and a name", "1,50;Apfel\n2,00;Birne\n", ";", ["1,50", "Apfel"]],
-    ["a surname and a name", "Müller, Hans;1,5\nSchmidt, Anna;2,5\n", ";", ["Müller, Hans", "1,5"]],
-    ["a surname between tabs", "Smith, John\t42\nDoe, Jane\t37\n", "\t", ["Smith, John", "42"]],
-    ["a surname between pipes", "Smith, John|42\nDoe, Jane|37\n", "|", ["Smith, John", "42"]],
+    [
+      'decimals between semicolons',
+      '1,5;2,5;3,5\n4,5;5,5;6,5\n',
+      ';',
+      ['1,5', '2,5', '3,5'],
+    ],
+    [
+      'decimals and a name',
+      '1,5;2,5;Müller\n3,5;4,5;Schmidt\n',
+      ';',
+      ['1,5', '2,5', 'Müller'],
+    ],
+    ['a price and a name', '1,50;Apfel\n2,00;Birne\n', ';', ['1,50', 'Apfel']],
+    [
+      'a surname and a name',
+      'Müller, Hans;1,5\nSchmidt, Anna;2,5\n',
+      ';',
+      ['Müller, Hans', '1,5'],
+    ],
+    [
+      'a surname between tabs',
+      'Smith, John\t42\nDoe, Jane\t37\n',
+      '\t',
+      ['Smith, John', '42'],
+    ],
+    [
+      'a surname between pipes',
+      'Smith, John|42\nDoe, Jane|37\n',
+      '|',
+      ['Smith, John', '42'],
+    ],
   ];
 
   for (const [name, body, delimiter, firstRow] of cases) {
     test(name, () => {
       expect(sniffDelimiter(body)).toBe(delimiter);
-      const s = read("f.csv", body, "none");
+      const s = read('f.csv', body, 'none');
       expect(s.cols()).toBe(firstRow.length);
       expect(firstRow.map((_, c) => s.raw(0, c))).toEqual(firstRow);
     });
@@ -57,52 +82,54 @@ describe("sniff reads a comma inside fields as data", () => {
 
   // When the comma is the only separator, a comma between digits is the
   // delimiter.
-  test("integers between commas are still columns", () => {
-    expect(sniffDelimiter("1,2,3\n4,5,6\n")).toBe(",");
+  test('integers between commas are still columns', () => {
+    expect(sniffDelimiter('1,2,3\n4,5,6\n')).toBe(',');
   });
 });
 
 // The sniff counts records, so a quoted cell with a line break is one
 // record.
-describe("sniff counts a quoted cell with a line break in it as one record", () => {
-  test("in the first few records", () => {
-    const s = read("f.csv", 'a;b\n1;"two\nlines"\n2;z\n');
+describe('sniff counts a quoted cell with a line break in it as one record', () => {
+  test('in the first few records', () => {
+    const s = read('f.csv', 'a;b\n1;"two\nlines"\n2;z\n');
     expect(s.cols()).toBe(2);
-    expect(s.raw(0, 1)).toBe("two\nlines");
+    expect(s.raw(0, 1)).toBe('two\nlines');
   });
 
   // A quoted cell still open at the end of the peek is left out of the count.
-  test("when the peek ends inside the cell", () => {
-    const tail = "\n2,3\n4,5\n6,7\n8,9";
-    const filler = "x".repeat(PEEK - tail.length);
+  test('when the peek ends inside the cell', () => {
+    const tail = '\n2,3\n4,5\n6,7\n8,9';
+    const filler = 'x'.repeat(PEEK - tail.length);
     const text = `a;b\n1;"${filler}${tail}"\n5;6\n`;
-    expect(sniffDelimiter(text)).toBe(";");
+    expect(sniffDelimiter(text)).toBe(';');
   });
 });
 
-test("read pads ragged rows rather than rejecting the file", () => {
-  const s = read("f.csv", "a,b,c\n1,2,3\n4\n5,6,7\n");
+test('read pads ragged rows rather than rejecting the file', () => {
+  const s = read('f.csv', 'a,b,c\n1,2,3\n4\n5,6,7\n');
   expect(s.rows()).toBe(3);
-  expect(s.raw(1, 2)).toBe("");
+  expect(s.raw(1, 2)).toBe('');
 });
 
-test("read handles CRLF", () => {
-  expect(read("f.csv", "a,b\r\n1,2\r\n").raw(0, 1)).toBe("2");
+test('read handles CRLF', () => {
+  expect(read('f.csv', 'a,b\r\n1,2\r\n').raw(0, 1)).toBe('2');
 });
 
 // read strips a leading byte order mark from both string and byte input.
-test("read strips a byte order mark from a string as from bytes", () => {
-  const body = "\uFEFFname,role\nAda,lead\n";
-  const asString = read("f.csv", body);
-  const asBytes = read("f.csv", new TextEncoder().encode(body));
-  expect(asString.columns[0]!.header).toBe("name");
-  expect(asString.columns.map((c) => c.header)).toEqual(asBytes.columns.map((c) => c.header));
+test('read strips a byte order mark from a string as from bytes', () => {
+  const body = '\uFEFFname,role\nAda,lead\n';
+  const asString = read('f.csv', body);
+  const asBytes = read('f.csv', new TextEncoder().encode(body));
+  expect(asString.columns[0]!.header).toBe('name');
+  expect(asString.columns.map((c) => c.header)).toEqual(
+    asBytes.columns.map((c) => c.header),
+  );
 });
 
-describe("read names the file in every error", () => {
+describe('read names the file in every error', () => {
   const cases: Array<[string, string, string, string]> = [
-    ["empty file", "empty.csv", "", "file is empty"],
-    ["json", "data.json", "[]", "not supported yet"],
+    ['empty file', 'empty.csv', '', 'file is empty'],
+    ['json', 'data.json', '[]', 'not supported yet'],
   ];
 
   for (const [name, file, body, want] of cases) {
@@ -122,8 +149,8 @@ describe("read names the file in every error", () => {
 });
 
 // A header-only file is a sheet of zero rows.
-test("read accepts a header with no rows", () => {
-  const s = read("f.csv", "a,b,c\n");
+test('read accepts a header with no rows', () => {
+  const s = read('f.csv', 'a,b,c\n');
   expect(s.rows()).toBe(0);
   expect(s.cols()).toBe(3);
 });
@@ -131,57 +158,73 @@ test("read accepts a header with no rows", () => {
 // readAll follows Go's encoding/csv rules with LazyQuotes on.
 describe("the csv reader follows Go's rules", () => {
   const cases: Array<[string, string, string[][]]> = [
-    ["doubled quotes are one quote", 'a\n"say ""hi"""\n', [["a"], ['say "hi"']]],
     [
-      "a bare quote in an unquoted field is data",
+      'doubled quotes are one quote',
+      'a\n"say ""hi"""\n',
+      [['a'], ['say "hi"']],
+    ],
+    [
+      'a bare quote in an unquoted field is data',
       'a,b\n12",3\n',
       [
-        ["a", "b"],
-        ['12"', "3"],
+        ['a', 'b'],
+        ['12"', '3'],
       ],
     ],
-    ["a bare quote inside a quoted field is data", 'a\n"12"3"\n', [["a"], ['12"3']]],
     [
-      "a newline inside a quoted field",
+      'a bare quote inside a quoted field is data',
+      'a\n"12"3"\n',
+      [['a'], ['12"3']],
+    ],
+    [
+      'a newline inside a quoted field',
       'a,b\n"one\ntwo",3\n',
       [
-        ["a", "b"],
-        ["one\ntwo", "3"],
-      ],
-    ],
-    ["CRLF inside a quoted field becomes LF", 'a\n"one\r\ntwo"\n', [["a"], ["one\ntwo"]]],
-    [
-      "a blank line is spacing, not a row",
-      "a,b\n1,2\n\n3,4\n",
-      [
-        ["a", "b"],
-        ["1", "2"],
-        ["3", "4"],
+        ['a', 'b'],
+        ['one\ntwo', '3'],
       ],
     ],
     [
-      "no trailing newline",
-      "a,b\n1,2",
+      'CRLF inside a quoted field becomes LF',
+      'a\n"one\r\ntwo"\n',
+      [['a'], ['one\ntwo']],
+    ],
+    [
+      'a blank line is spacing, not a row',
+      'a,b\n1,2\n\n3,4\n',
       [
-        ["a", "b"],
-        ["1", "2"],
+        ['a', 'b'],
+        ['1', '2'],
+        ['3', '4'],
       ],
     ],
     [
-      "a trailing CR before end of file is dropped",
-      "a,b\n1,2\r",
+      'no trailing newline',
+      'a,b\n1,2',
       [
-        ["a", "b"],
-        ["1", "2"],
+        ['a', 'b'],
+        ['1', '2'],
       ],
     ],
-    ["an unterminated quoted field still reads", 'a\n"one\n', [["a"], ["one\n"]]],
-    ["empty fields are kept", "a,,c\n", [["a", "", "c"]]],
+    [
+      'a trailing CR before end of file is dropped',
+      'a,b\n1,2\r',
+      [
+        ['a', 'b'],
+        ['1', '2'],
+      ],
+    ],
+    [
+      'an unterminated quoted field still reads',
+      'a\n"one\n',
+      [['a'], ['one\n']],
+    ],
+    ['empty fields are kept', 'a,,c\n', [['a', '', 'c']]],
   ];
 
   for (const [name, body, want] of cases) {
     test(name, () => {
-      expect(readAll(body, ",")).toEqual(want);
+      expect(readAll(body, ',')).toEqual(want);
     });
   }
 });

@@ -4,18 +4,18 @@
 // log, and rows finished from both as they are read. The engine does the
 // same over a file, with the same Schema and the same pipeline.
 
-import type { Formula } from "../formula/index.ts";
-import { evaluate } from "../formula/index.ts";
-import type { Program } from "../program/index.ts";
-import { text as programText } from "../program/index.ts";
-import type { Edit } from "./edit.ts";
-import { NO_ROW, Op } from "./edit.ts";
-import type { Kind } from "./kind.ts";
-import { SAMPLE_ROWS, inferKind } from "./kind.ts";
-import type { Finished } from "./pipeline.ts";
-import { finish, finishRows, formatValue } from "./pipeline.ts";
-import { Schema } from "./schema.ts";
-import type { Written } from "./schema.ts";
+import type { Formula } from '../formula/index.ts';
+import { evaluate } from '../formula/index.ts';
+import type { Program } from '../program/index.ts';
+import { text as programText } from '../program/index.ts';
+import type { Edit } from './edit.ts';
+import { NO_ROW, Op } from './edit.ts';
+import type { Kind } from './kind.ts';
+import { SAMPLE_ROWS, inferKind } from './kind.ts';
+import type { Finished } from './pipeline.ts';
+import { finish, finishRows, formatValue } from './pipeline.ts';
+import { Schema } from './schema.ts';
+import type { Written } from './schema.ts';
 
 /** Column pairs a header with the kind inferred from its values. */
 export interface Column {
@@ -38,7 +38,7 @@ const FINISH_ROWS = 1024;
 export class Sheet {
   readonly columns: Column[];
   /** How `ingest` read these bytes, shown verbatim in the status bar. */
-  source = "";
+  source = '';
 
   private readonly rowData: readonly (readonly string[])[];
   private readonly schema: Schema;
@@ -60,7 +60,11 @@ export class Sheet {
   ) {
     this.rowData = rows;
     this.schema = new Schema(header, rows.length);
-    this.columns = header.map((h) => ({ header: h, kind: "text" as Kind, flagged: false }));
+    this.columns = header.map((h) => ({
+      header: h,
+      kind: 'text' as Kind,
+      flagged: false,
+    }));
     this.infer();
   }
 
@@ -76,8 +80,8 @@ export class Sheet {
    * raw returns what a cell stores. A cell outside the sheet is "".
    */
   raw(row: number, col: number): string {
-    if (col < 0) return "";
-    return this.row(row)?.raw[col] ?? "";
+    if (col < 0) return '';
+    return this.row(row)?.raw[col] ?? '';
   }
 
   /**
@@ -85,8 +89,8 @@ export class Sheet {
    * formula fills it in. A cell outside the sheet is "".
    */
   display(row: number, col: number): string {
-    if (col < 0) return "";
-    return this.row(row)?.shown[col] ?? "";
+    if (col < 0) return '';
+    return this.row(row)?.shown[col] ?? '';
   }
 
   /** written returns the last write into a cell, or undefined. */
@@ -103,7 +107,11 @@ export class Sheet {
     if (f !== undefined) return f;
 
     const first = row - (row % FINISH_ROWS);
-    const block = finishRows(this.schema, first, this.rowData.slice(first, first + FINISH_ROWS));
+    const block = finishRows(
+      this.schema,
+      first,
+      this.rowData.slice(first, first + FINISH_ROWS),
+    );
     for (let i = 0; i < block.length; i++) this.finished[first + i] = block[i];
     return block[row - first];
   }
@@ -114,14 +122,27 @@ export class Sheet {
    * set records a value typed into one cell.
    */
   set(row: number, col: number, v: string): void {
-    this.record({ seq: 0, op: Op.Set, row, col, was: this.raw(row, col), now: v });
+    this.record({
+      seq: 0,
+      op: Op.Set,
+      row,
+      col,
+      was: this.raw(row, col),
+      now: v,
+    });
   }
 
   /**
    * apply records a program run over every value in a column, as one edit.
    */
   apply(col: number, p: Program): void {
-    this.record({ seq: 0, op: Op.Apply, row: NO_ROW, col, now: programText(p) });
+    this.record({
+      seq: 0,
+      op: Op.Apply,
+      row: NO_ROW,
+      col,
+      now: programText(p),
+    });
   }
 
   /**
@@ -129,7 +150,14 @@ export class Sheet {
    * it describes are shown.
    */
   note(row: number, col: number, src: string): void {
-    this.record({ seq: 0, op: Op.Note, row, col, was: this.raw(row, col), now: src });
+    this.record({
+      seq: 0,
+      op: Op.Note,
+      row,
+      col,
+      was: this.raw(row, col),
+      now: src,
+    });
   }
 
   /**
@@ -147,13 +175,15 @@ export class Sheet {
    */
   unbind(col: number): void {
     if (col < 0 || col >= this.columns.length) {
-      throw new Error(`column ${col} is outside the ${this.columns.length} columns of this sheet`);
+      throw new Error(
+        `column ${col} is outside the ${this.columns.length} columns of this sheet`,
+      );
     }
     const was = this.binding(col);
     if (was === undefined) {
       throw new Error(`no formula is bound to ${this.columns[col]!.header}`);
     }
-    this.record({ seq: 0, op: Op.Unbind, row: NO_ROW, col, was, now: "" });
+    this.record({ seq: 0, op: Op.Unbind, row: NO_ROW, col, was, now: '' });
   }
 
   /** binding returns the text of the formula bound to a column, if any. */
@@ -237,7 +267,7 @@ export class Sheet {
       evaluate(f, {
         value: (name) => {
           const i = this.schema.indexOf(name);
-          return i === undefined ? undefined : (shown[i] ?? "");
+          return i === undefined ? undefined : (shown[i] ?? '');
         },
       }),
     );
@@ -251,7 +281,9 @@ export class Sheet {
   }
 
   private inferColumn(col: number): void {
-    const { kind, flagged } = inferKind(this.rowData.length, (row) => this.display(row, col));
+    const { kind, flagged } = inferKind(this.rowData.length, (row) =>
+      this.display(row, col),
+    );
     const c = this.columns[col]!;
     c.kind = kind;
     c.flagged = flagged;

@@ -16,7 +16,7 @@ export type Attributes = Readonly<Record<string, string>>;
  * histogram buckets. A count is added to a running total. A level keeps the
  * newest value.
  */
-export type Kind = "duration" | "count" | "level";
+export type Kind = 'duration' | 'count' | 'level';
 
 /** Measurement is one thing the engine, or its platform, measured. */
 export interface Measurement {
@@ -36,21 +36,22 @@ export type Telemetry = (m: Measurement) => void;
 export const unmeasured: Telemetry = () => undefined;
 
 /** How long a request took from arriving to its reply being posted. */
-export const REQUEST = "uno.engine.request";
+export const REQUEST = 'uno.engine.request';
 /**
  * How long a source took to index, from the open's start to the last row
  * counted: the time its final Progress reports.
  */
-export const INDEX = "uno.engine.index";
+export const INDEX = 'uno.engine.index';
 /** How many bytes a source that finished indexing holds. */
-export const INDEXED = "uno.engine.indexed";
+export const INDEXED = 'uno.engine.indexed';
 
-export const MILLISECONDS = "ms";
-export const BYTES = "By";
+export const MILLISECONDS = 'ms';
+export const BYTES = 'By';
 
 /** The upper bounds of the duration histogram buckets, in milliseconds. */
 export const DURATION_BOUNDS: readonly number[] = [
-  1, 2, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000, 60_000, 300_000,
+  1, 2, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000,
+  60_000, 300_000,
 ];
 
 /** The OTLP resource a platform's measurements are filed under. */
@@ -89,7 +90,12 @@ interface HistogramPoint extends Point {
 const CUMULATIVE = 2;
 
 type Data =
-  | { histogram: { dataPoints: HistogramPoint[]; aggregationTemporality: typeof CUMULATIVE } }
+  | {
+      histogram: {
+        dataPoints: HistogramPoint[];
+        aggregationTemporality: typeof CUMULATIVE;
+      };
+    }
   | {
       sum: {
         dataPoints: NumberPoint[];
@@ -110,7 +116,7 @@ export interface Payload {
 }
 
 /** The OTLP instrumentation scope name. */
-const SCOPE = "@uno/grid";
+const SCOPE = '@uno/grid';
 
 const NANOS_PER_MS = 1_000_000n;
 
@@ -127,9 +133,9 @@ function keyValues(attributes: Attributes | undefined): KeyValue[] {
 
 /** The running total of one series. */
 type Total =
-  | { kind: "duration"; count: number; sum: number; buckets: number[] }
-  | { kind: "count"; sum: number }
-  | { kind: "level"; value: number };
+  | { kind: 'duration'; count: number; sum: number; buckets: number[] }
+  | { kind: 'count'; sum: number }
+  | { kind: 'level'; value: number };
 
 interface Series {
   name: string;
@@ -140,29 +146,34 @@ interface Series {
 
 function begin(kind: Kind): Total {
   switch (kind) {
-    case "duration":
+    case 'duration':
       // One more bucket than bounds. The last holds values over every bound.
-      return { kind, count: 0, sum: 0, buckets: DURATION_BOUNDS.map(() => 0).concat(0) };
-    case "count":
+      return {
+        kind,
+        count: 0,
+        sum: 0,
+        buckets: DURATION_BOUNDS.map(() => 0).concat(0),
+      };
+    case 'count':
       return { kind, sum: 0 };
-    case "level":
+    case 'level':
       return { kind, value: 0 };
   }
 }
 
 function add(total: Total, value: number): void {
   switch (total.kind) {
-    case "duration": {
+    case 'duration': {
       const over = DURATION_BOUNDS.findIndex((bound) => value <= bound);
       total.buckets[over === -1 ? DURATION_BOUNDS.length : over]!++;
       total.count++;
       total.sum += value;
       return;
     }
-    case "count":
+    case 'count':
       total.sum += value;
       return;
-    case "level":
+    case 'level':
       total.value = value;
       return;
   }
@@ -215,10 +226,14 @@ export class Meter {
     for (const s of this.series.values()) {
       const at = { ...point, attributes: s.attributes };
       const key = JSON.stringify([s.name, s.total.kind]);
-      const metric = metrics.get(key) ?? { name: s.name, unit: s.unit, ...empty(s.total.kind) };
+      const metric = metrics.get(key) ?? {
+        name: s.name,
+        unit: s.unit,
+        ...empty(s.total.kind),
+      };
       metrics.set(key, metric);
 
-      if ("histogram" in metric && s.total.kind === "duration") {
+      if ('histogram' in metric && s.total.kind === 'duration') {
         metric.histogram.dataPoints.push({
           ...at,
           count: String(s.total.count),
@@ -226,9 +241,9 @@ export class Meter {
           bucketCounts: s.total.buckets.map(String),
           explicitBounds: [...DURATION_BOUNDS],
         });
-      } else if ("sum" in metric && s.total.kind === "count") {
+      } else if ('sum' in metric && s.total.kind === 'count') {
         metric.sum.dataPoints.push({ ...at, asDouble: s.total.sum });
-      } else if ("gauge" in metric && s.total.kind === "level") {
+      } else if ('gauge' in metric && s.total.kind === 'level') {
         metric.gauge.dataPoints.push({ ...at, asDouble: s.total.value });
       }
     }
@@ -239,10 +254,12 @@ export class Meter {
           resource: {
             attributes: keyValues({
               ...this.resource.attributes,
-              "service.name": this.resource.service,
+              'service.name': this.resource.service,
             }),
           },
-          scopeMetrics: [{ scope: { name: SCOPE }, metrics: [...metrics.values()] }],
+          scopeMetrics: [
+            { scope: { name: SCOPE }, metrics: [...metrics.values()] },
+          ],
         },
       ],
     };
@@ -251,38 +268,46 @@ export class Meter {
 
 function empty(kind: Kind): Data {
   switch (kind) {
-    case "duration":
-      return { histogram: { dataPoints: [], aggregationTemporality: CUMULATIVE } };
-    case "count":
-      return { sum: { dataPoints: [], aggregationTemporality: CUMULATIVE, isMonotonic: true } };
-    case "level":
+    case 'duration':
+      return {
+        histogram: { dataPoints: [], aggregationTemporality: CUMULATIVE },
+      };
+    case 'count':
+      return {
+        sum: {
+          dataPoints: [],
+          aggregationTemporality: CUMULATIVE,
+          isMonotonic: true,
+        },
+      };
+    case 'level':
       return { gauge: { dataPoints: [] } };
   }
 }
 
 /** The path appended to a general OTLP endpoint for metrics. */
-export const METRICS_PATH = "/v1/metrics";
+export const METRICS_PATH = '/v1/metrics';
 
 /** The standard OpenTelemetry variable for the collector endpoint. */
-export const ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_ENDPOINT";
+export const ENDPOINT_VARIABLE = 'OTEL_EXPORTER_OTLP_ENDPOINT';
 /** The standard OpenTelemetry variable for request headers. */
-export const HEADERS_VARIABLE = "OTEL_EXPORTER_OTLP_HEADERS";
+export const HEADERS_VARIABLE = 'OTEL_EXPORTER_OTLP_HEADERS';
 /** The standard OpenTelemetry variable for the wire protocol. */
-export const PROTOCOL_VARIABLE = "OTEL_EXPORTER_OTLP_PROTOCOL";
+export const PROTOCOL_VARIABLE = 'OTEL_EXPORTER_OTLP_PROTOCOL';
 
 /**
  * The metrics-specific variables. Each overrides its general one when set.
  * The metrics endpoint is used as-is, as the full URL of the collector.
  */
-export const METRICS_ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT";
-export const METRICS_HEADERS_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
-export const METRICS_PROTOCOL_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL";
+export const METRICS_ENDPOINT_VARIABLE = 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT';
+export const METRICS_HEADERS_VARIABLE = 'OTEL_EXPORTER_OTLP_METRICS_HEADERS';
+export const METRICS_PROTOCOL_VARIABLE = 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL';
 
 /**
  * The protocol settings accepted. Both mean OTLP over HTTP, where the
  * collector tells JSON from protobuf by content type. gRPC is refused.
  */
-const HTTP_PROTOCOLS: readonly string[] = ["http/json", "http/protobuf"];
+const HTTP_PROTOCOLS: readonly string[] = ['http/json', 'http/protobuf'];
 
 /** Quote characters stripped from a pasted value. */
 const QUOTES = ['"', "'"];
@@ -292,9 +317,11 @@ const QUOTES = ['"', "'"];
  * surrounding quotes, as left by copying a shell snippet.
  */
 function pasted(name: string, text: string | undefined): string {
-  let value = (text ?? "").trim();
+  let value = (text ?? '').trim();
   if (value.startsWith(`${name}=`)) value = value.slice(name.length + 1).trim();
-  const quote = QUOTES.find((q) => value.length > 1 && value.startsWith(q) && value.endsWith(q));
+  const quote = QUOTES.find(
+    (q) => value.length > 1 && value.startsWith(q) && value.endsWith(q),
+  );
   return quote === undefined ? value : value.slice(1, -1).trim();
 }
 
@@ -304,10 +331,12 @@ function pasted(name: string, text: string | undefined): string {
  */
 export function otlpHeaders(text: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const pair of pasted(HEADERS_VARIABLE, text).split(",")) {
-    const eq = pair.indexOf("=");
+  for (const pair of pasted(HEADERS_VARIABLE, text).split(',')) {
+    const eq = pair.indexOf('=');
     if (eq <= 0) continue;
-    out[pair.slice(0, eq).trim()] = decodeURIComponent(pair.slice(eq + 1).trim());
+    out[pair.slice(0, eq).trim()] = decodeURIComponent(
+      pair.slice(eq + 1).trim(),
+    );
   }
   return out;
 }
@@ -340,9 +369,9 @@ function setOf(
 ): { variable: string; value: string } {
   for (const variable of variables) {
     const value = pasted(variable, env[variable]);
-    if (value !== "") return { variable, value };
+    if (value !== '') return { variable, value };
   }
-  return { variable: variables[0]!, value: "" };
+  return { variable: variables[0]!, value: '' };
 }
 
 /**
@@ -354,19 +383,22 @@ function setOf(
 export function collector(
   env: Readonly<Record<string, string | undefined>>,
 ): Collector | undefined {
-  const { variable, value: endpoint } = setOf(env, [METRICS_ENDPOINT_VARIABLE, ENDPOINT_VARIABLE]);
-  if (endpoint === "") return undefined;
+  const { variable, value: endpoint } = setOf(env, [
+    METRICS_ENDPOINT_VARIABLE,
+    ENDPOINT_VARIABLE,
+  ]);
+  if (endpoint === '') return undefined;
 
   const url =
     variable === METRICS_ENDPOINT_VARIABLE
       ? endpoint
-      : `${endpoint.replace(/\/+$/, "")}${METRICS_PATH}`;
+      : `${endpoint.replace(/\/+$/, '')}${METRICS_PATH}`;
   if (!/^https?:\/\//i.test(endpoint) || !URL.canParse(url)) {
     throw new Error(`${variable} is not a URL · ${whyNot(endpoint)}`);
   }
 
   const protocol = setOf(env, [METRICS_PROTOCOL_VARIABLE, PROTOCOL_VARIABLE]);
-  if (protocol.value !== "" && !HTTP_PROTOCOLS.includes(protocol.value)) {
+  if (protocol.value !== '' && !HTTP_PROTOCOLS.includes(protocol.value)) {
     throw new Error(
       `${protocol.variable} is ${protocol.value}, and metrics are sent as OTLP over HTTP · set it to http/json or leave it unset`,
     );
@@ -374,7 +406,7 @@ export function collector(
 
   const given = setOf(env, [METRICS_HEADERS_VARIABLE, HEADERS_VARIABLE]);
   const headers = otlpHeaders(given.value);
-  if (given.value !== "" && Object.keys(headers).length === 0) {
+  if (given.value !== '' && Object.keys(headers).length === 0) {
     throw new Error(
       `${given.variable} holds no header · it is read as key=value pairs with commas between`,
     );
