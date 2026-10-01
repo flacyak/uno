@@ -1,6 +1,8 @@
 // Shared helpers for the engine tests: a client and `serve` joined by a real
 // MessageChannel, the fixture, and row comparisons against a Sheet.
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { Engine, english, messagePort, serve } from "../../src/engine/index.ts";
 import type {
   MessagePortLike,
@@ -56,6 +58,33 @@ export function connect(
     // Only the client's end is closed. Its close request is delivered to the
     // engine before the channel shuts, so the engine closes its own files.
     done: () => engine.close(),
+  };
+}
+
+/**
+ * slowed returns `provider` with `ms` added before every read, so an index
+ * over it spans several progress replies.
+ */
+export function slowed(provider: Provider, ms: number): Provider {
+  const { files } = provider;
+  return {
+    ...provider,
+    files: {
+      label: files.label,
+      handles: (ref) => files.handles(ref),
+      async open(ref) {
+        const source = await files.open(ref);
+        return {
+          size: source.size,
+          version: source.version,
+          async read(offset, length) {
+            await sleep(ms);
+            return source.read(offset, length);
+          },
+          close: () => source.close(),
+        };
+      },
+    },
   };
 }
 
