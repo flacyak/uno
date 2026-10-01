@@ -142,13 +142,13 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
   // A ! mark for a tab whose file is missing, changed under the log, or has a
   // newer version in its bucket. Clicking the mark opens the panel on the
   // tab. Clicking the tab itself still selects it.
-  const trouble = t.trouble;
-  if (trouble !== undefined || t.newer !== undefined) {
+  const state = t.state;
+  if (state !== "fine") {
     const mark = el("span", t.missing ? "trouble gone" : "trouble", "!");
     mark.title =
-      t.newer !== undefined && !t.missing
+      state === "newer"
         ? `${m.newer_version()} · ${m.sidebar_open_line_hint()}`
-        : `${trouble} · ${m.sidebar_point_hint()}`;
+        : `${t.trouble} · ${m.sidebar_point_hint()}`;
     mark.addEventListener("click", (e) => {
       e.stopPropagation();
       act.repoint(t);

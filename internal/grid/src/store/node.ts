@@ -13,7 +13,8 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
-import type { Connection } from "../library/index.ts";
+import { compareStrings, parseTime } from "../go/index.ts";
+import type { AuthMode, Connection } from "../library/index.ts";
 import { covering } from "../library/index.ts";
 import type { Provider } from "../plugin/index.ts";
 import { diskLister } from "./disklister.ts";
@@ -295,13 +296,13 @@ async function ssoSession(
   const cacheKey = named ?? startUrl!;
   const name = createHash("sha1").update(cacheKey).digest("hex") + ".json";
   const path = join(homeOf(env), ".aws", "sso", "cache", name);
-  const text = await readText(path, name);
+  const text = await readText(path);
   if (text === undefined) throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
   // A cache file that fails to parse is refused like a missing sign-in.
   const token = cachedToken(text);
   // Older CLIs wrote the time with a UTC suffix, where newer write Z.
-  const expires = new Date(String(token?.expiresAt).replace(/UTC$/, "Z"));
-  if (typeof token?.accessToken !== "string" || Number.isNaN(expires.getTime())) {
+  const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, "Z"));
+  if (typeof token?.accessToken !== "string" || expires === undefined) {
     throw new Error(signInAgain(profile, "its cached SSO sign-in could not be read"));
   }
   if (expires.getTime() <= Date.now()) {
@@ -468,12 +469,10 @@ async function processCredentials(profile: string, command: string): Promise<Pri
     out = run.stdout;
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stderr?: string; killed?: boolean };
-    const why =
-      e.code === "ENOENT"
-        ? `there is no program called ${program}`
-        : e.killed === true
-          ? `it did not answer within ${PROCESS_MS / 1000} seconds`
-          : (e.stderr?.trim().split("\n")[0] ?? "") || e.message;
+    let why: string;
+    if (e.code === "ENOENT") why = `there is no program called ${program}`;
+    else if (e.killed === true) why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
+    else why = (e.stderr?.trim().split("\n")[0] ?? "") || e.message;
     throw fail(`failed · ${why}`);
   }
 
@@ -494,10 +493,8 @@ async function processCredentials(profile: string, command: string): Promise<Pri
   const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
   if (typeof o["SessionToken"] === "string") printed.sessionToken = o["SessionToken"];
   if (typeof o["Expiration"] === "string") {
-    const at = new Date(o["Expiration"]);
-    if (Number.isNaN(at.getTime())) {
-      throw fail("printed an Expiration uno cannot read");
-    }
+    const at = parseTime(o["Expiration"]);
+    if (at === undefined) throw fail("printed an Expiration uno cannot read");
     printed.expiration = at;
   }
   return printed;
@@ -626,9 +623,8 @@ export async function awsProfiles(env: Env = process.env): Promise<string[]> {
     else if (section.startsWith("profile ")) names.add(section.slice("profile ".length).trim());
   }
   for (const section of files.credentials.keys()) names.add(section);
-  return [...names].toSorted((a, b) =>
-    a === "default" ? -1 : b === "default" ? 1 : a < b ? -1 : a > b ? 1 : 0,
-  );
+  const rest = [...names].filter((name) => name !== "default").sort(compareStrings);
+  return names.has("default") ? ["default", ...rest] : rest;
 }
 
 /**
@@ -642,6 +638,27 @@ export interface ConnectionAuth {
   /** How a request through `c` is signed. Refuses a mode this platform
    * lacks. */
   of(c: Connection): Promise<Signing>;
+  /** The modes `of` signs with, in the order to offer them. */
+  readonly modes: readonly AuthMode[];
+}
+
+/** who names a connection as its signing does: its name, or its id where it has none. */
+function who(c: Connection): string {
+  return c.name === "" ? c.id : c.name;
+}
+
+/** signed is `creds` in c's region where it names one, labelled with whose they are. */
+function signed(c: Connection, creds: AwsCredentials, through: string): Signing {
+  return { ...creds, region: c.region ?? creds.region, as: `${who(c)} (${through})` };
+}
+
+/** unsigned reads without signing in, in c's region where it names one. */
+function unsigned(c: Connection, env: Env): Signing {
+  return {
+    unsigned: true,
+    region: c.region ?? envRegion(env) ?? DEFAULT_REGION,
+    as: `${who(c)} (read without signing in)`,
+  };
 }
 
 /**
@@ -651,16 +668,9 @@ export interface ConnectionAuth {
 export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const machine = awsCredentials(env);
   const profiles = new Map<string, () => Promise<AwsCredentials>>();
-  const who = (c: Connection): string => (c.name === "" ? c.id : c.name);
-  /** signed is `creds` in c's region where it names one, labelled with whose
-   * they are. */
-  const signed = (c: Connection, creds: AwsCredentials, through: string): Signing => ({
-    ...creds,
-    region: c.region ?? creds.region,
-    as: `${who(c)} (${through})`,
-  });
 
   return {
+    modes: ["machine", "profile", "public"],
     machine,
     async of(c) {
       switch (c.auth.mode) {
@@ -676,11 +686,7 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
           return signed(c, await read(), `the AWS profile ${name}`);
         }
         case "public":
-          return {
-            unsigned: true,
-            region: c.region ?? envRegion(env) ?? DEFAULT_REGION,
-            as: `${who(c)} (read without signing in)`,
-          };
+          return unsigned(c, env);
         case "role":
           throw new Error(
             `${who(c)} signs in with a role, which only uno's hosted engine takes on · ` +
@@ -722,8 +728,8 @@ export interface HostedOptions {
 export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   const env = opts.env ?? process.env;
   const roles = new Map<string, () => Promise<AwsCredentials>>();
-  const who = (c: Connection): string => (c.name === "" ? c.id : c.name);
   return {
+    modes: ["role", "public"],
     machine() {
       return Promise.reject(
         new Error(
@@ -740,36 +746,23 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
           if (read === undefined) {
             read = cached(async () => {
               const source = await opts.base();
+              const region = c.region ?? source.region;
               const session = await assumeRole(
-                {
-                  roleArn,
-                  sessionName: opts.sessionName,
-                  externalId: opts.externalId,
-                  region: c.region ?? source.region,
-                },
+                { roleArn, sessionName: opts.sessionName, externalId: opts.externalId, region },
                 source,
                 { endpoint: opts.stsEndpoint ?? env["AWS_ENDPOINT_URL_STS"] },
               );
               return {
-                creds: { ...session, region: c.region ?? source.region },
+                creds: { ...session, region },
                 until: session.expiration.getTime() - EARLY_MS,
               };
             });
             roles.set(roleArn, read);
           }
-          const creds = await read();
-          return {
-            ...creds,
-            region: c.region ?? creds.region,
-            as: `${who(c)} (a role in your account)`,
-          };
+          return signed(c, await read(), "a role in your account");
         }
         case "public":
-          return {
-            unsigned: true,
-            region: c.region ?? envRegion(env) ?? DEFAULT_REGION,
-            as: `${who(c)} (read without signing in)`,
-          };
+          return unsigned(c, env);
         case "machine":
         case "profile":
           throw new Error(
@@ -799,9 +792,9 @@ export function connectionSigning(
 }
 
 /** readText is a file's text, or undefined for a missing file. */
-async function readText(path: string, name = basename(path)): Promise<string | undefined> {
+async function readText(path: string): Promise<string | undefined> {
   try {
-    return new TextDecoder().decode(await readAll([localFiles()], { name, path }));
+    return new TextDecoder().decode(await readAll([localFiles()], { name: basename(path), path }));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw err;

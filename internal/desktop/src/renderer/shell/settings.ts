@@ -18,7 +18,7 @@ import type { Language, LanguageChoice } from "../language.ts";
 import type { Connection } from "../sources.ts";
 import { APPEARANCES, THEMES } from "../theme.ts";
 import type { Appearance, Theming } from "../theme.ts";
-import { el, tabStep, walk } from "./util.ts";
+import { button, el, tabStep, walk } from "./util.ts";
 
 /** What the menu asks of the shell. */
 export interface SettingsAsks {
@@ -329,11 +329,10 @@ function segment<T extends string>(
   const section = heading(title);
   const seg = el("div", "seg");
   for (const c of choices) {
-    const button = el("button", c === on ? "on" : "", label(c));
-    button.setAttribute("aria-pressed", String(c === on));
-    button.dataset[key] = c;
-    button.addEventListener("click", () => choose(c));
-    seg.append(button);
+    const choice = button(c === on ? "on" : "", label(c), () => choose(c));
+    choice.setAttribute("aria-pressed", String(c === on));
+    choice.dataset[key] = c;
+    seg.append(choice);
   }
   section.append(seg);
   return section;

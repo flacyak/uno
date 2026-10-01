@@ -2,6 +2,8 @@
 // DisagreementError naming the part and what differs, whether found as the
 // source opens or by the first read that reaches the part.
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { describe, expect, test } from "vite-plus/test";
 
 import { bytesSource } from "../../src/store/index.ts";
@@ -480,7 +482,7 @@ test("when two parts disagree, the earlier one in the list is named, whichever o
   const slowSecond: FileHandler = {
     ...quick,
     async open(ref) {
-      if (ref.name === nameOf(1)) await new Promise((resolve) => setTimeout(resolve, SLOWER_MS));
+      if (ref.name === nameOf(1)) await sleep(SLOWER_MS);
       return quick.open(ref);
     },
   };

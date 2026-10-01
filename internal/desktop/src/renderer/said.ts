@@ -5,7 +5,7 @@
 // The table is typed over every kind, so a new kind fails to compile here
 // until it has a message. The `text` kind is passed through unchanged.
 
-import { Refusal } from "@uno/grid/engine";
+import { Refusal, messageOf } from "@uno/grid/engine";
 import type { CharName, Said, Sought, StepSaid } from "@uno/grid/engine";
 import { quote } from "@uno/grid/go";
 import type { Sentences } from "@uno/grid/said";
@@ -17,7 +17,7 @@ import { bytes, num } from "./locale.ts";
 /** Returns an error's message. A Refusal is translated into the app's locale. */
 export function said(err: unknown): string {
   if (err instanceof Refusal) return say(err.said);
-  return err instanceof Error ? err.message : String(err);
+  return messageOf(err);
 }
 
 /** The message function for each character name. Called at use so the current locale applies. */

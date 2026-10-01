@@ -8,7 +8,7 @@ import type { Offer } from "@uno/grid/engine";
 import { m } from "../../paraglide/messages.js";
 import { num } from "../locale.ts";
 import { say } from "../said.ts";
-import { el } from "./util.ts";
+import { button, el } from "./util.ts";
 
 /** offerKey identifies an offer by its source, column and program. */
 export function offerKey(offer: Offer): string {
@@ -29,10 +29,8 @@ export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void
   const parts = [say(offer.description), count];
   if (offer.ambiguous) parts.push(m.offer_ambiguous());
 
-  const applyButton = el("button", "primary", m.action_apply());
-  applyButton.addEventListener("click", apply);
-  const later = el("button", "", m.action_not_now());
-  later.addEventListener("click", dismiss);
+  const applyButton = button("primary", m.action_apply(), apply);
+  const later = button("", m.action_not_now(), dismiss);
 
   return [
     header,
