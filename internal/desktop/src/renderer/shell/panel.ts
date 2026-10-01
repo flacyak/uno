@@ -56,13 +56,13 @@ const ROW_H = 24;
  * The key for each thing a tab's line offers. Connect is the key a tab waiting
  * for its bucket has in Reload's place, since reloading it is not on offer.
  */
-const DOING_KEYS: Record<string, Doing> = {
-  r: "reload",
-  c: "connect",
-  p: "repoint",
-  a: "append",
-  Delete: "remove",
-};
+const DOING_KEYS: ReadonlyMap<string, Doing> = new Map([
+  ["r", "reload"],
+  ["c", "connect"],
+  ["p", "repoint"],
+  ["a", "append"],
+  ["Delete", "remove"],
+]);
 
 /** What each section is headed. */
 const TITLES: Record<Section, () => string> = {
@@ -146,14 +146,14 @@ export function rowOf(laid: readonly Span[], place: Place): number {
 }
 
 export class Panel {
-  private readonly input = document.createElement("input");
-  private readonly list = document.createElement("div");
-  private readonly sizer = document.createElement("div");
-  private readonly rows = document.createElement("div");
+  private readonly input = el("input");
+  private readonly list = el("div", "panel-list");
+  private readonly sizer = el("div", "panel-sizer");
+  private readonly rows = el("div", "panel-rows");
   /** The front of the one picked file, under the list. */
-  private readonly peek = document.createElement("div");
+  private readonly peek = el("div", "panel-peek");
   /** The buttons that add what is picked. */
-  private readonly foot = document.createElement("div");
+  private readonly foot = el("div", "panel-foot");
   /** What the peek and the buttons were last drawn from, so a scroll redraws neither. */
   private drawnPeek: Peeked | "reading" | undefined;
   private drawnFoot = "";
@@ -164,7 +164,7 @@ export class Panel {
   private laid: Span[] = [];
   private frame = 0;
   /** The filter box's form, hidden with the list while a bucket is being connected. */
-  private readonly filter = document.createElement("form");
+  private readonly filter = el("form", "panel-filter");
   /** Connecting a bucket, which takes the list's place while it is open. */
   private readonly connecting: ConnectForm;
 
@@ -179,13 +179,12 @@ export class Panel {
     root.style.setProperty("--panel-row-h", `${ROW_H}px`);
 
     const form = this.filter;
-    form.className = "panel-filter";
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
     // An object's address is added rather than filtered by, so the box says so.
     this.words.placeholder(this.input, m.panel_filter_placeholder);
     this.words.attr(this.input, "aria-label", m.panel_filter_aria);
-    const go = this.words.text(document.createElement("button"), m.action_filter);
+    const go = this.words.text(el("button"), m.action_filter);
     go.type = "submit";
     form.append(this.input, go);
     // Enter in the box and the button are one submit, and neither leaves the page.
@@ -202,19 +201,14 @@ export class Panel {
       }
     });
 
-    this.list.className = "panel-list";
     this.list.tabIndex = 0;
-    this.sizer.className = "panel-sizer";
-    this.rows.className = "panel-rows";
     this.sizer.append(this.rows);
     this.list.append(this.sizer);
     this.list.addEventListener("scroll", () => this.draw(), { passive: true });
     this.list.addEventListener("keydown", (e) => this.key(e));
     this.list.addEventListener("click", (e) => this.click(e));
 
-    this.peek.className = "panel-peek";
     this.peek.hidden = true;
-    this.foot.className = "panel-foot";
     this.foot.hidden = true;
 
     // A connection saved is browsed at once, from where it starts: saving one
@@ -393,49 +387,23 @@ export class Panel {
    */
   private key(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
-    const vim = this.keys() === "vim-style";
     const page = Math.max(1, Math.floor(this.list.clientHeight / ROW_H) - 1);
+    // The keys that move, and by how much: j and k only for someone reading them vim's way.
+    const steps = new Map([
+      ["ArrowDown", 1],
+      ["ArrowUp", -1],
+      ["PageDown", page],
+      ["PageUp", -page],
+    ]);
+    if (this.keys() === "vim-style") steps.set("j", 1).set("k", -1);
 
     switch (e.key) {
-      case "ArrowDown":
-        this.move(1);
-        break;
-      case "ArrowUp":
-        this.move(-1);
-        break;
-      case "PageDown":
-        this.move(page);
-        break;
-      case "PageUp":
-        this.move(-page);
-        break;
-      case "j":
-        if (!vim) return;
-        this.move(1);
-        break;
-      case "k":
-        if (!vim) return;
-        this.move(-1);
-        break;
       case "Enter":
         this.choose();
         break;
       case " ":
         this.pick();
         break;
-      // What can be done to a tab, from its line. Anywhere else there is no
-      // tab, and the key goes on as one the panel does not read.
-      case "r":
-      case "c":
-      case "p":
-      case "a":
-      case "Delete": {
-        const does = DOING_KEYS[e.key];
-        const action = this.sources.doings.find((a) => a.does === does);
-        if (action === undefined) return;
-        this.doing(action);
-        break;
-      }
       case "Backspace":
         void this.sources.up();
         break;
@@ -448,8 +416,19 @@ export class Panel {
         if (this.sources.repointing !== undefined) this.sources.stop();
         else this.hide();
         break;
-      default:
-        return;
+      default: {
+        const step = steps.get(e.key);
+        if (step !== undefined) {
+          this.move(step);
+          break;
+        }
+        // What can be done to a tab, from its line. Anywhere else there is no
+        // tab, and the key goes on as one the panel does not read.
+        const does = DOING_KEYS.get(e.key);
+        const action = this.sources.doings.find((a) => a.does === does);
+        if (does === undefined || action === undefined) return;
+        this.doing(action);
+      }
     }
     e.preventDefault();
     e.stopPropagation();
@@ -622,19 +601,16 @@ export class Panel {
 
   /** doing is one of a tab's buttons, or its key. Re-pointing starts in the browser. */
   private doing(a: TabAction): void {
-    switch (a.does) {
-      case "reload":
-        return this.act.reload(a.id);
-      case "remove":
-        return this.act.remove(a.id);
-      case "repoint":
-        return this.repoint(a.id);
-      case "connect":
-        return this.connectFor(a.id);
-      case "append":
-        return this.act.append(a.id, a.files ?? []);
-    }
+    this.doings[a.does](a);
   }
+
+  private readonly doings: Record<Doing, (a: TabAction) => void> = {
+    reload: (a) => this.act.reload(a.id),
+    remove: (a) => this.act.remove(a.id),
+    repoint: (a) => this.repoint(a.id),
+    connect: (a) => this.connectFor(a.id),
+    append: (a) => this.act.append(a.id, a.files ?? []),
+  };
 
   /**
    * connectFor opens the connect form for the bucket a tab reads that no
