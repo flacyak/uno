@@ -502,6 +502,101 @@ test("closing closes each part that was opened, and no other", async () => {
   expect(m.closed.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[2]]);
 });
 
+/** What a read of a source that was closed is refused with. */
+const CLOSED = "the source was closed";
+
+// A view that is closed while its index is still reading asks for bytes after
+// the close. A part opened for that read would have nobody left to close it.
+test("a read after close is refused, and opens nothing", async () => {
+  const parts = await measuredParts();
+  const m = memory(fixtureFiles());
+  const source = await openMulti([m.handler], parts, "first");
+  const [first, second, third] = source.map.spans;
+  await source.read(first!.start, HEADER_BYTES);
+  await source.close();
+
+  // A part that was open, one that never was, and a read across all three.
+  await expect(source.read(first!.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
+  await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
+  await expect(source.read(0, source.size)).rejects.toThrow(CLOSED);
+  await expect(source.versions()).rejects.toThrow(CLOSED);
+  expect(third!.end).toBe(source.size);
+  expect(m.opened, "nothing is opened for a read that is refused").toEqual([PART_NAMES[0]]);
+  expect(m.closed, "and nothing is left open").toEqual([PART_NAMES[0]]);
+
+  // Closed again, it is as closed as it was.
+  await source.close();
+  expect(m.closed).toEqual([PART_NAMES[0]]);
+});
+
+/**
+ * slow is `inner` with its opens held back: a part is opened when it is asked
+ * for, and handed over only once `release` is called.
+ */
+function slow(inner: FileHandler): {
+  handler: FileHandler;
+  /** Resolves once an open has been asked for and is being held. */
+  asked: Promise<void>;
+  release: () => void;
+} {
+  let ask: () => void = () => {};
+  let release: () => void = () => {};
+  const asked = new Promise<void>((resolve) => {
+    ask = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    handler: {
+      label: inner.label,
+      handles: (ref) => inner.handles(ref),
+      async open(ref) {
+        const source = await inner.open(ref);
+        ask();
+        await gate;
+        return source;
+      },
+    },
+    asked,
+    release,
+  };
+}
+
+test("a part whose open is in flight when the source closes is closed when it lands", async () => {
+  const parts = await measuredParts();
+  const m = memory(fixtureFiles());
+  const held = slow(m.handler);
+  const source = await openMulti([held.handler], parts, "first");
+  const reading = source.read(source.map.spans[0]!.start, HEADER_BYTES);
+  await held.asked;
+
+  const closing = source.close();
+  held.release();
+  await expect(reading).rejects.toThrow(CLOSED);
+  await closing;
+  expect(m.opened).toEqual([PART_NAMES[0]]);
+  expect(m.closed, "the open that landed after the close").toEqual([PART_NAMES[0]]);
+});
+
+// A later part is held to the first part's header, so its open asks for the
+// first part. Landing after the close, it must not open that one either.
+test("a later part landing after the close does not open the first part behind it", async () => {
+  const parts = await measuredParts();
+  const m = memory(fixtureFiles());
+  const held = slow(m.handler);
+  const source = await openMulti([held.handler], parts, "first");
+  const reading = source.read(source.map.spans[1]!.start, HEADER_BYTES);
+  await held.asked;
+
+  const closing = source.close();
+  held.release();
+  await expect(reading).rejects.toThrow(CLOSED);
+  await closing;
+  expect(m.opened).toEqual([PART_NAMES[1]]);
+  expect(m.closed).toEqual([PART_NAMES[1]]);
+});
+
 // Any handler, in any mix: a file on disk, an object in a bucket, and bytes
 // already in hand, as one table.
 const KEY = `2025/${PART_NAMES[1]}`;

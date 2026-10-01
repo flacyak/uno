@@ -186,8 +186,11 @@ export class View {
       },
     }).catch((err: unknown) => {
       v.fail(err);
-      // Before the open answers, the open fails with it instead.
-      if (started) port.post({ t: "error", source: id, message: `${name}: ${messageOf(err)}` });
+      // Before the open answers, the open fails with it instead. A view that
+      // was closed has nothing to report: its close is what cut the read short.
+      if (started && !v.abort.signal.aborted) {
+        port.post({ t: "error", source: id, message: `${name}: ${messageOf(err)}` });
+      }
     });
 
     try {
