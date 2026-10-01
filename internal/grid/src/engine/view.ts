@@ -7,6 +7,7 @@
 // no stored row is rewritten, and the rows a client asks for next come back
 // changed, wherever in the file they are.
 
+import type { HeldPart } from "../document/index.ts";
 import { trimSpace } from "../go/index.ts";
 import { openFormat } from "../ingest/index.ts";
 import type { Format } from "../ingest/index.ts";
@@ -25,7 +26,8 @@ import {
   valueAt,
 } from "../sheet/index.ts";
 import type { Edit, Written } from "../sheet/index.ts";
-import type { ByteSource, PartsRef } from "../store/index.ts";
+import { multiOf } from "../store/index.ts";
+import type { ByteSource, HeaderMode, PartsRef } from "../store/index.ts";
 import { indexPass } from "./pass.ts";
 import type {
   Changed,
@@ -66,19 +68,42 @@ export interface Carried {
 }
 
 /** What a save writes of one source: where its bytes are, its log, and the grid
- * they add up to. Exactly one of `raw` and `path` is set. */
-export interface Part {
+ * they add up to. The bytes are one file or several read as one, and `parts`
+ * is what says which. */
+export type Part = FilePart | JoinedPart;
+
+/** What a save writes of every source, whatever is behind it. */
+interface Kept {
+  /** The connection it was read through, as a hint for whoever opens the save. */
+  connection?: string;
+  edits: Edit[];
+  rows: number;
+  cols: number;
+}
+
+/** What a save writes of one file. Exactly one of `raw` and `path` is set. */
+export interface FilePart extends Kept {
   raw?: Uint8Array;
   path?: string;
   /** What the file measures, for a save that points at it rather than copying it. */
   bytes: number;
   /** Which bytes of the file were read, where the place it is in can say. */
   version?: string;
-  /** The connection it was read through, as a hint for whoever opens the save. */
-  connection?: string;
-  edits: Edit[];
-  rows: number;
-  cols: number;
+
+  parts?: never;
+  header?: never;
+}
+
+/** What a save writes of several files read as one: where each part is, which
+ * bytes of it were read, and how it sits in the join. */
+export interface JoinedPart extends Kept {
+  parts: HeldPart[];
+  header: HeaderMode;
+
+  raw?: never;
+  path?: never;
+  bytes?: never;
+  version?: never;
 }
 
 export class View {
@@ -616,17 +641,20 @@ export class View {
    * pointed-at source reports how far the index has got, and nothing replays
    * against that number, so a save never blocks on a scan of 30 GB.
    *
-   * Several files read as one are refused. They would be written as their
-   * parts, each pointed at, and a .uno has nowhere to put those yet: carrying
-   * the join in their place would save a different source from the one that
-   * is open.
+   * Several files read as one are written as their parts, each pointed at:
+   * carrying the join in their place would save a different source from the
+   * one that is open.
    */
   part(): Promise<Part> {
     return this.serially(async () => {
       if (this.parts !== undefined) {
-        throw new Error(
-          `${this.name} is ${this.parts.parts.length} files read as one, and a workspace cannot save one yet`,
-        );
+        return {
+          ...(await this.joined(this.parts)),
+          connection: this.connection,
+          edits: this.schema.edits(),
+          rows: this.index.complete ? this.index.counted : this.index.readable(),
+          cols: this.schema.headers.length,
+        };
       }
       const carry = this.path === "";
       if (carry) await this.until(() => this.index.complete);
@@ -641,6 +669,58 @@ export class View {
         cols: this.schema.headers.length,
       };
     });
+  }
+
+  /**
+   * joined is what a save writes of the parts this source was opened from:
+   * each part's path, the version it was read as, and the extent the join
+   * measured of it, which is what lets the next open place every part without
+   * opening one.
+   *
+   * Every part has to have a path. A part dropped into a browser has none, and
+   * the save is refused naming it: a .uno points at parts and has no way to
+   * carry one, and writing the others down without it would save a different
+   * table from the one that is open.
+   */
+  private async joined(ref: PartsRef): Promise<{ parts: HeldPart[]; header: HeaderMode }> {
+    const count = ref.parts.length;
+    const multi = multiOf(this.source);
+    if (multi === undefined) {
+      throw new Error(
+        `${this.name} is ${count} files read as one by something that does not say how they join, so a workspace cannot save it`,
+      );
+    }
+
+    const files = ref.parts.map(({ ref: file }, i) => {
+      if (!("path" in file)) {
+        throw new Error(
+          `${this.name}: ${file.name} (part ${i + 1} of ${count}) is a dropped file with no path, and a workspace points at each part of several files read as one`,
+        );
+      }
+      return file;
+    });
+
+    // Asking opens any part no read has reached yet. One that will not open
+    // now -- moved, or no longer the file the log was made against -- must not
+    // cost the save, so the parts then keep the versions they were opened by:
+    // a part a read did reach was held to its own, and one no read reached has
+    // nothing newer to say.
+    const versions = await multi.versions().catch(() => files.map((file) => file.version));
+
+    return {
+      parts: files.map((file, i) => {
+        const extent = multi.extents[i]!;
+        return {
+          name: file.name,
+          path: file.path,
+          bytes: extent.bytes,
+          version: versions[i],
+          skip: extent.skip,
+          unterminated: extent.unterminated,
+        };
+      }),
+      header: ref.header,
+    };
   }
 
   // ------------------------------------------------------------ lifetime

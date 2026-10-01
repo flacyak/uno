@@ -133,8 +133,8 @@ test("a peek of parts shows the top of the join", async () => {
 });
 
 // What a source of parts does not do yet, each refused in words and with the
-// source left as it was.
-test("a source of parts has no link, and is not saved or re-pointed yet", async () => {
+// source left as it was. Saving one is in multisave.test.ts.
+test("a source of parts has no link, and is not re-pointed yet", async () => {
   const { engine, done } = connect(TINY, providers());
   try {
     const whole = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
@@ -142,9 +142,6 @@ test("a source of parts has no link, and is not saved or re-pointed yet", async 
     await indexed(three);
     expect(three.opened.link).toBeUndefined();
 
-    await expect(engine.save({ source: three.id, cells: [], at: "" }, ROOMY)).rejects.toThrow(
-      `${NAME} is ${PARTS} files read as one, and a workspace cannot save one yet`,
-    );
     await expect(engine.relink(whole, THREE)).rejects.toThrow(
       `${NAME} is ${PARTS} files read as one, and sales-q3.csv cannot be pointed at one yet`,
     );
@@ -152,7 +149,7 @@ test("a source of parts has no link, and is not saved or re-pointed yet", async 
       `${NAME} is ${PARTS} files read as one, and cannot be pointed at another file yet`,
     );
 
-    // Both are still what they were, and without the parts the rest saves.
+    // Both are still what they were.
     expect(widened((await three.rows(0, PAGE)).rows)).toEqual(sheetRows(sales, 0, PAGE, "raw"));
     await engine.remove(three);
     expect(

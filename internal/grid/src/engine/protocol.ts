@@ -46,8 +46,9 @@ export interface Progress {
  * A source the workspace carries has no link at all: there is no file to be
  * wrong about. One that points at a file has a link with neither `missing` nor
  * `changed` set while everything is as it was. Several files read as one have
- * no link either, since a link is one path, so nothing is asked or said about
- * their files changing.
+ * no link either while they are open, since a link is one path, so nothing is
+ * asked or said about their files changing. Reopened from a .uno and not
+ * readable, they have one with an empty path, which says why in `missing`.
  */
 export interface Link {
   /** Where the file is, as this machine names it. */
