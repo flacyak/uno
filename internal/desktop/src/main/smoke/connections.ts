@@ -14,7 +14,7 @@ import type { Check } from "./check.ts";
 
 const LINES = `
   const note = (section) => lines().find((l) => l.section === section && l.cls.includes("note"))?.name;
-  const form = () => document.querySelector("#panel .panel-connect");
+  const form = connectForm;
   const field = (name) => form().querySelector("input[name=" + name + "]");
   const result = () => form().querySelector(".result").textContent;
   const type = (name, value) => {
@@ -105,7 +105,7 @@ export const CONNECTIONS: Check[] = [
     shot: "connect-saved",
     script: `
       ${LINES}
-      [...form().querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
+      saveConnection();
       const listed = () => named(CONNECTIONS).map((l) => l.name + " · " + l.meta);
       const want = /^\\["acme-exports \\/ 2025 · s3 · [a-z0-9-]+","acme-exports · s3 · [a-z0-9-]+","\\+ Connect a bucket · "\\]$/;
       if (!(await arrives(() => want.test(JSON.stringify(listed()))))) {
@@ -114,7 +114,7 @@ export const CONNECTIONS: Check[] = [
       if (!form().hidden) return "the form is still open";
       const files = JSON.stringify(["2025/"]);
       const got = () => JSON.stringify(named(BROWSER).map((l) => l.name));
-      const crumb = () => lines().find((l) => l.section === BROWSER && l.cls.includes("head")).meta;
+      const crumb = () => head(BROWSER).meta;
       return (await arrives(() => crumb() === "acme-exports" && got() === files))
         ? ""
         : "the browser lists " + got() + " under " + JSON.stringify(crumb()) + " · " + JSON.stringify(note(BROWSER));
