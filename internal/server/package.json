@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "description": "uno's hosted engine, one per workspace on an EC2 instance of its own, and the gate in front of them.",
-  "license": "MIT",
   "type": "module",
   "bin": {
     "uno-engine": "dist/engine.mjs",
