@@ -27,8 +27,11 @@ import { bodyMarkup } from "../markup.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** The fixture scripts/smoke.js drives the real Electron path with. */
-export const FIXTURE = join(HERE, "..", "..", "..", "grid", "tests", "testdata", "sales-q3.csv");
+/** The fixtures: the one scripts/smoke.js drives the real Electron path
+ * with, and a second export for a check that opens another file over it. */
+const TESTDATA = join(HERE, "..", "..", "..", "grid", "tests", "testdata");
+export const FIXTURE = join(TESTDATA, "sales-q3.csv");
+export const SECOND = join(TESTDATA, "google-ads-sales.csv");
 
 /** How long the first rows get to arrive from the engine, and how often the
  * DOM is polled, matching index.ts's FIRST_ROWS_MS and POLL_MS. */
