@@ -12,7 +12,9 @@ import type { Engine } from "../../src/engine/index.ts";
 import { openFormat } from "../../src/ingest/index.ts";
 import { isNumber } from "../../src/num/index.ts";
 import { NO_ROW, Op } from "../../src/sheet/index.ts";
+import type { Provider } from "../../src/plugin/index.ts";
 import { blobSource } from "../../src/store/index.ts";
+import { diskProvider } from "../../src/store/node.ts";
 import { LAST_ROW, REGION, REVENUE, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import {
   FIXTURE,
@@ -211,4 +213,77 @@ test("a failed open names the file", async () => {
       done();
     }
   }
+});
+
+/** counted is the disk with every open and close of a file counted. */
+function counted(): {
+  provider: Provider;
+  opens: () => number;
+  closes: () => number;
+  /** Resolves when a file is closed. */
+  closed: Promise<void>;
+} {
+  const disk = diskProvider();
+  let opens = 0;
+  let closes = 0;
+  let close: () => void = () => {};
+  const closed = new Promise<void>((resolve) => {
+    close = resolve;
+  });
+  return {
+    provider: {
+      ...disk,
+      files: {
+        label: disk.files.label,
+        handles: (ref) => disk.files.handles(ref),
+        async open(ref) {
+          opens++;
+          const source = await disk.files.open(ref);
+          return {
+            size: source.size,
+            version: source.version,
+            read: (offset, length) => source.read(offset, length),
+            async close() {
+              await source.close();
+              closes++;
+              close();
+            },
+          };
+        },
+      },
+    },
+    opens: () => opens,
+    closes: () => closes,
+    closed,
+  };
+}
+
+// A window closed while its file is still opening. The close reaches the
+// workspace before the open has anything to hand it, and the file the open
+// lands with is the workspace's to close all the same.
+test("an engine closed while a file is opening closes the file", async () => {
+  const disk = counted();
+  const { engine, done } = connect(TINY, [disk.provider]);
+  const opening = engine.open({ name: "sales-q3.csv", path: FIXTURE });
+  done();
+  await expect(opening).rejects.toThrow("the engine was closed");
+
+  await disk.closed;
+  expect(disk.opens()).toBe(1);
+  expect(disk.closes()).toBe(1);
+});
+
+// What was asked for before the close and has not started is not started.
+test("an engine closed with opens waiting their turn opens none of them", async () => {
+  const disk = counted();
+  const { engine, done } = connect(TINY, [disk.provider]);
+  const first = engine.open({ name: "sales-q3.csv", path: FIXTURE });
+  const second = engine.open({ name: "again.csv", path: FIXTURE });
+  done();
+  await expect(first).rejects.toThrow("the engine was closed");
+  await expect(second).rejects.toThrow("the engine was closed");
+
+  await disk.closed;
+  expect(disk.opens()).toBe(1);
+  expect(disk.closes()).toBe(1);
 });
