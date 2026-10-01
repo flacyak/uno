@@ -13,11 +13,11 @@
 // `readDocument` takes bytes and `writeDocument` returns bytes. The engine
 // opens the file a source points at.
 
-import type { Edit } from "../sheet/index.ts";
-import type { Sheet } from "../sheet/index.ts";
-import { extensionOf } from "../ingest/index.ts";
-import type { FileRef, HeaderMode } from "../store/index.ts";
-import { against, baseOf, dirOf, relativeTo } from "./path.ts";
+import type { Edit } from '../sheet/index.ts';
+import type { Sheet } from '../sheet/index.ts';
+import { extensionOf } from '../ingest/index.ts';
+import type { FileRef, HeaderMode } from '../store/index.ts';
+import { against, baseOf, dirOf, relativeTo } from './path.ts';
 
 /**
  * FORMAT_VERSION is the highest layout this build reads and writes.
@@ -66,20 +66,20 @@ export function isHeaderMode(v: string): v is HeaderMode {
   return Object.hasOwn(HEADER_MODES, v);
 }
 
-export const GENERATOR = "uno 0.2.0";
+export const GENERATOR = 'uno 0.2.0';
 
 /**
  * The fixed entry names. Source entries are named after the file they hold;
  * see `sourceEntry`.
  */
-export const MANIFEST_ENTRY = "uno.json";
-export const STATE_ENTRY = "sheet/state.json";
-export const LOG_ENTRY = "edits/log.jsonl";
+export const MANIFEST_ENTRY = 'uno.json';
+export const STATE_ENTRY = 'sheet/state.json';
+export const LOG_ENTRY = 'edits/log.jsonl';
 
 /** Entry stem for a one-source workspace: data/source.csv. */
-const SOURCE_STEM = "data/source";
+const SOURCE_STEM = 'data/source';
 /** Entry folder for a workspace of several sources: data/source/<id>.csv. */
-const SOURCE_DIR = "data/source/";
+const SOURCE_DIR = 'data/source/';
 
 /**
  * Source is one source as uno.json records it: one file, or several read as
@@ -380,18 +380,21 @@ export interface Document {
  */
 export function sourceEntry(name: string, id?: string): string {
   const ext = extensionOf(name);
-  return (id === undefined ? SOURCE_STEM : SOURCE_DIR + id) + (ext === "" ? ".csv" : ext);
+  return (
+    (id === undefined ? SOURCE_STEM : SOURCE_DIR + id) +
+    (ext === '' ? '.csv' : ext)
+  );
 }
 
 /** The workspace file extension. The engine recognises a workspace by it. */
-export const WORKSPACE_EXT = ".uno";
+export const WORKSPACE_EXT = '.uno';
 
 /**
  * isWorkspace says whether a ref names a .uno. Several files read as one are
  * a source, whatever they are called.
  */
 export function isWorkspace(ref: FileRef): boolean {
-  return !("parts" in ref) && ref.name.toLowerCase().endsWith(WORKSPACE_EXT);
+  return !('parts' in ref) && ref.name.toLowerCase().endsWith(WORKSPACE_EXT);
 }
 
 /** The characters an id keeps. Anything else becomes a dash. */
@@ -404,12 +407,12 @@ const ID_UNSAFE = /[^A-Za-z0-9._-]+/g;
  */
 export function sourceId(name: string, taken: Iterable<string>): string {
   const file = baseOf(name);
-  const dot = file.lastIndexOf(".");
+  const dot = file.lastIndexOf('.');
   const stem = (dot > 0 ? file.slice(0, dot) : file)
-    .replace(ID_UNSAFE, "-")
-    .replace(/^[-.]+|-+$/g, "")
+    .replace(ID_UNSAFE, '-')
+    .replace(/^[-.]+|-+$/g, '')
     .toLowerCase();
-  const base = stem === "" ? "source" : stem;
+  const base = stem === '' ? 'source' : stem;
 
   const used = new Set(taken);
   if (!used.has(base)) return base;
@@ -428,12 +431,12 @@ export function logOf(log: readonly Logged[], id: string): Edit[] {
 export function newManifest(): Manifest {
   return {
     format: 0,
-    generator: "",
+    generator: '',
     created: undefined,
     modified: undefined,
     sources: [],
-    sheet: { entry: "" },
-    edits: { count: 0, entry: "" },
+    sheet: { entry: '' },
+    edits: { count: 0, entry: '' },
   };
 }
 

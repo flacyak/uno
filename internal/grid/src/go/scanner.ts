@@ -2,8 +2,8 @@
 // skips space, accepts one rune, expects one, and reports where it was when
 // the expected rune is missing.
 
-import { quote } from "./strconv.ts";
-import { isSpace } from "./strings.ts";
+import { quote } from './strconv.ts';
+import { isSpace } from './strings.ts';
 
 export class Scanner {
   i = 0;
@@ -33,13 +33,17 @@ export class Scanner {
 
   expect(r: string): void {
     if (this.accept(r)) return;
-    throw new Error(`expected ${quote(r)} at character ${this.i + 1}, ${this.here()}`);
+    throw new Error(
+      `expected ${quote(r)} at character ${this.i + 1}, ${this.here()}`,
+    );
   }
 
   /** here describes the text at the cursor, for an error message. */
   here(): string {
     if (this.i >= this.s.length) return `and the ${this.noun} ends there`;
-    const ahead = this.s.slice(this.i, Math.min(this.i + 8, this.s.length)).join("");
+    const ahead = this.s
+      .slice(this.i, Math.min(this.i + 8, this.s.length))
+      .join('');
     return `found ${quote(ahead)}`;
   }
 
@@ -51,7 +55,10 @@ export class Scanner {
     const out = this.about(src, grammar);
     this.space();
     if (this.i < this.s.length) {
-      this.refuse(src, `unexpected ${quote(this.s[this.i]!)} at character ${this.i + 1}`);
+      this.refuse(
+        src,
+        `unexpected ${quote(this.s[this.i]!)} at character ${this.i + 1}`,
+      );
     }
     return out;
   }

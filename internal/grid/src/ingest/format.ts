@@ -4,18 +4,19 @@
 //
 // CSV and TSV are the only formats today.
 
-import { english } from "../said/index.ts";
-import type { ByteSource } from "../store/index.ts";
-import { readAll } from "./csv.ts";
-import { RecordScanner, bomLength } from "./scan.ts";
-import type { Charset, Said } from "../said/index.ts";
-import { sniffDelimiter, sniffEncoding } from "./sniff.ts";
-import type { Encoding } from "./sniff.ts";
+import { english } from '../said/index.ts';
+import { unreachable } from '../never.ts';
+import type { ByteSource } from '../store/index.ts';
+import { readAll } from './csv.ts';
+import { RecordScanner, bomLength } from './scan.ts';
+import type { Charset, Said } from '../said/index.ts';
+import { sniffDelimiter, sniffEncoding } from './sniff.ts';
+import type { Encoding } from './sniff.ts';
 
 /** How much of the head is read first, to sniff and to find the header. */
 const PEEK = 64 << 10;
 
-export type { Charset } from "../said/index.ts";
+export type { Charset } from '../said/index.ts';
 
 /** The decoders a file is read with: one for its head, one for its records. */
 interface Decoders {
@@ -28,9 +29,9 @@ interface Decoders {
 }
 
 const UTF8: Decoders = {
-  head: new TextDecoder("utf-8"),
-  data: new TextDecoder("utf-8", { ignoreBOM: true }),
-  charset: "UTF-8",
+  head: new TextDecoder('utf-8'),
+  data: new TextDecoder('utf-8', { ignoreBOM: true }),
+  charset: 'UTF-8',
 };
 
 /**
@@ -38,8 +39,8 @@ const UTF8: Decoders = {
  * a character, so one decoder serves both roles.
  */
 const WINDOWS_1252: Decoders = (() => {
-  const decoder = new TextDecoder("windows-1252");
-  return { head: decoder, data: decoder, charset: "Windows-1252" };
+  const decoder = new TextDecoder('windows-1252');
+  return { head: decoder, data: decoder, charset: 'Windows-1252' };
 })();
 
 /**
@@ -52,7 +53,7 @@ export class UnsupportedEncodingError extends Error {
 
   constructor(name: string, encoding: Encoding) {
     super(`${name}: ${encodingName(encoding)} is not supported yet`);
-    this.name = "UnsupportedEncodingError";
+    this.name = 'UnsupportedEncodingError';
     this.encoding = encoding;
   }
 }
@@ -63,13 +64,15 @@ export class UnsupportedEncodingError extends Error {
  */
 export function decodersFor(name: string, encoding: Encoding): Decoders {
   switch (encoding) {
-    case "utf-8":
+    case 'utf-8':
       return UTF8;
-    case "other":
+    case 'other':
       return WINDOWS_1252;
-    case "utf-16le":
-    case "utf-16be":
+    case 'utf-16le':
+    case 'utf-16be':
       throw new UnsupportedEncodingError(name, encoding);
+    default:
+      return unreachable(encoding);
   }
 }
 
@@ -82,10 +85,10 @@ export interface Scanner {
  * columns. "none": every record is a row, and the columns are named by
  * `columnNames`. The default is "first".
  */
-export type HeaderMode = "first" | "none";
+export type HeaderMode = 'first' | 'none';
 
 /** The prefix of a generated column name, before its number. */
-const COLUMN = "column_";
+const COLUMN = 'column_';
 
 /**
  * columnNames names the columns of a file whose header mode is "none":
@@ -131,7 +134,7 @@ export interface Format {
 export async function openFormat(
   name: string,
   src: ByteSource,
-  header: HeaderMode = "first",
+  header: HeaderMode = 'first',
 ): Promise<Format> {
   const format = await peekFormat(name, src, header);
   if (format === undefined) throw new Error(`${name}: file is empty`);
@@ -143,16 +146,17 @@ export async function openFormat(
 export async function peekFormat(
   name: string,
   src: ByteSource,
-  header: HeaderMode = "first",
+  header: HeaderMode = 'first',
 ): Promise<Format | undefined> {
   const ext = extensionOf(name);
-  if (ext === ".json") throw new Error(`${name}: JSON is not supported yet`);
+  if (ext === '.json') throw new Error(`${name}: JSON is not supported yet`);
 
   let want = Math.min(PEEK, src.size);
   let head = await src.read(0, want);
   const encoding = sniffEncoding(head);
   const decoders = decodersFor(name, encoding);
-  const comma = ext === ".tsv" ? "\t" : sniffDelimiter(decoders.head.decode(head));
+  const comma =
+    ext === '.tsv' ? '\t' : sniffDelimiter(decoders.head.decode(head));
 
   // Where the second record begins, which is where the first ends.
   let second: number | undefined;
@@ -167,16 +171,19 @@ export async function peekFormat(
   }
   if (second < 0) return undefined;
 
-  const first = readAll(decoders.head.decode(head.subarray(0, second)), comma)[0]!;
+  const first = readAll(
+    decoders.head.decode(head.subarray(0, second)),
+    comma,
+  )[0]!;
   return {
     label: describe(comma, header, decoders.charset),
     delimiter: comma,
     encoding,
     charset: decoders.charset,
     header,
-    columns: header === "first" ? headerOf(first) : columnNames(first.length),
+    columns: header === 'first' ? headerOf(first) : columnNames(first.length),
     // Under "none" the first record is data, after any byte order mark.
-    dataStart: header === "first" ? second : bomLength(head),
+    dataStart: header === 'first' ? second : bomLength(head),
     scanner: (begin) => new RecordScanner(comma, begin),
     decode: (bytes) => readAll(decoders.data.decode(bytes), comma),
   };
@@ -186,7 +193,11 @@ export async function peekFormat(
  * findDataStart returns the offset of the second record. Undefined when the
  * head ends before it can tell, and -1 when the file holds zero records.
  */
-function findDataStart(head: Uint8Array, comma: string, whole: boolean): number | undefined {
+function findDataStart(
+  head: Uint8Array,
+  comma: string,
+  whole: boolean,
+): number | undefined {
   let records = 0;
   let second = -1;
   const scanner = new RecordScanner(comma, (offset) => {
@@ -223,9 +234,9 @@ export function headerOf(record: readonly string[]): string[] {
 
 /** The extension, lower-cased, including its dot. "" when there is none. */
 export function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
-  if (dot < 0 || dot < slash) return "";
+  const dot = name.lastIndexOf('.');
+  const slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+  if (dot < 0 || dot < slash) return '';
   return name.slice(dot).toLowerCase();
 }
 
@@ -235,24 +246,26 @@ export function extensionOf(name: string): string {
  */
 export function describe(
   comma: string,
-  header: HeaderMode = "first",
-  charset: Charset = "UTF-8",
+  header: HeaderMode = 'first',
+  charset: Charset = 'UTF-8',
 ): string {
   return english(labelOf({ delimiter: comma, header, charset }));
 }
 
 /** labelOf returns how a file was read, as Said. */
-export function labelOf(format: Pick<Format, "delimiter" | "header" | "charset">): Said {
+export function labelOf(
+  format: Pick<Format, 'delimiter' | 'header' | 'charset'>,
+): Said {
   const { delimiter, header, charset } = format;
-  return { t: "read", delimiter, header, charset };
+  return { t: 'read', delimiter, header, charset };
 }
 
 /** What each sniffable delimiter is called. */
 const DELIMITER_NAMES: ReadonlyMap<string, string> = new Map([
-  [",", "comma"],
-  ["\t", "tab"],
-  [";", "semicolon"],
-  ["|", "pipe"],
+  [',', 'comma'],
+  ['\t', 'tab'],
+  [';', 'semicolon'],
+  ['|', 'pipe'],
 ]);
 
 /** delimiterName is a delimiter as a word, or the character in quotes. */
@@ -261,10 +274,10 @@ export function delimiterName(comma: string): string {
 }
 
 const ENCODING_NAMES: Readonly<Record<Encoding, string>> = {
-  "utf-8": "UTF-8",
-  "utf-16le": "UTF-16 little-endian",
-  "utf-16be": "UTF-16 big-endian",
-  other: "neither UTF-8 nor UTF-16",
+  'utf-8': 'UTF-8',
+  'utf-16le': 'UTF-16 little-endian',
+  'utf-16be': 'UTF-16 big-endian',
+  other: 'neither UTF-8 nor UTF-16',
 };
 
 /** encodingName is an encoding's display name. */

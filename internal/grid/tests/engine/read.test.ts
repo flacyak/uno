@@ -1,11 +1,11 @@
 // Reading through the engine: the fixture by path and by Blob, the Band a
 // client holds, RowIndex, Pages, failed opens, and closing mid-open.
 
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { expect, test } from "vite-plus/test";
+import { expect, test } from 'vite-plus/test';
 
 import {
   Band,
@@ -16,16 +16,26 @@ import {
   indexPass,
   messagePort,
   serve,
-} from "../../src/engine/index.ts";
-import type { MessagePortLike, Reply, Request } from "../../src/engine/index.ts";
-import { openFormat } from "../../src/ingest/index.ts";
-import { isNumber } from "../../src/num/index.ts";
-import { NO_ROW, Op } from "../../src/sheet/index.ts";
-import type { Provider } from "../../src/plugin/index.ts";
-import { sources } from "../../src/plugin/index.ts";
-import { blobSource } from "../../src/store/index.ts";
-import { diskProvider } from "../../src/store/node.ts";
-import { LAST_ROW, REGION, REVENUE, ROWS, UNITS } from "../testdata/sales-q3.ts";
+} from '../../src/engine/index.ts';
+import type {
+  MessagePortLike,
+  Reply,
+  Request,
+} from '../../src/engine/index.ts';
+import { openFormat } from '../../src/ingest/index.ts';
+import { isNumber } from '../../src/num/index.ts';
+import { NO_ROW, Op } from '../../src/sheet/index.ts';
+import type { Provider } from '../../src/plugin/index.ts';
+import { sources } from '../../src/plugin/index.ts';
+import { blobSource } from '../../src/store/index.ts';
+import { diskProvider } from '../../src/store/node.ts';
+import {
+  LAST_ROW,
+  REGION,
+  REVENUE,
+  ROWS,
+  UNITS,
+} from '../testdata/sales-q3.ts';
 import {
   FIXTURE,
   SCREEN,
@@ -38,38 +48,51 @@ import {
   sheetRows,
   widened,
   saidIn,
-} from "./harness.ts";
+} from './harness.ts';
 
 /** The rows a Band keeps around the viewport, in engine/client.ts. */
 const BAND_ROWS = 2000;
 
-test("the engine reads the fixture the way read does", async () => {
+test('the engine reads the fixture the way read does', async () => {
   const { engine, done } = connect(TINY);
   try {
-    const src = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
+    const src = await openOne(engine, { name: 'sales-q3.csv', path: FIXTURE });
     const opened = src.opened;
     expect(saidIn(opened.label)).toBe("UTF-8 · delimiter ','");
     // Same columns as `read`: units is text flagged as numeric.
     expect(opened.columns).toEqual(sales.columns);
-    expect(opened.columns[UNITS]).toEqual({ header: "units", kind: "text", flagged: true });
+    expect(opened.columns[UNITS]).toEqual({
+      header: 'units',
+      kind: 'text',
+      flagged: true,
+    });
 
     await indexed(src);
-    expect(src.progress).toMatchObject({ rows: ROWS, readable: ROWS, complete: true });
+    expect(src.progress).toMatchObject({
+      rows: ROWS,
+      readable: ROWS,
+      complete: true,
+    });
 
     const page = 500;
     for (let first = 0; first < ROWS; first += page) {
       const { rows } = await src.rows(first, page);
-      expect(widened(rows), `rows from ${first}`).toEqual(sheetRows(sales, first, page, "raw"));
+      expect(widened(rows), `rows from ${first}`).toEqual(
+        sheetRows(sales, first, page, 'raw'),
+      );
     }
   } finally {
     done();
   }
 });
 
-test("a band holds the rows around the viewport, and only those", async () => {
+test('a band holds the rows around the viewport, and only those', async () => {
   const { engine, done } = connect(TINY);
   try {
-    const src = await openOne(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
+    const src = await openOne(engine, {
+      name: 'sales-q3.csv',
+      blob: new Blob([bytes]),
+    });
     await indexed(src);
 
     let asked = 0;
@@ -82,16 +105,24 @@ test("a band holds the rows around the viewport, and only those", async () => {
     let landed = (): void => {};
     const band = new Band(src, () => landed());
     expect(band.rows()).toBe(ROWS);
-    expect(band.readable(), "indexed to the end, so every row can be read").toBe(ROWS);
-    expect(band.ready(LAST_ROW), "nothing has arrived yet").toBe(false);
+    expect(
+      band.readable(),
+      'indexed to the end, so every row can be read',
+    ).toBe(ROWS);
+    expect(band.ready(LAST_ROW), 'nothing has arrived yet').toBe(false);
 
     const arrived = new Promise<void>((r) => (landed = r));
     band.view(ROWS - SCREEN, SCREEN);
     await arrived;
 
-    expect(band.display(LAST_ROW, REVENUE)).toBe(sales.display(LAST_ROW, REVENUE));
+    expect(band.display(LAST_ROW, REVENUE)).toBe(
+      sales.display(LAST_ROW, REVENUE),
+    );
     expect(band.ready(ROWS - BAND_ROWS)).toBe(true);
-    expect(band.ready(ROWS - BAND_ROWS - 1), "a band is 2,000 rows, not the file").toBe(false);
+    expect(
+      band.ready(ROWS - BAND_ROWS - 1),
+      'a band is 2,000 rows, not the file',
+    ).toBe(false);
 
     // A view inside the band is served from it. One outside asks for rows.
     band.view(3000, SCREEN);
@@ -103,10 +134,13 @@ test("a band holds the rows around the viewport, and only those", async () => {
   }
 });
 
-test("find reads the column past any band, with the log applied", async () => {
+test('find reads the column past any band, with the log applied', async () => {
   const { engine, done } = connect(TINY);
   try {
-    const src = await openOne(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
+    const src = await openOne(engine, {
+      name: 'sales-q3.csv',
+      blob: new Blob([bytes]),
+    });
     await indexed(src);
     const rows = sales.rows();
 
@@ -114,10 +148,10 @@ test("find reads the column past any band, with the log applied", async () => {
     const unparsed: number[] = [];
     for (let row = 0; row < rows; row++) {
       const v = sales.display(row, UNITS).trim();
-      if (v !== "" && !isNumber(v)) unparsed.push(row);
+      if (v !== '' && !isNumber(v)) unparsed.push(row);
     }
     const units = (from: number, dir: 1 | -1) =>
-      src.find({ col: UNITS, from, dir, match: { t: "unparsed" } });
+      src.find({ col: UNITS, from, dir, match: { t: 'unparsed' } });
 
     for (const from of [0, 7, 2400, LAST_ROW]) {
       const down = unparsed.find((r) => r > from) ?? null;
@@ -131,25 +165,35 @@ test("find reads the column past any band, with the log applied", async () => {
     }
 
     // A find for unparsed cells in a text column comes back empty.
-    const region = await src.find({ col: REGION, from: 0, dir: 1, match: { t: "unparsed" } });
+    const region = await src.find({
+      col: REGION,
+      from: 0,
+      dir: 1,
+      match: { t: 'unparsed' },
+    });
     expect(region).toEqual({ row: null, searched: 0, complete: true });
 
     const north = [...Array(rows).keys()].find(
-      (r) => r > 0 && sales.display(r, REGION).includes("North"),
+      (r) => r > 0 && sales.display(r, REGION).includes('North'),
     );
     const text = await src.find({
       col: REGION,
       from: 0,
       dir: 1,
-      match: { t: "text", text: "North" },
+      match: { t: 'text', text: 'North' },
     });
     expect(text.row).toBe(north);
 
     // After the apply, only the cell set to "n/a" is unparsed.
     const far = 4000;
     engine.mode(true);
-    await src.edit({ op: Op.Apply, row: NO_ROW, col: UNITS, now: 'replace(/,/, "")' });
-    await src.edit({ op: Op.Set, row: far, col: UNITS, now: "n/a" });
+    await src.edit({
+      op: Op.Apply,
+      row: NO_ROW,
+      col: UNITS,
+      now: 'replace(/,/, "")',
+    });
+    await src.edit({ op: Op.Set, row: far, col: UNITS, now: 'n/a' });
     expect((await units(0, 1)).row).toBe(far);
     expect((await units(far, 1)).row).toBe(null);
     expect((await units(LAST_ROW, -1)).row).toBe(far);
@@ -158,7 +202,7 @@ test("find reads the column past any band, with the log applied", async () => {
   }
 });
 
-test("the index serves closed blocks only, and projects the row count", () => {
+test('the index serves closed blocks only, and projects the row count', () => {
   const index = new RowIndex(10, 1010, { blockRows: 2, blockBytes: 1 << 20 });
   for (const offset of [10, 20, 30, 40, 50]) index.begin(offset);
   index.scanned = 60;
@@ -177,7 +221,7 @@ test("the index serves closed blocks only, and projects the row count", () => {
   expect(index.bytesOf(2)).toEqual([50, 1010]);
 });
 
-test("a block closes at its byte budget as well as its row count", () => {
+test('a block closes at its byte budget as well as its row count', () => {
   const index = new RowIndex(0, 100, { blockRows: 100, blockBytes: 25 });
   for (const offset of [0, 10, 20, 30, 40, 60]) index.begin(offset);
   // 30 is 30 bytes past the block at 0, and 60 is 30 past the one at 30.
@@ -186,7 +230,7 @@ test("a block closes at its byte budget as well as its row count", () => {
   expect(index.blockOf(3)).toBe(1);
 });
 
-test("the index keeps block starts past 4 GB exactly, at two numbers a block", () => {
+test('the index keeps block starts past 4 GB exactly, at two numbers a block', () => {
   const MB = 1 << 20;
   const GB = 1024 * MB;
   const size = 6 * GB;
@@ -208,9 +252,9 @@ test("the index keeps block starts past 4 GB exactly, at two numbers a block", (
   expect(index.readable()).toBe(blocks);
 });
 
-test("the page cache stays within its budget however much is read", async () => {
+test('the page cache stays within its budget however much is read', async () => {
   const source = blobSource(new Blob([bytes]));
-  const format = await openFormat("sales-q3.csv", source);
+  const format = await openFormat('sales-q3.csv', source);
   const index = new RowIndex(format.dataStart, source.size, TINY);
   await indexPass({
     source,
@@ -221,21 +265,38 @@ test("the page cache stays within its budget however much is read", async () => 
     progress() {},
   });
 
-  const pages = new Pages("sales-q3.csv", source, format, index, TINY.cacheBytes);
+  const pages = new Pages(
+    'sales-q3.csv',
+    source,
+    format,
+    index,
+    TINY.cacheBytes,
+  );
   const page = 100;
   for (let first = 0; first < ROWS; first += page) {
-    expect(widened(await pages.rows(first, page))).toEqual(sheetRows(sales, first, page, "raw"));
+    expect(widened(await pages.rows(first, page))).toEqual(
+      sheetRows(sales, first, page, 'raw'),
+    );
     expect(pages.held).toBeLessThanOrEqual(TINY.cacheBytes);
   }
 });
 
-test("a failed open names the file", async () => {
-  const missing = join(await mkdtemp(join(tmpdir(), "uno-engine-")), "nope.csv");
-  const cases: Array<[Parameters<Engine["open"]>[0], string]> = [
-    [{ name: "nope.csv", path: missing }, missing],
-    [{ name: "empty.csv", blob: new Blob([]) }, "empty.csv: file is empty"],
-    [{ name: "data.json", blob: new Blob(["[]"]) }, "data.json: JSON is not supported yet"],
-    [{ name: "broken.uno", blob: new Blob(["not a zip"]) }, "broken.uno is not a readable .uno"],
+test('a failed open names the file', async () => {
+  const missing = join(
+    await mkdtemp(join(tmpdir(), 'uno-engine-')),
+    'nope.csv',
+  );
+  const cases: Array<[Parameters<Engine['open']>[0], string]> = [
+    [{ name: 'nope.csv', path: missing }, missing],
+    [{ name: 'empty.csv', blob: new Blob([]) }, 'empty.csv: file is empty'],
+    [
+      { name: 'data.json', blob: new Blob(['[]']) },
+      'data.json: JSON is not supported yet',
+    ],
+    [
+      { name: 'broken.uno', blob: new Blob(['not a zip']) },
+      'broken.uno is not a readable .uno',
+    ],
   ];
 
   for (const [ref, want] of cases) {
@@ -293,12 +354,12 @@ function counted(): {
 
 // The engine is closed while an open is in progress. The file the open lands
 // with is still closed.
-test("an engine closed while a file is opening closes the file", async () => {
+test('an engine closed while a file is opening closes the file', async () => {
   const disk = counted();
   const { engine, done } = connect(TINY, [disk.provider]);
-  const opening = engine.open({ name: "sales-q3.csv", path: FIXTURE });
+  const opening = engine.open({ name: 'sales-q3.csv', path: FIXTURE });
   done();
-  await expect(opening).rejects.toThrow("the engine was closed");
+  await expect(opening).rejects.toThrow('the engine was closed');
 
   await disk.closed;
   expect(disk.opens()).toBe(1);
@@ -306,14 +367,14 @@ test("an engine closed while a file is opening closes the file", async () => {
 });
 
 // An open still queued at the close is rejected before it starts.
-test("an engine closed with opens waiting their turn opens none of them", async () => {
+test('an engine closed with opens waiting their turn opens none of them', async () => {
   const disk = counted();
   const { engine, done } = connect(TINY, [disk.provider]);
-  const first = engine.open({ name: "sales-q3.csv", path: FIXTURE });
-  const second = engine.open({ name: "again.csv", path: FIXTURE });
+  const first = engine.open({ name: 'sales-q3.csv', path: FIXTURE });
+  const second = engine.open({ name: 'again.csv', path: FIXTURE });
   done();
-  await expect(first).rejects.toThrow("the engine was closed");
-  await expect(second).rejects.toThrow("the engine was closed");
+  await expect(first).rejects.toThrow('the engine was closed');
+  await expect(second).rejects.toThrow('the engine was closed');
 
   await disk.closed;
   expect(disk.opens()).toBe(1);
@@ -322,21 +383,26 @@ test("an engine closed with opens waiting their turn opens none of them", async 
 
 // The engine's port closes with an open in flight. The open rejects, later
 // opens reject, and onError hears it once.
-test("an engine whose port goes with a request out refuses it, and says so once", async () => {
+test('an engine whose port goes with a request out refuses it, and says so once', async () => {
   const { port1, port2 } = new MessageChannel();
   serve(
     messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
     sources([diskProvider()]),
   );
-  const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
+  const engine = new Engine(
+    messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
+  );
   const said: string[] = [];
   engine.onError = (heard) => said.push(english(heard));
 
-  const opening = engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
+  const opening = engine.open({
+    name: 'sales-q3.csv',
+    blob: new Blob([bytes]),
+  });
   port1.close();
-  await expect(opening).rejects.toThrow("the connection to the engine closed");
-  await expect(engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) })).rejects.toThrow(
-    "the connection to the engine closed",
-  );
-  expect(said).toEqual(["the connection to the engine closed"]);
+  await expect(opening).rejects.toThrow('the connection to the engine closed');
+  await expect(
+    engine.open({ name: 'sales-q3.csv', blob: new Blob([bytes]) }),
+  ).rejects.toThrow('the connection to the engine closed');
+  expect(said).toEqual(['the connection to the engine closed']);
 });

@@ -40,9 +40,16 @@ interface Stream {
  * A held chunk whose request failed throws from the read that takes it, with
  * the error `read` threw.
  */
-export function readAhead(read: ReadRange, size: number, ahead = AHEAD): ReadRange {
+export function readAhead(
+  read: ReadRange,
+  size: number,
+  ahead = AHEAD,
+): ReadRange {
   /** Held chunks by start offset, with the reader each was requested for. */
-  const held = new Map<number, { length: number; bytes: Promise<Uint8Array>; for: Stream }>();
+  const held = new Map<
+    number,
+    { length: number; bytes: Promise<Uint8Array>; for: Stream }
+  >();
   /** The reader of each recent read, newest last. */
   const recent: Stream[] = [];
   /** The sequential reader whose next chunks are requested. */
@@ -94,7 +101,10 @@ export function readAhead(read: ReadRange, size: number, ahead = AHEAD): ReadRan
     }
 
     const got = held.get(offset);
-    const bytes = got !== undefined && got.length === length ? got.bytes : read(offset, length);
+    const bytes =
+      got !== undefined && got.length === length
+        ? got.bytes
+        : read(offset, length);
     if (got?.bytes === bytes) held.delete(offset);
     topUp();
     return bytes;
