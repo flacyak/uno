@@ -5,7 +5,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import { bytesSource } from "../../src/store/index.ts";
-import type { FileHandler, FileRef } from "../../src/store/index.ts";
+import type { FileHandler, SingleRef } from "../../src/store/index.ts";
 import { DisagreementError, openMulti } from "../../src/store/multi.ts";
 import type { Disagreement, HeaderMode, MultiSource, Part } from "../../src/store/multi.ts";
 
@@ -88,7 +88,7 @@ function memory(files: ReadonlyMap<string, Uint8Array>): {
   return { handler, opened, closed };
 }
 
-function inMemory(name: string): FileRef {
+function inMemory(name: string): SingleRef {
   return { name, path: MEMORY + name };
 }
 
