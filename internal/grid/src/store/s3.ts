@@ -120,27 +120,23 @@ export function s3Location(url: string): S3Location | undefined {
   // one. Decoding is per part, once the split has already happened.
   const path = u.pathname.slice(1);
 
-  // bucket.s3.amazonaws.com, bucket.s3.us-west-2.amazonaws.com, bucket.s3-us-west-2.amazonaws.com
-  const virtual = /^(.+)\.s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$/.exec(u.hostname);
-  if (virtual !== null) {
-    if (path === "") return undefined;
+  // The bucket is in the host -- bucket.s3.amazonaws.com/key,
+  // bucket.s3.us-west-2.amazonaws.com/key, bucket.s3-us-west-2.amazonaws.com/key
+  // -- or the path's first part: s3.amazonaws.com/bucket/key,
+  // s3.us-west-2.amazonaws.com/bucket/key.
+  const host = /^(?:(.+)\.)?s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$/.exec(u.hostname);
+  if (host === null || path === "") return undefined;
+  const named = host[1];
+  if (named !== undefined) {
     const key = decoded(path);
-    return key === undefined ? undefined : { bucket: virtual[1]!, key };
+    return key === undefined ? undefined : { bucket: named, key };
   }
-
-  // s3.amazonaws.com/bucket/key, s3.us-west-2.amazonaws.com/bucket/key
-  if (
-    /^s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$/.test(u.hostname) ||
-    u.hostname === "s3.amazonaws.com"
-  ) {
-    const slash = path.indexOf("/");
-    if (slash <= 0 || slash === path.length - 1) return undefined;
-    const bucket = decoded(path.slice(0, slash));
-    const key = decoded(path.slice(slash + 1));
-    if (bucket === undefined || key === undefined) return undefined;
-    return { bucket, key };
-  }
-  return undefined;
+  const slash = path.indexOf("/");
+  if (slash <= 0 || slash === path.length - 1) return undefined;
+  const bucket = decoded(path.slice(0, slash));
+  const key = decoded(path.slice(slash + 1));
+  if (bucket === undefined || key === undefined) return undefined;
+  return { bucket, key };
 }
 
 /**
