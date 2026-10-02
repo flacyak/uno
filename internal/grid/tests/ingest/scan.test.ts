@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The record scanner agrees with readAll over random input, in
+ * any chunk size, split at any record.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import { readAll } from '#ingest/csv';

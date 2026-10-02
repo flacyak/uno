@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The dependency graph: a cycle refused at bind time with its
+ * path named, and the order a recalculation runs in.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import { Graph, parse } from '#formula';

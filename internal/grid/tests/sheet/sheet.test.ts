@@ -1,3 +1,8 @@
+/**
+ * @fileoverview A sheet in memory: raw and display reads over ragged rows, the
+ * counts, and the kind inferred for each column.
+ */
+
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 

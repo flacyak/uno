@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reading a file a piece at a time agrees with reading it whole:
+ * the head, where the data starts, and a run of records decoded.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import {

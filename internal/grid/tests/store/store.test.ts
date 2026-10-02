@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The library on a disk: formulas saved and read back through the
+ * Node store, and what one bad file costs.
+ */
+
 import {
   copyFile,
   mkdtemp,

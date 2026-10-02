@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The notation subset: what is drawn, the first symbol refused,
+ * and that every table entry is reachable from a source.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import {

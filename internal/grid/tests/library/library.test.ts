@@ -1,3 +1,8 @@
+/**
+ * @fileoverview A formula saved as a .unof reads back whole, keeps keys this
+ * build does not know, and refuses an id that could name a path.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import { FORMAT_VERSION, formatFormula, parseFormula, validID } from '#library';
