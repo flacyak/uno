@@ -72,6 +72,11 @@ a time, and sends rows straight to the renderer, so neither main nor the
 renderer ever holds the file. The status bar shows `≈` rows and how far the
 index has got until it reaches the end.
 
+uno runs once.
+`uno q4.csv` typed while a window is open hands the file to that window, which comes to the front and opens it as a new workspace, and the second uno exits.
+Several files on one line are added together as one workspace, as they are at launch.
+Typed with no file, it brings the window to the front.
+
 Ctrl+E switches to transform, which unlocks editing and turns the recogniser
 on, and back again. It loads nothing. The engine keeps the edit log and applies it to each row as it
 reads the row, so an edit reaches the screen as soon as the next band does,
