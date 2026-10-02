@@ -7,8 +7,8 @@
 
 import { beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { setLocale } from "../src/paraglide/runtime.js";
-import { RoleBlock } from "../src/renderer/shell/role.ts";
+import { setLocale } from "#paraglide/runtime";
+import { RoleBlock } from "#renderer/shell/role";
 import { settle } from "./settle.ts";
 
 const TRUST = {

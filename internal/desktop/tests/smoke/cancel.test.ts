@@ -7,12 +7,12 @@
 
 import { setTimeout as sleep } from "node:timers/promises";
 
-import type { Provider } from "@uno/grid/plugin";
-import { diskProvider } from "@uno/grid/store/node";
+import type { Provider } from "#plugin";
+import { diskProvider } from "#store/node";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import type { Shell } from "../../src/renderer/shell/shell.ts";
-import { settle } from "../settle.ts";
+import type { Shell } from "#renderer/shell/shell";
+import { settle } from "#tests/settle";
 import { SECOND, bootShell } from "./dom-harness.ts";
 
 /** How long the opening row gets to appear, and how often the DOM is polled. */

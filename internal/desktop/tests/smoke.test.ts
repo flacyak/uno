@@ -11,9 +11,9 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
-import { displayMissing, electronEnv, verdict } from "../scripts/launch.js";
-import { DRIVEN_OPEN, openPathFor } from "../src/main/smoke/pick.ts";
-import { savePathFor } from "../src/main/smoke/save.ts";
+import { displayMissing, electronEnv, verdict } from "#scripts/launch";
+import { DRIVEN_OPEN, openPathFor } from "#main/smoke/pick";
+import { savePathFor } from "#main/smoke/save";
 
 const SCRIPTS = fileURLToPath(new URL("../scripts", import.meta.url));
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
