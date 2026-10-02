@@ -1,18 +1,20 @@
-// Fixtures and helpers for the headerless tests: the three parts of
-// sales-q3.csv with the header line removed from each.
+/**
+ * @fileoverview Fixtures and helpers for the headerless tests: the three parts
+ * of sales-q3.csv with the header line removed from each.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { SourceRef } from '../../src/engine/index.ts';
-import { columnNames } from '../../src/ingest/index.ts';
-import type { HeaderMode } from '../../src/ingest/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { blobProvider, multiProvider } from '../../src/store/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { COLS } from '../testdata/sales-q3.ts';
-import { PARTS, partBytes } from '../testdata/sales-q3-parts.ts';
+import type { SourceRef } from '#engine';
+import { columnNames } from '#ingest';
+import type { HeaderMode } from '#ingest';
+import type { Provider } from '#plugin';
+import { blobProvider, multiProvider } from '#store';
+import { diskProvider } from '#store/node';
+import { COLS } from '#tests/testdata/sales-q3';
+import { PARTS, partBytes } from '#tests/testdata/sales-q3-parts';
 
 const LF = 0x0a;
 

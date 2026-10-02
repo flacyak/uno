@@ -1,5 +1,7 @@
-// Pure arithmetic for the row virtualiser in View. Every function here
-// works on numbers alone.
+/**
+ * @fileoverview Pure arithmetic for the row virtualiser in View. Every function
+ * here works on numbers alone.
+ */
 
 /** Extra rows drawn past the viewport. */
 export const OVERSCAN = 6;

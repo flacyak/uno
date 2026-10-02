@@ -1,6 +1,8 @@
-// Engine tests for headerless files. Three headerless parts on disk
-// are opened as one source, and what the engine shows is compared cell for
-// cell with sales-q3.csv read the ordinary way.
+/**
+ * @fileoverview Engine tests for headerless files. Three headerless parts on
+ * disk are opened as one source, and what the engine shows is compared cell for
+ * cell with sales-q3.csv read the ordinary way.
+ */
 
 import { rm } from 'node:fs/promises';
 import {
@@ -12,10 +14,10 @@ import {
   test,
 } from 'vite-plus/test';
 
-import type { Engine } from '../../src/engine/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import { COLS, REGION, ROWS, UNITS } from '../testdata/sales-q3.ts';
-import { PART_ROWS } from '../testdata/sales-q3-parts.ts';
+import type { Engine } from '#engine';
+import { Op } from '#sheet';
+import { COLS, REGION, ROWS, UNITS } from '#tests/testdata/sales-q3';
+import { PART_ROWS } from '#tests/testdata/sales-q3-parts';
 import {
   FIXTURE,
   TINY,
@@ -26,7 +28,7 @@ import {
   saidIn,
   sales,
   widened,
-} from '../engine/harness.ts';
+} from '#tests/engine/harness';
 import {
   COLUMNS,
   NAMES,

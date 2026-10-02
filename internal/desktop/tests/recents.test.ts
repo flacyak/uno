@@ -1,9 +1,11 @@
-// The recent workspaces list: most recent first, kept between launches, and
-// read as empty when the kept value is bad.
+/**
+ * @fileoverview The recent workspaces list: most recent first, kept between
+ * launches, and read as empty when the kept value is bad.
+ */
 
 import { expect, test } from "vite-plus/test";
 
-import { RECENTS_KEY, RECENTS_MAX, Recents } from "../src/renderer/recents.ts";
+import { RECENTS_KEY, RECENTS_MAX, Recents } from "#renderer/recents";
 import { Kept } from "./kept.ts";
 
 test("a workspace opened goes to the top, and is listed once", () => {

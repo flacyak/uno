@@ -1,12 +1,14 @@
-// Checks of the settings control: it opens upward from the bottom left on the
-// run's connections and the four themes, each theme in each mode is what the
-// page is drawn in, and a language chosen is the one the window is written
-// in.
-//
-// They run with the run's own --user-data-dir, so the theme chosen here
-// stays with the run.
+/**
+ * @fileoverview Checks of the settings control: it opens upward from the bottom
+ * left on the run's connections and the four themes, each theme in each mode is
+ * what the page is drawn in, and a language chosen is the one the window is
+ * written in.
+ *
+ * They run with the run's own --user-data-dir, so the theme chosen here
+ * stays with the run.
+ */
 
-import { THEMES } from "../../renderer/theme.ts";
+import { THEMES } from "#renderer/theme";
 import type { Check } from "./check.ts";
 import { LOCALE } from "./fixture.ts";
 

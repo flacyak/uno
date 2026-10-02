@@ -1,18 +1,20 @@
-// @vitest-environment happy-dom
-//
-// The × on a source still opening, over the real engine. The disk provider
-// is wrapped so the second fixture's open sits where a slow bucket would
-// leave it: format sniffed, first chunk on its way, waiting for its sample
-// rows with its row on screen.
+/**
+ * @fileoverview The × on a source still opening, over the real engine. The disk
+ * provider is wrapped so the second fixture's open sits where a slow bucket
+ * would leave it: format sniffed, first chunk on its way, waiting for its
+ * sample rows with its row on screen.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { setTimeout as sleep } from "node:timers/promises";
 
-import type { Provider } from "@uno/grid/plugin";
-import { diskProvider } from "@uno/grid/store/node";
+import type { Provider } from "#plugin";
+import { diskProvider } from "#store/node";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import type { Shell } from "../../src/renderer/shell/shell.ts";
-import { settle } from "../settle.ts";
+import type { Shell } from "#renderer/shell/shell";
+import { settle } from "#tests/settle";
 import { SECOND, bootShell } from "./dom-harness.ts";
 
 /** How long the opening row gets to appear, and how often the DOM is polled. */

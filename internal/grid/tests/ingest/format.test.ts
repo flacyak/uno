@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reading a file a piece at a time agrees with reading it whole:
+ * the head, where the data starts, and a run of records decoded.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
@@ -8,9 +13,9 @@ import {
   peekFormat,
   read,
   sniffEncoding,
-} from '../../src/ingest/index.ts';
-import type { Encoding } from '../../src/ingest/index.ts';
-import { blobSource } from '../../src/store/index.ts';
+} from '#ingest';
+import type { Encoding } from '#ingest';
+import { blobSource } from '#store';
 
 /** Bytes openFormat reads first, before it knows how long the header is. */
 const PEEK = 64 << 10;

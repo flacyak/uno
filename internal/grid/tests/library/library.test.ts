@@ -1,12 +1,12 @@
+/**
+ * @fileoverview A formula saved as a .unof reads back whole, keeps keys this
+ * build does not know, and refuses an id that could name a path.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
-import {
-  FORMAT_VERSION,
-  formatFormula,
-  parseFormula,
-  validID,
-} from '../../src/library/index.ts';
-import type { Formula } from '../../src/library/index.ts';
+import { FORMAT_VERSION, formatFormula, parseFormula, validID } from '#library';
+import type { Formula } from '#library';
 
 function column(
   id: string,

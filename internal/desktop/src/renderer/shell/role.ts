@@ -1,20 +1,23 @@
-// What a person hands to whoever makes the role uno's hosted engine assumes:
-// uno's account and their external ID, with what the role has to allow.
-//
-// The role is made where the bucket is managed, by the team or the system
-// that owns it, so the form gives the two values to pass on and says what the
-// role needs, and edits nothing of the policies. The documents themselves are
-// written by `rolePolicies` in @uno/grid for whoever provisions the role.
-//
-// It is a block of its own, mounted by the connect form while a role is the
-// sign-in and an engine has said what the role has to trust. The desktop and
-// the web page both draw it through the renderer, and each engine decides
-// whether it appears by what it offers in `SignIns`.
+/**
+ * @fileoverview What a person hands to whoever makes the role uno's hosted
+ * engine assumes: uno's account and their external ID, with what the role has
+ * to allow.
+ *
+ * The role is made where the bucket is managed, by the team or the system
+ * that owns it, so the form gives the two values to pass on and says what the
+ * role needs, and edits nothing of the policies. The documents themselves are
+ * written by `rolePolicies` in @uno/grid for whoever provisions the role.
+ *
+ * It is a block of its own, mounted by the connect form while a role is the
+ * sign-in and an engine has said what the role has to trust. The desktop and
+ * the web page both draw it through the renderer, and each engine decides
+ * whether it appears by what it offers in `SignIns`.
+ */
 
-import type { Trust } from "@uno/grid/engine";
-import { accountOf } from "@uno/grid/library";
+import type { Trust } from "#engine";
+import { accountOf } from "#library";
 
-import { m } from "../../paraglide/messages.js";
+import { m } from "#paraglide/messages";
 import { Words, el } from "./util.ts";
 
 /** How long a copy button says it copied before it offers to copy again. */

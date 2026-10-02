@@ -1,15 +1,17 @@
-// Tests for sources(): building the file and browser lists from providers,
-// and the refusal messages for an unclaimed ref or path.
+/**
+ * @fileoverview Tests for sources(): building the file and browser lists from
+ * providers, and the refusal messages for an unclaimed ref or path.
+ */
 
 import { dirname } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
-import type { Provider } from '../../src/plugin/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import type { Entry, Lister } from '../../src/store/index.ts';
-import { blobProvider } from '../../src/store/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { FIXTURE, bytes } from '../engine/harness.ts';
+import type { Provider } from '#plugin';
+import { sources } from '#plugin';
+import type { Entry, Lister } from '#store';
+import { blobProvider } from '#store';
+import { diskProvider } from '#store/node';
+import { FIXTURE, bytes } from '#tests/engine/harness';
 
 /** A stand-in S3 provider that claims s3:// paths and lists and stats in memory. */
 function bucketProvider(): Provider {

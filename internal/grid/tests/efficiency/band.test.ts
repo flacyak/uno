@@ -1,12 +1,14 @@
-// Measures the requests and bytes one jump of the grid costs: a band of
-// BAND_ROWS asked for at once from the middle of an indexed object.
+/**
+ * @fileoverview Measures the requests and bytes one jump of the grid costs: a
+ * band of BAND_ROWS asked for at once from the middle of an indexed object.
+ */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { BAND_ROWS } from '../../src/engine/client.ts';
-import { TUNING } from '../../src/engine/index.ts';
-import { indexed } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { BAND_ROWS } from '#engine/client';
+import { TUNING } from '#engine';
+import { indexed } from '#tests/engine/harness';
+import { ROWS } from '#tests/testdata/sales-q3';
 import { record } from './record.ts';
 import { remote, repeated } from './remote.ts';
 import type { Remote } from './remote.ts';

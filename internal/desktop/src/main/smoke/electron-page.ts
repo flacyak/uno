@@ -1,8 +1,10 @@
-// Page, over a real Electron window.
-//
-// This is the only file that holds renderer JavaScript as a string for `Page`.
-// Each string answers one kind of question for every check that asks it. A
-// check that needs more than `Page` offers gets a new method here.
+/**
+ * @fileoverview Page, over a real Electron window.
+ *
+ * This is the only file that holds renderer JavaScript as a string for `Page`.
+ * Each string answers one kind of question for every check that asks it. A
+ * check that needs more than `Page` offers gets a new method here.
+ */
 
 import type { BrowserWindow } from "electron";
 

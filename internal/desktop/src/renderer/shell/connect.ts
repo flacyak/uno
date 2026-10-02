@@ -1,16 +1,18 @@
-// The connect form: a bucket, a folder in it, how to sign in, and a test that
-// lists the folder. It takes the panel list's place while open.
-//
-// A connection is saved only after a test that lists its folder succeeds. The
-// sign-in options come from the engine. The region is found by the test and
-// kept in the connection.
+/**
+ * @fileoverview The connect form: a bucket, a folder in it, how to sign in, and
+ * a test that lists the folder. It takes the panel list's place while open.
+ *
+ * A connection is saved only after a test that lists its folder succeeds. The
+ * sign-in options come from the engine. The region is found by the test and
+ * kept in the connection.
+ */
 
-import type { SignIns } from "@uno/grid/engine";
-import type { AuthMode, Connection } from "@uno/grid/library";
-import { roleNameOf, validConnection } from "@uno/grid/library";
-import type { Tried } from "@uno/grid/store/s3";
+import type { SignIns } from "#engine";
+import type { AuthMode, Connection } from "#library";
+import { roleNameOf, validConnection } from "#library";
+import type { Tried } from "#store/s3";
 
-import { m } from "../../paraglide/messages.js";
+import { m } from "#paraglide/messages";
 import { RoleBlock } from "./role.ts";
 import { Words, button, el, message, option } from "./util.ts";
 

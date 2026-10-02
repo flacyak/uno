@@ -1,7 +1,9 @@
-// The checks the smoke test runs against a window.
-//
-// This is test code inside the app. It is reached only when UNO_SMOKE is set
-// in the environment, from main's index.ts.
+/**
+ * @fileoverview The checks the smoke test runs against a window.
+ *
+ * This is test code inside the app. It is reached only when UNO_SMOKE is set
+ * in the environment, from main's index.ts.
+ */
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -9,8 +11,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { BrowserWindow } from "electron";
 
-import { ask } from "../ask.ts";
-import { through } from "../driven.ts";
+import { ask } from "#main/ask";
+import { through } from "#main/driven";
 import { AGAIN } from "./again.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";

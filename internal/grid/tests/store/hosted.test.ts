@@ -1,14 +1,17 @@
-// hostedAuth: the hosted engine signs in as a role in the customer's account,
-// assumed with the tenant's external ID, as a session named for the person.
-//
-// The stand-in STS checks the signature and the external ID. A machine or
-// profile connection, and an address outside every connection, are refused.
+/**
+ * @fileoverview hostedAuth: the hosted engine signs in as a role in the
+ * customer's account, assumed with the tenant's external ID, as a session named
+ * for the person.
+ *
+ * The stand-in STS checks the signature and the external ID. A machine or
+ * profile connection, and an address outside every connection, are refused.
+ */
 
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import type { Connection } from '../../src/library/index.ts';
-import { hostedAuth } from '../../src/store/node.ts';
-import type { AwsCredentials, S3Location } from '../../src/store/s3.ts';
+import type { Connection } from '#library';
+import { hostedAuth } from '#store/node';
+import type { AwsCredentials, S3Location } from '#store/s3';
 import { HOME_REGION } from './regions.ts';
 import { sts } from './stsstandin.ts';
 import type { Sts } from './stsstandin.ts';

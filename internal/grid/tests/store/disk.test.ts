@@ -1,5 +1,7 @@
-// The disk lister, against a real temp folder with the testdata fixtures
-// copied into it.
+/**
+ * @fileoverview The disk lister, against a real temp folder with the testdata
+ * fixtures copied into it.
+ */
 
 import { execFileSync } from 'node:child_process';
 import {
@@ -17,10 +19,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
-import type { Entry } from '../../src/store/index.ts';
-import { readAll } from '../../src/store/index.ts';
-import { diskLister } from '../../src/store/disklister.ts';
-import { localFiles } from '../../src/store/node.ts';
+import type { Entry } from '#store';
+import { readAll } from '#store';
+import { diskLister } from '#store/disklister';
+import { localFiles } from '#store/node';
 
 const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));
 

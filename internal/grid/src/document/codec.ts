@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The bytes of a .uno: `readDocument` and `writeDocument` over
+ * the zip, the entries it holds, and the manifest measured from them.
+ */
+
 import { Zip, deflateSync, unzipSync } from 'fflate';
 import type { ZipInputFile } from 'fflate';
 
@@ -8,10 +13,10 @@ import {
   parseTime,
   rfc3339,
   sha256Hex,
-} from '../go/index.ts';
-import { read as ingestRead } from '../ingest/index.ts';
-import { Op } from '../sheet/index.ts';
-import type { Edit, Sheet } from '../sheet/index.ts';
+} from '#go';
+import { read as ingestRead } from '#ingest';
+import { Op } from '#sheet';
+import type { Edit, Sheet } from '#sheet';
 import type {
   Document,
   FileSource,

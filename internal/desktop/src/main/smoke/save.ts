@@ -1,9 +1,11 @@
-// Where a driven run saves.
-//
-// Save As is a dialog, and a driven window ignores all input from the window
-// system, a dialog included. So a driven run is told where to save in the
-// environment. main uses this in place of the dialog when a run is driven;
-// the plain app keeps asking.
+/**
+ * @fileoverview Where a driven run saves.
+ *
+ * Save As is a dialog, and a driven window ignores all input from the window
+ * system, a dialog included. So a driven run is told where to save in the
+ * environment. main uses this in place of the dialog when a run is driven;
+ * the plain app keeps asking.
+ */
 
 import { basename, join } from "node:path";
 

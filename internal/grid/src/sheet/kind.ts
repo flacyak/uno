@@ -1,5 +1,10 @@
-import { trimSpace } from '../go/index.ts';
-import { isNumber, undress } from '../num/index.ts';
+/**
+ * @fileoverview What a column looks like, inferred from a sample of its rows at
+ * open: text, number or date, and whether it is flagged.
+ */
+
+import { trimSpace } from '#go';
+import { isNumber, undress } from '#num';
 
 /**
  * Kind is what a column looks like. It is inferred at load and lives in

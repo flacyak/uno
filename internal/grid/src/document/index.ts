@@ -1,4 +1,6 @@
-// Package document reads and writes the .uno container.
+/**
+ * @fileoverview Package document reads and writes the .uno container.
+ */
 
 export {
   BASE_VERSION,

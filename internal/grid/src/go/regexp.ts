@@ -1,8 +1,10 @@
-// Ports of Go's regexp package.
-//
-// RE2 and JavaScript agree on what the induced patterns match. They differ in
-// three places this file covers: what a replacement string means, what unit a
-// match index is in, and which characters are escaped.
+/**
+ * @fileoverview Ports of Go's regexp package.
+ *
+ * RE2 and JavaScript agree on what the induced patterns match. They differ in
+ * three places this file covers: what a replacement string means, what unit a
+ * match index is in, and which characters are escaped.
+ */
 
 import { MAX_BMP, SURROGATE_PAIR_UNITS, runes } from './strings.ts';
 

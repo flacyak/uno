@@ -1,38 +1,40 @@
-// Reading a source out of a real bucket, with the credentials this machine
-// has.
-//
-// It runs only when UNO_S3_LIVE names objects to read (s3:// URLs separated
-// by spaces or commas) and is skipped otherwise, CI included. Each object
-// must be a copy of testdata/sales-q3.csv.
-//
-//   UNO_S3_LIVE="s3://uno-live-use1/sales-q3.csv s3://uno-live-euw1/sales-q3.csv" vp test s3.live
-//
-// UNO_S3_LIVE_ELSEWHERE names one such object in a bucket outside the region
-// the credentials sign for. The block that reads it asserts a refusal was
-// seen and reports which channel carried the region:
-//
-//   UNO_S3_LIVE_ELSEWHERE="s3://uno-live-euw1/sales-q3.csv" \
-//     AWS_REGION=us-east-1 vp test s3.live
-//
-// UNO_S3_LIVE_KEYS names an s3:// prefix holding a copy of the fixture under
-// each key in awkward.ts. Seed it once:
-//
-//   for k in "sales q3.csv" "sales+q3.csv" "100%.csv" ... ; do
-//     aws s3api put-object --bucket uno-live-use1 --key "awkward/$k" \
-//       --body testdata/sales-q3.csv
-//   done
-//   UNO_S3_LIVE_KEYS="s3://uno-live-use1/awkward/" vp test s3.live
-//
-// The dot-segment keys are tested only against the stand-in.
+/**
+ * @fileoverview Reading a source out of a real bucket, with the credentials
+ * this machine has.
+ *
+ * It runs only when UNO_S3_LIVE names objects to read (s3:// URLs separated
+ * by spaces or commas) and is skipped otherwise, CI included. Each object
+ * must be a copy of testdata/sales-q3.csv.
+ *
+ *   UNO_S3_LIVE="s3://uno-live-use1/sales-q3.csv s3://uno-live-euw1/sales-q3.csv" vp test s3.live
+ *
+ * UNO_S3_LIVE_ELSEWHERE names one such object in a bucket outside the region
+ * the credentials sign for. The block that reads it asserts a refusal was
+ * seen and reports which channel carried the region:
+ *
+ *   UNO_S3_LIVE_ELSEWHERE="s3://uno-live-euw1/sales-q3.csv" \
+ *     AWS_REGION=us-east-1 vp test s3.live
+ *
+ * UNO_S3_LIVE_KEYS names an s3:// prefix holding a copy of the fixture under
+ * each key in awkward.ts. Seed it once:
+ *
+ *   for k in "sales q3.csv" "sales+q3.csv" "100%.csv" ... ; do
+ *     aws s3api put-object --bucket uno-live-use1 --key "awkward/$k" \
+ *       --body testdata/sales-q3.csv
+ *   done
+ *   UNO_S3_LIVE_KEYS="s3://uno-live-use1/awkward/" vp test s3.live
+ *
+ * The dot-segment keys are tested only against the stand-in.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { readContainer } from '../../src/document/index.ts';
-import { awsCredentials, diskProvider } from '../../src/store/node.ts';
-import { s3Files, s3Location, s3Provider } from '../../src/store/s3.ts';
+import { readContainer } from '#document';
+import { awsCredentials, diskProvider } from '#store/node';
+import { s3Files, s3Location, s3Provider } from '#store/s3';
 import {
   bytes,
   connect,
@@ -41,8 +43,8 @@ import {
   sales,
   sheetRows,
   widened,
-} from '../engine/harness.ts';
-import { LAST_ROW, ROWS, UNITS } from '../testdata/sales-q3.ts';
+} from '#tests/engine/harness';
+import { LAST_ROW, ROWS, UNITS } from '#tests/testdata/sales-q3';
 import { AWKWARD_KEYS } from './awkward.ts';
 
 const URLS = (process.env['UNO_S3_LIVE'] ?? '')

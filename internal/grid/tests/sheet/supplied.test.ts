@@ -1,17 +1,13 @@
-// Tests for a supplied column, such as `_file` when several files are read as
-// one. The schema holds only its position and what it shows; finishRows
-// writes the supplied value into each row.
+/**
+ * @fileoverview Tests for a supplied column, such as `_file` when several files
+ * are read as one. The schema holds only its position and what it shows;
+ * finishRows writes the supplied value into each row.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import {
-  ERR_CELL,
-  NO_ROW,
-  Op,
-  Schema,
-  finishRows,
-} from '../../src/sheet/index.ts';
-import type { Edit } from '../../src/sheet/index.ts';
+import { ERR_CELL, NO_ROW, Op, Schema, finishRows } from '#sheet';
+import type { Edit } from '#sheet';
 
 const UNITS = 1;
 const DOUBLE = 2;

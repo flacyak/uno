@@ -1,5 +1,7 @@
-// Picks the plugin that claims a path or ref, and builds the error when
-// none does. Opening and browsing both use it.
+/**
+ * @fileoverview Picks the plugin that claims a path or ref, and builds the
+ * error when none does. Opening and browsing both use it.
+ */
 
 /** A plugin with a label, which the error names. */
 interface Named {

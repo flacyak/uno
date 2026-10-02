@@ -1,5 +1,7 @@
-// Ports of Go's string functions whose JavaScript equivalents give a different
-// answer.
+/**
+ * @fileoverview Ports of Go's string functions whose JavaScript equivalents
+ * give a different answer.
+ */
 
 /**
  * runes splits a string into code points, like a Go `[]rune`. Parsers index
