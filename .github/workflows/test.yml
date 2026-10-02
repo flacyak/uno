@@ -103,3 +103,87 @@ jobs:
           name: smoke-window
           path: apps/desktop/out/smoke/window.png
           if-no-files-found: ignore
+
+  # The hosted version, apps/www, builds against @uno/core and @uno/desktop
+  # through link: dependencies, so a change in what either exports can break
+  # it with no signal here: its own presubmit runs against uno's main once a
+  # day, after the change has landed. This job is that signal on the pull
+  # request itself. The submodule is checked out at the commit this tree
+  # records and built, checked and tested the way its presubmit does.
+  #
+  # apps/www is a private repository, which the workflow token cannot read.
+  # HOSTED_TOKEN is a repository secret holding a token with read access to
+  # flacyak/uno-hosted's contents; a fine-grained personal access token
+  # scoped to that one repository is enough. A pull request from a fork is
+  # handed no secrets, so the job does not run for one.
+  #
+  # `needs: test` keeps a red run readable: uno's own build, check and tests
+  # have passed by the time this starts, so what fails here is the hosted
+  # build against them.
+  hosted:
+    needs: test
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the hosted token
+        env:
+          HOSTED_TOKEN: ${{ secrets.HOSTED_TOKEN }}
+        run: |
+          if [ -z "$HOSTED_TOKEN" ]; then
+            echo "::error title=HOSTED_TOKEN is not set::Add a repository secret named HOSTED_TOKEN holding a token that reads flacyak/uno-hosted."
+            exit 1
+          fi
+
+      # The gitlink is the one commit of apps/www this tree is known to build
+      # with, and it is what the checkout below fetches.
+      - name: Read the recorded apps/www commit
+        id: gitlink
+        run: echo "sha=$(git rev-parse HEAD:apps/www)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out apps/www
+        uses: actions/checkout@v7
+        with:
+          repository: flacyak/uno-hosted
+          ref: ${{ steps.gitlink.outputs.sha }}
+          path: apps/www
+          token: ${{ secrets.HOSTED_TOKEN }}
+
+      # Two workspaces, one store: both lock files name the cache key. The
+      # same ELECTRON_SKIP_BINARY_DOWNLOAD and cache-save reasoning as the
+      # test job: nothing here spawns Electron, and an entry saved without
+      # its binary must never be the one the smoke job restores.
+      - uses: voidzero-dev/setup-vp@v1.19.0
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        with:
+          version-file: pnpm-workspace.yaml
+          cache: true
+          cache-save: false
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            apps/www/pnpm-lock.yaml
+          run-install: true
+
+      # @uno/core's exports point at dist/, and the desktop's renderer imports
+      # its compiled messages, which its build writes. The hosted packages
+      # have nothing to resolve against until both have run.
+      - name: Build uno
+        run: vp run build
+
+      - name: Install apps/www
+        working-directory: apps/www
+        run: vp install
+
+      - name: Build apps/www
+        working-directory: apps/www
+        run: vp run build
+
+      - name: Check apps/www
+        working-directory: apps/www
+        run: vp run check
+
+      - name: Test apps/www
+        working-directory: apps/www
+        run: vp run test
