@@ -10,14 +10,14 @@
  * pages of a file.
  */
 
-import type { Formula } from '#formula';
-import { Graph, parse as parseFormula } from '#formula';
+import type { Formula } from '@formula';
+import { Graph, parse as parseFormula } from '@formula';
 import {
   render as renderNotation,
   supported as notationSupported,
-} from '#notation';
-import type { Program } from '#program';
-import { parse as parseProgram } from '#program';
+} from '@notation';
+import type { Program } from '@program';
+import { parse as parseProgram } from '@program';
 import type { Edit } from './edit.ts';
 import { Op, editEquals } from './edit.ts';
 

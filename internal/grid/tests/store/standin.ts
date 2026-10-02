@@ -13,10 +13,10 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { compareStrings } from '#go';
-import { signV4 } from '#store/s3';
-import type { AwsCredentials } from '#store/s3';
-import { bytes } from '#tests/testdata/sales-q3';
+import { compareStrings } from '@go';
+import { signV4 } from '@store/s3';
+import type { AwsCredentials } from '@store/s3';
+import { bytes } from '@grid-tests/testdata/sales-q3';
 import { HOME_REGION, rendered } from './regions.ts';
 import type { Misdirect } from './regions.ts';
 

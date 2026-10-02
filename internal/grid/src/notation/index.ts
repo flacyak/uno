@@ -7,7 +7,7 @@
  * time; the grid draws the result as plain text.
  */
 
-import { formatU, quote, runes } from '#go';
+import { formatU, quote, runes } from '@go';
 import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';
 
 export { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';

@@ -11,10 +11,10 @@ import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
-import { compareStrings, concat } from '#go';
-import type { Connection } from '#library';
-import { covering } from '#library';
-import type { Provider } from '#plugin';
+import { compareStrings, concat } from '@go';
+import type { Connection } from '@library';
+import { covering } from '@library';
+import type { Provider } from '@plugin';
 import type { FileHandler } from './index.ts';
 import { readAhead } from './ahead.ts';
 import { s3Lister } from './s3lister.ts';

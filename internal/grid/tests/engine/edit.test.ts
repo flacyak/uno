@@ -6,18 +6,18 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import type { Offer } from '#engine';
-import { read } from '#ingest';
-import { snap } from '#pattern';
-import { text as programText } from '#program';
-import { NO_ROW, Op } from '#sheet';
+import type { Offer } from '@engine';
+import { read } from '@ingest';
+import { snap } from '@pattern';
+import { text as programText } from '@program';
+import { NO_ROW, Op } from '@sheet';
 import {
   CHANNEL,
   COMMAS_LEFT,
   REGION,
   ROWS,
   UNITS,
-} from '#tests/testdata/sales-q3';
+} from '@grid-tests/testdata/sales-q3';
 import {
   SCREEN,
   TINY,

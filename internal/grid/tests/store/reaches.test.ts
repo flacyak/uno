@@ -19,6 +19,9 @@ const run = promisify(execFile);
 const SRC = fileURLToPath(new URL('../../src', import.meta.url));
 const REACH = fileURLToPath(new URL('./reach/', import.meta.url));
 
+/** The alias map for Node, since the scenario imports the core as `@store` and so on. */
+const PATHS = fileURLToPath(new URL('../../../paths.js', import.meta.url));
+
 /** How long one watched run gets. It starts a stand-in S3 and STS and runs a program. */
 const RUN_MS = 60_000;
 
@@ -32,6 +35,8 @@ async function watched(
     [
       '--experimental-transform-types',
       '--no-warnings',
+      '--import',
+      PATHS,
       `${REACH}run.ts`,
       root,
       scenario,

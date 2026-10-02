@@ -8,12 +8,12 @@
  * a Web Worker, or a MessageChannel.
  */
 
-import type { AuthMode, Connection, RoleTrust } from '#library';
-import type { Change } from '#pattern';
-import type { Said } from '#said';
-import type { Edit, Kind, Op } from '#sheet';
-import type { Entry, FileRef, Listing, SingleRef } from '#store';
-import type { Tried, Unconnected } from '#store/s3';
+import type { AuthMode, Connection, RoleTrust } from '@library';
+import type { Change } from '@pattern';
+import type { Said } from '@said';
+import type { Edit, Kind, Op } from '@sheet';
+import type { Entry, FileRef, Listing, SingleRef } from '@store';
+import type { Tried, Unconnected } from '@store/s3';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -365,4 +365,4 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
   };
 }
 
-export { formatBytes, messageOf } from '#said';
+export { formatBytes, messageOf } from '@said';

@@ -5,8 +5,8 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { Sheet } from '#sheet';
-import { parse } from '#formula';
+import { Sheet } from '@sheet';
+import { parse } from '@formula';
 
 function noted(): Sheet {
   return new Sheet(

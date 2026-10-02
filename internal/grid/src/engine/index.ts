@@ -10,8 +10,8 @@ export { BAND_ROWS, Band, Engine, SourceHandle } from './client.ts';
 export type { Added, Pending, RowsReply } from './client.ts';
 export { indexPass } from './pass.ts';
 export type { PassContext } from './pass.ts';
-export { Refusal, english, saidOf } from '#said';
-export type { CharName, Said, Sought, StepSaid } from '#said';
+export { Refusal, english, saidOf } from '@said';
+export type { CharName, Said, Sought, StepSaid } from '@said';
 export {
   ROWS_AT_MOST,
   formatBytes,
