@@ -9,6 +9,7 @@ import { expect, test } from 'vite-plus/test';
 
 import {
   BYTES,
+  COLLECTOR_VARIABLES,
   DURATION_BOUNDS,
   Engine,
   INDEX,
@@ -474,4 +475,43 @@ test('headers that are set and hold no header are refused by name', () => {
     ...READ,
     headers: {},
   });
+});
+
+/** readBy is every variable `collector` asks `env` for, whatever it finds. */
+function readBy(env: Record<string, string>): Set<string> {
+  const asked = new Set<string>();
+  collector(
+    new Proxy(env, {
+      get(target, name) {
+        if (typeof name === 'string') asked.add(name);
+        return Reflect.get(target, name);
+      },
+    }),
+  );
+  return asked;
+}
+
+test('the variables a collector is read from are all it reads, so handing them on hands the collector on', () => {
+  // A variable is asked for only while the ones before it were empty, so
+  // each endpoint is set alone, and what either run asked for is the whole.
+  const asked = new Set([
+    ...readBy({ OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp.example.test' }),
+    ...readBy({
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'https://metrics.example.test',
+    }),
+    ...readBy({}),
+  ]);
+  expect([...asked].toSorted()).toEqual([...COLLECTOR_VARIABLES].toSorted());
+
+  const env = {
+    OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp.example.test/otlp',
+    OTEL_EXPORTER_OTLP_HEADERS: 'Authorization=Basic%20all',
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'https://traces.example.test',
+    PATH: '/usr/bin',
+  };
+  const handed = Object.fromEntries(
+    COLLECTOR_VARIABLES.map((name) => [name, env[name as keyof typeof env]]),
+  );
+  expect(collector(handed)).toEqual(collector(env));
 });
