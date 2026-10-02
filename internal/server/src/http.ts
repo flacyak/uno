@@ -1,5 +1,7 @@
-// HTTP helpers shared by the engine and the gate: read a request body, answer
-// with JSON, and serve a file from a folder.
+/**
+ * @fileoverview HTTP helpers shared by the engine and the gate: read a request
+ * body, answer with JSON, and serve a file from a folder.
+ */
 
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
