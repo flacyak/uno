@@ -121,6 +121,22 @@ test('requests to S3 are counted on their way through, with nothing of where the
   });
 });
 
+test('a HEAD adds no bytes received: its length is what a GET would send, and no body came', async () => {
+  const { sent, go } = network();
+  await sending(go, async (e) => {
+    await e.fetch(OBJECT, { method: 'HEAD' });
+    await e.fetch(OBJECT, { method: 'GET' });
+    await e.flush();
+    const payload = JSON.parse(sent[2]!.body) as Payload;
+    const received = payload.resourceMetrics[0]!.scopeMetrics[0]!.metrics.find(
+      (m) => m.name === S3_RECEIVED,
+    );
+    expect(received).toMatchObject({
+      sum: { dataPoints: [{ asDouble: LENGTH }] },
+    });
+  });
+});
+
 test('sends go one at a time, so a close during a send on the timer follows it', async () => {
   const { sent, go } = network();
   let answer: (() => void) | undefined;

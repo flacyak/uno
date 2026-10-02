@@ -111,14 +111,17 @@ export function exporter(
       try {
         const res = await go(input, init);
         outcome = statusClass(res.status);
-        // A missing content-length counts as zero bytes.
-        const length = Number(res.headers.get('content-length') ?? '0');
-        meter.record({
-          name: S3_RECEIVED,
-          kind: 'count',
-          unit: 'By',
-          value: length,
-        });
+        // A HEAD is answered with the length a GET would send, and no body.
+        if (method.toUpperCase() !== 'HEAD') {
+          // A missing content-length counts as zero bytes.
+          const length = Number(res.headers.get('content-length') ?? '0');
+          meter.record({
+            name: S3_RECEIVED,
+            kind: 'count',
+            unit: 'By',
+            value: length,
+          });
+        }
         return res;
       } finally {
         meter.record({
