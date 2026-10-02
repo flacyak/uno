@@ -64,18 +64,29 @@ export class Engine {
 
   /**
    * open adds a file to the workspace. A .uno opens every source it holds,
-   * and only into an empty workspace.
+   * and only into an empty workspace. Aborting `signal` cancels an open
+   * still in flight, which is refused as cancelled; one already answered
+   * is left alone.
    */
-  async open(ref: SourceRef): Promise<Added> {
-    const { added } = await this.ask('opened', (id) => ({
-      t: 'open',
-      id,
-      ref,
-    }));
-    return {
-      sources: added.opened.map((o) => this.adopt(o)),
-      showing: added.showing,
-    };
+  async open(ref: SourceRef, signal?: AbortSignal): Promise<Added> {
+    if (signal?.aborted) throw new Refusal({ t: 'cancelled', name: ref.name });
+    // The cancel names the request's id, so the listener waits for it.
+    let cancel = (): void => {};
+    try {
+      const { added } = await this.ask('opened', (id) => {
+        cancel = () => {
+          if (this.gone === undefined) this.port.post({ t: 'cancel', of: id });
+        };
+        signal?.addEventListener('abort', cancel, { once: true });
+        return { t: 'open', id, ref };
+      });
+      return {
+        sources: added.opened.map((o) => this.adopt(o)),
+        showing: added.showing,
+      };
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+    }
   }
 
   /** remove takes a source out of the workspace, and its edits out of the log. */
