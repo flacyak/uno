@@ -105,7 +105,8 @@
   white-space: nowrap;
 }
 
-.tab > :not(.name) {
+.tab > :not(.name),
+.tab-opening > :not(.name) {
   flex-shrink: 0;
 }
 
@@ -150,14 +151,19 @@
   color: var(--surface);
 }
 
-/* The × shows on hover and on the active tab. */
-.tab .close {
+/* The × shows on hover and on the active tab. On a source still opening it
+ * stays in view: the person is waiting on it. */
+.tab .close,
+.tab-opening .close {
   margin: 0 -4px 0 -2px;
   padding: 0 4px;
   border-radius: 4px;
   color: var(--ink-3);
   line-height: 16px;
   cursor: pointer;
+}
+
+.tab .close {
   visibility: hidden;
 }
 
@@ -166,7 +172,8 @@
   visibility: visible;
 }
 
-.tab .close:hover {
+.tab .close:hover,
+.tab-opening .close:hover {
   color: var(--ink);
   background: var(--rule-2);
 }

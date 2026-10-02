@@ -350,6 +350,7 @@
   "sidebar_open_line_hint": "clique para abrir sua linha no painel de fontes",
   "sidebar_point_hint": "clique para apontá-lo para um ficheiro no painel de fontes",
   "sidebar_remove_source": "Remover {name} do espaço de trabalho",
+  "sidebar_stop_opening": "Interromper a abertura de {name}",
   "workspaces_title": "Espaços de trabalho",
   "new_workspace": "Novo espaço de trabalho",
   "empty_title": "Largue uma folha de cálculo",
