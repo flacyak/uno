@@ -80,7 +80,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "file-closed": { t: "file-closed" },
   "changed-on-disk": { t: "changed-on-disk", name: "ads.csv" },
   "keeps-no-connections": { t: "keeps-no-connections" },
-  "offers-no-profiles": { t: "offers-no-profiles" },
+  "offers-no-sign-ins": { t: "offers-no-sign-ins" },
   "tries-no-connection": { t: "tries-no-connection" },
 };
 
