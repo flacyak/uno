@@ -11,8 +11,9 @@ export interface Check {
   /**
    * A request to smoke.js, sent before the check runs and waited on until it
    * is done: `rewrite <key>` rewrites the stand-in's object at <key> with one
-   * digit changed, and `put <key> ...` puts the objects it holds for those
-   * keys into the bucket.
+   * digit changed, `put <key> ...` puts the objects it holds for those keys
+   * into the bucket, and `again [<path>]` starts a second uno on the path and
+   * waits for it to exit.
    */
   ask?: string;
   /**
