@@ -72,13 +72,14 @@ Each is one commit on the branch. Deltas are insertions and deletions over `src/
 30. grid codec: omitempty writes a manifest source, with the key order kept where fileSource and partsSource build the records.
 31. grid workspace: pointedAt and everyPart, each used once, written where they are used.
 32. grid engine: Part is Held less id, name and state, with edits, as a type; keptOf and the save's held are each one spread.
+33. desktop grid: Grid.act's own actions as a Handlers table. grid induce: dedup and deletions through Sets. grid ingest: read and readSeparated are one. Smoke run passes.
 
-Measured after step 32, against the baseline:
+Measured after step 33, against the baseline:
 
 | area                      | lines | was   |
 | ------------------------- | ----- | ----- |
-| internal/grid/src         | 16813 | 16971 |
-| internal/desktop/src      | 13388 | 13697 |
+| internal/grid/src         | 16786 | 16971 |
+| internal/desktop/src      | 13378 | 13697 |
 | internal/grid/tests       | 20639 |       |
 | internal/desktop/tests    | 7671  |       |
 | everything under internal | +2637 -3246 over 96 files, 35 commits |
@@ -95,6 +96,8 @@ From the survey, not yet done, highest value first.
 
 - desktop renderer: text-field key guard shared by six handlers (~15, medium risk: the six differ in composing and preventDefault, and the saving after the helper is a few lines); frameOnce for the two next-frame redraws (~5); Theming and Language listener lists (~3).
 - desktop smoke/vim-style.ts: the connection form filled three times across meets, sources and connections; the typed command repeated four times.
+- desktop keys.ts: target's fifteen one-line motions as a table (~10, medium: the lookup needs a cast and splits the logic).
+- grid formula/ast.ts collectRefs as an if chain (~11, mostly return lines: compression, so left).
 - grid: telemetry's three switches over a kind as three small classes. Measured as line-neutral, so left as it is.
 - grid codec: the hand-written CRC-32 could be read out of fflate's gzip trailer, about 20 lines. Left as it is: it would couple the save to gzip's wrapper, and no test checks the CRC, so a wrong one would pass every test and fail only in Go's archive/zip.
 - desktop sources: the peek's `shown` and `looking` as one field, about 9 lines, with about 14 test assertions to reword.
