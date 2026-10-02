@@ -19,10 +19,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
-import type { Entry } from '#store';
-import { readAll } from '#store';
-import { diskLister } from '#store/disklister';
-import { localFiles } from '#store/node';
+import type { Entry } from '@store';
+import { readAll } from '@store';
+import { diskLister } from '@store/disklister';
+import { localFiles } from '@store/node';
 
 const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));
 

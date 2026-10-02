@@ -7,18 +7,18 @@
  * pointed at with the same variables the AWS CLI reads. The app opens objects
  * in it with the real store, over the wire, with a real signature.
  *
- * Usage: node scripts/smoke.js   (after node scripts/build.js)
+ * Usage: node --import ../paths.js scripts/smoke.js   (after node scripts/build.js)
  */
 
-import { newManifest, readContainer, writeDocument } from "#document";
-import { parseConnection } from "#library";
+import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
+import { parseConnection } from "@uno/grid/library";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { HOME_REGION } from "../../grid/tests/store/regions.ts";
-import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "../../grid/tests/store/standin.ts";
+import { HOME_REGION } from "@grid-tests/store/regions";
+import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@grid-tests/store/standin";
 import {
   DRIVEN_LANGUAGE_ENV,
   DRIVEN_LANGUAGE_SWITCH,

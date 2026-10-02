@@ -12,11 +12,11 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
-import { num } from "#renderer/locale";
-import type { Shell } from "#renderer/shell/shell";
-import { m } from "#paraglide/messages";
-import { bootShell } from "#tests/smoke/dom-harness";
-import { domPage } from "#tests/smoke/dom-page";
+import { num } from "@renderer/locale";
+import type { Shell } from "@renderer/shell/shell";
+import { m } from "@paraglide/messages";
+import { bootShell } from "@desktop-tests/smoke/dom-harness";
+import { domPage } from "@desktop-tests/smoke/dom-page";
 
 const page = domPage();
 let shell: Shell;

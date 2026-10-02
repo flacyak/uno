@@ -7,8 +7,8 @@
  * refused by name.
  */
 
-import { compareStrings } from '#go';
-import type { Connection, Formula } from '#library';
+import { compareStrings } from '@go';
+import type { Connection, Formula } from '@library';
 import {
   EXT,
   fileName,
@@ -17,13 +17,13 @@ import {
   parseConnection,
   parseFormula,
   stampConnection,
-} from '#library';
+} from '@library';
 import { JOINS, OPENS, claim } from './claim.ts';
 // Type only. The handler that opens parts is re-exported below.
 import type { HeaderMode, Part } from './multi.ts';
 // Type only, so the run-time import graph stays one-way with the plugin
 // package.
-import type { Provider } from '#plugin';
+import type { Provider } from '@plugin';
 
 // Browsing is its own interface, in store/list.ts.
 export { listWith, statWith } from './list.ts';

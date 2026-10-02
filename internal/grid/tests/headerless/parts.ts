@@ -7,14 +7,14 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { SourceRef } from '#engine';
-import { columnNames } from '#ingest';
-import type { HeaderMode } from '#ingest';
-import type { Provider } from '#plugin';
-import { blobProvider, multiProvider } from '#store';
-import { diskProvider } from '#store/node';
-import { COLS } from '#tests/testdata/sales-q3';
-import { PARTS, partBytes } from '#tests/testdata/sales-q3-parts';
+import type { SourceRef } from '@engine';
+import { columnNames } from '@ingest';
+import type { HeaderMode } from '@ingest';
+import type { Provider } from '@plugin';
+import { blobProvider, multiProvider } from '@store';
+import { diskProvider } from '@store/node';
+import { COLS } from '@grid-tests/testdata/sales-q3';
+import { PARTS, partBytes } from '@grid-tests/testdata/sales-q3-parts';
 
 const LF = 0x0a;
 

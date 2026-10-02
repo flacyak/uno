@@ -3,7 +3,7 @@
  * or connection. It works on text alone.
  */
 
-import { rfc3339, runes } from '#go';
+import { rfc3339, runes } from '@go';
 import { CONNECTION_KIND } from './connection.ts';
 import {
   about,

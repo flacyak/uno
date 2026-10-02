@@ -4,7 +4,7 @@
  * answer. Strategies are pure functions of mode, pending keys and the press.
  */
 
-import type { Mode, Pending, Press, Step } from "#renderer/keys";
+import type { Mode, Pending, Press, Step } from "@renderer/keys";
 
 /** Strategy name used by the menu and the saved setting. */
 export type InputName = "default" | "vim-style";

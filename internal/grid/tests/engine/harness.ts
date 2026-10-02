@@ -6,7 +6,7 @@
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { Engine, english, messagePort, serve } from '#engine';
+import { Engine, english, messagePort, serve } from '@engine';
 import type {
   MessagePortLike,
   Reply,
@@ -15,16 +15,16 @@ import type {
   SourceHandle,
   SourceRef,
   Tuning,
-} from '#engine';
-import type { Connecting } from '#engine';
-import { read } from '#ingest';
-import { sources } from '#plugin';
-import type { Provider } from '#plugin';
-import type { Sheet } from '#sheet';
-import { blobProvider, multiProvider } from '#store';
-import type { Connections } from '#store';
-import { diskProvider } from '#store/node';
-import { bytes, FIXTURE } from '#tests/testdata/sales-q3';
+} from '@engine';
+import type { Connecting } from '@engine';
+import { read } from '@ingest';
+import { sources } from '@plugin';
+import type { Provider } from '@plugin';
+import type { Sheet } from '@sheet';
+import { blobProvider, multiProvider } from '@store';
+import type { Connections } from '@store';
+import { diskProvider } from '@store/node';
+import { bytes, FIXTURE } from '@grid-tests/testdata/sales-q3';
 
 // Re-exported from testdata/sales-q3.ts.
 export { bytes, FIXTURE };

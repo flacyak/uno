@@ -14,12 +14,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
-import { HOME_REGION } from "../../grid/tests/store/regions.ts";
-import { bucket, etagOf } from "../../grid/tests/store/standin.ts";
-import type { Bucket } from "../../grid/tests/store/standin.ts";
+import { HOME_REGION } from "@grid-tests/store/regions";
+import { bucket, etagOf } from "@grid-tests/store/standin";
+import type { Bucket } from "@grid-tests/store/standin";
 import { bucketEngine } from "./bucket-engine.ts";
-import { Sources, stateOf } from "#renderer/sources";
-import { Workspace } from "#renderer/workspace";
+import { Sources, stateOf } from "@renderer/sources";
+import { Workspace } from "@renderer/workspace";
 
 /** A small export, and the index of its cost column. */
 const ADS = "Ad_Date,Cost\n2024-11-16,$12.50\n20-11-2024,$8.00\n2024/11/16,$3.10\n";

@@ -6,19 +6,19 @@
  * CSV and TSV are the only formats today.
  */
 
-import { english } from '#said';
-import { unreachable } from '#never';
-import type { ByteSource } from '#store';
+import { english } from '@said';
+import { unreachable } from '@never';
+import type { ByteSource } from '@store';
 import { readAll } from './csv.ts';
 import { RecordScanner, bomLength } from './scan.ts';
-import type { Charset, Said } from '#said';
+import type { Charset, Said } from '@said';
 import { sniffDelimiter, sniffEncoding } from './sniff.ts';
 import type { Encoding } from './sniff.ts';
 
 /** How much of the head is read first, to sniff and to find the header. */
 const PEEK = 64 << 10;
 
-export type { Charset } from '#said';
+export type { Charset } from '@said';
 
 /** The decoders a file is read with: one for its head, one for its records. */
 interface Decoders {

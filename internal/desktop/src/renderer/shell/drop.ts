@@ -5,10 +5,10 @@
 
 import "./empty.css";
 
-import { WORKSPACE_EXT } from "#document";
+import { WORKSPACE_EXT } from "@document";
 
-import { m } from "#paraglide/messages";
-import { READS } from "#renderer/sources";
+import { m } from "@paraglide/messages";
+import { READS } from "@renderer/sources";
 
 /** The file extensions a drop may open: a workspace, or what the panel reads. */
 const OPENABLE = [WORKSPACE_EXT, ...READS];
