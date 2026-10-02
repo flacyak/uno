@@ -17,14 +17,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import {
-  ENDPOINT_VARIABLE,
-  Meter,
-  collector,
-} from '../src/engine/telemetry.ts';
-import type { Collector } from '../src/engine/telemetry.ts';
-import { compare, markdown } from '../tests/efficiency/compare.ts';
-import type { Metric } from '../tests/efficiency/record.ts';
+import { ENDPOINT_VARIABLE, Meter, collector } from '#engine/telemetry';
+import type { Collector } from '#engine/telemetry';
+import { compare, markdown } from '#tests/efficiency/compare';
+import type { Metric } from '#tests/efficiency/record';
 
 const HEAD = fileURLToPath(new URL('../out/efficiency/', import.meta.url));
 
