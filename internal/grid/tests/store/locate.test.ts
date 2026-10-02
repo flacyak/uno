@@ -15,7 +15,7 @@ import { locate, s3Provider } from "../../src/store/s3.ts";
 import type { S3Options } from "../../src/store/s3.ts";
 import { connect, indexed, openOne } from "../engine/harness.ts";
 import { HOME_REGION, REGION_FORMATS, rendered } from "./regions.ts";
-import { BUCKET, KEYS, bucket } from "./standin.ts";
+import { BUCKET, KEYS, bucket, keysOnly } from "./standin.ts";
 import type { Bucket } from "./standin.ts";
 
 let b: Bucket;
@@ -73,14 +73,7 @@ test("it costs a HeadBucket, followed once", async () => {
 // The point of keeping it: a connection that knows its region sends every
 // request there, and one that does not pays a redirect on its first.
 test("a connection holding its region sends its first request straight there", async () => {
-  const env = {
-    AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
-    AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
-    AWS_REGION: "us-east-1",
-    AWS_PROFILE: undefined,
-    AWS_CONFIG_FILE: "/nonexistent/config",
-    AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/credentials",
-  };
+  const env = keysOnly("us-east-1");
   const ref = { name: "sales-q3.csv", path: `s3://${BUCKET}/2025/sales-q3.csv` };
 
   for (const [c, redirects] of [

@@ -20,6 +20,7 @@ export {
   delimiterName,
   encodingName,
   headerOf,
+  labelOf,
   openFormat,
   peekFormat,
 } from "./format.ts";
@@ -45,14 +46,21 @@ export function read(
   const [text, charset] =
     typeof bytes === "string" ? [stripBOM(bytes), "UTF-8" as const] : decoded(name, bytes);
 
-  switch (extensionOf(name)) {
-    case ".json":
-      throw new Error(`${name}: JSON is not supported yet`);
-    case ".tsv":
-      return readSeparated(name, text, "\t", header, charset);
-    default:
-      return readSeparated(name, text, sniffDelimiter(text), header, charset);
-  }
+  const ext = extensionOf(name);
+  if (ext === ".json") throw new Error(`${name}: JSON is not supported yet`);
+  const comma = ext === ".tsv" ? "\t" : sniffDelimiter(text);
+
+  // Ragged rows are the norm in real exports, so short rows are tolerated
+  // rather than made a reason to reject the file.
+  const rows = readAll(text, comma);
+  if (rows.length === 0) throw new Error(`${name}: file is empty`);
+
+  const s =
+    header === "first"
+      ? new Sheet(name, headerOf(rows[0]!), rows.slice(1))
+      : new Sheet(name, columnNames(rows[0]!.length), rows);
+  s.source = describe(comma, header, charset);
+  return s;
 }
 
 /**
@@ -72,24 +80,4 @@ const BOM = "\uFEFF";
  * read the same header. */
 function stripBOM(text: string): string {
   return text.startsWith(BOM) ? text.slice(BOM.length) : text;
-}
-
-function readSeparated(
-  name: string,
-  text: string,
-  comma: string,
-  header: HeaderMode,
-  charset: Charset,
-): Sheet {
-  // Ragged rows are the norm in real exports, so short rows are tolerated
-  // rather than made a reason to reject the file.
-  const rows = readAll(text, comma);
-  if (rows.length === 0) throw new Error(`${name}: file is empty`);
-
-  const s =
-    header === "first"
-      ? new Sheet(name, headerOf(rows[0]!), rows.slice(1))
-      : new Sheet(name, columnNames(rows[0]!.length), rows);
-  s.source = describe(comma, header, charset);
-  return s;
 }

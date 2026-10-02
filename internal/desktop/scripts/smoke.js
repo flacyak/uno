@@ -20,7 +20,6 @@
 
 import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
 import { parseConnection } from "@uno/grid/library";
-import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +30,9 @@ import {
   DRIVEN_LANGUAGE_ENV,
   DRIVEN_LANGUAGE_SWITCH,
   displayMissing,
+  drive,
   electronEnv,
+  rewrite,
   verdict,
 } from "./launch.js";
 
@@ -159,9 +160,28 @@ console.log(`smoke: stand-in S3 at ${standin.endpoint}, holding ${object}`);
 let shutting;
 const shut = () => (shutting ??= standin.close());
 
-const child = spawn(electron, [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, fixture], {
-  // stdin carries smoke.js's answers to what the checks ask of it.
-  stdio: ["pipe", "pipe", "pipe"],
+/**
+ * answer does what a check asked of this script, which holds the stand-in:
+ * `rewrite <key>` writes the object at <key> over as an export regenerated
+ * with one figure corrected would be, and `put <key> ...` puts each object
+ * held back for those keys into the bucket, as an export landing in its
+ * folder would.
+ */
+function answer(what) {
+  const [verb, ...keys] = what.split(" ");
+  if (verb === "put" && keys.length > 0 && keys.every((k) => ARRIVING.has(k))) {
+    for (const k of keys) standin.objects.set(k, ARRIVING.get(k));
+    return true;
+  }
+  const [key] = keys;
+  if (verb !== "rewrite" || !standin.objects.has(key ?? "")) return false;
+  rewrite(standin.objects, key);
+  return true;
+}
+
+const { code, out } = await drive("smoke", {
+  electron,
+  args: [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, fixture],
   env: electronEnv(process.env, {
     ...DRIVEN_LANGUAGE_ENV,
     UNO_SMOKE: scratch,
@@ -180,64 +200,11 @@ const child = spawn(electron, [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_S
     AWS_CONFIG_FILE: join(aws, "config"),
     AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
   }),
+  answer,
+  // A hung app is a failure, not something to wait out.
+  deadlineMs: 60_000,
+  onTimeout: () => void shut(),
 });
-
-console.log(`smoke: electron pid ${child.pid}`);
-
-let out = "";
-/**
- * answer does what a check asked of this script, which holds the stand-in, and
- * says so on the app's stdin: `rewrite <key>` writes the object at <key> over
- * with the same bytes but one digit, the same size and a different ETag, as an
- * export regenerated with one figure corrected would be, and `put <key> ...`
- * puts each object held back for those keys into the bucket, as an export
- * landing in its folder would.
- */
-function answer(what) {
-  const [verb, ...keys] = what.split(" ");
-  if (verb === "put" && keys.length > 0 && keys.every((k) => ARRIVING.has(k))) {
-    for (const k of keys) standin.objects.set(k, ARRIVING.get(k));
-    child.stdin.write(`smoke: done ${what}\n`);
-    return;
-  }
-  const [key] = keys;
-  const was = standin.objects.get(key ?? "");
-  if (verb !== "rewrite" || was === undefined) {
-    child.stdin.write(`smoke: nothing here does ${what}\n`);
-    return;
-  }
-  const now = was.slice();
-  const body = now.indexOf(0x0a);
-  const at = now.findIndex((c, i) => i > body && c >= 0x30 && c <= 0x39);
-  now[at] = now[at] === 0x39 ? 0x30 : now[at] + 1;
-  standin.objects.set(key, now);
-  child.stdin.write(`smoke: done ${what}\n`);
-}
-
-let pending = "";
-child.stdout.on("data", (chunk) => {
-  out += String(chunk);
-  pending += String(chunk);
-  const lines = pending.split("\n");
-  pending = lines.pop() ?? "";
-  for (const line of lines) {
-    if (line.startsWith("smoke: ask ")) answer(line.slice("smoke: ask ".length));
-  }
-  process.stdout.write(chunk);
-});
-child.stderr.on("data", (chunk) => process.stderr.write(chunk));
-
-// A hung app is a failure, not something to wait out. The pid is tracked so it
-// can be stopped by pid rather than by name.
-const DEADLINE_MS = 60_000;
-const deadline = setTimeout(() => {
-  console.error(`smoke: timed out after ${DEADLINE_MS / 1000}s`);
-  if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
-  void shut();
-}, DEADLINE_MS);
-
-const code = await new Promise((resolve) => child.on("close", resolve));
-clearTimeout(deadline);
 await shut();
 
 const failed = verdict("smoke", code, out, "smoke: all checks passed");

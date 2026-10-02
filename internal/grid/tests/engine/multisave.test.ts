@@ -15,7 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vite-pl
 import { PARTS_VERSION, POINTED_VERSION, readContainer } from "../../src/document/index.ts";
 import type { Document, HeldPart } from "../../src/document/index.ts";
 import { english } from "../../src/engine/index.ts";
-import type { Engine, SourceHandle, SourceRef } from "../../src/engine/index.ts";
+import type { Engine, SourceRef } from "../../src/engine/index.ts";
 import type { Connection } from "../../src/library/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
 import { Op } from "../../src/sheet/index.ts";
@@ -30,7 +30,7 @@ import type { HeaderMode } from "../../src/store/index.ts";
 import { connectionSigning, diskProvider, nodeStore } from "../../src/store/node.ts";
 import { connectionMeeting, s3Provider } from "../../src/store/s3.ts";
 import { HOME_REGION } from "../store/regions.ts";
-import { BUCKET, KEYS, bucket, etagOf, versionIdOf } from "../store/standin.ts";
+import { BUCKET, KEYS, bucket, keysOnly, etagOf, versionIdOf } from "../store/standin.ts";
 import type { Bucket } from "../store/standin.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import {
@@ -40,16 +40,13 @@ import {
   PART_ROWS,
   partBytes,
 } from "../testdata/sales-q3-parts.ts";
-import { FIXTURE, TINY, connect, indexed, openOne, sales, saidIn } from "./harness.ts";
+import { connect, everyRow, indexed, openOne, saidIn, sales, FIXTURE, TINY } from "./harness.ts";
 
 /** What the three parts are called as one source. */
 const NAME = "sales-q3";
 
 /** What the workspace is saved as. */
 const UNO = "q3.uno";
-
-/** How many rows are asked for at a time. */
-const PAGE = 500;
 
 /** More than any source here would need a save to carry. */
 const ROOMY = 1 << 20;
@@ -93,15 +90,6 @@ async function copied(): Promise<{ dir: string; paths: string[] }> {
   return { dir, paths };
 }
 
-/** Every row of a source, as it shows them. */
-async function every(src: SourceHandle): Promise<string[][]> {
-  const rows: string[][] = [];
-  for (let first = 0; first < src.progress.rows; first += PAGE) {
-    rows.push(...(await src.rows(first, PAGE)).rows);
-  }
-  return rows;
-}
-
 /** What a client is handed of the parts open as one source, edited and saved. */
 interface Saved {
   /** The .uno's bytes. */
@@ -121,7 +109,7 @@ async function saved(
   await indexed(src);
   engine.mode(true);
   for (const e of edits) await src.edit({ op: Op.Set, row: e.row, col: UNITS, now: e.now });
-  const rows = await every(src);
+  const rows = await everyRow(src);
   return { uno: await engine.save({ source: src.id, cells: [], at }, ROOMY), rows };
 }
 
@@ -190,7 +178,7 @@ test("three parts open as one, edited in each part, save as format 6 and reopen 
     expect(src.opened.edits.map((e) => [e.row, e.now])).toEqual(EDITS.map((e) => [e.row, e.now]));
 
     // Every row is what it was, and every edit is on the cell it was made to.
-    expect(await every(src)).toEqual(rows);
+    expect(await everyRow(src)).toEqual(rows);
     for (const e of EDITS) {
       expect((await src.rows(e.row, 1)).rows[0]![UNITS]).toBe(e.now);
       expect((await src.rows(e.row - 1, 1)).rows[0]![UNITS]).toBe(sales.raw(e.row - 1, UNITS));
@@ -386,7 +374,7 @@ test("a reopened source opens no part until a read reaches it", async () => {
     m.release(PART_NAMES[2]!);
     await indexed(src);
     expect(m.handed).toEqual(PART_NAMES);
-    expect(await every(src)).toEqual(made.rows);
+    expect(await everyRow(src)).toEqual(made.rows);
   } finally {
     done();
   }
@@ -479,7 +467,7 @@ describe("a part changed on disk after the save", () => {
       const src = await openOne(engine, { name: UNO, path: file });
       await indexed(src);
       expect(src.opened.link).toBeUndefined();
-      expect(await every(src)).toEqual(rows);
+      expect(await everyRow(src)).toEqual(rows);
     } finally {
       done();
     }
@@ -526,7 +514,7 @@ describe("a part deleted after the save", () => {
       expect(src.id).toBe(gone.id);
       expect(src.opened.link?.missing).toBeUndefined();
       expect(src.opened.edits).toHaveLength(EDITS.length);
-      expect(await every(src)).toEqual(rows);
+      expect(await everyRow(src)).toEqual(rows);
 
       // A save points at the part where it is now, under the same log.
       const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
@@ -562,7 +550,7 @@ describe("a part deleted after the save", () => {
       const src = await engine.relink(gone, threeAt([paths[0]!, moved, paths[2]!]));
       await indexed(src);
       expect(src.opened.edits).toHaveLength(SHALLOW.length);
-      expect(await every(src)).toEqual(rows);
+      expect(await everyRow(src)).toEqual(rows);
     } finally {
       done();
     }
@@ -649,14 +637,7 @@ describe("parts in a bucket", () => {
     PART_NAMES.forEach((name, i) => history.set(name, partBytes[i]!));
   });
 
-  const env = () => ({
-    AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
-    AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
-    AWS_REGION: HOME_REGION,
-    AWS_PROFILE: undefined,
-    AWS_CONFIG_FILE: "/nonexistent/config",
-    AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/credentials",
-  });
+  const env = keysOnly;
 
   /** An engine the way the desktop wires one, with several files as one listed. */
   async function desktop(connections: Connection[]) {
@@ -704,7 +685,7 @@ describe("parts in a bucket", () => {
     try {
       const src = await openOne(engine, { name: UNO, path: file });
       await indexed(src);
-      expect(await every(src)).toEqual(rows);
+      expect(await everyRow(src)).toEqual(rows);
     } finally {
       done();
     }
@@ -745,7 +726,7 @@ describe("parts in a bucket", () => {
       const src = await openOne(engine, { name: UNO, path: file });
       await indexed(src);
       expect(src.opened.link).toBeUndefined();
-      expect(await every(src)).toEqual(rows);
+      expect(await everyRow(src)).toEqual(rows);
     } finally {
       done();
     }
@@ -805,7 +786,7 @@ describe("parts in a bucket", () => {
       objects.set(KEYS_IN_BUCKET[2]!, partBytes[2]!);
       const src = await engine.relink(gone, threeAt(ACROSS));
       await indexed(src);
-      expect(await every(src)).toEqual(rows);
+      expect(await everyRow(src)).toEqual(rows);
     } finally {
       done();
     }

@@ -14,15 +14,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
-import { Engine, messagePort, serve } from "@uno/grid/engine";
-import type { MessagePortLike, Reply, Request } from "@uno/grid/engine";
-import { sources } from "@uno/grid/plugin";
-import { diskProvider } from "@uno/grid/store/node";
-import { s3Provider } from "@uno/grid/store/s3";
-
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
-import { KEYS, bucket, etagOf } from "../../grid/tests/store/standin.ts";
+import { bucket, etagOf } from "../../grid/tests/store/standin.ts";
 import type { Bucket } from "../../grid/tests/store/standin.ts";
+import { bucketEngine } from "./bucket-engine.ts";
 import { Sources, stateOf } from "../src/renderer/sources.ts";
 import { Workspace } from "../src/renderer/workspace.ts";
 
@@ -55,27 +50,11 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-/** An engine over a real channel, reaching disk and the stand-in bucket. */
-function engine(): Engine {
-  const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
-    sources([
-      diskProvider(),
-      s3Provider({
-        credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
-        endpoint: b.endpoint,
-      }),
-    ]),
-  );
-  return new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
-}
-
 function open(path: string): Promise<Workspace> {
   const name = path.slice(path.lastIndexOf("/") + 1);
   return Workspace.open(
     { name, path },
-    engine(),
+    bucketEngine(b),
     path,
     () => {},
     () => {},

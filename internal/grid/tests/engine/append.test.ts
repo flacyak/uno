@@ -14,11 +14,8 @@ import { expect, test } from "vite-plus/test";
 import { readContainer } from "../../src/document/index.ts";
 import { FILE_COLUMN } from "../../src/engine/index.ts";
 import type { Engine, SourceHandle, SourceRef } from "../../src/engine/index.ts";
-import type { Provider } from "../../src/plugin/index.ts";
 import { Op } from "../../src/sheet/index.ts";
-import { blobProvider, multiProvider } from "../../src/store/index.ts";
 import type { SingleRef } from "../../src/store/index.ts";
-import { diskProvider } from "../../src/store/node.ts";
 import { COLS, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import {
   PARTS,
@@ -27,7 +24,18 @@ import {
   PART_ROWS,
   partBytes,
 } from "../testdata/sales-q3-parts.ts";
-import { FIXTURE, TINY, connect, indexed, openOne, sales, sheetRows, widened } from "./harness.ts";
+import {
+  connect,
+  everyRow,
+  indexed,
+  multiProviders,
+  openOne,
+  sales,
+  sheetRows,
+  widened,
+  FIXTURE,
+  TINY,
+} from "./harness.ts";
 
 /** What the parts are called as one source. */
 const NAME = "sales-q3";
@@ -73,21 +81,6 @@ const FIRST_TWO: SourceRef = {
 /** The part that is appended. */
 const THIRD = part(OPENED);
 
-/** The places a part can be here, and over them several read as one. */
-function providers(): Provider[] {
-  const single = [diskProvider(), blobProvider()];
-  return [...single, multiProvider(single)];
-}
-
-/** Every row of a source, as it shows them. */
-async function every(src: SourceHandle): Promise<string[][]> {
-  const rows: string[][] = [];
-  for (let first = 0; first < src.progress.rows; first += PAGE) {
-    rows.push(...(await src.rows(first, PAGE)).rows);
-  }
-  return rows;
-}
-
 /** The whole file's rows with `edits` made to its units. */
 function expected(edits: ReadonlyArray<{ row: number; now: string }>, rows = ROWS): string[][] {
   const all = sheetRows(sales, 0, rows, "raw");
@@ -113,7 +106,7 @@ function made(edits: ReadonlyArray<{ row: number; now: string }>): Array<[number
 // source that shows one says the appended part of the rows that part brought,
 // and says of every row it had what it said before.
 test("a source with a _file column names the appended part on the rows it brings", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const before = await openOne(engine, { ...FIRST_TWO, fileColumn: true });
     await indexed(before);
@@ -122,7 +115,7 @@ test("a source with a _file column names the appended part on the rows it brings
     await indexed(src);
     expect(src.opened.columns.at(-1)?.header).toBe(FILE_COLUMN);
 
-    const files = (await every(src)).map((row) => row[COLS]);
+    const files = (await everyRow(src)).map((row) => row[COLS]);
     expect(files).toHaveLength(ROWS);
     expect(files).toEqual(files.map((_, row) => PART_NAMES[Math.floor(row / PART_ROWS)]));
   } finally {
@@ -133,11 +126,11 @@ test("a source with a _file column names the appended part on the rows it brings
 // The task's own sentence: edits made before the append still sit on the
 // same cells.
 test("a part appended extends the rows and leaves every edit on its cell", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const before = await edited(engine);
     expect(before.progress).toMatchObject({ rows: ROWS_BEFORE, complete: true });
-    expect(widened(await every(before))).toEqual(expected(EDITS, ROWS_BEFORE));
+    expect(widened(await everyRow(before))).toEqual(expected(EDITS, ROWS_BEFORE));
 
     const src = await engine.append(before, [THIRD]);
     await indexed(src);
@@ -160,7 +153,7 @@ test("a part appended extends the rows and leaves every edit on its cell", async
 
     // Every row the source had is where it was, edits and all, and the third
     // part's rows follow them as the whole file has them.
-    expect(widened(await every(src))).toEqual(expected(EDITS));
+    expect(widened(await everyRow(src))).toEqual(expected(EDITS));
     for (const e of EDITS) {
       expect((await src.rows(e.row, 1)).rows[0]![UNITS]).toBe(e.now);
       expect((await src.rows(e.row + 1, 1)).rows[0]![UNITS]).toBe(sales.raw(e.row + 1, UNITS));
@@ -172,7 +165,7 @@ test("a part appended extends the rows and leaves every edit on its cell", async
 
 test("a save after an append records the longer list of parts, and reopens the same", async () => {
   const file = join(await mkdtemp(join(tmpdir(), "uno-append-")), UNO);
-  const first = connect(TINY, providers());
+  const first = connect(TINY, multiProviders());
   let rows: string[][];
   try {
     const src = await first.engine.append(await edited(first.engine), [THIRD]);
@@ -180,20 +173,20 @@ test("a save after an append records the longer list of parts, and reopens the s
     // It is still in transform, and a row of the appended part is edited
     // like any other.
     await src.edit({ op: Op.Set, row: LATER.row, col: UNITS, now: LATER.now });
-    rows = await every(src);
+    rows = await everyRow(src);
     expect(widened(rows)).toEqual(expected([...EDITS, LATER]));
     await writeFile(file, await first.engine.save({ source: src.id, cells: [], at: file }, ROOMY));
   } finally {
     first.done();
   }
 
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const src = await openOne(engine, { name: UNO, path: file });
     await indexed(src);
     expect(src.progress).toMatchObject({ rows: ROWS, complete: true });
     expect(made(src.opened.edits)).toEqual(made([...EDITS, LATER]));
-    expect(await every(src)).toEqual(rows);
+    expect(await everyRow(src)).toEqual(rows);
 
     // What was written: all three parts in order, each as the join measured
     // it, and the log in the order it was made.
@@ -212,7 +205,7 @@ test("a save after an append records the longer list of parts, and reopens the s
 // The log is one across the workspace, and an append takes no line out of it
 // and puts none in: what is undone after it is what was done last before it.
 test("an append leaves the log where it was among the workspace's sources", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const whole = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
     await indexed(whole);
@@ -230,7 +223,7 @@ test("an append leaves the log where it was among the workspace's sources", asyn
     const last = EDITS.at(-1)!;
     expect((await src.undo()).edit).toMatchObject({ row: last.row, now: last.now });
     expect((await src.rows(last.row, 1)).rows[0]![UNITS]).toBe(sales.raw(last.row, UNITS));
-    expect(widened(await every(src))).toEqual(expected(EDITS.slice(0, -1)));
+    expect(widened(await everyRow(src))).toEqual(expected(EDITS.slice(0, -1)));
   } finally {
     done();
   }
@@ -239,7 +232,7 @@ test("an append leaves the log where it was among the workspace's sources", asyn
 // ------------------------------------------------------------ refused
 
 test("an append to a source that is one file is refused", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const whole = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
     await indexed(whole);
@@ -266,7 +259,7 @@ test("a part that does not agree is refused naming it and the column, and the so
   const other = join(dir, PART_NAMES[OPENED]!);
   await writeFile(other, renamed());
 
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const src = await edited(engine);
     await expect(engine.append(src, [{ name: PART_NAMES[OPENED]!, path: other }])).rejects.toThrow(
@@ -274,7 +267,7 @@ test("a part that does not agree is refused naming it and the column, and the so
     );
 
     // Still the two parts, with every edit, and still taking edits.
-    expect(widened(await every(src))).toEqual(expected(EDITS, ROWS_BEFORE));
+    expect(widened(await everyRow(src))).toEqual(expected(EDITS, ROWS_BEFORE));
     await src.edit({ op: Op.Set, row: 0, col: UNITS, now: "3" });
     const doc = readContainer(UNO, await engine.save({ source: src.id, cells: [], at: "" }, ROOMY));
     expect(doc.sources[0]!.parts).toHaveLength(OPENED);
@@ -291,7 +284,7 @@ test("a part that does not agree is refused naming it and the column, and the so
 
 // A part read twice is its rows twice, which nobody asking to append means.
 test("a file the source already reads is refused, and so is one given twice", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const src = await edited(engine);
     await expect(engine.append(src, [part(1)])).rejects.toThrow(
@@ -302,7 +295,7 @@ test("a file the source already reads is refused, and so is one given twice", as
     );
     await expect(engine.append(src, [])).rejects.toThrow(`no file was given to append to ${NAME}`);
     expect(src.progress.rows).toBe(ROWS_BEFORE);
-    expect(widened(await every(src))).toEqual(expected(EDITS, ROWS_BEFORE));
+    expect(widened(await everyRow(src))).toEqual(expected(EDITS, ROWS_BEFORE));
   } finally {
     done();
   }
