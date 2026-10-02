@@ -12,6 +12,7 @@
 // part is a file on a disk, an object in a bucket or bytes already in hand,
 // in any mix, and nothing here knows which.
 
+import { concat } from "../go/index.ts";
 import {
   UnsupportedEncodingError,
   bomLength,
@@ -186,7 +187,7 @@ export class DisagreementError extends Error {
   constructor(parts: readonly Part[], part: number, differs: Disagreement) {
     const name = parts[part]!.ref.name;
     const first = parts[0]!.ref.name;
-    super(`${name} (part ${part + 1} of ${parts.length}): ${said(differs, first)}`);
+    super(`${partLabel(parts, part)}: ${said(differs, first)}`);
     this.part = part;
     this.partName = name;
     this.firstName = first;
@@ -465,12 +466,7 @@ class Parts {
     if (format !== undefined && first !== undefined) {
       const differs = disagreement(first, format, this.header);
       if (differs !== undefined) {
-        // Parts are opened several at a time and land in any order. The one
-        // the source is refused for is the first in the list that disagrees,
-        // so the same parts give the same refusal on every open.
-        const refusal = new DisagreementError(this.parts, i, differs);
-        if (this.refused === undefined || i < this.refused.part) this.refused = refusal;
-        throw refusal;
+        this.refuse(i, differs);
       }
     }
     // A part read as having no header row starts its rows after a byte order
@@ -494,11 +490,20 @@ class Parts {
       if (!(err instanceof UnsupportedEncodingError)) throw err;
       const first = await this.firstFormat();
       if (first === undefined) throw err;
-      const differs: Disagreement = { kind: "encoding", first: first.encoding, part: err.encoding };
-      const refusal = new DisagreementError(this.parts, i, differs);
-      if (this.refused === undefined || i < this.refused.part) this.refused = refusal;
-      throw refusal;
+      this.refuse(i, { kind: "encoding", first: first.encoding, part: err.encoding });
     }
+  }
+
+  /**
+   * refuse is part `i` not reading the way the first does. Parts are opened
+   * several at a time and land in any order. The one the source is refused
+   * for is the first in the list that disagrees, so the same parts give the
+   * same refusal on every open.
+   */
+  private refuse(i: number, differs: Disagreement): never {
+    const refusal = new DisagreementError(this.parts, i, differs);
+    if (this.refused === undefined || i < this.refused.part) this.refused = refusal;
+    throw refusal;
   }
 
   /**
@@ -556,7 +561,7 @@ class Parts {
 
   /** A sentence about part `i` that says which part it is. */
   private named(i: number, what: string): string {
-    return `${this.parts[i]!.ref.name} (part ${i + 1} of ${this.parts.length}): ${what}`;
+    return `${partLabel(this.parts, i)}: ${what}`;
   }
 
   /** failed is `err` with the part it happened to named, once. */
@@ -697,6 +702,11 @@ function counted(n: number, more = ""): string {
   return `${n} ${more}${n === 1 ? "column" : "columns"}`;
 }
 
+/** partLabel names part `i` as a person is told of it: its file, and its place in the list. */
+function partLabel(parts: readonly Part[], i: number): string {
+  return `${parts[i]!.ref.name} (part ${i + 1} of ${parts.length})`;
+}
+
 /** A name in quotes, so a space at its end or a tab inside it can be seen. */
 function quoted(name: string): string {
   return JSON.stringify(name);
@@ -704,16 +714,6 @@ function quoted(name: string): string {
 
 function same(a: Extent, b: Extent): boolean {
   return a.bytes === b.bytes && a.skip === b.skip && a.unterminated === b.unterminated;
-}
-
-function concat(pieces: readonly Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(pieces.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const p of pieces) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
 }
 
 // ------------------------------------------------------------ the handler
@@ -752,7 +752,7 @@ export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
       const nested = parts.findIndex((part) => "parts" in part.ref);
       if (nested >= 0) {
         throw new Error(
-          `${name}: ${parts[nested]!.ref.name} (part ${nested + 1} of ${parts.length}) is several files itself · a part is one file`,
+          `${name}: ${partLabel(parts, nested)} is several files itself · a part is one file`,
         );
       }
       const source = await openMulti(handlers, parts, header);

@@ -34,7 +34,9 @@ import {
   DRIVEN_LANGUAGE_ENV,
   DRIVEN_LANGUAGE_SWITCH,
   displayMissing,
+  drive,
   electronEnv,
+  rewrite,
   verdict,
 } from "./launch.js";
 
@@ -85,16 +87,10 @@ await mkdir(takes, { recursive: true });
  * returns the .uno's path, which is what the app opens.
  */
 async function stage() {
-  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
-  const { sources } = await import("@uno/grid/plugin");
-  const { Op } = await import("@uno/grid/sheet");
-  const { diskProvider } = await import("@uno/grid/store/node");
-
   // Under the temp folder rather than out/, because the status bar says where a
   // missing file was, and the GIF is published: a path into somebody's home
   // folder does not belong in it.
-  const dir = join(tmpdir(), "uno-preview", "exports");
-  await rm(dir, { recursive: true, force: true });
+  const dir = await freshDir("exports");
   await mkdir(join(dir, "2024"), { recursive: true });
   const csv = join(dir, "sales-q3.csv");
   const uno = join(dir, "q3-close.uno");
@@ -102,31 +98,74 @@ async function stage() {
   await copyFile(join(testdata, "google-ads-sales.csv"), join(dir, "google-ads.csv"));
   await copyFile(join(testdata, "google-ads-sales.csv"), join(dir, "2024", "google-ads-2024.csv"));
 
+  // The three the edit story fixes: `units` with a thousands separator in it.
+  const fixes = [
+    [0, 4, "1204"],
+    [2, 4, "1455"],
+    [4, 4, "2038"],
+  ];
+  await savedWorkspace(uno, { name: "sales-q3.csv", path: csv }, fixes, { row: 4, col: 4 });
+  await rename(csv, join(dir, "sales-q3-final.csv"));
+  return uno;
+}
+
+/**
+ * freshDir is an empty folder under the temp folder for one story's scene,
+ * emptied of the last take's.
+ */
+async function freshDir(name) {
+  const dir = join(tmpdir(), "uno-preview", name);
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * savedWorkspace saves a workspace at `uno` over the export `ref` names, with
+ * `edits` made to it, each a row, a column and a value, and left on `cell`.
+ *
+ * The workspace is saved by the engine itself, so a scene is a real .uno
+ * rather than one written by hand to look like one. `more` is the providers
+ * beside the disk's, for an export in a bucket.
+ */
+async function savedWorkspace(uno, ref, edits, cell, more = []) {
+  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
+  const { sources } = await import("@uno/grid/plugin");
+  const { Op } = await import("@uno/grid/sheet");
+  const { diskProvider } = await import("@uno/grid/store/node");
+
   const { port1, port2 } = new MessageChannel();
-  serve(messagePort(port1), sources([diskProvider()]));
+  serve(messagePort(port1), sources([diskProvider(), ...more]));
   const engine = new Engine(messagePort(port2));
   try {
     const {
       sources: [src],
-    } = await engine.open({ name: "sales-q3.csv", path: csv });
-    engine.mode(true);
-    // The three the edit story fixes: `units` with a thousands separator in it.
-    for (const [row, now] of [
-      [0, "1204"],
-      [2, "1455"],
-      [4, "2038"],
-    ]) {
-      await src.edit({ op: Op.Set, row, col: 4, now });
-    }
-    const cells = [{ source: src.id, row: 4, col: 4 }];
+    } = await engine.open(ref);
+    if (edits.length > 0) engine.mode(true);
+    for (const [row, col, now] of edits) await src.edit({ op: Op.Set, row, col, now });
+    const cells = [{ source: src.id, ...cell }];
     await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
   } finally {
     // Only the client's end is closed: closing the engine's end too would drop
     // the close request unread, and the engine would never close its files.
     engine.close();
   }
-  await rename(csv, join(dir, "sales-q3-final.csv"));
-  return uno;
+}
+
+/** bucketConnection is this machine's connection to the stand-in bucket's 2025 prefix. */
+function bucketConnection(bucket, region) {
+  return {
+    format: 1,
+    id: bucket,
+    name: `${bucket} / 2025`,
+    provider: "s3",
+    bucket,
+    prefix: "2025/",
+    region,
+    auth: { mode: "machine" },
+    created: undefined,
+    modified: undefined,
+  };
 }
 
 /** The column the sidebar story's formula goes into, added at the end of an export. */
@@ -143,12 +182,7 @@ const COMMISSION = "commission";
  * the export for the +.
  */
 async function stageSidebar() {
-  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
-  const { sources } = await import("@uno/grid/plugin");
-  const { diskProvider } = await import("@uno/grid/store/node");
-
-  const dir = join(tmpdir(), "uno-preview", "sidebar");
-  await rm(dir, { recursive: true, force: true });
+  const dir = await freshDir("sidebar");
 
   // The fixture with one more column, named and empty in every row.
   const lines = (await readFile(fixture, "utf8")).trimEnd().split(/\r?\n/);
@@ -160,20 +194,7 @@ async function stageSidebar() {
     const csv = join(dir, folder, export_);
     const uno = join(dir, folder, name);
     await writeFile(csv, bytes);
-
-    const { port1, port2 } = new MessageChannel();
-    serve(messagePort(port1), sources([diskProvider()]));
-    const engine = new Engine(messagePort(port2));
-    try {
-      const {
-        sources: [src],
-      } = await engine.open({ name: export_, path: csv });
-      const cells = [{ source: src.id, row: 0, col: 0 }];
-      await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
-    } finally {
-      // Only the client's end, for the reason stage gives.
-      engine.close();
-    }
+    await savedWorkspace(uno, { name: export_, path: csv }, [], { row: 0, col: 0 });
     return uno;
   };
 
@@ -198,29 +219,12 @@ async function stageSidebar() {
 const REFRESH_KEY = "2025/ads-q3.csv";
 
 /**
- * rewrite writes the stand-in's object over with the same bytes but one digit,
- * the same size and another ETag, the way an export regenerated with one figure
- * corrected is. The digit is the first in the rows, which is on screen.
- */
-function rewrite(objects, key) {
-  const now = objects.get(key).slice();
-  const body = now.indexOf(0x0a);
-  const at = now.findIndex((c, i) => i > body && c >= 0x30 && c <= 0x39);
-  now[at] = now[at] === 0x39 ? 0x30 : now[at] + 1;
-  objects.set(key, now);
-}
-
-/**
  * stageRefresh lays out the refresh story: the stand-in bucket holding an
  * export, a workspace a colleague saved over it with three campaign names
  * corrected, and the export regenerated since at the same size. It answers
  * with the .uno to open, the bucket, and the connection this machine has to it.
  */
 async function stageRefresh() {
-  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
-  const { sources } = await import("@uno/grid/plugin");
-  const { Op } = await import("@uno/grid/sheet");
-  const { diskProvider } = await import("@uno/grid/store/node");
   const { s3Provider } = await import("@uno/grid/store/s3");
   const { BUCKET, KEYS, bucket } = await import("../../grid/tests/store/standin.ts");
   const { HOME_REGION } = await import("../../grid/tests/store/regions.ts");
@@ -230,53 +234,19 @@ async function stageRefresh() {
     undefined,
     new Map([[REFRESH_KEY, await readFile(join(testdata, "google-ads-sales.csv"))]]),
   );
-  const dir = join(tmpdir(), "uno-preview", "refresh");
-  await rm(dir, { recursive: true, force: true });
-  await mkdir(dir, { recursive: true });
-  const uno = join(dir, "q3-close.uno");
+  const uno = join(await freshDir("refresh"), "q3-close.uno");
 
-  const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort(port1),
-    sources([
-      diskProvider(),
-      s3Provider({
-        credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
-        endpoint: standin.endpoint,
-      }),
-    ]),
-  );
-  const engine = new Engine(messagePort(port2));
-  try {
-    const {
-      sources: [src],
-    } = await engine.open({ name: "ads-q3.csv", path: `s3://${BUCKET}/${REFRESH_KEY}` });
-    engine.mode(true);
-    // Three of the campaign names the export misspells, corrected.
-    for (const row of [2, 3, 4]) {
-      await src.edit({ op: Op.Set, row, col: 1, now: "Data Analytics Course" });
-    }
-    const cells = [{ source: src.id, row: 0, col: 0 }];
-    await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
-  } finally {
-    // Only the client's end is closed: closing the engine's end too would drop
-    // the close request unread, and the engine would never close its files.
-    engine.close();
-  }
+  const bucketReads = s3Provider({
+    credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
+    endpoint: standin.endpoint,
+  });
+  // Three of the campaign names the export misspells, corrected.
+  const fixes = [2, 3, 4].map((row) => [row, 1, "Data Analytics Course"]);
+  const ref = { name: "ads-q3.csv", path: `s3://${BUCKET}/${REFRESH_KEY}` };
+  await savedWorkspace(uno, ref, fixes, { row: 0, col: 0 }, [bucketReads]);
   rewrite(standin.objects, REFRESH_KEY);
 
-  const connection = {
-    format: 1,
-    id: BUCKET,
-    name: `${BUCKET} / 2025`,
-    provider: "s3",
-    bucket: BUCKET,
-    prefix: "2025/",
-    region: HOME_REGION,
-    auth: { mode: "machine" },
-    created: undefined,
-    modified: undefined,
-  };
+  const connection = bucketConnection(BUCKET, HOME_REGION);
   return { uno, standin, connection };
 }
 
@@ -302,24 +272,10 @@ async function stageOpening(connected) {
   );
   // Under the temp folder, as the browse story's files are: a path into
   // somebody's home folder does not belong in a published GIF.
-  const dir = join(tmpdir(), "uno-preview", "opening");
-  await rm(dir, { recursive: true, force: true });
-  await mkdir(dir, { recursive: true });
-  const csv = join(dir, "sales-q3.csv");
+  const csv = join(await freshDir("opening"), "sales-q3.csv");
   await copyFile(fixture, csv);
 
-  const connection = {
-    format: 1,
-    id: BUCKET,
-    name: `${BUCKET} / 2025`,
-    provider: "s3",
-    bucket: BUCKET,
-    prefix: "2025/",
-    region: HOME_REGION,
-    auth: { mode: "machine" },
-    created: undefined,
-    modified: undefined,
-  };
+  const connection = bucketConnection(BUCKET, HOME_REGION);
   return { uno: csv, standin, connection: connected ? connection : undefined };
 }
 
@@ -382,9 +338,27 @@ const scene =
         UNO_DRIVEN_OPEN: sidebar.fresh,
       };
 
-const child = spawn(electron, [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, ...opened], {
-  // stdin carries this script's answers to what the story asks of it.
-  stdio: ["pipe", "pipe", "pipe"],
+/**
+ * answer does what the story asked of this script, which holds the stand-in:
+ * `rewrite <key>` regenerates the object, and `latency <ms>` is how long the
+ * stand-in takes over each answer from here on.
+ */
+function answer(what) {
+  const [verb, key] = what.split(" ");
+  if (verb === "rewrite" && remote?.standin.objects.has(key)) {
+    rewrite(remote.standin.objects, key);
+    return true;
+  }
+  if (verb === "latency" && remote !== undefined && Number(key) >= 0) {
+    remote.standin.latency = Number(key);
+    return true;
+  }
+  return false;
+}
+
+const { code, out } = await drive("preview", {
+  electron,
+  args: [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, ...opened],
   env: electronEnv(process.env, {
     ...DRIVEN_LANGUAGE_ENV,
     UNO_PREVIEW: frames,
@@ -392,45 +366,9 @@ const child = spawn(electron, [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_S
     ...aws,
     ...scene,
   }),
+  answer,
+  deadlineMs: 90_000,
 });
-
-console.log(`preview: electron pid ${child.pid}`);
-
-let out = "";
-let pending = "";
-child.stdout.on("data", (b) => {
-  out += String(b);
-  pending += String(b);
-  const lines = pending.split("\n");
-  pending = lines.pop() ?? "";
-  for (const line of lines) {
-    const what = line.startsWith("preview: ask ") ? line.slice("preview: ask ".length) : undefined;
-    if (what === undefined) continue;
-    const [verb, key] = what.split(" ");
-    if (verb === "rewrite" && remote?.standin.objects.has(key)) {
-      rewrite(remote.standin.objects, key);
-      child.stdin.write(`preview: done ${what}\n`);
-    } else if (verb === "latency" && remote !== undefined && Number(key) >= 0) {
-      // How long the stand-in takes over each answer from here on, in ms.
-      remote.standin.latency = Number(key);
-      child.stdin.write(`preview: done ${what}\n`);
-    } else {
-      child.stdin.write(`preview: nothing here does ${what}\n`);
-    }
-  }
-  process.stdout.write(b);
-});
-child.stderr.on("data", (b) => process.stderr.write(b));
-
-// A hung app is a failure, not something to wait out. The pid is tracked so it
-// can be stopped by pid rather than by name.
-const deadline = setTimeout(() => {
-  console.error("preview: timed out after 90s");
-  if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
-}, 90_000);
-
-const code = await new Promise((r) => child.on("close", r));
-clearTimeout(deadline);
 await remote?.standin.close();
 
 const failed = verdict("preview", code, out, "preview: rolled");

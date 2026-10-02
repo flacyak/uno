@@ -15,11 +15,8 @@ import { afterAll, afterEach, describe, expect, test } from "vite-plus/test";
 import { MANIFEST_ENTRY, PARTS_VERSION, readContainer } from "../../src/document/index.ts";
 import { FILE_COLUMN, TUNING } from "../../src/engine/index.ts";
 import type { Engine, SourceHandle, SourceRef, Tuning } from "../../src/engine/index.ts";
-import type { Provider } from "../../src/plugin/index.ts";
 import { Op } from "../../src/sheet/index.ts";
-import { blobProvider, multiProvider } from "../../src/store/index.ts";
 import type { HeaderMode } from "../../src/store/index.ts";
-import { diskProvider } from "../../src/store/node.ts";
 import { COLS, REGION, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import {
   PARTS,
@@ -29,7 +26,16 @@ import {
   partBytes,
 } from "../testdata/sales-q3-parts.ts";
 import { NAMES as ROWS_ONLY_NAMES, rowsOnly } from "../headerless/parts.ts";
-import { TINY, connect, indexed, openOne, sales, saidIn } from "./harness.ts";
+import {
+  connect,
+  everyRow,
+  indexed,
+  multiProviders,
+  openOne,
+  saidIn,
+  sales,
+  TINY,
+} from "./harness.ts";
 
 /** What the parts are called as one source. */
 const NAME = "sales-q3";
@@ -39,9 +45,6 @@ const UNO = "q3.uno";
 
 /** Where the `_file` column sits: after every column the files have. */
 const FILE = COLS;
-
-/** How many rows are asked for at a time. */
-const PAGE = 500;
 
 /** More than any source here would need a save to carry. */
 const ROOMY = 1 << 20;
@@ -79,15 +82,9 @@ afterEach(() => {
   done = undefined;
 });
 
-/** The places a part can be here, and over them several read as one. */
-function providers(): Provider[] {
-  const single = [diskProvider(), blobProvider()];
-  return [...single, multiProvider(single)];
-}
-
 /** An engine that reads disks, and several files as one. */
 function engine(tuning: Tuning = TINY): Engine {
-  const made = connect(tuning, providers());
+  const made = connect(tuning, multiProviders());
   done = made.done;
   return made.engine;
 }
@@ -115,15 +112,6 @@ async function onDisk(files: readonly Uint8Array[], names: readonly string[]): P
   const paths = names.map((name) => join(dir, name));
   await Promise.all(paths.map((path, i) => writeFile(path, files[i]!)));
   return paths;
-}
-
-/** Every row of a source, as it shows them. */
-async function every(src: SourceHandle): Promise<string[][]> {
-  const rows: string[][] = [];
-  for (let first = 0; first < src.progress.rows; first += PAGE) {
-    rows.push(...(await src.rows(first, PAGE)).rows);
-  }
-  return rows;
 }
 
 /** The `_file` cell of one row. */
@@ -158,7 +146,7 @@ async function expectParts(src: SourceHandle, names: readonly string[]): Promise
   expect(await fileOf(src, 0)).toBe(names[0]);
   expect(await fileOf(src, ROWS - 1)).toBe(names[PARTS - 1]);
 
-  const rows = await every(src);
+  const rows = await everyRow(src);
   expect(rows).toHaveLength(ROWS);
   expect(rows.map((row) => row[FILE])).toEqual(rows.map((_, row) => partOf(row, names)));
 }
@@ -208,7 +196,7 @@ describe.each(TUNINGS)("the _file column, over %s", (_, tuning) => {
     const src = await openOne(engine(tuning), asOne(await onDisk(files, names), names));
     await indexed(src);
 
-    const rows = await every(src);
+    const rows = await everyRow(src);
     expect(rows).toHaveLength(PART_ROWS + 2 + PART_ROWS);
     expect(rows.map((row) => row[FILE])).toEqual([
       ...Array.from({ length: PART_ROWS }, () => names[0]),
@@ -224,7 +212,7 @@ describe.each(TUNINGS)("the _file column, over %s", (_, tuning) => {
     const src = await openOne(engine(tuning), asOne(await onDisk(files, names), names));
     await indexed(src);
 
-    const rows = await every(src);
+    const rows = await everyRow(src);
     expect(rows).toHaveLength(PART_ROWS + PART_ROWS);
     expect(rows.map((row) => row[FILE])).toEqual([
       ...Array.from({ length: PART_ROWS }, () => names[0]),
@@ -245,7 +233,7 @@ describe("a source with a _file column", () => {
     expect(src.opened.columns[FILE]).toEqual({ header: FILE_COLUMN, kind: "text", flagged: false });
 
     // Every other cell is what it is without the column.
-    const rows = await every(src);
+    const rows = await everyRow(src);
     for (const row of [0, BOUNDARIES[0]! - 1, BOUNDARIES[0]!, ROWS - 1]) {
       expect(rows[row], `row ${row}`).toHaveLength(COLS + 1);
       expect(rows[row]!.slice(0, COLS)).toEqual(
@@ -307,7 +295,7 @@ describe("a source that did not ask for a _file column", () => {
     const src = await openOne(engine(), asOne(PART_FIXTURES, PART_NAMES, "first", fileColumn));
     await indexed(src);
     expect(src.opened.columns).toEqual(sales.columns);
-    for (const row of await every(src)) expect(row.length).toBeLessThanOrEqual(COLS);
+    for (const row of await everyRow(src)) expect(row.length).toBeLessThanOrEqual(COLS);
   });
 });
 
@@ -326,7 +314,7 @@ describe("a save of a source with a _file column", () => {
     await indexed(src);
     e.mode(true);
     await src.edit({ op: Op.Set, row: BOUNDARIES[0]!, col: UNITS, now: "77" });
-    const rows = await every(src);
+    const rows = await everyRow(src);
     await writeFile(file, await e.save({ source: src.id, cells: [], at: file }, ROOMY));
     done?.();
     done = undefined;
@@ -354,7 +342,7 @@ describe("a save of a source with a _file column", () => {
     const src = await openOne(engine(), { name: UNO, path: file });
     await indexed(src);
     expect(src.opened.columns.at(-1)?.header).toBe(FILE_COLUMN);
-    expect(await every(src)).toEqual(rows);
+    expect(await everyRow(src)).toEqual(rows);
     await expectParts(src, PART_NAMES);
   });
 
@@ -375,7 +363,7 @@ describe("a save of a source with a _file column", () => {
     const src = await e.relink(absent, asOne(paths, PART_NAMES, "first", "unsaid"));
     await indexed(src);
     expect(src.opened.columns.at(-1)?.header).toBe(FILE_COLUMN);
-    expect(await every(src)).toEqual(rows);
+    expect(await everyRow(src)).toEqual(rows);
     await expectParts(src, PART_NAMES);
   });
 

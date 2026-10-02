@@ -108,38 +108,33 @@ function isRealDate(y: number, m: number, d: number): boolean {
 }
 
 export function isDate(v: string): boolean {
-  const first = YEAR_FIRST.exec(v);
-  if (first !== null) {
-    return isRealDate(Number(first[1]), Number(first[3]), Number(first[4]));
+  for (const [shape, real] of DATE_SHAPES) {
+    const m = shape.exec(v);
+    if (m !== null) return real(m);
   }
+  return false;
+}
 
+/** The shapes a date is written in, each with what a real date in that shape is. */
+const DATE_SHAPES: ReadonlyArray<[RegExp, (m: RegExpExecArray) => boolean]> = [
+  [YEAR_FIRST, (m) => isRealDate(Number(m[1]), Number(m[3]), Number(m[4]))],
   // 20-11-2024 is day first and 11/20/2024 month first. Either reading makes
   // it a date; which one is meant only matters to whatever reads the value.
-  const last = YEAR_LAST.exec(v);
-  if (last !== null) {
-    const a = Number(last[1]);
-    const b = Number(last[3]);
-    const y = Number(last[4]);
-    return isRealDate(y, b, a) || isRealDate(y, a, b);
-  }
-
-  const named = NAME_FIRST.exec(v);
-  if (named !== null) {
-    return isRealDate(Number(named[3]), month(named[1]!), Number(named[2]));
-  }
-
-  const day = DAY_FIRST.exec(v);
-  if (day !== null) {
-    return isRealDate(Number(day[4]), month(day[3]!), Number(day[1]));
-  }
-
-  const full = RFC3339.exec(v);
-  if (full === null) return false;
-  if (!isRealDate(Number(full[1]), Number(full[2]), Number(full[3]))) return false;
-
-  const hh = Number(full[4]);
-  const mm = Number(full[5]);
-  const ss = Number(full[6]);
-  // Go refuses a leap second: time.Parse answers "second out of range" to :60.
-  return hh <= 23 && mm <= 59 && ss <= 59;
-}
+  [
+    YEAR_LAST,
+    (m) =>
+      isRealDate(Number(m[4]), Number(m[3]), Number(m[1])) ||
+      isRealDate(Number(m[4]), Number(m[1]), Number(m[3])),
+  ],
+  [NAME_FIRST, (m) => isRealDate(Number(m[3]), month(m[1]!), Number(m[2]))],
+  [DAY_FIRST, (m) => isRealDate(Number(m[4]), month(m[3]!), Number(m[1]))],
+  [
+    RFC3339,
+    (m) =>
+      isRealDate(Number(m[1]), Number(m[2]), Number(m[3])) &&
+      // Go refuses a leap second: time.Parse answers "second out of range" to :60.
+      Number(m[4]) <= 23 &&
+      Number(m[5]) <= 59 &&
+      Number(m[6]) <= 59,
+  ],
+];
