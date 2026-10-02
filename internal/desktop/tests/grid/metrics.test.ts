@@ -20,7 +20,7 @@ import {
   tableOffset,
   topToScroller,
   visibleRange,
-} from "#renderer/grid/metrics";
+} from "@renderer/grid/metrics";
 
 /** The stylesheet's default row height. */
 const ROW_H = 29;

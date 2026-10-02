@@ -8,12 +8,12 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { m } from "#paraglide/messages";
-import { sidebarRows } from "#renderer/shell/sidebar";
-import type { SidebarActions } from "#renderer/shell/sidebar";
-import { stateOf } from "#renderer/sources";
-import type { Arriving } from "#renderer/sources";
-import type { Tab, Workspace } from "#renderer/workspace";
+import { m } from "@paraglide/messages";
+import { sidebarRows } from "@renderer/shell/sidebar";
+import type { SidebarActions } from "@renderer/shell/sidebar";
+import { stateOf } from "@renderer/sources";
+import type { Arriving } from "@renderer/sources";
+import type { Tab, Workspace } from "@renderer/workspace";
 
 function tab(id: string, name: string, link?: Tab["link"]): Tab {
   return {

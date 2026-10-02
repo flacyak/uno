@@ -7,12 +7,12 @@
  * kept in the connection.
  */
 
-import type { SignIns } from "#engine";
-import type { AuthMode, Connection } from "#library";
-import { roleNameOf, validConnection } from "#library";
-import type { Tried } from "#store/s3";
+import type { SignIns } from "@engine";
+import type { AuthMode, Connection } from "@library";
+import { roleNameOf, validConnection } from "@library";
+import type { Tried } from "@store/s3";
 
-import { m } from "#paraglide/messages";
+import { m } from "@paraglide/messages";
 import { RoleBlock } from "./role.ts";
 import { Words, button, el, message, option } from "./util.ts";
 

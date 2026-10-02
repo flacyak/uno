@@ -7,8 +7,8 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { m } from "#paraglide/messages";
-import { FormulaForm } from "#renderer/shell/formula";
+import { m } from "@paraglide/messages";
+import { FormulaForm } from "@renderer/shell/formula";
 
 function form(): { asked: string[]; box: HTMLFormElement } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
