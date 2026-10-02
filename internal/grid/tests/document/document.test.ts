@@ -16,12 +16,12 @@ import {
   readDocument,
   sourceId,
   writeDocument,
-} from '../../src/document/index.ts';
-import type { Document, State } from '../../src/document/index.ts';
-import { parse as parseFormula } from '../../src/formula/index.ts';
-import { read as ingestRead } from '../../src/ingest/index.ts';
-import { parse as parseProgram } from '../../src/program/index.ts';
-import type { Sheet } from '../../src/sheet/index.ts';
+} from '#document';
+import type { Document, State } from '#document';
+import { parse as parseFormula } from '#formula';
+import { read as ingestRead } from '#ingest';
+import { parse as parseProgram } from '#program';
+import type { Sheet } from '#sheet';
 
 const CSV_BODY =
   'date,region,units\n2026-07-01,West,"1,204"\n2026-07-01,East,987\n2026-07-02,North,"1,455"\n';

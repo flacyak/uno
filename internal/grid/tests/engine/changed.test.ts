@@ -7,15 +7,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vite-plus/test';
 
-import { formatBytes } from '../../src/engine/index.ts';
-import type { SourceHandle } from '../../src/engine/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { HOME_REGION } from '../store/regions.ts';
-import { KEYS, bucket } from '../store/standin.ts';
-import type { Bucket } from '../store/standin.ts';
-import { UNITS } from '../testdata/sales-q3.ts';
+import { formatBytes } from '#engine';
+import type { SourceHandle } from '#engine';
+import { Op } from '#sheet';
+import { diskProvider } from '#store/node';
+import { s3Provider } from '#store/s3';
+import { HOME_REGION } from '#tests/store/regions';
+import { KEYS, bucket } from '#tests/store/standin';
+import type { Bucket } from '#tests/store/standin';
+import { UNITS } from '#tests/testdata/sales-q3';
 import { bytes, connect, indexed, openOne, saidIn } from './harness.ts';
 
 const KEY = '2025/sales-q3.csv';

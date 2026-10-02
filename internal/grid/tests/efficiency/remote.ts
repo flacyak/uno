@@ -6,14 +6,14 @@
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { Engine } from '../../src/engine/index.ts';
-import type { SourceHandle, Tuning } from '../../src/engine/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { bytes, connect, openOne } from '../engine/harness.ts';
-import { HOME_REGION } from '../store/regions.ts';
-import { BUCKET, KEYS, bucket } from '../store/standin.ts';
-import type { Bucket } from '../store/standin.ts';
+import { Engine } from '#engine';
+import type { SourceHandle, Tuning } from '#engine';
+import { diskProvider } from '#store/node';
+import { s3Provider } from '#store/s3';
+import { bytes, connect, openOne } from '#tests/engine/harness';
+import { HOME_REGION } from '#tests/store/regions';
+import { BUCKET, KEYS, bucket } from '#tests/store/standin';
+import type { Bucket } from '#tests/store/standin';
 
 /** Asked is one request the engine sent. */
 export interface Asked {

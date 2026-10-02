@@ -8,16 +8,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
-import { messagePort, serve } from '../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../src/engine/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import { connectionsIn } from '../../src/store/index.ts';
-import { awsProfiles, diskProvider, nodeStore } from '../../src/store/node.ts';
-import { connect } from '../engine/harness.ts';
+import { messagePort, serve } from '#engine';
+import type { MessagePortLike, Reply, Request } from '#engine';
+import { sources } from '#plugin';
+import { connectionsIn } from '#store';
+import { awsProfiles, diskProvider, nodeStore } from '#store/node';
+import { connect } from '#tests/engine/harness';
 
 /** Everything in the files below besides the profile names. */
 const SECRETS = [

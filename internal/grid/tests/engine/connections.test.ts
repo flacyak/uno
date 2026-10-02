@@ -9,9 +9,9 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
 
-import { parseConnection } from '../../src/library/index.ts';
-import { connectionsIn, saveConnection } from '../../src/store/index.ts';
-import { nodeStore } from '../../src/store/node.ts';
+import { parseConnection } from '#library';
+import { connectionsIn, saveConnection } from '#store';
+import { nodeStore } from '#store/node';
 import { connect, saidIn } from './harness.ts';
 
 const ACME = fileURLToPath(
