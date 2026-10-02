@@ -2,10 +2,10 @@
 // renderer through contextBridge. Context isolation is on, so these are the
 // renderer's only way to reach the main process.
 
-import type { SourceRef } from "@uno/grid/engine";
+import type { SourceRef } from "#engine";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
-import type { Bridge } from "../shared/host.ts";
+import type { Bridge } from "#shared/host";
 
 const bridge: Bridge = {
   open: () => ipcRenderer.invoke("file:open") as Promise<SourceRef | undefined>,

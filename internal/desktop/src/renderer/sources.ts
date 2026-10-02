@@ -8,14 +8,14 @@
 // This file is plain logic, so tests run it directly. Late listing and
 // peek responses are dropped by comparing request counters.
 
-import { baseOf } from "@uno/grid/document";
-import type { Link, PartInfo, Peeked, SourceRef } from "@uno/grid/engine";
-import { compareStrings } from "@uno/grid/go";
-import type { Connection as Saved } from "@uno/grid/library";
-import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@uno/grid/store";
-import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "@uno/grid/store/s3";
+import { baseOf } from "#document";
+import type { Link, PartInfo, Peeked, SourceRef } from "#engine";
+import { compareStrings } from "#go";
+import type { Connection as Saved } from "#library";
+import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "#store";
+import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "#store/s3";
 
-import { m } from "../paraglide/messages.js";
+import { m } from "#paraglide/messages";
 import { num } from "./locale.ts";
 import { said } from "./said.ts";
 
