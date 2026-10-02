@@ -163,8 +163,11 @@ function draw(
   };
 }
 
-function press(el: HTMLElement, key: string): void {
-  el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+/** Presses a key on the element and returns the event, to see if it was consumed. */
+function press(el: HTMLElement, key: string): KeyboardEvent {
+  const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+  el.dispatchEvent(e);
+  return e;
 }
 
 /** Lets pending promises settle and the frames they asked for draw. */
@@ -283,6 +286,68 @@ test("a source still opening has a line under the tabs that says so and cannot b
   d.panel.draw();
   await settle();
   expect(d.root.querySelector(".panel-row.opening")).toBeNull();
+});
+
+test("the Stop button and Delete cancel the opening line, and a line without cancel offers neither", async () => {
+  let cancelled = 0;
+  let arriving: readonly Arriving[] = [{ name: "orders-2025.csv", cancel: () => cancelled++ }];
+  const d = draw(undefined, undefined, undefined, () => arriving);
+
+  // Down the tabs onto the opening line, where the foot offers Stop alone.
+  for (let i = 0; i < TABS.length; i++) press(d.list, "ArrowDown");
+  expect(selected(d.root)).toBe("orders-2025.csv");
+  expect(buttons(d.root)).toEqual(["Stop"]);
+  d.root.querySelector<HTMLButtonElement>(".panel-foot button")!.click();
+  expect(cancelled).toBe(1);
+
+  // Delete stops it too, and is consumed rather than left for the shell.
+  expect(press(d.list, "Delete").defaultPrevented).toBe(true);
+  expect(cancelled).toBe(2);
+  expect(d.done).toEqual([]);
+
+  // Once the line is gone, focus is on the last tab, with that tab's buttons.
+  arriving = [];
+  d.panel.draw();
+  await settle();
+  expect(selected(d.root)).toBe("Ledger-2024.csv");
+  expect(buttons(d.root)).toEqual(["Re-point", "Remove"]);
+
+  // A line whose open cannot be stopped offers no Stop, and Delete goes on to
+  // the shell.
+  const plain = draw(undefined, undefined, undefined, () => [{ name: "orders-2025.csv" }]);
+  for (let i = 0; i < TABS.length; i++) press(plain.list, "ArrowDown");
+  expect(selected(plain.root)).toBe("orders-2025.csv");
+  expect(buttons(plain.root)).toEqual([]);
+  expect(press(plain.list, "Delete").defaultPrevented).toBe(false);
+  expect(plain.done).toEqual([]);
+});
+
+test("the Stop button stops the line focused when it is pressed, not the one it was drawn on", () => {
+  // Two opens of one name draw the foot alike, so a Stop bound at draw time
+  // would still name the first line once focus had moved to the second.
+  let first = 0;
+  let second = 0;
+  const d = draw(undefined, undefined, undefined, () => [
+    { name: "orders-2025.csv", cancel: () => first++ },
+    { name: "orders-2025.csv", cancel: () => second++ },
+  ]);
+
+  // Down the tabs onto the first opening line, then onto the second.
+  for (let i = 0; i < TABS.length; i++) press(d.list, "ArrowDown");
+  expect(buttons(d.root)).toEqual(["Stop"]);
+  press(d.list, "ArrowDown");
+  const opening = [...d.root.querySelectorAll<HTMLElement>(".panel-row.opening")];
+  expect(opening.map((r) => r.classList.contains("sel"))).toEqual([false, true]);
+  expect(buttons(d.root)).toEqual(["Stop"]);
+
+  d.root.querySelector<HTMLButtonElement>(".panel-foot button")!.click();
+  expect(second).toBe(1);
+  expect(first).toBe(0);
+
+  // Delete reads the same line.
+  press(d.list, "Delete");
+  expect(second).toBe(2);
+  expect(first).toBe(0);
 });
 
 test("a 200,000-entry listing scrolls with fewer than 100 rows in the DOM", async () => {
