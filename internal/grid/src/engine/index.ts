@@ -36,4 +36,17 @@ export { Pages, RowIndex, TUNING } from "./rows.ts";
 export type { Tuning } from "./rows.ts";
 export { serve } from "./serve.ts";
 export type { Connecting } from "./serve.ts";
+export {
+  BYTES,
+  DURATION_BOUNDS,
+  INDEX,
+  INDEXED,
+  METRICS_PATH,
+  MILLISECONDS,
+  Meter,
+  REQUEST,
+  otlpHeaders,
+  unmeasured,
+} from "./telemetry.ts";
+export type { Attributes, Kind, Measurement, Payload, Resource, Telemetry } from "./telemetry.ts";
 export { WHOLE_LIMIT } from "./workspace.ts";

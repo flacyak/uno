@@ -26,6 +26,8 @@ import {
 } from "@uno/grid/store/node";
 import { connectionMeeting, s3Provider, tryConnection } from "@uno/grid/store/s3";
 
+import { exporting } from "./telemetry.ts";
+
 /**
  * Where S3 is: the same variables the AWS CLI reads, so MinIO or a local
  * stand-in is pointed at the way every other tool on the machine is.
@@ -40,6 +42,13 @@ const CONNECTIONS = process.argv
   .find((a) => a.startsWith("--connections="))
   ?.slice("--connections=".length);
 
+/**
+ * This build's version, as main passed it. It is what a collector files the
+ * measurements under, so two builds can be told apart on a chart.
+ */
+const VERSION =
+  process.argv.find((a) => a.startsWith("--version="))?.slice("--version=".length) ?? "";
+
 process.parentPort.once("message", (e) => {
   const port = e.ports[0];
   if (port === undefined) {
@@ -47,9 +56,16 @@ process.parentPort.once("message", (e) => {
     return;
   }
 
+  // Where the engine's measurements go, on a machine that names a collector.
+  // On every other machine this is undefined and nothing is measured.
+  const telemetry = exporting(process.env, VERSION);
+
   // The renderer closing its end is how a workspace closes, and this process
-  // has nothing else to do.
-  port.on("close", () => process.exit(0));
+  // has nothing else to do. What was measured since the last send goes first,
+  // and the send is given up on rather than waited for past its timeout.
+  port.on("close", () => {
+    void (telemetry?.flush() ?? Promise.resolve()).finally(() => process.exit(0));
+  });
 
   // Read through the same disk handler every other file is, from the one
   // folder main named. The S3 provider asks it on every request, so a request
@@ -76,6 +92,7 @@ process.parentPort.once("message", (e) => {
       s3Provider({
         credentials: connectionSigning(() => kept?.all ?? [], process.env, auth),
         endpoint: ENDPOINT,
+        fetch: telemetry?.fetch,
       }),
     ]),
     TUNING,
@@ -91,5 +108,6 @@ process.parentPort.once("message", (e) => {
           // connected, and one this machine has is saved naming it.
           meet: connectionMeeting(() => kept.all),
         },
+    telemetry?.record,
   );
 });

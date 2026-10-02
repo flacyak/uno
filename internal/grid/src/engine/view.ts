@@ -26,7 +26,7 @@ import {
   valueAt,
 } from "../sheet/index.ts";
 import type { Edit, Written } from "../sheet/index.ts";
-import { multiOf } from "../store/index.ts";
+import { isRemote, multiOf } from "../store/index.ts";
 import type { ByteSource, HeaderMode, PartsRef } from "../store/index.ts";
 import { indexPass } from "./pass.ts";
 import type {
@@ -45,6 +45,8 @@ import type {
 import { messageOf } from "./protocol.ts";
 import { Pages, RowIndex } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
+import { BYTES, INDEX, INDEXED, MILLISECONDS, unmeasured } from "./telemetry.ts";
+import type { Telemetry } from "./telemetry.ts";
 
 /** How often a pass posts how far it has got. The status bar needs no more. */
 const PROGRESS_MS = 100;
@@ -159,7 +161,8 @@ export class View {
    * open starts viewing one source. `source` is the file, or the bytes a .uno
    * carried when `carried` says so. `path` is where the file is, which is what
    * a save points at; bytes with no file behind them pass "". The view owns
-   * `source` from here on, and closes it if the open fails.
+   * `source` from here on, and closes it if the open fails. `telemetry` is
+   * told how long the index took once it has finished.
    */
   static async open(
     id: string,
@@ -169,6 +172,7 @@ export class View {
     carried: Carried | undefined,
     port: Port<Request, Reply>,
     tuning: Tuning,
+    telemetry: Telemetry = unmeasured,
   ): Promise<View> {
     const v = new View(id, name, path, port);
     v.carried = carried?.raw;
@@ -196,6 +200,16 @@ export class View {
     let told = 0;
     let started = false;
     const index = v.index;
+    const began = performance.now();
+    // Where the bytes are, and nothing about whose they are.
+    const place =
+      carried?.raw !== undefined
+        ? "carried"
+        : path === ""
+          ? "joined"
+          : isRemote(path)
+            ? "bucket"
+            : "disk";
     indexPass({
       source,
       format,
@@ -204,6 +218,17 @@ export class View {
       signal: v.abort.signal,
       progress() {
         v.wake();
+        if (index.complete) {
+          const attributes = { place };
+          telemetry({
+            name: INDEX,
+            kind: "duration",
+            unit: MILLISECONDS,
+            value: performance.now() - began,
+            attributes,
+          });
+          telemetry({ name: INDEXED, kind: "count", unit: BYTES, value: source.size, attributes });
+        }
         const now = Date.now();
         if (!index.complete && now - told < PROGRESS_MS) return;
         told = now;

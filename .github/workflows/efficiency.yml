@@ -1,0 +1,101 @@
+name: efficiency
+
+# What a change costs in requests and bytes, measured on every pull request
+# and on every push to main.
+#
+# internal/grid/tests/efficiency counts what a person waits on: requests sent,
+# bytes asked for, directory entries read. The counts are exact, the same on
+# every run and every runner, so a difference between a pull request and its
+# base is something the change did.
+#
+# A pull request gets a table of each metric beside what it is on the base,
+# in the job summary and in one comment that is kept up to date. Every run
+# also sends the metrics to Grafana, where the dashboard in observability/
+# plots them over time: main is the line, and each pull request is a branch
+# of its own beside it.
+#
+# Sending needs two repository secrets, GRAFANA_OTLP_ENDPOINT and
+# GRAFANA_OTLP_HEADERS, which observability/README.md says how to get. Without
+# them, and on a pull request from a fork, which is not handed secrets, the
+# job still measures and reports and sends nothing.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# One run per branch: a push on top of a run still going replaces it.
+concurrency:
+  group: efficiency-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  efficiency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The same install the test job does: nothing here starts Electron, so
+      # its binary is not fetched, and the cache is read and never written.
+      - uses: voidzero-dev/setup-vp@v1.19.0
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        with:
+          version-file: pnpm-workspace.yaml
+          cache: true
+          cache-save: false
+          run-install: true
+
+      # A budget that is broken fails this step, and the report below still
+      # runs: a table of what got worse is what somebody needs then.
+      - name: Measure
+        id: measure
+        working-directory: internal/grid
+        run: vp test tests/efficiency
+
+      # The base is measured with its own tests, in a checkout of its own, so
+      # the two sets of numbers come from the same runner. A base from before
+      # these tests existed has nothing to measure, and the table says so. A
+      # base that breaks its own budget still wrote its numbers.
+      - name: Measure the base
+        if: always() && github.event_name == 'pull_request'
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/base"
+          if [ -d internal/grid/tests/efficiency ]; then
+            vp install
+            cd internal/grid
+            vp test tests/efficiency || true
+          fi
+
+      - name: Report
+        if: always() && steps.measure.outcome != 'skipped'
+        working-directory: internal/grid
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.GRAFANA_OTLP_ENDPOINT }}
+          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.GRAFANA_OTLP_HEADERS }}
+        run: |
+          node scripts/efficiency.ts \
+            --base "$RUNNER_TEMP/base/internal/grid/out/efficiency" \
+            --out "$RUNNER_TEMP/efficiency.md"
+          cat "$RUNNER_TEMP/efficiency.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment, edited in place on every push. A pull request from a fork
+      # is run with a token that cannot comment, and has the job summary.
+      - name: Comment on the pull request
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR" --body-file "$RUNNER_TEMP/efficiency.md" --edit-last --create-if-none

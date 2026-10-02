@@ -1,0 +1,8 @@
+# Tells the local Grafana where uno's dashboard is.
+apiVersion: 1
+
+providers:
+  - name: uno
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards/uno
