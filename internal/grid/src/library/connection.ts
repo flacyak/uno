@@ -128,6 +128,14 @@ const BUCKET = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
 const REGION = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 
 /**
+ * A role's ARN as IAM writes one: a partition, a 12-digit account, and a name
+ * of the characters IAM allows, with a path before it where there is one. It
+ * is checked because the file somebody sent is what it came out of, and the
+ * ARN is what the hosted engine asks STS to let it be.
+ */
+const ROLE_ARN = /^arn:aws(?:-[a-z]+)*:iam::\d{12}:role\/[\w+=,.@/-]+$/;
+
+/**
  * secretIn names the first thing in a value that looks like a secret, or
  * answers undefined when there is none. It walks the whole value, because a key
  * nested three objects down is sent along with the file just the same.
@@ -263,8 +271,9 @@ function authKnown(mode: AuthMode): (key: string) => boolean {
 
 /**
  * validConnection checks the values that reach outside the file: the id, which
- * becomes a filename, and the bucket, prefix and region, which become a host
- * and a path. It runs on the way in and on the way out.
+ * becomes a filename, the bucket, prefix and region, which become a host and
+ * a path, and a role's ARN, which is asked of STS. It runs on the way in and
+ * on the way out.
  */
 export function validConnection(c: Connection): void {
   validID(c.id, "connection");
@@ -282,6 +291,11 @@ export function validConnection(c: Connection): void {
   }
   if (c.region !== undefined && !REGION.test(c.region)) {
     throw new Error(`${JSON.stringify(c.region)} is not a region`);
+  }
+  if (c.auth.mode === "role" && !ROLE_ARN.test(c.auth.roleArn)) {
+    throw new Error(
+      `${JSON.stringify(c.auth.roleArn)} is not a role's ARN · one reads arn:aws:iam::123456789012:role/name`,
+    );
   }
 }
 
