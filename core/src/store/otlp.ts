@@ -44,7 +44,18 @@ function statusClass(status: number): string {
 }
 
 /**
+ * The OpenTelemetry resource attribute that tells two processes of one
+ * service apart. Grafana files it as the `instance` label.
+ */
+export const INSTANCE_ATTRIBUTE = 'service.instance.id';
+
+/**
  * exporter starts sending to `to` every EXPORT_MS, filed under `resource`.
+ *
+ * Each exporter is an instance of its own, named at random unless the
+ * resource names it. A total is cumulative since its process began, so two
+ * engines sending one series would write over each other's totals: two
+ * workspaces open on a desktop, or every engine on a server.
  *
  * `go` is the fetch used for sends to the collector and for the counted S3
  * requests. Defaults to the global fetch.
@@ -56,7 +67,13 @@ export function exporter(
 ): Exporter {
   const { url } = to;
   const headers = { ...to.headers, 'content-type': 'application/json' };
-  const meter = new Meter(resource);
+  const meter = new Meter({
+    ...resource,
+    attributes: {
+      [INSTANCE_ATTRIBUTE]: crypto.randomUUID(),
+      ...resource.attributes,
+    },
+  });
 
   async function send(): Promise<void> {
     if (meter.empty) return;
