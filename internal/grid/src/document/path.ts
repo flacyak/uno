@@ -1,11 +1,13 @@
-// Path helpers for the source paths a .uno stores.
-//
-// A source under the workspace's folder is stored relative to that folder.
-// Any other source is stored absolute. A relative path always descends from
-// the folder, so `against` is a plain concatenation and every path passes
-// through as written.
-//
-// This runs in the browser too, so it uses string operations only.
+/**
+ * @fileoverview Path helpers for the source paths a .uno stores.
+ *
+ * A source under the workspace's folder is stored relative to that folder.
+ * Any other source is stored absolute. A relative path always descends from
+ * the folder, so `against` is a plain concatenation and every path passes
+ * through as written.
+ *
+ * This runs in the browser too, so it uses string operations only.
+ */
 
 import { isRemote } from '#store';
 

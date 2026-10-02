@@ -1,17 +1,19 @@
-// Package document reads and writes the .uno container: a zip holding the
-// manifest, the state, the edit log and, for each source, either a copy of
-// its bytes or a path to it.
-//
-// A source is one file or several files read as one table. A one-file source
-// is either carried (its bytes are in the zip) or pointed at (its path is in
-// the manifest). A parts source is always pointed at, one path per part, in
-// the order their rows are read.
-//
-// A pointer whose file has gone keeps its id, its edits and its place in the
-// log. It gets a grid again once it is pointed at a file.
-//
-// `readDocument` takes bytes and `writeDocument` returns bytes. The engine
-// opens the file a source points at.
+/**
+ * @fileoverview Package document reads and writes the .uno container: a zip
+ * holding the manifest, the state, the edit log and, for each source, either a
+ * copy of its bytes or a path to it.
+ *
+ * A source is one file or several files read as one table. A one-file source
+ * is either carried (its bytes are in the zip) or pointed at (its path is in
+ * the manifest). A parts source is always pointed at, one path per part, in
+ * the order their rows are read.
+ *
+ * A pointer whose file has gone keeps its id, its edits and its place in the
+ * log. It gets a grid again once it is pointed at a file.
+ *
+ * `readDocument` takes bytes and `writeDocument` returns bytes. The engine
+ * opens the file a source points at.
+ */
 
 import type { Edit } from '#sheet';
 import type { Sheet } from '#sheet';

@@ -1,8 +1,10 @@
-// Package program is uno's transform language: the string program a pattern
-// proposal names, and the one a .uno log stores.
-//
-// Its text form is public API: a program in edits/log.jsonl is replayed by
-// parsing it. It works on one string at a time.
+/**
+ * @fileoverview Package program is uno's transform language: the string program
+ * a pattern proposal names, and the one a .uno log stores.
+ *
+ * Its text form is public API: a program in edits/log.jsonl is replayed by
+ * parsing it. It works on one string at a time.
+ */
 
 export type { Program } from './program.ts';
 export { apply, describe, described, text } from './program.ts';
