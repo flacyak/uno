@@ -3,9 +3,10 @@
  * OTLP collector.
  *
  * `serve` calls a Telemetry function with each measurement: how long a
- * request took, how long a source took to index. Sending is left to the
- * platform. A measurement carries timings and request kinds only, so file
- * names, paths and buckets stay on the machine.
+ * request took, how long a source took to index. Sending is store/otlp.ts's,
+ * to the collector a platform reads from its environment with `collector`.
+ * A measurement carries timings and request kinds only, so file names,
+ * paths and buckets stay on the machine.
  *
  * Meter sums measurements, and `payload` writes the totals as an OTLP
  * metrics request in JSON for a collector's /v1/metrics endpoint.
