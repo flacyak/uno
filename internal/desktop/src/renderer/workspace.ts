@@ -1,11 +1,13 @@
-// One open workspace: its engine, its tabs, which tab is showing, and its
-// save state.
-//
-// Each tab wraps a source handle and the Band of rows the engine sends for
-// it. The files and the edit log live in the engine. Transform mode unlocks
-// editing and turns the recogniser on. An edit is one message to the engine.
-//
-// This file is plain logic, so tests run it directly.
+/**
+ * @fileoverview One open workspace: its engine, its tabs, which tab is showing,
+ * and its save state.
+ *
+ * Each tab wraps a source handle and the Band of rows the engine sends for
+ * it. The files and the edit log live in the engine. Transform mode unlocks
+ * editing and turns the recogniser on. An edit is one message to the engine.
+ *
+ * This file is plain logic, so tests run it directly.
+ */
 
 import { isWorkspace } from "#document";
 import { Band } from "#engine";

@@ -1,9 +1,11 @@
-// The list of recently opened workspace paths, most recent first. The
-// sidebar shows it.
-//
-// A .uno path is added when it is opened or saved. The list is kept in local
-// storage and holds only paths. A path deleted since is only found out
-// when it is opened.
+/**
+ * @fileoverview The list of recently opened workspace paths, most recent first.
+ * The sidebar shows it.
+ *
+ * A .uno path is added when it is opened or saved. The list is kept in local
+ * storage and holds only paths. A path deleted since is only found out
+ * when it is opened.
+ */
 
 import type { Keeps } from "./theme.ts";
 

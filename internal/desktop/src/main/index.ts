@@ -1,12 +1,14 @@
-// The main process: one window, the application menu, the file dialogs, and
-// the engine processes that read files for the renderer.
-//
-// uno runs once. A second uno started while this one runs hands its command
-// line over and exits, and the files it named open in this window.
-//
-// The data lives elsewhere. An engine reads a file in a utility process and
-// sends rows straight to the renderer over a message port. Everything else
-// about the data lives in the renderer.
+/**
+ * @fileoverview The main process: one window, the application menu, the file
+ * dialogs, and the engine processes that read files for the renderer.
+ *
+ * uno runs once. A second uno started while this one runs hands its command
+ * line over and exits, and the files it named open in this window.
+ *
+ * The data lives elsewhere. An engine reads a file in a utility process and
+ * sends rows straight to the renderer over a message port. Everything else
+ * about the data lives in the renderer.
+ */
 
 import {
   BrowserWindow,

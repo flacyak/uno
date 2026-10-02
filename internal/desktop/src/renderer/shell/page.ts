@@ -1,7 +1,9 @@
-// Writes the page's static text: the sidebar head, the empty state, the mode
-// switch labels, and the aria labels. index.html holds the elements with no
-// text. The text is written here when the shell starts and again when the
-// language changes, along with the document's lang and dir.
+/**
+ * @fileoverview Writes the page's static text: the sidebar head, the empty
+ * state, the mode switch labels, and the aria labels. index.html holds the
+ * elements with no text. The text is written here when the shell starts and
+ * again when the language changes, along with the document's lang and dir.
+ */
 
 import { m } from "#paraglide/messages";
 import { getLocale, getTextDirection } from "#paraglide/runtime";

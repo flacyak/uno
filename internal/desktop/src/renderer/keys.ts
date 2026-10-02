@@ -1,8 +1,11 @@
-// The actions the grid's keys map to, shared by every input strategy.
-//
-// An input strategy (input/) turns a key press into an Action, and the grid
-// carries it out. Motion targets, repeatable changes and command parsing live
-// here. This file is plain logic, so tests run it directly.
+/**
+ * @fileoverview The actions the grid's keys map to, shared by every input
+ * strategy.
+ *
+ * An input strategy (input/) turns a key press into an Action, and the grid
+ * carries it out. Motion targets, repeatable changes and command parsing live
+ * here. This file is plain logic, so tests run it directly.
+ */
 
 import { clamp } from "./grid/metrics.ts";
 

@@ -1,9 +1,11 @@
-// Default input: spreadsheet keys.
-//
-// Arrows, Tab, Shift+Tab and the page keys move. Enter and F2 open the editor
-// on the value. Typing a character opens the editor with that character. In
-// the editor Enter commits, Esc cancels, and Tab commits then moves. Ctrl+C
-// yanks and Ctrl+R redoes. Ctrl+E and Ctrl+Z are handled by the shell.
+/**
+ * @fileoverview Default input: spreadsheet keys.
+ *
+ * Arrows, Tab, Shift+Tab and the page keys move. Enter and F2 open the editor
+ * on the value. Typing a character opens the editor with that character. In
+ * the editor Enter commits, Esc cancels, and Tab commits then moves. Ctrl+C
+ * yanks and Ctrl+R redoes. Ctrl+E and Ctrl+Z are handled by the shell.
+ */
 
 import { NAMED_MOTIONS, NONE, done, isCharacter, move } from "#renderer/keys";
 import type { Action, Mode, Pending, Press, Step } from "#renderer/keys";
