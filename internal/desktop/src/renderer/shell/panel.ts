@@ -104,6 +104,9 @@ export type Row =
   | { t: "line"; section: Section; line: number }
   | { t: "note"; section: Section };
 
+/** A source still opening whose open can be stopped. */
+type Stoppable = Arriving & { readonly cancel: () => void };
+
 /**
  * spans lays the sections out as one column: a heading, then its lines, or
  * one note row when there are none.
@@ -414,6 +417,12 @@ export class Panel {
           this.move(step);
           break;
         }
+        // Delete on a source still opening stops its open.
+        const stopping = e.key === "Delete" ? this.stopping() : undefined;
+        if (stopping !== undefined) {
+          stopping.cancel();
+          break;
+        }
         // A tab action key, when focus is on a tab's line. Otherwise the key
         // goes on to the shell.
         const does = DOING_KEYS.get(e.key);
@@ -506,6 +515,16 @@ export class Panel {
     const { section, line } = this.sources.place;
     const coming = this.arriving(section, line);
     return coming?.failed === undefined ? undefined : coming;
+  }
+
+  /**
+   * stopping returns the source opening on the focused line, if its open can
+   * be stopped.
+   */
+  private stopping(): Stoppable | undefined {
+    const { section, line } = this.sources.place;
+    const coming = this.arriving(section, line);
+    return isStoppable(coming) ? coming : undefined;
   }
 
   /** edit reopens the connect form as it was left when its save was refused. */
@@ -632,28 +651,37 @@ export class Panel {
   }
 
   /**
-   * paintFoot draws the refusal, the focused tab's actions, the join choices,
-   * and the add buttons. The foot is hidden when there are none.
+   * paintFoot draws the refusal, the focused tab's actions or the Stop for a
+   * source still opening, the join choices, and the add buttons. The foot is
+   * hidden when there are none.
    */
   private paintFoot(): void {
     const doings = this.sources.doings;
     const buttons = this.sources.buttons;
     const joining = this.sources.joining;
     const failure = this.failure();
+    const stoppable = this.stopping() !== undefined;
     // A key for what the foot shows. Buttons read the sources again when
-    // pressed, so ticking a choice leaves the foot as drawn.
+    // pressed, so ticking a choice leaves the foot as drawn, and the Stop
+    // reads the focused line when pressed, so the key records only that a
+    // stop is offered.
     const key = [
       ...doings.map((a) => a.does + a.id + a.label),
       ...buttons.map((b) => b.label + (b.to ?? "") + b.refs.map(placeOf).join()),
       joining === undefined ? "" : "joining",
       failure === undefined ? "" : `failed${failure.name}${failure.failed}`,
+      stoppable ? "stopping" : "",
     ].join("|");
     if (key === this.drawnFoot) return;
     this.drawnFoot = key;
-    this.foot.hidden = doings.length === 0 && buttons.length === 0 && failure === undefined;
+    this.foot.hidden =
+      doings.length === 0 && buttons.length === 0 && failure === undefined && !stoppable;
     this.foot.replaceChildren(
       ...(failure === undefined ? [] : this.refusal(failure)),
       ...doings.map((a) => button(a.does === "append" ? "wide" : "", a.label, () => this.doing(a))),
+      // The Stop reads the line focused when it is pressed, as Delete does, so
+      // the one stopped is the one in view.
+      ...(stoppable ? [button("", m.action_stop(), () => this.stopping()?.cancel())] : []),
       ...(joining === undefined ? [] : [this.choices(joining)]),
       // Each button is read as it stands when pressed.
       ...buttons.map((b, i) =>
@@ -796,6 +824,11 @@ export class Panel {
 function placeOf(ref: SourceRef): string {
   if ("parts" in ref) return ref.parts.map((part) => placeOf(part.ref)).join();
   return "path" in ref ? ref.path : ref.name;
+}
+
+/** isStoppable is whether a source still on its way has a way to stop its open. */
+function isStoppable(coming: Arriving | undefined): coming is Stoppable {
+  return coming?.cancel !== undefined;
 }
 
 /** choice creates one checkbox with a label and a hover hint. */

@@ -208,6 +208,7 @@
   "action_reload": "Recargar",
   "action_repoint": "Redirigir",
   "action_remove": "Quitar",
+  "action_stop": "Detener",
   "action_edit_connection": "Editar conexión",
   "sources_title": "Fuentes",
   "settings_title": "Ajustes",
