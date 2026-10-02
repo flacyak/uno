@@ -1,6 +1,8 @@
-// A module that reaches outside with every module name built at run time, so
-// only a run reveals them. reaches.test.ts runs it as if it were
-// src/engine/serve.ts and expects each use to be caught.
+/**
+ * @fileoverview A module that reaches outside with every module name built at
+ * run time, so only a run reveals them. reaches.test.ts runs it as if it were
+ * src/engine/serve.ts and expects each use to be caught.
+ */
 
 /** The module names, assembled from pieces. */
 const PROGRAM = ['child', 'process'].join('_');

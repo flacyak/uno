@@ -1,14 +1,16 @@
-// Browsing over the protocol: `list`, `stat` and `peek`. These requests stand
-// apart from any source. They go to the listers and handlers the engine was
-// wired with, outside the workspace queue, so they are answered while a save
-// runs.
-//
-// The first half sends raw messages over the channel and checks which reply
-// comes back, with which id, in what order. The second half goes through the
-// Engine client.
-//
-// Every listing browses a temp directory with the testdata fixtures copied
-// into it. The sizes checked are those copies' sizes.
+/**
+ * @fileoverview Browsing over the protocol: `list`, `stat` and `peek`. These
+ * requests stand apart from any source. They go to the listers and handlers the
+ * engine was wired with, outside the workspace queue, so they are answered
+ * while a save runs.
+ *
+ * The first half sends raw messages over the channel and checks which reply
+ * comes back, with which id, in what order. The second half goes through the
+ * Engine client.
+ *
+ * Every listing browses a temp directory with the testdata fixtures copied
+ * into it. The sizes checked are those copies' sizes.
+ */
 
 import { copyFile, mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

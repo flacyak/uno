@@ -1,5 +1,7 @@
-// Browsing a bucket: readListing on XML strings, s3Prefix and the lister's
-// claims, and the S3 lister against the stand-in.
+/**
+ * @fileoverview Browsing a bucket: readListing on XML strings, s3Prefix and the
+ * lister's claims, and the S3 lister against the stand-in.
+ */
 
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 

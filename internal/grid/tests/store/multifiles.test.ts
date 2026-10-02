@@ -1,8 +1,10 @@
-// PartsRef: several files named as one source, claimed by multiFiles and
-// opened through the handlers beside it.
-//
-// A build of single-file handlers only refuses the ref by name, and a part
-// in a bucket is signed by the connection covering it.
+/**
+ * @fileoverview PartsRef: several files named as one source, claimed by
+ * multiFiles and opened through the handlers beside it.
+ *
+ * A build of single-file handlers only refuses the ref by name, and a part
+ * in a bucket is signed by the connection covering it.
+ */
 
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

@@ -1,8 +1,11 @@
-// A stand-in bucket behind a Door that holds every ranged read until the test
-// lets it through, once the engine has gone quiet. This makes the order of
-// reads, and so the request and byte counts, the same on every run.
-//
-// The engine and the S3 provider are the real ones. Only `fetch` is wrapped.
+/**
+ * @fileoverview A stand-in bucket behind a Door that holds every ranged read
+ * until the test lets it through, once the engine has gone quiet. This makes
+ * the order of reads, and so the request and byte counts, the same on every
+ * run.
+ *
+ * The engine and the S3 provider are the real ones. Only `fetch` is wrapped.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 

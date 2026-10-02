@@ -1,6 +1,8 @@
-// Measures a find that reads to the end of a 24 MB file, plain and beside a
-// formula bound to another column. The bound column must keep it near plain
-// speed.
+/**
+ * @fileoverview Measures a find that reads to the end of a 24 MB file, plain
+ * and beside a formula bound to another column. The bound column must keep it
+ * near plain speed.
+ */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
