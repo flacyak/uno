@@ -1,11 +1,13 @@
-// @vitest-environment happy-dom
-//
-// The settings control and its menu: the sources, the themes, the appearance,
-// the keys, and the languages.
-//
-// Checks what the menu offers and what choosing does: a theme applies at
-// once, a source opens the panel on it, and the menu closes the ways a menu
-// should.
+/**
+ * @fileoverview The settings control and its menu: the sources, the themes, the
+ * appearance, the keys, and the languages.
+ *
+ * Checks what the menu offers and what choosing does: a theme applies at
+ * once, a source opens the panel on it, and the menu closes the ways a menu
+ * should.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 

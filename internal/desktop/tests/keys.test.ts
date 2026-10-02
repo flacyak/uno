@@ -1,5 +1,7 @@
-// What keys mean in either strategy: where each motion lands, what . repeats,
-// and what the command line reads.
+/**
+ * @fileoverview What keys mean in either strategy: where each motion lands,
+ * what . repeats, and what the command line reads.
+ */
 
 import { expect, test } from "vite-plus/test";
 

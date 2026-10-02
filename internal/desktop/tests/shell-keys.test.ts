@@ -1,8 +1,10 @@
-// @vitest-environment happy-dom
-//
-// A key is read once. When the grid handles a key, the shell leaves it
-// alone: Ctrl+B pages up under vim-style and the sidebar stays as it was.
-// Runs over the real shell and engine.
+/**
+ * @fileoverview A key is read once. When the grid handles a key, the shell
+ * leaves it alone: Ctrl+B pages up under vim-style and the sidebar stays as it
+ * was. Runs over the real shell and engine.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeAll, expect, test } from "vite-plus/test";
 

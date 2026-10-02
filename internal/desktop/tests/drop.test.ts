@@ -1,7 +1,9 @@
-// @vitest-environment happy-dom
-//
-// Dropping a file on the window: what lights the empty state, and what a
-// drop opens or refuses.
+/**
+ * @fileoverview Dropping a file on the window: what lights the empty state, and
+ * what a drop opens or refuses.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { expect, test } from "vite-plus/test";
 

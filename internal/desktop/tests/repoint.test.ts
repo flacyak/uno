@@ -1,11 +1,13 @@
-// A missing S3 source, re-pointed at another object from the panel, with its
-// edits replayed.
-//
-// Runs headless over a real engine, the S3 provider, and the stand-in
-// bucket. A workspace is saved pointing at an object, the object is deleted,
-// and the workspace opens with the source missing. The panel browses the
-// object's prefix through the workspace's engine, and the file picked there
-// is what the workspace is pointed at.
+/**
+ * @fileoverview A missing S3 source, re-pointed at another object from the
+ * panel, with its edits replayed.
+ *
+ * Runs headless over a real engine, the S3 provider, and the stand-in
+ * bucket. A workspace is saved pointing at an object, the object is deleted,
+ * and the workspace opens with the source missing. The panel browses the
+ * object's prefix through the workspace's engine, and the file picked there
+ * is what the workspace is pointed at.
+ */
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

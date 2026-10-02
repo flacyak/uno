@@ -1,6 +1,9 @@
-// @vitest-environment happy-dom
-//
-// The formula form: what it opens on, and how Esc and Tab behave in it.
+/**
+ * @fileoverview The formula form: what it opens on, and how Esc and Tab behave
+ * in it.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { expect, test } from "vite-plus/test";
 

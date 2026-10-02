@@ -1,4 +1,6 @@
-// The default input strategy on its own: what each key does.
+/**
+ * @fileoverview The default input strategy on its own: what each key does.
+ */
 
 import { expect, test } from "vite-plus/test";
 

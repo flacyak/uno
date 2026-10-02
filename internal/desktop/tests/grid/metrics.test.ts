@@ -1,6 +1,8 @@
-// The grid's layout arithmetic in metrics.ts: the scroller's height, the
-// scrollbar mapping on a sheet past the cap, which rows the pool draws, and
-// where a jump lands.
+/**
+ * @fileoverview The grid's layout arithmetic in metrics.ts: the scroller's
+ * height, the scrollbar mapping on a sheet past the cap, which rows the pool
+ * draws, and where a jump lands.
+ */
 
 import { expect, test } from "vite-plus/test";
 

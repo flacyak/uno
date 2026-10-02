@@ -1,8 +1,11 @@
-// @vitest-environment happy-dom
-//
-// The view over a plain DOM: what sits between the browser's scroller and the
-// arithmetic in metrics.ts. happy-dom skips layout, so the scroller is
-// told its height, and a resize is the observer's callback fired by hand.
+/**
+ * @fileoverview The view over a plain DOM: what sits between the browser's
+ * scroller and the arithmetic in metrics.ts. happy-dom skips layout, so the
+ * scroller is told its height, and a resize is the observer's callback fired by
+ * hand.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
