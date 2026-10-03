@@ -128,7 +128,10 @@ export default async function everything(): Promise<void> {
       undefined,
       {
         connections: kept,
-        profiles: () => awsProfiles(env),
+        signIns: async () => ({
+          modes: ["machine", "profile", "public"],
+          profiles: await awsProfiles(env),
+        }),
         test: (c) => tryConnection(c, { sign: (x) => auth.of(x), endpoint: b.endpoint }),
       },
     );
@@ -142,7 +145,7 @@ export default async function everything(): Promise<void> {
   const first = engine();
   try {
     await first.connections();
-    await first.profiles();
+    await first.signIns();
     await first.list(home);
     await first.stat(local);
     await first.peek({ name: "sales-q3.csv", path: local });

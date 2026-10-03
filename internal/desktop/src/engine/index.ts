@@ -106,9 +106,13 @@ process.parentPort.once("message", (e) => {
       ? undefined
       : {
           connections: kept,
-          // Names only: the files are read here, and what else is in them
-          // never leaves this process.
-          profiles: () => awsProfiles(),
+          // The desktop signs in as this machine, as one of its profiles, or
+          // not at all. Names only: the files are read here, and what else
+          // is in them never leaves this process.
+          signIns: async () => ({
+            modes: ["machine", "profile", "public"],
+            profiles: await awsProfiles(),
+          }),
           test: (c) => tryConnection(c, { sign: (x) => auth.of(x), endpoint: ENDPOINT }),
           // A .uno somebody sent reads no bucket this machine has not
           // connected, and one this machine has is saved naming it.
