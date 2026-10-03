@@ -42,15 +42,15 @@
       "@store": ["./grid/src/store/index.ts"],
       "@store/*": ["./grid/src/store/*.ts"],
       "@grid-tests/*": ["./grid/tests/*.ts"],
-      "@desktop-engine/*": ["./internal/desktop/src/engine/*.ts"],
-      "@main/*": ["./internal/desktop/src/main/*.ts"],
-      "@paraglide/*": ["./internal/desktop/src/paraglide/*.js"],
-      "@renderer/grid": ["./internal/desktop/src/renderer/grid/index.ts"],
-      "@renderer/input": ["./internal/desktop/src/renderer/input/index.ts"],
-      "@renderer/*": ["./internal/desktop/src/renderer/*.ts"],
-      "@shared/*": ["./internal/desktop/src/shared/*.ts"],
-      "@scripts/*": ["./internal/desktop/scripts/*.js"],
-      "@desktop-tests/*": ["./internal/desktop/tests/*.ts"]
+      "@desktop-engine/*": ["./apps/desktop/src/engine/*.ts"],
+      "@main/*": ["./apps/desktop/src/main/*.ts"],
+      "@paraglide/*": ["./apps/desktop/src/paraglide/*.js"],
+      "@renderer/grid": ["./apps/desktop/src/renderer/grid/index.ts"],
+      "@renderer/input": ["./apps/desktop/src/renderer/input/index.ts"],
+      "@renderer/*": ["./apps/desktop/src/renderer/*.ts"],
+      "@shared/*": ["./apps/desktop/src/shared/*.ts"],
+      "@scripts/*": ["./apps/desktop/scripts/*.js"],
+      "@desktop-tests/*": ["./apps/desktop/tests/*.ts"]
     }
   }
 }

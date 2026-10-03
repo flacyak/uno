@@ -1,16 +1,16 @@
 node_modules/
+dist/
+out/
 *.log
+.DS_Store
 .eslintcache
 resource/
 
 # the server and the web page, a repository of their own checked out here
-internal/www/
+apps/www/
 
 # screenshot artefacts from `go test -tags screenshot ./internal/uitest/`
 .screenshots/
-
-# goreleaser output
-dist/
 
 # fyne-cross output
 fyne-cross/
