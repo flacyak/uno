@@ -1,6 +1,6 @@
 packages:
-  - internal/grid
-  - internal/desktop
+  - core
+  - apps/desktop
 
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.3.1
