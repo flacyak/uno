@@ -8,7 +8,7 @@
  * Blob.prototype.arrayBuffer. Node's own type stripping runs the .ts source,
  * so a use is attributed to the .ts file that made it.
  *
- * Usage: node --experimental-transform-types --import ../../../paths.js run.ts <root> <scenario>
+ * Usage: node --experimental-transform-types --import ../../../../paths.js run.ts <root> <scenario>
  * <root> is the folder uses are attributed under, and <scenario> a module
  * whose default export is run.
  */
