@@ -46,8 +46,9 @@ export async function twoProfiles(config = ''): Promise<string> {
 
 /**
  * profilesEnv is an environment pointing at that folder. It clears
- * AWS_PROFILE and the session token, and sets the machine's own keys only
- * when `machine` is given.
+ * AWS_PROFILE and the session token, sets the machine's own keys only when
+ * `machine` is given, and turns the instance metadata service off so the
+ * end of the chain is reached without a probe of the network.
  */
 export function profilesEnv(
   aws: string,
@@ -63,5 +64,6 @@ export function profilesEnv(
     AWS_ACCESS_KEY_ID: machine?.accessKeyId,
     AWS_SECRET_ACCESS_KEY: machine?.secretAccessKey,
     AWS_SESSION_TOKEN: undefined,
+    AWS_EC2_METADATA_DISABLED: 'true',
   };
 }
