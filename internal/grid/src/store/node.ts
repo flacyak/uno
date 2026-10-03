@@ -1,6 +1,7 @@
 /**
  * @fileoverview The Node FileStore, the handler that opens a file on this
- * machine's disks, and the AWS credential chain read from ~/.aws.
+ * machine's disks, and the AWS credential chain: the environment, ~/.aws,
+ * then the host the process runs on.
  *
  * `write` builds a sibling temp file, fsyncs it and renames it over the
  * target. Only this file and store/disklister.ts import node:fs. The guard
@@ -23,7 +24,12 @@ import { diskLister } from './disklister.ts';
 import type { ByteSource, FileHandler, FileStore } from './index.ts';
 import { isRemote, readAll } from './index.ts';
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
-import { assumeRole, signInAgain, ssoRoleCredentials } from './sts.ts';
+import {
+  assumeRole,
+  assumeRoleWithWebIdentity,
+  signInAgain,
+  ssoRoleCredentials,
+} from './sts.ts';
 import type { Session } from './sts.ts';
 import { unreachable } from '@never';
 
@@ -259,8 +265,10 @@ async function profileSession(
   if (roleArn !== undefined) {
     const setting = (key: string): string | undefined =>
       fromConfig?.get(key) ?? p?.get(key);
-    return hold(
+    return held(
       await roleSession(env, files, profile, roleArn, setting, through),
+      region,
+      as,
     );
   }
 
@@ -269,22 +277,96 @@ async function profileSession(
     return { creds: { ...own.creds, as }, until: own.until };
   const command = fromConfig?.get('credential_process');
   if (command !== undefined)
-    return hold(await processCredentials(profile, command));
+    return held(await processCredentials(profile, command), region, as);
   if (
     fromConfig?.has('sso_session') === true ||
     fromConfig?.has('sso_start_url') === true
   ) {
-    return hold(await ssoSession(env, files, profile, fromConfig));
+    return held(await ssoSession(env, files, profile, fromConfig), region, as);
   }
   return undefined;
+}
 
-  /** hold is a session as this profile's credentials, kept until shortly
-   * before it expires, or for good for keys that last. */
-  function hold({ expiration, ...keys }: Printed | Session): Held {
-    const until =
-      expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS;
-    return { creds: { ...keys, region, as }, until };
+/**
+ * held is a session kept until shortly before it expires, or for good for
+ * keys that last, signing for `region`. `as` names whose it is.
+ */
+function held(
+  { expiration, ...keys }: Printed | Session,
+  region: string,
+  as?: string,
+): Held {
+  const until =
+    expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS;
+  return {
+    creds: { ...keys, region, ...(as === undefined ? {} : { as }) },
+    until,
+  };
+}
+
+/**
+ * hostSession is the end of the chain, where the AWS SDKs look last: a web
+ * identity token the environment names. Undefined where the host offers none.
+ */
+async function hostSession(
+  env: Env,
+  region: string,
+): Promise<Held | undefined> {
+  const tokenFile = envVar(env, 'AWS_WEB_IDENTITY_TOKEN_FILE');
+  const roleArn = envVar(env, 'AWS_ROLE_ARN');
+  if (tokenFile !== undefined && roleArn !== undefined) {
+    const ask = {
+      roleArn,
+      tokenFile,
+      sessionName: envVar(env, 'AWS_ROLE_SESSION_NAME'),
+      region,
+    };
+    return held(await webIdentitySession(env, ask, 'the environment'), region);
   }
+  return undefined;
+}
+
+/** What a web identity session is asked for, and where its token is. */
+interface WebIdentityFile {
+  roleArn: string;
+  tokenFile: string;
+  sessionName?: string;
+  durationSeconds?: number;
+  region: string;
+}
+
+/**
+ * webIdentitySession reads the token in the file and trades it at STS for
+ * the role. `named` is who names the file, for an error: the AWS profile
+ * x, or the environment.
+ */
+async function webIdentitySession(
+  env: Env,
+  ask: WebIdentityFile,
+  named: string,
+): Promise<Session> {
+  const token = await readText(ask.tokenFile);
+  if (token === undefined) {
+    throw new Error(
+      `${named} names the web identity token file ${ask.tokenFile}, which is not there`,
+    );
+  }
+  return assumeRoleWithWebIdentity(
+    {
+      roleArn: ask.roleArn,
+      sessionName: ask.sessionName ?? `uno-${Date.now()}`,
+      token: token.trim(),
+      durationSeconds: ask.durationSeconds,
+      region: ask.region,
+    },
+    { endpoint: env['AWS_ENDPOINT_URL_STS'] },
+  );
+}
+
+/** The environment's value for `name`, where it is set and not empty. */
+function envVar(env: Env, name: string): string | undefined {
+  const value = env[name];
+  return value === undefined || value === '' ? undefined : value;
 }
 
 /**
@@ -398,7 +480,22 @@ async function roleSession(
     );
   }
 
-  let source: AwsCredentials;
+  // A profile with a web identity token has no source: the token says who
+  // is asking.
+  const tokenFile = setting('web_identity_token_file');
+  if (tokenFile !== undefined) {
+    const duration = setting('duration_seconds');
+    const ask: WebIdentityFile = {
+      roleArn,
+      tokenFile,
+      sessionName: setting('role_session_name'),
+      durationSeconds: duration === undefined ? undefined : Number(duration),
+      region: regionOf(env, files, profile),
+    };
+    return webIdentitySession(env, ask, `the AWS profile ${profile}`);
+  }
+
+  let source: Omit<AwsCredentials, 'region'>;
   const sourceProfile = setting('source_profile');
   const credentialSource = setting('credential_source');
   if (sourceProfile !== undefined) {
@@ -409,24 +506,24 @@ async function roleSession(
     }
     // A profile that is its own source means the static keys beside its
     // role_arn.
-    const held =
+    const found =
       sourceProfile === profile
         ? profileKeysOnly(env, files, profile)
         : await profileSession(env, files, sourceProfile, chain);
-    if (held === undefined) {
+    if (found === undefined) {
       throw new Error(
         `the AWS profile ${profile} takes its credentials from ${sourceProfile}, which has no way in uno can use`,
       );
     }
-    source = held.creds;
+    source = found.creds;
   } else if (credentialSource === 'Environment') {
-    const held = envKeys(env, DEFAULT_REGION);
-    if (held === undefined) {
+    const found = envKeys(env, DEFAULT_REGION);
+    if (found === undefined) {
       throw new Error(
         `the AWS profile ${profile} takes its credentials from the environment, which has no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY`,
       );
     }
-    source = held;
+    source = found;
   } else if (credentialSource !== undefined) {
     throw new Error(
       `the AWS profile ${profile} takes its credentials from ${credentialSource}, which uno does not reach · use source_profile or Environment`,
@@ -634,8 +731,8 @@ function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
 /**
  * awsCredentials finds credentials the way the AWS CLI does: the environment
  * first, then the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or
- * `default`. This is the `machine` way of signing in, and what a request
- * outside every connection signs with.
+ * `default`, then the host the process runs on. This is the `machine` way
+ * of signing in, and what a request outside every connection signs with.
  */
 export function awsCredentials(
   env: Env = process.env,
@@ -644,13 +741,17 @@ export function awsCredentials(
     const profile =
       env['AWS_PROFILE'] ?? env['AWS_DEFAULT_PROFILE'] ?? 'default';
     const files = await awsFiles(env);
-    const fromEnv = envKeys(env, regionOf(env, files, profile));
+    const region = regionOf(env, files, profile);
+    const fromEnv = envKeys(env, region);
     if (fromEnv !== undefined)
       return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
-    const held = await profileSession(env, files, profile);
-    if (held !== undefined) return held;
+    const fromProfile = await profileSession(env, files, profile);
+    if (fromProfile !== undefined) return fromProfile;
+    const fromHost = await hostSession(env, region);
+    if (fromHost !== undefined) return fromHost;
     throw new Error(
-      `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or put keys for the ${profile} profile in ~/.aws/credentials`,
+      `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, ` +
+        `put keys for the ${profile} profile in ~/.aws/credentials, or run uno where a role is attached`,
     );
   });
 }
