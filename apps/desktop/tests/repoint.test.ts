@@ -14,9 +14,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
-import { HOME_REGION } from "@grid-tests/store/regions";
-import { bucket, etagOf } from "@grid-tests/store/standin";
-import type { Bucket } from "@grid-tests/store/standin";
+import { HOME_REGION } from "@core-tests/store/regions";
+import { bucket, etagOf } from "@core-tests/store/standin";
+import type { Bucket } from "@core-tests/store/standin";
 import { bucketEngine } from "./bucket-engine.ts";
 import { Sources, stateOf } from "@renderer/sources";
 import { Workspace } from "@renderer/workspace";

@@ -5,7 +5,7 @@
  * policy the role is made with.
  *
  * The documents are written by `trustPolicy` and `permissionPolicy` in
- * @uno/grid, and the permission policy follows the bucket and prefix as they
+ * @uno/core, and the permission policy follows the bucket and prefix as they
  * are typed, so what is copied is what the connection will ask for. The form
  * edits none of it: a policy is attached where the bucket is managed, by the
  * team or the system that owns it.

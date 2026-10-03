@@ -48,7 +48,7 @@ test("the engine lists the providers it reaches through", () => {
 const RUNS = /["'](node:)?child_process["']/;
 
 // The only program uno runs is a profile's credential_process, inside
-// @uno/grid/store/node in the engine. The desktop starts engines through
+// @uno/core/store/node in the engine. The desktop starts engines through
 // Electron's utilityProcess alone.
 test("nothing in the desktop runs a program of its own", () => {
   const found = sources(SRC)

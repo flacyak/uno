@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@uno/desktop": "workspace:*",
-    "@uno/grid": "workspace:*",
+    "@uno/core": "workspace:*",
     "ws": "^8.22.0"
   },
   "devDependencies": {

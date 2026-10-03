@@ -5,7 +5,7 @@
  * defined. TypeScript reads it through each package's tsconfig, Vite through
  * resolve.tsconfigPaths and tsdown through the tsconfig it finds. Node reads
  * nothing of the kind, and the smoke, preview and efficiency scripts run
- * under Node alone with grid source loaded straight off the disk. This is
+ * under Node alone with core source loaded straight off the disk. This is
  * what lets them: `node --import ../../paths.js scripts/smoke.js`.
  *
  * Every target in the map names a file with its extension, so a match is
