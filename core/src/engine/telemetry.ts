@@ -334,6 +334,9 @@ export const COLLECTOR_VARIABLES: readonly string[] = [
  */
 const HTTP_PROTOCOLS: readonly string[] = ['http/json', 'http/protobuf'];
 
+/** What a protocol's name looks like, grpc or http/json, and so may be said back. */
+const PROTOCOL_NAME = /^[a-z]{1,16}(\/[a-z]{1,16})?$/i;
+
 /** Quote characters stripped from a pasted value. */
 const QUOTES = ['"', "'"];
 
@@ -424,8 +427,13 @@ export function collector(
 
   const protocol = setOf(env, [METRICS_PROTOCOL_VARIABLE, PROTOCOL_VARIABLE]);
   if (protocol.value !== '' && !HTTP_PROTOCOLS.includes(protocol.value)) {
+    // A protocol's name is said back. Anything else may be a token pasted
+    // into the wrong variable, and is described by its length alone.
+    const is = PROTOCOL_NAME.test(protocol.value)
+      ? `is ${protocol.value}`
+      : `is not a protocol, and is ${protocol.value.length} characters long`;
     throw new Error(
-      `${protocol.variable} is ${protocol.value}, and metrics are sent as OTLP over HTTP · set it to http/json or leave it unset`,
+      `${protocol.variable} ${is}, and metrics are sent as OTLP over HTTP · set it to http/json or leave it unset`,
     );
   }
 
