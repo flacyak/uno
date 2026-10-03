@@ -49,6 +49,9 @@ export interface SsoAsk {
  * ssoRoleCredentials trades an SSO access token for a role's temporary keys
  * through the SSO portal's GetRoleCredentials. A 401 or 403 means the sign-in
  * has expired or been revoked, and the error says to sign in again.
+ * @param ask the profile's portal, account and role, with its access token
+ * @param opts where the exchange is sent and how requests go out
+ * @return the role's temporary keys
  */
 export async function ssoRoleCredentials(
   ask: SsoAsk,
@@ -104,6 +107,9 @@ export async function ssoRoleCredentials(
 /**
  * signInAgain is the error message for an SSO sign-in that has lapsed,
  * with the command that fixes it. Also used by store/node.ts.
+ * @param profile the profile's name
+ * @param why what is wrong with the sign-in
+ * @return the message, with the command that signs in again
  */
 export function signInAgain(profile: string, why: string): string {
   return `the AWS profile ${profile} is not signed in · ${why} · sign in with \`aws sso login --profile ${profile}\``;
@@ -136,6 +142,10 @@ const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
  * caller's credentials, and returns the role's session.
  *
  * An error includes STS's error code and message.
+ * @param ask the role, the session and the region
+ * @param source the caller's keys, which sign the request
+ * @param opts where the exchange is sent and how requests go out
+ * @return the role's session
  */
 export async function assumeRole(
   ask: RoleAsk,
@@ -184,6 +194,9 @@ export interface WebIdentityAsk {
  * assumeRoleWithWebIdentity calls STS AssumeRoleWithWebIdentity and returns
  * the role's session. The call is unsigned: the token says who is asking.
  * It goes as a POST, since a token can run past what a URL holds.
+ * @param ask the role, the session, the token and the region
+ * @param opts where the exchange is sent and how requests go out
+ * @return the role's session
  */
 export async function assumeRoleWithWebIdentity(
   ask: WebIdentityAsk,
@@ -208,7 +221,13 @@ export async function assumeRoleWithWebIdentity(
   return sessionIn(res, ask.roleArn);
 }
 
-/** Where STS is for a region: the endpoint given, or AWS's regional one. */
+/**
+ *
+ * Where STS is for a region: the endpoint given, or AWS's regional one.
+ * @param region the region whose STS is called
+ * @param opts the endpoint that replaces it, if any
+ * @return the endpoint, with no trailing slash
+ */
 function stsBase(region: string, opts: ExchangeOptions): string {
   return (opts.endpoint ?? `https://sts.${region}.amazonaws.com`).replace(
     /\/+$/,
@@ -216,7 +235,12 @@ function stsBase(region: string, opts: ExchangeOptions): string {
   );
 }
 
-/** checkSessionName refuses a name STS would not take, before any request is sent. */
+/**
+ *
+ * checkSessionName refuses a name STS would not take, before any request is sent.
+ * @param roleArn the role, for the error
+ * @param sessionName the name to check
+ */
 function checkSessionName(roleArn: string, sessionName: string): void {
   if (!SESSION_NAME.test(sessionName)) {
     throw new Error(
@@ -229,6 +253,9 @@ function checkSessionName(roleArn: string, sessionName: string): void {
 /**
  * sessionIn reads STS's answer to a role assumption: the session it holds,
  * or the refusal with STS's error code and message.
+ * @param res STS's answer
+ * @param roleArn the role, for the error
+ * @return the session the answer holds
  */
 async function sessionIn(res: Response, roleArn: string): Promise<Session> {
   const body = await res.text();
