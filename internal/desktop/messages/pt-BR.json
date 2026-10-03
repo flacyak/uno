@@ -300,6 +300,7 @@
   "role_how": "Entregue estes dados a quem administra o bucket. A função que criarem leva a política de confiança e a política de permissões, que seguem o bucket e o prefixo conforme são digitados. Depois cole o ARN da função.",
   "role_trust_policy": "Política de confiança",
   "role_permission_policy": "Política de permissões",
+  "policy_keys_how": "O usuário ou função do IAM cujas chaves fazem login precisa desta política: listar o bucket e ler os objetos sob o prefixo, conforme digitados acima.",
   "role_copy_aria": "copiar {what}",
   "action_copy": "Copiar",
   "action_copied": "Copiado",

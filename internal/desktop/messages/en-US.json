@@ -286,6 +286,7 @@
   "role_how": "Give these to whoever manages the bucket. The role they make has the trust policy and the permission policy, which follow the bucket and prefix as they are typed. Then paste the role's ARN.",
   "role_trust_policy": "Trust policy",
   "role_permission_policy": "Permission policy",
+  "policy_keys_how": "The IAM user or role whose keys sign in needs this policy: to list the bucket and read objects under the prefix, as typed above.",
   "role_copy_aria": "copy {what}",
   "action_copy": "Copy",
   "action_copied": "Copied",
