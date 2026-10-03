@@ -33,7 +33,9 @@ export type {
   Progress,
   Reply,
   Request,
+  SignIns,
   SourceRef,
+  Trust,
 } from "./protocol.ts";
 export { Pages, RowIndex, TUNING } from "./rows.ts";
 export type { Tuning } from "./rows.ts";

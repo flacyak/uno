@@ -111,7 +111,8 @@ export async function bootShell(over: Partial<Host> = {}): Promise<Shell> {
       undefined,
       {
         connections: connectionsIn(nodeStore(), kept),
-        profiles: () => Promise.resolve(["default"]),
+        signIns: () =>
+          Promise.resolve({ modes: ["machine", "profile", "public"], profiles: ["default"] }),
       },
     );
     return port1 as unknown as MessagePortLike;
