@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
-// The menu hung off the page: what it offers, that choosing closes it first,
-// and that it gets out of the way the ways a menu should.
+// The pop-up menu: what it offers, that choosing closes it first, and how it
+// closes.
 
 import { expect, test } from "vite-plus/test";
 

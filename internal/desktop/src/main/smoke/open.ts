@@ -1,5 +1,5 @@
 // Checks that the fixture opened: the bridge, the header, the virtualiser, and a
-// window that takes no input from the person at the desktop.
+// window that ignores input from the person at the desktop.
 
 import type { Check, Input } from "./check.ts";
 import { DATE, DOM_ROWS, REP, ROWS, UNITS, counted } from "./fixture.ts";
@@ -33,7 +33,7 @@ export const OPEN: Check[] = [
     },
   },
   {
-    // The file is still on disk, so a workspace nobody has touched has nothing to lose.
+    // The file is on disk and untouched, so the tab is clean.
     name: "a file just opened has nothing unsaved",
     run: async (page) => ((await page.count(".tab .dirty")) === 0 ? "" : "the tab has a dirty dot"),
   },
@@ -67,7 +67,7 @@ export const OPEN: Check[] = [
     name: "the first row shows what the file holds",
     run: async (page) => {
       const [row] = await page.rows();
-      // The gutter goes back in front, so a failure reads exactly as the row it names.
+      // The gutter goes back in front, so a failure reads as the whole row.
       const cells = [row?.gutter ?? "", ...(row?.cells ?? [])];
       const date = row?.cells[DATE] ?? "";
       const units = row?.cells[UNITS] ?? "";
@@ -92,8 +92,8 @@ export const OPEN: Check[] = [
     },
   },
   {
-    // Needs the real preload bridge -- `webUtils.getPathForFile` -- which only
-    // a real Electron window exposes. Window-bound.
+    // Needs the real preload bridge (`webUtils.getPathForFile`), which only a
+    // real Electron window exposes.
     name: "a file that is not on disk has no path to open",
     script: `
       const ref = window.uno.dropped(new File(["a,b\\n1,2\\n"], "memory.csv"));
@@ -104,22 +104,20 @@ export const OPEN: Check[] = [
     name: "only the visible rows are in the DOM",
     run: async (page) => {
       const n = await page.count("tbody tr");
-      // A viewport shows a few dozen. Anything near 4,812 means the virtualiser
-      // is not virtualising, which is the whole reason it exists.
+      // A viewport shows a few dozen rows, and a virtualising grid draws only
+      // those.
       return n > 0 && n < DOM_ROWS ? "" : n + " rows in the DOM";
     },
   },
   {
-    // Compares getBoundingClientRect() of the header against the scroller: real
-    // layout, which nothing but a real window can give an honest answer to.
-    // Window-bound.
+    // Compares the header's getBoundingClientRect() against the scroller's:
+    // real layout, which only a real window has.
     name: "scrolling to the end renders the last row",
     script: `
       const sc = document.querySelector(".grid-scroll");
       sc.scrollTop = sc.scrollHeight;
 
-      // The rows at the end are not in the band the file opened with, so they
-      // are drawn pending until the engine sends them.
+      // The rows at the end are drawn pending until the engine sends them.
       let rows = [];
       for (let i = 0; i < TRIES; i++) {
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -130,8 +128,7 @@ export const OPEN: Check[] = [
           if (rows.length >= DOM_ROWS) return rows.length + " rows in the DOM";
           if (date === "") return "row 4,812 arrived empty";
 
-          // The header has to have come along. It once stuck to where the table
-          // started and scrolled out of sight with it.
+          // The header stays at the top of the view.
           const head = document.querySelector("thead th").getBoundingClientRect().top;
           const view = sc.getBoundingClientRect().top;
           return Math.abs(head - view) <= 1 ? "" : "the header is at " + head + ", the view starts at " + view;
@@ -157,8 +154,8 @@ export const OPEN: Check[] = [
     },
   },
   {
-    // Whether a person's own input reaches a driven window is exactly what
-    // `input.through` decides. Window-bound: see src/main/driven.ts.
+    // Whether a person's input reaches a driven window is what `input.through`
+    // decides. See src/main/driven.ts.
     name: "a person's key, click and wheel do not reach the page",
     input: { events: PERSON, through: false },
     script: `
@@ -169,19 +166,17 @@ export const OPEN: Check[] = [
     `,
   },
   {
-    // Without this, the check before it would pass on input that went nowhere.
-    // The wheel stays out: its scroll follows it later, and through does not
-    // wait. Window-bound, for the same reason as the check above.
+    // Proves the check before it: the same input, let through, does land. The
+    // wheel is left out: its scroll arrives after `through` has restored the
+    // ignore.
     name: "the same key and click let through do reach it",
     input: { events: PERSON.filter((e) => e.type !== "mouseWheel"), through: true },
     script: `
       if (!(await until(() => text("#status-cell") !== "rep · row 3"))) {
         return "the selection is still at " + text("#status-cell");
       }
-      // The key lands first and the click after it, on its own time. Moving
-      // the selection back before the click has landed is moving it back
-      // twice, the second time too late, so the selection is waited on until
-      // it has stopped moving.
+      // The key lands first and the click after it, on its own time. The
+      // selection is waited on until it has stopped moving.
       let was = text("#status-cell");
       for (let same = 0; same < SETTLE_FRAMES; ) {
         await frame();

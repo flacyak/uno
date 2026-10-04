@@ -1,9 +1,8 @@
-// The language the app speaks: one of the ones it has messages for, or
-// whichever of them the system prefers.
+// The app's language: a locale the app has messages for, or the best match
+// for the system's preferred languages.
 //
-// It is this machine's choice and not a workspace's, kept in the page's
-// storage beside the theme. Nothing kept means follow the system, which is what
-// a new install does.
+// The choice is kept in local storage and defaults to following the
+// system.
 
 import {
   baseLocale,
@@ -17,30 +16,28 @@ import type { Locale } from "../paraglide/runtime.js";
 import { PSEUDO_LOCALE } from "../../scripts/pseudo.js";
 import type { Keeps } from "./theme.ts";
 
-/** Where the chosen language is kept. */
+/** Storage key for the chosen language. */
 export const LANGUAGE_KEY = "uno.language";
 
-/** Following the system, as the choice and as what is kept for it. */
+/** The choice value that means follow the system. */
 export const SYSTEM = "system";
 
-/** What a person can choose: a language, or whatever the system prefers. */
+/** A locale, or SYSTEM to follow the system's preference. */
 export type LanguageChoice = Locale | typeof SYSTEM;
 
 /**
- * The languages a person is offered. The pseudo-locale is offered where the
- * app is being worked on and nowhere else: it is for checking a layout, and a
- * person who chose it by accident could not read their way back.
+ * Returns the locales a person can choose from. The pseudo-locale is only
+ * included in dev builds.
  */
 export function offered(dev: boolean): readonly Locale[] {
   return locales.filter((locale) => dev || locale !== PSEUDO_LOCALE);
 }
 
 /**
- * preferred is the first of the system's languages the app has: as the
- * language and region exactly, or failing that as the same language in the
- * first region offered, which is the one most of its speakers are in. en-AU
- * reads en-US, pt reads pt-BR, and es-MX reads es. The base locale is what a
- * system that prefers none of them gets.
+ * Returns the first system language found among the offered locales. An
+ * exact tag match wins; otherwise the first offered locale with the same
+ * language wins. en-AU matches en-US, pt matches pt-BR, es-MX matches es.
+ * Falls back to the base locale.
  */
 export function preferred(system: readonly string[], among: readonly Locale[]): Locale {
   for (const tag of system) {
@@ -53,33 +50,29 @@ export function preferred(system: readonly string[], among: readonly Locale[]): 
   return baseLocale;
 }
 
-/** languageOf is a tag's language without its region: the en of en-GB. */
+/** Returns the language part of a tag, lower-cased: the en of en-GB. */
 function languageOf(tag: string): string {
   return tag.split("-")[0]!.toLowerCase();
 }
 
-/** languageName is what a language calls itself, capitalised as it would: Español. */
+/** Returns a locale's name in its own language, capitalised: Español. */
 export function languageName(locale: Locale): string {
   const name = new Intl.DisplayNames([locale], { type: "language" }).of(locale) ?? locale;
   return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
 }
 
 /**
- * speak puts the messages in a locale. The page is written again in place by
- * whoever hears of it, since the reload the runtime offers would drop the open
- * workspace. The locale is a variable, with nothing to wait for, so it is set
- * by the time this returns.
+ * Sets the runtime locale in place. The locale is set synchronously, so it
+ * is in effect when this returns. Listeners redraw the page themselves.
  */
 function speak(locale: Locale): void {
   void setLocale(locale, { reload: false });
 }
 
 /**
- * Language is the choice, kept between launches, and the locale the messages
- * are in because of it.
+ * Language holds the stored language choice and the locale it resolves to.
  *
- * A value kept by some other build that this one has no messages for is not
- * an error: the app follows the system, and the next choice writes over it.
+ * A stored value outside the offered locales is treated as SYSTEM.
  */
 export class Language {
   private chosen: LanguageChoice;
@@ -87,9 +80,9 @@ export class Language {
 
   constructor(
     private readonly keeps: Keeps,
-    /** The system's languages, most wanted first: navigator.languages. */
+    /** The system's preferred languages, in order: navigator.languages. */
     private readonly system: readonly string[],
-    /** The languages on offer, which the system's are matched among. */
+    /** The locales a person can choose from. */
     readonly offered: readonly Locale[],
   ) {
     const kept = keeps.getItem(LANGUAGE_KEY);
@@ -101,12 +94,12 @@ export class Language {
     return this.chosen;
   }
 
-  /** The locale the choice comes to. */
+  /** The locale the current choice resolves to. */
   get locale(): Locale {
     return this.chosen === SYSTEM ? preferred(this.system, this.offered) : this.chosen;
   }
 
-  /** choose speaks another language, or follows the system again, and keeps it. */
+  /** Stores a new choice and applies it. Listeners run only if the locale changed. */
   choose(choice: LanguageChoice): void {
     this.chosen = choice;
     this.keeps.setItem(LANGUAGE_KEY, choice);
@@ -115,7 +108,7 @@ export class Language {
     for (const fn of this.heard) fn();
   }
 
-  /** onChange is told whenever the locale the app speaks changes. */
+  /** Registers a listener called whenever the locale changes. */
   onChange(fn: () => void): void {
     this.heard.push(fn);
   }

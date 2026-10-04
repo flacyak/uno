@@ -1,14 +1,15 @@
 // Checks of the sidebar: the workspaces this run opened, listed with the open
-// one first and its sources under it, moving between them, a formula put in
+// one first and its sources under it, moving between them, a formula inserted
 // from a right click, and the × that closes the window asking before it drops
 // anything.
 //
-// They run last, over the workspace the checks before them saved, reopened
-// and added to, with the colleague's workspace beside it in the list.
+// They run over the workspace the checks before them saved, reopened and
+// added to, with the colleague's workspace beside it in the list.
 
 import type { Check } from "./check.ts";
 
-/** A right click on a workspace's line, where a person's pointer would be. */
+/** Helpers: a right click on a line, the names in a list, and the context
+ * menu's items. */
 const RIGHT_CLICK = `
   const rightClick = (el) => {
     const at = el.getBoundingClientRect();
@@ -24,7 +25,7 @@ const RIGHT_CLICK = `
   const choose = (label) => [...document.querySelectorAll(".pop-menu .pop-item")].find((i) => i.firstChild.textContent === label).click();
 `;
 
-/** sales-q3.csv's columns, as the formula checks name them. */
+/** The column the formula checks put a formula into. */
 const CHANNEL = 3;
 
 export const SIDEBAR: Check[] = [
@@ -39,7 +40,7 @@ export const SIDEBAR: Check[] = [
       if (JSON.stringify(open) !== JSON.stringify(["sales-q3"])) return "the open workspace is " + JSON.stringify(open);
       const first = document.querySelector("#workspaces").firstElementChild;
       if (!first.classList.contains("open")) return "the list begins with " + JSON.stringify(first.textContent);
-      // Its sources hang under it, and the others come after them.
+      // Its sources come under it, and the other workspaces after them.
       const order = [...document.querySelectorAll("#workspaces > *")].map((el) => el.classList[0]);
       const tabs = document.querySelectorAll(".tab").length;
       const want = ["ws", ...Array(tabs).fill("tab"), "tab-add", "ws"];
@@ -68,7 +69,7 @@ export const SIDEBAR: Check[] = [
     `,
   },
   {
-    // The workspace has sources nobody saved, so leaving it is said first.
+    // The workspace has unsaved sources, so the first click only warns.
     name: "another workspace picked over unsaved work says so, and opens on the second click",
     script: `
       ${RIGHT_CLICK}
@@ -102,14 +103,14 @@ export const SIDEBAR: Check[] = [
       const meta = document.querySelector(".ws.open .meta").textContent;
       if (meta !== "not saved") return "the new workspace says " + JSON.stringify(meta);
       if (document.querySelectorAll(".tab").length !== 1) return "it has " + document.querySelectorAll(".tab").length + " sources";
-      // Nothing was saved, so nothing joined the list but what was there.
+      // The new workspace is unsaved, so the list holds what it did before.
       const others = names(".ws:not(.open)");
       return JSON.stringify(others) === JSON.stringify(["gone", "sales-q3"]) ? "" : "the others are " + JSON.stringify(others);
     `,
   },
   {
-    // Thirteen columns, which is wider than the window: the grid follows the
-    // selection along the row as it does down the file.
+    // Thirteen columns, wider than the window: the grid scrolls along to
+    // follow the selection.
     name: "the selection moved to a column off the side of a wide file brings it on screen",
     script: `
       if (!(await arrives(() => document.querySelector("tbody tr:not(.pending)") !== null))) return "no rows were drawn";
@@ -193,7 +194,7 @@ export const SIDEBAR: Check[] = [
       const badge = document.querySelectorAll("thead th")[GUTTER + ${CHANNEL}].querySelector(".badge.bound");
       if (badge === null) return "channel has no formula badge";
       if (badge.title !== "= revenue * 2") return "the badge says " + JSON.stringify(badge.title);
-      // Row 1 sold 48160.00.
+      // Row 1's revenue is 48160.00.
       const cell = () => document.querySelectorAll("tbody tr")[0].children[GUTTER + ${CHANNEL}].textContent;
       if (!(await arrives(() => cell() === "96320"))) return "row 1 of channel is " + JSON.stringify(cell());
       if (document.querySelector('.tab[data-source="sales-q3"] .dirty') === null) return "the tab has no dirty dot";
@@ -207,8 +208,8 @@ export const SIDEBAR: Check[] = [
       const at = close.getBoundingClientRect();
       if (Math.round(innerWidth - at.right) > 12 || at.top > 12) return "the × is at " + Math.round(at.left) + "," + Math.round(at.top);
       if (at.width !== at.height || getComputedStyle(close).borderRadius !== "999px") return "the × is not a circle";
-      // Nothing is drawn under it: scrolled to its end, the last header stops
-      // short of the corner.
+      // The × has its corner to itself: scrolled to the end, the last header
+      // ends before it.
       const scroller = document.querySelector(".grid-scroll");
       scroller.scrollLeft = scroller.scrollWidth;
       await frame();

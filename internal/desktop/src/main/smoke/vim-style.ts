@@ -4,8 +4,8 @@
 import type { Check } from "./check.ts";
 
 /**
- * A row of the fixture far enough down that no window is tall enough to show
- * it from the top of the file, so zb and zz have room to place it.
+ * A row with more rows above it than any window shows, so zb and zz have
+ * room to place it.
  */
 const DEEP_ROW = 2000;
 
@@ -67,7 +67,8 @@ export const VIM_STYLE: Check[] = [
       if (document.querySelector(".cell-editor") !== null) return "Esc left the editor open";
       if (text("#status-mode") !== "TRANSFORM") return "the mode is " + text("#status-mode");
 
-      // 3 before, so the Esc that closed a's editor unchanged recorded nothing.
+      // 3 before and this one: the Esc that closed a's editor unchanged left
+      // the count as it was.
       if (!(await until(() => edited(4)))) return "status bar says: " + text("#status-file");
       const shown = document.querySelectorAll("tbody tr")[6].children[GUTTER + UNITS].textContent;
       return shown === "8430" ? "" : "the cell shows " + JSON.stringify(shown);
@@ -155,14 +156,13 @@ export const VIM_STYLE: Check[] = [
     script: `
       const row = () => Number(text("#status-cell").split("row ")[1].replace(/,/g, ""));
       const DEEP_ROW = ${DEEP_ROW};
-      // Sent without waiting a frame between keys. The grid lays out as each key
-      // lands, and the recogniser's banner comes and goes as offers arrive: one
-      // arriving between zb and L would move the rows under L.
+      // Keys are sent back to back within one frame, so zb and L both land
+      // before the recogniser's banner arrives and moves the rows.
       const grid = document.querySelector("#content");
       const key = (k) => grid.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
 
       // A row with more rows above it than any window shows, so it can be put
-      // at the bottom of the screen and in its middle however tall the window is.
+      // at the bottom and in the middle of the screen.
       for (const k of String(DEEP_ROW) + "G") key(k);
       if (row() !== DEEP_ROW) return DEEP_ROW + "G went to row " + row();
       for (const [scroll, find] of [["t", "H"], ["b", "L"], ["z", "M"]]) {
@@ -263,7 +263,7 @@ export const VIM_STYLE: Check[] = [
       const said = text("#status-msg");
       if (!said.includes("i or Ctrl+E")) return "ga in view says " + JSON.stringify(said);
 
-      // Back in transform, the recogniser asks again about the three fixes.
+      // Back in transform, the recogniser offers the three fixes again.
       await press("i");
       const banner = document.querySelector("#banner");
       if (!(await until(() => !banner.hidden && banner.textContent.includes("region") && banner.textContent.includes(counted(ROWS - 3) + " cells")))) {
@@ -274,7 +274,7 @@ export const VIM_STYLE: Check[] = [
       const region = () => document.querySelectorAll("tbody tr")[3].children[GUTTER + REGION].textContent;
       if (!(await until(() => region() === "South-q3"))) return "row 4 reads " + JSON.stringify(region());
       if (!(await until(() => edited(10)))) return "status bar says: " + text("#status-file");
-      // The three fixes the offer was learned from are left as they were typed.
+      // The three fixes the offer was learned from are left as typed.
       const fixed = [0, 1, 2].map((r) => document.querySelectorAll("tbody tr")[r].children[GUTTER + REGION].textContent);
       if (JSON.stringify(fixed) !== JSON.stringify(["West-q3", "East-q3", "North-q3"])) {
         return "after ga the fixed rows read " + JSON.stringify(fixed);
@@ -335,7 +335,7 @@ export const VIM_STYLE: Check[] = [
       await press("h");
       if (at() !== "units · row 3") return "the selection is at " + at();
 
-      // Row 5 is blank, which is no evidence either way; rows 6 and 8 keep their commas.
+      // Row 5 is blank. Rows 6 and 8 keep their commas.
       for (const [key, want] of [["]", "units · row 6"], ["]", "units · row 8"], ["[", "units · row 6"]]) {
         await press(key);
         await press("f");
@@ -409,8 +409,8 @@ export const VIM_STYLE: Check[] = [
     `,
   },
   {
-    // A check that fails here opens the run's second export in the fixture's
-    // place, and every check after it says so.
+    // A failure here opens the run's second export in the fixture's place,
+    // and every check after it fails too.
     name: "Ctrl+O over unsaved edits says so, and opens nothing",
     send: ["menu:open"],
     script: `
@@ -418,12 +418,12 @@ export const VIM_STYLE: Check[] = [
       if (!(await until(() => text("#status-msg") === warning))) {
         return "Ctrl+O over unsaved edits says " + JSON.stringify(text("#status-msg"));
       }
-      // Moving says nothing, so the warning stays, and a second Ctrl+O would open.
+      // Moving leaves the status bar alone, so the warning stays.
       await press("j");
       if (text("#status-msg") !== warning) return "moving took the warning away";
 
       // Anything the status bar says next replaces the warning, and the next
-      // Ctrl+O has to warn again.
+      // Ctrl+O warns again.
       await press(":");
       const input = document.querySelector("#status-cmd");
       input.value = ":foo";
@@ -451,14 +451,14 @@ export const VIM_STYLE: Check[] = [
     `,
   },
   {
-    // Last, so a run leaves the strategy a person gets by default.
+    // Last, so a run leaves the default strategy.
     name: "Edit → Input → Default reads keys the default way again, and is kept",
     send: ["menu:input", "default"],
     script: `
       if (!(await until(() => localStorage.getItem("uno.input") === "default"))) {
         return "the choice was not kept: " + JSON.stringify(localStorage.getItem("uno.input"));
       }
-      // Esc on the grid is nobody's by default, so it no longer leaves transform.
+      // By default, Esc on the grid leaves the mode as it is.
       const mode = text("#status-mode");
       await press("Escape");
       return text("#status-mode") === mode ? "" : "Esc took the mode from " + mode + " to " + text("#status-mode");

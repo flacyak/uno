@@ -1,15 +1,8 @@
-// Every file a test file opens is closed by the time that test file is done.
-//
-// A FileHandle nobody closes is closed by the garbage collector, whenever it
-// gets to it. Node prints DEP0137 when that happens and says it will be an
-// error one day, so a leak shows up as a warning in some runs and not in
-// others, under whichever test happened to be running at the time. This says
-// it every run, against the test file that did it, with where the file was
-// opened.
-//
-// It is a setup file: vite.config.ts lists it, so it runs around every test
-// file. It watches `open` from node:fs/promises, which is the one way a
-// FileHandle is made, and so the only way `store/node` opens a file.
+// Setup file, listed in vite.config.ts, that runs around every test file.
+// It wraps `open` from node:fs/promises to track every FileHandle opened
+// during the test file, and fails the file if any handle is still open at
+// the end. The failure message includes the stack from where each leaked
+// handle was opened.
 
 import fs from "node:fs";
 import type { FileHandle } from "node:fs/promises";
@@ -19,26 +12,26 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, beforeAll } from "vite-plus/test";
 
 /**
- * How long a test file's last closes are given to land. An engine is closed
- * by a message, so the files it holds are closed a moment after the test that
- * asked is over.
+ * How long to wait for late closes after the last test. An engine closes its
+ * files a moment after the test that sent the close message ends.
  */
 const SETTLE_MS = 5000;
 
-/** How often the wait looks again. */
+/** Poll interval for the wait. */
 const LOOK_MS = 5;
 
 const open = fs.promises.open;
 
-/** Every handle opened and not yet closed, and where it was opened. */
+/** Every handle still open, with the stack of where it was opened. */
 const unclosed = new Map<FileHandle, string>();
 
 const watched: typeof open = async (...args) => {
-  // Taken before the open, while the caller is still on the stack.
+  // Captured before the await so the caller is still on the stack.
   const where = new Error(`${String(args[0])} was opened and never closed`).stack ?? "";
   const handle = await open(...args);
   unclosed.set(handle, where);
-  // Whatever closes a handle calls its `close`: a caller, a stream, `await using`.
+  // Every way of closing a handle (direct call, stream, `await using`) goes
+  // through `close`.
   const close = handle.close.bind(handle);
   handle.close = () => {
     unclosed.delete(handle);
@@ -47,7 +40,7 @@ const watched: typeof open = async (...args) => {
   return handle;
 };
 
-/** watch puts `fn` where `open` is, for every module that imports it by either name. */
+/** Replaces `fs.promises.open` with `fn` for both CJS and ESM importers. */
 function watch(fn: typeof open): void {
   Object.defineProperty(fs.promises, "open", { value: fn, writable: true, configurable: true });
   syncBuiltinESMExports();
@@ -63,8 +56,8 @@ afterAll(async () => {
 
   const left = [...unclosed];
   unclosed.clear();
-  // Closed here, so the leak is reported once and by name, and not a second
-  // time by the garbage collector under another test.
+  // Close the leaked handles here so each leak is reported once, under the
+  // test file that opened it, before the garbage collector finds it.
   await Promise.all(left.map(([handle]) => handle.close()));
   if (left.length > 0) {
     throw new Error(

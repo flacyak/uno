@@ -1,5 +1,5 @@
-// A machine with two AWS profiles, each holding the keys to one bucket and not
-// the other: what the signing and the several-files suites both sign in from.
+// Two AWS profiles, finance and marketing, each holding the keys to one
+// bucket. Used by signing.test.ts and multifiles.test.ts.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,9 +20,9 @@ export const MARKETING: AwsCredentials = {
 };
 
 /**
- * twoProfiles writes the machine's ~/.aws: a credentials file with the finance
- * and marketing profiles, and a config file saying `config`. It answers the
- * folder, for `profilesEnv`.
+ * twoProfiles writes a temp ~/.aws folder: a credentials file with the
+ * finance and marketing profiles, and a config file holding `config`. It
+ * returns the folder path, for `profilesEnv`.
  */
 export async function twoProfiles(config = ""): Promise<string> {
   const aws = await mkdtemp(join(tmpdir(), "uno-profiles-aws-"));
@@ -43,9 +43,9 @@ export async function twoProfiles(config = ""): Promise<string> {
 }
 
 /**
- * profilesEnv is the environment of that machine with, unless `machine` says
- * otherwise, no keys of its own: whatever the developer's shell exports is
- * cleared, so nothing a test reads was signed by anybody but the files there.
+ * profilesEnv is an environment pointing at that folder. It clears
+ * AWS_PROFILE and the session token, and sets the machine's own keys only
+ * when `machine` is given.
  */
 export function profilesEnv(
   aws: string,

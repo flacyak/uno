@@ -1,13 +1,11 @@
-/* The grid: the scroller, the virtualised table, the cell editor, and the
- * column badges. Loaded with the grid, when the first file opens. */
+/* Grid styles: the scroller, the virtualised table, the cell editor and the
+ * column badges. */
 
-/* The grid's container has to be told to fill what is left, and told that it
- * may be shorter than its contents. Without `min-height: 0` a flex child sizes
- * to its content instead of scrolling, and the virtualiser then measures a
- * viewport the height of the whole sheet -- which is every row in the DOM, the
- * one thing it exists to avoid. */
+/* The grid's container fills the remaining space. `min-height: 0` lets it be
+ * shorter than its content, so the scroller scrolls and the virtualiser
+ * measures a viewport of the window's height. */
 #content {
-  outline: none; /* it takes focus to receive keys, not to be drawn around */
+  outline: none; /* focused for keyboard input only */
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -21,8 +19,8 @@
   background: var(--surface);
 }
 
-/* The scrollbars, in the theme's colours. The upright one starts under the
- * header row, which does not scroll. */
+/* Scrollbars in the theme's colours. The vertical track starts below the
+ * sticky header. */
 .grid-scroll::-webkit-scrollbar {
   width: var(--bar);
   height: var(--bar);
@@ -48,10 +46,9 @@
   background: transparent;
 }
 
-/* The end of the header row, while the grid reaches the top right of the
- * window: no banner above it and no panel beside it. The window's × sits
- * there, so the corner is a header cell of its own that stays put, and the
- * columns scroll under it the way the rows scroll under the header. */
+/* A fixed corner at the end of the header row, shown when the grid reaches
+ * the top right of the window (banner and panel both hidden). The
+ * window's close button sits there. Columns scroll under it. */
 #content {
   position: relative;
 }
@@ -69,9 +66,8 @@
   border-bottom: 1px solid var(--rule);
 }
 
-/* The scroller's inner height is the whole sheet; the table inside holds only
- * the rows that fit the viewport, translated into place. That is what keeps a
- * 4,812-row file at about forty elements. */
+/* The sizer is as tall as the whole sheet. The table inside holds only the
+ * visible rows and is positioned with `top`. */
 .grid-sizer {
   position: relative;
   width: 100%;
@@ -112,14 +108,14 @@ table.grid thead th {
   font-weight: 500;
 }
 
-/* The last header stops short of that corner, less the scrollbar, which is
- * under it already, so scrolled to the end its name and badge are clear. */
+/* Extra right padding on the last header cell so its text clears the
+ * corner. */
 .win-sheet:has(> .banner[hidden]):has(+ .panel[hidden]) table.grid thead th:last-child {
   padding-right: calc(11px + var(--corner) - var(--bar));
 }
 
-/* As wide as the row count needs, set by the grid, so the column does not
- * widen under the cursor as the numbers grow past row 99,999. */
+/* Gutter width from `--gutter-digits`, set by the grid from the row
+ * total. */
 table.grid .gutter {
   background: var(--sunken);
   color: var(--ink-3);
@@ -138,7 +134,7 @@ table.grid tbody tr.even td:not(.gutter) {
   background: color-mix(in srgb, var(--sunken) 42%, transparent);
 }
 
-/* A row the engine has not sent yet. It has a number and nothing else. */
+/* A row still on its way from the engine. */
 table.grid tbody tr.pending td:not(.gutter)::after {
   content: "·";
   color: var(--ink-3);
@@ -151,8 +147,7 @@ table.grid td.sel {
   color: var(--ink);
 }
 
-/* The cell editor sits exactly over the cell it is editing, so nothing moves
- * when a person starts typing. */
+/* The cell editor is positioned over the cell it edits. */
 .cell-editor {
   position: absolute;
   z-index: 3;
@@ -171,8 +166,7 @@ table.grid td.sel {
   gap: 8px;
 }
 
-/* A column the file left nameless, called by its place. Dressed as a name the
- * file did not give, as the fx badge is dressed for a column the file does not hold. */
+/* A column with a blank header, labelled by its position. */
 .colname.unnamed {
   color: var(--ink-3);
   font-style: italic;
@@ -190,7 +184,7 @@ table.grid td.sel {
   line-height: 1.5;
 }
 
-/* A column computed from a formula, which is a hover away. */
+/* Badge for a column computed from a formula. */
 .badge.bound {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);

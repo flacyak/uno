@@ -1,13 +1,11 @@
-// What the engine says, written by the desktop: one message for each kind.
+// The desktop's message for each kind of thing the engine says.
 //
-// The engine has its own English for every kind, which is what its errors and
-// its logs read. The desktop's English is in the message file. They are two
-// sentences for one thing, so they are held together here: a sample of every
-// kind, said both ways, has to come out the same.
+// The engine has its own English for every kind, used in its errors and logs.
+// The desktop's English is in the message file. A sample of every kind, said
+// both ways, must match.
 //
-// The samples are keyed by kind, and the type asks for every kind there is. A
-// kind the engine gains fails to compile here until it has a sample, the same
-// way it fails in `say` until it has a message.
+// SAMPLES is keyed by kind and typed to need every kind. A new kind fails to
+// compile here until it has a sample, as `say` does until it has a message.
 
 import { beforeEach, describe, expect, test } from "vite-plus/test";
 
@@ -97,7 +95,7 @@ describe.each(samples)("%s", (_kind, sample) => {
 
   test("is said through a message in every other language", () => {
     void setLocale(PSEUDO_LOCALE, { reload: false });
-    // A diagnostic with no kind of its own is passed on as it was written.
+    // A "text" kind is literal, and is passed on as written.
     if (sample.t === "text") expect(say(sample)).toBe(sample.text);
     else expect(say(sample).startsWith(PSEUDO_OPEN)).toBe(true);
   });

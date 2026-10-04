@@ -1,6 +1,6 @@
 // The sidebar: the workspaces opened on this machine, most recent first. The
-// one that is open lists its sources under it, a tab each, with the dot that
-// says one has unsaved work and a way to add another.
+// open one lists its sources under it, one tab each, with a dot for unsaved
+// work and a + to add another.
 
 import "./arriving.css";
 import "./sidebar.css";
@@ -12,38 +12,37 @@ import type { Tab, Workspace } from "../workspace.ts";
 import type { MenuPlace } from "./menu.ts";
 import { baseName, el, folderName } from "./util.ts";
 
-/** The extension a workspace's name is shown without. */
+/** The extension stripped from a workspace's name. */
 const UNO = /\.uno$/i;
 
-/** What the sidebar's controls do. The shell decides; the sidebar only asks. */
+/** What the sidebar's controls ask of the shell. */
 export interface SidebarActions {
-  /** Open a workspace from the list, in place of the one open now. */
+  /** Open a workspace from the list in place of the open one. */
   open(path: string): void;
   /**
-   * A workspace was right-clicked: offer what can be done with it, at `place`.
-   * `path` is "" for the open workspace while it has never been saved.
+   * A workspace was right-clicked: open its menu at `place`. `path` is "" for
+   * an open workspace that is still unsaved.
    */
   menu(path: string, place: MenuPlace): void;
   select(tab: Tab): void;
   remove(tab: Tab): void;
-  /** The + under the sources was clicked: offer a file or the sources panel,
-   * hung off `plus`. */
+  /** The + under the sources was clicked: open the add menu under `plus`. */
   add(plus: HTMLElement): void;
-  /** Point a source at a file, from the sources panel: one whose file has
-   * gone, or one that changed under the log. */
+  /**
+   * Open the panel to pick a file for a tab whose file is missing or changed.
+   */
   repoint(tab: Tab): void;
 }
 
-/** workspaceName is what a workspace is called in the list: its file, without the extension. */
+/** workspaceName is a workspace's file name, with the .uno extension off. */
 export function workspaceName(path: string): string {
   return baseName(path).replace(UNO, "");
 }
 
 /**
- * sidebarRows is what the list holds: the open workspace with its sources,
- * then every other one in `recents`, which is most recent first. A source in
- * `arriving` was asked for and has not opened yet: it is listed after the
- * sources, where its tab will be, and takes no choosing until it is one.
+ * sidebarRows builds the list's rows: the open workspace, its sources, the
+ * sources in `arriving` that are still opening, the + row, then every other
+ * path in `recents`. For an empty list it returns one note row.
  */
 export function sidebarRows(
   w: Workspace | undefined,
@@ -54,7 +53,7 @@ export function sidebarRows(
   const rows: HTMLElement[] = [];
   if (w !== undefined) {
     rows.push(openRow(w, act));
-    // The last source stays, so it has no × to offer.
+    // A workspace keeps its last source, so the × shows from two sources up.
     const removable = w.sources.length > 1;
     rows.push(...w.sources.map((t) => tabFor(w, t, removable, act)));
     rows.push(...arriving.map(arrivingRow));
@@ -73,9 +72,8 @@ export function sidebarRows(
 }
 
 /**
- * A source that is still opening: its name, dimmed, over the bar that fills
- * until it has opened. It is a tab's line with nothing on it to click, and
- * not a tab: nothing that counts or selects the sources finds it.
+ * The row for a source that is still opening: its name, dimmed, with a
+ * progress bar.
  */
 function arrivingRow(a: Arriving): HTMLElement {
   const row = el("div", "tab-opening");
@@ -85,7 +83,9 @@ function arrivingRow(a: Arriving): HTMLElement {
   return row;
 }
 
-/** The workspace that is open: its name, and whether a save would change it. */
+/**
+ * The row for the open workspace, with a dirty dot when it has unsaved changes.
+ */
 function openRow(w: Workspace, act: SidebarActions): HTMLElement {
   const saved = w.path !== "";
   const row = workspaceRow(
@@ -107,8 +107,8 @@ function recentRow(path: string, act: SidebarActions): HTMLElement {
 }
 
 /**
- * One workspace's line: its name, and the folder it is in, which is what
- * tells two called q3-close apart. The whole path is a hover away.
+ * One workspace's row: its name and the folder it is in, with `title` as the
+ * hover text.
  */
 function workspaceRow(
   name: string,
@@ -133,17 +133,15 @@ function workspaceRow(
 function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): HTMLElement {
   const tab = el("div", t === w.active ? "tab active" : "tab");
   tab.dataset["source"] = t.id;
-  // The name in a box of its own, so a name longer than the sidebar is cut
-  // short rather than the marks beside it; the whole name is a hover away.
+  // The name is in its own span, so a long name is cut short and the marks
+  // beside it keep their width. The full name is the hover text.
   tab.title = t.name;
   tab.append(el("span", "name", t.name));
   tab.addEventListener("click", () => act.select(t));
 
-  // A source whose file is gone, or is not the file the log was written
-  // against. Clicking the mark opens the panel on it to pick where the file is
-  // now; the tab itself still selects, because its edits are worth looking at either way.
-  // One whose bucket holds a newer version wears the same mark, which opens
-  // the panel on its line, where Reload reads the newer one.
+  // A ! mark for a tab whose file is missing, changed under the log, or has a
+  // newer version in its bucket. Clicking the mark opens the panel on the
+  // tab. Clicking the tab itself still selects it.
   const trouble = t.trouble;
   if (trouble !== undefined || t.newer !== undefined) {
     const mark = el("span", t.missing ? "trouble gone" : "trouble", "!");
@@ -158,14 +156,14 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
     tab.append(mark);
   }
 
-  // The dot is what says this source has unsaved work.
+  // The dot marks unsaved work.
   if (w.unsaved(t)) tab.append(dirty(m.unsaved_edits()));
 
   if (removable) {
     const close = el("span", "close", "×");
     close.title = m.sidebar_remove_source({ name: t.name });
     close.addEventListener("click", (e) => {
-      e.stopPropagation(); // removing is not selecting
+      e.stopPropagation(); // keep the click on the ×
       act.remove(t);
     });
     tab.append(close);
@@ -173,7 +171,7 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
   return tab;
 }
 
-/** The dot that says something has unsaved work, with what a hover says it is. */
+/** The dot that marks unsaved work, with `hint` as its hover text. */
 function dirty(hint: string): HTMLElement {
   const dot = el("span", "dirty");
   dot.title = hint;

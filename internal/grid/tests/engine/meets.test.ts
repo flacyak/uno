@@ -1,11 +1,6 @@
-// A workspace meets its connections: every S3 source a .uno names is matched
-// to a connection covering it, and one nothing covers is not read at all.
-//
-// A .uno travels, and the person opening one did not choose the buckets in it.
-// What is under test is that such a source opens missing, keeps its edits,
-// says which bucket it wants connecting, and costs the bucket nothing -- not a
-// HEAD -- until a connection to it has been made. Then it is read like any
-// other.
+// A .uno's S3 sources are matched to the connections that cover them. A source
+// outside every connection opens as missing, keeps its edits, names the bucket
+// to connect, and leaves the bucket alone until a connection is made.
 
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -31,7 +26,7 @@ beforeAll(async () => {
 afterAll(() => b.close());
 
 const OBJECT = `s3://${BUCKET}/2025/sales-q3.csv`;
-/** The same object, written the way a browser shows it. */
+/** The same object as an https URL. */
 const HTTPS = `https://${BUCKET}.s3.amazonaws.com/2025/sales-q3.csv`;
 
 const env = keysOnly();
@@ -48,7 +43,10 @@ const EXPORTS: Connection = {
   modified: undefined,
 };
 
-/** An engine the way the desktop wires one: connections in a folder, signed and guarded by them. */
+/**
+ * An engine wired like the desktop: connections in a folder, with S3 signed
+ * and gated by them.
+ */
 async function desktop(saved: Connection[] = []) {
   const dir = await mkdtemp(join(tmpdir(), "uno-meets-"));
   const store = nodeStore();
@@ -66,9 +64,9 @@ async function desktop(saved: Connection[] = []) {
 }
 
 /**
- * workspace saves a .uno somebody else made: the fixture off the disk and the
- * object in the bucket, one edit on the object, in an engine that knows no
- * connections at all -- the way a colleague's machine would have written it.
+ * workspace saves a .uno with the fixture from disk and the object at `path`,
+ * with one edit on the object, from an engine whose saved connections are
+ * empty.
  */
 async function workspace(path = OBJECT): Promise<string> {
   const { engine, done } = await desktop();
@@ -94,7 +92,6 @@ function sourceNamed(sources: SourceHandle[], name: string): SourceHandle {
   return sources.find((s) => s.opened.name === name)!;
 }
 
-// The task's own sentence.
 test("the stand-in bucket sees zero requests before the person accepts", async () => {
   const file = await workspace();
   const { engine, done, store, dir } = await desktop();
@@ -108,13 +105,13 @@ test("the stand-in bucket sees zero requests before the person accepts", async (
       missing: { t: "bucket-unconnected", container: "q4-close.uno", bucket: BUCKET },
       connect: { bucket: BUCKET, prefix: "2025/" },
     });
-    // The work done through it is still there, waiting for the file.
+    // The edit is kept.
     expect(remote.opened.edits).toHaveLength(1);
-    // And the source on disk opened as ever.
+    // The disk source opens as usual.
     await indexed(sourceNamed(sources, "local.csv"));
     expect(sourceNamed(sources, "local.csv").progress.rows).toBe(ROWS);
 
-    // Accepting is making the connection. Then the source reads like any other.
+    // Once the connection is saved and reloaded, a relink reads the object.
     await saveConnection(store, dir, EXPORTS);
     await engine.connections();
     const back = await engine.relink(remote, { name: "sales-q3.csv", path: OBJECT });
@@ -144,7 +141,6 @@ test("a source a connection already covers opens and reads as it always did", as
   }
 });
 
-// A connection to another folder of the bucket is not a connection to this one.
 test("a connection to another folder of the bucket does not cover it", async () => {
   const file = await workspace();
   const { engine, done } = await desktop([{ ...EXPORTS, prefix: "2024/" }]);
@@ -161,8 +157,6 @@ test("a connection to another folder of the bucket does not cover it", async () 
   }
 });
 
-// The guard reads addresses the way the handler does, so a .uno written with
-// the https form of an address is held to it as well.
 test("an object named by its https address is guarded the same way", async () => {
   const file = await workspace(HTTPS);
   const { engine, done } = await desktop();
@@ -182,19 +176,17 @@ test("an object named by its https address is guarded the same way", async () =>
 test("a path on disk meets no connection, and an object meets the one it is read through", () => {
   const meet = connectionMeeting(() => [EXPORTS, { ...EXPORTS, id: "whole", prefix: "" }]);
   expect(meet(FIXTURE)).toBeUndefined();
-  // The longest prefix, which is the connection the handler signs with.
+  // The longest matching prefix wins.
   expect(meet(OBJECT)).toEqual({ through: EXPORTS.id });
   expect(meet(`s3://${BUCKET}/2024/x.csv`)).toEqual({ through: "whole" });
-  // With none, the folder the object is in is what connecting it offers to cover.
+  // An unmatched object has its folder offered as the prefix to connect.
   const none = connectionMeeting(() => []);
   expect(none(OBJECT)).toEqual({ unconnected: { bucket: BUCKET, prefix: "2025/" } });
   expect(none(`s3://${BUCKET}/top.csv`)).toEqual({ unconnected: { bucket: BUCKET, prefix: "" } });
 });
 
-// Connecting the bucket is what the source waited for, so it stops waiting
-// whether or not its object is still there. One that has gone is missing like
-// any other, and says why -- not "connect acme-exports" once more, which would
-// send the person round the same form for a connection they already have.
+// Once the bucket is connected, a source whose object is gone is missing
+// with a plain reason, and stops asking for a connection.
 test("a source whose object has gone stops waiting once its bucket is connected, and says why", async () => {
   const key = "2025/gone.csv";
   const gone = `s3://${BUCKET}/${key}`;
@@ -211,8 +203,7 @@ test("a source whose object has gone stops waiting once its bucket is connected,
     const remote = sourceNamed(sources, "sales-q3.csv");
     const at = { name: "sales-q3.csv", path: gone };
 
-    // Before it is connected, a failed read is only a failed read, and the
-    // source is still waiting for its bucket.
+    // Before the connection, a relink fails and the source keeps waiting.
     await expect(engine.relink(remote, at)).rejects.toThrow(
       `${gone}: no such object in that bucket`,
     );
@@ -230,10 +221,8 @@ test("a source whose object has gone stops waiting once its bucket is connected,
   }
 });
 
-// 3.1: which bytes a source was read as, and the connection it came through,
-// go into the save, so the next open can tell a rewrite from the file the log
-// was made against. A source that could not be read writes back what it was
-// given, and a file on disk has neither.
+// A save records each S3 source's version and connection. A disk source is
+// recorded with both left undefined.
 test("a save records the version an object was read as and the connection it came through", async () => {
   const { engine, done } = await desktop([EXPORTS]);
   try {
@@ -258,7 +247,7 @@ test("a save records the version an object was read as and the connection it cam
 });
 
 test("a source waiting for its bucket saves the version and connection it was opened with", async () => {
-  // Saved on a machine that had the connection, opened on one that does not.
+  // Saved on a machine that had the connection, opened on one missing it.
   const had = await desktop([EXPORTS]);
   let file: string;
   try {

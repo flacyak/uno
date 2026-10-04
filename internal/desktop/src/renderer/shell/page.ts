@@ -1,18 +1,14 @@
-// The text the page's own markup carries: the heads, the empty state, the
-// switch between view and transform, and what the controls are called aloud.
-//
-// index.html holds the elements and none of their words. The compiler reads
-// TypeScript and not HTML, so a word written there would stay in the language
-// it was typed in. They are written here, when the shell starts and again
-// whenever the language changes, along with the language and the direction the
-// page says it is in, which a screen reader and a right-to-left script go by.
+// Writes the page's static text: the sidebar head, the empty state, the mode
+// switch labels, and the aria labels. index.html holds the elements with no
+// text. The text is written here when the shell starts and again when the
+// language changes, along with the document's lang and dir.
 
 import { m } from "../../paraglide/messages.js";
 import { getLocale, getTextDirection } from "../../paraglide/runtime.js";
 import type { MessagePart } from "../../paraglide/runtime.js";
 import { found, must } from "./util.ts";
 
-/** labelPage writes the page's words in the language the app is in now. */
+/** labelPage writes the page's static text in the current language. */
 export function labelPage(): void {
   const root = document.documentElement;
   root.lang = getLocale();
@@ -33,9 +29,9 @@ function say(selector: string, text: string): void {
 }
 
 /**
- * link writes a sentence with a link in it into the link's line: the words the
- * message marks are the link's, and the rest go around it in the order the
- * language puts them. The link itself is kept, since its click is wired to it.
+ * link writes a message with markup into the anchor's parent. Text inside the
+ * markup becomes the anchor's text; text outside it becomes text nodes around
+ * the anchor. The anchor element is reused, so its click handler stays.
  */
 function link(anchor: HTMLElement, parts: readonly MessagePart[]): void {
   const line = must(anchor.parentElement);

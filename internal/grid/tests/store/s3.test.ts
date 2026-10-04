@@ -1,10 +1,8 @@
 // Reading a source out of S3.
 //
-// The signing is held to AWS's own published examples, because a signature
-// that is wrong in one byte is a 403 and nothing more helpful. The rest runs
-// against standin.ts, a small stand-in for S3 on localhost that serves the real
-// fixture, checks every request's signature the way S3 would, and answers
-// ranges.
+// Signing is checked against AWS's published examples. Everything else runs
+// against standin.ts, which serves the fixture, checks every signature, and
+// answers ranges.
 
 import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -71,7 +69,7 @@ test("signs S3's documented ranged GET the way S3 does", () => {
       "SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, " +
       "Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41",
   );
-  // fetch sets Host itself and throws if told to.
+  // fetch sets Host itself, so the signer leaves it out.
   expect(headers["host"]).toBeUndefined();
 });
 
@@ -89,7 +87,7 @@ function signatureOf(headers: Record<string, string>): string | undefined {
 }
 
 // The other three examples on the same page. The PUT signs a real body hash
-// and a `$` in the key, the lifecycle GET a query with a name and no value,
+// and a `$` in the key, the lifecycle GET a query of a bare name,
 // and the listing a query of two names that have to come out in order.
 interface Example {
   example: string;
@@ -147,10 +145,8 @@ test.each(EXAMPLES)(
 );
 
 /**
- * reference is the signature AWS's instructions give for a canonical request
- * written out by hand, taken with node's own crypto rather than anything in
- * store/s3.ts, so a probe below can hold the module to a request the
- * documented examples do not reach.
+ * reference is the SigV4 signature of a canonical request written out by
+ * hand, computed with node's crypto alone.
  */
 function reference(canonical: string, amzDate: string, scope: string, secret: string): string {
   const mac = (key: Buffer | string, text: string): Buffer =>
@@ -198,11 +194,10 @@ test("sorts a query by name first, then by value", () => {
   );
 });
 
-// A stand-in on a port, a session's token, a key with every character S3
-// users put in one, a token in the query with `/` and `+` in it, and the
-// last moment of a day: the host keeps its port, the token is signed, each
-// segment is encoded once with RFC 3986's unreserved set and nothing else,
-// and the date in the scope is the day of the x-amz-date.
+// A host with a port, a session token, an awkward key, a versionId with `/`
+// and `+`, and the last moment of a day: the host keeps its port, the token
+// is signed, each segment is encoded once, and the scope date is the day of
+// the x-amz-date.
 test("signs a session's request to a stand-in on a port, for an awkward key, at the end of a day", () => {
   const key = "a b+c*d~e!f'g(h)i%j/k ü";
   const url = new URL(
@@ -313,8 +308,8 @@ describe("credentials", () => {
     });
   });
 
-  // SSO itself is followed, and sso.test.ts holds it to a stand-in portal.
-  // A profile that points at a portal section nobody wrote is refused by name.
+  // SSO is covered in sso.test.ts. Here, a missing sso-session is refused by
+  // name.
   test("refuse an SSO profile whose sso-session is not in the config", async () => {
     const env = {
       ...(await files("", "[profile work]\nsso_session = acme\nregion = us-east-1\n")),
@@ -332,7 +327,7 @@ describe("credentials", () => {
 
 // ------------------------------------------------------------ a bucket
 //
-// standin.ts is the S3 these run against, and says what it answers and why.
+// These run against standin.ts.
 
 describe("a source in a bucket", () => {
   let b: Bucket;
@@ -357,7 +352,7 @@ describe("a source in a bucket", () => {
       await indexed(src);
 
       expect(src.progress.rows).toBe(ROWS);
-      // Which bytes were read goes with where they are, for a save to keep.
+      // The link carries the path and the version read.
       expect(src.opened.link).toEqual({
         path: `s3://${BUCKET}/2025/sales-q3.csv`,
         version: etagOf(bytes),
@@ -365,7 +360,7 @@ describe("a source in a bucket", () => {
       const rows = (await src.rows(100, 3)).rows;
       expect(rows.map((r) => r[UNITS])).toEqual([100, 101, 102].map((r) => sales.raw(r, UNITS)));
 
-      // Nothing asked for the whole object: a HEAD for its size, then ranges.
+      // Every request was a HEAD for its size or a GET of a range.
       expect(b.seen[0]).toMatchObject({ method: "HEAD", range: undefined });
       expect(b.seen.filter((r) => r.method === "GET").every((r) => r.range !== undefined)).toBe(
         true,
@@ -375,8 +370,7 @@ describe("a source in a bucket", () => {
     }
   });
 
-  // The bucket is in eu-west-1 and the credentials say us-east-1. S3 says so
-  // once, and uno goes straight there after.
+  // The bucket is in eu-west-1 and the credentials say us-east-1.
   test("follows the bucket to its region once", async () => {
     const { engine, done } = connect(undefined, providers());
     try {
@@ -402,9 +396,7 @@ describe("a source in a bucket", () => {
     await expect(right.open(at("2025/gone.csv"))).rejects.toThrow("no such object in that bucket");
   });
 
-  // An export rewritten while it is being read would hand the index the front
-  // of one file and the back of another. Asking for each range as the version
-  // that was opened turns that into an error that says so.
+  // Each range is asked for with If-Match on the version that was opened.
   test("refuses to read an object rewritten under it", async () => {
     const s3 = s3Files({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint });
     b.objects.set("2025/moving.csv", bytes);
@@ -415,8 +407,7 @@ describe("a source in a bucket", () => {
     await expect(file.read(0, 4)).rejects.toThrow("changed in the bucket since it was opened");
   });
 
-  // A remote pointer is never read relative to the workspace's folder, and a
-  // save writes it down exactly as it was opened.
+  // The saved path is the URL as it was opened.
   test("saves as the URL it came from, and opens again from it", async () => {
     const dir = await mkdtemp(join(tmpdir(), "uno-s3-"));
     const url = `s3://${BUCKET}/2025/sales-q3.csv`;
@@ -447,8 +438,7 @@ describe("a source in a bucket", () => {
     }
   });
 
-  // The workspace opens on a machine that cannot reach the bucket. The source
-  // is still there, edits and all, and says what stopped it.
+  // Opened on a bare engine, the source is kept and reports what is missing.
   test("an engine with no S3 keeps the source and says so", async () => {
     const dir = await mkdtemp(join(tmpdir(), "uno-s3-"));
     const first = connect(undefined, providers());
@@ -479,10 +469,8 @@ describe("a source in a bucket", () => {
 
 // ------------------------------------------------------------ awkward keys
 //
-// awkward.ts says what these keys are and why they are the ones that break.
-// Here they are read out of the stand-in, which checks every signature the way
-// S3 does and looks a key up by the path as it arrived, not as URL would
-// rather have it.
+// The keys in awkward.ts, read out of the stand-in, which looks a key up by
+// the path as it arrived.
 
 describe("awkward keys", () => {
   let b: Bucket;
@@ -508,10 +496,7 @@ describe("awkward keys", () => {
     }
   });
 
-  // If the encoding and the signature ever disagree the stand-in answers 403,
-  // the same as S3 does, so reaching the bytes above already proves they agree.
-  // This says what the encoding is, so a change to it is a change somebody
-  // chose rather than one a runtime made on uno's behalf.
+  // The path on the wire is the encoded form awkward.ts gives.
   test("go out encoded once, and reach the wire that way", async () => {
     for (const [key, encoded] of AWKWARD_KEYS) {
       b.seen.length = 0;
@@ -534,7 +519,7 @@ describe("awkward keys", () => {
       b.objects.set(onto, utf8(`the object at ${onto}`));
       const got = await readAll(key).catch((err: unknown) => err as Error);
       if (got instanceof Error) {
-        // Refusing is a fine answer, as long as it names the key it refused.
+        // A refusal must name the key.
         expect(got.message, key).toContain(key);
       } else {
         expect(got, key).toBe(`the object at ${key}`);
@@ -549,15 +534,13 @@ test("reads awkward keys out of the https forms too, and never throws", () => {
     ["https://acme-exports.s3.amazonaws.com/2025/100%25.csv", "2025/100%.csv"],
     ["https://acme-exports.s3.amazonaws.com/2025/ventas-%C3%B1.csv", "2025/ventas-ñ.csv"],
     ["https://acme-exports.s3.amazonaws.com/2025//double.csv", "2025//double.csv"],
-    // A + in a path is a plus, not a space. Only a query string spells it that way.
+    // A + in a path is a plus. Only a query string spells a space that way.
     ["https://acme-exports.s3.amazonaws.com/2025/sales+q3.csv", "2025/sales+q3.csv"],
   ] as Array<[string, string]>) {
     expect(s3Location(url), url).toEqual({ bucket: "acme-exports", key: want });
   }
 
-  // A pasted URL with a stray per cent is not an address uno can read, and
-  // saying so is the handler's job. Throwing out of handles() takes down the
-  // choice of handler for every source in the workspace, local ones included.
+  // A URL with a bad percent escape returns undefined.
   for (const url of [
     "https://acme-exports.s3.amazonaws.com/2025/100%.csv",
     "https://s3.eu-west-1.amazonaws.com/acme-exports/50%off.csv",
@@ -569,14 +552,8 @@ test("reads awkward keys out of the https forms too, and never throws", () => {
 
 // ------------------------------------------------------------ elsewhere
 //
-// regions.ts says what these replies are and why each one is followed or
-// refused. A bucket in another region is the first thing anyone with more than
-// one bucket meets, and the reply that says so is the only request uno gets:
-// there is nothing else to ask, because every request after it is signed the
-// same wrong way.
-//
-// The stand-in checks signatures the way S3 does, so reaching the object at
-// all proves the second attempt was re-signed for the region it was sent to.
+// Each reply in regions.ts, served by the stand-in. Reaching the object
+// proves the second attempt was signed for the region it was sent to.
 
 describe("a bucket that is somewhere else", () => {
   const where = (b: Bucket) =>
@@ -590,14 +567,12 @@ describe("a bucket that is somewhere else", () => {
         const opening = where(b).open(at("2025/sales-q3.csv"));
         if (!format.follow) {
           await expect(opening, format.name).rejects.toThrow();
-          // Refusing means refusing quietly: nothing signed for a region the
-          // credentials did not name, which is what a body would be choosing.
+          // Every request was signed for the credentials' own region.
           for (const r of b.seen) expect(r.region, format.name).toBe(KEYS.region);
           return;
         }
         expect((await opening).size, format.name).toBe(bytes.length);
-        // Once. A probe for the region is allowed; a second round of them is
-        // the bug this is here to catch.
+        // At most three requests: the HEAD, a probe, and the HEAD again.
         expect(b.seen.length, format.name).toBeLessThanOrEqual(3);
         expect(b.seen.at(-1)?.region, format.name).toBe(home);
       } finally {
@@ -606,8 +581,7 @@ describe("a bucket that is somewhere else", () => {
     });
   }
 
-  // "Once, and then remembered": the second object costs one request, because
-  // the region is already known by the time it is asked for.
+  // The region is remembered, so the second object costs one request.
   test("remembers it, so the next object in the bucket goes straight there", async () => {
     const b = await bucket(REGION_FORMATS[0]!.reply);
     try {
@@ -622,9 +596,8 @@ describe("a bucket that is somewhere else", () => {
     }
   });
 
-  // A HEAD reply has no body, and open() starts with a HEAD. So a bucket that
-  // only says where it is in the body can only say it to a GET, and following
-  // one means asking a second way rather than reading nothing twice.
+  // A HEAD reply carries headers only, so the region is read from a one-byte
+  // GET probe.
   test("asks a way that can carry the answer, since a HEAD cannot", async () => {
     const b = await bucket(REGION_FORMATS[0]!.reply);
     try {
@@ -639,13 +612,12 @@ describe("a bucket that is somewhere else", () => {
   });
 });
 
-// A region becomes a hostname. These go through a stand-in fetch rather than
-// the server above, because the point is the request that is never sent: with
-// no endpoint set, the host uno builds is the whole of the evidence.
+// These use a stand-in fetch and the default endpoint, so the host uno builds
+// is what is checked.
 describe("a region out of a body never becomes a host", () => {
   /**
-   * A stand-in that answers every request with the same refusal, gives up
-   * rather than hanging if uno keeps following it, and keeps what it was sent.
+   * A fetch that answers every request with a 400 from `body`, records each
+   * URL sent, and throws after eight requests.
    */
   function refusing(body: (n: number) => string) {
     const sent: URL[] = [];
@@ -672,8 +644,8 @@ describe("a region out of a body never becomes a host", () => {
     for (const url of sent) expect(url.host).toBe(`${BUCKET}.s3.${KEYS.region}.amazonaws.com`);
   });
 
-  // A bucket that is somewhere new every time it is asked is not one to keep
-  // asking. Following forever is a loop nothing downstream can interrupt.
+  // A reply naming a new region every time is followed a bounded number of
+  // times.
   test("stops following a bucket that keeps moving", async () => {
     const { sent, s3 } = refusing(
       (n) =>
@@ -684,7 +656,7 @@ describe("a region out of a body never becomes a host", () => {
   });
 });
 
-/** The bytes of a string, for objects whose content only has to be telling. */
+/** The UTF-8 bytes of a string. */
 function utf8(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }

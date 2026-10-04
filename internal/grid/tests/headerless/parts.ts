@@ -1,9 +1,5 @@
-// Files with no header row, for the tests of reading them.
-//
-// They are the three parts of sales-q3.csv with the header taken off each, so
-// every line of every one is a row, and together they hold exactly the rows
-// the whole file has under its header. What a headerless read shows can then
-// be held to what the ordinary read of the whole file shows, cell for cell.
+// Fixtures and helpers for the headerless tests: the three parts of
+// sales-q3.csv with the header line removed from each.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,7 +24,7 @@ export const rowsOnly: readonly Uint8Array[] = partBytes.map((bytes) =>
   bytes.subarray(bytes.indexOf(LF) + 1),
 );
 
-/** The parts end to end: every row of sales-q3.csv and no header. */
+/** The headerless parts concatenated: every data row of sales-q3.csv. */
 export const allRows = ((): Uint8Array => {
   const out = new Uint8Array(rowsOnly.reduce((sum, part) => sum + part.length, 0));
   let at = 0;
@@ -39,19 +35,19 @@ export const allRows = ((): Uint8Array => {
   return out;
 })();
 
-/** What each headerless part is called, in order. */
+/** File name of each headerless part, in order. */
 export const NAMES: readonly string[] = Array.from(
   { length: PARTS },
   (_, i) => `sales-q3-rows-${i + 1}.csv`,
 );
 
-/** What the columns of a file that names none are called. */
+/** The generated column names for a headerless file with COLS columns. */
 export const COLUMNS = columnNames(COLS);
 
-/** What the parts are called as one source. */
+/** Source name for the parts opened as one. */
 export const SOURCE = "sales-q3-rows";
 
-/** onDisk writes `files` into a folder of their own and says where each is. */
+/** Writes `files` into a new temp dir and returns the dir and each path. */
 export async function onDisk(
   files: readonly Uint8Array[] = rowsOnly,
 ): Promise<{ dir: string; paths: string[] }> {
@@ -61,7 +57,7 @@ export async function onDisk(
   return { dir, paths };
 }
 
-/** The files at `paths` as one source. With no header row unless said. */
+/** A SourceRef for the files at `paths` as one source. Header mode defaults to "none". */
 export function asOne(paths: readonly string[], header: HeaderMode = "none"): SourceRef {
   return {
     name: SOURCE,
@@ -70,7 +66,7 @@ export function asOne(paths: readonly string[], header: HeaderMode = "none"): So
   };
 }
 
-/** What an engine on a machine with a disk reads through, several files as one included. */
+/** Disk, blob and multi-file providers. */
 export function providers(): Provider[] {
   const single = [diskProvider(), blobProvider()];
   return [...single, multiProvider(single)];

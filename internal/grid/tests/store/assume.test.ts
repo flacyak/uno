@@ -1,10 +1,8 @@
-// STS AssumeRole: a role taken on with credentials its trust policy names.
+// STS AssumeRole: the call itself, and the profiles that make it.
 //
-// What is under test is the call and the profiles that make it. The stand-in
-// checks the signature and the external ID the way STS does, so a session
-// coming back out of it proves both were right. The profiles are the ways a
-// company hands out a role: role_arn beside a source_profile, a chain of them,
-// and credential_source = Environment.
+// The stand-in STS checks the signature and the external ID. The profiles
+// cover role_arn with source_profile, a chain of roles, and
+// credential_source = Environment.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,7 +20,7 @@ import type { Bucket } from "./standin.ts";
 import { sts } from "./stsstandin.ts";
 import type { Sts } from "./stsstandin.ts";
 
-/** The keys a person holds, which may assume the reader role and nothing else. */
+/** The keys that may assume the reader role only. */
 const BASE = { accessKeyId: "AKIDBASE", secretAccessKey: "base/secret" };
 const READER = "arn:aws:iam::210987654321:role/uno-read";
 const AUDITOR = "arn:aws:iam::210987654321:role/uno-audit";
@@ -133,7 +131,6 @@ async function machine(extra: Record<string, string | undefined> = {}) {
 }
 
 describe("the call", () => {
-  // The task's own sentence.
   test("a stand-in STS that checks the signature and the external ID hands out a session", async () => {
     const session = await assumeRole(
       { roleArn: READER, sessionName: "ana", externalId: EXTERNAL, region: HOME_REGION },
@@ -153,8 +150,7 @@ describe("the call", () => {
     ]);
   });
 
-  // The confused-deputy guard the hosted engine rests on: the right ARN with
-  // somebody else's external ID is refused, and says why.
+  // The right ARN with the wrong external ID is refused with STS's message.
   test("the wrong external ID is refused, with what STS said", async () => {
     await expect(
       assumeRole(
@@ -169,9 +165,8 @@ describe("the call", () => {
     );
   });
 
-  // STS holds RoleSessionName to 2..64 of [\w+=,.@-], and a name a profile's
-  // role_session_name sets outside that is refused here, in words naming the
-  // name, before a request is signed for it.
+  // RoleSessionName must be 2 to 64 of [\w+=,.@-]. Other names are refused
+  // before any request is sent.
   test.each([
     ["a", "a"],
     ["x".repeat(65), "x".repeat(65)],
@@ -210,9 +205,8 @@ describe("the call", () => {
     ).rejects.toThrow(/· SignatureDoesNotMatch:/);
   });
 
-  // What STS said is read with its entities undone, and an escape that names
-  // a code point no string can hold is left as it came rather than thrown
-  // over: the refusal is still what STS said, and still in words.
+  // Entities in the STS message are decoded. A numeric escape past the
+  // Unicode range is left as written.
   test("a refusal escaped past what a string can hold is still said in words", async () => {
     const message = "Session for a&amp;b was refused at &#1114112; by &#xFFFFFFFF;";
     const refuse: typeof fetch = async () =>
