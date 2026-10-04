@@ -32,14 +32,17 @@ try {
   const runs = [];
   for (let i = 0; i < finds; i++) {
     const r = await findToEnd(src, watch);
-    if (!r.found.complete || r.found.row !== null) throw new Error('find stopped early');
+    if (!r.found.complete || r.found.row !== null)
+      throw new Error('find stopped early');
     runs.push({
       ms: Math.round(r.ms),
       readMB: Number((r.bytes / MB).toFixed(1)),
       msPerGBRead: Math.round((r.ms * GB) / r.bytes),
     });
   }
-  process.stdout.write(`${JSON.stringify({ indexedMB: Number((size / MB).toFixed(1)), runs })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ indexedMB: Number((size / MB).toFixed(1)), runs })}\n`,
+  );
 } finally {
   done();
 }
