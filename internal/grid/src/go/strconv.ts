@@ -1,14 +1,12 @@
-// Go's strconv, where JavaScript's number and string literals differ.
+// Ports of Go's strconv package.
 
 import { runes } from "./strings.ts";
 
 /**
- * formatFloat is `strconv.FormatFloat(v, 'f', -1, 64)`: the shortest decimal
- * that reads back as the same float64, in plain notation, never exponential.
- *
- * `Number.prototype.toString` gets the shortest part right and the notation
- * wrong -- it switches to exponential above 1e21 and below 1e-6, and a
- * spreadsheet column showing 1.234567890e+12 has helped nobody.
+ * formatFloat mirrors `strconv.FormatFloat(v, 'f', -1, 64)`: the shortest
+ * decimal that reads back as the same float64, in plain notation.
+ * `Number.prototype.toString` switches to exponential above 1e21
+ * and below 1e-6.
  */
 export function formatFloat(v: number): string {
   if (Number.isNaN(v)) return "NaN";
@@ -44,20 +42,16 @@ export function formatFloat(v: number): string {
 }
 
 /**
- * roundSignificant is the round trip through `strconv.FormatFloat(v, 'g', n, 64)`
- * and back: keep n significant digits, then read the result as a float again.
- *
- * It is what turns 0.21999999999999997 into 0.22 -- far more precision than a
- * cell displays, and far less than float64 noise.
+ * roundSignificant mirrors `strconv.FormatFloat(v, 'g', n, 64)` followed by
+ * a parse: keeps n significant digits. Turns 0.21999999999999997 into 0.22.
  */
 export function roundSignificant(v: number, digits: number): number {
   if (!Number.isFinite(v)) return v;
   return Number(v.toPrecision(digits));
 }
 
-// strconv.IsPrint: categories L, M, N, P and S, plus the ASCII space. Go's
-// Quote leaves these alone, so an accented letter in a cell stays legible in an
-// error message instead of becoming an escape.
+// strconv.IsPrint: categories L, M, N, P and S, plus the ASCII space. `quote`
+// leaves these unescaped.
 const PRINTABLE = /[\p{L}\p{M}\p{N}\p{P}\p{S}]/u;
 
 const BEL = "\u0007"; // Go spells this \a
@@ -75,10 +69,7 @@ const SHORT_ESCAPES = new Map<string, string>([
 ]);
 
 /**
- * quote is `strconv.Quote`, which is what every `%q` in the Go core prints and
- * what the transform language's text form round-trips through.
- *
- * `JSON.stringify` is close and not the same: it escapes a different set and
+ * quote mirrors `strconv.Quote`. `JSON.stringify` escapes a different set and
  * spells the escapes differently.
  */
 export function quote(s: string): string {
@@ -117,11 +108,8 @@ const UNESCAPE = new Map<string, string>([
 const HEX_WIDTHS: Record<string, number> = { x: 2, u: 4, U: 8 };
 
 /**
- * unquote is `strconv.Unquote` for a double-quoted literal, which is the only
- * form the transform language's parser hands it.
- *
- * It throws rather than returning an error pair, because its one caller wraps
- * the failure in a message naming the character the string started at.
+ * unquote mirrors `strconv.Unquote` for a double-quoted literal. Throws
+ * "invalid syntax" on bad input.
  */
 export function unquote(s: string): string {
   const r = runes(s);
@@ -175,27 +163,26 @@ export function unquote(s: string): string {
   return out;
 }
 
-// What `strconv.ParseFloat` will read, once num's character whitelist has
-// already refused the hexadecimal and infinity spellings Go also accepts.
+// The decimal forms `strconv.ParseFloat` accepts. Hexadecimal and infinity
+// spellings are refused.
 const DECIMAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 /**
- * parseFloat is `strconv.ParseFloat(v, 64)` narrowed to decimal input.
- *
- * `Number()` is not it: `Number("")` is 0, `Number("0x10")` is 16, and
- * `Number(" 12 ")` is 12, all of which have to be refusals here.
+ * parseFloat mirrors `strconv.ParseFloat(v, 64)` for decimal input only.
+ * Returns undefined for anything else, including "", "0x10" and " 12 ",
+ * which `Number()` would accept.
  */
 export function parseFloat(v: string): number | undefined {
   if (!DECIMAL.test(v)) return undefined;
   const n = Number(v);
-  // Go answers ±Inf with ErrRange for a decimal too large for a float64, and
-  // the core reads an error as "not a number": 1e400 is text, never +Inf.
+  // Go returns ErrRange for a decimal too large for a float64. Here that is
+  // undefined: 1e400 overflows a float64.
   return Number.isFinite(n) ? n : undefined;
 }
 
 /**
- * atoi is `strconv.Atoi`: a whole decimal integer and nothing else. The
- * transform language's parser uses it for slice positions and match counts.
+ * atoi mirrors `strconv.Atoi`: a whole decimal integer. Returns undefined
+ * for anything else.
  */
 export function atoi(s: string): number | undefined {
   if (!/^[+-]?\d+$/.test(s)) return undefined;

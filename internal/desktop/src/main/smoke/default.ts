@@ -24,8 +24,7 @@ export const DEFAULT_INPUT: Check[] = [
       await page.clickCell(0, UNITS);
       await page.settle(1);
 
-      // Enter opens the editor over the selected cell, the way it does in the
-      // Go build's grid.
+      // Enter opens the editor over the selected cell.
       await page.press("Enter");
 
       const opened = await page.editorValue();
@@ -57,8 +56,7 @@ export const DEFAULT_INPUT: Check[] = [
       await page.setEditorValue("987");
       await page.press("Enter");
 
-      // Committing used to leave the Enter free to reach the grid, which read
-      // it as "start editing" and reopened an editor over the cell.
+      // The Enter that commits closes the editor and leaves the grid with none.
       const open = await page.count(".cell-editor");
       return open === 0 ? "" : open + " editor(s) still open after committing";
     },
@@ -74,7 +72,7 @@ export const DEFAULT_INPUT: Check[] = [
         await page.press("Enter");
       };
 
-      // Row 1 was fixed by the check before last. These are the second and third.
+      // Row 1 was fixed two checks ago. These are the second and third.
       await type(2, "1455");
       await type(4, "2038");
 
@@ -149,7 +147,7 @@ export const DEFAULT_INPUT: Check[] = [
         return "after Ctrl+R row 6 shows " + JSON.stringify(cell) + ", status bar: " + status;
       }
 
-      // Taken back again, so the checks after this one start where they expect.
+      // Undone again, so the checks after this one start where they expect.
       await page.press("z", { ctrlKey: true });
       const undone = await page.until([
         { selector: "#status-file", includes: "3 edits" },

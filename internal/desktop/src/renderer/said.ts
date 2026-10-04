@@ -1,12 +1,9 @@
-// What the engine says, written in the language the app is in.
+// Turns the engine's structured messages (`Said`) into text in the app's
+// locale.
 //
-// The engine sends a sentence as data: which one it is, and what goes in it.
-// It may be in another process, and it does not know what language the person
-// reading speaks. `say` is the other half: one message for each kind, so a
-// kind the engine gains fails to compile here until it has one.
-//
-// What the engine has given no kind of its own yet arrives as `text`, in the
-// English it was written in, and is passed on as it is.
+// The engine sends a kind and its fields. `say` maps each kind to a message.
+// The table is typed over every kind, so a new kind fails to compile here
+// until it has a message. The `text` kind is passed through unchanged.
 
 import { Refusal } from "@uno/grid/engine";
 import type { CharName, Said, Sought, StepSaid } from "@uno/grid/engine";
@@ -17,13 +14,13 @@ import { m } from "../paraglide/messages.js";
 import { getLocale } from "../paraglide/runtime.js";
 import { bytes, num } from "./locale.ts";
 
-/** said is what an error says, in the app's language where the engine sent it as data. */
+/** Returns an error's message. A Refusal is translated into the app's locale. */
 export function said(err: unknown): string {
   if (err instanceof Refusal) return say(err.said);
   return err instanceof Error ? err.message : String(err);
 }
 
-/** One message a kind, stored as the function and not its text, so it is said in the language of the moment. */
+/** The message function for each character name. Called at use so the current locale applies. */
 const CHARS: Record<CharName, () => string> = {
   commas: m.chars_commas,
   "full stops": m.chars_full_stops,
@@ -48,21 +45,21 @@ function charName(name: CharName): string {
 }
 
 /**
- * quoted is a piece of text between the language's quotation marks, with what
- * could not be seen in it written as an escape: a tab is \t.
+ * Wraps text in the locale's quotation marks, with invisible characters
+ * escaped: a tab is \t.
  */
 function quoted(text: string): string {
-  // The engine's quote escapes, and puts its own marks at each end.
+  // quote() escapes and adds its own quote marks, which are stripped here.
   return m.quoted({ text: quote(text).slice(1, -1) });
 }
 
-/** What a step looks for, without where: the characters by name, or the text in quotes. */
+/** Describes what a step looks for: the character names, or the literal text in quotes. */
 function sought(what: Sought): string {
   if (what.t === "literal") return quoted(what.text);
   return new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(what.names.map(charName));
 }
 
-/** Where a step looks: anywhere in the cell, or at one end of it. */
+/** Where a step looks: anywhere in the cell, or at the start or end. */
 type Where = Extract<Sought, { t: "chars" }>["where"];
 
 function whereOf(what: Sought): Where {
@@ -177,9 +174,8 @@ const SAYS: Sentences<Said> = {
   "tries-no-connection": m.refused_tries_no_connection,
 };
 
-/** say is one thing the engine said, in the language the app is in now. */
+/** Returns the message for one Said, in the current locale. */
 export function say(s: Said): string {
-  // The table is typed by kind, and s is the union, so the one pairing the
-  // compiler cannot see is said here: each message takes its own kind.
+  // The cast is needed because the table entry is typed by kind and s is the union.
   return (SAYS[s.t] as (s: Said) => string)(s);
 }

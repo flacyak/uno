@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
 //
-// The grid over a plain DOM, driven the way the shell drives it: rows shown,
-// keys pressed on the host, and what the selection, the marks and the editor
-// make of them. happy-dom lays nothing out, so the scroller is told how tall it
-// is, as view.test.ts does.
+// The grid over a plain DOM, driven as the shell drives it: rows shown, keys
+// pressed on the host, and what the selection, the marks, and the editor do.
+// happy-dom skips layout, so the scroller is told its height.
 
 import { expect, test } from "vite-plus/test";
 
@@ -16,11 +15,11 @@ import type { InputStrategy } from "../../src/renderer/input/strategy.ts";
 import { vimStyle } from "../../src/renderer/input/vim-style.ts";
 import { m } from "../../src/paraglide/messages.js";
 
-/** What the header is told it measures, since happy-dom measures nothing. */
+/** The header height the grid is told, since happy-dom skips layout. */
 const HEAD_H = 30;
 const VIEWPORT = 600;
 
-/** A sheet of `total` rows and `cols` columns, every cell its own coordinates. */
+/** A sheet of `total` rows and `cols` columns. Each cell's text is its coordinates. */
 function sheet(total: number, cols = 3): Rows {
   const kind: Kind = "text";
   return {
@@ -39,13 +38,13 @@ interface Driven {
   said: string[];
   /** The cells committed, in order. */
   edits: [row: number, col: number, value: string][];
-  /** press sends a key to the grid, or to `target` in it, and returns the event for what became of it. */
+  /** Sends a key to the grid, or to `target` in it, and returns the event. */
   press: (key: string, init?: KeyboardEventInit, target?: Element) => KeyboardEvent;
   /** The open cell editor. */
   editor: () => HTMLInputElement;
 }
 
-/** make builds a grid reading keys through `input`, on a scroller tall enough to draw rows. */
+/** Builds a grid reading keys through `input`, on a scroller tall enough to draw rows. */
 function make(input: InputStrategy): Driven {
   const host = document.createElement("div");
   host.tabIndex = 0;
@@ -99,14 +98,14 @@ test("a mark is its own tab's: it waits through a tab switch, and is not set on 
   press("m");
   press("a");
 
-  // gt: the shell shows the other tab's rows, where a is nothing yet.
+  // Show the other tab's rows, where mark a is unset.
   grid.show(second, false);
   press("'");
   press("a");
   expect(said.at(-1)).toBe(m.mark_not_set({ name: "a" }));
   expect(grid.selection()).toEqual({ row: 0, col: 0 });
 
-  // gT: the shell shows the first tab again, and puts its selection back.
+  // Show the first tab again and restore its selection.
   grid.show(first, false);
   grid.moveTo(0, 0);
   press("'");

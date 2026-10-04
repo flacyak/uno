@@ -1,11 +1,8 @@
-// Package engine opens files without loading them, and changes them without
-// rewriting them.
+// Package engine indexes files chunk by chunk and serves rows by position
+// with the edit log applied.
 //
-// A worker owns a workspace: its sources, and the log over them. It indexes
-// each file a chunk at a time and serves rows by position with the log
-// applied, so an edit anywhere is one line and the rows on screen. A client
-// holds a band of rows around the viewport and nothing more, so what it costs
-// depends on the screen and not on the files.
+// A worker owns one workspace: its sources and the log over them. A client
+// holds a band of rows around the viewport and asks the worker for more.
 
 export { BAND_ROWS, Band, Engine, SourceHandle } from "./client.ts";
 export type { Added, Pending, RowsReply } from "./client.ts";

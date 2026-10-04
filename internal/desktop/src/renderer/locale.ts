@@ -1,35 +1,32 @@
-// The locale the app speaks, for what is written without a message of its own:
-// numbers, sizes and lists.
+// Formats numbers, byte sizes and lists in the app's locale.
 //
-// A message is already in the app's language. A number written beside it has
-// to be in the same one, or a German sentence counts its rows the English way.
-// toLocaleString() with no locale follows the operating system, which is a
-// different setting from the app's.
+// The app's locale is a separate setting from the operating system's, so
+// every formatter here is built with getLocale().
 
 import { m } from "../paraglide/messages.js";
 import { getLocale } from "../paraglide/runtime.js";
 import type { Locale } from "../paraglide/runtime.js";
 
-/** The formatter for the locale it was made in, kept until the locale changes. */
+/** Cached number formatter, rebuilt when the locale changes. */
 let grouping: { locale: Locale; format: Intl.NumberFormat } | undefined;
 
-/** num is a count as the app's locale writes it: 1,204 in English. */
+/** Formats a count in the app's locale: 1,204 in English. */
 export function num(n: number): string {
   const locale = getLocale();
   if (grouping?.locale !== locale) grouping = { locale, format: new Intl.NumberFormat(locale) };
   return grouping.format.format(n);
 }
 
-/** How many of one unit make the next: bytes in a KB, KB in a MB. */
+/** Bytes per KB, KB per MB, and so on. */
 const UNIT_STEP = 1024;
 
 /** The units above a byte, smallest first. */
 const UNITS = [m.size_kb, m.size_mb, m.size_gb, m.size_tb] as const;
 
-/** A size under this many of its unit keeps one decimal place: 3.2 MB, 32 MB. */
+/** A size below this many of its unit shows one decimal: 3.2 MB, 32 MB. */
 const DECIMAL_BELOW = 10;
 
-/** bytes is a file's size in the largest unit that keeps it above one: 3.2 MB. */
+/** Formats a byte count in the largest unit that keeps it at or above one: 3.2 MB. */
 export function bytes(n: number): string {
   if (n < UNIT_STEP) return m.size_bytes({ count: n });
   let size = n / UNIT_STEP;
@@ -46,7 +43,7 @@ export function bytes(n: number): string {
   return UNITS[unit]!({ size: written });
 }
 
-/** list is several names as the locale sets them side by side: a, b, c. */
+/** Joins names as a short list in the app's locale: a, b, c. */
 export function list(names: readonly string[]): string {
   return new Intl.ListFormat(getLocale(), { type: "unit", style: "short" }).format(names);
 }

@@ -1,5 +1,6 @@
-// The engine changing a file: edits, undo and redo, what it refuses, and the
-// offers the recogniser streams, each checked against a Sheet given the same log.
+// Edits through the engine: set, apply, bind, undo, redo, refusals, and the
+// offers streamed after fixes. Each is checked against a Sheet given the same
+// log.
 
 import { expect, test } from "vite-plus/test";
 
@@ -22,7 +23,7 @@ test("an edit shows in the next rows, and undo takes it back", async () => {
     expect(set.edit).toEqual({ seq: 1, op: "set", row: 0, col: UNITS, was: "1,204", now: "1204" });
     expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe("1204");
 
-    // One line for the whole column, and the last rows of the file show it at once.
+    // An apply covers the whole column, including the last rows.
     const apply = await src.edit({
       op: Op.Apply,
       row: NO_ROW,
@@ -60,7 +61,7 @@ test("redo records again what undo took back, until a new edit", async () => {
     await src.undo();
     expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe("1,204");
 
-    // Oldest first: the set comes back before the apply that followed it.
+    // Redo is oldest first.
     const set = await src.redo();
     expect(set.edit).toEqual({ seq: 1, op: "set", row: 0, col: UNITS, was: "1,204", now: "1204" });
     const apply = await src.redo();
@@ -68,7 +69,7 @@ test("redo records again what undo took back, until a new edit", async () => {
     expect(apply.columns[UNITS]).toMatchObject({ kind: "num", flagged: false });
     expect((await src.rows(5, 1)).rows[0]![UNITS]).toBe("1101");
 
-    // A new edit goes on a log the undone one no longer follows.
+    // A new edit clears the redo stack.
     await src.undo();
     await src.edit({ op: Op.Set, row: 1, col: UNITS, now: "988" });
     await expect(src.redo()).rejects.toThrow("there is nothing to redo");
@@ -104,8 +105,7 @@ test("the engine refuses what a Sheet refuses, in the same words", async () => {
   }
 });
 
-// A file that says product_cost twice has two columns a formula can read, and
-// each one reads its own values.
+// A duplicate header is suffixed _2, and a formula reads each by its name.
 test("a column named twice in the file can be read by its own name", async () => {
   const header = "sku,product_cost,price,product_cost,margin";
   const csv = `${header}\nA,1,5,2,\nB,3,9,4,\n`;
@@ -138,8 +138,6 @@ test("a column named twice in the file can be read by its own name", async () =>
   }
 });
 
-// The rule that makes a lazy log safe: whatever order the edits came in, a row
-// finished through the engine is the row a Sheet holds after the same edits.
 test("rows through the engine match a Sheet replaying the same log", async () => {
   const { engine, done } = connect(TINY);
   try {
@@ -220,7 +218,7 @@ test("three fixes stream an offer that ends as the one snap makes", async () => 
     });
     expect(offer.sample).toEqual(p.sample);
 
-    // Apply is one edit, and the column has nothing left to ask about.
+    // After the apply the offer is cleared.
     const cleared = new Promise<Offer | null>((resolve) => (src.onOffer = resolve));
     await src.edit({ op: Op.Apply, row: NO_ROW, col: UNITS, now: offer.program });
     expect(await cleared).toBeNull();
@@ -253,7 +251,7 @@ test("an offer counts and applies around the fixes it was learned from", async (
     for (const [row, now] of fixes) sheet.set(row, REGION, now);
     const p = snap(sheet).propose()!;
 
-    // Appending is not idempotent, so the three fixed rows are the ones left out.
+    // The three rows already fixed are excluded from `affects`.
     expect(p.affects).toBe(ROWS - fixes.length);
     expect(offer).toMatchObject({
       col: REGION,

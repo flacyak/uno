@@ -1,19 +1,15 @@
 // Page, over a real Electron window.
 //
-// This is the only file allowed to hold renderer JavaScript as a string. Each
-// string here answers one kind of question -- read this text, click this
-// cell, wait for these conditions -- for every check that asks it, rather than
-// one check having a script of its own. That is what keeps `Page` honest: a
-// check that wants something this file cannot express needs a new method on
-// the interface, not a new string here.
+// This is the only file that holds renderer JavaScript as a string for `Page`.
+// Each string answers one kind of question for every check that asks it. A
+// check that needs more than `Page` offers gets a new method here.
 
 import type { BrowserWindow } from "electron";
 
 import type { KeyModifiers, Page, Row, Wait } from "./page.ts";
 
-/** The wait budget a poll gets: this many frames, each a real animation frame
- * apart. Matches the budget the string-based checks already poll with -- see
- * index.ts's PRELUDE. */
+/** How many frames a poll waits, two animation frames apart. Matches the
+ * TRIES in index.ts's PRELUDE. */
 const TRIES = 150;
 
 function evaluate<T>(win: BrowserWindow, expression: string): Promise<T> {
@@ -96,9 +92,8 @@ export function electronPage(win: BrowserWindow): Page {
         `document.querySelector(".cell-editor").value = ${JSON.stringify(value)}`,
       ),
 
-    // A key goes where a real one would: to the editor while it is open, to
-    // the grid otherwise. Matches PRELUDE's own `press`, so a check reads the
-    // same whichever form it is.
+    // A key goes to the editor while one is open, to the grid otherwise.
+    // Matches the PRELUDE's `press`.
     press: (key, modifiers: KeyModifiers = {}) =>
       evaluate<void>(
         win,
@@ -121,8 +116,7 @@ export function electronPage(win: BrowserWindow): Page {
          })()`,
       ),
 
-    // The whole poll runs in one evaluate: a wait that round-tripped once per
-    // frame would turn 150 frames of patience into 150 IPC calls.
+    // The whole poll runs in one evaluate.
     until: (waits) => {
       const ok = waits.length === 0 ? "true" : waits.map(condition).join(" && ");
       return evaluate<boolean>(

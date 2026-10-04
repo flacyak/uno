@@ -1,13 +1,10 @@
-// What the desktop engine does, end to end, for run.ts to watch: every way out
-// the core has, taken the way a person's session takes it.
+// A scenario for run.ts: an engine wired the way the desktop wires one,
+// taking every way out the core has.
 //
-// A file on disk opened, listed and peeked at. An object in a bucket opened,
-// listed and statted. A bucket read through a profile whose credential_process
-// runs a program, and another through a role STS hands out. A connection
-// tried and saved. Dropped bytes read. A workspace saved and opened again.
-//
-// Each is here so the guard has seen it happen in the one module allowed it,
-// which is what makes "nothing else did" worth saying.
+// It opens, lists and peeks at a file on disk; opens, lists and stats an
+// object in a bucket; reads a bucket through a credential_process profile and
+// another through an STS role; tries a connection; reads dropped bytes; and
+// saves a workspace and opens it again.
 
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -35,7 +32,10 @@ import { sts } from "../stsstandin.ts";
 
 const PROCESS = fileURLToPath(new URL("../../testdata/credential-process.mjs", import.meta.url));
 
-/** What the credential_process fixture prints, and the role STS hands out. */
+/**
+ * The keys the credential_process fixture prints, and the session STS hands
+ * out.
+ */
 const PRINTED = { accessKeyId: "AKIDPROCESS", secretAccessKey: "process/secret" };
 const SESSION = {
   accessKeyId: "ASIDREADER",
@@ -74,7 +74,8 @@ export default async function everything(): Promise<void> {
     },
   });
 
-  // A machine of its own: three profiles, one of each kind this touches.
+  // A temp home with three profiles: plain keys, credential_process, and a
+  // role.
   const home = await mkdtemp(join(tmpdir(), "uno-reach-"));
   const runs = join(home, "runs");
   await writeFile(runs, "");

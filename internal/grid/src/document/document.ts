@@ -1,96 +1,66 @@
-// Package document reads and writes the .uno container: a zip holding the log of
-// what you did to each of your files, and, for each file, either where it is or
-// a copy of it.
+// Package document reads and writes the .uno container: a zip holding the
+// manifest, the state, the edit log and, for each source, either a copy of
+// its bytes or a path to it.
 //
-// Pointing rather than copying is what lets a workspace hold sources bigger than
-// a zip has any business carrying. A workspace of a 30 GB ledger and four 2 GB
-// exports is a few kilobytes of JSON, saves instantly, and costs nothing to keep
-// a dozen copies of. What it gives up is travelling alone: a .uno that points at
-// /home/you/exports opens on your machine and nowhere else, so a source uno
-// cannot name by path -- bytes dropped into a browser, with no file behind them
-// -- is carried instead.
+// A source is one file or several files read as one table. A one-file source
+// is either carried (its bytes are in the zip) or pointed at (its path is in
+// the manifest). A parts source is always pointed at, one path per part, in
+// the order their rows are read.
 //
-// A source can also be several files read as one table. Those are always
-// pointed at, each part by its own path, in the order their rows are read: the
-// log names rows by number, so the list is fixed and written down whole.
+// A pointer whose file has gone keeps its id, its edits and its place in the
+// log. It gets a grid again once it is pointed at a file.
 //
-// A pointer that no longer resolves is not a broken file. The source keeps its
-// id, its edits and its place in the log; it simply has no grid until somebody
-// points it at a file again. Losing a path must never cost the work done through
-// it.
-//
-// It is a codec and not a file reader. `readDocument` takes bytes and
-// `writeDocument` returns them, so the same code serves the desktop, where a
-// FileStore puts them on a disk, and the browser, where there is no disk to put
-// them on. Nothing here opens the file a source points at: it hands the path
-// back, and the engine does.
+// `readDocument` takes bytes and `writeDocument` returns bytes. The engine
+// opens the file a source points at.
 
 import type { Edit } from "../sheet/index.ts";
 import type { Sheet } from "../sheet/index.ts";
-// Type only: whether parts have a header row is decided where they are joined.
 import type { HeaderMode } from "../store/index.ts";
 import { against, dirOf, relativeTo } from "./path.ts";
 
 /**
- * FORMAT_VERSION is the highest layout this build reads, and the highest it
- * writes. It is the public API of uno: everything else can be reshaped on any
- * afternoon, but a .uno travels to other machines and stays readable there.
+ * FORMAT_VERSION is the highest layout this build reads and writes.
  *
- * A file declares the lowest version that can read it rather than this one, so
- * a workspace holding nothing an older uno could not replay still opens there.
- * The alternative is that adding an operation nobody used locks every file the
- * release touches out of every build before it.
+ * A file declares the lowest version that can read it, so a workspace an
+ * older build could replay still opens there.
  */
 export const FORMAT_VERSION = 6;
 
-/** What a log of nothing but single-cell edits needs, which is every file uno
- * wrote before the recogniser existed. */
+/** A log of only single-cell edits. */
 export const BASE_VERSION = 1;
 
-/** What a log carrying an induced column rule needs, which is every file the
- * recogniser wrote before formulas existed. */
+/** A log that carries an apply (an induced column rule). */
 export const RULE_VERSION = 2;
 
-/** What a log carrying a note, a binding or an unbinding needs, which is every
- * file written before a workspace could hold more than one source. */
+/** A log that carries a note, a bind or an unbind. */
 export const FORMULA_VERSION = 3;
 
 /**
- * What a workspace of more than one source needs. The manifest lists its
- * sources and every line of the log names the one it changed, which is a layout
- * a build before it would read as one source and a log it cannot place.
+ * A workspace of more than one source. The manifest lists its sources and
+ * every log line names the one it changed.
  */
 export const SOURCES_VERSION = 4;
 
 /**
- * What a workspace that points at a file needs. A build before it reads every
- * source as one it carries, finds no entry where the manifest promised bytes,
- * and has no idea there is a path to try instead.
+ * A workspace with a source that is pointed at by path.
  */
 export const POINTED_VERSION = 5;
 
 /**
- * What a workspace holding several files read as one needs. A build before it
- * knows a source as an entry or a path and nothing else, so it would have no
- * rows to give for one that is a list of parts.
- *
- * Nothing else needs it: a workspace with no such source is written as it
- * always was, and opens in every build that read it before.
+ * A workspace with a source that is several files read as one.
  */
 export const PARTS_VERSION = 6;
 
 /**
- * Every way parts can say whether they have a header row, as uno.json spells
- * them. A record of them, so a mode added to the type has to be added here
- * before this compiles.
+ * Every header mode, as uno.json spells it. A mode added to HeaderMode has
+ * to be added here.
  */
 const HEADER_MODES: Record<HeaderMode, true> = { first: true, none: true };
 
 /** The header modes this build reads, in the order a refusal lists them. */
 export const KNOWN_HEADER_MODES: readonly string[] = Object.keys(HEADER_MODES);
 
-/** isHeaderMode says whether a string out of a file is a header mode this
- * build knows. */
+/** isHeaderMode is true when `v` is a header mode this build knows. */
 export function isHeaderMode(v: string): v is HeaderMode {
   return Object.hasOwn(HEADER_MODES, v);
 }
@@ -98,58 +68,46 @@ export function isHeaderMode(v: string): v is HeaderMode {
 export const GENERATOR = "uno 0.2.0";
 
 /**
- * The fixed entries. The source entries are not fixed, because calling a TSV's
- * bytes source.csv would be a small lie told to everyone who unzips the file.
+ * The fixed entry names. Source entries are named after the file they hold;
+ * see `sourceEntry`.
  */
 export const MANIFEST_ENTRY = "uno.json";
 export const STATE_ENTRY = "sheet/state.json";
 export const LOG_ENTRY = "edits/log.jsonl";
 
-/** Where a one-source workspace keeps its bytes, as data/source.csv. */
+/** Entry stem for a one-source workspace: data/source.csv. */
 const SOURCE_STEM = "data/source";
-/** Where a workspace of several keeps them, one entry each, as data/source/<id>.csv. */
+/** Entry folder for a workspace of several sources: data/source/<id>.csv. */
 const SOURCE_DIR = "data/source/";
 
 /**
- * Source is where one source's bytes are, as uno.json records it: one file, or
- * several read as one. It is never both, and `parts` is what says which.
+ * Source is one source as uno.json records it: one file, or several read as
+ * one. `parts` is set only for the second.
  *
- * The name is kept either way, because it is what the tab says and because
- * `ingest` picks its decoder from the extension. For a pointed-at source it is
- * also what identifies the file after somebody has moved it: the name is the
- * thing a person recognises when uno asks them where it went.
- *
- * The delimiter and encoding are deliberately absent. The reader derives them
- * from the same bytes with the same code that derived them the first time, so a
- * stored copy could only ever be a second opinion that disagrees.
+ * `name` is what the tab shows and what `ingest` picks a decoder from. The
+ * reader derives the delimiter and encoding from the bytes.
  */
 export type Source = FileSource | PartsSource;
 
-/** What uno.json records of every source, whatever is behind it. */
+/** The fields uno.json records for every source. */
 interface SourceBase {
-  /** What the log calls this source. Unique in its workspace, and never reused
-   * for another file in it. */
+  /** What the log calls this source. Unique in its workspace. */
   id: string;
   name: string;
 
   /**
-   * The id of the connection the source was read through, as a hint. The
-   * connection's details stay in its own file, and an opener matches each
-   * address to its own connections regardless. "" where none covered it, and
-   * for several files where they were not all read through the same one.
+   * The id of the connection the source was read through, as a hint. "" when
+   * none covered it, or when the parts disagree on which.
    *
-   * Optional, as a file's `version` is: a format 5 reader ignores both and
-   * opens the workspace as it always did, so neither moves the format.
+   * Optional in the file: a format 5 reader ignores it.
    */
   connection: string;
 
   /**
-   * The shape of the grid the source and the log add up to, so a recents list
-   * or a file inspector can say how big a workspace is without decoding it.
-   *
-   * For a pointed-at source still being indexed at the save, `rows` is as far
-   * as the index had got. Nothing replays against it -- the engine counts the
-   * rows itself -- so it is a number to show and not one to trust.
+   * The row and column count of the grid this source shows with its edits
+   * applied, recorded so a reader can size the workspace from the manifest
+   * alone. For a pointed-at source still being indexed at the save, `rows` is
+   * the count indexed so far. On open the engine recounts from the file.
    */
   rows: number;
   cols: number;
@@ -158,24 +116,20 @@ interface SourceBase {
 /**
  * FileSource is a source that is one file.
  *
- * Exactly one of `entry` and `path` is set. An entry is a copy of the file
- * inside this zip. A path is where the file was when the workspace was saved,
- * relative to the .uno when the file sits under its folder and absolute
- * otherwise.
+ * Exactly one of `entry` and `path` is set. `entry` names a copy of the file
+ * inside the zip. `path` is where the file was at the save, relative to the
+ * .uno when the file is under its folder and absolute otherwise.
  */
 export interface FileSource extends SourceBase {
   /**
-   * The file's size. For a carried source it is the length of the entry; for a
-   * pointed-at one it is what the file measured at the save.
-   *
-   * That makes it the cheap test for "is this still the file the log was
-   * written against", and the only one worth running: hashing 30 GB to open a
-   * workspace would cost more than every other part of opening it put together.
+   * The file's size: the entry's length for a carried source, or what the
+   * file measured at the save for a pointed-at one. The opener uses it to
+   * check that a pointed-at file is still the one the log was written
+   * against.
    */
   bytes: number;
 
-  /** Over the carried bytes. Empty for a pointed-at source, which is not read
-   * until the engine opens it. */
+  /** The hash of the carried bytes. "" for a pointed-at source. */
   sha256: string;
 
   /** The zip entry holding a copy of the file, or "" for a pointed-at source. */
@@ -185,9 +139,8 @@ export interface FileSource extends SourceBase {
   path: string;
 
   /**
-   * Which bytes of the file the log was made against, where the place it is in
-   * can say: an S3 VersionId, or an ETag in its quotes. "" where there is
-   * none to record, which is every carried source and every file on a disk.
+   * Which version of the file the log was made against, where the store can
+   * say: an S3 VersionId, or an ETag in its quotes. "" otherwise.
    */
   version: string;
 
@@ -197,21 +150,18 @@ export interface FileSource extends SourceBase {
 }
 
 /**
- * PartsSource is a source that is several files read as one table.
- *
- * The parts are a fixed, ordered list, and never "whatever is in the folder
- * now": the log names rows by number, and a file landing in the middle would
- * move every row after it out from under its edits.
+ * PartsSource is a source that is several files read as one table. The parts
+ * are a fixed, ordered list: the log names rows by number, so the order
+ * decides which row an edit lands on.
  */
 export interface PartsSource extends SourceBase {
-  /** The files, in the order their rows are read. Never empty. */
+  /** The files, in the order their rows are read. At least one. */
   parts: SourcePart[];
   /** Whether the parts have a header row. */
   header: HeaderMode;
   /**
-   * Whether a `_file` column shows which part each row came from. Only that
-   * it was asked for: what the column shows is worked out from the parts at
-   * every open, and no cell of it is written.
+   * Whether a `_file` column shows which part each row came from. The
+   * column's cells are computed at every open; the file holds only this flag.
    */
   fileColumn: boolean;
 
@@ -223,34 +173,27 @@ export interface PartsSource extends SourceBase {
 }
 
 /**
- * SourcePart is one file of several read as one, as uno.json records it:
- * where it is, which bytes of it the log was made against, and how it sits in
- * the join.
+ * SourcePart is one file of a PartsSource as uno.json records it.
  *
- * `bytes`, `skip` and `unterminated` are what the join measured of the part at
- * the save. With them written down the next open places every part without
- * opening one, and a part is read for the first time when a row in it is. It
- * is held to all three then, and to its version, so a part that is no longer
- * the file the log was made against is refused by name rather than read with
- * every row after it moved.
+ * `bytes`, `skip` and `unterminated` are what the join measured at the save.
+ * The next open places every part from them alone. A part whose size or
+ * `version` has changed since is refused by name.
  */
 export interface SourcePart {
-  /** What the part is called where that is something other than the last
-   * piece of its path, and "" otherwise. It is what `ingest` picks a decoder
-   * by, so it has to come back as it was. */
+  /** The part's name when it differs from the last piece of its path, and
+   * "" otherwise. `ingest` picks a decoder by it. */
   name: string;
-  /** Where the part is, written down the way a file source's path is. */
+  /** Where the part is, stored the way a file source's path is. */
   path: string;
-  /** How big the part was at the save. */
+  /** The part's size at the save. */
   bytes: number;
-  /** Which bytes of it were read, where its place can say. "" where there is
-   * none to record. */
+  /** Which version of the part was read, where the store can say. ""
+   * otherwise. */
   version: string;
-  /** How many bytes at its start the join leaves out: a later part's repeat
-   * of the header. 0 for a part that is there whole. */
+  /** How many bytes at the start of the part the join leaves out: a later
+   * part's repeat of the header. 0 for a part read whole. */
   skip: number;
-  /** Whether its last byte was something other than a newline, so the join
-   * gives it one. */
+  /** Whether the part's last line is unterminated. The join adds a newline. */
   unterminated: boolean;
 }
 
@@ -264,8 +207,8 @@ export interface EditsRef {
   entry: string;
 }
 
-/** Manifest is uno.json: what this file is, where each source's bytes came
- * from, and where the other entries live. */
+/** Manifest is uno.json: the format, the sources, and where the other
+ * entries are. */
 export interface Manifest {
   format: number;
   generator: string;
@@ -276,18 +219,16 @@ export interface Manifest {
   edits: EditsRef;
 }
 
-/** A position in the grid. It is where the person was, which is a fact about
- * the session rather than about the data. */
+/** A position in the grid. */
 export interface Cell {
   row: number;
   col: number;
 }
 
 /**
- * ColumnFormula points a bound column at the library file it was written in.
- *
- * A reference that does not resolve is not an error: the column still computes,
- * and the drawer simply has nothing to open.
+ * ColumnFormula points a bound column at the library file (.unof) it was
+ * written in. A ref whose file has gone is fine: the column still computes
+ * from the expression in the log.
  */
 export interface ColumnFormula {
   col: number;
@@ -295,42 +236,33 @@ export interface ColumnFormula {
 }
 
 /**
- * State is what one source's grid looked like, not what it held. Everything
- * the data itself contains is reachable from the raw bytes and the log, so
- * nothing that can be replayed is written here.
+ * State is what one source's grid looked like: the active cell and, for each
+ * bound column, which library file it came from. Everything else is replayed
+ * from the log.
  */
 export interface State {
   active: Cell;
 
   /**
-   * Which .unof in the person's own library each bound column came from, and
-   * nothing else.
-   *
-   * The expression itself is in the log, because that is what has to be there
-   * for the file to compute on a machine that has never seen the sender's
-   * library -- the same promise the raw bytes make. This is the convenience
-   * that makes "edit" beside a name find the formula again, so it belongs to
-   * what the grid looked like rather than to what the workspace holds.
+   * Which .unof in the person's library each bound column came from. The
+   * expression itself is in the log; this only lets "edit" find the file
+   * again.
    */
   columnFormulas?: ColumnFormula[];
 }
 
 /**
- * Held is one source as a workspace holds it: where its bytes are, and what its
- * grid looked like. It is one file or several read as one, and `parts` is what
- * says which.
- *
- * The caller owns the facts the writer cannot see -- the id, the source's
- * name, the shape of the grid the log builds. What can be measured is measured
- * as it is written.
+ * Held is one source as a workspace holds it in memory: where its bytes are,
+ * and what its grid looked like. `parts` is set only for several files read
+ * as one.
  */
 export type Held = HeldFile | HeldParts;
 
-/** What a workspace holds of every source, whatever is behind it. */
+/** The fields a workspace holds for every source. */
 interface HeldBase {
   id: string;
   name: string;
-  /** The connection it was read through, for a pointed-at source one covered. */
+  /** The connection it was read through, for a pointed-at source. */
   connection?: string;
   rows: number;
   cols: number;
@@ -338,21 +270,19 @@ interface HeldBase {
 }
 
 /**
- * HeldFile is a source that is one file.
- *
- * Exactly one of `raw` and `path` is set, and which one decides whether the
- * save copies the file or points at it.
+ * HeldFile is a source that is one file. Exactly one of `raw` and `path` is
+ * set: `raw` means the save copies the file in, `path` means it points at it.
  */
 export interface HeldFile extends HeldBase {
-  /** The file's bytes, for a source the workspace carries. */
+  /** The file's bytes, for a carried source. */
   raw?: Uint8Array;
-  /** Where the file is, absolute, for a source the workspace points at. */
+  /** Where the file is, absolute, for a pointed-at source. */
   path?: string;
-  /** What the file measured, for a pointed-at source. Taken from `raw` for a
+  /** The file's size, for a pointed-at source. Taken from `raw` for a
    * carried one. */
   bytes?: number;
-  /** Which bytes of it the log was made against, for a pointed-at source whose
-   * place can say. */
+  /** Which version of the file the log was made against, for a pointed-at
+   * source whose store can say. */
   version?: string;
 
   parts?: never;
@@ -362,10 +292,10 @@ export interface HeldFile extends HeldBase {
 
 /**
  * HeldParts is a source that is several files read as one. Every part is
- * pointed at: a save never copies one in.
+ * pointed at, so a save writes only its path.
  */
 export interface HeldParts extends HeldBase {
-  /** The files, in the order their rows are read. Never empty. */
+  /** The files, in the order their rows are read. At least one. */
   parts: HeldPart[];
   /** Whether the parts have a header row. */
   header: HeaderMode;
@@ -378,28 +308,27 @@ export interface HeldParts extends HeldBase {
   version?: never;
 }
 
-/** HeldPart is one file of several read as one, as a workspace holds it. */
+/** HeldPart is one file of a HeldParts source. */
 export interface HeldPart {
-  /** What the part is called, which `ingest` picks a decoder by. */
+  /** The part's name. `ingest` picks a decoder by it. */
   name: string;
   /** Where the part is, absolute. */
   path: string;
-  /** How big the part is. */
+  /** The part's size. */
   bytes: number;
-  /** Which bytes of it the log was made against, where its place can say. */
+  /** Which version of the part the log was made against, where the store
+   * can say. */
   version?: string;
-  /** How many bytes at its start the join leaves out. */
+  /** How many bytes at the start of the part the join leaves out. */
   skip: number;
-  /** Whether its last byte is something other than a newline. */
+  /** Whether the part's last line is unterminated. */
   unterminated: boolean;
 }
 
 /**
- * Logged is one line of the log: an edit, and the source it changed.
- *
+ * Logged is one line of the log: an edit and the id of the source it changed.
  * The log is one list for the whole workspace, in the order the edits were
- * made, because that order is what a person reads back. Each edit's `seq` is
- * its place in its own source's log, which is what replay numbers it by.
+ * made. Each edit's `seq` is its place in its own source's log.
  */
 export interface Logged {
   source: string;
@@ -407,42 +336,34 @@ export interface Logged {
 }
 
 /**
- * Document is one .uno in memory, and one workspace.
+ * Document is one .uno in memory.
  *
- * The split matters at save time. `writeDocument` consumes manifest, sources,
- * log and extra, all of which are values that can be snapshotted and handed
- * over, so the deflate can run somewhere else while the person keeps typing.
- * `sheets` is live and mutable, and only `readDocument` ever sets it.
+ * `writeDocument` reads manifest, sources, active, log, at and extra.
+ * `sheets` is set only by `readDocument` and ignored by the writer.
  */
 export interface Document {
   /**
-   * Derived: the writer fills in the format, the generator, the timestamps,
-   * the sources, the counts and the entry names from what it actually writes,
-   * so the file cannot come to describe a different file. The one fact the
-   * caller owns is `created`.
+   * The writer fills in every field here from what it writes, except
+   * `created`, which the caller owns.
    */
   manifest: Manifest;
-  /** In the order the workspace shows them. Never empty. */
+  /** At least one, in the order the workspace shows them. */
   sources: Held[];
   /** The id of the source that was showing. */
   active: string;
   log: Logged[];
 
   /**
-   * Where the .uno itself is, so a source under the same folder is pointed at
-   * relative to it and the folder can be copied whole.
-   *
-   * Empty when that is not known -- a browser download has no path until after
-   * it is written -- and every pointer is then absolute. `readContainer` takes
-   * the same path and reads the relative ones back from it.
+   * Where the .uno itself is, so a source under the same folder is stored
+   * relative to it. "" when unknown, such as a browser download; every
+   * pointer is then stored absolute. `readContainer` resolves relative
+   * pointers from the same path.
    */
   at: string;
 
   /**
-   * Entries this build did not recognise, carried through to the next save.
-   *
-   * An older uno opening a file written by a newer one must not quietly drop
-   * what it could not read and then write that loss back over the file.
+   * Entries beyond what this build knows, carried through to the next save
+   * intact.
    */
   extra: Map<string, Uint8Array>;
 
@@ -451,11 +372,10 @@ export interface Document {
 }
 
 /**
- * sourceEntry names a source's entry after the file it holds, so `unzip -l`
- * on a workspace opened from a TSV says data/source.tsv.
- *
- * A workspace of one source keeps the entry every earlier build wrote. One of
- * several gives each its own, named by id.
+ * sourceEntry names a source's zip entry after the file it holds, so a
+ * workspace opened from a TSV writes data/source.tsv. With `id` the entry is
+ * data/source/<id>.<ext>, and otherwise data/source.<ext>. An extensionless
+ * name gets .csv.
  */
 export function sourceEntry(name: string, id?: string): string {
   const dot = name.lastIndexOf(".");
@@ -464,16 +384,13 @@ export function sourceEntry(name: string, id?: string): string {
   return (id === undefined ? SOURCE_STEM : SOURCE_DIR + id) + (ext === "" ? ".csv" : ext);
 }
 
-/** The characters an id keeps. Anything else becomes a dash, so an id is safe
- * as a zip entry name and reads the same in a log line. */
+/** The characters an id keeps. Anything else becomes a dash. */
 const ID_UNSAFE = /[^A-Za-z0-9._-]+/g;
 
 /**
- * sourceId names a source after its file, as the log will call it:
- * google-ads for Google Ads.csv.
- *
- * A second file of the same name is google-ads_2, the way a repeated column
- * name is told apart, so two exports both called export.csv stay two sources.
+ * sourceId names a source after its file, as the log calls it: google-ads
+ * for Google Ads.csv. A name already in `taken` gets a numeric suffix:
+ * google-ads_2, then _3, and so on.
  */
 export function sourceId(name: string, taken: Iterable<string>): string {
   const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
@@ -493,12 +410,12 @@ export function sourceId(name: string, taken: Iterable<string>): string {
   }
 }
 
-/** logOf is one source's edits, in order: what its sheet replays. */
+/** logOf returns one source's edits, in order. */
 export function logOf(log: readonly Logged[], id: string): Edit[] {
   return log.filter((l) => l.source === id).map((l) => l.edit);
 }
 
-/** An empty manifest, for a workspace that has never been saved. */
+/** newManifest returns an empty manifest, for a workspace yet to be saved. */
 export function newManifest(): Manifest {
   return {
     format: 0,
@@ -512,15 +429,15 @@ export function newManifest(): Manifest {
 }
 
 /**
- * storedPath is what the manifest writes down for a source at `file`, given the
- * .uno going to `at`: relative where the file sits under the workspace's own
- * folder, absolute everywhere else.
+ * storedPath returns what the manifest writes for a source at `file` when
+ * the .uno is saved to `at`: relative when the file is under the .uno's
+ * folder, absolute otherwise.
  */
 export function storedPath(file: string, at: string): string {
   return relativeTo(file, dirOf(at)) || file;
 }
 
-/** resolvedPath is where a stored path points, read from the .uno at `at`. */
+/** resolvedPath resolves a stored path from the .uno at `at`. */
 export function resolvedPath(stored: string, at: string): string {
   return against(stored, dirOf(at));
 }

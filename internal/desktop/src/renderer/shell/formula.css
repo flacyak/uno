@@ -1,4 +1,4 @@
-/* The formula form, hung off the page where the workspace was right-clicked. */
+/* The formula form, positioned where the workspace was right-clicked. */
 
 .formula {
   position: fixed;
@@ -63,8 +63,8 @@
   color: var(--ink-3);
 }
 
-/* What an expression may hold, until the engine has refused one: then why,
- * in its words. Two lines at most, the whole of it a hover away. */
+/* The hint under the expression, or the engine's refusal. Two lines at
+ * most; the full text is the hover text. */
 .formula .note {
   display: -webkit-box;
   -webkit-box-orient: vertical;

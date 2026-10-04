@@ -1,52 +1,39 @@
-// Just enough of a path for a workspace to point at a file.
+// Path helpers for the source paths a .uno stores.
 //
-// A .uno that points at its sources has to say where they are, and where a file
-// is depends on where the workspace is. A source under the workspace's own
-// folder is written down relative to it, so copying that folder to another
-// machine -- or to a share, or onto a stick -- moves the data and the pointer
-// together. Anything else is written down absolute, because there is nothing
-// else true to say about it.
+// A source under the workspace's folder is stored relative to that folder.
+// Any other source is stored absolute. A relative path always descends from
+// the folder, so `against` is a plain concatenation and every path passes
+// through as written.
 //
-// There is no node:path here, and there will not be: everything above `store`
-// runs in a browser unchanged, and this is four string operations.
-//
-// Relative paths written here never begin with `..`, which is what keeps `join`
-// to a concatenation. A source outside the workspace's folder is absolute
-// instead of being reached for with dots, so nothing here has to normalise a
-// path, and a path that came out of a file is never walked back up through the
-// filesystem.
+// This runs in the browser too, so it uses string operations only.
 
-/** Separators, both of them, because a .uno written on Windows opens on Linux. */
+/** Matches either separator. A .uno written on Windows opens on Linux. */
 const SEP = /[/\\]/;
 
-/** isAbsolute covers a POSIX path, a Windows drive path, a UNC share, and a
- * URL: s3://bucket/key is never read relative to anything. */
+/** isAbsolute is true for a POSIX path, a Windows drive path, a UNC share or
+ * a URL such as s3://bucket/key. */
 export function isAbsolute(path: string): boolean {
   return /^[/\\]/.test(path) || /^[A-Za-z]:[/\\]/.test(path) || URL_LIKE.test(path);
 }
 
-/** A scheme of two letters or more, so a drive letter is not taken for one. */
+/** A URL scheme of two or more letters, so a drive letter stays a path. */
 const URL_LIKE = /^[A-Za-z][A-Za-z0-9+.-]+:\/\//;
 
-/** dirOf is the folder a file is in, or "" for a bare name. */
+/** dirOf returns the folder part of a path, or "" for a bare name. */
 export function dirOf(path: string): string {
   const cut = lastSep(path);
   return cut < 0 ? "" : path.slice(0, cut);
 }
 
-/** baseOf is the file's own name. */
+/** baseOf returns the file name part of a path. */
 export function baseOf(path: string): string {
   return path.slice(lastSep(path) + 1);
 }
 
 /**
- * relativeTo is where `file` sits under `dir`, with forward slashes, or "" when
- * it does not sit under it at all.
- *
- * "" is the answer for a file in a sibling folder, on another drive, or above
- * the workspace, and the caller writes the absolute path instead. Reaching up
- * with `..` would buy one more layout and cost every reader an opinion about
- * what a path means.
+ * relativeTo returns where `file` sits under `dir`, with forward slashes. A
+ * file in a sibling folder, on another drive or above `dir` gives "". The
+ * result is a plain descent from `dir`.
  */
 export function relativeTo(file: string, dir: string): string {
   if (dir === "" || file === "") return "";
@@ -58,12 +45,9 @@ export function relativeTo(file: string, dir: string): string {
 }
 
 /**
- * against is where a stored path points, read from `dir`.
- *
- * An absolute path is itself. A relative one is read from the folder the .uno
- * is in, which is the whole point of storing it that way. With nowhere to read
- * it from -- a browser, which has no folders -- a relative path stays as it is
- * and fails to open under its own name, which is the truthful failure.
+ * against resolves a stored path from `dir`. An absolute path is returned as
+ * is. A relative path is joined onto `dir`. When `dir` is "" a relative path
+ * is returned unchanged.
  */
 export function against(stored: string, dir: string): string {
   if (stored === "" || dir === "" || isAbsolute(stored)) return stored;
@@ -71,12 +55,8 @@ export function against(stored: string, dir: string): string {
 }
 
 /**
- * samePath says whether two paths name one place, with either separator.
- *
- * It is a comparison of the text and nothing more: no case folding, no dot
- * segments walked, no symlink followed. A workspace refusing to write over a
- * file it reads needs the plain case caught, and anything cleverer would be
- * an opinion about the filesystem taken on its behalf.
+ * samePath is true when two paths are the same text, treating both
+ * separators alike. Case, dot segments and symlinks compare as written.
  */
 export function samePath(a: string, b: string): boolean {
   return a.replace(/\\/g, "/") === b.replace(/\\/g, "/");

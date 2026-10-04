@@ -1,7 +1,4 @@
-// What changed between two runs of the efficiency tests, as a table.
-//
-// The counts are exact, so any difference between a pull request and the
-// branch it is going into is something the change did, and is worth a line.
+// Compares two runs of the efficiency tests and writes the result as a table.
 
 import type { Metric } from "./record.ts";
 
@@ -13,7 +10,7 @@ export interface Change {
   head: number | undefined;
 }
 
-/** compare lines the two runs up by name, in the order the newer one lists them. */
+/** compare pairs metrics by name: head's in order, then those only in base. */
 export function compare(base: readonly Metric[], head: readonly Metric[]): Change[] {
   const before = new Map(base.map((m) => [m.name, m]));
   const after = new Set(head.map((m) => m.name));
@@ -30,9 +27,9 @@ export function compare(base: readonly Metric[], head: readonly Metric[]): Chang
   ];
 }
 
-/** The unit of the one metric that is a wall clock, and moves with the machine. */
+/** The unit of wall-clock metrics, which vary by machine. */
 const CLOCK = "ms";
-/** How many digits a number that is not whole is shown to. */
+/** Fraction digits shown for a number with a fractional part. */
 const DIGITS = 2;
 const PERCENT = 100;
 
@@ -43,7 +40,7 @@ function shown(value: number | undefined): string {
     : value.toLocaleString("en-US", { maximumFractionDigits: DIGITS });
 }
 
-/** What a change comes to, in words: every metric here is one where smaller is better. */
+/** One word for a change, plus a percentage. Smaller is better. */
 function verdict(c: Change): string {
   if (c.base === undefined) return "new";
   if (c.head === undefined) return "gone";
@@ -53,7 +50,7 @@ function verdict(c: Change): string {
   return `${c.head < c.base ? "better" : "worse"}${by}${noisy}`;
 }
 
-/** markdown writes the changes as a table a pull request can show. */
+/** markdown renders the changes as a Markdown table. */
 export function markdown(changes: readonly Change[], baseline: boolean): string {
   const lines = [
     "### Efficiency",

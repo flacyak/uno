@@ -1,27 +1,18 @@
-// Starting a real Electron.
+// Starts a real Electron and runs it to the end.
 //
-// dev, smoke and preview all do the same things around the child: decide
-// whether there is a display to draw on, build the environment it gets, drive
-// it to the end answering what it asks, and read a verdict out of what it
-// printed. They live here because each of them fails in a way that looks like
-// the app itself is broken, and because a test can ask about them without a
-// display.
+// dev, smoke and preview share these: whether there is a display, the
+// environment the child gets, driving it while answering what it asks, and
+// the verdict read from what it printed.
 
 import { spawn } from "node:child_process";
 
 /**
- * The environment an Electron child is started with.
+ * The environment an Electron child is started with: `base` plus `extra`,
+ * with `ELECTRON_RUN_AS_NODE` removed.
  *
- * `ELECTRON_RUN_AS_NODE` is deleted rather than passed on. Editors and their
- * terminals set it for their own helpers, and everything started from one
- * inherits it; an Electron binary that sees it starts as a plain Node instead of
- * an app. There is then no browser process, so `require("electron")` finds the
- * npm package -- which exports the path to the binary, a string -- rather than
- * the built-in, and main dies on the first line that touches `app`, reading as
- * though the bundle were at fault.
- *
- * The flag describes how the parent was launched and says nothing about how the
- * app should run, so it does not travel.
+ * Editors set `ELECTRON_RUN_AS_NODE` for their own helpers, and a child
+ * inherits it. An Electron binary that sees it starts as plain Node, with no
+ * `app`.
  *
  * @param {NodeJS.ProcessEnv} base   usually process.env
  * @param {NodeJS.ProcessEnv} [extra] what this run adds, e.g. UNO_SMOKE
@@ -34,36 +25,23 @@ export function electronEnv(base, extra = {}) {
 }
 
 /**
- * The language a driven run is in, whatever the machine it runs on prefers.
- *
- * The app follows the system's language until a person chooses one, and a
- * smoke check reads what the window says. Run on a machine that prefers
- * Spanish, the app would say `4812 filas` and every check that reads a word
- * would fail on an app that is working.
+ * The language a driven run is in. The smoke checks read the window's text,
+ * so the run is held to one language.
  */
 export const DRIVEN_LANGUAGE = "en-US";
 
-/**
- * The switch that starts Electron in that language, where a switch decides:
- * macOS and Windows. It goes after the app's directory and its data, with the
- * other switches.
- */
+/** The command line switch that sets the language on macOS and Windows. */
 export const DRIVEN_LANGUAGE_SWITCH = `--lang=${DRIVEN_LANGUAGE}`;
 
 /**
- * The environment that starts it in that language, where the environment
- * decides: on Linux Chromium reads LANGUAGE before anything else and does not
- * take the switch over it.
+ * The environment that sets the language on Linux, where Chromium reads
+ * LANGUAGE and ignores the switch.
  */
 export const DRIVEN_LANGUAGE_ENV = { LANGUAGE: DRIVEN_LANGUAGE.replace("-", "_") };
 
 /**
- * Whether Electron has nowhere to draw.
- *
- * On a headless Linux box this is the one thing that has to be arranged from
- * outside, so it is worth saying plainly rather than waiting for a timeout.
- * macOS and Windows always have a display, and Wayland sessions are reached
- * through Xwayland, which sets DISPLAY like any other.
+ * Whether Electron lacks a display: Linux with DISPLAY unset. macOS and
+ * Windows always have one, and Wayland sessions set DISPLAY through Xwayland.
  *
  * @param {NodeJS.ProcessEnv} env
  * @param {string} platform  process.platform
@@ -73,11 +51,8 @@ export function displayMissing(env, platform) {
 }
 
 /**
- * What a finished run amounts to, as a line to print, or undefined if it passed.
- *
- * An app that exits 0 without ever saying it got to the end has not passed: it
- * found a way to close the window before the checks ran, which is the failure
- * that looks most like a success.
+ * The failure line for a finished run, or undefined if it passed. A run
+ * passes only when it exited 0 and printed `banner`.
  *
  * @param {string} name    the run, for the message: "smoke", "preview"
  * @param {number|null} code  the child's exit code
@@ -94,14 +69,12 @@ export function verdict(name, code, out, banner) {
 }
 
 /**
- * drive starts the built app and reads it to the end.
+ * drive starts the built app and runs it to the end.
  *
- * What the app prints is passed through. A line `<who>: ask <what>` is the app
- * asking this script, which holds what the app cannot -- the stand-in bucket --
- * to do something; `answer(what)` does it and says whether anything here could,
- * and the app is told `done` or `nothing here does` on its stdin. A hung app is
- * a failure, not something to wait out: at `deadlineMs` it is killed by pid,
- * and `onTimeout` is told.
+ * What the app prints is passed through. A line `<who>: ask <what>` is a
+ * request to this script: `answer(what)` handles it and returns whether it
+ * could, and the app is told `done` or `nothing here does` on its stdin. At
+ * `deadlineMs` the app is killed by pid and `onTimeout` is called.
  *
  * @param {string} who  "smoke" or "preview": the prefix of every line the app prints
  * @param {{ electron: string, args: string[], env: NodeJS.ProcessEnv, answer: (what: string) => boolean, deadlineMs: number, onTimeout?: () => void }} run
@@ -109,7 +82,7 @@ export function verdict(name, code, out, banner) {
  */
 export async function drive(who, { electron, args, env, answer, deadlineMs, onTimeout }) {
   const child = spawn(electron, args, {
-    // stdin carries this script's answers to what the app asks of it.
+    // stdin carries this script's answers to the app.
     stdio: ["pipe", "pipe", "pipe"],
     env,
   });
@@ -142,9 +115,9 @@ export async function drive(who, { electron, args, env, answer, deadlineMs, onTi
 }
 
 /**
- * rewrite writes a stand-in's object over with the same bytes but one digit,
- * the same size and another ETag, the way an export regenerated with one
- * figure corrected is. The digit is the first in the rows, which is on screen.
+ * rewrite replaces a stand-in object with the same bytes but one digit
+ * changed: the first digit after the header line. The size stays the same
+ * and the ETag changes.
  *
  * @param {Map<string, Uint8Array>} objects  the stand-in's
  * @param {string} key

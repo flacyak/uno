@@ -1,5 +1,5 @@
-// The recogniser's question: what it would change and in how many cells, with
-// Apply and Not now.
+// The banner for an offer: what it would change, how many cells, and the
+// Apply and Not now buttons.
 
 import "./banner.css";
 
@@ -10,17 +10,15 @@ import { num } from "../locale.ts";
 import { say } from "../said.ts";
 import { el } from "./util.ts";
 
-/** An offer is the same question while its source, column and program are. */
+/** offerKey identifies an offer by its source, column and program. */
 export function offerKey(offer: Offer): string {
   return `${offer.source}:${offer.col}:${offer.program}`;
 }
 
 /**
- * bannerParts asks the question.
- *
- * On a file larger than its first pass, the count grows while the survey reads
- * and says it is a lower bound. Apply works before the count is final: it is
- * one edit, and Ctrl+Z takes it back.
+ * bannerParts builds the banner's nodes for an offer. While the survey is
+ * incomplete the count is shown as a lower bound. Apply works before the
+ * count is final.
  */
 export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void): Node[] {
   const header = el("b", "", offer.header);

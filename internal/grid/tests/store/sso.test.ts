@@ -1,11 +1,9 @@
-// SSO profiles: the token `aws sso login` cached, traded at the portal for a
-// role's keys, and those keys signing requests to a bucket.
+// SSO profiles: the token `aws sso login` cached is traded at the portal for
+// a role's keys, which sign requests to a bucket.
 //
-// What is under test is the part uno does and the part it refuses to. It reads
-// the token and asks the portal, in both of the layouts ~/.aws/config names a
-// portal in. It never signs in for anybody: a token that has expired, or that
-// was never there, or that the portal turns away, is a sentence naming the
-// command that mends it, and the portal is not asked when the answer is known.
+// Both config layouts are read. An expired, missing, unreadable or refused
+// token is an error naming the command that fixes it. The portal is asked
+// only with a token that looks good on disk.
 
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -62,8 +60,7 @@ let grants: Map<string, Grant>;
 beforeAll(async () => {
   grants = new Map();
   p = await portal(grants);
-  // The bucket reads only with the role's keys, session token and all, so an
-  // object read out of it is keys the portal handed out, used.
+  // The bucket accepts only the role's keys.
   b = await bucket(undefined, HOME_REGION, undefined, {
     "acme-finance": {
       objects: new Map([["q3/ledger.csv", bytes]]),
@@ -147,7 +144,7 @@ describe("a stand-in portal hands out credentials", () => {
     expect((await profileCredentials("legacy-sso", env)()).accessKeyId).toBe(ROLE_KEYS.accessKeyId);
   });
 
-  // Older CLIs wrote the expiry with a UTC suffix rather than a Z.
+  // Older CLIs wrote the expiry with a UTC suffix in place of the Z.
   test("with an expiry written the way older CLIs wrote it", async () => {
     grant("tok-acme");
     const later = new Date(Date.now() + HOUR_MS).toISOString().replace(/\.\d{3}Z$/, "UTC");
@@ -157,8 +154,8 @@ describe("a stand-in portal hands out credentials", () => {
     );
   });
 
-  // The whole road: the keys the portal handed out sign every request to a
-  // bucket that answers nobody else, through a connection naming the profile.
+  // The portal's keys sign every request through a connection naming the
+  // profile.
   test("and they read a bucket through a connection naming the profile", async () => {
     grant("tok-acme");
     const env = await home({
@@ -187,7 +184,7 @@ describe("a stand-in portal hands out credentials", () => {
       });
       await indexed(ledger);
       expect(ledger.progress.rows).toBe(ROWS);
-      // Every range signed with the one set the portal gave, and it gave once.
+      // The portal was asked once.
       expect(p.seen).toHaveLength(1);
     } finally {
       done();
@@ -205,8 +202,7 @@ describe("a stand-in portal hands out credentials", () => {
 });
 
 describe("uno never signs in for anybody", () => {
-  // The task's own sentence: an expired token gives that message, and the
-  // portal is not asked a question whose answer is already known.
+  // An expired token is refused on disk, and the portal stays idle.
   test("an expired token says to sign in with aws sso login", async () => {
     grant("tok-acme");
     const env = await home({
@@ -225,9 +221,7 @@ describe("uno never signs in for anybody", () => {
     );
   });
 
-  // `aws sso login` writes the cache file in place, so a sign-in cut short
-  // leaves half a file behind. It is a sign-in uno cannot read, said in the
-  // same words as any other, and the command that mends it is the same.
+  // A cache file holding broken JSON, or null.
   test("a cache file that is not JSON says the same", async () => {
     const env = await home({});
     const name = createHash("sha1").update("acme").digest("hex") + ".json";
@@ -244,7 +238,7 @@ describe("uno never signs in for anybody", () => {
     expect(p.seen).toEqual([]);
   });
 
-  // A token that has not expired on disk but was revoked at the portal.
+  // A token still good on disk and revoked at the portal.
   test("a token the portal turns away says the same", async () => {
     const env = await home({
       acme: { token: "tok-revoked", expires: new Date(Date.now() + HOUR_MS) },
@@ -268,8 +262,7 @@ describe("the portal is asked as seldom as it can be", () => {
     expect(p.seen).toHaveLength(1);
   });
 
-  // Keys a minute from expiry would lapse on the way to S3, so they are not
-  // reused: each ask goes back to the portal for fresh ones.
+  // Keys within a minute of expiry are traded again.
   test("keys about to expire are traded again rather than reused", async () => {
     grant("tok-acme", new Date(Date.now() + 60_000));
     const env = await home({

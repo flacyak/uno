@@ -30,13 +30,12 @@ const COLS = 3;
 const REGION = 1;
 const UNITS = 2;
 
-/** The cell a saved workspace was left on. */
+/** The active cell saved in the workspace state. */
 const ACTIVE = { row: 2, col: REGION };
 
 const encoder = new TextEncoder();
 
-/** A workspace of one source, built the way the app builds one: ingest the
- * bytes, edit the sheet, then hand the writer what it cannot see for itself. */
+/** Ingests CSV_BODY, applies `edit`, and writes a one-source document. */
 function saved(name: string, edit?: (s: Sheet) => void): { bytes: Uint8Array; doc: Document } {
   const doc = oneSource(name, ingestRead(name, CSV_BODY), edit);
   return { bytes: writeDocument(doc), doc };
@@ -60,7 +59,7 @@ function oneSource(
   };
 }
 
-/** The one sheet a one-source workspace replays into. */
+/** The single sheet of a one-source document. */
 function only(doc: Document): Sheet {
   const [sheet] = doc.sheets!.values();
   return sheet!;
@@ -88,13 +87,11 @@ test("the container holds four named entries", () => {
   expect(entries).toEqual(
     [MANIFEST_ENTRY, doc.manifest.sources[0]!.entry!, STATE_ENTRY, LOG_ENTRY].sort(),
   );
-  // The source entry is named after the file it holds, so `unzip -l` on a
-  // workspace opened from a TSV does not call its bytes source.csv.
+  // The source entry keeps the extension of the file it holds.
   expect(doc.manifest.sources[0]!.entry).toBe("data/source.tsv");
 });
 
-// Everything the file says about itself is taken from what is actually written,
-// so no code path can produce a manifest describing a different file.
+// The manifest's sizes, hash and counts are measured from the written bytes.
 test("the manifest is measured from the bytes", () => {
   const { bytes, doc } = saved("sales.csv", (s) => {
     s.set(0, UNITS, "1204");
@@ -108,7 +105,7 @@ test("the manifest is measured from the bytes", () => {
   expect(m.sources[0]!.rows).toBe(ROWS);
   expect(m.sources[0]!.cols).toBe(COLS);
 
-  // And the file agrees with the value handed back.
+  // The written manifest holds the same hash as the returned one.
   const written = JSON.parse(strFromU8(unzipSync(bytes)[MANIFEST_ENTRY]!)) as Record<
     string,
     unknown
@@ -125,8 +122,8 @@ test("a second save keeps the created time", () => {
   expect(doc.manifest.created).toEqual(created);
 });
 
-// A reader that guesses at a layout it does not know will either crash or
-// silently drop what it could not read and save that loss back over the file.
+// A manifest with a format number above FORMAT_VERSION is refused, naming the
+// file.
 test("a newer format is refused by name", () => {
   const { bytes } = saved("sales.csv");
   const entries = unzipSync(bytes);
@@ -146,8 +143,7 @@ test("a newer format is refused by name", () => {
   expect(thrown!.message).toContain("newer uno");
 });
 
-// Version skew is only survivable if an older uno hands back the entries it
-// could not read.
+// Unknown zip entries are kept in `extra` and written back on save.
 test("an unknown entry survives a round trip", () => {
   const { bytes } = saved("sales.csv");
   const entries = unzipSync(bytes);
@@ -160,8 +156,7 @@ test("an unknown entry survives a round trip", () => {
   expect(strFromU8(again["future/thing.json"]!)).toBe('{"kept":true}');
 });
 
-// A log cut short still replays up to its last complete line. That tolerance is
-// the whole argument for JSONL over JSON.
+// A log whose last line is incomplete replays its complete lines.
 test("a truncated log replays its complete lines", () => {
   const { bytes } = saved("sales.csv", (s) => {
     s.set(0, UNITS, "1204");
@@ -171,7 +166,7 @@ test("a truncated log replays its complete lines", () => {
   const entries = unzipSync(bytes);
   const log = strFromU8(entries[LOG_ENTRY]!);
   const cut = log.indexOf("\n") + 1;
-  const torn = 12; // bytes of the second line that made it out
+  const torn = 12; // bytes of the second line to keep
   entries[LOG_ENTRY] = encoder.encode(log.slice(0, cut) + log.slice(cut, cut + torn));
 
   const back = readDocument("sales.csv", zipSync(entries));
@@ -179,8 +174,7 @@ test("a truncated log replays its complete lines", () => {
   expect(only(back).raw(0, UNITS)).toBe("1204");
 });
 
-// Damage in the middle is a different thing: stopping there would silently
-// discard the operations after it.
+// A log with a bad line before a good one fails the open.
 test("a log damaged in the middle fails the open", () => {
   const { bytes } = saved("sales.csv", (s) => {
     s.set(0, UNITS, "1204");
@@ -194,9 +188,8 @@ test("a log damaged in the middle fails the open", () => {
   expect(() => readDocument("sales.csv", zipSync(entries))).toThrow();
 });
 
-// The zip's own checksum is not what fflate checks, and the manifest's hash is
-// what the save promised of the bytes. A byte flipped on disk must not open as
-// the file it was.
+// A carried source whose bytes differ from the manifest's sha256 is
+// refused, naming the workspace and the source.
 test("a carried source that no longer matches its hash is refused by name", () => {
   const { bytes } = saved("sales.csv");
   const stored = zipSync(unzipSync(bytes), { level: 0 });
@@ -216,9 +209,8 @@ test("a carried source that no longer matches its hash is refused by name", () =
   expect(thrown!.message).toContain("sha256");
 });
 
-// Every build numbers a source's edits 1, 2, 3 and gives the next one the
-// number after the last, so a log numbered any other way is one nobody wrote,
-// and replaying it would hand a new edit a number already taken.
+// Each source's edits must be numbered 1, 2, 3 in order. The error names the
+// log line and the edit.
 describe("a log whose edits are not numbered in order", () => {
   const withLog = (lines: string[]): Uint8Array => {
     const { bytes } = saved("sales.csv");
@@ -273,8 +265,8 @@ test("a file that is not a zip is refused by name", () => {
   expect(thrown!.message).toContain("sales.uno");
 });
 
-// An operation an older uno does not know cannot be discovered halfway through
-// a replay, so the file declares the oldest build that can read it.
+// The manifest format is the lowest version that can read every operation in
+// the log.
 describe("the format version follows the log", () => {
   test("plain edits stay at 1", () => {
     const { doc } = saved("sales.csv", (s) => {
@@ -298,8 +290,7 @@ describe("the format version follows the log", () => {
   });
 });
 
-// A column op is one line for a whole column, and replay has to produce the
-// same column it did the first time.
+// An apply entry replays to the same column values and kind.
 test("a column op round-trips", () => {
   const { bytes, doc } = saved("sales.csv", (s) => {
     s.apply(UNITS, parseProgram('replace(/,/, "")'));
@@ -312,8 +303,7 @@ test("a column op round-trips", () => {
   expect(only(back).columns[UNITS]!.kind).toBe("num");
 });
 
-// The expression is what the file carries, not the results, so reopening
-// recomputes them rather than reading them back.
+// A bind entry replays by recomputing the column from its expression.
 test("a binding round-trips and recomputes", () => {
   const { bytes } = saved("sales.csv", (s) => {
     s.set(0, UNITS, "1204");
@@ -323,14 +313,12 @@ test("a binding round-trips and recomputes", () => {
   const back = readDocument("sales.csv", bytes);
   expect(only(back).display(0, REGION)).toBe("2408");
   expect(only(back).binding(REGION)).toBe("units * 2");
-  // Binding never removed the column's own values -- it stopped them being what
-  // display hands out -- so they are still underneath, waiting for an unbind.
+  // The stored values are still there under the binding.
   expect(only(back).raw(0, REGION)).toBe("West");
 });
 
-// The library reference is a convenience about this machine. The expression is
-// in the log, so a file computes for someone who has never seen the sender's
-// library.
+// A binding typed in directly leaves out the columnFormulas key, and the
+// column computes from the expression in the log.
 test("a bound file computes with no library to resolve", () => {
   const { bytes } = saved("sales.csv", (s) => {
     s.bind(REGION, parseFormula("units * 2"));
@@ -359,14 +347,14 @@ test("a library reference round-trips when there is one", () => {
 
 // ------------------------------------------------------------ many sources
 
-/** A second export, of a different shape, for a workspace of two. */
+/** A second source with a different shape, for two-source documents. */
 const ADS_BODY = "Ad_Date\tCost\n2024-11-16\t$12.50\n20-11-2024\t$8.00\n";
 const ADS_ROWS = 2;
 const COST = 1;
 
 /**
- * A workspace of two sources, edited in turn the way a person moves between
- * tabs: a sales cell, then an ads cell, then a sales cell again.
+ * A two-source document with edits interleaved: a sales cell, an ads cell,
+ * then a sales cell again.
  */
 function twoSources(): { bytes: Uint8Array; doc: Document } {
   const sales = ingestRead("sales.csv", CSV_BODY);
@@ -459,7 +447,7 @@ describe("a workspace of several sources", () => {
     ]);
   });
 
-  // The order edits were made in, across sources, is what a person reads back.
+  // The log keeps the interleaved order across sources.
   test("the log keeps the order the edits were made in, and names each source", () => {
     const { bytes } = twoSources();
     const lines = strFromU8(unzipSync(bytes)[LOG_ENTRY]!)
@@ -489,8 +477,7 @@ describe("a workspace of several sources", () => {
     );
   });
 
-  // A file every earlier build wrote gains a second source without its first
-  // one being renamed.
+  // Adding a second source to a one-source file keeps the first source's id.
   test("a one-source file takes a second source and keeps its first one's id", () => {
     const { bytes } = saved("sales.csv", (s) => s.set(0, UNITS, "1204"));
     const back = readDocument("sales.uno", bytes);
@@ -526,8 +513,7 @@ describe("a workspace of several sources", () => {
 // ---------------------------------------------------------- pointed at
 
 describe("a workspace that points at its sources", () => {
-  /** One source carried, one pointed at: the mixed case, which is what a
-   * browser drop beside a file on disk would make. */
+  /** A document with one pointed-at source and one carried source. */
   function mixed(at: string): Document {
     const sales = ingestRead("sales.csv", CSV_BODY);
     sales.set(0, UNITS, "1204");
@@ -564,8 +550,7 @@ describe("a workspace that points at its sources", () => {
     const bytes = writeDocument(doc);
 
     expect(doc.manifest.format).toBe(POINTED_VERSION);
-    // A 3 GB source and a 100-byte one, and the container is the size of the
-    // small one.
+    // The container holds only the carried source.
     expect(bytes.length).toBeLessThan(2048);
 
     const entries = Object.keys(unzipSync(bytes)).sort();
@@ -582,7 +567,8 @@ describe("a workspace that points at its sources", () => {
     expect(sales!.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  // Nobody should have to wonder which of two empty fields means what.
+  // A pointed-at source is written with a path key; a carried source is
+  // written with sha256 and entry keys.
   test("writes neither key for the half that does not apply", () => {
     const written = JSON.parse(
       strFromU8(unzipSync(writeDocument(mixed("/home/cpa/q4/books.uno")))[MANIFEST_ENTRY]!),
@@ -617,8 +603,8 @@ describe("a workspace that points at its sources", () => {
     expect(back.sources[1]!.path).toBeUndefined();
   });
 
-  // readDocument reads a container and opens nothing. A pointed-at source is
-  // the engine's to open, an index at a time.
+  // readDocument builds sheets for carried sources only. Pointed-at sources
+  // are opened by the engine.
   test("builds a sheet for what it carries and skips what it points at", () => {
     const back = readDocument("books.uno", writeDocument(mixed("")));
 
@@ -657,9 +643,8 @@ describe("a workspace that points at its sources", () => {
   });
 });
 
-// Which bytes a pointed-at source was read as, and the connection it came
-// through. Both are optional keys on a source, so a format 5 reader -- which
-// reads the keys it knows and nothing else -- opens the file as it always did.
+// The optional version and connection keys of a pointed-at source. A format 5
+// reader ignores them.
 describe("a source's version and connection", () => {
   const ETAG = '"9b2cf5d1e0a4c7f8b3a2d6e1c0f9a8b7"';
 
@@ -682,7 +667,7 @@ describe("a source's version and connection", () => {
           id: "sales",
           name: "sales.csv",
           raw: encoder.encode(CSV_BODY),
-          // A carried source is its own version, so neither is written for it.
+          // Both keys are dropped when a carried source is written.
           version: ETAG,
           connection: "acme-exports",
           rows: ROWS,
@@ -718,8 +703,7 @@ describe("a source's version and connection", () => {
   test("do not move the format, and sit beside what they describe", () => {
     const m = manifestOf(writeDocument(pinned()));
     expect(m.format).toBe(POINTED_VERSION);
-    // The connection beside the name, as a person reads a source, and the
-    // version beside the path it is a version of.
+    // connection is written after name, and version after path.
     expect(Object.keys(m.sources[0]!)).toEqual([
       "id",
       "name",
@@ -741,9 +725,8 @@ describe("a source's version and connection", () => {
     ]);
   });
 
-  // What a build before these keys sees is the file with them taken out,
-  // because it reads a source's keys by name and has never heard of these.
-  // So taking them out must leave the same workspace.
+  // Removing version and connection from the manifest reads back as the same
+  // workspace with those two fields undefined.
   test("taken out, leave the workspace a format 5 reader opened before", () => {
     const entries = unzipSync(writeDocument(pinned()));
     const m = manifestOf(zipSync(entries));
