@@ -15,7 +15,12 @@ import { messagePort, serve } from '@engine';
 import type { MessagePortLike, Reply, Request } from '@engine';
 import { sources } from '@plugin';
 import { connectionsIn } from '@store';
-import { awsProfiles, diskProvider, nodeStore } from '@store/node';
+import {
+  awsProfiles,
+  diskProvider,
+  nodeStore,
+  profileCredentials,
+} from '@store/node';
 import { connect } from '@core-tests/engine/harness';
 
 /** Everything in the files below besides the profile names. */
@@ -83,6 +88,42 @@ test('every profile in both files is named once, default first', async () => {
     'sso-work',
     'vault',
   ]);
+});
+
+// The CLI reads `[profile  spaced]` as the profile "spaced", and the
+// indented lines under `s3 =` as that setting's own rather than the
+// profile's.
+test('a profile is read as the CLI reads its section', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'uno-profiles-ini-'));
+  await writeFile(
+    join(dir, 'config'),
+    [
+      '[profile  spaced]',
+      'aws_access_key_id = AKIDSPACED',
+      'aws_secret_access_key = spaced/secret',
+      'region = eu-west-1',
+      's3 =',
+      '  region = ap-south-1',
+      '  max_concurrent_requests = 20',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(join(dir, 'credentials'), '');
+  const env = {
+    HOME: dir,
+    AWS_CONFIG_FILE: join(dir, 'config'),
+    AWS_SHARED_CREDENTIALS_FILE: join(dir, 'credentials'),
+    AWS_REGION: undefined,
+    AWS_DEFAULT_REGION: undefined,
+  };
+
+  expect(await awsProfiles(env)).toEqual(['spaced']);
+  expect(await profileCredentials('spaced', env)()).toEqual({
+    accessKeyId: 'AKIDSPACED',
+    secretAccessKey: 'spaced/secret',
+    region: 'eu-west-1',
+    as: 'the AWS profile spaced',
+  });
 });
 
 test('a machine with no ~/.aws has no profiles rather than a failure', async () => {
