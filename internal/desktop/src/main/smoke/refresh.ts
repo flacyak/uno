@@ -1,11 +1,11 @@
 // Checks that a source in a bucket knows when it is out of date: a workspace
-// whose export was written over since it was saved opens saying so, one
-// written over while it is open is marked when the window gets the focus back,
-// and Reload reads the newer one with the edits replayed over it.
+// whose export was rewritten since it was saved opens saying so, one rewritten
+// while it is open is marked when the window gets the focus back, and Reload
+// reads the newer one with the edits replayed over it.
 //
 // They run after meets.ts, with acme-exports/2025/ connected, so the saved
-// workspace opens its object at once. The object is written over by smoke.js,
-// which holds the stand-in, when a check asks it to.
+// workspace opens its object at once. smoke.js rewrites the object when a
+// check asks it to.
 
 import { join } from "node:path";
 
@@ -16,9 +16,8 @@ import type { Check } from "./check.ts";
 const SAVED = join(process.env["UNO_SMOKE"] ?? "", "sales-q3.uno");
 
 /**
- * How long to wait for an ask that should find nothing: the page's own wait
- * before asking, and as long again for one HEAD to the stand-in on this
- * machine to come back.
+ * How long to wait for a focus that finds the bucket as it was: the page's
+ * own wait before asking, and as long again for the HEAD to come back.
  */
 const ASKED_MS = NEWER_AFTER_MS * 2;
 
@@ -48,8 +47,8 @@ export const REFRESH: Check[] = [
       if (!(await arrives(() => line("ads-q3.csv")?.children[1]?.textContent === "changed"))) {
         return "the line says " + JSON.stringify(line("ads-q3.csv")?.textContent);
       }
-      // Said and not acted on: the rows are there, and the status bar says why
-      // the tab is marked.
+      // The mark leaves the tab as it was: the rows are there, and the status
+      // bar says why the tab is marked.
       tab("ads-q3.csv").click();
       if (!(await arrives(() => document.querySelector("thead th .colhead") !== null))) return "no rows came";
       const status = () => text("#status-file");
@@ -57,8 +56,8 @@ export const REFRESH: Check[] = [
     `,
   },
   {
-    // The task's own sentence: coming back to the window is when the bucket
-    // is asked, one HEAD per object, and the moved one wears the mark.
+    // Getting the focus back is when the bucket is asked, one HEAD per
+    // object, and the rewritten one is marked.
     name: "replacing the object in the stand-in shows the mark on the next focus",
     ask: `rewrite ${KEY}`,
     shot: "refresh-newer",
@@ -72,14 +71,15 @@ export const REFRESH: Check[] = [
       const mark = tab("ads-q3.csv").querySelector(".trouble");
       if (mark === null || !mark.title.startsWith(want)) return "the mark says " + JSON.stringify(mark?.title);
       if (!text("#status-file").endsWith(want)) return "the status bar says " + JSON.stringify(text("#status-file"));
-      // The mark opens the panel with the keys on its line, where Reload is.
+      // The mark opens the panel with the selection on its line, where Reload
+      // is.
       mark.click();
       return (await until(() => foot()[0] === "Reload")) ? "" : "its line offers " + JSON.stringify(foot());
     `,
   },
   {
-    // 3.5: Reload reads what the bucket holds now, says what it found, and
-    // the tab reads the newest -- the digit smoke.js changed twice now.
+    // Reload reads what the bucket holds now, says what it found, and the tab
+    // shows the newest: the digit smoke.js changed twice.
     name: "Reload reads the newer version and says what changed",
     shot: "refresh-reloaded",
     script: `
@@ -92,7 +92,8 @@ export const REFRESH: Check[] = [
       if (tab("ads-q3.csv").querySelector(".trouble") !== null) return "the tab still wears its mark";
       const first = () => document.querySelector("tbody tr:not(.pending) td:nth-child(2)")?.textContent;
       if (!(await arrives(() => first() === "A3000"))) return "the first cell reads " + JSON.stringify(first());
-      // Nothing newer is left to find.
+      // Another focus finds the object as just reloaded, so the line keeps
+      // its size.
       window.dispatchEvent(new Event("focus"));
       await new Promise((r) => setTimeout(r, ${ASKED_MS}));
       const words = line("ads-q3.csv")?.children[1]?.textContent ?? "";

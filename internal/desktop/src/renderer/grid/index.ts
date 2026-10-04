@@ -1,9 +1,8 @@
-// The grid: the selection, what the keys do to it, and the cell editor, over a
-// view that holds only the rows you can see (view.ts).
+// The grid: selection, key handling, marks and the cell editor, on top of the
+// virtualised View in view.ts.
 //
-// It draws a Sheet or a band of rows from an engine through `Rows`, and cannot
-// tell which. A row the band has not received yet is drawn pending and filled
-// in when it lands. Nothing here waits.
+// It draws any `Rows` implementation. Rows still on their way from an engine
+// are drawn as pending.
 
 import "./grid.css";
 
@@ -17,17 +16,17 @@ import { num } from "../locale.ts";
 import { columnLabel } from "./rows.ts";
 import type { Cell, GridEvents, Rows, ShellAction } from "./rows.ts";
 
-/** The actions the grid carries out itself, which are every kind the shell does not. */
+/** Actions the grid carries out itself. */
 type GridAction = Exclude<Action, ShellAction>;
 import { View } from "./view.ts";
 
 export type { GridEvents, Rows, ShellAction } from "./rows.ts";
 
-/** What one source's rows remember for '{a-z} and ''. */
+/** Marks for one Rows source. */
 interface Marks {
-  /** The cells m{a-z} marked, by letter. */
+  /** Cells set with m{a-z}, by letter. */
   readonly named: Map<string, Cell>;
-  /** Where the last jump left from, for ''. */
+  /** Where the last jump started, for ''. */
   before: Cell | undefined;
 }
 
@@ -40,28 +39,23 @@ export class Grid {
   private editor: HTMLInputElement | undefined;
   private pending: Pending = NOTHING;
 
-  /**
-   * The marks of the rows showing. Marks belong to the open workspace: not
-   * saved in the .uno, and gone with the rows the next open replaces. Each
-   * tab's rows have their own, as each tab keeps its selection, since a cell
-   * marked on one source names nothing on another. A row keeps its number,
-   * because the log has no row insert or delete, so a mark stays on the same
-   * record.
-   */
+  /** Marks of the current source. Marks are per source and live for the
+   * session. */
   private marks: Marks = noMarks();
-  /** The marks of every rows shown, found again when a tab comes back. */
+  /** Marks of every source shown so far, restored when a tab comes back. */
   private readonly marked = new WeakMap<Rows, Marks>();
-  /** What yy copied, for p. Kept across opens, as vim keeps a register across files. */
+  /** Value copied by yank, for put. Kept across opens. */
   private register: string | undefined;
-  /** How the open editor was opened, so . can tell what the insert did. */
+  /** Caret mode the open editor was started with. Used to record the change
+   * for repeat. */
   private caret: Caret = "all";
-  /** The last insert, x or p, for . to make again. */
+  /** Last change, for repeat. */
   private last: Change | undefined;
 
   constructor(
     private readonly host: HTMLElement,
     private readonly events: GridEvents,
-    /** How keys are read. The grid carries out what the strategy says a key means. */
+    /** Maps key presses to actions. */
     private input: InputStrategy,
   ) {
     this.view = new View(
@@ -79,16 +73,16 @@ export class Grid {
   }
 
   /**
-   * Show rows, or nothing. `keep` holds the selection and the scroll position,
-   * for the same rows drawn from somewhere else -- a band handing over to a
-   * sheet when a file enters transform.
+   * Shows `source`, or clears the grid. `keep` preserves the selection,
+   * scroll position and marks, for the same data arriving as a new Rows
+   * object (a band replaced by a sheet when entering transform).
    */
   show(source: Rows | undefined, editable: boolean, keep = false): void {
     this.cancelEdit();
     this.editable = editable;
     this.wait(NOTHING);
     if (keep) {
-      // The same rows from somewhere else keep the marks they were given.
+      // Carry the current marks over to the new Rows object.
       if (source !== undefined) this.marked.set(source, this.marks);
     } else {
       this.marks = this.marksOf(source);
@@ -98,13 +92,13 @@ export class Grid {
     this.view.show(source, keep);
   }
 
-  /** refused says a refusal where there is one, and answers whether there was. */
+  /** Shows `why` as an error when it is non-empty. Returns whether it was. */
   private refused(why: string): boolean {
     if (why !== "") this.events.onSay(why, true);
     return why !== "";
   }
 
-  /** marksOf is the marks rows were given before, or none yet. */
+  /** Returns the marks stored for `source`, creating them on first use. */
   private marksOf(source: Rows | undefined): Marks {
     if (source === undefined) return noMarks();
     let marks = this.marked.get(source);
@@ -115,13 +109,12 @@ export class Grid {
     return marks;
   }
 
-  /** Redraw what is on screen. Called when an edit lands, because a bound column
-   * anywhere in view may have recomputed. */
+  /** Redraws the header and the visible rows. */
   refresh(): void {
     this.view.refresh();
   }
 
-  /** Redraw the body on the next frame: rows arrived, or the row count moved. */
+  /** Redraws the visible rows on the next frame. */
   repaint(): void {
     this.view.schedule();
   }
@@ -130,12 +123,12 @@ export class Grid {
     return { row: this.selRow, col: this.selCol };
   }
 
-  /** moveTo selects a cell and brings it into view, as a key would. */
+  /** Selects a cell and scrolls it into view. */
   moveTo(row: number, col: number): void {
     this.select(row, col);
   }
 
-  /** Whether the cell editor is open. */
+  /** Returns whether the cell editor is open. */
   editing(): boolean {
     return this.editor !== undefined;
   }
@@ -144,7 +137,7 @@ export class Grid {
     this.host.focus();
   }
 
-  /** setInput changes how keys are read. Keys waiting for more were read the old way, so they go. */
+  /** Replaces the input strategy and clears any pending keys. */
   setInput(input: InputStrategy): void {
     this.input = input;
     this.wait(NOTHING);
@@ -170,14 +163,13 @@ export class Grid {
   }
 
   /**
-   * onKey hands a key to the input strategy and carries out what it means.
-   *
-   * Every key the grid takes is prevented, so a letter that opens the editor is
-   * not typed into it as well.
+   * Passes a key press to the input strategy and carries out the result.
+   * Handled keys are prevented, so a letter that opens the editor reaches it
+   * as `text` alone.
    */
   private onKey(e: KeyboardEvent): void {
     if (this.source === undefined) return;
-    if (this.editor !== undefined) return; // the editor has its own keys
+    if (this.editor !== undefined) return; // the editor handles its own keys
 
     const step = this.input.interpret(this.editable ? "transform" : "view", this.pending, {
       key: e.key,
@@ -199,17 +191,14 @@ export class Grid {
     if (showing(pending) !== before) this.events.onPending(showing(pending));
   }
 
-  /**
-   * act carries out an action as if its keys had been pressed. The shell calls
-   * it for :{n}, which is {n}G typed at the command line.
-   */
+  /** Carries out an action. Grid actions run here; shell actions are passed
+   * to `events.onAction`. */
   act(action: Action): void {
-    // What the grid does itself, and the rest, which is the shell's.
     if (Object.hasOwn(this.doing, action.t)) dispatch(this.doing, action as GridAction);
     else this.events.onAction(action as ShellAction);
   }
 
-  /** The actions the grid carries out itself, by kind. */
+  /** Handlers for grid actions, by kind. */
   private readonly doing: Handlers<GridAction> = {
     none: () => undefined,
     move: (a) => this.move(a.motion, a.count),
@@ -235,15 +224,14 @@ export class Grid {
     },
     mode: (a) => this.events.onMode(a.to),
     insert: (a) => {
-      // a in view: the switch writes nothing and was asked for, so it happens
-      // even when the editor then refuses the cell.
+      // The mode switch happens even if the editor then refuses the cell.
       if (a.transform) this.events.onMode("transform");
       this.beginEdit(a.caret, a.text);
     },
     say: (a) => this.events.onSay(a.text, false),
   };
 
-  /** move goes where keys.ts says a motion lands. None of them write. */
+  /** Moves the selection by a motion. */
   private move(motion: Motion, count: number | undefined): void {
     const source = this.source;
     if (source === undefined) return;
@@ -263,10 +251,7 @@ export class Grid {
     if (to.short !== undefined) this.events.onShort(to.short);
   }
 
-  /**
-   * jump selects a cell and remembers where the selection left from, so '' can
-   * go back. Going back is a jump too, which makes '' twice return.
-   */
+  /** Selects a cell and records where the selection came from, for ''. */
   private jump(row: number, col: number): void {
     const from = { row: this.selRow, col: this.selCol };
     this.select(row, col);
@@ -276,18 +261,14 @@ export class Grid {
   // ---------------------------------------------------------------- editing
 
   /**
-   * beginEdit opens an entry over the selected cell.
-   *
-   * It starts from `raw` and not `display`, because what a person edits is what
-   * the cell stores. Editing what it shows would mean typing over the result of
-   * a computation, which the sheet refuses anyway -- and refusing after the
-   * typing is a worse way to say so than not offering it.
+   * Opens the cell editor over the selected cell. The editor starts from the
+   * cell's raw value, or from `text` when a typed character opened it.
    */
   private beginEdit(caret: Caret, text?: string): void {
     const source = this.source;
     if (source === undefined || this.editor !== undefined) return;
 
-    // In view a keystroke changes nothing, and says what would.
+    // View mode answers with the locked message.
     if (!this.editable) {
       this.events.onSay(this.input.locked, false);
       return;
@@ -295,24 +276,18 @@ export class Grid {
     if (this.refused(this.refusal(source))) return;
 
     const input = el("input", "cell-editor");
-    // Typing over a cell starts the editor holding what was typed.
     input.value = text ?? (caret === "empty" ? "" : source.raw(this.selRow, this.selCol));
     this.caret = caret;
 
     input.addEventListener("keydown", (e) => {
-      // Swallowed first, before anything that could fail. Stopping propagation
-      // at the end of the handler meant that any throw on the way -- or any
-      // early return added later -- let the same Enter reach the grid, which
-      // read it as "start editing" and opened a second editor over the cell
-      // that had just been committed.
+      // Stop propagation first. If the event reached the grid's own handler,
+      // Enter would open a second editor on the cell just committed.
       e.stopPropagation();
 
-      // Whether Esc keeps the typing is the strategy's to say.
       const key = this.input.editorKey(e.key, e.isComposing);
       if (key === undefined) {
-        // Tab keeps the typing and then moves as it does on the grid, to the
-        // next cell or with Shift the one before, whichever strategy reads it.
-        // Left to the field it would carry focus off the grid.
+        // Tab commits and then moves as it does on the grid. Left to the
+        // field it would move focus off the grid.
         if (e.key === "Tab" && !e.isComposing && !e.ctrlKey && !e.altKey && !e.metaKey) {
           e.preventDefault();
           this.commitEdit();
@@ -342,16 +317,11 @@ export class Grid {
     this.events.onEditor(true);
   }
 
-  /**
-   * refusal says why the selected cell cannot be written, or "" when it can.
-   *
-   * A row the band has not received has no value here. An editor opened on it
-   * would start from "", and appending to that would write over the real cell.
-   */
+  /** Returns why a write to the selected cell is refused, or "" when it is
+   * allowed. */
   private refusal(source: Rows): string {
     if (source.rows() === 0) return m.no_rows();
-    // A derived column stores nothing to type over. The sheet would refuse it;
-    // saying so before the keystroke is kinder than after it.
+    // A formula column's values come from its binding, so a write is refused.
     if (source.binding(this.selCol) !== undefined) {
       const column = source.columns[this.selCol];
       return m.computed_nothing_to_type({
@@ -361,7 +331,8 @@ export class Grid {
     return this.unreadable(source);
   }
 
-  /** unreadable says why the selected cell has no value here, or "" when it has one. */
+  /** Returns why the selected cell is still loading, or "" once it has a
+   * value. */
   private unreadable(source: Rows): string {
     if (source.rows() === 0) return m.no_rows();
     if (source.ready?.(this.selRow) === false) {
@@ -371,9 +342,9 @@ export class Grid {
   }
 
   /**
-   * write changes the selected cell from a key rather than through the editor,
-   * and is refused wherever the editor would be. A value the cell already holds
-   * records nothing. What it did is what . does next.
+   * Applies a change to the selected cell directly. Refused where the editor
+   * would be. The change is kept for repeat. An unchanged value leaves the
+   * cell as it is.
    */
   private write(change: Change): void {
     const source = this.source;
@@ -388,11 +359,8 @@ export class Grid {
     this.view.layout();
   }
 
-  /**
-   * yank copies what the cell stores to the register and the system clipboard.
-   * It copies raw rather than what is shown, because p puts it back into a cell
-   * and the editor works on stored values, and the two should agree.
-   */
+  /** Copies the selected cell's raw value to the register and the system
+   * clipboard. */
   private yank(): void {
     const source = this.source;
     if (source === undefined) return;
@@ -400,8 +368,7 @@ export class Grid {
 
     const value = source.raw(this.selRow, this.selCol);
     this.register = value;
-    // The register is uno's copy. The system clipboard is a courtesy a page can
-    // be refused, without focus or permission.
+    // The clipboard write can be refused by the browser.
     void navigator.clipboard.writeText(value).catch(() => {
       this.events.onSay(m.yank_clipboard_refused(), true);
     });
@@ -411,8 +378,7 @@ export class Grid {
     const input = this.editor;
     if (input === undefined) return;
 
-    // The cell being edited scrolled out of view. Keeping the entry where the
-    // cell was would leave it floating over a different row.
+    // Close the editor when its cell scrolls out of view.
     if (!this.view.place(input, this.selRow, this.selCol)) this.cancelEdit();
   }
 
@@ -436,8 +402,8 @@ export class Grid {
   private cancelEdit(): void {
     const input = this.editor;
     if (input === undefined) return;
-    // Cleared before the input goes, so a blur fired by removing it finds no
-    // editor to commit a second time.
+    // Cleared before removal, so the blur fired by removing the input finds
+    // the editor already gone.
     this.editor = undefined;
     input.remove();
     this.events.onEditor(false);

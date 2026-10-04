@@ -1,4 +1,5 @@
-// The engine's measurements, sent to a collector only where one is named.
+// The engine's telemetry, sent to a collector only when one is named in the
+// environment.
 
 import { expect, test, vi } from "vite-plus/test";
 
@@ -21,7 +22,7 @@ interface Sent {
   body: string;
 }
 
-/** A fetch that keeps what it was asked and answers as a bucket or a collector would. */
+/** A fetch that records each request and answers as a bucket or a collector would. */
 function network(): { sent: Sent[]; go: typeof fetch } {
   const sent: Sent[] = [];
   return {
@@ -49,7 +50,7 @@ test("what was measured is posted to the collector's metrics path, signed in as 
   const { sent, go } = network();
   const telemetry = exporting(ENV, VERSION, go)!;
   try {
-    // Nothing measured is nothing to send.
+    // A flush before any record leaves `sent` empty.
     await telemetry.flush();
     expect(sent).toEqual([]);
 
@@ -131,7 +132,7 @@ test("a collector that cannot be reached costs the engine nothing", async () => 
   try {
     telemetry.record({ name: "uno.engine.request", kind: "duration", unit: "ms", value: 1 });
     await expect(telemetry.flush()).resolves.toBeUndefined();
-    // A request to S3 that fails still fails as it did, and is counted.
+    // A failed request to S3 still rejects, and is counted.
     await expect(telemetry.fetch(OBJECT)).rejects.toThrow("no route");
   } finally {
     telemetry.stop();

@@ -1,11 +1,9 @@
-// The main process: one window, the menu its keys live on, the file dialogs,
-// and the engines that read files for the renderer.
+// The main process: one window, the application menu, the file dialogs, and
+// the engine processes that read files for the renderer.
 //
-// It holds no sheet, no document and no file's contents. An engine reads a file
-// in a utility process and sends rows straight to the renderer, and everything
-// else about the data lives in the renderer, because `@uno/grid` is pure and
-// runs there unchanged -- which is what makes the web build the same renderer
-// with a different `host`.
+// The data lives elsewhere. An engine reads a file in a utility process and
+// sends rows straight to the renderer over a message port. Everything else
+// about the data lives in the renderer.
 
 import {
   BrowserWindow,
@@ -25,66 +23,46 @@ import { isLocale, setLocale } from "../paraglide/runtime.js";
 import { sourceAt, unoPath, writeAtomic, writeConnection } from "./files.ts";
 
 /**
- * This file is bundled to CommonJS, because a preload script has to be and the
- * two are built the same way. So `__dirname` is the one that exists here --
- * `import.meta.url` compiles to an empty object and every path off it resolves
- * to the wrong place, silently.
+ * This file is bundled to CommonJS, so `__dirname` is defined. Paths are
+ * resolved from it.
  */
 declare const __dirname: string;
 const here = __dirname;
 
-/**
- * The size the Go build asks its window to be, kept the same so the design
- * documents in resource/ still describe what a person sees.
- */
+/** The window size. The design documents in resource/ are drawn at it. */
 const WINDOW_WIDTH = 1100;
 const WINDOW_HEIGHT = 720;
 
 /**
- * In development the renderer is served by Vite; in a packaged app it is a file
- * beside this one.
- *
- * The URL arrives in the environment at run time and is never compiled in. A
- * localhost address baked into a bundle is one that ships, and then the
- * installed app tries to reach a dev server that is not there.
+ * The Vite dev server URL, read from the environment at run time. When it is
+ * unset the renderer is loaded from a file beside this one.
  */
 const devServer = process.env["UNO_RENDERER_URL"];
 
 /**
- * The window, while there is one.
+ * The current window, or undefined when there is none.
  *
- * There is at most one at a time, but on macOS the app outlives it: closing
- * the window and clicking the dock icon makes another. The menu and the IPC
- * handlers are registered once, at start, so they reach the window through
- * here rather than through the one that existed when they were made. A handler
- * holding the first window would hand a destroyed one to every dialog, and the
- * × at the top right would compare against a page that no longer exists.
+ * On macOS the app outlives its window and `activate` creates a new one. The
+ * menu and IPC handlers are registered once and reach the window through this
+ * variable, so they always address the window that exists now.
  */
 let current: BrowserWindow | undefined;
 
 /**
- * Engines, one per open workspace, each a utility process of its own.
- *
- * Not the renderer, because reading a file by path takes Node and the renderer
- * has none. Not this process, because an index scan over 30 GB would stall
- * every menu and dialog while it ran. Rows go from the engine to the renderer
- * over the port and never pass through here.
+ * The running engines, one utility process per open workspace.
  *
  * An engine exits by itself when its port closes, which is what closing a
- * workspace does. These handles are kept so the ones still running when the
- * window goes are stopped by handle, never by name.
+ * workspace does. The handles are kept so engines still running when the
+ * window closes can be killed.
  */
 const engines = new Set<UtilityProcess>();
 
-/** The window a message came from, if it came from one. */
+/** The window an IPC event came from, or undefined. */
 function windowOf(event: { sender: WebContents }): BrowserWindow | undefined {
   return BrowserWindow.fromWebContents(event.sender) ?? undefined;
 }
 
-/**
- * The window a dialog goes over: the one that asked. Every page that can ask
- * is in a window, so having none is a fault, not a case to answer quietly.
- */
+/** The window a dialog opens over: the one that sent the event. Throws if none. */
 function over(event: { sender: WebContents }): BrowserWindow {
   const win = windowOf(event);
   if (win === undefined) throw new Error("a dialog was asked by a page in no window");
@@ -92,16 +70,12 @@ function over(event: { sender: WebContents }): BrowserWindow {
 }
 
 /**
- * The arguments that look like files to open.
+ * The file paths on the command line, made absolute.
  *
- * Electron's own switches are dropped rather than filtered by name: anything
- * beginning with a dash is not a path, and in development argv also carries the
- * "." that told Electron which app to run.
- *
- * Each is made absolute here, where the working directory it is relative to
- * is known. `uno data/sales.csv` from a terminal names a file by where the
- * terminal was, and a workspace points at its sources by paths that are true
- * from anywhere, so the engine refuses to save one pointed at by less.
+ * Arguments starting with a dash are Electron switches and are dropped. In
+ * development argv also carries the "." that told Electron which app to run.
+ * Paths are resolved against the working directory here, because a workspace
+ * stores absolute paths to its sources.
  */
 function filesFromArgv(): string[] {
   const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
@@ -115,21 +89,18 @@ function createWindow(): BrowserWindow {
     minWidth: 640,
     minHeight: 400,
     show: false,
-    // The page is the whole window. It draws its own way to close, at the top
-    // right, and its sidebar and status bar are where the window is taken
-    // hold of, so there is no title bar and no menu bar over it.
+    // Frameless. The page draws its own close button and provides its own
+    // drag regions.
     frame: false,
     backgroundColor: "#EFF2F3",
     title: "uno",
     webPreferences: {
       preload: join(here, "../preload/index.cjs"),
-      // The renderer is a web page and is treated as one: no Node, no remote
-      // module, and nothing from the main process except what preload hands it.
+      // The renderer gets only what preload exposes.
       contextIsolation: true,
       nodeIntegration: false,
-      // The preload only needs contextBridge and ipcRenderer, both of which a
-      // sandboxed preload has. Nothing here reads a file or spawns anything, so
-      // there is no reason to hand the renderer's process a bigger one.
+      // The preload only uses contextBridge and ipcRenderer, which a sandboxed
+      // preload has.
       sandbox: true,
     },
   });
@@ -139,10 +110,10 @@ function createWindow(): BrowserWindow {
     if (current === win) current = undefined;
     for (const child of engines) child.kill();
   });
-  // The menu is kept for its keys and its bar is never shown. See menuFor.
+  // The menu exists for its accelerators. Its bar stays hidden. See menuFor.
   win.setMenuBarVisibility(false);
 
-  // Shown once it has something to draw, so the window does not flash empty.
+  // Show the window once it has rendered, so its first frame has content.
   win.once("ready-to-show", () => win.show());
 
   if (devServer !== undefined && devServer !== "") {
@@ -151,10 +122,9 @@ function createWindow(): BrowserWindow {
     void win.loadFile(join(here, "../renderer/index.html"));
   }
 
-  // A file named on the command line -- `uno sales.csv`, or a double-click in
-  // the file manager -- is handed to the renderer once it can receive it.
-  // Several are one workspace, `uno ads.csv shop.csv bank.csv`, so they go
-  // together and the renderer adds them in order.
+  // Files named on the command line are sent to the renderer once the page
+  // has loaded. One file opens on its own; several are added together as one
+  // workspace, in order.
   const argued = filesFromArgv();
   if (argued.length > 0) {
     win.webContents.once("did-finish-load", () => {
@@ -163,7 +133,7 @@ function createWindow(): BrowserWindow {
     });
   }
 
-  // A link in the app opens in the person's browser, not inside the window.
+  // Links open in the system browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: "deny" };
@@ -173,25 +143,23 @@ function createWindow(): BrowserWindow {
 }
 
 /**
- * The menu exists for its accelerators: Ctrl+O and Ctrl+S are how anyone
- * actually opens and saves, and an accelerator has to live on a menu item for
- * Electron to bind it. Its bar is not shown. Everything on it is a key, and
- * what is not is in the page: the sidebar, the status bar and settings. macOS
- * keeps the menu where it keeps every app's, at the top of the screen.
+ * menuFor builds the application menu. It exists for its accelerators
+ * (Ctrl+O, Ctrl+S and so on); the menu bar is hidden, except on macOS where
+ * the system shows it at the top of the screen.
  *
- * Each one asks the renderer to act rather than acting itself. The renderer is
- * the only thing that knows whether there is an open workspace, whether it has
- * unsaved edits, and which cell is selected.
+ * Each item sends a message to the renderer, which acts on it. The renderer
+ * knows whether a workspace is open, whether it has unsaved edits, and which
+ * cell is selected.
  *
- * Every item is labelled from the messages, the ones with a role among them.
- * A role's own label is Electron's and is English in every language, so a menu
- * that left them to it would be in two languages at once.
+ * Every item is labelled from the messages, including items with a role, so
+ * the menu is in one language.
+ *
+ * `input` is the current key mode, used to check the matching radio item.
  */
 function menuFor(input: string): Menu {
   const send = (channel: string) => () => current?.webContents.send(channel);
   const pick = (name: string) => () => current?.webContents.send("menu:input", name);
-  // The item a platform ends its File menu with: the window on macOS, where
-  // the app outlives it, and the app everywhere else, by the name each uses.
+  // The last File item: Close Window on macOS, Quit or Exit elsewhere.
   const leave: MenuItemConstructorOptions =
     process.platform === "darwin"
       ? { role: "close", label: m.native_close_window() }
@@ -202,7 +170,7 @@ function menuFor(input: string): Menu {
       label: m.native_file(),
       submenu: [
         { label: m.native_open(), accelerator: "CmdOrCtrl+O", click: send("menu:open") },
-        // Another export into the workspace that is open, beside the files already in it.
+        // Adds another export to the open workspace.
         {
           label: m.native_add_source(),
           accelerator: "CmdOrCtrl+Shift+O",
@@ -229,8 +197,8 @@ function menuFor(input: string): Menu {
         { role: "copy", label: m.native_copy() },
         { role: "paste", label: m.native_paste() },
         { type: "separator" },
-        // How the grid reads keys. The renderer keeps the choice, and checks the
-        // item it read at start through input:chosen.
+        // The key mode. The renderer stores the choice and reports it through
+        // input:chosen, which checks the matching item.
         {
           label: m.native_input(),
           submenu: [
@@ -255,15 +223,15 @@ function menuFor(input: string): Menu {
     {
       label: m.native_view(),
       submenu: [
-        // The renderer binds the key itself, so the accelerator is shown here
-        // and not registered. Registering it too would toggle twice.
+        // The renderer binds this key itself. The accelerator is shown as a
+        // label only, so the key is handled once.
         {
           label: m.native_view_transform(),
           accelerator: "CmdOrCtrl+E",
           registerAccelerator: false,
           click: send("menu:mode"),
         },
-        // The same, for the same reason: the page binds the key.
+        // Same: the renderer binds this key itself.
         {
           label: m.sources_title(),
           accelerator: "CmdOrCtrl+Shift+B",
@@ -271,8 +239,9 @@ function menuFor(input: string): Menu {
           click: send("menu:sources"),
         },
         { type: "separator" },
-        // No accelerator. The reload role binds Ctrl+R, which is redo whichever
-        // way the grid reads keys, and a reload loses the open workspace.
+        // A plain item, reached by click only. The reload role would bind
+        // Ctrl+R, which is redo in the grid, and a reload loses the open
+        // workspace.
         { label: m.native_reload(), click: () => current?.webContents.reload() },
         { role: "toggleDevTools", label: m.native_toggle_devtools() },
         { type: "separator" },
@@ -287,15 +256,13 @@ function menuFor(input: string): Menu {
 }
 
 /**
- * buildMenu sets the menu, and sets it again whenever the renderer says the
- * language or the way keys are read has changed. A menu's labels are fixed
- * when it is built, so one in another language is another menu.
+ * buildMenu sets the application menu, and rebuilds it when the renderer
+ * reports a new language or key mode. Menu labels are fixed at build time.
  *
- * Each message is taken only from the window this process is serving: a frame
- * that is not the page gets no say in the menu.
+ * Messages are only accepted from the current window.
  */
 function buildMenu(): void {
-  /** How the grid reads keys, as the renderer last said, for the item to check. */
+  /** The key mode the renderer last reported, for the radio item to check. */
   let input = "";
   const set = (): void => Menu.setApplicationMenu(menuFor(input));
   set();
@@ -306,40 +273,36 @@ function buildMenu(): void {
     set();
   });
 
-  // The renderer keeps which language was chosen and tells this process, which
-  // has the menu and the dialogs to say in it and nowhere to keep a choice.
+  // The renderer stores the chosen language and reports it here, so the menu
+  // and dialogs can use it.
   ipcMain.on("language:chosen", (event, locale: string) => {
     if (windowOf(event) !== current || !isLocale(locale)) return;
     void setLocale(locale, { reload: false });
     set();
   });
 
-  // The × at the top right of the page. The renderer has already asked about
-  // unsaved edits, since it is the only thing that knows of any.
+  // The page's close button. The renderer has already confirmed any unsaved
+  // edits before sending this.
   ipcMain.on("window:close", (event) => {
     windowOf(event)?.close();
   });
 }
 
 /**
- * The file operations, as IPC handlers.
- *
- * They are deliberately dumb: choose a file, start an engine, write bytes. No
- * parsing, no format knowledge, no idea what a .uno is. That is what keeps the
- * whole of uno's behaviour in one place the tests can reach without a window.
+ * registerFileHandlers registers the file IPC handlers: choose a file, start
+ * an engine, write bytes.
  */
 function registerFileHandlers(): void {
   /**
-   * Where connections are kept: a folder of .unof files under the app's own
-   * data, beside nothing the person put there themselves. It is read at the
-   * moment it is needed rather than once, so a run started with its own
-   * --user-data-dir -- the smoke, the preview -- keeps its connections there.
+   * The folder of .unof connection files under the app's user data. Read
+   * each time it is needed, so a run with its own --user-data-dir keeps its
+   * connections there.
    */
   const connectionsDir = (): string => join(app.getPath("userData"), "connections");
 
   ipcMain.on("engine:connect", (event, id: number) => {
-    // The folder is an argument rather than something the engine works out,
-    // because only this process knows where the app keeps its data.
+    // The connections folder is passed as an argument, since only this process
+    // knows the user data path.
     const child = utilityProcess.fork(
       join(here, "../engine/index.cjs"),
       [`--connections=${connectionsDir()}`, `--version=${app.getVersion()}`],
@@ -362,12 +325,12 @@ function registerFileHandlers(): void {
         { name: m.filter_all_files(), extensions: ["*"] },
       ],
     });
-    // Cancelling is not a failure and must not be reported as one.
+    // Cancelling returns undefined.
     if (picked.canceled || picked.filePaths[0] === undefined) return undefined;
     return sourceAt(picked.filePaths[0]);
   });
 
-  // Several at once, because a week's liquidity is built from several exports.
+  // Picks one or more files to add to the open workspace.
   ipcMain.handle("file:add", async (event) => {
     const picked = await dialog.showOpenDialog(over(event), {
       title: m.dialog_add_source(),
@@ -381,9 +344,9 @@ function registerFileHandlers(): void {
     return picked.filePaths.map(sourceAt);
   });
 
-  // Where to save, and nothing else. The renderer writes through file:save
-  // afterwards, because a workspace points at sources relative to its own
-  // folder and cannot be laid out until that folder is known.
+  // Picks the save path only. The renderer then writes through file:save,
+  // because a workspace's source paths are relative to its own folder and
+  // are laid out once that folder is known.
   ipcMain.handle("file:pick-save", async (event, suggestedName: string) => {
     const picked = await dialog.showSaveDialog(over(event), {
       title: m.dialog_save_as(),
@@ -398,16 +361,13 @@ function registerFileHandlers(): void {
     await writeAtomic(path, bytes);
   });
 
-  // A connection saved from the panel. The engines read the folder again when
-  // the renderer tells them to, so nothing here has to reach one.
+  // Saves a connection from the panel. The renderer tells the engines to
+  // re-read the folder afterwards.
   ipcMain.handle("connections:save", async (_event, id: string, text: string) => {
     await writeConnection(connectionsDir(), id, text);
   });
 }
 
-// One window. Its sidebar lists workspaces and the sources of the one open in
-// it, and they are a renderer concern: the engine behind them is one process
-// for all of them.
 void app.whenReady().then(async () => {
   const win = createWindow();
   buildMenu();
@@ -417,21 +377,16 @@ void app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // The two branches in this file that know what a test is. See src/main/smoke/index.ts
-  // for why they have to live inside the app rather than outside it; preview.ts
-  // is the same argument for the same reason, one story instead of assertions.
-  // Either one drives the window, so the person at the desktop is shut out of it
-  // before it is shown. See src/main/driven.ts.
+  // The smoke test (UNO_SMOKE) and the preview (UNO_PREVIEW) run inside the
+  // app. Both drive the window, so input from the desktop is shut out before
+  // the window is shown. See src/main/driven.ts.
   const smoke = process.env["UNO_SMOKE"] !== undefined;
   if (smoke || process.env["UNO_PREVIEW"] !== undefined) {
     const { drive } = await import("./driven.ts");
     const driven = drive(win);
-    // A take is filmed in the shape the design is drawn in, and the window is
-    // not on screen yet. One with a single size it can be is one a tiling
-    // window manager floats at that size, rather than fitting it to a tile
-    // that changes when a window beside it opens or closes mid-take. The smoke
-    // run measures what is laid out, so it is held to the same shape: in a
-    // tile, whether the panel's foot fits depended on what else was open.
+    // Pin the window to one size so a tiling window manager floats it instead
+    // of fitting it to a tile. The preview is filmed at this size and the
+    // smoke run measures layout at it.
     win.setMinimumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
     win.setMaximumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
     const run = smoke
@@ -439,19 +394,15 @@ void app.whenReady().then(async () => {
       : (await import("./preview.ts")).runPreview;
     const quit = (code: number): void => app.exit(code);
 
-    // Save As asks a dialog where to save, and a driven window can never answer
-    // one: it ignores the window system, so the modal stands until the deadline
-    // kills the app. The run is told where instead. The handler registered above
-    // is the app's and knows nothing about this; it is replaced here, in the one
-    // place that already knows what a test is. See smoke/save.ts.
+    // A driven window ignores all input, so the save dialog is replaced with
+    // a path from the environment. See smoke/save.ts.
     const { savePathFor } = await import("./smoke/save.ts");
     ipcMain.removeHandler("file:pick-save");
     ipcMain.handle("file:pick-save", (_event, suggestedName: string) =>
       savePathFor(process.env, suggestedName),
     );
 
-    // Open is a dialog too, and the + at the foot of the sidebar asks it. See
-    // smoke/pick.ts.
+    // The same for the open dialog. See smoke/pick.ts.
     const { openPathFor } = await import("./smoke/pick.ts");
     ipcMain.removeHandler("file:open");
     ipcMain.handle("file:open", () => {

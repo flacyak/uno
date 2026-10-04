@@ -1,8 +1,6 @@
-// A reopened source says when it is not the file its log was made against.
-//
-// Where the save recorded a version, the version is the test: an export
-// written over at the same size is a change no size could show, and the same
-// version is the same bytes. A file with no version falls back to its size.
+// A reopened source reports when its file differs from the one the save
+// recorded.
+// The version is compared where the save recorded one, and the size otherwise.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,7 +22,7 @@ const KEY = "2025/sales-q3.csv";
 const PLAIN = `s3://acme-plain/${KEY}`;
 const VERSIONED = `s3://acme-history/${KEY}`;
 
-/** What each bucket holds now. A test writes over the object through these. */
+/** The objects in each bucket. A test overwrites through these. */
 const plain = new Map<string, Uint8Array>();
 const history = new Map<string, Uint8Array>();
 
@@ -46,11 +44,7 @@ const providers = () => [
   s3Provider({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint }),
 ];
 
-/**
- * The fixture with one digit of one row changed: the same size, and
- * different bytes, which is what an export regenerated with a corrected
- * figure looks like.
- */
+/** The fixture with one digit changed: same size, different bytes. */
 function sameSizeRewrite(): Uint8Array {
   const out = bytes.slice();
   const body = out.indexOf(0x0a) + 1;
@@ -59,7 +53,7 @@ function sameSizeRewrite(): Uint8Array {
   return out;
 }
 
-/** A workspace of the object with one edit, saved, as the file it wrote. */
+/** Opens the object, makes one edit, saves, and returns the .uno's path. */
 async function saved(path: string): Promise<string> {
   const { engine, done } = connect(undefined, providers());
   try {
@@ -81,7 +75,6 @@ async function reopened(file: string): Promise<{ src: SourceHandle; done: () => 
   return { src: sources[0]!, done };
 }
 
-// The task's own sentence.
 test("a same-size rewrite is reported as changed", async () => {
   const file = await saved(PLAIN);
   const rewritten = sameSizeRewrite();
@@ -93,7 +86,7 @@ test("a same-size rewrite is reported as changed", async () => {
     expect(saidIn(src.opened.link?.changed)).toBe(
       "sales-q3.csv is not the version the workspace was saved against · it is the same size",
     );
-    // Said and not acted on: the rows are there, with the edit replayed.
+    // The rows still open, with the edit replayed.
     await indexed(src);
     expect((await src.rows(1, 1)).rows[0]![UNITS]).toBe("986");
   } finally {
@@ -111,8 +104,8 @@ test("an object nobody touched is not changed", async () => {
   }
 });
 
-// Pinned by 3.2, so a rewrite in a versioned bucket reopens the saved bytes,
-// and those are not a change.
+// A versioned bucket reopens the saved version, so the file is the one the
+// save recorded.
 test("an object written over in a versioned bucket reopens unchanged", async () => {
   const file = await saved(VERSIONED);
   history.set(KEY, sameSizeRewrite());

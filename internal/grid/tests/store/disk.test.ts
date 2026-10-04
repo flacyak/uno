@@ -1,12 +1,5 @@
-// The disk lister, against a real folder.
-//
-// The folder is a temp directory with the testdata fixtures copied into it, so
-// what is under test is a readdir and a stat and not a stand-in: the sizes are
-// the sizes of those files, and the order is the order the filesystem was asked
-// for and then put into.
-//
-// Nothing here symlinks a fixture into place. The data is copied, and the links
-// that are under test point at the copies.
+// The disk lister, against a real temp folder with the testdata fixtures
+// copied into it.
 
 import { execFileSync } from "node:child_process";
 import { copyFile, lstat, mkdir, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
@@ -29,7 +22,7 @@ const FOLDERS = ["reports", "archive"];
 
 /**
  * folder builds the directory every check below browses: three fixtures, two
- * empty folders, a link to one of each, and a link to nothing.
+ * empty folders, a link to one of each, and a dangling link.
  */
 async function folder(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "uno-disk-"));
@@ -41,7 +34,7 @@ async function folder(): Promise<string> {
   return dir;
 }
 
-/** Folders first and then by name, which is the order every check expects. */
+/** The expected order: folders first, then by name. */
 const ORDER = [
   "archive",
   "linked-folder",
@@ -71,8 +64,7 @@ test("a folder comes back folders first and then by name", async () => {
   expect(listing.next, "one page holds a folder this small").toBeUndefined();
 });
 
-// The page size is the lister's own, so a test that wants a second page sets it
-// rather than writing a thousand files to earn one.
+// The page size is set small to get several pages.
 test("a folder is paged by a cursor, two at a time", async () => {
   const dir = await folder();
   const disk = diskLister(2);
@@ -94,8 +86,7 @@ test("a folder is paged by a cursor, two at a time", async () => {
   expect(pages.flat(), "the pages are the folder, in the same order").toEqual(ORDER);
 });
 
-// The cursor is where the next page starts, and it is the lister's own token:
-// the first entry of a page is the one the previous page's `next` named.
+// The cursor names the first entry of the next page.
 test("the cursor names where the next page starts", async () => {
   const dir = await folder();
   const disk = diskLister(2);
@@ -107,9 +98,7 @@ test("the cursor names where the next page starts", async () => {
   expect(second.entries[0]!.name).toBe("reports");
 });
 
-// A cursor from a folder that has since shrunk is the end of the listing, not
-// the start of it: a page of nothing is right, and the whole folder again is
-// not.
+// A cursor past every entry gives an empty page.
 test("a cursor past the end is an empty last page", async () => {
   const dir = await folder();
 
@@ -133,9 +122,7 @@ test("a listing carries the size a file weighs, and folders carry none", async (
   expect(by.get("sales-q3.csv")!.modified).toBeInstanceOf(Date);
 });
 
-// A disk has nothing like an ETag, and task 3.3's change test compares sizes
-// where there are no versions. An mtime dressed up as a version would break
-// that quietly.
+// Every disk entry's version is undefined.
 test("nothing on a disk carries a version", async () => {
   const dir = await folder();
 
@@ -161,8 +148,7 @@ test("a symlink is listed as what it points to", async () => {
   expect(toFolder.bytes).toBeUndefined();
 });
 
-// It is in the folder and `ls` shows it, so hiding it would be the quieter lie.
-// The panel draws a dash where it was given no size.
+// A dangling link is listed, with size and time undefined.
 test("a link that points nowhere is listed with no size", async () => {
   const dir = await folder();
 
@@ -174,8 +160,7 @@ test("a link that points nowhere is listed with no size", async () => {
   expect(gone.modified).toBeUndefined();
 });
 
-// Nothing in ingest reads a socket, and opening a fifo would wait for a writer
-// that may never come. Not offering one is the only safe thing to do with it.
+// A socket is left out of the listing.
 test("a socket is not listed", async () => {
   const dir = await folder();
   const server = createServer();
@@ -189,8 +174,7 @@ test("a socket is not listed", async () => {
   }
 });
 
-// An entry's path is what a FileRef carries, so a caller that browsed to a file
-// already holds everything openWith needs, with no joining to do.
+// An entry's path can be used as a FileRef path as it is.
 test("an entry's path is one the handler opens", async () => {
   const dir = await folder();
 
@@ -205,9 +189,7 @@ async function readFixture(name: string): Promise<Uint8Array> {
   return readAll([localFiles()], { name, path: join(TESTDATA, name) });
 }
 
-// The opposite of what nodeStore.list does with the formula library, and on
-// purpose: an empty listing would say the folder is there and has nothing in
-// it.
+// A missing folder is an error.
 test("a folder that is not there is a failure and not an empty one", async () => {
   const dir = await folder();
 
@@ -245,8 +227,6 @@ test("stat follows a link, the way the listing shows it", async () => {
   expect(link.bytes).toBe((await stat(join(TESTDATA, "sales-q3.csv"))).size);
 });
 
-// A source that has been moved or deleted is the case behind "newer in the
-// bucket", and it has to fail rather than answer with a zero.
 test("a stat of something that is not there names it", async () => {
   const dir = await folder();
 
@@ -264,8 +244,6 @@ test("the disk lister claims paths and leaves schemes alone", () => {
   expect(disk.handles("https://example.com/a/")).toBe(false);
 });
 
-// A folder with nothing in it is a folder with nothing in it, which is a
-// different answer from a folder that is not there.
 test("an empty folder is an empty listing", async () => {
   const dir = await mkdtemp(join(tmpdir(), "uno-disk-empty-"));
 
@@ -275,9 +253,7 @@ test("an empty folder is an empty listing", async () => {
   expect(listing.next).toBeUndefined();
 });
 
-// Deciding what a person should not see is the panel's filter box and not the
-// store's: a dotfile is in the folder, and something that browses a folder for
-// a .unof has to be able to find one in ~/.config.
+// Dotfiles are listed.
 test("a dotfile is listed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "uno-disk-dot-"));
   await writeFile(join(dir, ".hidden.csv"), "a,b\n1,2\n");
@@ -287,11 +263,9 @@ test("a dotfile is listed", async () => {
   expect(named(entries)).toEqual([".hidden.csv"]);
 });
 
-// Linux lets a name be any bytes, and node hands one that is not UTF-8 back
-// with the bad bytes replaced, which is a name no path reaches: stat says
-// ENOENT, and so would an open. A row that cannot be opened is worse than no
-// row, so the name is left out. macOS and Windows refuse to write such a name
-// in the first place, so there is nothing to check there.
+// On Linux a file name can be bytes outside UTF-8. Node returns such a name
+// with the bad bytes replaced, a path that misses the file, so the lister
+// leaves it out. macOS and Windows refuse to create such a name.
 test.skipIf(process.platform !== "linux")(
   "a name that is not UTF-8 is left out rather than listed as a path nothing opens",
   async () => {
@@ -310,9 +284,7 @@ test.skipIf(process.platform !== "linux")(
   },
 );
 
-// A folder opened as a file has a size that means nothing and a read that
-// fails without saying where. Refusing at the open names the path, which is
-// what the connections loader has to show when a folder is in its directory.
+// Opening a folder as a file is refused at the open, naming the path.
 test("a folder opened as a file is refused by name", async () => {
   const dir = await folder();
 
@@ -324,9 +296,7 @@ test("a folder opened as a file is refused by name", async () => {
   ).rejects.toThrow("linked-folder");
 });
 
-// Opening a fifo to read waits for a writer that may never come, which would
-// hold a thread of the pool for good. It is refused at the open, which has to
-// come back before anything can be said about it.
+// Opening a fifo as a file is refused at the open, right away.
 test.skipIf(process.platform === "win32")(
   "a fifo opened as a file is refused rather than waited on",
   async () => {

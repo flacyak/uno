@@ -1,10 +1,6 @@
-// The only bridge between the renderer and the machine.
-//
-// Context isolation is on, so the renderer has no `require`, no `node:fs`, and
-// no way to reach the main process except through what is exposed here. That is
-// the point: the surface is a handful of functions, so a bug in the renderer --
-// or something nasty in a spreadsheet somebody sent -- has a handful of things
-// to reach for rather than a filesystem.
+// The preload script. Exposes `window.uno` and `window.unoMenu` to the
+// renderer through contextBridge. Context isolation is on, so these are the
+// renderer's only way to reach the main process.
 
 import type { SourceRef } from "@uno/grid/engine";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
@@ -17,11 +13,9 @@ const bridge: Bridge = {
   add: () => ipcRenderer.invoke("file:add") as Promise<SourceRef[]>,
 
   /**
-   * A dropped File is turned into its path here, because only preload can ask.
-   * The engine opens files by path, and a File that came from somewhere other
-   * than the disk -- a drag out of a browser -- has none to give. That is
-   * answered as nothing and said by the page, which is in the person's
-   * language. This world has no way to know which that is.
+   * Returns the path of a dropped File, or undefined for a file off this
+   * machine's disk (for example a drag out of a browser). The renderer
+   * reports the error, since it knows the user's language.
    */
   dropped(file) {
     const path = webUtils.getPathForFile(file);
@@ -43,23 +37,17 @@ const bridge: Bridge = {
 contextBridge.exposeInMainWorld("uno", bridge);
 
 /**
- * An engine's port, handed on to the page.
- *
- * Ports cannot go through contextBridge, and posting to the window is the way
- * Electron gives for moving one into the main world. The id is the one the page
- * asked with, so two engines started together each find their own.
+ * Forwards an engine's MessagePort to the page. contextBridge carries plain
+ * values only, so the port is posted to the window tagged with the id the
+ * page asked with.
  */
 ipcRenderer.on("engine:port", (event, id: number) => {
   window.postMessage({ unoEnginePort: id }, "*", event.ports);
 });
 
 /**
- * The menu's accelerators, forwarded.
- *
- * The main process owns the menu because Electron requires it to, but it cannot
- * answer any of these -- whether a workspace is open, whether it has unsaved
- * edits, which cell is selected -- so each item is a message rather than an
- * action, and the renderer decides what it means.
+ * Menu events forwarded from main. The renderer decides what each one does,
+ * since it holds the workspace state.
  */
 contextBridge.exposeInMainWorld("unoMenu", {
   on(
@@ -69,27 +57,19 @@ contextBridge.exposeInMainWorld("unoMenu", {
     ipcRenderer.on(channel, () => fn());
   },
 
-  /**
-   * A file named on the command line, or handed over by the desktop when
-   * somebody double-clicks a .csv.
-   *
-   * It carries a path because a path is what the engine opens, and because a
-   * workspace opened this way should save back to where it came from without
-   * asking.
-   */
+  /** A file to open, named on the command line or by the OS (double-click). */
   onOpenPath(fn: (path: string) => void): void {
     ipcRenderer.on("menu:open-path", (_event, path: string) => fn(path));
   },
 
-  /** Files named together on the command line, added to one workspace in order. */
+  /** Several files named on the command line, added to one workspace in
+   * order. */
   onAddPaths(fn: (paths: string[]) => void): void {
     ipcRenderer.on("menu:add-paths", (_event, paths: string[]) => fn(paths));
   },
 
-  /**
-   * Edit → Input. The renderer keeps which strategy was chosen, so the menu tells
-   * it when a person picks one, and it tells the menu which to check at start.
-   */
+  /** Edit > Input. `onInput` receives the strategy picked in the menu;
+   * `inputChosen` tells the menu which one to check. */
   onInput(fn: (name: string) => void): void {
     ipcRenderer.on("menu:input", (_event, name: string) => fn(name));
   },
@@ -97,10 +77,7 @@ contextBridge.exposeInMainWorld("unoMenu", {
     ipcRenderer.send("input:chosen", name);
   },
 
-  /**
-   * The language the page is in. The renderer keeps which was chosen, and the
-   * main process has the menu and the dialogs to say in it.
-   */
+  /** Tells main the renderer's locale, for the menu and dialogs. */
   languageChosen(locale: string): void {
     ipcRenderer.send("language:chosen", locale);
   },

@@ -1,10 +1,6 @@
-// What every .unof has around what it is.
-//
-// A formula and a connection are each one small JSON file: an object, with a
-// format number, a kind, an id, a name, two times, and whatever a later build
-// wrote that this one does not know. Reading that envelope and writing it back
-// the same way is here once, so the two codecs are about what differs: a
-// formula's expression, a connection's bucket and how it signs in.
+// The envelope every .unof shares: a JSON object with a format number, a kind,
+// an id, a name, two times, and any keys a later build wrote. Reading and
+// writing it is here once, for the formula and connection codecs.
 
 import { compareStrings, nowTruncated, parseTime } from "../go/index.ts";
 import { FORMAT_VERSION } from "./index.ts";
@@ -16,10 +12,9 @@ export interface Envelope {
 }
 
 /**
- * readUnof reads the text of a .unof as far as every kind shares: it has to be
- * an object, and one this build knows the layout of. A reader that guesses at
- * a layout it does not know will either misread it or, far worse, save what it
- * misread back over the file. `name` is only used to name the file in an error.
+ * readUnof parses the text as a JSON object and reads its format number. It
+ * throws for unreadable JSON, an array, a scalar, and a format newer than
+ * FORMAT_VERSION. `name` is only used in error messages.
  */
 export function readUnof(name: string, text: string): Envelope {
   let raw: unknown;
@@ -42,11 +37,9 @@ export function readUnof(name: string, text: string): Envelope {
 }
 
 /**
- * wrongKind is the refusal for a .unof of another kind than the one asked for.
- * Other things are .unof files too, and one that lands in the wrong folder is
- * refused by name rather than read as an empty one of the kind expected, the
- * rule `document` keeps for what it does not recognise. `other` is the kinds
- * the sibling folder holds, named with what it is and where it belongs.
+ * wrongKind builds the error for a .unof whose kind differs from `want`.
+ * `other` names the kinds the sibling folder holds, what they are, and where
+ * they belong.
  */
 export function wrongKind(
   name: string,
@@ -65,23 +58,23 @@ export function wrongKind(
   );
 }
 
-/** textOf is a field read as text, or "" where it is not there or not text. */
+/** textOf returns a field as text, or "" when absent. */
 export function textOf(o: Record<string, unknown>, key: string): string {
   const v = o[key];
   return typeof v === "string" ? v : "";
 }
 
-/** timeOf is a field read as an RFC 3339 time, or nothing where it is not there or not text. */
+/**
+ * timeOf returns a field as a Date, or undefined when absent.
+ */
 export function timeOf(o: Record<string, unknown>, key: string): Date | undefined {
   const v = o[key];
   return parseTime(typeof v === "string" ? v : undefined);
 }
 
 /**
- * extraOf is what this build did not decode: the keys it does not know, kept
- * beside the ones it does so the next save carries them. Decoding into the
- * known fields cannot see what it did not decode, so they are picked out here.
- * Nothing where there are none, so a file without them stays without them.
+ * extraOf collects the keys outside `known`. Returns undefined when every
+ * key is known.
  */
 export function extraOf(
   o: Record<string, unknown>,
@@ -95,10 +88,8 @@ export function extraOf(
 }
 
 /**
- * writeExtra puts the unrecognised keys after the known ones, in name order
- * rather than in map order, so that a save which changed nothing produces the
- * same bytes as the one before it. A key this build owns is never written from
- * extra.
+ * writeExtra copies the unrecognised keys into `out` in name order, after the
+ * known ones. A known key in extra is skipped.
  */
 export function writeExtra(
   out: Record<string, unknown>,
@@ -111,9 +102,8 @@ export function writeExtra(
 }
 
 /**
- * stamp sets the times a save records: modified is now, and created is filled
- * in the first time only, so a file cannot come to claim it was made after it
- * was last changed. The format is this build's.
+ * stamp sets format to FORMAT_VERSION, modified to `now`, and created to
+ * `now` when it was unset.
  */
 export function stamp<T extends { format: number; created?: Date; modified?: Date }>(
   x: T,
@@ -122,7 +112,7 @@ export function stamp<T extends { format: number; created?: Date; modified?: Dat
   return { ...x, format: FORMAT_VERSION, modified: now, created: x.created ?? now };
 }
 
-/** about runs `check`, and what it refuses is refused again naming the file. */
+/** about runs `check` and rethrows any error with `name` prefixed. */
 export function about<T>(name: string, check: () => T): T {
   try {
     return check();

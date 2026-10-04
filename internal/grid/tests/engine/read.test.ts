@@ -1,5 +1,5 @@
-// The engine reading: the fixture by path and by Blob, the band a client holds,
-// the index and page cache behind it, and every row compared with what read builds.
+// Reading through the engine: the fixture by path and by Blob, the Band a
+// client holds, RowIndex, Pages, failed opens, and closing mid-open.
 
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -49,7 +49,7 @@ test("the engine reads the fixture the way read does", async () => {
     const src = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
     const opened = src.opened;
     expect(saidIn(opened.label)).toBe("UTF-8 · delimiter ','");
-    // The same sample, so the same badges: units is numeric data in a costume.
+    // Same columns as `read`: units is text flagged as numeric.
     expect(opened.columns).toEqual(sales.columns);
     expect(opened.columns[UNITS]).toEqual({ header: "units", kind: "text", flagged: true });
 
@@ -93,7 +93,7 @@ test("a band holds the rows around the viewport, and only those", async () => {
     expect(band.ready(ROWS - BAND_ROWS)).toBe(true);
     expect(band.ready(ROWS - BAND_ROWS - 1), "a band is 2,000 rows, not the file").toBe(false);
 
-    // Somewhere the band already covers, a screen either side, asks for nothing.
+    // A view inside the band is served from it. One outside asks for rows.
     band.view(3000, SCREEN);
     expect(asked).toBe(1);
     band.view(100, SCREEN);
@@ -110,7 +110,7 @@ test("find reads the column past any band, with the log applied", async () => {
     await indexed(src);
     const rows = sales.rows();
 
-    // Every units cell that does not parse as a number, read the slow way.
+    // Every units cell whose text fails to parse as a number, from the Sheet.
     const unparsed: number[] = [];
     for (let row = 0; row < rows; row++) {
       const v = sales.display(row, UNITS).trim();
@@ -130,7 +130,7 @@ test("find reads the column past any band, with the log applied", async () => {
       expect((await units(from, -1)).row, `up from ${from}`).toBe(up);
     }
 
-    // Text that is not numeric data in a costume has nothing in it to fail.
+    // A find for unparsed cells in a text column comes back empty.
     const region = await src.find({ col: REGION, from: 0, dir: 1, match: { t: "unparsed" } });
     expect(region).toEqual({ row: null, searched: 0, complete: true });
 
@@ -145,7 +145,7 @@ test("find reads the column past any band, with the log applied", async () => {
     });
     expect(text.row).toBe(north);
 
-    // With the commas gone nothing fails, until one cell far below is typed over.
+    // After the apply, only the cell set to "n/a" is unparsed.
     const far = 4000;
     engine.mode(true);
     await src.edit({ op: Op.Apply, row: NO_ROW, col: UNITS, now: 'replace(/,/, "")' });
@@ -168,7 +168,7 @@ test("the index serves closed blocks only, and projects the row count", () => {
   expect(index.blockOf(3)).toBe(1);
   expect(index.rowsOf(1)).toEqual([2, 4]);
   expect(index.bytesOf(1)).toEqual([30, 50]);
-  // Five rows in the first 50 of 1,000 bytes.
+  // Five rows in the first 50 of 1,000 bytes project to 100.
   expect(index.rows()).toBe(100);
 
   index.complete = true;
@@ -186,18 +186,13 @@ test("a block closes at its byte budget as well as its row count", () => {
   expect(index.blockOf(3)).toBe(1);
 });
 
-// A file past 4 GB, and the rows in it, are counted in numbers a double holds
-// exactly: every byte offset and row number under 2^53. A hosted engine opens
-// an object of a few hundred GB, and an index that kept an offset in 32 bits
-// would read the wrong block without a word. What it keeps is two numbers a
-// block, so a terabyte of kilobyte rows is a million blocks and 16 MB.
 test("the index keeps block starts past 4 GB exactly, at two numbers a block", () => {
   const MB = 1 << 20;
   const GB = 1024 * MB;
   const size = 6 * GB;
   const index = new RowIndex(0, size, { blockRows: 1024, blockBytes: MB });
-  // One record a byte past each megabyte, so every begin after the first
-  // closes a block, and five thousand of them reach past 4 GB.
+  // One row per megabyte, so each begin closes a block, and 5,120 of them
+  // reach past 4 GB.
   const blocks = 5 * 1024;
   for (let b = 0; b < blocks; b++) index.begin(b * MB + 1);
   index.scanned = blocks * MB;
@@ -206,7 +201,7 @@ test("the index keeps block starts past 4 GB exactly, at two numbers a block", (
   expect(last * MB + 1).toBeGreaterThan(2 ** 32);
   expect(index.bytesOf(last)).toEqual([last * MB + 1, size]);
   expect(index.blockOf(last)).toBe(last);
-  // Five thousand rows in the first 5 GB of 6 project to six thousand.
+  // 5 * 1024 rows in the first 5 GB of 6 project to 6 * 1024.
   expect(index.rows()).toBe(6 * 1024);
   index.complete = true;
   expect(index.rows()).toBe(blocks);
@@ -253,7 +248,7 @@ test("a failed open names the file", async () => {
   }
 });
 
-/** counted is the disk with every open and close of a file counted. */
+/** counted is the disk provider with opens and closes counted. */
 function counted(): {
   provider: Provider;
   opens: () => number;
@@ -296,9 +291,8 @@ function counted(): {
   };
 }
 
-// A window closed while its file is still opening. The close reaches the
-// workspace before the open has anything to hand it, and the file the open
-// lands with is the workspace's to close all the same.
+// The engine is closed while an open is in progress. The file the open lands
+// with is still closed.
 test("an engine closed while a file is opening closes the file", async () => {
   const disk = counted();
   const { engine, done } = connect(TINY, [disk.provider]);
@@ -311,7 +305,7 @@ test("an engine closed while a file is opening closes the file", async () => {
   expect(disk.closes()).toBe(1);
 });
 
-// What was asked for before the close and has not started is not started.
+// An open still queued at the close is rejected before it starts.
 test("an engine closed with opens waiting their turn opens none of them", async () => {
   const disk = counted();
   const { engine, done } = connect(TINY, [disk.provider]);
@@ -326,9 +320,8 @@ test("an engine closed with opens waiting their turn opens none of them", async 
   expect(disk.closes()).toBe(1);
 });
 
-// The far end going first: the process behind the port exited under a client
-// with an open on its way. The open is refused rather than left waiting, and
-// the client hears it once, where it listens for trouble nobody asked about.
+// The engine's port closes with an open in flight. The open rejects, later
+// opens reject, and onError hears it once.
 test("an engine whose port goes with a request out refuses it, and says so once", async () => {
   const { port1, port2 } = new MessageChannel();
   serve(
