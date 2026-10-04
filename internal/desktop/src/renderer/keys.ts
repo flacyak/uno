@@ -1,47 +1,45 @@
-// What the grid's keys mean, whichever way they are read.
+// The actions the grid's keys map to, shared by every input strategy.
 //
-// An input strategy (input/) turns a key into one of these actions, and the
-// grid carries the action out. Where a motion lands, what . makes again and what
-// a command says are the same whichever strategy asked, so they live here. None
-// of it touches the DOM, so a test can drive every key without a window -- the
-// same property the header of shell/shell.ts says the shell exists to keep.
+// An input strategy (input/) turns a key press into an Action, and the grid
+// carries it out. Motion targets, repeatable changes and command parsing live
+// here. This file is plain logic, so tests run it directly.
 
 export type Mode = "view" | "transform";
 
 /** Where the caret starts when the editor opens. */
 export type Caret = "start" | "end" | "all" | "empty";
 
-/** The part of a KeyboardEvent the keys read. */
+/** The fields of a KeyboardEvent the input strategies read. */
 export interface Press {
   key: string;
   ctrl: boolean;
   alt: boolean;
   meta: boolean;
-  /** Shift, which Tab reads to go the other way. A letter's case is in `key`. */
+  /** Shift state. Tab uses it to reverse direction. A letter's case is in `key`. */
   shift: boolean;
-  /** The key is held down and repeating. */
+  /** The key is held down and auto-repeating. */
   repeat: boolean;
 }
 
-/** Keys that wait for more: a count, and a key waiting for the one that finishes it. */
+/** Keys typed so far that are waiting for more: a count and a prefix key. */
 export interface Pending {
   /** The count's digits, or "" for none. */
   readonly count: string;
-  /** The first key of two, like the g of gg. */
+  /** The first key of a two-key sequence, like the g of gg. */
   readonly keys: string;
 }
 
 export const NOTHING: Pending = { count: "", keys: "" };
 
-/** showing is what the status bar shows of pending keys, where vim's showcmd would. */
+/** Returns the pending keys as the status bar shows them. */
 export function showing(pending: Pending): string {
   return pending.count + pending.keys;
 }
 
-/** One code point, so a character outside the BMP counts as the one key it is. */
+/** Matches exactly one code point, including characters outside the BMP. */
 const ONE_CHARACTER = /^.$/u;
 
-/** isCharacter says whether a key types a character, rather than naming one like Shift. */
+/** Returns whether a key value is a single typed character, as opposed to a name like Shift. */
 export function isCharacter(key: string): boolean {
   return ONE_CHARACTER.test(key);
 }
@@ -75,47 +73,47 @@ export type Action =
   | { t: "move"; motion: Motion; count: number | undefined }
   /** zt zz zb: scroll the selected row to the top, middle or bottom. The selection stays. */
   | { t: "scroll"; where: "top" | "middle" | "bottom" }
-  /** m{a-z}: remember the selected cell by a letter. */
+  /** m{a-z}: store the selected cell under a letter. */
   | { t: "mark"; name: string }
   /** '{a-z} and `{a-z}: go to a marked cell. */
   | { t: "to-mark"; name: string }
-  /** '' and ``: go back to where the last jump left from. */
+  /** '' and ``: go back to where the last jump started. */
   | { t: "back" }
   | { t: "mode"; to: Mode }
   /**
-   * Open the editor. `transform` switches to transform first, which is `a` in
-   * view. `text` starts it holding that instead of the value: typing over a cell.
+   * Open the editor. `transform` switches to transform mode first. `text`
+   * replaces the cell's value as the starting content.
    */
   | { t: "insert"; caret: Caret; transform: boolean; text?: string }
   | { t: "undo" }
-  /** Record again what undo took back. */
+  /** Redo the last undone edit. */
   | { t: "redo" }
   /** Set the cell to "". */
   | { t: "clear" }
-  /** Copy what the cell stores. It changes nothing, so view allows it. */
+  /** Copy the cell's stored value. Allowed in view mode. */
   | { t: "yank" }
-  /** Set the cell to what was copied. */
+  /** Set the cell to the copied value. */
   | { t: "put" }
-  /** Do the last insert, clear or put again, on the selected cell. */
+  /** Repeat the last insert, clear or put on the selected cell. */
   | { t: "repeat" }
-  /** Apply on the banner. */
+  /** Press Apply on the banner. */
   | { t: "apply" }
-  /** Not now on the banner. */
+  /** Press Not now on the banner. */
   | { t: "dismiss" }
-  /** The command line, or a search down or up. */
+  /** Open the command line or a search prompt. */
   | { t: "prompt"; lead: Lead }
-  /** The next or previous cell in the column that does not parse as its kind. */
+  /** Go to the next or previous cell in the column that fails to parse as its kind. */
   | { t: "unparsed"; dir: 1 | -1 }
-  /** The last search again, the same way or the other. */
+  /** Repeat the last search, forward or reversed. */
   | { t: "next"; reverse: boolean }
   /**
-   * gt and gT: another source's tab. A count after gt is the tab to go to, from
-   * 1, and a count after gT is how many to go back.
+   * gt and gT: switch tab. A count after gt is the tab number to go to, from
+   * 1. A count after gT is how many tabs to go back.
    */
   | { t: "tab"; step: 1 | -1; count: number | undefined }
   | { t: "say"; text: string };
 
-/** What the command line opens with: a command, or a search down or up. */
+/** The character a prompt opens with: a command, a forward search, or a backward search. */
 export type Lead = ":" | "/" | "?";
 
 export interface Step {
@@ -125,7 +123,7 @@ export interface Step {
 
 export const NONE: Action = { t: "none" };
 
-/** done is a key that finished something, so nothing is left pending. */
+/** Returns a Step with the action and an empty Pending. */
 export function done(action: Action): Step {
   return { pending: NOTHING, action };
 }
@@ -135,9 +133,9 @@ export function move(motion: Motion, count: number | undefined): Action {
 }
 
 /**
- * The keys every spreadsheet moves by, read the same under either input. Tab
- * is not among them, since Shift turns it round. A Map rather than a record,
- * so a key named like something every object has is not read as a motion.
+ * Named keys that map to a motion under every input strategy. Tab is handled
+ * separately because Shift reverses it. A Map, so a key named like an Object
+ * property matches only an entry.
  */
 export const NAMED_MOTIONS: ReadonlyMap<string, Motion> = new Map([
   ["ArrowDown", "down"],
@@ -155,9 +153,8 @@ export function isLead(key: string): key is Lead {
 }
 
 /**
- * isJump says whether a motion is a jump, which '' goes back from: G, gg and
- * {n}G, and H, M and L. Going to a mark is one too. It keeps one position, not
- * a jumplist.
+ * Returns whether a motion is a jump, which '' goes back from: G, gg, {n}G,
+ * H, M and L. Going to a mark is also a jump. Only one position is kept.
  */
 export function isJump(motion: Motion): boolean {
   switch (motion) {
@@ -178,16 +175,15 @@ export type Command =
   | { t: "write" }
   | { t: "save-as" }
   | { t: "open"; force: boolean }
-  /** :sources, the panel beside the grid. */
+  /** :sources, opens the sources panel. */
   | { t: "sources" }
-  /** :{n}, a row numbered from 1. */
+  /** :{n}, go to a row numbered from 1. */
   | { t: "row"; row: number }
   | { t: "unknown"; text: string };
 
 /**
- * command reads what was typed after the colon. There is no :q or :wq. Closing
- * is the window's job, and quitting with unsaved edits over a mistyped command
- * is a bad trade for two saved keystrokes.
+ * Parses the text typed after the colon. Closing is done through the window,
+ * so :q and :wq parse as unknown.
  */
 export function command(text: string): Command {
   const typed = text.trim();
@@ -212,18 +208,17 @@ export function command(text: string): Command {
   return { t: "unknown", text: typed };
 }
 
-/** A change . can make again on another cell. */
+/** A change that . can repeat on another cell. */
 export type Change =
   | { t: "set"; value: string }
   | { t: "append"; text: string }
   | { t: "prepend"; text: string };
 
 /**
- * changeOf works out what an insert did by comparing the value it left with the
- * one it started from. Opened at the end and only added to there, it repeats as
- * an append; opened at the start and only added to there, as a prepend.
- * Anything else repeats as the whole value, which is still right for the common
- * case, several cells holding the same bad value.
+ * Works out what an insert did by comparing the value before and after. An
+ * insert opened at the end that only added text is an append; one opened at
+ * the start that only added text is a prepend. Anything else is a set of the
+ * whole value.
  */
 export function changeOf(caret: Caret, before: string, after: string): Change {
   if (caret === "end" && after.startsWith(before)) {
@@ -235,7 +230,7 @@ export function changeOf(caret: Caret, before: string, after: string): Change {
   return { t: "set", value: after };
 }
 
-/** replay is what a change makes of a cell's value. */
+/** Applies a change to a cell's value and returns the result. */
 export function replay(change: Change, value: string): string {
   switch (change.t) {
     case "set":
@@ -247,17 +242,17 @@ export function replay(change: Change, value: string): string {
   }
 }
 
-/** Where the selection is and what is around it: what a motion needs to land. */
+/** The selection and the sheet around it: the inputs a motion needs. */
 export interface Place {
   row: number;
   col: number;
   rows: number;
   cols: number;
-  /** Rows the engine can answer for now. The same as rows once the index is done. */
+  /** Rows the engine can read now. Equals rows once indexing is done. */
   readable: number;
-  /** Rows a page moves. */
+  /** Rows per page. */
   page: number;
-  /** The first and last rows wholly on screen. */
+  /** The first and last rows fully on screen. */
   top: number;
   bottom: number;
 }
@@ -266,16 +261,15 @@ export interface Target {
   row: number;
   col: number;
   /**
-   * Set when the motion stopped at the last indexed row, short of where it was
-   * going: the row it asked for, or "end" for G on its own.
+   * Set when the motion stopped short at the last readable row: the row that
+   * was asked for, or "end" for a bare G.
    */
   short?: number | "end";
 }
 
 /**
- * target works out where a motion lands. It clamps to the sheet rather than
- * wrapping, and it moves by arithmetic rather than a step at a time, so a count
- * of fifty million costs what one does.
+ * Returns where a motion lands, clamped to the sheet. Computed by arithmetic,
+ * so the cost is the same for every count.
  */
 export function target(motion: Motion, count: number | undefined, at: Place): Target {
   const n = count ?? 1;
@@ -326,11 +320,11 @@ export function target(motion: Motion, count: number | undefined, at: Place): Ta
       return cell(lastRow, lastCol);
     case "first-row":
     case "last-row": {
-      // With a count both go to row n, numbered from 1 the way the gutter is.
+      // With a count, both go to row n, numbered from 1.
       const wanted = count !== undefined ? count - 1 : motion === "first-row" ? 0 : undefined;
 
-      // While the file indexes, the row count is a projection. Going past what
-      // the engine can read would land on rows that stay pending.
+      // While indexing, the row count is an estimate. The target is clamped
+      // to the last readable row and marked short.
       const indexing = at.readable < at.rows;
       const lastReadable = Math.max(0, at.readable - 1);
       if (wanted === undefined) {
@@ -348,7 +342,7 @@ function clamp(value: number, max: number): number {
   return Math.max(0, Math.min(max, value));
 }
 
-/** Half a page, and at least one row. */
+/** Half a page, at least one row. */
 function half(page: number): number {
   return Math.max(1, Math.floor(page / 2));
 }

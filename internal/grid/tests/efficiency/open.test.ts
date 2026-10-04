@@ -1,9 +1,6 @@
-// What a person waits on between asking for an object and seeing its rows.
-//
-// The reads are let through one at a time, the one nearest the front of the
-// object first, until the open answers. What had to arrive by then is what the
-// open waited on: reads asked for ahead sit further into the object and are
-// still at the door. On a slow line the bytes are the wait.
+// Measures the requests and bytes an open waits on before it answers. Reads
+// are let through one at a time, lowest offset first; what passed by the
+// time the open answered is what it waited on.
 
 import { afterEach, expect, test } from "vite-plus/test";
 
@@ -12,7 +9,7 @@ import { record } from "./record.ts";
 import { remote, repeated } from "./remote.ts";
 import type { Remote } from "./remote.ts";
 
-/** 24 MB: three of the chunks indexing really reads, so the first is a whole one. */
+/** 24 MB: three chunks at the default chunk size. */
 const REPEATS = 100;
 const OBJECT = repeated(REPEATS);
 

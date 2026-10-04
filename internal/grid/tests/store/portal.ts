@@ -1,17 +1,15 @@
 // A stand-in for the AWS SSO portal, on localhost.
 //
-// An SSO profile signs in by trading the token `aws sso login` cached for a
-// role's keys: GET /federation/credentials with the token in a header. This
-// answers exactly that, out of a table of tokens, and refuses a token it does
-// not know the way the portal does. It keeps every request, so a test can say
-// the portal was never asked.
+// It answers GET /federation/credentials with the role keys granted to the
+// token in the x-amz-sso_bearer_token header, and refuses an unknown token.
+// It records every request in `seen`.
 
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import type { AwsCredentials } from "../../src/store/s3.ts";
 
-/** What one token may be traded for: one role in one account, until a time. */
+/** The keys one token is granted: one role in one account, with an expiry. */
 export interface Grant {
   accountId: string;
   roleName: string;

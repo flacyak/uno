@@ -1,8 +1,7 @@
-// Bundling the Node side of the app.
+// Bundles the Node side of the app: main, preload and the engine.
 //
-// The renderer goes through Vite, which is what `vp build` does. Main, preload
-// and the engine cannot: they run with Electron's own module loader, so they
-// are built here, as CommonJS, which is the format a preload script has to be.
+// The renderer is built by Vite through `vp build`. These three run under
+// Electron's own module loader and are built here as CommonJS.
 
 import { build } from "vite";
 
@@ -30,8 +29,7 @@ export async function bundleElectron(opts = {}) {
           fileName: () => "index.cjs",
         },
         rollupOptions: {
-          // Electron and Node's own modules are provided by the runtime;
-          // bundling them in would be shipping a second copy of the platform.
+          // Electron and Node's built-in modules come from the runtime.
           external: [/^node:/, "electron"],
         },
       },

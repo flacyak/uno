@@ -1,5 +1,5 @@
-// Vim-style input without a window: a mode, what is pending, and a key in; the
-// next pending keys and one action out.
+// The vim-style input strategy on its own: a mode, the pending keys, and
+// a key in; the next pending keys and one action out.
 
 import { expect, test } from "vite-plus/test";
 
@@ -10,7 +10,7 @@ import type { Action, Mode, Pending, Press, Step } from "../../src/renderer/keys
 const LOCKED = vimStyle.locked;
 
 /**
- * press reads a run of keys. A key that is not a character is written `<Name>`,
+ * Reads a run of keys. A named key is written `<Name>`,
  * and a Ctrl chord `<C-d>`.
  */
 function press(mode: Mode, keys: string, from: Pending = NOTHING): Step {
@@ -95,7 +95,7 @@ test("Esc drops pending keys first, then leaves transform, then clears the messa
 });
 
 test("no key opens the editor holding itself", () => {
-  // Letters are commands, so j and 9 do not start a value the way they would by default.
+  // Letters and digits are commands, so j and 9 are read as commands.
   for (const key of ["j", "9", "x", " "]) {
     expect(action("transform", key).t, key).not.toBe("insert");
   }
@@ -148,7 +148,7 @@ test("ga applies the banner's offer and gx says not now, in transform only", () 
   });
 });
 
-// Switching tabs writes nothing, so view allows it.
+// Switching tabs is read-only, so view allows it.
 test("gt and gT go to the next and previous source, with a count as vim reads it", () => {
   for (const mode of ["view", "transform"] as const) {
     expect(action(mode, "gt")).toEqual({ t: "tab", step: 1, count: undefined });
@@ -202,7 +202,7 @@ test("chords and keys that type nothing are not the grid's, and keep what is pen
   expect(
     vimStyle.interpret("transform", waiting, { ...base, key: "a", alt: true }),
   ).toBeUndefined();
-  // Ctrl+Shift+B is the panel's. Read as Ctrl+b it would page up under it.
+  // Ctrl+Shift+B is the panel's, and passes through.
   expect(
     vimStyle.interpret("transform", waiting, { ...base, key: "B", ctrl: true, shift: true }),
   ).toBeUndefined();

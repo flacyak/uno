@@ -1,76 +1,46 @@
-// Browsing a place files are, as its own interface.
+// The Lister interface: browsing a folder or a prefix one page at a time.
 //
-// `FileHandler` claims a ref and opens it, and that is all it does. Browsing is
-// separate because not every place a file can be has anything to browse: a Blob
-// dropped into a page is a file and nothing around it. A provider that can do
-// both -- a disk, a bucket -- supplies one of each, and the two never depend on
-// one another.
-//
-// Nothing here reads anything. It is the shape a lister has; the reading lives
-// in store/disklister.ts and store/s3lister.ts, the refusal when no lister
-// claims a path is store/claim.ts, and what plugs the two interfaces in as one
-// thing is the plugin package.
+// The disk lister is store/disklister.ts and the bucket lister is
+// store/s3lister.ts. The error for a path every lister declines is built in
+// store/claim.ts.
 
 import { compareStrings } from "../go/index.ts";
 import { BROWSES, claim } from "./claim.ts";
 
 /**
- * How many entries one page of a listing holds.
- *
- * A thousand, which is what ListObjectsV2 answers with when it is not told
- * otherwise and what the disk pages at, so the panel scrolls a prefix and a
- * folder at the same rate and neither feels like the other's special case. S3
- * is sent it rather than left to default, because a page is what the panel
- * draws and a bucket quietly changing its own default would change how far one
- * scroll goes.
+ * How many entries one page of a listing holds. Sent to S3 as max-keys, and
+ * used by the disk lister as its page size.
  */
 export const PAGE = 1_000;
 
-/** Named is what the order of a listing is decided from: whether it is a folder, and what it is called. */
+/** Named is what a listing's order is decided from: folder or file, and name. */
 export interface Named {
   readonly name: string;
   readonly folder: boolean;
 }
 
 /**
- * pageKey is the order a listing promises, written as one string: folders
- * first, then by name. `d` sorts before `f`, so one string compare is both
- * halves of it.
+ * pageKey is the sort key of an entry: folders first, then by name. `d` sorts
+ * before `f`, so one string compare gives both.
  *
- * For the disk it is also the cursor, which is why it is a string and not a
- * pair. A cursor that were an index would slide by one when somebody saved a
- * file into the folder mid-scroll and a page would skip an entry; a key means
- * "the entries from here on" and stays true whatever happened to the folder
- * meanwhile. For a bucket it is only an order, and one that holds within a page
- * rather than across a prefix, which it cannot help: a bucket pages its keys
- * and the prefixes they fold into together, in one UTF-8 order, so a page after
- * this one can hold a folder whose name sorts before a file on this one.
- * Promising more would mean reading every page of a prefix before answering
- * with the first, and for two million keys that is a listing nobody waits for.
- * The disk pays a readdir per page to promise it everywhere; a bucket cannot be
- * asked that way at any price.
+ * The disk lister also uses it as the cursor, so it must stay a string. For a
+ * bucket the order holds within one page only, since S3 pages keys and common
+ * prefixes together in UTF-8 order.
  */
 export function pageKey(named: Named): string {
   return `${named.folder ? "d" : "f"}:${named.name}`;
 }
 
-/** byPageKey orders a page the way a listing promises: folders, then names. */
+/** byPageKey orders entries folders first, then by name. */
 export function byPageKey(a: Named, b: Named): number {
   return compareStrings(pageKey(a), pageKey(b));
 }
 
 /**
- * Entry is one thing a listing found.
+ * Entry is one thing a listing found. `path` is what a FileRef carries, so an
+ * entry can be opened as it is.
  *
- * A folder is a prefix to list next and a file is a ref to open, which is why
- * `path` is what a FileRef would carry -- /home/jo/q3.csv, s3://bucket/key --
- * rather than a name to join onto something. A caller that wants to open an
- * entry already holds everything openWith needs.
- *
- * The three optional fields are optional because a listing is not a stat: S3
- * gives size and ETag away in ListObjectsV2 and a disk gives them for the cost
- * of a stat per entry, but a prefix has none of them and neither does a place
- * that only knows its own names.
+ * `bytes`, `modified` and `version` are set where the listing had them.
  */
 export interface Entry {
   name: string;
@@ -83,14 +53,8 @@ export interface Entry {
   version?: string;
 }
 
-/**
- * Listing is one page of a folder or a prefix.
- *
- * It is a page and never the whole, because the prefix somebody browses into
- * may hold two entries or two million and the panel that draws it cannot tell
- * which until it asks. Entries come back folders first and then by name, so the
- * order is the same whatever answered.
- */
+/** Listing is one page of a folder or a prefix, folders first and then by
+ * name. */
 export interface Listing {
   entries: Entry[];
   /** Where the next page starts, when there is one. Absent at the end. */
@@ -98,36 +62,25 @@ export interface Listing {
 }
 
 /**
- * Lister browses one kind of place: a disk, a bucket, later a GCS or Azure
- * container.
+ * Lister browses one kind of place: a disk, a bucket.
  *
- * `handles` looks at the path and nothing else, the way a handler's does, so
- * the engine can pick a lister for a prefix it read out of a .uno without
- * asking anybody.
- *
- * `stat` is deliberately not `list` of one entry. It is what "newer in the
- * bucket than in this workspace" is decided from, it costs one HEAD, and it has
- * to stay that cheap because a workspace with forty sources asks it forty times
- * on open.
+ * `handles` looks at the path only. `stat` is one request and stays cheap: a
+ * workspace stats every source on open.
  */
 export interface Lister {
-  /** What a person would call this kind of place, for an error that names it. */
+  /** The kind of place, as an error names it. */
   readonly label: string;
   /** Whether `path` is one this lister browses. */
   handles(path: string): boolean;
   /** One page from `cursor`, or the first page when there is none. */
   list(path: string, cursor?: string): Promise<Listing>;
-  /** Size and version now, without reading the file. */
+  /** Size and version now, from metadata alone. */
   stat(path: string): Promise<Entry>;
 }
 
 /**
- * listWith lists a path through the first lister that claims it.
- *
- * It refuses by name for the same reason openWith does: a workspace written on
- * a machine with S3 set up, opened on one without, has to say which kind of
- * place it cannot reach rather than showing an empty folder, which is a
- * different and much quieter lie than an empty file.
+ * listWith lists a path through the first lister that claims it. Throws,
+ * naming the kinds this build browses, when none does.
  */
 export async function listWith(
   listers: readonly Lister[],
@@ -138,12 +91,8 @@ export async function listWith(
 }
 
 /**
- * statWith asks the first lister that claims a path for size and version,
- * refusing by name the same way listWith does.
- *
- * It is here beside listWith rather than inlined by the one caller because a
- * path that cannot be browsed cannot be statted either, and the two have to
- * say so in the same words.
+ * statWith stats a path through the first lister that claims it, with the
+ * same error as listWith when none does.
  */
 export async function statWith(listers: readonly Lister[], path: string): Promise<Entry> {
   return claim(listers, path, (l) => l.handles(path), BROWSES).stat(path);

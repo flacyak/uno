@@ -1,9 +1,6 @@
-// The whole core, end to end, on the file the app was designed around.
-//
-// Every other test file pins one module. This one is the only place the modules
-// meet, and it is the shape of what an Electron shell will actually do: open a
-// file, fix a few cells, accept what the recogniser offers, bind a column, save
-// a workspace, and open it again somewhere else.
+// End-to-end test of the core modules together on sales-q3.csv: open a file,
+// edit a few cells, accept the proposed rule, bind a column formula, save a
+// workspace document, and read it back.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -28,17 +25,17 @@ test("a workspace survives being built, saved and reopened", () => {
   const raw = salesBytes();
   const s = read("sales-q3.csv", raw);
 
-  // 1. It opens, and the delimiter was guessed from the bytes.
+  // 1. The file opens and the delimiter is detected from the bytes.
   expect(s.rows()).toBe(ROWS);
   expect(s.cols()).toBe(COLS);
   expect(s.source).toBe("UTF-8 · delimiter ','");
 
-  // 2. units looks numeric and does not parse: numeric data wearing a costume.
+  // 2. The units column has comma-separated numbers, so it reads as flagged text.
   expect(s.columns[UNITS]!.header).toBe("units");
   expect(s.columns[UNITS]!.kind).toBe("text");
   expect(s.columns[UNITS]!.flagged).toBe(true);
 
-  // 3. Three cells fixed by hand, and the recogniser offers the rest.
+  // 3. After three hand edits, the pattern recogniser proposes a rule for the rest.
   s.set(0, UNITS, "1204");
   s.set(2, UNITS, "1455");
   s.set(4, UNITS, "2038");
@@ -49,22 +46,21 @@ test("a workspace survives being built, saved and reopened", () => {
   expect(describeProgram(p!.prog)).toBe("remove commas");
   expect(p!.affects).toBe(COMMAS_LEFT);
 
-  // 4. Accepting it is one line in the log for 3,149 changed cells, and the
+  // 4. Applying the rule adds one log entry, changes 3,149 cells, and the
   //    column stops being flagged.
   s.apply(p!.col, p!.prog);
   expect(s.columns[UNITS]!.kind).toBe("num");
   expect(s.columns[UNITS]!.flagged).toBe(false);
   expect(s.editCount(), "three edits and one rule").toBe(4);
 
-  // 5. A formula over the column that was just fixed. Binding channel to the
-  //    unit price is what the Go suite does with this same file, and 48160.00
-  //    over 1,204 units is 40.
+  // 5. Bind a formula over the fixed column. Row 0 has revenue 48160.00 and
+  //    1,204 units, so the unit price is 40.
   s.bind(CHANNEL, parseFormula("revenue / units"));
   const unitPrice = s.display(0, CHANNEL);
   expect(unitPrice).toBe("40");
 
-  // 6. Saved, and the log stayed proportional to what the person did rather
-  //    than to how much data they did it to.
+  // 6. Save the document. The manifest counts five log entries: three edits,
+  //    one rule, and one binding.
   const doc: Document = {
     manifest: newManifest(),
     sources: [
@@ -89,8 +85,8 @@ test("a workspace survives being built, saved and reopened", () => {
   expect(doc.manifest.edits.count).toBe(5);
   expect(doc.manifest.sources[0]!.bytes).toBe(raw.length);
 
-  // 7. Reopened, it is the same workspace: the rule replayed, and the bound
-  //    column recomputed from the expression rather than from stored results.
+  // 7. Read it back. The rule is replayed and the bound column is recomputed
+  //    from its expression.
   const back = readDocument("sales-q3.uno", bytes);
   const sheet = back.sheets!.get("sales-q3")!;
   expect(sheet.rows()).toBe(ROWS);
@@ -101,11 +97,11 @@ test("a workspace survives being built, saved and reopened", () => {
   expect(back.sources[0]!.state.active).toEqual({ row: 0, col: UNITS });
   expect(back.sources[0]!.state.columnFormulas).toEqual([{ col: CHANNEL, ref: "unit-price" }]);
 
-  // Every one of the 4,812 values came back off one line of the log.
+  // Every row of the bound column matches the original sheet.
   for (let row = 0; row < sheet.rows(); row++) {
     expect(sheet.display(row, CHANNEL), `row ${row}`).toBe(s.display(row, CHANNEL));
   }
 
-  // 8. And the recogniser has nothing left to ask about.
+  // 8. The recogniser's propose returns undefined.
   expect(snap(sheet).propose()).toBeUndefined();
 });

@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 //
-// Dropping a file on the window: what lights the empty state, what does not,
-// and what a drop opens or refuses.
+// Dropping a file on the window: what lights the empty state, and what a
+// drop opens or refuses.
 
 import { expect, test } from "vite-plus/test";
 
 import { wireDrop } from "../src/renderer/shell/drop.ts";
 
-/** A drag event as Chromium sends one, with `types` naming what is dragged. */
+/** A drag event with a dataTransfer whose `types` name what is dragged. */
 function drag(
   type: string,
   types: readonly string[],
@@ -59,12 +59,12 @@ test("dragged text is not a file, and lights nothing", () => {
 test("moving the file from the window onto the heading keeps the light on", () => {
   const { root, zone, child } = wired();
   root.dispatchEvent(drag("dragover", ["Files"]));
-  // Leaving the root for its own child, as Chromium reports it.
+  // dragleave from the root to its own child.
   child.dispatchEvent(drag("dragleave", ["Files"], [], child));
   root.dispatchEvent(drag("dragleave", ["Files"], [], child));
   expect(zone.classList.contains("over")).toBe(true);
 
-  // Leaving the window puts it out.
+  // dragleave with a null relatedTarget is leaving the window.
   root.dispatchEvent(drag("dragleave", ["Files"], [], null));
   expect(zone.classList.contains("over")).toBe(false);
 });

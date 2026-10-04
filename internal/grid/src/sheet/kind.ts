@@ -2,18 +2,14 @@ import { trimSpace } from "../go/index.ts";
 import { isNumber, undress } from "../num/index.ts";
 
 /**
- * Kind is what a column looks like. It is inferred at load and never stored in
- * the file, so changing the inference rules can never invalidate a saved sheet.
- *
- * A string union rather than a numbered enum: the Go type's whole observable
- * surface is its `String()` method, and the numbers were never written anywhere.
+ * Kind is what a column looks like. It is inferred at load and lives in
+ * memory only.
  */
 export type Kind = "text" | "num" | "date";
 
 /**
- * sampleRows bounds the work done at open. Measuring all 4,812 rows of six
- * columns to name their kinds costs 28,872 parses before the first frame; the
- * top of the file is enough to catch the shape of a column.
+ * SAMPLE_ROWS is how many rows from the top of a column are read to infer
+ * its kind.
  */
 export const SAMPLE_ROWS = 200;
 
@@ -23,21 +19,14 @@ export interface Inferred {
 }
 
 /**
- * inferKind reads down one column of the sample and names it.
+ * inferKind reads the first SAMPLE_ROWS values of one column through `at`
+ * and names its kind. Callers pass the display value, so a bound column is
+ * judged by what it shows.
  *
- * It takes a reader rather than the rows, because a bound column has no stored
- * values to read: what a formula computes lives in the display cache, and the
- * badge over it has to describe the numbers a person can see rather than the
- * empty strings underneath them. Callers pass `display`, which answers for both
- * kinds of column without this having to know which it is looking at.
- *
- * The flagged case is the one worth being precise about. A column is flagged
- * when every value would be a number but for a formatting convention the parser
- * does not accept: a separator, a currency mark, a percent sign. That is a
- * stricter test than "mostly numeric", and deliberately so: a column with the
- * odd "N/A" in it is genuinely mixed, whereas a column where 1,204 sits beside
- * 987 is numeric data wearing a costume, and it is the second the recogniser
- * offers to fix.
+ * Blank values are skipped. The kind is "date" when every value is a date,
+ * "num" when every value is a number, and "text" otherwise. The column is
+ * flagged when every value is a number or a number with formatting that
+ * `undress` removes: a separator, a currency mark, a percent sign.
  */
 export function inferKind(rows: number, at: (row: number) => string): Inferred {
   let seen = 0;
@@ -47,7 +36,7 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
 
   for (let i = 0; i < rows && i < SAMPLE_ROWS; i++) {
     const v = trimSpace(at(i));
-    if (v === "") continue; // a blank, or a ragged row: not evidence either way
+    if (v === "") continue; // a blank or a short row is skipped
     seen++;
 
     if (isDate(v)) dates++;
@@ -62,11 +51,9 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
   return { kind: "text", flagged: false };
 }
 
-// The layouts a date is written in: year first with any one separator, the
-// year last the same way, a month by name, and RFC 3339. Spelled out rather
-// than handed to `new Date`, which accepts far more -- "2026", "Nov 1970" and
-// "2026-07-01T25:00:00Z" would all become dates, and a text column would come
-// back wearing a date badge.
+// The layouts a date can be written in: year first with one separator, year
+// last the same way, a month by name, and RFC 3339. These are matched by
+// hand because `new Date` accepts far more.
 const YEAR_FIRST = /^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})$/;
 const YEAR_LAST = /^(\d{1,2})([-/.])(\d{1,2})\2(\d{4})$/;
 // Nov. 6, 1970 and November 6 1970; 6 Nov 1970 and 06-Nov-1970.
@@ -75,8 +62,7 @@ const DAY_FIRST = /^(\d{1,2})([ -])([A-Za-z]+)\.?\2(\d{4})$/;
 const RFC3339 =
   /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
 
-// Only a name or its usual short form is a month: "Nov" and "November", but
-// not "No" or "Novem", which would let any word before a number through.
+// A month is its full name or its three-letter form, plus "sept".
 const MONTHS = new Map<string, number>();
 [
   "january",
@@ -115,11 +101,11 @@ export function isDate(v: string): boolean {
   return false;
 }
 
-/** The shapes a date is written in, each with what a real date in that shape is. */
+/** Each date layout, with a check that its fields make a real date. */
 const DATE_SHAPES: ReadonlyArray<[RegExp, (m: RegExpExecArray) => boolean]> = [
   [YEAR_FIRST, (m) => isRealDate(Number(m[1]), Number(m[3]), Number(m[4]))],
-  // 20-11-2024 is day first and 11/20/2024 month first. Either reading makes
-  // it a date; which one is meant only matters to whatever reads the value.
+  // 20-11-2024 is day first and 11/20/2024 is month first. Either reading
+  // counts.
   [
     YEAR_LAST,
     (m) =>
@@ -132,7 +118,7 @@ const DATE_SHAPES: ReadonlyArray<[RegExp, (m: RegExpExecArray) => boolean]> = [
     RFC3339,
     (m) =>
       isRealDate(Number(m[1]), Number(m[2]), Number(m[3])) &&
-      // Go refuses a leap second: time.Parse answers "second out of range" to :60.
+      // Seconds stop at 59, so a leap second reads as text.
       Number(m[4]) <= 23 &&
       Number(m[5]) <= 59 &&
       Number(m[6]) <= 59,

@@ -1,10 +1,9 @@
 // Checks that a workspace somebody sent waits for its bucket, and stops
-// waiting once the bucket is connected, even when the object it names has
-// gone: the tab then says what reading it said, and offers Reload, rather than
-// asking again for a connection that is already there.
+// waiting once the bucket is connected, even when the object it names is
+// gone: the tab then says what reading it said and offers Reload, and no
+// longer asks for a connection.
 //
-// They run last, since opening the workspace closes the one the checks before
-// them built.
+// Opening the workspace closes the one the checks before them built.
 
 import type { Check } from "./check.ts";
 
@@ -12,7 +11,7 @@ import type { Check } from "./check.ts";
 const SENT = process.env["UNO_SMOKE_SENT"] ?? "";
 
 const LINE = `
-  // The workspace's one line, whatever it says about its file.
+  // The workspace's one line, unconnected or missing.
   const line = () => document.querySelector("#panel .panel-row.unconnected, #panel .panel-row.missing");
   `;
 
@@ -43,13 +42,13 @@ export const MEETS: Check[] = [
       signInAs("public");
       saveConnection();
 
-      // The bucket lists, so the connection is kept, and the object is read at
-      // once -- and is not there.
+      // The bucket lists, so the connection is kept and the object is read at
+      // once, and found missing.
       if (!(await arrives(() => line()?.classList.contains("missing") === true))) {
         return "the line still says " + JSON.stringify(line()?.textContent) + " · the status bar says " + JSON.stringify(text("#status-msg"));
       }
       if (line().children[1].textContent !== "missing") return "the line says " + JSON.stringify(line().textContent);
-      // Said once, on the file's line, and not again beside it.
+      // The reason is in the file's line, and the message line is empty.
       const why = "s3://open-data/2025/gone.csv: no such object in that bucket · point it at a file to see its rows";
       if (text("#status-file") !== why || text("#status-msg") !== "") {
         return "the status bar says " + JSON.stringify(text("#status-file")) + " · " + JSON.stringify(text("#status-msg"));

@@ -1,26 +1,12 @@
-// The settings control at the bottom left, and the menu it opens: the places
-// sources come from, how the page looks, and how the grid reads keys.
+// The settings control at the bottom left, and the menu it opens upward: the
+// connections, the theme, the appearance, the input strategy, and the
+// language.
 //
-// It works the way T3 Code's does. One control in the corner opens upward into
-// a menu. A theme is worn the moment it is chosen, so choosing is also
-// previewing. Light, dark or the system's is a separate choice beside it,
-// since every theme has both.
+// Choosing a theme or appearance applies it at once. Choosing a language
+// rewrites the whole window, this menu included, and everything stays open.
 //
-// The sources are the top-level places: every connection the engine loaded,
-// which is where browsing starts. Choosing one opens the panel browsing it,
-// and the menu offers to connect another the way the panel does.
-//
-// The keys are the input strategy. The window has no menu bar to pick one
-// from, so it is picked here.
-//
-// The language is one of the ones the app has messages for, each under the
-// name it calls itself, or whichever of them the system prefers. Choosing one
-// writes the whole window again in it, this menu included, without closing
-// what is open.
-//
-// It hangs off the page rather than the status bar, as the + menu does,
-// because the status bar is written again on every edit and would take an
-// open menu down with it.
+// The menu is appended to document.body, because the status bar is redrawn
+// on every edit and would remove an open menu.
 
 import "./settings.css";
 
@@ -34,36 +20,36 @@ import { APPEARANCES, THEMES } from "../theme.ts";
 import type { Appearance, Theming } from "../theme.ts";
 import { el, tabStep, walk } from "./util.ts";
 
-/** What the menu asks of the shell. The shell decides; the menu only asks. */
+/** What the menu asks of the shell. */
 export interface SettingsAsks {
-  /** The connections, read again from the engine, as the panel lists them. */
+  /** The connections, read again from the engine. */
   connections(): Promise<readonly Connection[]>;
-  /** Open the panel browsing one of them. */
+  /** Open the panel browsing a connection. */
   browse(c: Connection): void;
-  /** Open the panel's connect screen. */
+  /** Open the panel's connect form. */
   connect(): void;
-  /** The menu closed, so the keys go back to where they were. */
+  /** Called when the menu closes. */
   closed(): void;
-  /** How the grid reads keys now. */
+  /** The current input strategy. */
   input(): InputName;
-  /** Read keys another way, from here on and at the next launch. */
+  /** Change the input strategy, now and for the next launch. */
   setInput(name: InputName): void;
 }
 
-/** What each appearance says on its button. */
+/** The label for each appearance. */
 const APPEARANCE_WORDS: Record<Appearance, () => string> = {
   system: m.appearance_system,
   light: m.appearance_light,
   dark: m.appearance_dark,
 };
 
-/** What marks the one chosen among several in a list. */
+/** The mark beside the chosen item in a list. */
 const CHOSEN = "✓";
 
-/** The gap between the control and the menu it opens above it, in pixels. */
+/** The gap between the control and the menu above it, in pixels. */
 const GAP = 6;
 
-/** A gear, drawn in the ink's colour so every theme wears it. */
+/** The gear icon, drawn in currentColor. */
 const GEAR =
   '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' +
   '<circle cx="8" cy="8" r="2.2"/>' +
@@ -72,7 +58,9 @@ const GEAR =
 
 export class Settings {
   private readonly box = document.createElement("div");
-  /** Counts opens, so a list of connections that lands after a close is dropped. */
+  /**
+   * Counts opens, so a list of connections that lands after a close is dropped.
+   */
   private opens = 0;
   private connections: readonly Connection[] = [];
   private reading = false;
@@ -82,7 +70,7 @@ export class Settings {
   };
 
   constructor(
-    /** The control in the corner, which the menu opens above. */
+    /** The control in the corner the menu opens above. */
     private readonly toggle: HTMLButtonElement,
     private readonly theming: Theming,
     private readonly language: Language,
@@ -100,18 +88,21 @@ export class Settings {
     document.body.append(this.box);
 
     this.label();
-    // A theme worn is drawn as chosen whatever chose it.
+    // Repaint when the theme changes, whatever changed it.
     theming.onChange(() => {
       if (this.open) this.paint();
     });
-    // A language chosen is the one the control and the open menu are in.
+    // Relabel when the language changes.
     language.onChange(() => {
       this.label();
       if (this.open) this.paint();
     });
   }
 
-  /** label names the control and its menu, for a pointer resting on it and for a screen reader. */
+  /**
+   * label sets the control's hover text and the aria labels of the control and
+   * the menu.
+   */
   private label(): void {
     this.toggle.setAttribute("aria-label", m.settings_title());
     this.toggle.title = m.settings_title();
@@ -123,8 +114,8 @@ export class Settings {
   }
 
   /**
-   * show opens the menu above the control, with the keys on its first item,
-   * and reads the connections again so the list is the engine's as it is now.
+   * show opens the menu above the control, focuses its first item, and reads
+   * the connections again.
    */
   show(): void {
     if (this.open) return;
@@ -163,7 +154,7 @@ export class Settings {
     this.asks.closed();
   }
 
-  /** place hangs the menu above the control, its left edge on the control's. */
+  /** place positions the menu above the control, left edges aligned. */
   private place(): void {
     const at = this.toggle.getBoundingClientRect();
     this.box.style.left = `${Math.round(at.left)}px`;
@@ -171,8 +162,8 @@ export class Settings {
   }
 
   /**
-   * key reads a key in the menu: the arrows and Tab walk its items, Esc closes
-   * it and gives the keys back, and nothing typed here reaches the grid.
+   * key handles a key in the menu: the arrows and Tab move through the items,
+   * and Esc closes it. Every key stops at the menu.
    */
   private key(e: KeyboardEvent): void {
     e.stopPropagation();
@@ -186,14 +177,14 @@ export class Settings {
     walk(e, this.items(), arrowStep);
   }
 
-  /** Every item the keys can land on, in the order they are drawn. */
+  /** Every button in the menu, in document order. */
   private items(): HTMLButtonElement[] {
     return [...this.box.querySelectorAll<HTMLButtonElement>("button")];
   }
 
   /**
-   * paint draws the menu from what is so now: the connections, the theme worn,
-   * and the appearance. The item the keys were on keeps them, by its place.
+   * paint rebuilds the menu's contents. Focus stays on the item at the same
+   * position.
    */
   private paint(): void {
     const focused = this.items().indexOf(document.activeElement as HTMLButtonElement);
@@ -211,7 +202,10 @@ export class Settings {
     if (focused >= 0) this.items()[Math.min(focused, this.items().length - 1)]?.focus();
   }
 
-  /** The places sources come from, each one a way into the panel. */
+  /**
+   * The connections section: each one opens the panel on it, then a Connect
+   * item.
+   */
   private sources(): HTMLElement {
     const section = heading(m.sources_title());
     if (this.reading && this.connections.length === 0) {
@@ -238,7 +232,9 @@ export class Settings {
     return section;
   }
 
-  /** The four themes, each with a chip of its colours in the mode worn now. */
+  /**
+   * The themes section, each with a chip of its colours in the current mode.
+   */
   private themes(): HTMLElement {
     const section = heading(m.settings_theme());
     const mode = this.theming.mode;
@@ -262,7 +258,7 @@ export class Settings {
     return section;
   }
 
-  /** Light, dark, or whatever the system is in, for whichever theme is worn. */
+  /** The appearance section: system, light, or dark. */
   private appearances(): HTMLElement {
     const on = this.theming.appearance;
     const word = (a: Appearance): string => APPEARANCE_WORDS[a]();
@@ -271,7 +267,7 @@ export class Settings {
     );
   }
 
-  /** How the grid reads keys: a spreadsheet's, or vim's. */
+  /** The input strategy section. */
   private keys(): HTMLElement {
     const on = this.asks.input();
     return segment(m.settings_keys(), INPUTS, on, inputLabel, "input", (name) => {
@@ -281,8 +277,8 @@ export class Settings {
   }
 
   /**
-   * The languages the app speaks, each under its own name so it can be found
-   * by someone who reads no other, and the system's first.
+   * The languages section: the system's choice first, then each language
+   * under its own name.
    */
   private languages(): HTMLElement {
     const section = heading(m.settings_language());
@@ -293,7 +289,7 @@ export class Settings {
     for (const [choice, name] of choices) {
       const chosen = choice === this.language.choice;
       const item = radio(name, chosen, "language", choice, () => this.language.choose(choice));
-      // The name is in the language itself, and the page is in another.
+      // The name is written in its own language.
       if (choice !== SYSTEM) item.lang = choice;
       section.append(item);
     }
@@ -302,8 +298,8 @@ export class Settings {
 }
 
 /**
- * radio is one line of a list where one is chosen: its name, the mark where it
- * is the one, and under `key` what it stands for, for the keys and a reader.
+ * radio is one item of a list with one chosen: its name, the chosen mark,
+ * and `data-<key>` set to `value`.
  */
 function radio(
   name: string,
@@ -343,21 +339,21 @@ function segment<T extends string>(
   return section;
 }
 
-/** arrowStep reads the arrows as a step through the items, and Tab as one too. */
+/** arrowStep reads the arrow keys as steps, and Tab as tabStep does. */
 function arrowStep(e: KeyboardEvent): 1 | -1 | 0 {
   if (e.key === "ArrowDown") return 1;
   if (e.key === "ArrowUp") return -1;
   return tabStep(e);
 }
 
-/** heading is a section of the menu, under its title. */
+/** heading creates a section with its title. */
 function heading(title: string): HTMLElement {
   const section = el("section");
   section.append(el("div", "head", title));
   return section;
 }
 
-/** row is one item: what it is, and what is beside it. */
+/** row creates one item button: a name and text beside it. */
 function row(name: string, meta: string): HTMLButtonElement {
   const item = el("button", "item");
   item.type = "button";

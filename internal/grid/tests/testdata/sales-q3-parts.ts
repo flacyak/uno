@@ -1,10 +1,7 @@
-// sales-q3.csv cut into three files, for the tests that read several files as
-// one.
-//
-// Each part opens with the header the whole file has and holds a third of its
-// rows, in order, every row ending in the CRLF it ends in there. Joined with
-// the two repeats of the header left out, they are the whole file byte for
-// byte.
+// sales-q3.csv cut into three files, for the tests that read several files
+// as one. Each part has the full header line and a third of the data rows,
+// with the original CRLF line endings. Joined with the second and third
+// headers removed, they equal the whole file byte for byte.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -14,7 +11,7 @@ import { ROWS } from "./sales-q3.ts";
 /** How many parts the file is cut into. */
 export const PARTS = 3;
 
-/** Data rows in each part, not counting its header. */
+/** Data rows in each part, below its header. */
 export const PART_ROWS = ROWS / PARTS;
 
 /** What each part is called, in order. */
