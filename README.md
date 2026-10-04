@@ -10,8 +10,8 @@ leaves the machine.
 
 There is a hosted version too: the same renderer in a browser, over an engine
 on a server, which signs in to a bucket with a role in your account rather than
-with any key of its own. It is a repository of its own, checked out as
-`apps/www/` here and ignored by this one. What it needs of uno is public in this
+with any key of its own. It is a repository of its own, the submodule at
+`apps/www/` here. What it needs of uno is public in this
 repository: the engine's messages as WebSocket frames, the engine saying how it
 signs in, and the renderer, the `Host` interface and the page's markup that
 [`apps/desktop`](apps/desktop) exports.
