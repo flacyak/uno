@@ -53,7 +53,7 @@ export interface S3Prefix {
  * the prefix. Undefined for anything else.
  */
 export function s3Prefix(path: string): S3Prefix | undefined {
-  const root = /^s3:\/\/([^/]+)\/?$/i.exec(path.trim());
+  const root = /^s3:\/\/([^/]+)\/?$/i.exec(path);
   if (root !== null) return { bucket: root[1]!, prefix: '' };
 
   const loc = s3Location(path);

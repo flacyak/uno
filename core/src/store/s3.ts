@@ -77,15 +77,17 @@ export interface S3Location {
 
 /**
  * s3Location reads an object's address: the s3:// form, and the https forms
- * on amazonaws.com. Undefined for anything else.
+ * on amazonaws.com. Undefined for anything else. The key is read as written,
+ * space at its end included, since S3 keeps such a key apart from the
+ * trimmed one. Text a person pasted is trimmed before it gets here.
  */
 export function s3Location(url: string): S3Location | undefined {
-  const s3 = /^s3:\/\/([^/]+)\/(.+)$/i.exec(url.trim());
+  const s3 = /^s3:\/\/([^/]+)\/(.+)$/i.exec(url);
   if (s3 !== null) return { bucket: s3[1]!, key: s3[2]! };
 
   let u: URL;
   try {
-    u = new URL(url.trim());
+    u = new URL(url);
   } catch {
     return undefined;
   }
