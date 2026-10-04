@@ -58,6 +58,7 @@ describe('supported names the first symbol it cannot draw', () => {
     ['\\frac{a}', '\\frac'],
     ['a \\ b', '\\ names no symbol'],
     ['x^{\\alpha}', '\\alpha'], // superscript Greek is refused
+    ['x^\\alpha', '\\alpha'], // bare too, named whole
     ['\\frac{x_q}{b}', '"q"'], // groups are checked too
 
     // The first unsupported symbol is named.
