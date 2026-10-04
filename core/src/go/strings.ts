@@ -104,7 +104,11 @@ export function toLower(s: string): string {
   return out;
 }
 
-/** equalFold mirrors strings.EqualFold, using the simple mappings above. */
+/**
+ * equalFold mirrors strings.EqualFold, using the simple mappings above. A
+ * rune's fold orbit is reached through its upper case: ſ and s share S, and
+ * ς and σ share Σ, while neither pair shares a lower case.
+ */
 export function equalFold(a: string, b: string): boolean {
-  return toLower(a) === toLower(b);
+  return toLower(toUpper(a)) === toLower(toUpper(b));
 }
