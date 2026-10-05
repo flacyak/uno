@@ -25,6 +25,7 @@
   --accent-b: #e2f0f4;
   --flag: #a85f06;
   --flag-b: #f8eddc;
+  --scrim: rgb(0 0 0 / 30%);
 
   --display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -44,6 +45,10 @@
    * it. */
   --corner: 34px;
 
+  /* How long the sources panel takes to come in. The scrim over the workspace
+   * darkens over the same time, so the two read as one motion. */
+  --panel-in: 180ms;
+
   color-scheme: light;
 }
 
@@ -61,6 +66,7 @@
     --accent-b: #12303a;
     --flag: #efa84c;
     --flag-b: #33240f;
+    --scrim: rgb(0 0 0 / 50%);
     color-scheme: dark;
   }
 }
@@ -102,19 +108,48 @@ body {
  * `min-height: 0` so the grid scrolls rather than pushing the status bar off
  * the window. */
 .win-frame {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 /* `min-width: 0` so the sheet gives up the width the columns either side take
- * rather than pushing one off the window. */
+ * rather than pushing one off the window. `isolation`, so the grid's sticky
+ * headers stack inside it and the scrim needs only to be above the sheet as a
+ * whole. */
 .win-sheet {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  isolation: isolate;
+}
+
+/* The scrim: the workspace darkened while the keys are in the sources panel,
+ * so the panel is what the eye goes to. It is drawn over all three columns,
+ * the sidebar with the sheet, and the panel sits above it. A click goes
+ * through it to the grid, which takes the keys back and with them the light. */
+.win-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--panel-in) ease-out;
+}
+
+.win-frame:has(.panel:focus-within)::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .win-frame::after {
+    transition: none;
+  }
 }
 
 /* The head a column begins with: what the column is, in a band one row high.
