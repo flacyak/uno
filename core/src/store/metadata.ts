@@ -73,7 +73,12 @@ export async function instanceCredentials(
   else await token.body?.cancel(); // v2 turned off, or a proxy in the way: ask the v1 way
 
   const at = `${base}/latest/meta-data/iam/security-credentials/`;
-  const roles = await go(at, { headers, signal: AbortSignal.timeout(HOST_MS) });
+  let roles: Response;
+  try {
+    roles = await go(at, { headers, signal: AbortSignal.timeout(HOST_MS) });
+  } catch {
+    return undefined; // the token answered and then nothing did: not an instance
+  }
   if (!roles.ok) {
     await roles.body?.cancel();
     return undefined; // no role attached, or something other than IMDS at this address
