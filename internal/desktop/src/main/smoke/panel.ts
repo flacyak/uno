@@ -62,6 +62,22 @@ export const PANEL: Check[] = [
     `,
   },
   {
+    // The × at the top right closes the window, so the panel must not be what
+    // it sits on: only a window lays this out, too.
+    name: "the panel begins under the window's top line, and the × is on the line and not the panel",
+    script: `
+      // The panel slides in from the edge, and is measured where it comes to rest.
+      await Promise.all(document.querySelector("#panel").getAnimations().map((a) => a.finished));
+      const panel = document.querySelector("#panel").getBoundingClientRect();
+      const line = document.querySelector(".win-top").getBoundingClientRect();
+      const close = document.querySelector(".win-close").getBoundingClientRect();
+      if (line.top !== 0 || line.height < close.height) return "the top line is " + line.height + "px tall at " + line.top + "px";
+      if (panel.top !== line.bottom) return "the panel starts at " + panel.top + "px, and the top line ends at " + line.bottom + "px";
+      if (line.left !== panel.left || line.right !== panel.right) return "the top line runs from " + line.left + " to " + line.right + ", and the panel from " + panel.left + " to " + panel.right;
+      return close.bottom <= panel.top ? "" : "the × reaches " + close.bottom + "px, into the panel at " + panel.top + "px";
+    `,
+  },
+  {
     name: "p on the object's tab lists the folder in the bucket it came from",
     script: `
       ${LINES}
