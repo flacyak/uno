@@ -10,7 +10,7 @@
 import type { Connection } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
 import type { Edit, Kind, Op } from "../sheet/index.ts";
-import type { Entry, FileRef, Listing } from "../store/index.ts";
+import type { Entry, FileRef, Listing, SingleRef } from "../store/index.ts";
 import type { Tried, Unconnected } from "../store/s3.ts";
 
 /**
@@ -233,6 +233,12 @@ export type Request =
    * the log, and the log is replayed over what the file holds now.
    */
   | { t: "relink"; id: number; source: string; ref: SourceRef }
+  /**
+   * Add files at the end of a source that is several read as one. Its rows
+   * extend, and every row it had keeps its number, so the log is untouched and
+   * each edit stays on the cell it was made to.
+   */
+  | { t: "append"; id: number; source: string; parts: SingleRef[] }
   /** Rows by position, with the log applied. Fewer where the index has not reached. */
   | { t: "rows"; id: number; source: string; first: number; count: number }
   | { t: "edit"; id: number; source: string; edit: EditRequest }
@@ -284,6 +290,7 @@ export type Reply =
   | { t: "opened"; id: number; added: Opening }
   | { t: "removed"; id: number }
   | { t: "relinked"; id: number; opened: Opened }
+  | { t: "appended"; id: number; opened: Opened }
   | { t: "progress"; source: string; progress: Progress }
   | {
       t: "rows";

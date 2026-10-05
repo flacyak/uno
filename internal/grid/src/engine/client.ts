@@ -24,7 +24,7 @@ import type {
 } from "./protocol.ts";
 import { messageOf } from "./protocol.ts";
 import type { Connection } from "../library/index.ts";
-import type { Entry, Listing } from "../store/index.ts";
+import type { Entry, Listing, SingleRef } from "../store/index.ts";
 import type { Tried } from "../store/s3.ts";
 
 interface Waiter<T> {
@@ -95,6 +95,21 @@ export class Engine {
   async relink(source: SourceHandle, ref: SourceRef): Promise<SourceHandle> {
     const r = await this.ask((id) => ({ t: "relink", id, source: source.id, ref }));
     if (r.t !== "relinked") throw new Error(`the engine answered a relink with ${r.t}`);
+    const handle = new SourceHandle(this, r.opened);
+    this.sources.set(handle.id, handle);
+    return handle;
+  }
+
+  /**
+   * append adds files at the end of a source that is several read as one.
+   *
+   * It answers with a new handle, as a relink does and for the same reason:
+   * the progress and the rows belong to the longer source. The log is the one
+   * the old handle had, every edit on the cell it was made to.
+   */
+  async append(source: SourceHandle, parts: SingleRef[]): Promise<SourceHandle> {
+    const r = await this.ask((id) => ({ t: "append", id, source: source.id, parts }));
+    if (r.t !== "appended") throw new Error(`the engine answered an append with ${r.t}`);
     const handle = new SourceHandle(this, r.opened);
     this.sources.set(handle.id, handle);
     return handle;
