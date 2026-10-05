@@ -173,8 +173,10 @@ export async function peekFormat(
   }
   if (second < 0) return undefined;
 
+  // The byte order mark is skipped by hand: the Windows-1252 decoder has no
+  // notion of one and would read it as three characters.
   const first = readAll(
-    decoders.head.decode(head.subarray(0, second)),
+    decoders.head.decode(head.subarray(bomLength(head), second)),
     comma,
   )[0]!;
   return {
