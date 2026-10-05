@@ -12,13 +12,14 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 
 import { readContainer } from "../../src/document/index.ts";
+import { FILE_COLUMN } from "../../src/engine/index.ts";
 import type { Engine, SourceHandle, SourceRef } from "../../src/engine/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
 import { Op } from "../../src/sheet/index.ts";
 import { blobProvider, multiProvider } from "../../src/store/index.ts";
 import type { SingleRef } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
-import { ROWS, UNITS } from "../testdata/sales-q3.ts";
+import { COLS, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import {
   PARTS,
   PART_FIXTURES,
@@ -107,6 +108,27 @@ async function edited(engine: Engine): Promise<SourceHandle> {
 function made(edits: ReadonlyArray<{ row: number; now: string }>): Array<[number, string]> {
   return edits.map((e) => [e.row, e.now]);
 }
+
+// The `_file` column is worked out from where a row starts in the join, so a
+// source that shows one says the appended part of the rows that part brought,
+// and says of every row it had what it said before.
+test("a source with a _file column names the appended part on the rows it brings", async () => {
+  const { engine, done } = connect(TINY, providers());
+  try {
+    const before = await openOne(engine, { ...FIRST_TWO, fileColumn: true });
+    await indexed(before);
+
+    const src = await engine.append(before, [THIRD]);
+    await indexed(src);
+    expect(src.opened.columns.at(-1)?.header).toBe(FILE_COLUMN);
+
+    const files = (await every(src)).map((row) => row[COLS]);
+    expect(files).toHaveLength(ROWS);
+    expect(files).toEqual(files.map((_, row) => PART_NAMES[Math.floor(row / PART_ROWS)]));
+  } finally {
+    done();
+  }
+});
 
 // The task's own sentence: edits made before the append still sit on the
 // same cells.
