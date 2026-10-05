@@ -113,7 +113,7 @@ test("the stand-in bucket sees zero requests before the person accepts", async (
     expect(b.seen.length, "nothing was asked of the bucket").toBe(before);
     expect(remote.opened.link).toEqual({
       path: OBJECT,
-      missing: `q4-close.uno reads s3://${BUCKET}/…, which no connection covers · connect ${BUCKET} to read it`,
+      missing: { t: "bucket-unconnected", container: "q4-close.uno", bucket: BUCKET },
       connect: { bucket: BUCKET, prefix: "2025/" },
     });
     // The work done through it is still there, waiting for the file.
@@ -230,7 +230,7 @@ test("a source whose object has gone stops waiting once its bucket is connected,
     const now = await engine.relink(remote, at);
     expect(now.opened.link).toEqual({
       path: gone,
-      missing: `${gone}: no such object in that bucket`,
+      missing: { t: "text", text: `${gone}: no such object in that bucket` },
     });
     expect(now.opened.edits).toHaveLength(1);
   } finally {

@@ -30,6 +30,7 @@ import type { Listing, SingleRef } from "@uno/grid/store";
 import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "../paraglide/messages.js";
 import { bytes } from "./locale.ts";
+import { say } from "./said.ts";
 
 /**
  * The most a saved workspace carries, all such sources together.
@@ -122,7 +123,8 @@ export class Tab {
   /** What is wrong with the file behind this source, if anything: it is gone,
    * or it is not the file the log was written against. */
   get trouble(): string | undefined {
-    return this.link?.missing ?? this.link?.changed;
+    const wrong = this.link?.missing ?? this.link?.changed;
+    return wrong === undefined ? undefined : say(wrong);
   }
 
   /** Whether there is a grid behind this tab at all. */
@@ -531,11 +533,12 @@ export class Workspace {
 
     // Until the index reaches the end, the count is projected from how far it
     // has got, and says so.
-    const parts = [
+    const parts: string[] = [
       p.complete ? m.rows_count({ count: p.rows }) : m.rows_count_about({ count: p.rows }),
       m.columns_count({ count: t.band.cols() }),
-      t.source.opened.label,
     ];
+    const read = t.source.opened.label;
+    if (read !== undefined) parts.push(say(read));
     if (!p.complete) parts.push(m.indexing_percent({ percent: this.indexed() }));
 
     const edits = t.edited;
@@ -544,8 +547,8 @@ export class Workspace {
     // says so where the person is looking, not only on the mark's hover.
     // The one with something to do about it goes first, as on its panel line:
     // a newer version, which Reload reads, before a change it would replace.
-    const changed = t.newer === undefined ? t.link?.changed : m.newer_version();
-    if (changed !== undefined) parts.push(changed);
+    if (t.newer !== undefined) parts.push(m.newer_version());
+    else if (t.link?.changed !== undefined) parts.push(say(t.link.changed));
     return parts.join(" · ");
   }
 }

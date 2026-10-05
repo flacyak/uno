@@ -57,9 +57,8 @@ const UNTRANSLATED: readonly RegExp[] = [
   /acme-exports|\bs3\b|\bdefault\b|~\/\.aws/g,
   // The file extensions the empty state lists.
   /\b(csv|tsv)\b/g,
-  // How the engine describes the file it read. These are the engine's words,
-  // which are still English: see @uno/grid/engine.
-  /UTF-8|delimiter '.'/g,
+  // The encoding a file was read in, by the name everyone calls it.
+  /UTF-8/g,
 ];
 
 /** A message, innermost first, so one that holds another is taken out whole. */

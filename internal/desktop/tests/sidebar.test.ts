@@ -140,7 +140,7 @@ test("the last source has no ×, and one of several asks to be removed without b
 test("the ! mark asks to re-point the tab from the panel, and does not select it", () => {
   const { els, asked } = one({
     path: "s3://acme-exports/ads/google-ads.csv",
-    missing: "google-ads.csv is not there",
+    missing: { t: "text", text: "google-ads.csv is not there" },
   });
   const mark = els[1]!.querySelector<HTMLElement>(".trouble")!;
   expect(mark.className).toBe("trouble gone");

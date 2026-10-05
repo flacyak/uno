@@ -12,7 +12,16 @@ import type { Engine, SourceHandle } from "../../src/engine/index.ts";
 import { Op } from "../../src/sheet/index.ts";
 import { COLS, REGION, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { PART_ROWS } from "../testdata/sales-q3-parts.ts";
-import { FIXTURE, TINY, connect, indexed, openOne, sales, widened } from "../engine/harness.ts";
+import {
+  FIXTURE,
+  TINY,
+  connect,
+  indexed,
+  openOne,
+  sales,
+  widened,
+  saidIn,
+} from "../engine/harness.ts";
 import { COLUMNS, NAMES, SOURCE, asOne, marked, onDisk, providers, rowsOnly } from "./parts.ts";
 
 /** How many rows are asked for at a time. */
@@ -63,7 +72,7 @@ describe("three headerless files opened as one", () => {
     const src = await openOne(engine(), asOne(paths));
     expect(src.opened.name).toBe(SOURCE);
     expect(src.opened.columns.map((c) => c.header)).toEqual(COLUMNS);
-    expect(src.opened.label).toBe(NO_HEADER);
+    expect(saidIn(src.opened.label)).toBe(NO_HEADER);
   });
 
   test("show every line of every file as a row, in order", async () => {
@@ -130,7 +139,7 @@ describe("a peek at headerless files", () => {
   test("shows numbered columns over the first lines, the very first included", async () => {
     const peeked = await engine().peek(asOne(paths));
     expect(peeked.header).toEqual(COLUMNS);
-    expect(peeked.label).toBe(NO_HEADER);
+    expect(saidIn(peeked.label)).toBe(NO_HEADER);
     expect(peeked.rows[0]).toEqual(expected(0));
     expect(peeked.rows[1]).toEqual(expected(1));
   });
@@ -160,7 +169,7 @@ describe("what a header mode does not change", () => {
     const src = await openOne(engine(), { name: "sales-q3.csv", path: FIXTURE });
     await indexed(src);
     expect(src.opened.columns.map((c) => c.header)).toEqual(sales.columns.map((c) => c.header));
-    expect(src.opened.label).toBe("UTF-8 · delimiter ','");
+    expect(saidIn(src.opened.label)).toBe("UTF-8 · delimiter ','");
     expect(src.progress.rows).toBe(ROWS);
   });
 });

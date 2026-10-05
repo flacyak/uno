@@ -17,6 +17,7 @@ import { m } from "../../paraglide/messages.js";
 import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
 import { bytes } from "../locale.ts";
+import { say } from "../said.ts";
 import { SECTIONS, connectionLine, fileCount, newFiles, stateOf, stateWord } from "../sources.ts";
 import type {
   Button,
@@ -603,7 +604,7 @@ export class Panel {
     const wrap = document.createElement("div");
     wrap.className = "table";
     wrap.append(table);
-    this.peek.replaceChildren(text("div", "note", now.label), wrap);
+    this.peek.replaceChildren(text("div", "note", say(now.label)), wrap);
   }
 
   /**
@@ -698,8 +699,12 @@ export class Panel {
         title = [
           tab.link?.path,
           ...(tab.parts ?? []).map((part) => part.path || part.name),
-          tab.link?.missing ?? (tab.newer === undefined ? undefined : m.newer_version()),
-          tab.link?.changed,
+          tab.link?.missing === undefined
+            ? tab.newer === undefined
+              ? undefined
+              : m.newer_version()
+            : say(tab.link.missing),
+          tab.link?.changed === undefined ? undefined : say(tab.link.changed),
         ]
           .filter((t) => t !== undefined)
           .join(" · ");

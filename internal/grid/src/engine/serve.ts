@@ -8,7 +8,7 @@
 // same call.
 
 import type { Port, Reply, Request } from "./protocol.ts";
-import { messageOf } from "./protocol.ts";
+import { Refusal, saidOf } from "../said/index.ts";
 import { TUNING } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
 import { peek } from "./peek.ts";
@@ -151,15 +151,13 @@ export function serve(
       // files must not wait behind a save.
       case "connections": {
         if (connections === undefined) {
-          throw new Error(
-            "this engine keeps no connections · its platform gave it nowhere to read them from",
-          );
+          throw new Refusal({ t: "keeps-no-connections" });
         }
         const read = await connections.load();
         port.post({
           t: "loaded",
           id: msg.id,
-          loaded: { connections: read.connections, failed: read.failed.map((e) => e.message) },
+          loaded: { connections: read.connections, failed: read.failed.map(saidOf) },
         });
         return;
       }
@@ -168,9 +166,7 @@ export function serve(
       // what is in it besides the names stays here.
       case "profiles": {
         if (connecting?.profiles === undefined) {
-          throw new Error(
-            "this engine has no AWS profiles to offer · its platform signs in another way",
-          );
+          throw new Refusal({ t: "offers-no-profiles" });
         }
         port.post({ t: "names", id: msg.id, names: await connecting.profiles() });
         return;
@@ -179,7 +175,7 @@ export function serve(
       // not hold it up.
       case "try": {
         if (connecting?.test === undefined) {
-          throw new Error("this engine cannot try a connection · its platform connects to nothing");
+          throw new Refusal({ t: "tries-no-connection" });
         }
         port.post({ t: "tried", id: msg.id, tried: await connecting.test(msg.connection) });
         return;
@@ -216,7 +212,7 @@ export function serve(
     handle(msg).then(
       () => took(msg, started, "answered"),
       (err: unknown) => {
-        port.post({ t: "error", id: "id" in msg ? msg.id : undefined, message: messageOf(err) });
+        port.post({ t: "error", id: "id" in msg ? msg.id : undefined, said: saidOf(err) });
         took(msg, started, "refused");
       },
     );

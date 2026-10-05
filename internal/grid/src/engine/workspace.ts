@@ -32,7 +32,8 @@ import type {
   Request,
   SourceRef,
 } from "./protocol.ts";
-import { formatBytes, messageOf } from "./protocol.ts";
+import { Refusal, saidOf } from "../said/index.ts";
+import type { Said } from "../said/index.ts";
 import type { Meeting, Unconnected } from "../store/s3.ts";
 import type { Tuning } from "./rows.ts";
 import { unmeasured } from "./telemetry.ts";
@@ -74,7 +75,7 @@ class Absent {
      * not a reason to be the thing that finally loses them.
      */
     private readonly kept: Part,
-    why: string,
+    why: Said,
     /** The bucket it reads that no connection covers, when that is why. */
     connect?: Unconnected,
   ) {
@@ -84,7 +85,6 @@ class Absent {
       source: id,
       name,
       size,
-      label: "",
       columns: [],
       // Complete, because nothing is going to arrive. A grid that waits for rows
       // out of a file that is not there waits forever, and says "indexing 0%"
@@ -142,7 +142,7 @@ class Absent {
    * missing is this source once it has stopped waiting for its bucket but its
    * file still does not open: the same source, saying why it has no file.
    */
-  missing(why: string): Absent {
+  missing(why: Said): Absent {
     return new Absent(this.id, this.name, this.kept, why);
   }
 
@@ -230,7 +230,7 @@ export class Workspace {
     return this.serially(async () => {
       const source = this.need(id);
       if (this.sources.size === 1) {
-        throw new Error(`${source.name} is the only source here, and a workspace needs one`);
+        throw new Refusal({ t: "only-source", name: source.name });
       }
       this.sources.delete(id);
       this.states.delete(id);
@@ -282,7 +282,7 @@ export class Workspace {
           sameList(places, pathsIn(was.parts ?? { name: was.name, path: was.path })) &&
           places.every((path) => this.unconnected(path) === undefined);
         if (!connected) throw err;
-        const now = was.missing(messageOf(err));
+        const now = was.missing(saidOf(err));
         this.sources.set(id, now);
         return now.opened;
       }
@@ -313,19 +313,26 @@ export class Workspace {
     return this.serially(async () => {
       const was = this.need(id);
       if (!(was instanceof View)) {
-        throw new Error(`${was.name} has no file behind it, so nothing can be appended to it`);
+        throw new Refusal({ t: "append-to-absent", name: was.name });
       }
       const ref = was.extended(files);
       if (ref === undefined) {
-        throw new Error(`${was.name} is one file · files are appended only to several read as one`);
+        throw new Refusal({ t: "append-to-one-file", name: was.name });
       }
-      if (files.length === 0) throw new Error(`no file was given to append to ${was.name}`);
+      if (files.length === 0) throw new Refusal({ t: "append-nothing", name: was.name });
       const had = ref.parts.length - files.length;
       files.forEach((file, i) => {
         if (!("path" in file)) return;
         const at = ref.parts.findIndex((part) => "path" in part.ref && part.ref.path === file.path);
-        if (at < had) throw new Error(`${file.name} is already part ${at + 1} of ${was.name}`);
-        if (at < had + i) throw new Error(`${file.name} is given twice to append to ${was.name}`);
+        if (at < had) {
+          throw new Refusal({
+            t: "append-already-part",
+            file: file.name,
+            part: at + 1,
+            name: was.name,
+          });
+        }
+        if (at < had + i) throw new Refusal({ t: "append-twice", file: file.name, name: was.name });
       });
 
       const view = await this.view(id, ref, { container: "", edits: was.log });
@@ -342,7 +349,7 @@ export class Workspace {
   /** A .uno's sources: each opened from the file it points at, or carried. */
   private async openWorkspace(ref: SourceRef): Promise<Opening> {
     if (this.sources.size > 0) {
-      throw new Error(`${ref.name} is a workspace of its own · open it rather than adding it`);
+      throw new Refusal({ t: "workspace-as-source", name: ref.name });
     }
 
     // A .uno is a zip, and whatever it carries has to come out of it before
@@ -354,9 +361,12 @@ export class Workspace {
     let bytes: Uint8Array;
     try {
       if (file.size > WHOLE_LIMIT) {
-        throw new Error(
-          `${ref.name} is ${formatBytes(file.size)}, over the ${formatBytes(WHOLE_LIMIT)} a workspace can be read whole`,
-        );
+        throw new Refusal({
+          t: "workspace-too-large",
+          name: ref.name,
+          bytes: file.size,
+          limit: WHOLE_LIMIT,
+        });
       }
       bytes = await file.read(0, file.size);
     } finally {
@@ -400,7 +410,7 @@ export class Workspace {
         src.id,
         src.name,
         kept,
-        `${container} reads s3://${needs.bucket}/…, which no connection covers · connect ${needs.bucket} to read it`,
+        { t: "bucket-unconnected", container, bucket: needs.bucket },
         needs,
       );
     }
@@ -424,7 +434,7 @@ export class Workspace {
       view.opened.link = linkOf(view, src);
       return view;
     } catch (err) {
-      return new Absent(src.id, src.name, kept, messageOf(err));
+      return new Absent(src.id, src.name, kept, saidOf(err));
     }
   }
 
@@ -578,7 +588,7 @@ export class Workspace {
   save(place: Place, limit: number): Promise<Uint8Array> {
     return this.serially(async () => {
       const sources = [...this.sources.values()];
-      if (sources.length === 0) throw new Error("no file is open");
+      if (sources.length === 0) throw new Refusal({ t: "no-file-open" });
       this.refuseOver(sources, limit);
 
       const parts = new Map<string, Part>();
@@ -635,13 +645,14 @@ export class Workspace {
     if (total <= limit) return;
     if (carried.length === 1) {
       const s = carried[0]!;
-      throw new Error(
-        `${s.name} is ${formatBytes(s.carries)}, over the ${formatBytes(limit)} a workspace can carry for a source it has no file to point at`,
-      );
+      throw new Refusal({ t: "carried-too-large", name: s.name, bytes: s.carries, limit });
     }
-    throw new Error(
-      `the ${carried.length} sources with no file behind them come to ${formatBytes(total)}, over the ${formatBytes(limit)} a workspace can carry`,
-    );
+    throw new Refusal({
+      t: "carried-together-too-large",
+      count: carried.length,
+      bytes: total,
+      limit,
+    });
   }
 
   // ------------------------------------------------------------ lifetime
@@ -663,7 +674,7 @@ export class Workspace {
 
   /** live refuses whatever is asked of a workspace that was closed. */
   private live(): void {
-    if (this.closed) throw new Error("the workspace was closed");
+    if (this.closed) throw new Refusal({ t: "workspace-closed" });
   }
 
   private need(id: string): Source {
@@ -671,7 +682,7 @@ export class Workspace {
     const source = this.sources.get(id);
     if (source === undefined) {
       const none = this.sources.size === 0;
-      throw new Error(none ? "no file is open" : `no source called ${id} is open`);
+      throw new Refusal(none ? { t: "no-file-open" } : { t: "no-such-source", id });
     }
     return source;
   }
@@ -681,7 +692,7 @@ export class Workspace {
   private needView(id: string): View {
     const source = this.need(id);
     if (!(source instanceof View)) {
-      throw new Error(`${source.name} has no file behind it · point it at one to read its rows`);
+      throw new Refusal({ t: "source-absent", name: source.name });
     }
     return source;
   }
@@ -764,18 +775,24 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
   const made = was.parts;
   if (made === undefined) {
     if (!("parts" in ref)) return ref;
-    throw new Error(
-      `${ref.name} is ${ref.parts.length} files read as one, and ${was.name} cannot be pointed at one yet`,
-    );
+    throw new Refusal({
+      t: "point-one-at-several",
+      file: ref.name,
+      count: ref.parts.length,
+      name: was.name,
+    });
   }
   const count = made.parts.length;
   if (!("parts" in ref)) {
-    throw new Error(`${was.name} is ${count} files read as one, and ${ref.name} is one file`);
+    throw new Refusal({ t: "point-several-at-one", name: was.name, count, file: ref.name });
   }
   if (ref.parts.length !== count) {
-    throw new Error(
-      `${was.name} is ${count} files read as one, and cannot be pointed at ${ref.parts.length}`,
-    );
+    throw new Refusal({
+      t: "point-several-at-other",
+      name: was.name,
+      count,
+      given: ref.parts.length,
+    });
   }
   return {
     ...made,
@@ -847,17 +864,16 @@ function linkOf(view: View, src: Held): Link | undefined {
  * person looking at the grid is better placed than uno to say whether it is
  * still the right file.
  */
-function changeOf(view: View, src: Held): string | undefined {
+function changeOf(view: View, src: Held): Said | undefined {
   const was = src.bytes ?? 0;
-  const sizes =
-    was === 0 || was === view.size
-      ? undefined
-      : `it is ${formatBytes(view.size)} now and was ${formatBytes(was)}`;
+  const sizes = was === 0 || was === view.size ? undefined : { now: view.size, was };
   if (src.version !== undefined && view.version !== undefined) {
     if (src.version === view.version) return undefined;
-    return `${src.name} is not the version the workspace was saved against · ${sizes ?? "it is the same size"}`;
+    return sizes === undefined
+      ? { t: "version-changed", name: src.name }
+      : { t: "version-changed", name: src.name, sizes };
   }
-  return sizes === undefined ? undefined : `${src.name} ${sizes} when the workspace was saved`;
+  return sizes === undefined ? undefined : { t: "size-changed", name: src.name, ...sizes };
 }
 
 /**
@@ -871,13 +887,13 @@ function interleave(trail: readonly string[], parts: ReadonlyMap<string, Part>):
   const log: Logged[] = trail.map((source) => {
     const i = next.get(source) ?? 0;
     const edit = parts.get(source)?.edits[i];
-    if (edit === undefined) throw new Error(`the log lost track of an edit to ${source}`);
+    if (edit === undefined) throw new Refusal({ t: "log-lost-edit", source });
     next.set(source, i + 1);
     return { source, edit };
   });
   for (const [source, part] of parts) {
     if ((next.get(source) ?? 0) !== part.edits.length) {
-      throw new Error(`the log lost track of an edit to ${source}`);
+      throw new Refusal({ t: "log-lost-edit", source });
     }
   }
   return log;

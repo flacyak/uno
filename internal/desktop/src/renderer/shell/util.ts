@@ -1,6 +1,8 @@
 // What every part of the shell reaches for: an element the markup promised, and
 // an error as something to say.
 
+import { said } from "../said.ts";
+
 export function must<T>(value: T | null): T {
   if (value === null) throw new Error("the renderer's markup is missing an element it needs");
   return value;
@@ -42,8 +44,12 @@ export class Words {
   }
 }
 
+/**
+ * message is what an error says, to say to a person: in the app's language
+ * where the engine sent it as data, and as it was written otherwise.
+ */
 export function message(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  return said(err);
 }
 
 /**

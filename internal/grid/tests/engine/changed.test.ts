@@ -18,7 +18,7 @@ import { HOME_REGION } from "../store/regions.ts";
 import { KEYS, bucket } from "../store/standin.ts";
 import type { Bucket } from "../store/standin.ts";
 import { UNITS } from "../testdata/sales-q3.ts";
-import { bytes, connect, indexed, openOne } from "./harness.ts";
+import { bytes, connect, indexed, openOne, saidIn } from "./harness.ts";
 
 const KEY = "2025/sales-q3.csv";
 const PLAIN = `s3://acme-plain/${KEY}`;
@@ -90,7 +90,7 @@ test("a same-size rewrite is reported as changed", async () => {
 
   const { src, done } = await reopened(file);
   try {
-    expect(src.opened.link?.changed).toBe(
+    expect(saidIn(src.opened.link?.changed)).toBe(
       "sales-q3.csv is not the version the workspace was saved against · it is the same size",
     );
     // Said and not acted on: the rows are there, with the edit replayed.
@@ -133,7 +133,7 @@ test("a rewrite of another size says both sizes", async () => {
   plain.set(KEY, longer);
   const { src, done } = await reopened(file);
   try {
-    expect(src.opened.link?.changed).toBe(
+    expect(saidIn(src.opened.link?.changed)).toBe(
       `sales-q3.csv is not the version the workspace was saved against · it is ${formatBytes(longer.length)} now and was ${formatBytes(bytes.length)}`,
     );
   } finally {

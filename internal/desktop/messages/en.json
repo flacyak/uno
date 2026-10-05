@@ -354,5 +354,146 @@
   "filter_spreadsheets": "Spreadsheets",
   "filter_all_files": "All files",
   "filter_workspace": "uno workspace",
-  "dropped_not_a_file": "{name} is not a file on this machine"
+  "dropped_not_a_file": "{name} is not a file on this machine",
+  "read_delimiter": "UTF-8 · delimiter '{delimiter}'",
+  "read_delimiter_no_header": "UTF-8 · delimiter '{delimiter}' · no header row",
+  "read_tabs": "UTF-8 · tab-separated",
+  "read_tabs_no_header": "UTF-8 · tab-separated · no header row",
+  "said_about": "{subject}: {why}",
+  "said_replaying": "replaying edits to {name}: {why}",
+  "program_nothing": "change nothing",
+  "program_then": "{before}, then {after}",
+  "step_trim": "trim the spaces off both ends",
+  "step_upper": "upper-case it",
+  "step_lower": "lower-case it",
+  "step_remove": "remove {what}",
+  "step_remove_from_start": "remove {what} from the start",
+  "step_remove_from_end": "remove {what} from the end",
+  "step_replace": "replace {what} with {with}",
+  "step_replace_from_start": "replace {what} from the start with {with}",
+  "step_replace_from_end": "replace {what} from the end with {with}",
+  "quoted": "\"{text}\"",
+  "chars_commas": "commas",
+  "chars_full_stops": "full stops",
+  "chars_dollar_signs": "dollar signs",
+  "chars_pound_signs": "pound signs",
+  "chars_euro_signs": "euro signs",
+  "chars_percent_signs": "percent signs",
+  "chars_underscores": "underscores",
+  "chars_apostrophes": "apostrophes",
+  "chars_spaces": "spaces",
+  "chars_asterisks": "asterisks",
+  "chars_hashes": "hashes",
+  "chars_slashes": "slashes",
+  "chars_dashes": "dashes",
+  "chars_plus_signs": "plus signs",
+  "chars_brackets": "brackets",
+  "chars_quotes": "quotes",
+  "changed_version_same_size": "{name} is not the version the workspace was saved against · it is the same size",
+  "changed_version_sizes": "{name} is not the version the workspace was saved against · it is {now} now and was {was}",
+  "changed_size": "{name} is {now} now and was {was} when the workspace was saved",
+  "refused_only_source": "{name} is the only source here, and a workspace needs one",
+  "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
+  "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
+  "refused_append_nothing": "no file was given to append to {name}",
+  "refused_append_already_part": "{file} is already part {part} of {name}",
+  "refused_append_twice": "{file} is given twice to append to {name}",
+  "refused_workspace_too_large": "{name} is {size}, over the {limit} a workspace can be read whole",
+  "refused_no_file_open": "no file is open",
+  "refused_carried_too_large": "{name} is {size}, over the {limit} a workspace can carry for a source it has no file to point at",
+  "refused_carried_together_too_large": [
+    {
+      "declarations": [
+        "input count",
+        "input size",
+        "input limit",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "the {n} source with no file behind it comes to {size}, over the {limit} a workspace can carry",
+        "plural=other": "the {n} sources with no file behind them come to {size}, over the {limit} a workspace can carry"
+      }
+    }
+  ],
+  "refused_workspace_closed": "the workspace was closed",
+  "refused_no_such_source": "no source called {id} is open",
+  "refused_source_absent": "{name} has no file behind it · point it at one to read its rows",
+  "refused_point_one_at_several": [
+    {
+      "declarations": [
+        "input count",
+        "input file",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{file} is {n} file read as one, and {name} cannot be pointed at one yet",
+        "plural=other": "{file} is {n} files read as one, and {name} cannot be pointed at one yet"
+      }
+    }
+  ],
+  "refused_point_several_at_one": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input file",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} is {n} file read as one, and {file} is one file",
+        "plural=other": "{name} is {n} files read as one, and {file} is one file"
+      }
+    }
+  ],
+  "refused_point_several_at_other": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input given",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} is {n} file read as one, and cannot be pointed at {given}",
+        "plural=other": "{name} is {n} files read as one, and cannot be pointed at {given}"
+      }
+    }
+  ],
+  "refused_log_lost_edit": "the log lost track of an edit to {source}",
+  "refused_bucket_unconnected": "{container} reads s3://{bucket}/…, which no connection covers · connect {bucket} to read it",
+  "refused_joins_unknown_for_column": "{name} is read as one by something that does not say how its files join, so it cannot show which file each row came from",
+  "refused_joins_unknown_for_save": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} is {n} file read as one by something that does not say how they join, so a workspace cannot save it",
+        "plural=other": "{name} is {n} files read as one by something that does not say how they join, so a workspace cannot save it"
+      }
+    }
+  ],
+  "refused_rows_past_files": "{name}: its rows run past the files it is read from",
+  "refused_part_has_no_path": "{name}: {file} (part {part} of {count}) is a dropped file with no path, and a workspace points at each part of several files read as one",
+  "refused_nothing_to_undo": "there is nothing to undo",
+  "refused_nothing_to_redo": "there is nothing to redo",
+  "refused_in_view": "the file is in view · Ctrl+E to transform",
+  "refused_file_closed": "the file was closed",
+  "refused_changed_on_disk": "{name} changed on disk after it was opened",
+  "refused_keeps_no_connections": "this engine keeps no connections · its platform gave it nowhere to read them from",
+  "refused_offers_no_profiles": "this engine has no AWS profiles to offer · its platform signs in another way",
+  "refused_tries_no_connection": "this engine cannot try a connection · its platform connects to nothing"
 }
