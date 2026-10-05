@@ -357,9 +357,16 @@ export class Shell {
    * without asking. Over unsaved edits the first try says so and is refused.
    * The second, while that is still on screen, goes ahead, as :e! does.
    */
-  private drops(what: Dropping, again: string): boolean {
+  private drops(what: Dropping): boolean {
     if (this.workspace?.dirty !== true || this.warned === what) return true;
-    this.say(`unsaved edits · Ctrl+S first, or ${again} again to drop them`, true);
+    this.say(
+      what === "open"
+        ? m.unsaved_edits_key_again({ key: "Ctrl+O" })
+        : what === "quit"
+          ? m.unsaved_edits_key_again({ key: "×" })
+          : m.unsaved_edits_click_again(),
+      true,
+    );
     this.warned = what;
     return false;
   }
@@ -372,7 +379,7 @@ export class Shell {
    * `force` is :e!, and :e, which has asked already.
    */
   async open(force = false): Promise<void> {
-    if (!force && !this.drops("open", "Ctrl+O")) return;
+    if (!force && !this.drops("open")) return;
     try {
       const ref = await this.host.open();
       if (ref === undefined) return; // cancelled, which is not a failure
@@ -395,7 +402,7 @@ export class Shell {
    */
   private async openRecent(path: string): Promise<boolean> {
     if (this.workspace?.path === path) return true;
-    if (!this.drops(`recent:${path}`, "click")) return false;
+    if (!this.drops(`recent:${path}`)) return false;
     await this.load(refAt(path), path);
     return this.workspace?.path === path;
   }
@@ -405,7 +412,7 @@ export class Shell {
    * the first × says so, as Ctrl+O does.
    */
   quit(): void {
-    if (this.drops("quit", "×")) this.host.quit();
+    if (this.drops("quit")) this.host.quit();
   }
 
   /** Add files by path, as sources: several named together on the command line. */
@@ -865,11 +872,7 @@ export class Shell {
     const w = this.workspace;
     if (w === undefined) return;
     if (tab.edited > 0 && this.warned !== tab) {
-      const n = tab.edited;
-      this.say(
-        `${tab.name} has ${num(n)} ${n === 1 ? "edit" : "edits"} · × again to remove it`,
-        true,
-      );
+      this.say(m.source_has_edits({ name: tab.name, count: tab.edited }), true);
       this.warned = tab;
       return;
     }
