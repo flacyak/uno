@@ -45,7 +45,15 @@ const FRAME_INTERVAL = 60;
  * opening frame and one for each of those three, and a take with fewer is one
  * where a beat did nothing.
  */
-const MIN_DISTINCT: Record<string, number> = { edit: 8, browse: 8, refresh: 4, sidebar: 8 };
+const MIN_DISTINCT: Record<string, number> = {
+  edit: 8,
+  browse: 8,
+  refresh: 4,
+  sidebar: 8,
+  opening: 8,
+  connecting: 8,
+  refused: 8,
+};
 
 /**
  * The edit story, as offsets from the moment the camera rolls.
@@ -140,6 +148,68 @@ const SIDEBAR = {
 /** What the sidebar story's formula computes the commission column from. */
 const SIDEBAR_FORMULA = "revenue / 20";
 
+/**
+ * The opening story, in the same form: an export in a bucket a long way off,
+ * added from the sources panel, and its line in the panel while it opens.
+ *
+ * scripts/preview.js lays it out against the stand-in bucket, and makes the
+ * bucket slow when the story asks it to, so that the open lasts long enough
+ * to be watched.
+ */
+const OPENING = {
+  panel: 1_500, // the one tab and its rows have been read
+  connection: 2_700, // the panel lists the workspace's tab; down to the bucket
+  browse: 3_400, // and into it
+  slow: 4_600, // its folder is listed, the keys on the first export in it
+  add: 5_200, // Enter adds it, and its line says it is opening
+  end: 13_400, // the bar has filled a few times over, and the tab has arrived
+};
+
+/** How long the stand-in takes over each answer while the opening story adds from it. */
+const OPENING_LATENCY_MS = 1_100;
+
+/**
+ * The connecting story, in the same form: a bucket a long way off connected
+ * from the sources panel, and its line in the panel while it is tried and kept.
+ *
+ * scripts/preview.js lays it out as the opening story, with no connection to
+ * the bucket kept yet.
+ */
+const CONNECTING = {
+  panel: 1_500, // the one tab and its rows have been read
+  line: 2_500, // the panel has no connections; down to the line that connects one
+  form: 3_200, // Enter opens the form in the list's place
+  bucket: 4_000, // the bucket is typed
+  prefix: 5_900, // and the folder in it
+  slow: 7_000, // the form has been read
+  save: 7_400, // Save connection, and the connection's line says it is connecting
+  end: 14_400, // the bar has filled a few times over, and the bucket is browsed
+};
+
+/** The bucket and the folder the connecting story types, which the stand-in holds. */
+const CONNECTING_BUCKET = "acme-exports";
+const CONNECTING_PREFIX = "2025";
+
+/**
+ * The refused story is the connecting story with the bucket's name mistyped,
+ * so the bucket is not there: the line fails where it was connecting, and is
+ * chosen to edit the connection.
+ */
+const REFUSED_BUCKET = "acme-exprots";
+const REFUSED = {
+  edit: 12_600, // the line says failed, and why is under the list; Enter edits it
+  end: 15_400, // the form is back as it was left, saying why
+};
+/**
+ * How long the stand-in takes over each answer while the connecting story
+ * saves. A test is two asks, where an open is four, so each is slower here
+ * for the line to be up as long.
+ */
+const CONNECTING_LATENCY_MS = 1_800;
+/** How often a story looks for what a line was waiting on having arrived, and how many times. */
+const ARRIVED_MS = 50;
+const ARRIVED_LOOKS = 160;
+
 /** The object the refresh story's workspace points at, by its key in the stand-in. */
 const REFRESH_KEY = "2025/ads-q3.csv";
 
@@ -224,8 +294,8 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // whose source is missing, so it has none, and waits for the tab's ! instead.
   const story = process.env["UNO_PREVIEW_STORY"] ?? "edit";
   // The sidebar story opens its workspaces itself, the last of them with rows.
-  const ready =
-    story === "edit" || story === "sidebar" ? "tbody tr:not(.pending)" : ".tab .trouble";
+  const rows = ["edit", "sidebar", "opening", "connecting", "refused"].includes(story);
+  const ready = rows ? "tbody tr:not(.pending)" : ".tab .trouble";
   try {
     if (story === "sidebar") await openWorkspaces(win);
     await win.webContents.executeJavaScript(`
@@ -655,7 +725,147 @@ const STORIES: Record<
   browse: { end: BROWSE.end, script: playBrowse },
   refresh: { end: REFRESH.end, script: playRefresh },
   sidebar: { end: SIDEBAR.end, script: playSidebar },
+  opening: { end: OPENING.end, script: playOpening },
+  connecting: { end: CONNECTING.end, script: playConnecting },
+  refused: { end: REFUSED.end, script: playRefused },
 };
+
+/**
+ * playOpening performs the opening story: the panel opened, the bucket's
+ * connection browsed, and the first export in it added with Enter while the
+ * bucket is slow, so its line in the workspace section is seen opening before
+ * its tab arrives.
+ */
+async function playOpening(win: BrowserWindow, start: number): Promise<void> {
+  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
+
+  win.webContents.send("menu:input", "default");
+
+  await at(OPENING.panel);
+  through(win, () => {
+    const modifiers: ("control" | "shift")[] = ["control", "shift"];
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
+  });
+
+  // One tab, so one line down is the connection.
+  await at(OPENING.connection);
+  press(win, "Down");
+  await at(OPENING.browse);
+  press(win, "Return");
+
+  // The folder was listed at the stand-in's own speed. From here the bucket
+  // is a long way off, which is what the line is for.
+  await at(OPENING.slow);
+  await ask("preview", `latency ${OPENING_LATENCY_MS}`);
+  await at(OPENING.add);
+  press(win, "Return");
+
+  // The rows are read at the stand-in's own speed again once the tab is there.
+  await arrived(win);
+  await ask("preview", "latency 0");
+
+  await at(OPENING.end);
+}
+
+/**
+ * playConnecting performs the connecting story: the panel opened, the form
+ * that connects a bucket filled in from the keyboard, and the connection
+ * saved by the pointer while the bucket is slow, so its line in the connections section is
+ * seen connecting before the bucket is browsed.
+ */
+async function playConnecting(win: BrowserWindow, start: number): Promise<void> {
+  await connect(win, start, CONNECTING_BUCKET);
+  await sleep(start + CONNECTING.end - Date.now());
+}
+
+/**
+ * playRefused performs the refused story: the same form saved with the
+ * bucket's name mistyped, its line failing where it was connecting, and Enter
+ * on the line bringing the form back to be edited.
+ */
+async function playRefused(win: BrowserWindow, start: number): Promise<void> {
+  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
+
+  await connect(win, start, REFUSED_BUCKET);
+  await at(REFUSED.edit);
+  press(win, "Return");
+  await at(REFUSED.end);
+}
+
+/**
+ * connect is what the connecting and refused stories share: the form filled
+ * in with `bucket` and saved while the stand-in is slow, as far as its line
+ * having stopped connecting, one way or the other.
+ */
+async function connect(win: BrowserWindow, start: number, bucket: string): Promise<void> {
+  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
+
+  win.webContents.send("menu:input", "default");
+
+  await at(CONNECTING.panel);
+  through(win, () => {
+    const modifiers: ("control" | "shift")[] = ["control", "shift"];
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
+  });
+
+  // One tab and no connections, so one line down is + Connect a bucket.
+  await at(CONNECTING.line);
+  press(win, "Down");
+  await at(CONNECTING.form);
+  press(win, "Return");
+
+  // The form opens with the keys in the bucket, and Tab is the way to the prefix.
+  await at(CONNECTING.bucket);
+  await type(win, bucket);
+  await at(CONNECTING.prefix);
+  press(win, "Tab");
+  await sleep(KEYSTROKE);
+  await type(win, CONNECTING_PREFIX);
+
+  // Save tests first. From here the bucket is a long way off.
+  await at(CONNECTING.slow);
+  await ask("preview", `latency ${CONNECTING_LATENCY_MS}`);
+  await at(CONNECTING.save);
+  await click(win, ".panel-connect button.primary");
+
+  await arrived(win);
+  await ask("preview", "latency 0");
+}
+
+/**
+ * arrived waits for a line of the panel to be seen on its way, a source
+ * opening or a connection being kept, and then to have given way to what it
+ * was waiting for.
+ */
+async function arrived(win: BrowserWindow): Promise<void> {
+  const gone = (await win.webContents.executeJavaScript(`
+    (async () => {
+      let seen = false;
+      for (let i = 0; i < ${ARRIVED_LOOKS}; i++) {
+        const opening = document.querySelector("#panel .panel-row.opening") !== null;
+        if (seen && !opening) return true;
+        seen ||= opening;
+        await new Promise((r) => setTimeout(r, ${ARRIVED_MS}));
+      }
+      return false;
+    })()
+  `)) as boolean;
+  if (!gone) throw new Error("no line in the panel was seen on its way and then arrived");
+}
+
+/** type types text into the field the keys are in, a character at a time. */
+async function type(win: BrowserWindow, text: string): Promise<void> {
+  for (const ch of text) {
+    through(win, () => {
+      win.webContents.sendInputEvent({ type: "keyDown", keyCode: ch });
+      win.webContents.sendInputEvent({ type: "char", keyCode: ch });
+      win.webContents.sendInputEvent({ type: "keyUp", keyCode: ch });
+    });
+    await sleep(KEYSTROKE);
+  }
+}
 
 /** The pause between the pointer arriving at a button and pressing it. */
 const HOVER = 250;

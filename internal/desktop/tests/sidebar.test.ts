@@ -61,6 +61,33 @@ function one(link: Tab["link"]): { els: HTMLElement[]; asked: string[] } {
 const names = (els: HTMLElement[]): string[] =>
   els.map((el) => `${el.className}:${el.querySelector(".name")?.textContent ?? el.textContent}`);
 
+test("a source still opening is listed after the sources, dimmed, with nothing on it to click", () => {
+  const w = workspace("/work/q3-close.uno", [tab("a", "sales-q3.csv")]);
+  const asked: string[] = [];
+  const act: SidebarActions = {
+    open: (path) => asked.push(`open ${path}`),
+    menu: (path) => asked.push(`menu ${path}`),
+    select: (t) => asked.push(`select ${t.id}`),
+    remove: (t) => asked.push(`remove ${t.id}`),
+    add: () => asked.push("add"),
+    repoint: (t) => asked.push(`repoint ${t.id}`),
+  };
+  const els = sidebarRows(w, [], act, [{ name: "ads-q3.csv" }]);
+
+  expect(names(els)).toEqual([
+    "ws open:q3-close",
+    "tab active:sales-q3.csv",
+    // The class is what draws the bar that fills along the bottom of its line.
+    "tab-opening:ads-q3.csv",
+    "tab-add:+ add source",
+  ]);
+  const coming = els[2]!;
+  expect(coming.title).toBe("ads-q3.csv · opening…");
+  expect(coming.querySelector(".close, .dirty, .trouble")).toBeNull();
+  coming.click();
+  expect(asked).toEqual([]);
+});
+
 test("with nothing open and nothing opened before, the list says so", () => {
   const { els } = list(undefined);
   expect(els.map((el) => el.textContent)).toEqual([m.no_workspaces()]);

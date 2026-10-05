@@ -8,6 +8,7 @@
 // same elements rather than making more. What is on each line, and which line
 // the keys are on, is `Sources`'s; this file only draws it and reads keys.
 
+import "./arriving.css";
 import "./panel.css";
 
 import type { Peeked, SourceRef } from "@uno/grid/engine";
@@ -18,8 +19,19 @@ import { firstRow, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
 import { bytes } from "../locale.ts";
 import { say } from "../said.ts";
-import { SECTIONS, connectionLine, fileCount, newFiles, stateOf, stateWord } from "../sources.ts";
+import {
+  SECTIONS,
+  connecting,
+  connectionLine,
+  failed,
+  fileCount,
+  newFiles,
+  opening,
+  stateOf,
+  stateWord,
+} from "../sources.ts";
 import type {
+  Arriving,
   Button,
   Connection,
   Doing,
@@ -213,11 +225,30 @@ export class Panel {
 
     // A connection saved is browsed at once, from where it starts: saving one
     // is how a person says they want to look in it.
-    this.connecting = new ConnectForm(asks, (saved) => {
-      this.showList();
-      if (saved !== undefined)
-        void this.sources.open(connectionLine(saved)).then(() => this.reveal());
-    });
+    this.connecting = new ConnectForm(
+      asks,
+      (saved) => {
+        this.sources.connect(undefined);
+        this.showList();
+        if (saved !== undefined)
+          void this.sources.open(connectionLine(saved)).then(() => this.reveal());
+      },
+      {
+        // The list is back while the connection is tried and kept, with the
+        // keys on the line that says so, where its own line will be.
+        keeping: (draft) => {
+          this.sources.connect({ name: draft.name });
+          this.sources.focus("connections", this.sources.connections.length);
+          this.listIn();
+          this.reveal();
+        },
+        // Refused, its line stays and says so, and is chosen to edit it.
+        refused: (draft, why) => {
+          this.sources.connect({ name: draft.name, failed: why });
+          this.layout();
+        },
+      },
+    );
 
     // The head every column of the window begins with, which is also what
     // keeps the filter out from under the × at the window's top right.
@@ -234,11 +265,18 @@ export class Panel {
    */
   connect(filled: Filled = {}): void {
     if (!this.open) this.show();
+    // A connection still being kept is given up for the one being filled in.
+    this.sources.connect(undefined);
+    this.listOut();
+    this.connecting.show(filled);
+  }
+
+  /** listOut takes the list, and what is under it, out of the form's way. */
+  private listOut(): void {
     this.filter.hidden = true;
     this.list.hidden = true;
     this.peek.hidden = true;
     this.foot.hidden = true;
-    this.connecting.show(filled);
   }
 
   /**
@@ -253,6 +291,11 @@ export class Panel {
   /** showList puts the list back where the form was, with the keys in it. */
   private showList(): void {
     this.connecting.hide();
+    this.listIn();
+  }
+
+  /** listIn draws the list where it was, and gives it the keys. */
+  private listIn(): void {
     this.filter.hidden = false;
     this.list.hidden = false;
     this.drawnPeek = undefined;
@@ -433,6 +476,9 @@ export class Panel {
     if (!Number.isInteger(index)) return;
     const row = rowAt(this.laid, index);
     if (row.t !== "line") return;
+    // What is still on its way is not there to be chosen yet. A connection that was refused is: choosing it edits it.
+    const coming = this.arriving(row.section, row.line);
+    if (coming !== undefined && coming.failed === undefined) return;
     this.sources.focus(row.section, row.line);
     this.layout();
     this.choose();
@@ -462,6 +508,7 @@ export class Panel {
       }
       case "connections": {
         if (this.sources.isConnect(line)) return this.connect();
+        if (this.failure() !== undefined) return this.edit();
         const to = this.sources.connections[line];
         if (to !== undefined) void this.sources.open(to);
         return;
@@ -474,6 +521,40 @@ export class Panel {
         else if (this.sources.selectable(entry)) this.give({ name: entry.name, path: entry.path });
       }
     }
+  }
+
+  /**
+   * arriving is what is still on its way that a line stands for, where it
+   * stands for anything: a source opening, on the workspace's lines after its
+   * tabs, or a connection being tried and kept, on the line after the
+   * connections.
+   */
+  private arriving(section: Section, line: number): Arriving | undefined {
+    switch (section) {
+      case "workspace":
+        return this.sources.opening[line - this.sources.tabs.length];
+      case "connections":
+        return line === this.sources.connections.length ? this.sources.connecting : undefined;
+      case "browser":
+        return undefined;
+    }
+  }
+
+  /** failure is the refused connection the keys are on, when they are on one. */
+  private failure(): Arriving | undefined {
+    const { section, line } = this.sources.place;
+    const coming = this.arriving(section, line);
+    return coming?.failed === undefined ? undefined : coming;
+  }
+
+  /**
+   * edit brings the connect form back as it was left when its connection was
+   * refused, saying why. Saving it tries the connection again, and Cancel
+   * gives it up, line and all.
+   */
+  private edit(): void {
+    this.listOut();
+    this.connecting.reopen();
   }
 
   /** reveal scrolls as little as it takes to bring the keys' line into view. */
@@ -617,6 +698,7 @@ export class Panel {
     const doings = this.sources.doings;
     const buttons = this.sources.buttons;
     const joining = this.sources.joining;
+    const failure = this.failure();
     // What a button was drawn for is asked of the panel again when it is
     // pressed, so the choices a person ticks need no redraw, and keep the
     // keys while they are ticked.
@@ -624,11 +706,13 @@ export class Panel {
       ...doings.map((a) => a.does + a.id + a.label),
       ...buttons.map((b) => b.label + (b.to ?? "") + b.refs.map(placeOf).join()),
       joining === undefined ? "" : "joining",
+      failure === undefined ? "" : `failed${failure.name}${failure.failed}`,
     ].join("|");
     if (key === this.drawnFoot) return;
     this.drawnFoot = key;
-    this.foot.hidden = doings.length === 0 && buttons.length === 0;
+    this.foot.hidden = doings.length === 0 && buttons.length === 0 && failure === undefined;
     this.foot.replaceChildren(
+      ...(failure === undefined ? [] : this.refusal(failure)),
       ...doings.map((a) => {
         const el = text("button", a.does === "append" ? "wide" : "", a.label);
         el.addEventListener("click", () => this.doing(a));
@@ -643,6 +727,16 @@ export class Panel {
         return el;
       }),
     );
+  }
+
+  /**
+   * refusal is what the foot says under a connection that was refused: why,
+   * in the engine's own words, and the button that edits it to try again.
+   */
+  private refusal(failure: Arriving): HTMLElement[] {
+    const editing = text("button", "primary", m.action_edit_connection());
+    editing.addEventListener("click", () => this.edit());
+    return [text("div", "why", `✗ ${failure.failed}`), editing];
   }
 
   /**
@@ -689,6 +783,11 @@ export class Panel {
         else if (!this.sources.selectable(entry)) cls += " off";
       }
       if (row.section === "connections" && this.sources.isConnect(row.line)) cls += " action";
+      const coming = this.arriving(row.section, row.line);
+      if (coming !== undefined) {
+        cls += coming.failed === undefined ? " opening" : " failed";
+        title = coming.failed ?? "";
+      }
       const tab = row.section === "workspace" ? this.sources.tabs[row.line] : undefined;
       if (tab !== undefined) {
         const state = stateOf(tab);
@@ -723,7 +822,10 @@ export class Panel {
     switch (section) {
       case "workspace": {
         const t = this.sources.tabs[line];
-        if (t === undefined) return ["", ""];
+        if (t === undefined) {
+          const coming = this.arriving(section, line);
+          return coming === undefined ? ["", ""] : [coming.name, opening()];
+        }
         const state = stateOf(t);
         if (state !== "fine") return [t.name, stateWord(state)];
         // Several files say how many they are, and how many more there are
@@ -736,7 +838,11 @@ export class Panel {
       case "connections": {
         if (this.sources.isConnect(line)) return [m.connect_action(), ""];
         const c = this.sources.connections[line];
-        if (c === undefined) return ["", ""];
+        if (c === undefined) {
+          const coming = this.arriving(section, line);
+          if (coming === undefined) return ["", ""];
+          return [coming.name, coming.failed === undefined ? connecting() : failed()];
+        }
         return [c.name, c.where === undefined ? c.kind : `${c.kind} · ${c.where}`];
       }
       case "browser": {
