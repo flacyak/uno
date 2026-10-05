@@ -510,7 +510,8 @@ export class Sources {
    * askGrown lists the folder each tab of several files came from, and keeps
    * the files in it that sort after the tab's last part and are not among its
    * parts. It is asked when the panel opens and when the window gets the
-   * focus back, which is when a folder has had the chance to grow.
+   * focus back, which is when a folder has had the chance to grow, and the
+   * place being browsed is listed again with it.
    *
    * The parts are never read again from the folder: a file landing among
    * them would move every row after it out from under the log. A file after
@@ -526,8 +527,49 @@ export class Sources {
     for (const id of this.gained.keys()) {
       if (!tabs.some((t) => t.id === id)) this.gained.delete(id);
     }
-    await Promise.all(tabs.map((tab) => this.askAfter(tab)));
+    await Promise.all([...tabs.map((tab) => this.askAfter(tab)), this.again()]);
     this.changed();
+  }
+
+  /**
+   * again lists the place being browsed once more, as far down as it had been
+   * read, and shows what it holds now.
+   *
+   * It is asked whenever askGrown is, for the same reason: a folder that has
+   * gained a file offers it on a tab's line, and the browser under that line
+   * still listing the folder without it would be the panel saying two things.
+   * Nothing is cleared while it is asked, so the lines, the selection and the
+   * keys stay where they are, and a folder the person has left or paged
+   * further down since is not written over.
+   */
+  private async again(): Promise<void> {
+    const path = this.path;
+    if (path === "" || this.waiting || this.paging) return;
+    const mine = this.asked;
+    const was = this.found;
+
+    let entries: Entry[] = [];
+    let cursor: string | undefined;
+    try {
+      do {
+        const page = await this.listings.list(path, cursor);
+        entries = [...entries, ...page.entries];
+        cursor = page.next;
+      } while (cursor !== undefined && entries.length < was.length);
+    } catch {
+      // What was listed stays, and the refusal is said where the folder is
+      // browsed, the next time it is.
+      return;
+    }
+    if (mine !== this.asked || was !== this.found || this.paging) return;
+    this.found = entries;
+    this.cursor = cursor;
+    for (const pick of this.picks) {
+      if (!entries.some((entry) => entry.path === pick)) this.picks.delete(pick);
+    }
+    if (this.at.section === "browser") {
+      this.at = { section: "browser", line: bound(this.at.line, this.entries.length) };
+    }
   }
 
   /** askAfter is askGrown for one tab. */

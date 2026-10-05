@@ -948,6 +948,28 @@ test("a tab of several files is offered the files after its last that its folder
   ]);
 });
 
+test("a folder that has gained a file lists it under the offer, and keeps what was picked", async () => {
+  const stand = new Stand();
+  const at = "s3://acme-exports/ads/";
+  const tab = joined(at, "ads-2025-10.csv", "ads-2025-11.csv");
+  const panel = new Sources(stand, () => [tab], [{ name: "ads", path: at, kind: "s3" }]);
+  await panel.open(panel.connections[0]!);
+  await panel.toggle(named(panel, "ads-2025-11.csv"));
+  const had = PAGES[at]!;
+
+  try {
+    PAGES[at] = [...had.slice(0, 2), file("ads-2025-12.csv", `${at}ads-2025-12.csv`, 700), had[2]!];
+    await panel.askGrown();
+
+    expect(panel.grown(tab)?.files.map((f) => f.name)).toEqual(["ads-2025-12.csv"]);
+    expect(names(panel.entries)).toEqual(names(PAGES[at]!));
+    expect(names(panel.selected)).toEqual(["ads-2025-11.csv"]);
+    expect(panel.reading).toBe(false);
+  } finally {
+    PAGES[at] = had;
+  }
+});
+
 test("a file that sorts before the last part is not offered, wherever it came from", async () => {
   const tab = joined("s3://acme-exports/ads/", "ads-2025-11.csv");
   const panel = new Sources(new Stand(), () => [tab], [ACME]);
