@@ -416,7 +416,7 @@ describe("a part changed on disk after the save", () => {
       expect(src.opened.edits).toHaveLength(EDITS.length);
       // It is still several files, so it is not pointed at one.
       await expect(engine.relink(src, { name: PART_NAMES[1]!, path: paths[1]! })).rejects.toThrow(
-        `${NAME} is ${PARTS} files read as one, and cannot be pointed at another file yet`,
+        `${NAME} is ${PARTS} files read as one, and ${PART_NAMES[1]} is one file`,
       );
 
       // A save writes it back as it was found: every part, and every edit.
@@ -479,6 +479,114 @@ describe("a part changed on disk after the save", () => {
       await indexed(src);
       expect(src.opened.link).toBeUndefined();
       expect(await every(src)).toEqual(rows);
+    } finally {
+      done();
+    }
+  });
+});
+
+// ------------------------------------------------------------ a part that has gone
+
+/** What part two is called once it has been moved. */
+const MOVED = "sales-q3-part-2-moved.csv";
+
+describe("a part deleted after the save", () => {
+  const SECOND = `${PART_NAMES[1]} (part 2 of ${PARTS}): `;
+
+  // 4.5's own sentence: deleting part two leaves the source openable once
+  // re-pointed, with every edit intact.
+  test("opens the source with no rows, naming the part, and re-pointed it has every edit", async () => {
+    const { uno, rows, dir, paths, file } = await savedOnDisk(EDITS);
+    await rm(paths[1]!);
+
+    const { engine, done } = connect(TINY, providers());
+    try {
+      const gone = await openOne(engine, { name: UNO, path: file });
+      expect(gone.opened.link?.missing).toContain(SECOND);
+      expect(gone.opened.edits).toHaveLength(EDITS.length);
+      await expect(gone.rows(0, 1)).rejects.toThrow("point it at one to read its rows");
+
+      // It is several files, so one file is not what it is pointed at, and
+      // neither are the same parts while one of them is still gone.
+      await expect(engine.relink(gone, { name: PART_NAMES[1]!, path: paths[1]! })).rejects.toThrow(
+        `${NAME} is ${PARTS} files read as one, and ${PART_NAMES[1]} is one file`,
+      );
+      await expect(engine.relink(gone, threeAt(paths.slice(0, 2)))).rejects.toThrow(
+        `${NAME} is ${PARTS} files read as one, and cannot be pointed at 2`,
+      );
+      await expect(engine.relink(gone, threeAt(paths))).rejects.toThrow(SECOND);
+
+      // Part two turns up somewhere else, and the source is pointed at it there.
+      const moved = join(dir, MOVED);
+      await copyFile(PART_FIXTURES[1]!, moved);
+      const at = [paths[0]!, moved, paths[2]!];
+      const src = await engine.relink(gone, threeAt(at));
+      await indexed(src);
+      expect(src.id).toBe(gone.id);
+      expect(src.opened.link?.missing).toBeUndefined();
+      expect(src.opened.edits).toHaveLength(EDITS.length);
+      expect(await every(src)).toEqual(rows);
+
+      // A save points at the part where it is now, under the same log.
+      const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
+      expect(held(again, file).parts).toEqual(measured(at, NO_VERSIONS));
+      expect(readContainer(UNO, again, file).log).toEqual(readContainer(UNO, uno, file).log);
+    } finally {
+      done();
+    }
+  });
+
+  // The log stops in the first part, so the open has no need of the second,
+  // and the read that reaches it is what says it has gone. The source is
+  // pointed at its parts again all the same.
+  test("is named by the read that reaches it, and the source is re-pointed the same way", async () => {
+    const { rows, dir, paths, file } = await savedOnDisk(SHALLOW);
+    await rm(paths[1]!);
+
+    const { engine, done } = connect(TINY, providers());
+    const said = new Promise<string>((resolve) => {
+      engine.onError = resolve;
+    });
+    try {
+      const gone = await openOne(engine, { name: UNO, path: file });
+      expect(gone.opened.link).toBeUndefined();
+      expect(await said).toContain(`${NAME}: ${SECOND}`);
+
+      // No read has to reach a part for a re-point to find it gone.
+      await expect(engine.relink(gone, threeAt(paths))).rejects.toThrow(SECOND);
+      expect((await gone.rows(SHALLOW[0]!.row, 1)).rows[0]![UNITS]).toBe(SHALLOW[0]!.now);
+
+      const moved = join(dir, MOVED);
+      await copyFile(PART_FIXTURES[1]!, moved);
+      const src = await engine.relink(gone, threeAt([paths[0]!, moved, paths[2]!]));
+      await indexed(src);
+      expect(src.opened.edits).toHaveLength(SHALLOW.length);
+      expect(await every(src)).toEqual(rows);
+    } finally {
+      done();
+    }
+  });
+
+  // The log names rows by number, so a part is held to what the save recorded
+  // of it wherever it is: another file in its place would move every row
+  // after it out from under its edits.
+  test("is not replaced by another file, which is refused by name", async () => {
+    const { uno, dir, paths, file } = await savedOnDisk(EDITS);
+    await rm(paths[1]!);
+    const other = join(dir, MOVED);
+    await writeFile(other, shortened());
+
+    const { engine, done } = connect(TINY, providers());
+    try {
+      const gone = await openOne(engine, { name: UNO, path: file });
+      await expect(engine.relink(gone, threeAt([paths[0]!, other, paths[2]!]))).rejects.toThrow(
+        `${SECOND}it is not the file this source was made from · it is ${shortened().length} bytes and was ${partBytes[1]!.length}`,
+      );
+
+      // A refused re-point costs nothing: the source is as the save left it.
+      const again = await engine.save({ source: gone.id, cells: [], at: file }, ROOMY);
+      expect(held(again, file)).toEqual(held(uno, file));
+      expect(readContainer(UNO, again, file).log).toEqual(readContainer(UNO, uno, file).log);
     } finally {
       done();
     }
@@ -559,10 +667,11 @@ describe("parts in a bucket", () => {
       diskProvider(),
       s3Provider({ credentials: connectionSigning(() => kept.all, env()), endpoint: b.endpoint }),
     ];
-    return connect(TINY, [...single, multiProvider(single)], {
+    const made = connect(TINY, [...single, multiProvider(single)], {
       connections: kept,
       meet: connectionMeeting(() => kept.all),
     });
+    return { ...made, store, dir };
   }
 
   /** The parts saved from a machine that has the connection, as the file it wrote. */
@@ -663,6 +772,36 @@ describe("parts in a bucket", () => {
       expect(held(again, file)).toEqual(held(uno, file));
       expect(readContainer(UNO, again, file).log).toEqual(readContainer(UNO, uno, file).log);
       expect(b.seen.slice(from)).toEqual([]);
+    } finally {
+      done();
+    }
+  });
+
+  // Connecting the bucket is what the source waited for. Pointed at the parts
+  // it already names, it stops waiting whether or not they are all there: a
+  // part that has gone is said by name, and with it back the source reads.
+  test("stop waiting once the bucket is connected, and read once every part is there", async () => {
+    const { rows, file } = await savedAcross(ACROSS, EDITS);
+    objects.delete(KEYS_IN_BUCKET[2]!);
+
+    const { engine, done, store, dir } = await desktop([]);
+    try {
+      const waiting = await openOne(engine, { name: UNO, path: file });
+      expect(waiting.opened.link?.connect).toEqual({ bucket: BUCKET, prefix: "2025/" });
+
+      await saveConnection(store, dir, EXPORTS);
+      await engine.connections();
+      const gone = await engine.relink(waiting, threeAt(ACROSS));
+      expect(gone.opened.link).toEqual({
+        path: "",
+        missing: `${PART_NAMES[2]} (part 3 of ${PARTS}): ${ACROSS[2]}: no such object in that bucket`,
+      });
+      expect(gone.opened.edits).toHaveLength(EDITS.length);
+
+      objects.set(KEYS_IN_BUCKET[2]!, partBytes[2]!);
+      const src = await engine.relink(gone, threeAt(ACROSS));
+      await indexed(src);
+      expect(await every(src)).toEqual(rows);
     } finally {
       done();
     }

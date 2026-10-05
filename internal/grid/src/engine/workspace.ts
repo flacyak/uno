@@ -16,7 +16,7 @@
 import { logOf, newManifest, readContainer, sourceId, writeDocument } from "../document/index.ts";
 import type { Document, Held, HeldFile, HeldParts, Logged, State } from "../document/index.ts";
 import type { Edit } from "../sheet/index.ts";
-import { bytesSource, openWith, partMap } from "../store/index.ts";
+import { bytesSource, multiOf, openWith, partMap } from "../store/index.ts";
 import type { ByteSource, FileHandler, PartsRef, SingleRef } from "../store/index.ts";
 import type {
   Opening,
@@ -102,9 +102,12 @@ class Absent {
     return this.kept.path ?? "";
   }
 
-  /** How many files it reads as one, for a source that is several. */
-  get joins(): number | undefined {
-    return this.kept.parts?.length;
+  /** The parts it reads as one, for a source that is several: each where the
+   * .uno said it was, with the extent the save measured of it. */
+  get parts(): PartsRef | undefined {
+    const kept = this.kept;
+    if (kept.parts === undefined) return undefined;
+    return joinedFrom({ name: this.name, parts: kept.parts, header: kept.header });
   }
 
   /** Whatever the container carried for it, which for a pointed-at source is
@@ -247,35 +250,32 @@ export class Workspace {
    * again to connect a bucket that is connected would send the person round
    * the same form for nothing.
    *
-   * Several files read as one are refused on either side, the source and the
-   * ref. Which of a source's parts may change under its log is a rule of its
-   * own, and until it is here the source stays as it is.
+   * Several files read as one are pointed at as many again, part for part:
+   * the one that moved where it is now, the others where they were. No part
+   * may change under the log. Each is held to the extent a save recorded of
+   * the part in its place, because the log names rows by number and another
+   * file there would move every row after it out from under its edits. And
+   * each is opened before the source is swapped, so a part that is still gone
+   * is refused by name here and not by whichever read reaches it later.
+   *
+   * One file is still refused several, and several one.
    */
   relink(id: string, ref: SourceRef): Promise<Opened> {
     return this.serially(async () => {
       const was = this.need(id);
-      const joins = was instanceof View ? was.parts?.parts.length : was.joins;
-      if (joins !== undefined) {
-        throw new Error(
-          `${was.name} is ${joins} files read as one, and cannot be pointed at another file yet`,
-        );
-      }
-      if ("parts" in ref) {
-        throw new Error(
-          `${ref.name} is ${ref.parts.length} files read as one, and ${was.name} cannot be pointed at one yet`,
-        );
-      }
+      const to = pointedTo(was, ref);
       const carried: Carried = { container: "", edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, ref, carried);
+        view = await this.view(id, to, carried, "parts" in to);
       } catch (err) {
+        const places = pathsIn(to);
         const connected =
           was instanceof Absent &&
           was.waiting !== undefined &&
-          "path" in ref &&
-          ref.path === was.path &&
-          this.unconnected(was.path) === undefined;
+          places.length > 0 &&
+          sameList(places, pathsIn(was.parts ?? { name: was.name, path: was.path })) &&
+          places.every((path) => this.unconnected(path) === undefined);
         if (!connected) throw err;
         const now = was.missing(messageOf(err));
         this.sources.set(id, now);
@@ -419,10 +419,18 @@ export class Workspace {
 
   /** view opens one file as a source, through whatever this platform hands back
    * for a SourceRef. A ref with no path is bytes a save will have to carry, or
-   * several files read as one, which the view keeps the parts of. */
-  private async view(id: string, ref: SourceRef, carried: Carried | undefined): Promise<View> {
+   * several files read as one, which the view keeps the parts of. `whole`
+   * opens every one of those parts first, for a caller that must know none is
+   * gone before it has a source at all. */
+  private async view(
+    id: string,
+    ref: SourceRef,
+    carried: Carried | undefined,
+    whole = false,
+  ): Promise<View> {
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
+    if (whole) await everyPart(source);
     const view = await View.open(
       id,
       ref.name,
@@ -672,7 +680,7 @@ function pointedAt(src: HeldFile): SourceRef {
  * it the extent the save measured, which is what leaves it unopened until a
  * read reaches it.
  */
-function joinedFrom(src: HeldParts): PartsRef {
+function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header">): PartsRef {
   return {
     name: src.name,
     parts: src.parts.map((part) => ({
@@ -681,6 +689,76 @@ function joinedFrom(src: HeldParts): PartsRef {
     })),
     header: src.header,
   };
+}
+
+/**
+ * pointedTo is what a relink opens: the ref it was given, or for several
+ * files read as one, that ref with each part held to what the source knows of
+ * the part in its place.
+ *
+ * A part still where it was is opened as the source had it, by the version a
+ * save recorded. A part somewhere else is opened as it is there, and both are
+ * held to the extent the part had, where a save measured one. The header mode
+ * is the source's own: it decides which line is row 0, and the log was made
+ * against that.
+ *
+ * It refuses one file for a source that is several, several for one that is
+ * one file, and any other number of parts than the source has.
+ */
+function pointedTo(was: Source, ref: SourceRef): SourceRef {
+  const made = was.parts;
+  if (made === undefined) {
+    if (!("parts" in ref)) return ref;
+    throw new Error(
+      `${ref.name} is ${ref.parts.length} files read as one, and ${was.name} cannot be pointed at one yet`,
+    );
+  }
+  const count = made.parts.length;
+  if (!("parts" in ref)) {
+    throw new Error(`${was.name} is ${count} files read as one, and ${ref.name} is one file`);
+  }
+  if (ref.parts.length !== count) {
+    throw new Error(
+      `${was.name} is ${count} files read as one, and cannot be pointed at ${ref.parts.length}`,
+    );
+  }
+  return {
+    ...made,
+    name: ref.name,
+    parts: ref.parts.map((part, i) => {
+      const { ref: file, extent } = made.parts[i]!;
+      const stayed = "path" in part.ref && "path" in file && part.ref.path === file.path;
+      const now = stayed ? file : part.ref;
+      return extent === undefined ? { ref: now } : { ref: now, extent };
+    }),
+  };
+}
+
+/** Every address a ref is read from, in order. A dropped file has none. */
+function pathsIn(ref: SourceRef): string[] {
+  const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
+  return files.flatMap((file) => ("path" in file ? [file.path] : []));
+}
+
+/** Whether two lists of addresses are the same addresses in the same order. */
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((path, i) => path === b[i]);
+}
+
+/**
+ * everyPart opens each part of several files read as one that no read has
+ * reached yet, which is what holds it to its extent. A part that will not
+ * open, or is another file, closes the source and is the error, by name.
+ * Any other source has no parts and is left alone.
+ */
+async function everyPart(source: ByteSource): Promise<void> {
+  try {
+    // Asking a part its version is asking for the part.
+    await multiOf(source)?.versions();
+  } catch (err) {
+    await source.close();
+    throw err;
+  }
 }
 
 /** One file by its path, and by its version where a save recorded one. */
