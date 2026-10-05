@@ -1,1 +1,4 @@
 out/
+
+# The pseudo-locale, written from messages/en.json by scripts/messages.js.
+messages/en-XA.json

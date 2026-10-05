@@ -349,6 +349,12 @@ The Vite plugin compiles the messages for the dev server, the renderer build and
 `scripts/messages.js` holds the compiler's options and compiles them for the Electron bundles and the check.
 The plugin that reads the JSON is loaded from `node_modules`, so a build fetches nothing.
 
+`messages/en-XA.json` is the pseudo-locale, written from the English by `scripts/pseudo.js` before every compile and not committed.
+Every letter in it wears an accent, every message is a third longer, and each sits in `⟦ ⟧`.
+On screen, text with no accents never went through a message, and text with a bracket missing was cut short by a layout that only fitted the English.
+
+`tests/messages.test.ts` holds each language's file to the English one: the same messages, the same inputs, and a form for every plural the language has.
+
 ## Running it
 
 ```bash
