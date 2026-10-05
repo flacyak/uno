@@ -11,6 +11,7 @@ import {
   MILLISECONDS,
   Meter,
   REQUEST,
+  collector,
   messagePort,
   otlpHeaders,
   serve,
@@ -199,4 +200,68 @@ test("the headers a collector is signed in with are read as every OpenTelemetry 
     Authorization: "Basic abc==",
     "x-scope": "team",
   });
+});
+
+const GATEWAY = "https://otlp-gateway-prod-us-east-0.grafana.net/otlp";
+const SIGNED = "Authorization=Basic%20abc";
+const READ = {
+  url: `${GATEWAY}/v1/metrics`,
+  headers: { Authorization: "Basic abc" },
+};
+
+test("an environment that names no collector sends nowhere", () => {
+  expect(collector({})).toBeUndefined();
+  expect(collector({ OTEL_EXPORTER_OTLP_ENDPOINT: "  " })).toBeUndefined();
+});
+
+// A settings page shows `NAME="value"` for a shell, and what is pasted into
+// a secret is often the whole line or the value in its quotes.
+test.each([
+  ["as it is", GATEWAY, SIGNED],
+  ["with a slash after it", `${GATEWAY}/`, SIGNED],
+  ["in the quotes it was shown in", `"${GATEWAY}"`, `"${SIGNED}"`],
+  ["in single quotes", `'${GATEWAY}'`, `'${SIGNED}'`],
+  [
+    "as the whole line",
+    `OTEL_EXPORTER_OTLP_ENDPOINT="${GATEWAY}"`,
+    `OTEL_EXPORTER_OTLP_HEADERS="${SIGNED}"`,
+  ],
+  ["with a line break after it", `${GATEWAY}\n`, ` ${SIGNED}\n`],
+])("a collector's address is read %s", (_, endpoint, headers) => {
+  expect(
+    collector({ OTEL_EXPORTER_OTLP_ENDPOINT: endpoint, OTEL_EXPORTER_OTLP_HEADERS: headers }),
+  ).toEqual(READ);
+});
+
+test("an endpoint that is not a URL is refused by name, saying what is wrong and not what it holds", () => {
+  const TOKEN = "glc_secret";
+  const refused = (endpoint: string): string => {
+    try {
+      collector({ OTEL_EXPORTER_OTLP_ENDPOINT: endpoint, OTEL_EXPORTER_OTLP_HEADERS: SIGNED });
+    } catch (err) {
+      return (err as Error).message;
+    }
+    throw new Error(`${endpoint} was read as a URL`);
+  };
+
+  expect(refused(`Authorization=Basic%20${TOKEN}`)).toBe(
+    "OTEL_EXPORTER_OTLP_ENDPOINT is not a URL · it holds what OTEL_EXPORTER_OTLP_HEADERS should, so the two look swapped",
+  );
+  const BARE = `otlp-gateway-${TOKEN}.grafana.net/otlp`;
+  expect(refused(BARE)).toBe(
+    `OTEL_EXPORTER_OTLP_ENDPOINT is not a URL · it does not start with https://, and is ${BARE.length} characters long`,
+  );
+  const SPACED = `https://${TOKEN} gateway/otlp`;
+  expect(refused(SPACED)).toBe(
+    `OTEL_EXPORTER_OTLP_ENDPOINT is not a URL · it starts as a URL does and cannot be read as one, and is ${SPACED.length} characters long`,
+  );
+});
+
+test("headers that are set and hold no header are refused by name", () => {
+  expect(() =>
+    collector({ OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY, OTEL_EXPORTER_OTLP_HEADERS: "glc_secret" }),
+  ).toThrow(
+    "OTEL_EXPORTER_OTLP_HEADERS holds no header · it is read as key=value pairs with commas between",
+  );
+  expect(collector({ OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY })).toEqual({ ...READ, headers: {} });
 });

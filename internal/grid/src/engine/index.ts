@@ -39,14 +39,25 @@ export type { Connecting } from "./serve.ts";
 export {
   BYTES,
   DURATION_BOUNDS,
+  ENDPOINT_VARIABLE,
+  HEADERS_VARIABLE,
   INDEX,
   INDEXED,
   METRICS_PATH,
   MILLISECONDS,
   Meter,
   REQUEST,
+  collector,
   otlpHeaders,
   unmeasured,
 } from "./telemetry.ts";
-export type { Attributes, Kind, Measurement, Payload, Resource, Telemetry } from "./telemetry.ts";
+export type {
+  Attributes,
+  Collector,
+  Kind,
+  Measurement,
+  Payload,
+  Resource,
+  Telemetry,
+} from "./telemetry.ts";
 export { WHOLE_LIMIT } from "./workspace.ts";

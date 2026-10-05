@@ -274,6 +274,28 @@ function empty(kind: Kind): Data {
 /** The path a collector takes metrics on, after its OTLP endpoint. */
 export const METRICS_PATH = "/v1/metrics";
 
+/** The variable every OpenTelemetry tool reads for where its collector is. */
+export const ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_ENDPOINT";
+/** The variable every OpenTelemetry tool reads for what to sign in with. */
+export const HEADERS_VARIABLE = "OTEL_EXPORTER_OTLP_HEADERS";
+
+/** The quotes a value copied out of a shell snippet arrives wearing. */
+const QUOTES = ['"', "'"];
+
+/**
+ * pasted is a variable's value as it was meant, from how it tends to arrive.
+ *
+ * A collector's settings page shows `NAME="value"` to be copied into a shell,
+ * and what ends up in a secret is often that whole line, or the value with
+ * its quotes. Neither can mean anything else, so both are read as the value.
+ */
+function pasted(name: string, text: string | undefined): string {
+  let value = (text ?? "").trim();
+  if (value.startsWith(`${name}=`)) value = value.slice(name.length + 1).trim();
+  const quote = QUOTES.find((q) => value.length > 1 && value.startsWith(q) && value.endsWith(q));
+  return quote === undefined ? value : value.slice(1, -1).trim();
+}
+
 /**
  * otlpHeaders reads OTEL_EXPORTER_OTLP_HEADERS, which is how every
  * OpenTelemetry tool is told what to sign in with: `key=value` pairs with
@@ -281,10 +303,61 @@ export const METRICS_PATH = "/v1/metrics";
  */
 export function otlpHeaders(text: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const pair of (text ?? "").split(",")) {
+  for (const pair of pasted(HEADERS_VARIABLE, text).split(",")) {
     const eq = pair.indexOf("=");
     if (eq <= 0) continue;
     out[pair.slice(0, eq).trim()] = decodeURIComponent(pair.slice(eq + 1).trim());
   }
   return out;
+}
+
+/** Collector is where metrics are sent, and what the send is signed in with. */
+export interface Collector {
+  /** The whole address a metrics request is posted to. */
+  url: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * What is wrong with an endpoint that is not a URL, said from its shape and
+ * without a character of it: it sits beside a token, and an error is read by
+ * people the token was never meant for.
+ */
+function whyNot(value: string): string {
+  if (/^authorization\s*=/i.test(value)) {
+    return `it holds what ${HEADERS_VARIABLE} should, so the two look swapped`;
+  }
+  if (!/^https?:\/\//i.test(value)) {
+    return `it does not start with https://, and is ${value.length} characters long`;
+  }
+  return `it starts as a URL does and cannot be read as one, and is ${value.length} characters long`;
+}
+
+/**
+ * collector reads where metrics go from the environment, as every
+ * OpenTelemetry tool does, and answers undefined where it names nowhere.
+ *
+ * An endpoint that is set and is not a URL is refused, saying which variable
+ * it was and what about it is wrong: sending to nowhere quietly would look
+ * the same as sending.
+ */
+export function collector(
+  env: Readonly<Record<string, string | undefined>>,
+): Collector | undefined {
+  const endpoint = pasted(ENDPOINT_VARIABLE, env[ENDPOINT_VARIABLE]);
+  if (endpoint === "") return undefined;
+
+  const url = `${endpoint.replace(/\/+$/, "")}${METRICS_PATH}`;
+  if (!/^https?:\/\//i.test(endpoint) || !URL.canParse(url)) {
+    throw new Error(`${ENDPOINT_VARIABLE} is not a URL · ${whyNot(endpoint)}`);
+  }
+
+  const headers = otlpHeaders(env[HEADERS_VARIABLE]);
+  const given = pasted(HEADERS_VARIABLE, env[HEADERS_VARIABLE]);
+  if (given !== "" && Object.keys(headers).length === 0) {
+    throw new Error(
+      `${HEADERS_VARIABLE} holds no header · it is read as key=value pairs with commas between`,
+    );
+  }
+  return { url, headers };
 }
