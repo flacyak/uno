@@ -128,7 +128,7 @@ test("clicked, it opens on every top-level source, the four themes, the appearan
     Theme: ["Paper Ember|✓", "Tokyo Night|", "Sakura|", "Catppuccin Frappé|"],
     Appearance: ["System", "Light", "Dark"],
     Keys: ["Default", "Vim-style"],
-    Language: ["System|✓", "English|", `${languageName(PSEUDO_LOCALE)}|`],
+    Language: ["System|✓", ...offered(true).map((locale) => `${languageName(locale)}|`)],
   });
   // The keys land in the menu, on its first item.
   expect(document.activeElement?.textContent).toContain("ACME exports");

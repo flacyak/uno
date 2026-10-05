@@ -49,6 +49,7 @@ test("the system's first language the app has is the one preferred", () => {
 test("a region the app has no messages for reads its language's", () => {
   expect(preferred(["en-GB"], ALL)).toBe("en");
   expect(preferred(["EN-gb"], ALL)).toBe("en");
+  expect(preferred(["es-MX", "en-US"], ALL)).toBe("es");
 });
 
 test("a system that prefers none of them gets the base locale", () => {
@@ -108,6 +109,7 @@ test("a change of language is heard, and a choice that changes nothing is not", 
   expect(kept.getItem(LANGUAGE_KEY)).toBe(SYSTEM);
 });
 
-test("a language is named as it names itself", () => {
+test("a language is named as it names itself, capitalised as it would at the head of a line", () => {
   expect(languageName("en")).toBe("English");
+  expect(languageName("es")).toBe("Español");
 });

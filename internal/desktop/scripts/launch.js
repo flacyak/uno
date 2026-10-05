@@ -31,6 +31,30 @@ export function electronEnv(base, extra = {}) {
 }
 
 /**
+ * The language a driven run is in, whatever the machine it runs on prefers.
+ *
+ * The app follows the system's language until a person chooses one, and a
+ * smoke check reads what the window says. Run on a machine that prefers
+ * Spanish, the app would say `4812 filas` and every check that reads a word
+ * would fail on an app that is working.
+ */
+export const DRIVEN_LANGUAGE = "en-US";
+
+/**
+ * The switch that starts Electron in that language, where a switch decides:
+ * macOS and Windows. It goes after the app's directory and its data, with the
+ * other switches.
+ */
+export const DRIVEN_LANGUAGE_SWITCH = `--lang=${DRIVEN_LANGUAGE}`;
+
+/**
+ * The environment that starts it in that language, where the environment
+ * decides: on Linux Chromium reads LANGUAGE before anything else and does not
+ * take the switch over it.
+ */
+export const DRIVEN_LANGUAGE_ENV = { LANGUAGE: DRIVEN_LANGUAGE.replace("-", "_") };
+
+/**
  * Whether Electron has nowhere to draw.
  *
  * On a headless Linux box this is the one thing that has to be arranged from
