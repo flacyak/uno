@@ -94,14 +94,10 @@ export const OPEN: Check[] = [
   {
     // Needs the real preload bridge -- `webUtils.getPathForFile` -- which only
     // a real Electron window exposes. Window-bound.
-    name: "a file that is not on disk is refused by name",
+    name: "a file that is not on disk has no path to open",
     script: `
-      try {
-        window.uno.dropped(new File(["a,b\\n1,2\\n"], "memory.csv"));
-        return "a file with no path was accepted";
-      } catch (err) {
-        return err.message.includes("memory.csv") ? "" : err.message;
-      }
+      const ref = window.uno.dropped(new File(["a,b\\n1,2\\n"], "memory.csv"));
+      return ref === undefined ? "" : "a file with no path was given " + JSON.stringify(ref);
     `,
   },
   {
