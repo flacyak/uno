@@ -18,13 +18,14 @@ import type {
   Found,
   Link,
   Offer,
+  PartInfo,
   Peeked,
   SourceHandle,
   SourceRef,
 } from "@uno/grid/engine";
 import { NO_ROW, Op, editEquals } from "@uno/grid/sheet";
 import type { Edit } from "@uno/grid/sheet";
-import type { Listing } from "@uno/grid/store";
+import type { Listing, SingleRef } from "@uno/grid/store";
 
 import type { Cell, Rows } from "./grid/rows.ts";
 
@@ -112,6 +113,11 @@ export class Tab {
     return this.source.opened.link;
   }
 
+  /** The files this source reads as one, in order, for one that is several. */
+  get parts(): readonly PartInfo[] | undefined {
+    return this.source.opened.parts;
+  }
+
   /** What is wrong with the file behind this source, if anything: it is gone,
    * or it is not the file the log was written against. */
   get trouble(): string | undefined {
@@ -174,12 +180,14 @@ export class Workspace {
   /** The sources the last save held, so adding or removing one is unsaved work too. */
   private savedSources: string[] = [];
   /**
-   * Sources pointed at a different file since the last save.
+   * Sources pointed at a different file since the last save, or given more
+   * files at their end.
    *
-   * The log does not change when a source is relinked, and neither does the
-   * list of sources, so nothing else here would notice. What changed is the
-   * path the .uno on disk still holds, and leaving that unsaved is how somebody
-   * finds the same missing file again tomorrow.
+   * The log does not change when a source is relinked or appended to, and
+   * neither does the list of sources, so nothing else here would notice. What
+   * changed is the path, or the parts, the .uno on disk still holds, and
+   * leaving that unsaved is how somebody finds the same missing file again
+   * tomorrow.
    */
   private readonly relinked = new Set<string>();
 
@@ -271,6 +279,27 @@ export class Workspace {
     // One still with no file points where it did, so a save has nothing new
     // to write for it.
     if (!fresh.missing) this.relinked.add(fresh.id);
+    if (this.showing === tab) this.showing = fresh;
+    return fresh;
+  }
+
+  /**
+   * append adds files at the end of a tab that reads several as one.
+   *
+   * The tab is replaced, as a relinked one is and for the same reason: its
+   * rows and its band belong to the longer source. Its log is the one it had,
+   * every edit on the cell it was made to, and it keeps its place in the
+   * strip, the cell it was left on, and what the last save held.
+   */
+  async append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
+    const source = await this.engine.append(tab.source, [...files]);
+    const i = this.tabs.indexOf(tab);
+    if (i < 0) return tab;
+
+    const fresh = this.tab(source, tab.savedLog);
+    fresh.cell = tab.cell;
+    this.tabs[i] = fresh;
+    this.relinked.add(fresh.id);
     if (this.showing === tab) this.showing = fresh;
     return fresh;
   }

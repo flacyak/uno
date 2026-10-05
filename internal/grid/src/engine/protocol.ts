@@ -104,6 +104,19 @@ export interface Opened {
   generation: number;
   /** The file this source points at, for one that does. */
   link?: Link;
+  /**
+   * The files it reads as one, in the order their rows are read, for a source
+   * that is several: what a client needs to say how many there are, and to
+   * see that the folder they came from has more.
+   */
+  parts?: PartInfo[];
+}
+
+/** One of the files a source reads as one, as a client is told of it. */
+export interface PartInfo {
+  name: string;
+  /** Where the file is, or "" for a dropped one, which has no path. */
+  path: string;
 }
 
 /** What an open added to the workspace, in the order it shows them. */

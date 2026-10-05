@@ -8,7 +8,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { Entry, Listing } from "@uno/grid/store";
 
 import type { Connection, Listings, Open } from "../src/renderer/sources.ts";
-import { Sources, stateOf, trailTo } from "../src/renderer/sources.ts";
+import { Sources, joinedName, stateOf, trailTo } from "../src/renderer/sources.ts";
 
 const ACME: Connection = {
   name: "acme-exports",
@@ -382,10 +382,81 @@ test("the buttons offer nothing, then one file, then each file or all of them as
     { name: "aug.tsv", path: "s3://acme-exports/2025/q3/aug.tsv" },
     { name: "sep.CSV", path: "s3://acme-exports/2025/q3/sep.CSV" },
   ];
+  // As one they are one ref of all three in that order, named after the
+  // folder, since their names share nothing.
   expect(panel.buttons).toEqual([
     { label: "Add 3", one: false, refs },
-    { label: "Add as one", one: true, refs },
+    {
+      label: "Add as one",
+      one: true,
+      refs: [{ name: "q3.csv", parts: refs.map((ref) => ({ ref })), header: "first" }],
+    },
   ]);
+});
+
+test("files added as one are named for what their names share, back to a whole word", () => {
+  const at = (...names: string[]) =>
+    names.map((name) => ({ name, path: `s3://acme-exports/shop/2025/${name}` }));
+
+  expect(joinedName(at("orders-2025-01.csv", "orders-2025-02.csv"))).toBe("orders-2025.csv");
+  expect(joinedName(at("sales-q3-part-1.csv", "sales-q3-part-2.csv"))).toBe("sales-q3-part.csv");
+  expect(joinedName(at("ads-q3.csv", "ads-q4.csv"))).toBe("ads.csv");
+  // One name that is the start of the other ends on a whole word already.
+  expect(joinedName(at("sales.tsv", "sales_eu.tsv"))).toBe("sales.tsv");
+  // Nothing shared but a letter is nothing shared: the folder names them.
+  expect(joinedName(at("jan.csv", "jul.csv"))).toBe("2025.csv");
+  expect(joinedName([{ name: "jan.csv", path: "/home/jo/exports/jan.csv" }])).toBe("jan.csv");
+  expect(
+    joinedName([
+      { name: "a.csv", path: "/home/jo/exports/a.csv" },
+      { name: "b.csv", path: "/home/jo/exports/b.csv" },
+    ]),
+  ).toBe("exports.csv");
+  // With no folder to be named after, the first file names them.
+  expect(
+    joinedName([
+      { name: "a.csv", path: "a.csv" },
+      { name: "b.csv", path: "b.csv" },
+    ]),
+  ).toBe("a.csv");
+});
+
+test("how files are read as one is chosen while Add as one is offered, and kept", async () => {
+  let drawn = 0;
+  const panel = new Sources(
+    new Stand(),
+    () => TABS,
+    [Q3],
+    () => drawn++,
+  );
+  await panel.open(Q3);
+  const one = () => panel.buttons.find((b) => b.one)?.refs[0];
+
+  await panel.toggle(named(panel, "jul.csv"));
+  expect(panel.joining).toBeUndefined();
+
+  await panel.toggle(named(panel, "sep.CSV"));
+  expect(panel.joining).toEqual({ header: "first", fileColumn: false });
+  expect(one()).toMatchObject({ header: "first" });
+  expect(one()).not.toHaveProperty("fileColumn");
+
+  const before = drawn;
+  panel.join({ header: "none" });
+  panel.join({ fileColumn: true });
+  expect(drawn).toBe(before + 2);
+  expect(panel.joining).toEqual({ header: "none", fileColumn: true });
+  expect(one()).toMatchObject({ header: "none", fileColumn: true });
+
+  // Somewhere else, with other files picked, the choices are as they were left.
+  await panel.open(BIG);
+  expect(panel.joining).toBeUndefined();
+  await panel.toggle(named(panel, "a.csv"));
+  await panel.toggle(named(panel, "b.csv"));
+  expect(panel.joining).toEqual({ header: "none", fileColumn: true });
+
+  // A tab reads one file, so picking for one offers no way to read several.
+  await panel.repoint(TABS[0]!);
+  expect(panel.joining).toBeUndefined();
 });
 
 test("one selected file is peeked at, and a second selected puts the peek away", async () => {
@@ -832,6 +903,118 @@ test("the keys on a tab offer reload, re-point and remove, and nothing elsewhere
 
   panel.focus("connections");
   expect(panel.doings).toEqual([]);
+});
+
+// ------------------------------------------------------------ a folder that grew
+
+/** A tab reading `names` out of a folder as one. */
+function joined(folder: string, ...names: string[]): Open {
+  return {
+    id: "m",
+    name: "joined.csv",
+    parts: names.map((name) => ({ name, path: `${folder}${name}` })),
+  };
+}
+
+test("a tab of several files is offered the files after its last that its folder has gained", async () => {
+  const stand = new Stand();
+  const tab = joined("s3://acme-exports/ads/", "ads-2025-10.csv");
+  let drawn = 0;
+  const panel = new Sources(
+    stand,
+    () => [...TABS, tab],
+    [ACME],
+    () => drawn++,
+  );
+
+  // Nothing is offered that nobody has asked about.
+  expect(panel.grown(tab)).toBeUndefined();
+
+  await panel.askGrown();
+
+  // Only the folder of a tab with parts is listed, as the lister names it.
+  expect(stand.asked).toEqual(["s3://acme-exports/ads/"]);
+  expect(drawn).toBe(1);
+  // The PDF sorts after it too, and is not a file a part can be.
+  const files = [{ name: "ads-2025-11.csv", path: "s3://acme-exports/ads/ads-2025-11.csv" }];
+  expect(panel.grown(tab)).toEqual({ folder: "ads/", files });
+  expect(panel.grown(TABS[0]!)).toBeUndefined();
+
+  // The offer is the first thing its line has, and it is not re-pointed.
+  panel.focus("workspace", 2);
+  expect(panel.doings).toEqual([
+    { label: "1 new file in ads/ · append", does: "append", id: "m", files },
+    { label: "Remove", does: "remove", id: "m" },
+  ]);
+});
+
+test("a file that sorts before the last part is not offered, wherever it came from", async () => {
+  const tab = joined("s3://acme-exports/ads/", "ads-2025-11.csv");
+  const panel = new Sources(new Stand(), () => [tab], [ACME]);
+
+  await panel.askGrown();
+
+  // ads-2025-10.csv is in the folder and is not a part, and appending it
+  // would not be reading the folder in order.
+  expect(panel.grown(tab)).toBeUndefined();
+  expect(panel.doings).toEqual([]);
+});
+
+test("every page of the folder is read for what it has gained", async () => {
+  const stand = new Stand();
+  const tab = joined("s3://acme-exports/big/", "a.csv", "b.csv");
+  BOOKS["s3://acme-exports/big/"] = BOOKS["s3://acme-exports/big"]!;
+  const panel = new Sources(stand, () => [tab], [BIG]);
+
+  await panel.askGrown();
+
+  expect(stand.asked).toEqual([
+    "s3://acme-exports/big/",
+    "s3://acme-exports/big/@1",
+    "s3://acme-exports/big/@2",
+  ]);
+  expect(panel.grown(tab)?.files.map((f) => f.name)).toEqual(["c.csv", "d.tsv", "e.csv"]);
+  expect(panel.doings[0]?.label).toBe("3 new files in big/ · append");
+});
+
+test("what a folder gained is not offered to a tab that has been appended to since", async () => {
+  let tab = joined("s3://acme-exports/ads/", "ads-2025-10.csv");
+  const panel = new Sources(new Stand(), () => [tab], [ACME]);
+  await panel.askGrown();
+  expect(panel.grown(tab)).toBeDefined();
+
+  // The append lands before anything is asked again: the answer in hand is
+  // about a list of parts the tab no longer has.
+  tab = joined("s3://acme-exports/ads/", "ads-2025-10.csv", "ads-2025-11.csv");
+  expect(panel.grown(tab)).toBeUndefined();
+
+  await panel.askGrown();
+  expect(panel.grown(tab)).toBeUndefined();
+});
+
+test("a folder that cannot be listed offers nothing, and a tab on a disk is asked by its folder", async () => {
+  const stand = new Stand();
+  const tab = joined("/home/jo/exports/", "a.csv", "b.csv");
+  PAGES["/home/jo/exports"] = [
+    file("b.csv", "/home/jo/exports/b.csv", 2),
+    file("c.csv", "/home/jo/exports/c.csv", 3),
+    file("notes.csv", "/home/jo/exports/notes.csv", 12),
+  ];
+  const panel = new Sources(stand, () => [tab]);
+
+  await panel.askGrown();
+  expect(stand.asked).toEqual(["/home/jo/exports"]);
+  expect(panel.grown(tab)).toEqual({
+    folder: "exports/",
+    files: [
+      { name: "c.csv", path: "/home/jo/exports/c.csv" },
+      { name: "notes.csv", path: "/home/jo/exports/notes.csv" },
+    ],
+  });
+
+  stand.refuse = "/home/jo/exports: no such folder";
+  await panel.askGrown();
+  expect(panel.grown(tab)).toBeUndefined();
 });
 
 test("a tab with no file has nothing to reload, and the last tab cannot be removed", () => {

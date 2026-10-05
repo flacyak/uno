@@ -494,6 +494,12 @@ export class Workspace {
       "parts" in ref ? ref : undefined,
     );
     view.connection = this.through(ref);
+    if ("parts" in ref) {
+      view.opened.parts = ref.parts.map((part) => ({
+        name: part.ref.name,
+        path: "path" in part.ref ? part.ref.path : "",
+      }));
+    }
     return view;
   }
 

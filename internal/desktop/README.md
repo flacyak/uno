@@ -216,6 +216,18 @@ Opening a file closes the one open now. Over unsaved edits, Ctrl+O says so
 first, and a second Ctrl+O while that is still on screen opens anyway, as `:e!`
 does.
 
+## Several files as one source
+
+Several files picked in the sources panel with Space are added as a tab each by `Add 3`, or as one tab by `Add as one`.
+One tab reads them end to end in the order they are listed, as one table, and is named for what their names share.
+Beside `Add as one` are its two choices: `header row`, ticked unless the files have none, and `_file column`, which says which file each row came from.
+Files that do not read the way the first does are refused, naming the file and the column, and stay picked.
+
+A tab of several files reads the files it was made from, and never whatever is in the folder now, because its edits name rows by number.
+When the folder gains files that sort after the tab's last, its line in the panel says `1 new file`, and the line offers `1 new file in shop/2025/ · append`, which `a` takes too.
+Appending adds them at the end, so every edit stays on the cell it was made to.
+The folder is asked when the panel opens and when the window gets the focus back.
+
 ## Keys
 
 How the grid reads keys is an input strategy, picked from Edit → Input and kept

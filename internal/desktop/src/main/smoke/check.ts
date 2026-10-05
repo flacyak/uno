@@ -11,8 +11,10 @@ export interface Check {
   /**
    * Something only smoke.js can do, asked of it before the check runs and
    * answered once it is done: `rewrite <key>` writes the stand-in's object at
-   * <key> over with other bytes of the same size. The stand-in bucket lives in
-   * smoke.js, so a change a person would make in the bucket is made there.
+   * <key> over with other bytes of the same size, and `put <key> ...` puts
+   * the objects it holds for those keys into the bucket. The stand-in bucket
+   * lives in smoke.js, so a change a person would make in the bucket is made
+   * there.
    */
   ask?: string;
   /**

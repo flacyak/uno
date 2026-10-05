@@ -39,6 +39,8 @@ test("the engine lists the providers it reaches through", () => {
   expect(entry).toMatch(/sources\(\[/);
   expect(entry).toMatch(/diskProvider\(\)/);
   expect(entry).toMatch(/s3Provider\(/);
+  // Several files read as one, over the places one file can be.
+  expect(entry).toMatch(/multiProvider\(single\)/);
 });
 
 /**

@@ -11,9 +11,10 @@
 // nobody has selected any more -- and all of it is tested here without a
 // window.
 
-import type { Link, Peeked, SourceRef } from "@uno/grid/engine";
+import type { Link, PartInfo, Peeked, SourceRef } from "@uno/grid/engine";
+import { compareStrings } from "@uno/grid/go";
 import type { Connection as Saved } from "@uno/grid/library";
-import type { Entry, Listing } from "@uno/grid/store";
+import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@uno/grid/store";
 import { s3Location, s3Url } from "@uno/grid/store/s3";
 
 /**
@@ -53,6 +54,8 @@ export interface Open {
    * tab reads a version a save pinned. Asked when the window gets the focus.
    */
   readonly newer?: string;
+  /** The files it reads as one, in order, for a tab that is several. */
+  readonly parts?: readonly PartInfo[];
 }
 
 /**
@@ -86,10 +89,11 @@ export function stateOf(tab: Open): State {
 
 /**
  * Doing is what can be done to the tab the keys are on, besides showing it:
- * read its file again, point it at another, take it out, or connect the bucket
- * it reads so that it can be read at all.
+ * read its file again, point it at another, take it out, connect the bucket
+ * it reads so that it can be read at all, or append the files its folder has
+ * gained since.
  */
-export type Doing = "reload" | "repoint" | "remove" | "connect";
+export type Doing = "reload" | "repoint" | "remove" | "connect" | "append";
 
 /** One of the things a workspace line offers, as its button says it. */
 export interface TabAction {
@@ -97,6 +101,39 @@ export interface TabAction {
   does: Doing;
   /** The tab it is done to. */
   id: string;
+  /** The files an append adds, in the order they are listed. */
+  files?: readonly SingleRef[];
+}
+
+/**
+ * Joining is how files added as one are read: whether each has a header row,
+ * and whether a `_file` column says which file a row came from.
+ */
+export interface Joining {
+  header: HeaderMode;
+  fileColumn: boolean;
+}
+
+/**
+ * Grown is what the folder a tab's files came from has gained: the files in
+ * it that sort after the tab's last and are not among its own, which are the
+ * ones that can be appended without moving a row.
+ */
+export interface Grown {
+  /** The folder, as a person would say it: shop/2025/. */
+  folder: string;
+  /** The new files, in the order they are listed. */
+  files: readonly SingleRef[];
+}
+
+/** newFiles is how many files a folder has gained, in words: "3 new files". */
+export function newFiles(n: number): string {
+  return `${n.toLocaleString()} new ${n === 1 ? "file" : "files"}`;
+}
+
+/** fileCount is how many files a tab reads as one, in words: "3 files". */
+export function fileCount(n: number): string {
+  return `${n.toLocaleString()} ${n === 1 ? "file" : "files"}`;
 }
 
 /**
@@ -154,8 +191,8 @@ export interface Crumb {
 }
 
 /**
- * Button is one of the two under the browser: what it says, and the files it
- * hands back.
+ * Button is one of the two under the browser: what it says, and what it hands
+ * back.
  *
  * The panel picks the files and puts them in order; opening them is the
  * shell's, since a tab belongs to the workspace and the panel has never held
@@ -166,7 +203,8 @@ export interface Button {
   label: string;
   /** Whether the files are one source between them, or a tab each. */
   one: boolean;
-  /** The files it hands back, in the order they are listed. */
+  /** What it hands back: each file in the order they are listed, or the one
+   * ref that reads them all in that order. */
   refs: readonly SourceRef[];
   /** The tab the one file is for, when the button re-points rather than adds. */
   to?: string;
@@ -238,6 +276,62 @@ export function trailTo(path: string): Crumb[] | undefined {
   return [{ name: name === "" ? folder : name, path: folder }];
 }
 
+/** The characters a file's name is broken into words at. */
+const BREAKS = "-_. ";
+
+/**
+ * joinedName is what several files added as one are called: what their names
+ * share, back to the last whole word of it, with the extension of the first.
+ * `orders-2025-01.csv` and `orders-2025-02.csv` are `orders-2025.csv`.
+ *
+ * The extension stays because the engine picks a reader by it, as it does for
+ * one file. Files whose names share no whole word are named after the folder
+ * the first is in, and after the first itself where it has none.
+ */
+export function joinedName(files: ReadonlyArray<{ name: string; path: string }>): string {
+  const first = files[0];
+  if (first === undefined) return "";
+  const dot = first.name.lastIndexOf(".");
+  const extension = dot > 0 ? first.name.slice(dot) : "";
+  const stems = files.map((f) => {
+    const at = f.name.lastIndexOf(".");
+    return at > 0 ? f.name.slice(0, at) : f.name;
+  });
+
+  let shared = stems[0]!;
+  for (const stem of stems) {
+    let same = 0;
+    while (same < shared.length && shared[same] === stem[same]) same++;
+    shared = shared.slice(0, same);
+  }
+  // Back to where a word ends in every name, so `ads-q3` and `ads-q4` share
+  // `ads` and not `ads-q`.
+  const whole = (end: number): boolean =>
+    BREAKS.includes(shared[end - 1]!) ||
+    stems.every((stem) => stem.length === end || BREAKS.includes(stem[end]!));
+  let end = shared.length;
+  while (end > 0 && !whole(end)) end--;
+  while (end > 0 && BREAKS.includes(shared[end - 1]!)) end--;
+
+  const base = shared.slice(0, end) || trailTo(first.path)?.at(-1)?.name || stems[0]!;
+  return base + extension;
+}
+
+/**
+ * folderOf is the folder a file is in, as it is listed and as it is said:
+ * s3://acme-exports/shop/2025/ and `shop/2025/`. An object is said by its
+ * prefix, which is what a person knows it by, and one at the top of its
+ * bucket by the bucket. A file on a disk is said by the folder's own name.
+ * Undefined for a path with no folder in it.
+ */
+function folderOf(path: string): { path: string; said: string } | undefined {
+  const last = trailTo(path)?.at(-1);
+  if (last === undefined) return undefined;
+  const key = s3Location(path)?.key ?? "";
+  const prefix = key.slice(0, key.lastIndexOf("/") + 1);
+  return { path: last.path, said: prefix === "" ? `${last.name}/` : prefix };
+}
+
 /** A line that exists, for a count of lines that may have changed under it. */
 function bound(line: number, count: number): number {
   return Math.max(0, Math.min(line, count - 1));
@@ -299,6 +393,15 @@ export class Sources {
    * browsing with a different button at the end of it.
    */
   private pointing: Open | undefined;
+  /** How files added as one are read, as the person last left the choices. */
+  private how: Joining = { header: "first", fileColumn: false };
+  /**
+   * What each tab of several files was last found to be missing from its
+   * folder, by the tab's id, and the last part it had when that was asked.
+   * An answer for a tab that has been appended to since is about a list of
+   * parts that no longer exists, and is not read.
+   */
+  private readonly gained = new Map<string, { after: string; grown: Grown }>();
 
   constructor(
     private readonly listings: Listings,
@@ -358,8 +461,10 @@ export class Sources {
 
   /**
    * What can be done to the tab the keys are on: reload a tab with a file to
-   * read again, re-point any of them, and remove one while it is not the last,
-   * since a workspace of none has nothing to show. Nothing when the keys are
+   * read again, re-point one that reads one file, and remove one while it is
+   * not the last, since a workspace of none has nothing to show. A tab of
+   * several files whose folder has gained more offers to append them, first,
+   * since it is the one thing here that is news. Nothing when the keys are
    * not on a tab.
    */
   get doings(): readonly TabAction[] {
@@ -376,9 +481,81 @@ export class Sources {
     } else if (tab.link !== undefined) {
       out.push({ label: "Reload", does: "reload", id });
     }
-    out.push({ label: "Re-point", does: "repoint", id });
+    const grown = this.grown(tab);
+    if (grown !== undefined) {
+      out.push({
+        label: `${newFiles(grown.files.length)} in ${grown.folder} · append`,
+        does: "append",
+        id,
+        files: grown.files,
+      });
+    }
+    // Several files read as one are not pointed at another file: the parts
+    // are the source, and the one change they take is more at the end.
+    if (tab.parts === undefined) out.push({ label: "Re-point", does: "repoint", id });
     if (this.opened().length > 1) out.push({ label: "Remove", does: "remove", id });
     return out;
+  }
+
+  /**
+   * grown is what the folder a tab's files came from has gained, as the last
+   * ask found it, or undefined for a tab with nothing to append.
+   */
+  grown(tab: Open): Grown | undefined {
+    const found = this.gained.get(tab.id);
+    return found !== undefined && found.after === tab.parts?.at(-1)?.path ? found.grown : undefined;
+  }
+
+  /**
+   * askGrown lists the folder each tab of several files came from, and keeps
+   * the files in it that sort after the tab's last part and are not among its
+   * parts. It is asked when the panel opens and when the window gets the
+   * focus back, which is when a folder has had the chance to grow.
+   *
+   * The parts are never read again from the folder: a file landing among
+   * them would move every row after it out from under the log. A file after
+   * the last moves none, so it is offered, and appending is the person's to
+   * choose.
+   *
+   * A folder that cannot be listed offers nothing and says nothing: the tab
+   * reads as it did, and the refusal is worth a sentence where the folder is
+   * browsed and not on every focus.
+   */
+  async askGrown(): Promise<void> {
+    const tabs = this.opened();
+    for (const id of this.gained.keys()) {
+      if (!tabs.some((t) => t.id === id)) this.gained.delete(id);
+    }
+    await Promise.all(tabs.map((tab) => this.askAfter(tab)));
+    this.changed();
+  }
+
+  /** askAfter is askGrown for one tab. */
+  private async askAfter(tab: Open): Promise<void> {
+    const last = tab.parts?.at(-1);
+    const folder = last === undefined ? undefined : folderOf(last.path);
+    if (tab.parts === undefined || last === undefined || folder === undefined) return;
+    const have = new Set(tab.parts.map((part) => part.path));
+
+    const files: SingleRef[] = [];
+    try {
+      let cursor: string | undefined;
+      do {
+        const page = await this.listings.list(folder.path, cursor);
+        for (const entry of page.entries) {
+          const after = compareStrings(entry.name, last.name) > 0;
+          if (after && this.selectable(entry) && !have.has(entry.path)) {
+            files.push({ name: entry.name, path: entry.path });
+          }
+        }
+        cursor = page.next;
+      } while (cursor !== undefined);
+    } catch {
+      this.gained.delete(tab.id);
+      return;
+    }
+    if (files.length === 0) this.gained.delete(tab.id);
+    else this.gained.set(tab.id, { after: last.path, grown: { folder: folder.said, files } });
   }
 
   /**
@@ -525,6 +702,9 @@ export class Sources {
    * a file on its own, and "Add 3" beside "Add as one" for more than one. One
    * file is one source whichever way it is added, so there is no second thing
    * to offer for it.
+   *
+   * "Add as one" hands back one ref of every file picked, in the order they
+   * are listed, read the way `joining` says.
    */
   get buttons(): readonly Button[] {
     const refs = this.selected.map((e) => ({ name: e.name, path: e.path }));
@@ -535,7 +715,32 @@ export class Sources {
     }
     const each: Button = { label: `Add ${refs.length}`, one: false, refs };
     if (refs.length === 1) return [each];
-    return [each, { label: "Add as one", one: true, refs }];
+    const joined: PartsRef = {
+      name: joinedName(refs),
+      parts: refs.map((ref) => ({ ref })),
+      header: this.how.header,
+    };
+    if (this.how.fileColumn) joined.fileColumn = true;
+    return [each, { label: "Add as one", one: true, refs: [joined] }];
+  }
+
+  /**
+   * How files added as one would be read, while "Add as one" is on offer, and
+   * undefined while it is not: the choices are that button's, and are shown
+   * with it.
+   */
+  get joining(): Joining | undefined {
+    return this.selected.length > 1 && this.repointing === undefined ? this.how : undefined;
+  }
+
+  /**
+   * join changes how files added as one are read. The choice stays as it was
+   * left for the next files picked, since a person adding one folder of
+   * exports with no header row is likely adding another.
+   */
+  join(how: Partial<Joining>): void {
+    this.how = { ...this.how, ...how };
+    this.changed();
   }
 
   /** The front of the one selected file, once it has landed: what is read
@@ -737,6 +942,20 @@ export class Sources {
     if (had) this.picks.delete(entry.path);
     else this.picks.add(entry.path);
     await this.look();
+  }
+
+  /**
+   * added lets go of files once they are in the workspace, whether as a tab
+   * each or as the parts of one. They are what was picked a moment ago, and
+   * left picked they are one Enter from being added twice. Anything picked
+   * since stays.
+   */
+  added(refs: readonly SourceRef[]): void {
+    for (const ref of refs) {
+      const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
+      for (const file of files) if ("path" in file) this.picks.delete(file.path);
+    }
+    void this.look();
   }
 
   /**
