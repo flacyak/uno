@@ -90,7 +90,7 @@ export const SOURCES: Check[] = [
       await press("PageUp", { ctrlKey: true });
       const active = document.querySelector(".tab.active").textContent;
       if (!active.startsWith("sales-q3.csv")) return "the tab showing is " + JSON.stringify(active);
-      if (!text("#status-file").startsWith(ROWS.toLocaleString() + " rows")) {
+      if (!text("#status-file").startsWith(counted(ROWS) + " rows")) {
         return "the status bar says " + JSON.stringify(text("#status-file"));
       }
       return text("#status-cell") === window.smokeCell

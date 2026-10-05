@@ -6,6 +6,7 @@
 import type { FindRequest } from "@uno/grid/engine";
 
 import type { Grid } from "../grid/index.ts";
+import { num } from "../locale.ts";
 import type { Workspace } from "../workspace.ts";
 import { message } from "./util.ts";
 
@@ -43,7 +44,7 @@ export class Finder {
       this.say(`${column.header} is text · every value in it parses`, true);
       return;
     }
-    const where = `${dir === 1 ? "below" : "above"} row ${(row + 1).toLocaleString()}`;
+    const where = `${dir === 1 ? "below" : "above"} row ${num(row + 1)}`;
     const kind = column.kind === "date" ? "a date" : "a number";
     void this.find(
       { t: "unparsed" },
@@ -81,7 +82,7 @@ export class Finder {
     if (on === undefined) return;
     const { row, col } = on.grid.selection();
     const header = on.workspace.rows.columns[col]?.header ?? "this column";
-    const where = `${dir === 1 ? "below" : "above"} row ${(row + 1).toLocaleString()}`;
+    const where = `${dir === 1 ? "below" : "above"} row ${num(row + 1)}`;
     void this.find({ t: "text", text }, dir, `"${text}" is not ${where} in ${header}`);
   }
 
@@ -108,7 +109,7 @@ export class Finder {
       } else if (found.complete) {
         this.say(missing, true);
       } else {
-        const searched = found.searched.toLocaleString();
+        const searched = num(found.searched);
         this.say(`${missing} · searched ${searched} rows · indexing ${w.indexed()}%`, true);
       }
     } catch (err) {

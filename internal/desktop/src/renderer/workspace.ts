@@ -28,6 +28,7 @@ import type { Edit } from "@uno/grid/sheet";
 import type { Listing, SingleRef } from "@uno/grid/store";
 
 import type { Cell, Rows } from "./grid/rows.ts";
+import { num } from "./locale.ts";
 
 /**
  * The most a saved workspace carries, all such sources together.
@@ -61,7 +62,7 @@ export function reloaded(was: Tab, now: Tab): string {
         : `a new version, ${size}`
       : size;
   const n = now.edited;
-  const replayed = n === 0 ? "" : ` · ${n} ${n === 1 ? "edit" : "edits"} replayed`;
+  const replayed = n === 0 ? "" : ` · ${num(n)} ${n === 1 ? "edit" : "edits"} replayed`;
   return `reloaded ${now.name} · ${found}${replayed}`;
 }
 
@@ -531,14 +532,14 @@ export class Workspace {
     // Until the index reaches the end, the count is projected from how far it
     // has got, and says so.
     const parts = [
-      `${p.complete ? "" : "≈"}${p.rows.toLocaleString()} rows`,
-      `${t.band.cols()} columns`,
+      `${p.complete ? "" : "≈"}${num(p.rows)} rows`,
+      `${num(t.band.cols())} columns`,
       t.source.opened.label,
     ];
     if (!p.complete) parts.push(`indexing ${this.indexed()}%`);
 
     const edits = t.edited;
-    if (edits > 0) parts.push(`${edits} ${edits === 1 ? "edit" : "edits"}`);
+    if (edits > 0) parts.push(`${num(edits)} ${edits === 1 ? "edit" : "edits"}`);
     // A file that is not the one the log was made against still reads, and
     // says so where the person is looking, not only on the mark's hover.
     // The one with something to do about it goes first, as on its panel line:

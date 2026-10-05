@@ -20,7 +20,17 @@ import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
-import { COMMAS_LEFT, DATE, DOM_ROWS, GUTTER, REGION, REP, ROWS, UNITS } from "./fixture.ts";
+import {
+  COMMAS_LEFT,
+  DATE,
+  DOM_ROWS,
+  GUTTER,
+  LOCALE,
+  REGION,
+  REP,
+  ROWS,
+  UNITS,
+} from "./fixture.ts";
 import { MEETS } from "./meets.ts";
 import { MULTI } from "./multi.ts";
 import { OPEN } from "./open.ts";
@@ -86,6 +96,9 @@ const PRELUDE = `
 
   // More rows than this in the DOM means the grid is not virtualising.
   const DOM_ROWS = ${DOM_ROWS};
+
+  // A count as the app writes it on screen: 4,812.
+  const counted = (n) => n.toLocaleString(${JSON.stringify(LOCALE)});
 
   // How long a check waits on the app: this many frames, or polls POLL_MS apart.
   const TRIES = 150;

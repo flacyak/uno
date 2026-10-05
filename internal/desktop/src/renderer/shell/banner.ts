@@ -5,6 +5,8 @@ import "./banner.css";
 
 import type { Offer } from "@uno/grid/engine";
 
+import { num } from "../locale.ts";
+
 /** An offer is the same question while its source, column and program are. */
 export function offerKey(offer: Offer): string {
   return `${offer.source}:${offer.col}:${offer.program}`;
@@ -21,10 +23,10 @@ export function bannerParts(offer: Offer, apply: () => void, dismiss: () => void
   const header = document.createElement("b");
   header.textContent = offer.header;
 
-  const n = offer.affects.toLocaleString();
+  const n = num(offer.affects);
   const count = offer.complete
     ? `${n} ${offer.affects === 1 ? "cell" : "cells"}`
-    : `at least ${n} in the first ${offer.scanned.toLocaleString()} rows`;
+    : `at least ${n} in the first ${num(offer.scanned)} rows`;
   const parts = [offer.description, count];
   if (offer.ambiguous) parts.push("another rule fits these examples too");
 

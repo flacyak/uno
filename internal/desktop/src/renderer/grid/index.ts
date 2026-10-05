@@ -10,6 +10,7 @@ import "./grid.css";
 import type { InputStrategy } from "../input/strategy.ts";
 import { NOTHING, changeOf, isJump, replay, showing, target } from "../keys.ts";
 import type { Action, Caret, Change, Motion, Pending } from "../keys.ts";
+import { num } from "../locale.ts";
 import type { Cell, GridEvents, Rows } from "./rows.ts";
 import { View } from "./view.ts";
 
@@ -330,7 +331,7 @@ export class Grid {
   private unreadable(source: Rows): string {
     if (source.rows() === 0) return "no rows";
     if (source.ready?.(this.selRow) === false) {
-      return `row ${(this.selRow + 1).toLocaleString()} is still loading`;
+      return `row ${num(this.selRow + 1)} is still loading`;
     }
     return "";
   }

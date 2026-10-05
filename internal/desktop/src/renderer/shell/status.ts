@@ -13,6 +13,7 @@ import "./status.css";
 import type { Grid } from "../grid/index.ts";
 import type { InputStrategy } from "../input/index.ts";
 import type { Lead } from "../keys.ts";
+import { num } from "../locale.ts";
 import type { Workspace } from "../workspace.ts";
 import { must } from "./util.ts";
 
@@ -116,7 +117,7 @@ export class StatusBar {
     }
     const { row, col } = grid.selection();
     const header = w.rows.columns[col]?.header ?? "";
-    this.cell.textContent = `${header} · row ${row + 1}`;
+    this.cell.textContent = `${header} · row ${num(row + 1)}`;
   }
 
   /** switches draws the mode switch as the workspace has it, and each column's
