@@ -25,6 +25,7 @@
   --accent-b: #e2f0f4;
   --flag: #a85f06;
   --flag-b: #f8eddc;
+  --scrim: rgb(0 0 0 / 30%);
 
   --display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -34,6 +35,10 @@
    * it cannot be a number the stylesheet and the script each decide for
    * themselves. */
   --row-h: 29px;
+
+  /* How long the sources panel takes to come in. The scrim over the workspace
+   * darkens over the same time, so the two read as one motion. */
+  --panel-in: 180ms;
 
   color-scheme: light;
 }
@@ -52,6 +57,7 @@
     --accent-b: #12303a;
     --flag: #efa84c;
     --flag-b: #33240f;
+    --scrim: rgb(0 0 0 / 50%);
     color-scheme: dark;
   }
 }
@@ -92,11 +98,40 @@ body {
 /* The grid and the sources panel side by side. `min-width: 0` so the grid
  * gives up the width the panel takes rather than pushing it off the window. */
 .win-body {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
 }
 
+/* `isolation`, so the grid's sticky headers stack inside it and the scrim
+ * needs only to be above the grid as a whole. */
 .win-body > #content {
   min-width: 0;
+  isolation: isolate;
+}
+
+/* The scrim: the workspace darkened while the keys are in the sources panel,
+ * so the panel is what the eye goes to. It is drawn over the whole body and
+ * the panel sits above it. A click goes through it to the grid, which takes
+ * the keys back and with them the light. */
+.win-body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--panel-in) ease-out;
+}
+
+.win-body:has(.panel:focus-within)::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .win-body::after {
+    transition: none;
+  }
 }
