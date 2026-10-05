@@ -34,6 +34,7 @@ import { bannerParts, offerKey } from "./banner.ts";
 import { wireDrop } from "./drop.ts";
 import { Finder } from "./find.ts";
 import type { Showing } from "./find.ts";
+import { m } from "../../paraglide/messages.js";
 import { Theming } from "../theme.ts";
 import { FormulaForm } from "./formula.ts";
 import { PopMenu, below } from "./menu.ts";
@@ -1060,7 +1061,7 @@ export class Shell {
       await this.host.save(w.path, await w.bytes(grid.selection(), w.path));
       w.saved(w.path);
       this.recents.opened(w.path);
-      this.say(`saved ${w.path}`);
+      this.say(m.saved_path({ path: w.path }));
     } catch (err) {
       this.say(message(err), true);
     }
@@ -1086,7 +1087,7 @@ export class Shell {
       await this.host.save(path, await w.bytes(grid.selection(), path));
       w.saved(path);
       this.recents.opened(path);
-      this.say(`saved ${path}`);
+      this.say(m.saved_path({ path }));
     } catch (err) {
       this.say(message(err), true);
     }
