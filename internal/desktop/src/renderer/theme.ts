@@ -167,6 +167,9 @@ const WARNING_WASH: Record<Mode, string> = { light: "8%", dark: "16%" };
 /** How much accent washes a selected line: more in dark, where the surface swallows it. */
 const ACCENT_WASH: Record<Mode, string> = { light: "14%", dark: "22%" };
 
+/** What darkens the workspace behind the sources panel: more in dark, where the grounds are near it already. */
+const SCRIM: Record<Mode, string> = { light: "rgb(0 0 0 / 30%)", dark: "rgb(0 0 0 / 50%)" };
+
 /**
  * tokensOf is a palette as the CSS custom properties base.css declares, the
  * ones it gives and the ones mixed from them.
@@ -187,6 +190,7 @@ export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
     "--accent-b": `color-mix(in srgb, ${p.accent} ${ACCENT_WASH[mode]}, ${p.surface})`,
     "--flag": WARNING_INK[mode],
     "--flag-b": `color-mix(in srgb, ${WARNING} ${WARNING_WASH[mode]}, ${p.paper})`,
+    "--scrim": SCRIM[mode],
   };
 }
 
