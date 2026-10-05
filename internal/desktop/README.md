@@ -96,9 +96,15 @@ Below them are four themes, Paper Ember, Tokyo Night, Sakura and Catppuccin
 Frappé, taken with their authors' credit from [T3 Themes](https://t3themes.com),
 and an appearance of System, Light or Dark, since each theme has both. A theme
 is worn the moment it is chosen, and the choice is kept on this machine for the
-next launch. Last is Keys, which picks how the grid reads them: Default or
+next launch. Then Keys, which picks how the grid reads them: Default or
 Vim-style. Paper Ember is worn until another is chosen. `src/renderer/theme.ts`
 has how each theme's colours map onto uno's.
+
+Last is Language: System, and then every language uno has messages for, each under the name it calls itself.
+System follows the first of the system's languages uno has, and is what a new install does.
+A language is spoken the moment it is chosen.
+The whole window is written again in it with everything open left open, and the choice is kept on this machine.
+`src/renderer/language.ts` has the choice, and `shell/page.ts` and each part's `relabel` write the words again.
 
 ## Sources in S3
 
@@ -352,6 +358,9 @@ The plugin that reads the JSON is loaded from `node_modules`, so a build fetches
 `messages/en-XA.json` is the pseudo-locale, written from the English by `scripts/pseudo.js` before every compile and not committed.
 Every letter in it wears an accent, every message is a third longer, and each sits in `⟦ ⟧`.
 On screen, text with no accents never went through a message, and text with a bracket missing was cut short by a layout that only fitted the English.
+
+`tests/smoke/pseudo.test.ts` starts the real shell over the real engine, changes the language to the pseudo-locale, and fails on any plain letters left in the window.
+What it finds is a sentence written into the code, or one written once and not written again when the language changed.
 
 `tests/messages.test.ts` holds each language's file to the English one: the same messages, the same inputs, and a form for every plural the language has.
 

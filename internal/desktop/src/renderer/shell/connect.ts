@@ -17,6 +17,7 @@ import { validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
 import { m } from "../../paraglide/messages.js";
+import { Words } from "./util.ts";
 
 /** What the form needs of the engine and the host. The shell decides how. */
 export interface ConnectAsks {
@@ -122,18 +123,18 @@ type Status =
 
 export class ConnectForm {
   readonly el = document.createElement("form");
-  private readonly bucket = input("bucket", m.connect_bucket_aria(), EXAMPLE_BUCKET);
-  private readonly prefix = input(
-    "prefix",
-    m.connect_prefix_aria(),
-    m.connect_prefix_placeholder(),
-  );
+  /** What the form says that does not change with what is typed in it. */
+  private readonly words = new Words();
+  private readonly bucket = input("bucket");
+  private readonly prefix = input("prefix");
   private readonly signIn = document.createElement("select");
   private readonly region = document.createElement("div");
   private readonly result = document.createElement("div");
   private readonly saving = document.createElement("div");
-  private readonly tryButton = button(m.action_test(), "");
-  private readonly saveButton = button(m.connect_save(), "primary");
+  private readonly tryButton = button("");
+  private readonly saveButton = button("primary");
+  /** The profile names the engine last answered with, for the list to be drawn from again. */
+  private names: readonly string[] = [];
   private status: Status = { t: "untried" };
   /** Counts tries, so an answer for fields that have since changed is dropped. */
   private tries = 0;
@@ -149,20 +150,27 @@ export class ConnectForm {
     el.className = "panel-connect";
     el.hidden = true;
     el.noValidate = true;
-    el.setAttribute("aria-label", m.connect_form_aria());
+    const words = this.words;
+    words.attr(el, "aria-label", m.connect_form_aria);
 
     const title = document.createElement("div");
     title.className = "title";
-    title.textContent = m.connect_title();
+    words.text(title, m.connect_title);
 
-    this.signIn.setAttribute("aria-label", m.connect_sign_in_aria());
+    words.attr(this.bucket, "aria-label", m.connect_bucket_aria);
+    this.bucket.placeholder = EXAMPLE_BUCKET;
+    words.attr(this.prefix, "aria-label", m.connect_prefix_aria);
+    words.placeholder(this.prefix, m.connect_prefix_placeholder);
+    words.text(this.tryButton, m.action_test);
+    words.text(this.saveButton, m.connect_save);
+    words.attr(this.signIn, "aria-label", m.connect_sign_in_aria);
     this.signIn.addEventListener("change", () => (this.picked = true));
     this.region.className = "value";
     this.result.className = "result";
     this.result.setAttribute("role", "status");
     this.saving.className = "fine";
 
-    const cancel = button(m.action_cancel(), "");
+    const cancel = words.text(button(""), m.action_cancel);
     cancel.type = "button";
     cancel.addEventListener("click", () => this.cancel());
     this.tryButton.type = "button";
@@ -173,10 +181,10 @@ export class ConnectForm {
 
     el.append(
       title,
-      field(m.field_bucket(), this.bucket),
-      field(m.field_prefix(), this.prefix),
-      field(m.field_profile(), this.signIn),
-      field(m.field_region(), this.region),
+      field(words, m.field_bucket, this.bucket),
+      field(words, m.field_prefix, this.prefix),
+      field(words, m.field_profile, this.signIn),
+      field(words, m.field_region, this.region),
       this.result,
       buttons,
       this.saving,
@@ -202,6 +210,13 @@ export class ConnectForm {
 
   get open(): boolean {
     return !this.el.hidden;
+  }
+
+  /** relabel writes the form again in the language the app is in now, as it stands. */
+  relabel(): void {
+    this.words.write();
+    this.options(this.names);
+    this.paint();
   }
 
   /**
@@ -314,6 +329,7 @@ export class ConnectForm {
 
   /** options fills the profile list: the machine's own chain, each profile, and public. */
   private options(names: readonly string[]): void {
+    this.names = names;
     const was = this.signIn.value;
     const choices: Array<[SignIn, string]> = [
       ["machine", m.connect_sign_in_machine()],
@@ -371,30 +387,25 @@ function key(c: Connection): string {
   return JSON.stringify([c.bucket, c.prefix, c.auth]);
 }
 
-/** input is one text field: its name in the form, what it is called aloud, and an example. */
-function input(name: string, label: string, placeholder: string): HTMLInputElement {
+/** input is one text field, by its name in the form. */
+function input(name: string): HTMLInputElement {
   const el = document.createElement("input");
   el.name = name;
-  el.placeholder = placeholder;
   el.spellcheck = false;
   el.autocomplete = "off";
-  el.setAttribute("aria-label", label);
   return el;
 }
 
-function button(label: string, cls: string): HTMLButtonElement {
+function button(cls: string): HTMLButtonElement {
   const el = document.createElement("button");
-  el.textContent = label;
   if (cls !== "") el.className = cls;
   return el;
 }
 
 /** field is one labelled row of the form. */
-function field(label: string, control: HTMLElement): HTMLElement {
+function field(words: Words, label: () => string, control: HTMLElement): HTMLElement {
   const row = document.createElement("label");
   row.className = "field";
-  const name = document.createElement("span");
-  name.textContent = label;
-  row.append(name, control);
+  row.append(words.text(document.createElement("span"), label), control);
   return row;
 }

@@ -30,6 +30,7 @@ import type {
 } from "../sources.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
+import { Words } from "./util.ts";
 
 /**
  * One line's height, in one place. The stylesheet is handed it as
@@ -149,6 +150,8 @@ export class Panel {
   /** What the peek and the buttons were last drawn from, so a scroll redraws neither. */
   private drawnPeek: Peeked | "reading" | undefined;
   private drawnFoot = "";
+  /** What the panel says that it does not paint again: its head and its filter. */
+  private readonly words = new Words();
   /** One element per row on screen, reused as the list scrolls. */
   private pool: HTMLElement[] = [];
   private laid: Span[] = [];
@@ -173,11 +176,10 @@ export class Panel {
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
     // An object's address is added rather than filtered by, so the box says so.
-    this.input.placeholder = m.panel_filter_placeholder();
-    this.input.setAttribute("aria-label", m.panel_filter_aria());
-    const go = document.createElement("button");
+    this.words.placeholder(this.input, m.panel_filter_placeholder);
+    this.words.attr(this.input, "aria-label", m.panel_filter_aria);
+    const go = this.words.text(document.createElement("button"), m.action_filter);
     go.type = "submit";
-    go.textContent = m.action_filter();
     form.append(this.input, go);
     // Enter in the box and the button are one submit, and neither leaves the page.
     form.addEventListener("submit", (e) => {
@@ -220,7 +222,7 @@ export class Panel {
     // keeps the filter out from under the × at the window's top right.
     const head = document.createElement("div");
     head.className = "panel-head col-head";
-    head.textContent = m.sources_title();
+    this.words.text(head, m.sources_title);
 
     root.append(head, form, this.list, this.peek, this.foot, this.connecting.el);
   }
@@ -260,6 +262,19 @@ export class Panel {
 
   get open(): boolean {
     return !this.root.hidden;
+  }
+
+  /**
+   * relabel writes the panel again in the language the app is in now: its own
+   * words, the form's, and the peek and the buttons, which are otherwise drawn
+   * once for what they show and left.
+   */
+  relabel(): void {
+    this.words.write();
+    this.connecting.relabel();
+    this.drawnPeek = undefined;
+    this.drawnFoot = "";
+    this.draw();
   }
 
   /** show opens the panel with the keys in its list, or in the form while one is open. */

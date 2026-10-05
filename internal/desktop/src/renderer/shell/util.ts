@@ -6,6 +6,42 @@ export function must<T>(value: T | null): T {
   return value;
 }
 
+/**
+ * Words are the texts a component writes once, when it is built, kept so they
+ * can be written again in another language. What a component paints on every
+ * change needs none of this, since its next paint is already in the language
+ * the app is in by then.
+ */
+export class Words {
+  private readonly writers: Array<() => void> = [];
+
+  /** text keeps an element's text as whatever `say` answers, and hands the element back. */
+  text<E extends HTMLElement>(el: E, say: () => string): E {
+    return this.keep(el, () => (el.textContent = say()));
+  }
+
+  /** attr keeps one of an element's attributes as whatever `say` answers. */
+  attr<E extends HTMLElement>(el: E, name: string, say: () => string): E {
+    return this.keep(el, () => el.setAttribute(name, say()));
+  }
+
+  /** placeholder keeps what a field shows before anything is typed in it. */
+  placeholder<E extends HTMLInputElement>(el: E, say: () => string): E {
+    return this.keep(el, () => (el.placeholder = say()));
+  }
+
+  /** write writes every one of them again, in the language the app is in now. */
+  write(): void {
+    for (const write of this.writers) write();
+  }
+
+  private keep<E extends HTMLElement>(el: E, write: () => void): E {
+    this.writers.push(write);
+    write();
+    return el;
+  }
+}
+
 export function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
