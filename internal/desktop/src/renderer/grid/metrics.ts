@@ -90,19 +90,31 @@ export function tableOffset(seen: number, top: number, first: number, rowHeight:
 }
 
 /**
- * intoView is the least scroll that puts `row` wholly on screen, or undefined
- * when it already is, so the caller does no arithmetic of its own.
+ * spanIntoView is the least scroll that puts a span wholly inside a window
+ * `extent` long that begins at `at`, or undefined when it already is, so the
+ * caller does no arithmetic of its own. A span longer than the window is
+ * shown from its start.
  */
+export function spanIntoView(
+  start: number,
+  size: number,
+  at: number,
+  extent: number,
+): number | undefined {
+  if (start < at || size >= extent) return start === at ? undefined : start;
+  if (start + size > at + extent) return start + size - extent;
+  return undefined;
+}
+
+/** intoView is the least scroll that puts `row` wholly on screen, or undefined
+ * when it already is. */
 export function intoView(
   row: number,
   rowHeight: number,
   top: number,
   height: number,
 ): number | undefined {
-  const rowTop = row * rowHeight;
-  if (rowTop < top) return rowTop;
-  if (rowTop + rowHeight > top + height) return rowTop + rowHeight - height;
-  return undefined;
+  return spanIntoView(row * rowHeight, rowHeight, top, height);
 }
 
 /** Where a row lands on screen: at the top, centred, or at the bottom. */

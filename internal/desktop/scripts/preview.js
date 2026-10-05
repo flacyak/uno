@@ -4,15 +4,17 @@
 // half that lives outside it: set the scene, start the real built app on it,
 // then turn the frames it left behind into a GIF.
 //
-// There are three stories. `browse`, the README's, finds a workspace's moved
+// There are four stories. `browse`, the README's, finds a workspace's moved
 // export again through the sources panel, then tries the themes in settings.
-// `edit` fixes three cells of the fixture and applies the offer to fix the
-// rest. `refresh` reopens a workspace whose export in a bucket was regenerated
-// since, sees it regenerated again on coming back to the window, and reloads
-// it; it is filmed against the stand-in bucket, and goes to out/refresh.gif
-// rather than the README's.
+// `sidebar` moves between the workspaces in the sidebar, puts a formula into
+// one from a right click, and makes a new one from the + at its foot; it goes
+// to docs/sidebar.gif, beside the README's. `edit` fixes three cells of the
+// fixture and applies the offer to fix the rest. `refresh` reopens a workspace
+// whose export in a bucket was regenerated since, sees it regenerated again on
+// coming back to the window, and reloads it; it is filmed against the stand-in
+// bucket, and goes to out/refresh.gif rather than the README's.
 //
-// Usage: node scripts/preview.js [browse|edit|refresh]   (after node scripts/build.js)
+// Usage: node scripts/preview.js [browse|sidebar|edit|refresh]   (after node scripts/build.js)
 
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -28,9 +30,10 @@ const root = resolve(pkg, "../..");
 const testdata = join(pkg, "../grid/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 
+const STORIES = ["browse", "sidebar", "edit", "refresh"];
 const story = process.argv[2] ?? "browse";
-if (story !== "browse" && story !== "edit" && story !== "refresh") {
-  console.error(`preview: no story called ${story} · browse, edit or refresh`);
+if (!STORIES.includes(story)) {
+  console.error(`preview: no story called ${story} · ${STORIES.join(", ")}`);
   process.exit(2);
 }
 
@@ -38,7 +41,10 @@ if (story !== "browse" && story !== "edit" && story !== "refresh") {
 // the shots of this app go.
 const frames = join(pkg, "out/preview");
 const takes = join(root, "docs");
-const gif = story === "refresh" ? join(pkg, "out/refresh.gif") : join(takes, "preview.gif");
+const gif =
+  story === "refresh"
+    ? join(pkg, "out/refresh.gif")
+    : join(takes, story === "sidebar" ? "sidebar.gif" : "preview.gif");
 
 /** What the GIF is resampled to. Twelve is enough for a caret and a scroll to
  * look continuous, and low enough that sixteen seconds of a mostly still window
@@ -100,11 +106,77 @@ async function stage() {
     const cells = [{ source: src.id, row: 4, col: 4 }];
     await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
   } finally {
+    // Only the client's end is closed: closing the engine's end too would drop
+    // the close request unread, and the engine would never close its files.
     engine.close();
-    port1.close();
   }
   await rename(csv, join(dir, "sales-q3-final.csv"));
   return uno;
+}
+
+/** The column the sidebar story's formula goes into, added at the end of an export. */
+const COMMISSION = "commission";
+
+/**
+ * stageSidebar lays out the sidebar story: three workspaces in three folders,
+ * each saved by the engine over an export of its own, and a fourth export
+ * that is no workspace yet, which is what the + opens.
+ *
+ * The export of the workspace the take begins on has an empty commission
+ * column at its end, for the formula to go into. It answers with the
+ * workspaces in the order to open them, the one the take begins on last, and
+ * the export for the +.
+ */
+async function stageSidebar() {
+  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
+  const { sources } = await import("@uno/grid/plugin");
+  const { diskProvider } = await import("@uno/grid/store/node");
+
+  const dir = join(tmpdir(), "uno-preview", "sidebar");
+  await rm(dir, { recursive: true, force: true });
+
+  // The fixture with one more column, named and empty in every row.
+  const lines = (await readFile(fixture, "utf8")).trimEnd().split(/\r?\n/);
+  const widened = lines.map((line, i) => `${line},${i === 0 ? COMMISSION : ""}`).join("\n");
+
+  /** One workspace: a folder, and the export in it the workspace is saved over. */
+  const save = async (folder, export_, bytes, name) => {
+    await mkdir(join(dir, folder), { recursive: true });
+    const csv = join(dir, folder, export_);
+    const uno = join(dir, folder, name);
+    await writeFile(csv, bytes);
+
+    const { port1, port2 } = new MessageChannel();
+    serve(messagePort(port1), sources([diskProvider()]));
+    const engine = new Engine(messagePort(port2));
+    try {
+      const {
+        sources: [src],
+      } = await engine.open({ name: export_, path: csv });
+      const cells = [{ source: src.id, row: 0, col: 0 }];
+      await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
+    } finally {
+      // Only the client's end, for the reason stage gives.
+      engine.close();
+    }
+    return uno;
+  };
+
+  const ads = await readFile(join(testdata, "google-ads-sales.csv"));
+  const workspaces = [
+    await save(
+      "treasury",
+      "ledger-w32.csv",
+      await readFile(join(testdata, "sales-q3-part-2.csv")),
+      "liquidity-w32.uno",
+    ),
+    await save("ads", "google-ads.csv", ads, "ads-review.uno"),
+    await save("exports", "sales-q3.csv", widened + "\n", "q3-close.uno"),
+  ];
+
+  const fresh = join(dir, "exports", "sales-q4.csv");
+  await copyFile(join(testdata, "sales-q3-part-3.csv"), fresh);
+  return { workspaces, fresh };
 }
 
 /** The object the refresh story's workspace points at, in the stand-in bucket. */
@@ -172,8 +244,9 @@ async function stageRefresh() {
     const cells = [{ source: src.id, row: 0, col: 0 }];
     await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
   } finally {
+    // Only the client's end is closed: closing the engine's end too would drop
+    // the close request unread, and the engine would never close its files.
     engine.close();
-    port1.close();
   }
   rewrite(standin.objects, REFRESH_KEY);
 
@@ -193,7 +266,11 @@ async function stageRefresh() {
 }
 
 const refresh = story === "refresh" ? await stageRefresh() : undefined;
-const opened = story === "browse" ? await stage() : (refresh?.uno ?? fixture);
+const sidebar = story === "sidebar" ? await stageSidebar() : undefined;
+// The sidebar story opens its own workspaces once the window is up, so it is
+// started on none.
+const opened =
+  sidebar !== undefined ? [] : [story === "browse" ? await stage() : (refresh?.uno ?? fixture)];
 
 const electron = (await import("electron")).default;
 
@@ -230,10 +307,25 @@ if (refresh !== undefined) {
   };
 }
 
-const child = spawn(electron, [pkg, `--user-data-dir=${data}`, opened], {
+// The sidebar story's workspaces, and what its + opens in place of the dialog
+// a driven window cannot answer.
+const scene =
+  sidebar === undefined
+    ? {}
+    : {
+        UNO_PREVIEW_WORKSPACES: JSON.stringify(sidebar.workspaces),
+        UNO_DRIVEN_OPEN: sidebar.fresh,
+      };
+
+const child = spawn(electron, [pkg, `--user-data-dir=${data}`, ...opened], {
   // stdin carries this script's answers to what the story asks of it.
   stdio: ["pipe", "pipe", "pipe"],
-  env: electronEnv(process.env, { UNO_PREVIEW: frames, UNO_PREVIEW_STORY: story, ...aws }),
+  env: electronEnv(process.env, {
+    UNO_PREVIEW: frames,
+    UNO_PREVIEW_STORY: story,
+    ...aws,
+    ...scene,
+  }),
 });
 
 console.log(`preview: electron pid ${child.pid}`);
@@ -341,4 +433,6 @@ const { size } = await stat(gif);
 console.log(
   `preview: ${gif} (${(size / 1024).toFixed(0)} KB, ${shots.length} frames at ${FPS}fps)`,
 );
-console.log(`preview: copy it into docs/preview.gif when the take is the one you want`);
+if (story === "refresh") {
+  console.log(`preview: copy it into docs/ when the take is the one you want`);
+}

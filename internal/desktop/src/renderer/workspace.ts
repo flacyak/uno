@@ -174,7 +174,7 @@ export class Workspace {
   /** Never saved: every open lands in view. */
   mode: Mode = "view";
 
-  /** In the order they were added, which is the order the strip shows. */
+  /** In the order they were added, which is the order the sidebar shows. */
   private tabs: Tab[] = [];
   private showing!: Tab;
   /** The sources the last save held, so adding or removing one is unsaved work too. */
@@ -265,7 +265,7 @@ export class Workspace {
    *
    * The tab is replaced rather than repaired, because its columns, its rows and
    * its band all belong to the file behind it. What it keeps is its place in the
-   * strip, the cell it was left on, and what the last save held, so nothing
+   * sidebar, the cell it was left on, and what the last save held, so nothing
    * about the session moves under the person doing it.
    */
   async relink(tab: Tab, ref: SourceRef): Promise<Tab> {
@@ -289,7 +289,7 @@ export class Workspace {
    * The tab is replaced, as a relinked one is and for the same reason: its
    * rows and its band belong to the longer source. Its log is the one it had,
    * every edit on the cell it was made to, and it keeps its place in the
-   * strip, the cell it was left on, and what the last save held.
+   * sidebar, the cell it was left on, and what the last save held.
    */
   async append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
     const source = await this.engine.append(tab.source, [...files]);
@@ -348,7 +348,7 @@ export class Workspace {
     return moved;
   }
 
-  /** The sources, in the order the strip shows them. */
+  /** The sources, in the order the sidebar shows them. */
   get sources(): readonly Tab[] {
     return this.tabs;
   }
@@ -422,6 +422,15 @@ export class Workspace {
     t.landed(
       await t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
     );
+  }
+
+  /**
+   * bind computes a column of a source from an expression over the row's
+   * other columns: one edit, which undo takes back. The engine refuses an
+   * expression it cannot read, or one that names a column the source has not.
+   */
+  async bind(tab: Tab, col: number, expr: string): Promise<void> {
+    tab.landed(await tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }));
   }
 
   /**

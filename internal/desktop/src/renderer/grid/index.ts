@@ -126,7 +126,7 @@ export class Grid {
     this.cancelEdit();
     this.selRow = Math.max(0, Math.min(source.rows() - 1, row));
     this.selCol = Math.max(0, Math.min(source.cols() - 1, col));
-    this.view.scrollIntoView(this.selRow);
+    this.view.scrollIntoView(this.selRow, this.selCol);
     this.view.layout();
     this.events.onSelect(this.selRow, this.selCol);
   }

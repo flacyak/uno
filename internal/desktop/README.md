@@ -4,23 +4,59 @@ uno's desktop client: an Electron shell over [`@uno/grid`](../grid).
 
 It holds no spreadsheet logic. Opening a file is `@uno/grid/engine`, changing a
 cell is `sheet.set`, saving is `writeDocument`. This package is the window, the
-menu, the grid that draws rows, and the file operations a web page cannot do
+sidebar, the grid that draws rows, and the file operations a web page cannot do
 for itself.
 
 ## The shape of it
 
 ```
 src/
-  main/       the Electron main process: one window, the menu, dialogs, engines
+  main/       the Electron main process: one window, its keys, dialogs, engines
   preload/    the only bridge to the renderer
   engine/     the utility process that owns one open workspace
-  renderer/   the app: tab strip, virtualized grid, status bar
+  renderer/   the app: sidebar, virtualized grid, sources panel, status bar
   shared/     the Host interface both Electron and a web build implement
 ```
 
 The seam is `src/shared/host.ts`. Everything above it is a plain web page
 running the pure core, which is what makes `internal/web` the same renderer with
 a different `host` behind it.
+
+## The window
+
+![uno moving between the workspaces in its sidebar, putting a formula into one from a right click, closing and opening the sidebar, making a new workspace from the + at its foot, and pointing at the round × that closes the window](../../docs/sidebar.gif)
+
+The page is the whole window.
+There is no title bar and no menu bar over it.
+
+The sidebar on the left lists the workspaces opened on this machine, most recent first.
+A workspace joins the list when its `.uno` is opened or saved, and the list is kept between launches.
+Clicking one opens it in place of the one open now, and over unsaved edits the first click says so and the second opens.
+The open workspace is first, with its sources under it, a tab each.
+One that has never been saved is named for its first source and says `not saved`.
+
+The `+ New workspace` at the foot of the sidebar asks for a file, as Ctrl+O does.
+A spreadsheet opens as a new workspace, and Ctrl+S keeps it as a `.uno`.
+
+A right click on a workspace offers `Insert formula…`.
+On a workspace that is not open it offers `Open` and `Remove from list` too, and on the open one `Add source…`, `Save` and `Save as…`.
+The formula form opens on the column the grid has selected, in the source showing.
+A formula is arithmetic over the row's other columns by name, such as `revenue / units`.
+The column stops storing values of its own and shows what the expression computes, and its header wears `fx` with the expression on hover.
+Inserting one switches to transform, since it changes the file, and it is one edit that Ctrl+Z takes back.
+An expression the engine cannot read is refused in the form, in the engine's words, and the form stays open on what was typed.
+
+The three columns, the sidebar, the sheet and the sources panel, each begin with a head one row high.
+Together they make one line across the top of the window, and the round `×` at its right end closes the window.
+Over unsaved edits the first `×` says so and the second closes.
+The heads and the empty middle of the status bar are where the window is dragged from.
+
+The status bar holds the window's switches.
+The one at its left closes the sidebar so the grid has the width, as Ctrl+B does, and the choice is kept.
+At its right are View / Transform and the switch for the sources panel.
+
+The menu still exists, for its keys: Ctrl+O, Ctrl+S, Ctrl+Q and the rest are accelerators on its items.
+Its bar is hidden on Windows and Linux, and macOS shows it at the top of the screen as it does for every app.
 
 ## Opening a file
 
@@ -58,12 +94,13 @@ Below them are four themes, Paper Ember, Tokyo Night, Sakura and Catppuccin
 Frappé, taken with their authors' credit from [T3 Themes](https://t3themes.com),
 and an appearance of System, Light or Dark, since each theme has both. A theme
 is worn the moment it is chosen, and the choice is kept on this machine for the
-next launch. Paper Ember is worn until another is chosen. `src/renderer/theme.ts`
+next launch. Last is Keys, which picks how the grid reads them: Default or
+Vim-style. Paper Ember is worn until another is chosen. `src/renderer/theme.ts`
 has how each theme's colours map onto uno's.
 
 ## Sources in S3
 
-The `+` at the end of the tab strip offers a file or an S3 URL. An S3 URL is
+The `+ add source` under the open workspace's tabs offers a file or the sources panel, where an S3 URL is pasted. An S3 URL is
 `s3://bucket/key` or the https address the console shows, and the object opens
 as a view the same way a file on disk does: a HEAD for its size, then ranged
 GETs as the index and the grid need them. Nothing is downloaded whole, and a
@@ -199,7 +236,7 @@ nothing.
 ## A workspace of several sources
 
 A workspace holds as many sources as the work needs, each in a tab of its own.
-File → Add Source (Ctrl+Shift+O) adds one or more beside the file already open, and so does the `+` at the end of the tab strip.
+Ctrl+Shift+O adds one or more beside the file already open, and so does the `+ add source` under the tabs in the sidebar.
 Dropping files on the window adds them too, and `uno ads.csv shop.csv bank.csv` opens all three as one workspace.
 A `.uno` is a workspace of its own, so it opens rather than being added.
 
@@ -230,8 +267,8 @@ The folder is asked when the panel opens and when the window gets the focus back
 
 ## Keys
 
-How the grid reads keys is an input strategy, picked from Edit → Input and kept
-between launches. There are two, and Default is the one a new install gets.
+How the grid reads keys is an input strategy, picked under Keys in settings and
+kept between launches. There are two, and Default is the one a new install gets.
 
 **Default** is a spreadsheet's keys. The arrows, Tab, PgUp, PgDn, Home and End
 move. Enter, F2 or a double click open the editor on the value, and typing over
@@ -339,8 +376,8 @@ transform and insert with Esc keeping what was typed. It writes a screenshot to
 The window it drives ignores the desktop. Keys, clicks and the wheel from the
 window system never reach the page, and the page keeps the focus when someone
 switches to another window. Keep working while it runs. Two of the checks send
-input down the window system's path, once dropped and once let through. The menu
-bar is outside the page and still takes clicks. `vp run preview` runs in the same
+input down the window system's path, once dropped and once let through. The
+menu's accelerators are the main process's, so one of those still lands. `vp run preview` runs in the same
 mode, and `src/main/driven.ts` has the details.
 
 The run starts Electron with a `--user-data-dir` of its own under `out/smoke/`,

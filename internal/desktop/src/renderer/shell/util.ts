@@ -30,3 +30,14 @@ export function settled(ms: number, run: () => Promise<void>): () => void {
     }, ms);
   };
 }
+
+/** The last part of a path, whichever way its separators lean. */
+export function baseName(path: string): string {
+  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
+}
+
+/** The folder a path is in, by its own name: "exports" for /work/exports/q3.uno. */
+export function folderName(path: string): string {
+  const end = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return end < 0 ? "" : baseName(path.slice(0, end));
+}

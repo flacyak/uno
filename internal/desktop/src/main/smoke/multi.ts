@@ -129,7 +129,7 @@ export const MULTI: Check[] = [
         return "the tab showing is " + JSON.stringify(active()) + " · " + JSON.stringify(text("#status-msg"));
       }
       const now = document.querySelectorAll(".tab").length;
-      if (now !== tabs + 1) return "the strip went from " + tabs + " tabs to " + now;
+      if (now !== tabs + 1) return "the sidebar went from " + tabs + " tabs to " + now;
       if (text("#status-msg") !== ${JSON.stringify(`added ${TAB}`)}) return "the status bar says " + JSON.stringify(text("#status-msg"));
 
       // Every row of all three, and no part's header among them: the whole
@@ -197,7 +197,7 @@ export const MULTI: Check[] = [
       if (!(await arrives(() => text("#status-file").startsWith(rows)))) {
         return "the status bar says " + JSON.stringify(text("#status-file"));
       }
-      if (document.querySelectorAll(".tab").length !== tabs) return "the strip has " + document.querySelectorAll(".tab").length + " tabs, not " + tabs;
+      if (document.querySelectorAll(".tab").length !== tabs) return "the sidebar has " + document.querySelectorAll(".tab").length + " tabs, not " + tabs;
 
       // Nothing is left to offer: the line says how many it reads now.
       const meta = () => line(WORKSPACE, ${JSON.stringify(TAB)})?.meta;

@@ -35,6 +35,15 @@
    * themselves. */
   --row-h: 29px;
 
+  /* How wide a scrollbar is. */
+  --bar: 12px;
+
+  /* The width kept clear at the top right of the window for its ×. The
+   * window has no frame, so whatever reaches that corner -- the grid's
+   * header, the banner, the sources panel's head -- ends this far short of
+   * it. */
+  --corner: 34px;
+
   color-scheme: light;
 }
 
@@ -89,14 +98,88 @@ body {
   background: var(--surface);
 }
 
-/* The grid and the sources panel side by side. `min-width: 0` so the grid
- * gives up the width the panel takes rather than pushing it off the window. */
-.win-body {
+/* The window's three columns: the sidebar, the sheet, and the sources panel.
+ * `min-height: 0` so the grid scrolls rather than pushing the status bar off
+ * the window. */
+.win-frame {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.win-body > #content {
+/* `min-width: 0` so the sheet gives up the width the columns either side take
+ * rather than pushing one off the window. */
+.win-sheet {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
+}
+
+/* The head a column begins with: what the column is, in a band one row high.
+ * The grid's own header row is the sheet's, so the three make one line across
+ * the top of the window. The window has no frame, so the heads are also where
+ * it is taken hold of. */
+.col-head {
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--row-h);
+  padding: 0 14px;
+  background: var(--sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+/* A narrow window has three columns to fit when the sidebar and the sources
+ * panel are both open, so each gives some up and the grid between them keeps
+ * enough to read. Ctrl+B gives the grid the sidebar's width as well. */
+@media (max-width: 900px) {
+  #sidebar {
+    flex-basis: 168px;
+  }
+
+  #panel {
+    flex-basis: 250px;
+  }
+}
+
+/* Closing the window, at the end of that line. The window has no frame, so
+ * there is no title bar to hold this; it sits over the end of whichever head
+ * reaches the top right, and each keeps `--corner` clear for it. */
+.win-close {
+  --size: 20px;
+  position: fixed;
+  top: calc((var(--row-h) - var(--size)) / 2);
+  right: calc((var(--corner) - var(--size)) / 2);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size);
+  height: var(--size);
+  padding: 0;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.win-close:hover {
+  color: var(--surface);
+  background: var(--flag);
+  border-color: var(--flag);
+}
+
+.win-close:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }

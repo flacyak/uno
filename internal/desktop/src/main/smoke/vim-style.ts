@@ -413,7 +413,8 @@ export const VIM_STYLE: Check[] = [
     `,
   },
   {
-    // A check that fails here opens the file dialog instead, and the run times out.
+    // A check that fails here opens the run's second export in the fixture's
+    // place, and every check after it says so.
     name: "Ctrl+O over unsaved edits says so, and opens nothing",
     send: ["menu:open"],
     script: `

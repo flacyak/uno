@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
 import { displayMissing, electronEnv, verdict } from "../scripts/launch.js";
+import { DRIVEN_OPEN, openPathFor } from "../src/main/smoke/pick.ts";
 import { savePathFor } from "../src/main/smoke/save.ts";
 
 const SCRIPTS = fileURLToPath(new URL("../scripts", import.meta.url));
@@ -302,4 +303,12 @@ test("no address and no port is baked into anything that ships", () => {
     }
   }
   expect(named).toEqual([]);
+});
+
+// The + at the foot of the sidebar asks for a file through a dialog, which a
+// driven window cannot answer either.
+test("a driven run's Open picks the file it was told, and cancels when told none", () => {
+  expect(openPathFor({ [DRIVEN_OPEN]: "/tmp/run/google-ads.csv" })).toBe("/tmp/run/google-ads.csv");
+  expect(openPathFor({})).toBeUndefined();
+  expect(openPathFor({ [DRIVEN_OPEN]: "" })).toBeUndefined();
 });

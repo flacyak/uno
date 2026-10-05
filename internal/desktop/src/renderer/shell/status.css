@@ -1,4 +1,6 @@
-/* The status bar and the prompt that stands in for its file line. */
+/* The status bar, the prompt that stands in for its file line, and the
+ * window's switches at either end: the sidebar's on the left, the mode's and
+ * the sources panel's on the right. */
 
 .win-status {
   display: flex;
@@ -43,8 +45,12 @@
   display: none;
 }
 
+/* The window has no frame, so the bar's empty middle takes hold of it too,
+ * which is what is left to grab while the sidebar is closed. */
 .win-status .grow {
   flex: 1;
+  align-self: stretch;
+  -webkit-app-region: drag;
 }
 
 .win-status .mode {
@@ -92,4 +98,99 @@
 .win-status.prompting #status-msg,
 .win-status.prompting .sep {
   display: none;
+}
+
+/* The mode switch. View in the accent, transform in amber, because transform is
+ * where a keystroke changes the file. */
+.win-status .seg {
+  display: inline-flex;
+  margin: -3px 0;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.win-status .seg span {
+  padding: 2px 9px;
+  color: var(--ink-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.win-status .seg span.on {
+  background: var(--accent-b);
+  color: var(--accent);
+  cursor: default;
+}
+
+.win-status .seg span.on.t {
+  background: var(--flag-b);
+  color: var(--flag);
+}
+
+/* The two switches that open and close a column: a window with its left
+ * column filled in while the sidebar is open, and one with its right column
+ * filled in while the sources panel is. */
+.side-toggle,
+.panel-toggle {
+  --c: var(--ink-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  margin: -3px 0;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.panel-toggle {
+  margin-right: -6px;
+}
+
+.side-toggle::before,
+.panel-toggle::before {
+  content: "";
+  width: 14px;
+  height: 11px;
+  border: 1.5px solid var(--c);
+  border-radius: 2px;
+}
+
+.side-toggle::before {
+  background: linear-gradient(90deg, transparent 3px, var(--c) 3px 4.5px, transparent 4.5px);
+}
+
+.panel-toggle::before {
+  background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px 8px, transparent 8px);
+}
+
+.side-toggle:hover,
+.panel-toggle:hover {
+  --c: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+
+.side-toggle.on,
+.panel-toggle.on {
+  --c: var(--accent);
+}
+
+.side-toggle.on::before {
+  background: linear-gradient(90deg, var(--c) 4.5px, transparent 4.5px);
+}
+
+.panel-toggle.on::before {
+  background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px);
+}
+
+.side-toggle:focus-visible,
+.panel-toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }

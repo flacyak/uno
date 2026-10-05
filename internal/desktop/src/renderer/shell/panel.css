@@ -1,5 +1,5 @@
-/* The panel: a column on the right of the grid, the filter at its top, and the
- * sections as one virtualised list. `--panel-row-h` is set by panel.ts, which
+/* The panel: a column on the right of the grid, its head, the filter under
+ * it, and the sections as one virtualised list. `--panel-row-h` is set by panel.ts, which
  * does arithmetic with it. */
 
 /* `min-width: 0`, or the peek's table, as wide as the file's header, would
@@ -15,6 +15,12 @@
   font-family: var(--mono);
   font-size: 12px;
   color: var(--ink);
+}
+
+/* The head reaches the top right of the window, where the × is, and ends
+ * short of it. */
+.panel-head {
+  padding: 0 var(--corner) 0 12px;
 }
 
 .panel-filter {
@@ -253,35 +259,6 @@
   margin: 0;
   accent-color: var(--accent);
   cursor: pointer;
-}
-
-/* The switch at the right of the tab strip: a window with its right column
- * filled in while the panel is open. */
-.panel-toggle {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 12px 0 2px;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-.panel-toggle::before {
-  --c: var(--ink-3);
-  content: "";
-  width: 14px;
-  height: 11px;
-  border: 1.5px solid var(--c);
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px 8px, transparent 8px);
-}
-
-.panel-toggle:hover::before {
-  --c: var(--ink);
-}
-
-.panel-toggle.on::before {
-  --c: var(--accent);
-  background: linear-gradient(90deg, transparent 6.5px, var(--c) 6.5px);
 }
 
 /* A tab whose file changed under the log, one the bucket holds a newer version

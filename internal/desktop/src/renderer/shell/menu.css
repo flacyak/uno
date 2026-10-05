@@ -1,6 +1,7 @@
-/* The + menu: a file, or the sources panel. */
+/* A menu hung off the page: the + beside a workspace's sources, and a right
+ * click on a workspace. */
 
-.add-menu {
+.pop-menu {
   position: fixed;
   z-index: 10;
   min-width: 180px;
@@ -14,7 +15,7 @@
   color: var(--ink);
 }
 
-.add-item {
+.pop-item {
   display: flex;
   justify-content: space-between;
   gap: 18px;
@@ -22,13 +23,18 @@
   border-radius: 4px;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 }
 
-.add-item:hover {
+.pop-item:hover {
   background: var(--accent-b);
   color: var(--accent);
 }
 
-.add-item .keys {
+.pop-item .keys {
   color: var(--ink-3);
+}
+
+.pop-menu:focus {
+  outline: none;
 }
