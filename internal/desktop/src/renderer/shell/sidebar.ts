@@ -4,19 +4,13 @@
 
 import "./sidebar.css";
 
-import { NEWER } from "../workspace.ts";
+import { m } from "../../paraglide/messages.js";
 import type { Tab, Workspace } from "../workspace.ts";
 import type { MenuPlace } from "./menu.ts";
 import { baseName, folderName } from "./util.ts";
 
 /** The extension a workspace's name is shown without. */
 const UNO = /\.uno$/i;
-
-/** What an open workspace that has never been saved says beside its name. */
-export const NOT_SAVED = "not saved";
-
-/** What the list says while it has nothing in it. */
-export const NO_WORKSPACES = "no workspaces yet";
 
 /** What the sidebar's controls do. The shell decides; the sidebar only asks. */
 export interface SidebarActions {
@@ -60,8 +54,8 @@ export function sidebarRows(
 
     const add = document.createElement("div");
     add.className = "tab-add";
-    add.textContent = "+ add source";
-    add.title = "Add a source: a file, or an object in S3";
+    add.textContent = m.sidebar_add_source();
+    add.title = m.sidebar_add_source_hint();
     add.setAttribute("role", "button");
     add.addEventListener("click", () => act.add(add));
     rows.push(add);
@@ -72,7 +66,7 @@ export function sidebarRows(
   if (rows.length === 0) {
     const note = document.createElement("div");
     note.className = "note";
-    note.textContent = NO_WORKSPACES;
+    note.textContent = m.no_workspaces();
     rows.push(note);
   }
   return rows;
@@ -83,8 +77,8 @@ function openRow(w: Workspace, act: SidebarActions): HTMLElement {
   const saved = w.path !== "";
   const row = workspaceRow(
     saved ? workspaceName(w.path) : workspaceName(w.suggestedFileName),
-    saved ? folderName(w.path) : NOT_SAVED,
-    saved ? w.path : `${NOT_SAVED} · Ctrl+S keeps it as a workspace`,
+    saved ? folderName(w.path) : m.not_saved(),
+    saved ? w.path : m.sidebar_not_saved_hint(),
     w.path,
     act,
   );
@@ -92,7 +86,7 @@ function openRow(w: Workspace, act: SidebarActions): HTMLElement {
   if (w.dirty) {
     const dot = document.createElement("span");
     dot.className = "dirty";
-    dot.title = "unsaved changes";
+    dot.title = m.unsaved_changes();
     row.append(dot);
   }
   return row;
@@ -161,8 +155,8 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
     mark.textContent = "!";
     mark.title =
       t.newer !== undefined && !t.missing
-        ? `${NEWER} · click to open its line in the sources panel`
-        : `${trouble} · click to point it at a file in the sources panel`;
+        ? `${m.newer_version()} · ${m.sidebar_open_line_hint()}`
+        : `${trouble} · ${m.sidebar_point_hint()}`;
     mark.addEventListener("click", (e) => {
       e.stopPropagation();
       act.repoint(t);
@@ -174,7 +168,7 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
   if (w.unsaved(t)) {
     const dot = document.createElement("span");
     dot.className = "dirty";
-    dot.title = "unsaved edits";
+    dot.title = m.unsaved_edits();
     tab.append(dot);
   }
 
@@ -182,7 +176,7 @@ function tabFor(w: Workspace, t: Tab, removable: boolean, act: SidebarActions): 
     const close = document.createElement("span");
     close.className = "close";
     close.textContent = "×";
-    close.title = `Remove ${t.name} from the workspace`;
+    close.title = m.sidebar_remove_source({ name: t.name });
     close.addEventListener("click", (e) => {
       e.stopPropagation(); // removing is not selecting
       act.remove(t);

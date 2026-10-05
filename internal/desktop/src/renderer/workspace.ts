@@ -10,7 +10,7 @@
 // It holds no widgets, which is the property that let the Go build test its
 // shell without a window.
 
-import { Band, formatBytes } from "@uno/grid/engine";
+import { Band } from "@uno/grid/engine";
 import type {
   Changed,
   Engine,
@@ -29,6 +29,7 @@ import type { Listing, SingleRef } from "@uno/grid/store";
 
 import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "../paraglide/messages.js";
+import { bytes } from "./locale.ts";
 
 /**
  * The most a saved workspace carries, all such sources together.
@@ -52,7 +53,7 @@ export function reloaded(was: Tab, now: Tab): string {
   const before = was.link?.version;
   const after = now.link?.version;
   const sized = was.bytes === now.bytes;
-  const moved = { now: formatBytes(now.bytes), was: formatBytes(was.bytes) };
+  const moved = { now: bytes(now.bytes), was: bytes(was.bytes) };
   const versioned = before !== undefined && after !== undefined;
   const found = !versioned
     ? sized
@@ -67,9 +68,6 @@ export function reloaded(was: Tab, now: Tab): string {
   if (now.edited > 0) parts.push(m.edits_replayed({ count: now.edited }));
   return parts.join(" · ");
 }
-
-/** What the status bar says of a tab the bucket holds a newer version of. */
-export const NEWER = "a newer version is in the bucket · Reload reads it";
 
 export class Tab {
   /** The recogniser's question about this source, while it has one. */
@@ -420,7 +418,7 @@ export class Workspace {
   /** apply runs an offered program over its column: one edit, however long the column. */
   async apply(offer: Offer): Promise<void> {
     const t = this.tabs.find((tab) => tab.id === offer.source);
-    if (t === undefined) throw new Error("the source that offer was about is gone");
+    if (t === undefined) throw new Error(m.offer_source_gone());
     t.offer = null;
     t.landed(
       await t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
@@ -467,7 +465,7 @@ export class Workspace {
   /** What a save without a path should suggest: named after the first source. */
   get suggestedFileName(): string {
     const base = (this.tabs[0]?.name ?? "").replace(/\.[^.]*$/, "");
-    return `${base || "workspace"}.uno`;
+    return `${base || m.workspace_file_stem()}.uno`;
   }
 
   /** Whether anything would be lost by closing: an edit, a source added or
@@ -529,7 +527,7 @@ export class Workspace {
     // thing worth saying about it.
     // One in a bucket nobody connected already says what to do about it.
     if (t.link?.connect !== undefined) return t.trouble ?? "";
-    if (t.missing) return `${t.trouble} · point it at a file to see its rows`;
+    if (t.missing) return `${t.trouble} · ${m.point_at_file_to_see_rows()}`;
 
     // Until the index reaches the end, the count is projected from how far it
     // has got, and says so.
@@ -546,7 +544,7 @@ export class Workspace {
     // says so where the person is looking, not only on the mark's hover.
     // The one with something to do about it goes first, as on its panel line:
     // a newer version, which Reload reads, before a change it would replace.
-    const changed = t.newer === undefined ? t.link?.changed : NEWER;
+    const changed = t.newer === undefined ? t.link?.changed : m.newer_version();
     if (changed !== undefined) parts.push(changed);
     return parts.join(" · ");
   }

@@ -19,7 +19,8 @@
 
 import "./settings.css";
 
-import { INPUTS } from "../input/index.ts";
+import { m } from "../../paraglide/messages.js";
+import { INPUTS, inputLabel } from "../input/index.ts";
 import type { InputName } from "../input/index.ts";
 import type { Connection } from "../sources.ts";
 import { APPEARANCES, THEMES } from "../theme.ts";
@@ -42,11 +43,16 @@ export interface SettingsAsks {
 }
 
 /** What each appearance says on its button. */
-const APPEARANCE_WORDS: Record<Appearance, string> = {
-  system: "System",
-  light: "Light",
-  dark: "Dark",
-};
+function appearanceWord(a: Appearance): string {
+  switch (a) {
+    case "system":
+      return m.appearance_system();
+    case "light":
+      return m.appearance_light();
+    case "dark":
+      return m.appearance_dark();
+  }
+}
 
 /** The gap between the control and the menu it opens above it, in pixels. */
 const GAP = 6;
@@ -76,15 +82,15 @@ export class Settings {
     private readonly asks: SettingsAsks,
   ) {
     toggle.innerHTML = GEAR;
-    toggle.setAttribute("aria-label", "Settings");
+    toggle.setAttribute("aria-label", m.settings_title());
     toggle.setAttribute("aria-haspopup", "true");
     toggle.setAttribute("aria-expanded", "false");
-    toggle.title = "Settings";
+    toggle.title = m.settings_title();
     toggle.addEventListener("click", () => (this.open ? this.close() : this.show()));
 
     this.box.className = "settings";
     this.box.setAttribute("role", "dialog");
-    this.box.setAttribute("aria-label", "Settings");
+    this.box.setAttribute("aria-label", m.settings_title());
     this.box.hidden = true;
     this.box.addEventListener("keydown", (e) => this.key(e));
     document.body.append(this.box);
@@ -180,7 +186,7 @@ export class Settings {
   private paint(): void {
     const focused = this.items().indexOf(document.activeElement as HTMLButtonElement);
 
-    const title = element("div", "title", "Settings");
+    const title = element("div", "title", m.settings_title());
     this.box.replaceChildren(title, this.sources(), this.themes(), this.appearances(), this.keys());
 
     if (focused >= 0) this.items()[Math.min(focused, this.items().length - 1)]?.focus();
@@ -188,11 +194,11 @@ export class Settings {
 
   /** The places sources come from, each one a way into the panel. */
   private sources(): HTMLElement {
-    const section = heading("Sources");
+    const section = heading(m.sources_title());
     if (this.reading && this.connections.length === 0) {
-      section.append(element("div", "note", "reading…"));
+      section.append(element("div", "note", m.reading()));
     } else if (this.connections.length === 0) {
-      section.append(element("div", "note", "no connections yet"));
+      section.append(element("div", "note", m.no_connections()));
     }
     for (const c of this.connections) {
       const item = row(c.name, c.where === undefined ? c.kind : `${c.kind} · ${c.where}`);
@@ -203,7 +209,7 @@ export class Settings {
       });
       section.append(item);
     }
-    const connect = row("+ Connect a bucket", "");
+    const connect = row(m.connect_action(), "");
     connect.classList.add("action");
     connect.addEventListener("click", () => {
       this.close();
@@ -215,7 +221,7 @@ export class Settings {
 
   /** The four themes, each with a chip of its colours in the mode worn now. */
   private themes(): HTMLElement {
-    const section = heading("Theme");
+    const section = heading(m.settings_theme());
     const mode = this.theming.mode;
     for (const t of THEMES) {
       const chosen = t.id === this.theming.theme.id;
@@ -223,7 +229,7 @@ export class Settings {
       item.setAttribute("role", "menuitemradio");
       item.setAttribute("aria-checked", String(chosen));
       item.dataset["theme"] = t.id;
-      item.title = `${t.name} · by ${t.author} on T3 Themes`;
+      item.title = m.settings_theme_credit({ name: t.name, author: t.author });
       if (chosen) item.classList.add("chosen");
 
       const p = t[mode];
@@ -244,13 +250,13 @@ export class Settings {
 
   /** Light, dark, or whatever the system is in, for whichever theme is worn. */
   private appearances(): HTMLElement {
-    const section = heading("Appearance");
+    const section = heading(m.settings_appearance());
     const seg = element("div", "seg", "");
     for (const a of APPEARANCES) {
       const button = element(
         "button",
         a === this.theming.appearance ? "on" : "",
-        APPEARANCE_WORDS[a],
+        appearanceWord(a),
       );
       button.setAttribute("aria-pressed", String(a === this.theming.appearance));
       button.dataset["appearance"] = a;
@@ -263,11 +269,11 @@ export class Settings {
 
   /** How the grid reads keys: a spreadsheet's, or vim's. */
   private keys(): HTMLElement {
-    const section = heading("Keys");
+    const section = heading(m.settings_keys());
     const seg = element("div", "seg", "");
     const now = this.asks.input();
-    for (const { name, label } of INPUTS) {
-      const button = element("button", name === now ? "on" : "", label);
+    for (const name of INPUTS) {
+      const button = element("button", name === now ? "on" : "", inputLabel(name));
       button.setAttribute("aria-pressed", String(name === now));
       button.dataset["input"] = name;
       button.addEventListener("click", () => {

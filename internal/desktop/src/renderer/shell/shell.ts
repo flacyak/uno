@@ -26,7 +26,7 @@ import { strategy } from "../input/index.ts";
 import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
 import type { Command } from "../keys.ts";
-import { num } from "../locale.ts";
+import { list, num } from "../locale.ts";
 import { Recents } from "../recents.ts";
 import { Sources, connectionLine } from "../sources.ts";
 import { NEWER_AFTER_MS } from "../timing.ts";
@@ -332,7 +332,9 @@ export class Shell {
       if (path === undefined || tab.link?.connect === undefined) continue;
       const loc = s3Location(path);
       if (loc !== undefined && covers(saved, loc.bucket, loc.key)) {
-        void this.pointAt(tab, refAt(path), () => `${tab.name} reads from ${saved.name}`);
+        void this.pointAt(tab, refAt(path), () =>
+          m.source_reads_from({ name: tab.name, from: saved.name }),
+        );
       }
     }
     return saved;
@@ -446,8 +448,8 @@ export class Shell {
    */
   private offerAdd(plus: HTMLElement): void {
     this.offer(below(plus), [
-      { label: "File…", keys: "Ctrl+Shift+O", choose: () => void this.add() },
-      { label: "Browse sources…", keys: "Ctrl+Shift+B", choose: () => this.showPanel() },
+      { label: m.menu_file(), keys: "Ctrl+Shift+O", choose: () => void this.add() },
+      { label: m.menu_browse_sources(), keys: "Ctrl+Shift+B", choose: () => this.showPanel() },
     ]);
   }
 
@@ -460,11 +462,11 @@ export class Shell {
   private offerWorkspace(path: string, place: MenuPlace): void {
     const isOpen = this.workspace !== undefined && this.workspace.path === path;
     const formula: MenuItem = {
-      label: "Insert formula…",
+      label: m.menu_insert_formula(),
       choose: () => void this.insertFormula(path, place),
     };
     const forget: MenuItem = {
-      label: "Remove from list",
+      label: m.menu_remove_from_list(),
       choose: () => {
         this.recents.forget(path);
         this.paintTabs();
@@ -473,11 +475,11 @@ export class Shell {
     const items: MenuItem[] = isOpen
       ? [
           formula,
-          { label: "Add source…", keys: "Ctrl+Shift+O", choose: () => void this.add() },
-          { label: "Save", keys: "Ctrl+S", choose: () => void this.save() },
-          { label: "Save as…", keys: "Ctrl+Shift+S", choose: () => void this.saveAs() },
+          { label: m.menu_add_source(), keys: "Ctrl+Shift+O", choose: () => void this.add() },
+          { label: m.menu_save(), keys: "Ctrl+S", choose: () => void this.save() },
+          { label: m.menu_save_as(), keys: "Ctrl+Shift+S", choose: () => void this.saveAs() },
         ]
-      : [{ label: "Open", choose: () => void this.openRecent(path) }, formula, forget];
+      : [{ label: m.menu_open(), choose: () => void this.openRecent(path) }, formula, forget];
     this.offer(place, items);
   }
 
@@ -493,7 +495,7 @@ export class Shell {
     const { workspace: w, grid } = on;
     const tab = w.active;
     if (tab.missing) {
-      this.say(`${tab.name} has no file behind it · point it at one first`, true);
+      this.say(m.source_no_file_point_first({ name: tab.name }), true);
       return;
     }
 
@@ -515,7 +517,7 @@ export class Shell {
    */
   private async bind(w: Workspace, tab: Tab, col: number, expr: string): Promise<void> {
     if (this.workspace !== w || !w.sources.includes(tab)) {
-      throw new Error(`${tab.name} is no longer open`);
+      throw new Error(m.source_no_longer_open({ name: tab.name }));
     }
     if (w.mode !== "transform") this.toggleMode();
     try {
@@ -527,7 +529,9 @@ export class Shell {
     // changed, which also brings a column off the side of the window on screen.
     const on = this.showing();
     if (on?.workspace === w && w.active === tab) on.grid.moveTo(on.grid.selection().row, col);
-    this.say(`${tab.band.columns[col]?.header ?? "the column"} is computed from ${expr}`);
+    this.say(
+      m.column_computed_from({ column: tab.band.columns[col]?.header ?? m.the_column(), expr }),
+    );
   }
 
   /**
@@ -539,7 +543,7 @@ export class Shell {
   private async addSources(refs: SourceRef[]): Promise<boolean> {
     const uno = refs.find(isWorkspace);
     if (uno !== undefined) {
-      this.say(`${uno.name} is a workspace of its own · open it rather than adding it`, true);
+      this.say(m.workspace_not_a_source({ name: uno.name }), true);
       return false;
     }
 
@@ -572,7 +576,7 @@ export class Shell {
     if (shown !== undefined) this.select(shown);
     else this.paintTabs();
     if (failed.length > 0) this.say(failed.join(" · "), true);
-    else this.say(`added ${rest.map((r) => r.name).join(", ")}`);
+    else this.say(m.added_names({ names: list(rest.map((r) => r.name)) }));
     void this.sources.askGrown();
     return failed.length === 0;
   }
@@ -667,8 +671,8 @@ export class Shell {
         if (w === undefined) return;
         this.say(
           wanted === "end"
-            ? `indexing ${w.indexed()}% · G again when it finishes`
-            : `row ${num(wanted + 1)} is not indexed yet`,
+            ? m.indexing_g_again({ percent: w.indexed() })
+            : m.row_not_indexed({ row: num(wanted + 1) }),
         );
       },
       onAction: (action) => {
@@ -679,7 +683,7 @@ export class Shell {
           case "apply": {
             // From any cell, since the offer names its own column.
             const offer = this.offered();
-            if (offer === null) this.say("nothing to apply", true);
+            if (offer === null) this.say(m.nothing_to_apply(), true);
             else void this.apply(offer);
             return;
           }
@@ -880,7 +884,7 @@ export class Shell {
       const showing = w.active === tab;
       await w.remove(tab);
       if (this.workspace !== w) return;
-      this.say(`removed ${tab.name}`);
+      this.say(m.removed_name({ name: tab.name }));
       // Taking out the tab on screen puts its neighbour there.
       if (showing) this.showActive();
       else this.paintTabs();
@@ -938,7 +942,8 @@ export class Shell {
       this.say(
         fresh.missing
           ? ""
-          : (said?.(fresh) ?? `${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`),
+          : (said?.(fresh) ??
+              m.source_reads_from({ name: fresh.name, from: "path" in ref ? ref.path : ref.name })),
       );
       if (w.active === fresh) this.showActive();
       else this.paintTabs();
@@ -960,7 +965,7 @@ export class Shell {
     try {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;
-      this.say(`appended ${files.map((f) => f.name).join(", ")} to ${fresh.name}`);
+      this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
       if (w.active === fresh) this.showActive();
       else this.paintTabs();
       this.paintStatus();
@@ -1118,7 +1123,7 @@ export class Shell {
       case "open":
         // Opening closes the workspace without asking, so :e asks first.
         if (!c.force && this.workspace?.dirty === true) {
-          this.say("unsaved edits · :w first, or :e! to drop them", true);
+          this.say(m.unsaved_edits_command(), true);
         } else {
           void this.open(true);
         }
@@ -1130,7 +1135,7 @@ export class Shell {
         this.grid?.act({ t: "move", motion: "last-row", count: c.row });
         return;
       case "unknown":
-        this.say(`not a command: :${c.text}`, true);
+        this.say(m.not_a_command({ text: c.text }), true);
         return;
     }
   }
