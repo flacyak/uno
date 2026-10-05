@@ -162,7 +162,9 @@ export class View {
    * carried when `carried` says so. `path` is where the file is, which is what
    * a save points at; bytes with no file behind them pass "". The view owns
    * `source` from here on, and closes it if the open fails. `telemetry` is
-   * told how long the index took once it has finished.
+   * told how long the index took once it has finished. `header` says whether
+   * the first line names the columns, which it does unless the source was
+   * added as having no header row.
    */
   static async open(
     id: string,
@@ -173,6 +175,7 @@ export class View {
     port: Port<Request, Reply>,
     tuning: Tuning,
     telemetry: Telemetry = unmeasured,
+    header: HeaderMode = "first",
   ): Promise<View> {
     const v = new View(id, name, path, port);
     v.carried = carried?.raw;
@@ -184,7 +187,7 @@ export class View {
 
     let format: Format;
     try {
-      format = await openFormat(name, source);
+      format = await openFormat(name, source, header);
     } catch (err) {
       await source.close();
       if (from === "") throw err;

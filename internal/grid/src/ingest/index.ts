@@ -8,12 +8,20 @@
 
 import { Sheet } from "../sheet/index.ts";
 import { readAll } from "./csv.ts";
-import { describe, extensionOf, headerOf } from "./format.ts";
+import { columnNames, describe, extensionOf, headerOf } from "./format.ts";
+import type { HeaderMode } from "./format.ts";
 import { sniffDelimiter } from "./sniff.ts";
 
 export { readAll } from "./csv.ts";
-export { delimiterName, encodingName, headerOf, openFormat, peekFormat } from "./format.ts";
-export type { Format, Scanner } from "./format.ts";
+export {
+  columnNames,
+  delimiterName,
+  encodingName,
+  headerOf,
+  openFormat,
+  peekFormat,
+} from "./format.ts";
+export type { Format, HeaderMode, Scanner } from "./format.ts";
 export { RecordScanner, bomLength } from "./scan.ts";
 export { sniffDelimiter, sniffEncoding } from "./sniff.ts";
 export type { Encoding } from "./sniff.ts";
@@ -23,27 +31,37 @@ export type { Encoding } from "./sniff.ts";
  *
  * It takes the bytes rather than a path: a .uno carries its source embedded,
  * and the web build has no filesystem to read one from.
+ *
+ * `header` says whether the first record names the columns, as it does for
+ * `openFormat`.
  */
-export function read(name: string, bytes: Uint8Array | string): Sheet {
+export function read(
+  name: string,
+  bytes: Uint8Array | string,
+  header: HeaderMode = "first",
+): Sheet {
   const text = typeof bytes === "string" ? bytes : new TextDecoder("utf-8").decode(bytes);
 
   switch (extensionOf(name)) {
     case ".json":
       throw new Error(`${name}: JSON is not supported yet`);
     case ".tsv":
-      return readSeparated(name, text, "\t");
+      return readSeparated(name, text, "\t", header);
     default:
-      return readSeparated(name, text, sniffDelimiter(text));
+      return readSeparated(name, text, sniffDelimiter(text), header);
   }
 }
 
-function readSeparated(name: string, text: string, comma: string): Sheet {
+function readSeparated(name: string, text: string, comma: string, header: HeaderMode): Sheet {
   // Ragged rows are the norm in real exports, so short rows are tolerated
   // rather than made a reason to reject the file.
   const rows = readAll(text, comma);
   if (rows.length === 0) throw new Error(`${name}: file is empty`);
 
-  const s = new Sheet(name, headerOf(rows[0]!), rows.slice(1));
-  s.source = describe(comma);
+  const s =
+    header === "first"
+      ? new Sheet(name, headerOf(rows[0]!), rows.slice(1))
+      : new Sheet(name, columnNames(rows[0]!.length), rows);
+  s.source = describe(comma, header);
   return s;
 }

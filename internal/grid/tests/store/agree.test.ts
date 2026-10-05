@@ -450,3 +450,22 @@ test("a part found not to agree by a read refuses every read of the source after
   await source.close();
   expect(m.closed.toSorted()).toEqual(["a.csv", "b.csv"]);
 });
+
+// Parts are opened several at a time, and a later one can land first.
+test("when two parts disagree, the earlier one in the list is named, whichever opened first", async () => {
+  /** How much longer the earlier disagreeing part takes to open than the later one. */
+  const SLOWER_MS = 20;
+  const { files, parts } = held(["a,b\n1,2\n", "a,x\n3,4\n", "a,y\n5,6\n"]);
+  const quick = memory(files).handler;
+  const slowSecond: FileHandler = {
+    ...quick,
+    async open(ref) {
+      if (ref.name === nameOf(1)) await new Promise((resolve) => setTimeout(resolve, SLOWER_MS));
+      return quick.open(ref);
+    },
+  };
+
+  const opening = openMulti([slowSecond], parts, "first");
+  await expect(opening).rejects.toThrow(DisagreementError);
+  await expect(opening).rejects.toMatchObject({ part: 1, partName: nameOf(1) });
+});

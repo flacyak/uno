@@ -31,6 +31,31 @@ export interface Scanner {
   push(chunk: Uint8Array, base: number): void;
 }
 
+/**
+ * Whether a file has a header row.
+ *
+ * With "first", its first record names the columns and the rows start at the
+ * second. With "none" every record is a row, the first included, and the
+ * columns are named by `columnNames`. A file cannot say which it is, so the
+ * person who adds it does, and a reader told nothing takes "first".
+ */
+export type HeaderMode = "first" | "none";
+
+/** What a column nobody named is called, before its number. */
+const COLUMN = "column_";
+
+/**
+ * columnNames is what the columns of a file with no header row are called:
+ * column_1, column_2 and on, counted from one as a person counts columns.
+ *
+ * Each is an identifier, so a formula can use one, and each is a function of
+ * the column's place alone, so the same file reads the same names on every
+ * open.
+ */
+export function columnNames(width: number): string[] {
+  return Array.from({ length: width }, (_, i) => `${COLUMN}${i + 1}`);
+}
+
 export interface Format {
   /** How the bytes were read, for the status bar to show verbatim. */
   readonly label: string;
@@ -41,9 +66,14 @@ export interface Format {
    * UTF-8 whatever this says, so it is here for a caller to refuse on.
    */
   readonly encoding: Encoding;
-  /** The header row. */
+  /** Whether the first record was taken as the header row. */
+  readonly header: HeaderMode;
+  /** The header row, or `columnNames` for a file read as having none. */
   readonly columns: string[];
-  /** The offset of the first data record, or the file's size when there is none. */
+  /**
+   * The offset of the first data record, or the file's size when there is
+   * none. With no header row that is the first record, past a byte order mark.
+   */
   readonly dataStart: number;
   /** A scanner that reports the first byte of every record it is fed. */
   scanner(begin: (offset: number) => void): Scanner;
@@ -58,9 +88,16 @@ export interface Format {
  * openFormat picks a reader from the extension, then from the bytes, and reads
  * the header. It is `read` for a file that is never loaded: same extension
  * rules, same sniff, same errors.
+ *
+ * `header` says whether the first record names the columns. It does unless
+ * the caller says there is no header row.
  */
-export async function openFormat(name: string, src: ByteSource): Promise<Format> {
-  const format = await peekFormat(name, src);
+export async function openFormat(
+  name: string,
+  src: ByteSource,
+  header: HeaderMode = "first",
+): Promise<Format> {
+  const format = await peekFormat(name, src, header);
   if (format === undefined) throw new Error(`${name}: file is empty`);
   return format;
 }
@@ -69,7 +106,11 @@ export async function openFormat(name: string, src: ByteSource): Promise<Format>
  * peekFormat is `openFormat` for a caller that has a use for a file with no
  * record in it: it answers undefined for one, where `openFormat` refuses it.
  */
-export async function peekFormat(name: string, src: ByteSource): Promise<Format | undefined> {
+export async function peekFormat(
+  name: string,
+  src: ByteSource,
+  header: HeaderMode = "first",
+): Promise<Format | undefined> {
   const ext = extensionOf(name);
   if (ext === ".json") throw new Error(`${name}: JSON is not supported yet`);
 
@@ -77,26 +118,31 @@ export async function peekFormat(name: string, src: ByteSource): Promise<Format 
   let head = await src.read(0, want);
   const comma = ext === ".tsv" ? "\t" : sniffDelimiter(headDecoder.decode(head));
 
-  let dataStart: number | undefined;
+  // Where the second record begins, which is where the first ends. The first
+  // is read whole either way: it is the names, or it is how wide the rows are.
+  let second: number | undefined;
   for (;;) {
     const whole = head.length < want || want >= src.size;
-    dataStart = findDataStart(head, comma, whole);
-    if (dataStart !== undefined) break;
+    second = findDataStart(head, comma, whole);
+    if (second !== undefined) break;
 
-    // The header runs past what was read: names with newlines in them, or a
-    // few thousand columns. Rare enough that doubling is plenty.
+    // The first record runs past what was read: names with newlines in them,
+    // or a few thousand columns. Rare enough that doubling is plenty.
     want = Math.min(want * 2, src.size);
     head = await src.read(0, want);
   }
-  if (dataStart < 0) return undefined;
+  if (second < 0) return undefined;
 
-  const columns = headerOf(readAll(headDecoder.decode(head.subarray(0, dataStart)), comma)[0]!);
+  const first = readAll(headDecoder.decode(head.subarray(0, second)), comma)[0]!;
   return {
-    label: describe(comma),
+    label: describe(comma, header),
     delimiter: comma,
     encoding: sniffEncoding(head),
-    columns,
-    dataStart,
+    header,
+    columns: header === "first" ? headerOf(first) : columnNames(first.length),
+    // With no header row the first record is a row, and only a byte order
+    // mark comes before it.
+    dataStart: header === "first" ? second : bomLength(head),
     scanner: (begin) => new RecordScanner(comma, begin),
     decode: (bytes) => readAll(dataDecoder.decode(bytes), comma),
   };
@@ -161,11 +207,18 @@ export function extensionOf(name: string): string {
  *
  * The quoting is Go's `%q` on a rune, which is a single-quoted character
  * literal rather than a double-quoted string.
+ *
+ * A file read as having no header row says so here too: the names on screen
+ * are uno's, and a first line that was a header after all is sitting in the
+ * first row, where somebody should be told to look.
  */
-export function describe(comma: string): string {
-  if (comma === "\t") return "UTF-8 · tab-separated";
-  return `UTF-8 · delimiter '${comma}'`;
+export function describe(comma: string, header: HeaderMode = "first"): string {
+  const read = comma === "\t" ? "UTF-8 · tab-separated" : `UTF-8 · delimiter '${comma}'`;
+  return header === "first" ? read : `${read}${NO_HEADER}`;
 }
+
+/** What is added to how a file was read when it was read as having no header row. */
+const NO_HEADER = " · no header row";
 
 /** What each delimiter worth guessing is called. */
 const DELIMITER_NAMES: ReadonlyMap<string, string> = new Map([

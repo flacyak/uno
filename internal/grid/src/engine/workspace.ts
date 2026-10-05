@@ -432,6 +432,9 @@ export class Workspace {
       this.port,
       this.tuning,
       this.telemetry,
+      // Only several files read as one say whether they have a header row.
+      // One file on its own has one.
+      "parts" in ref ? ref.header : "first",
     );
     view.connection = this.through(ref);
     view.parts = "parts" in ref ? ref : undefined;
