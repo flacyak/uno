@@ -313,5 +313,13 @@
   "sidebar_not_saved_hint": "not saved · Ctrl+S keeps it as a workspace",
   "sidebar_open_line_hint": "click to open its line in the sources panel",
   "sidebar_point_hint": "click to point it at a file in the sources panel",
-  "sidebar_remove_source": "Remove {name} from the workspace"
+  "sidebar_remove_source": "Remove {name} from the workspace",
+  "workspaces_title": "Workspaces",
+  "new_workspace": "New workspace",
+  "empty_title": "Drop a spreadsheet",
+  "empty_or_open": "or {#link}open one{/link}",
+  "switch_view": "View",
+  "switch_transform": "Transform",
+  "command_aria": "command",
+  "close_window_aria": "Close uno"
 }
