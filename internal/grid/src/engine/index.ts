@@ -60,4 +60,5 @@ export type {
   Resource,
   Telemetry,
 } from "./telemetry.ts";
+export { FILE_COLUMN } from "./view.ts";
 export { WHOLE_LIMIT } from "./workspace.ts";

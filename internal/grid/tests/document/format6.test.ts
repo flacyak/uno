@@ -462,6 +462,11 @@ describe("a source of several files is refused on reading", () => {
       'books.uno: shop-orders: this build does not know header true · it reads "first", "none"',
     ],
     [
+      "a _file column that is not a yes or a no",
+      (m) => (m.sources[0]!["fileColumn"] = "yes"),
+      "books.uno: shop-orders: fileColumn is neither true nor false",
+    ],
+    [
       "a path of its own beside its parts",
       (m) => (m.sources[0]!["path"] = "s3://acme-exports/shop/2025/orders.csv"),
       "books.uno: shop-orders has both a path and parts · a source is one file or several read as one",

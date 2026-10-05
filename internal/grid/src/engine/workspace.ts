@@ -107,7 +107,12 @@ class Absent {
   get parts(): PartsRef | undefined {
     const kept = this.kept;
     if (kept.parts === undefined) return undefined;
-    return joinedFrom({ name: this.name, parts: kept.parts, header: kept.header });
+    return joinedFrom({
+      name: this.name,
+      parts: kept.parts,
+      header: kept.header,
+      fileColumn: kept.fileColumn,
+    });
   }
 
   /** Whatever the container carried for it, which for a pointed-at source is
@@ -443,9 +448,9 @@ export class Workspace {
       // Only several files read as one say whether they have a header row.
       // One file on its own has one.
       "parts" in ref ? ref.header : "first",
+      "parts" in ref ? ref : undefined,
     );
     view.connection = this.through(ref);
-    view.parts = "parts" in ref ? ref : undefined;
     return view;
   }
 
@@ -547,7 +552,7 @@ export class Workspace {
           state,
         };
         return part.parts !== undefined
-          ? { ...held, parts: part.parts, header: part.header }
+          ? { ...held, parts: part.parts, header: part.header, fileColumn: part.fileColumn }
           : { ...held, raw: part.raw, path: part.path, bytes: part.bytes, version: part.version };
       });
 
@@ -646,7 +651,7 @@ export class Workspace {
 function keptOf(src: Held, edits: Edit[]): Part {
   const kept = { connection: src.connection, edits, rows: src.rows, cols: src.cols };
   return src.parts !== undefined
-    ? { ...kept, parts: src.parts, header: src.header }
+    ? { ...kept, parts: src.parts, header: src.header, fileColumn: src.fileColumn }
     : { ...kept, raw: src.raw, path: src.path, bytes: src.bytes ?? 0, version: src.version };
 }
 
@@ -680,7 +685,7 @@ function pointedAt(src: HeldFile): SourceRef {
  * it the extent the save measured, which is what leaves it unopened until a
  * read reaches it.
  */
-function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header">): PartsRef {
+function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header" | "fileColumn">): PartsRef {
   return {
     name: src.name,
     parts: src.parts.map((part) => ({
@@ -688,6 +693,7 @@ function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header">): PartsRef
       extent: { bytes: part.bytes, skip: part.skip, unterminated: part.unterminated },
     })),
     header: src.header,
+    fileColumn: src.fileColumn,
   };
 }
 

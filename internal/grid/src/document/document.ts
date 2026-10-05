@@ -193,6 +193,7 @@ export interface FileSource extends SourceBase {
 
   parts?: never;
   header?: never;
+  fileColumn?: never;
 }
 
 /**
@@ -207,6 +208,12 @@ export interface PartsSource extends SourceBase {
   parts: SourcePart[];
   /** Whether the parts have a header row. */
   header: HeaderMode;
+  /**
+   * Whether a `_file` column shows which part each row came from. Only that
+   * it was asked for: what the column shows is worked out from the parts at
+   * every open, and no cell of it is written.
+   */
+  fileColumn: boolean;
 
   bytes?: never;
   sha256?: never;
@@ -350,6 +357,7 @@ export interface HeldFile extends HeldBase {
 
   parts?: never;
   header?: never;
+  fileColumn?: never;
 }
 
 /**
@@ -361,6 +369,8 @@ export interface HeldParts extends HeldBase {
   parts: HeldPart[];
   /** Whether the parts have a header row. */
   header: HeaderMode;
+  /** Whether a `_file` column shows which part each row came from. */
+  fileColumn?: boolean;
 
   raw?: never;
   path?: never;

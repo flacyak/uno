@@ -128,6 +128,8 @@ export interface PartsRef {
   parts: readonly Part[];
   /** Whether the parts have a header row. */
   header: HeaderMode;
+  /** Whether a `_file` column shows which part each row came from. */
+  fileColumn?: boolean;
 }
 
 /**
