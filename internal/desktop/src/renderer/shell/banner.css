@@ -39,3 +39,9 @@
   border-color: color-mix(in srgb, var(--flag) 50%, transparent);
   color: var(--flag);
 }
+
+/* With the sources panel closed it reaches the top right of the window, where
+ * the × is, and ends short of it. */
+.win-sheet:has(+ .panel[hidden]) .banner {
+  padding-right: var(--corner);
+}

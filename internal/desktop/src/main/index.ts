@@ -1,5 +1,5 @@
-// The main process: one window, the menu, the file dialogs, and the engines
-// that read files for the renderer.
+// The main process: one window, the menu its keys live on, the file dialogs,
+// and the engines that read files for the renderer.
 //
 // It holds no sheet, no document and no file's contents. An engine reads a file
 // in a utility process and sends rows straight to the renderer, and everything
@@ -67,6 +67,10 @@ function createWindow(): BrowserWindow {
     minWidth: 640,
     minHeight: 400,
     show: false,
+    // The page is the whole window. It draws its own way to close, at the top
+    // right, and its sidebar and status bar are where the window is taken
+    // hold of, so there is no title bar and no menu bar over it.
+    frame: false,
     backgroundColor: "#EFF2F3",
     title: "uno",
     webPreferences: {
@@ -113,9 +117,11 @@ function createWindow(): BrowserWindow {
 }
 
 /**
- * The menu exists for its accelerators as much as for its items: Ctrl+O and
- * Ctrl+S are how anyone actually opens and saves, and an accelerator has to
- * live on a menu item for Electron to bind it.
+ * The menu exists for its accelerators: Ctrl+O and Ctrl+S are how anyone
+ * actually opens and saves, and an accelerator has to live on a menu item for
+ * Electron to bind it. Its bar is not shown. Everything on it is a key, and
+ * what is not is in the page: the sidebar, the status bar and settings. macOS
+ * keeps the menu where it keeps every app's, at the top of the screen.
  *
  * Each one asks the renderer to act rather than acting itself. The renderer is
  * the only thing that knows whether there is an open workspace, whether it has
@@ -193,11 +199,18 @@ function buildMenu(win: BrowserWindow): void {
     },
   ]);
   Menu.setApplicationMenu(menu);
+  win.setMenuBarVisibility(false);
 
   ipcMain.on("input:chosen", (event, name: string) => {
     if (event.sender !== win.webContents) return;
     const item = menu.getMenuItemById(`input:${name}`);
     if (item !== null) item.checked = true;
+  });
+
+  // The × at the top right of the page. The renderer has already asked about
+  // unsaved edits, since it is the only thing that knows of any.
+  ipcMain.on("window:close", (event) => {
+    if (event.sender === win.webContents) win.close();
   });
 }
 
@@ -303,8 +316,9 @@ function registerFileHandlers(win: BrowserWindow): void {
   });
 }
 
-// One window. Its tabs are the sources of the workspace open in it, and they are
-// a renderer concern: the engine behind them is one process for all of them.
+// One window. Its sidebar lists workspaces and the sources of the one open in
+// it, and they are a renderer concern: the engine behind them is one process
+// for all of them.
 void app.whenReady().then(async () => {
   const win = createWindow();
   buildMenu(win);
@@ -323,6 +337,14 @@ void app.whenReady().then(async () => {
   if (smoke || process.env["UNO_PREVIEW"] !== undefined) {
     const { drive } = await import("./driven.ts");
     const driven = drive(win);
+    // A take is filmed in the shape the design is drawn in, and the window is
+    // not on screen yet. One with a single size it can be is one a tiling
+    // window manager floats at that size, rather than fitting it to a tile
+    // that changes when a window beside it opens or closes mid-take.
+    if (!smoke) {
+      win.setMinimumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+      win.setMaximumSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+    }
     const run = smoke
       ? (await import("./smoke/index.ts")).runSmoke
       : (await import("./preview.ts")).runPreview;
@@ -338,6 +360,15 @@ void app.whenReady().then(async () => {
     ipcMain.handle("file:pick-save", (_event, suggestedName: string) =>
       savePathFor(process.env, suggestedName),
     );
+
+    // Open is a dialog too, and the + at the foot of the sidebar asks it. See
+    // smoke/pick.ts.
+    const { openPathFor } = await import("./smoke/pick.ts");
+    ipcMain.removeHandler("file:open");
+    ipcMain.handle("file:open", () => {
+      const path = openPathFor(process.env);
+      return path === undefined ? undefined : sourceAt(path);
+    });
 
     win.webContents.once("did-finish-load", () => {
       void driven.then(

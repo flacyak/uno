@@ -12,6 +12,7 @@ import {
   clampTop,
   firstRow,
   intoView,
+  spanIntoView,
   measure,
   pageSize,
   poolSize,
@@ -115,7 +116,8 @@ export class View {
   /**
    * buildHead draws the header, which is the one place a column's inferred kind
    * is visible: the badge says what uno thinks the column is, and says it in
-   * amber when the column looks numeric and does not parse.
+   * amber when the column looks numeric and does not parse. A column computed
+   * from a formula wears a second badge that says so.
    */
   private buildHead(): void {
     this.head.replaceChildren();
@@ -124,10 +126,19 @@ export class View {
     const tr = document.createElement("tr");
     tr.append(el("th", "gutter"));
 
-    for (const column of this.source.columns) {
+    for (const [col, column] of this.source.columns.entries()) {
       const th = document.createElement("th");
       const wrap = el("span", "colhead");
       wrap.append(text(column.header));
+
+      // A column a formula computes says so, and what from.
+      const binding = this.source.binding(col);
+      if (binding !== undefined) {
+        const fx = el("span", "badge bound");
+        fx.textContent = "fx";
+        fx.title = `= ${binding}`;
+        wrap.append(fx);
+      }
 
       const badge = el("span", column.flagged ? "badge flagged" : "badge");
       badge.textContent = column.kind;
@@ -290,10 +301,25 @@ export class View {
     return { row, col };
   }
 
-  /** scrollIntoView scrolls as little as puts a row wholly on screen. */
-  scrollIntoView(row: number): void {
+  /**
+   * scrollIntoView scrolls as little as puts a cell wholly on screen: down or
+   * up to its row, and along to its column in a file wider than the window.
+   */
+  scrollIntoView(row: number, col: number): void {
     const want = intoView(row, this.rowHeight, this.top, this.bodyHeight());
     if (want !== undefined) this.scrollTo(want);
+
+    // Every row's cells sit under the header's, so the header says where a
+    // column is whether or not the row is drawn yet.
+    const th = this.head.firstElementChild?.children[col + 1];
+    if (!(th instanceof HTMLElement)) return;
+    // The first column brings the gutter back with it, so going home along a
+    // row ends where the row began.
+    const start = col === 0 ? 0 : th.offsetLeft;
+    const size = th.offsetLeft + th.offsetWidth - start;
+    const { scrollLeft, clientWidth } = this.scroller;
+    const left = spanIntoView(start, size, scrollLeft, clientWidth);
+    if (left !== undefined) this.scroller.scrollLeft = left;
   }
 
   /**

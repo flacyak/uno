@@ -35,6 +35,8 @@ const bridge: Bridge = {
   save: (path, bytes) => ipcRenderer.invoke("file:save", path, bytes) as Promise<void>,
 
   saveConnection: (id, text) => ipcRenderer.invoke("connections:save", id, text) as Promise<void>,
+
+  quit: () => ipcRenderer.send("window:close"),
 };
 
 contextBridge.exposeInMainWorld("uno", bridge);

@@ -21,6 +21,54 @@
   background: var(--surface);
 }
 
+/* The scrollbars, in the theme's colours. The upright one starts under the
+ * header row, which does not scroll. */
+.grid-scroll::-webkit-scrollbar {
+  width: var(--bar);
+  height: var(--bar);
+}
+
+.grid-scroll::-webkit-scrollbar-track:vertical {
+  margin-top: var(--row-h);
+}
+
+.grid-scroll::-webkit-scrollbar-thumb {
+  min-width: 32px;
+  min-height: 32px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-3) 50%, transparent) content-box;
+}
+
+.grid-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-3);
+}
+
+.grid-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* The end of the header row, while the grid reaches the top right of the
+ * window: no banner above it and no panel beside it. The window's × sits
+ * there, so the corner is a header cell of its own that stays put, and the
+ * columns scroll under it the way the rows scroll under the header. */
+#content {
+  position: relative;
+}
+
+.win-sheet:has(> .banner[hidden]):has(+ .panel[hidden]) #content::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 4;
+  width: var(--corner);
+  height: var(--row-h);
+  background: var(--sunken);
+  border-left: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--rule);
+}
+
 /* The scroller's inner height is the whole sheet; the table inside holds only
  * the rows that fit the viewport, translated into place. That is what keeps a
  * 4,812-row file at about forty elements. */
@@ -62,6 +110,12 @@ table.grid thead th {
   border-bottom: 1px solid var(--rule);
   color: var(--ink);
   font-weight: 500;
+}
+
+/* The last header stops short of that corner, less the scrollbar, which is
+ * under it already, so scrolled to the end its name and badge are clear. */
+.win-sheet:has(> .banner[hidden]):has(+ .panel[hidden]) table.grid thead th:last-child {
+  padding-right: calc(11px + var(--corner) - var(--bar));
 }
 
 /* As wide as the row count needs, set by the grid, so the column does not
@@ -127,6 +181,15 @@ table.grid td.sel {
   border-radius: 3px;
   padding: 1px 4px;
   line-height: 1.5;
+}
+
+/* A column computed from a formula, which is a hover away. */
+.badge.bound {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-b);
+  text-transform: none;
+  font-style: italic;
 }
 
 .badge.flagged {

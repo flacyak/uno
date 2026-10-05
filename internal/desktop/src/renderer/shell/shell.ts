@@ -1,5 +1,5 @@
-// The shell: the tab strip, the banner, the grid, the status bar, and what the
-// menu means.
+// The shell: the sidebar, the banner, the grid, the status bar, and what the
+// menu's keys mean.
 //
 // It owns *when* things happen and nothing about what they do. Opening a file
 // is `Workspace.open` over an engine, adding one is `workspace.add`, changing a
@@ -25,26 +25,46 @@ import { strategy } from "../input/index.ts";
 import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
 import type { Command } from "../keys.ts";
+import { Recents } from "../recents.ts";
 import { Sources, connectionLine } from "../sources.ts";
 import { NEWER_AFTER_MS } from "../timing.ts";
 import { Workspace, reloaded } from "../workspace.ts";
 import type { Tab } from "../workspace.ts";
-import { AddMenu } from "./add.ts";
 import { bannerParts, offerKey } from "./banner.ts";
 import { wireDrop } from "./drop.ts";
 import { Finder } from "./find.ts";
 import type { Showing } from "./find.ts";
 import { Theming } from "../theme.ts";
+import { FormulaForm } from "./formula.ts";
+import { PopMenu, below } from "./menu.ts";
+import type { MenuItem, MenuPlace } from "./menu.ts";
 import { Panel } from "./panel.ts";
 import { Settings } from "./settings.ts";
+import { sidebarRows } from "./sidebar.ts";
 import { StatusBar } from "./status.ts";
-import { tabStrip } from "./tabs.ts";
-import { message, must, settled } from "./util.ts";
+import { baseName, message, must, settled } from "./util.ts";
 
 /** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
 const INPUT_KEY = "uno.input";
 
+/** Where it is kept that the sidebar is closed. Open is what a new install gets. */
+const SIDEBAR_KEY = "uno.sidebar";
+const SIDEBAR_CLOSED = "closed";
+
+/** What the window wears while the sidebar is closed. */
+const NO_SIDEBAR = "no-sidebar";
+
+/**
+ * What would close the workspace without asking, so a warning about its
+ * unsaved edits knows what it warned about: Ctrl+O, the window's ×, or a
+ * workspace picked from the sidebar.
+ */
+type Dropping = "open" | "quit" | `recent:${string}`;
+
 export class Shell {
+  /** Told how keys are read whenever that changes, for whatever else shows it. */
+  onInput: (name: InputName) => void = () => undefined;
+
   private workspace: Workspace | undefined;
   /** The grid, from the first open on. */
   private grid: Grid | undefined;
@@ -53,13 +73,18 @@ export class Shell {
   private opens = 0;
   /** The offer a person said "not now" to, so it stays gone until it changes. */
   private dismissed = "";
-  /** The workspace Ctrl+O warned about, or the tab × warned about, for as long
-   * as the warning is on screen. */
-  private warned: Workspace | Tab | undefined;
+  /** What was warned about, for as long as the warning is on screen: the tab
+   * its × would remove, or what would drop the workspace's unsaved edits. */
+  private warned: Tab | Dropping | undefined;
   /** How keys are read, which the grid and the status bar both follow. */
   private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
-  /** The + menu, while it is open. */
-  private adding: AddMenu | undefined;
+  /** The menu hung off the sidebar, while one is open, and the formula form. */
+  private menu: PopMenu | undefined;
+  private formula: FormulaForm | undefined;
+  /** Whether the sidebar is open, which is this machine's choice. */
+  private sidebarOpen = localStorage.getItem(SIDEBAR_KEY) !== SIDEBAR_CLOSED;
+  /** The workspaces the sidebar lists. */
+  private readonly recents = new Recents(localStorage);
   /**
    * An engine that holds no workspace, for the panel while nothing is open.
    *
@@ -83,7 +108,7 @@ export class Shell {
   readonly theming: Theming;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
-  private readonly tabs = must(document.querySelector<HTMLElement>("#tabs"));
+  private readonly workspaces = must(document.querySelector<HTMLElement>("#workspaces"));
   private readonly banner = must(document.querySelector<HTMLElement>("#banner"));
   private readonly empty = must(document.querySelector<HTMLElement>("#empty"));
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
@@ -102,6 +127,11 @@ export class Shell {
         else this.finder.search(typed, lead === "/" ? 1 : -1);
       },
       () => this.grid?.focus(),
+      {
+        toggleMode: () => this.toggleMode(),
+        toggleSidebar: () => this.toggleSidebar(),
+        togglePanel: () => this.togglePanel(),
+      },
     );
     this.finder = new Finder(
       () => this.showing(),
@@ -147,6 +177,7 @@ export class Shell {
         },
         closed: () => {
           this.paintTabs();
+          this.paintStatus();
           this.grid?.focus();
         },
       },
@@ -195,7 +226,17 @@ export class Shell {
       closed: () => {
         if (!this.panel.open) this.grid?.focus();
       },
+      input: () => this.input.name,
+      setInput: (name) => this.setInput(name),
     });
+    this.root.classList.toggle(NO_SIDEBAR, !this.sidebarOpen);
+    must(document.querySelector<HTMLElement>("#new")).addEventListener(
+      "click",
+      () => void this.open(),
+    );
+    must(document.querySelector<HTMLElement>("#close")).addEventListener("click", () =>
+      this.quit(),
+    );
     this.wireKeys();
     // Coming back to the window is when a person has had the chance to change
     // something in a bucket, so it is when the buckets are asked.
@@ -206,6 +247,7 @@ export class Shell {
         await Promise.all([this.askNewer(), this.sources.askGrown()]);
       }),
     );
+    this.paintTabs();
     this.paintStatus();
   }
 
@@ -309,19 +351,26 @@ export class Shell {
   // --------------------------------------------------------------- opening
 
   /**
-   * open asks for a file and opens it in place of the one open now.
+   * drops says whether `what` may go ahead, given that it closes the workspace
+   * without asking. Over unsaved edits the first try says so and is refused.
+   * The second, while that is still on screen, goes ahead, as :e! does.
+   */
+  private drops(what: Dropping, again: string): boolean {
+    if (this.workspace?.dirty !== true || this.warned === what) return true;
+    this.say(`unsaved edits · Ctrl+S first, or ${again} again to drop them`, true);
+    this.warned = what;
+    return false;
+  }
+
+  /**
+   * open asks for a file and opens it in place of the one open now: Ctrl+O,
+   * and the + at the foot of the sidebar. A spreadsheet opens as a new
+   * workspace, and a .uno as the one it is.
    *
-   * Opening closes the workspace without asking, so over unsaved edits the
-   * first Ctrl+O says so. A second, while that is still on screen, opens anyway,
-   * as :e! does. `force` is :e!, and :e, which has asked already.
+   * `force` is :e!, and :e, which has asked already.
    */
   async open(force = false): Promise<void> {
-    const w = this.workspace;
-    if (!force && w?.dirty === true && this.warned !== w) {
-      this.say("unsaved edits · Ctrl+S first, or Ctrl+O again to drop them", true);
-      this.warned = w;
-      return;
-    }
+    if (!force && !this.drops("open", "Ctrl+O")) return;
     try {
       const ref = await this.host.open();
       if (ref === undefined) return; // cancelled, which is not a failure
@@ -335,6 +384,26 @@ export class Shell {
    * file manager. */
   async openPath(path: string): Promise<void> {
     await this.load(refAt(path), path);
+  }
+
+  /**
+   * openRecent opens a workspace from the sidebar, and answers whether it is
+   * the one open afterwards. One that will not open says why and stays
+   * listed, since a folder that is not mounted today is there tomorrow.
+   */
+  private async openRecent(path: string): Promise<boolean> {
+    if (this.workspace?.path === path) return true;
+    if (!this.drops(`recent:${path}`, "click")) return false;
+    await this.load(refAt(path), path);
+    return this.workspace?.path === path;
+  }
+
+  /**
+   * quit closes the window, from the × at its top right. Over unsaved edits
+   * the first × says so, as Ctrl+O does.
+   */
+  quit(): void {
+    if (this.drops("quit", "×")) this.host.quit();
   }
 
   /** Add files by path, as sources: several named together on the command line. */
@@ -352,20 +421,104 @@ export class Shell {
     }
   }
 
+  /** offer hangs a menu off the page, in place of any already there. */
+  private offer(place: MenuPlace, items: readonly MenuItem[]): void {
+    this.menu?.close();
+    this.formula?.close();
+    this.menu = new PopMenu(place, items, () => {
+      this.menu = undefined;
+      this.grid?.focus();
+    });
+  }
+
   /**
    * offerAdd opens the + menu: a file off this machine, or the sources panel,
    * where an object in S3 is browsed to or its address pasted into the filter.
    */
   private offerAdd(plus: HTMLElement): void {
-    this.adding?.close();
-    this.adding = new AddMenu(plus, {
-      file: () => void this.add(),
-      browse: () => this.showPanel(),
+    this.offer(below(plus), [
+      { label: "File…", keys: "Ctrl+Shift+O", choose: () => void this.add() },
+      { label: "Browse sources…", keys: "Ctrl+Shift+B", choose: () => this.showPanel() },
+    ]);
+  }
+
+  /**
+   * offerWorkspace is a right click on a workspace in the sidebar: a formula
+   * into it, and what else is done to a workspace as a whole. One that is not
+   * open is opened first by whatever needs it open. `path` is "" for the open
+   * workspace while it has never been saved.
+   */
+  private offerWorkspace(path: string, place: MenuPlace): void {
+    const isOpen = this.workspace !== undefined && this.workspace.path === path;
+    const formula: MenuItem = {
+      label: "Insert formula…",
+      choose: () => void this.insertFormula(path, place),
+    };
+    const forget: MenuItem = {
+      label: "Remove from list",
+      choose: () => {
+        this.recents.forget(path);
+        this.paintTabs();
+      },
+    };
+    const items: MenuItem[] = isOpen
+      ? [
+          formula,
+          { label: "Add source…", keys: "Ctrl+Shift+O", choose: () => void this.add() },
+          { label: "Save", keys: "Ctrl+S", choose: () => void this.save() },
+          { label: "Save as…", keys: "Ctrl+Shift+S", choose: () => void this.saveAs() },
+        ]
+      : [{ label: "Open", choose: () => void this.openRecent(path) }, formula, forget];
+    this.offer(place, items);
+  }
+
+  /**
+   * insertFormula opens the formula form on the source showing in a workspace,
+   * opening the workspace first when it is another one. The form opens where
+   * the workspace was right-clicked.
+   */
+  private async insertFormula(path: string, place: MenuPlace): Promise<void> {
+    if (!(await this.openRecent(path))) return;
+    const on = this.showing();
+    if (on === undefined) return;
+    const { workspace: w, grid } = on;
+    const tab = w.active;
+    if (tab.missing) {
+      this.say(`${tab.name} has no file behind it · point it at one first`, true);
+      return;
+    }
+
+    this.menu?.close();
+    this.formula?.close();
+    this.formula = new FormulaForm(place, tab.name, tab.band.columns, grid.selection().col, {
+      insert: (col, expr) => this.bind(w, tab, col, expr),
       closed: () => {
-        this.adding = undefined;
+        this.formula = undefined;
         this.grid?.focus();
       },
     });
+  }
+
+  /**
+   * bind computes a column from an expression. A formula changes the file, so
+   * it is made in transform, and asking for one is the decision to be there.
+   * What the engine refuses is thrown for the form to say.
+   */
+  private async bind(w: Workspace, tab: Tab, col: number, expr: string): Promise<void> {
+    if (this.workspace !== w || !w.sources.includes(tab)) {
+      throw new Error(`${tab.name} is no longer open`);
+    }
+    if (w.mode !== "transform") this.toggleMode();
+    try {
+      await w.bind(tab, col, expr);
+    } finally {
+      this.changed(w);
+    }
+    // The column it went into is selected, as undo selects the cell it
+    // changed, which also brings a column off the side of the window on screen.
+    const on = this.showing();
+    if (on?.workspace === w && w.active === tab) on.grid.moveTo(on.grid.selection().row, col);
+    this.say(`${tab.band.columns[col]?.header ?? "the column"} is computed from ${expr}`);
   }
 
   /**
@@ -453,6 +606,10 @@ export class Shell {
 
       this.workspace?.close();
       this.workspace = w;
+      // A menu or a form left open was about the workspace this one replaces.
+      this.menu?.close();
+      this.formula?.close();
+      if (w.path !== "") this.recents.opened(w.path);
       // The workspace's engine answers the panel from here on.
       this.closeSpare();
       void this.refreshConnections();
@@ -580,7 +737,10 @@ export class Shell {
         }
         return;
       }
-      if (key === "e") {
+      if (key === "b") {
+        e.preventDefault();
+        this.toggleSidebar();
+      } else if (key === "e") {
         e.preventDefault();
         this.toggleMode();
       } else if (key === "z" && this.workspace?.editable === true) {
@@ -615,6 +775,21 @@ export class Shell {
   // ------------------------------------------------------------------ tabs
 
   /**
+   * toggleSidebar opens the sidebar, or closes it so the grid has the width:
+   * Ctrl+B, and the switch at the left of the status bar. The choice is kept,
+   * so the next launch opens the same way.
+   */
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen;
+    localStorage.setItem(SIDEBAR_KEY, this.sidebarOpen ? "open" : SIDEBAR_CLOSED);
+    this.root.classList.toggle(NO_SIDEBAR, !this.sidebarOpen);
+    this.menu?.close();
+    this.formula?.close();
+    this.grid?.repaint();
+    this.paintStatus();
+  }
+
+  /**
    * togglePanel opens the sources panel beside the grid, or closes it. The
    * grid gives up the width and keeps its rows, so it is laid out again and
    * nothing is fetched.
@@ -625,6 +800,7 @@ export class Shell {
     // listed the next time the panel opens, and so is what a folder gained.
     if (this.panel.open) this.refreshPanel();
     this.paintTabs();
+    this.paintStatus();
     this.grid?.repaint();
   }
 
@@ -795,12 +971,14 @@ export class Shell {
   }
 
   /**
-   * setInput changes how keys are read, from Edit → Input. The choice is kept in
-   * the page's storage, so the next launch reads keys the same way.
+   * setInput changes how keys are read, from settings or Edit → Input. The
+   * choice is kept in the page's storage, so the next launch reads keys the
+   * same way.
    */
   setInput(name: string): void {
     this.input = strategy(name);
     localStorage.setItem(INPUT_KEY, this.input.name);
+    this.onInput(this.input.name);
     this.status.close();
     this.grid?.setInput(this.input);
     this.grid?.focus();
@@ -881,6 +1059,7 @@ export class Shell {
     try {
       await this.host.save(w.path, await w.bytes(grid.selection(), w.path));
       w.saved(w.path);
+      this.recents.opened(w.path);
       this.say(`saved ${w.path}`);
     } catch (err) {
       this.say(message(err), true);
@@ -906,6 +1085,7 @@ export class Shell {
       if (path === undefined) return; // cancelled
       await this.host.save(path, await w.bytes(grid.selection(), path));
       w.saved(path);
+      this.recents.opened(path);
       this.say(`saved ${path}`);
     } catch (err) {
       this.say(message(err), true);
@@ -955,21 +1135,18 @@ export class Shell {
     this.paintStatus();
   }
 
+  /** paintTabs draws the sidebar: the workspaces, and the open one's tabs. */
   private paintTabs(): void {
-    const w = this.workspace;
-    const strip =
-      w === undefined
-        ? []
-        : tabStrip(w, this.input.switchHint, this.panel.open, {
-            toggle: () => this.toggleMode(),
-            select: (tab) => this.select(tab),
-            remove: (tab) => void this.remove(tab),
-            add: (plus) => this.offerAdd(plus),
-            repoint: (tab) => this.repoint(tab),
-            panel: () => this.togglePanel(),
-          });
-    this.tabs.replaceChildren(...strip);
-    // The panel lists the tabs too, and whatever changed the strip changed them.
+    const rows = sidebarRows(this.workspace, this.recents.all, {
+      open: (path) => void this.openRecent(path),
+      menu: (path, place) => this.offerWorkspace(path, place),
+      select: (tab) => this.select(tab),
+      remove: (tab) => void this.remove(tab),
+      add: (plus) => this.offerAdd(plus),
+      repoint: (tab) => this.repoint(tab),
+    });
+    this.workspaces.replaceChildren(...rows);
+    // The panel lists the tabs too, and whatever changed the sidebar changed them.
     this.panel.draw();
   }
 
@@ -1002,7 +1179,10 @@ export class Shell {
   }
 
   private paintStatus(): void {
-    this.status.paint(this.workspace, this.grid, this.input);
+    this.status.paint(this.workspace, this.grid, this.input, {
+      sidebar: this.sidebarOpen,
+      panel: this.panel.open,
+    });
   }
 
   /** One line, and the only place the shell talks. An error stays until the
@@ -1023,6 +1203,5 @@ function isWorkspace(ref: SourceRef): boolean {
 
 /** refAt names a file by path the way a dialog would have. */
 function refAt(path: string): SourceRef {
-  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
-  return { name, path };
+  return { name: baseName(path), path };
 }

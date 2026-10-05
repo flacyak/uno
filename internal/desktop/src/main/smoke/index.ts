@@ -27,6 +27,7 @@ import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
 import { REFRESH } from "./refresh.ts";
 import { SETTINGS } from "./settings.ts";
+import { SIDEBAR } from "./sidebar.ts";
 import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
 
@@ -62,6 +63,7 @@ const CHECKS: Check[] = [
   ...MEETS,
   ...REFRESH,
   ...MULTI,
+  ...SIDEBAR,
 ];
 
 /**

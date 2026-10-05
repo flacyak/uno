@@ -66,7 +66,7 @@ export const SOURCES: Check[] = [
     send: ["menu:add-paths", [ADS]],
     script: `
       if (!(await until(() => document.querySelectorAll(".tab").length === 2))) {
-        return "the strip has " + document.querySelectorAll(".tab").length + " tabs · " + text("#status-msg");
+        return "the sidebar has " + document.querySelectorAll(".tab").length + " tabs · " + text("#status-msg");
       }
       const active = document.querySelector(".tab.active").textContent;
       if (!active.startsWith("google-ads-sales.csv")) return "the tab showing is " + JSON.stringify(active);
@@ -112,7 +112,7 @@ export const SOURCES: Check[] = [
     script: `
       document.querySelector('.tab[data-source="google-ads-sales"] .close').click();
       if (!(await until(() => document.querySelectorAll(".tab").length === 1))) {
-        return "the strip still has " + document.querySelectorAll(".tab").length + " tabs";
+        return "the sidebar still has " + document.querySelectorAll(".tab").length + " tabs";
       }
       const active = document.querySelector(".tab.active").textContent;
       if (!active.startsWith("sales-q3.csv")) return "the tab showing is " + JSON.stringify(active);
@@ -126,11 +126,11 @@ export const SOURCES: Check[] = [
     script: `
       document.querySelector(".tab-add").click();
       await frame();
-      const menu = document.querySelector(".add-menu");
+      const menu = document.querySelector(".pop-menu");
       if (menu === null) return "the + opened no menu";
       // The label is the item's first child: what follows it is the keys it
       // answers to.
-      const items = [...menu.querySelectorAll(".add-item")].map((i) => i.firstChild.textContent);
+      const items = [...menu.querySelectorAll(".pop-item")].map((i) => i.firstChild.textContent);
       return JSON.stringify(items) === JSON.stringify(["File…", "Browse sources…"])
         ? ""
         : "the menu offers " + JSON.stringify(items);
@@ -139,13 +139,13 @@ export const SOURCES: Check[] = [
   {
     name: "Browse sources… opens the panel with the keys in it",
     script: `
-      const items = [...document.querySelectorAll(".add-item")];
+      const items = [...document.querySelectorAll(".pop-item")];
       const browse = items.find((i) => i.firstChild.textContent === "Browse sources…");
       if (browse === undefined) return "the menu has no Browse sources… to choose";
       browse.click();
       await frame();
 
-      if (document.querySelector(".add-menu") !== null) return "the menu stayed open";
+      if (document.querySelector(".pop-menu") !== null) return "the menu stayed open";
       const panel = document.querySelector("#panel");
       if (panel.hidden) return "the panel is still closed";
       return document.activeElement === panel.querySelector(".panel-list")
@@ -168,7 +168,7 @@ export const SOURCES: Check[] = [
       // the only place a run leaves it: a 403 is the signature or the region, a
       // 404 is the key, and neither is visible anywhere else afterwards.
       if (!(await arrives(() => document.querySelectorAll(".tab").length === 2))) {
-        return "the strip has " + document.querySelectorAll(".tab").length +
+        return "the sidebar has " + document.querySelectorAll(".tab").length +
           " tabs · " + JSON.stringify(text("#status-msg"));
       }
       const active = document.querySelector(".tab.active").textContent;
