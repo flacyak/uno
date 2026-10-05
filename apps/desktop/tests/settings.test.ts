@@ -63,6 +63,8 @@ class Asked implements SettingsAsks {
   setInput(name: InputName): void {
     this.said.push(`input ${name}`);
     this.reads = name;
+    // The shell hands the keys to the grid.
+    document.querySelector<HTMLElement>("#content")!.focus();
   }
 }
 
@@ -76,7 +78,7 @@ let spoken: Kept;
 let toggle: HTMLButtonElement;
 
 beforeEach(() => {
-  document.body.innerHTML = `<div class="win-status"><button id="settings" class="settings-toggle" type="button"></button></div>`;
+  document.body.innerHTML = `<div class="win-status"><button id="settings" class="settings-toggle" type="button"></button></div><button id="content" type="button"></button>`;
   document.documentElement.removeAttribute("style");
   toggle = document.querySelector<HTMLButtonElement>("#settings")!;
   asked = new Asked();
@@ -173,6 +175,10 @@ test("the keys are read another way the moment one is chosen, and it is marked",
   expect(asked.said.at(-1)).toBe("input vim-style");
   expect(on()).toEqual(["Vim-style"]);
   expect(menu().hidden).toBe(false);
+  // The keys come back to the choice, so Esc still closes the menu.
+  expect(document.activeElement).toBe(menu().querySelector('[data-input="vim-style"]'));
+  menu().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  expect(menu().hidden).toBe(true);
 });
 
 const languageItem = (choice: string): HTMLElement =>
