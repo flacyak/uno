@@ -118,11 +118,18 @@ export type Said =
 /**
  * Refusal is an Error that carries its message as `Said`. Its message is the
  * English.
+ *
+ * `said` is declared and then assigned rather than taken as a parameter
+ * property: Node loads this file as source under its type stripping for the
+ * smoke, preview and efficiency scripts, and that strips erasable syntax only.
  */
 export class Refusal extends Error {
-  constructor(readonly said: Said) {
+  readonly said: Said;
+
+  constructor(said: Said) {
     super(english(said));
     this.name = 'Refusal';
+    this.said = said;
   }
 }
 
