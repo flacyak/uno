@@ -20,7 +20,7 @@ import {
   test,
 } from 'vite-plus/test';
 
-import { containerCredentials } from '@store/metadata';
+import { containerCredentials, instanceCredentials } from '@store/metadata';
 import {
   awsCredentials,
   connectionSigning,
@@ -207,6 +207,18 @@ describe('the instance metadata service', () => {
       /^no AWS credentials · set .* or run uno where a role is attached$/,
     );
     expect(asked()).toEqual(['PUT /latest/api/token', `GET ${ROLES}`]);
+  });
+
+  // A host that answers the token request and then drops the connection is
+  // not an instance either.
+  test('answering the token and then nothing is no credentials', async () => {
+    const fetch: typeof globalThis.fetch = (_, init) =>
+      init?.method === 'PUT'
+        ? Promise.resolve(new Response('', { status: 403 }))
+        : Promise.reject(new TypeError('fetch failed'));
+    expect(
+      await instanceCredentials('http://169.254.169.254', { fetch }),
+    ).toBeUndefined();
   });
 
   test('is left alone when AWS_EC2_METADATA_DISABLED is true', async () => {

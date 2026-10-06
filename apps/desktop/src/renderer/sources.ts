@@ -241,10 +241,11 @@ function matches(name: string, query: string): boolean {
 /**
  * Parses the search text as an S3 object URL (s3:// or https form). Returns
  * a ref named after the object, or undefined for other text and for a
- * prefix (key ending in a slash).
+ * prefix (key ending in a slash). Space around a pasted address is dropped
+ * here, since s3Location reads a key as written.
  */
 function address(typed: string): SourceRef | undefined {
-  const loc = s3Location(typed);
+  const loc = s3Location(typed.trim());
   if (loc === undefined || loc.key.endsWith("/")) return undefined;
   return { name: keyName(loc.key), path: s3Url(loc) };
 }

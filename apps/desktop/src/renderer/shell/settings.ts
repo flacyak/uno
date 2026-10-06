@@ -275,6 +275,11 @@ export class Settings {
     return segment(m.settings_keys(), INPUTS, on, inputLabel, "input", (name) => {
       this.asks.setInput(name);
       this.paint();
+      // setInput hands the keys to the grid. The menu is still open, so they
+      // come back to the choice, and Esc closes it.
+      this.items()
+        .find((b) => b.dataset["input"] === name)
+        ?.focus();
     });
   }
 

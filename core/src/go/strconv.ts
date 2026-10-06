@@ -58,6 +58,7 @@ export function roundSignificant(v: number, digits: number): number {
 const PRINTABLE = /[\p{L}\p{M}\p{N}\p{P}\p{S}]/u;
 
 const BEL = '\u0007'; // Go spells this \a
+const DEL = 0x7f;
 
 const SHORT_ESCAPES = new Map<string, string>([
   [BEL, '\\a'],
@@ -88,7 +89,10 @@ export function quote(s: string): string {
       continue;
     }
     const cp = r.codePointAt(0)!;
-    if (cp < 0x100) out += '\\x' + cp.toString(16).padStart(2, '0');
+    // Go spells a control character \x and everything else by code point,
+    // since \xa0 reads back in Go as the byte 0xa0 rather than U+00A0.
+    if (cp < 0x20 || cp === DEL)
+      out += '\\x' + cp.toString(16).padStart(2, '0');
     else if (cp < 0x10000) out += '\\u' + cp.toString(16).padStart(4, '0');
     else out += '\\U' + cp.toString(16).padStart(8, '0');
   }
@@ -104,9 +108,14 @@ const UNESCAPE = new Map<string, string>([
   ['t', '\t'],
   ['v', '\v'],
   ['\\', '\\'],
-  ["'", "'"],
   ['"', '"'],
 ]);
+
+/** The surrogate range, which no \u or \U escape may name. */
+const SURROGATE_MIN = 0xd800;
+const SURROGATE_MAX = 0xdfff;
+/** The largest octal escape: \377, one byte. */
+const OCTAL_MAX = 0xff;
 
 const HEX_WIDTHS: Record<string, number> = { x: 2, u: 4, U: 8 };
 
@@ -123,7 +132,7 @@ export function unquote(s: string): string {
   let out = '';
   for (let i = 1; i < r.length - 1; i++) {
     const c = r[i]!;
-    if (c === '"') throw new Error('invalid syntax');
+    if (c === '"' || c === '\n') throw new Error('invalid syntax');
     if (c !== '\\') {
       out += c;
       continue;
@@ -146,7 +155,8 @@ export function unquote(s: string): string {
         throw new Error('invalid syntax');
       }
       const cp = parseInt(hex, 16);
-      if (cp > 0x10ffff) throw new Error('invalid syntax');
+      if (cp > 0x10ffff || (cp >= SURROGATE_MIN && cp <= SURROGATE_MAX))
+        throw new Error('invalid syntax');
       // \x names a byte in Go, the others name a code point.
       out += k === 'x' ? String.fromCharCode(cp) : String.fromCodePoint(cp);
       i += width;
@@ -156,7 +166,9 @@ export function unquote(s: string): string {
     if (k >= '0' && k <= '7') {
       const oct = r.slice(i, i + 3).join('');
       if (!/^[0-7]{3}$/.test(oct)) throw new Error('invalid syntax');
-      out += String.fromCharCode(parseInt(oct, 8));
+      const byte = parseInt(oct, 8);
+      if (byte > OCTAL_MAX) throw new Error('invalid syntax');
+      out += String.fromCharCode(byte);
       i += 2;
       continue;
     }

@@ -312,10 +312,12 @@ async function profileSession(
 
   // A profile with role_arn is the role, whatever else it holds, as for the
   // CLI.
-  const roleArn = fromConfig?.get('role_arn') ?? p?.get('role_arn');
+  // A setting is read from the config section, then the credentials one, as
+  // the CLI reads them.
+  const setting = (key: string): string | undefined =>
+    fromConfig?.get(key) ?? p?.get(key);
+  const roleArn = setting('role_arn');
   if (roleArn !== undefined) {
-    const setting = (key: string): string | undefined =>
-      fromConfig?.get(key) ?? p?.get(key);
     return held(
       await roleSession(env, files, profile, roleArn, setting, through),
       region,
@@ -326,7 +328,7 @@ async function profileSession(
   const own = profileKeysOnly(env, files, profile);
   if (own !== undefined)
     return { creds: { ...own.creds, as }, until: own.until };
-  const command = fromConfig?.get('credential_process');
+  const command = setting('credential_process');
   if (command !== undefined)
     return held(await processCredentials(profile, command), region, as);
   if (
@@ -1201,18 +1203,26 @@ async function ini(path: string): Promise<Map<string, Map<string, string>>> {
   const text = await readText(path);
   if (text === undefined) return out;
   let section: Map<string, string> | undefined;
+  // True after a key with no value, whose indented lines below are its own
+  // settings rather than the section's: `s3 =` then `  region = ...`.
+  let nested = false;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (line === '' || line.startsWith('#') || line.startsWith(';')) continue;
     const head = /^\[(.+)\]$/.exec(line);
     if (head !== null) {
       section = new Map();
-      out.set(head[1]!.trim(), section);
+      // The CLI reads `[profile  spaced]` as the profile "spaced".
+      out.set(head[1]!.trim().replace(/\s+/g, ' '), section);
+      nested = false;
       continue;
     }
+    if (nested && /^\s/.test(raw)) continue;
     const eq = line.indexOf('=');
     if (section === undefined || eq < 0) continue;
-    section.set(line.slice(0, eq).trim(), line.slice(eq + 1).trim());
+    const value = line.slice(eq + 1).trim();
+    section.set(line.slice(0, eq).trim(), value);
+    nested = value === '';
   }
   return out;
 }

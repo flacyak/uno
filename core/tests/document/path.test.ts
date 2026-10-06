@@ -38,6 +38,11 @@ test('a path anywhere else is written down absolute', () => {
   expect(
     storedPath('/home/cpa/q4-old/sales.csv', '/home/cpa/q4/books.uno'),
   ).toBe('/home/cpa/q4-old/sales.csv');
+  // A doubled separator is kept whole rather than read as a path from the
+  // root.
+  expect(storedPath('/home/cpa/q4//sales.csv', '/home/cpa/q4/books.uno')).toBe(
+    '/home/cpa/q4//sales.csv',
+  );
 });
 
 test('a relative path is read back from the folder the workspace is in', () => {

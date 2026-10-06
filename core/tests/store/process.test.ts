@@ -57,6 +57,7 @@ async function machine(
   expiration: string,
   answer = 'keys',
   program = process.execPath,
+  file: 'config' | 'credentials' = 'config',
 ) {
   const dir = await mkdtemp(join(tmpdir(), 'uno process '));
   const runs = join(dir, 'runs');
@@ -64,11 +65,12 @@ async function machine(
   const command = [program, FIXTURE, runs, expiration, answer]
     .map((w) => `"${w}"`)
     .join(' ');
+  const section = file === 'config' ? '[profile vault]' : '[vault]';
   await writeFile(
-    join(dir, 'config'),
-    `[profile vault]\ncredential_process = ${command}\nregion = ${HOME_REGION}\n`,
+    join(dir, file),
+    `${section}\ncredential_process = ${command}\nregion = ${HOME_REGION}\n`,
   );
-  await writeFile(join(dir, 'credentials'), '');
+  await writeFile(join(dir, file === 'config' ? 'credentials' : 'config'), '');
   return {
     env: {
       HOME: dir,
@@ -94,6 +96,19 @@ describe("a fixture script's credentials are used", () => {
       region: HOME_REGION,
       as: 'the AWS profile vault',
     });
+  });
+
+  // The CLI reads credential_process from either file.
+  test('as the keys of a profile in ~/.aws/credentials too', async () => {
+    const { env } = await machine(
+      later(),
+      'keys',
+      process.execPath,
+      'credentials',
+    );
+    expect((await profileCredentials('vault', env)()).accessKeyId).toBe(
+      PRINTED.accessKeyId,
+    );
   });
 
   test('to read a bucket that answers nobody else, through a connection', async () => {
