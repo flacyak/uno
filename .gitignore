@@ -3,6 +3,9 @@ node_modules/
 .eslintcache
 resource/
 
+# the server and the web page, a repository of their own checked out here
+hosted/
+
 # screenshot artefacts from `go test -tags screenshot ./internal/uitest/`
 .screenshots/
 
