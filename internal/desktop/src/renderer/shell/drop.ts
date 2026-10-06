@@ -6,6 +6,8 @@
 
 import "./empty.css";
 
+import { m } from "../../paraglide/messages.js";
+
 /** The extensions the app will try to open. Anything else is very likely a
  * mis-drop, and saying so is better than a parser error. */
 const OPENABLE = [".uno", ".csv", ".tsv"];
@@ -44,7 +46,7 @@ export function wireDrop(
 
     const odd = files.find((f) => !OPENABLE.some((ext) => f.name.toLowerCase().endsWith(ext)));
     if (odd !== undefined) {
-      refuse(`${odd.name} is not a spreadsheet uno can open`);
+      refuse(m.drop_not_spreadsheet({ name: odd.name }));
       return;
     }
     open(files);

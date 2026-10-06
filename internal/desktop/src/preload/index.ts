@@ -19,12 +19,13 @@ const bridge: Bridge = {
   /**
    * A dropped File is turned into its path here, because only preload can ask.
    * The engine opens files by path, and a File that came from somewhere other
-   * than the disk -- a drag out of a browser -- has none to give.
+   * than the disk -- a drag out of a browser -- has none to give. That is
+   * answered as nothing and said by the page, which is in the person's
+   * language. This world has no way to know which that is.
    */
   dropped(file) {
     const path = webUtils.getPathForFile(file);
-    if (path === "") throw new Error(`${file.name} is not a file on this machine`);
-    return { name: file.name, path };
+    return path === "" ? undefined : { name: file.name, path };
   },
 
   connect: (id) => ipcRenderer.send("engine:connect", id),
@@ -94,5 +95,13 @@ contextBridge.exposeInMainWorld("unoMenu", {
   },
   inputChosen(name: string): void {
     ipcRenderer.send("input:chosen", name);
+  },
+
+  /**
+   * The language the page is in. The renderer keeps which was chosen, and the
+   * main process has the menu and the dialogs to say in it.
+   */
+  languageChosen(locale: string): void {
+    ipcRenderer.send("language:chosen", locale);
   },
 });

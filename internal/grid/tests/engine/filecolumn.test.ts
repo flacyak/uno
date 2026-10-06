@@ -29,7 +29,7 @@ import {
   partBytes,
 } from "../testdata/sales-q3-parts.ts";
 import { NAMES as ROWS_ONLY_NAMES, rowsOnly } from "../headerless/parts.ts";
-import { TINY, connect, indexed, openOne, sales } from "./harness.ts";
+import { TINY, connect, indexed, openOne, sales, saidIn } from "./harness.ts";
 
 /** What the parts are called as one source. */
 const NAME = "sales-q3";
@@ -352,7 +352,7 @@ describe("a save of a source with a _file column", () => {
 
     const e = engine();
     const absent = await openOne(e, { name: UNO, path: file });
-    expect(absent.opened.link?.missing).toContain(PART_NAMES[1]);
+    expect(saidIn(absent.opened.link?.missing)).toContain(PART_NAMES[1]);
 
     await writeFile(gone, bytes);
     const src = await e.relink(absent, asOne(paths, PART_NAMES, "first", "unsaid"));

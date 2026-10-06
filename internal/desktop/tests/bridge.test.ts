@@ -52,7 +52,7 @@ function unionMembers(union: string): string[] {
 
 // Every ipcRenderer.invoke/send in preload, wherever it is exposed from --
 // `bridge` and `unoMenu` both carry renderer -> main traffic; input:chosen
-// lives on the latter.
+// and language:chosen live on the latter.
 const PRELOAD_SENDS = new Set(captures(/ipcRenderer\.(?:invoke|send)\("([^"]+)"/g, PRELOAD));
 
 // Every ipcMain.handle/on in main. ipcMain.removeHandler does not match --
@@ -60,11 +60,11 @@ const PRELOAD_SENDS = new Set(captures(/ipcRenderer\.(?:invoke|send)\("([^"]+)"/
 // of file:pick-save is not double-counted here.
 const MAIN_HANDLES = new Set(captures(/ipcMain\.(?:handle|on)\("([^"]+)"/g, MAIN));
 
-test("the renderer -> main extraction found the eight channels this file assumes", () => {
+test("the renderer -> main extraction found the nine channels this file assumes", () => {
   // Non-empty and sized on purpose: a regex that stops matching would
   // otherwise leave every "is it registered" assertion below trivially true.
-  expect(PRELOAD_SENDS.size).toBe(8);
-  expect(MAIN_HANDLES.size).toBe(8);
+  expect(PRELOAD_SENDS.size).toBe(9);
+  expect(MAIN_HANDLES.size).toBe(9);
 });
 
 test("every channel the renderer sends has a receiver in main", () => {

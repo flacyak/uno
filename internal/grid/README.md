@@ -15,6 +15,7 @@ one codebase.
 | `sheet`    | the edit log, folded into a schema and applied per row   |
 | `ingest`   | bytes to rows: a CSV reader, a record scanner, a sniff   |
 | `engine`   | open a file without loading it: index, pages, passes     |
+| `said`     | what the engine says to a person, as data                |
 | `pattern`  | the recogniser: watch edits, propose the rest            |
 | `document` | the `.uno` codec, `Uint8Array` in and out                |
 | `library`  | the `.unof` codecs, formulas and connections, as strings |
@@ -51,6 +52,28 @@ block of rows at a time, so its offer can grow while the engine reads.
 Indexing is the first pass. Validation, deduplication, splitting and format
 conversion are meant to be the next ones, each a loop over a `PassContext`
 running in a worker of its own. `resource/composition.html` has the plan.
+
+## What the engine says
+
+A sentence the engine writes is English, and an engine does not know what language the person reading it speaks.
+So what it says crosses the port as data, a `Said`: which sentence it is, and what goes in it.
+`english(said)` is the sentence as this package writes it, which is what an error's message, a log and a test read.
+A client writes its own sentence for each kind, in the language its person reads.
+
+```ts
+throw new Refusal({ t: "only-source", name: source.name });
+// message: "ads.csv is the only source here, and a workspace needs one"
+```
+
+A `Refusal` is an `Error` that carries its `Said`.
+It crosses as data and is a `Refusal` again on the client's side.
+How a file was read, what a program does, and how a file differs from the one a workspace was saved against are a `Said` each.
+
+Not every sentence has a kind yet.
+What has none is `{ t: "text" }`: the diagnostic as it was written, in English, passed on whole.
+The 34 that have one are what the engine itself refuses and says in ordinary use.
+The 194 that do not are the diagnostics of a broken `.uno`, an AWS profile, S3, and the parsers.
+Giving one a kind is adding it to `Said`, after which the compiler asks for its English in `english` and for its message wherever a client writes one.
 
 ## Files with no header row
 

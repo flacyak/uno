@@ -130,7 +130,11 @@ export async function peekHead(
   const width = format.columns.length;
   const rowsOut = records.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ""));
 
-  return { label: format.label, header: format.columns, rows: rowsOut };
+  return {
+    label: { t: "read", delimiter: format.delimiter, header: format.header },
+    header: format.columns,
+    rows: rowsOut,
+  };
 }
 
 /** peek reads the front of ref and answers with what it holds: one open, one read, one close. */

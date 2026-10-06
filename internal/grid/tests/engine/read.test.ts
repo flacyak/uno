@@ -27,6 +27,7 @@ import {
   sales,
   sheetRows,
   widened,
+  saidIn,
 } from "./harness.ts";
 
 /** The rows a Band keeps around the viewport, in engine/client.ts. */
@@ -37,7 +38,7 @@ test("the engine reads the fixture the way read does", async () => {
   try {
     const src = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
     const opened = src.opened;
-    expect(opened.label).toBe("UTF-8 · delimiter ','");
+    expect(saidIn(opened.label)).toBe("UTF-8 · delimiter ','");
     // The same sample, so the same badges: units is numeric data in a costume.
     expect(opened.columns).toEqual(sales.columns);
     expect(opened.columns[UNITS]).toEqual({ header: "units", kind: "text", flagged: true });

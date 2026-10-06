@@ -1,6 +1,7 @@
 // The Host the shell talks to, assembled from what preload could hand over.
 //
-// Everything but `connect` and `saveConnection` passes straight through.
+// Everything but `connect`, `saveConnection` and `dropped` passes straight
+// through. `dropped` refuses a file preload found no path for.
 // `connect` asks preload for an engine by id and waits for the port to be
 // posted to the window under that id, because a port cannot come back through
 // contextBridge as a return value. `saveConnection` hands preload the text of
@@ -8,6 +9,7 @@
 
 import { formatConnection, stampConnection } from "@uno/grid/library";
 
+import { m } from "../paraglide/messages.js";
 import type { Bridge, Host } from "../shared/host.ts";
 
 export function electronHost(bridge: Bridge): Host {
@@ -25,7 +27,12 @@ export function electronHost(bridge: Bridge): Host {
   return {
     open: () => bridge.open(),
     add: () => bridge.add(),
-    dropped: (file) => bridge.dropped(file),
+    // Refused here and not in preload, so it is said in the page's language.
+    dropped(file) {
+      const ref = bridge.dropped(file);
+      if (ref === undefined) throw new Error(m.dropped_not_a_file({ name: file.name }));
+      return ref;
+    },
     pickSave: (suggestedName) => bridge.pickSave(suggestedName),
     save: (path, bytes) => bridge.save(path, bytes),
     quit: () => bridge.quit(),

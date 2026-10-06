@@ -140,7 +140,7 @@ export const SIDEBAR: Check[] = [
       }
       if (document.querySelectorAll(".tab .dirty").length !== 0) return "a workspace just opened has a dirty dot";
       document.querySelector('.tab[data-source="sales-q3"]').click();
-      return (await arrives(() => text("#status-file").startsWith(ROWS.toLocaleString() + " rows")))
+      return (await arrives(() => text("#status-file").startsWith(counted(ROWS) + " rows")))
         ? ""
         : "the status bar says " + JSON.stringify(text("#status-file"));
     `,

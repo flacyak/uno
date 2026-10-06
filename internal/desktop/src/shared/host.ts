@@ -63,15 +63,18 @@ export interface Host {
 }
 
 /**
- * Bridge is what preload hands the page: Host, except for `connect` and
- * `saveConnection`.
+ * Bridge is what preload hands the page: Host, except for `connect`,
+ * `saveConnection` and `dropped`.
  *
  * A MessagePort cannot cross contextBridge, so the page asks for one by id and
  * preload posts it to the window with that id. `electronHost` in the renderer
  * turns that back into `connect`.
  */
-export interface Bridge extends Omit<Host, "connect" | "saveConnection"> {
+export interface Bridge extends Omit<Host, "connect" | "saveConnection" | "dropped"> {
   connect(id: number): void;
+  /** Where a dropped file is, or nothing for one that is not on this machine's
+   * disk. `electronHost` refuses that one by name, in the page's language. */
+  dropped(file: File): SourceRef | undefined;
   /**
    * A connection as the text of its .unof. A Connection carries a Map and
    * Dates, which contextBridge does not promise to carry intact, and the text

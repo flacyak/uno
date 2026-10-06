@@ -19,13 +19,17 @@ import type { Connection } from "@uno/grid/library";
 import type { SingleRef } from "@uno/grid/store";
 import { s3Location } from "@uno/grid/store/s3";
 
+import { m } from "../../paraglide/messages.js";
 import type { Host } from "../../shared/host.ts";
 import type { Grid, GridEvents } from "../grid/index.ts";
 import { strategy } from "../input/index.ts";
 import type { InputName, InputStrategy } from "../input/index.ts";
 import { command } from "../keys.ts";
+import { Language, offered } from "../language.ts";
 import type { Command } from "../keys.ts";
+import { list, num } from "../locale.ts";
 import { Recents } from "../recents.ts";
+import { say } from "../said.ts";
 import { Sources, connectionLine } from "../sources.ts";
 import { NEWER_AFTER_MS } from "../timing.ts";
 import { Workspace, reloaded } from "../workspace.ts";
@@ -37,6 +41,7 @@ import type { Showing } from "./find.ts";
 import { Theming } from "../theme.ts";
 import { FormulaForm } from "./formula.ts";
 import { PopMenu, below } from "./menu.ts";
+import { labelPage } from "./page.ts";
 import type { MenuItem, MenuPlace } from "./menu.ts";
 import { Panel } from "./panel.ts";
 import { Settings } from "./settings.ts";
@@ -106,6 +111,8 @@ export class Shell {
   private readonly panel: Panel;
   /** The theme the page wears, which the settings menu changes. */
   readonly theming: Theming;
+  /** The language the app speaks, which the settings menu changes. */
+  readonly language: Language;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
   private readonly workspaces = must(document.querySelector<HTMLElement>("#workspaces"));
@@ -114,7 +121,13 @@ export class Shell {
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
 
   constructor(private readonly host: Host) {
-    // First, so the page is in its theme before anything is drawn in it.
+    // First of all, so every word written after it is in the language chosen.
+    this.language = new Language(localStorage, navigator.languages, offered(import.meta.env.DEV));
+    this.language.onChange(() => this.relabel());
+    // The page's own words, before the rest is drawn beside them.
+    labelPage();
+
+    // First of what is drawn, so the page is in its theme before anything is drawn in it.
     this.theming = new Theming(
       localStorage,
       window.matchMedia("(prefers-color-scheme: dark)"),
@@ -210,7 +223,8 @@ export class Shell {
     );
     // It wires itself to the control and asks through these, so the shell
     // holds nothing of it.
-    new Settings(must(document.querySelector<HTMLButtonElement>("#settings")), this.theming, {
+    const settings = must(document.querySelector<HTMLButtonElement>("#settings"));
+    new Settings(settings, this.theming, this.language, {
       connections: async () => {
         await this.refreshConnections();
         return this.known.map(connectionLine);
@@ -274,7 +288,7 @@ export class Shell {
     this.spare ??= this.host.connect().then(
       (port) => {
         const engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
-        engine.onError = (msg) => this.say(msg, true);
+        engine.onError = (heard) => this.say(say(heard), true);
         return engine;
       },
       (err: unknown) => {
@@ -306,7 +320,7 @@ export class Shell {
       this.known = connections;
       this.sources.connections = connections.map(connectionLine);
       this.panel.draw();
-      const trouble = failed.join(" · ");
+      const trouble = failed.map(say).join(" · ");
       if (trouble !== this.connectionTrouble) {
         this.connectionTrouble = trouble;
         if (trouble !== "") this.say(trouble, true);
@@ -330,7 +344,9 @@ export class Shell {
       if (path === undefined || tab.link?.connect === undefined) continue;
       const loc = s3Location(path);
       if (loc !== undefined && covers(saved, loc.bucket, loc.key)) {
-        void this.pointAt(tab, refAt(path), () => `${tab.name} reads from ${saved.name}`);
+        void this.pointAt(tab, refAt(path), () =>
+          m.source_reads_from({ name: tab.name, from: saved.name }),
+        );
       }
     }
     return saved;
@@ -355,9 +371,16 @@ export class Shell {
    * without asking. Over unsaved edits the first try says so and is refused.
    * The second, while that is still on screen, goes ahead, as :e! does.
    */
-  private drops(what: Dropping, again: string): boolean {
+  private drops(what: Dropping): boolean {
     if (this.workspace?.dirty !== true || this.warned === what) return true;
-    this.say(`unsaved edits · Ctrl+S first, or ${again} again to drop them`, true);
+    this.say(
+      what === "open"
+        ? m.unsaved_edits_key_again({ key: "Ctrl+O" })
+        : what === "quit"
+          ? m.unsaved_edits_key_again({ key: "×" })
+          : m.unsaved_edits_click_again(),
+      true,
+    );
     this.warned = what;
     return false;
   }
@@ -370,7 +393,7 @@ export class Shell {
    * `force` is :e!, and :e, which has asked already.
    */
   async open(force = false): Promise<void> {
-    if (!force && !this.drops("open", "Ctrl+O")) return;
+    if (!force && !this.drops("open")) return;
     try {
       const ref = await this.host.open();
       if (ref === undefined) return; // cancelled, which is not a failure
@@ -393,7 +416,7 @@ export class Shell {
    */
   private async openRecent(path: string): Promise<boolean> {
     if (this.workspace?.path === path) return true;
-    if (!this.drops(`recent:${path}`, "click")) return false;
+    if (!this.drops(`recent:${path}`)) return false;
     await this.load(refAt(path), path);
     return this.workspace?.path === path;
   }
@@ -403,7 +426,7 @@ export class Shell {
    * the first × says so, as Ctrl+O does.
    */
   quit(): void {
-    if (this.drops("quit", "×")) this.host.quit();
+    if (this.drops("quit")) this.host.quit();
   }
 
   /** Add files by path, as sources: several named together on the command line. */
@@ -437,8 +460,8 @@ export class Shell {
    */
   private offerAdd(plus: HTMLElement): void {
     this.offer(below(plus), [
-      { label: "File…", keys: "Ctrl+Shift+O", choose: () => void this.add() },
-      { label: "Browse sources…", keys: "Ctrl+Shift+B", choose: () => this.showPanel() },
+      { label: m.menu_file(), keys: "Ctrl+Shift+O", choose: () => void this.add() },
+      { label: m.menu_browse_sources(), keys: "Ctrl+Shift+B", choose: () => this.showPanel() },
     ]);
   }
 
@@ -451,11 +474,11 @@ export class Shell {
   private offerWorkspace(path: string, place: MenuPlace): void {
     const isOpen = this.workspace !== undefined && this.workspace.path === path;
     const formula: MenuItem = {
-      label: "Insert formula…",
+      label: m.menu_insert_formula(),
       choose: () => void this.insertFormula(path, place),
     };
     const forget: MenuItem = {
-      label: "Remove from list",
+      label: m.menu_remove_from_list(),
       choose: () => {
         this.recents.forget(path);
         this.paintTabs();
@@ -464,11 +487,11 @@ export class Shell {
     const items: MenuItem[] = isOpen
       ? [
           formula,
-          { label: "Add source…", keys: "Ctrl+Shift+O", choose: () => void this.add() },
-          { label: "Save", keys: "Ctrl+S", choose: () => void this.save() },
-          { label: "Save as…", keys: "Ctrl+Shift+S", choose: () => void this.saveAs() },
+          { label: m.menu_add_source(), keys: "Ctrl+Shift+O", choose: () => void this.add() },
+          { label: m.menu_save(), keys: "Ctrl+S", choose: () => void this.save() },
+          { label: m.menu_save_as(), keys: "Ctrl+Shift+S", choose: () => void this.saveAs() },
         ]
-      : [{ label: "Open", choose: () => void this.openRecent(path) }, formula, forget];
+      : [{ label: m.menu_open(), choose: () => void this.openRecent(path) }, formula, forget];
     this.offer(place, items);
   }
 
@@ -484,7 +507,7 @@ export class Shell {
     const { workspace: w, grid } = on;
     const tab = w.active;
     if (tab.missing) {
-      this.say(`${tab.name} has no file behind it · point it at one first`, true);
+      this.say(m.source_no_file_point_first({ name: tab.name }), true);
       return;
     }
 
@@ -506,7 +529,7 @@ export class Shell {
    */
   private async bind(w: Workspace, tab: Tab, col: number, expr: string): Promise<void> {
     if (this.workspace !== w || !w.sources.includes(tab)) {
-      throw new Error(`${tab.name} is no longer open`);
+      throw new Error(m.source_no_longer_open({ name: tab.name }));
     }
     if (w.mode !== "transform") this.toggleMode();
     try {
@@ -518,7 +541,9 @@ export class Shell {
     // changed, which also brings a column off the side of the window on screen.
     const on = this.showing();
     if (on?.workspace === w && w.active === tab) on.grid.moveTo(on.grid.selection().row, col);
-    this.say(`${tab.band.columns[col]?.header ?? "the column"} is computed from ${expr}`);
+    this.say(
+      m.column_computed_from({ column: tab.band.columns[col]?.header ?? m.the_column(), expr }),
+    );
   }
 
   /**
@@ -530,7 +555,7 @@ export class Shell {
   private async addSources(refs: SourceRef[]): Promise<boolean> {
     const uno = refs.find(isWorkspace);
     if (uno !== undefined) {
-      this.say(`${uno.name} is a workspace of its own · open it rather than adding it`, true);
+      this.say(m.workspace_not_a_source({ name: uno.name }), true);
       return false;
     }
 
@@ -563,7 +588,7 @@ export class Shell {
     if (shown !== undefined) this.select(shown);
     else this.paintTabs();
     if (failed.length > 0) this.say(failed.join(" · "), true);
-    else this.say(`added ${rest.map((r) => r.name).join(", ")}`);
+    else this.say(m.added_names({ names: list(rest.map((r) => r.name)) }));
     void this.sources.askGrown();
     return failed.length === 0;
   }
@@ -584,7 +609,7 @@ export class Shell {
       const port = await this.host.connect();
       engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
       let opened: Workspace | undefined;
-      engine.onError = (msg) => this.say(msg, true);
+      engine.onError = (heard) => this.say(say(heard), true);
 
       const w = await Workspace.open(
         ref,
@@ -658,8 +683,8 @@ export class Shell {
         if (w === undefined) return;
         this.say(
           wanted === "end"
-            ? `indexing ${w.indexed()}% · G again when it finishes`
-            : `row ${(wanted + 1).toLocaleString()} is not indexed yet`,
+            ? m.indexing_g_again({ percent: w.indexed() })
+            : m.row_not_indexed({ row: num(wanted + 1) }),
         );
       },
       onAction: (action) => {
@@ -670,7 +695,7 @@ export class Shell {
           case "apply": {
             // From any cell, since the offer names its own column.
             const offer = this.offered();
-            if (offer === null) this.say("nothing to apply", true);
+            if (offer === null) this.say(m.nothing_to_apply(), true);
             else void this.apply(offer);
             return;
           }
@@ -863,8 +888,7 @@ export class Shell {
     const w = this.workspace;
     if (w === undefined) return;
     if (tab.edited > 0 && this.warned !== tab) {
-      const n = tab.edited;
-      this.say(`${tab.name} has ${n} ${n === 1 ? "edit" : "edits"} · × again to remove it`, true);
+      this.say(m.source_has_edits({ name: tab.name, count: tab.edited }), true);
       this.warned = tab;
       return;
     }
@@ -872,7 +896,7 @@ export class Shell {
       const showing = w.active === tab;
       await w.remove(tab);
       if (this.workspace !== w) return;
-      this.say(`removed ${tab.name}`);
+      this.say(m.removed_name({ name: tab.name }));
       // Taking out the tab on screen puts its neighbour there.
       if (showing) this.showActive();
       else this.paintTabs();
@@ -930,7 +954,8 @@ export class Shell {
       this.say(
         fresh.missing
           ? ""
-          : (said?.(fresh) ?? `${fresh.name} reads from ${"path" in ref ? ref.path : ref.name}`),
+          : (said?.(fresh) ??
+              m.source_reads_from({ name: fresh.name, from: "path" in ref ? ref.path : ref.name })),
       );
       if (w.active === fresh) this.showActive();
       else this.paintTabs();
@@ -952,7 +977,7 @@ export class Shell {
     try {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;
-      this.say(`appended ${files.map((f) => f.name).join(", ")} to ${fresh.name}`);
+      this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
       if (w.active === fresh) this.showActive();
       else this.paintTabs();
       this.paintStatus();
@@ -1060,7 +1085,7 @@ export class Shell {
       await this.host.save(w.path, await w.bytes(grid.selection(), w.path));
       w.saved(w.path);
       this.recents.opened(w.path);
-      this.say(`saved ${w.path}`);
+      this.say(m.saved_path({ path: w.path }));
     } catch (err) {
       this.say(message(err), true);
     }
@@ -1086,7 +1111,7 @@ export class Shell {
       await this.host.save(path, await w.bytes(grid.selection(), path));
       w.saved(path);
       this.recents.opened(path);
-      this.say(`saved ${path}`);
+      this.say(m.saved_path({ path }));
     } catch (err) {
       this.say(message(err), true);
     }
@@ -1110,7 +1135,7 @@ export class Shell {
       case "open":
         // Opening closes the workspace without asking, so :e asks first.
         if (!c.force && this.workspace?.dirty === true) {
-          this.say("unsaved edits · :w first, or :e! to drop them", true);
+          this.say(m.unsaved_edits_command(), true);
         } else {
           void this.open(true);
         }
@@ -1122,7 +1147,7 @@ export class Shell {
         this.grid?.act({ t: "move", motion: "last-row", count: c.row });
         return;
       case "unknown":
-        this.say(`not a command: :${c.text}`, true);
+        this.say(m.not_a_command({ text: c.text }), true);
         return;
     }
   }
@@ -1132,6 +1157,26 @@ export class Shell {
   /** Rows landed or the index moved: the body and the status bar, nothing else. */
   private repaint(): void {
     this.grid?.repaint();
+    this.paintStatus();
+  }
+
+  /**
+   * relabel writes the window again in the language the app is in now, with
+   * everything open left open. What is painted is painted again, and what was
+   * written once is written again.
+   */
+  private relabel(): void {
+    labelPage();
+    // A menu or a form left open was built in the language before.
+    this.menu?.close();
+    this.formula?.close();
+    // So was what the bar last said, and a sentence is not translated after it is said.
+    this.say("");
+    this.panel.relabel();
+    // The header's hints, which the grid draws once for a file.
+    this.grid?.refresh();
+    this.paintTabs();
+    this.paintBanner();
     this.paintStatus();
   }
 

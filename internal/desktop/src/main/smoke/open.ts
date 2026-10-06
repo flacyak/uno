@@ -2,7 +2,7 @@
 // window that takes no input from the person at the desktop.
 
 import type { Check, Input } from "./check.ts";
-import { DATE, DOM_ROWS, REP, ROWS, UNITS } from "./fixture.ts";
+import { DATE, DOM_ROWS, REP, ROWS, UNITS, counted } from "./fixture.ts";
 
 /** A point over a cell in the grid, and a turn of the wheel up it. */
 const OVER_GRID = { x: 400, y: 300 };
@@ -29,7 +29,7 @@ export const OPEN: Check[] = [
     name: "the fixture opened",
     run: async (page) => {
       const s = await page.text("#status-file");
-      return s.includes(ROWS.toLocaleString() + " rows") ? "" : "status bar says: " + s;
+      return s.includes(counted(ROWS) + " rows") ? "" : "status bar says: " + s;
     },
   },
   {
@@ -94,14 +94,10 @@ export const OPEN: Check[] = [
   {
     // Needs the real preload bridge -- `webUtils.getPathForFile` -- which only
     // a real Electron window exposes. Window-bound.
-    name: "a file that is not on disk is refused by name",
+    name: "a file that is not on disk has no path to open",
     script: `
-      try {
-        window.uno.dropped(new File(["a,b\\n1,2\\n"], "memory.csv"));
-        return "a file with no path was accepted";
-      } catch (err) {
-        return err.message.includes("memory.csv") ? "" : err.message;
-      }
+      const ref = window.uno.dropped(new File(["a,b\\n1,2\\n"], "memory.csv"));
+      return ref === undefined ? "" : "a file with no path was given " + JSON.stringify(ref);
     `,
   },
   {
