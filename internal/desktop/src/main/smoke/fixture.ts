@@ -6,6 +6,16 @@
 // index.ts's PRELUDE interpolates the same values in, so the checks that are
 // still strings see the same fixture through the same names.
 
+import { baseLocale } from "../../paraglide/runtime.js";
+
+/** The locale the smoke runs the app in, and so the one its counts are written in. */
+export const LOCALE = baseLocale;
+
+/** A count as the app writes it on screen: 4,812. */
+export function counted(n: number): string {
+  return n.toLocaleString(LOCALE);
+}
+
 /** A body row has the gutter before these, so a column's cell is one further
  * along in a raw row of `<td>`s. `Page`'s `rows()` already leaves the gutter
  * out, so a check reading through it never needs this offset -- only a check

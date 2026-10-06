@@ -17,6 +17,8 @@ import {
   toUpper,
   trimSpace,
 } from "../go/index.ts";
+import { english, englishSought } from "../said/index.ts";
+import type { CharName, Sought, StepSaid } from "../said/index.ts";
 
 /**
  * MAX_STEPS bounds a pipeline. The limit is not about cost -- three steps run
@@ -237,22 +239,27 @@ export function stepText(s: Step): string {
 }
 
 export function describeStep(s: Step): string {
+  return english({ t: "program", steps: [describedStep(s)] });
+}
+
+/** describedStep is what `describeStep` says, as data. */
+export function describedStep(s: Step): StepSaid {
   switch (s.kind) {
     case "trim":
-      return "trim the spaces off both ends";
+      return { t: "trim" };
 
     case "case":
-      return s.up ? "upper-case it" : "lower-case it";
+      return s.up ? { t: "upper" } : { t: "lower" };
 
     case "replace": {
-      let what = nameChars(s.src);
+      let what: Sought | undefined = soughtChars(s.src);
       if (what === undefined) {
         const lit = literalOf(s.src);
-        if (lit === undefined) return stepText(s);
-        what = quote(lit);
+        if (lit === undefined) return { t: "notation", text: stepText(s) };
+        what = { t: "literal", text: lit };
       }
-      if (s.lit === "") return "remove " + what;
-      return `replace ${what} with ${quote(s.lit)}`;
+      if (s.lit === "") return { t: "remove", what };
+      return { t: "replace", what, with: s.lit };
     }
 
     // A slice, a concat and a constant fall back to the notation. A person
@@ -261,7 +268,7 @@ export function describeStep(s: Step): string {
     case "slice":
     case "concat":
     case "const":
-      return stepText(s);
+      return { t: "notation", text: stepText(s) };
   }
 }
 
@@ -296,29 +303,29 @@ export function quoteRegex(src: string): string {
  * turns a number column into a text one, which is the whole of what the
  * recogniser proposes today; anything outside it falls back to the notation.
  */
-const CHAR_NAMES = new Map<string, string>(
-  Object.entries({
-    ",": "commas",
-    ".": "full stops",
-    $: "dollar signs",
-    "£": "pound signs",
-    "€": "euro signs",
-    "%": "percent signs",
-    _: "underscores",
-    "'": "apostrophes",
-    " ": "spaces",
-    "*": "asterisks",
-    "#": "hashes",
-    "/": "slashes",
-    "-": "dashes",
-    "+": "plus signs",
-    "(": "brackets",
-    ")": "brackets",
-    '"': "quotes",
-    "“": "quotes",
-    "”": "quotes",
-  }),
-);
+const NAMED: Readonly<Record<string, CharName>> = {
+  ",": "commas",
+  ".": "full stops",
+  $: "dollar signs",
+  "£": "pound signs",
+  "€": "euro signs",
+  "%": "percent signs",
+  _: "underscores",
+  "'": "apostrophes",
+  " ": "spaces",
+  "*": "asterisks",
+  "#": "hashes",
+  "/": "slashes",
+  "-": "dashes",
+  "+": "plus signs",
+  "(": "brackets",
+  ")": "brackets",
+  '"': "quotes",
+  "“": "quotes",
+  "”": "quotes",
+};
+
+const CHAR_NAMES = new Map<string, CharName>(Object.entries(NAMED));
 
 const META_CHARS = "\\.+*?()|[]{}^$";
 
@@ -356,22 +363,28 @@ export function literalOf(src: string): string | undefined {
  * rather than describing a program approximately.
  */
 export function nameChars(src: string): string | undefined {
+  const what = soughtChars(src);
+  return what === undefined ? undefined : englishSought(what);
+}
+
+/** soughtChars is what `nameChars` says, as data: the characters by name, and where. */
+export function soughtChars(src: string): Sought | undefined {
   // The deletion lattice anchors its class rungs. Strip the anchor and say
   // where it pointed, rather than refusing a program the recogniser offers.
-  let where = "";
+  let where: "anywhere" | "start" | "end" = "anywhere";
   let body = src;
   if (body.startsWith("^") && body.endsWith("+")) {
     body = body.slice(1, -1);
-    where = " from the start";
+    where = "start";
   } else if (body.endsWith("+$")) {
     body = body.slice(0, -2);
-    where = " from the end";
+    where = "end";
   }
 
   if (body.startsWith("[") && body.endsWith("]")) body = body.slice(1, -1);
 
-  const names: string[] = [];
-  const seen = new Set<string>();
+  const names: CharName[] = [];
+  const seen = new Set<CharName>();
   const rs = runes(body);
   for (let i = 0; i < rs.length; i++) {
     let r = rs[i]!;
@@ -395,8 +408,7 @@ export function nameChars(src: string): string | undefined {
   }
 
   if (names.length === 0) return undefined;
-  if (names.length === 1) return names[0]! + where;
-  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1]! + where;
+  return { t: "chars", names, where };
 }
 
 export { atoi, indexOfRunes, quoteMeta };

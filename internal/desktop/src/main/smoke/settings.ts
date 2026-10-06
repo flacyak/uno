@@ -1,6 +1,7 @@
 // Checks that the settings control works in a window: it opens upward from the
-// bottom left on the run's connections and the four themes, and each theme in
-// each mode is what the page is drawn in.
+// bottom left on the run's connections and the four themes, each theme in
+// each mode is what the page is drawn in, and a language chosen is the one
+// the window is written in.
 //
 // They run last, over whatever the checks before them left open, with the
 // run's own --user-data-dir, so the theme chosen here is never the one kept on
@@ -8,6 +9,7 @@
 
 import { THEMES } from "../../renderer/theme.ts";
 import type { Check } from "./check.ts";
+import { LOCALE } from "./fixture.ts";
 import { REMOTE } from "./sources.ts";
 
 const MENU = `
@@ -60,6 +62,46 @@ export const SETTINGS: Check[] = [
     `,
   },
   ...WORN,
+  {
+    // The run is in English, pinned by the script that started it. This is the
+    // one place it is not: a person choosing another language in settings.
+    name: "Español is spoken the moment it is chosen: the window, the open menu and the status bar",
+    shot: "settings-language-es",
+    script: `
+      ${MENU}
+      if (menu().hidden) gear().click();
+      menu().querySelector('[data-language="es"]').click();
+      if (!(await until(() => document.documentElement.lang === "es"))) {
+        return "the page says it is in " + document.documentElement.lang;
+      }
+      if (menu().hidden) return "choosing a language closed the menu";
+      const said = {
+        "the sidebar's head": [text(".sidebar-head"), "Espacios de trabajo"],
+        "the menu's title": [menu().querySelector(".title").textContent, "Ajustes"],
+        "the switch": [text('#mode-switch [data-mode="transform"]'), "Transformar"],
+        "the control": [gear().getAttribute("aria-label"), "Ajustes"],
+      };
+      for (const [what, [is, want]] of Object.entries(said)) {
+        if (is !== want) return what + " says " + JSON.stringify(is) + ", not " + JSON.stringify(want);
+      }
+      if (!/ filas · /.test(text("#status-file"))) return "the status bar says " + JSON.stringify(text("#status-file"));
+      const chosen = menu().querySelector('[data-language="es"]').getAttribute("aria-checked");
+      return chosen === "true" ? "" : "the menu does not mark Español as chosen";
+    `,
+  },
+  {
+    name: "System follows the run's language again, with everything still open",
+    script: `
+      ${MENU}
+      menu().querySelector('[data-language="system"]').click();
+      if (!(await until(() => document.documentElement.lang === ${JSON.stringify(LOCALE)}))) {
+        return "the page says it is in " + document.documentElement.lang;
+      }
+      if (text(".sidebar-head") !== "Workspaces") return "the sidebar's head says " + JSON.stringify(text(".sidebar-head"));
+      if (!/ rows · /.test(text("#status-file"))) return "the status bar says " + JSON.stringify(text("#status-file"));
+      return menu().hidden ? "choosing a language closed the menu" : "";
+    `,
+  },
   {
     name: "Esc closes settings and hands the keys back",
     script: `

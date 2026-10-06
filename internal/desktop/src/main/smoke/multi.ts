@@ -9,7 +9,7 @@
 // there, so nothing before these lists a folder it did not expect.
 
 import type { Check } from "./check.ts";
-import { ROWS } from "./fixture.ts";
+import { ROWS, counted } from "./fixture.ts";
 import { REMOTE } from "./sources.ts";
 
 /** How many objects are added as one, before the folder gains another. */
@@ -134,7 +134,7 @@ export const MULTI: Check[] = [
 
       // Every row of all three, and no part's header among them: the whole
       // fixture, which is what they were cut from.
-      const rows = ${JSON.stringify(ROWS_AS_ONE.toLocaleString("en-US"))} + " rows";
+      const rows = ${JSON.stringify(counted(ROWS_AS_ONE))} + " rows";
       if (!(await arrives(() => text("#status-file").startsWith(rows)))) {
         return "the status bar says " + JSON.stringify(text("#status-file"));
       }
@@ -193,7 +193,7 @@ export const MULTI: Check[] = [
       buttons()[0].click();
       const said = ${JSON.stringify(`appended ${NAMES[PARTS]} to ${TAB}`)};
       if (!(await arrives(() => text("#status-msg") === said))) return "the status bar says " + JSON.stringify(text("#status-msg"));
-      const rows = ${JSON.stringify(ROWS_APPENDED.toLocaleString("en-US"))} + " rows";
+      const rows = ${JSON.stringify(counted(ROWS_APPENDED))} + " rows";
       if (!(await arrives(() => text("#status-file").startsWith(rows)))) {
         return "the status bar says " + JSON.stringify(text("#status-file"));
       }

@@ -140,7 +140,7 @@ export const VIM_STYLE: Check[] = [
     name: "G, gg, $, 0, {n}G and w land where vim would",
     script: `
       const steps = [
-        [["G"], "units · row " + ROWS],
+        [["G"], "units · row " + counted(ROWS)],
         [["g", "g"], "units · row 1"],
         [["$"], "revenue · row 1"],
         [["0"], "date · row 1"],
@@ -195,13 +195,13 @@ export const VIM_STYLE: Check[] = [
       const marked = at();
 
       await press("G");
-      if (at() !== "revenue · row " + ROWS) return "G went to " + at();
+      if (at() !== "revenue · row " + counted(ROWS)) return "G went to " + at();
       await press("'");
       await press("a");
       if (at() !== marked) return "'a went to " + at() + ", not " + marked;
       await press("'");
       await press("'");
-      if (at() !== "revenue · row " + ROWS) return "'' went to " + at();
+      if (at() !== "revenue · row " + counted(ROWS)) return "'' went to " + at();
       await press("\`");
       await press("\`");
       if (at() !== marked) return "\`\` went to " + at() + ", not " + marked;
@@ -278,7 +278,7 @@ export const VIM_STYLE: Check[] = [
       // Back in transform, the recogniser asks again about the three fixes.
       await press("i");
       const banner = document.querySelector("#banner");
-      if (!(await until(() => !banner.hidden && banner.textContent.includes("region") && banner.textContent.includes((ROWS - 3).toLocaleString() + " cells")))) {
+      if (!(await until(() => !banner.hidden && banner.textContent.includes("region") && banner.textContent.includes(counted(ROWS - 3) + " cells")))) {
         return "the banner says " + JSON.stringify(banner.textContent);
       }
 

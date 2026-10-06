@@ -4,6 +4,8 @@
 
 import "./base.css";
 
+import { m } from "../paraglide/messages.js";
+import type { Locale } from "../paraglide/runtime.js";
 import { electronHost } from "./host.ts";
 import type { InputName } from "./input/index.ts";
 import { Shell } from "./shell/shell.ts";
@@ -22,12 +24,13 @@ interface MenuBridge {
   onAddPaths(fn: (paths: string[]) => void): void;
   onInput(fn: (name: string) => void): void;
   inputChosen(name: InputName): void;
+  languageChosen(locale: Locale): void;
 }
 
 const bridge = window.uno;
 if (bridge === undefined) {
   // Nothing here works without the bridge, and a blank window explains nothing.
-  document.body.textContent = "uno could not reach its host process.";
+  document.body.textContent = m.host_unreachable();
 } else {
   const shell = new Shell(electronHost(bridge));
   const menu = (window as unknown as { unoMenu?: MenuBridge }).unoMenu;
@@ -44,6 +47,9 @@ if (bridge === undefined) {
   // Settings changes how keys are read too, and the menu's check follows it.
   shell.onInput = (name) => menu?.inputChosen(name);
   menu?.inputChosen(shell.inputName);
+  // The menu and the dialogs are the main process's, in the language the page is in.
+  shell.language.onChange(() => menu?.languageChosen(shell.language.locale));
+  menu?.languageChosen(shell.language.locale);
 
   document.querySelector("#open")?.addEventListener("click", () => void shell.open());
 }

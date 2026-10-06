@@ -25,7 +25,7 @@ import { headerOf, readAll } from "../../src/ingest/index.ts";
 import { blobFiles } from "../../src/store/index.ts";
 import type { ByteSource, FileHandler, FileRef } from "../../src/store/index.ts";
 import { localFiles } from "../../src/store/node.ts";
-import { FIXTURE, bytes } from "./harness.ts";
+import { FIXTURE, bytes, saidIn } from "./harness.ts";
 
 /**
  * The size of tests/testdata/generated/sales-q3-50m.csv, the file this task's
@@ -214,7 +214,7 @@ test("the fixture peeks as its six headers and the twenty rows under them", asyn
   expect(peeked.rows).toHaveLength(PEEK_ROWS);
   // The same sentence an opened source carries, so the panel and the tab say
   // the same thing about the same file.
-  expect(peeked.label).toBe("UTF-8 · delimiter ','");
+  expect(saidIn(peeked.label)).toBe("UTF-8 · delimiter ','");
 });
 
 test("a peek of bytes in hand needs no path", async () => {
@@ -303,11 +303,11 @@ test("an empty file is refused by name", async () => {
 
 test("the delimiter comes from the name for a .tsv and from the bytes otherwise", async () => {
   const tsv = await peekHead("q3.tsv", head("a\tb\n1\t2\n"));
-  expect(tsv.label).toBe("UTF-8 · tab-separated");
+  expect(saidIn(tsv.label)).toBe("UTF-8 · tab-separated");
   expect(tsv.header).toEqual(["a", "b"]);
 
   const semis = await peekHead("q3.csv", head("a;b\n1;2\n3;4\n"));
-  expect(semis.label).toBe("UTF-8 · delimiter ';'");
+  expect(saidIn(semis.label)).toBe("UTF-8 · delimiter ';'");
   expect(semis.rows).toEqual([
     ["1", "2"],
     ["3", "4"],

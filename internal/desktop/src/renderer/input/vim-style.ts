@@ -5,11 +5,10 @@
 // editor is insert. `i` moves one level in and Esc moves one level back out.
 // The whole plan is resource/vim-motions.html.
 
+import { m } from "../../paraglide/messages.js";
 import { NOTHING, isCharacter, showing } from "../keys.ts";
 import type { Action, Caret, Mode, Motion, Pending, Press, Step } from "../keys.ts";
 import type { EditorKey, InputStrategy } from "./strategy.ts";
-
-const LOCKED = "View · i or Ctrl+E to transform";
 
 const NONE: Action = { t: "none" };
 
@@ -222,7 +221,9 @@ function move(motion: Motion, count: number | undefined): Action {
 
 /** open is a key that opens the editor, which view refuses. */
 function open(mode: Mode, caret: Caret): Action {
-  return mode === "view" ? { t: "say", text: LOCKED } : { t: "insert", caret, transform: false };
+  return mode === "view"
+    ? { t: "say", text: m.locked_vim() }
+    : { t: "insert", caret, transform: false };
 }
 
 /**
@@ -231,15 +232,21 @@ function open(mode: Mode, caret: Caret): Action {
  */
 function change(mode: Mode, press: Press, action: Action): Action {
   if (press.repeat) return NONE;
-  return mode === "view" ? { t: "say", text: LOCKED } : action;
+  return mode === "view" ? { t: "say", text: m.locked_vim() } : action;
 }
 
 export const vimStyle: InputStrategy = {
   name: "vim-style",
-  locked: LOCKED,
+  get locked() {
+    return m.locked_vim();
+  },
   // Transform with the editor open, which is vim's insert mode.
-  editing: "INSERT",
-  switchHint: "i to transform · Esc to view · Ctrl+E",
+  get editing() {
+    return m.mode_insert();
+  },
+  get switchHint() {
+    return m.switch_hint_vim();
+  },
   interpret,
   editorKey,
 };

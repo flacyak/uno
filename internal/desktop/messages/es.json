@@ -1,0 +1,518 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "saved_path": "guardado en {path}",
+  "rows_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} fila",
+        "plural=many": "{n} filas",
+        "plural=other": "{n} filas"
+      }
+    }
+  ],
+  "rows_count_about": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "≈{n} fila",
+        "plural=many": "≈{n} filas",
+        "plural=other": "≈{n} filas"
+      }
+    }
+  ],
+  "columns_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} columna",
+        "plural=many": "{n} columnas",
+        "plural=other": "{n} columnas"
+      }
+    }
+  ],
+  "edits_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} edición",
+        "plural=many": "{n} ediciones",
+        "plural=other": "{n} ediciones"
+      }
+    }
+  ],
+  "cells_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} celda",
+        "plural=many": "{n} celdas",
+        "plural=other": "{n} celdas"
+      }
+    }
+  ],
+  "files_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} archivo",
+        "plural=many": "{n} archivos",
+        "plural=other": "{n} archivos"
+      }
+    }
+  ],
+  "files_new_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} archivo nuevo",
+        "plural=many": "{n} archivos nuevos",
+        "plural=other": "{n} archivos nuevos"
+      }
+    }
+  ],
+  "folders_count": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} carpeta",
+        "plural=many": "{n} carpetas",
+        "plural=other": "{n} carpetas"
+      }
+    }
+  ],
+  "indexing_percent": "indexando {percent} %",
+  "offer_cells_at_least": [
+    {
+      "declarations": [
+        "input scanned",
+        "input affected",
+        "local plural = scanned: plural",
+        "local n = scanned: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "al menos {affected} en la primera fila",
+        "plural=many": "al menos {affected} en las primeras {n} filas",
+        "plural=other": "al menos {affected} en las primeras {n} filas"
+      }
+    }
+  ],
+  "connect_found": "{folders}, {files}",
+  "connect_found_more": "{folders}, {files} y más",
+  "connect_listed_bucket": "bucket listado · {found}",
+  "connect_listed_prefix": "{prefix} listado · {found}",
+  "sources_append_new": [
+    {
+      "declarations": [
+        "input count",
+        "input folder",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} archivo nuevo en {folder} · añadir al final",
+        "plural=many": "{n} archivos nuevos en {folder} · añadir al final",
+        "plural=other": "{n} archivos nuevos en {folder} · añadir al final"
+      }
+    }
+  ],
+  "find_unparsed_date_below": "nada por debajo de la fila {row} en {column} deja de leerse como fecha",
+  "find_unparsed_date_above": "nada por encima de la fila {row} en {column} deja de leerse como fecha",
+  "find_unparsed_number_below": "nada por debajo de la fila {row} en {column} deja de leerse como número",
+  "find_unparsed_number_above": "nada por encima de la fila {row} en {column} deja de leerse como número",
+  "find_text_below": "«{text}» no está por debajo de la fila {row} en {column}",
+  "find_text_above": "«{text}» no está por encima de la fila {row} en {column}",
+  "find_searched_rows": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} fila buscada",
+        "plural=many": "{n} filas buscadas",
+        "plural=other": "{n} filas buscadas"
+      }
+    }
+  ],
+  "sidebar_close_hint": "Cerrar la barra lateral · Ctrl+B",
+  "sidebar_open_hint": "Abrir la barra lateral · Ctrl+B",
+  "status_row": "fila {row}",
+  "reloaded_name": "{name} recargado",
+  "reload_same_size": "el mismo tamaño",
+  "reload_size_moved": "{now}, antes {was}",
+  "reload_no_change": "sin cambios en el bucket",
+  "reload_new_version_same_size": "una versión nueva, del mismo tamaño",
+  "reload_new_version_size_moved": "una versión nueva, {now}, antes {was}",
+  "edits_replayed": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} edición reaplicada",
+        "plural=many": "{n} ediciones reaplicadas",
+        "plural=other": "{n} ediciones reaplicadas"
+      }
+    }
+  ],
+  "source_has_edits": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} tiene {n} edición · × otra vez para quitarlo",
+        "plural=many": "{name} tiene {n} ediciones · × otra vez para quitarlo",
+        "plural=other": "{name} tiene {n} ediciones · × otra vez para quitarlo"
+      }
+    }
+  ],
+  "unsaved_edits_key_again": "ediciones sin guardar · Ctrl+S primero, o {key} otra vez para descartarlas",
+  "unsaved_edits_click_again": "ediciones sin guardar · Ctrl+S primero, o haz clic otra vez para descartarlas",
+  "size_bytes": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} byte",
+        "plural=many": "{n} bytes",
+        "plural=other": "{n} bytes"
+      }
+    }
+  ],
+  "size_kb": "{size} KB",
+  "size_mb": "{size} MB",
+  "size_gb": "{size} GB",
+  "size_tb": "{size} TB",
+  "action_apply": "Aplicar",
+  "action_not_now": "Ahora no",
+  "action_cancel": "Cancelar",
+  "action_test": "Probar",
+  "action_insert": "Insertar",
+  "action_filter": "Filtrar",
+  "action_reload": "Recargar",
+  "action_repoint": "Redirigir",
+  "action_remove": "Quitar",
+  "sources_title": "Fuentes",
+  "settings_title": "Ajustes",
+  "reading": "leyendo…",
+  "no_connections": "todavía no hay conexiones",
+  "connect_action": "+ Conectar un bucket",
+  "this_column": "esta columna",
+  "the_column": "la columna",
+  "no_rows": "sin filas",
+  "unsaved_edits": "ediciones sin guardar",
+  "unsaved_changes": "cambios sin guardar",
+  "newer_version": "hay una versión más nueva en el bucket · Recargar la lee",
+  "menu_file": "Archivo…",
+  "menu_browse_sources": "Explorar fuentes…",
+  "menu_insert_formula": "Insertar fórmula…",
+  "menu_remove_from_list": "Quitar de la lista",
+  "menu_add_source": "Añadir fuente…",
+  "menu_save": "Guardar",
+  "menu_save_as": "Guardar como…",
+  "menu_open": "Abrir",
+  "no_file_open": "ningún archivo abierto",
+  "mode_view": "VER",
+  "mode_transform": "TRANSFORMAR",
+  "mode_insert": "INSERTAR",
+  "locked_default": "Ver · Ctrl+E para transformar",
+  "locked_vim": "Ver · i o Ctrl+E para transformar",
+  "switch_hint_vim": "i para transformar · Esc para ver · Ctrl+E",
+  "sidebar_aria": "Barra lateral",
+  "panel_close_hint": "Cerrar el panel de fuentes",
+  "panel_open_hint": "Fuentes: lo que está abierto y de dónde vienen los archivos · Ctrl+Shift+B",
+  "point_at_file_to_see_rows": "dirígelo a un archivo para ver sus filas",
+  "source_reads_from": "{name} lee de {from}",
+  "source_no_file_point_first": "{name} no tiene un archivo detrás · dirígelo a uno primero",
+  "source_no_longer_open": "{name} ya no está abierto",
+  "column_computed_from": "{column} se calcula a partir de {expr}",
+  "workspace_not_a_source": "{name} es un espacio de trabajo propio · ábrelo en lugar de añadirlo",
+  "added_names": "añadido: {names}",
+  "removed_name": "{name} quitado",
+  "appended_to": "{files} añadido al final de {name}",
+  "indexing_g_again": "indexando {percent} % · G otra vez cuando termine",
+  "row_not_indexed": "la fila {row} todavía no está indexada",
+  "nothing_to_apply": "nada que aplicar",
+  "unsaved_edits_command": "ediciones sin guardar · :w primero, o :e! para descartarlas",
+  "not_a_command": "no es un comando: :{text}",
+  "offer_source_gone": "la fuente de esa propuesta ya no está",
+  "drop_not_spreadsheet": "{name} no es una hoja de cálculo que uno pueda abrir",
+  "host_unreachable": "uno no pudo conectar con su proceso anfitrión.",
+  "workspace_file_stem": "espacio-de-trabajo",
+  "mark_not_set": "la marca {name} no está puesta",
+  "nothing_yanked": "nada copiado",
+  "computed_nothing_to_type": "{column} se calcula con una fórmula · no hay nada que sobrescribir",
+  "row_still_loading": "la fila {row} todavía se está cargando",
+  "yank_clipboard_refused": "copiado, pero el portapapeles del sistema lo rechazó",
+  "column_flagged_hint": "parece numérica, pero no se lee como número",
+  "offer_ambiguous": "otra regla también encaja con estos ejemplos",
+  "find_column_is_text": "{column} es texto · todos sus valores se leen bien",
+  "nothing_searched": "todavía no se ha buscado nada",
+  "searching": "buscando…",
+  "connect_title": "Conectar un bucket",
+  "connect_form_aria": "conectar un bucket",
+  "connect_bucket_aria": "bucket",
+  "connect_prefix_aria": "prefijo",
+  "connect_prefix_placeholder": "todo el bucket",
+  "connect_sign_in_aria": "iniciar sesión como",
+  "connect_save": "Guardar conexión",
+  "field_bucket": "Bucket",
+  "field_prefix": "Prefijo",
+  "field_profile": "Perfil",
+  "field_region": "Región",
+  "connect_name_bucket": "indica el bucket que quieres conectar",
+  "connect_sign_in_machine": "la configuración de AWS de este equipo",
+  "connect_sign_in_public": "público · sin iniciar sesión",
+  "connect_region_detected": "{region} · detectada",
+  "connect_region_pending": "la detecta la prueba",
+  "connect_listing": "listando…",
+  "connect_saving_each": "Cada conexión es un archivo en connections/. La lista de perfiles se lee de ~/.aws; uno guarda el nombre, nunca las claves.",
+  "connect_saving_as": "Se guarda como connections/{id}.unof. La lista de perfiles se lee de ~/.aws; uno guarda el nombre, nunca las claves.",
+  "formula_title": "Insertar fórmula",
+  "formula_title_source": "Insertar fórmula · {source}",
+  "formula_column": "columna",
+  "formula_expression_aria": "expresión",
+  "formula_hint": "columnas por su nombre · + - * / ( )",
+  "formula_needs_expression": "falta una expresión con la que calcular la columna",
+  "section_workspace": "En este espacio de trabajo",
+  "section_connections": "Conexiones",
+  "section_browser": "Explorador",
+  "panel_filter_placeholder": "filtra, o pega s3://…",
+  "panel_filter_aria": "filtrar fuentes",
+  "panel_peeking": "leyendo el principio…",
+  "panel_as_one": "como uno",
+  "panel_header_row": "fila de encabezado",
+  "panel_header_row_hint": "la primera línea de cada archivo nombra las columnas",
+  "panel_file_column": "columna _file",
+  "panel_file_column_hint": "una columna que dice de qué archivo viene cada fila",
+  "panel_point_at": "Dirigir {name} a…",
+  "panel_choose_connection": "elige una conexión para explorarla",
+  "panel_nothing_matches": "nada coincide con «{filter}»",
+  "panel_no_sources": "ninguna fuente abierta",
+  "panel_folder_empty": "esta carpeta está vacía",
+  "state_changed": "cambiado",
+  "state_missing": "falta",
+  "state_unconnected": "sin conectar",
+  "state_newer": "más nuevo en el bucket",
+  "sources_connect_bucket": "Conectar {bucket}",
+  "sources_point_here": "Dirigir {name} aquí",
+  "sources_add_count": "Añadir {count}",
+  "sources_add_as_one": "Añadir como uno",
+  "settings_theme": "Tema",
+  "settings_theme_credit": "{name} · de {author} en T3 Themes",
+  "settings_appearance": "Apariencia",
+  "appearance_system": "Sistema",
+  "appearance_light": "Claro",
+  "appearance_dark": "Oscuro",
+  "settings_keys": "Teclas",
+  "input_default": "Predeterminadas",
+  "input_vim_style": "Estilo Vim",
+  "not_saved": "sin guardar",
+  "no_workspaces": "todavía no hay espacios de trabajo",
+  "sidebar_add_source": "+ añadir fuente",
+  "sidebar_add_source_hint": "Añadir una fuente: un archivo, o un objeto en S3",
+  "sidebar_not_saved_hint": "sin guardar · Ctrl+S lo conserva como espacio de trabajo",
+  "sidebar_open_line_hint": "haz clic para abrir su línea en el panel de fuentes",
+  "sidebar_point_hint": "haz clic para dirigirlo a un archivo en el panel de fuentes",
+  "sidebar_remove_source": "Quitar {name} del espacio de trabajo",
+  "workspaces_title": "Espacios de trabajo",
+  "new_workspace": "Nuevo espacio de trabajo",
+  "empty_title": "Suelta una hoja de cálculo",
+  "empty_or_open": "o {#link}abre una{/link}",
+  "switch_view": "Ver",
+  "switch_transform": "Transformar",
+  "command_aria": "comando",
+  "close_window_aria": "Cerrar uno",
+  "settings_language": "Idioma",
+  "language_system": "Sistema",
+  "native_file": "Archivo",
+  "native_open": "Abrir…",
+  "native_add_source": "Añadir fuente…",
+  "native_save": "Guardar",
+  "native_save_as": "Guardar como…",
+  "native_close_window": "Cerrar ventana",
+  "native_quit": "Salir",
+  "native_exit": "Salir",
+  "native_edit": "Edición",
+  "native_undo": "Deshacer",
+  "native_redo": "Rehacer",
+  "native_cut": "Cortar",
+  "native_copy": "Copiar",
+  "native_paste": "Pegar",
+  "native_input": "Entrada",
+  "native_view": "Ver",
+  "native_view_transform": "Ver / Transformar",
+  "native_reload": "Recargar",
+  "native_toggle_devtools": "Alternar herramientas de desarrollo",
+  "native_actual_size": "Tamaño real",
+  "native_zoom_in": "Acercar",
+  "native_zoom_out": "Alejar",
+  "native_toggle_full_screen": "Alternar pantalla completa",
+  "dialog_open": "Abrir",
+  "dialog_add_source": "Añadir fuente",
+  "dialog_save_as": "Guardar como",
+  "filter_spreadsheets_and_workspaces": "Hojas de cálculo y espacios de trabajo",
+  "filter_spreadsheets": "Hojas de cálculo",
+  "filter_all_files": "Todos los archivos",
+  "filter_workspace": "espacio de trabajo de uno",
+  "dropped_not_a_file": "{name} no es un archivo de este equipo",
+  "read_delimiter": "UTF-8 · delimitador '{delimiter}'",
+  "read_delimiter_no_header": "UTF-8 · delimitador '{delimiter}' · sin fila de encabezado",
+  "read_tabs": "UTF-8 · separado por tabuladores",
+  "read_tabs_no_header": "UTF-8 · separado por tabuladores · sin fila de encabezado",
+  "said_about": "{subject}: {why}",
+  "said_replaying": "al reaplicar las ediciones de {name}: {why}",
+  "program_nothing": "no cambiar nada",
+  "program_then": "{before}, y después {after}",
+  "step_trim": "quitar los espacios de ambos extremos",
+  "step_upper": "pasarlo a mayúsculas",
+  "step_lower": "pasarlo a minúsculas",
+  "step_remove": "quitar {what}",
+  "step_remove_from_start": "quitar {what} del principio",
+  "step_remove_from_end": "quitar {what} del final",
+  "step_replace": "reemplazar {what} por {with}",
+  "step_replace_from_start": "reemplazar {what} del principio por {with}",
+  "step_replace_from_end": "reemplazar {what} del final por {with}",
+  "quoted": "«{text}»",
+  "chars_commas": "comas",
+  "chars_full_stops": "puntos",
+  "chars_dollar_signs": "signos de dólar",
+  "chars_pound_signs": "signos de libra",
+  "chars_euro_signs": "signos de euro",
+  "chars_percent_signs": "signos de porcentaje",
+  "chars_underscores": "guiones bajos",
+  "chars_apostrophes": "apóstrofos",
+  "chars_spaces": "espacios",
+  "chars_asterisks": "asteriscos",
+  "chars_hashes": "almohadillas",
+  "chars_slashes": "barras",
+  "chars_dashes": "guiones",
+  "chars_plus_signs": "signos más",
+  "chars_brackets": "paréntesis",
+  "chars_quotes": "comillas",
+  "changed_version_same_size": "{name} no es la versión con la que se guardó el espacio de trabajo · tiene el mismo tamaño",
+  "changed_version_sizes": "{name} no es la versión con la que se guardó el espacio de trabajo · ahora ocupa {now} y antes {was}",
+  "changed_size": "{name} ocupa {now} ahora y ocupaba {was} cuando se guardó el espacio de trabajo",
+  "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
+  "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
+  "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",
+  "refused_append_nothing": "no se dio ningún archivo para añadir al final de {name}",
+  "refused_append_already_part": "{file} ya es la parte {part} de {name}",
+  "refused_append_twice": "{file} se dio dos veces para añadir al final de {name}",
+  "refused_workspace_too_large": "{name} ocupa {size}, más de los {limit} con los que un espacio de trabajo se puede leer entero",
+  "refused_no_file_open": "no hay ningún archivo abierto",
+  "refused_carried_too_large": "{name} ocupa {size}, más de los {limit} que un espacio de trabajo puede llevar consigo para una fuente sin archivo al que dirigirse",
+  "refused_carried_together_too_large": [
+    {
+      "declarations": [
+        "input count",
+        "input size",
+        "input limit",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "la {n} fuente sin archivo detrás suma {size}, más de los {limit} que un espacio de trabajo puede llevar consigo",
+        "plural=many": "las {n} fuentes sin archivo detrás suman {size}, más de los {limit} que un espacio de trabajo puede llevar consigo",
+        "plural=other": "las {n} fuentes sin archivo detrás suman {size}, más de los {limit} que un espacio de trabajo puede llevar consigo"
+      }
+    }
+  ],
+  "refused_workspace_closed": "el espacio de trabajo se cerró",
+  "refused_no_such_source": "no hay ninguna fuente abierta llamada {id}",
+  "refused_source_absent": "{name} no tiene un archivo detrás · dirígelo a uno para leer sus filas",
+  "refused_point_one_at_several": [
+    {
+      "declarations": [
+        "input count",
+        "input file",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{file} es {n} archivo leído como uno, y {name} todavía no se puede dirigir a uno así",
+        "plural=many": "{file} son {n} archivos leídos como uno, y {name} todavía no se puede dirigir a uno así",
+        "plural=other": "{file} son {n} archivos leídos como uno, y {name} todavía no se puede dirigir a uno así"
+      }
+    }
+  ],
+  "refused_point_several_at_one": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input file",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} es {n} archivo leído como uno, y {file} es un solo archivo",
+        "plural=many": "{name} son {n} archivos leídos como uno, y {file} es un solo archivo",
+        "plural=other": "{name} son {n} archivos leídos como uno, y {file} es un solo archivo"
+      }
+    }
+  ],
+  "refused_point_several_at_other": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input given",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} es {n} archivo leído como uno, y no se puede dirigir a {given}",
+        "plural=many": "{name} son {n} archivos leídos como uno, y no se puede dirigir a {given}",
+        "plural=other": "{name} son {n} archivos leídos como uno, y no se puede dirigir a {given}"
+      }
+    }
+  ],
+  "refused_log_lost_edit": "el registro perdió la pista de una edición de {source}",
+  "refused_bucket_unconnected": "{container} lee s3://{bucket}/…, que ninguna conexión cubre · conecta {bucket} para leerlo",
+  "refused_joins_unknown_for_column": "a {name} lo lee como uno algo que no dice cómo se unen sus archivos, así que no puede mostrar de qué archivo viene cada fila",
+  "refused_joins_unknown_for_save": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local plural = count: plural",
+        "local n = count: number"
+      ],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{name} es {n} archivo leído como uno por algo que no dice cómo se unen, así que un espacio de trabajo no puede guardarlo",
+        "plural=many": "{name} son {n} archivos leídos como uno por algo que no dice cómo se unen, así que un espacio de trabajo no puede guardarlo",
+        "plural=other": "{name} son {n} archivos leídos como uno por algo que no dice cómo se unen, así que un espacio de trabajo no puede guardarlo"
+      }
+    }
+  ],
+  "refused_rows_past_files": "{name}: sus filas van más allá de los archivos de los que se lee",
+  "refused_part_has_no_path": "{name}: {file} (parte {part} de {count}) es un archivo soltado sin ruta, y un espacio de trabajo se dirige a cada parte de varios archivos leídos como uno",
+  "refused_nothing_to_undo": "no hay nada que deshacer",
+  "refused_nothing_to_redo": "no hay nada que rehacer",
+  "refused_in_view": "el archivo está en modo ver · Ctrl+E para transformar",
+  "refused_file_closed": "el archivo se cerró",
+  "refused_changed_on_disk": "{name} cambió en el disco después de abrirse",
+  "refused_keeps_no_connections": "este motor no guarda conexiones · su plataforma no le dio de dónde leerlas",
+  "refused_offers_no_profiles": "este motor no tiene perfiles de AWS que ofrecer · su plataforma inicia sesión de otra manera",
+  "refused_tries_no_connection": "este motor no puede probar una conexión · su plataforma no se conecta a nada"
+}

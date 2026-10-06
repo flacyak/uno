@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
-import { messagePort, serve } from "../../src/engine/index.ts";
+import { english, messagePort, serve } from "../../src/engine/index.ts";
 import type { MessagePortLike, Reply, Request } from "../../src/engine/index.ts";
 import { sources } from "../../src/plugin/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
@@ -185,7 +185,10 @@ test("a path nothing browses is refused by name, against the id that asked", asy
     expect(r).toEqual({
       t: "error",
       id: 7,
-      message: "gs://acme/exports/: nothing here browses it · this build browses local files",
+      said: {
+        t: "text",
+        text: "gs://acme/exports/: nothing here browses it · this build browses local files",
+      },
     });
   } finally {
     w.close();
@@ -204,7 +207,10 @@ test("an engine whose providers cannot browse refuses to browse at all", async (
     expect(r).toMatchObject({
       t: "error",
       id: 1,
-      message: "/home/jo/q3.csv: nothing here browses it · this build browses nothing",
+      said: {
+        t: "text",
+        text: "/home/jo/q3.csv: nothing here browses it · this build browses nothing",
+      },
     });
   } finally {
     w.close();
@@ -336,8 +342,8 @@ test("a refused listing rejects the caller rather than reaching onError", async 
   const { engine, done } = connect(undefined, [diskProvider()]);
   try {
     let unwaited: string | undefined;
-    engine.onError = (message) => {
-      unwaited = message;
+    engine.onError = (said) => {
+      unwaited = english(said);
     };
 
     await expect(engine.list("s3://acme/exports/")).rejects.toThrow(
@@ -391,7 +397,7 @@ test("a peek comes back as a header and the rows under it", async () => {
     // Every row as wide as the header, which is what the grid would draw.
     expect(r.peeked.rows.every((row) => row.length === COLUMNS.length)).toBe(true);
     // The sentence an opened source carries, so a preview and a tab agree.
-    expect(r.peeked.label).toBe("UTF-8 · delimiter ','");
+    expect(english(r.peeked.label)).toBe("UTF-8 · delimiter ','");
   } finally {
     w.close();
   }
@@ -426,7 +432,10 @@ test("a peek at a file nothing opens is refused by name, against the id that ask
     expect(r).toEqual({
       t: "error",
       id: 7,
-      message: "s3://acme/exports/q3.csv: nothing here opens it · this build reads local files",
+      said: {
+        t: "text",
+        text: "s3://acme/exports/q3.csv: nothing here opens it · this build reads local files",
+      },
     });
   } finally {
     w.close();
@@ -465,8 +474,8 @@ test("a refused peek rejects the caller rather than reaching onError", async () 
   const { engine, done } = connect(undefined, [diskProvider()]);
   try {
     let unwaited: string | undefined;
-    engine.onError = (message) => {
-      unwaited = message;
+    engine.onError = (said) => {
+      unwaited = english(said);
     };
 
     await expect(engine.peek({ name: "q3.csv", path: "s3://acme/q3.csv" })).rejects.toThrow(

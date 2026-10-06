@@ -14,6 +14,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vite-pl
 
 import { PARTS_VERSION, POINTED_VERSION, readContainer } from "../../src/document/index.ts";
 import type { Document, HeldPart } from "../../src/document/index.ts";
+import { english } from "../../src/engine/index.ts";
 import type { Engine, SourceHandle, SourceRef } from "../../src/engine/index.ts";
 import type { Connection } from "../../src/library/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
@@ -39,7 +40,7 @@ import {
   PART_ROWS,
   partBytes,
 } from "../testdata/sales-q3-parts.ts";
-import { FIXTURE, TINY, connect, indexed, openOne, sales } from "./harness.ts";
+import { FIXTURE, TINY, connect, indexed, openOne, sales, saidIn } from "./harness.ts";
 
 /** What the three parts are called as one source. */
 const NAME = "sales-q3";
@@ -412,7 +413,7 @@ describe("a part changed on disk after the save", () => {
     const { engine, done } = connect(TINY, providers());
     try {
       const src = await openOne(engine, { name: UNO, path: file });
-      expect(src.opened.link?.missing).toBe(CHANGED(shortened().length));
+      expect(saidIn(src.opened.link?.missing)).toBe(CHANGED(shortened().length));
       expect(src.opened.edits).toHaveLength(EDITS.length);
       // It is still several files, so it is not pointed at one.
       await expect(engine.relink(src, { name: PART_NAMES[1]!, path: paths[1]! })).rejects.toThrow(
@@ -436,7 +437,7 @@ describe("a part changed on disk after the save", () => {
 
     const { engine, done } = connect(TINY, providers());
     const said = new Promise<string>((resolve) => {
-      engine.onError = resolve;
+      engine.onError = (heard) => resolve(english(heard));
     });
     try {
       const src = await openOne(engine, { name: UNO, path: file });
@@ -464,7 +465,7 @@ describe("a part changed on disk after the save", () => {
     const gone = connect(TINY, providers());
     try {
       const src = await openOne(gone.engine, { name: UNO, path: file });
-      expect(src.opened.link?.missing).toContain(`${PART_NAMES[1]} (part 2 of ${PARTS}): `);
+      expect(saidIn(src.opened.link?.missing)).toContain(`${PART_NAMES[1]} (part 2 of ${PARTS}): `);
       const again = await gone.engine.save({ source: src.id, cells: [], at: file }, ROOMY);
       expect(held(again, file)).toEqual(held(uno, file));
       await writeFile(file, again);
@@ -502,7 +503,7 @@ describe("a part deleted after the save", () => {
     const { engine, done } = connect(TINY, providers());
     try {
       const gone = await openOne(engine, { name: UNO, path: file });
-      expect(gone.opened.link?.missing).toContain(SECOND);
+      expect(saidIn(gone.opened.link?.missing)).toContain(SECOND);
       expect(gone.opened.edits).toHaveLength(EDITS.length);
       await expect(gone.rows(0, 1)).rejects.toThrow("point it at one to read its rows");
 
@@ -545,7 +546,7 @@ describe("a part deleted after the save", () => {
 
     const { engine, done } = connect(TINY, providers());
     const said = new Promise<string>((resolve) => {
-      engine.onError = resolve;
+      engine.onError = (heard) => resolve(english(heard));
     });
     try {
       const gone = await openOne(engine, { name: UNO, path: file });
@@ -719,7 +720,7 @@ describe("parts in a bucket", () => {
     const { engine, done } = await desktop([EXPORTS]);
     try {
       const src = await openOne(engine, { name: UNO, path: file });
-      expect(src.opened.link?.missing).toBe(
+      expect(saidIn(src.opened.link?.missing)).toBe(
         `${PART_NAMES[1]} (part 2 of ${PARTS}): it is not the version this source was saved against`,
       );
       // The save keeps the versions the log was made against, not the ones there now.
@@ -761,7 +762,7 @@ describe("parts in a bucket", () => {
       const src = await openOne(engine, { name: UNO, path: file });
       expect(src.opened.link).toEqual({
         path: "",
-        missing: `${UNO} reads s3://${BUCKET}/…, which no connection covers · connect ${BUCKET} to read it`,
+        missing: { t: "bucket-unconnected", container: UNO, bucket: BUCKET },
         connect: { bucket: BUCKET, prefix: "2025/" },
       });
       expect(src.opened.edits).toHaveLength(EDITS.length);
@@ -794,7 +795,10 @@ describe("parts in a bucket", () => {
       const gone = await engine.relink(waiting, threeAt(ACROSS));
       expect(gone.opened.link).toEqual({
         path: "",
-        missing: `${PART_NAMES[2]} (part 3 of ${PARTS}): ${ACROSS[2]}: no such object in that bucket`,
+        missing: {
+          t: "text",
+          text: `${PART_NAMES[2]} (part 3 of ${PARTS}): ${ACROSS[2]}: no such object in that bucket`,
+        },
       });
       expect(gone.opened.edits).toHaveLength(EDITS.length);
 

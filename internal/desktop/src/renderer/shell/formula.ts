@@ -11,6 +11,7 @@
 
 import "./formula.css";
 
+import { m } from "../../paraglide/messages.js";
 import type { MenuPlace } from "./menu.ts";
 import { message } from "./util.ts";
 
@@ -29,7 +30,6 @@ export interface FormulaAsks {
 }
 
 /** What the form says under the expression until the engine has said something else. */
-export const FORMULA_HINT = "columns by name · + - * / ( )";
 
 /** A header an expression can name: letters, digits and underscores, not
  * starting with a digit, as the engine reads one. */
@@ -58,10 +58,10 @@ export class FormulaForm {
     private readonly asks: FormulaAsks,
   ) {
     this.box.className = "formula";
-    this.box.setAttribute("aria-label", "Insert formula");
+    this.box.setAttribute("aria-label", m.formula_title());
     this.box.noValidate = true;
 
-    const title = element("div", "title", `Insert formula · ${source}`);
+    const title = element("div", "title", m.formula_title_source({ source }));
 
     for (const [i, c] of columns.entries()) {
       const option = document.createElement("option");
@@ -70,26 +70,32 @@ export class FormulaForm {
       this.column.append(option);
     }
     this.column.value = String(Math.min(Math.max(selected, 0), columns.length - 1));
-    this.column.setAttribute("aria-label", "column");
+    this.column.setAttribute("aria-label", m.formula_column());
     // A column that is computed already opens on its expression, to change it.
     this.column.addEventListener("change", () => this.fill());
 
     this.expr.type = "text";
     this.expr.spellcheck = false;
     this.expr.autocomplete = "off";
-    this.expr.setAttribute("aria-label", "expression");
-    this.expr.addEventListener("input", () => this.say(FORMULA_HINT, false));
+    this.expr.setAttribute("aria-label", m.formula_expression_aria());
+    this.expr.addEventListener("input", () => this.say(m.formula_hint(), false));
 
-    const cancel = element("button", "", "Cancel");
+    const cancel = element("button", "", m.action_cancel());
     cancel.type = "button";
     cancel.addEventListener("click", () => this.close());
     this.submit.type = "submit";
     this.submit.className = "primary";
-    this.submit.textContent = "Insert";
+    this.submit.textContent = m.action_insert();
 
     const buttons = element("div", "buttons", "");
     buttons.append(cancel, this.submit);
-    this.box.append(title, field("column", this.column), field("=", this.expr), this.note, buttons);
+    this.box.append(
+      title,
+      field(m.formula_column(), this.column),
+      field("=", this.expr),
+      this.note,
+      buttons,
+    );
 
     this.box.addEventListener("keydown", (e) => {
       // The grid's keys and the shell's chords stay out of what is typed here.
@@ -140,14 +146,14 @@ export class FormulaForm {
     this.expr.placeholder = others.length >= 2 ? `${others.at(-1)} / ${others.at(-2)}` : "";
     this.expr.value = this.columns[col]?.binding ?? "";
     this.expr.select();
-    this.say(FORMULA_HINT, false);
+    this.say(m.formula_hint(), false);
   }
 
   /** insert asks for the formula, and closes once the engine has taken it. */
   private async insert(): Promise<void> {
     const expr = this.expr.value.trim();
     if (expr === "") {
-      this.say("an expression to compute the column from", true);
+      this.say(m.formula_needs_expression(), true);
       this.expr.focus();
       return;
     }

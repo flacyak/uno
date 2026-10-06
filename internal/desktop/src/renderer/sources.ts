@@ -17,6 +17,10 @@ import type { Connection as Saved } from "@uno/grid/library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@uno/grid/store";
 import { s3Location, s3Url } from "@uno/grid/store/s3";
 
+import { m } from "../paraglide/messages.js";
+import { num } from "./locale.ts";
+import { said } from "./said.ts";
+
 /**
  * Listings is the whole of what the panel needs an engine for.
  *
@@ -67,12 +71,18 @@ export interface Open {
 export type State = "fine" | "changed" | "missing" | "unconnected" | "newer";
 
 /** What a workspace line says beside a tab that is not fine. */
-export const STATE_WORDS: Record<Exclude<State, "fine">, string> = {
-  changed: "changed",
-  missing: "missing",
-  unconnected: "not connected",
-  newer: "newer in bucket",
-};
+export function stateWord(state: Exclude<State, "fine">): string {
+  switch (state) {
+    case "changed":
+      return m.state_changed();
+    case "missing":
+      return m.state_missing();
+    case "unconnected":
+      return m.state_unconnected();
+    case "newer":
+      return m.state_newer();
+  }
+}
 
 /**
  * stateOf is the one state a line says, the most pressing first. Newer comes
@@ -128,12 +138,12 @@ export interface Grown {
 
 /** newFiles is how many files a folder has gained, in words: "3 new files". */
 export function newFiles(n: number): string {
-  return `${n.toLocaleString()} new ${n === 1 ? "file" : "files"}`;
+  return m.files_new_count({ count: n });
 }
 
 /** fileCount is how many files a tab reads as one, in words: "3 files". */
 export function fileCount(n: number): string {
-  return `${n.toLocaleString()} ${n === 1 ? "file" : "files"}`;
+  return m.files_count({ count: n });
 }
 
 /**
@@ -477,14 +487,18 @@ export class Sources {
     // with this machine's credentials: it is connected, which is asking.
     const unconnected = tab.link?.connect;
     if (unconnected !== undefined) {
-      out.push({ label: `Connect ${unconnected.bucket}`, does: "connect", id });
+      out.push({
+        label: m.sources_connect_bucket({ bucket: unconnected.bucket }),
+        does: "connect",
+        id,
+      });
     } else if (tab.link !== undefined) {
-      out.push({ label: "Reload", does: "reload", id });
+      out.push({ label: m.action_reload(), does: "reload", id });
     }
     const grown = this.grown(tab);
     if (grown !== undefined) {
       out.push({
-        label: `${newFiles(grown.files.length)} in ${grown.folder} · append`,
+        label: m.sources_append_new({ count: grown.files.length, folder: grown.folder }),
         does: "append",
         id,
         files: grown.files,
@@ -492,8 +506,8 @@ export class Sources {
     }
     // Several files read as one are not pointed at another file: the parts
     // are the source, and the one change they take is more at the end.
-    if (tab.parts === undefined) out.push({ label: "Re-point", does: "repoint", id });
-    if (this.opened().length > 1) out.push({ label: "Remove", does: "remove", id });
+    if (tab.parts === undefined) out.push({ label: m.action_repoint(), does: "repoint", id });
+    if (this.opened().length > 1) out.push({ label: m.action_remove(), does: "remove", id });
     return out;
   }
 
@@ -753,9 +767,15 @@ export class Sources {
     if (refs.length === 0) return [];
     const pointing = this.repointing;
     if (pointing !== undefined) {
-      return [{ label: `Point ${pointing.name} here`, one: false, refs, to: pointing.id }];
+      return [
+        { label: m.sources_point_here({ name: pointing.name }), one: false, refs, to: pointing.id },
+      ];
     }
-    const each: Button = { label: `Add ${refs.length}`, one: false, refs };
+    const each: Button = {
+      label: m.sources_add_count({ count: num(refs.length) }),
+      one: false,
+      refs,
+    };
     if (refs.length === 1) return [each];
     const joined: PartsRef = {
       name: joinedName(refs),
@@ -763,7 +783,7 @@ export class Sources {
       header: this.how.header,
     };
     if (this.how.fileColumn) joined.fileColumn = true;
-    return [each, { label: "Add as one", one: true, refs: [joined] }];
+    return [each, { label: m.sources_add_as_one(), one: true, refs: [joined] }];
   }
 
   /**
@@ -924,7 +944,7 @@ export class Sources {
       // panel has nowhere better to say so than where its entries would be. An
       // empty folder and a bucket this machine has no credentials for look the
       // same otherwise.
-      this.refused = err instanceof Error ? err.message : String(err);
+      this.refused = said(err);
     }
     this.waiting = false;
     this.changed();
@@ -964,7 +984,7 @@ export class Sources {
       // is the retry a person would reach for anyway. The refusal is kept for
       // the view to say where it says why a folder has no lines, which it only
       // needs to when a filter has hidden all of them.
-      this.refused = err instanceof Error ? err.message : String(err);
+      this.refused = said(err);
     }
     this.paging = false;
     this.changed();

@@ -17,9 +17,11 @@ import {
   shell,
   utilityProcess,
 } from "electron";
-import type { UtilityProcess } from "electron";
+import type { MenuItemConstructorOptions, UtilityProcess } from "electron";
 import { join } from "node:path";
 
+import { m } from "../paraglide/messages.js";
+import { isLocale, setLocale } from "../paraglide/runtime.js";
 import { sourceAt, writeAtomic, writeConnection } from "./files.ts";
 
 /**
@@ -126,60 +128,90 @@ function createWindow(): BrowserWindow {
  * Each one asks the renderer to act rather than acting itself. The renderer is
  * the only thing that knows whether there is an open workspace, whether it has
  * unsaved edits, and which cell is selected.
+ *
+ * Every item is labelled from the messages, the ones with a role among them.
+ * A role's own label is Electron's and is English in every language, so a menu
+ * that left them to it would be in two languages at once.
  */
-function buildMenu(win: BrowserWindow): void {
+function menuFor(win: BrowserWindow, input: string): Menu {
   const send = (channel: string) => () => win.webContents.send(channel);
   const pick = (name: string) => () => win.webContents.send("menu:input", name);
+  // The item a platform ends its File menu with: the window on macOS, where
+  // the app outlives it, and the app everywhere else, by the name each uses.
+  const leave: MenuItemConstructorOptions =
+    process.platform === "darwin"
+      ? { role: "close", label: m.native_close_window() }
+      : { role: "quit", label: process.platform === "win32" ? m.native_exit() : m.native_quit() };
 
-  const menu = Menu.buildFromTemplate([
+  return Menu.buildFromTemplate([
     {
-      label: "File",
+      label: m.native_file(),
       submenu: [
-        { label: "Open…", accelerator: "CmdOrCtrl+O", click: send("menu:open") },
+        { label: m.native_open(), accelerator: "CmdOrCtrl+O", click: send("menu:open") },
         // Another export into the workspace that is open, beside the files already in it.
-        { label: "Add Source…", accelerator: "CmdOrCtrl+Shift+O", click: send("menu:add") },
+        {
+          label: m.native_add_source(),
+          accelerator: "CmdOrCtrl+Shift+O",
+          click: send("menu:add"),
+        },
         { type: "separator" },
-        { label: "Save", accelerator: "CmdOrCtrl+S", click: send("menu:save") },
-        { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: send("menu:save-as") },
+        { label: m.native_save(), accelerator: "CmdOrCtrl+S", click: send("menu:save") },
+        {
+          label: m.native_save_as(),
+          accelerator: "CmdOrCtrl+Shift+S",
+          click: send("menu:save-as"),
+        },
         { type: "separator" },
-        { role: process.platform === "darwin" ? "close" : "quit" },
+        leave,
       ],
     },
     {
-      label: "Edit",
+      label: m.native_edit(),
       submenu: [
-        { role: "undo" },
-        { role: "redo" },
+        { role: "undo", label: m.native_undo() },
+        { role: "redo", label: m.native_redo() },
         { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
+        { role: "cut", label: m.native_cut() },
+        { role: "copy", label: m.native_copy() },
+        { role: "paste", label: m.native_paste() },
         { type: "separator" },
         // How the grid reads keys. The renderer keeps the choice, and checks the
         // item it read at start through input:chosen.
         {
-          label: "Input",
+          label: m.native_input(),
           submenu: [
-            { id: "input:default", label: "Default", type: "radio", click: pick("default") },
-            { id: "input:vim-style", label: "Vim-style", type: "radio", click: pick("vim-style") },
+            {
+              id: "input:default",
+              label: m.input_default(),
+              type: "radio",
+              checked: input === "default",
+              click: pick("default"),
+            },
+            {
+              id: "input:vim-style",
+              label: m.input_vim_style(),
+              type: "radio",
+              checked: input === "vim-style",
+              click: pick("vim-style"),
+            },
           ],
         },
       ],
     },
     {
-      label: "View",
+      label: m.native_view(),
       submenu: [
         // The renderer binds the key itself, so the accelerator is shown here
         // and not registered. Registering it too would toggle twice.
         {
-          label: "View / Transform",
+          label: m.native_view_transform(),
           accelerator: "CmdOrCtrl+E",
           registerAccelerator: false,
           click: send("menu:mode"),
         },
         // The same, for the same reason: the page binds the key.
         {
-          label: "Sources",
+          label: m.sources_title(),
           accelerator: "CmdOrCtrl+Shift+B",
           registerAccelerator: false,
           click: send("menu:sources"),
@@ -187,24 +219,45 @@ function buildMenu(win: BrowserWindow): void {
         { type: "separator" },
         // No accelerator. The reload role binds Ctrl+R, which is redo whichever
         // way the grid reads keys, and a reload loses the open workspace.
-        { label: "Reload", click: () => win.webContents.reload() },
-        { role: "toggleDevTools" },
+        { label: m.native_reload(), click: () => win.webContents.reload() },
+        { role: "toggleDevTools", label: m.native_toggle_devtools() },
         { type: "separator" },
-        { role: "resetZoom" },
-        { role: "zoomIn" },
-        { role: "zoomOut" },
+        { role: "resetZoom", label: m.native_actual_size() },
+        { role: "zoomIn", label: m.native_zoom_in() },
+        { role: "zoomOut", label: m.native_zoom_out() },
         { type: "separator" },
-        { role: "togglefullscreen" },
+        { role: "togglefullscreen", label: m.native_toggle_full_screen() },
       ],
     },
   ]);
-  Menu.setApplicationMenu(menu);
-  win.setMenuBarVisibility(false);
+}
+
+/**
+ * buildMenu sets the menu, and sets it again whenever the renderer says the
+ * language or the way keys are read has changed. A menu's labels are fixed
+ * when it is built, so one in another language is another menu.
+ */
+function buildMenu(win: BrowserWindow): void {
+  /** How the grid reads keys, as the renderer last said, for the item to check. */
+  let input = "";
+  const set = (): void => {
+    Menu.setApplicationMenu(menuFor(win, input));
+    win.setMenuBarVisibility(false);
+  };
+  set();
 
   ipcMain.on("input:chosen", (event, name: string) => {
     if (event.sender !== win.webContents) return;
-    const item = menu.getMenuItemById(`input:${name}`);
-    if (item !== null) item.checked = true;
+    input = name;
+    set();
+  });
+
+  // The renderer keeps which language was chosen and tells this process, which
+  // has the menu and the dialogs to say in it and nowhere to keep a choice.
+  ipcMain.on("language:chosen", (event, locale: string) => {
+    if (event.sender !== win.webContents || !isLocale(locale)) return;
+    void setLocale(locale, { reload: false });
+    set();
   });
 
   // The × at the top right of the page. The renderer has already asked about
@@ -266,11 +319,11 @@ function registerFileHandlers(win: BrowserWindow): void {
 
   ipcMain.handle("file:open", async () => {
     const picked = await dialog.showOpenDialog(win, {
-      title: "Open",
+      title: m.dialog_open(),
       properties: ["openFile"],
       filters: [
-        { name: "Spreadsheets and workspaces", extensions: ["uno", "csv", "tsv"] },
-        { name: "All files", extensions: ["*"] },
+        { name: m.filter_spreadsheets_and_workspaces(), extensions: ["uno", "csv", "tsv"] },
+        { name: m.filter_all_files(), extensions: ["*"] },
       ],
     });
     // Cancelling is not a failure and must not be reported as one.
@@ -281,11 +334,11 @@ function registerFileHandlers(win: BrowserWindow): void {
   // Several at once, because a week's liquidity is built from several exports.
   ipcMain.handle("file:add", async () => {
     const picked = await dialog.showOpenDialog(win, {
-      title: "Add Source",
+      title: m.dialog_add_source(),
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: "Spreadsheets", extensions: ["csv", "tsv"] },
-        { name: "All files", extensions: ["*"] },
+        { name: m.filter_spreadsheets(), extensions: ["csv", "tsv"] },
+        { name: m.filter_all_files(), extensions: ["*"] },
       ],
     });
     if (picked.canceled) return [];
@@ -297,9 +350,9 @@ function registerFileHandlers(win: BrowserWindow): void {
   // folder and cannot be laid out until that folder is known.
   ipcMain.handle("file:pick-save", async (_event, suggestedName: string) => {
     const picked = await dialog.showSaveDialog(win, {
-      title: "Save As",
+      title: m.dialog_save_as(),
       defaultPath: suggestedName,
-      filters: [{ name: "uno workspace", extensions: ["uno"] }],
+      filters: [{ name: m.filter_workspace(), extensions: ["uno"] }],
     });
     if (picked.canceled || picked.filePath === undefined) return undefined;
     return picked.filePath;

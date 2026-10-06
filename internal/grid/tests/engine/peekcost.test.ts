@@ -23,6 +23,7 @@ import { HOME_REGION } from "../store/regions.ts";
 import { KEYS, at, bucket } from "../store/standin.ts";
 import type { Bucket } from "../store/standin.ts";
 import { bytes } from "../testdata/sales-q3.ts";
+import { saidIn } from "./harness.ts";
 
 /** The six columns every copy of the fixture has, however large the copy is. */
 const COLUMNS = ["date", "region", "rep", "channel", "units", "revenue"];
@@ -110,6 +111,6 @@ describe.skipIf(!existsSync(HUGE))("a peek at a 2.5 GB file on this disk", () =>
 
     expect(peeked.header).toEqual(COLUMNS);
     expect(peeked.rows).toHaveLength(20);
-    expect(peeked.label).toBe("UTF-8 · delimiter ','");
+    expect(saidIn(peeked.label)).toBe("UTF-8 · delimiter ','");
   });
 });

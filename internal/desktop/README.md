@@ -16,6 +16,8 @@ src/
   engine/     the utility process that owns one open workspace
   renderer/   the app: sidebar, virtualized grid, sources panel, status bar
   shared/     the Host interface both Electron and a web build implement
+  paraglide/  the app's text as typed functions, compiled from messages/
+messages/     the app's text, one JSON file a language
 ```
 
 The seam is `src/shared/host.ts`. Everything above it is a plain web page
@@ -95,9 +97,15 @@ Below them are four themes, Paper Ember, Tokyo Night, Sakura and Catppuccin
 Frappé, taken with their authors' credit from [T3 Themes](https://t3themes.com),
 and an appearance of System, Light or Dark, since each theme has both. A theme
 is worn the moment it is chosen, and the choice is kept on this machine for the
-next launch. Last is Keys, which picks how the grid reads them: Default or
+next launch. Then Keys, which picks how the grid reads them: Default or
 Vim-style. Paper Ember is worn until another is chosen. `src/renderer/theme.ts`
 has how each theme's colours map onto uno's.
+
+Last is Language: System, and then every language uno has messages for, each under the name it calls itself.
+System follows the first of the system's languages uno has, and is what a new install does.
+A language is spoken the moment it is chosen.
+The whole window is written again in it with everything open left open, and the choice is kept on this machine.
+`src/renderer/language.ts` has the choice, and `shell/page.ts` and each part's `relabel` write the words again.
 
 ## Sources in S3
 
@@ -332,6 +340,46 @@ The keys are read by an input strategy in `src/renderer/input/`, and what they
 mean is carried out through `src/renderer/keys.ts`. Neither touches the DOM, and
 both are tested without a window. The whole plan is `resource/vim-motions.html`.
 
+## The text
+
+Every sentence the app says is in `messages/en.json`, in [inlang's message format](https://inlang.com/m/reootnfj/plugin-inlang-messageFormat).
+[Paraglide](https://paraglidejs.com) compiles each one to a typed function in `src/paraglide`, which is generated and not committed.
+
+```ts
+import { m } from "../../paraglide/messages.js";
+
+this.say(m.saved_path({ path }));
+```
+
+A key that is not there, or a parameter left out, fails `vp run check`.
+The Vite plugin compiles the messages for the dev server, the renderer build and the tests.
+`scripts/messages.js` holds the compiler's options and compiles them for the Electron bundles and the check.
+The plugin that reads the JSON is loaded from `node_modules`, so a build fetches nothing.
+
+uno speaks American English, British English, Spanish, Brazilian Portuguese and European Portuguese.
+A language is one file: `messages/es.json` holds every message `messages/en-US.json` does, in Spanish.
+Adding another is copying the English file to the new locale's name, translating it, and adding the locale to `project.inlang/settings.json`.
+Settings lists it from there under the name it calls itself.
+
+A new install follows the system.
+The first of the system's languages uno has is the one it starts in: the language and region exactly, or failing that the same language in the first region listed, which is the one most of its speakers are in.
+So en-AU reads American English, pt reads Brazilian Portuguese, and es-MX reads Spanish.
+A system that prefers none of them gets American English.
+The two English files say the same today, and differ only where someone edits one.
+
+`messages/en-XA.json` is the pseudo-locale, written from the English by `scripts/pseudo.js` before every compile and not committed.
+Every letter in it wears an accent, every message is a third longer, and each sits in `⟦ ⟧`.
+On screen, text with no accents never went through a message, and text with a bracket missing was cut short by a layout that only fitted the English.
+
+`tests/smoke/pseudo.test.ts` starts the real shell over the real engine, changes the language to the pseudo-locale, and fails on any plain letters left in the window.
+What it finds is a sentence written into the code, or one written once and not written again when the language changed.
+
+What the engine says arrives as data, a `Said` from `@uno/grid/said`, and `src/renderer/said.ts` writes each kind through a message.
+`tests/said.test.ts` says a sample of every kind both ways, and the desktop's English has to be the engine's.
+A diagnostic the engine has given no kind yet arrives as text and is shown as it was written, in English.
+
+`tests/messages.test.ts` holds each language's file to the English one: the same messages, the same inputs, and a form for every plural the language has.
+
 ## Running it
 
 ```bash
@@ -340,7 +388,7 @@ vp run dev               # vite dev server + electron, reloading
 vp run build             # out/main, out/preload, out/renderer
 vp run smoke             # build, then drive the real app and assert
 vp test                  # the keys, without a window
-vp check                 # format, lint, type check
+vp run check             # compile the messages, then format, lint, type check
 ```
 
 `vp run dev` prints the Electron pid. Stop it by that pid; there is usually
@@ -386,6 +434,10 @@ emptied first, so the connection it saves never lands among yours and a file a
 previous run left behind is not taken as evidence. `vp run preview` does the
 same under `out/preview-data/`, since the GIF it films is published and the
 theme its story tries must not become the one your own uno opens in.
+
+The run is in English whatever the machine it runs on prefers, since its checks read what the window says.
+`scripts/launch.js` pins it, with a switch where a switch decides and `LANGUAGE` on Linux, where Chromium reads the environment first.
+One check chooses Español in settings and reads the window in Spanish, then goes back.
 
 It needs a display. On a headless machine, run it under Xvfb. Started from a
 tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
