@@ -114,6 +114,13 @@ test("a test that worked says what the folder held", () => {
   expect(triedLine({ ...tried, connection: connection({ prefix: "" }) })).toBe(
     "listed the bucket · 3 folders, 41 files",
   );
+  // A role connection names the role that was assumed to list.
+  expect(
+    triedLine({
+      ...tried,
+      connection: connection({ prefix: "exports/", auth: { mode: "role", roleArn: ROLE } }),
+    }),
+  ).toBe("assumed uno-read · listed exports/ · 3 folders, 41 files");
 });
 
 // ------------------------------------------------------------ the form
@@ -246,9 +253,10 @@ test("the sign-in list is the engine's profiles, between this machine and public
   );
 });
 
-// With a role mode on offer, the form asks for the role's ARN and shows the
-// trust the engine reports: its principal and the external ID.
-test("an engine that signs in with a role asks for its ARN and says what the role has to trust", async () => {
+// With a role mode on offer, the form asks for the role's ARN and shows what
+// to hand to whoever makes the role: uno's account and the external ID, with
+// what the role has to allow.
+test("an engine that signs in with a role asks for its ARN and shows what to hand to whoever makes it", async () => {
   asks.offered = { modes: ["role", "public"], profiles: [], trust: TRUST };
   panel.connect({ bucket: "acme-finance-lake" });
   await settle();
@@ -259,8 +267,17 @@ test("an engine that signs in with a role asks for its ARN and says what the rol
   expect(select().value).toBe("role");
   const row = field("roleArn").closest("label")!;
   expect(row.hidden).toBe(false);
-  expect(form().querySelector(".trust")!.textContent).toBe(
-    `Its trust policy lets ${TRUST.principal} assume it with external ID ${TRUST.externalId}.`,
+  const block = form().querySelector<HTMLElement>(".role")!;
+  expect(block.hidden).toBe(false);
+  // The block sits above the role's row, so a person copies before they paste.
+  expect(block.nextElementSibling).toBe(row);
+  const copyable = [...block.querySelectorAll(".copyable")].map((e) => e.textContent);
+  expect(copyable).toEqual(["111122223333", TRUST.externalId]);
+  expect(block.querySelector(".how")!.textContent).toMatch(
+    /^Give these to whoever manages the bucket\./,
+  );
+  expect(block.querySelector(".needs")!.textContent).toBe(
+    "It allows s3:ListBucket on the bucket, and s3:GetObject and s3:GetObjectVersion under the prefix.",
   );
   expect(form().querySelector(".fine")!.textContent).toBe(
     "Each connection is one file in connections/. uno stores the role's ARN and never a key; what lets uno read is the role's own trust policy.",
@@ -285,13 +302,13 @@ test("an engine that signs in with a role asks for its ARN and says what the rol
   press("Test");
   await settle();
   expect(asks.tried.map((c) => c.auth)).toEqual([{ mode: "role", roleArn: ROLE }]);
-  expect(result()).toBe("✓ listed the bucket · 3 folders, 41 files");
+  expect(result()).toBe("✓ assumed uno-read · listed the bucket · 3 folders, 41 files");
 
-  // Choosing public hides the role field and the trust line.
+  // Choosing public hides the role field and the block.
   select().value = "public";
   select().dispatchEvent(new Event("change", { bubbles: true }));
   expect(row.hidden).toBe(true);
-  expect(form().querySelector<HTMLElement>(".trust")!.hidden).toBe(true);
+  expect(block.hidden).toBe(true);
 });
 
 test("a test lists the folder and fills in the region nobody typed", async () => {
