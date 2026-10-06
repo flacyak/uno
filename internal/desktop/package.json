@@ -6,6 +6,11 @@
   "license": "MIT",
   "type": "module",
   "main": "out/main/index.cjs",
+  "exports": {
+    "./renderer/*": "./src/renderer/*",
+    "./shared/*": "./src/shared/*",
+    "./index.html": "./index.html"
+  },
   "scripts": {
     "dev": "node scripts/dev.js",
     "build": "node scripts/build.js",

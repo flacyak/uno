@@ -11,7 +11,7 @@
 // for it, or for its stylesheet.
 
 import { Engine, messagePort } from "@uno/grid/engine";
-import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
+import type { Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
 import { NO_ROW } from "@uno/grid/sheet";
 
 import { covers } from "@uno/grid/library";
@@ -273,7 +273,7 @@ export class Shell {
     if (w !== undefined) return Promise.resolve(w.engine);
     this.spare ??= this.host.connect().then(
       (port) => {
-        const engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
+        const engine = new Engine(messagePort<Reply, Request>(port));
         engine.onError = (msg) => this.say(msg, true);
         return engine;
       },
@@ -396,6 +396,14 @@ export class Shell {
     if (!this.drops(`recent:${path}`, "click")) return false;
     await this.load(refAt(path), path);
     return this.workspace?.path === path;
+  }
+
+  /**
+   * Whether closing now would lose something: what a page asks before a
+   * browser lets its tab go, where there is no × of uno's own to ask twice.
+   */
+  get unsaved(): boolean {
+    return this.workspace?.dirty === true;
   }
 
   /**
@@ -582,7 +590,7 @@ export class Shell {
       // Before the engine, so a grid that fails to load leaves no engine running.
       const grid = await this.loadGrid();
       const port = await this.host.connect();
-      engine = new Engine(messagePort<Reply, Request>(port as MessagePortLike));
+      engine = new Engine(messagePort<Reply, Request>(port));
       let opened: Workspace | undefined;
       engine.onError = (msg) => this.say(msg, true);
 
