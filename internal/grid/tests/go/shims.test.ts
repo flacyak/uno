@@ -57,6 +57,14 @@ describe("compareStrings", () => {
     expect(compareStrings("a", "ab")).toBe(-1);
     expect(["total", "base", "left"].sort(compareStrings)).toEqual(["base", "left", "total"]);
   });
+
+  test("a prefix sorts first, and a cut surrogate pair sorts as its unit", () => {
+    expect(compareStrings("ab", "a")).toBe(1);
+    expect(compareStrings("", "a")).toBe(-1);
+    expect(compareStrings("x\ud83d", "x\u{1F600}")).toBe(-1);
+    expect(compareStrings("\u{1F600}a", "\u{1F600}b")).toBe(-1);
+    expect(compareStrings("\u{1F600}", "\u{1F600}")).toBe(0);
+  });
 });
 
 describe("case mapping", () => {
@@ -119,6 +127,11 @@ describe("unicode classes", () => {
     expect(trimSpace("  a b  ")).toBe("a b");
     expect(trimSpace("y")).toBe("y");
     expect(trimSpace("\u00a0z\u00a0")).toBe("z"); // NBSP: Go trims it
+    expect(trimSpace("\u0085z\u0085")).toBe("z"); // NEL: Go trims it too
+    expect(trimSpace("\ufeffz\ufeff")).toBe("\ufeffz\ufeff"); // in JS \s, not in Go
+    expect(trimSpace("   ")).toBe("");
+    expect(trimSpace("")).toBe("");
+    expect(trimSpace(" \u{1F600} a \u{1F600} ")).toBe("\u{1F600} a \u{1F600}");
   });
 });
 
@@ -242,6 +255,15 @@ describe("parseFloat", () => {
     expect(goParseFloat("Infinity")).toBeUndefined();
     expect(goParseFloat(" 12 ")).toBeUndefined();
     expect(goParseFloat("1.2.3")).toBeUndefined();
+  });
+
+  // strconv.ParseFloat answers ±Inf with ErrRange for a decimal too large for
+  // a float64, and the core reads an error as "not a number". Too small is 0
+  // and no error.
+  test("refuses a decimal that overflows, as Go does", () => {
+    expect(goParseFloat("1e400")).toBeUndefined();
+    expect(goParseFloat("-1e400")).toBeUndefined();
+    expect(goParseFloat("1e-400")).toBe(0);
   });
 
   test("atoi is whole numbers only", () => {
