@@ -26,12 +26,15 @@ interface Probe {
   replies: Reply[];
   /** What `listen`'s callback threw, which in a worker would have ended the engine. */
   thrown: unknown[];
+  /** The ids of every message sent that a reply can be matched by. */
+  asked: Set<number>;
   send(msg: unknown): void;
 }
 
 function probe(): Probe {
   const replies: Reply[] = [];
   const thrown: unknown[] = [];
+  const asked = new Set<number>();
   let handler: ((msg: Request) => void) | undefined;
   const port: Port<Request, Reply> = {
     post: (msg) => replies.push(msg),
@@ -44,7 +47,10 @@ function probe(): Probe {
   return {
     replies,
     thrown,
+    asked,
     send(msg) {
+      const id = idOf(msg);
+      if (id !== undefined) asked.add(id);
       try {
         handler!(msg as Request);
       } catch (err) {
@@ -52,6 +58,29 @@ function probe(): Probe {
       }
     },
   };
+}
+
+/** The id a message carries, where it is a number a reply's can equal. */
+function idOf(msg: unknown): number | undefined {
+  if (typeof msg !== "object" || msg === null || !("id" in msg)) return undefined;
+  return typeof msg.id === "number" && !Number.isNaN(msg.id) ? msg.id : undefined;
+}
+
+/** The most turns `answered` waits before letting the assertions say what is missing. */
+const ANSWER_TURNS = 2000;
+
+/**
+ * answered waits until every message sent with an id has its reply, and a
+ * few turns more so a rejection nobody caught is reported. A reply to an open
+ * takes as long as the disk takes, and a count of turns that is enough on an
+ * idle machine is not enough beside a full suite.
+ */
+async function answered(p: Probe): Promise<void> {
+  for (let i = 0; i < ANSWER_TURNS; i++) {
+    if ([...p.asked].every((id) => withId(p.replies, id).length > 0)) break;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  await settle();
 }
 
 /** Rejections nobody caught while a test ran. */
@@ -96,7 +125,7 @@ test("an object with no kind, or a kind that does not exist, is refused by id", 
   p.send({ id: 1 });
   p.send({ t: "explode", id: 2 });
   p.send({ t: 3, id: 3 });
-  await settle();
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   for (const id of [1, 2, 3]) {
@@ -134,7 +163,7 @@ test("a request of a known kind with its fields wrong is refused, once, by id", 
     { t: "remove", id: 33, source: ["a"] },
   ];
   for (const msg of bad) p.send(msg);
-  await settle();
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   for (let id = 10; id <= 33; id++) {
@@ -154,7 +183,7 @@ test("an id that is not a number still gets a reply it can be matched by, and ne
   p.send({ t: "stat", id: 2 ** 53, path: FIXTURE });
   p.send({ t: "stat", id: Number.NaN, path: FIXTURE });
   p.send({ t: "stat", id: null, path: FIXTURE });
-  await settle();
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   expect(p.replies.length).toBe(6);
@@ -163,7 +192,7 @@ test("an id that is not a number still gets a reply it can be matched by, and ne
 test("rows asked with a count that is not a count are refused or answered empty", async () => {
   const p = probe();
   p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
-  await settle(20);
+  await answered(p);
   const opened = withId(p.replies, 1);
   expect(opened.map((r) => r.t)).toEqual(["opened"]);
   const source = opened[0]!.t === "opened" ? opened[0]!.added.showing : "";
@@ -223,7 +252,7 @@ test("rows asked with a count that is not a count are refused or answered empty"
     { t: "rows", id: 25, source, first: 0, count: 3 },
   ];
   for (const msg of bad) p.send(msg);
-  await settle(50);
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   for (let id = 2; id <= 25; id++) {
@@ -231,7 +260,7 @@ test("rows asked with a count that is not a count are refused or answered empty"
     expect(got.length, `request ${id}: ${JSON.stringify(got.map((r) => r.t))}`).toBe(1);
   }
   p.send({ t: "close" });
-  await settle(20);
+  await answered(p);
 });
 
 test("a peek at what is not a table is refused or answered, and reads a bounded front", async () => {
@@ -255,7 +284,7 @@ test("a peek at what is not a table is refused or answered, and reads a bounded 
     { t: "peek", id: 9, ref: { name: "parts", parts: null, header: "first" } },
   ];
   for (const msg of odd) p.send(msg);
-  await settle(50);
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   for (let id = 1; id <= 9; id++) {
@@ -280,7 +309,7 @@ test("replies land by id, so a fast answer overtaking a slow one settles the rig
 test("a rows or edit request with a number that is not whole is refused, not read as one", async () => {
   const p = probe();
   p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
-  await settle(20);
+  await answered(p);
   const opened = withId(p.replies, 1)[0]!;
   const source = opened.t === "opened" ? opened.added.showing : "";
   // "9" + 2000 is "92000", which read as the whole file.
@@ -291,7 +320,7 @@ test("a rows or edit request with a number that is not whole is refused, not rea
   p.send({ t: "edit", id: 5, source, edit: { op: "set", row: "3", col: 0, now: "x" } });
   p.send({ t: "edit", id: 6, source, edit: { op: "set", row: 3, col: "0", now: "x" } });
   p.send({ t: "edit", id: 7, source, edit: { op: "set", row: -2, col: 0, now: "x" } });
-  await settle(50);
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   for (const id of [2, 3, 4, 5, 6, 7]) {
@@ -303,24 +332,24 @@ test("a rows or edit request with a number that is not whole is refused, not rea
   // A whole row that is what it says still lands, once the workspace can write.
   p.send({ t: "mode", transform: true });
   p.send({ t: "edit", id: 8, source, edit: { op: "set", row: 3, col: 0, now: "x" } });
-  await settle(20);
+  await answered(p);
   expect(withId(p.replies, 8).map((r) => r.t)).toEqual(["changed"]);
   p.send({ t: "close" });
-  await settle(20);
+  await answered(p);
 });
 
 test("rows asked for more than a band are refused, so no reply holds a file whole", async () => {
   expect(BAND_ROWS).toBeLessThanOrEqual(ROWS_AT_MOST);
   const p = probe();
   p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
-  await settle(20);
+  await answered(p);
   const opened = withId(p.replies, 1)[0]!;
   const source = opened.t === "opened" ? opened.added.showing : "";
   p.send({ t: "rows", id: 2, source, first: 0, count: ROWS_AT_MOST });
   p.send({ t: "rows", id: 3, source, first: 0, count: ROWS_AT_MOST + 1 });
   p.send({ t: "rows", id: 4, source, first: 0, count: 1e12 });
   p.send({ t: "rows", id: 5, source, first: 0, count: "2" });
-  await settle(50);
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   const band = withId(p.replies, 2)[0]!;
@@ -332,7 +361,7 @@ test("rows asked for more than a band are refused, so no reply holds a file whol
     ).toEqual(["error"]);
   }
   p.send({ t: "close" });
-  await settle(20);
+  await answered(p);
 });
 
 test("requests after a close are refused by id, and a second close is quiet", async () => {
@@ -344,7 +373,7 @@ test("requests after a close are refused by id, and a second close is quiet", as
   p.send({ t: "stat", id: 3, path: FIXTURE });
   p.send({ t: "mode", transform: "yes" });
   p.send({ t: "mode" });
-  await settle(20);
+  await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   expect(withId(p.replies, 1).map((r) => r.t)).toEqual(["error"]);
