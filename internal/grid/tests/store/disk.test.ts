@@ -8,6 +8,7 @@
 // Nothing here symlinks a fixture into place. The data is copied, and the links
 // that are under test point at the copies.
 
+import { execFileSync } from "node:child_process";
 import { copyFile, lstat, mkdir, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -285,3 +286,52 @@ test("a dotfile is listed", async () => {
 
   expect(named(entries)).toEqual([".hidden.csv"]);
 });
+
+// Linux lets a name be any bytes, and node hands one that is not UTF-8 back
+// with the bad bytes replaced, which is a name no path reaches: stat says
+// ENOENT, and so would an open. A row that cannot be opened is worse than no
+// row, so the name is left out. macOS and Windows refuse to write such a name
+// in the first place, so there is nothing to check there.
+test.skipIf(process.platform !== "linux")(
+  "a name that is not UTF-8 is left out rather than listed as a path nothing opens",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "uno-disk-bytes-"));
+    const latin1 = Buffer.concat([Buffer.from(`${dir}/caf`), Buffer.from([0xe9]), Buffer.from(".csv")]);
+    await writeFile(latin1, "a,b\n1,2\n");
+    await writeFile(join(dir, "cafe.csv"), "a,b\n1,2\n");
+
+    const { entries } = await diskLister().list(dir);
+
+    expect(named(entries)).toEqual(["cafe.csv"]);
+  },
+);
+
+// A folder opened as a file has a size that means nothing and a read that
+// fails without saying where. Refusing at the open names the path, which is
+// what the connections loader has to show when a folder is in its directory.
+test("a folder opened as a file is refused by name", async () => {
+  const dir = await folder();
+
+  await expect(
+    readAll([localFiles()], { name: "reports", path: join(dir, "reports") }),
+  ).rejects.toThrow("reports");
+  await expect(
+    readAll([localFiles()], { name: "linked-folder", path: join(dir, "linked-folder") }),
+  ).rejects.toThrow("linked-folder");
+});
+
+// Opening a fifo to read waits for a writer that may never come, which would
+// hold a thread of the pool for good. It is refused at the open, which has to
+// come back before anything can be said about it.
+test.skipIf(process.platform === "win32")(
+  "a fifo opened as a file is refused rather than waited on",
+  async () => {
+    const dir = await folder();
+    execFileSync("mkfifo", [join(dir, "feed")]);
+
+    await expect(readAll([localFiles()], { name: "feed", path: join(dir, "feed") })).rejects.toThrow(
+      "feed",
+    );
+  },
+  2_000,
+);

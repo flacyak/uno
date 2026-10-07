@@ -78,7 +78,7 @@ interface Row {
  * would say the folder is there and has nothing in it.
  */
 async function listDir(dir: string, page: number, cursor: string | undefined): Promise<Listing> {
-  const found = await readdir(dir, { withFileTypes: true });
+  const found = namesOf(await readdir(dir, { withFileTypes: true, encoding: "buffer" }));
   const rows = (await rowsOf(dir, found)).toSorted(byPageKey).filter(from(cursor));
 
   const entries = await Promise.all(rows.slice(0, page).map(entryOf(dir)));
@@ -87,6 +87,36 @@ async function listDir(dir: string, page: number, cursor: string | undefined): P
   // point at, so it is the last page rather than the first.
   const after = rows[page];
   return after === undefined ? { entries } : { entries, next: pageKey(after) };
+}
+
+/** Found is one directory entry with its name as a string a path can be made of. */
+interface Found {
+  readonly name: string;
+  readonly entry: Dirent<Buffer>;
+}
+
+/** A decoder that refuses rather than replaces, so a bad byte is an answer. */
+const utf8 = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * namesOf turns the bytes a directory holds its names as into strings, leaving
+ * out any name that is not one.
+ *
+ * Linux lets a name be any bytes, and asked for strings, node hands back a name
+ * whose bad bytes have been replaced -- a string no path reaches, so the stat
+ * fails and so would the open. The name is asked for as bytes and read as
+ * UTF-8 here instead, so a row is only ever a name an Entry's `path` can carry.
+ * A file that is not listed is better than one that cannot be opened, and
+ * macOS and Windows never write such a name in the first place.
+ */
+function namesOf(found: readonly Dirent<Buffer>[]): Found[] {
+  return found.flatMap((entry) => {
+    try {
+      return [{ name: utf8.decode(entry.name), entry }];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /**
@@ -99,12 +129,12 @@ async function listDir(dir: string, page: number, cursor: string | undefined): P
  * rather than one after another, so a folder of two hundred of them is one round
  * of waiting and not two hundred.
  */
-async function rowsOf(dir: string, found: readonly Dirent[]): Promise<Row[]> {
-  const links = found.filter((e) => e.isSymbolicLink());
-  const followed = await Promise.all(links.map((e) => statOrNothing(join(dir, e.name))));
-  const pointsAt = new Map(links.map((e, i) => [e.name, followed[i]]));
+async function rowsOf(dir: string, found: readonly Found[]): Promise<Row[]> {
+  const links = found.filter((f) => f.entry.isSymbolicLink());
+  const followed = await Promise.all(links.map((f) => statOrNothing(join(dir, f.name))));
+  const pointsAt = new Map(links.map((f, i) => [f.name, followed[i]]));
 
-  return found.flatMap((e) => rowOf(e, pointsAt.get(e.name)));
+  return found.flatMap((f) => rowOf(f, pointsAt.get(f.name)));
 }
 
 /**
@@ -122,14 +152,14 @@ async function rowsOf(dir: string, found: readonly Dirent[]): Promise<Row[]> {
  * shows it, and a panel that draws a dash for a size it was not given already
  * has somewhere to put it.
  */
-function rowOf(e: Dirent, linked: Stats | undefined): Row[] {
-  if (e.isSymbolicLink()) {
-    if (linked === undefined) return [{ name: e.name, folder: false, stats: undefined }];
+function rowOf({ name, entry }: Found, linked: Stats | undefined): Row[] {
+  if (entry.isSymbolicLink()) {
+    if (linked === undefined) return [{ name, folder: false, stats: undefined }];
     if (!linked.isDirectory() && !linked.isFile()) return [];
-    return [{ name: e.name, folder: linked.isDirectory(), stats: linked }];
+    return [{ name, folder: linked.isDirectory(), stats: linked }];
   }
-  if (e.isDirectory()) return [{ name: e.name, folder: true, stats: undefined }];
-  if (e.isFile()) return [{ name: e.name, folder: false, stats: undefined }];
+  if (entry.isDirectory()) return [{ name, folder: true, stats: undefined }];
+  if (entry.isFile()) return [{ name, folder: false, stats: undefined }];
   return [];
 }
 

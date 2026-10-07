@@ -57,12 +57,23 @@ export function diskProvider(): Provider {
  *
  * Reads with an explicit position share the descriptor safely, so an index
  * scan and a page read can be in flight together.
+ *
+ * Only a regular file is a source. A folder opens, has a size that means
+ * nothing and fails on the first read without saying where; a fifo does not
+ * even open until something writes to it, which holds a thread of the pool
+ * for as long as that takes. The open is non-blocking so that a fifo comes
+ * back at once, which costs a regular file nothing, and the stat that follows
+ * refuses anything that is not a file by its path.
  */
 export async function nodeSource(path: string): Promise<ByteSource> {
-  const fh = await open(path, "r");
+  const fh = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   let size: number;
   try {
-    size = (await fh.stat()).size;
+    const st = await fh.stat();
+    if (!st.isFile()) {
+      throw new Error(`${path} is ${st.isDirectory() ? "a folder" : "not a regular file"}`);
+    }
+    size = st.size;
   } catch (err) {
     await fh.close();
     throw err;

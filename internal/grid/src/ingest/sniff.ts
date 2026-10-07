@@ -131,13 +131,23 @@ const UTF16_MARK_HIGH = 0xfe;
 const UTF16_UNIT_BYTES = 2;
 
 /**
+ * How many code units apart the NULs can be and still be UTF-16. Plain text
+ * has one in every unit; another script has one at every separator and
+ * digit, a few units apart. A NUL that strayed into a UTF-8 export, as a
+ * database writes one for a binary field, is one in thousands.
+ */
+const UTF16_UNITS_PER_NUL = 16;
+
+/**
  * sniffEncoding guesses the encoding from the head of a file.
  *
- * A UTF-16 byte order mark settles it. Without one, a NUL settles it too: no
- * UTF-8 table has one, and UTF-16 has one in every character of plain ASCII,
- * second in each pair when it is little-endian and first when it is big.
- * What is left is UTF-8 if it decodes as UTF-8. A UTF-8 byte order mark makes
- * no difference: with it or without, the encoding is UTF-8.
+ * A UTF-16 byte order mark settles it. Without one, the NULs do: a UTF-8
+ * table has none to speak of, and UTF-16 has one in every character of plain
+ * ASCII, second in each pair when it is little-endian and first when it is
+ * big. One NUL is a stray and not an encoding, so the NULs have to come as
+ * often as UTF-16 writes them. What is left is UTF-8 if it decodes as UTF-8.
+ * A UTF-8 byte order mark makes no difference: with it or without, the
+ * encoding is UTF-8.
  *
  * It answers for the head alone. A file that is plain ASCII as far as the
  * head goes reads as UTF-8, which it is so far.
@@ -153,7 +163,10 @@ export function sniffEncoding(head: Uint8Array): Encoding {
     if (i % UTF16_UNIT_BYTES === 0) first++;
     else second++;
   }
-  if (first + second > 0) return second >= first ? "utf-16le" : "utf-16be";
+  const units = Math.ceil(head.length / UTF16_UNIT_BYTES);
+  if (Math.max(first, second) * UTF16_UNITS_PER_NUL >= units) {
+    return second >= first ? "utf-16le" : "utf-16be";
+  }
 
   try {
     // Streaming, so a character the head cuts in half is not held against it.
