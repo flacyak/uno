@@ -587,7 +587,10 @@ function headerDisagreement(
 
   if (first.length === part.length) {
     if (differing.length === 0) return undefined;
-    const reordered = first.toSorted().every((name, at) => name === part.toSorted()[at]);
+    // Each header sorted once: sorting the part's again per column is a wait
+    // of seconds for a header thousands of columns wide.
+    const sorted = part.toSorted();
+    const reordered = first.toSorted().every((name, at) => name === sorted[at]);
     return { kind: reordered ? "reordered" : "renamed", columns: differing };
   }
 
