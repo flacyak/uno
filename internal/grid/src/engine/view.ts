@@ -682,7 +682,6 @@ export class View {
     const matches = await this.matcher(req);
     if (matches === undefined) return { row: null, searched: 0, complete: true };
 
-    const schema = this.schema;
     const index = this.index;
     const down = req.dir === 1;
     let row = down ? Math.max(0, req.from + 1) : Math.min(index.readable(), req.from) - 1;
@@ -696,14 +695,13 @@ export class View {
       const files = await this.files(from, records.length);
       if (abort.signal.aborted) return { row: null, searched, complete: false };
 
-      // The block is finished whole, so a bound column is computed once over it
-      // rather than once for every row the search steps through.
-      const finished = finishRows(schema, from, records, files);
+      // Only the column searched is finished: a find reads one cell of each
+      // row, and the formulas bound to the other columns are none of its
+      // concern.
+      const shown = this.shownIn(req.col, from, records, files);
       for (; down ? row < end : row >= from; row += req.dir) {
         searched++;
-        if (matches(finished[row - from]!.shown[req.col] ?? "")) {
-          return { row, searched, complete: true };
-        }
+        if (matches(shown(row))) return { row, searched, complete: true };
       }
       if (Date.now() - slice >= SLICE_MS) {
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -711,6 +709,34 @@ export class View {
       }
     }
     return { row: null, searched, complete: !down || index.complete };
+  }
+
+  /**
+   * shownIn is what one column of a block shows, row by row, as `finishRows`
+   * would leave it, without finishing the rest of the block.
+   *
+   * A column nothing computes is finished a cell at a time: what the cell
+   * stores, or a note's rendering of it, and for the supplied column the name
+   * of the row's file. A bound column reads the others, so a block of it is
+   * finished whole, once, rather than once for every row the search steps
+   * through.
+   */
+  private shownIn(
+    col: number,
+    from: number,
+    records: readonly (readonly string[])[],
+    files: readonly string[] | undefined,
+  ): (row: number) => string {
+    const schema = this.schema;
+    if (schema.formula(col) !== undefined) {
+      const finished = finishRows(schema, from, records, files);
+      return (row) => finished[row - from]!.shown[col] ?? "";
+    }
+    if (schema.supplied?.col === col) {
+      return (row) => schema.writtenIn(row)?.get(col)?.rendered ?? files?.[row - from] ?? "";
+    }
+    return (row) =>
+      schema.writtenIn(row)?.get(col)?.rendered ?? valueAt(schema, row, col, records[row - from]!);
   }
 
   /**
