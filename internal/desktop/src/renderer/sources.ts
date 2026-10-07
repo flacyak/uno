@@ -408,6 +408,17 @@ export class Sources {
    * the only one a person meant by picking them.
    */
   private readonly picks = new Set<string>();
+  /** Counts changes to the picks, so the selection kept below knows them by number. */
+  private picked = 0;
+  /**
+   * The selected files as last read, and the page and the picks they were
+   * read from. Every draw reads them, through the buttons and the choices,
+   * and a page can be 200,000 entries, so they are read once per page and
+   * per pick rather than once per draw.
+   */
+  private selection:
+    | { from: readonly Entry[]; picked: number; entries: readonly Entry[] }
+    | undefined;
   private shown: Peeked | undefined;
   private looking = false;
   /** Which peek is wanted, counted the way a listing's ask is. */
@@ -644,7 +655,7 @@ export class Sources {
     this.found = entries;
     this.cursor = cursor;
     for (const pick of this.picks) {
-      if (!entries.some((entry) => entry.path === pick)) this.picks.delete(pick);
+      if (!entries.some((entry) => entry.path === pick)) this.unpick(pick);
     }
     if (this.at.section === "browser") {
       this.at = { section: "browser", line: bound(this.at.line, this.entries.length) };
@@ -799,7 +810,13 @@ export class Sources {
    */
   get selected(): readonly Entry[] {
     if (this.picks.size === 0) return [];
-    return this.found.filter((e) => this.picks.has(e.path));
+    const kept = this.selection;
+    if (kept !== undefined && kept.from === this.found && kept.picked === this.picked) {
+      return kept.entries;
+    }
+    const entries = this.found.filter((e) => this.picks.has(e.path));
+    this.selection = { from: this.found, picked: this.picked, entries };
+    return entries;
   }
 
   /** Whether an entry is selected, for the line that draws it. */
@@ -1068,6 +1085,7 @@ export class Sources {
     if (this.repointing !== undefined) this.picks.clear();
     if (had) this.picks.delete(entry.path);
     else this.picks.add(entry.path);
+    this.picked++;
     await this.look();
   }
 
@@ -1080,9 +1098,14 @@ export class Sources {
   added(refs: readonly SourceRef[]): void {
     for (const ref of refs) {
       const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
-      for (const file of files) if ("path" in file) this.picks.delete(file.path);
+      for (const file of files) if ("path" in file) this.unpick(file.path);
     }
     void this.look();
+  }
+
+  /** unpick takes one file out of the selection, if it was in it. */
+  private unpick(path: string): void {
+    if (this.picks.delete(path)) this.picked++;
   }
 
   /**
@@ -1093,6 +1116,7 @@ export class Sources {
    */
   private forget(): void {
     this.picks.clear();
+    this.picked++;
     this.shown = undefined;
     this.looking = false;
     this.looked++;
