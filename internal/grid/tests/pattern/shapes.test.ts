@@ -21,6 +21,47 @@ test("proposes an extraction", () => {
   expect(p!.affects).toBe(2);
 });
 
+// The anchor a slice is described by is a pattern between slashes, and a slash
+// is the one character that has to be escaped to sit there. Rows of different
+// lengths leave the anchored form as the only description they share, so a
+// column cut at a slash has no proposal at all if that form cannot be read back.
+test("proposes an extraction after a slash", () => {
+  const s = oneCol("rep", "Ada/West", "Ben/East", "Celine/North", "Dee/South");
+  s.set(0, 0, "West");
+  s.set(1, 0, "East");
+  s.set(2, 0, "North");
+
+  const p = propose(s);
+  expect(p, "no proposal from three extractions after a slash").toBeDefined();
+  expect(applyProgram(p!.prog, "Dee/South")).toBe("South");
+  expect(p!.affects).toBe(1);
+});
+
+// A class generalises over decoration: the separators and the marks. Drawn from
+// the letters or digits the examples happened to lose, it would say that those
+// are the whole alphabet, and the row holding a different one is left half done.
+test("digits lost are not a class", () => {
+  const s = oneCol("term", "ab^2", "cd^3", "ef^4", "gh^5");
+  s.set(0, 0, "ab");
+  s.set(1, 0, "cd");
+  s.set(2, 0, "ef");
+
+  const p = propose(s);
+  expect(p, "no proposal from three exponents removed").toBeDefined();
+  expect(applyProgram(p!.prog, "gh^5")).toBe("gh");
+});
+
+test("letters lost are not a class", () => {
+  const s = oneCol("qty", "45 kg", "17 lb", "120 kg", "9 oz");
+  s.set(0, 0, "45");
+  s.set(1, 0, "17");
+  s.set(2, 0, "120");
+
+  const p = propose(s);
+  expect(p, "no proposal from three units removed").toBeDefined();
+  expect(applyProgram(p!.prog, "9 oz")).toBe("9");
+});
+
 // The same characters in a different order is the case a pipeline of rewrites
 // cannot reach at all.
 test("proposes a reordering", () => {

@@ -16,6 +16,7 @@ import type { Edit, Sheet, Written } from "../sheet/index.ts";
 import { Op, settled } from "../sheet/index.ts";
 import type { Example } from "./induce.ts";
 import {
+  decoration,
   droppedChars,
   induce,
   parseAll,
@@ -327,7 +328,9 @@ function compose(ex: Example[]): Program[] {
   if (chars.length === 0 || chars.length > MAX_FIRST_STEPS) return [];
 
   const firsts: string[] = chars.map((r) => replaceSrc(quoteMeta(r), ""));
-  if (chars.length > 1) firsts.push(replaceSrc("[" + quoteClass(chars) + "]", ""));
+  if (chars.length > 1 && decoration(chars)) {
+    firsts.push(replaceSrc("[" + quoteClass(chars) + "]", ""));
+  }
 
   const out: Program[] = [];
   for (const first of parseAll(firsts)) {
