@@ -48,6 +48,9 @@ const ROOMY = 1 << 20;
 
 const LF = 0x0a;
 const CRLF_BYTES = 2;
+const BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
+
+const encoder = new TextEncoder();
 
 /** The first row of each part after the first: the row just past a boundary. */
 const BOUNDARIES = Array.from({ length: PARTS - 1 }, (_, i) => (i + 1) * PART_ROWS);
@@ -211,6 +214,20 @@ describe.each(TUNINGS)("the _file column, over %s", (_, tuning) => {
       ...Array.from({ length: PART_ROWS }, () => names[0]),
       names[1],
       names[1],
+      ...Array.from({ length: PART_ROWS }, () => names[3]),
+    ]);
+  });
+
+  test("passes over a part of blank lines, and one that is a byte order mark alone", async () => {
+    const names = [PART_NAMES[0]!, "blank.csv", "marked.csv", PART_NAMES[2]!];
+    const files = [partBytes[0]!, encoder.encode("\n\n"), BOM, partBytes[2]!];
+    const src = await openOne(engine(tuning), asOne(await onDisk(files, names), names));
+    await indexed(src);
+
+    const rows = await every(src);
+    expect(rows).toHaveLength(PART_ROWS + PART_ROWS);
+    expect(rows.map((row) => row[FILE])).toEqual([
+      ...Array.from({ length: PART_ROWS }, () => names[0]),
       ...Array.from({ length: PART_ROWS }, () => names[3]),
     ]);
   });
