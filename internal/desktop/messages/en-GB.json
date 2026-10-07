@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "saved_path": "saved {path}",
+  "save_over_source": "{name} is a source of this workspace, and a save over it would lose it",
   "rows_count": [
     {
       "declarations": ["input count", "local plural = count: plural", "local n = count: number"],

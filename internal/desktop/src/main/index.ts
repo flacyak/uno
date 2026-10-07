@@ -22,7 +22,7 @@ import { join } from "node:path";
 
 import { m } from "../paraglide/messages.js";
 import { isLocale, setLocale } from "../paraglide/runtime.js";
-import { sourceAt, writeAtomic, writeConnection } from "./files.ts";
+import { sourceAt, unoPath, writeAtomic, writeConnection } from "./files.ts";
 
 /**
  * This file is bundled to CommonJS, because a preload script has to be and the
@@ -386,7 +386,7 @@ function registerFileHandlers(): void {
       filters: [{ name: m.filter_workspace(), extensions: ["uno"] }],
     });
     if (picked.canceled || picked.filePath === undefined) return undefined;
-    return picked.filePath;
+    return unoPath(picked.filePath);
   });
 
   ipcMain.handle("file:save", async (_event, path: string, bytes: Uint8Array) => {
