@@ -234,6 +234,17 @@ export interface Loaded {
   failed: Said[];
 }
 
+/**
+ * The most rows one `rows` request is answered with.
+ *
+ * A client reads a band of rows around its viewport and never more, so a
+ * request for more than this is from something other than the client. It is
+ * refused at the port rather than answered, because answering it would build
+ * the whole readable part of a file into one reply, and for a large file that
+ * is more than the engine has.
+ */
+export const ROWS_AT_MOST = 2000;
+
 export type Request =
   /**
    * Add a file to the workspace: read its header, begin indexing it. A .uno

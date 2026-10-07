@@ -7,13 +7,13 @@
 // holds a band of rows around the viewport and nothing more, so what it costs
 // depends on the screen and not on the files.
 
-export { Band, Engine, SourceHandle } from "./client.ts";
+export { BAND_ROWS, Band, Engine, SourceHandle } from "./client.ts";
 export type { Added, Pending, RowsReply } from "./client.ts";
 export { indexPass } from "./pass.ts";
 export type { PassContext } from "./pass.ts";
 export { Refusal, english, saidOf } from "../said/index.ts";
 export type { CharName, Said, Sought, StepSaid } from "../said/index.ts";
-export { formatBytes, messageOf, messagePort } from "./protocol.ts";
+export { ROWS_AT_MOST, formatBytes, messageOf, messagePort } from "./protocol.ts";
 export type {
   Changed,
   ColumnInfo,
