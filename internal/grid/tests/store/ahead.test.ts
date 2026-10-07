@@ -156,6 +156,19 @@ test("a second reader in order gets its chunks once the first is forgotten, and 
   expect(r.asked.filter((a) => a === 2 * CHUNK)).toHaveLength(2);
 });
 
+test("a reader that has gone is not asked ahead for again at every read from elsewhere", async () => {
+  const r = counting();
+  const size = 20 * CHUNK;
+  const read = readAhead(r.read, size);
+  for (let at = 0; at < 5 * CHUNK; at += CHUNK) await read(at, CHUNK);
+  const scanned = r.asked.length;
+  // Reads from all over, as the grid drawing blocks makes: once the scan is
+  // forgotten, each costs itself and nothing for the scan.
+  const elsewhere = [1500, 900, 1700, 1100, 1900, 1300, 800, 1600];
+  for (const at of elsewhere) await read(at, CHUNK);
+  expect(r.asked.length - scanned).toBe(elsewhere.length);
+});
+
 // The task's bound: what read-ahead can hold, at the size indexing reads.
 test("what read-ahead holds stays under 40 MB at the chunk size indexing reads", () => {
   expect(AHEAD * TUNING.chunkBytes).toBeLessThan(40 << 20);
