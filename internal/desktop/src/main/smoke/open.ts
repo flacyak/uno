@@ -125,7 +125,7 @@ export const OPEN: Check[] = [
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
         rows = [...document.querySelectorAll("tbody tr")];
         const last = rows[rows.length - 1];
-        if (last.children[0].textContent === String(ROWS) && !last.classList.contains("pending")) {
+        if (last.children[0].textContent === ${JSON.stringify(counted(ROWS))} && !last.classList.contains("pending")) {
           const date = last.children[1].textContent;
           if (rows.length >= DOM_ROWS) return rows.length + " rows in the DOM";
           if (date === "") return "row 4,812 arrived empty";
