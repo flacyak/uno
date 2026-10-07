@@ -69,6 +69,19 @@ function drawn(scroller: HTMLElement): number {
   return scroller.querySelectorAll("tbody tr").length;
 }
 
+// ---------------------------------------------------------------- gutter
+
+test("the gutter numbers rows grouped the way the status bar counts them", async () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(4812), false);
+  view.scrollRow(4811, "bottom");
+  await frame();
+  const last = [...scroller.querySelectorAll("tbody tr")].at(-1)!;
+  expect(last.children[0]!.textContent).toBe("4,812");
+  // The gutter is as wide as that number, grouping included.
+  expect(view.scroller.querySelector("table")!.style.getPropertyValue("--gutter-digits")).toBe("5");
+});
+
 // -------------------------------------------------------------- scrolling
 
 test("zt puts the row at the top of the visible range, with nothing lost to rounding", () => {

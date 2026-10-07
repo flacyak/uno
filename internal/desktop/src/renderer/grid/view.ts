@@ -14,6 +14,7 @@
 import type { Kind } from "@uno/grid/sheet";
 
 import { m } from "../../paraglide/messages.js";
+import { num } from "../locale.ts";
 import {
   clampTop,
   firstRow,
@@ -202,7 +203,8 @@ export class View {
     this.seen = scrollTop;
     if (this.scaled) this.syncScroll(m.vMax, m.rMax);
 
-    const digits = String(total).length;
+    // As wide as the last row's number, grouped as the status bar groups it.
+    const digits = num(total).length;
     if (digits !== this.digits) {
       this.digits = digits;
       this.table.style.setProperty("--gutter-digits", String(digits));
@@ -288,7 +290,9 @@ export class View {
 
     const cells = tr.children;
     const gutter = cells[0] as HTMLTableCellElement;
-    const label = String(row + 1);
+    // Grouped the way every other count in the window is: the status bar
+    // says 4,812 rows, and the gutter beside them does not say 4812.
+    const label = num(row + 1);
     if (gutter.textContent !== label) gutter.textContent = label;
 
     for (let col = 0; col < source.cols(); col++) {
