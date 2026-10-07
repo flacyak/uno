@@ -60,11 +60,14 @@ export function walk(
   const step = stepOf(e);
   if (step === 0) return false;
   e.preventDefault();
-  const at = controls.indexOf(document.activeElement as HTMLElement);
+  // A control that is disabled takes no focus, and a step that stopped on it
+  // would stop there for good: it is stepped over.
+  const live = controls.filter((c) => !c.hasAttribute("disabled"));
+  const at = live.indexOf(document.activeElement as HTMLElement);
   // From outside the controls, a step forward lands on the first and one
   // back on the last, as it would from the end either step walks past.
-  const from = at >= 0 ? at : step > 0 ? -1 : controls.length;
-  controls[(from + step + controls.length) % controls.length]?.focus();
+  const from = at >= 0 ? at : step > 0 ? -1 : live.length;
+  live[(from + step + live.length) % live.length]?.focus();
   return true;
 }
 
