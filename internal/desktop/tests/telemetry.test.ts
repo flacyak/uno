@@ -98,6 +98,34 @@ test("requests to S3 are counted on their way through, with nothing of where the
   }
 });
 
+test("sends go one at a time, so a close during a send on the timer follows it", async () => {
+  const { sent, go } = network();
+  let answer: (() => void) | undefined;
+  const slow: typeof fetch = async (input, init) => {
+    await new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    return go(input, init);
+  };
+  const telemetry = exporting(ENV, VERSION, slow)!;
+  try {
+    telemetry.record({ name: "uno.engine.request", kind: "duration", unit: "ms", value: 1 });
+    const first = telemetry.flush();
+    const second = telemetry.flush();
+    await Promise.resolve();
+    expect(sent.length, "the second send waits for the first").toBe(0);
+    expect(answer).toBeDefined();
+    answer!();
+    await first;
+    expect(sent.length).toBe(1);
+    answer!();
+    await second;
+    expect(sent.length).toBe(2);
+  } finally {
+    telemetry.stop();
+  }
+});
+
 test("a collector that cannot be reached costs the engine nothing", async () => {
   const telemetry = exporting(ENV, VERSION, () => Promise.reject(new Error("no route")))!;
   try {

@@ -71,7 +71,7 @@ export function exporting(
   const headers = { ...to.headers, "content-type": "application/json" };
   const meter = new Meter({ service: "uno-engine", attributes: { "service.version": version } });
 
-  async function flush(): Promise<void> {
+  async function send(): Promise<void> {
     if (meter.empty) return;
     try {
       await go(url, {
@@ -84,6 +84,15 @@ export function exporting(
       // A collector that is down costs the measurements and nothing else. The
       // totals are running ones, so the next send carries what this one held.
     }
+  }
+
+  // One send at a time, in the order asked. Two in flight could arrive out of
+  // order, and a collector drops a total older than the one it has. A close
+  // during a send on the timer waits for it, then sends what came after.
+  let sending: Promise<void> = Promise.resolve();
+  function flush(): Promise<void> {
+    sending = sending.then(send);
+    return sending;
   }
 
   const timer = setInterval(() => void flush(), EXPORT_MS);
@@ -100,6 +109,8 @@ export function exporting(
       try {
         const res = await go(input, init);
         outcome = statusClass(res.status);
+        // S3 says how long every answer is. One that does not counts as no
+        // bytes, so what was received is under-counted rather than guessed.
         const length = Number(res.headers.get("content-length") ?? "0");
         meter.record({ name: S3_RECEIVED, kind: "count", unit: "By", value: length });
         return res;

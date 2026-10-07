@@ -278,6 +278,24 @@ export const METRICS_PATH = "/v1/metrics";
 export const ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_ENDPOINT";
 /** The variable every OpenTelemetry tool reads for what to sign in with. */
 export const HEADERS_VARIABLE = "OTEL_EXPORTER_OTLP_HEADERS";
+/** The variable every OpenTelemetry tool reads for how its collector is spoken to. */
+export const PROTOCOL_VARIABLE = "OTEL_EXPORTER_OTLP_PROTOCOL";
+
+/**
+ * The same three, for metrics alone. Each stands over its general one where
+ * it is set, and the address is the whole one: nothing is put after it.
+ */
+export const METRICS_ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT";
+export const METRICS_HEADERS_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
+export const METRICS_PROTOCOL_VARIABLE = "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL";
+
+/**
+ * The protocols a payload written here answers to. A collector that takes
+ * OTLP over HTTP takes JSON and protobuf on the same path and tells them
+ * apart by content type, so either HTTP setting means what is sent. gRPC is
+ * another port and another wire, and a post to it says nothing back.
+ */
+const HTTP_PROTOCOLS: readonly string[] = ["http/json", "http/protobuf"];
 
 /** The quotes a value copied out of a shell snippet arrives wearing. */
 const QUOTES = ['"', "'"];
@@ -333,30 +351,52 @@ function whyNot(value: string): string {
   return `it starts as a URL does and cannot be read as one, and is ${value.length} characters long`;
 }
 
+/** The first of `variables` that is set to something, with what it is set to. */
+function setOf(
+  env: Readonly<Record<string, string | undefined>>,
+  variables: readonly string[],
+): { variable: string; value: string } {
+  for (const variable of variables) {
+    const value = pasted(variable, env[variable]);
+    if (value !== "") return { variable, value };
+  }
+  return { variable: variables[0]!, value: "" };
+}
+
 /**
  * collector reads where metrics go from the environment, as every
  * OpenTelemetry tool does, and answers undefined where it names nowhere.
  *
  * An endpoint that is set and is not a URL is refused, saying which variable
  * it was and what about it is wrong: sending to nowhere quietly would look
- * the same as sending.
+ * the same as sending. So is a protocol this cannot speak.
  */
 export function collector(
   env: Readonly<Record<string, string | undefined>>,
 ): Collector | undefined {
-  const endpoint = pasted(ENDPOINT_VARIABLE, env[ENDPOINT_VARIABLE]);
+  const { variable, value: endpoint } = setOf(env, [METRICS_ENDPOINT_VARIABLE, ENDPOINT_VARIABLE]);
   if (endpoint === "") return undefined;
 
-  const url = `${endpoint.replace(/\/+$/, "")}${METRICS_PATH}`;
+  const url =
+    variable === METRICS_ENDPOINT_VARIABLE
+      ? endpoint
+      : `${endpoint.replace(/\/+$/, "")}${METRICS_PATH}`;
   if (!/^https?:\/\//i.test(endpoint) || !URL.canParse(url)) {
-    throw new Error(`${ENDPOINT_VARIABLE} is not a URL · ${whyNot(endpoint)}`);
+    throw new Error(`${variable} is not a URL · ${whyNot(endpoint)}`);
   }
 
-  const headers = otlpHeaders(env[HEADERS_VARIABLE]);
-  const given = pasted(HEADERS_VARIABLE, env[HEADERS_VARIABLE]);
-  if (given !== "" && Object.keys(headers).length === 0) {
+  const protocol = setOf(env, [METRICS_PROTOCOL_VARIABLE, PROTOCOL_VARIABLE]);
+  if (protocol.value !== "" && !HTTP_PROTOCOLS.includes(protocol.value)) {
     throw new Error(
-      `${HEADERS_VARIABLE} holds no header · it is read as key=value pairs with commas between`,
+      `${protocol.variable} is ${protocol.value}, and metrics are sent as OTLP over HTTP · set it to http/json or leave it unset`,
+    );
+  }
+
+  const given = setOf(env, [METRICS_HEADERS_VARIABLE, HEADERS_VARIABLE]);
+  const headers = otlpHeaders(given.value);
+  if (given.value !== "" && Object.keys(headers).length === 0) {
+    throw new Error(
+      `${given.variable} holds no header · it is read as key=value pairs with commas between`,
     );
   }
   return { url, headers };
