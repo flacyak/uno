@@ -154,18 +154,27 @@ function evalNode(
         case "*":
           for (let i = 0; i < count; i++) left[i] = left[i]! * right[i]!;
           return left;
-        case "/":
+        case "/": {
           // Refused rather than left to produce Infinity or NaN. A column of
           // infinities is a wrong answer that displays as one, and the divisor
           // is named because on a bound column the person needs to know which
           // cell was empty. A row that already failed keeps its first reason.
+          //
+          // The failure names the divisor rather than the cell, so it reads the
+          // same in every row, and the block shares one: an Error is the one
+          // allocation here that costs more than the arithmetic, and a divisor
+          // column that is still blank is an ordinary moment in building a
+          // sheet rather than a reason for it to compute ten times slower.
+          let err: DivideByZeroError | undefined;
           for (let i = 0; i < count; i++) {
             if (right[i] === 0 && errors[i] === undefined) {
-              errors[i] = new DivideByZeroError(`${text(n.right)}: divide by zero`);
+              err ??= new DivideByZeroError(`${text(n.right)}: divide by zero`);
+              errors[i] = err;
             }
             left[i] = left[i]! / right[i]!;
           }
           return left;
+        }
       }
     }
   }
