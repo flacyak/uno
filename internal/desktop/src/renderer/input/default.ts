@@ -1,8 +1,9 @@
 // Default input: the keys a spreadsheet has.
 //
-// The arrows, Tab and the page keys move. Enter, F2 or a double click open the
-// editor on the value, typing over a cell replaces it, and in the editor Enter
-// keeps the typing and Esc throws it away. Ctrl+C copies the cell and Ctrl+R
+// The arrows, Tab, Shift+Tab and the page keys move. Enter, F2 or a double
+// click open the editor on the value, typing over a cell replaces it, and in
+// the editor Enter keeps the typing, Esc throws it away, and Tab keeps it and
+// moves on as it does on the grid. Ctrl+C copies the cell and Ctrl+R
 // records again what Ctrl+Z took back. Ctrl+E and Ctrl+Z are the shell's, and
 // work the same whichever strategy reads the grid's keys.
 
