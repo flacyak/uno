@@ -22,6 +22,9 @@ function interpret(mode: Mode, _pending: Pending, press: Press): Step | undefine
   const key = press.key;
 
   if (press.ctrl) {
+    // Shift in a chord names another key, Ctrl+Shift+B the panel's among them.
+    // CapsLock is why the case of the letter itself says nothing.
+    if (press.shift) return undefined;
     switch (key.toLowerCase()) {
       case "c":
         // Copying changes nothing, so view allows it.

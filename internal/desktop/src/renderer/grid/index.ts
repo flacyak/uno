@@ -17,6 +17,14 @@ import { View } from "./view.ts";
 
 export type { GridEvents, Rows, ShellAction } from "./rows.ts";
 
+/** What one source's rows remember for '{a-z} and ''. */
+interface Marks {
+  /** The cells m{a-z} marked, by letter. */
+  readonly named: Map<string, Cell>;
+  /** Where the last jump left from, for ''. */
+  before: Cell | undefined;
+}
+
 export class Grid {
   private readonly view: View;
   private editable = false;
@@ -27,13 +35,16 @@ export class Grid {
   private pending: Pending = NOTHING;
 
   /**
-   * Marks belong to the open workspace: not saved in the .uno, and cleared by
-   * the next open. A row keeps its number, because the log has no row insert or
-   * delete, so a mark stays on the same record.
+   * The marks of the rows showing. Marks belong to the open workspace: not
+   * saved in the .uno, and gone with the rows the next open replaces. Each
+   * tab's rows have their own, as each tab keeps its selection, since a cell
+   * marked on one source names nothing on another. A row keeps its number,
+   * because the log has no row insert or delete, so a mark stays on the same
+   * record.
    */
-  private marks = new Map<string, Cell>();
-  /** Where the last jump left from, for ''. */
-  private before: Cell | undefined;
+  private marks: Marks = { named: new Map(), before: undefined };
+  /** The marks of every rows shown, found again when a tab comes back. */
+  private readonly marked = new WeakMap<Rows, Marks>();
   /** What yy copied, for p. Kept across opens, as vim keeps a register across files. */
   private register: string | undefined;
   /** How the open editor was opened, so . can tell what the insert did. */
@@ -70,13 +81,26 @@ export class Grid {
     this.cancelEdit();
     this.editable = editable;
     this.wait(NOTHING);
-    if (!keep) {
-      this.marks = new Map();
-      this.before = undefined;
+    if (keep) {
+      // The same rows from somewhere else keep the marks they were given.
+      if (source !== undefined) this.marked.set(source, this.marks);
+    } else {
+      this.marks = this.marksOf(source);
       this.selRow = 0;
       this.selCol = 0;
     }
     this.view.show(source, keep);
+  }
+
+  /** marksOf is the marks rows were given before, or none yet. */
+  private marksOf(source: Rows | undefined): Marks {
+    if (source === undefined) return { named: new Map(), before: undefined };
+    let marks = this.marked.get(source);
+    if (marks === undefined) {
+      marks = { named: new Map(), before: undefined };
+      this.marked.set(source, marks);
+    }
+    return marks;
   }
 
   /** Redraw what is on screen. Called when an edit lands, because a bound column
@@ -178,17 +202,19 @@ export class Grid {
         this.view.scrollRow(this.selRow, action.where);
         return;
       case "mark":
-        this.marks.set(action.name, { row: this.selRow, col: this.selCol });
+        this.marks.named.set(action.name, { row: this.selRow, col: this.selCol });
         return;
       case "to-mark": {
-        const mark = this.marks.get(action.name);
+        const mark = this.marks.named.get(action.name);
         if (mark === undefined) this.events.onSay(m.mark_not_set({ name: action.name }), true);
         else this.jump(mark.row, mark.col);
         return;
       }
-      case "back":
-        if (this.before !== undefined) this.jump(this.before.row, this.before.col);
+      case "back": {
+        const before = this.marks.before;
+        if (before !== undefined) this.jump(before.row, before.col);
         return;
+      }
       case "clear":
         this.write({ t: "set", value: "" });
         return;
@@ -246,7 +272,7 @@ export class Grid {
   private jump(row: number, col: number): void {
     const from = { row: this.selRow, col: this.selCol };
     this.select(row, col);
-    if (this.selRow !== from.row || this.selCol !== from.col) this.before = from;
+    if (this.selRow !== from.row || this.selCol !== from.col) this.marks.before = from;
   }
 
   // ---------------------------------------------------------------- editing
@@ -290,7 +316,17 @@ export class Grid {
 
       // Whether Esc keeps the typing is the strategy's to say.
       const key = this.input.editorKey(e.key, e.isComposing);
-      if (key === undefined) return;
+      if (key === undefined) {
+        // Tab keeps the typing and then moves as it does on the grid, to the
+        // next cell or with Shift the one before, whichever strategy reads it.
+        // Left to the field it would carry focus off the grid.
+        if (e.key === "Tab" && !e.isComposing && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          e.preventDefault();
+          this.commitEdit();
+          this.onKey(e);
+        }
+        return;
+      }
       e.preventDefault();
       if (key === "commit") {
         this.commitEdit();
