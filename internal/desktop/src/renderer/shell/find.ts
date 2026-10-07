@@ -49,16 +49,16 @@ export class Finder {
       this.say(m.find_column_is_text({ column: columnLabel(column.header, col) }), true);
       return;
     }
-    const from = { row: num(row + 1), column: columnLabel(column.header, col) };
+    const header = columnLabel(column.header, col);
     const missing =
       column.kind === "date"
         ? dir === 1
-          ? m.find_unparsed_date_below(from)
-          : m.find_unparsed_date_above(from)
+          ? m.find_unparsed_date_below
+          : m.find_unparsed_date_above
         : dir === 1
-          ? m.find_unparsed_number_below(from)
-          : m.find_unparsed_number_above(from);
-    void this.find({ t: "unparsed" }, dir, missing);
+          ? m.find_unparsed_number_below
+          : m.find_unparsed_number_above;
+    void this.find({ t: "unparsed" }, dir, () => missing({ row: num(row + 1), column: header }));
   }
 
   /**
@@ -91,19 +91,22 @@ export class Finder {
     const { row, col } = on.grid.selection();
     const column = on.workspace.rows.columns[col];
     const header = column === undefined ? m.this_column() : columnLabel(column.header, col);
-    const from = { text, row: num(row + 1), column: header };
-    void this.find(
-      { t: "text", text },
-      dir,
-      dir === 1 ? m.find_text_below(from) : m.find_text_above(from),
+    const missing = dir === 1 ? m.find_text_below : m.find_text_above;
+    void this.find({ t: "text", text }, dir, () =>
+      missing({ text, row: num(row + 1), column: header }),
     );
   }
 
   /**
    * find asks the engine for the next row down or up this column that matches,
-   * and selects it. `missing` is what to say when there is none.
+   * and selects it. `missing` is what to say when there is none, written when
+   * it is said: a find that outlasts a change of language answers in the new one.
    */
-  private async find(match: FindRequest["match"], dir: 1 | -1, missing: string): Promise<void> {
+  private async find(
+    match: FindRequest["match"],
+    dir: 1 | -1,
+    missing: () => string,
+  ): Promise<void> {
     const on = this.showing();
     if (on === undefined) return;
     const { workspace: w, grid } = on;
@@ -133,10 +136,10 @@ export class Finder {
         grid.moveTo(found.row, col);
         this.say("");
       } else if (found.complete) {
-        this.say(missing, true);
+        this.say(missing(), true);
       } else {
         const parts = [
-          missing,
+          missing(),
           m.find_searched_rows({ count: found.searched }),
           m.indexing_percent({ percent: w.indexed() }),
         ];
