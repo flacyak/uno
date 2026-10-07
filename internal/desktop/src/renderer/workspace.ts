@@ -252,14 +252,19 @@ export class Workspace {
   /**
    * remove takes a source out, and its edits out of the log. The engine keeps
    * the last one, since a workspace of none has nothing to show or save.
+   *
+   * It answers whether the tab was the one showing, as it is once the engine
+   * has answered: its neighbour shows then, and the grid has to follow.
    */
-  async remove(tab: Tab): Promise<void> {
+  async remove(tab: Tab): Promise<boolean> {
     await this.engine.remove(tab.source);
     const i = this.tabs.indexOf(tab);
-    if (i < 0) return;
+    if (i < 0) return false;
     this.tabs.splice(i, 1);
     this.relinked.delete(tab.id);
-    if (this.showing === tab) this.showing = this.tabs[Math.min(i, this.tabs.length - 1)]!;
+    if (this.showing !== tab) return false;
+    this.showing = this.tabs[Math.min(i, this.tabs.length - 1)]!;
+    return true;
   }
 
   /**
