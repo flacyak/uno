@@ -48,10 +48,12 @@ function interpret(mode: Mode, pending: Pending, press: Press): Step | undefined
     case "ArrowUp":
       return done(move("up", count));
     case "ArrowRight":
-    case "Tab":
       return done(move("right", count));
     case "ArrowLeft":
       return done(move("left", count));
+    // The next cell, and with Shift the one before, as every spreadsheet has it.
+    case "Tab":
+      return done(move(press.shift ? "left" : "right", count));
     case "PageDown":
       return done(move("page-down", count));
     case "PageUp":

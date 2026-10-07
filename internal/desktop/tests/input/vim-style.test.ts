@@ -24,13 +24,13 @@ function press(mode: Mode, keys: string, from: Pending = NOTHING): Step {
 }
 
 function split(keys: string): Press[] {
-  const base = { ctrl: false, alt: false, meta: false, repeat: false };
+  const base = { ctrl: false, alt: false, meta: false, shift: false, repeat: false };
   return (keys.match(/<[^>]+>|./gu) ?? []).map((k) => {
     if (!k.startsWith("<")) return { ...base, key: k };
     const name = k.slice(1, -1);
-    return name.startsWith("C-")
-      ? { ...base, key: name.slice(2), ctrl: true }
-      : { ...base, key: name };
+    if (name.startsWith("C-")) return { ...base, key: name.slice(2), ctrl: true };
+    if (name.startsWith("S-")) return { ...base, key: name.slice(2), shift: true };
+    return { ...base, key: name };
   });
 }
 
@@ -38,7 +38,14 @@ function action(mode: Mode, keys: string): Action {
   return press(mode, keys).action;
 }
 
-const held = (key: string): Press => ({ key, ctrl: false, alt: false, meta: false, repeat: true });
+const held = (key: string): Press => ({
+  key,
+  ctrl: false,
+  alt: false,
+  meta: false,
+  shift: false,
+  repeat: true,
+});
 
 // ------------------------------------------------------------------ modes
 
@@ -103,7 +110,7 @@ test("u undoes in transform, says why not in view, and does nothing held down", 
 test("Ctrl+r redoes in transform, says why not in view, and does nothing held down", () => {
   expect(action("transform", "<C-r>")).toEqual({ t: "redo" });
   expect(action("view", "<C-r>")).toEqual({ t: "say", text: LOCKED });
-  const holding = { key: "r", ctrl: true, alt: false, meta: false, repeat: true };
+  const holding = { key: "r", ctrl: true, alt: false, meta: false, shift: false, repeat: true };
   expect(vimStyle.interpret("transform", NOTHING, holding)?.action).toEqual({ t: "none" });
 });
 
@@ -176,13 +183,15 @@ test("/ and ? open a search down and up, and n and N search again", () => {
 test("the arrows, Tab, PgUp, PgDn, Home and End keep working", () => {
   expect(action("view", "<ArrowDown>")).toEqual({ t: "move", motion: "down" });
   expect(action("view", "<Tab>")).toEqual({ t: "move", motion: "right" });
+  expect(action("view", "<S-Tab>")).toEqual({ t: "move", motion: "left" });
+  expect(action("view", "3<S-Tab>")).toEqual({ t: "move", motion: "left", count: 3 });
   expect(action("transform", "<PageUp>")).toEqual({ t: "move", motion: "page-up" });
   expect(action("transform", "<End>")).toEqual({ t: "move", motion: "end" });
 });
 
 test("chords and keys that type nothing are not the grid's, and keep what is pending", () => {
   const waiting = { count: "5", keys: "" };
-  const base = { ctrl: false, alt: false, meta: false, repeat: false };
+  const base = { ctrl: false, alt: false, meta: false, shift: false, repeat: false };
   expect(vimStyle.interpret("transform", waiting, { ...base, key: "Shift" })).toBeUndefined();
   expect(
     vimStyle.interpret("transform", waiting, { ...base, key: "e", ctrl: true }),
