@@ -71,5 +71,5 @@ export type {
 } from './telemetry.ts';
 export { FILE_COLUMN } from './view.ts';
 export { FRAME_LIMIT, decode, encode, frameBytes, socketPort } from './wire.ts';
-export type { Frame, WebSocketLike } from './wire.ts';
+export type { Carried, Frame, WebSocketLike } from './wire.ts';
 export { WHOLE_LIMIT } from './workspace.ts';
