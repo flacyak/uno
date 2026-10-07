@@ -1,9 +1,25 @@
-// What the grid draws and what it tells the shell. Types only, so the shell and
-// the workspace can name them without loading the grid.
+// What the grid draws and what it tells the shell. Types, and the one name the
+// grid and the status bar both write, so the shell and the workspace can use
+// them without loading the grid.
 
 import type { Kind } from "@uno/grid/sheet";
 
+import { m } from "../../paraglide/messages.js";
 import type { Action, Mode } from "../keys.ts";
+
+/**
+ * columnLabel is what a column is called on screen. A header a file left blank
+ * is still a column a person can be on, so it is named by its place, counted
+ * from one as the engine counts a headerless file's columns.
+ */
+export function columnLabel(header: string, col: number): string {
+  return unnamed(header) ? m.column_unnamed({ number: col + 1 }) : header;
+}
+
+/** unnamed says whether a header is blank, and so drawn with the name its place gives it. */
+export function unnamed(header: string): boolean {
+  return header.trim() === "";
+}
 
 /**
  * Rows is what the grid draws. A Sheet is one, and so is an engine's band.

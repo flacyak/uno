@@ -5,6 +5,11 @@
 // widget.Table, and it is why what the grid reads has to stay a cache read: it
 // calls `display` once per visible cell on every frame, so anything done there
 // beyond reading an array is work multiplied by two hundred and then by sixty.
+//
+// Rows are virtualised and columns are not: every row in the pool holds a cell
+// for every column, so a sheet of 500 columns is about forty rows of 500 cells,
+// and each frame compares that many strings. The bound is the pool's height
+// times the sheet's width, and a frame writes only the cells whose text moved.
 
 import type { Kind } from "@uno/grid/sheet";
 
@@ -23,6 +28,7 @@ import {
   topToScroller,
   visibleRange,
 } from "./metrics.ts";
+import { columnLabel, unnamed } from "./rows.ts";
 import type { Cell, Rows } from "./rows.ts";
 
 export class View {
@@ -136,7 +142,11 @@ export class View {
     for (const [col, column] of this.source.columns.entries()) {
       const th = document.createElement("th");
       const wrap = el("span", "colhead");
-      wrap.append(text(column.header));
+      // A blank header is named by its place, and dressed as a name the file
+      // did not give, so it is not read as one a formula can use.
+      const name = el("span", unnamed(column.header) ? "colname unnamed" : "colname");
+      name.textContent = columnLabel(column.header, col);
+      wrap.append(name);
 
       // A column a formula computes says so, and what from.
       const binding = this.source.binding(col);
@@ -401,10 +411,6 @@ function el(tag: string, className: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = className;
   return node;
-}
-
-function text(value: string): Text {
-  return document.createTextNode(value);
 }
 
 /** The row height lives in the stylesheet, so the virtualiser asks for it

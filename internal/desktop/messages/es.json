@@ -213,6 +213,7 @@
   "connect_action": "+ Conectar un bucket",
   "this_column": "esta columna",
   "the_column": "la columna",
+  "column_unnamed": "columna {number}",
   "no_rows": "sin filas",
   "unsaved_edits": "ediciones sin guardar",
   "unsaved_changes": "cambios sin guardar",
