@@ -3,6 +3,9 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   MAX_PARTS,
   MAX_STEPS,
+  type MatchPos,
+  type ReplaceStep,
+  type SliceStep,
   apply,
   describe as describeProgram,
   parse,
@@ -65,6 +68,37 @@ describe("apply", () => {
 // capture reference has to survive being written back.
 test("a replacement is literal text", () => {
   expect(apply(parse('replace(/x/, "$1")'), "x")).toBe("$1");
+});
+
+// A pattern is compiled once, at parse, and run over every cell of a column
+// for every candidate the recogniser is scoring. The shim's every-occurrence
+// calls take the pattern as compiled when it already matches globally and build
+// a second RegExp per call when it does not, so a step has to hold the global
+// one -- and holding one shared object means its match position must not leak
+// from one cell into the next.
+describe("a step's pattern is compiled global, once", () => {
+  const replace = parse('replace(/,/, "")')[0] as ReplaceStep;
+  const slice = parse("slice(end(/,/, 1), start(/,/, -1))")[0] as SliceStep;
+
+  test("replace holds the global pattern", () => {
+    expect(replace.re.global).toBe(true);
+  });
+
+  test("a match position holds the global pattern", () => {
+    expect((slice.from as MatchPos).re.global).toBe(true);
+    expect((slice.to as MatchPos).re.global).toBe(true);
+  });
+
+  test("no match state leaks between cells", () => {
+    const cells = ["1,204,567", "1,204", "987", "1,204,567", ",,", ""];
+    const want = cells.map((v) => apply(parse('replace(/,/, "")'), v));
+    expect(cells.map((v) => apply([replace], v))).toEqual(want);
+    expect(cells.map((v) => apply([replace], v))).toEqual(want);
+
+    const between = cells.map((v) => apply(parse("slice(end(/,/, 1), start(/,/, -1))"), v));
+    expect(cells.map((v) => apply([slice], v))).toEqual(between);
+    expect(cells.map((v) => apply([slice], v))).toEqual(between);
+  });
 });
 
 // A log that does not parse must say so before a column is rewritten, not
