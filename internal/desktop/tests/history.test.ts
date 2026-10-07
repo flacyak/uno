@@ -32,7 +32,9 @@ const page = domPage();
  */
 function key(k: string, modifiers: KeyModifiers = {}): void {
   const target = document.querySelector(".cell-editor") ?? document.querySelector("#content");
-  target?.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, ...modifiers }));
+  target?.dispatchEvent(
+    new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...modifiers }),
+  );
 }
 
 /** until waits, a frame at a time, for `holds` to say so. */

@@ -85,7 +85,11 @@ export function domPage(): Page {
     // grid otherwise. Matches electron-page.ts's own press.
     press: async (key, modifiers: KeyModifiers = {}) => {
       const target = document.querySelector(".cell-editor") ?? document.querySelector("#content");
-      target?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...modifiers }));
+      // Cancelable as a browser's keydown is, so what one listener took the
+      // next can see was taken.
+      target?.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...modifiers }),
+      );
       await frame();
     },
 
