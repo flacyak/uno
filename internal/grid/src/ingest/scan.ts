@@ -56,12 +56,24 @@ export class RecordScanner {
     this.sep = sep;
   }
 
-  /** push scans `chunk`, whose first byte sits at `base` in the file. */
+  /**
+   * push scans `chunk`, whose first byte sits at `base` in the file.
+   *
+   * Nearly every byte is inside a field, and a byte inside a field changes
+   * nothing unless it is one of two: the quote and LF outside quotes, the
+   * quote alone inside them. Those two states run their own loop that looks
+   * for only those bytes, and the switch is reached once per transition rather
+   * than once per byte. Where the loop stops decides the state exactly as the
+   * byte-by-byte rules would: a quote opens a quoted field only as a field's
+   * first byte, which is where the byte before it is the separator.
+   */
   push(chunk: Uint8Array, base: number): void {
     const sep = this.sep;
+    const end = chunk.length;
     let s = this.state;
+    let i = 0;
 
-    for (let i = 0; i < chunk.length; i++) {
+    while (i < end) {
       const b = chunk[i]!;
       switch (s) {
         case LINE:
@@ -87,19 +99,42 @@ export class RecordScanner {
           break;
 
         case FIELD:
-          if (b === QUOTE) s = QUOTED;
-          else if (b === LF) s = LINE;
-          else if (b !== sep) s = BARE;
+        case BARE: {
+          // Unquoted, until the line ends or a quote comes. A quote at a
+          // field's first byte opens a quoted field; anywhere else it is data.
+          // The byte before it says which, and for the byte at `i` the state does.
+          let j = i;
+          let c = b;
+          while (c !== LF && c !== QUOTE) {
+            if (++j === end) break;
+            c = chunk[j]!;
+          }
+          if (j === end) {
+            s = j === i ? s : chunk[j - 1] === sep ? FIELD : BARE;
+            i = j;
+            continue;
+          }
+          if (c === LF) s = LINE;
+          else if (j === i ? s === FIELD : chunk[j - 1] === sep) s = QUOTED;
+          else s = BARE;
+          i = j;
           break;
+        }
 
-        case BARE:
-          if (b === sep) s = FIELD;
-          else if (b === LF) s = LINE;
+        case QUOTED: {
+          // Inside quotes, only a quote matters.
+          let j = i;
+          while (chunk[j] !== QUOTE) {
+            if (++j === end) break;
+          }
+          if (j === end) {
+            i = j;
+            continue;
+          }
+          s = QUOTE_SEEN;
+          i = j;
           break;
-
-        case QUOTED:
-          if (b === QUOTE) s = QUOTE_SEEN;
-          break;
+        }
 
         case QUOTE_SEEN:
           if (b === QUOTE) s = QUOTED; // `""` is one literal quote
@@ -116,6 +151,7 @@ export class RecordScanner {
           else s = b === QUOTE ? QUOTE_SEEN : QUOTED;
           break;
       }
+      i++;
     }
 
     this.state = s;
