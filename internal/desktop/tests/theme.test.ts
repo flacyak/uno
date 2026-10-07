@@ -111,11 +111,11 @@ test("the system's mode is followed while the page follows it, and not after", (
 
 test("the tokens a palette does not give are mixed from the ones it does", () => {
   const t = tokensOf(THEMES[3].dark, "dark");
-  expect(t["--ink-2"]).toBe("color-mix(in srgb, #c6d0f5 62%, #a5adce)");
+  expect(t["--ink-2"]).toBe("color-mix(in srgb, #c6d0f5 62%, #b5bfe2)");
   expect(t["--accent-b"]).toBe("color-mix(in srgb, #ca9ee6 22%, #414559)");
   // The warning is T3 Code's standard one under every theme.
   expect(t["--flag"]).toBe("#ffb900");
-  expect(tokensOf(THEMES[3].light, "light")["--flag"]).toBe("#bb4d00");
+  expect(tokensOf(THEMES[3].light, "light")["--flag"]).toBe("#973e00");
 });
 
 // ------------------------------------------------------------ every palette
@@ -146,4 +146,26 @@ test.each(palettes)("%s, %s: its grounds climb from the chrome to the grid", (_,
 // WCAG AA for body text, on the ground most of the text is on.
 test.each(palettes)("%s, %s: its ink reads on the grid", (_, _mode, p) => {
   expect(contrast(p.ink, p.surface)).toBeGreaterThanOrEqual(4.5);
+});
+
+// ----------------------------------------------------------------- contrast
+
+/** WCAG's bound for text at the sizes the window writes: 4.5 to 1. */
+const READABLE = 4.5;
+
+// The muted ink writes the gutter, the sidebar's sizes and the status bar's
+// separators: words a person reads, on every ground the window has. So does
+// the flag, which is how a refusal is said. Each has to read on each.
+test("muted ink and the flag read on every ground of every theme", () => {
+  for (const theme of THEMES) {
+    for (const mode of ["light", "dark"] as const) {
+      const p = theme[mode];
+      const flag = tokensOf(p, mode)["--flag"]!;
+      for (const ground of [p.sunken, p.paper, p.surface]) {
+        const where = `${theme.id} ${mode} on ${ground}`;
+        expect(contrast(p.ink3, ground), `ink3 ${where}`).toBeGreaterThanOrEqual(READABLE);
+        expect(contrast(flag, ground), `flag ${where}`).toBeGreaterThanOrEqual(READABLE);
+      }
+    }
+  }
 });
