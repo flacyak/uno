@@ -13,7 +13,7 @@ import "./formula.css";
 
 import { m } from "../../paraglide/messages.js";
 import type { MenuPlace } from "./menu.ts";
-import { message } from "./util.ts";
+import { message, walk } from "./util.ts";
 
 /** A column the form offers, with the expression it is computed from already. */
 export interface FormulaColumn {
@@ -104,7 +104,11 @@ export class FormulaForm {
       if (e.key === "Escape") {
         e.preventDefault();
         this.close();
-      } else if (e.key === "Enter" && e.target === this.expr) {
+        return;
+      }
+      // Tab stays in the form, round its ends.
+      if (walk(e, this.controls())) return;
+      if (e.key === "Enter" && e.target === this.expr) {
         // Enter in the expression is Insert, said here rather than left to
         // the form, so it is the same key however the key arrived.
         e.preventDefault();
@@ -134,6 +138,11 @@ export class FormulaForm {
     document.removeEventListener("mousedown", this.away);
     this.box.remove();
     this.asks.closed();
+  }
+
+  /** Every control the keys can land on, in the order they are drawn. */
+  private controls(): HTMLElement[] {
+    return [...this.box.querySelectorAll<HTMLElement>("select, input, button")];
   }
 
   /** fill writes the chosen column's expression into the field, or clears it,

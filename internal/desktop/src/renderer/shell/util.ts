@@ -45,6 +45,36 @@ export class Words {
 }
 
 /**
+ * walk moves the keys through the controls of a surface hung off the page,
+ * one step along and round the ends. The surface sits after the page in the
+ * document, so Tab left alone would carry the keys out of it, to the
+ * window's × behind it or the grid, with the surface still open: Tab and
+ * Shift+Tab walk it instead, and so do whatever other keys the surface reads
+ * as a step. It answers whether the key was one.
+ */
+export function walk(
+  e: KeyboardEvent,
+  controls: readonly HTMLElement[],
+  stepOf: (e: KeyboardEvent) => 1 | -1 | 0 = tabStep,
+): boolean {
+  const step = stepOf(e);
+  if (step === 0) return false;
+  e.preventDefault();
+  const at = controls.indexOf(document.activeElement as HTMLElement);
+  // From outside the controls, a step forward lands on the first and one
+  // back on the last, as it would from the end either step walks past.
+  const from = at >= 0 ? at : step > 0 ? -1 : controls.length;
+  controls[(from + step + controls.length) % controls.length]?.focus();
+  return true;
+}
+
+/** tabStep reads Tab as a step forward and Shift+Tab as one back. */
+export function tabStep(e: KeyboardEvent): 1 | -1 | 0 {
+  if (e.key !== "Tab") return 0;
+  return e.shiftKey ? -1 : 1;
+}
+
+/**
  * message is what an error says, to say to a person: in the app's language
  * where the engine sent it as data, and as it was written otherwise.
  */

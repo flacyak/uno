@@ -12,6 +12,11 @@ import { m } from "../../paraglide/messages.js";
  * mis-drop, and saying so is better than a parser error. */
 const OPENABLE = [".uno", ".csv", ".tsv"];
 
+/** Whether a drag carries files, rather than text or a link out of the page. */
+function carriesFiles(e: DragEvent): boolean {
+  return e.dataTransfer?.types.includes("Files") ?? false;
+}
+
 /**
  * wireDrop opens the files dropped anywhere on `root`, lighting `zone` while
  * some are over it. Several can come at once, because a workspace is built from
@@ -30,11 +35,16 @@ export function wireDrop(
   };
 
   root.addEventListener("dragover", (e) => {
+    // Stopped whatever is dragged: a link or a file the page did not take
+    // would otherwise be navigated to, and the app left behind.
     stop(e);
-    zone.classList.add("over");
+    zone.classList.toggle("over", carriesFiles(e));
   });
   root.addEventListener("dragleave", (e) => {
     stop(e);
+    // Leaving one element of the window for another is not leaving the
+    // window, and the light would blink off and on across every edge.
+    if (e.relatedTarget instanceof Node && root.contains(e.relatedTarget)) return;
     zone.classList.remove("over");
   });
   root.addEventListener("drop", (e) => {
