@@ -277,6 +277,38 @@ test("replies land by id, so a fast answer overtaking a slow one settles the rig
   done();
 });
 
+test("a rows or edit request with a number that is not whole is refused, not read as one", async () => {
+  const p = probe();
+  p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
+  await settle(20);
+  const opened = withId(p.replies, 1)[0]!;
+  const source = opened.t === "opened" ? opened.added.showing : "";
+  // "9" + 2000 is "92000", which read as the whole file.
+  p.send({ t: "rows", id: 2, source, first: "9", count: 2000 });
+  p.send({ t: "rows", id: 3, source, first: -5, count: 10 });
+  p.send({ t: "rows", id: 4, source, first: 1.5, count: 10 });
+  // A row of "3" compared as 3 and was logged as "3", which the saved file refused.
+  p.send({ t: "edit", id: 5, source, edit: { op: "set", row: "3", col: 0, now: "x" } });
+  p.send({ t: "edit", id: 6, source, edit: { op: "set", row: 3, col: "0", now: "x" } });
+  p.send({ t: "edit", id: 7, source, edit: { op: "set", row: -2, col: 0, now: "x" } });
+  await settle(50);
+  expect(p.thrown).toEqual([]);
+  expect(unhandled).toEqual([]);
+  for (const id of [2, 3, 4, 5, 6, 7]) {
+    expect(
+      withId(p.replies, id).map((r) => r.t),
+      `request ${id}`,
+    ).toEqual(["error"]);
+  }
+  // A whole row that is what it says still lands, once the workspace can write.
+  p.send({ t: "mode", transform: true });
+  p.send({ t: "edit", id: 8, source, edit: { op: "set", row: 3, col: 0, now: "x" } });
+  await settle(20);
+  expect(withId(p.replies, 8).map((r) => r.t)).toEqual(["changed"]);
+  p.send({ t: "close" });
+  await settle(20);
+});
+
 test("rows asked for more than a band are refused, so no reply holds a file whole", async () => {
   expect(BAND_ROWS).toBeLessThanOrEqual(ROWS_AT_MOST);
   const p = probe();
