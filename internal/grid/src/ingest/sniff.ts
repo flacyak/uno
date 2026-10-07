@@ -1,12 +1,18 @@
 /**
- * The separators worth guessing between. Anything else is rare enough that
- * being wrong about it is better handled by the person telling us.
+ * The separators worth guessing between, in the order a tie goes: a tab is
+ * never prose, a pipe hardly ever, a semicolon sometimes, and a comma sits
+ * inside fields all the time, after a surname or between the digits of a
+ * European decimal. Anything else is rare enough that being wrong about it is
+ * better handled by the person telling us.
  */
-const CANDIDATES = [",", "\t", ";", "|"];
+const CANDIDATES = ["\t", "|", ";", ","];
+
+/** The candidate that is also a decimal mark, and is read as one when it can be. */
+const COMMA = ",";
 
 /**
  * sniffLines bounds the peek. A delimiter that is not consistent across the
- * first few lines is not the delimiter.
+ * first few records is not the delimiter.
  */
 const SNIFF_LINES = 5;
 
@@ -20,15 +26,22 @@ const PEEK = 64 << 10;
  * A dialog asking for a delimiter is a question the file already answers; the
  * guess is shown in the status bar so it can be seen, and the open never blocks
  * on it.
+ *
+ * A comma is the one candidate that has another job: 1,5;2,5 is two decimals
+ * between a semicolon, and the comma count agrees on every line of such a
+ * file. So once another separator fits, a comma between two digits is a
+ * decimal mark and is not counted. With nothing else fitting, 1,2,3 is three
+ * columns as it always was.
  */
 export function sniffDelimiter(text: string): string {
   const lines = headLines(text.slice(0, PEEK));
-  if (lines.length === 0) return ",";
+  if (lines.length === 0) return COMMA;
 
-  let best = ",";
+  let best = COMMA;
   let bestFields = 1;
   for (const c of CANDIDATES) {
-    const [fields, consistent] = fieldCount(lines, c);
+    const decimal = c === COMMA && bestFields > 1;
+    const [fields, consistent] = fieldCount(lines, c, decimal);
     // Consistency is what separates a real delimiter from a character that
     // happens to appear: a ';' inside prose shows up on some lines only.
     if (consistent && fields > bestFields) {
@@ -40,41 +53,65 @@ export function sniffDelimiter(text: string): string {
 }
 
 /**
- * headLines splits the peeked text into whole lines. The last line is dropped
- * unless it was terminated, because a line cut in half by the peek limit has a
- * field count that means nothing and would fail every consistency check.
+ * headLines splits the peeked text into whole records. A quoted field can
+ * hold a line break, and the record it is in is counted once, not once per
+ * line: counted per line, the two halves of "two\nlines" would each get a
+ * field count of their own, and no delimiter would be consistent.
+ *
+ * The last record is dropped unless it was terminated, because a record cut
+ * in half by the peek limit has a field count that means nothing and would
+ * fail every consistency check. A quote the peek leaves open is the same
+ * cut, and nothing inside it is a delimiter. A text with no line break at all
+ * is one record, whole.
  */
 function headLines(s: string): string[] {
-  const last = s.lastIndexOf("\n");
-  if (last >= 0) s = s.slice(0, last + 1);
-
   const out: string[] = [];
-  for (let l of s.split("\n")) {
-    if (out.length === SNIFF_LINES) break;
-    if (l.endsWith("\r")) l = l.slice(0, -1);
-    if (l !== "") out.push(l);
+  let start = 0;
+  let inQuote = false;
+  for (let i = 0; i < s.length && out.length < SNIFF_LINES; i++) {
+    const r = s[i];
+    if (r === '"') inQuote = !inQuote;
+    else if (r === "\n" && !inQuote) {
+      pushLine(out, s.slice(start, i));
+      start = i + 1;
+    }
   }
+  if (out.length === 0 && start === 0 && !inQuote) pushLine(out, s);
   return out;
+}
+
+/** pushLine keeps a record that holds something, without its CR. */
+function pushLine(out: string[], l: string): void {
+  if (l.endsWith("\r")) l = l.slice(0, -1);
+  if (l !== "") out.push(l);
 }
 
 /**
  * fieldCount reports how many fields the separator yields per line, and whether
  * every line agreed. Quoted sections are skipped so a comma inside
- * "Okafor, Ada" is not counted as a separator.
+ * "Okafor, Ada" is not counted as a separator, and with `decimal` so is a
+ * separator between two digits, which is the decimal mark of 1,5.
  */
-function fieldCount(lines: string[], sep: string): [number, boolean] {
+function fieldCount(lines: string[], sep: string, decimal: boolean): [number, boolean] {
   let want = -1;
   for (const l of lines) {
     let n = 1;
     let inQuote = false;
-    for (const r of l) {
+    for (let i = 0; i < l.length; i++) {
+      const r = l[i];
       if (r === '"') inQuote = !inQuote;
-      else if (r === sep && !inQuote) n++;
+      else if (r === sep && !inQuote && !(decimal && isDigit(l[i - 1]) && isDigit(l[i + 1]))) n++;
     }
     if (want === -1) want = n;
     else if (n !== want) return [0, false];
   }
   return [want, want > 1];
+}
+
+const DIGITS = "0123456789";
+
+function isDigit(r: string | undefined): boolean {
+  return r !== undefined && DIGITS.includes(r);
 }
 
 /**
