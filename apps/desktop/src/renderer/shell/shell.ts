@@ -399,10 +399,12 @@ export class Shell {
   /**
    * openRef opens a file the platform already holds a reference to, with no
    * dialog: a workspace the server kept, handed to the page as its bytes. A
-   * ref with a path saves back to it, as one picked in the dialog does.
+   * ref with a path saves back to it, as one picked in the dialog does. One
+   * handed over as bytes saves to `savePath`, where the platform names the
+   * place it kept the workspace, and asks where otherwise.
    */
-  async openRef(ref: SourceRef): Promise<void> {
-    await this.load(ref, "path" in ref ? ref.path : "");
+  async openRef(ref: SourceRef, savePath = ""): Promise<void> {
+    await this.load(ref, "path" in ref ? ref.path : savePath);
   }
 
   /**
