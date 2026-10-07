@@ -1,5 +1,5 @@
 import { indexOfRunes, quote, quoteMeta, runes } from "../go/index.ts";
-import { MAX_PARTS } from "../program/index.ts";
+import { MAX_PARTS, quoteRegex } from "../program/index.ts";
 import { MAX_DIFF } from "./align.ts";
 import { MAX_PER_EXAMPLE } from "./induce.ts";
 
@@ -141,7 +141,9 @@ function sliceSrcs(a: string[], from: number, to: number): string[] {
  */
 function boundary(a: string[], at: number, side: string): string[] {
   const target = a[at]!;
-  const c = quoteMeta(target);
+  // Through quoteRegex, as a replace step's pattern is: a slash is a delimiter
+  // people cut at, and a bare one would end the pattern it was meant to be.
+  const c = quoteRegex(quoteMeta(target));
 
   let k = 0;
   for (const r of a.slice(0, at + 1)) if (r === target) k++;
@@ -149,8 +151,8 @@ function boundary(a: string[], at: number, side: string): string[] {
   for (const r of a.slice(at + 1)) if (r === target) total++;
 
   return [
-    side + "(/" + c + "/, " + String(k) + ")",
-    side + "(/" + c + "/, " + String(k - total - 1) + ")",
+    side + "(" + c + ", " + String(k) + ")",
+    side + "(" + c + ", " + String(k - total - 1) + ")",
   ];
 }
 
