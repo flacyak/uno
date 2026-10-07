@@ -18,7 +18,7 @@ import {
   utilityProcess,
 } from "electron";
 import type { MenuItemConstructorOptions, UtilityProcess, WebContents } from "electron";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { m } from "../paraglide/messages.js";
 import { isLocale, setLocale } from "../paraglide/runtime.js";
@@ -97,10 +97,15 @@ function over(event: { sender: WebContents }): BrowserWindow {
  * Electron's own switches are dropped rather than filtered by name: anything
  * beginning with a dash is not a path, and in development argv also carries the
  * "." that told Electron which app to run.
+ *
+ * Each is made absolute here, where the working directory it is relative to
+ * is known. `uno data/sales.csv` from a terminal names a file by where the
+ * terminal was, and a workspace points at its sources by paths that are true
+ * from anywhere, so the engine refuses to save one pointed at by less.
  */
 function filesFromArgv(): string[] {
   const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
-  return args.filter((a) => !a.startsWith("-") && a !== ".");
+  return args.filter((a) => !a.startsWith("-") && a !== ".").map((a) => resolve(a));
 }
 
 function createWindow(): BrowserWindow {
