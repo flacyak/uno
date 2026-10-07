@@ -164,7 +164,7 @@ export function sniffEncoding(head: Uint8Array): Encoding {
     else second++;
   }
   const units = Math.ceil(head.length / UTF16_UNIT_BYTES);
-  if (Math.max(first, second) * UTF16_UNITS_PER_NUL >= units) {
+  if (first + second > 0 && Math.max(first, second) * UTF16_UNITS_PER_NUL >= units) {
     return second >= first ? "utf-16le" : "utf-16be";
   }
 

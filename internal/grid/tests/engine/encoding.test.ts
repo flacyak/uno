@@ -22,7 +22,7 @@ const EURO = 0x80;
 const EN_DASH = 0x96;
 const NUL = 0x00;
 
-function bytesOf(...parts: Array<string | number[]>): Uint8Array {
+function bytesOf(...parts: Array<string | number[]>): Uint8Array<ArrayBuffer> {
   const out: number[] = [];
   for (const part of parts) {
     if (typeof part === "string") out.push(...encoder.encode(part));
@@ -32,11 +32,12 @@ function bytesOf(...parts: Array<string | number[]>): Uint8Array {
 }
 
 /** UTF-16 with a byte order mark, in either byte order. */
-function utf16(text: string, order: "le" | "be"): Uint8Array {
+function utf16(text: string, order: "le" | "be"): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array((text.length + 1) * 2);
   const view = new DataView(out.buffer);
   view.setUint16(0, 0xfeff, order === "le");
-  for (let i = 0; i < text.length; i++) view.setUint16((i + 1) * 2, text.charCodeAt(i), order === "le");
+  for (let i = 0; i < text.length; i++)
+    view.setUint16((i + 1) * 2, text.charCodeAt(i), order === "le");
   return out;
 }
 
@@ -52,7 +53,7 @@ async function allRows(src: SourceHandle): Promise<string[][]> {
 }
 
 /** Opens one file through the engine and hands back its handle. */
-async function open(name: string, bytes: Uint8Array) {
+async function open(name: string, bytes: Uint8Array<ArrayBuffer>) {
   const { engine, done } = connect(TINY);
   const { sources } = await engine.open({ name, blob: new Blob([bytes]) });
   return { src: sources[0]!, done };
@@ -117,7 +118,15 @@ for (const order of ["le", "be"] as const) {
 }
 
 test("a Windows-1252 file shows its characters, and says what it is", async () => {
-  const body = bytesOf("city;price;note\nParis;12", [E_ACUTE], ";caf", [E_ACUTE], " ", [EURO, EN_DASH], "\n");
+  const body = bytesOf(
+    "city;price;note\nParis;12",
+    [E_ACUTE],
+    ";caf",
+    [E_ACUTE],
+    " ",
+    [EURO, EN_DASH],
+    "\n",
+  );
   const sheet = read("f.csv", body);
   expect(sheet.raw(0, 2)).toBe("café €–");
   expect(sheet.source).toBe("Windows-1252 · delimiter ';'");
@@ -127,7 +136,9 @@ test("a Windows-1252 file shows its characters, and says what it is", async () =
     expect(saidIn(src.opened.label)).toBe("Windows-1252 · delimiter ';'");
     expect(src.opened.columns.map((c) => c.header)).toEqual(["city", "price", "note"]);
     expect(await allRows(src)).toEqual([["Paris", "12é", "café €–"]]);
-    expect(await src.find({ col: 2, from: -1, dir: 1, match: { t: "text", text: "é" } })).toMatchObject({
+    expect(
+      await src.find({ col: 2, from: -1, dir: 1, match: { t: "text", text: "é" } }),
+    ).toMatchObject({
       row: 0,
     });
   } finally {

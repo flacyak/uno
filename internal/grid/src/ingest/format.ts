@@ -13,20 +13,75 @@ import { english } from "../said/index.ts";
 import type { ByteSource } from "../store/index.ts";
 import { readAll } from "./csv.ts";
 import { RecordScanner, bomLength } from "./scan.ts";
+import type { Charset } from "../said/index.ts";
 import { sniffDelimiter, sniffEncoding } from "./sniff.ts";
 import type { Encoding } from "./sniff.ts";
 
 /** How much of the head is read first, to sniff and to find the header. */
 const PEEK = 64 << 10;
 
-/** Strips a leading byte order mark, the way `read` does for a whole file. */
-const headDecoder = new TextDecoder("utf-8");
+export type { Charset } from "../said/index.ts";
+
+/** The decoders a file is read with: one for its head, one for its records. */
+interface Decoders {
+  /** Strips a leading byte order mark, the way `read` does for a whole file. */
+  readonly head: TextDecoder;
+  /**
+   * Keeps one. Data never starts at byte 0, so a U+FEFF at the start of a run
+   * of records is a character in a field and not a mark to strip.
+   */
+  readonly data: TextDecoder;
+  readonly charset: Charset;
+}
+
+const UTF8: Decoders = {
+  head: new TextDecoder("utf-8"),
+  data: new TextDecoder("utf-8", { ignoreBOM: true }),
+  charset: "UTF-8",
+};
 
 /**
- * Keeps one. Data never starts at byte 0, so a U+FEFF at the start of a run of
- * records is a character in a field and not a mark to strip.
+ * What is neither UTF-8 nor UTF-16 is read as Windows-1252: the encoding an
+ * export from a European Excel or an older database is in, and the one every
+ * byte is a character of, so nothing is lost on the way through. A mark is
+ * not a thing it has, so one decoder does for both.
  */
-const dataDecoder = new TextDecoder("utf-8", { ignoreBOM: true });
+const WINDOWS_1252: Decoders = (() => {
+  const decoder = new TextDecoder("windows-1252");
+  return { head: decoder, data: decoder, charset: "Windows-1252" };
+})();
+
+/**
+ * UnsupportedEncodingError is a file in an encoding this build cannot read
+ * yet, which it says by the file's name and the encoding's. It carries the
+ * encoding so a reader of several files as one can say instead that the part
+ * does not read the way the first does.
+ */
+export class UnsupportedEncodingError extends Error {
+  readonly encoding: Encoding;
+
+  constructor(name: string, encoding: Encoding) {
+    super(`${name}: ${encodingName(encoding)} is not supported yet`);
+    this.name = "UnsupportedEncodingError";
+    this.encoding = encoding;
+  }
+}
+
+/**
+ * decodersFor is how a file of `encoding` is read, and refuses the one this
+ * build cannot read yet.
+ */
+export function decodersFor(name: string, encoding: Encoding): Decoders {
+  switch (encoding) {
+    case "utf-8":
+      return UTF8;
+    case "other":
+      return WINDOWS_1252;
+    case "utf-16le":
+    case "utf-16be":
+      throw new UnsupportedEncodingError(name, encoding);
+  }
+}
 
 export interface Scanner {
   push(chunk: Uint8Array, base: number): void;
@@ -62,11 +117,10 @@ export interface Format {
   readonly label: string;
   /** The character between fields: sniffed, or a tab for a .tsv. */
   readonly delimiter: string;
-  /**
-   * The text encoding the head of the file is in. Every file is decoded as
-   * UTF-8 whatever this says, so it is here for a caller to refuse on.
-   */
+  /** The text encoding the head of the file is in, which the file is read as. */
   readonly encoding: Encoding;
+  /** The name of that encoding, for the status bar. */
+  readonly charset: Charset;
   /** Whether the first record was taken as the header row. */
   readonly header: HeaderMode;
   /** The header row, or `columnNames` for a file read as having none. */
@@ -117,7 +171,9 @@ export async function peekFormat(
 
   let want = Math.min(PEEK, src.size);
   let head = await src.read(0, want);
-  const comma = ext === ".tsv" ? "\t" : sniffDelimiter(headDecoder.decode(head));
+  const encoding = sniffEncoding(head);
+  const decoders = decodersFor(name, encoding);
+  const comma = ext === ".tsv" ? "\t" : sniffDelimiter(decoders.head.decode(head));
 
   // Where the second record begins, which is where the first ends. The first
   // is read whole either way: it is the names, or it is how wide the rows are.
@@ -134,18 +190,19 @@ export async function peekFormat(
   }
   if (second < 0) return undefined;
 
-  const first = readAll(headDecoder.decode(head.subarray(0, second)), comma)[0]!;
+  const first = readAll(decoders.head.decode(head.subarray(0, second)), comma)[0]!;
   return {
-    label: describe(comma, header),
+    label: describe(comma, header, decoders.charset),
     delimiter: comma,
-    encoding: sniffEncoding(head),
+    encoding,
+    charset: decoders.charset,
     header,
     columns: header === "first" ? headerOf(first) : columnNames(first.length),
     // With no header row the first record is a row, and only a byte order
     // mark comes before it.
     dataStart: header === "first" ? second : bomLength(head),
     scanner: (begin) => new RecordScanner(comma, begin),
-    decode: (bytes) => readAll(dataDecoder.decode(bytes), comma),
+    decode: (bytes) => readAll(decoders.data.decode(bytes), comma),
   };
 }
 
@@ -213,8 +270,12 @@ export function extensionOf(name: string): string {
  * are uno's, and a first line that was a header after all is sitting in the
  * first row, where somebody should be told to look.
  */
-export function describe(comma: string, header: HeaderMode = "first"): string {
-  return english({ t: "read", delimiter: comma, header });
+export function describe(
+  comma: string,
+  header: HeaderMode = "first",
+  charset: Charset = "UTF-8",
+): string {
+  return english({ t: "read", delimiter: comma, header, charset });
 }
 
 /** What each delimiter worth guessing is called. */

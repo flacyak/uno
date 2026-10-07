@@ -12,7 +12,14 @@
 // part is a file on a disk, an object in a bucket or bytes already in hand,
 // in any mix, and nothing here knows which.
 
-import { bomLength, delimiterName, encodingName, openFormat, peekFormat } from "../ingest/index.ts";
+import {
+  UnsupportedEncodingError,
+  bomLength,
+  delimiterName,
+  encodingName,
+  openFormat,
+  peekFormat,
+} from "../ingest/index.ts";
 import type { Encoding, Format, HeaderMode } from "../ingest/index.ts";
 import { openWith } from "./index.ts";
 import type { ByteSource, FileHandler, SingleRef } from "./index.ts";
@@ -453,7 +460,7 @@ class Parts {
   private async skip(i: number, source: ByteSource): Promise<number> {
     if (i === 0 || source.size === 0) return 0;
 
-    const format = await this.format(i, source);
+    const format = await this.formatOrDiffers(i, source);
     const first = format === undefined ? undefined : await this.firstFormat();
     if (format !== undefined && first !== undefined) {
       const differs = disagreement(first, format, this.header);
@@ -472,6 +479,26 @@ class Parts {
     // its blank lines are blank lines of the join, which no row begins in.
     if (format === undefined) return bomLength(await source.read(0, BOM_BYTES));
     return format.dataStart;
+  }
+
+  /**
+   * formatOrDiffers is `format`, with a part in an encoding this build cannot
+   * read refused as the disagreement it is: it does not read the way the
+   * first part does, and both encodings are named, rather than the part's
+   * alone as if it were a file on its own.
+   */
+  private async formatOrDiffers(i: number, source: ByteSource): Promise<Format | undefined> {
+    try {
+      return await this.format(i, source);
+    } catch (err) {
+      if (!(err instanceof UnsupportedEncodingError)) throw err;
+      const first = await this.firstFormat();
+      if (first === undefined) throw err;
+      const differs: Disagreement = { kind: "encoding", first: first.encoding, part: err.encoding };
+      const refusal = new DisagreementError(this.parts, i, differs);
+      if (this.refused === undefined || i < this.refused.part) this.refused = refusal;
+      throw refusal;
+    }
   }
 
   /**

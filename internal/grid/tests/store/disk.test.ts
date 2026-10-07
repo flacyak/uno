@@ -296,7 +296,11 @@ test.skipIf(process.platform !== "linux")(
   "a name that is not UTF-8 is left out rather than listed as a path nothing opens",
   async () => {
     const dir = await mkdtemp(join(tmpdir(), "uno-disk-bytes-"));
-    const latin1 = Buffer.concat([Buffer.from(`${dir}/caf`), Buffer.from([0xe9]), Buffer.from(".csv")]);
+    const latin1 = Buffer.concat([
+      Buffer.from(`${dir}/caf`),
+      Buffer.from([0xe9]),
+      Buffer.from(".csv"),
+    ]);
     await writeFile(latin1, "a,b\n1,2\n");
     await writeFile(join(dir, "cafe.csv"), "a,b\n1,2\n");
 
@@ -329,9 +333,9 @@ test.skipIf(process.platform === "win32")(
     const dir = await folder();
     execFileSync("mkfifo", [join(dir, "feed")]);
 
-    await expect(readAll([localFiles()], { name: "feed", path: join(dir, "feed") })).rejects.toThrow(
-      "feed",
-    );
+    await expect(
+      readAll([localFiles()], { name: "feed", path: join(dir, "feed") }),
+    ).rejects.toThrow("feed");
   },
   2_000,
 );
