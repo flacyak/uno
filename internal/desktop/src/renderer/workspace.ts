@@ -484,6 +484,17 @@ export class Workspace {
     return !same || this.relinked.size > 0 || this.tabs.some((t) => t.dirty);
   }
 
+  /**
+   * readingFrom is the source whose file is at `path`, for a save that would
+   * write the workspace over it. A source several files are read as is
+   * reading from each of them.
+   */
+  readingFrom(path: string): Tab | undefined {
+    return this.tabs.find(
+      (t) => t.link?.path === path || t.parts?.some((p) => p.path === path) === true,
+    );
+  }
+
   /** Whether a tab holds something the last save did not. */
   unsaved(tab: Tab): boolean {
     return tab.dirty || this.relinked.has(tab.id) || !this.savedSources.includes(tab.id);

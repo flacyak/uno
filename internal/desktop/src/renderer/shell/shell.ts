@@ -86,6 +86,9 @@ export class Shell {
   /** What was warned about, for as long as the warning is on screen: the tab
    * its × would remove, or what would drop the workspace's unsaved edits. */
   private warned: Tab | Dropping | undefined;
+  /** The save in flight, while one is: a second Ctrl+S joins it rather than
+   * writing the same bytes twice, and the × waits for it to land. */
+  private saving: Promise<void> | undefined;
   /** How keys are read, which the grid and the status bar both follow. */
   private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
   /** The menu hung off the sidebar, while one is open, and the formula form. */
@@ -440,6 +443,10 @@ export class Shell {
    * the first × says so, as Ctrl+O does.
    */
   quit(): void {
+    if (this.saving !== undefined) {
+      void this.saving.then(() => this.quit());
+      return;
+    }
     if (this.drops("quit")) this.host.quit();
   }
 
@@ -1127,22 +1134,18 @@ export class Shell {
 
   // ---------------------------------------------------------------- saving
 
-  async save(): Promise<void> {
+  /**
+   * save writes the workspace where it was saved last, and asks where the
+   * first time. One save at a time: a second Ctrl+S while one is in flight,
+   * or at its dialog, joins it rather than writing the same bytes twice or
+   * asking twice.
+   */
+  save(): Promise<void> {
+    if (this.saving !== undefined) return this.saving;
     const on = this.showing();
-    if (on === undefined) return;
-    const { workspace: w, grid } = on;
-    if (w.path === "") return this.saveAs();
-
-    try {
-      await this.host.save(w.path, await w.bytes(grid.selection(), w.path));
-      w.saved(w.path);
-      this.recents.opened(w.path);
-      this.say(m.saved_path({ path: w.path }));
-    } catch (err) {
-      this.say(message(err), true);
-    }
-    this.paintTabs();
-    this.paintStatus();
+    if (on === undefined) return Promise.resolve();
+    this.saving = this.write(on, on.workspace.path === "" ? undefined : on.workspace.path);
+    return this.saving;
   }
 
   /**
@@ -1152,20 +1155,38 @@ export class Shell {
    * source beside the workspace is pointed at relative to it, so what gets
    * written depends on where it is going.
    */
-  async saveAs(): Promise<void> {
+  saveAs(): Promise<void> {
+    if (this.saving !== undefined) return this.saving;
     const on = this.showing();
-    if (on === undefined) return;
-    const { workspace: w, grid } = on;
+    if (on === undefined) return Promise.resolve();
+    this.saving = this.write(on, undefined);
+    return this.saving;
+  }
 
+  /**
+   * write is the save itself: the dialog when `path` is not known, the bytes,
+   * the host, the paint. A place the workspace reads a source from is refused
+   * before a byte goes out: the dialog asked about replacing a file, not
+   * about losing a source.
+   */
+  private async write(on: Showing, path: string | undefined): Promise<void> {
+    const { workspace: w, grid } = on;
     try {
-      const path = await this.host.pickSave(w.suggestedFileName);
-      if (path === undefined) return; // cancelled
-      await this.host.save(path, await w.bytes(grid.selection(), path));
-      w.saved(path);
-      this.recents.opened(path);
-      this.say(m.saved_path({ path }));
+      const at = path ?? (await this.host.pickSave(w.suggestedFileName));
+      if (at === undefined) return; // cancelled
+      const over = w.readingFrom(at);
+      if (over !== undefined) {
+        this.say(m.save_over_source({ name: over.name }), true);
+        return;
+      }
+      await this.host.save(at, await w.bytes(grid.selection(), at));
+      w.saved(at);
+      this.recents.opened(at);
+      this.say(m.saved_path({ path: at }));
     } catch (err) {
       this.say(message(err), true);
+    } finally {
+      this.saving = undefined;
     }
     this.paintTabs();
     this.paintStatus();

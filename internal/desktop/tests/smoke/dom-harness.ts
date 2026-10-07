@@ -88,8 +88,11 @@ function fakeLayout(): void {
  * condition runSmoke's own prelude waits on in index.ts, since nothing here
  * runs that prelude for it. It answers the shell, for a test that drives what
  * no check on `Page` reaches.
+ *
+ * `over` replaces what the host answers, for a test that saves or quits:
+ * where a save goes, what it costs, whether the window may close.
  */
-export async function bootShell(): Promise<Shell> {
+export async function bootShell(over: Partial<Host> = {}): Promise<Shell> {
   document.body.innerHTML = bodyMarkup();
   fakeLayout();
 
@@ -130,7 +133,7 @@ export async function bootShell(): Promise<Shell> {
   };
 
   const { Shell } = await import("../../src/renderer/shell/shell.ts");
-  const shell = new Shell(host);
+  const shell = new Shell({ ...host, ...over });
   await shell.openPath(FIXTURE);
 
   const start = performance.now();
