@@ -55,6 +55,15 @@ test("a top mapped to the scrollbar and back lands where it started", () => {
   }
 });
 
+test("below the cap the scrollbar's position is the top as it is, not a hair off a row's edge", () => {
+  // 32 rows under a 30px header in a 600px viewport leave 358px of scroll, and
+  // row 7 sits at 203px. 203 / 358 * 358 is 203.00000000000003, which ceil reads
+  // as row 8.
+  const vMax = 32 * ROW_H + 30 - 600;
+  expect(scrollerToTop(7 * ROW_H, vMax, vMax)).toBe(7 * ROW_H);
+  expect(topToScroller(7 * ROW_H, vMax, vMax)).toBe(7 * ROW_H);
+});
+
 test("both directions of the mapping answer 0, not NaN, when the sheet fits without scrolling", () => {
   // A short sheet has vMax === rMax === 0: nothing to scroll, in either unit.
   expect(scrollerToTop(5, 0, 0)).toBe(0);
