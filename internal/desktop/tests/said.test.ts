@@ -25,7 +25,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   text: { t: "text", text: "ENOENT: no such file or directory" },
   about: { t: "about", subject: "q4.uno", why: { t: "nothing-to-undo" } },
   replaying: { t: "replaying", name: "ads.csv", why: { t: "in-view" } },
-  read: { t: "read", delimiter: ";", header: "none" },
+  read: { t: "read", delimiter: ";", header: "none", charset: "UTF-8" },
   program: {
     t: "program",
     steps: [
@@ -105,9 +105,10 @@ describe.each(samples)("%s", (_kind, sample) => {
 
 test("the other shapes of a kind are the engine's English too", () => {
   const shapes: Said[] = [
-    { t: "read", delimiter: ",", header: "first" },
-    { t: "read", delimiter: "\t", header: "first" },
-    { t: "read", delimiter: "\t", header: "none" },
+    { t: "read", delimiter: ",", header: "first", charset: "UTF-8" },
+    { t: "read", delimiter: ";", header: "first", charset: "Windows-1252" },
+    { t: "read", delimiter: "\t", header: "first", charset: "UTF-8" },
+    { t: "read", delimiter: "\t", header: "none", charset: "UTF-8" },
     { t: "program", steps: [] },
     { t: "program", steps: [{ t: "upper" }, { t: "lower" }] },
     { t: "program", steps: [{ t: "notation", text: "slice(0, 2)" }] },
