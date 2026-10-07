@@ -12,6 +12,9 @@ import { num } from "../locale.ts";
 import type { Workspace } from "../workspace.ts";
 import { message } from "./util.ts";
 
+/** How long a find may take before the status bar says it is searching. */
+const SLOW_MS = 200;
+
 /** The open workspace and the grid showing it. */
 export interface Showing {
   workspace: Workspace;
@@ -112,10 +115,20 @@ export class Finder {
 
     // Most finds answer within a frame. Saying so only for one that does not
     // keeps the status bar from blinking on every ]f.
-    const slow = setTimeout(() => this.say(m.searching()), 200);
+    let spoke = false;
+    const slow = setTimeout(() => {
+      spoke = true;
+      this.say(m.searching());
+    }, SLOW_MS);
     try {
       const found = await w.find({ col, from: row, dir, match });
-      if (asked !== this.finds || this.showing()?.workspace !== w || w.active !== tab) return;
+      // A newer find speaks for itself, over whatever this one said.
+      if (asked !== this.finds) return;
+      if (this.showing()?.workspace !== w || w.active !== tab) {
+        // The answer is to a tab since left, and so is what was said of it.
+        if (spoke) this.say("");
+        return;
+      }
       if (found.row !== null) {
         grid.moveTo(found.row, col);
         this.say("");
