@@ -17,8 +17,19 @@ export const AHEAD = 4;
 /** A read of one range. */
 export type ReadRange = (offset: number, length: number) => Promise<Uint8Array>;
 
-/** How many recent read ends are remembered to spot a reader going on from one. */
-const REMEMBERED = 4;
+/**
+ * How many recent reads are remembered, to spot a reader going on from one
+ * and to know which readers are still about. A reader none of the last few
+ * reads belonged to has gone, and what was asked for ahead of it is let go.
+ */
+export const REMEMBERED = 4;
+
+/** One reader going through the object in order: where it is up to, and how
+ * much it reads at a time. */
+interface Stream {
+  next: number;
+  length: number;
+}
 
 /**
  * readAhead wraps `read` with read-ahead for a reader going through the object
@@ -31,29 +42,40 @@ const REMEMBERED = 4;
  * read as asked and changes nothing, so a reader in order keeps its chunks
  * coming while the page reads around it.
  *
+ * Two readers in order share the window rather than take it from each other.
+ * The grid drawing two blocks in a row is a reader in order for exactly two
+ * reads, and the index pass goes on from where it was a moment later; letting
+ * go of what was asked ahead for it would ask for all of it again, every time
+ * the page scrolled. So a chunk is held for the reader it was asked for until
+ * that reader has not read for `REMEMBERED` reads, and only then let go.
+ *
  * A chunk asked for ahead that fails is not an error until somebody reads it:
  * the failure is handed to that read, in the words `read` failed with.
  */
 export function readAhead(read: ReadRange, size: number, ahead = AHEAD): ReadRange {
-  /** The chunks asked for ahead, by where they start. */
-  const held = new Map<number, { length: number; bytes: Promise<Uint8Array> }>();
-  /** Where recent reads ended, newest last. */
-  const ends: number[] = [];
-  /** Where the reader in order is up to, and how much it reads at a time. */
-  let stream: { next: number; length: number } | undefined;
+  /** The chunks asked for ahead, by where they start, and for whom. */
+  const held = new Map<number, { length: number; bytes: Promise<Uint8Array>; for: Stream }>();
+  /** The reader each recent read belonged to, newest last. */
+  const recent: Stream[] = [];
+  /** The reader in order whose next chunks are asked for. */
+  let stream: Stream | undefined;
 
-  function ended(at: number): void {
-    ends.push(at);
-    if (ends.length > REMEMBERED) ends.shift();
+  function remember(who: Stream): void {
+    recent.push(who);
+    if (recent.length > REMEMBERED) recent.shift();
   }
 
   /**
    * topUp asks for the stream's next chunks. The chunk the reader is waiting
    * on counts as one of `ahead`, so no more than `ahead` are ever in flight
-   * or held at once.
+   * or held at once -- which is why what was held for a reader that has gone
+   * is let go first: it is taking a place in the window from the one here.
    */
   function topUp(): void {
     if (stream === undefined) return;
+    for (const [offset, chunk] of held) {
+      if (!recent.includes(chunk.for)) held.delete(offset);
+    }
     let at = stream.next;
     while (held.has(at)) at += held.get(at)!.length;
     while (held.size < ahead - 1 && at < size) {
@@ -61,32 +83,27 @@ export function readAhead(read: ReadRange, size: number, ahead = AHEAD): ReadRan
       const bytes = read(at, length);
       // Handed to whoever reads it; unread, it is nobody's to report.
       bytes.catch(() => undefined);
-      held.set(at, { length, bytes });
+      held.set(at, { length, bytes, for: stream });
       at += length;
     }
   }
 
   return (offset, length) => {
-    const got = held.get(offset);
-    if (got !== undefined && got.length === length) {
-      held.delete(offset);
-      stream = { next: offset + length, length };
-      ended(offset + length);
-      topUp();
-      return got.bytes;
+    // A reader going on from where it stopped is the one that stopped there,
+    // whether or not it is the one being read ahead of: it is now.
+    const going = recent.findLast((who) => who.next === offset);
+    if (going === undefined) {
+      remember({ next: offset + length, length });
+    } else {
+      going.next = offset + length;
+      going.length = length;
+      stream = going;
+      remember(going);
     }
 
-    // A reader going on from where it stopped, and somewhere other than the
-    // stream already being read ahead of: that stream has moved on, so what
-    // was asked for it is let go rather than held against the new one.
-    if (ends.includes(offset) && offset !== stream?.next) {
-      held.clear();
-      stream = { next: offset + length, length };
-    } else if (offset === stream?.next) {
-      stream = { next: offset + length, length };
-    }
-    ended(offset + length);
-    const bytes = read(offset, length);
+    const got = held.get(offset);
+    const bytes = got !== undefined && got.length === length ? got.bytes : read(offset, length);
+    if (got?.bytes === bytes) held.delete(offset);
     topUp();
     return bytes;
   };
