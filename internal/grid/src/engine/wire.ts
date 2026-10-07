@@ -268,11 +268,15 @@ function isRecord(value: unknown): value is { [key: string]: Json } {
 /**
  * trouble is something the socket has to say for itself, as the reply an
  * engine sends when a thing nobody asked about fails. It is a diagnostic as
- * written: the socket going is not yet a sentence with a kind of its own.
+ * written: a frame that cannot be read is not yet a sentence with a kind of
+ * its own.
  */
 function trouble(text: string): Reply {
   return { t: "error", said: { t: "text", text } };
 }
+
+/** What a port's listener is told, by what it listens for. */
+type Listening = ["message", (e: { data: unknown }) => void] | ["close", () => void];
 
 /** The part of a browser's web socket this uses. The `ws` package's has it too. */
 export interface WebSocketLike {
@@ -291,12 +295,13 @@ export interface WebSocketLike {
  * message over it is refused here, in a sentence, where sending it would have
  * the engine drop the connection and every tab with it.
  *
- * A socket that closes under the client says so once, as the error an engine
- * sends when something fails behind a source, since that is where a client
- * already listens for trouble nobody asked about.
+ * A socket that closes under the client closes the port, the way a
+ * MessagePort closes when the process behind it goes, and the client says so
+ * from there.
  */
 export function socketPort(socket: WebSocketLike, limit = FRAME_LIMIT): MessagePortLike {
   const listeners: Array<(e: { data: unknown }) => void> = [];
+  const closes: Array<() => void> = [];
   let closed = false;
 
   socket.binaryType = "arraybuffer";
@@ -314,9 +319,13 @@ export function socketPort(socket: WebSocketLike, limit = FRAME_LIMIT): MessageP
   socket.addEventListener("close", () => {
     if (closed) return;
     closed = true;
-    const gone = trouble("the connection to the engine closed");
-    for (const fn of listeners) fn({ data: gone });
+    for (const fn of closes) fn();
   });
+
+  function addEventListener(...[type, fn]: Listening): void {
+    if (type === "message") listeners.push(fn);
+    else closes.push(fn);
+  }
 
   return {
     postMessage(message) {
@@ -330,7 +339,7 @@ export function socketPort(socket: WebSocketLike, limit = FRAME_LIMIT): MessageP
       }
       socket.send(typeof frame === "string" ? frame : new Blob(frame));
     },
-    addEventListener: (_type, fn) => void listeners.push(fn),
+    addEventListener,
     // A web socket has no queue to start: it delivers as soon as it is open.
     start: () => undefined,
     close() {

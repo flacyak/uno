@@ -54,10 +54,14 @@ export class Engine {
   private next = 1;
   private readonly waiting = new Map<number, Waiter<Reply>>();
   private readonly sources = new Map<string, SourceHandle>();
-  private closed = false;
+  /** Why nothing more can be asked, once nothing can: closed here, or gone there. */
+  private gone: Error | undefined;
 
   constructor(private readonly port: Port<Reply, Request>) {
-    port.listen((msg) => this.receive(msg));
+    port.listen(
+      (msg) => this.receive(msg),
+      () => this.lost(),
+    );
   }
 
   /**
@@ -117,7 +121,7 @@ export class Engine {
   }
 
   mode(transform: boolean): void {
-    if (!this.closed) this.port.post({ t: "mode", transform });
+    if (this.gone === undefined) this.port.post({ t: "mode", transform });
   }
 
   /** save returns the workspace as a .uno, refusing carried sources larger than
@@ -192,19 +196,36 @@ export class Engine {
 
   /** close ends the connection. The worker behind it goes when its port does. */
   close(): void {
-    if (this.closed) return;
-    this.closed = true;
+    if (this.gone !== undefined) return;
+    this.gone = new Error("the engine was closed");
     this.port.post({ t: "close" });
     this.port.close();
+    this.refuse(this.gone);
+  }
 
-    const gone = new Error("the engine was closed");
-    for (const w of this.waiting.values()) w.reject(gone);
+  /**
+   * lost is the far end going first: the process behind the port exited, or
+   * the socket closed. Every request out is refused, so nothing waits on an
+   * answer that cannot come, and it is said once where a client listens for
+   * trouble nobody asked about.
+   */
+  private lost(): void {
+    if (this.gone !== undefined) return;
+    const said: Said = { t: "text", text: "the connection to the engine closed" };
+    this.gone = new Refusal(said);
+    this.port.close();
+    this.refuse(this.gone);
+    this.onError(said);
+  }
+
+  private refuse(why: Error): void {
+    for (const w of this.waiting.values()) w.reject(why);
     this.waiting.clear();
   }
 
   /** ask sends a request and resolves with its answer. For SourceHandle. */
   ask(make: (id: number) => Request): Promise<Reply> {
-    if (this.closed) return Promise.reject(new Error("the engine was closed"));
+    if (this.gone !== undefined) return Promise.reject(this.gone);
     const id = this.next++;
     return new Promise((resolve, reject) => {
       this.waiting.set(id, { resolve, reject });

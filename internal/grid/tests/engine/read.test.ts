@@ -7,12 +7,22 @@ import { join } from "node:path";
 
 import { expect, test } from "vite-plus/test";
 
-import { Band, Pages, RowIndex, indexPass } from "../../src/engine/index.ts";
-import type { Engine } from "../../src/engine/index.ts";
+import {
+  Band,
+  Engine,
+  Pages,
+  RowIndex,
+  english,
+  indexPass,
+  messagePort,
+  serve,
+} from "../../src/engine/index.ts";
+import type { MessagePortLike, Reply, Request } from "../../src/engine/index.ts";
 import { openFormat } from "../../src/ingest/index.ts";
 import { isNumber } from "../../src/num/index.ts";
 import { NO_ROW, Op } from "../../src/sheet/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
+import { sources } from "../../src/plugin/index.ts";
 import { blobSource } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { LAST_ROW, REGION, REVENUE, ROWS, UNITS } from "../testdata/sales-q3.ts";
@@ -287,4 +297,26 @@ test("an engine closed with opens waiting their turn opens none of them", async 
   await disk.closed;
   expect(disk.opens()).toBe(1);
   expect(disk.closes()).toBe(1);
+});
+
+// The far end going first: the process behind the port exited under a client
+// with an open on its way. The open is refused rather than left waiting, and
+// the client hears it once, where it listens for trouble nobody asked about.
+test("an engine whose port goes with a request out refuses it, and says so once", async () => {
+  const { port1, port2 } = new MessageChannel();
+  serve(
+    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
+    sources([diskProvider()]),
+  );
+  const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
+  const said: string[] = [];
+  engine.onError = (heard) => said.push(english(heard));
+
+  const opening = engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
+  port1.close();
+  await expect(opening).rejects.toThrow("the connection to the engine closed");
+  await expect(engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) })).rejects.toThrow(
+    "the connection to the engine closed",
+  );
+  expect(said).toEqual(["the connection to the engine closed"]);
 });
