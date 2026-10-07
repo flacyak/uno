@@ -309,9 +309,27 @@ export function newReplace(src: string, lit: string): ReplaceStep {
 /**
  * quoteRegex renders a pattern back between slashes, escaping the delimiter so
  * a pattern containing one still round-trips.
+ *
+ * A slash the pattern already escapes is kept as the one escape rather than
+ * given a second backslash: the parser reads `\/` as the delimiter, so a
+ * doubled one would come back as a literal backslash and a pattern's end.
  */
 export function quoteRegex(src: string): string {
-  return "/" + src.replaceAll("/", "\\/") + "/";
+  let out = "/";
+  const r = runes(src);
+  for (let i = 0; i < r.length; i++) {
+    const c = r[i]!;
+    if (c === "\\" && i + 1 < r.length) {
+      const next = r[i + 1]!;
+      out += next === "/" ? "\\/" : "\\" + next;
+      i++;
+    } else if (c === "/") {
+      out += "\\/";
+    } else {
+      out += c;
+    }
+  }
+  return out + "/";
 }
 
 /**

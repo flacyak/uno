@@ -80,9 +80,11 @@ class Parser {
   }
 
   step(): Step {
+    this.space();
+    const at = this.i + 1;
     const name = this.ident();
     if (name === "") {
-      throw new Error(`expected a step name at character ${this.i + 1}, ${this.here()}`);
+      throw new Error(`expected a step name at character ${at}, ${this.here()}`);
     }
     this.expect("(");
 
@@ -107,7 +109,7 @@ class Parser {
         st = { kind: "case", up: false };
         break;
       default:
-        throw new Error(`unknown step ${quote(name)} at character ${this.i - name.length}`);
+        throw new Error(`unknown step ${quote(name)} at character ${at}`);
     }
 
     this.expect(")");

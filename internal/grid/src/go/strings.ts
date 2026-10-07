@@ -52,8 +52,8 @@ export function compareStrings(a: string, b: string): number {
 }
 
 /** The last code point one UTF-16 unit holds; above it a pair does. */
-const MAX_BMP = 0xffff;
-const SURROGATE_PAIR_UNITS = 2;
+export const MAX_BMP = 0xffff;
+export const SURROGATE_PAIR_UNITS = 2;
 
 // unicode.IsLetter is category L and unicode.IsDigit is category Nd, so
 // `region` is a legal column name and `[a-zA-Z]` is not the test.

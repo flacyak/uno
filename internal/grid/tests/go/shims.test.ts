@@ -306,6 +306,16 @@ describe("replaceAllLiteral", () => {
     expect(replaceAllLiteral(/(a)/u, "aa", "$1")).toBe("$1$1");
     expect(replaceAllLiteral(/,/u, "1,204,567", "")).toBe("1204567");
   });
+
+  // Go gives "-" for the first and "#a#b#" for the second: an empty match that
+  // sits where the previous match ended is not replaced again. String.replace
+  // gives "--" and "#a##b#", a second replacement for one run of digits.
+  test("an empty match abutting a previous match is not replaced twice", () => {
+    expect(replaceAllLiteral(/a*/u, "aaa", "-")).toBe("-");
+    expect(replaceAllLiteral(/\d*/u, "a12b", "#")).toBe("#a#b#");
+    expect(replaceAllLiteral(/x*/u, "abc", "-")).toBe("-a-b-c-");
+    expect(replaceAllLiteral(/x*/u, "a\u{1F600}b", "-")).toBe("-a-\u{1F600}-b-");
+  });
 });
 
 describe("findAllIndex", () => {
