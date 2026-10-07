@@ -2,10 +2,11 @@
 //
 // The engine measures and @uno/grid adds it up. This file is the part only a
 // platform can do, which is sending it. Nothing is sent unless
-// OTEL_EXPORTER_OTLP_ENDPOINT is set, the variable every OpenTelemetry tool
-// reads, so it is something a person turns on for their own machine and off
-// for everybody else's. Grafana Cloud's OTLP gateway and the local stack in
-// observability/ both take what is sent here as it is.
+// OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_EXPORTER_OTLP_METRICS_ENDPOINT is set,
+// the variables every OpenTelemetry tool reads, so it is something a person
+// turns on for their own machine and off for everybody else's. Grafana
+// Cloud's OTLP gateway and the local stack in observability/ both take what
+// is sent here as it is.
 //
 // What is sent says what was done and how long it took: the kind of request,
 // whether the bytes were on a disk or in a bucket, the count and size of the

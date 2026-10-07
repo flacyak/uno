@@ -55,8 +55,9 @@ Over unsaved edits the first `×` says so and the second closes.
 The heads and the empty middle of the status bar are where the window is dragged from.
 
 The status bar holds the window's switches.
-The one at its left closes the sidebar so the grid has the width, as Ctrl+B does, and the choice is kept.
-At its right are View / Transform and the switch for the sources panel.
+The one at its left closes the sidebar so the grid has the width, as Ctrl+B does under the default keys, and the choice is kept.
+Under Vim-style Ctrl+B pages up, and the switch is how the sidebar closes.
+At its right are View / Transform and the switch for the sources panel, which Ctrl+Shift+B opens too.
 
 The menu still exists, for its keys: Ctrl+O, Ctrl+S, Ctrl+Q and the rest are accelerators on its items.
 Its bar is hidden on Windows and Linux, and macOS shows it at the top of the screen as it does for every app.
@@ -292,8 +293,10 @@ How the grid reads keys is an input strategy, picked under Keys in settings and
 kept between launches. There are two, and Default is the one a new install gets.
 
 **Default** is a spreadsheet's keys. The arrows, Tab, PgUp, PgDn, Home and End
-move. Enter, F2 or a double click open the editor on the value, and typing over
-a cell replaces it. In the editor Enter keeps the typing and Esc throws it away.
+move, and Shift+Tab moves left. Enter, F2 or a double click open the editor on
+the value, and typing over a cell replaces it. In the editor Enter keeps the
+typing and Esc throws it away, and Tab keeps it and moves on to the next cell,
+Shift+Tab to the one before.
 Ctrl+C copies what the cell stores, Ctrl+Z takes back the last edit and selects
 the cell it changed, and Ctrl+R records it again, until the next edit.
 
@@ -304,7 +307,8 @@ one level in and Esc one level back out.
 `i` in view switches to transform and stops there. In transform, `i`, `a`, `s`
 and Enter open the editor with the caret at the start, at the end, on nothing
 and on the whole value. `a` in view does both at once. Esc in the editor keeps
-what was typed, as Enter does. Letters are commands, so typing over a cell
+what was typed, as Enter does, and Tab keeps it and moves on to the next cell,
+Shift+Tab to the one before. Letters are commands, so typing over a cell
 starts with `s`. `u` takes back the last edit, as Ctrl+Z does, and selects the
 cell it changed. Ctrl+r records it again, until the next edit, and no longer
 reloads the window.
@@ -312,11 +316,13 @@ reloads the window.
 Moving is the same in both modes and writes nothing: `h` `j` `k` `l`, `w` and
 `b` through cells in reading order, `0` `^` `$` across the row, `gg` and `G` to
 the first and last row, `H` `M` `L` to the top, middle and bottom row on screen,
-Ctrl+d, u, f and b by half and whole pages. Each takes a count, which waits in
+Ctrl+d, u, f and b by half and whole pages, so Ctrl+b is a page up here and
+the sidebar closes from the status bar. Each takes a count, which waits in
 the status bar until the motion arrives, and `{n}G` goes to row n. `zt` `zz`
 `zb` scroll the selected row to the top, middle or bottom and leave it selected.
-`m{a-z}` marks a cell for as long as the workspace is open, `'{a-z}` goes back
-to it, and `''` returns to where the last jump left from.
+`m{a-z}` marks a cell in the tab it was made on, for as long as the workspace
+is open, `'{a-z}` goes back to it, and `''` returns to where the last jump left
+from.
 
 Changing is transform's. `x` clears a cell and `p` sets it to what `yy` copied.
 `yy` works in view too, since copying changes nothing, and copies what the cell
@@ -333,8 +339,8 @@ any cell, and `gx` is Not now.
 
 `:` opens a command line in the status bar, in either mode. `:w` saves as Ctrl+S
 does, `:sav` is Save As, `:e` opens a file but refuses over unsaved edits unless
-it is `:e!`, and `:{n}` goes to row n. There is no `:q`; closing is the window's
-job.
+it is `:e!`, `:sources` opens the sources panel, and `:{n}` goes to row n.
+There is no `:q`; closing is the window's job.
 
 `gt` and `gT` go to the next and previous source's tab, `{n}gt` to the nth.
 
@@ -350,7 +356,7 @@ work as before.
 
 The keys are read by an input strategy in `src/renderer/input/`, and what they
 mean is carried out through `src/renderer/keys.ts`. Neither touches the DOM, and
-both are tested without a window. The whole plan is `resource/vim-motions.html`.
+both are tested without a window.
 
 ## The text
 
@@ -416,7 +422,9 @@ A 4,812-row export is about forty elements in the DOM. The scroller's inner
 height is the whole sheet; the table inside holds only the rows that fit, moved
 into place with one transform per frame. Every cell reads `display(row, col)`
 from a sheet or a band, and both are array reads. Recalculation happens when an
-edit lands, never when a cell is drawn.
+edit lands, never when a cell is drawn. The gutter numbers rows grouped the way
+the status bar counts them, and a column whose header is blank is named
+`column N` by its place, in the grid and wherever the status bar names it.
 
 Past 15 million pixels of rows, about 517,000, the scroller's height is capped
 and the scrollbar maps onto the rows by proportion. The wheel and the keys still
