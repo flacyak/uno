@@ -310,17 +310,19 @@ async function ssoSession(
   const cacheKey = named ?? startUrl!;
   const name = createHash("sha1").update(cacheKey).digest("hex") + ".json";
   const path = join(homeOf(env), ".aws", "sso", "cache", name);
-  let token: { accessToken?: unknown; expiresAt?: unknown };
+  let text: string;
   try {
-    const bytes = await readAll([localFiles()], { name, path });
-    token = JSON.parse(new TextDecoder().decode(bytes)) as typeof token;
+    text = new TextDecoder().decode(await readAll([localFiles()], { name, path }));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
   }
+  // `aws sso login` writes the cache in place, so a sign-in cut short leaves
+  // half a file: a sign-in uno cannot read, mended the same way as any other.
+  const token = cachedToken(text);
   // Older CLIs wrote the time with a UTC suffix rather than a Z.
-  const expires = new Date(String(token.expiresAt).replace(/UTC$/, "Z"));
-  if (typeof token.accessToken !== "string" || Number.isNaN(expires.getTime())) {
+  const expires = new Date(String(token?.expiresAt).replace(/UTC$/, "Z"));
+  if (typeof token?.accessToken !== "string" || Number.isNaN(expires.getTime())) {
     throw new Error(signInAgain(profile, "its cached SSO sign-in could not be read"));
   }
   if (expires.getTime() <= Date.now()) {
@@ -337,6 +339,19 @@ async function ssoSession(
     },
     { endpoint: env["AWS_ENDPOINT_URL_SSO"] },
   );
+}
+
+/** What a cache file holds, where it holds a JSON object at all. */
+function cachedToken(text: string): Record<string, unknown> | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  return typeof parsed === "object" && parsed !== null
+    ? (parsed as Record<string, unknown>)
+    : undefined;
 }
 
 /**

@@ -178,6 +178,28 @@ describe("the call", () => {
       ),
     ).rejects.toThrow(/· SignatureDoesNotMatch:/);
   });
+
+  // What STS said is read with its entities undone, and an escape that names
+  // a code point no string can hold is left as it came rather than thrown
+  // over: the refusal is still what STS said, and still in words.
+  test("a refusal escaped past what a string can hold is still said in words", async () => {
+    const message = "Session for a&amp;b was refused at &#1114112; by &#xFFFFFFFF;";
+    const refuse: typeof fetch = async () =>
+      new Response(
+        `<ErrorResponse><Error><Type>Sender</Type><Code>AccessDenied</Code>` +
+          `<Message>${message}</Message></Error></ErrorResponse>`,
+        { status: 403, headers: { "content-type": "text/xml" } },
+      );
+    await expect(
+      assumeRole(
+        { roleArn: READER, sessionName: "ana", externalId: EXTERNAL, region: HOME_REGION },
+        BASE,
+        { endpoint: s.endpoint, fetch: refuse },
+      ),
+    ).rejects.toThrow(
+      `STS would not let ${READER} be assumed · AccessDenied: Session for a&b was refused at &#1114112; by &#xFFFFFFFF;`,
+    );
+  });
 });
 
 describe("profiles with role_arn", () => {
