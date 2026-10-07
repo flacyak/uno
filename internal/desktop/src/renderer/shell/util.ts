@@ -63,6 +63,8 @@ export function walk(
   // A control that is disabled takes no focus, and a step that stopped on it
   // would stop there for good: it is stepped over.
   const live = controls.filter((c) => !c.hasAttribute("disabled"));
+  // With nothing to land on, the key is left to the page rather than swallowed.
+  if (live.length === 0) return false;
   const at = live.indexOf(document.activeElement as HTMLElement);
   // From outside the controls, a step forward lands on the first and one
   // back on the last, as it would from the end either step walks past.

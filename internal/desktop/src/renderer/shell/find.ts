@@ -6,6 +6,7 @@
 import type { FindRequest } from "@uno/grid/engine";
 
 import { m } from "../../paraglide/messages.js";
+import { columnLabel } from "../grid/rows.ts";
 import type { Grid } from "../grid/index.ts";
 import { num } from "../locale.ts";
 import type { Workspace } from "../workspace.ts";
@@ -42,10 +43,10 @@ export class Finder {
     // Plain text has nothing in it to fail, and reading the file to say so
     // would be slow for nothing.
     if (column.kind === "text" && !column.flagged) {
-      this.say(m.find_column_is_text({ column: column.header }), true);
+      this.say(m.find_column_is_text({ column: columnLabel(column.header, col) }), true);
       return;
     }
-    const from = { row: num(row + 1), column: column.header };
+    const from = { row: num(row + 1), column: columnLabel(column.header, col) };
     const missing =
       column.kind === "date"
         ? dir === 1
@@ -85,7 +86,8 @@ export class Finder {
     const on = this.showing();
     if (on === undefined) return;
     const { row, col } = on.grid.selection();
-    const header = on.workspace.rows.columns[col]?.header ?? m.this_column();
+    const column = on.workspace.rows.columns[col];
+    const header = column === undefined ? m.this_column() : columnLabel(column.header, col);
     const from = { text, row: num(row + 1), column: header };
     void this.find(
       { t: "text", text },

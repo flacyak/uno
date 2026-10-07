@@ -12,6 +12,7 @@ import type { InputStrategy } from "../input/strategy.ts";
 import { NOTHING, changeOf, isJump, replay, showing, target } from "../keys.ts";
 import type { Action, Caret, Change, Motion, Pending } from "../keys.ts";
 import { num } from "../locale.ts";
+import { columnLabel } from "./rows.ts";
 import type { Cell, GridEvents, Rows } from "./rows.ts";
 import { View } from "./view.ts";
 
@@ -360,8 +361,9 @@ export class Grid {
     // A derived column stores nothing to type over. The sheet would refuse it;
     // saying so before the keystroke is kinder than after it.
     if (source.binding(this.selCol) !== undefined) {
+      const column = source.columns[this.selCol];
       return m.computed_nothing_to_type({
-        column: source.columns[this.selCol]?.header ?? m.this_column(),
+        column: column === undefined ? m.this_column() : columnLabel(column.header, this.selCol),
       });
     }
     return this.unreadable(source);

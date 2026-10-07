@@ -12,6 +12,7 @@
 import "./formula.css";
 
 import { m } from "../../paraglide/messages.js";
+import { columnLabel } from "../grid/rows.ts";
 import type { MenuPlace } from "./menu.ts";
 import { message, walk } from "./util.ts";
 
@@ -66,7 +67,8 @@ export class FormulaForm {
     for (const [i, c] of columns.entries()) {
       const option = document.createElement("option");
       option.value = String(i);
-      option.textContent = c.header;
+      // A blank header is named by its place here as it is in the grid.
+      option.textContent = columnLabel(c.header, i);
       this.column.append(option);
     }
     this.column.value = String(Math.min(Math.max(selected, 0), columns.length - 1));

@@ -20,6 +20,7 @@ import type { SingleRef } from "@uno/grid/store";
 import { s3Location } from "@uno/grid/store/s3";
 
 import { m } from "../../paraglide/messages.js";
+import { columnLabel } from "../grid/rows.ts";
 import type { Host } from "../../shared/host.ts";
 import type { Grid, GridEvents } from "../grid/index.ts";
 import { strategy } from "../input/index.ts";
@@ -554,8 +555,12 @@ export class Shell {
     // changed, which also brings a column off the side of the window on screen.
     const on = this.showing();
     if (on?.workspace === w && w.active === tab) on.grid.moveTo(on.grid.selection().row, col);
+    const column = tab.band.columns[col];
     this.say(
-      m.column_computed_from({ column: tab.band.columns[col]?.header ?? m.the_column(), expr }),
+      m.column_computed_from({
+        column: column === undefined ? m.the_column() : columnLabel(column.header, col),
+        expr,
+      }),
     );
   }
 
