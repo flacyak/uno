@@ -41,6 +41,25 @@ test("binding a column fills it from one line", () => {
   expect(s.editCount(), "the binding should be one line").toBe(1);
 });
 
+// The badge reads a column after strings.TrimSpace, so "40.00\t" is numeric. A
+// formula bound over that column has to read the same 40.00 rather than show
+// #ERR beside a badge that promised arithmetic.
+test("a cell the badge calls numeric computes, however it is padded", () => {
+  const s = new Sheet(
+    "sales.csv",
+    ["region", "price", "cost", "margin"],
+    [
+      ["West", "40.00\t", "31.20", ""],
+      ["East", "\u00a040.00", "30.00\r", ""],
+    ],
+  );
+  expect(s.columns[PRICE]!.kind).toBe("num");
+  expect(s.columns[COST]!.kind).toBe("num");
+
+  s.bind(MARGIN, parse("(price - cost) / price"));
+  expect([0, 1].map((row) => s.display(row, MARGIN))).toEqual(["0.22", "0.25"]);
+});
+
 // Binary floating point makes (40.00 - 31.20) / 40.00 into 0.21999999999999997,
 // and a column of those is arithmetic showing its working rather than answering.
 test("a computed value is not shown with its floating point noise", () => {

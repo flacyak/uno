@@ -11,7 +11,7 @@
 // Nothing here knows what a sheet is. A value arrives as the string it was
 // stored as and leaves as a number or as nothing.
 
-import { parseFloat as parseDecimal } from "../go/index.ts";
+import { parseFloat as parseDecimal, trimSpace } from "../go/index.ts";
 
 /**
  * DECORATION is what a number wears when it was formatted for a reader rather
@@ -76,10 +76,15 @@ function decimal(v: string): number | undefined {
  * evaluator was pointed at computes on the value a person sees rather than
  * refusing 1,204 for wearing a comma.
  *
+ * The edges are trimmed the way the badge trims them, by `strings.TrimSpace`,
+ * before the costume comes off: the recogniser calls a column of "12\t" numeric,
+ * and arithmetic bound to it must read the 12 the badge promised rather than
+ * refuse the tab. Undressing alone strips a plain space and nothing else.
+ *
  * It reports `undefined` rather than throwing because the caller that has
  * something to say about the failure is the one that knows which column and
  * which row the value came from, and this module knows neither.
  */
 export function parse(v: string): number | undefined {
-  return decimal(signed(undress(v)));
+  return decimal(signed(undress(trimSpace(v))));
 }
