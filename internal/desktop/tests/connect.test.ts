@@ -72,6 +72,26 @@ test("an id already kept for another folder is not taken; the same folder keeps 
   expect(again.created).toEqual(kept[0]!.created);
 });
 
+// The library's rule for a newer uno's keys holds in the form too: a connection
+// made again is the kept one edited, and what this build did not recognise in
+// it is still there after the save.
+test("the same folder made again carries what this build did not recognise", () => {
+  const extra = new Map<string, unknown>([["sso_session", "corp"]]);
+  const authExtra = new Map<string, unknown>([["sso_account_id", "123456789012"]]);
+  const kept = [
+    connection({ extra, auth: { mode: "profile", profile: "finance", extra: authExtra } }),
+  ];
+
+  const same = draftOf({ bucket: "acme-exports", prefix: "shop", signIn: "profile:finance" }, kept);
+  expect(same.extra).toEqual(extra);
+  expect(same.auth).toEqual({ mode: "profile", profile: "finance", extra: authExtra });
+
+  // Signing in another way is another auth block, and the old one's keys were about the old one.
+  const other = draftOf({ bucket: "acme-exports", prefix: "shop", signIn: "machine" }, kept);
+  expect(other.extra).toEqual(extra);
+  expect(other.auth).toEqual({ mode: "machine" });
+});
+
 test("a test that worked says what the folder held", () => {
   const tried: Tried = {
     connection: connection({ region: REGION }),
@@ -406,6 +426,26 @@ test("changing a field after a test takes the test back", async () => {
   form().requestSubmit();
   await settle();
   expect(asks.tried.map((c) => c.prefix)).toEqual(["", "refunds/"]);
+});
+
+// The names can land after a quick Test, and pick a profile the test did not
+// sign in with. The select moving is a field changing, and takes the test back
+// like typing would, so what the form says passed is what is on screen.
+test("the profile list arriving after a test takes the test back", async () => {
+  let name: (names: string[]) => void = () => {};
+  asks.profiles = () => new Promise<string[]>((resolve) => (name = resolve));
+  panel.connect({ bucket: "acme-exports" });
+  await settle();
+  press("Test");
+  await settle();
+  expect(asks.tried.map((c) => c.auth)).toEqual([{ mode: "machine" }]);
+  expect(result()).toBe("✓ listed the bucket · 3 folders, 41 files");
+
+  name(["default"]);
+  await settle();
+  expect(select().value).toBe("profile:default");
+  expect(result()).toBe("");
+  expect(region()).toBe("detected by the test");
 });
 
 test("Esc gives up, keeps nothing, and gives the list back its place", async () => {
