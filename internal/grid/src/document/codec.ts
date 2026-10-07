@@ -142,7 +142,7 @@ function heldFile(
   return {
     id: src.id,
     name: src.name,
-    raw: src.entry === "" ? undefined : readEntry(name, entries, src.entry),
+    raw: src.entry === "" ? undefined : carriedBytes(name, entries, src),
     path: src.path === "" ? undefined : resolvedPath(src.path, at),
     bytes: src.bytes,
     version: src.version === "" ? undefined : src.version,
@@ -151,6 +151,31 @@ function heldFile(
     cols: src.cols,
     state,
   };
+}
+
+/**
+ * carriedBytes reads a carried source and holds it to the hash the save
+ * recorded of it.
+ *
+ * The zip's own checksum is not checked by the unzip this reads with, so a
+ * byte flipped on disk would otherwise open as the file it was, replay the
+ * log over the wrong cells and save the damage back under a fresh hash. The
+ * manifest's hash is what the save promised, and a mismatch is said in words
+ * before a sheet is built. A file with no hash recorded is taken as it is,
+ * since there is nothing to hold it to.
+ */
+function carriedBytes(
+  name: string,
+  entries: Record<string, Uint8Array>,
+  src: FileSource,
+): Uint8Array {
+  const raw = readEntry(name, entries, src.entry);
+  if (src.sha256 !== "" && sha256Hex(raw) !== src.sha256) {
+    throw new Error(
+      `${name}: ${src.entry} is not the ${src.name} the manifest describes: its sha256 does not match, so the file is damaged`,
+    );
+  }
+  return raw;
 }
 
 /** Several files read as one as the workspace holds them: where each part is,
@@ -545,7 +570,10 @@ function readJSON(name: string, entries: Record<string, Uint8Array>, entry: stri
  * Anything unparseable earlier in the file is a log that has been damaged in
  * the middle, where stopping would silently discard the operations after it, so
  * that is an error. So is a line naming a source the manifest does not list,
- * since there is no grid to replay it into.
+ * since there is no grid to replay it into, and a line numbered out of turn:
+ * every build numbers a source's edits 1, 2, 3 and gives the next edit the
+ * number after the last, so a log numbered any other way would hand a new
+ * edit a number already taken, and a rule would run over the wrong writes.
  */
 function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest): Logged[] {
   const entry = m.edits.entry;
@@ -555,16 +583,18 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
   const only = m.sources.length === 1 ? m.sources[0]!.id : undefined;
 
   const log: Logged[] = [];
+  const counted = new Map<string, number>();
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (line.trim() === "") continue;
+    const where = `${name}: ${entry} line ${i + 1}`;
 
     let raw: unknown;
     try {
       raw = JSON.parse(line);
     } catch (err) {
       if (i === lines.length - 1) break; // a truncated tail costs the last operation, at worst
-      throw new Error(`${name}: ${entry} line ${i + 1}: ${(err as Error).message}`);
+      throw new Error(`${where}: ${(err as Error).message}`);
     }
 
     const named = asString(asRecord(raw)["source"]);
@@ -572,11 +602,19 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
     if (source === undefined || !ids.has(source)) {
       throw new Error(
         named === ""
-          ? `${name}: ${entry} line ${i + 1} does not say which source it changed`
-          : `${name}: ${entry} line ${i + 1} changes ${named}, which is not a source in this file`,
+          ? `${where} does not say which source it changed`
+          : `${where} changes ${named}, which is not a source in this file`,
       );
     }
-    log.push({ source, edit: parseEdit(raw) });
+    const edit = parseEdit(where, raw);
+    const expected = (counted.get(source) ?? 0) + 1;
+    if (edit.seq !== expected) {
+      throw new Error(
+        `${where} is edit ${edit.seq} of ${source}, where edit ${expected} comes next`,
+      );
+    }
+    counted.set(source, expected);
+    log.push({ source, edit });
   }
   return log;
 }
@@ -833,8 +871,18 @@ function parseSheetState(o: Record<string, unknown>): State {
   return state;
 }
 
-function parseEdit(v: unknown): Edit {
+/**
+ * parseEdit reads one line of the log. `where` is what an error calls the
+ * line. The numbers are held to whole ones here, where the line is known,
+ * since a row of 0.5 is a cell no sheet has and the sheet would only say so
+ * by its edit number. The operation is the sheet's to know, and the row and
+ * column are the sheet's to bound.
+ */
+function parseEdit(where: string, v: unknown): Edit {
   const o = asRecord(v);
+  for (const key of ["seq", "row", "col"] as const) {
+    if (!Number.isInteger(o[key])) throw new Error(`${where}: ${key} is not a whole number`);
+  }
   const e: Edit = {
     seq: asNumber(o["seq"]),
     op: asString(o["op"]) as Op,

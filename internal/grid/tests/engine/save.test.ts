@@ -24,6 +24,7 @@ import {
 } from "../../src/document/index.ts";
 import type { Document, Source } from "../../src/document/index.ts";
 import type { SourceHandle } from "../../src/engine/index.ts";
+import { sha256Hex } from "../../src/go/index.ts";
 import { read } from "../../src/ingest/index.ts";
 import { parse as parseProgram } from "../../src/program/index.ts";
 import { Op } from "../../src/sheet/index.ts";
@@ -465,9 +466,17 @@ test("a carried source that will not open keeps its bytes through a save", async
     extra: new Map(),
     at: "",
   });
-  // Swap the entry for something no decoder will take.
+  // Swap the entry for something no decoder will take, and keep the manifest
+  // honest about it: a hash that does not match is a damaged file, not a
+  // source that will not open.
   const entries = unzipSync(uno);
   entries["data/source.csv"] = broken;
+  const manifest = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as {
+    source: { bytes: number; sha256: string };
+  };
+  manifest.source.bytes = broken.length;
+  manifest.source.sha256 = sha256Hex(broken);
+  entries[MANIFEST_ENTRY] = new TextEncoder().encode(JSON.stringify(manifest));
 
   const { engine, done } = connect();
   try {
