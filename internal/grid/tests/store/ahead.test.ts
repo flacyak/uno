@@ -4,7 +4,7 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { AHEAD, readAhead } from "../../src/store/ahead.ts";
+import { AHEAD, REMEMBERED, readAhead } from "../../src/store/ahead.ts";
 import type { ReadRange } from "../../src/store/ahead.ts";
 import { TUNING } from "../../src/engine/index.ts";
 
@@ -89,18 +89,68 @@ test("a chunk asked for ahead that fails fails the read that wants it, and only 
   await expect(read(3 * CHUNK, CHUNK)).rejects.toThrow("no range at 300");
 });
 
-// Two readers in order at once: the one that went on last has its chunks
-// asked for, and what was held for the other is let go rather than kept
-// against the bound. A chunk let go is asked for again if it is wanted.
-test("a second reader in order takes over, and what was held for the first is let go", async () => {
+// The grid draws blocks while indexing scans, and block k+1 starts where
+// block k ended, so two blocks on screen look like a second reader in order.
+// What was asked for ahead of the index is kept through that rather than let
+// go, because the index goes on from exactly there a moment later and would
+// otherwise ask for every chunk of it again.
+test("the grid drawing two blocks in a row does not cost the index what was asked ahead of it", async () => {
   const r = counting();
   const read = readAhead(r.read, SIZE);
   await read(0, CHUNK);
   await read(CHUNK, CHUNK);
   expect(r.asked).toEqual([0, 100, 200, 300, 400]);
-  await read(600, CHUNK);
-  await read(700, CHUNK);
-  expect(r.asked.slice(-3)).toEqual([700, 800, 900]);
+  await read(750, 30);
+  await read(780, 30);
+  await read(2 * CHUNK, CHUNK);
+  await read(3 * CHUNK, CHUNK);
+  // The two blocks as asked, then only what the index had not been asked for
+  // ahead yet: the chunks held for it were served, not asked for again.
+  expect(r.asked.slice(5)).toEqual([750, 780, 500, 600]);
+});
+
+// The bound on work a scan is promised: every chunk of the object asked for
+// once however often the grid draws consecutive blocks in the middle of it.
+test("a scan with the grid drawing in the middle of it asks for every chunk once", async () => {
+  const r = counting();
+  const read = readAhead(r.read, SIZE);
+  const blocks = [750, 780, 810, 840];
+  let drawn = 0;
+  for (let at = 0; at < SIZE; at += CHUNK) {
+    await read(at, CHUNK);
+    if (at === 2 * CHUNK || at === 5 * CHUNK) {
+      await read(blocks[drawn++]!, 30);
+      await read(blocks[drawn++]!, 30);
+    }
+  }
+  expect(r.asked.filter((a) => a % CHUNK === 0).toSorted((a, b) => a - b)).toEqual([
+    0, 100, 200, 300, 400, 500, 600, 700, 800, 900,
+  ]);
+  expect(r.asked).toHaveLength(SIZE / CHUNK + blocks.length);
+});
+
+// Two readers in order at once: what was asked ahead for the first is held as
+// long as the first is remembered, so the second reads as asked until the
+// first has been forgotten, and then has its own chunks asked for. A chunk let
+// go is asked for again if the first comes back for it.
+test("a second reader in order gets its chunks once the first is forgotten, and the first's are let go", async () => {
+  const r = counting();
+  const size = 20 * CHUNK;
+  const read = readAhead(r.read, size);
+  await read(0, CHUNK);
+  await read(CHUNK, CHUNK);
+  expect(r.asked).toEqual([0, 100, 200, 300, 400]);
+  await read(1000, CHUNK);
+  await read(1100, CHUNK);
+  expect(r.asked.slice(-2), "the first is still remembered, so nothing is asked ahead").toEqual([
+    1000, 1100,
+  ]);
+  for (let at = 1200; at < 1200 + REMEMBERED * CHUNK; at += CHUNK) await read(at, CHUNK);
+  expect(r.peak()).toBeLessThanOrEqual(AHEAD);
+  expect(
+    r.asked.at(-1)!,
+    "the first forgotten, the second has chunks asked ahead of it",
+  ).toBeGreaterThan(1200 + REMEMBERED * CHUNK);
   // The first going on again is asked for again, not served from what was let go.
   await read(2 * CHUNK, CHUNK);
   expect(r.asked.filter((a) => a === 2 * CHUNK)).toHaveLength(2);
