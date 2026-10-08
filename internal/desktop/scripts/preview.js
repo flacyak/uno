@@ -33,9 +33,9 @@ import { fileURLToPath } from "node:url";
 import {
   DRIVEN_LANGUAGE_ENV,
   DRIVEN_LANGUAGE_SWITCH,
-  displayMissing,
   drive,
   electronEnv,
+  requireDisplay,
   rewrite,
   verdict,
 } from "./launch.js";
@@ -263,12 +263,9 @@ async function stageOpening(connected) {
   return { uno: csv, standin, connection: connected ? connection : undefined };
 }
 
-const remote =
-  story === "refresh"
-    ? await stageRefresh()
-    : AGAINST_BUCKET.includes(story)
-      ? await stageOpening(story === "opening")
-      : undefined;
+let remote;
+if (story === "refresh") remote = await stageRefresh();
+else if (AGAINST_BUCKET.includes(story)) remote = await stageOpening(story === "opening");
 const sidebar = story === "sidebar" ? await stageSidebar() : undefined;
 // The sidebar story opens its own workspaces once the window is up, so the
 // app starts with none.
@@ -277,10 +274,7 @@ const opened =
 
 const electron = (await import("electron")).default;
 
-if (displayMissing(process.env, process.platform)) {
-  console.error("preview: no DISPLAY. Run under Xvfb, or on a desktop session.");
-  process.exit(2);
-}
+requireDisplay("preview");
 
 // The app's own data (connections, page storage, theme), for this take only
 // and emptied first. The GIF is published, and shows only this take's

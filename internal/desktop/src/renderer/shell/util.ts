@@ -1,5 +1,7 @@
 // Helpers shared by the shell's files.
 
+import { baseOf, dirOf } from "@uno/grid/document";
+
 import { said } from "../said.ts";
 
 export function must<T>(value: T | null): T {
@@ -41,6 +43,17 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   const made = document.createElement(tag);
   if (cls !== "") made.className = cls;
   if (text !== "") made.textContent = text;
+  return made;
+}
+
+/**
+ * button creates a button that does `onClick` when pressed. Its type is
+ * `button`, so one inside a form submits nothing.
+ */
+export function button(cls: string, text: string, onClick: () => void): HTMLButtonElement {
+  const made = el("button", cls, text);
+  made.type = "button";
+  made.addEventListener("click", onClick);
   return made;
 }
 
@@ -178,15 +191,12 @@ export function settled(ms: number, run: () => Promise<void>): () => void {
 }
 
 /** baseName returns the last part of a path, with either separator. */
-export function baseName(path: string): string {
-  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
-}
+export { baseOf as baseName } from "@uno/grid/document";
 
 /**
  * folderName returns the name of the folder a path is in: "exports" for
  * /work/exports/q3.uno.
  */
 export function folderName(path: string): string {
-  const end = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return end < 0 ? "" : baseName(path.slice(0, end));
+  return baseOf(dirOf(path));
 }

@@ -1,6 +1,8 @@
 // What the engine measures, how a Meter writes it as OTLP JSON, and how a
 // collector's address is read from the environment.
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { expect, test } from "vite-plus/test";
 
 import {
@@ -54,7 +56,7 @@ async function until(
   for (;;) {
     const m = seen.find(found);
     if (m !== undefined) return m;
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    await sleep(1);
   }
 }
 

@@ -7,17 +7,16 @@
 //
 // This runs in the browser too, so it uses string operations only.
 
+import { isRemote } from "../store/index.ts";
+
 /** Matches either separator. A .uno written on Windows opens on Linux. */
 const SEP = /[/\\]/;
 
 /** isAbsolute is true for a POSIX path, a Windows drive path, a UNC share or
  * a URL such as s3://bucket/key. */
 export function isAbsolute(path: string): boolean {
-  return /^[/\\]/.test(path) || /^[A-Za-z]:[/\\]/.test(path) || URL_LIKE.test(path);
+  return /^[/\\]/.test(path) || /^[A-Za-z]:[/\\]/.test(path) || isRemote(path);
 }
-
-/** A URL scheme of two or more letters, so a drive letter stays a path. */
-const URL_LIKE = /^[A-Za-z][A-Za-z0-9+.-]+:\/\//;
 
 /** dirOf returns the folder part of a path, or "" for a bare name. */
 export function dirOf(path: string): string {

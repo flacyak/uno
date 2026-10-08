@@ -7,9 +7,10 @@
 import "./formula.css";
 
 import { m } from "../../paraglide/messages.js";
+import { clamp } from "../grid/metrics.ts";
 import { columnLabel } from "../grid/rows.ts";
 import type { MenuPlace } from "./menu.ts";
-import { clickAway, el, hang, message, option, walk } from "./util.ts";
+import { button, clickAway, el, hang, message, option, walk } from "./util.ts";
 
 /**
  * A column the form offers, with the expression it is already computed from, if
@@ -61,7 +62,7 @@ export class FormulaForm {
       // A blank header is labelled by its position, as in the grid.
       this.column.append(option(columnLabel(c.header, i), String(i)));
     }
-    this.column.value = String(Math.min(Math.max(selected, 0), columns.length - 1));
+    this.column.value = String(clamp(selected, columns.length - 1));
     this.column.setAttribute("aria-label", m.formula_column());
     // Changing the column fills in its current expression, if any.
     this.column.addEventListener("change", () => this.fill());
@@ -72,9 +73,7 @@ export class FormulaForm {
     this.expr.setAttribute("aria-label", m.formula_expression_aria());
     this.expr.addEventListener("input", () => this.say(m.formula_hint(), false));
 
-    const cancel = el("button", "", m.action_cancel());
-    cancel.type = "button";
-    cancel.addEventListener("click", () => this.close());
+    const cancel = button("", m.action_cancel(), () => this.close());
     this.submit.type = "submit";
 
     const buttons = el("div", "buttons");
