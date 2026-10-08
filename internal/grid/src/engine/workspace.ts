@@ -22,7 +22,7 @@ import {
   sourceId,
   writeDocument,
 } from "../document/index.ts";
-import type { Document, Held, HeldFile, HeldParts, Logged, State } from "../document/index.ts";
+import type { Document, Held, HeldParts, Logged, State } from "../document/index.ts";
 import type { Edit } from "../sheet/index.ts";
 import { bytesSource, multiOf, openWith, partMap } from "../store/index.ts";
 import type { ByteSource, FileHandler, PartsRef, SingleRef } from "../store/index.ts";
@@ -422,7 +422,9 @@ export class Workspace {
         src.parts !== undefined
           ? await this.view(src.id, joinedFrom(src), carried)
           : src.raw === undefined
-            ? await this.view(src.id, pointedAt(src), carried)
+            ? // By where the file is, and which bytes of it the log was made
+              // against, for a place that can hand those over again.
+              await this.view(src.id, fileAt(src.name, src.path ?? "", src.version), carried)
             : await View.open(
                 src.id,
                 src.name,
@@ -490,7 +492,19 @@ export class Workspace {
   ): Promise<View> {
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
-    if (whole) await everyPart(source);
+    // Opened whole, each part of several files read as one that no read has
+    // reached yet is opened too, which is what holds it to its extent: asking a
+    // part its version is asking for the part. One that will not open, or is
+    // another file, closes the source and is the error, by name. Any other
+    // source has no parts and is left alone.
+    if (whole) {
+      await multiOf(source)
+        ?.versions()
+        .catch(async (err: unknown) => {
+          await source.close();
+          throw err;
+        });
+    }
     const view = await View.open(
       id,
       ref.name,
@@ -777,15 +791,6 @@ function sizeOf(kept: Part): number {
 }
 
 /**
- * pointedAt is the ref a .uno's pointed-at source is opened by: where it is,
- * and which bytes of it the log was made against, for a place that can hand
- * those over again.
- */
-function pointedAt(src: HeldFile): SourceRef {
-  return fileAt(src.name, src.path ?? "", src.version);
-}
-
-/**
  * joinedFrom is the ref several files read as one are opened by again: each
  * part where it is, pinned to the bytes the log was made against, and beside
  * it the extent the save measured, which is what leaves it unopened until a
@@ -861,22 +866,6 @@ function pathsIn(ref: SourceRef): string[] {
 /** Whether two lists of addresses are the same addresses in the same order. */
 function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((path, i) => path === b[i]);
-}
-
-/**
- * everyPart opens each part of several files read as one that no read has
- * reached yet, which is what holds it to its extent. A part that will not
- * open, or is another file, closes the source and is the error, by name.
- * Any other source has no parts and is left alone.
- */
-async function everyPart(source: ByteSource): Promise<void> {
-  try {
-    // Asking a part its version is asking for the part.
-    await multiOf(source)?.versions();
-  } catch (err) {
-    await source.close();
-    throw err;
-  }
 }
 
 /** One file by its path, and by its version where a save recorded one. */
