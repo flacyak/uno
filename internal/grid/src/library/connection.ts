@@ -220,43 +220,40 @@ function parseAuth(name: string, raw: unknown): Auth {
   }
   const o = raw as Record<string, unknown>;
   const mode = o["mode"];
-  if (typeof mode !== "string" || !MODES.includes(mode as AuthMode)) {
+  if (!isMode(mode)) {
     throw new Error(
       mode === undefined
         ? `${name}: its auth block has no mode`
         : `${name}: this build does not know auth mode ${JSON.stringify(mode)} · it knows ${MODES.join(", ")}`,
     );
   }
-
-  let auth: Auth;
-  switch (mode as AuthMode) {
-    case "machine":
-      auth = { mode: "machine" };
-      break;
-    case "public":
-      auth = { mode: "public" };
-      break;
-    case "profile": {
-      const profile = o["profile"];
-      if (typeof profile !== "string" || profile === "") {
-        throw new Error(`${name}: auth mode "profile" names no profile`);
-      }
-      auth = { mode: "profile", profile };
-      break;
-    }
-    case "role": {
-      const roleArn = o["roleArn"];
-      if (typeof roleArn !== "string" || roleArn === "") {
-        throw new Error(`${name}: auth mode "role" names no roleArn`);
-      }
-      auth = { mode: "role", roleArn };
-      break;
-    }
-  }
-
-  const extra = extraOf(o, authKnown(auth.mode));
+  const auth: Auth = AUTH_READERS[mode](o, name);
+  const extra = extraOf(o, authKnown(mode));
   if (extra !== undefined) auth.extra = extra;
   return auth;
+}
+
+function isMode(v: unknown): v is AuthMode {
+  return typeof v === "string" && MODES.includes(v as AuthMode);
+}
+
+/** What each mode reads out of its auth block, besides the mode: a profile and a role each name one thing. */
+const AUTH_READERS: {
+  [M in AuthMode]: (o: Record<string, unknown>, name: string) => Extract<Auth, { mode: M }>;
+} = {
+  machine: () => ({ mode: "machine" }),
+  public: () => ({ mode: "public" }),
+  profile: (o, name) => ({ mode: "profile", profile: named(o, name, "profile", "profile") }),
+  role: (o, name) => ({ mode: "role", roleArn: named(o, name, "role", "roleArn") }),
+};
+
+/** named is the one field a mode has to name, or the refusal for a block that does not. */
+function named(o: Record<string, unknown>, name: string, mode: AuthMode, key: string): string {
+  const v = o[key];
+  if (typeof v !== "string" || v === "") {
+    throw new Error(`${name}: auth mode "${mode}" names no ${key}`);
+  }
+  return v;
 }
 
 /** Whether a key inside an auth block is one this build reads for that mode. */
