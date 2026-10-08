@@ -24,6 +24,7 @@ import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
+import { compareStrings, concat } from "../go/index.ts";
 import type { Connection } from "../library/index.ts";
 import { covering } from "../library/index.ts";
 import type { Provider } from "../plugin/index.ts";
@@ -311,7 +312,7 @@ export function s3Requests(opts: S3Options): S3Requests {
     }
   }
 
-  return {
+  const requests: S3Requests = {
     object: (loc, method, extra, version) =>
       request(loc, (region) => objectUrl(loc, region, opts.endpoint, version), method, extra),
     // A listing is a GET, so its refusal carries a body, so the region in one
@@ -340,15 +341,18 @@ export function s3Requests(opts: S3Options): S3Requests {
       const said = res.headers.get("x-amz-bucket-region");
       if (said !== null && isRegion(said)) return said;
       if (res.ok) return regions.get(bucket) ?? (await opts.credentials(loc)).region;
-      if (res.status === 404) throw new Error(`s3://${bucket}: no such bucket`);
-      if (res.status === 403) {
-        throw new Error(
-          `s3://${bucket}: access denied · ${(await opts.credentials(loc)).as ?? FOUND} cannot reach that bucket`,
-        );
-      }
-      throw new Error(`s3://${bucket}: S3 answered ${res.status} when asked where the bucket is`);
+      const why = answered(
+        res.status,
+        {
+          404: "no such bucket",
+          403: `access denied · ${await requests.who(loc)} cannot reach that bucket`,
+        },
+        `S3 answered ${res.status} when asked where the bucket is`,
+      );
+      throw new Error(`s3://${bucket}: ${why}`);
     },
   };
+  return requests;
 }
 
 /**
@@ -391,8 +395,7 @@ export interface TryOptions extends Omit<S3Options, "credentials"> {
 export async function tryConnection(c: Connection, opts: TryOptions): Promise<Tried> {
   const { sign, ...rest } = opts;
   const located = await locate(c, { ...rest, credentials: () => sign(c) });
-  const where =
-    located.prefix === "" ? `s3://${located.bucket}` : `s3://${located.bucket}/${located.prefix}`;
+  const where = s3Url({ bucket: located.bucket, key: located.prefix });
   const page = await s3Lister({ ...rest, credentials: () => sign(located) }).list(where);
   const folders = page.entries.filter((e) => e.folder).length;
   return {
@@ -458,13 +461,8 @@ export function s3Files(opts: S3Options): FileHandler {
     handles: (ref) => "path" in ref && s3Location(ref.path) !== undefined,
 
     async open(ref) {
-      const loc = "path" in ref ? s3Location(ref.path) : undefined;
-      if (loc === undefined) throw new Error(`${ref.name}: not an object in S3`);
+      const loc = objectAt("path" in ref ? ref.path : undefined, ref.name);
       const url = s3Url(loc);
-      // Refused here, before a single request goes out, because the request
-      // would be the wrong one and nothing downstream could tell.
-      const cannot = unaddressable(loc);
-      if (cannot !== undefined) throw cannot;
 
       // A VersionId a save recorded is asked for by name, so a workspace opens
       // the bytes its log was made against even after the object is written
@@ -477,9 +475,8 @@ export function s3Files(opts: S3Options): FileHandler {
         pinned = undefined;
         head = await send.object(loc, "HEAD", {});
       }
-      if (!head.ok) throw new Error(`${url}: ${refusal(head.status, await send.who(loc))}`);
-      const size = Number(head.headers.get("content-length") ?? "NaN");
-      if (!Number.isFinite(size)) throw new Error(`${url}: S3 did not say how big it is`);
+      if (!head.ok) throw await refused(send, loc, head);
+      const size = sizeOf(head, url);
       // Every range after this one is asked for as this version of the object.
       // An export rewritten while it is being read would otherwise hand the
       // index the first half of one file and the second half of another.
@@ -501,7 +498,7 @@ export function s3Files(opts: S3Options): FileHandler {
         if (res.status === 412) {
           throw new Error(`${url} changed in the bucket since it was opened · open it again`);
         }
-        if (!res.ok) throw new Error(`${url}: ${refusal(res.status, await send.who(loc))}`);
+        if (!res.ok) throw await refused(send, loc, res);
         const bytes = new Uint8Array(await res.arrayBuffer());
         // A server that ignored the range sent the whole object.
         return res.status === 200 && bytes.length === size ? bytes.subarray(offset, end) : bytes;
@@ -599,13 +596,7 @@ async function refusalBody(res: Response): Promise<string> {
   } finally {
     await reader.cancel().catch(() => undefined);
   }
-  const all = new Uint8Array(read);
-  let at = 0;
-  for (const part of parts) {
-    all.set(part, at);
-    at += part.length;
-  }
-  return new TextDecoder().decode(all);
+  return new TextDecoder().decode(concat(parts));
 }
 
 /**
@@ -662,14 +653,53 @@ function isRegion(word: string): boolean {
  * and has to say the same thing about a 403 as opening it does.
  */
 export function refusal(status: number, who = FOUND): string {
-  switch (status) {
-    case 403:
-      return `access denied · ${who} cannot read it`;
-    case 404:
-      return "no such object in that bucket";
-    default:
-      return `S3 answered ${status}`;
-  }
+  return answered(status, {
+    403: `access denied · ${who} cannot read it`,
+    404: "no such object in that bucket",
+  });
+}
+
+/**
+ * answered is what a status code means where it was met: the sentence `words`
+ * has for it, or `otherwise`, which says the bare number.
+ */
+export function answered(
+  status: number,
+  words: Partial<Record<number, string>>,
+  otherwise = `S3 answered ${status}`,
+): string {
+  return words[status] ?? otherwise;
+}
+
+/**
+ * objectAt is the object a path names, or the refusal for a path that names
+ * none: not an S3 URL at all, or a key no URL can ask for. `name` is what the
+ * refusal calls the path, since a ref is called by its name and a bare path by
+ * itself.
+ *
+ * The second refusal is made here, before a single request goes out, because
+ * the request would be the wrong one and nothing downstream could tell. Opening
+ * and statting both go through it, because both are about to turn a key into a
+ * URL and have to say the same thing about one that cannot be.
+ */
+export function objectAt(path: string | undefined, name: string): S3Location {
+  const loc = path === undefined ? undefined : s3Location(path);
+  if (loc === undefined) throw new Error(`${name}: not an object in S3`);
+  const cannot = unaddressable(loc);
+  if (cannot !== undefined) throw cannot;
+  return loc;
+}
+
+/** The size a HEAD says, or the refusal for one that did not say. */
+export function sizeOf(head: Response, url: string): number {
+  const size = Number(head.headers.get("content-length") ?? "NaN");
+  if (!Number.isFinite(size)) throw new Error(`${url}: S3 did not say how big it is`);
+  return size;
+}
+
+/** The Error for an answer that was not ok, in `refusal`'s words, naming the object and who was turned away. */
+export async function refused(send: S3Requests, loc: S3Location, res: Response): Promise<Error> {
+  return new Error(`${s3Url(loc)}: ${refusal(res.status, await send.who(loc))}`);
 }
 
 /**
@@ -758,10 +788,12 @@ function listUrl(
   region: string,
   endpoint: string | undefined,
 ): URL {
-  const asked = Object.entries(query)
-    .map(([k, v]) => `${encode(k)}=${encode(v)}`)
-    .join("&");
-  return new URL(`${bucketUrl(bucket, region, endpoint)}/?${asked}`);
+  return new URL(`${bucketUrl(bucket, region, endpoint)}/?${encodeQuery(Object.entries(query))}`);
+}
+
+/** encodeQuery writes pairs as the query of a URL, each encoded as SigV4 signs it. */
+export function encodeQuery(pairs: Iterable<readonly [string, string]>): string {
+  return Array.from(pairs, ([k, v]) => `${encode(k)}=${encode(v)}`).join("&");
 }
 
 // ------------------------------------------------------------------ SigV4
@@ -850,14 +882,9 @@ function hex(text: string): string {
 function canonicalQuery(url: URL): string {
   return [...url.searchParams]
     .map(([k, v]) => [encode(k), encode(v)] as const)
-    .sort(([k1, v1], [k2, v2]) => compare(k1, k2) || compare(v1, v2))
+    .sort(([k1, v1], [k2, v2]) => compareStrings(k1, k2) || compareStrings(v1, v2))
     .map(([k, v]) => `${k}=${v}`)
     .join("&");
-}
-
-/** Code point order, which is what SigV4 sorts by: no locale, no collation. */
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /** encodePath encodes each segment of a key as SigV4 wants it, keeping the slashes. */

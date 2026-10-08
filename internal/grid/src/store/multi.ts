@@ -12,6 +12,7 @@
 // part is a file on a disk, an object in a bucket or bytes already in hand,
 // in any mix, and nothing here knows which.
 
+import { concat } from "../go/index.ts";
 import {
   UnsupportedEncodingError,
   bomLength,
@@ -704,16 +705,6 @@ function quoted(name: string): string {
 
 function same(a: Extent, b: Extent): boolean {
   return a.bytes === b.bytes && a.skip === b.skip && a.unterminated === b.unterminated;
-}
-
-function concat(pieces: readonly Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(pieces.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const p of pieces) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
 }
 
 // ------------------------------------------------------------ the handler

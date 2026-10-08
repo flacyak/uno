@@ -23,15 +23,10 @@ import { basename, join } from "node:path";
 import { compareStrings } from "../go/index.ts";
 import { isRemote } from "./index.ts";
 import type { Entry, Lister, Listing } from "./list.ts";
+import { PAGE, byPageKey, pageKey } from "./list.ts";
 
-/**
- * How many entries one page of a disk listing holds.
- *
- * A thousand, which is what one ListObjectsV2 answers with, so the panel scrolls
- * a folder and a prefix at the same rate and neither feels like the other's
- * special case.
- */
-export const PAGE = 1_000;
+// Re-exported because the efficiency suite pages a folder by it.
+export { PAGE };
 
 /**
  * diskLister browses this machine's disks: one `readdir` for what is there, and
@@ -161,27 +156,6 @@ function rowOf({ name, entry }: Found, linked: Stats | undefined): Row[] {
   if (entry.isDirectory()) return [{ name, folder: true, stats: undefined }];
   if (entry.isFile()) return [{ name, folder: false, stats: undefined }];
   return [];
-}
-
-/**
- * pageKey is the order a disk listing comes back in, written as one string:
- * folders first, then by name.
- *
- * It is also the cursor, which is why it is a string and not a pair. A cursor
- * that were an index would slide by one when somebody saved a file into the
- * folder mid-scroll and a page would skip an entry; a key means "the entries
- * from here on" and stays true whatever happened to the folder meanwhile. `d`
- * sorts before `f`, so comparing two keys is comparing folder-ness and then the
- * name, and the order, the cursor and the comparison below are all this one
- * function rather than three that have to agree.
- */
-function pageKey(row: Row): string {
-  return `${row.folder ? "d" : "f"}:${row.name}`;
-}
-
-/** byPageKey orders a folder the way a listing promises: folders, then names. */
-function byPageKey(a: Row, b: Row): number {
-  return compareStrings(pageKey(a), pageKey(b));
 }
 
 /**
