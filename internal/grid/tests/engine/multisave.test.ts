@@ -6,6 +6,7 @@
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vite-plus/test";
 
 import { PARTS_VERSION, POINTED_VERSION, readContainer } from "../../src/document/index.ts";
@@ -328,10 +329,7 @@ function memory(holding = false) {
   };
 }
 
-/** Waits SETTLE_MS for any other open to be asked. */
-function settled(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-}
+/** How long to wait for any other open to be asked. */
 const SETTLE_MS = 50;
 
 test("a reopened source opens no part until a read reaches it", async () => {
@@ -352,7 +350,7 @@ test("a reopened source opens no part until a read reaches it", async () => {
 
     // Only the first part is asked for.
     await m.first;
-    await settled();
+    await sleep(SETTLE_MS);
     expect(m.asked).toEqual([PART_NAMES[0]]);
 
     // With the first part alone the open answers. The third stays unasked.

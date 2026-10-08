@@ -4,6 +4,7 @@
 // Writes go through the node store, which does an atomic temp-file-and-rename
 // write (internal/safefile/write.go).
 
+import { WORKSPACE_EXT } from "@uno/grid/document";
 import type { SourceRef } from "@uno/grid/engine";
 import { fileName, parseConnection } from "@uno/grid/library";
 import { nodeStore } from "@uno/grid/store/node";
@@ -13,9 +14,6 @@ import { basename, join } from "node:path";
 export function sourceAt(path: string): SourceRef {
   return { name: basename(path), path };
 }
-
-/** The workspace file extension. The engine recognises a workspace by it. */
-const WORKSPACE_EXT = ".uno";
 
 /**
  * unoPath returns the path a Save As dialog answered with, with `.uno` added

@@ -16,6 +16,7 @@ import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "../../scripts/pseudo.j
 import { m } from "../../src/paraglide/messages.js";
 import type { Shell } from "../../src/renderer/shell/shell.ts";
 import { bootShell } from "./dom-harness.ts";
+import { frame } from "./dom-page.ts";
 
 /**
  * Selectors for text the app leaves as written: the file's cells
@@ -102,9 +103,6 @@ function english(): string[] {
   }
   return found;
 }
-
-const frame = (): Promise<void> =>
-  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
 const click = (selector: string): void => {
   const el = document.querySelector<HTMLElement>(selector);

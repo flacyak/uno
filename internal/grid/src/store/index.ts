@@ -105,6 +105,14 @@ export interface PartsRef {
 }
 
 /**
+ * headerModeOf says whether a ref's first record names its columns. A parts
+ * ref carries its own header mode. A single file has a header row.
+ */
+export function headerModeOf(ref: FileRef): HeaderMode {
+  return "parts" in ref ? ref.header : "first";
+}
+
+/**
  * FileHandler opens one kind of place a file can be: a disk, a bucket, a
  * Blob. It only opens, and only for reading. `handles` looks at the ref only,
  * so a handler can be picked for a path read out of a .uno.
