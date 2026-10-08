@@ -12,12 +12,16 @@ import { isSpace } from "./strings.ts";
 
 export class Scanner {
   i = 0;
+  readonly s: string[];
+  /** What the text is called in a complaint: a formula, a program. */
+  protected readonly noun: string;
 
-  /** `noun` is what the text is called in a complaint: a formula, a program. */
-  constructor(
-    readonly s: string[],
-    protected readonly noun: string,
-  ) {}
+  // Written out rather than as parameter properties, which Node's strip-only
+  // TypeScript cannot run, and the smoke run loads this source under it.
+  constructor(s: string[], noun: string) {
+    this.s = s;
+    this.noun = noun;
+  }
 
   space(): void {
     while (this.i < this.s.length && isSpace(this.s[this.i]!)) this.i++;
