@@ -18,7 +18,8 @@ import { LANGUAGE_KEY, Language, languageName, offered } from "../src/renderer/l
 import type { SettingsAsks } from "../src/renderer/shell/settings.ts";
 import type { Connection } from "../src/renderer/sources.ts";
 import { Theming } from "../src/renderer/theme.ts";
-import type { Keeps, Scheme } from "../src/renderer/theme.ts";
+import type { Scheme } from "../src/renderer/theme.ts";
+import { Kept } from "./kept.ts";
 
 const ACME: Connection = {
   id: "acme-exports",
@@ -33,16 +34,6 @@ const LAKE: Connection = {
   path: "s3://acme-finance-lake",
   kind: "s3",
 };
-
-class Kept implements Keeps {
-  private readonly map = new Map<string, string>();
-  getItem(key: string): string | null {
-    return this.map.get(key) ?? null;
-  }
-  setItem(key: string, value: string): void {
-    this.map.set(key, value);
-  }
-}
 
 const light: Scheme = { matches: false, addEventListener: () => {} };
 

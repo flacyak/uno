@@ -14,15 +14,12 @@ import type { KeyModifiers } from "../src/main/smoke/page.ts";
 import { m } from "../src/paraglide/messages.js";
 import { num } from "../src/renderer/locale.ts";
 import { FIXTURE, bootShell } from "./smoke/dom-harness.ts";
-import { domPage } from "./smoke/dom-page.ts";
+import { domPage, until } from "./smoke/dom-page.ts";
 
 const FIXTURE_NAME = "sales-q3.csv";
 const ADS_NAME = "google-ads-sales.csv";
 /** A second export beside the fixture, for a workspace of two tabs. */
 const ADS = join(dirname(FIXTURE), ADS_NAME);
-
-/** Matches dom-page.ts's own budget. */
-const TRIES = 150;
 
 const page = domPage();
 
@@ -35,12 +32,6 @@ function key(k: string, modifiers: KeyModifiers = {}): void {
   target?.dispatchEvent(
     new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...modifiers }),
   );
-}
-
-/** until waits, a frame at a time, for `holds` to say so. */
-async function until(holds: () => boolean): Promise<boolean> {
-  for (let i = 0; i < TRIES && !holds(); i++) await page.settle(2);
-  return holds();
 }
 
 /** The sidebar's tab for a source, by the name on it. */
@@ -77,7 +68,9 @@ test("an undo answered after Ctrl+Tab moves nothing on the tab now showing", asy
   // Ctrl+Z, and Ctrl+Tab before the engine has answered it.
   key("z", { ctrlKey: true });
   key("Tab", { ctrlKey: true });
-  expect(await until(() => tabNamed(FIXTURE_NAME)?.querySelector(".dirty") === null)).toBe(true);
+  expect(await until(page, () => tabNamed(FIXTURE_NAME)?.querySelector(".dirty") === null)).toBe(
+    true,
+  );
 
   // The other tab is showing, where it was left: on its first row.
   expect(await page.text("#status-file")).not.toContain(`${counted(ROWS)} rows`);
@@ -95,7 +88,7 @@ test("a source removed after Ctrl+Tab leaves the grid on the tab the workspace s
   expect(ads).toBeDefined();
   ads?.querySelector<HTMLElement>(".close")?.click();
   key("Tab", { ctrlKey: true });
-  expect(await until(() => tabNamed(ADS_NAME) === undefined)).toBe(true);
+  expect(await until(page, () => tabNamed(ADS_NAME) === undefined)).toBe(true);
 
   // The fixture is the tab the workspace shows, and the grid draws it.
   expect(await page.text("#status-file")).toContain(`${counted(ROWS)} rows`);

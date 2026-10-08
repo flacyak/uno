@@ -37,6 +37,12 @@ function holds(wait: Wait): boolean {
   return "equals" in wait ? at === wait.equals : at.includes(wait.includes);
 }
 
+/** until waits, a frame at a time, for `holds` to say so. */
+export async function until(page: Page, holds: () => boolean): Promise<boolean> {
+  for (let i = 0; i < TRIES && !holds(); i++) await page.settle(2);
+  return holds();
+}
+
 export function domPage(): Page {
   return {
     bridgeExposed: async () =>

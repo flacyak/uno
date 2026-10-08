@@ -13,17 +13,7 @@ import {
   offered,
   preferred,
 } from "../src/renderer/language.ts";
-import type { Keeps } from "../src/renderer/theme.ts";
-
-class Kept implements Keeps {
-  private readonly map = new Map<string, string>();
-  getItem(key: string): string | null {
-    return this.map.get(key) ?? null;
-  }
-  setItem(key: string, value: string): void {
-    this.map.set(key, value);
-  }
-}
+import { Kept } from "./kept.ts";
 
 /** Every language the app has messages for, the pseudo-locale among them. */
 const ALL = offered(true);
