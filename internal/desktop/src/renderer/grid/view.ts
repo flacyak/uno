@@ -22,6 +22,7 @@ import {
   spanIntoView,
   measure,
   pageSize,
+  fitPool,
   poolSize,
   scrollerToTop,
   scrollTarget,
@@ -210,16 +211,7 @@ export class View {
 
     const visible = poolSize(total, viewport, this.rowHeight);
 
-    // Grow or shrink the pool. This runs on a resize and on the first draw, and
-    // not while scrolling.
-    while (this.pool.length < visible) {
-      const tr = el("tr");
-      tr.append(el("td", "gutter"));
-      for (let c = 0; c < source.cols(); c++) tr.append(el("td"));
-      this.pool.push(tr);
-      this.body.append(tr);
-    }
-    while (this.pool.length > visible) this.pool.pop()?.remove();
+    fitPool(this.pool, visible, () => blankRow(source.cols()), this.body);
 
     const first = firstRow(total, this.pool.length, this.top, this.rowHeight);
     this.first = first;
@@ -415,4 +407,12 @@ function readRowHeight(scope: Element): number {
   const declared = getComputedStyle(scope).getPropertyValue("--row-h").trim();
   const parsed = Number.parseFloat(declared);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 29;
+}
+
+/** blankRow is one row of the grid before anything is written into it: the gutter, then a cell a column. */
+function blankRow(cols: number): HTMLTableRowElement {
+  const tr = el("tr");
+  tr.append(el("td", "gutter"));
+  for (let c = 0; c < cols; c++) tr.append(el("td"));
+  return tr;
 }
