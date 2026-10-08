@@ -282,19 +282,8 @@ const encoder = new TextEncoder();
  * rather than raising.
  */
 export async function loadLibrary(store: FileStore, dir: string): Promise<LibraryLoad> {
-  const formulas: Formula[] = [];
-  const failed: Error[] = [];
-
-  for (const entry of await store.list(dir)) {
-    if (!entry.toLowerCase().endsWith(EXT)) continue;
-    try {
-      const path = join(dir, entry);
-      const bytes = await readAll(store.files, { name: entry, path });
-      formulas.push(parseFormula(entry, decoder.decode(bytes)));
-    } catch (err) {
-      failed.push(err as Error);
-    }
-  }
+  const { read, failed } = await readEach(store, dir, parseFormula, false);
+  const formulas = read.map((r) => r.value);
 
   // Sorted by id, so the caller is handed a stable order instead of whatever
   // the directory happened to give. Which order they are shown in is the
@@ -319,6 +308,34 @@ export async function saveFormula(store: FileStore, dir: string, f: Formula): Pr
   return stamped;
 }
 
+/**
+ * readEach reads every .unof in a folder through `parse`, each on its own: one
+ * broken file costs one entry and is kept beside the rest as the Error it
+ * threw, because somebody who can see which file is broken can fix it. The
+ * entries are taken in name order where `sorted`, which is what decides which
+ * of two files is the failure, and in the folder's order otherwise.
+ */
+async function readEach<T>(
+  store: FileStore,
+  dir: string,
+  parse: (name: string, text: string) => T,
+  sorted: boolean,
+): Promise<{ read: Array<{ file: string; value: T }>; failed: Error[] }> {
+  const read: Array<{ file: string; value: T }> = [];
+  const failed: Error[] = [];
+  const listed = await store.list(dir);
+  for (const entry of sorted ? listed.toSorted(compareStrings) : listed) {
+    if (!entry.toLowerCase().endsWith(EXT)) continue;
+    try {
+      const bytes = await readAll(store.files, { name: entry, path: join(dir, entry) });
+      read.push({ file: entry, value: parse(entry, decoder.decode(bytes)) });
+    } catch (err) {
+      failed.push(err as Error);
+    }
+  }
+  return { read, failed };
+}
+
 /** What `loadConnections` could not read, alongside what it could. */
 export interface ConnectionLoad {
   connections: Connection[];
@@ -341,21 +358,11 @@ export interface ConnectionLoad {
  * name order loads, so the answer never depends on how the directory lists.
  */
 export async function loadConnections(store: FileStore, dir: string): Promise<ConnectionLoad> {
-  const read: Array<{ file: string; connection: Connection }> = [];
-  const failed: Error[] = [];
-
   // In name order, so which of two files with one id is the failure does not
   // depend on the order the directory gave them in.
-  const entries = (await store.list(dir)).toSorted(compareStrings);
-  for (const entry of entries) {
-    if (!entry.toLowerCase().endsWith(EXT)) continue;
-    try {
-      const bytes = await readAll(store.files, { name: entry, path: join(dir, entry) });
-      read.push({ file: entry, connection: parseConnection(entry, decoder.decode(bytes)) });
-    } catch (err) {
-      failed.push(err as Error);
-    }
-  }
+  const loaded = await readEach(store, dir, parseConnection, true);
+  const read = loaded.read.map(({ file, value }) => ({ file, connection: value }));
+  const failed = loaded.failed;
 
   // The file a save would write to goes first for its id; the rest keep name order.
   const own = (r: { file: string; connection: Connection }): number =>
