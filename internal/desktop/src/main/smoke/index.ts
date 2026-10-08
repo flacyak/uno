@@ -119,6 +119,42 @@ const PRELUDE = `
     for (let i = 0; i < TRIES && !ok(); i++) await frame();
     return ok();
   };
+  // A wait for something coming over the network. \`until\` is counted in
+  // frames, which is the right size for the app catching up with itself and
+  // too small for a signed request, a bucket, and 2,600 rows on the way back.
+  const arrives = async (ok) => {
+    for (let i = 0; i < 4; i++) if (await until(ok)) return true;
+    return false;
+  };
+  // Whether the status bar counts this many edits.
+  const edited = (n) => text("#status-file").includes(n + " edits");
+  // The sources panel, opened where it is closed.
+  const openPanel = async () => {
+    if (document.querySelector("#panel").hidden) await press("B", { ctrlKey: true, shiftKey: true });
+  };
+  // The panel's lines, each with the section it is under: the titles come
+  // workspace, connections, browser, and a column this short is all on screen.
+  const lines = () => {
+    let at = -1;
+    return [...document.querySelectorAll("#panel .panel-row")].map((r) => ({
+      el: r, section: r.classList.contains("head") ? ++at : at, cls: r.className,
+      name: r.children[0].textContent, meta: r.children[1].textContent, title: r.title,
+    }));
+  };
+  const WORKSPACE = 0, CONNECTIONS = 1, BROWSER = 2;
+  const head = (section) => lines().find((l) => l.section === section && l.cls.includes("head"));
+  // A section's lines, not its title or note.
+  const named = (section) => lines().filter((l) => l.section === section && !/\\b(head|note)\\b/.test(l.cls));
+  // A key pressed where the panel reads them.
+  const key = async (k) => {
+    document.querySelector("#panel .panel-list")
+      .dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+    await frame();
+  };
+  // The buttons under the panel's list, and the one with a label.
+  const footButtons = () => [...document.querySelectorAll("#panel .panel-foot button")];
+  const foot = () => footButtons().map((b) => b.textContent);
+  const footButton = (label) => footButtons().find((b) => b.textContent === label);
 `;
 
 /**

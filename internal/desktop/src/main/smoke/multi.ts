@@ -10,7 +10,6 @@
 
 import type { Check } from "./check.ts";
 import { ROWS, counted } from "./fixture.ts";
-import { REMOTE } from "./sources.ts";
 
 /** How many objects are added as one, before the folder gains another. */
 const PARTS = 3;
@@ -36,28 +35,13 @@ const TAB = "sales-q3-part.csv";
 const ROWS_AS_ONE = ROWS;
 const ROWS_APPENDED = ROWS + ROWS / PARTS;
 
-/** What the panel's lines say, and a key pressed where the panel reads them. */
+/** What the panel's lines say here, beside what the PRELUDE says of the panel. */
 const LINES = `
-  const lines = () => {
-    let at = -1;
-    return [...document.querySelectorAll("#panel .panel-row")].map((r) => ({
-      el: r, section: r.classList.contains("head") ? ++at : at,
-      cls: r.className, name: r.children[0].textContent, meta: r.children[1].textContent,
-    }));
-  };
-  const WORKSPACE = 0, CONNECTIONS = 1, BROWSER = 2;
-  const named = (section) => lines().filter((l) => l.section === section && !/\\b(head|note)\\b/.test(l.cls));
   const names = (section) => JSON.stringify(named(section).map((l) => l.name));
   const line = (section, name) => named(section).find((l) => l.name === name);
-  const crumb = () => lines().find((l) => l.section === BROWSER && l.cls.includes("head")).meta;
-  const key = async (k) => {
-    document.querySelector("#panel .panel-list")
-      .dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
-    await frame();
-  };
-  const foot = () => document.querySelector("#panel .panel-foot");
-  const buttons = () => [...foot().querySelectorAll("button")];
-  const labels = () => JSON.stringify(buttons().map((b) => b.textContent));
+  const crumb = () => head(BROWSER).meta;
+  const footer = () => document.querySelector("#panel .panel-foot");
+  const labels = () => JSON.stringify(foot());
   const box = (el) => el.getBoundingClientRect();
 `;
 
@@ -69,9 +53,8 @@ export const MULTI: Check[] = [
     ask: `put ${FIRST.join(" ")}`,
     shot: "multi-picked",
     script: `
-      ${REMOTE}
       ${LINES}
-      if (document.querySelector("#panel").hidden) await press("B", { ctrlKey: true, shiftKey: true });
+      await openPanel();
       if (!(await arrives(() => line(CONNECTIONS, "acme-exports") !== undefined))) {
         return "the connections are " + names(CONNECTIONS);
       }
@@ -93,7 +76,7 @@ export const MULTI: Check[] = [
       }
       if (!(await until(() => labels() === '["Add ${PARTS}","Add as one"]'))) return "the buttons are " + labels();
 
-      const choices = foot().querySelector(".choices");
+      const choices = footer().querySelector(".choices");
       if (choices === null) return "nothing says how the files are read as one";
       const said = [...choices.children].map((c) => c.textContent);
       if (JSON.stringify(said) !== '["as one","header row","_file column"]') return "the choices say " + JSON.stringify(said);
@@ -106,7 +89,7 @@ export const MULTI: Check[] = [
       const at = box(choices);
       if (at.left < panel.left || at.right > panel.right) return "the choices run from " + at.left + " to " + at.right + ", outside the panel";
       if (choices.scrollWidth > choices.clientWidth) return "the choices are cut short";
-      const low = Math.min(...buttons().map((b) => box(b).top));
+      const low = Math.min(...footButtons().map((b) => box(b).top));
       return at.bottom <= low ? "" : "the choices end at " + at.bottom + ", under the buttons at " + low;
     `,
   },
@@ -114,16 +97,15 @@ export const MULTI: Check[] = [
     name: "Add as one adds the three as one tab, read end to end",
     shot: "multi-added",
     script: `
-      ${REMOTE}
       ${LINES}
       const tabs = document.querySelectorAll(".tab").length;
       // Asked for here, where the source is made, which is the one place it can be.
-      const file = [...foot().querySelectorAll(".choices input")].at(-1);
+      const file = [...footer().querySelectorAll(".choices input")].at(-1);
       file.click();
-      if (!(await until(() => [...foot().querySelectorAll(".choices input")].at(-1)?.checked === true))) {
+      if (!(await until(() => [...footer().querySelectorAll(".choices input")].at(-1)?.checked === true))) {
         return "the _file column is not ticked once clicked";
       }
-      buttons().find((b) => b.textContent === "Add as one").click();
+      footButtons().find((b) => b.textContent === "Add as one").click();
       const active = () => document.querySelector(".tab.active")?.textContent ?? "";
       if (!(await arrives(() => active().startsWith(${JSON.stringify(TAB)})))) {
         return "the tab showing is " + JSON.stringify(active()) + " · " + JSON.stringify(text("#status-msg"));
@@ -154,7 +136,6 @@ export const MULTI: Check[] = [
     ask: `put ${LATER}`,
     shot: "multi-grown",
     script: `
-      ${REMOTE}
       ${LINES}
       const meta = () => line(WORKSPACE, ${JSON.stringify(TAB)})?.meta;
       if (meta() !== "${PARTS} files") return "before the focus its line says " + JSON.stringify(meta());
@@ -171,10 +152,10 @@ export const MULTI: Check[] = [
 
       // The offer is a sentence with a line of the foot to itself, as wide
       // as the foot's own padding lets it be, and Remove sits under it.
-      const [wide, remove] = buttons();
-      const inside = box(foot());
+      const [wide, remove] = footButtons();
+      const inside = box(footer());
       const at = box(wide);
-      const pad = parseFloat(getComputedStyle(foot()).paddingLeft);
+      const pad = parseFloat(getComputedStyle(footer()).paddingLeft);
       if (Math.abs(at.left - (inside.left + pad)) > 1 || Math.abs(at.right - (inside.right - pad)) > 1) {
         return "the offer runs from " + at.left + " to " + at.right + " in a foot from " + inside.left + " to " + inside.right;
       }
@@ -187,10 +168,9 @@ export const MULTI: Check[] = [
     name: "taking the offer appends the fourth, and the rows extend",
     shot: "multi-appended",
     script: `
-      ${REMOTE}
       ${LINES}
       const tabs = document.querySelectorAll(".tab").length;
-      buttons()[0].click();
+      footButtons()[0].click();
       const said = ${JSON.stringify(`appended ${NAMES[PARTS]} to ${TAB}`)};
       if (!(await arrives(() => text("#status-msg") === said))) return "the status bar says " + JSON.stringify(text("#status-msg"));
       const rows = ${JSON.stringify(counted(ROWS_APPENDED))} + " rows";

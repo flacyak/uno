@@ -68,9 +68,7 @@ export const VIM_STYLE: Check[] = [
       if (text("#status-mode") !== "TRANSFORM") return "the mode is " + text("#status-mode");
 
       // 3 before, so the Esc that closed a's editor unchanged recorded nothing.
-      if (!(await until(() => text("#status-file").includes("4 edits")))) {
-        return "status bar says: " + text("#status-file");
-      }
+      if (!(await until(() => edited(4)))) return "status bar says: " + text("#status-file");
       const shown = document.querySelectorAll("tbody tr")[6].children[GUTTER + UNITS].textContent;
       return shown === "8430" ? "" : "the cell shows " + JSON.stringify(shown);
     `,
@@ -80,7 +78,7 @@ export const VIM_STYLE: Check[] = [
     script: `
       await press("Escape");
       if (text("#status-mode") !== "VIEW") return "the mode is " + text("#status-mode");
-      if (!text("#status-file").includes("4 edits")) return "status bar says: " + text("#status-file");
+      if (!edited(4)) return "status bar says: " + text("#status-file");
       return document.querySelector(".tab .dirty") !== null ? "" : "the tab lost its dirty dot";
     `,
   },
@@ -95,9 +93,7 @@ export const VIM_STYLE: Check[] = [
 
       input.value = "843";
       await press("Escape");
-      return (await until(() => text("#status-file").includes("5 edits")))
-        ? ""
-        : "status bar says: " + text("#status-file");
+      return (await until(() => edited(5))) ? "" : "status bar says: " + text("#status-file");
     `,
   },
   {
@@ -108,9 +104,7 @@ export const VIM_STYLE: Check[] = [
       if (text("#status-cell") !== "channel · row 6") return "the selection is at " + text("#status-cell");
 
       await press("u");
-      if (!(await until(() => text("#status-file").includes("4 edits")))) {
-        return "status bar says: " + text("#status-file");
-      }
+      if (!(await until(() => edited(4)))) return "status bar says: " + text("#status-file");
       if (text("#status-cell") !== "units · row 7") return "the selection is at " + text("#status-cell");
       const cell = () => document.querySelectorAll("tbody tr")[6].children[GUTTER + UNITS].textContent;
       return (await until(() => cell() === "8430")) ? "" : "the cell shows " + JSON.stringify(cell());
@@ -231,9 +225,7 @@ export const VIM_STYLE: Check[] = [
 
       await press("i");
       await press("p");
-      if (!(await until(() => text("#status-file").includes("5 edits")))) {
-        return "status bar says: " + text("#status-file");
-      }
+      if (!(await until(() => edited(5)))) return "status bar says: " + text("#status-file");
       return cell(3) === "1204" ? "" : "row 4 shows " + JSON.stringify(cell(3));
     `,
   },
@@ -242,9 +234,7 @@ export const VIM_STYLE: Check[] = [
     script: `
       const cell = (row) => document.querySelectorAll("tbody tr")[row].children[GUTTER + UNITS].textContent;
       for (const key of ["j", "3", "x"]) await press(key);
-      if (!(await until(() => text("#status-file").includes("6 edits")))) {
-        return "status bar says: " + text("#status-file");
-      }
+      if (!(await until(() => edited(6)))) return "status bar says: " + text("#status-file");
       if (cell(4) !== "") return "row 5 shows " + JSON.stringify(cell(4));
       return cell(5) === "1,101" ? "" : "3x reached row 6, which shows " + JSON.stringify(cell(5));
     `,
@@ -259,9 +249,7 @@ export const VIM_STYLE: Check[] = [
       input.value = "West-q3"; // typed after West, where a put the caret
 
       for (const key of ["Escape", "j", ".", "j", "."]) await press(key);
-      if (!(await until(() => text("#status-file").includes("9 edits")))) {
-        return "status bar says: " + text("#status-file");
-      }
+      if (!(await until(() => edited(9)))) return "status bar says: " + text("#status-file");
       const got = [0, 1, 2, 3].map(region);
       return JSON.stringify(got) === JSON.stringify(["West-q3", "East-q3", "North-q3", "South"])
         ? ""
@@ -285,9 +273,7 @@ export const VIM_STYLE: Check[] = [
       for (const key of ["4", "l", "g", "a"]) await press(key); // from revenue
       const region = () => document.querySelectorAll("tbody tr")[3].children[GUTTER + REGION].textContent;
       if (!(await until(() => region() === "South-q3"))) return "row 4 reads " + JSON.stringify(region());
-      if (!(await until(() => text("#status-file").includes("10 edits")))) {
-        return "status bar says: " + text("#status-file");
-      }
+      if (!(await until(() => edited(10)))) return "status bar says: " + text("#status-file");
       // The three fixes the offer was learned from are left as they were typed.
       const fixed = [0, 1, 2].map((r) => document.querySelectorAll("tbody tr")[r].children[GUTTER + REGION].textContent);
       if (JSON.stringify(fixed) !== JSON.stringify(["West-q3", "East-q3", "North-q3"])) {
