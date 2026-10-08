@@ -22,7 +22,7 @@ import {
   sourceId,
   writeDocument,
 } from "../document/index.ts";
-import type { Document, Held, HeldFile, HeldParts, Logged, State } from "../document/index.ts";
+import type { Document, Held, HeldParts, Logged, State } from "../document/index.ts";
 import type { Edit } from "../sheet/index.ts";
 import { bytesSource, multiOf, openWith, partMap } from "../store/index.ts";
 import type { ByteSource, FileHandler, PartsRef, SingleRef } from "../store/index.ts";
@@ -114,13 +114,7 @@ class Absent {
    * .uno said it was, with the extent the save measured of it. */
   get parts(): PartsRef | undefined {
     const kept = this.kept;
-    if (kept.parts === undefined) return undefined;
-    return joinedFrom({
-      name: this.name,
-      parts: kept.parts,
-      header: kept.header,
-      fileColumn: kept.fileColumn,
-    });
+    return kept.parts === undefined ? undefined : joinedFrom({ ...kept, name: this.name });
   }
 
   /** Whatever the container carried for it, which for a pointed-at source is
@@ -297,10 +291,7 @@ export class Workspace {
 
       // Only once the new one is open, so a refused relink leaves the source
       // showing whatever it was showing before.
-      this.sources.set(id, view);
-      if (this.transform) view.mode(true);
-      await was.close();
-      return view.opened;
+      return this.replace(was, view);
     });
   }
 
@@ -347,10 +338,7 @@ export class Workspace {
 
       // Only once the longer one is open, so a refused append leaves the
       // source showing what it was showing before.
-      this.sources.set(id, view);
-      if (this.transform) view.mode(true);
-      await was.close();
-      return view.opened;
+      return this.replace(was, view);
     });
   }
 
@@ -406,7 +394,8 @@ export class Workspace {
    * read that reaches it, and held then to what the save recorded of it.
    */
   private async reopen(container: string, src: Held, edits: Edit[]): Promise<Source> {
-    const kept = keptOf(src, edits);
+    // What a save writes back of it, exactly as the .uno held it.
+    const kept: Part = { ...src, edits };
     // A .uno travels, and the person opening one did not choose the buckets
     // it names. One no connection covers is not read at all -- not a HEAD --
     // until they connect it: the source is kept, edits and all, and says why.
@@ -428,7 +417,9 @@ export class Workspace {
         src.parts !== undefined
           ? await this.view(src.id, joinedFrom(src), carried)
           : src.raw === undefined
-            ? await this.view(src.id, pointedAt(src), carried)
+            ? // By where the file is, and which bytes of it the log was made
+              // against, for a place that can hand those over again.
+              await this.view(src.id, fileAt(src.name, src.path ?? "", src.version), carried)
             : await View.open(
                 src.id,
                 src.name,
@@ -496,7 +487,19 @@ export class Workspace {
   ): Promise<View> {
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
-    if (whole) await everyPart(source);
+    // Opened whole, each part of several files read as one that no read has
+    // reached yet is opened too, which is what holds it to its extent: asking a
+    // part its version is asking for the part. One that will not open, or is
+    // another file, closes the source and is the error, by name. Any other
+    // source has no parts and is left alone.
+    if (whole) {
+      await multiOf(source)
+        ?.versions()
+        .catch(async (err: unknown) => {
+          await source.close();
+          throw err;
+        });
+    }
     const view = await View.open(
       id,
       ref.name,
@@ -525,6 +528,13 @@ export class Workspace {
     this.sources.set(source.id, source);
     if (this.transform) source.mode(true);
     return source.opened;
+  }
+
+  /** replace puts `now` where `was` stood, under the same id, and closes what was there. */
+  private async replace(was: Source, now: View): Promise<Opened> {
+    const opened = this.keep(now);
+    await was.close();
+    return opened;
   }
 
   /** drop closes every source, for a workspace that is going away. */
@@ -559,26 +569,32 @@ export class Workspace {
   }
 
   edit(id: string, req: EditRequest): Promise<Changed> {
-    return this.serially(async () => {
-      const changed = await this.needView(id).edit(req);
-      this.trail.push(id);
-      return changed;
-    });
+    return this.changing(id, (view) => view.edit(req), "push");
   }
 
   /** undo takes back the source's last edit, wherever it sits in the workspace's log. */
   undo(id: string): Promise<Changed> {
-    return this.serially(async () => {
-      const changed = await this.needView(id).undo();
-      this.trail.splice(this.trail.lastIndexOf(id), 1);
-      return changed;
-    });
+    return this.changing(id, (view) => view.undo(), "pull");
   }
 
   redo(id: string): Promise<Changed> {
+    return this.changing(id, (view) => view.redo(), "push");
+  }
+
+  /**
+   * changing is one change to a source's log, run in its turn, and then the
+   * workspace's trail of which source changed last kept with it: an edit and
+   * a redo push the source onto it, and an undo pulls its last mention off.
+   */
+  private changing(
+    id: string,
+    change: (view: View) => Promise<Changed>,
+    trail: "push" | "pull",
+  ): Promise<Changed> {
     return this.serially(async () => {
-      const changed = await this.needView(id).redo();
-      this.trail.push(id);
+      const changed = await change(this.needView(id));
+      if (trail === "push") this.trail.push(id);
+      else this.trail.splice(this.trail.lastIndexOf(id), 1);
       return changed;
     });
   }
@@ -610,17 +626,7 @@ export class Workspace {
           ...kept,
           active: cells.get(source.id) ?? kept?.active ?? { row: 0, col: 0 },
         };
-        const held = {
-          id: source.id,
-          name: source.name,
-          connection: part.connection,
-          rows: part.rows,
-          cols: part.cols,
-          state,
-        };
-        return part.parts !== undefined
-          ? { ...held, parts: part.parts, header: part.header, fileColumn: part.fileColumn }
-          : { ...held, raw: part.raw, path: part.path, bytes: part.bytes, version: part.version };
+        return { ...part, id: source.id, name: source.name, state };
       });
       this.refuseWhere(held, place.at);
 
@@ -746,14 +752,6 @@ export class Workspace {
   }
 }
 
-/** What a save writes back of a source of a .uno, exactly as the .uno held it. */
-function keptOf(src: Held, edits: Edit[]): Part {
-  const kept = { connection: src.connection, edits, rows: src.rows, cols: src.cols };
-  return src.parts !== undefined
-    ? { ...kept, parts: src.parts, header: src.header, fileColumn: src.fileColumn }
-    : { ...kept, raw: src.raw, path: src.path, bytes: src.bytes ?? 0, version: src.version };
-}
-
 /** Every address a source of a .uno is read from, which for one it carries
  * is none. */
 function pathsOf(src: Held): string[] {
@@ -766,16 +764,7 @@ function pathsOf(src: Held): string[] {
  * long its parts are once joined, which is the size it opens at.
  */
 function sizeOf(kept: Part): number {
-  return kept.parts !== undefined ? partMap(kept.parts).size : kept.bytes;
-}
-
-/**
- * pointedAt is the ref a .uno's pointed-at source is opened by: where it is,
- * and which bytes of it the log was made against, for a place that can hand
- * those over again.
- */
-function pointedAt(src: HeldFile): SourceRef {
-  return fileAt(src.name, src.path ?? "", src.version);
+  return kept.parts !== undefined ? partMap(kept.parts).size : (kept.bytes ?? 0);
 }
 
 /**
@@ -854,22 +843,6 @@ function pathsIn(ref: SourceRef): string[] {
 /** Whether two lists of addresses are the same addresses in the same order. */
 function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((path, i) => path === b[i]);
-}
-
-/**
- * everyPart opens each part of several files read as one that no read has
- * reached yet, which is what holds it to its extent. A part that will not
- * open, or is another file, closes the source and is the error, by name.
- * Any other source has no parts and is left alone.
- */
-async function everyPart(source: ByteSource): Promise<void> {
-  try {
-    // Asking a part its version is asking for the part.
-    await multiOf(source)?.versions();
-  } catch (err) {
-    await source.close();
-    throw err;
-  }
 }
 
 /** One file by its path, and by its version where a save recorded one. */

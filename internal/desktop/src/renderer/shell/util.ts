@@ -8,6 +8,71 @@ export function must<T>(value: T | null): T {
   return value;
 }
 
+/** found is the element the markup promised under a selector. */
+export function found<E extends HTMLElement = HTMLElement>(selector: string): E {
+  return must(document.querySelector<E>(selector));
+}
+
+/** Handlers is one function for each kind of a union tagged by `t`, so a kind left out is a type error. */
+export type Handlers<U extends { t: string }> = {
+  [K in U["t"]]: (u: Extract<U, { t: K }>) => void;
+};
+
+/** dispatch hands a tagged value to its kind's handler. */
+export function dispatch<U extends { t: string }>(handlers: Handlers<U>, u: U): void {
+  // The table is typed by kind, and u is the union, so the one pairing the
+  // compiler cannot see is said here: each handler takes its own kind.
+  (handlers[u.t as U["t"]] as (u: U) => void)(u);
+}
+
+/**
+ * el is one element as the shell makes most of them: a tag, the class it
+ * wears, and the text in it. Either may be left out, and an empty class is
+ * no class at all, so the markup stays as index.html would have written it.
+ */
+export function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  cls = "",
+  text = "",
+): HTMLElementTagNameMap[K] {
+  const made = document.createElement(tag);
+  if (cls !== "") made.className = cls;
+  if (text !== "") made.textContent = text;
+  return made;
+}
+
+/**
+ * hang places a surface hung off the page at `place`, moved in from the bottom
+ * or the right of the window until the whole of it shows, `edge` pixels clear.
+ */
+export function hang(box: HTMLElement, place: { left: number; top: number }, edge: number): void {
+  const { width, height } = box.getBoundingClientRect();
+  const left = Math.min(place.left, window.innerWidth - width - edge);
+  const top = Math.min(place.top, window.innerHeight - height - edge);
+  box.style.left = `${Math.max(edge, left)}px`;
+  box.style.top = `${Math.max(edge, top)}px`;
+}
+
+/**
+ * clickAway has a click outside a surface close it, armed after the click
+ * that opened it has finished, or it would close what it opened. It answers
+ * the disarm, for the close.
+ */
+export function clickAway(box: HTMLElement, close: () => void): () => void {
+  const away = (e: MouseEvent): void => {
+    if (!box.contains(e.target as Node)) close();
+  };
+  setTimeout(() => document.addEventListener("mousedown", away), 0);
+  return () => document.removeEventListener("mousedown", away);
+}
+
+/** option is one choice in a select: what it says, and the value it stands for. */
+export function option(label: string, value: string): HTMLOptionElement {
+  const made = el("option", "", label);
+  made.value = value;
+  return made;
+}
+
 /**
  * Words are the texts a component writes once, when it is built, kept so they
  * can be written again in another language. What a component paints on every

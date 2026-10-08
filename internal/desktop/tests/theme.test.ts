@@ -17,17 +17,8 @@ import {
   Theming,
   tokensOf,
 } from "../src/renderer/theme.ts";
-import type { Keeps, Mode, Palette, Scheme } from "../src/renderer/theme.ts";
-
-class Kept implements Keeps {
-  readonly map = new Map<string, string>();
-  getItem(key: string): string | null {
-    return this.map.get(key) ?? null;
-  }
-  setItem(key: string, value: string): void {
-    this.map.set(key, value);
-  }
-}
+import type { Mode, Palette, Scheme } from "../src/renderer/theme.ts";
+import { Kept } from "./kept.ts";
 
 /** A system that is in whichever mode a test says, and says when it changes. */
 class System implements Scheme {

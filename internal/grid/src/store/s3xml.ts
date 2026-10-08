@@ -90,9 +90,12 @@ function keyIn(block: string): KeyEntry[] {
   ];
 }
 
-/** The date a LastModified names, or nothing where it names none. */
-function when(stamp: string | undefined): Date | undefined {
-  if (stamp === undefined) return undefined;
+/**
+ * The date a LastModified or a Last-Modified header names, or nothing where it
+ * names none. A header that is not there is null, an element undefined.
+ */
+export function when(stamp: string | null | undefined): Date | undefined {
+  if (stamp === undefined || stamp === null) return undefined;
   const at = new Date(stamp.trim());
   return Number.isNaN(at.getTime()) ? undefined : at;
 }
@@ -123,9 +126,10 @@ function element(name: string, flags = ""): RegExp {
  *
  * Undefined where the element is not there at all, which is a different answer
  * from the empty string: a reply with no NextContinuationToken is the last page,
- * and one with an empty one is a bucket uno cannot page.
+ * and one with an empty one is a bucket uno cannot page. STS's answer is read
+ * with it too: four elements deep, six names, and the entities XML's own.
  */
-function text(xml: string, name: string): string | undefined {
+export function text(xml: string, name: string): string | undefined {
   const one = element(name).exec(xml);
   return one === null ? undefined : entities(one[1]!);
 }

@@ -7,15 +7,13 @@
 // records again what Ctrl+Z took back. Ctrl+E and Ctrl+Z are the shell's, and
 // work the same whichever strategy reads the grid's keys.
 
-import { NOTHING, isCharacter } from "../keys.ts";
-import type { Action, Mode, Motion, Pending, Press, Step } from "../keys.ts";
+import { NAMED_MOTIONS, NONE, done, isCharacter, move } from "../keys.ts";
+import type { Action, Mode, Pending, Press, Step } from "../keys.ts";
 import { m } from "../../paraglide/messages.js";
 import type { EditorKey, InputStrategy } from "./strategy.ts";
 
 /** The chord that moves between view and transform, which is all the switch needs to say. */
 const SWITCH_KEY = "Ctrl+E";
-
-const NONE: Action = { t: "none" };
 
 /** interpret reads one key in view or transform. Nothing waits for a second key, so nothing is pending. */
 function interpret(mode: Mode, _pending: Pending, press: Press): Step | undefined {
@@ -37,29 +35,12 @@ function interpret(mode: Mode, _pending: Pending, press: Press): Step | undefine
     return undefined;
   }
 
-  switch (key) {
-    case "ArrowDown":
-      return done(move("down"));
-    case "ArrowUp":
-      return done(move("up"));
-    case "ArrowRight":
-      return done(move("right"));
-    case "ArrowLeft":
-      return done(move("left"));
-    // The next cell, and with Shift the one before, as every spreadsheet has it.
-    case "Tab":
-      return done(move(press.shift ? "left" : "right"));
-    case "PageDown":
-      return done(move("page-down"));
-    case "PageUp":
-      return done(move("page-up"));
-    case "Home":
-      return done(move("home"));
-    case "End":
-      return done(move("end"));
-    case "Enter":
-    case "F2":
-      return done(writes(mode, { t: "insert", caret: "all", transform: false }));
+  const named = NAMED_MOTIONS.get(key);
+  if (named !== undefined) return done(move(named, undefined));
+  // The next cell, and with Shift the one before, as every spreadsheet has it.
+  if (key === "Tab") return done(move(press.shift ? "left" : "right", undefined));
+  if (key === "Enter" || key === "F2") {
+    return done(writes(mode, { t: "insert", caret: "all", transform: false }));
   }
 
   // Esc, Shift and every other key that types nothing are not the grid's.
@@ -74,14 +55,6 @@ function editorKey(key: string, composing: boolean): EditorKey {
   if (composing || key === "Process") return undefined;
   if (key === "Enter") return "commit";
   return key === "Escape" ? "cancel" : undefined;
-}
-
-function done(action: Action): Step {
-  return { pending: NOTHING, action };
-}
-
-function move(motion: Motion): Action {
-  return { t: "move", motion, count: undefined };
 }
 
 /** writes is a key that changes the file, which view refuses by saying what would. */

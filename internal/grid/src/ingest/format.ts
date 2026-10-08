@@ -13,7 +13,7 @@ import { english } from "../said/index.ts";
 import type { ByteSource } from "../store/index.ts";
 import { readAll } from "./csv.ts";
 import { RecordScanner, bomLength } from "./scan.ts";
-import type { Charset } from "../said/index.ts";
+import type { Charset, Said } from "../said/index.ts";
 import { sniffDelimiter, sniffEncoding } from "./sniff.ts";
 import type { Encoding } from "./sniff.ts";
 
@@ -275,7 +275,13 @@ export function describe(
   header: HeaderMode = "first",
   charset: Charset = "UTF-8",
 ): string {
-  return english({ t: "read", delimiter: comma, header, charset });
+  return english(labelOf({ delimiter: comma, header, charset }));
+}
+
+/** labelOf is how a file was read, as the sentence an opened source and a peek both carry. */
+export function labelOf(format: Pick<Format, "delimiter" | "header" | "charset">): Said {
+  const { delimiter, header, charset } = format;
+  return { t: "read", delimiter, header, charset };
 }
 
 /** What each delimiter worth guessing is called. */

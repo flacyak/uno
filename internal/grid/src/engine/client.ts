@@ -69,20 +69,13 @@ export class Engine {
    * only into an engine that holds none.
    */
   async open(ref: SourceRef): Promise<Added> {
-    const r = await this.ask((id) => ({ t: "open", id, ref }));
-    if (r.t !== "opened") throw new Error(`the engine answered an open with ${r.t}`);
-    const sources = r.added.opened.map((o) => {
-      const s = new SourceHandle(this, o);
-      this.sources.set(o.source, s);
-      return s;
-    });
-    return { sources, showing: r.added.showing };
+    const { added } = await this.ask("opened", (id) => ({ t: "open", id, ref }));
+    return { sources: added.opened.map((o) => this.adopt(o)), showing: added.showing };
   }
 
   /** remove takes a source out of the workspace, and its edits out of the log. */
   async remove(source: SourceHandle): Promise<void> {
-    const r = await this.ask((id) => ({ t: "remove", id, source: source.id }));
-    if (r.t !== "removed") throw new Error(`the engine answered a remove with ${r.t}`);
+    await this.ask("removed", (id) => ({ t: "remove", id, source: source.id }));
     this.sources.delete(source.id);
   }
 
@@ -98,11 +91,8 @@ export class Engine {
    * no file behind it still, once connected: its link then says why.
    */
   async relink(source: SourceHandle, ref: SourceRef): Promise<SourceHandle> {
-    const r = await this.ask((id) => ({ t: "relink", id, source: source.id, ref }));
-    if (r.t !== "relinked") throw new Error(`the engine answered a relink with ${r.t}`);
-    const handle = new SourceHandle(this, r.opened);
-    this.sources.set(handle.id, handle);
-    return handle;
+    const r = await this.ask("relinked", (id) => ({ t: "relink", id, source: source.id, ref }));
+    return this.adopt(r.opened);
   }
 
   /**
@@ -113,9 +103,13 @@ export class Engine {
    * the old handle had, every edit on the cell it was made to.
    */
   async append(source: SourceHandle, parts: SingleRef[]): Promise<SourceHandle> {
-    const r = await this.ask((id) => ({ t: "append", id, source: source.id, parts }));
-    if (r.t !== "appended") throw new Error(`the engine answered an append with ${r.t}`);
-    const handle = new SourceHandle(this, r.opened);
+    const r = await this.ask("appended", (id) => ({ t: "append", id, source: source.id, parts }));
+    return this.adopt(r.opened);
+  }
+
+  /** adopt is the handle for a source the engine has opened, kept by its id for what the engine says of it later. */
+  private adopt(opened: Opened): SourceHandle {
+    const handle = new SourceHandle(this, opened);
     this.sources.set(handle.id, handle);
     return handle;
   }
@@ -127,9 +121,7 @@ export class Engine {
   /** save returns the workspace as a .uno, refusing carried sources larger than
    * limit together. */
   async save(place: Place, limit: number): Promise<Uint8Array> {
-    const r = await this.ask((id) => ({ t: "save", id, place, limit }));
-    if (r.t !== "saved") throw new Error(`the engine answered a save with ${r.t}`);
-    return r.bytes;
+    return (await this.ask("saved", (id) => ({ t: "save", id, place, limit }))).bytes;
   }
 
   /**
@@ -139,17 +131,13 @@ export class Engine {
    * workspace.
    */
   async list(path: string, cursor?: string): Promise<Listing> {
-    const r = await this.ask((id) => ({ t: "list", id, path, cursor }));
-    if (r.t !== "listed") throw new Error(`the engine answered a list with ${r.t}`);
-    return r.listing;
+    return (await this.ask("listed", (id) => ({ t: "list", id, path, cursor }))).listing;
   }
 
   /** stat answers the size and version of a path now, without opening it: the
    * same reason as list, before there is a source to ask instead. */
   async stat(path: string): Promise<Entry> {
-    const r = await this.ask((id) => ({ t: "stat", id, path }));
-    if (r.t !== "statted") throw new Error(`the engine answered a stat with ${r.t}`);
-    return r.entry;
+    return (await this.ask("statted", (id) => ({ t: "stat", id, path }))).entry;
   }
 
   /**
@@ -160,9 +148,7 @@ export class Engine {
    * to add may have no path to name it by.
    */
   async peek(ref: SourceRef): Promise<Peeked> {
-    const r = await this.ask((id) => ({ t: "peek", id, ref }));
-    if (r.t !== "peeked") throw new Error(`the engine answered a peek with ${r.t}`);
-    return r.peeked;
+    return (await this.ask("peeked", (id) => ({ t: "peek", id, ref }))).peeked;
   }
 
   /**
@@ -171,16 +157,12 @@ export class Engine {
    * what the engine signs with are the same list.
    */
   async connections(): Promise<Loaded> {
-    const r = await this.ask((id) => ({ t: "connections", id }));
-    if (r.t !== "loaded") throw new Error(`the engine answered a connections request with ${r.t}`);
-    return r.loaded;
+    return (await this.ask("loaded", (id) => ({ t: "connections", id }))).loaded;
   }
 
   /** profiles answers the names of the AWS profiles the engine's machine has. */
   async profiles(): Promise<string[]> {
-    const r = await this.ask((id) => ({ t: "profiles", id }));
-    if (r.t !== "names") throw new Error(`the engine answered a profiles request with ${r.t}`);
-    return r.names;
+    return (await this.ask("names", (id) => ({ t: "profiles", id }))).names;
   }
 
   /**
@@ -189,9 +171,7 @@ export class Engine {
    * stopped it, and keeps nothing either way.
    */
   async tryConnection(connection: Connection): Promise<Tried> {
-    const r = await this.ask((id) => ({ t: "try", id, connection }));
-    if (r.t !== "tried") throw new Error(`the engine answered a try with ${r.t}`);
-    return r.tried;
+    return (await this.ask("tried", (id) => ({ t: "try", id, connection }))).tried;
   }
 
   /** close ends the connection. The worker behind it goes when its port does. */
@@ -223,14 +203,27 @@ export class Engine {
     this.waiting.clear();
   }
 
-  /** ask sends a request and resolves with its answer. For SourceHandle. */
-  ask(make: (id: number) => Request): Promise<Reply> {
-    if (this.gone !== undefined) return Promise.reject(this.gone);
+  /**
+   * ask sends a request and resolves with its answer, which has to be of the
+   * kind `want`: an engine that answers a stat with anything else is one this
+   * client cannot read, and is said so rather than read as something it is not.
+   * Public for SourceHandle.
+   */
+  async ask<K extends Reply["t"]>(
+    want: K,
+    make: (id: number) => Request,
+  ): Promise<Extract<Reply, { t: K }>> {
+    if (this.gone !== undefined) throw this.gone;
     const id = this.next++;
-    return new Promise((resolve, reject) => {
+    const request = make(id);
+    const reply = await new Promise<Reply>((resolve, reject) => {
       this.waiting.set(id, { resolve, reject });
-      this.port.post(make(id));
+      this.port.post(request);
     });
+    if (!isKind(reply, want)) {
+      throw new Error(`the engine answered a ${request.t} request with ${reply.t}`);
+    }
+    return reply;
   }
 
   private receive(msg: Reply): void {
@@ -309,36 +302,33 @@ export class SourceHandle {
     return this.opened.source;
   }
 
-  async rows(first: number, count: number): Promise<RowsReply> {
-    const r = await this.engine.ask((id) => ({ t: "rows", id, source: this.id, first, count }));
-    if (r.t !== "rows") throw new Error(`the engine answered a rows request with ${r.t}`);
-    return r;
+  rows(first: number, count: number): Promise<RowsReply> {
+    return this.engine.ask("rows", (id) => ({ t: "rows", id, source: this.id, first, count }));
   }
 
   async edit(edit: EditRequest): Promise<Changed> {
-    const r = await this.engine.ask((id) => ({ t: "edit", id, source: this.id, edit }));
-    if (r.t !== "changed") throw new Error(`the engine answered an edit with ${r.t}`);
-    return r.changed;
+    return (await this.engine.ask("changed", (id) => ({ t: "edit", id, source: this.id, edit })))
+      .changed;
   }
 
   async undo(): Promise<Changed> {
-    const r = await this.engine.ask((id) => ({ t: "undo", id, source: this.id }));
-    if (r.t !== "changed") throw new Error(`the engine answered an undo with ${r.t}`);
-    return r.changed;
+    return (await this.engine.ask("changed", (id) => ({ t: "undo", id, source: this.id }))).changed;
   }
 
   async redo(): Promise<Changed> {
-    const r = await this.engine.ask((id) => ({ t: "redo", id, source: this.id }));
-    if (r.t !== "changed") throw new Error(`the engine answered a redo with ${r.t}`);
-    return r.changed;
+    return (await this.engine.ask("changed", (id) => ({ t: "redo", id, source: this.id }))).changed;
   }
 
   /** find asks for the next matching row in a column, however far from the band it is. */
   async find(find: FindRequest): Promise<Found> {
-    const r = await this.engine.ask((id) => ({ t: "find", id, source: this.id, find }));
-    if (r.t !== "found") throw new Error(`the engine answered a find with ${r.t}`);
-    return r.found;
+    return (await this.engine.ask("found", (id) => ({ t: "find", id, source: this.id, find })))
+      .found;
   }
+}
+
+/** isKind narrows a reply to one kind, which is how `ask` reads the one it was promised. */
+function isKind<K extends Reply["t"]>(reply: Reply, kind: K): reply is Extract<Reply, { t: K }> {
+  return reply.t === kind;
 }
 
 /** Rows kept around the viewport. Several screens, so a wheel rarely outruns them. */

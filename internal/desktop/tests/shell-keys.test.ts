@@ -10,12 +10,10 @@ import { beforeAll, expect, test } from "vite-plus/test";
 import { ROWS, counted } from "../src/main/smoke/fixture.ts";
 import type { Shell } from "../src/renderer/shell/shell.ts";
 import { bootShell } from "./smoke/dom-harness.ts";
-import { domPage } from "./smoke/dom-page.ts";
+import { domPage, until } from "./smoke/dom-page.ts";
 
 /** What the window wears while the sidebar is closed, as shell.ts has it. */
 const NO_SIDEBAR = "no-sidebar";
-/** Matches dom-page.ts's own budget. */
-const TRIES = 150;
 
 const page = domPage();
 let shell: Shell;
@@ -28,12 +26,6 @@ function cell(): string {
   return document.querySelector("#status-cell")?.textContent ?? "";
 }
 
-/** until waits, a frame at a time, for `holds` to say so. */
-async function until(holds: () => boolean): Promise<boolean> {
-  for (let i = 0; i < TRIES && !holds(); i++) await page.settle(2);
-  return holds();
-}
-
 beforeAll(async () => {
   shell = await bootShell();
 }, 20_000);
@@ -44,10 +36,10 @@ test("Ctrl+B under vim-style pages up and leaves the sidebar as it is", async ()
   // To the end, so there is a page above to go up to.
   await page.press("G");
   const last = `row ${counted(ROWS)}`;
-  expect(await until(() => cell().includes(last)), cell()).toBe(true);
+  expect(await until(page, () => cell().includes(last)), cell()).toBe(true);
 
   await page.press("b", { ctrlKey: true });
-  expect(await until(() => !cell().includes(last)), cell()).toBe(true);
+  expect(await until(page, () => !cell().includes(last)), cell()).toBe(true);
   expect(sidebarOpen()).toBe(true);
 });
 

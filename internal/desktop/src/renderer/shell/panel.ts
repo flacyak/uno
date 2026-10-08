@@ -15,7 +15,7 @@ import type { Peeked, SourceRef } from "@uno/grid/engine";
 import type { SingleRef } from "@uno/grid/store";
 
 import { m } from "../../paraglide/messages.js";
-import { firstRow, poolSize } from "../grid/metrics.ts";
+import { firstRow, fitPool, poolSize } from "../grid/metrics.ts";
 import type { InputName } from "../input/index.ts";
 import { bytes } from "../locale.ts";
 import { say } from "../said.ts";
@@ -43,7 +43,7 @@ import type {
 } from "../sources.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
-import { Words } from "./util.ts";
+import { Words, el } from "./util.ts";
 
 /**
  * One line's height, in one place. The stylesheet is handed it as
@@ -56,26 +56,20 @@ const ROW_H = 24;
  * The key for each thing a tab's line offers. Connect is the key a tab waiting
  * for its bucket has in Reload's place, since reloading it is not on offer.
  */
-const DOING_KEYS: Record<string, Doing> = {
-  r: "reload",
-  c: "connect",
-  p: "repoint",
-  a: "append",
-  Delete: "remove",
+const DOING_KEYS: ReadonlyMap<string, Doing> = new Map([
+  ["r", "reload"],
+  ["c", "connect"],
+  ["p", "repoint"],
+  ["a", "append"],
+  ["Delete", "remove"],
+]);
+
+/** What each section is headed. */
+const TITLES: Record<Section, () => string> = {
+  workspace: m.section_workspace,
+  connections: m.section_connections,
+  browser: m.section_browser,
 };
-
-/** What each choice about files added as one says, and says to whoever hovers. */
-
-function titleOf(section: Section): string {
-  switch (section) {
-    case "workspace":
-      return m.section_workspace();
-    case "connections":
-      return m.section_connections();
-    case "browser":
-      return m.section_browser();
-  }
-}
 
 /** What stands where a size would be, for an entry whose size is not known. */
 const NO_SIZE = "—";
@@ -152,14 +146,14 @@ export function rowOf(laid: readonly Span[], place: Place): number {
 }
 
 export class Panel {
-  private readonly input = document.createElement("input");
-  private readonly list = document.createElement("div");
-  private readonly sizer = document.createElement("div");
-  private readonly rows = document.createElement("div");
+  private readonly input = el("input");
+  private readonly list = el("div", "panel-list");
+  private readonly sizer = el("div", "panel-sizer");
+  private readonly rows = el("div", "panel-rows");
   /** The front of the one picked file, under the list. */
-  private readonly peek = document.createElement("div");
+  private readonly peek = el("div", "panel-peek");
   /** The buttons that add what is picked. */
-  private readonly foot = document.createElement("div");
+  private readonly foot = el("div", "panel-foot");
   /** What the peek and the buttons were last drawn from, so a scroll redraws neither. */
   private drawnPeek: Peeked | "reading" | undefined;
   private drawnFoot = "";
@@ -170,7 +164,7 @@ export class Panel {
   private laid: Span[] = [];
   private frame = 0;
   /** The filter box's form, hidden with the list while a bucket is being connected. */
-  private readonly filter = document.createElement("form");
+  private readonly filter = el("form", "panel-filter");
   /** Connecting a bucket, which takes the list's place while it is open. */
   private readonly connecting: ConnectForm;
 
@@ -185,13 +179,12 @@ export class Panel {
     root.style.setProperty("--panel-row-h", `${ROW_H}px`);
 
     const form = this.filter;
-    form.className = "panel-filter";
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
     // An object's address is added rather than filtered by, so the box says so.
     this.words.placeholder(this.input, m.panel_filter_placeholder);
     this.words.attr(this.input, "aria-label", m.panel_filter_aria);
-    const go = this.words.text(document.createElement("button"), m.action_filter);
+    const go = this.words.text(el("button"), m.action_filter);
     go.type = "submit";
     form.append(this.input, go);
     // Enter in the box and the button are one submit, and neither leaves the page.
@@ -208,19 +201,14 @@ export class Panel {
       }
     });
 
-    this.list.className = "panel-list";
     this.list.tabIndex = 0;
-    this.sizer.className = "panel-sizer";
-    this.rows.className = "panel-rows";
     this.sizer.append(this.rows);
     this.list.append(this.sizer);
     this.list.addEventListener("scroll", () => this.draw(), { passive: true });
     this.list.addEventListener("keydown", (e) => this.key(e));
     this.list.addEventListener("click", (e) => this.click(e));
 
-    this.peek.className = "panel-peek";
     this.peek.hidden = true;
-    this.foot.className = "panel-foot";
     this.foot.hidden = true;
 
     // A connection saved is browsed at once, from where it starts: saving one
@@ -252,9 +240,7 @@ export class Panel {
 
     // The head that says what the column is. It begins under the end of the
     // window's top line, which index.html keeps for the × that closes the window.
-    const head = document.createElement("div");
-    head.className = "panel-head col-head";
-    this.words.text(head, m.sources_title);
+    const head = this.words.text(el("div", "panel-head col-head"), m.sources_title);
 
     root.append(head, form, this.list, this.peek, this.foot, this.connecting.el);
   }
@@ -401,49 +387,23 @@ export class Panel {
    */
   private key(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
-    const vim = this.keys() === "vim-style";
     const page = Math.max(1, Math.floor(this.list.clientHeight / ROW_H) - 1);
+    // The keys that move, and by how much: j and k only for someone reading them vim's way.
+    const steps = new Map([
+      ["ArrowDown", 1],
+      ["ArrowUp", -1],
+      ["PageDown", page],
+      ["PageUp", -page],
+    ]);
+    if (this.keys() === "vim-style") steps.set("j", 1).set("k", -1);
 
     switch (e.key) {
-      case "ArrowDown":
-        this.move(1);
-        break;
-      case "ArrowUp":
-        this.move(-1);
-        break;
-      case "PageDown":
-        this.move(page);
-        break;
-      case "PageUp":
-        this.move(-page);
-        break;
-      case "j":
-        if (!vim) return;
-        this.move(1);
-        break;
-      case "k":
-        if (!vim) return;
-        this.move(-1);
-        break;
       case "Enter":
         this.choose();
         break;
       case " ":
         this.pick();
         break;
-      // What can be done to a tab, from its line. Anywhere else there is no
-      // tab, and the key goes on as one the panel does not read.
-      case "r":
-      case "c":
-      case "p":
-      case "a":
-      case "Delete": {
-        const does = DOING_KEYS[e.key];
-        const action = this.sources.doings.find((a) => a.does === does);
-        if (action === undefined) return;
-        this.doing(action);
-        break;
-      }
       case "Backspace":
         void this.sources.up();
         break;
@@ -456,8 +416,19 @@ export class Panel {
         if (this.sources.repointing !== undefined) this.sources.stop();
         else this.hide();
         break;
-      default:
-        return;
+      default: {
+        const step = steps.get(e.key);
+        if (step !== undefined) {
+          this.move(step);
+          break;
+        }
+        // What can be done to a tab, from its line. Anywhere else there is no
+        // tab, and the key goes on as one the panel does not read.
+        const does = DOING_KEYS.get(e.key);
+        const action = this.sources.doings.find((a) => a.does === does);
+        if (does === undefined || action === undefined) return;
+        this.doing(action);
+      }
     }
     e.preventDefault();
     e.stopPropagation();
@@ -471,8 +442,8 @@ export class Panel {
 
   /** click puts the keys on a line and chooses it, as the keys and Enter would. */
   private click(e: MouseEvent): void {
-    const el = (e.target as HTMLElement).closest<HTMLElement>(".panel-row");
-    const index = Number(el?.dataset["row"]);
+    const hit = (e.target as HTMLElement).closest<HTMLElement>(".panel-row");
+    const index = Number(hit?.dataset["row"]);
     if (!Number.isInteger(index)) return;
     const row = rowAt(this.laid, index);
     if (row.t !== "line") return;
@@ -582,13 +553,7 @@ export class Panel {
     this.sizer.style.height = `${total * ROW_H}px`;
 
     const want = poolSize(total, this.list.clientHeight, ROW_H);
-    while (this.pool.length < want) {
-      const row = document.createElement("div");
-      row.append(document.createElement("span"), document.createElement("span"));
-      this.pool.push(row);
-      this.rows.append(row);
-    }
-    while (this.pool.length > want) this.pool.pop()?.remove();
+    fitPool(this.pool, want, () => line(), this.rows);
 
     const first = firstRow(total, this.pool.length, this.list.scrollTop, ROW_H);
     this.rows.style.transform = `translateY(${first * ROW_H}px)`;
@@ -636,19 +601,16 @@ export class Panel {
 
   /** doing is one of a tab's buttons, or its key. Re-pointing starts in the browser. */
   private doing(a: TabAction): void {
-    switch (a.does) {
-      case "reload":
-        return this.act.reload(a.id);
-      case "remove":
-        return this.act.remove(a.id);
-      case "repoint":
-        return this.repoint(a.id);
-      case "connect":
-        return this.connectFor(a.id);
-      case "append":
-        return this.act.append(a.id, a.files ?? []);
-    }
+    this.doings[a.does](a);
   }
+
+  private readonly doings: Record<Doing, (a: TabAction) => void> = {
+    reload: (a) => this.act.reload(a.id),
+    remove: (a) => this.act.remove(a.id),
+    repoint: (a) => this.repoint(a.id),
+    connect: (a) => this.connectFor(a.id),
+    append: (a) => this.act.append(a.id, a.files ?? []),
+  };
 
   /**
    * connectFor opens the connect form for the bucket a tab reads that no
@@ -670,22 +632,21 @@ export class Panel {
     this.peek.hidden = now === undefined;
     if (now === undefined) return this.peek.replaceChildren();
     if (now === "reading") {
-      this.peek.replaceChildren(text("div", "note", m.panel_peeking()));
+      this.peek.replaceChildren(el("div", "note", m.panel_peeking()));
       return;
     }
 
     const table = document.createElement("table");
     const head = table.createTHead().insertRow();
-    for (const h of now.header) head.append(text("th", "", h));
+    for (const h of now.header) head.append(el("th", "", h));
     const body = table.createTBody();
     for (const row of now.rows) {
       const tr = body.insertRow();
-      for (const cell of row) tr.append(text("td", "", cell));
+      for (const cell of row) tr.append(el("td", "", cell));
     }
-    const wrap = document.createElement("div");
-    wrap.className = "table";
+    const wrap = el("div", "table");
     wrap.append(table);
-    this.peek.replaceChildren(text("div", "note", say(now.label)), wrap);
+    this.peek.replaceChildren(el("div", "note", say(now.label)), wrap);
   }
 
   /**
@@ -714,17 +675,17 @@ export class Panel {
     this.foot.replaceChildren(
       ...(failure === undefined ? [] : this.refusal(failure)),
       ...doings.map((a) => {
-        const el = text("button", a.does === "append" ? "wide" : "", a.label);
-        el.addEventListener("click", () => this.doing(a));
-        return el;
+        const button = el("button", a.does === "append" ? "wide" : "", a.label);
+        button.addEventListener("click", () => this.doing(a));
+        return button;
       }),
       ...(joining === undefined ? [] : [this.choices(joining)]),
       ...buttons.map((b, i) => {
-        const el = text("button", b.one ? "" : "primary", b.label);
+        const button = el("button", b.one ? "" : "primary", b.label);
         // The button as it stands when pressed, with the choices as they are
         // then, and not as they were when it was drawn.
-        el.addEventListener("click", () => this.press(this.sources.buttons[i] ?? b));
-        return el;
+        button.addEventListener("click", () => this.press(this.sources.buttons[i] ?? b));
+        return button;
       }),
     );
   }
@@ -734,9 +695,9 @@ export class Panel {
    * in the engine's own words, and the button that edits it to try again.
    */
   private refusal(failure: Arriving): HTMLElement[] {
-    const editing = text("button", "primary", m.action_edit_connection());
+    const editing = el("button", "primary", m.action_edit_connection());
     editing.addEventListener("click", () => this.edit());
-    return [text("div", "why", `✗ ${failure.failed}`), editing];
+    return [el("div", "why", `✗ ${failure.failed}`), editing];
   }
 
   /**
@@ -745,9 +706,9 @@ export class Panel {
    * which file a row came from.
    */
   private choices(joining: Joining): HTMLElement {
-    const line = text("div", "choices", "");
+    const line = el("div", "choices");
     line.append(
-      text("span", "", m.panel_as_one()),
+      el("span", "", m.panel_as_one()),
       choice(m.panel_header_row(), m.panel_header_row_hint(), joining.header === "first", (on) =>
         this.sources.join({ header: on ? "first" : "none" }),
       ),
@@ -770,7 +731,7 @@ export class Panel {
       cls += " head";
       const pointing = row.section === "browser" ? this.sources.repointing : undefined;
       name =
-        pointing === undefined ? titleOf(row.section) : m.panel_point_at({ name: pointing.name });
+        pointing === undefined ? TITLES[row.section]() : m.panel_point_at({ name: pointing.name });
       if (row.section === "browser") meta = this.sources.crumb.map((c) => c.name).join(" / ");
     } else if (row.t === "note") {
       cls += " note";
@@ -887,26 +848,26 @@ function choice(
   on: boolean,
   changed: (on: boolean) => void,
 ): HTMLElement {
-  const el = document.createElement("label");
-  el.title = hint;
-  const box = document.createElement("input");
+  const line = el("label");
+  line.title = hint;
+  const box = el("input");
   box.type = "checkbox";
   box.checked = on;
   box.addEventListener("change", () => changed(box.checked));
   // Space ticks it, and the grid's keys and the shell's chords stay out of it.
   box.addEventListener("keydown", (e) => e.stopPropagation());
-  el.append(box, label);
-  return el;
-}
-
-function text(tag: string, cls: string, content: string): HTMLElement {
-  const el = document.createElement(tag);
-  if (cls !== "") el.className = cls;
-  el.textContent = content;
-  return el;
+  line.append(box, label);
+  return line;
 }
 
 /** set writes text only when it changed, since the pool is repainted on every scroll. */
 function set(node: Element, text: string): void {
   if (node.textContent !== text) node.textContent = text;
+}
+
+/** line is one row of the list before anything is painted on it: a name and what stands beside it. */
+function line(): HTMLElement {
+  const row = el("div");
+  row.append(el("span"), el("span"));
+  return row;
 }

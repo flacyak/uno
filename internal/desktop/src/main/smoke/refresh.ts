@@ -11,7 +11,6 @@ import { join } from "node:path";
 
 import { NEWER_AFTER_MS } from "../../renderer/timing.ts";
 import type { Check } from "./check.ts";
-import { REMOTE } from "./sources.ts";
 
 /** The workspace sources.ts saved, with the object in it. */
 const SAVED = join(process.env["UNO_SMOKE"] ?? "", "sales-q3.uno");
@@ -38,7 +37,6 @@ export const REFRESH: Check[] = [
     send: ["menu:open-path", SAVED],
     shot: "refresh-changed",
     script: `
-      ${REMOTE}
       ${LINE}
       if (!(await arrives(() => tab("ads-q3.csv")?.querySelector(".trouble") != null))) {
         return "the tabs are " + JSON.stringify([...document.querySelectorAll(".tab")].map((t) => t.textContent));
@@ -46,7 +44,7 @@ export const REFRESH: Check[] = [
       const why = tab("ads-q3.csv").querySelector(".trouble").title;
       const want = "ads-q3.csv is not the version the workspace was saved against · it is the same size";
       if (!why.startsWith(want)) return "the mark says " + JSON.stringify(why);
-      if (document.querySelector("#panel").hidden) await press("B", { ctrlKey: true, shiftKey: true });
+      await openPanel();
       if (!(await arrives(() => line("ads-q3.csv")?.children[1]?.textContent === "changed"))) {
         return "the line says " + JSON.stringify(line("ads-q3.csv")?.textContent);
       }
@@ -65,7 +63,6 @@ export const REFRESH: Check[] = [
     ask: `rewrite ${KEY}`,
     shot: "refresh-newer",
     script: `
-      ${REMOTE}
       ${LINE}
       const words = () => line("ads-q3.csv")?.children[1]?.textContent;
       if (words() !== "changed") return "before the focus the line says " + JSON.stringify(words());
@@ -77,7 +74,6 @@ export const REFRESH: Check[] = [
       if (!text("#status-file").endsWith(want)) return "the status bar says " + JSON.stringify(text("#status-file"));
       // The mark opens the panel with the keys on its line, where Reload is.
       mark.click();
-      const foot = () => [...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent);
       return (await until(() => foot()[0] === "Reload")) ? "" : "its line offers " + JSON.stringify(foot());
     `,
   },
@@ -87,9 +83,8 @@ export const REFRESH: Check[] = [
     name: "Reload reads the newer version and says what changed",
     shot: "refresh-reloaded",
     script: `
-      ${REMOTE}
       ${LINE}
-      const reload = [...document.querySelectorAll("#panel .panel-foot button")].find((b) => b.textContent === "Reload");
+      const reload = footButton("Reload");
       if (reload === undefined) return "no Reload on the line";
       reload.click();
       const said = /^reloaded ads-q3.csv · a new version, the same size( · d+ edits? replayed)?$/;

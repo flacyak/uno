@@ -123,6 +123,37 @@ export interface Step {
   action: Action;
 }
 
+export const NONE: Action = { t: "none" };
+
+/** done is a key that finished something, so nothing is left pending. */
+export function done(action: Action): Step {
+  return { pending: NOTHING, action };
+}
+
+export function move(motion: Motion, count: number | undefined): Action {
+  return { t: "move", motion, count };
+}
+
+/**
+ * The keys every spreadsheet moves by, read the same under either input. Tab
+ * is not among them, since Shift turns it round. A Map rather than a record,
+ * so a key named like something every object has is not read as a motion.
+ */
+export const NAMED_MOTIONS: ReadonlyMap<string, Motion> = new Map([
+  ["ArrowDown", "down"],
+  ["ArrowUp", "up"],
+  ["ArrowRight", "right"],
+  ["ArrowLeft", "left"],
+  ["PageDown", "page-down"],
+  ["PageUp", "page-up"],
+  ["Home", "home"],
+  ["End", "end"],
+]);
+
+export function isLead(key: string): key is Lead {
+  return key === ":" || key === "/" || key === "?";
+}
+
 /**
  * isJump says whether a motion is a jump, which '' goes back from: G, gg and
  * {n}G, and H, M and L. Going to a mark is one too. It keeps one position, not

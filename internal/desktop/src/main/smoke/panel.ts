@@ -7,30 +7,10 @@
 // that object.
 
 import type { Check } from "./check.ts";
-import { REMOTE } from "./sources.ts";
 
-/** What the panel's lines say, and a key pressed where the panel reads them. */
+/** The names on a section's lines, beside what the PRELUDE says of the panel. */
 const LINES = `
-  // The column's rows, each with the section it is under: the titles come
-  // workspace, connections, browser, and a column this short is all on screen.
-  const lines = () => {
-    let at = -1;
-    return [...document.querySelectorAll("#panel .panel-row")].map((r) => ({
-      section: r.classList.contains("head") ? ++at : at,
-      cls: r.className, name: r.children[0].textContent, meta: r.children[1].textContent, title: r.title,
-    }));
-  };
-  const WORKSPACE = 0, BROWSER = 2;
-  const head = (section) => lines().find((l) => l.section === section && l.cls.includes("head"));
-  // The names on a section's lines, not its title or note.
-  const names = (section) => lines()
-    .filter((l) => l.section === section && !/\\b(head|note)\\b/.test(l.cls))
-    .map((l) => l.name);
-  const key = async (k) => {
-    document.querySelector("#panel .panel-list")
-      .dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
-    await frame();
-  };
+  const names = (section) => named(section).map((l) => l.name);
 `;
 
 export const PANEL: Check[] = [
@@ -121,23 +101,19 @@ export const PANEL: Check[] = [
       }
       const rows = peek.querySelectorAll("tbody tr").length;
       if (rows !== 20) return "the peek has " + rows + " rows";
-      const foot = [...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent);
-      return JSON.stringify(foot) === '["Add 1"]' ? "" : "the buttons are " + JSON.stringify(foot);
+      return JSON.stringify(foot()) === '["Add 1"]' ? "" : "the buttons are " + JSON.stringify(foot());
     `,
   },
   {
     name: "two objects picked are added as a tab each, out of the bucket",
     script: `
-      ${REMOTE}
       ${LINES}
       await key("ArrowUp");
       await key(" ");
-      const buttons = () => [...document.querySelectorAll("#panel .panel-foot button")];
-      const labels = buttons().map((b) => b.textContent);
-      if (JSON.stringify(labels) !== '["Add 2","Add as one"]') return "the buttons are " + JSON.stringify(labels);
+      if (JSON.stringify(foot()) !== '["Add 2","Add as one"]') return "the buttons are " + JSON.stringify(foot());
       if (!document.querySelector("#panel .panel-peek").hidden) return "two picks still show a peek";
 
-      buttons()[0].click();
+      footButtons()[0].click();
       if (!(await arrives(() => document.querySelectorAll(".tab").length === 4))) {
         return "the sidebar has " + document.querySelectorAll(".tab").length + " tabs · " + JSON.stringify(text("#status-msg"));
       }
@@ -154,15 +130,13 @@ export const PANEL: Check[] = [
   {
     name: "Re-point on a tab's line points it at another object in the bucket",
     script: `
-      ${REMOTE}
       ${LINES}
       const q3 = "s3://acme-exports/2025/ads-q3.csv", q4 = "s3://acme-exports/2025/ads-q4.csv";
       const row = (path) => [...document.querySelectorAll("#panel .panel-row")].find((r) => r.title.startsWith(path));
-      const button = (label) => [...document.querySelectorAll("#panel .panel-foot button")].find((b) => b.textContent === label);
       row(q4).click();
       await frame();
-      if (button("Re-point") === undefined) return "the ads-q4.csv line offers no Re-point";
-      button("Re-point").click();
+      if (footButton("Re-point") === undefined) return "the ads-q4.csv line offers no Re-point";
+      footButton("Re-point").click();
       // The folder is on screen from the adding before, so what is waited for
       // is the listing drawn under the re-point's title. A pick made in the
       // old one is dropped when the new one lands.
@@ -171,10 +145,10 @@ export const PANEL: Check[] = [
       }
       // The keys are on the folder's first line, which is ads-q3.csv.
       await key(" ");
-      if (!(await until(() => button("Point ads-q4.csv here") !== undefined))) {
-        return "the buttons are " + JSON.stringify([...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent));
+      if (!(await until(() => footButton("Point ads-q4.csv here") !== undefined))) {
+        return "the buttons are " + JSON.stringify(foot());
       }
-      button("Point ads-q4.csv here").click();
+      footButton("Point ads-q4.csv here").click();
 
       if (!(await arrives(() => text("#status-msg").endsWith("reads from " + q3)))) {
         return "the status bar says " + JSON.stringify(text("#status-msg"));

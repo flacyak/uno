@@ -173,8 +173,9 @@ test("smoke opens the app directory, not the main bundle, and on fixtures that e
   // package's `main`, which is what makes __dirname in the bundle point at
   // out/main and the preload resolve beside it.
   expect(src).toMatch(
-    /spawn\(electron,\s*\[pkg,\s*`--user-data-dir=\$\{data\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
+    /args:\s*\[pkg,\s*`--user-data-dir=\$\{data\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
   );
+  expect(read("launch.js")).toMatch(/spawn\(electron,\s*args/);
   for (const fixture of ["sales-q3.csv", "google-ads-sales.csv"]) {
     expect(() => readFileSync(join(SCRIPTS, "../../grid/tests/testdata", fixture))).not.toThrow();
   }
@@ -191,9 +192,12 @@ test("smoke runs with a data folder of its own, emptied first", () => {
 });
 
 test("a hung app is killed by pid, on a deadline", () => {
-  const src = read("smoke.js");
+  // The deadline is the launcher's, and every driven run names one.
+  const src = read("launch.js");
   expect(src).toMatch(/setTimeout/);
   expect(src).toMatch(/process\.kill\(child\.pid, "SIGKILL"\)/);
+  for (const name of ["smoke.js", "preview.js"])
+    expect(read(name), name).toMatch(/deadlineMs:\s*\d/);
 });
 
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {
@@ -213,9 +217,9 @@ test("the stand-in is shut both ways the run can end", () => {
   // A leaked server holds the port, and the next run comes up on a different
   // one -- which passes, and quietly tests nothing about the one that leaked.
   const src = read("smoke.js");
-  const deadline = src.slice(src.indexOf("const deadline"), src.indexOf("const code"));
-  expect(deadline).toMatch(/shut\(\)/);
-  expect(src.slice(src.indexOf("const code"))).toMatch(/shut\(\)/);
+  const driven = src.slice(src.indexOf("await drive("), src.indexOf("const failed"));
+  expect(driven).toMatch(/onTimeout:.*shut\(\)/);
+  expect(driven).toMatch(/\n\s*await shut\(\);/);
 });
 
 test("the workspace the run saved is read back, and its absence is loud", () => {

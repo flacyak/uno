@@ -1,4 +1,4 @@
-import { atoi, isDigit, isLetter, isSpace, quote, runes, unquote } from "../go/index.ts";
+import { Scanner, atoi, isDigit, isLetter, quote, runes, unquote } from "../go/index.ts";
 import type { Pos, Step } from "./steps.ts";
 import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from "./steps.ts";
 import type { Program } from "./program.ts";
@@ -12,64 +12,32 @@ import type { Program } from "./program.ts";
  */
 export function parse(src: string): Program {
   const p = new Parser(runes(src));
-
-  const out: Step[] = [];
-  for (;;) {
-    try {
-      out.push(p.step());
-    } catch (err) {
-      throw new Error(`program ${quote(src)}: ${(err as Error).message}`);
-    }
-    p.space();
-    if (!p.accept("|")) break;
-  }
-
-  p.space();
-  if (p.i < p.s.length) {
-    throw new Error(
-      `program ${quote(src)}: unexpected ${quote(p.s[p.i]!)} at character ${p.i + 1}`,
-    );
-  }
+  const out = p.whole(src, () => {
+    const steps: Step[] = [];
+    do steps.push(p.step());
+    while (p.accept("|"));
+    return steps;
+  });
   if (out.length > MAX_STEPS) {
-    throw new Error(`program ${quote(src)}: ${out.length} steps, and the limit is ${MAX_STEPS}`);
+    p.refuse(src, `${out.length} steps, and the limit is ${MAX_STEPS}`);
   }
   return out;
 }
 
-/**
- * Parser is a scanner over the text form. It is hand-written because the
- * grammar is five step names deep and a generated parser would be a build step
- * and a dependency for something smaller than the file describing it.
- */
-class Parser {
-  i = 0;
+/** What each step reads between its brackets. */
+const ARGS: Record<string, (p: Parser) => Step> = {
+  replace: (p) => p.replaceArgs(),
+  slice: (p) => p.sliceArgs(),
+  concat: (p) => p.concatArgs(),
+  trim: () => ({ kind: "trim" }),
+  upper: () => ({ kind: "case", up: true }),
+  lower: () => ({ kind: "case", up: false }),
+};
 
-  constructor(readonly s: string[]) {}
-
-  space(): void {
-    while (this.i < this.s.length && isSpace(this.s[this.i]!)) this.i++;
-  }
-
-  accept(r: string): boolean {
-    this.space();
-    if (this.i < this.s.length && this.s[this.i] === r) {
-      this.i++;
-      return true;
-    }
-    return false;
-  }
-
-  private expect(r: string): void {
-    if (this.accept(r)) return;
-    throw new Error(`expected ${quote(r)} at character ${this.i + 1}, ${this.here()}`);
-  }
-
-  /** here names what was found instead, so an error points at the text rather
-   * than only at an offset into it. */
-  private here(): string {
-    if (this.i >= this.s.length) return "and the program ends there";
-    const ahead = this.s.slice(this.i, Math.min(this.i + 8, this.s.length)).join("");
-    return `found ${quote(ahead)}`;
+/** Parser is a scanner over the text form: five step names, each with its arguments. */
+class Parser extends Scanner {
+  constructor(s: string[]) {
+    super(s, "program");
   }
 
   private ident(): string {
@@ -87,43 +55,22 @@ class Parser {
       throw new Error(`expected a step name at character ${at}, ${this.here()}`);
     }
     this.expect("(");
-
-    let st: Step;
-    switch (name) {
-      case "replace":
-        st = this.replaceArgs();
-        break;
-      case "slice":
-        st = this.sliceArgs();
-        break;
-      case "concat":
-        st = this.concatArgs();
-        break;
-      case "trim":
-        st = { kind: "trim" };
-        break;
-      case "upper":
-        st = { kind: "case", up: true };
-        break;
-      case "lower":
-        st = { kind: "case", up: false };
-        break;
-      default:
-        throw new Error(`unknown step ${quote(name)} at character ${at}`);
-    }
-
+    // Looked up as an own key, since a name is letters and "constructor" is.
+    if (!Object.hasOwn(ARGS, name))
+      throw new Error(`unknown step ${quote(name)} at character ${at}`);
+    const st = ARGS[name]!(this);
     this.expect(")");
     return st;
   }
 
-  private replaceArgs(): Step {
+  replaceArgs(): Step {
     const re = this.regexArg();
     this.expect(",");
     const lit = this.stringArg();
     return newReplace(re, lit);
   }
 
-  private sliceArgs(): Step {
+  sliceArgs(): Step {
     const from = this.pos();
     this.expect(",");
     const to = this.pos();
@@ -135,7 +82,7 @@ class Parser {
    * is that thing, and two spellings of one program would both have to
    * round-trip.
    */
-  private concatArgs(): Step {
+  concatArgs(): Step {
     const parts: Step[] = [];
     for (;;) {
       this.space();

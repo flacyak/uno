@@ -80,6 +80,26 @@ export function poolSize(total: number, viewport: number, rowHeight: number): nu
   return Math.min(total, Math.ceil(viewport / rowHeight) + OVERSCAN);
 }
 
+/**
+ * fitPool grows or shrinks a pool of row elements to `want`, making a new one
+ * with `make` and hanging it under `parent`. It runs on a resize and on the
+ * first draw, and not while scrolling: once the pool fits, a scroll only
+ * writes text into it.
+ */
+export function fitPool<T extends Element>(
+  pool: T[],
+  want: number,
+  make: () => T,
+  parent: Element,
+): void {
+  while (pool.length < want) {
+    const row = make();
+    pool.push(row);
+    parent.append(row);
+  }
+  while (pool.length > want) pool.pop()?.remove();
+}
+
 /** firstRow is the first row the pool draws, clamped so the last screenful
  * stays full at the very end of the sheet. */
 export function firstRow(total: number, pool: number, top: number, rowHeight: number): number {

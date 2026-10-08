@@ -277,18 +277,9 @@ export class Workspace {
    * about the session moves under the person doing it.
    */
   async relink(tab: Tab, ref: SourceRef): Promise<Tab> {
-    const source = await this.engine.relink(tab.source, ref);
-    const i = this.tabs.indexOf(tab);
-    if (i < 0) return tab;
-
-    const fresh = this.tab(source, tab.savedLog);
-    fresh.cell = tab.cell;
-    this.tabs[i] = fresh;
     // One still with no file points where it did, so a save has nothing new
     // to write for it.
-    if (!fresh.missing) this.relinked.add(fresh.id);
-    if (this.showing === tab) this.showing = fresh;
-    return fresh;
+    return this.replace(tab, await this.engine.relink(tab.source, ref), (fresh) => !fresh.missing);
   }
 
   /**
@@ -300,14 +291,21 @@ export class Workspace {
    * sidebar, the cell it was left on, and what the last save held.
    */
   async append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
-    const source = await this.engine.append(tab.source, [...files]);
+    return this.replace(tab, await this.engine.append(tab.source, [...files]), () => true);
+  }
+
+  /**
+   * replace puts a fresh tab over `source` where `tab` was: its place in the
+   * sidebar, the cell it was left on, and what the last save held all stay.
+   * `pointed` says whether the save now has somewhere new to write for it.
+   */
+  private replace(tab: Tab, source: SourceHandle, pointed: (fresh: Tab) => boolean): Tab {
     const i = this.tabs.indexOf(tab);
     if (i < 0) return tab;
-
     const fresh = this.tab(source, tab.savedLog);
     fresh.cell = tab.cell;
     this.tabs[i] = fresh;
-    this.relinked.add(fresh.id);
+    if (pointed(fresh)) this.relinked.add(fresh.id);
     if (this.showing === tab) this.showing = fresh;
     return fresh;
   }

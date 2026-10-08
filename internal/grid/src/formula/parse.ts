@@ -1,7 +1,7 @@
 import {
+  Scanner,
   isDigit,
   isLetter,
-  isSpace,
   parseFloat as parseDecimal,
   quote,
   runes,
@@ -22,21 +22,7 @@ import { Formula } from "./ast.ts";
  */
 export function parse(src: string): Formula {
   const p = new Parser(runes(src));
-
-  let root: Node;
-  try {
-    root = p.expr(0);
-  } catch (err) {
-    throw new Error(`formula ${quote(src)}: ${(err as Error).message}`);
-  }
-
-  p.space();
-  if (p.i < p.s.length) {
-    throw new Error(
-      `formula ${quote(src)}: unexpected ${quote(p.s[p.i]!)} at character ${p.i + 1}`,
-    );
-  }
-  return new Formula(root);
+  return new Formula(p.whole(src, () => p.expr(0)));
 }
 
 /**
@@ -59,43 +45,17 @@ function isIdentRune(r: string): boolean {
 }
 
 /**
- * Parser is a scanner over the text form. It is hand-written because the
- * grammar is four operators and three kinds of term.
+ * Parser is a scanner over the text form: four operators and three kinds of
+ * term.
  *
  * Lexing happens inside the parser rather than ahead of it. There are no
  * keywords and no lookahead past one character, so a token list would be a
  * second representation of the same string, and the character offsets an error
  * points at would have to be carried through it.
  */
-class Parser {
-  i = 0;
-
-  constructor(readonly s: string[]) {}
-
-  space(): void {
-    while (this.i < this.s.length && isSpace(this.s[this.i]!)) this.i++;
-  }
-
-  private accept(r: string): boolean {
-    this.space();
-    if (this.i < this.s.length && this.s[this.i] === r) {
-      this.i++;
-      return true;
-    }
-    return false;
-  }
-
-  private expect(r: string): void {
-    if (this.accept(r)) return;
-    throw new Error(`expected ${quote(r)} at character ${this.i + 1}, ${this.here()}`);
-  }
-
-  /** here names what was found instead, so an error points at the text rather
-   * than only at an offset into it. */
-  private here(): string {
-    if (this.i >= this.s.length) return "and the formula ends there";
-    const ahead = this.s.slice(this.i, Math.min(this.i + 8, this.s.length)).join("");
-    return `found ${quote(ahead)}`;
+class Parser extends Scanner {
+  constructor(s: string[]) {
+    super(s, "formula");
   }
 
   /**
@@ -135,21 +95,15 @@ class Parser {
     }
 
     this.space();
-    if (this.i >= this.s.length) {
-      throw new Error(
-        `expected a number, a column name or ( at character ${this.i + 1}, ${this.here()}`,
-      );
-    }
-
-    const c = this.s[this.i]!;
+    const c = this.s[this.i];
     if (c === "(") {
       this.i++;
       const inner = this.expr(0);
       this.expect(")");
       return { kind: "group", inner };
     }
-    if (isDigit(c)) return this.number();
-    if (isIdentStart(c)) return { kind: "col", name: this.ident() };
+    if (c !== undefined && isDigit(c)) return this.number();
+    if (c !== undefined && isIdentStart(c)) return { kind: "col", name: this.ident() };
 
     throw new Error(
       `expected a number, a column name or ( at character ${this.i + 1}, ${this.here()}`,

@@ -7,9 +7,9 @@
 // no stored row is rewritten, and the rows a client asks for next come back
 // changed, wherever in the file they are.
 
-import type { HeldPart } from "../document/index.ts";
+import type { HeldFile, HeldPart, HeldParts } from "../document/index.ts";
 import { trimSpace } from "../go/index.ts";
-import { headerOf, openFormat } from "../ingest/index.ts";
+import { headerOf, labelOf, openFormat } from "../ingest/index.ts";
 import type { Format } from "../ingest/index.ts";
 import { isNumber } from "../num/index.ts";
 import { MIN_EXAMPLES, Survey, gather } from "../pattern/index.ts";
@@ -96,47 +96,14 @@ export interface Carried {
   edits: Edit[];
 }
 
-/** What a save writes of one source: where its bytes are, its log, and the grid
- * they add up to. The bytes are one file or several read as one, and `parts`
- * is what says which. */
-export type Part = FilePart | JoinedPart;
-
-/** What a save writes of every source, whatever is behind it. */
-interface Kept {
-  /** The connection it was read through, as a hint for whoever opens the save. */
-  connection?: string;
-  edits: Edit[];
-  rows: number;
-  cols: number;
-}
-
-/** What a save writes of one file. Exactly one of `raw` and `path` is set. */
-export interface FilePart extends Kept {
-  raw?: Uint8Array;
-  path?: string;
-  /** What the file measures, for a save that points at it rather than copying it. */
-  bytes: number;
-  /** Which bytes of the file were read, where the place it is in can say. */
-  version?: string;
-
-  parts?: never;
-  header?: never;
-  fileColumn?: never;
-}
-
-/** What a save writes of several files read as one: where each part is, which
- * bytes of it were read, and how it sits in the join. */
-export interface JoinedPart extends Kept {
-  parts: HeldPart[];
-  header: HeaderMode;
-  /** Whether it shows a `_file` column. Left out where it does not. */
-  fileColumn?: boolean;
-
-  raw?: never;
-  path?: never;
-  bytes?: never;
-  version?: never;
-}
+/**
+ * Part is what a save writes of one source: what a workspace holds of it, less
+ * what the workspace gives it -- its id, its name, where its grid was left --
+ * and with its log. The bytes are one file or several read as one, and `parts`
+ * is what says which.
+ */
+export type Part = (Omit<HeldFile, Unsaved> | Omit<HeldParts, Unsaved>) & { edits: Edit[] };
+type Unsaved = "id" | "name" | "state";
 
 export class View {
   opened!: Opened;
@@ -306,7 +273,7 @@ export class View {
       started = true;
 
       if (carried !== undefined) {
-        v.schema.rows = index.complete ? index.counted : index.readable();
+        v.schema.rows = index.readable();
         try {
           v.schema.replay(carried.edits);
         } catch (err) {
@@ -318,12 +285,7 @@ export class View {
         source: id,
         name,
         size: source.size,
-        label: {
-          t: "read",
-          delimiter: format.delimiter,
-          header: format.header,
-          charset: format.charset,
-        },
+        label: labelOf(format),
         columns: await v.columns(),
         progress: progressOf(index),
         edits: carried?.edits ?? [],
@@ -488,8 +450,7 @@ export class View {
       const e = this.undone.pop();
       if (e === undefined) throw new Refusal({ t: "nothing-to-redo" });
 
-      const index = this.index;
-      this.schema.rows = index.complete ? index.counted : index.readable();
+      this.schema.rows = this.index.readable();
       try {
         this.schema.record(e);
       } catch (err) {
@@ -505,7 +466,7 @@ export class View {
 
     const index = this.index;
     const schema = this.schema;
-    schema.rows = index.complete ? index.counted : index.readable();
+    schema.rows = index.readable();
 
     const cell = req.op === Op.Set || req.op === Op.Note;
     const e: Edit = {
@@ -630,10 +591,7 @@ export class View {
           told = now;
           this.offer(survey, generation, false);
         }
-        if (now - slice >= SLICE_MS) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 0));
-          slice = Date.now();
-        }
+        if (now - slice >= SLICE_MS) slice = await turn();
       }
 
       if (signal.aborted) return;
@@ -708,10 +666,7 @@ export class View {
         searched++;
         if (matches(shown(row))) return { row, searched, complete: true };
       }
-      if (Date.now() - slice >= SLICE_MS) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        slice = Date.now();
-      }
+      if (Date.now() - slice >= SLICE_MS) slice = await turn();
     }
     return { row: null, searched, complete: !down || index.complete };
   }
@@ -824,13 +779,7 @@ export class View {
   part(): Promise<Part> {
     return this.serially(async () => {
       if (this.parts !== undefined) {
-        return {
-          ...(await this.joined(this.parts)),
-          connection: this.connection,
-          edits: this.schema.edits(),
-          rows: this.index.complete ? this.index.counted : this.index.readable(),
-          cols: this.schema.headers.length,
-        };
+        return { ...(await this.joined(this.parts)), connection: this.connection, ...this.kept() };
       }
       const carry = this.path === "";
       if (carry) await this.until(() => this.index.complete);
@@ -840,11 +789,18 @@ export class View {
         bytes: this.size,
         version: this.version,
         connection: carry ? undefined : this.connection,
-        edits: this.schema.edits(),
-        rows: this.index.complete ? this.index.counted : this.index.readable(),
-        cols: this.schema.headers.length,
+        ...this.kept(),
       };
     });
+  }
+
+  /** kept is what a save writes down of the log, whatever the bytes are: the edits, and the shape they were made over. */
+  private kept(): Pick<Part, "edits" | "rows" | "cols"> {
+    return {
+      edits: this.schema.edits(),
+      rows: this.index.readable(),
+      cols: this.schema.headers.length,
+    };
   }
 
   /**
@@ -1003,4 +959,14 @@ function progressOf(index: RowIndex): Progress {
 /** The link to a file just opened: where it is, and which bytes of it were read. */
 function linkTo(path: string, version: string | undefined): Link {
   return version === undefined ? { path } : { path, version };
+}
+
+/**
+ * turn lets the event loop turn once, so a progress message, or a request that
+ * arrived while a long loop ran, goes out before the loop goes on. It answers
+ * with the time, which is when the next slice starts.
+ */
+async function turn(): Promise<number> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return Date.now();
 }

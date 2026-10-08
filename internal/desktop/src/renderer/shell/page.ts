@@ -10,7 +10,7 @@
 import { m } from "../../paraglide/messages.js";
 import { getLocale, getTextDirection } from "../../paraglide/runtime.js";
 import type { MessagePart } from "../../paraglide/runtime.js";
-import { must } from "./util.ts";
+import { found, must } from "./util.ts";
 
 /** labelPage writes the page's words in the language the app is in now. */
 export function labelPage(): void {
@@ -21,19 +21,15 @@ export function labelPage(): void {
   say(".sidebar-head", m.workspaces_title());
   say("#new .label", m.new_workspace());
   say("#empty h1", m.empty_title());
-  link(el("#open"), m.empty_or_open.parts());
+  link(found("#open"), m.empty_or_open.parts());
   say('#mode-switch [data-mode="view"]', m.switch_view());
   say('#mode-switch [data-mode="transform"]', m.switch_transform());
-  el("#status-cmd").setAttribute("aria-label", m.command_aria());
-  el("#close").setAttribute("aria-label", m.close_window_aria());
-}
-
-function el(selector: string): HTMLElement {
-  return must(document.querySelector<HTMLElement>(selector));
+  found("#status-cmd").setAttribute("aria-label", m.command_aria());
+  found("#close").setAttribute("aria-label", m.close_window_aria());
 }
 
 function say(selector: string, text: string): void {
-  el(selector).textContent = text;
+  found(selector).textContent = text;
 }
 
 /**

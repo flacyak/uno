@@ -221,12 +221,7 @@ export class Schema {
         // Parsed here rather than carried in the Edit, because an Edit is what a
         // file holds and a file holds text. A log naming a program this build
         // cannot read fails before anything changes.
-        let prog: Program;
-        try {
-          prog = parseProgram(e.now);
-        } catch (err) {
-          throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
-        }
+        const prog = atEdit(e, () => parseProgram(e.now));
         const runs = this.runs.get(e.col);
         if (runs === undefined) this.runs.set(e.col, [{ seq: e.seq, prog }]);
         else runs.push({ seq: e.seq, prog });
@@ -297,21 +292,11 @@ export class Schema {
   }
 
   private bindColumn(e: Edit): void {
-    let f: Formula;
-    try {
-      f = parseFormula(e.now);
-    } catch (err) {
-      throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
-    }
+    const f = atEdit(e, () => parseFormula(e.now));
 
     // The graph names columns the way a person does, so the column being bound
     // needs a name that means one column.
-    let name: string;
-    try {
-      name = this.uniqueHeader(e.col);
-    } catch (err) {
-      throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
-    }
+    const name = atEdit(e, () => this.uniqueHeader(e.col));
 
     // Binding over notation would stop drawing the sources a person wrote,
     // which is a loss they would have to notice rather than be told about.
@@ -321,19 +306,8 @@ export class Schema {
       );
     }
 
-    for (const ref of f.refs()) {
-      try {
-        this.resolve(ref);
-      } catch (err) {
-        throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
-      }
-    }
-
-    try {
-      this.graph.bind(name, f);
-    } catch (err) {
-      throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
-    }
+    for (const ref of f.refs()) atEdit(e, () => this.resolve(ref));
+    atEdit(e, () => this.graph.bind(name, f));
     this.bound.set(e.col, f);
     this.reorder();
   }
@@ -343,13 +317,7 @@ export class Schema {
       throw new Error(`edit ${e.seq}: no formula is bound to ${this.headers[e.col]}`);
     }
 
-    let name: string;
-    try {
-      name = this.uniqueHeader(e.col);
-    } catch (err) {
-      throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
-    }
-
+    const name = atEdit(e, () => this.uniqueHeader(e.col));
     this.bound.delete(e.col);
     this.graph.unbind(name);
     this.reorder();
@@ -363,5 +331,17 @@ export class Schema {
     const name = this.headers[col]!;
     this.resolve(name);
     return name;
+  }
+}
+
+/**
+ * atEdit runs one step of folding an edit, and what it refuses is refused
+ * again naming the edit, so a log that cannot be replayed says which line.
+ */
+function atEdit<T>(e: Edit, step: () => T): T {
+  try {
+    return step();
+  } catch (err) {
+    throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
   }
 }

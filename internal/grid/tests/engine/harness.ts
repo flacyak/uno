@@ -16,7 +16,7 @@ import { read } from "../../src/ingest/index.ts";
 import { sources } from "../../src/plugin/index.ts";
 import type { Provider } from "../../src/plugin/index.ts";
 import type { Sheet } from "../../src/sheet/index.ts";
-import { blobProvider } from "../../src/store/index.ts";
+import { blobProvider, multiProvider } from "../../src/store/index.ts";
 import type { Connections } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { bytes, FIXTURE } from "../testdata/sales-q3.ts";
@@ -67,6 +67,21 @@ export function connect(
     // it holds.
     done: () => engine.close(),
   };
+}
+
+/** The disk and the blob handlers, and several files read as one over them. */
+export function multiProviders(): Provider[] {
+  const single = [diskProvider(), blobProvider()];
+  return [...single, multiProvider(single)];
+}
+
+/** Every row of a source, as it shows them, read a page at a time. */
+export async function everyRow(src: SourceHandle, page = 500): Promise<string[][]> {
+  const rows: string[][] = [];
+  for (let first = 0; first < src.progress.rows; first += page) {
+    rows.push(...(await src.rows(first, page)).rows);
+  }
+  return rows;
 }
 
 /** openOne adds a file that is one source, and hands back that source. */

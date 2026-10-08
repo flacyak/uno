@@ -7,7 +7,6 @@
 // them built.
 
 import type { Check } from "./check.ts";
-import { REMOTE } from "./sources.ts";
 
 /** The colleague's workspace smoke.js wrote: one source, s3://open-data/2025/gone.csv. */
 const SENT = process.env["UNO_SMOKE_SENT"] ?? "";
@@ -15,15 +14,13 @@ const SENT = process.env["UNO_SMOKE_SENT"] ?? "";
 const LINE = `
   // The workspace's one line, whatever it says about its file.
   const line = () => document.querySelector("#panel .panel-row.unconnected, #panel .panel-row.missing");
-  const foot = () => [...document.querySelectorAll("#panel .panel-foot button")].map((b) => b.textContent);
-`;
+  `;
 
 export const MEETS: Check[] = [
   {
     name: "a workspace somebody sent waits for its bucket to be connected",
     send: ["menu:open-path", SENT],
     script: `
-      ${REMOTE}
       const want = "gone.uno reads s3://open-data/…, which no connection covers · connect open-data to read it";
       if (!(await arrives(() => text("#status-file") === want))) {
         return "the status bar says " + JSON.stringify(text("#status-file")) + " · " + JSON.stringify(text("#status-msg"));
@@ -35,20 +32,16 @@ export const MEETS: Check[] = [
     name: "connecting a bucket whose object has gone says why, and stops asking to connect it",
     shot: "meets-gone",
     script: `
-      ${REMOTE}
       ${LINE}
-      if (document.querySelector("#panel").hidden) await press("B", { ctrlKey: true, shiftKey: true });
+      await openPanel();
       if (!(await arrives(() => line()?.classList.contains("unconnected") === true))) return "no line says it is not connected";
       line().click();
-      const connect = () => [...document.querySelectorAll("#panel .panel-foot button")].find((b) => b.textContent === "Connect open-data");
+      const connect = () => footButton("Connect open-data");
       if (!(await until(() => connect() !== undefined))) return "the line offers " + JSON.stringify(foot());
       connect().click();
-      const form = document.querySelector("#panel .panel-connect");
-      if (form.hidden) return "the form did not open";
-      const choose = form.querySelector("select");
-      choose.value = "public";
-      choose.dispatchEvent(new Event("change", { bubbles: true }));
-      [...form.querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
+      if (connectForm().hidden) return "the form did not open";
+      signInAs("public");
+      saveConnection();
 
       // The bucket lists, so the connection is kept, and the object is read at
       // once -- and is not there.

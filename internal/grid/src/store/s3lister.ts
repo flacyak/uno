@@ -23,24 +23,21 @@
 // requests and cannot disagree about anything but what the bucket did between
 // them.
 
-import { compareStrings } from "../go/index.ts";
 import type { Entry, Lister, Listing } from "./list.ts";
+import { PAGE, byPageKey } from "./list.ts";
 import type { S3Options, S3Requests } from "./s3.ts";
-import { refusal, s3Location, s3Requests, s3Url, unaddressable, versionOf } from "./s3.ts";
-import { readListing } from "./s3xml.ts";
+import {
+  answered,
+  objectAt,
+  refused,
+  s3Location,
+  s3Requests,
+  s3Url,
+  sizeOf,
+  versionOf,
+} from "./s3.ts";
+import { readListing, when } from "./s3xml.ts";
 import type { KeyEntry } from "./s3xml.ts";
-
-/**
- * How many entries one page of a listing asks for.
- *
- * A thousand, which is what ListObjectsV2 answers with when it is not told
- * otherwise and what the disk lister pages at, so the panel scrolls a prefix and
- * a folder at the same rate and neither feels like the other's special case. It
- * is sent rather than left to default, because a page is what the panel draws
- * and a bucket quietly changing its own default would change how far one scroll
- * goes.
- */
-export const PAGE = 1_000;
 
 /**
  * s3Lister browses buckets: one ListObjectsV2 per page, and a HEAD for the one
@@ -180,39 +177,9 @@ function folderAt(bucket: string, prefix: string): Entry {
  */
 function fileAt(bucket: string, prefix: string, key: KeyEntry): Entry[] {
   if (key.key === prefix || key.key.endsWith("/")) return [];
-  return [
-    {
-      name: lastSegment(key.key),
-      path: s3Url({ bucket, key: key.key }),
-      folder: false,
-      ...(key.bytes === undefined ? {} : { bytes: key.bytes }),
-      ...(key.modified === undefined ? {} : { modified: key.modified }),
-      ...(key.version === undefined ? {} : { version: key.version }),
-    },
-  ];
-}
-
-/**
- * pageKey is the order a listing promises, written as one string: folders first,
- * then by name. `d` sorts before `f`, so one string compare is both halves of
- * it.
- *
- * Unlike the disk's it is only an order and not also the cursor, because the
- * bucket's token is the cursor. And it holds within a page rather than across a
- * prefix, which it cannot help: a bucket pages its keys and the prefixes they
- * fold into together, in one UTF-8 order, so a page after this one can hold a
- * folder whose name sorts before a file on this one. Promising more would mean
- * reading every page of a prefix before answering with the first, and for two
- * million keys that is a listing nobody waits for. The disk pays a readdir per
- * page to promise it everywhere; a bucket cannot be asked that way at any price.
- */
-function pageKey(entry: Entry): string {
-  return `${entry.folder ? "d" : "f"}:${entry.name}`;
-}
-
-/** byPageKey orders a page the way a listing promises: folders, then names. */
-function byPageKey(a: Entry, b: Entry): number {
-  return compareStrings(pageKey(a), pageKey(b));
+  // keyIn set only the facts it could read, so the rest carries over as it is.
+  const { key: k, ...facts } = key;
+  return [{ name: lastSegment(k), path: s3Url({ bucket, key: k }), folder: false, ...facts }];
 }
 
 /**
@@ -225,19 +192,11 @@ function byPageKey(a: Entry, b: Entry): number {
  * ListObjectsV2 over the whole prefix to find one key in it.
  */
 async function statObject(send: S3Requests, path: string): Promise<Entry> {
-  const loc = s3Location(path);
-  if (loc === undefined) throw new Error(`${path}: not an object in S3`);
-  // The same refusal `open` makes, in the same words, because this is about to
-  // do the same thing: turn a key into a URL, which resolves a dot segment away
-  // before anything signs it.
-  const cannot = unaddressable(loc);
-  if (cannot !== undefined) throw cannot;
-
+  const loc = objectAt(path, path);
   const url = s3Url(loc);
   const head = await send.object(loc, "HEAD", {});
-  if (!head.ok) throw new Error(`${url}: ${refusal(head.status, await send.who(loc))}`);
-  const bytes = Number(head.headers.get("content-length") ?? "NaN");
-  if (!Number.isFinite(bytes)) throw new Error(`${url}: S3 did not say how big it is`);
+  if (!head.ok) throw await refused(send, loc, head);
+  const bytes = sizeOf(head, url);
 
   // The version is read the way the handler reads it at open -- the VersionId
   // where the bucket keeps versions, the ETag otherwise -- because it is
@@ -252,13 +211,6 @@ async function statObject(send: S3Requests, path: string): Promise<Entry> {
     ...(modified === undefined ? {} : { modified }),
     ...(version === undefined || version === "" ? {} : { version }),
   };
-}
-
-/** The date a header names, or nothing where it names none. */
-function when(stamp: string | null): Date | undefined {
-  if (stamp === null) return undefined;
-  const at = new Date(stamp);
-  return Number.isNaN(at.getTime()) ? undefined : at;
 }
 
 /** The part of a key a person reads: everything after the last slash. */
@@ -276,12 +228,8 @@ function lastSegment(key: string): string {
  * the permission people forget, so it says which one it wanted.
  */
 function cannotList(status: number, who: string): string {
-  switch (status) {
-    case 403:
-      return `access denied · ${who} cannot list that bucket (s3:ListBucket)`;
-    case 404:
-      return "no such bucket";
-    default:
-      return `S3 answered ${status}`;
-  }
+  return answered(status, {
+    403: `access denied · ${who} cannot list that bucket (s3:ListBucket)`,
+    404: "no such bucket",
+  });
 }

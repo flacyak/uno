@@ -197,12 +197,24 @@ function configOf(files: AwsFiles, profile: string): Map<string, string> | undef
 
 /** The region a profile signs for: the environment first, as the CLI has it, then its config. */
 function regionOf(env: Env, files: AwsFiles, profile: string): string {
-  return (
-    env["AWS_REGION"] ??
-    env["AWS_DEFAULT_REGION"] ??
-    configOf(files, profile)?.get("region") ??
-    DEFAULT_REGION
-  );
+  return envRegion(env) ?? configOf(files, profile)?.get("region") ?? DEFAULT_REGION;
+}
+
+/** The region the environment names, as the CLI reads it, or nothing. */
+function envRegion(env: Env): string | undefined {
+  return env["AWS_REGION"] ?? env["AWS_DEFAULT_REGION"];
+}
+
+/**
+ * envKeys is the keys the environment holds, as the CLI reads them, signing for
+ * `region`, or nothing where it holds none. An empty variable is none.
+ */
+function envKeys(env: Env, region: string): AwsCredentials | undefined {
+  const id = env["AWS_ACCESS_KEY_ID"];
+  const secret = env["AWS_SECRET_ACCESS_KEY"];
+  if (id === undefined || id === "" || secret === undefined || secret === "") return undefined;
+  const sessionToken = env["AWS_SESSION_TOKEN"];
+  return { accessKeyId: id, secretAccessKey: secret, sessionToken, region };
 }
 
 /** Credentials, and the moment they stop being reused and are asked for again. */
@@ -251,32 +263,23 @@ async function profileSession(
   const roleArn = fromConfig?.get("role_arn") ?? p?.get("role_arn");
   if (roleArn !== undefined) {
     const setting = (key: string): string | undefined => fromConfig?.get(key) ?? p?.get(key);
-    const { expiration, ...keys } = await roleSession(
-      env,
-      files,
-      profile,
-      roleArn,
-      setting,
-      through,
-    );
-    return { creds: { ...keys, region, as }, until: expiration.getTime() - EARLY_MS };
+    return hold(await roleSession(env, files, profile, roleArn, setting, through));
   }
 
   const own = profileKeysOnly(env, files, profile);
   if (own !== undefined) return { creds: { ...own.creds, as }, until: own.until };
   const command = fromConfig?.get("credential_process");
-  if (command !== undefined) {
-    const { expiration, ...keys } = await processCredentials(profile, command);
-    return {
-      creds: { ...keys, region, as },
-      until: expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS,
-    };
-  }
+  if (command !== undefined) return hold(await processCredentials(profile, command));
   if (fromConfig?.has("sso_session") === true || fromConfig?.has("sso_start_url") === true) {
-    const { expiration, ...keys } = await ssoSession(env, files, profile, fromConfig);
-    return { creds: { ...keys, region, as }, until: expiration.getTime() - EARLY_MS };
+    return hold(await ssoSession(env, files, profile, fromConfig));
   }
   return undefined;
+
+  /** hold is a session as this profile's credentials, kept until shortly before it expires, or for good where it does not. */
+  function hold({ expiration, ...keys }: Printed | Session): Held {
+    const until = expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS;
+    return { creds: { ...keys, region, as }, until };
+  }
 }
 
 /**
@@ -321,13 +324,8 @@ async function ssoSession(
   const cacheKey = named ?? startUrl!;
   const name = createHash("sha1").update(cacheKey).digest("hex") + ".json";
   const path = join(homeOf(env), ".aws", "sso", "cache", name);
-  let text: string;
-  try {
-    text = new TextDecoder().decode(await readAll([localFiles()], { name, path }));
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
-  }
+  const text = await readText(path, name);
+  if (text === undefined) throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
   // `aws sso login` writes the cache in place, so a sign-in cut short leaves
   // half a file: a sign-in uno cannot read, mended the same way as any other.
   const token = cachedToken(text);
@@ -412,19 +410,13 @@ async function roleSession(
     }
     source = held.creds;
   } else if (credentialSource === "Environment") {
-    const id = env["AWS_ACCESS_KEY_ID"];
-    const secret = env["AWS_SECRET_ACCESS_KEY"];
-    if (id === undefined || id === "" || secret === undefined || secret === "") {
+    const held = envKeys(env, DEFAULT_REGION);
+    if (held === undefined) {
       throw new Error(
         `the AWS profile ${profile} takes its credentials from the environment, which has no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY`,
       );
     }
-    source = {
-      accessKeyId: id,
-      secretAccessKey: secret,
-      sessionToken: env["AWS_SESSION_TOKEN"],
-      region: DEFAULT_REGION,
-    };
+    source = held;
   } else if (credentialSource !== undefined) {
     throw new Error(
       `the AWS profile ${profile} takes its credentials from ${credentialSource}, which uno does not reach · use source_profile or Environment`,
@@ -498,6 +490,9 @@ interface Printed {
  * else is refused by name rather than guessed at.
  */
 async function processCredentials(profile: string, command: string): Promise<Printed> {
+  /** fail is what went wrong with the profile's credential_process, named. */
+  const fail = (why: string): Error =>
+    new Error(`the AWS profile ${profile}'s credential_process ${why}`);
   const words = splitCommand(command);
   const [program, ...args] = words;
   if (program === undefined) {
@@ -521,35 +516,29 @@ async function processCredentials(profile: string, command: string): Promise<Pri
         : e.killed === true
           ? `it did not answer within ${PROCESS_MS / 1000} seconds`
           : (e.stderr?.trim().split("\n")[0] ?? "") || e.message;
-    throw new Error(`the AWS profile ${profile}'s credential_process failed · ${why}`);
+    throw fail(`failed · ${why}`);
   }
 
   let o: Record<string, unknown>;
   try {
     o = JSON.parse(out) as Record<string, unknown>;
   } catch {
-    throw new Error(`the AWS profile ${profile}'s credential_process did not print JSON`);
+    throw fail("did not print JSON");
   }
   if (o["Version"] !== 1) {
-    throw new Error(
-      `the AWS profile ${profile}'s credential_process printed version ${JSON.stringify(o["Version"])} · uno reads version 1`,
-    );
+    throw fail(`printed version ${JSON.stringify(o["Version"])} · uno reads version 1`);
   }
   const id = o["AccessKeyId"];
   const secret = o["SecretAccessKey"];
   if (typeof id !== "string" || typeof secret !== "string") {
-    throw new Error(
-      `the AWS profile ${profile}'s credential_process printed no AccessKeyId and SecretAccessKey`,
-    );
+    throw fail("printed no AccessKeyId and SecretAccessKey");
   }
   const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
   if (typeof o["SessionToken"] === "string") printed.sessionToken = o["SessionToken"];
   if (typeof o["Expiration"] === "string") {
     const at = new Date(o["Expiration"]);
     if (Number.isNaN(at.getTime())) {
-      throw new Error(
-        `the AWS profile ${profile}'s credential_process printed an Expiration uno cannot read`,
-      );
+      throw fail("printed an Expiration uno cannot read");
     }
     printed.expiration = at;
   }
@@ -645,19 +634,8 @@ export function awsCredentials(env: Env = process.env): () => Promise<AwsCredent
   return cached(async () => {
     const profile = env["AWS_PROFILE"] ?? env["AWS_DEFAULT_PROFILE"] ?? "default";
     const files = await awsFiles(env);
-    const id = env["AWS_ACCESS_KEY_ID"];
-    const secret = env["AWS_SECRET_ACCESS_KEY"];
-    if (id !== undefined && id !== "" && secret !== undefined && secret !== "") {
-      return {
-        creds: {
-          accessKeyId: id,
-          secretAccessKey: secret,
-          sessionToken: env["AWS_SESSION_TOKEN"],
-          region: regionOf(env, files, profile),
-        },
-        until: Date.now() + CREDENTIALS_MS,
-      };
-    }
+    const fromEnv = envKeys(env, regionOf(env, files, profile));
+    if (fromEnv !== undefined) return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
     const held = await profileSession(env, files, profile);
     if (held !== undefined) return held;
     throw new Error(
@@ -734,19 +712,19 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const machine = awsCredentials(env);
   const profiles = new Map<string, () => Promise<AwsCredentials>>();
   const who = (c: Connection): string => (c.name === "" ? c.id : c.name);
+  /** signed is credentials for c, in c's region where it names one, saying whose they are. */
+  const signed = (c: Connection, creds: AwsCredentials, through: string): Signing => ({
+    ...creds,
+    region: c.region ?? creds.region,
+    as: `${who(c)} (${through})`,
+  });
 
   return {
     machine,
     async of(c) {
       switch (c.auth.mode) {
-        case "machine": {
-          const creds = await machine();
-          return {
-            ...creds,
-            region: c.region ?? creds.region,
-            as: `${who(c)} (this machine's AWS credentials)`,
-          };
-        }
+        case "machine":
+          return signed(c, await machine(), "this machine's AWS credentials");
         case "profile": {
           const name = c.auth.profile;
           let read = profiles.get(name);
@@ -754,17 +732,12 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
             read = profileCredentials(name, env);
             profiles.set(name, read);
           }
-          const creds = await read();
-          return {
-            ...creds,
-            region: c.region ?? creds.region,
-            as: `${who(c)} (the AWS profile ${name})`,
-          };
+          return signed(c, await read(), `the AWS profile ${name}`);
         }
         case "public":
           return {
             unsigned: true,
-            region: c.region ?? env["AWS_REGION"] ?? env["AWS_DEFAULT_REGION"] ?? DEFAULT_REGION,
+            region: c.region ?? envRegion(env) ?? DEFAULT_REGION,
             as: `${who(c)} (read without signing in)`,
           };
         case "role":
@@ -796,17 +769,21 @@ export function connectionSigning(
   };
 }
 
+/** readText is a file's text through the local handler, or nothing where there is no such file. */
+async function readText(path: string, name = basename(path)): Promise<string | undefined> {
+  try {
+    return new TextDecoder().decode(await readAll([localFiles()], { name, path }));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+}
+
 /** ini reads an AWS-style ini file into sections of keys. A missing file is empty. */
 async function ini(path: string): Promise<Map<string, Map<string, string>>> {
   const out = new Map<string, Map<string, string>>();
-  let text: string;
-  try {
-    const ref = { name: basename(path), path };
-    text = new TextDecoder().decode(await readAll([localFiles()], ref));
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return out;
-    throw err;
-  }
+  const text = await readText(path);
+  if (text === undefined) return out;
   let section: Map<string, string> | undefined;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();

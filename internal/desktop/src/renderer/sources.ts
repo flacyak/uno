@@ -101,17 +101,15 @@ export type State = "fine" | "changed" | "missing" | "unconnected" | "newer";
 
 /** What a workspace line says beside a tab that is not fine. */
 export function stateWord(state: Exclude<State, "fine">): string {
-  switch (state) {
-    case "changed":
-      return m.state_changed();
-    case "missing":
-      return m.state_missing();
-    case "unconnected":
-      return m.state_unconnected();
-    case "newer":
-      return m.state_newer();
-  }
+  return STATE_WORDS[state]();
 }
+
+const STATE_WORDS: Record<Exclude<State, "fine">, () => string> = {
+  changed: m.state_changed,
+  missing: m.state_missing,
+  unconnected: m.state_unconnected,
+  newer: m.state_newer,
+};
 
 /**
  * stateOf is the one state a line says, the most pressing first. Newer comes
@@ -479,9 +477,7 @@ export class Sources {
 
   /** In this workspace: one line per open tab the filter keeps. */
   get tabs(): readonly Open[] {
-    const q = this.query;
-    const all = this.opened();
-    return q === "" ? all : all.filter((t) => matches(t.name, q));
+    return this.filtered(this.opened());
   }
 
   /**
@@ -489,18 +485,23 @@ export class Sources {
    * section's last lines: each is where its tab will be.
    */
   get opening(): readonly Arriving[] {
-    const q = this.query;
-    const all = this.arriving();
-    return q === "" ? all : all.filter((a) => matches(a.name, q));
+    return this.filtered(this.arriving());
   }
 
   /** The places that can be browsed, as far as the filter keeps them. A
    * connection is kept on its path as well, since that is what a person pastes. */
   get connections(): readonly Connection[] {
+    return this.filtered(this.saved, (c) => c.path);
+  }
+
+  /** filtered is what the filter keeps of a list: everything while it is empty, else what it matches by name, or by `also`. */
+  private filtered<T extends { name: string }>(
+    all: readonly T[],
+    also?: (t: T) => string,
+  ): readonly T[] {
     const q = this.query;
-    return q === ""
-      ? this.saved
-      : this.saved.filter((c) => matches(c.name, q) || matches(c.path, q));
+    if (q === "") return all;
+    return all.filter((t) => matches(t.name, q) || (also !== undefined && matches(also(t), q)));
   }
 
   set connections(list: readonly Connection[]) {
@@ -649,14 +650,14 @@ export class Sources {
     const entries: Entry[] = [];
     let cursor: string | undefined;
     try {
-      do {
-        const page = await this.listings.list(path, cursor);
+      for await (const page of this.pages(path)) {
         // Pushed rather than spread into a new array, which would copy
         // everything read so far once per page: two hundred pages of a
         // prefix are twenty million copies that way.
         for (const entry of page.entries) entries.push(entry);
         cursor = page.next;
-      } while (cursor !== undefined && entries.length < was.length);
+        if (entries.length >= was.length) break;
+      }
     } catch {
       // What was listed stays, and the refusal is said where the folder is
       // browsed, the next time it is.
@@ -677,6 +678,16 @@ export class Sources {
     }
   }
 
+  /** pages is a folder's listing a page at a time, from the first to the one with no next. */
+  private async *pages(path: string): AsyncGenerator<Listing> {
+    let cursor: string | undefined;
+    do {
+      const page = await this.listings.list(path, cursor);
+      yield page;
+      cursor = page.next;
+    } while (cursor !== undefined);
+  }
+
   /** askAfter is askGrown for one tab. */
   private async askAfter(tab: Open): Promise<void> {
     const last = tab.parts?.at(-1);
@@ -686,17 +697,14 @@ export class Sources {
 
     const files: SingleRef[] = [];
     try {
-      let cursor: string | undefined;
-      do {
-        const page = await this.listings.list(folder.path, cursor);
+      for await (const page of this.pages(folder.path)) {
         for (const entry of page.entries) {
           const after = compareStrings(entry.name, last.name) > 0;
           if (after && this.selectable(entry) && !have.has(entry.path)) {
             files.push({ name: entry.name, path: entry.path });
           }
         }
-        cursor = page.next;
-      } while (cursor !== undefined);
+      }
     } catch {
       this.gained.delete(tab.id);
       return;

@@ -6,7 +6,7 @@
 // signing in sends, and that a connection saved while the engine runs is the
 // one its next request uses.
 
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vite-plus/test";
@@ -21,18 +21,7 @@ import { ROWS } from "../testdata/sales-q3.ts";
 import { HOME_REGION } from "./regions.ts";
 import { KEYS, bucket } from "./standin.ts";
 import type { Bucket } from "./standin.ts";
-
-/** Two profiles, each with the keys to one bucket and not the other. */
-const FINANCE: AwsCredentials = {
-  accessKeyId: "AKIDFINANCE",
-  secretAccessKey: "finance/secret",
-  region: HOME_REGION,
-};
-const MARKETING: AwsCredentials = {
-  accessKeyId: "AKIDMARKETING",
-  secretAccessKey: "marketing/secret",
-  region: HOME_REGION,
-};
+import { FINANCE, MARKETING, profilesEnv, twoProfiles } from "./profiles.ts";
 
 const LEDGER = "q3/ledger.csv";
 const ADS = "ads/ads.csv";
@@ -47,20 +36,7 @@ beforeAll(async () => {
     "acme-marketing": { objects: new Map([[ADS, bytes]]), keys: MARKETING },
     "open-data": { objects: new Map([[OPEN, bytes]]), public: true },
   });
-  aws = await mkdtemp(join(tmpdir(), "uno-signing-aws-"));
-  await writeFile(
-    join(aws, "credentials"),
-    [
-      "[finance]",
-      `aws_access_key_id = ${FINANCE.accessKeyId}`,
-      `aws_secret_access_key = ${FINANCE.secretAccessKey}`,
-      "[marketing]",
-      `aws_access_key_id = ${MARKETING.accessKeyId}`,
-      `aws_secret_access_key = ${MARKETING.secretAccessKey}`,
-      "",
-    ].join("\n"),
-  );
-  await writeFile(join(aws, "config"), "[profile finance]\nregion = eu-west-1\n");
+  aws = await twoProfiles("[profile finance]\nregion = eu-west-1\n");
 });
 
 afterAll(() => b.close());
@@ -71,17 +47,7 @@ afterAll(() => b.close());
  * cleared, so nothing a test reads was signed by anybody but the files here.
  */
 function env(machine?: AwsCredentials): Record<string, string | undefined> {
-  return {
-    HOME: aws,
-    AWS_CONFIG_FILE: join(aws, "config"),
-    AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
-    AWS_REGION: HOME_REGION,
-    AWS_PROFILE: undefined,
-    AWS_DEFAULT_PROFILE: undefined,
-    AWS_ACCESS_KEY_ID: machine?.accessKeyId,
-    AWS_SECRET_ACCESS_KEY: machine?.secretAccessKey,
-    AWS_SESSION_TOKEN: undefined,
-  };
+  return profilesEnv(aws, machine);
 }
 
 function connection(

@@ -32,7 +32,7 @@ import type { Language, LanguageChoice } from "../language.ts";
 import type { Connection } from "../sources.ts";
 import { APPEARANCES, THEMES } from "../theme.ts";
 import type { Appearance, Theming } from "../theme.ts";
-import { tabStep, walk } from "./util.ts";
+import { el, tabStep, walk } from "./util.ts";
 
 /** What the menu asks of the shell. The shell decides; the menu only asks. */
 export interface SettingsAsks {
@@ -51,16 +51,11 @@ export interface SettingsAsks {
 }
 
 /** What each appearance says on its button. */
-function appearanceWord(a: Appearance): string {
-  switch (a) {
-    case "system":
-      return m.appearance_system();
-    case "light":
-      return m.appearance_light();
-    case "dark":
-      return m.appearance_dark();
-  }
-}
+const APPEARANCE_WORDS: Record<Appearance, () => string> = {
+  system: m.appearance_system,
+  light: m.appearance_light,
+  dark: m.appearance_dark,
+};
 
 /** What marks the one chosen among several in a list. */
 const CHOSEN = "✓";
@@ -203,7 +198,7 @@ export class Settings {
   private paint(): void {
     const focused = this.items().indexOf(document.activeElement as HTMLButtonElement);
 
-    const title = element("div", "title", m.settings_title());
+    const title = el("div", "title", m.settings_title());
     this.box.replaceChildren(
       title,
       this.sources(),
@@ -220,9 +215,9 @@ export class Settings {
   private sources(): HTMLElement {
     const section = heading(m.sources_title());
     if (this.reading && this.connections.length === 0) {
-      section.append(element("div", "note", m.reading()));
+      section.append(el("div", "note", m.reading()));
     } else if (this.connections.length === 0) {
-      section.append(element("div", "note", m.no_connections()));
+      section.append(el("div", "note", m.no_connections()));
     }
     for (const c of this.connections) {
       const item = row(c.name, c.where === undefined ? c.kind : `${c.kind} · ${c.where}`);
@@ -249,24 +244,19 @@ export class Settings {
     const mode = this.theming.mode;
     for (const t of THEMES) {
       const chosen = t.id === this.theming.theme.id;
-      const item = row(t.name, chosen ? CHOSEN : "");
-      item.setAttribute("role", "menuitemradio");
-      item.setAttribute("aria-checked", String(chosen));
-      item.dataset["theme"] = t.id;
+      const item = radio(t.name, chosen, "theme", t.id, () => this.theming.choose(t.id));
       item.title = m.settings_theme_credit({ name: t.name, author: t.author });
-      if (chosen) item.classList.add("chosen");
 
       const p = t[mode];
-      const chip = element("span", "chip", "");
+      const chip = el("span", "chip");
       chip.style.background = p.surface;
       chip.style.borderColor = p.rule;
       for (const colour of [p.accent, p.ink]) {
-        const dot = element("span", "dot", "");
+        const dot = el("span", "dot");
         dot.style.background = colour;
         chip.append(dot);
       }
       item.prepend(chip);
-      item.addEventListener("click", () => this.theming.choose(t.id));
       section.append(item);
     }
     return section;
@@ -274,40 +264,20 @@ export class Settings {
 
   /** Light, dark, or whatever the system is in, for whichever theme is worn. */
   private appearances(): HTMLElement {
-    const section = heading(m.settings_appearance());
-    const seg = element("div", "seg", "");
-    for (const a of APPEARANCES) {
-      const button = element(
-        "button",
-        a === this.theming.appearance ? "on" : "",
-        appearanceWord(a),
-      );
-      button.setAttribute("aria-pressed", String(a === this.theming.appearance));
-      button.dataset["appearance"] = a;
-      button.addEventListener("click", () => this.theming.appear(a));
-      seg.append(button);
-    }
-    section.append(seg);
-    return section;
+    const on = this.theming.appearance;
+    const word = (a: Appearance): string => APPEARANCE_WORDS[a]();
+    return segment(m.settings_appearance(), APPEARANCES, on, word, "appearance", (a) =>
+      this.theming.appear(a),
+    );
   }
 
   /** How the grid reads keys: a spreadsheet's, or vim's. */
   private keys(): HTMLElement {
-    const section = heading(m.settings_keys());
-    const seg = element("div", "seg", "");
-    const now = this.asks.input();
-    for (const name of INPUTS) {
-      const button = element("button", name === now ? "on" : "", inputLabel(name));
-      button.setAttribute("aria-pressed", String(name === now));
-      button.dataset["input"] = name;
-      button.addEventListener("click", () => {
-        this.asks.setInput(name);
-        this.paint();
-      });
-      seg.append(button);
-    }
-    section.append(seg);
-    return section;
+    const on = this.asks.input();
+    return segment(m.settings_keys(), INPUTS, on, inputLabel, "input", (name) => {
+      this.asks.setInput(name);
+      this.paint();
+    });
   }
 
   /**
@@ -322,18 +292,55 @@ export class Settings {
     ];
     for (const [choice, name] of choices) {
       const chosen = choice === this.language.choice;
-      const item = row(name, chosen ? CHOSEN : "");
-      item.setAttribute("role", "menuitemradio");
-      item.setAttribute("aria-checked", String(chosen));
-      item.dataset["language"] = choice;
+      const item = radio(name, chosen, "language", choice, () => this.language.choose(choice));
       // The name is in the language itself, and the page is in another.
       if (choice !== SYSTEM) item.lang = choice;
-      if (chosen) item.classList.add("chosen");
-      item.addEventListener("click", () => this.language.choose(choice));
       section.append(item);
     }
     return section;
   }
+}
+
+/**
+ * radio is one line of a list where one is chosen: its name, the mark where it
+ * is the one, and under `key` what it stands for, for the keys and a reader.
+ */
+function radio(
+  name: string,
+  chosen: boolean,
+  key: string,
+  value: string,
+  choose: () => void,
+): HTMLElement {
+  const item = row(name, chosen ? CHOSEN : "");
+  item.setAttribute("role", "menuitemradio");
+  item.setAttribute("aria-checked", String(chosen));
+  item.dataset[key] = value;
+  if (chosen) item.classList.add("chosen");
+  item.addEventListener("click", choose);
+  return item;
+}
+
+/** segment is a section of buttons side by side, one of them pressed. */
+function segment<T extends string>(
+  title: string,
+  choices: readonly T[],
+  on: T,
+  label: (choice: T) => string,
+  key: string,
+  choose: (choice: T) => void,
+): HTMLElement {
+  const section = heading(title);
+  const seg = el("div", "seg");
+  for (const c of choices) {
+    const button = el("button", c === on ? "on" : "", label(c));
+    button.setAttribute("aria-pressed", String(c === on));
+    button.dataset[key] = c;
+    button.addEventListener("click", () => choose(c));
+    seg.append(button);
+  }
+  section.append(seg);
+  return section;
 }
 
 /** arrowStep reads the arrows as a step through the items, and Tab as one too. */
@@ -343,28 +350,17 @@ function arrowStep(e: KeyboardEvent): 1 | -1 | 0 {
   return tabStep(e);
 }
 
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  cls: string,
-  text: string,
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  if (cls !== "") el.className = cls;
-  el.textContent = text;
-  return el;
-}
-
 /** heading is a section of the menu, under its title. */
 function heading(title: string): HTMLElement {
-  const section = element("section", "", "");
-  section.append(element("div", "head", title));
+  const section = el("section");
+  section.append(el("div", "head", title));
   return section;
 }
 
 /** row is one item: what it is, and what is beside it. */
 function row(name: string, meta: string): HTMLButtonElement {
-  const item = element("button", "item", "");
+  const item = el("button", "item");
   item.type = "button";
-  item.append(element("span", "name", name), element("span", "meta", meta));
+  item.append(el("span", "name", name), el("span", "meta", meta));
   return item;
 }
