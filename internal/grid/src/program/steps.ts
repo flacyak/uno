@@ -9,6 +9,7 @@ import {
   compile,
   findAllIndex,
   indexOfRunes,
+  isMeta,
   quote,
   quoteMeta,
   replaceAllLiteral,
@@ -361,12 +362,6 @@ const NAMED: Readonly<Record<string, CharName>> = {
 
 const CHAR_NAMES = new Map<string, CharName>(Object.entries(NAMED));
 
-const META_CHARS = "\\.+*?()|[]{}^$";
-
-function isMetaChar(c: string): boolean {
-  return META_CHARS.includes(c);
-}
-
 /**
  * literalOf returns the text a pattern matches, when the pattern is that text
  * and nothing else. It inverts the escaping the deletion lattice applies, and
@@ -379,9 +374,9 @@ export function literalOf(src: string): string | undefined {
     const c = r[i]!;
     if (c === "\\") {
       i++;
-      if (i >= r.length || !isMetaChar(r[i]!)) return undefined;
+      if (i >= r.length || !isMeta(r[i]!)) return undefined;
       out += r[i]!;
-    } else if (isMetaChar(c)) {
+    } else if (isMeta(c)) {
       return undefined;
     } else {
       out += c;
