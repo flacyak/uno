@@ -12,7 +12,9 @@
 // it; where the files live is `store`'s business, and debouncing the autosave
 // belongs to whatever owns the editor.
 
-import { compareStrings, nowTruncated, parseTime, rfc3339, runes } from "../go/index.ts";
+import { rfc3339, runes } from "../go/index.ts";
+import { CONNECTION_KIND } from "./connection.ts";
+import { about, extraOf, readUnof, stamp, textOf, timeOf, writeExtra, wrongKind } from "./unof.ts";
 
 // A connection is a .unof too, with a codec of its own beside this one. It is
 // re-exported here so that `@uno/grid/library` is every kind of .unof.
@@ -94,6 +96,7 @@ export interface Formula {
 
 /** The keys this build owns. Anything else in the file goes into `extra`. */
 const KNOWN_KEYS = new Set(["format", "id", "name", "kind", "expr", "refs", "created", "modified"]);
+const isKnown = (key: string): boolean => KNOWN_KEYS.has(key);
 
 /**
  * maxIDLen is short of the 255 bytes filesystems stop at, leaving room for the
@@ -153,48 +156,27 @@ export function fileName(id: string, what = "formula"): string {
  * only used to name the file in an error.
  */
 export function parseFormula(name: string, text: string): Formula {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`${name} is not a readable .unof file: ${(err as Error).message}`);
-  }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new Error(`${name} is not a readable .unof file: not an object`);
-  }
-  const o = raw as Record<string, unknown>;
+  const { o, format } = readUnof(name, text);
 
-  const format = typeof o["format"] === "number" ? o["format"] : 0;
-  // A reader that guesses at a layout it does not know will either misread it
-  // or, far worse, save what it misread back over the file.
-  if (format > FORMAT_VERSION) {
-    throw new Error(
-      `${name} was saved by a newer uno (format ${format}, this build reads ${FORMAT_VERSION}). Update uno to open it`,
-    );
-  }
-
-  // Other things are .unof files too, a connection among them. One that lands
-  // in the formula folder is refused by name rather than read as an empty
-  // column formula, the rule `document` keeps for what it does not recognise.
+  // A connection is a .unof too, and one that lands in the formula folder is
+  // refused by name rather than read as an empty column formula.
   const kind = o["kind"];
   if (kind !== "column" && kind !== "notation") {
-    throw new Error(
-      kind === "connection"
-        ? `${name} is a connection ("kind": "connection"), not a formula · it belongs in connections/`
-        : kind === undefined
-          ? `${name} is not a formula: it has no kind`
-          : `${name} is not a formula: this build does not know kind ${JSON.stringify(kind)}`,
-    );
+    throw wrongKind(name, kind, "formula", {
+      kinds: [CONNECTION_KIND],
+      is: "a connection",
+      dir: "connections/",
+    });
   }
 
   const f: Formula = {
     format,
-    id: typeof o["id"] === "string" ? o["id"] : "",
-    name: typeof o["name"] === "string" ? o["name"] : "",
+    id: textOf(o, "id"),
+    name: textOf(o, "name"),
     kind,
-    expr: typeof o["expr"] === "string" ? o["expr"] : "",
-    created: parseTime(typeof o["created"] === "string" ? o["created"] : undefined),
-    modified: parseTime(typeof o["modified"] === "string" ? o["modified"] : undefined),
+    expr: textOf(o, "expr"),
+    created: timeOf(o, "created"),
+    modified: timeOf(o, "modified"),
   };
 
   const refs = o["refs"];
@@ -202,22 +184,12 @@ export function parseFormula(name: string, text: string): Formula {
     const named = refs.filter((r): r is string => typeof r === "string");
     if (named.length > 0) f.refs = named;
   }
-
-  // Decoding into the known fields cannot see what it did not decode, so the
-  // unrecognised keys are picked out here and kept beside them.
-  const extra = new Map<string, unknown>();
-  for (const [key, value] of Object.entries(o)) {
-    if (!KNOWN_KEYS.has(key)) extra.set(key, value);
-  }
-  if (extra.size > 0) f.extra = extra;
+  const extra = extraOf(o, isKnown);
+  if (extra !== undefined) f.extra = extra;
 
   // The id is checked on the way in as well as on the way out, so no id that
   // could name a path is ever handed to a caller in the first place.
-  try {
-    validID(f.id);
-  } catch (err) {
-    throw new Error(`${name}: ${(err as Error).message}`);
-  }
+  about(name, () => validID(f.id));
   return f;
 }
 
@@ -231,18 +203,9 @@ export function parseFormula(name: string, text: string): Formula {
  */
 export function formatFormula(f: Formula): { text: string; stamped: Formula } {
   validID(f.id);
+  const stamped = stamp(f);
 
-  const modified = nowTruncated();
-  const stamped: Formula = {
-    ...f,
-    format: FORMAT_VERSION,
-    modified,
-    created: f.created ?? modified,
-  };
-
-  // The known fields in the order they are declared, then the unrecognised ones
-  // in name order rather than in map order, so that a save which changed
-  // nothing produces the same bytes as the one before it.
+  // The known fields in the order they are declared, then the unrecognised ones.
   const out: Record<string, unknown> = {
     format: stamped.format,
     id: stamped.id,
@@ -253,11 +216,7 @@ export function formatFormula(f: Formula): { text: string; stamped: Formula } {
   if (stamped.refs !== undefined && stamped.refs.length > 0) out["refs"] = stamped.refs;
   out["created"] = stamped.created === undefined ? undefined : rfc3339(stamped.created);
   out["modified"] = stamped.modified === undefined ? undefined : rfc3339(stamped.modified);
-
-  for (const key of [...(stamped.extra?.keys() ?? [])].sort(compareStrings)) {
-    if (KNOWN_KEYS.has(key)) continue; // a key this build owns is never written from extra
-    out[key] = stamped.extra!.get(key);
-  }
+  writeExtra(out, stamped.extra, isKnown);
 
   // A comparison in an expression stays a "<" rather than becoming a "<".
   // Escaping it would cost exactly the legibility that made markdown the right

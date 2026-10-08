@@ -14,8 +14,9 @@
 // codec touches neither: where the files live is `store`'s business, and
 // signing in is the engine's.
 
-import { compareStrings, nowTruncated, parseTime, rfc3339 } from "../go/index.ts";
-import { FORMAT_VERSION, validID } from "./index.ts";
+import { rfc3339 } from "../go/index.ts";
+import { validID } from "./index.ts";
+import { about, extraOf, readUnof, stamp, textOf, timeOf, writeExtra, wrongKind } from "./unof.ts";
 
 /** The kind a connection's file says it is, beside a formula's column and notation. */
 export const CONNECTION_KIND = "connection";
@@ -90,6 +91,7 @@ const KNOWN_KEYS = new Set([
   "created",
   "modified",
 ]);
+const isKnown = (key: string): boolean => KNOWN_KEYS.has(key);
 const AUTH_KEYS: Record<AuthMode, readonly string[]> = {
   machine: ["mode"],
   profile: ["mode", "profile"],
@@ -164,33 +166,15 @@ export function secretIn(value: unknown, at = ""): string | undefined {
  * used to name the file in an error.
  */
 export function parseConnection(name: string, text: string): Connection {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`${name} is not a readable .unof file: ${(err as Error).message}`);
-  }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new Error(`${name} is not a readable .unof file: not an object`);
-  }
-  const o = raw as Record<string, unknown>;
-
-  const format = typeof o["format"] === "number" ? o["format"] : 0;
-  if (format > FORMAT_VERSION) {
-    throw new Error(
-      `${name} was saved by a newer uno (format ${format}, this build reads ${FORMAT_VERSION}). Update uno to open it`,
-    );
-  }
+  const { o, format } = readUnof(name, text);
 
   const kind = o["kind"];
   if (kind !== CONNECTION_KIND) {
-    throw new Error(
-      kind === "column" || kind === "notation"
-        ? `${name} is a formula ("kind": ${JSON.stringify(kind)}), not a connection · it belongs in formulas/`
-        : kind === undefined
-          ? `${name} is not a connection: it has no kind`
-          : `${name} is not a connection: this build does not know kind ${JSON.stringify(kind)}`,
-    );
+    throw wrongKind(name, kind, "connection", {
+      kinds: ["column", "notation"],
+      is: "a formula",
+      dir: "formulas/",
+    });
   }
 
   // Before anything else is read out of it, so a file carrying a key is never
@@ -211,28 +195,21 @@ export function parseConnection(name: string, text: string): Connection {
 
   const c: Connection = {
     format,
-    id: typeof o["id"] === "string" ? o["id"] : "",
-    name: typeof o["name"] === "string" ? o["name"] : "",
+    id: textOf(o, "id"),
+    name: textOf(o, "name"),
     provider: provider as ConnectionProvider,
-    bucket: typeof o["bucket"] === "string" ? o["bucket"] : "",
-    prefix: typeof o["prefix"] === "string" ? o["prefix"] : "",
+    bucket: textOf(o, "bucket"),
+    prefix: textOf(o, "prefix"),
     auth: parseAuth(name, o["auth"]),
-    created: parseTime(typeof o["created"] === "string" ? o["created"] : undefined),
-    modified: parseTime(typeof o["modified"] === "string" ? o["modified"] : undefined),
+    created: timeOf(o, "created"),
+    modified: timeOf(o, "modified"),
   };
-  if (typeof o["region"] === "string" && o["region"] !== "") c.region = o["region"];
+  const region = textOf(o, "region");
+  if (region !== "") c.region = region;
+  const extra = extraOf(o, isKnown);
+  if (extra !== undefined) c.extra = extra;
 
-  const extra = new Map<string, unknown>();
-  for (const [key, value] of Object.entries(o)) {
-    if (!KNOWN_KEYS.has(key)) extra.set(key, value);
-  }
-  if (extra.size > 0) c.extra = extra;
-
-  try {
-    validConnection(c);
-  } catch (err) {
-    throw new Error(`${name}: ${(err as Error).message}`);
-  }
+  about(name, () => validConnection(c));
   return c;
 }
 
@@ -277,13 +254,14 @@ function parseAuth(name: string, raw: unknown): Auth {
     }
   }
 
-  const known = AUTH_KEYS[auth.mode];
-  const extra = new Map<string, unknown>();
-  for (const [key, value] of Object.entries(o)) {
-    if (!known.includes(key)) extra.set(key, value);
-  }
-  if (extra.size > 0) auth.extra = extra;
+  const extra = extraOf(o, authKnown(auth.mode));
+  if (extra !== undefined) auth.extra = extra;
   return auth;
+}
+
+/** Whether a key inside an auth block is one this build reads for that mode. */
+function authKnown(mode: AuthMode): (key: string) => boolean {
+  return (key) => AUTH_KEYS[mode].includes(key);
 }
 
 /**
@@ -318,8 +296,8 @@ export function validConnection(c: Connection): void {
  * It is apart from `formatConnection` so that formatting stays a function of
  * the connection alone, which is what lets a file round-trip byte for byte.
  */
-export function stampConnection(c: Connection, now: Date = nowTruncated()): Connection {
-  return { ...c, format: FORMAT_VERSION, modified: now, created: c.created ?? now };
+export function stampConnection(c: Connection, now?: Date): Connection {
+  return stamp(c, now);
 }
 
 /**
@@ -336,10 +314,7 @@ export function formatConnection(c: Connection): string {
   const auth: Record<string, unknown> = { mode: c.auth.mode };
   if (c.auth.mode === "profile") auth["profile"] = c.auth.profile;
   if (c.auth.mode === "role") auth["roleArn"] = c.auth.roleArn;
-  for (const key of [...(c.auth.extra?.keys() ?? [])].sort(compareStrings)) {
-    if (AUTH_KEYS[c.auth.mode].includes(key)) continue;
-    auth[key] = c.auth.extra!.get(key);
-  }
+  writeExtra(auth, c.auth.extra, authKnown(c.auth.mode));
 
   const out: Record<string, unknown> = {
     format: c.format,
@@ -354,10 +329,7 @@ export function formatConnection(c: Connection): string {
   out["auth"] = auth;
   if (c.created !== undefined) out["created"] = rfc3339(c.created);
   if (c.modified !== undefined) out["modified"] = rfc3339(c.modified);
-  for (const key of [...(c.extra?.keys() ?? [])].sort(compareStrings)) {
-    if (KNOWN_KEYS.has(key)) continue; // a key this build owns is never written from extra
-    out[key] = c.extra!.get(key);
-  }
+  writeExtra(out, c.extra, isKnown);
 
   // Checked on what is about to be written rather than on the connection, so
   // nothing carried through `extra` can slip a key past it.
