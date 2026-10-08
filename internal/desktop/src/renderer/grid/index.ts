@@ -10,6 +10,7 @@ import "./grid.css";
 import { m } from "../../paraglide/messages.js";
 import type { InputStrategy } from "../input/strategy.ts";
 import { NOTHING, changeOf, isJump, replay, showing, target } from "../keys.ts";
+import { el } from "../shell/util.ts";
 import type { Action, Caret, Change, Motion, Pending } from "../keys.ts";
 import { num } from "../locale.ts";
 import { columnLabel } from "./rows.ts";
@@ -43,7 +44,7 @@ export class Grid {
    * because the log has no row insert or delete, so a mark stays on the same
    * record.
    */
-  private marks: Marks = { named: new Map(), before: undefined };
+  private marks: Marks = noMarks();
   /** The marks of every rows shown, found again when a tab comes back. */
   private readonly marked = new WeakMap<Rows, Marks>();
   /** What yy copied, for p. Kept across opens, as vim keeps a register across files. */
@@ -93,12 +94,18 @@ export class Grid {
     this.view.show(source, keep);
   }
 
+  /** refused says a refusal where there is one, and answers whether there was. */
+  private refused(why: string): boolean {
+    if (why !== "") this.events.onSay(why, true);
+    return why !== "";
+  }
+
   /** marksOf is the marks rows were given before, or none yet. */
   private marksOf(source: Rows | undefined): Marks {
-    if (source === undefined) return { named: new Map(), before: undefined };
+    if (source === undefined) return noMarks();
     let marks = this.marked.get(source);
     if (marks === undefined) {
-      marks = { named: new Map(), before: undefined };
+      marks = noMarks();
       this.marked.set(source, marks);
     }
     return marks;
@@ -295,14 +302,9 @@ export class Grid {
       this.events.onSay(this.input.locked, false);
       return;
     }
-    const refused = this.refusal(source);
-    if (refused !== "") {
-      this.events.onSay(refused, true);
-      return;
-    }
+    if (this.refused(this.refusal(source))) return;
 
-    const input = document.createElement("input");
-    input.className = "cell-editor";
+    const input = el("input", "cell-editor");
     // Typing over a cell starts the editor holding what was typed.
     input.value = text ?? (caret === "empty" ? "" : source.raw(this.selRow, this.selCol));
     this.caret = caret;
@@ -386,11 +388,7 @@ export class Grid {
   private write(change: Change): void {
     const source = this.source;
     if (source === undefined) return;
-    const refused = this.refusal(source);
-    if (refused !== "") {
-      this.events.onSay(refused, true);
-      return;
-    }
+    if (this.refused(this.refusal(source))) return;
 
     this.last = change;
     const raw = source.raw(this.selRow, this.selCol);
@@ -408,11 +406,7 @@ export class Grid {
   private yank(): void {
     const source = this.source;
     if (source === undefined) return;
-    const unreadable = this.unreadable(source);
-    if (unreadable !== "") {
-      this.events.onSay(unreadable, true);
-      return;
-    }
+    if (this.refused(this.unreadable(source))) return;
 
     const value = source.raw(this.selRow, this.selCol);
     this.register = value;
@@ -458,4 +452,8 @@ export class Grid {
     input.remove();
     this.events.onEditor(false);
   }
+}
+
+function noMarks(): Marks {
+  return { named: new Map(), before: undefined };
 }
