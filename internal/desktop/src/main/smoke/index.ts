@@ -151,6 +151,16 @@ const PRELUDE = `
       .dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
     await frame();
   };
+  // The form that connects a bucket, in the list's place while it is open, and
+  // its Save, pressed after the sign-in is chosen as a person chooses it.
+  const connectForm = () => document.querySelector("#panel .panel-connect");
+  const signInAs = (value) => {
+    const choose = connectForm().querySelector("select");
+    choose.value = value;
+    choose.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const saveConnection = () =>
+    [...connectForm().querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
   // The buttons under the panel's list, and the one with a label.
   const footButtons = () => [...document.querySelectorAll("#panel .panel-foot button")];
   const foot = () => footButtons().map((b) => b.textContent);
