@@ -163,8 +163,13 @@ export function englishSought(what: Sought): string {
   }
 }
 
-/** Sentences is one English sentence for each kind, so a kind without one is a type error. */
-type Sentences<U extends { t: string }> = { [K in U["t"]]: (s: Extract<U, { t: K }>) => string };
+/**
+ * Sentences is one sentence for each kind of a union, so a kind without one is
+ * a type error: here in English, and in a client in whatever language it writes.
+ */
+export type Sentences<U extends { t: string }> = {
+  [K in U["t"]]: (s: Extract<U, { t: K }>) => string;
+};
 
 const STEPS: Sentences<StepSaid> = {
   trim: () => "trim the spaces off both ends",
