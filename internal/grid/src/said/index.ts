@@ -106,7 +106,7 @@ export type Said =
 
   // What an engine whose platform gave it less cannot do.
   | { t: "keeps-no-connections" }
-  | { t: "offers-no-profiles" }
+  | { t: "offers-no-sign-ins" }
   | { t: "tries-no-connection" };
 
 /**
@@ -254,8 +254,8 @@ const SENTENCES: Sentences<Said> = {
 
   "keeps-no-connections": () =>
     "this engine keeps no connections · its platform gave it nowhere to read them from",
-  "offers-no-profiles": () =>
-    "this engine has no AWS profiles to offer · its platform signs in another way",
+  "offers-no-sign-ins": () =>
+    "this engine has no way of signing in to offer · its platform connects to nothing",
   "tries-no-connection": () =>
     "this engine cannot try a connection · its platform connects to nothing",
 };

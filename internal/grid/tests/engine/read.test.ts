@@ -186,6 +186,33 @@ test("a block closes at its byte budget as well as its row count", () => {
   expect(index.blockOf(3)).toBe(1);
 });
 
+// A file past 4 GB, and the rows in it, are counted in numbers a double holds
+// exactly: every byte offset and row number under 2^53. A hosted engine opens
+// an object of a few hundred GB, and an index that kept an offset in 32 bits
+// would read the wrong block without a word. What it keeps is two numbers a
+// block, so a terabyte of kilobyte rows is a million blocks and 16 MB.
+test("the index keeps block starts past 4 GB exactly, at two numbers a block", () => {
+  const MB = 1 << 20;
+  const GB = 1024 * MB;
+  const size = 6 * GB;
+  const index = new RowIndex(0, size, { blockRows: 1024, blockBytes: MB });
+  // One record a byte past each megabyte, so every begin after the first
+  // closes a block, and five thousand of them reach past 4 GB.
+  const blocks = 5 * 1024;
+  for (let b = 0; b < blocks; b++) index.begin(b * MB + 1);
+  index.scanned = blocks * MB;
+
+  const last = blocks - 1;
+  expect(last * MB + 1).toBeGreaterThan(2 ** 32);
+  expect(index.bytesOf(last)).toEqual([last * MB + 1, size]);
+  expect(index.blockOf(last)).toBe(last);
+  // Five thousand rows in the first 5 GB of 6 project to six thousand.
+  expect(index.rows()).toBe(6 * 1024);
+  index.complete = true;
+  expect(index.rows()).toBe(blocks);
+  expect(index.readable()).toBe(blocks);
+});
+
 test("the page cache stays within its budget however much is read", async () => {
   const source = blobSource(new Blob([bytes]));
   const format = await openFormat("sales-q3.csv", source);

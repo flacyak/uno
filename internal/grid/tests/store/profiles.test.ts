@@ -100,19 +100,25 @@ test("the engine's reply holds names only, and no key reaches it", async () => {
     undefined,
     {
       connections: connectionsIn(nodeStore(), dir),
-      profiles: () => awsProfiles(env),
+      signIns: async () => ({
+        modes: ["machine", "profile", "public"],
+        profiles: await awsProfiles(env),
+      }),
     },
   );
   const client = messagePort<Reply, Request>(port2 as unknown as MessagePortLike);
   try {
     const reply = await new Promise<Reply>((resolve) => {
       client.listen(resolve);
-      client.post({ t: "profiles", id: 1 });
+      client.post({ t: "signins", id: 1 });
     });
     expect(reply).toEqual({
-      t: "names",
+      t: "offered",
       id: 1,
-      names: ["default", "finance", "reader", "sso-work", "vault"],
+      signins: {
+        modes: ["machine", "profile", "public"],
+        profiles: ["default", "finance", "reader", "sso-work", "vault"],
+      },
     });
     const wire = JSON.stringify(reply);
     for (const secret of SECRETS) expect(wire, secret).not.toContain(secret);
@@ -121,12 +127,12 @@ test("the engine's reply holds names only, and no key reaches it", async () => {
   }
 });
 
-test("an engine whose platform has no profiles to offer says so", async () => {
+test("an engine whose platform has no way of signing in to offer says so", async () => {
   const dir = await mkdtemp(join(tmpdir(), "uno-profiles-connections-"));
   const { engine, done } = connect(undefined, undefined, connectionsIn(nodeStore(), dir));
   try {
-    await expect(engine.profiles()).rejects.toThrow(
-      "this engine has no AWS profiles to offer · its platform signs in another way",
+    await expect(engine.signIns()).rejects.toThrow(
+      "this engine has no way of signing in to offer · its platform connects to nothing",
     );
   } finally {
     done();

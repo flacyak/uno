@@ -55,6 +55,8 @@ const UNTRANSLATED: readonly RegExp[] = [
   /Paper Ember|Tokyo Night|Sakura|Catppuccin Frappé|T3 Themes|uno\b/g,
   // The example bucket, a provider and a profile, which are AWS's names.
   /acme-exports|\bs3\b|\bdefault\b|~\/\.aws/g,
+  // The example role's ARN, which is AWS's shape for one.
+  /arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+/g,
   // The file extensions the empty state lists.
   /\b(csv|tsv)\b/g,
   // The encoding a file was read in, by the name everyone calls it.

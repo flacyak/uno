@@ -20,6 +20,7 @@ import type {
   Progress,
   Reply,
   Request,
+  SignIns,
   SourceRef,
 } from "./protocol.ts";
 import { Refusal, saidOf } from "../said/index.ts";
@@ -160,9 +161,9 @@ export class Engine {
     return (await this.ask("loaded", (id) => ({ t: "connections", id }))).loaded;
   }
 
-  /** profiles answers the names of the AWS profiles the engine's machine has. */
-  async profiles(): Promise<string[]> {
-    return (await this.ask("names", (id) => ({ t: "profiles", id }))).names;
+  /** signIns answers how the engine signs in: its modes, its machine's profile names, and a role's trust. */
+  async signIns(): Promise<SignIns> {
+    return (await this.ask("offered", (id) => ({ t: "signins", id }))).signins;
   }
 
   /**
