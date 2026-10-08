@@ -43,7 +43,7 @@ import type {
 } from "../sources.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
-import { Words } from "./util.ts";
+import { Words, el } from "./util.ts";
 
 /**
  * One line's height, in one place. The stylesheet is handed it as
@@ -246,9 +246,7 @@ export class Panel {
 
     // The head that says what the column is. It begins under the end of the
     // window's top line, which index.html keeps for the × that closes the window.
-    const head = document.createElement("div");
-    head.className = "panel-head col-head";
-    this.words.text(head, m.sources_title);
+    const head = this.words.text(el("div", "panel-head col-head"), m.sources_title);
 
     root.append(head, form, this.list, this.peek, this.foot, this.connecting.el);
   }
@@ -465,8 +463,8 @@ export class Panel {
 
   /** click puts the keys on a line and chooses it, as the keys and Enter would. */
   private click(e: MouseEvent): void {
-    const el = (e.target as HTMLElement).closest<HTMLElement>(".panel-row");
-    const index = Number(el?.dataset["row"]);
+    const hit = (e.target as HTMLElement).closest<HTMLElement>(".panel-row");
+    const index = Number(hit?.dataset["row"]);
     if (!Number.isInteger(index)) return;
     const row = rowAt(this.laid, index);
     if (row.t !== "line") return;
@@ -577,8 +575,8 @@ export class Panel {
 
     const want = poolSize(total, this.list.clientHeight, ROW_H);
     while (this.pool.length < want) {
-      const row = document.createElement("div");
-      row.append(document.createElement("span"), document.createElement("span"));
+      const row = el("div");
+      row.append(el("span"), el("span"));
       this.pool.push(row);
       this.rows.append(row);
     }
@@ -664,22 +662,21 @@ export class Panel {
     this.peek.hidden = now === undefined;
     if (now === undefined) return this.peek.replaceChildren();
     if (now === "reading") {
-      this.peek.replaceChildren(text("div", "note", m.panel_peeking()));
+      this.peek.replaceChildren(el("div", "note", m.panel_peeking()));
       return;
     }
 
     const table = document.createElement("table");
     const head = table.createTHead().insertRow();
-    for (const h of now.header) head.append(text("th", "", h));
+    for (const h of now.header) head.append(el("th", "", h));
     const body = table.createTBody();
     for (const row of now.rows) {
       const tr = body.insertRow();
-      for (const cell of row) tr.append(text("td", "", cell));
+      for (const cell of row) tr.append(el("td", "", cell));
     }
-    const wrap = document.createElement("div");
-    wrap.className = "table";
+    const wrap = el("div", "table");
     wrap.append(table);
-    this.peek.replaceChildren(text("div", "note", say(now.label)), wrap);
+    this.peek.replaceChildren(el("div", "note", say(now.label)), wrap);
   }
 
   /**
@@ -708,17 +705,17 @@ export class Panel {
     this.foot.replaceChildren(
       ...(failure === undefined ? [] : this.refusal(failure)),
       ...doings.map((a) => {
-        const el = text("button", a.does === "append" ? "wide" : "", a.label);
-        el.addEventListener("click", () => this.doing(a));
-        return el;
+        const button = el("button", a.does === "append" ? "wide" : "", a.label);
+        button.addEventListener("click", () => this.doing(a));
+        return button;
       }),
       ...(joining === undefined ? [] : [this.choices(joining)]),
       ...buttons.map((b, i) => {
-        const el = text("button", b.one ? "" : "primary", b.label);
+        const button = el("button", b.one ? "" : "primary", b.label);
         // The button as it stands when pressed, with the choices as they are
         // then, and not as they were when it was drawn.
-        el.addEventListener("click", () => this.press(this.sources.buttons[i] ?? b));
-        return el;
+        button.addEventListener("click", () => this.press(this.sources.buttons[i] ?? b));
+        return button;
       }),
     );
   }
@@ -728,9 +725,9 @@ export class Panel {
    * in the engine's own words, and the button that edits it to try again.
    */
   private refusal(failure: Arriving): HTMLElement[] {
-    const editing = text("button", "primary", m.action_edit_connection());
+    const editing = el("button", "primary", m.action_edit_connection());
     editing.addEventListener("click", () => this.edit());
-    return [text("div", "why", `✗ ${failure.failed}`), editing];
+    return [el("div", "why", `✗ ${failure.failed}`), editing];
   }
 
   /**
@@ -739,9 +736,9 @@ export class Panel {
    * which file a row came from.
    */
   private choices(joining: Joining): HTMLElement {
-    const line = text("div", "choices", "");
+    const line = el("div", "choices");
     line.append(
-      text("span", "", m.panel_as_one()),
+      el("span", "", m.panel_as_one()),
       choice(m.panel_header_row(), m.panel_header_row_hint(), joining.header === "first", (on) =>
         this.sources.join({ header: on ? "first" : "none" }),
       ),
@@ -881,23 +878,16 @@ function choice(
   on: boolean,
   changed: (on: boolean) => void,
 ): HTMLElement {
-  const el = document.createElement("label");
-  el.title = hint;
-  const box = document.createElement("input");
+  const line = el("label");
+  line.title = hint;
+  const box = el("input");
   box.type = "checkbox";
   box.checked = on;
   box.addEventListener("change", () => changed(box.checked));
   // Space ticks it, and the grid's keys and the shell's chords stay out of it.
   box.addEventListener("keydown", (e) => e.stopPropagation());
-  el.append(box, label);
-  return el;
-}
-
-function text(tag: string, cls: string, content: string): HTMLElement {
-  const el = document.createElement(tag);
-  if (cls !== "") el.className = cls;
-  el.textContent = content;
-  return el;
+  line.append(box, label);
+  return line;
 }
 
 /** set writes text only when it changed, since the pool is repainted on every scroll. */

@@ -32,7 +32,7 @@ import type { Language, LanguageChoice } from "../language.ts";
 import type { Connection } from "../sources.ts";
 import { APPEARANCES, THEMES } from "../theme.ts";
 import type { Appearance, Theming } from "../theme.ts";
-import { tabStep, walk } from "./util.ts";
+import { el, tabStep, walk } from "./util.ts";
 
 /** What the menu asks of the shell. The shell decides; the menu only asks. */
 export interface SettingsAsks {
@@ -198,7 +198,7 @@ export class Settings {
   private paint(): void {
     const focused = this.items().indexOf(document.activeElement as HTMLButtonElement);
 
-    const title = element("div", "title", m.settings_title());
+    const title = el("div", "title", m.settings_title());
     this.box.replaceChildren(
       title,
       this.sources(),
@@ -215,9 +215,9 @@ export class Settings {
   private sources(): HTMLElement {
     const section = heading(m.sources_title());
     if (this.reading && this.connections.length === 0) {
-      section.append(element("div", "note", m.reading()));
+      section.append(el("div", "note", m.reading()));
     } else if (this.connections.length === 0) {
-      section.append(element("div", "note", m.no_connections()));
+      section.append(el("div", "note", m.no_connections()));
     }
     for (const c of this.connections) {
       const item = row(c.name, c.where === undefined ? c.kind : `${c.kind} · ${c.where}`);
@@ -252,11 +252,11 @@ export class Settings {
       if (chosen) item.classList.add("chosen");
 
       const p = t[mode];
-      const chip = element("span", "chip", "");
+      const chip = el("span", "chip");
       chip.style.background = p.surface;
       chip.style.borderColor = p.rule;
       for (const colour of [p.accent, p.ink]) {
-        const dot = element("span", "dot", "");
+        const dot = el("span", "dot");
         dot.style.background = colour;
         chip.append(dot);
       }
@@ -270,13 +270,9 @@ export class Settings {
   /** Light, dark, or whatever the system is in, for whichever theme is worn. */
   private appearances(): HTMLElement {
     const section = heading(m.settings_appearance());
-    const seg = element("div", "seg", "");
+    const seg = el("div", "seg");
     for (const a of APPEARANCES) {
-      const button = element(
-        "button",
-        a === this.theming.appearance ? "on" : "",
-        APPEARANCE_WORDS[a](),
-      );
+      const button = el("button", a === this.theming.appearance ? "on" : "", APPEARANCE_WORDS[a]());
       button.setAttribute("aria-pressed", String(a === this.theming.appearance));
       button.dataset["appearance"] = a;
       button.addEventListener("click", () => this.theming.appear(a));
@@ -289,10 +285,10 @@ export class Settings {
   /** How the grid reads keys: a spreadsheet's, or vim's. */
   private keys(): HTMLElement {
     const section = heading(m.settings_keys());
-    const seg = element("div", "seg", "");
+    const seg = el("div", "seg");
     const now = this.asks.input();
     for (const name of INPUTS) {
-      const button = element("button", name === now ? "on" : "", inputLabel(name));
+      const button = el("button", name === now ? "on" : "", inputLabel(name));
       button.setAttribute("aria-pressed", String(name === now));
       button.dataset["input"] = name;
       button.addEventListener("click", () => {
@@ -338,28 +334,17 @@ function arrowStep(e: KeyboardEvent): 1 | -1 | 0 {
   return tabStep(e);
 }
 
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  cls: string,
-  text: string,
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  if (cls !== "") el.className = cls;
-  el.textContent = text;
-  return el;
-}
-
 /** heading is a section of the menu, under its title. */
 function heading(title: string): HTMLElement {
-  const section = element("section", "", "");
-  section.append(element("div", "head", title));
+  const section = el("section");
+  section.append(el("div", "head", title));
   return section;
 }
 
 /** row is one item: what it is, and what is beside it. */
 function row(name: string, meta: string): HTMLButtonElement {
-  const item = element("button", "item", "");
+  const item = el("button", "item");
   item.type = "button";
-  item.append(element("span", "name", name), element("span", "meta", meta));
+  item.append(el("span", "name", name), el("span", "meta", meta));
   return item;
 }

@@ -17,7 +17,7 @@ import { validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
 import { m } from "../../paraglide/messages.js";
-import { Words, message } from "./util.ts";
+import { Words, el, message, option } from "./util.ts";
 
 /** What the form needs of the engine and the host. The shell decides how. */
 export interface ConnectAsks {
@@ -154,8 +154,8 @@ export class ConnectForm {
   private readonly region = document.createElement("div");
   private readonly result = document.createElement("div");
   private readonly saving = document.createElement("div");
-  private readonly tryButton = button("");
-  private readonly saveButton = button("primary");
+  private readonly tryButton = el("button", "");
+  private readonly saveButton = el("button", "primary");
   /** The profile names the engine last answered with, for the list to be drawn from again. */
   private names: readonly string[] = [];
   private status: Status = { t: "untried" };
@@ -172,16 +172,14 @@ export class ConnectForm {
     private readonly done: (saved: Connection | undefined) => void,
     private readonly tells: ConnectTells,
   ) {
-    const el = this.el;
-    el.className = "panel-connect";
-    el.hidden = true;
-    el.noValidate = true;
+    const form = this.el;
+    form.className = "panel-connect";
+    form.hidden = true;
+    form.noValidate = true;
     const words = this.words;
-    words.attr(el, "aria-label", m.connect_form_aria);
+    words.attr(form, "aria-label", m.connect_form_aria);
 
-    const title = document.createElement("div");
-    title.className = "title";
-    words.text(title, m.connect_title);
+    const title = words.text(el("div", "title"), m.connect_title);
 
     words.attr(this.bucket, "aria-label", m.connect_bucket_aria);
     this.bucket.placeholder = EXAMPLE_BUCKET;
@@ -196,16 +194,15 @@ export class ConnectForm {
     this.result.setAttribute("role", "status");
     this.saving.className = "fine";
 
-    const cancel = words.text(button(""), m.action_cancel);
+    const cancel = words.text(el("button", ""), m.action_cancel);
     cancel.type = "button";
     cancel.addEventListener("click", () => this.cancel());
     this.tryButton.type = "button";
     this.tryButton.addEventListener("click", () => void this.test());
-    const buttons = document.createElement("div");
-    buttons.className = "buttons";
+    const buttons = el("div", "buttons");
     buttons.append(cancel, this.tryButton, this.saveButton);
 
-    el.append(
+    form.append(
       title,
       field(words, m.field_bucket, this.bucket),
       field(words, m.field_prefix, this.prefix),
@@ -218,13 +215,13 @@ export class ConnectForm {
 
     // Enter in any field, and the Save button, are one submit: save, testing
     // first when what is on screen has not been tested yet.
-    el.addEventListener("submit", (e) => {
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
       void this.save();
     });
-    el.addEventListener("input", () => this.edited());
-    el.addEventListener("change", () => this.edited());
-    el.addEventListener("keydown", (e) => {
+    form.addEventListener("input", () => this.edited());
+    form.addEventListener("change", () => this.edited());
+    form.addEventListener("keydown", (e) => {
       // The grid's keys and the shell's chords stay out of what is typed here.
       e.stopPropagation();
       if (e.key === "Escape" && !e.isComposing) {
@@ -397,14 +394,7 @@ export class ConnectForm {
       ...names.map((n): [SignIn, string] => [`profile:${n}`, n]),
       ["public", m.connect_sign_in_public()],
     ];
-    this.signIn.replaceChildren(
-      ...choices.map(([value, label]) => {
-        const o = document.createElement("option");
-        o.value = value;
-        o.textContent = label;
-        return o;
-      }),
-    );
+    this.signIn.replaceChildren(...choices.map(([value, label]) => option(label, value)));
     // A choice made before the names arrived is kept; otherwise `default` is
     // what a person means when they did not say, where there is one.
     const keep =
@@ -456,23 +446,16 @@ function key(c: Connection): string {
 
 /** input is one text field, by its name in the form. */
 function input(name: string): HTMLInputElement {
-  const el = document.createElement("input");
-  el.name = name;
-  el.spellcheck = false;
-  el.autocomplete = "off";
-  return el;
-}
-
-function button(cls: string): HTMLButtonElement {
-  const el = document.createElement("button");
-  if (cls !== "") el.className = cls;
-  return el;
+  const box = el("input");
+  box.name = name;
+  box.spellcheck = false;
+  box.autocomplete = "off";
+  return box;
 }
 
 /** field is one labelled row of the form. */
 function field(words: Words, label: () => string, control: HTMLElement): HTMLElement {
-  const row = document.createElement("label");
-  row.className = "field";
-  row.append(words.text(document.createElement("span"), label), control);
+  const row = el("label", "field");
+  row.append(words.text(el("span"), label), control);
   return row;
 }
