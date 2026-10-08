@@ -15,8 +15,9 @@
 
 import type { Edit } from "../sheet/index.ts";
 import type { Sheet } from "../sheet/index.ts";
-import type { HeaderMode } from "../store/index.ts";
-import { against, dirOf, relativeTo } from "./path.ts";
+import { extensionOf } from "../ingest/index.ts";
+import type { FileRef, HeaderMode } from "../store/index.ts";
+import { against, baseOf, dirOf, relativeTo } from "./path.ts";
 
 /**
  * FORMAT_VERSION is the highest layout this build reads and writes.
@@ -378,10 +379,19 @@ export interface Document {
  * name gets .csv.
  */
 export function sourceEntry(name: string, id?: string): string {
-  const dot = name.lastIndexOf(".");
-  const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
-  const ext = dot < 0 || dot < slash ? "" : name.slice(dot).toLowerCase();
+  const ext = extensionOf(name);
   return (id === undefined ? SOURCE_STEM : SOURCE_DIR + id) + (ext === "" ? ".csv" : ext);
+}
+
+/** The workspace file extension. The engine recognises a workspace by it. */
+export const WORKSPACE_EXT = ".uno";
+
+/**
+ * isWorkspace says whether a ref names a .uno. Several files read as one are
+ * a source, whatever they are called.
+ */
+export function isWorkspace(ref: FileRef): boolean {
+  return !("parts" in ref) && ref.name.toLowerCase().endsWith(WORKSPACE_EXT);
 }
 
 /** The characters an id keeps. Anything else becomes a dash. */
@@ -393,8 +403,7 @@ const ID_UNSAFE = /[^A-Za-z0-9._-]+/g;
  * google-ads_2, then _3, and so on.
  */
 export function sourceId(name: string, taken: Iterable<string>): string {
-  const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
-  const file = name.slice(slash + 1);
+  const file = baseOf(name);
   const dot = file.lastIndexOf(".");
   const stem = (dot > 0 ? file.slice(0, dot) : file)
     .replace(ID_UNSAFE, "-")

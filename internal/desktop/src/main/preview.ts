@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import type { BrowserWindow, Rectangle } from "electron";
 
@@ -222,7 +223,10 @@ interface Shot {
   at: number;
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, Math.max(0, ms)));
+/** A shot and a hash of its pixels. */
+interface Hashed extends Shot {
+  hash: string;
+}
 
 /**
  * runPreview waits for the page to be ready, plays the story named by
@@ -270,7 +274,7 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   const at: Clock = (ms) => sleep(start + ms - Date.now());
   // Stories are written for the default key mode.
   win.webContents.send("menu:input", "default");
-  let shots: (Shot & { hash: string })[];
+  let shots: Hashed[];
   try {
     [shots] = await Promise.all([film(win, dir, rect, start, end), script(win, at)]);
   } catch (err) {
@@ -379,8 +383,8 @@ async function film(
   rect: Rectangle,
   start: number,
   end: number,
-): Promise<(Shot & { hash: string })[]> {
-  const shots: (Shot & { hash: string })[] = [];
+): Promise<Hashed[]> {
+  const shots: Hashed[] = [];
   const writes: Promise<void>[] = [];
 
   for (let i = 0; ; i++) {

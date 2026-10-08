@@ -19,6 +19,7 @@ import { draftOf, folderOf, triedLine } from "../src/renderer/shell/connect.ts";
 import { Panel } from "../src/renderer/shell/panel.ts";
 import type { Listings } from "../src/renderer/sources.ts";
 import { Sources, stateOf } from "../src/renderer/sources.ts";
+import { settle } from "./settle.ts";
 
 const REGION = "eu-west-1";
 
@@ -213,9 +214,6 @@ const result = (): string => form().querySelector(".result")!.textContent ?? "";
 const region = (): string => form().querySelector(".value")!.textContent ?? "";
 const press = (label: string): void =>
   [...form().querySelectorAll("button")].find((b) => b.textContent === label)!.click();
-const settle = async (): Promise<void> => {
-  for (let i = 0; i < 5; i++) await Promise.resolve();
-};
 
 function type(name: string, value: string): void {
   field(name).value = value;
