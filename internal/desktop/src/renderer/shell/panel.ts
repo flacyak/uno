@@ -64,18 +64,12 @@ const DOING_KEYS: Record<string, Doing> = {
   Delete: "remove",
 };
 
-/** What each choice about files added as one says, and says to whoever hovers. */
-
-function titleOf(section: Section): string {
-  switch (section) {
-    case "workspace":
-      return m.section_workspace();
-    case "connections":
-      return m.section_connections();
-    case "browser":
-      return m.section_browser();
-  }
-}
+/** What each section is headed. */
+const TITLES: Record<Section, () => string> = {
+  workspace: m.section_workspace,
+  connections: m.section_connections,
+  browser: m.section_browser,
+};
 
 /** What stands where a size would be, for an entry whose size is not known. */
 const NO_SIZE = "—";
@@ -770,7 +764,7 @@ export class Panel {
       cls += " head";
       const pointing = row.section === "browser" ? this.sources.repointing : undefined;
       name =
-        pointing === undefined ? titleOf(row.section) : m.panel_point_at({ name: pointing.name });
+        pointing === undefined ? TITLES[row.section]() : m.panel_point_at({ name: pointing.name });
       if (row.section === "browser") meta = this.sources.crumb.map((c) => c.name).join(" / ");
     } else if (row.t === "note") {
       cls += " note";

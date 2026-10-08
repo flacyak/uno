@@ -51,16 +51,11 @@ export interface SettingsAsks {
 }
 
 /** What each appearance says on its button. */
-function appearanceWord(a: Appearance): string {
-  switch (a) {
-    case "system":
-      return m.appearance_system();
-    case "light":
-      return m.appearance_light();
-    case "dark":
-      return m.appearance_dark();
-  }
-}
+const APPEARANCE_WORDS: Record<Appearance, () => string> = {
+  system: m.appearance_system,
+  light: m.appearance_light,
+  dark: m.appearance_dark,
+};
 
 /** What marks the one chosen among several in a list. */
 const CHOSEN = "✓";
@@ -280,7 +275,7 @@ export class Settings {
       const button = element(
         "button",
         a === this.theming.appearance ? "on" : "",
-        appearanceWord(a),
+        APPEARANCE_WORDS[a](),
       );
       button.setAttribute("aria-pressed", String(a === this.theming.appearance));
       button.dataset["appearance"] = a;

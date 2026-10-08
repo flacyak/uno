@@ -5,17 +5,50 @@
 // editor is insert. `i` moves one level in and Esc moves one level back out.
 
 import { m } from "../../paraglide/messages.js";
-import { NOTHING, isCharacter, showing } from "../keys.ts";
+import { NAMED_MOTIONS, NONE, done, isCharacter, isLead, move, showing } from "../keys.ts";
 import type { Action, Caret, Mode, Motion, Pending, Press, Step } from "../keys.ts";
 import type { EditorKey, InputStrategy } from "./strategy.ts";
-
-const NONE: Action = { t: "none" };
 
 /** The most digits a count keeps. Past that it could only be clamped to the sheet. */
 const COUNT_DIGITS = 10;
 
 /** A mark's name. */
 const MARK = /^[a-z]$/;
+
+/** The letters that move, as vim has them. 0 is among them only before a count starts. */
+const LETTER_MOTIONS: ReadonlyMap<string, Motion> = new Map([
+  ["h", "left"],
+  ["j", "down"],
+  ["k", "up"],
+  ["l", "right"],
+  ["w", "next"],
+  ["b", "previous"],
+  ["0", "first-col"],
+  ["^", "first-col"],
+  ["$", "last-col"],
+  ["G", "last-row"],
+  ["H", "screen-top"],
+  ["M", "screen-middle"],
+  ["L", "screen-bottom"],
+]);
+
+/** The motions a count means nothing to: there is one end, one middle, one last column. */
+const UNCOUNTED: ReadonlySet<Motion> = new Set(["home", "end", "last-col", "screen-middle"]);
+
+/** The keys that wait for a second: g, z, m, the marks, y, the brackets and c. */
+const WAITING: ReadonlySet<string> = new Set(["g", "z", "m", "'", "`", "y", "]", "[", "c"]);
+
+const CTRL_MOTIONS: ReadonlyMap<string, Motion> = new Map([
+  ["d", "half-down"],
+  ["u", "half-up"],
+  ["f", "page-down"],
+  ["b", "page-up"],
+]);
+
+/** moved is a motion with its count, where the motion takes one. */
+function moved(motion: Motion, count: number | undefined): Step {
+  return done(move(motion, UNCOUNTED.has(motion) ? undefined : count));
+}
 
 /**
  * interpret reads one key in view or transform.
@@ -36,39 +69,21 @@ function interpret(mode: Mode, pending: Pending, press: Press): Step | undefined
     if (press.shift) return undefined;
     // Redo, which is why the reload item gave up Ctrl+R.
     if (key.toLowerCase() === "r") return done(change(mode, press, { t: "redo" }));
-    const motion = ctrlMotion(key);
-    return motion === undefined ? undefined : done(move(motion, count));
+    const motion = CTRL_MOTIONS.get(key.toLowerCase());
+    return motion === undefined ? undefined : moved(motion, count);
   }
 
-  switch (key) {
-    case "Escape":
-      // Pending keys first. Someone who types 4 by mistake and presses Esc means
-      // "cancel the 4", not "lock the file".
-      if (showing(pending) !== "") return done(NONE);
-      return done(mode === "transform" ? { t: "mode", to: "view" } : { t: "say", text: "" });
-    case "ArrowDown":
-      return done(move("down", count));
-    case "ArrowUp":
-      return done(move("up", count));
-    case "ArrowRight":
-      return done(move("right", count));
-    case "ArrowLeft":
-      return done(move("left", count));
-    // The next cell, and with Shift the one before, as every spreadsheet has it.
-    case "Tab":
-      return done(move(press.shift ? "left" : "right", count));
-    case "PageDown":
-      return done(move("page-down", count));
-    case "PageUp":
-      return done(move("page-up", count));
-    case "Home":
-      return done(move("home", undefined));
-    case "End":
-      return done(move("end", undefined));
-    case "Enter":
-    case "F2":
-      return done(open(mode, "all"));
+  if (key === "Escape") {
+    // Pending keys first. Someone who types 4 by mistake and presses Esc means
+    // "cancel the 4", not "lock the file".
+    if (showing(pending) !== "") return done(NONE);
+    return done(mode === "transform" ? { t: "mode", to: "view" } : { t: "say", text: "" });
   }
+  const named = NAMED_MOTIONS.get(key);
+  if (named !== undefined) return moved(named, count);
+  // The next cell, and with Shift the one before, as every spreadsheet has it.
+  if (key === "Tab") return moved(press.shift ? "left" : "right", count);
+  if (key === "Enter" || key === "F2") return done(open(mode, "all"));
 
   // A named key that types nothing: Shift, CapsLock, a dead key.
   if (!isCharacter(key)) return undefined;
@@ -81,42 +96,12 @@ function interpret(mode: Mode, pending: Pending, press: Press): Step | undefined
     return { pending: { count: digits, keys: "" }, action: NONE };
   }
 
+  const letter = LETTER_MOTIONS.get(key);
+  if (letter !== undefined) return moved(letter, count);
+  if (WAITING.has(key)) return { pending: { count: pending.count, keys: key }, action: NONE };
+  if (isLead(key)) return done({ t: "prompt", lead: key });
+
   switch (key) {
-    case "h":
-      return done(move("left", count));
-    case "j":
-      return done(move("down", count));
-    case "k":
-      return done(move("up", count));
-    case "l":
-      return done(move("right", count));
-    case "w":
-      return done(move("next", count));
-    case "b":
-      return done(move("previous", count));
-    case "0":
-    case "^":
-      return done(move("first-col", count));
-    case "$":
-      return done(move("last-col", undefined));
-    case "G":
-      return done(move("last-row", count));
-    case "H":
-      return done(move("screen-top", count));
-    case "M":
-      return done(move("screen-middle", undefined));
-    case "L":
-      return done(move("screen-bottom", count));
-    case "g":
-    case "z":
-    case "m":
-    case "'":
-    case "`":
-    case "y":
-    case "]":
-    case "[":
-    case "c":
-      return { pending: { count: pending.count, keys: key }, action: NONE };
     case "i":
     case "I":
       // In view, i stops at transform. Writing should follow a decision to write,
@@ -138,12 +123,6 @@ function interpret(mode: Mode, pending: Pending, press: Press): Step | undefined
       return done(change(mode, press, { t: "put" }));
     case ".":
       return done(change(mode, press, { t: "repeat" }));
-    case ":":
-      return done({ t: "prompt", lead: ":" });
-    case "/":
-      return done({ t: "prompt", lead: "/" });
-    case "?":
-      return done({ t: "prompt", lead: "?" });
     case "n":
       return done({ t: "next", reverse: false });
     case "N":
@@ -192,20 +171,6 @@ function finish(mode: Mode, press: Press, keys: string, count: number | undefine
   return NONE;
 }
 
-function ctrlMotion(key: string): Motion | undefined {
-  switch (key.toLowerCase()) {
-    case "d":
-      return "half-down";
-    case "u":
-      return "half-up";
-    case "f":
-      return "page-down";
-    case "b":
-      return "page-up";
-  }
-  return undefined;
-}
-
 /**
  * editorKey ends the insert on Enter and on Esc, and both keep the typing. Vim
  * users press Esc at the end of every insert, and losing the text each time
@@ -214,14 +179,6 @@ function ctrlMotion(key: string): Motion | undefined {
 function editorKey(key: string, composing: boolean): EditorKey {
   if (composing || key === "Process") return undefined;
   return key === "Enter" || key === "Escape" ? "commit" : undefined;
-}
-
-function done(action: Action): Step {
-  return { pending: NOTHING, action };
-}
-
-function move(motion: Motion, count: number | undefined): Action {
-  return { t: "move", motion, count };
 }
 
 /** open is a key that opens the editor, which view refuses. */
