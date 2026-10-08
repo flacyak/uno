@@ -390,6 +390,19 @@
   color: var(--ink);
 }
 
+/* What a role has to trust, under its ARN: a principal and an external ID a
+ * person copies into a policy, so the text is theirs to select. */
+.panel-connect .trust {
+  color: var(--ink-2);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.panel-connect .trust[hidden] {
+  display: none;
+}
+
 /* What the test said: nothing until it runs, then a line that is either the
  * folder's count or the reason nothing will be saved. */
 .panel-connect .result {
