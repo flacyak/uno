@@ -1,10 +1,13 @@
 // Starting a real Electron.
 //
-// dev, smoke and preview all do the same three things around the child: decide
-// whether there is a display to draw on, build the environment it gets, and read
-// a verdict out of what it printed. They live here because each of them fails in
-// a way that looks like the app itself is broken, and because a test can ask
-// about all three without a display.
+// dev, smoke and preview all do the same things around the child: decide
+// whether there is a display to draw on, build the environment it gets, drive
+// it to the end answering what it asks, and read a verdict out of what it
+// printed. They live here because each of them fails in a way that looks like
+// the app itself is broken, and because a test can ask about them without a
+// display.
+
+import { spawn } from "node:child_process";
 
 /**
  * The environment an Electron child is started with.
@@ -88,4 +91,68 @@ export function verdict(name, code, out, banner) {
     return `${name}: FAILED (the app exited cleanly without reporting)`;
   }
   return undefined;
+}
+
+/**
+ * drive starts the built app and reads it to the end.
+ *
+ * What the app prints is passed through. A line `<who>: ask <what>` is the app
+ * asking this script, which holds what the app cannot -- the stand-in bucket --
+ * to do something; `answer(what)` does it and says whether anything here could,
+ * and the app is told `done` or `nothing here does` on its stdin. A hung app is
+ * a failure, not something to wait out: at `deadlineMs` it is killed by pid,
+ * and `onTimeout` is told.
+ *
+ * @param {string} who  "smoke" or "preview": the prefix of every line the app prints
+ * @param {{ electron: string, args: string[], env: NodeJS.ProcessEnv, answer: (what: string) => boolean, deadlineMs: number, onTimeout?: () => void }} run
+ * @returns {Promise<{ code: number | null, out: string }>}  the exit code, and everything written to stdout
+ */
+export async function drive(who, { electron, args, env, answer, deadlineMs, onTimeout }) {
+  const child = spawn(electron, args, {
+    // stdin carries this script's answers to what the app asks of it.
+    stdio: ["pipe", "pipe", "pipe"],
+    env,
+  });
+  console.log(`${who}: electron pid ${child.pid}`);
+
+  let out = "";
+  let pending = "";
+  child.stdout.on("data", (chunk) => {
+    out += String(chunk);
+    pending += String(chunk);
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith(`${who}: ask `)) continue;
+      const what = line.slice(`${who}: ask `.length);
+      child.stdin.write(`${who}: ${answer(what) ? "done" : "nothing here does"} ${what}\n`);
+    }
+    process.stdout.write(chunk);
+  });
+  child.stderr.on("data", (chunk) => process.stderr.write(chunk));
+
+  const deadline = setTimeout(() => {
+    console.error(`${who}: timed out after ${deadlineMs / 1000}s`);
+    if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
+    onTimeout?.();
+  }, deadlineMs);
+  const code = await new Promise((resolve) => child.on("close", resolve));
+  clearTimeout(deadline);
+  return { code, out };
+}
+
+/**
+ * rewrite writes a stand-in's object over with the same bytes but one digit,
+ * the same size and another ETag, the way an export regenerated with one
+ * figure corrected is. The digit is the first in the rows, which is on screen.
+ *
+ * @param {Map<string, Uint8Array>} objects  the stand-in's
+ * @param {string} key
+ */
+export function rewrite(objects, key) {
+  const now = objects.get(key).slice();
+  const body = now.indexOf(0x0a);
+  const at = now.findIndex((c, i) => i > body && c >= 0x30 && c <= 0x39);
+  now[at] = now[at] === 0x39 ? 0x30 : now[at] + 1;
+  objects.set(key, now);
 }
