@@ -8,7 +8,7 @@
 import { rm } from "node:fs/promises";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vite-plus/test";
 
-import type { Engine, SourceHandle } from "../../src/engine/index.ts";
+import type { Engine } from "../../src/engine/index.ts";
 import { Op } from "../../src/sheet/index.ts";
 import { COLS, REGION, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { PART_ROWS } from "../testdata/sales-q3-parts.ts";
@@ -16,16 +16,14 @@ import {
   FIXTURE,
   TINY,
   connect,
+  everyRow,
   indexed,
   openOne,
+  saidIn,
   sales,
   widened,
-  saidIn,
 } from "../engine/harness.ts";
 import { COLUMNS, NAMES, SOURCE, asOne, marked, onDisk, providers, rowsOnly } from "./parts.ts";
-
-/** How many rows are asked for at a time. */
-const PAGE = 500;
 
 /** The first row of each part: the rows a reader that took a header would lose. */
 const FIRST_ROWS = [0, PART_ROWS, 2 * PART_ROWS];
@@ -53,15 +51,6 @@ function engine(): Engine {
   return made.engine;
 }
 
-/** Every row of a source, as it shows them. */
-async function every(src: SourceHandle): Promise<string[][]> {
-  const rows: string[][] = [];
-  for (let first = 0; first < src.progress.rows; first += PAGE) {
-    rows.push(...(await src.rows(first, PAGE)).rows);
-  }
-  return rows;
-}
-
 /** A row of the whole fixture, as the ordinary read of it holds it. */
 function expected(row: number): string[] {
   return Array.from({ length: COLS }, (_, col) => sales.raw(row, col));
@@ -81,7 +70,7 @@ describe("three headerless files opened as one", () => {
     expect(src.progress).toMatchObject({ rows: ROWS, complete: true });
 
     // A row short of cells is shown as wide as the columns, as the grid draws it.
-    const rows = widened(await every(src));
+    const rows = widened(await everyRow(src));
     expect(rows).toHaveLength(ROWS);
     for (let row = 0; row < ROWS; row++) {
       expect(rows[row], `row ${row}`).toEqual(expected(row));

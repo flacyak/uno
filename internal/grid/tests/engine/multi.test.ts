@@ -14,11 +14,12 @@ import { diskProvider } from "../../src/store/node.ts";
 import { ROWS } from "../testdata/sales-q3.ts";
 import { PARTS, PART_FIXTURES, PART_NAMES, partBytes } from "../testdata/sales-q3-parts.ts";
 import {
-  bytes,
   FIXTURE,
   TINY,
+  bytes,
   connect,
   indexed,
+  multiProviders,
   openOne,
   sales,
   sheetRows,
@@ -44,14 +45,8 @@ const THREE: SourceRef = {
   header: "first",
 };
 
-/** The places a part can be here, and over them several read as one. */
-function providers(): Provider[] {
-  const single = [diskProvider(), blobProvider()];
-  return [...single, multiProvider(single)];
-}
-
 test("the engine opens three parts as the one table the whole file is", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const src = await openOne(engine, THREE);
     await indexed(src);
@@ -71,7 +66,7 @@ test("the engine opens three parts as the one table the whole file is", async ()
 // A part is whatever one file can be, and the ref crosses the channel with a
 // Blob in it as it does with a path.
 test("a part on disk and parts dropped in open as one source", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const src = await openOne(engine, {
       name: NAME,
@@ -123,7 +118,7 @@ test("a part in a kind of place the engine does not read is refused, naming the 
 });
 
 test("a peek of parts shows the top of the join", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const peeked = await engine.peek(THREE);
     expect(peeked.header).toEqual(sales.columns.map((c) => c.header));
@@ -136,7 +131,7 @@ test("a peek of parts shows the top of the join", async () => {
 // What a source of parts does not do yet, each refused in words and with the
 // source left as it was. Saving one is in multisave.test.ts.
 test("a source of parts has no link, and is not re-pointed yet", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const whole = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
     const three = await openOne(engine, THREE);
@@ -163,7 +158,7 @@ test("a source of parts has no link, and is not re-pointed yet", async () => {
 
 // Parts named like a workspace are still parts.
 test("a ref of parts called .uno opens as a source", async () => {
-  const { engine, done } = connect(TINY, providers());
+  const { engine, done } = connect(TINY, multiProviders());
   try {
     const src = await openOne(engine, { ...THREE, name: "sales-q3.uno" });
     await indexed(src);
