@@ -383,6 +383,15 @@ export class Shell {
   }
 
   /**
+   * openRef opens a file the platform already holds a reference to, with no
+   * dialog: a workspace the server kept, handed to the page as its bytes. A
+   * ref with a path saves back to it, as one picked in the dialog does.
+   */
+  async openRef(ref: SourceRef): Promise<void> {
+    await this.load(ref, "path" in ref ? ref.path : "");
+  }
+
+  /**
    * openRecent opens a workspace from the sidebar. Returns whether it is open
    * afterwards. One that fails to open stays listed.
    */
