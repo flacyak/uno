@@ -163,118 +163,101 @@ export function englishSought(what: Sought): string {
   }
 }
 
+/** Sentences is one English sentence for each kind, so a kind without one is a type error. */
+type Sentences<U extends { t: string }> = { [K in U["t"]]: (s: Extract<U, { t: K }>) => string };
+
+const STEPS: Sentences<StepSaid> = {
+  trim: () => "trim the spaces off both ends",
+  upper: () => "upper-case it",
+  lower: () => "lower-case it",
+  remove: (s) => `remove ${englishSought(s.what)}`,
+  replace: (s) => `replace ${englishSought(s.what)} with ${quote(s.with)}`,
+  notation: (s) => s.text,
+};
+
 function step(s: StepSaid): string {
-  switch (s.t) {
-    case "trim":
-      return "trim the spaces off both ends";
-    case "upper":
-      return "upper-case it";
-    case "lower":
-      return "lower-case it";
-    case "remove":
-      return `remove ${englishSought(s.what)}`;
-    case "replace":
-      return `replace ${englishSought(s.what)} with ${quote(s.with)}`;
-    case "notation":
-      return s.text;
-  }
+  return (STEPS[s.t] as (s: StepSaid) => string)(s);
 }
+
+const SENTENCES: Sentences<Said> = {
+  text: (s) => s.text,
+  about: (s) => `${s.subject}: ${english(s.why)}`,
+  replaying: (s) => `replaying edits to ${s.name}: ${english(s.why)}`,
+
+  read: (s) => {
+    // The quoting is Go's `%q` on a rune: a single-quoted character literal.
+    const read =
+      s.delimiter === "\t"
+        ? `${s.charset} · tab-separated`
+        : `${s.charset} · delimiter '${s.delimiter}'`;
+    return s.header === "first" ? read : `${read} · no header row`;
+  },
+
+  program: (s) => (s.steps.length === 0 ? "change nothing" : s.steps.map(step).join(", then ")),
+
+  "version-changed": (s) => {
+    const sizes =
+      s.sizes === undefined
+        ? "it is the same size"
+        : `it is ${formatBytes(s.sizes.now)} now and was ${formatBytes(s.sizes.was)}`;
+    return `${s.name} is not the version the workspace was saved against · ${sizes}`;
+  },
+  "size-changed": (s) =>
+    `${s.name} is ${formatBytes(s.now)} now and was ${formatBytes(s.was)} when the workspace was saved`,
+
+  "only-source": (s) => `${s.name} is the only source here, and a workspace needs one`,
+  "append-to-absent": (s) => `${s.name} has no file behind it, so nothing can be appended to it`,
+  "append-to-one-file": (s) =>
+    `${s.name} is one file · files are appended only to several read as one`,
+  "append-nothing": (s) => `no file was given to append to ${s.name}`,
+  "append-already-part": (s) => `${s.file} is already part ${s.part} of ${s.name}`,
+  "append-twice": (s) => `${s.file} is given twice to append to ${s.name}`,
+  "workspace-as-source": (s) =>
+    `${s.name} is a workspace of its own · open it rather than adding it`,
+  "workspace-too-large": (s) =>
+    `${s.name} is ${formatBytes(s.bytes)}, over the ${formatBytes(s.limit)} a workspace can be read whole`,
+  "no-file-open": () => "no file is open",
+  "carried-too-large": (s) =>
+    `${s.name} is ${formatBytes(s.bytes)}, over the ${formatBytes(s.limit)} a workspace can carry for a source it has no file to point at`,
+  "carried-together-too-large": (s) =>
+    `the ${s.count} sources with no file behind them come to ${formatBytes(s.bytes)}, over the ${formatBytes(s.limit)} a workspace can carry`,
+  "workspace-closed": () => "the workspace was closed",
+  "no-such-source": (s) => `no source called ${s.id} is open`,
+  "source-absent": (s) => `${s.name} has no file behind it · point it at one to read its rows`,
+  "point-one-at-several": (s) =>
+    `${s.file} is ${s.count} files read as one, and ${s.name} cannot be pointed at one yet`,
+  "point-several-at-one": (s) =>
+    `${s.name} is ${s.count} files read as one, and ${s.file} is one file`,
+  "point-several-at-other": (s) =>
+    `${s.name} is ${s.count} files read as one, and cannot be pointed at ${s.given}`,
+  "log-lost-edit": (s) => `the log lost track of an edit to ${s.source}`,
+  "bucket-unconnected": (s) =>
+    `${s.container} reads s3://${s.bucket}/…, which no connection covers · connect ${s.bucket} to read it`,
+
+  "joins-unknown-for-column": (s) =>
+    `${s.name} is read as one by something that does not say how its files join, so it cannot show ${FILE_SHOWS}`,
+  "joins-unknown-for-save": (s) =>
+    `${s.name} is ${s.count} files read as one by something that does not say how they join, so a workspace cannot save it`,
+  "rows-past-files": (s) => `${s.name}: its rows run past the files it is read from`,
+  "part-has-no-path": (s) =>
+    `${s.name}: ${s.file} (part ${s.part} of ${s.count}) is a dropped file with no path, and a workspace points at each part of several files read as one`,
+  "nothing-to-undo": () => "there is nothing to undo",
+  "nothing-to-redo": () => "there is nothing to redo",
+  "in-view": () => "the file is in view · Ctrl+E to transform",
+  "file-closed": () => "the file was closed",
+  "changed-on-disk": (s) => `${s.name} changed on disk after it was opened`,
+
+  "keeps-no-connections": () =>
+    "this engine keeps no connections · its platform gave it nowhere to read them from",
+  "offers-no-profiles": () =>
+    "this engine has no AWS profiles to offer · its platform signs in another way",
+  "tries-no-connection": () =>
+    "this engine cannot try a connection · its platform connects to nothing",
+};
 
 /** english is the sentence in English, as this package has always written it. */
 export function english(s: Said): string {
-  switch (s.t) {
-    case "text":
-      return s.text;
-    case "about":
-      return `${s.subject}: ${english(s.why)}`;
-    case "replaying":
-      return `replaying edits to ${s.name}: ${english(s.why)}`;
-
-    case "read": {
-      // The quoting is Go's `%q` on a rune: a single-quoted character literal.
-      const read =
-        s.delimiter === "\t"
-          ? `${s.charset} · tab-separated`
-          : `${s.charset} · delimiter '${s.delimiter}'`;
-      return s.header === "first" ? read : `${read} · no header row`;
-    }
-
-    case "program":
-      return s.steps.length === 0 ? "change nothing" : s.steps.map(step).join(", then ");
-
-    case "version-changed": {
-      const sizes =
-        s.sizes === undefined
-          ? "it is the same size"
-          : `it is ${formatBytes(s.sizes.now)} now and was ${formatBytes(s.sizes.was)}`;
-      return `${s.name} is not the version the workspace was saved against · ${sizes}`;
-    }
-    case "size-changed":
-      return `${s.name} is ${formatBytes(s.now)} now and was ${formatBytes(s.was)} when the workspace was saved`;
-
-    case "only-source":
-      return `${s.name} is the only source here, and a workspace needs one`;
-    case "append-to-absent":
-      return `${s.name} has no file behind it, so nothing can be appended to it`;
-    case "append-to-one-file":
-      return `${s.name} is one file · files are appended only to several read as one`;
-    case "append-nothing":
-      return `no file was given to append to ${s.name}`;
-    case "append-already-part":
-      return `${s.file} is already part ${s.part} of ${s.name}`;
-    case "append-twice":
-      return `${s.file} is given twice to append to ${s.name}`;
-    case "workspace-as-source":
-      return `${s.name} is a workspace of its own · open it rather than adding it`;
-    case "workspace-too-large":
-      return `${s.name} is ${formatBytes(s.bytes)}, over the ${formatBytes(s.limit)} a workspace can be read whole`;
-    case "no-file-open":
-      return "no file is open";
-    case "carried-too-large":
-      return `${s.name} is ${formatBytes(s.bytes)}, over the ${formatBytes(s.limit)} a workspace can carry for a source it has no file to point at`;
-    case "carried-together-too-large":
-      return `the ${s.count} sources with no file behind them come to ${formatBytes(s.bytes)}, over the ${formatBytes(s.limit)} a workspace can carry`;
-    case "workspace-closed":
-      return "the workspace was closed";
-    case "no-such-source":
-      return `no source called ${s.id} is open`;
-    case "source-absent":
-      return `${s.name} has no file behind it · point it at one to read its rows`;
-    case "point-one-at-several":
-      return `${s.file} is ${s.count} files read as one, and ${s.name} cannot be pointed at one yet`;
-    case "point-several-at-one":
-      return `${s.name} is ${s.count} files read as one, and ${s.file} is one file`;
-    case "point-several-at-other":
-      return `${s.name} is ${s.count} files read as one, and cannot be pointed at ${s.given}`;
-    case "log-lost-edit":
-      return `the log lost track of an edit to ${s.source}`;
-    case "bucket-unconnected":
-      return `${s.container} reads s3://${s.bucket}/…, which no connection covers · connect ${s.bucket} to read it`;
-
-    case "joins-unknown-for-column":
-      return `${s.name} is read as one by something that does not say how its files join, so it cannot show ${FILE_SHOWS}`;
-    case "joins-unknown-for-save":
-      return `${s.name} is ${s.count} files read as one by something that does not say how they join, so a workspace cannot save it`;
-    case "rows-past-files":
-      return `${s.name}: its rows run past the files it is read from`;
-    case "part-has-no-path":
-      return `${s.name}: ${s.file} (part ${s.part} of ${s.count}) is a dropped file with no path, and a workspace points at each part of several files read as one`;
-    case "nothing-to-undo":
-      return "there is nothing to undo";
-    case "nothing-to-redo":
-      return "there is nothing to redo";
-    case "in-view":
-      return "the file is in view · Ctrl+E to transform";
-    case "file-closed":
-      return "the file was closed";
-    case "changed-on-disk":
-      return `${s.name} changed on disk after it was opened`;
-
-    case "keeps-no-connections":
-      return "this engine keeps no connections · its platform gave it nowhere to read them from";
-    case "offers-no-profiles":
-      return "this engine has no AWS profiles to offer · its platform signs in another way";
-    case "tries-no-connection":
-      return "this engine cannot try a connection · its platform connects to nothing";
-  }
+  // The table is typed by kind, and s is the union, so the one pairing the
+  // compiler cannot see is said here: each sentence takes its own kind.
+  return (SENTENCES[s.t] as (s: Said) => string)(s);
 }
