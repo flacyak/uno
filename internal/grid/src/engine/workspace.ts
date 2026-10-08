@@ -297,10 +297,7 @@ export class Workspace {
 
       // Only once the new one is open, so a refused relink leaves the source
       // showing whatever it was showing before.
-      this.sources.set(id, view);
-      if (this.transform) view.mode(true);
-      await was.close();
-      return view.opened;
+      return this.replace(was, view);
     });
   }
 
@@ -347,10 +344,7 @@ export class Workspace {
 
       // Only once the longer one is open, so a refused append leaves the
       // source showing what it was showing before.
-      this.sources.set(id, view);
-      if (this.transform) view.mode(true);
-      await was.close();
-      return view.opened;
+      return this.replace(was, view);
     });
   }
 
@@ -527,6 +521,13 @@ export class Workspace {
     return source.opened;
   }
 
+  /** replace puts `now` where `was` stood, under the same id, and closes what was there. */
+  private async replace(was: Source, now: View): Promise<Opened> {
+    const opened = this.keep(now);
+    await was.close();
+    return opened;
+  }
+
   /** drop closes every source, for a workspace that is going away. */
   private async drop(): Promise<void> {
     const sources = [...this.sources.values()];
@@ -559,26 +560,32 @@ export class Workspace {
   }
 
   edit(id: string, req: EditRequest): Promise<Changed> {
-    return this.serially(async () => {
-      const changed = await this.needView(id).edit(req);
-      this.trail.push(id);
-      return changed;
-    });
+    return this.changing(id, (view) => view.edit(req), "push");
   }
 
   /** undo takes back the source's last edit, wherever it sits in the workspace's log. */
   undo(id: string): Promise<Changed> {
-    return this.serially(async () => {
-      const changed = await this.needView(id).undo();
-      this.trail.splice(this.trail.lastIndexOf(id), 1);
-      return changed;
-    });
+    return this.changing(id, (view) => view.undo(), "pull");
   }
 
   redo(id: string): Promise<Changed> {
+    return this.changing(id, (view) => view.redo(), "push");
+  }
+
+  /**
+   * changing is one change to a source's log, run in its turn, and then the
+   * workspace's trail of which source changed last kept with it: an edit and
+   * a redo push the source onto it, and an undo pulls its last mention off.
+   */
+  private changing(
+    id: string,
+    change: (view: View) => Promise<Changed>,
+    trail: "push" | "pull",
+  ): Promise<Changed> {
     return this.serially(async () => {
-      const changed = await this.needView(id).redo();
-      this.trail.push(id);
+      const changed = await change(this.needView(id));
+      if (trail === "push") this.trail.push(id);
+      else this.trail.splice(this.trail.lastIndexOf(id), 1);
       return changed;
     });
   }

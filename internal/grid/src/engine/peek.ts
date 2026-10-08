@@ -18,7 +18,7 @@
 // quoted field cut in two, a header with nothing under it -- be a string in a
 // test rather than a fixture on a disk.
 
-import { openFormat } from "../ingest/index.ts";
+import { labelOf, openFormat } from "../ingest/index.ts";
 import type { HeaderMode } from "../ingest/index.ts";
 import type { Peeked } from "./protocol.ts";
 import { bytesSource, openWith } from "../store/index.ts";
@@ -130,16 +130,7 @@ export async function peekHead(
   const width = format.columns.length;
   const rowsOut = records.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ""));
 
-  return {
-    label: {
-      t: "read",
-      delimiter: format.delimiter,
-      header: format.header,
-      charset: format.charset,
-    },
-    header: format.columns,
-    rows: rowsOut,
-  };
+  return { label: labelOf(format), header: format.columns, rows: rowsOut };
 }
 
 /** peek reads the front of ref and answers with what it holds: one open, one read, one close. */

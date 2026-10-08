@@ -20,6 +20,7 @@ export {
   delimiterName,
   encodingName,
   headerOf,
+  labelOf,
   openFormat,
   peekFormat,
 } from "./format.ts";
