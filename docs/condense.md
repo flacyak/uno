@@ -64,6 +64,7 @@ Each is one commit on the branch. Deltas are insertions and deletions over `src/
 22. desktop tests: bucketEngine for the repoint and newer suites.
 23. grid tests: the two-profile machine fixture, tests/store/profiles.ts.
 24. grid said exports Sentences; the desktop's tables use it.
+25. desktop smoke PRELUDE connects a bucket: connectForm, signInAs, saveConnection. Smoke run passes.
 
 Measured after step 24, against the baseline:
 
