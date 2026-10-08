@@ -14,13 +14,13 @@ export const INPUTS: readonly InputName[] = ["default", "vim-style"];
 
 /** inputLabel is what a strategy is called where it is offered. */
 export function inputLabel(name: InputName): string {
-  switch (name) {
-    case "default":
-      return m.input_default();
-    case "vim-style":
-      return m.input_vim_style();
-  }
+  return INPUT_LABELS[name]();
 }
+
+const INPUT_LABELS: Record<InputName, () => string> = {
+  default: m.input_default,
+  "vim-style": m.input_vim_style,
+};
 
 /**
  * strategy is the one a name picks. Anything else -- nothing saved yet, or a
