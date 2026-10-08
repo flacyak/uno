@@ -6,6 +6,8 @@
 
 import "./menu.css";
 
+import { el } from "./util.ts";
+
 /** One thing a menu offers, and the keys that do the same. */
 export interface MenuItem {
   label: string;
@@ -76,13 +78,9 @@ export class PopMenu {
   }
 
   private item({ label, keys, choose }: MenuItem): HTMLElement {
-    const item = document.createElement("div");
-    item.className = "pop-item";
+    const item = el("div", "pop-item");
     item.setAttribute("role", "menuitem");
-    const k = document.createElement("span");
-    k.className = "keys";
-    k.textContent = keys ?? "";
-    item.append(label, k);
+    item.append(label, el("span", "keys", keys ?? ""));
     item.addEventListener("click", () => {
       this.close();
       choose();
