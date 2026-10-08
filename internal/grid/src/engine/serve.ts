@@ -7,8 +7,11 @@
 // utility process and a browser's Web Worker are each a few lines around the
 // same call.
 
+import { ROWS_AT_MOST } from "./protocol.ts";
 import type { Port, Reply, Request } from "./protocol.ts";
 import { Refusal, saidOf } from "../said/index.ts";
+import { NO_ROW } from "../sheet/index.ts";
+import type { Said } from "../said/index.ts";
 import { TUNING } from "./rows.ts";
 import type { Tuning } from "./rows.ts";
 import { peek } from "./peek.ts";
@@ -53,6 +56,78 @@ export interface Connecting {
    * address.
    */
   meet?: (path: string) => Meeting | undefined;
+}
+
+/**
+ * The kinds of request an engine answers, as a record rather than a list so
+ * that a kind added to the protocol and not here is a type error rather than
+ * a request refused at the port.
+ */
+const KINDS: Record<Request["t"], true> = {
+  open: true,
+  remove: true,
+  relink: true,
+  append: true,
+  rows: true,
+  edit: true,
+  undo: true,
+  redo: true,
+  find: true,
+  list: true,
+  stat: true,
+  peek: true,
+  connections: true,
+  profiles: true,
+  try: true,
+  mode: true,
+  save: true,
+  close: true,
+};
+
+/**
+ * requestOf is what a message off the port is taken to be, or undefined for
+ * one that is not a request at all.
+ *
+ * The far end of the port is a page, so what arrives is looked at before it
+ * is believed: anything that is not an object, or is not of a kind in KINDS,
+ * is refused here, before `handle` can throw on it or let it through to no
+ * answer. What a request of a known kind holds besides is left to the
+ * workspace, which refuses a field it cannot use in the sentence it would
+ * refuse a wrong one with.
+ */
+function requestOf(msg: unknown): Request | undefined {
+  if (typeof msg !== "object" || msg === null || !("t" in msg)) return undefined;
+  return typeof msg.t === "string" && Object.hasOwn(KINDS, msg.t) ? (msg as Request) : undefined;
+}
+
+/**
+ * counted holds a field of a request to a whole number of at least `least`,
+ * refusing in words that name the field. A page is at the other end of the
+ * port, and "9" + 2000 is "92000".
+ */
+function counted(field: string, value: unknown, least: number): void {
+  if (typeof value === "number" && Number.isInteger(value) && value >= least) return;
+  throw new Refusal({
+    t: "text",
+    text: `${field} is ${JSON.stringify(value)}, and has to be a whole number of at least ${least}`,
+  });
+}
+
+/** idOf is the id a message carried, where it carried one a reply can be matched by. */
+function idOf(msg: unknown): number | undefined {
+  if (typeof msg !== "object" || msg === null || !("id" in msg)) return undefined;
+  return typeof msg.id === "number" ? msg.id : undefined;
+}
+
+/** notARequest says what a message was instead: its kind where it named one, and its type otherwise. */
+function notARequest(msg: unknown): Said {
+  const kind =
+    typeof msg === "object" && msg !== null && "t" in msg
+      ? typeof msg.t === "string"
+        ? msg.t
+        : typeof msg.t
+      : typeof msg;
+  return { t: "text", text: `not a request this engine answers: ${kind}` };
 }
 
 /**
@@ -104,11 +179,29 @@ export function serve(
         return;
       }
       case "rows": {
+        // Both numbers are held to be whole here, where a string would
+        // otherwise add itself to a count and read as the whole file.
+        counted("first", msg.first, 0);
+        counted("count", msg.count, 0);
+        if (msg.count > ROWS_AT_MOST) {
+          throw new Refusal({
+            t: "text",
+            text: `a rows request asks for at most ${ROWS_AT_MOST} rows, not ${msg.count}`,
+          });
+        }
         const r = await workspace.rows(msg.source, msg.first, msg.count);
         port.post({ t: "rows", id: msg.id, first: msg.first, ...r });
         return;
       }
       case "edit": {
+        // A row or column that is not a whole number compares as one and
+        // lands in the log as what it is, which the saved file then refuses.
+        // NO_ROW is the row a column operation names.
+        if (typeof msg.edit !== "object" || msg.edit === null) {
+          throw new Refusal({ t: "text", text: "an edit request carries no edit" });
+        }
+        counted("row", msg.edit.row, NO_ROW);
+        counted("col", msg.edit.col, 0);
         const changed = await workspace.edit(msg.source, msg.edit);
         port.post({ t: "changed", id: msg.id, source: msg.source, changed });
         return;
@@ -207,13 +300,21 @@ export function serve(
     });
   }
 
-  port.listen((msg) => {
+  port.listen((msg: unknown) => {
     const started = performance.now();
-    handle(msg).then(
-      () => took(msg, started, "answered"),
+    const request = requestOf(msg);
+    // Refused by whatever id it carried, so nothing waits on it, and not
+    // measured: what it called itself is not a kind of request, and a metric
+    // must not grow an attribute for every string a page makes up.
+    if (request === undefined) {
+      port.post({ t: "error", id: idOf(msg), said: notARequest(msg) });
+      return;
+    }
+    handle(request).then(
+      () => took(request, started, "answered"),
       (err: unknown) => {
-        port.post({ t: "error", id: "id" in msg ? msg.id : undefined, said: saidOf(err) });
-        took(msg, started, "refused");
+        port.post({ t: "error", id: idOf(request), said: saidOf(err) });
+        took(request, started, "refused");
       },
     );
   });

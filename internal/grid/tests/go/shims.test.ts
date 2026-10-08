@@ -16,7 +16,9 @@ import {
   isDigit,
   isLetter,
   isSpace,
+  isZeroTime,
   parseFloat as goParseFloat,
+  parseTime,
   quote,
   quoteMeta,
   replaceAllLiteral,
@@ -56,6 +58,14 @@ describe("compareStrings", () => {
     expect(compareStrings("a", "a")).toBe(0);
     expect(compareStrings("a", "ab")).toBe(-1);
     expect(["total", "base", "left"].sort(compareStrings)).toEqual(["base", "left", "total"]);
+  });
+
+  test("a prefix sorts first, and a cut surrogate pair sorts as its unit", () => {
+    expect(compareStrings("ab", "a")).toBe(1);
+    expect(compareStrings("", "a")).toBe(-1);
+    expect(compareStrings("x\ud83d", "x\u{1F600}")).toBe(-1);
+    expect(compareStrings("\u{1F600}a", "\u{1F600}b")).toBe(-1);
+    expect(compareStrings("\u{1F600}", "\u{1F600}")).toBe(0);
   });
 });
 
@@ -119,6 +129,11 @@ describe("unicode classes", () => {
     expect(trimSpace("  a b  ")).toBe("a b");
     expect(trimSpace("y")).toBe("y");
     expect(trimSpace("\u00a0z\u00a0")).toBe("z"); // NBSP: Go trims it
+    expect(trimSpace("\u0085z\u0085")).toBe("z"); // NEL: Go trims it too
+    expect(trimSpace("\ufeffz\ufeff")).toBe("\ufeffz\ufeff"); // in JS \s, not in Go
+    expect(trimSpace("   ")).toBe("");
+    expect(trimSpace("")).toBe("");
+    expect(trimSpace(" \u{1F600} a \u{1F600} ")).toBe("\u{1F600} a \u{1F600}");
   });
 });
 
@@ -156,12 +171,12 @@ describe("formatFloat", () => {
 describe("roundSignificant", () => {
   // This is what turns arithmetic showing its working into an answer, at the
   // significant digits a computed cell keeps.
-  const DIGITS = 10;
+  const DIGITS = 15;
 
   const cases: Array<[number, string]> = [
     [(40.0 - 31.2) / 40.0, "0.22"],
-    [1 / 3, "0.3333333333"],
-    [2 / 3, "0.6666666667"],
+    [1 / 3, "0.333333333333333"],
+    [2 / 3, "0.666666666666667"],
   ];
 
   for (const [v, want] of cases) {
@@ -244,6 +259,15 @@ describe("parseFloat", () => {
     expect(goParseFloat("1.2.3")).toBeUndefined();
   });
 
+  // strconv.ParseFloat answers ±Inf with ErrRange for a decimal too large for
+  // a float64, and the core reads an error as "not a number". Too small is 0
+  // and no error.
+  test("refuses a decimal that overflows, as Go does", () => {
+    expect(goParseFloat("1e400")).toBeUndefined();
+    expect(goParseFloat("-1e400")).toBeUndefined();
+    expect(goParseFloat("1e-400")).toBe(0);
+  });
+
   test("atoi is whole numbers only", () => {
     expect(atoi("12")).toBe(12);
     expect(atoi("-3")).toBe(-3);
@@ -281,6 +305,16 @@ describe("replaceAllLiteral", () => {
     expect(replaceAllLiteral(/x/u, "axb", "$&")).toBe("a$&b");
     expect(replaceAllLiteral(/(a)/u, "aa", "$1")).toBe("$1$1");
     expect(replaceAllLiteral(/,/u, "1,204,567", "")).toBe("1204567");
+  });
+
+  // Go gives "-" for the first and "#a#b#" for the second: an empty match that
+  // sits where the previous match ended is not replaced again. String.replace
+  // gives "--" and "#a##b#", a second replacement for one run of digits.
+  test("an empty match abutting a previous match is not replaced twice", () => {
+    expect(replaceAllLiteral(/a*/u, "aaa", "-")).toBe("-");
+    expect(replaceAllLiteral(/\d*/u, "a12b", "#")).toBe("#a#b#");
+    expect(replaceAllLiteral(/x*/u, "abc", "-")).toBe("-a-b-c-");
+    expect(replaceAllLiteral(/x*/u, "a\u{1F600}b", "-")).toBe("-a-\u{1F600}-b-");
   });
 });
 
@@ -327,5 +361,17 @@ describe("fmt and hashing", () => {
 
   test("rfc3339 truncates to the second, as encoding/json does", () => {
     expect(rfc3339(new Date(Date.UTC(2026, 8, 9, 12, 0, 0)))).toBe("2026-09-09T12:00:00Z");
+  });
+
+  // time.Time{} marshals as year 1, which is not the Unix epoch. A manifest the
+  // Go build wrote with a stamp it never set reads as absent, so the next save
+  // fills it in rather than keeping January 1 of year 1 as the creation date.
+  test("the zero time.Time is year 1 and reads as absent, and so does the epoch", () => {
+    expect(isZeroTime(parseTime("2026-09-09T12:00:00Z"))).toBe(false);
+    expect(isZeroTime(new Date(0))).toBe(true);
+    expect(parseTime("0001-01-01T00:00:00Z")).toBeUndefined();
+    expect(parseTime("1970-01-01T00:00:00Z")).toBeUndefined();
+    expect(parseTime("garbage")).toBeUndefined();
+    expect(parseTime("2026-09-09T12:00:00Z")?.toISOString()).toBe("2026-09-09T12:00:00.000Z");
   });
 });

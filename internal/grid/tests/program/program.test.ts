@@ -3,8 +3,12 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   MAX_PARTS,
   MAX_STEPS,
+  type MatchPos,
+  type ReplaceStep,
+  type SliceStep,
   apply,
   describe as describeProgram,
+  newReplace,
   parse,
   text,
 } from "../../src/program/index.ts";
@@ -52,6 +56,8 @@ describe("apply", () => {
     ["slice(end(/\\(/, 1), start(/\\)/, 1))", "Ada Okafor", "Ada Okafor"], // no bracket, left alone
     ['trim() | replace(/,/, "")', " 1,204 ", "1204"],
     ["slice(0, -1)", "é1", "é"], // code points, not bytes
+    ['replace(/\\d*/, "#")', "a12b", "#a#b#"], // Go's rule: one run of digits, one replacement
+    ['replace(/\\d*/, "#")', "12", "#"], // and the empty match at the end is not a second one
   ];
 
   for (const [src, input, want] of cases) {
@@ -65,6 +71,48 @@ describe("apply", () => {
 // capture reference has to survive being written back.
 test("a replacement is literal text", () => {
   expect(apply(parse('replace(/x/, "$1")'), "x")).toBe("$1");
+});
+
+// A pattern may already escape the delimiter, as a pattern written for another
+// engine does. The text form has one spelling for a slash, so it has to come
+// back as that spelling rather than as a backslash before a bare one.
+test("a pattern that escapes the slash itself round-trips", () => {
+  for (const src of ["\\/", "a\\/b", "\\\\/"]) {
+    const t = text([newReplace(src, "-")]);
+    expect(text(parse(t))).toBe(t);
+    expect(apply(parse(t), "a/b\\")).toBe(apply([newReplace(src, "-")], "a/b\\"));
+  }
+});
+
+// A pattern is compiled once, at parse, and run over every cell of a column
+// for every candidate the recogniser is scoring. The shim's every-occurrence
+// calls take the pattern as compiled when it already matches globally and build
+// a second RegExp per call when it does not, so a step has to hold the global
+// one -- and holding one shared object means its match position must not leak
+// from one cell into the next.
+describe("a step's pattern is compiled global, once", () => {
+  const replace = parse('replace(/,/, "")')[0] as ReplaceStep;
+  const slice = parse("slice(end(/,/, 1), start(/,/, -1))")[0] as SliceStep;
+
+  test("replace holds the global pattern", () => {
+    expect(replace.re.global).toBe(true);
+  });
+
+  test("a match position holds the global pattern", () => {
+    expect((slice.from as MatchPos).re.global).toBe(true);
+    expect((slice.to as MatchPos).re.global).toBe(true);
+  });
+
+  test("no match state leaks between cells", () => {
+    const cells = ["1,204,567", "1,204", "987", "1,204,567", ",,", ""];
+    const want = cells.map((v) => apply(parse('replace(/,/, "")'), v));
+    expect(cells.map((v) => apply([replace], v))).toEqual(want);
+    expect(cells.map((v) => apply([replace], v))).toEqual(want);
+
+    const between = cells.map((v) => apply(parse("slice(end(/,/, 1), start(/,/, -1))"), v));
+    expect(cells.map((v) => apply([slice], v))).toEqual(between);
+    expect(cells.map((v) => apply([slice], v))).toEqual(between);
+  });
 });
 
 // A log that does not parse must say so before a column is rewritten, not
@@ -92,6 +140,14 @@ describe("parse refuses what it cannot run", () => {
       expect(() => parse(src)).toThrow();
     });
   }
+});
+
+// The position an error names is the step's own, in characters, whatever sits
+// before its bracket and however many code units its name takes.
+test("an unknown step is placed at its name", () => {
+  expect(() => parse("explode()")).toThrow(/at character 1/);
+  expect(() => parse("  explode ()")).toThrow(/at character 3/);
+  expect(() => parse("trim() | \u{1D522}()")).toThrow(/at character 10/);
 });
 
 // The banner asks the question in words, so the words have to be right for what
