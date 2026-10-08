@@ -250,15 +250,14 @@ export const SOURCES: Check[] = [
         return "the line offers " + JSON.stringify(foot());
       }
       button().click();
-      const form = document.querySelector("#panel .panel-connect");
+      const form = connectForm();
       if (form.hidden) return "the form did not open";
       if (form.querySelector("input[name=bucket]").value !== "acme-exports") return "the bucket was not filled in";
       if (form.querySelector("input[name=prefix]").value !== "2025/") return "the folder was not filled in";
       const choose = form.querySelector("select");
       if (!(await arrives(() => [...choose.options].some((o) => o.value === "profile:finance")))) return "no finance profile to choose";
-      choose.value = "profile:finance";
-      choose.dispatchEvent(new Event("change", { bubbles: true }));
-      [...form.querySelectorAll("button")].find((b) => b.textContent === "Save connection").click();
+      signInAs("profile:finance");
+      saveConnection();
 
       if (!(await arrives(() => text("#status-msg") === "ads-q3.csv reads from acme-exports / 2025"))) {
         return "the status bar says " + JSON.stringify(text("#status-msg")) + " · the form says " + JSON.stringify(form.querySelector(".result").textContent);
