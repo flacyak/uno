@@ -140,7 +140,7 @@ function text(xml: string, name: string): string | undefined {
  * byte. A reader that left them escaped would hand back keys nothing could open
  * and versions nothing would match.
  */
-function entities(s: string): string {
+export function entities(s: string): string {
   return s.replace(/&(#[0-9]+|#x[0-9a-f]+|amp|lt|gt|quot|apos);/gi, (whole, code: string) => {
     const named = NAMED[code.toLowerCase()];
     if (named !== undefined) return named;

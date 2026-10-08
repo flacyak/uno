@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "saved_path": "guardado em {path}",
+  "save_over_source": "{name} é uma fonte deste espaço de trabalho, e guardar por cima perdê-la-ia",
   "rows_count": [
     {
       "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
@@ -213,6 +214,7 @@
   "connect_action": "+ Conectar um bucket",
   "this_column": "esta coluna",
   "the_column": "a coluna",
+  "column_unnamed": "coluna {number}",
   "no_rows": "sem linhas",
   "unsaved_edits": "edições não guardadas",
   "unsaved_changes": "alterações não guardadas",
@@ -373,10 +375,10 @@
   "filter_all_files": "Todos os ficheiros",
   "filter_workspace": "espaço de trabalho do uno",
   "dropped_not_a_file": "{name} não é um ficheiro desta máquina",
-  "read_delimiter": "UTF-8 · delimitador '{delimiter}'",
-  "read_delimiter_no_header": "UTF-8 · delimitador '{delimiter}' · sem linha de cabeçalho",
-  "read_tabs": "UTF-8 · separado por tabulações",
-  "read_tabs_no_header": "UTF-8 · separado por tabulações · sem linha de cabeçalho",
+  "read_delimiter": "{charset} · delimitador '{delimiter}'",
+  "read_delimiter_no_header": "{charset} · delimitador '{delimiter}' · sem linha de cabeçalho",
+  "read_tabs": "{charset} · separado por tabulações",
+  "read_tabs_no_header": "{charset} · separado por tabulações · sem linha de cabeçalho",
   "said_about": "{subject}: {why}",
   "said_replaying": "ao reaplicar as edições de {name}: {why}",
   "program_nothing": "não mudar nada",

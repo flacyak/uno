@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "saved_path": "saved {path}",
+  "save_over_source": "{name} is a source of this workspace, and a save over it would lose it",
   "rows_count": [
     {
       "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
@@ -199,6 +200,7 @@
   "connect_action": "+ Connect a bucket",
   "this_column": "this column",
   "the_column": "the column",
+  "column_unnamed": "column {number}",
   "no_rows": "no rows",
   "unsaved_edits": "unsaved edits",
   "unsaved_changes": "unsaved changes",
@@ -359,10 +361,10 @@
   "filter_all_files": "All files",
   "filter_workspace": "uno workspace",
   "dropped_not_a_file": "{name} is not a file on this machine",
-  "read_delimiter": "UTF-8 · delimiter '{delimiter}'",
-  "read_delimiter_no_header": "UTF-8 · delimiter '{delimiter}' · no header row",
-  "read_tabs": "UTF-8 · tab-separated",
-  "read_tabs_no_header": "UTF-8 · tab-separated · no header row",
+  "read_delimiter": "{charset} · delimiter '{delimiter}'",
+  "read_delimiter_no_header": "{charset} · delimiter '{delimiter}' · no header row",
+  "read_tabs": "{charset} · tab-separated",
+  "read_tabs_no_header": "{charset} · tab-separated · no header row",
   "said_about": "{subject}: {why}",
   "said_replaying": "replaying edits to {name}: {why}",
   "program_nothing": "change nothing",

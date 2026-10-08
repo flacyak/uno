@@ -19,6 +19,7 @@ import {
 import type {
   Measurement,
   MessagePortLike,
+  Payload,
   Reply,
   Request,
   SourceHandle,
@@ -193,6 +194,57 @@ test("a meter adds measurements up into one OTLP request", () => {
   });
 });
 
+test("the JSON a collector reads has every 64-bit integer in a string and every double as a number", () => {
+  const meter = new Meter({ service: "uno-engine" }, () => BEGAN);
+  meter.record({
+    name: REQUEST,
+    kind: "duration",
+    unit: MILLISECONDS,
+    value: 3,
+    attributes: { request: "rows", outcome: "answered" },
+  });
+  meter.record({
+    name: INDEXED,
+    kind: "count",
+    unit: BYTES,
+    value: 100,
+    attributes: { place: "disk" },
+  });
+
+  // What the collector sees is the text, so the text is what is checked.
+  const sent = JSON.parse(JSON.stringify(meter.payload())) as Payload;
+  const [histogram, sum] = sent.resourceMetrics[0]!.scopeMetrics[0]!.metrics;
+  if (!("histogram" in histogram!) || !("sum" in sum!))
+    throw new Error("the metrics are not in the order they were recorded");
+
+  expect(histogram.histogram.aggregationTemporality).toBe(2);
+  expect(sum.sum.aggregationTemporality).toBe(2);
+  expect(sum.sum.isMonotonic).toBe(true);
+
+  const bucket = histogram.histogram.dataPoints[0]!;
+  expect(typeof bucket.startTimeUnixNano).toBe("string");
+  expect(typeof bucket.timeUnixNano).toBe("string");
+  expect(bucket.timeUnixNano).toMatch(/^[0-9]+$/);
+  expect(typeof bucket.count).toBe("string");
+  expect(typeof bucket.sum).toBe("number");
+  for (const n of bucket.bucketCounts) expect(typeof n).toBe("string");
+  for (const b of bucket.explicitBounds) expect(typeof b).toBe("number");
+  expect(bucket.bucketCounts.length).toBe(bucket.explicitBounds.length + 1);
+  expect(bucket.attributes).toEqual([
+    { key: "outcome", value: { stringValue: "answered" } },
+    { key: "request", value: { stringValue: "rows" } },
+  ]);
+
+  const total = sum.sum.dataPoints[0]!;
+  expect(typeof total.asDouble).toBe("number");
+  expect("asInt" in total).toBe(false);
+  expect(total.attributes).toEqual([{ key: "place", value: { stringValue: "disk" } }]);
+  expect(sent.resourceMetrics[0]!.resource.attributes).toEqual([
+    { key: "service.name", value: { stringValue: "uno-engine" } },
+  ]);
+  expect(sent.resourceMetrics[0]!.scopeMetrics[0]!.scope).toEqual({ name: "@uno/grid" });
+});
+
 test("the headers a collector is signed in with are read as every OpenTelemetry tool reads them", () => {
   expect(otlpHeaders(undefined)).toEqual({});
   expect(otlpHeaders("")).toEqual({});
@@ -231,6 +283,50 @@ test.each([
   expect(
     collector({ OTEL_EXPORTER_OTLP_ENDPOINT: endpoint, OTEL_EXPORTER_OTLP_HEADERS: headers }),
   ).toEqual(READ);
+});
+
+// The variable for metrics alone names the whole address, with no path put
+// after it, and stands over the one for every signal. So does its headers one.
+test("an address for metrics alone is taken as it is, over the one for every signal", () => {
+  const METRICS = `${GATEWAY}/metrics-here`;
+  expect(
+    collector({
+      OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY,
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: `${METRICS}/`,
+      OTEL_EXPORTER_OTLP_HEADERS: SIGNED,
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: "x-scope=team",
+    }),
+  ).toEqual({ url: `${METRICS}/`, headers: { "x-scope": "team" } });
+  expect(collector({ OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: METRICS })).toEqual({
+    url: METRICS,
+    headers: {},
+  });
+  expect(() => collector({ OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "4318" })).toThrow(
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT is not a URL · it does not start with https://, and is 4 characters long",
+  );
+});
+
+// Metrics go out as OTLP over HTTP, as JSON. A collector that takes OTLP over
+// HTTP takes JSON and protobuf on the same path, so either HTTP setting is
+// kept. gRPC is another port and another wire, and a post to it says nothing.
+test("a protocol that is not OTLP over HTTP is refused by name", () => {
+  for (const protocol of ["http/json", "http/protobuf", ""]) {
+    expect(
+      collector({ OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY, OTEL_EXPORTER_OTLP_PROTOCOL: protocol }),
+    ).toEqual({ ...READ, headers: {} });
+  }
+  expect(() =>
+    collector({ OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY, OTEL_EXPORTER_OTLP_PROTOCOL: "grpc" }),
+  ).toThrow(
+    "OTEL_EXPORTER_OTLP_PROTOCOL is grpc, and metrics are sent as OTLP over HTTP · set it to http/json or leave it unset",
+  );
+  expect(() =>
+    collector({
+      OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY,
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/json",
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "grpc",
+    }),
+  ).toThrow("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL is grpc");
 });
 
 test("an endpoint that is not a URL is refused by name, saying what is wrong and not what it holds", () => {

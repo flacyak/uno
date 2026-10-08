@@ -1,8 +1,8 @@
 # @uno/grid
 
 uno's core, in TypeScript: sheets, formulas, the transform language and the
-`.uno` container. It allows the Electron desktop and the web app can share
-one codebase.
+`.uno` container. It lets the Electron desktop and the web app share one
+codebase.
 
 ## What is in here
 
@@ -51,7 +51,7 @@ block of rows at a time, so its offer can grow while the engine reads.
 
 Indexing is the first pass. Validation, deduplication, splitting and format
 conversion are meant to be the next ones, each a loop over a `PassContext`
-running in a worker of its own. `resource/composition.html` has the plan.
+running in a worker of its own.
 
 ## What the engine says
 
@@ -71,8 +71,8 @@ How a file was read, what a program does, and how a file differs from the one a 
 
 Not every sentence has a kind yet.
 What has none is `{ t: "text" }`: the diagnostic as it was written, in English, passed on whole.
-The 34 that have one are what the engine itself refuses and says in ordinary use.
-The 194 that do not are the diagnostics of a broken `.uno`, an AWS profile, S3, and the parsers.
+The 37 that have one are what the engine itself refuses and says in ordinary use.
+The rest are the diagnostics of a broken `.uno`, an AWS profile, S3, and the parsers.
 Giving one a kind is adding it to `Said`, after which the compiler asks for its English in `english` and for its message wherever a client writes one.
 
 ## Files with no header row
@@ -102,6 +102,9 @@ order of reads is the scenario's and not a race.
 | `band.test.ts`   | requests and bytes for one jump of the grid's 2,000 row band  |
 | `open.test.ts`   | requests and bytes an open waits on before it shows rows      |
 | `lister.test.ts` | directory entries read again for each page of a 20,000 folder |
+| `index.test.ts`  | bytes and rows indexed per second, and bytes kept per row     |
+| `find.test.ts`   | what a find to the end of a file costs beside a bound column  |
+| `save.test.ts`   | what a second save of bytes already carried costs             |
 
 Each file holds its numbers to a budget, which is what they are today, so a
 change that costs more fails.
@@ -110,12 +113,13 @@ Each also writes its numbers to `out/efficiency/<file>.json` as a list of
 `{ name, unit, value }`, smaller is better, for a tracker to plot over time.
 
 ```bash
-vp test tests/efficiency                       # the four files alone
+vp test tests/efficiency                       # these files alone
 node scripts/efficiency.ts                     # their numbers as a table
 ```
 
 `scripts/efficiency.ts` also sets the numbers beside a base's with `--base`,
-and sends them to a collector where `OTEL_EXPORTER_OTLP_ENDPOINT` names one.
+and sends them to a collector where `OTEL_EXPORTER_OTLP_ENDPOINT` or
+`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` names one.
 The `efficiency` workflow does both on every pull request.
 `observability/README.md` at the root of the repository has the rest.
 

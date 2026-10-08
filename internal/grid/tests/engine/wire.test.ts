@@ -250,3 +250,18 @@ test("a socket that closes under the client says so once", async () => {
   far.close();
   await expect.poll(() => said).toEqual(["the connection to the engine closed"]);
 });
+
+// The socket goes while an open is on its way. A promise that never settles
+// leaves the shell waiting on a workspace nobody will send.
+test("a socket that closes with a request out refuses it, and every request after it", async () => {
+  const { engine, far } = overSockets();
+  const said: string[] = [];
+  engine.onError = (heard) => said.push(english(heard));
+  const opening = engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
+  far.close();
+  await expect(opening).rejects.toThrow("the connection to the engine closed");
+  await expect(engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) })).rejects.toThrow(
+    "the connection to the engine closed",
+  );
+  expect(said).toEqual(["the connection to the engine closed"]);
+});

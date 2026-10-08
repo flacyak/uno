@@ -188,7 +188,9 @@ const DECIMAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 export function parseFloat(v: string): number | undefined {
   if (!DECIMAL.test(v)) return undefined;
   const n = Number(v);
-  return Number.isNaN(n) ? undefined : n;
+  // Go answers ±Inf with ErrRange for a decimal too large for a float64, and
+  // the core reads an error as "not a number": 1e400 is text, never +Inf.
+  return Number.isFinite(n) ? n : undefined;
 }
 
 /**

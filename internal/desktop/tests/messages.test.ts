@@ -2,10 +2,12 @@
 //
 // The compiler fails a call site that names a message the base locale does not
 // have. It does not fail a translation that leaves a message out, drops a
-// variable, or has no form for one of its language's plurals: the first falls
-// back to English, the second prints a sentence with a hole in it, and the
-// third prints the message's key. Each of those reaches a person unless a test
-// stops it here.
+// variable, has no form for one of its language's plurals, or writes a plural
+// as one sentence: the first falls back to English, the second prints a
+// sentence with a hole in it, the third prints the message's key, and the
+// fourth prints the count as it was given, ungrouped and in the one form for
+// one and for many alike. Each of those reaches a person unless a test stops
+// it here.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -70,6 +72,15 @@ describe.each(locales.map((locale) => [locale]))("%s", (locale) => {
 
   test("has every message the base locale has, and none it does not", () => {
     expect([...messages.keys()].sort()).toEqual([...base.keys()].sort());
+  });
+
+  // The call site passes what the base locale's message takes: a number where
+  // it has variants, and text where it is one pattern. A translation of the
+  // other shape prints that number as it came, or selects on text.
+  test("is one pattern, or has variants, as the base locale's is", () => {
+    for (const [key, message] of messages) {
+      expect(typeof message, key).toBe(typeof base.get(key));
+    }
   });
 
   test("takes the same inputs for every message", () => {

@@ -88,21 +88,34 @@ function fakeLayout(): void {
  * condition runSmoke's own prelude waits on in index.ts, since nothing here
  * runs that prelude for it. It answers the shell, for a test that drives what
  * no check on `Page` reaches.
+ *
+ * `over` replaces what the host answers, for a test that saves or quits:
+ * where a save goes, what it costs, whether the window may close.
  */
-export async function bootShell(): Promise<Shell> {
+export async function bootShell(over: Partial<Host> = {}): Promise<Shell> {
   document.body.innerHTML = bodyMarkup();
   fakeLayout();
 
   // A connections folder of its own, the way main hands the desktop's engine
   // one, so the shell's connection reads are answered rather than refused.
   const kept = mkdtempSync(join(tmpdir(), "uno-dom-connections-"));
-  const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
-    sources([diskProvider()]),
-    undefined,
-    { connections: connectionsIn(nodeStore(), kept), profiles: () => Promise.resolve(["default"]) },
-  );
+  // An engine of its own on a channel of its own per connect, as main makes a
+  // MessageChannelMain per "engine:connect". The shell closes a workspace's
+  // engine when the next file opens, and a port shared between the two would
+  // close the new engine with the old.
+  const connect = (): MessagePortLike => {
+    const { port1, port2 } = new MessageChannel();
+    serve(
+      messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
+      sources([diskProvider()]),
+      undefined,
+      {
+        connections: connectionsIn(nodeStore(), kept),
+        profiles: () => Promise.resolve(["default"]),
+      },
+    );
+    return port1 as unknown as MessagePortLike;
+  };
 
   const host: Host = {
     open: () => Promise.resolve(undefined),
@@ -110,7 +123,7 @@ export async function bootShell(): Promise<Shell> {
     dropped: () => {
       throw new Error("dropped() is window-bound and not used by any run check");
     },
-    connect: () => Promise.resolve(port1 as unknown as MessagePortLike),
+    connect: () => Promise.resolve(connect()),
     pickSave: () => Promise.resolve(undefined),
     save: () => Promise.resolve(),
     saveConnection: (c) => saveConnection(nodeStore(), kept, c),
@@ -120,7 +133,7 @@ export async function bootShell(): Promise<Shell> {
   };
 
   const { Shell } = await import("../../src/renderer/shell/shell.ts");
-  const shell = new Shell(host);
+  const shell = new Shell({ ...host, ...over });
   await shell.openPath(FIXTURE);
 
   const start = performance.now();

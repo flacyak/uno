@@ -277,25 +277,59 @@ function clamp(i: number, n: number): number {
 }
 
 /**
+ * EVERY_OCCURRENCE is the flag a step's pattern is compiled with. A replace
+ * rewrites every occurrence and a match position counts every occurrence, and
+ * the shim's every-occurrence calls take the pattern as compiled when it is
+ * already global and build a second RegExp per call when it is not. A step is
+ * run once per cell per candidate, so it holds the one it will be run with.
+ */
+const EVERY_OCCURRENCE = "g";
+
+/**
+ * compilePattern builds the RegExp a step or a position holds, and throws the
+ * pattern's text with the engine's complaint so a damaged log names the line
+ * that broke it.
+ */
+export function compilePattern(src: string): RegExp {
+  try {
+    return compile(src, EVERY_OCCURRENCE);
+  } catch (err) {
+    throw new Error(`pattern /${src}/: ${(err as Error).message}`);
+  }
+}
+
+/**
  * newReplace builds a substitution step, and is how the synthesiser proposes
  * one without going through the text form.
  */
 export function newReplace(src: string, lit: string): ReplaceStep {
-  let re: RegExp;
-  try {
-    re = compile(src);
-  } catch (err) {
-    throw new Error(`pattern /${src}/: ${(err as Error).message}`);
-  }
-  return { kind: "replace", re, src, lit };
+  return { kind: "replace", re: compilePattern(src), src, lit };
 }
 
 /**
  * quoteRegex renders a pattern back between slashes, escaping the delimiter so
  * a pattern containing one still round-trips.
+ *
+ * A slash the pattern already escapes is kept as the one escape rather than
+ * given a second backslash: the parser reads `\/` as the delimiter, so a
+ * doubled one would come back as a literal backslash and a pattern's end.
  */
 export function quoteRegex(src: string): string {
-  return "/" + src.replaceAll("/", "\\/") + "/";
+  let out = "/";
+  const r = runes(src);
+  for (let i = 0; i < r.length; i++) {
+    const c = r[i]!;
+    if (c === "\\" && i + 1 < r.length) {
+      const next = r[i + 1]!;
+      out += next === "/" ? "\\/" : "\\" + next;
+      i++;
+    } else if (c === "/") {
+      out += "\\/";
+    } else {
+      out += c;
+    }
+  }
+  return out + "/";
 }
 
 /**

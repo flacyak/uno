@@ -146,4 +146,17 @@ describe("evaluateColumn computes every row as one row would", () => {
     expect(errors[0]).toBeInstanceOf(DivideByZeroError);
     expect(errors[3]).toBeUndefined();
   });
+
+  // A divide by zero names the divisor, not the cell, so it reads the same in
+  // every row it happens in -- and an Error is the one allocation in a block
+  // that costs more than the arithmetic. A column whose divisor is blank is an
+  // ordinary moment in building a sheet, and it has to compute as fast as one
+  // whose divisor is not: one failure for the block, like an unknown column.
+  test("a column that divides by zero fails once, not once per row", () => {
+    const { errors } = evaluateColumn(parse("price / zero"), 4, src);
+    expect(errors[0]).toBeInstanceOf(DivideByZeroError);
+    expect(errors[1]).toBe(errors[0]);
+    expect(errors[2]).toBeInstanceOf(NotNumberError); // price is "n/a" there
+    expect(errors[3]).toBeUndefined();
+  });
 });

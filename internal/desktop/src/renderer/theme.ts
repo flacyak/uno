@@ -53,7 +53,7 @@ export const THEMES = [
       paper: "#faf6f0",
       surface: "#fdfaf5",
       ink: "#44403c",
-      ink3: "#8a817a",
+      ink3: "#6e6661",
       rule: "#e7ddd0",
       accent: "#c2571f",
     },
@@ -76,7 +76,7 @@ export const THEMES = [
       paper: "#e6e7ed",
       surface: "#e6e7ed",
       ink: "#343b59",
-      ink3: "#707280",
+      ink3: "#585a65",
       rule: "#c1c2c7",
       accent: "#2959aa",
     },
@@ -85,7 +85,7 @@ export const THEMES = [
       paper: "#1a1b26",
       surface: "#1e202e",
       ink: "#c0caf5",
-      ink3: "#787c99",
+      ink3: "#a5a8bb",
       rule: "#292e42",
       accent: "#7aa2f7",
     },
@@ -99,7 +99,7 @@ export const THEMES = [
       paper: "#fbf3f5",
       surface: "#fdf7f9",
       ink: "#432b36",
-      ink3: "#8a6675",
+      ink3: "#7d5c6a",
       rule: "#ecd7de",
       accent: "#b83d72",
     },
@@ -122,7 +122,7 @@ export const THEMES = [
       paper: "#dce0e8",
       surface: "#eff1f5",
       ink: "#4c4f69",
-      ink3: "#6c6f85",
+      ink3: "#555869",
       rule: "#ccd0da",
       accent: "#8839ef",
     },
@@ -131,7 +131,7 @@ export const THEMES = [
       paper: "#303446",
       surface: "#414559",
       ink: "#c6d0f5",
-      ink3: "#a5adce",
+      ink3: "#b5bfe2",
       rule: "#51576d",
       accent: "#ca9ee6",
     },
@@ -161,7 +161,7 @@ export const APPEARANCE_KEY = "uno.appearance";
  * paper for a flagged surface -- 8% in light and 16% in dark, as T3 Code does.
  */
 const WARNING = "#fe9a00";
-const WARNING_INK: Record<Mode, string> = { light: "#bb4d00", dark: "#ffb900" };
+const WARNING_INK: Record<Mode, string> = { light: "#973e00", dark: "#ffb900" };
 const WARNING_WASH: Record<Mode, string> = { light: "8%", dark: "16%" };
 
 /** How much accent washes a selected line: more in dark, where the surface swallows it. */

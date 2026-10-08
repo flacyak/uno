@@ -19,6 +19,21 @@ export function sourceAt(path: string): SourceRef {
   return { name: basename(path), path };
 }
 
+/** What a workspace file is called by. The engine knows a .uno by this. */
+const WORKSPACE_EXT = ".uno";
+
+/**
+ * unoPath is where a Save As goes, from what its dialog answered.
+ *
+ * The dialog filters on .uno, and Windows and macOS add it to a name typed
+ * without. GTK answers with the name as typed, and a workspace saved as
+ * `sales` opens as a spreadsheet the next time, since the engine knows a .uno
+ * by its name. So it is added here, once, whatever the desktop did.
+ */
+export function unoPath(picked: string): string {
+  return picked.toLowerCase().endsWith(WORKSPACE_EXT) ? picked : picked + WORKSPACE_EXT;
+}
+
 /**
  * writeAtomic publishes bytes to path.
  *

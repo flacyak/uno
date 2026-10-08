@@ -12,7 +12,14 @@
 // part is a file on a disk, an object in a bucket or bytes already in hand,
 // in any mix, and nothing here knows which.
 
-import { bomLength, delimiterName, encodingName, openFormat, peekFormat } from "../ingest/index.ts";
+import {
+  UnsupportedEncodingError,
+  bomLength,
+  delimiterName,
+  encodingName,
+  openFormat,
+  peekFormat,
+} from "../ingest/index.ts";
 import type { Encoding, Format, HeaderMode } from "../ingest/index.ts";
 import { openWith } from "./index.ts";
 import type { ByteSource, FileHandler, SingleRef } from "./index.ts";
@@ -41,8 +48,8 @@ export interface Extent {
   bytes: number;
   /**
    * How many bytes at its start the join leaves out: a later part's repeat of
-   * the header, or its byte order mark where there is no header. 0 for the
-   * first part, which is there whole.
+   * the header, or its byte order mark where there is no header or no record
+   * in it. 0 for the first part, which is there whole.
    */
   skip: number;
   /** Whether its last byte is something other than a newline. */
@@ -444,15 +451,16 @@ class Parts {
    *
    * The first part is there whole. A later part has to read the way the first
    * does, and with a header it is left out up to its first row. A part with
-   * nothing in it has nothing to check and gives no rows. With no header,
-   * only a byte order mark is left out, which in the middle of the join would
-   * be read as a character of the first cell, and a part of blank lines alone
-   * has no row to hold to the first part's.
+   * no record in it, whether it is no bytes, blank lines or a byte order mark
+   * alone, has nothing to check and gives no rows, header or none. With no
+   * header, only a byte order mark is left out, which in the middle of the
+   * join would be read as a character of the first cell, and a part of blank
+   * lines alone has no row to hold to the first part's.
    */
   private async skip(i: number, source: ByteSource): Promise<number> {
     if (i === 0 || source.size === 0) return 0;
 
-    const format = await this.format(i, source);
+    const format = await this.formatOrDiffers(i, source);
     const first = format === undefined ? undefined : await this.firstFormat();
     if (format !== undefined && first !== undefined) {
       const differs = disagreement(first, format, this.header);
@@ -467,18 +475,42 @@ class Parts {
     }
     // A part read as having no header row starts its rows after a byte order
     // mark and nothing else, so where its rows start is what is left out
-    // either way. A part with no record in it has only the mark to leave out.
+    // either way. A part with no record in it has only the mark to leave out:
+    // its blank lines are blank lines of the join, which no row begins in.
     if (format === undefined) return bomLength(await source.read(0, BOM_BYTES));
     return format.dataStart;
   }
 
   /**
-   * How part `i` reads. With a header, a part with no record in it is
-   * refused, for it has no header. With none, it is undefined.
+   * formatOrDiffers is `format`, with a part in an encoding this build cannot
+   * read refused as the disagreement it is: it does not read the way the
+   * first part does, and both encodings are named, rather than the part's
+   * alone as if it were a file on its own.
+   */
+  private async formatOrDiffers(i: number, source: ByteSource): Promise<Format | undefined> {
+    try {
+      return await this.format(i, source);
+    } catch (err) {
+      if (!(err instanceof UnsupportedEncodingError)) throw err;
+      const first = await this.firstFormat();
+      if (first === undefined) throw err;
+      const differs: Disagreement = { kind: "encoding", first: first.encoding, part: err.encoding };
+      const refusal = new DisagreementError(this.parts, i, differs);
+      if (this.refused === undefined || i < this.refused.part) this.refused = refusal;
+      throw refusal;
+    }
+  }
+
+  /**
+   * How part `i` reads: undefined where it has no record in it. The first
+   * part is refused for that where there is a header row, since it is the
+   * header every other part is held to. A later part with no record in it
+   * has no header to hold to the first's and no rows to give, which is the
+   * same nothing whatever its bytes are.
    */
   private format(i: number, source: ByteSource): Promise<Format | undefined> {
     const name = this.parts[i]!.ref.name;
-    return this.header === "first"
+    return this.header === "first" && i === 0
       ? openFormat(name, source)
       : peekFormat(name, source, this.header);
   }
@@ -587,7 +619,10 @@ function headerDisagreement(
 
   if (first.length === part.length) {
     if (differing.length === 0) return undefined;
-    const reordered = first.toSorted().every((name, at) => name === part.toSorted()[at]);
+    // Each header sorted once: sorting the part's again per column is a wait
+    // of seconds for a header thousands of columns wide.
+    const sorted = part.toSorted();
+    const reordered = first.toSorted().every((name, at) => name === sorted[at]);
     return { kind: reordered ? "reordered" : "renamed", columns: differing };
   }
 

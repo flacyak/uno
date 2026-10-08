@@ -1,4 +1,5 @@
-import { unzipSync, zipSync } from "fflate";
+import { Zip, deflateSync, unzipSync } from "fflate";
+import type { ZipInputFile } from "fflate";
 
 import { compareStrings, nowTruncated, parseTime, rfc3339, sha256Hex } from "../go/index.ts";
 import { read as ingestRead } from "../ingest/index.ts";
@@ -141,7 +142,7 @@ function heldFile(
   return {
     id: src.id,
     name: src.name,
-    raw: src.entry === "" ? undefined : readEntry(name, entries, src.entry),
+    raw: src.entry === "" ? undefined : carriedBytes(name, entries, src),
     path: src.path === "" ? undefined : resolvedPath(src.path, at),
     bytes: src.bytes,
     version: src.version === "" ? undefined : src.version,
@@ -150,6 +151,31 @@ function heldFile(
     cols: src.cols,
     state,
   };
+}
+
+/**
+ * carriedBytes reads a carried source and holds it to the hash the save
+ * recorded of it.
+ *
+ * The zip's own checksum is not checked by the unzip this reads with, so a
+ * byte flipped on disk would otherwise open as the file it was, replay the
+ * log over the wrong cells and save the damage back under a fresh hash. The
+ * manifest's hash is what the save promised, and a mismatch is said in words
+ * before a sheet is built. A file with no hash recorded is taken as it is,
+ * since there is nothing to hold it to.
+ */
+function carriedBytes(
+  name: string,
+  entries: Record<string, Uint8Array>,
+  src: FileSource,
+): Uint8Array {
+  const raw = readEntry(name, entries, src.entry);
+  if (src.sha256 !== "" && sha256Hex(raw) !== src.sha256) {
+    throw new Error(
+      `${name}: ${src.entry} is not the ${src.name} the manifest describes: its sha256 does not match, so the file is damaged`,
+    );
+  }
+  return raw;
 }
 
 /** Several files read as one as the workspace holds them: where each part is,
@@ -205,29 +231,157 @@ export function writeDocument(d: Document): Uint8Array {
   // fflate takes the modification time per entry, so `unzip -l` on a workspace
   // lists the save time rather than the 1980-00-00 a zero timestamp renders as.
   const mtime = m.modified ?? new Date();
-  const entry = (bytes: Uint8Array): [Uint8Array, { mtime: Date }] => [bytes, { mtime }];
 
-  const files: Record<string, [Uint8Array, { mtime: Date }]> = {
-    [MANIFEST_ENTRY]: entry(encoder.encode(formatJSON(manifestJSON(m)))),
-  };
+  const entries: Entry[] = [
+    { name: MANIFEST_ENTRY, bytes: encoder.encode(formatJSON(manifestJSON(m))) },
+  ];
   d.sources.forEach((src, i) => {
-    const named = m.sources[i]!.entry;
-    if (src.raw !== undefined && named !== undefined) files[named] = entry(src.raw);
+    const { entry: named, sha256 } = m.sources[i]!;
+    if (src.raw !== undefined && named !== undefined) {
+      entries.push({ name: named, bytes: src.raw, key: sha256 });
+    }
   });
-  files[STATE_ENTRY] = entry(encoder.encode(formatJSON(stateJSON(d, single))));
-  files[LOG_ENTRY] = entry(encoder.encode(formatLog(d.log, single)));
+  entries.push(
+    { name: STATE_ENTRY, bytes: encoder.encode(formatJSON(stateJSON(d, single))) },
+    { name: LOG_ENTRY, bytes: encoder.encode(formatLog(d.log, single)) },
+  );
 
   // The entries this build did not understand go back in, in name order rather
   // than in whatever order they were read, so the layout of a saved file does
   // not shuffle between saves that changed nothing.
+  const named = new Set(entries.map((e) => e.name));
   for (const key of [...d.extra.keys()].sort(compareStrings)) {
-    if (key in files) continue;
-    files[key] = entry(d.extra.get(key)!);
+    if (named.has(key)) continue;
+    entries.push({ name: key, bytes: d.extra.get(key)! });
   }
 
-  const out = zipSync(files, { level: 6 });
+  const out = pack(entries, mtime);
   d.manifest = m;
   return out;
+}
+
+// ------------------------------------------------------------- packing
+
+/** One entry of the container. `key` is what a carried source's deflated
+ * bytes are kept under between saves: the hash the manifest records of them. */
+interface Entry {
+  name: string;
+  bytes: Uint8Array;
+  key?: string;
+}
+
+/** An entry's bytes as the zip holds them, and what its header says of the
+ * bytes they were. */
+interface Deflated {
+  bytes: Uint8Array<ArrayBuffer>;
+  size: number;
+  crc: number;
+}
+
+/** How hard an entry is squeezed, on fflate's scale of 0 to 9. */
+const DEFLATE_LEVEL = 6;
+
+/** The method a zip entry names DEFLATE by, from APPNOTE.txt section 4.4.5. */
+const DEFLATE_METHOD = 8;
+
+/**
+ * What the last save deflated of the sources it carried, under the hash the
+ * manifest recorded of each.
+ *
+ * A carried source's bytes never change: the log is what changes between one
+ * save and the next. Deflating them is most of what a save costs -- the
+ * better part of a second for 24 MB, during which the engine answers nothing
+ * -- so the next save of the same bytes writes them as they were deflated the
+ * first time. The hash is the key rather than the array, because a dropped
+ * file is read into a fresh array at every save. What one save carried is
+ * all that is kept, so this weighs at most one save's worth.
+ */
+let deflated = new Map<string, Deflated>();
+
+/** squeeze deflates one entry's bytes, and measures what its header needs. */
+function squeeze(bytes: Uint8Array): Deflated {
+  return {
+    bytes: deflateSync(bytes, { level: DEFLATE_LEVEL }),
+    size: bytes.length,
+    crc: crc32(bytes),
+  };
+}
+
+/**
+ * pack writes the entries as one zip, in the order given. Every entry goes in
+ * deflated already, through fflate's streaming writer, which is what lets a
+ * carried source deflated by an earlier save go in without being deflated
+ * again.
+ */
+function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let failed: Error | undefined;
+  const zip = new Zip((err, chunk) => {
+    if (err !== null) {
+      failed ??= err;
+      return;
+    }
+    chunks.push(chunk);
+    total += chunk.length;
+  });
+
+  const kept = new Map<string, Deflated>();
+  for (const { name, bytes, key } of entries) {
+    const entry = (key === undefined ? undefined : deflated.get(key)) ?? squeeze(bytes);
+    if (key !== undefined) kept.set(key, entry);
+    const file: ZipInputFile = {
+      filename: name,
+      size: entry.size,
+      crc: entry.crc,
+      compression: DEFLATE_METHOD,
+      mtime,
+    };
+    zip.add(file);
+    if (failed !== undefined) break;
+    // Adding the file is what gives it `ondata`, and the bytes go in through
+    // it, in one piece: there is nothing left to do to them.
+    file.ondata!(null, entry.bytes, true);
+  }
+  zip.end();
+  if (failed !== undefined) throw failed;
+  deflated = kept;
+
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.length;
+  }
+  return out;
+}
+
+/** The CRC-32 polynomial, reflected, which is how a zip entry's checksum is computed. */
+const CRC32_POLYNOMIAL = 0xedb88320;
+const BITS_PER_BYTE = 8;
+const BYTE_VALUES = 1 << BITS_PER_BYTE;
+const BYTE_MASK = BYTE_VALUES - 1;
+
+/** The CRC-32 of every one-byte message, which is what each byte of a longer one is folded through. */
+const CRC32_TABLE = ((): Int32Array => {
+  const table = new Int32Array(BYTE_VALUES);
+  for (let byte = 0; byte < BYTE_VALUES; byte++) {
+    let c = byte;
+    for (let bit = 0; bit < BITS_PER_BYTE; bit++) {
+      c = (c & 1) === 1 ? CRC32_POLYNOMIAL ^ (c >>> 1) : c >>> 1;
+    }
+    table[byte] = c;
+  }
+  return table;
+})();
+
+/** crc32 is the checksum a zip entry carries of its bytes before deflation. */
+function crc32(bytes: Uint8Array): number {
+  let c = -1;
+  for (let i = 0; i < bytes.length; i++) {
+    c = CRC32_TABLE[(c ^ bytes[i]!) & BYTE_MASK]! ^ (c >>> BITS_PER_BYTE);
+  }
+  return ~c >>> 0;
 }
 
 /**
@@ -416,7 +570,10 @@ function readJSON(name: string, entries: Record<string, Uint8Array>, entry: stri
  * Anything unparseable earlier in the file is a log that has been damaged in
  * the middle, where stopping would silently discard the operations after it, so
  * that is an error. So is a line naming a source the manifest does not list,
- * since there is no grid to replay it into.
+ * since there is no grid to replay it into, and a line numbered out of turn:
+ * every build numbers a source's edits 1, 2, 3 and gives the next edit the
+ * number after the last, so a log numbered any other way would hand a new
+ * edit a number already taken, and a rule would run over the wrong writes.
  */
 function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest): Logged[] {
   const entry = m.edits.entry;
@@ -426,16 +583,18 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
   const only = m.sources.length === 1 ? m.sources[0]!.id : undefined;
 
   const log: Logged[] = [];
+  const counted = new Map<string, number>();
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (line.trim() === "") continue;
+    const where = `${name}: ${entry} line ${i + 1}`;
 
     let raw: unknown;
     try {
       raw = JSON.parse(line);
     } catch (err) {
       if (i === lines.length - 1) break; // a truncated tail costs the last operation, at worst
-      throw new Error(`${name}: ${entry} line ${i + 1}: ${(err as Error).message}`);
+      throw new Error(`${where}: ${(err as Error).message}`);
     }
 
     const named = asString(asRecord(raw)["source"]);
@@ -443,11 +602,19 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
     if (source === undefined || !ids.has(source)) {
       throw new Error(
         named === ""
-          ? `${name}: ${entry} line ${i + 1} does not say which source it changed`
-          : `${name}: ${entry} line ${i + 1} changes ${named}, which is not a source in this file`,
+          ? `${where} does not say which source it changed`
+          : `${where} changes ${named}, which is not a source in this file`,
       );
     }
-    log.push({ source, edit: parseEdit(raw) });
+    const edit = parseEdit(where, raw);
+    const expected = (counted.get(source) ?? 0) + 1;
+    if (edit.seq !== expected) {
+      throw new Error(
+        `${where} is edit ${edit.seq} of ${source}, where edit ${expected} comes next`,
+      );
+    }
+    counted.set(source, expected);
+    log.push({ source, edit });
   }
   return log;
 }
@@ -704,8 +871,18 @@ function parseSheetState(o: Record<string, unknown>): State {
   return state;
 }
 
-function parseEdit(v: unknown): Edit {
+/**
+ * parseEdit reads one line of the log. `where` is what an error calls the
+ * line. The numbers are held to whole ones here, where the line is known,
+ * since a row of 0.5 is a cell no sheet has and the sheet would only say so
+ * by its edit number. The operation is the sheet's to know, and the row and
+ * column are the sheet's to bound.
+ */
+function parseEdit(where: string, v: unknown): Edit {
   const o = asRecord(v);
+  for (const key of ["seq", "row", "col"] as const) {
+    if (!Number.isInteger(o[key])) throw new Error(`${where}: ${key} is not a whole number`);
+  }
   const e: Edit = {
     seq: asNumber(o["seq"]),
     op: asString(o["op"]) as Op,

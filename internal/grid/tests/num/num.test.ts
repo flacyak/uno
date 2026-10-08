@@ -25,6 +25,7 @@ describe("isNumber rejects what a spreadsheet does not mean", () => {
     "(5",
     "5)",
     "(5)-",
+    "1e400",
   ]) {
     test(`refuses ${JSON.stringify(v)}`, () => {
       expect(isNumber(v)).toBe(false);
@@ -69,6 +70,14 @@ describe("parse reads the number a person sees", () => {
     ["$1,204.50", 1204.5],
     ["£40.00", 40],
     [" 987 ", 987],
+
+    // The badge trims by strings.TrimSpace before it calls a column numeric, so
+    // a tab, a carriage return or a no-break space at either edge is read the
+    // same way here. A column the badge promises is numeric must compute.
+    ["12\t", 12],
+    ["12\r", 12],
+    ["\u00a012", 12],
+    ["\t1,204\t", 1204],
 
     // A percent sign is decoration, so 12% reads as the 12 that was written.
     // Dividing by a hundred here would invent a value nobody typed and no cell

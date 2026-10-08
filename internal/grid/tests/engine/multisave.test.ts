@@ -811,3 +811,16 @@ describe("parts in a bucket", () => {
     }
   });
 });
+
+test("saving the workspace over one of the parts is refused", async () => {
+  const { paths } = await copied();
+  const { engine, done } = connect(TINY, providers());
+  try {
+    const over = paths[1]!;
+    await expect(saved(engine, threeAt(paths), [], over)).rejects.toThrow(
+      `${over} is where ${NAME} is read from · saving the workspace there would write over it`,
+    );
+  } finally {
+    done();
+  }
+});

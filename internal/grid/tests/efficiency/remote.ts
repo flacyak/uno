@@ -145,7 +145,7 @@ export class Door {
 }
 
 /** The fixture's rows `repeats` times over, under one header. */
-export function repeated(repeats: number): Uint8Array {
+export function repeated(repeats: number): Uint8Array<ArrayBuffer> {
   const header = bytes.indexOf(0x0a) + 1;
   const body = bytes.subarray(header);
   const out = new Uint8Array(header + body.length * repeats);

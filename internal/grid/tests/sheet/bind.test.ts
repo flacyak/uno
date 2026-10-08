@@ -7,6 +7,7 @@ import { read } from "../../src/ingest/index.ts";
 
 import { ERR_CELL, Sheet } from "../../src/sheet/index.ts";
 import { parse } from "../../src/formula/index.ts";
+import { parse as parseProgram } from "../../src/program/index.ts";
 
 const REGION = 0;
 const PRICE = 1;
@@ -41,12 +42,42 @@ test("binding a column fills it from one line", () => {
   expect(s.editCount(), "the binding should be one line").toBe(1);
 });
 
+// The badge reads a column after strings.TrimSpace, so "40.00\t" is numeric. A
+// formula bound over that column has to read the same 40.00 rather than show
+// #ERR beside a badge that promised arithmetic.
+test("a cell the badge calls numeric computes, however it is padded", () => {
+  const s = new Sheet(
+    "sales.csv",
+    ["region", "price", "cost", "margin"],
+    [
+      ["West", "40.00\t", "31.20", ""],
+      ["East", "\u00a040.00", "30.00\r", ""],
+    ],
+  );
+  expect(s.columns[PRICE]!.kind).toBe("num");
+  expect(s.columns[COST]!.kind).toBe("num");
+
+  s.bind(MARGIN, parse("(price - cost) / price"));
+  expect([0, 1].map((row) => s.display(row, MARGIN))).toEqual(["0.22", "0.25"]);
+});
+
 // Binary floating point makes (40.00 - 31.20) / 40.00 into 0.21999999999999997,
 // and a column of those is arithmetic showing its working rather than answering.
 test("a computed value is not shown with its floating point noise", () => {
   const s = sales();
   s.bind(MARGIN, parse("(price - cost) / price"));
   expect(s.display(0, MARGIN)).not.toContain("999999");
+});
+
+// Removing the noise must not remove the answer. A float64 carries fifteen
+// significant digits faithfully, and a sum in cents or a timestamp in
+// milliseconds uses twelve or thirteen of them: rounding harder than the
+// number is wrong in the cents, which is a wrong answer shown as a right one.
+test("a computed value keeps every digit the number has", () => {
+  const s = new Sheet("ledger.csv", ["cents", "dollars"], [["123456789012", ""]]);
+  s.bind(1, parse("cents / 100"));
+
+  expect(s.display(0, 1)).toBe("1234567890.12");
 });
 
 // Editing an input recomputes what reads it. Nothing else moves, because the
@@ -90,6 +121,27 @@ test("a cell in a bound column cannot be typed into", () => {
 
   expect(() => s.set(0, MARGIN, "nonsense")).toThrow();
   expect(s.display(0, MARGIN)).toBe("8.8");
+});
+
+// The same holds for a program over the column: it would rewrite values nobody
+// can see, and the rewrite would surface only when the formula came off.
+test("a program cannot run over a bound column", () => {
+  const s = sales();
+  s.bind(MARGIN, parse("price - cost"));
+
+  let thrown: Error | undefined;
+  try {
+    s.apply(MARGIN, parseProgram('replace(/8/, "9")'));
+  } catch (err) {
+    thrown = err as Error;
+  }
+
+  expect(thrown, "a program over a bound column was accepted").toBeDefined();
+  expect(thrown!.message).toContain("computed by a formula");
+  expect(s.editCount(), "the refused program was recorded anyway").toBe(1);
+  expect(s.display(0, MARGIN)).toBe("8.8");
+  s.unbind(MARGIN);
+  expect(s.display(0, MARGIN), "the refused program ran over the stored values").toBe("");
 });
 
 // A row the expression cannot read says so in the cell it happened in. An empty

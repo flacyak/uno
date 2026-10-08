@@ -70,6 +70,18 @@ export function against(stored: string, dir: string): string {
   return dir + (SEP.test(dir.charAt(dir.length - 1)) ? "" : "/") + stored;
 }
 
+/**
+ * samePath says whether two paths name one place, with either separator.
+ *
+ * It is a comparison of the text and nothing more: no case folding, no dot
+ * segments walked, no symlink followed. A workspace refusing to write over a
+ * file it reads needs the plain case caught, and anything cleverer would be
+ * an opinion about the filesystem taken on its behalf.
+ */
+export function samePath(a: string, b: string): boolean {
+  return a.replace(/\\/g, "/") === b.replace(/\\/g, "/");
+}
+
 function lastSep(path: string): number {
   return Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
 }

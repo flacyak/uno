@@ -56,15 +56,22 @@ export function clampTop(top: number, vMax: number): number {
  * where that puts the view on the uncapped sheet. `rMax` is zero exactly when
  * the whole sheet fits without scrolling, and the answer is then the top,
  * rather than a division by zero.
+ *
+ * Below the cap the two are the same length, and the scrollbar's position is
+ * the answer as it is. Dividing and multiplying it back lands a hair off a
+ * row's edge -- 203 / 358 * 358 is more than 203 -- which ceil then reads as
+ * the next row down, so H after zt landed one row under the top.
  */
 export function scrollerToTop(scrollTop: number, rMax: number, vMax: number): number {
-  return rMax === 0 ? 0 : (scrollTop / rMax) * vMax;
+  if (rMax === 0) return 0;
+  return rMax === vMax ? scrollTop : (scrollTop / rMax) * vMax;
 }
 
 /** topToScroller is the inverse: where the scrollbar should sit, above the
  * cap, for the view to be at `top` on the uncapped sheet. */
 export function topToScroller(top: number, vMax: number, rMax: number): number {
-  return vMax === 0 ? 0 : (top / vMax) * rMax;
+  if (vMax === 0) return 0;
+  return vMax === rMax ? top : (top / vMax) * rMax;
 }
 
 /** poolSize is how many row elements the pool needs: a screenful, plus the

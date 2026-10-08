@@ -171,6 +171,13 @@ table.grid td.sel {
   gap: 8px;
 }
 
+/* A column the file left nameless, called by its place. Dressed as a name the
+ * file did not give, as the fx badge is dressed for a column the file does not hold. */
+.colname.unnamed {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
 .badge {
   font-family: var(--mono);
   font-size: 9.5px;

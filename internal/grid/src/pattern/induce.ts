@@ -1,6 +1,8 @@
 import {
   compareStrings,
   equalFold,
+  isDigit,
+  isLetter,
   isSpace,
   quote,
   quoteMeta,
@@ -130,6 +132,12 @@ export function rewrites(was: string, now: string): string[] {
  * climbs from specific to general so that ranking can prefer the narrowest
  * program that still explains every example, which is the guard against reading
  * one habit as a licence to rewrite a whole column.
+ *
+ * The class rungs are drawn from decoration only. Letters and digits that went
+ * away are a stretch the person cut, not a set they cleared: x^2, y^3 and z^4
+ * losing their exponents is not "[234^] goes", and said that way it leaves
+ * w^5 as w5. Those edits are left to the restructuring reading, which runs when
+ * this one declines, and finds the cut.
  */
 function deletions(a: string[], dels: Run[]): string[] {
   const out: string[] = [];
@@ -164,10 +172,12 @@ function deletions(a: string[], dels: Run[]): string[] {
     for (const t of texts) out.push(replaceSrc(quoteMeta(t), ""));
   }
 
-  const cls = "[" + quoteClass(chars) + "]";
-  out.push(replaceSrc(cls, ""));
-  if (suffix) out.push(replaceSrc(cls + "+$", ""));
-  if (prefix) out.push(replaceSrc("^" + cls + "+", ""));
+  if (decoration(chars)) {
+    const cls = "[" + quoteClass(chars) + "]";
+    out.push(replaceSrc(cls, ""));
+    if (suffix) out.push(replaceSrc(cls + "+$", ""));
+    if (prefix) out.push(replaceSrc("^" + cls + "+", ""));
+  }
 
   // Both ends at once is the ordinary case and neither anchor covers it, so
   // trim asks about the ends rather than about the anchor they share.
@@ -242,8 +252,18 @@ export function unionDeletion(ex: Example[]): string[] {
     if (al === undefined || al.ins.length > 0) return [];
   }
   const chars = droppedChars(ex);
-  if (chars.length === 0) return [];
+  if (chars.length === 0 || !decoration(chars)) return [];
   return [replaceSrc("[" + quoteClass(chars) + "]", "")];
+}
+
+/**
+ * decoration says whether a set of characters is one a class may generalise
+ * over: the separators, the currency marks, the brackets, the space. A class is
+ * a claim that these characters are the whole of what goes, wherever they
+ * stand, and only decoration is ever meant that way.
+ */
+export function decoration(chars: readonly string[]): boolean {
+  return chars.every((r) => !isLetter(r) && !isDigit(r));
 }
 
 export function replaceSrc(re: string, lit: string): string {

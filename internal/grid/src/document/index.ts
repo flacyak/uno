@@ -37,5 +37,5 @@ export type {
   SourcePart,
   State,
 } from "./document.ts";
-export { against, baseOf, dirOf, isAbsolute, relativeTo } from "./path.ts";
+export { against, baseOf, dirOf, isAbsolute, relativeTo, samePath } from "./path.ts";
 export { formatFor, readContainer, readDocument, versionFor, writeDocument } from "./codec.ts";

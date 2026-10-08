@@ -13,9 +13,9 @@ import { text as programText } from "../program/index.ts";
 import type { Edit } from "./edit.ts";
 import { NO_ROW, Op } from "./edit.ts";
 import type { Kind } from "./kind.ts";
-import { inferKind } from "./kind.ts";
+import { SAMPLE_ROWS, inferKind } from "./kind.ts";
 import type { Finished } from "./pipeline.ts";
-import { finishRows, formatValue } from "./pipeline.ts";
+import { finish, finishRows, formatValue } from "./pipeline.ts";
 import { Schema } from "./schema.ts";
 import type { Written } from "./schema.ts";
 
@@ -196,8 +196,38 @@ export class Sheet {
 
   private record(e: Edit): void {
     this.schema.record(e);
-    this.finished = [];
-    this.infer();
+    this.settle(e);
+  }
+
+  /**
+   * settle brings what is finished and what the columns are called up to
+   * date with an edit.
+   *
+   * A write into one cell reaches its own row and nothing else: every
+   * operation in the log reads one row, and a formula's cell reads only its
+   * own. So that row is finished again where it was finished, and the rest of
+   * its block stands; finishing one row says the same as finishing the block
+   * it is in, since the block is only how a formula is walked. The write can
+   * rename the column it wrote and any computed from it, and only when the
+   * row is one a kind is read from. A column operation can reach every row
+   * and every column, so everything goes. The difference is a paste of a
+   * thousand cells costing a thousand rows rather than a thousand sheets.
+   */
+  private settle(e: Edit): void {
+    if (e.op !== Op.Set && e.op !== Op.Note) {
+      this.finished = [];
+      this.infer();
+      return;
+    }
+
+    const source = this.rowData[e.row];
+    if (source !== undefined && this.finished[e.row] !== undefined) {
+      this.finished[e.row] = finish(this.schema, e.row, source);
+    }
+    if (e.row >= SAMPLE_ROWS) return;
+
+    this.inferColumn(e.col);
+    for (const col of this.schema.computedColumns()) this.inferColumn(col);
   }
 
   /**
@@ -260,11 +290,13 @@ export class Sheet {
    * reads it may have become one too.
    */
   private infer(): void {
-    for (let col = 0; col < this.columns.length; col++) {
-      const { kind, flagged } = inferKind(this.rowData.length, (row) => this.display(row, col));
-      const c = this.columns[col]!;
-      c.kind = kind;
-      c.flagged = flagged;
-    }
+    for (let col = 0; col < this.columns.length; col++) this.inferColumn(col);
+  }
+
+  private inferColumn(col: number): void {
+    const { kind, flagged } = inferKind(this.rowData.length, (row) => this.display(row, col));
+    const c = this.columns[col]!;
+    c.kind = kind;
+    c.flagged = flagged;
   }
 }

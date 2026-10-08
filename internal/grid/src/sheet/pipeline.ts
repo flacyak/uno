@@ -25,17 +25,27 @@ import type { Schema, Written } from "./schema.ts";
 export const ERR_CELL = "#ERR";
 
 /**
+ * SHOWN_DIGITS is how many significant digits a computed cell keeps: the
+ * fifteen a float64 carries faithfully, which is also what a spreadsheet shows.
+ *
+ * Fewer would lose answers rather than noise. A sum in cents or a timestamp in
+ * milliseconds is twelve or thirteen digits, and rounding it to ten is a
+ * wrong number shown as a right one. More would show the noise: the artefact
+ * of binary arithmetic sits in the sixteenth and seventeenth digits.
+ */
+const SHOWN_DIGITS = 15;
+
+/**
  * formatValue renders a computed number the way a spreadsheet does.
  *
  * The rounding is the point. (40.00 - 31.20) / 40.00 is 0.21999999999999997 in
  * binary floating point, and a column of those is arithmetic showing its
- * working. Ten significant digits is far more precision than a cell displays
- * and far less than float64 noise, so it removes the artefact without removing
- * an answer. The second pass turns the result back into plain notation, since a
+ * working. Rounding to `SHOWN_DIGITS` removes the artefact without removing an
+ * answer. The second pass turns the result back into plain notation, since a
  * spreadsheet column showing 1.234567890e+12 has helped nobody.
  */
 export function formatValue(v: number): string {
-  return formatFloat(roundSignificant(v, 10));
+  return formatFloat(roundSignificant(v, SHOWN_DIGITS));
 }
 
 /** A row with the log applied: what each cell stores, and what it shows. */

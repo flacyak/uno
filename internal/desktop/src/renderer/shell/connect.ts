@@ -81,7 +81,10 @@ export function folderOf(typed: string): string {
  * Its id names its file, so it is the bucket's name, and a connection already
  * kept for another folder of the same bucket keeps its file: the new one is
  * `-2`, `-3`. One already kept for this same bucket and folder is the one
- * being made again, and keeps its id, its name and when it was created.
+ * being made again, and keeps its id, its name, when it was created, and the
+ * keys this build did not recognise, so a save from here never writes their
+ * loss back over a file a newer uno wrote. The auth block's own unknown keys
+ * were about its way of signing in, and stay only while that way does.
  */
 export function draftOf(fields: Fields, known: readonly Connection[]): Connection {
   const bucket = fields.bucket.trim();
@@ -91,13 +94,16 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
     fields.signIn === "machine" || fields.signIn === "public"
       ? { mode: fields.signIn }
       : { mode: "profile", profile: fields.signIn.slice("profile:".length) };
+  if (again?.auth.mode === auth.mode && again.auth.extra !== undefined) {
+    auth.extra = again.auth.extra;
+  }
 
   let id = again?.id ?? bucket;
   if (again === undefined) {
     const taken = new Set(known.map((c) => c.id));
     for (let n = 2; taken.has(id); n++) id = `${bucket}-${n}`;
   }
-  return {
+  const draft: Connection = {
     format: 1,
     id,
     name: again?.name ?? (prefix === "" ? bucket : `${bucket} / ${prefix.slice(0, -1)}`),
@@ -108,6 +114,8 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
     created: again?.created,
     modified: again?.modified,
   };
+  if (again?.extra !== undefined) draft.extra = again.extra;
+  return draft;
 }
 
 /** A bucket's name as an example of one, in the field before anything is typed. */
@@ -406,6 +414,12 @@ export class ConnectForm {
           ? "profile:default"
           : "machine";
     this.signIn.value = keep;
+    // The names landing after a quick Test can move the choice to a profile
+    // the test did not sign in with. A select moved is a field changed, and
+    // takes the test back the way typing in one does. Only while the form is
+    // on screen: a save has stepped aside with its draft already taken, and
+    // the names landing then are not an edit of it.
+    if (this.open && this.signIn.value !== was) this.edited();
   }
 
   private paint(): void {

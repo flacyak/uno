@@ -17,6 +17,8 @@ export interface Press {
   ctrl: boolean;
   alt: boolean;
   meta: boolean;
+  /** Shift, which Tab reads to go the other way. A letter's case is in `key`. */
+  shift: boolean;
   /** The key is held down and repeating. */
   repeat: boolean;
 }

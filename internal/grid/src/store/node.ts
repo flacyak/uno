@@ -57,12 +57,23 @@ export function diskProvider(): Provider {
  *
  * Reads with an explicit position share the descriptor safely, so an index
  * scan and a page read can be in flight together.
+ *
+ * Only a regular file is a source. A folder opens, has a size that means
+ * nothing and fails on the first read without saying where; a fifo does not
+ * even open until something writes to it, which holds a thread of the pool
+ * for as long as that takes. The open is non-blocking so that a fifo comes
+ * back at once, which costs a regular file nothing, and the stat that follows
+ * refuses anything that is not a file by its path.
  */
 export async function nodeSource(path: string): Promise<ByteSource> {
-  const fh = await open(path, "r");
+  const fh = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   let size: number;
   try {
-    size = (await fh.stat()).size;
+    const st = await fh.stat();
+    if (!st.isFile()) {
+      throw new Error(`${path} is ${st.isDirectory() ? "a folder" : "not a regular file"}`);
+    }
+    size = st.size;
   } catch (err) {
     await fh.close();
     throw err;
@@ -310,17 +321,19 @@ async function ssoSession(
   const cacheKey = named ?? startUrl!;
   const name = createHash("sha1").update(cacheKey).digest("hex") + ".json";
   const path = join(homeOf(env), ".aws", "sso", "cache", name);
-  let token: { accessToken?: unknown; expiresAt?: unknown };
+  let text: string;
   try {
-    const bytes = await readAll([localFiles()], { name, path });
-    token = JSON.parse(new TextDecoder().decode(bytes)) as typeof token;
+    text = new TextDecoder().decode(await readAll([localFiles()], { name, path }));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
   }
+  // `aws sso login` writes the cache in place, so a sign-in cut short leaves
+  // half a file: a sign-in uno cannot read, mended the same way as any other.
+  const token = cachedToken(text);
   // Older CLIs wrote the time with a UTC suffix rather than a Z.
-  const expires = new Date(String(token.expiresAt).replace(/UTC$/, "Z"));
-  if (typeof token.accessToken !== "string" || Number.isNaN(expires.getTime())) {
+  const expires = new Date(String(token?.expiresAt).replace(/UTC$/, "Z"));
+  if (typeof token?.accessToken !== "string" || Number.isNaN(expires.getTime())) {
     throw new Error(signInAgain(profile, "its cached SSO sign-in could not be read"));
   }
   if (expires.getTime() <= Date.now()) {
@@ -337,6 +350,19 @@ async function ssoSession(
     },
     { endpoint: env["AWS_ENDPOINT_URL_SSO"] },
   );
+}
+
+/** What a cache file holds, where it holds a JSON object at all. */
+function cachedToken(text: string): Record<string, unknown> | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  return typeof parsed === "object" && parsed !== null
+    ? (parsed as Record<string, unknown>)
+    : undefined;
 }
 
 /**
@@ -577,13 +603,31 @@ export function splitCommand(line: string): string[] {
  * read off the disk, so a key rotated there is picked up within it, and until
  * shortly before expiry for keys AWS handed out, so a request per range does
  * not trade a token per range.
+ *
+ * Asks that land while one read is on its way share it. Forty sources opening
+ * at once ask forty times before the first answer is back, and each ask that
+ * read on its own would be a program run, a portal call or an AssumeRole of
+ * its own: a credential_process that asks a vault for its answer would ask
+ * forty times. A read that fails answers everybody waiting on it with the
+ * failure, and is not kept, so the next ask reads again.
  */
 function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
   let kept: Held | undefined;
+  let reading: Promise<Held> | undefined;
   return async () => {
     if (kept !== undefined && Date.now() < kept.until) return kept.creds;
-    kept = await read();
-    return kept.creds;
+    reading ??= read().then(
+      (held) => {
+        kept = held;
+        reading = undefined;
+        return held;
+      },
+      (err: unknown) => {
+        reading = undefined;
+        throw err;
+      },
+    );
+    return (await reading).creds;
   };
 }
 

@@ -12,6 +12,7 @@ import "./status.css";
 
 import { m } from "../../paraglide/messages.js";
 import type { Grid } from "../grid/index.ts";
+import { columnLabel } from "../grid/rows.ts";
 import type { InputStrategy } from "../input/index.ts";
 import type { Lead } from "../keys.ts";
 import { num } from "../locale.ts";
@@ -122,8 +123,12 @@ export class StatusBar {
       return;
     }
     const { row, col } = grid.selection();
-    const header = w.rows.columns[col]?.header ?? "";
-    this.cell.textContent = `${header} · ${m.status_row({ row: num(row + 1) })}`;
+    const column = w.rows.columns[col];
+    const header = column === undefined ? "" : columnLabel(column.header, col);
+    // A sheet with no rows has a column to be on and no row in it, and saying
+    // "row 1" of none would be saying there was one.
+    this.cell.textContent =
+      w.rows.rows() === 0 ? header : `${header} · ${m.status_row({ row: num(row + 1) })}`;
   }
 
   /** switches draws the mode switch as the workspace has it, and each column's

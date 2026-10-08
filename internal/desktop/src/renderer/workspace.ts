@@ -252,14 +252,19 @@ export class Workspace {
   /**
    * remove takes a source out, and its edits out of the log. The engine keeps
    * the last one, since a workspace of none has nothing to show or save.
+   *
+   * It answers whether the tab was the one showing, as it is once the engine
+   * has answered: its neighbour shows then, and the grid has to follow.
    */
-  async remove(tab: Tab): Promise<void> {
+  async remove(tab: Tab): Promise<boolean> {
     await this.engine.remove(tab.source);
     const i = this.tabs.indexOf(tab);
-    if (i < 0) return;
+    if (i < 0) return false;
     this.tabs.splice(i, 1);
     this.relinked.delete(tab.id);
-    if (this.showing === tab) this.showing = this.tabs[Math.min(i, this.tabs.length - 1)]!;
+    if (this.showing !== tab) return false;
+    this.showing = this.tabs[Math.min(i, this.tabs.length - 1)]!;
+    return true;
   }
 
   /**
@@ -477,6 +482,17 @@ export class Workspace {
     const same =
       ids.length === this.savedSources.length && ids.every((id, i) => id === this.savedSources[i]);
     return !same || this.relinked.size > 0 || this.tabs.some((t) => t.dirty);
+  }
+
+  /**
+   * readingFrom is the source whose file is at `path`, for a save that would
+   * write the workspace over it. A source several files are read as is
+   * reading from each of them.
+   */
+  readingFrom(path: string): Tab | undefined {
+    return this.tabs.find(
+      (t) => t.link?.path === path || t.parts?.some((p) => p.path === path) === true,
+    );
   }
 
   /** Whether a tab holds something the last save did not. */

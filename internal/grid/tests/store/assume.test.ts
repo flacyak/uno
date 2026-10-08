@@ -169,6 +169,37 @@ describe("the call", () => {
     );
   });
 
+  // STS holds RoleSessionName to 2..64 of [\w+=,.@-], and a name a profile's
+  // role_session_name sets outside that is refused here, in words naming the
+  // name, before a request is signed for it.
+  test.each([
+    ["a", "a"],
+    ["x".repeat(65), "x".repeat(65)],
+    ["ana at acme", "ana at acme"],
+    ["ana/acme", "ana/acme"],
+  ])("a session name STS would not take is refused before it is sent: %s", async (_, name) => {
+    await expect(
+      assumeRole(
+        { roleArn: READER, sessionName: name, externalId: EXTERNAL, region: HOME_REGION },
+        BASE,
+        { endpoint: s.endpoint },
+      ),
+    ).rejects.toThrow(
+      `${READER} cannot be assumed as "${name}" · a role session name is 2 to 64 of letters, digits and +=,.@_-`,
+    );
+    expect(s.seen).toEqual([]);
+  });
+
+  test("a session name of every character STS takes goes through", async () => {
+    const name = "Ana+at=acme,Inc.@2025_x-y";
+    await assumeRole(
+      { roleArn: READER, sessionName: name, externalId: EXTERNAL, region: HOME_REGION },
+      BASE,
+      { endpoint: s.endpoint },
+    );
+    expect(s.seen.map((r) => r.sessionName)).toEqual([name]);
+  });
+
   test("a signature taken with the wrong secret is refused", async () => {
     await expect(
       assumeRole(
@@ -177,6 +208,28 @@ describe("the call", () => {
         { endpoint: s.endpoint },
       ),
     ).rejects.toThrow(/· SignatureDoesNotMatch:/);
+  });
+
+  // What STS said is read with its entities undone, and an escape that names
+  // a code point no string can hold is left as it came rather than thrown
+  // over: the refusal is still what STS said, and still in words.
+  test("a refusal escaped past what a string can hold is still said in words", async () => {
+    const message = "Session for a&amp;b was refused at &#1114112; by &#xFFFFFFFF;";
+    const refuse: typeof fetch = async () =>
+      new Response(
+        `<ErrorResponse><Error><Type>Sender</Type><Code>AccessDenied</Code>` +
+          `<Message>${message}</Message></Error></ErrorResponse>`,
+        { status: 403, headers: { "content-type": "text/xml" } },
+      );
+    await expect(
+      assumeRole(
+        { roleArn: READER, sessionName: "ana", externalId: EXTERNAL, region: HOME_REGION },
+        BASE,
+        { endpoint: s.endpoint, fetch: refuse },
+      ),
+    ).rejects.toThrow(
+      `STS would not let ${READER} be assumed · AccessDenied: Session for a&b was refused at &#1114112; by &#xFFFFFFFF;`,
+    );
   });
 });
 

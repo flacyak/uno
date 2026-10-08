@@ -32,6 +32,7 @@ import type { Language, LanguageChoice } from "../language.ts";
 import type { Connection } from "../sources.ts";
 import { APPEARANCES, THEMES } from "../theme.ts";
 import type { Appearance, Theming } from "../theme.ts";
+import { tabStep, walk } from "./util.ts";
 
 /** What the menu asks of the shell. The shell decides; the menu only asks. */
 export interface SettingsAsks {
@@ -175,8 +176,8 @@ export class Settings {
   }
 
   /**
-   * key reads a key in the menu: the arrows walk its items, Esc closes it and
-   * gives the keys back, and nothing typed here reaches the grid.
+   * key reads a key in the menu: the arrows and Tab walk its items, Esc closes
+   * it and gives the keys back, and nothing typed here reaches the grid.
    */
   private key(e: KeyboardEvent): void {
     e.stopPropagation();
@@ -187,12 +188,7 @@ export class Settings {
       this.toggle.focus();
       return;
     }
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    e.preventDefault();
-    const items = this.items();
-    const at = items.indexOf(document.activeElement as HTMLButtonElement);
-    const step = e.key === "ArrowDown" ? 1 : -1;
-    items[(at + step + items.length) % items.length]?.focus();
+    walk(e, this.items(), arrowStep);
   }
 
   /** Every item the keys can land on, in the order they are drawn. */
@@ -338,6 +334,13 @@ export class Settings {
     }
     return section;
   }
+}
+
+/** arrowStep reads the arrows as a step through the items, and Tab as one too. */
+function arrowStep(e: KeyboardEvent): 1 | -1 | 0 {
+  if (e.key === "ArrowDown") return 1;
+  if (e.key === "ArrowUp") return -1;
+  return tabStep(e);
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
