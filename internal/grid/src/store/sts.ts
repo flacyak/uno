@@ -10,9 +10,9 @@
 // reads a file: which token and which role are store/node.ts's business, which
 // reads ~/.aws, and hands the answer here to be exchanged.
 
-import { encode, signV4 } from "./s3.ts";
+import { encodeQuery, signV4 } from "./s3.ts";
 import type { AwsCredentials } from "./s3.ts";
-import { entities } from "./s3xml.ts";
+import { text } from "./s3xml.ts";
 
 /** Keys AWS handed out for a while, and when they stop working. */
 export interface Session {
@@ -168,7 +168,7 @@ export async function assumeRole(
   // Written with the encoder SigV4 signs with, for the reason listUrl in
   // store/s3.ts gives: a form-encoded space is a `+` on the wire and `%20` in
   // the signature, and the two would not agree.
-  const url = new URL(`${base}/?${query.map(([k, v]) => `${encode(k)}=${encode(v)}`).join("&")}`);
+  const url = new URL(`${base}/?${encodeQuery(query)}`);
 
   const headers = signV4(
     { method: "GET", url, headers: {} },
@@ -180,19 +180,19 @@ export async function assumeRole(
   const res = await go(url, { method: "GET", headers });
   const body = await res.text();
   if (!res.ok) {
-    const code = element(body, "Code") ?? `HTTP ${res.status}`;
-    const message = element(body, "Message");
+    const code = text(body, "Code") ?? `HTTP ${res.status}`;
+    const message = text(body, "Message");
     throw new Error(
       `STS would not let ${ask.roleArn} be assumed · ${code}${message === undefined ? "" : `: ${message}`}`,
     );
   }
 
-  const credentials = element(body, "Credentials");
-  const id = credentials === undefined ? undefined : element(credentials, "AccessKeyId");
-  const secret = credentials === undefined ? undefined : element(credentials, "SecretAccessKey");
-  const token = credentials === undefined ? undefined : element(credentials, "SessionToken");
-  const expires = credentials === undefined ? undefined : element(credentials, "Expiration");
-  const expiration = new Date(expires ?? "");
+  // No Credentials element reads as an empty one, which holds none of the four.
+  const credentials = text(body, "Credentials") ?? "";
+  const id = text(credentials, "AccessKeyId");
+  const secret = text(credentials, "SecretAccessKey");
+  const token = text(credentials, "SessionToken");
+  const expiration = new Date(text(credentials, "Expiration") ?? "");
   if (
     id === undefined ||
     secret === undefined ||
@@ -202,17 +202,4 @@ export async function assumeRole(
     throw new Error(`STS answered ${ask.roleArn}'s AssumeRole with no credentials uno could read`);
   }
   return { accessKeyId: id, secretAccessKey: secret, sessionToken: token, expiration };
-}
-
-/**
- * element is the text of the first <name> in some XML, entities undone, or
- * undefined where there is none. STS's answer is four elements deep and uno
- * reads six names out of it, so this is the whole of the XML it needs: the
- * store/s3xml.ts reader is ListBucketResult's, and its rules are that reply's.
- * The entities are XML's own, and undone the way that reader undoes them.
- */
-function element(xml: string, name: string): string | undefined {
-  const m = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(xml);
-  if (m === null) return undefined;
-  return entities(m[1]!);
 }
