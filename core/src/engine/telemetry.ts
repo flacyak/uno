@@ -316,6 +316,19 @@ export const METRICS_HEADERS_VARIABLE = 'OTEL_EXPORTER_OTLP_METRICS_HEADERS';
 export const METRICS_PROTOCOL_VARIABLE = 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL';
 
 /**
+ * Every variable `collector` reads, for a platform that hands its collector
+ * on to a process it starts somewhere else, such as an instance it launches.
+ */
+export const COLLECTOR_VARIABLES: readonly string[] = [
+  METRICS_ENDPOINT_VARIABLE,
+  ENDPOINT_VARIABLE,
+  METRICS_HEADERS_VARIABLE,
+  HEADERS_VARIABLE,
+  METRICS_PROTOCOL_VARIABLE,
+  PROTOCOL_VARIABLE,
+];
+
+/**
  * The protocol settings accepted. Both mean OTLP over HTTP, where the
  * collector tells JSON from protobuf by content type. gRPC is refused.
  */
