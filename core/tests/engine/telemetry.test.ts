@@ -242,6 +242,16 @@ test('a meter adds measurements up into one OTLP request', () => {
     startTimeUnixNano: `${BEGAN}000000`,
     timeUnixNano: `${LATER}000000`,
   };
+  // A running total is first sent from zero, at the moment it was first
+  // recorded, which here is when the meter began.
+  const zeroTimes = {
+    startTimeUnixNano: `${BEGAN}000000`,
+    timeUnixNano: `${BEGAN}000000`,
+  };
+  const rowsAttributes = [
+    { key: 'outcome', value: { stringValue: 'answered' } },
+    { key: 'request', value: { stringValue: 'rows' } },
+  ];
 
   // 3 ms falls in the bucket up to 5, 40 in the one up to 50, and 1e9 in the
   // overflow bucket.
@@ -256,11 +266,16 @@ test('a meter adds measurements up into one OTLP request', () => {
       aggregationTemporality: 2,
       dataPoints: [
         {
+          ...zeroTimes,
+          attributes: rowsAttributes,
+          count: '0',
+          sum: 0,
+          bucketCounts: buckets.map(() => '0'),
+          explicitBounds: [...DURATION_BOUNDS],
+        },
+        {
           ...times,
-          attributes: [
-            { key: 'outcome', value: { stringValue: 'answered' } },
-            { key: 'request', value: { stringValue: 'rows' } },
-          ],
+          attributes: rowsAttributes,
           count: '3',
           sum: 1e9 + 43,
           bucketCounts: buckets,
@@ -275,13 +290,25 @@ test('a meter adds measurements up into one OTLP request', () => {
     sum: {
       aggregationTemporality: 2,
       isMonotonic: true,
-      dataPoints: [{ ...times, attributes: [], asDouble: 150 }],
+      dataPoints: [
+        { ...zeroTimes, attributes: [], asDouble: 0 },
+        { ...times, attributes: [], asDouble: 150 },
+      ],
     },
   });
+  // A level is read as it stands, and has no zero to start from.
   expect(level).toEqual({
     name: 'uno.level',
     unit: '1',
     gauge: { dataPoints: [{ ...times, attributes: [], asDouble: 9 }] },
+  });
+
+  // The zero goes with the first payload alone.
+  const [again, againIndexed] =
+    meter.payload().resourceMetrics[0]!.scopeMetrics[0]!.metrics;
+  expect(again).toMatchObject({ histogram: { dataPoints: [{ count: '3' }] } });
+  expect(againIndexed).toMatchObject({
+    sum: { dataPoints: [{ asDouble: 150 }] },
   });
 });
 

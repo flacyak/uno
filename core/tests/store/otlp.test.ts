@@ -131,8 +131,9 @@ test('a HEAD adds no bytes received: its length is what a GET would send, and no
     const received = payload.resourceMetrics[0]!.scopeMetrics[0]!.metrics.find(
       (m) => m.name === S3_RECEIVED,
     );
+    // From zero, then the GET's bytes alone.
     expect(received).toMatchObject({
-      sum: { dataPoints: [{ asDouble: LENGTH }] },
+      sum: { dataPoints: [{ asDouble: 0 }, { asDouble: LENGTH }] },
     });
   });
 });
