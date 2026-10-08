@@ -114,13 +114,7 @@ class Absent {
    * .uno said it was, with the extent the save measured of it. */
   get parts(): PartsRef | undefined {
     const kept = this.kept;
-    if (kept.parts === undefined) return undefined;
-    return joinedFrom({
-      name: this.name,
-      parts: kept.parts,
-      header: kept.header,
-      fileColumn: kept.fileColumn,
-    });
+    return kept.parts === undefined ? undefined : joinedFrom({ ...kept, name: this.name });
   }
 
   /** Whatever the container carried for it, which for a pointed-at source is
@@ -400,7 +394,8 @@ export class Workspace {
    * read that reaches it, and held then to what the save recorded of it.
    */
   private async reopen(container: string, src: Held, edits: Edit[]): Promise<Source> {
-    const kept = keptOf(src, edits);
+    // What a save writes back of it, exactly as the .uno held it.
+    const kept: Part = { ...src, edits };
     // A .uno travels, and the person opening one did not choose the buckets
     // it names. One no connection covers is not read at all -- not a HEAD --
     // until they connect it: the source is kept, edits and all, and says why.
@@ -631,17 +626,7 @@ export class Workspace {
           ...kept,
           active: cells.get(source.id) ?? kept?.active ?? { row: 0, col: 0 },
         };
-        const held = {
-          id: source.id,
-          name: source.name,
-          connection: part.connection,
-          rows: part.rows,
-          cols: part.cols,
-          state,
-        };
-        return part.parts !== undefined
-          ? { ...held, parts: part.parts, header: part.header, fileColumn: part.fileColumn }
-          : { ...held, raw: part.raw, path: part.path, bytes: part.bytes, version: part.version };
+        return { ...part, id: source.id, name: source.name, state };
       });
       this.refuseWhere(held, place.at);
 
@@ -767,14 +752,6 @@ export class Workspace {
   }
 }
 
-/** What a save writes back of a source of a .uno, exactly as the .uno held it. */
-function keptOf(src: Held, edits: Edit[]): Part {
-  const kept = { connection: src.connection, edits, rows: src.rows, cols: src.cols };
-  return src.parts !== undefined
-    ? { ...kept, parts: src.parts, header: src.header, fileColumn: src.fileColumn }
-    : { ...kept, raw: src.raw, path: src.path, bytes: src.bytes ?? 0, version: src.version };
-}
-
 /** Every address a source of a .uno is read from, which for one it carries
  * is none. */
 function pathsOf(src: Held): string[] {
@@ -787,7 +764,7 @@ function pathsOf(src: Held): string[] {
  * long its parts are once joined, which is the size it opens at.
  */
 function sizeOf(kept: Part): number {
-  return kept.parts !== undefined ? partMap(kept.parts).size : kept.bytes;
+  return kept.parts !== undefined ? partMap(kept.parts).size : (kept.bytes ?? 0);
 }
 
 /**
