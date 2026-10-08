@@ -22,41 +22,28 @@ export function said(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** One message a kind, stored as the function and not its text, so it is said in the language of the moment. */
+const CHARS: Record<CharName, () => string> = {
+  commas: m.chars_commas,
+  "full stops": m.chars_full_stops,
+  "dollar signs": m.chars_dollar_signs,
+  "pound signs": m.chars_pound_signs,
+  "euro signs": m.chars_euro_signs,
+  "percent signs": m.chars_percent_signs,
+  underscores: m.chars_underscores,
+  apostrophes: m.chars_apostrophes,
+  spaces: m.chars_spaces,
+  asterisks: m.chars_asterisks,
+  hashes: m.chars_hashes,
+  slashes: m.chars_slashes,
+  dashes: m.chars_dashes,
+  "plus signs": m.chars_plus_signs,
+  brackets: m.chars_brackets,
+  quotes: m.chars_quotes,
+};
+
 function charName(name: CharName): string {
-  switch (name) {
-    case "commas":
-      return m.chars_commas();
-    case "full stops":
-      return m.chars_full_stops();
-    case "dollar signs":
-      return m.chars_dollar_signs();
-    case "pound signs":
-      return m.chars_pound_signs();
-    case "euro signs":
-      return m.chars_euro_signs();
-    case "percent signs":
-      return m.chars_percent_signs();
-    case "underscores":
-      return m.chars_underscores();
-    case "apostrophes":
-      return m.chars_apostrophes();
-    case "spaces":
-      return m.chars_spaces();
-    case "asterisks":
-      return m.chars_asterisks();
-    case "hashes":
-      return m.chars_hashes();
-    case "slashes":
-      return m.chars_slashes();
-    case "dashes":
-      return m.chars_dashes();
-    case "plus signs":
-      return m.chars_plus_signs();
-    case "brackets":
-      return m.chars_brackets();
-    case "quotes":
-      return m.chars_quotes();
-  }
+  return CHARS[name]();
 }
 
 /**
@@ -74,164 +61,127 @@ function sought(what: Sought): string {
   return new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(what.names.map(charName));
 }
 
-function step(s: StepSaid): string {
-  switch (s.t) {
-    case "trim":
-      return m.step_trim();
-    case "upper":
-      return m.step_upper();
-    case "lower":
-      return m.step_lower();
-    case "remove": {
-      const what = { what: sought(s.what) };
-      const where = s.what.t === "chars" ? s.what.where : "anywhere";
-      switch (where) {
-        case "anywhere":
-          return m.step_remove(what);
-        case "start":
-          return m.step_remove_from_start(what);
-        case "end":
-          return m.step_remove_from_end(what);
-      }
-      break;
-    }
-    case "replace": {
-      const parts = { what: sought(s.what), with: quoted(s.with) };
-      const where = s.what.t === "chars" ? s.what.where : "anywhere";
-      switch (where) {
-        case "anywhere":
-          return m.step_replace(parts);
-        case "start":
-          return m.step_replace_from_start(parts);
-        case "end":
-          return m.step_replace_from_end(parts);
-      }
-      break;
-    }
-    case "notation":
-      return s.text;
-  }
+/** Where a step looks: anywhere in the cell, or at one end of it. */
+type Where = Extract<Sought, { t: "chars" }>["where"];
+
+function whereOf(what: Sought): Where {
+  return what.t === "chars" ? what.where : "anywhere";
 }
+
+const REMOVES: Record<Where, (p: { what: string }) => string> = {
+  anywhere: m.step_remove,
+  start: m.step_remove_from_start,
+  end: m.step_remove_from_end,
+};
+
+const REPLACES: Record<Where, (p: { what: string; with: string }) => string> = {
+  anywhere: m.step_replace,
+  start: m.step_replace_from_start,
+  end: m.step_replace_from_end,
+};
+
+/** Sentences is one message for each kind, so a kind the engine gains fails to compile here until it has one. */
+type Sentences<U extends { t: string }> = { [K in U["t"]]: (s: Extract<U, { t: K }>) => string };
+
+const STEPS: Sentences<StepSaid> = {
+  trim: m.step_trim,
+  upper: m.step_upper,
+  lower: m.step_lower,
+  remove: (s) => REMOVES[whereOf(s.what)]({ what: sought(s.what) }),
+  replace: (s) => REPLACES[whereOf(s.what)]({ what: sought(s.what), with: quoted(s.with) }),
+  notation: (s) => s.text,
+};
+
+function step(s: StepSaid): string {
+  return (STEPS[s.t] as (s: StepSaid) => string)(s);
+}
+
+const SAYS: Sentences<Said> = {
+  text: (s) => s.text,
+  about: (s) => m.said_about({ subject: s.subject, why: say(s.why) }),
+  replaying: (s) => m.said_replaying({ name: s.name, why: say(s.why) }),
+
+  read: (s) => {
+    const headed = s.header === "first";
+    const tabs = { charset: s.charset };
+    if (s.delimiter === "\t") return headed ? m.read_tabs(tabs) : m.read_tabs_no_header(tabs);
+    const read = { charset: s.charset, delimiter: s.delimiter };
+    return headed ? m.read_delimiter(read) : m.read_delimiter_no_header(read);
+  },
+
+  program: (s) => {
+    const [first, ...rest] = s.steps.map(step);
+    if (first === undefined) return m.program_nothing();
+    return rest.reduce((before, after) => m.program_then({ before, after }), first);
+  },
+
+  "version-changed": (s) =>
+    s.sizes === undefined
+      ? m.changed_version_same_size({ name: s.name })
+      : m.changed_version_sizes({
+          name: s.name,
+          now: bytes(s.sizes.now),
+          was: bytes(s.sizes.was),
+        }),
+  "size-changed": (s) => m.changed_size({ name: s.name, now: bytes(s.now), was: bytes(s.was) }),
+
+  "only-source": (s) => m.refused_only_source({ name: s.name }),
+  "append-to-absent": (s) => m.refused_append_to_absent({ name: s.name }),
+  "append-to-one-file": (s) => m.refused_append_to_one_file({ name: s.name }),
+  "append-nothing": (s) => m.refused_append_nothing({ name: s.name }),
+  "append-already-part": (s) =>
+    m.refused_append_already_part({ file: s.file, part: num(s.part), name: s.name }),
+  "append-twice": (s) => m.refused_append_twice({ file: s.file, name: s.name }),
+  "workspace-as-source": (s) => m.workspace_not_a_source({ name: s.name }),
+  "workspace-too-large": (s) =>
+    m.refused_workspace_too_large({ name: s.name, size: bytes(s.bytes), limit: bytes(s.limit) }),
+  "no-file-open": m.refused_no_file_open,
+  "carried-too-large": (s) =>
+    m.refused_carried_too_large({ name: s.name, size: bytes(s.bytes), limit: bytes(s.limit) }),
+  "carried-together-too-large": (s) =>
+    m.refused_carried_together_too_large({
+      count: s.count,
+      size: bytes(s.bytes),
+      limit: bytes(s.limit),
+    }),
+  "workspace-closed": m.refused_workspace_closed,
+  "no-such-source": (s) => m.refused_no_such_source({ id: s.id }),
+  "source-absent": (s) => m.refused_source_absent({ name: s.name }),
+  "point-one-at-several": (s) =>
+    m.refused_point_one_at_several({ file: s.file, count: s.count, name: s.name }),
+  "point-several-at-one": (s) =>
+    m.refused_point_several_at_one({ name: s.name, count: s.count, file: s.file }),
+  "point-several-at-other": (s) =>
+    m.refused_point_several_at_other({ name: s.name, count: s.count, given: num(s.given) }),
+  "log-lost-edit": (s) => m.refused_log_lost_edit({ source: s.source }),
+  "bucket-unconnected": (s) =>
+    m.refused_bucket_unconnected({ container: s.container, bucket: s.bucket }),
+
+  "joins-unknown-for-column": (s) => m.refused_joins_unknown_for_column({ name: s.name }),
+  "joins-unknown-for-save": (s) =>
+    m.refused_joins_unknown_for_save({ name: s.name, count: s.count }),
+  "rows-past-files": (s) => m.refused_rows_past_files({ name: s.name }),
+  "part-has-no-path": (s) =>
+    m.refused_part_has_no_path({
+      name: s.name,
+      file: s.file,
+      part: num(s.part),
+      count: num(s.count),
+    }),
+  "nothing-to-undo": m.refused_nothing_to_undo,
+  "nothing-to-redo": m.refused_nothing_to_redo,
+  "in-view": m.refused_in_view,
+  "file-closed": m.refused_file_closed,
+  "changed-on-disk": (s) => m.refused_changed_on_disk({ name: s.name }),
+
+  "keeps-no-connections": m.refused_keeps_no_connections,
+  "offers-no-profiles": m.refused_offers_no_profiles,
+  "tries-no-connection": m.refused_tries_no_connection,
+};
 
 /** say is one thing the engine said, in the language the app is in now. */
 export function say(s: Said): string {
-  switch (s.t) {
-    case "text":
-      return s.text;
-    case "about":
-      return m.said_about({ subject: s.subject, why: say(s.why) });
-    case "replaying":
-      return m.said_replaying({ name: s.name, why: say(s.why) });
-
-    case "read": {
-      const headed = s.header === "first";
-      const tabs = { charset: s.charset };
-      if (s.delimiter === "\t") return headed ? m.read_tabs(tabs) : m.read_tabs_no_header(tabs);
-      const read = { charset: s.charset, delimiter: s.delimiter };
-      return headed ? m.read_delimiter(read) : m.read_delimiter_no_header(read);
-    }
-
-    case "program": {
-      const [first, ...rest] = s.steps.map(step);
-      if (first === undefined) return m.program_nothing();
-      return rest.reduce((before, after) => m.program_then({ before, after }), first);
-    }
-
-    case "version-changed":
-      return s.sizes === undefined
-        ? m.changed_version_same_size({ name: s.name })
-        : m.changed_version_sizes({
-            name: s.name,
-            now: bytes(s.sizes.now),
-            was: bytes(s.sizes.was),
-          });
-    case "size-changed":
-      return m.changed_size({ name: s.name, now: bytes(s.now), was: bytes(s.was) });
-
-    case "only-source":
-      return m.refused_only_source({ name: s.name });
-    case "append-to-absent":
-      return m.refused_append_to_absent({ name: s.name });
-    case "append-to-one-file":
-      return m.refused_append_to_one_file({ name: s.name });
-    case "append-nothing":
-      return m.refused_append_nothing({ name: s.name });
-    case "append-already-part":
-      return m.refused_append_already_part({ file: s.file, part: num(s.part), name: s.name });
-    case "append-twice":
-      return m.refused_append_twice({ file: s.file, name: s.name });
-    case "workspace-as-source":
-      return m.workspace_not_a_source({ name: s.name });
-    case "workspace-too-large":
-      return m.refused_workspace_too_large({
-        name: s.name,
-        size: bytes(s.bytes),
-        limit: bytes(s.limit),
-      });
-    case "no-file-open":
-      return m.refused_no_file_open();
-    case "carried-too-large":
-      return m.refused_carried_too_large({
-        name: s.name,
-        size: bytes(s.bytes),
-        limit: bytes(s.limit),
-      });
-    case "carried-together-too-large":
-      return m.refused_carried_together_too_large({
-        count: s.count,
-        size: bytes(s.bytes),
-        limit: bytes(s.limit),
-      });
-    case "workspace-closed":
-      return m.refused_workspace_closed();
-    case "no-such-source":
-      return m.refused_no_such_source({ id: s.id });
-    case "source-absent":
-      return m.refused_source_absent({ name: s.name });
-    case "point-one-at-several":
-      return m.refused_point_one_at_several({ file: s.file, count: s.count, name: s.name });
-    case "point-several-at-one":
-      return m.refused_point_several_at_one({ name: s.name, count: s.count, file: s.file });
-    case "point-several-at-other":
-      return m.refused_point_several_at_other({
-        name: s.name,
-        count: s.count,
-        given: num(s.given),
-      });
-    case "log-lost-edit":
-      return m.refused_log_lost_edit({ source: s.source });
-    case "bucket-unconnected":
-      return m.refused_bucket_unconnected({ container: s.container, bucket: s.bucket });
-
-    case "joins-unknown-for-column":
-      return m.refused_joins_unknown_for_column({ name: s.name });
-    case "joins-unknown-for-save":
-      return m.refused_joins_unknown_for_save({ name: s.name, count: s.count });
-    case "rows-past-files":
-      return m.refused_rows_past_files({ name: s.name });
-    case "part-has-no-path":
-      return m.refused_part_has_no_path({
-        name: s.name,
-        file: s.file,
-        part: num(s.part),
-        count: num(s.count),
-      });
-    case "nothing-to-undo":
-      return m.refused_nothing_to_undo();
-    case "nothing-to-redo":
-      return m.refused_nothing_to_redo();
-    case "in-view":
-      return m.refused_in_view();
-    case "file-closed":
-      return m.refused_file_closed();
-    case "changed-on-disk":
-      return m.refused_changed_on_disk({ name: s.name });
-
-    case "keeps-no-connections":
-      return m.refused_keeps_no_connections();
-    case "offers-no-profiles":
-      return m.refused_offers_no_profiles();
-    case "tries-no-connection":
-      return m.refused_tries_no_connection();
-  }
+  // The table is typed by kind, and s is the union, so the one pairing the
+  // compiler cannot see is said here: each message takes its own kind.
+  return (SAYS[s.t] as (s: Said) => string)(s);
 }
