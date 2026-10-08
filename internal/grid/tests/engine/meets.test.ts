@@ -19,8 +19,7 @@ import { Op } from "../../src/sheet/index.ts";
 import { connectionsIn, saveConnection } from "../../src/store/index.ts";
 import { connectionSigning, diskProvider, nodeStore } from "../../src/store/node.ts";
 import { connectionMeeting, s3Provider } from "../../src/store/s3.ts";
-import { HOME_REGION } from "../store/regions.ts";
-import { BUCKET, KEYS, bucket, etagOf } from "../store/standin.ts";
+import { BUCKET, bucket, etagOf, keysOnly } from "../store/standin.ts";
 import type { Bucket } from "../store/standin.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { FIXTURE, connect, indexed, openOne } from "./harness.ts";
@@ -35,14 +34,7 @@ const OBJECT = `s3://${BUCKET}/2025/sales-q3.csv`;
 /** The same object, written the way a browser shows it. */
 const HTTPS = `https://${BUCKET}.s3.amazonaws.com/2025/sales-q3.csv`;
 
-const env = {
-  AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
-  AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
-  AWS_REGION: HOME_REGION,
-  AWS_PROFILE: undefined,
-  AWS_CONFIG_FILE: "/nonexistent/config",
-  AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/credentials",
-};
+const env = keysOnly();
 
 const EXPORTS: Connection = {
   format: 1,
