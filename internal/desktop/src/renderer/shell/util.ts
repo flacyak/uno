@@ -8,6 +8,23 @@ export function must<T>(value: T | null): T {
   return value;
 }
 
+/** found is the element the markup promised under a selector. */
+export function found<E extends HTMLElement = HTMLElement>(selector: string): E {
+  return must(document.querySelector<E>(selector));
+}
+
+/** Handlers is one function for each kind of a union tagged by `t`, so a kind left out is a type error. */
+export type Handlers<U extends { t: string }> = {
+  [K in U["t"]]: (u: Extract<U, { t: K }>) => void;
+};
+
+/** dispatch hands a tagged value to its kind's handler. */
+export function dispatch<U extends { t: string }>(handlers: Handlers<U>, u: U): void {
+  // The table is typed by kind, and u is the union, so the one pairing the
+  // compiler cannot see is said here: each handler takes its own kind.
+  (handlers[u.t as U["t"]] as (u: U) => void)(u);
+}
+
 /**
  * el is one element as the shell makes most of them: a tag, the class it
  * wears, and the text in it. Either may be left out, and an empty class is
