@@ -14,10 +14,8 @@ import { m } from "../src/paraglide/messages.js";
 import { RECENTS_KEY } from "../src/renderer/recents.ts";
 import type { Shell } from "../src/renderer/shell/shell.ts";
 import { FIXTURE, bootShell } from "./smoke/dom-harness.ts";
-import { domPage } from "./smoke/dom-page.ts";
+import { domPage, until } from "./smoke/dom-page.ts";
 
-/** Matches dom-page.ts's own budget. */
-const TRIES = 150;
 /** The units column of the fixture, where an edit goes. */
 const UNITS = 2;
 
@@ -44,12 +42,6 @@ function dirtyMarks(): number {
   return document.querySelectorAll(".dirty").length;
 }
 
-/** until waits, a frame at a time, for `holds` to say so. */
-async function until(holds: () => boolean): Promise<boolean> {
-  for (let i = 0; i < TRIES && !holds(); i++) await page.settle(2);
-  return holds();
-}
-
 /** edit changes one cell, so the workspace has something to save. */
 async function edit(row: number, value: string): Promise<void> {
   await page.clickCell(row, UNITS);
@@ -57,7 +49,7 @@ async function edit(row: number, value: string): Promise<void> {
   await page.press("Enter");
   await page.setEditorValue(value);
   await page.press("Enter");
-  expect(await until(() => dirtyMarks() > 0)).toBe(true);
+  expect(await until(page, () => dirtyMarks() > 0)).toBe(true);
 }
 
 beforeAll(async () => {
@@ -129,7 +121,7 @@ test("the × over a save in flight waits for it, and closes once it has landed",
   expect(quits).toBe(0);
   release?.();
   await saving;
-  expect(await until(() => quits === 1)).toBe(true);
+  expect(await until(page, () => quits === 1)).toBe(true);
   expect(shell.unsaved).toBe(false);
   writes.length = 0;
 });

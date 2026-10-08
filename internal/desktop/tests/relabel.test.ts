@@ -17,10 +17,8 @@ import { getLocale } from "../src/paraglide/runtime.js";
 import { num } from "../src/renderer/locale.ts";
 import type { Shell } from "../src/renderer/shell/shell.ts";
 import { bootShell } from "./smoke/dom-harness.ts";
-import { domPage } from "./smoke/dom-page.ts";
+import { domPage, until } from "./smoke/dom-page.ts";
 
-/** Matches dom-page.ts's own budget. */
-const TRIES = 150;
 /** The units column of the fixture, where an edit goes. */
 const UNITS = 2;
 /** A row the mark is set on, and one the selection is left on. */
@@ -56,12 +54,6 @@ function scroller(): HTMLElement {
   return document.querySelector<HTMLElement>(".grid-scroll")!;
 }
 
-/** until waits, a frame at a time, for `holds` to say so. */
-async function until(holds: () => boolean): Promise<boolean> {
-  for (let i = 0; i < TRIES && !holds(); i++) await page.settle(2);
-  return holds();
-}
-
 async function edit(row: number, value: string): Promise<void> {
   // The rows drawn are the ones scrolled to, so the row clicked is counted
   // from the top of the file only once the grid is there.
@@ -72,7 +64,7 @@ async function edit(row: number, value: string): Promise<void> {
   await page.press("Enter");
   await page.setEditorValue(value);
   await page.press("Enter");
-  expect(await until(() => document.querySelectorAll(".dirty").length > 0)).toBe(true);
+  expect(await until(page, () => document.querySelectorAll(".dirty").length > 0)).toBe(true);
 }
 
 beforeAll(async () => {
@@ -127,7 +119,7 @@ test("an edit, the selection, the scroll, a mark and the undo history survive a 
 
   // The undo history is still there: u takes the edit back.
   await page.press("u");
-  expect(await until(() => fileLine().indexOf(m.edits_count({ count: 1 })) < 0)).toBe(true);
+  expect(await until(page, () => fileLine().indexOf(m.edits_count({ count: 1 })) < 0)).toBe(true);
   expect(shell.unsaved).toBe(false);
   shell.setInput("default");
 });
@@ -176,7 +168,7 @@ test("a change made twice before the first settles ends in the last, with one of
 test("a save in flight lands, and says so in the language chosen after it began", async () => {
   await edit(LEFT_ROW, "9");
   const saving = shell.save();
-  expect(await until(() => release !== undefined)).toBe(true);
+  expect(await until(page, () => release !== undefined)).toBe(true);
   shell.language.choose("en-US");
   await page.settle(1);
   release!();
@@ -211,7 +203,7 @@ test("a find in flight finishes, in the language chosen while it ran", async () 
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
   );
   shell.language.choose("pt-BR");
-  expect(await until(() => message() !== "" && message() !== m.searching())).toBe(true);
+  expect(await until(page, () => message() !== "" && message() !== m.searching())).toBe(true);
   expect(message()).toContain(
     m.find_text_below({ text: "zzz-not-in-the-file", row: "1", column: "" }).slice(0, 4),
   );
