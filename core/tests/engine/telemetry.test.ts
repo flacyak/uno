@@ -435,6 +435,22 @@ test('a protocol that is not OTLP over HTTP is refused by name', () => {
   ).toThrow('OTEL_EXPORTER_OTLP_METRICS_PROTOCOL is grpc');
 });
 
+test('a protocol setting that does not read as a protocol is described by its length, since it may hold a secret', () => {
+  const token = 'glc_eyJvIjoiMTIzNDU2NyIsIm4iOiJ1bm8ifQ==';
+  let said = '';
+  try {
+    collector({
+      OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY,
+      OTEL_EXPORTER_OTLP_PROTOCOL: token,
+    });
+  } catch (err) {
+    said = (err as Error).message;
+  }
+  expect(said).toContain('OTEL_EXPORTER_OTLP_PROTOCOL is not a protocol');
+  expect(said).toContain(`${token.length} characters long`);
+  expect(said).not.toContain(token);
+});
+
 test('an endpoint that is not a URL is refused by name, saying what is wrong and not what it holds', () => {
   const TOKEN = 'glc_secret';
   const refused = (endpoint: string): string => {
