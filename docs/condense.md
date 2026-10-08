@@ -44,10 +44,26 @@ Each is one commit on the branch. Deltas are insertions and deletions over `src/
 2. engine: serve's switch is a typed handler table (KINDS gone); client's requests go through `ask(kind, make)`; workspace replace and changing; labelOf; readable(); codec blamed and optional. +286 -325.
 3. library/unof.ts envelope for formulas and connections; go/scanner.ts Scanner under both parsers, program step table; notation bail; schema atEdit. +128 -319.
 4. said english table; graph postOrder; pattern pushTo; induce Set; steps uses go/regexp isMeta. +125 -165.
-5. desktop said tables. 
+5. desktop said tables.
 6. desktop key readers over shared motion tables in keys.ts; state, section, appearance and input words as tables.
 7. desktop shell/util.ts `el` and `option`; every builder uses them. +139 -213.
 8. desktop shell withTab, paintAll, shown, engineOn, saveTo. +50 -56.
+9. desktop renderer workspace replace; sources filtered and pages; metrics fitPool.
+10. desktop grid refused and noMarks.
+11. desktop popups hang and clickAway; settings radio and segment; Scanner fields written out for strip-only TypeScript.
+12. desktop smoke PRELUDE holds arrives, the panel line readers, foot buttons, openPanel, edited. Smoke run: 106 checks pass.
+13. desktop main/preview.ts: one Clock, press with modifiers, presses, type in fix, story table, waitIn. Stories edit, browse, refresh, connecting roll.
+14. grid node.ts envKeys, envRegion, readText, hold, fail, signed.
+15. grid multi partLabel and refuse; store/index readEach.
+16. desktop scripts: launch.js drive and rewrite; preview.js savedWorkspace, bucketConnection, freshDir. Smoke passes; edit and refresh stories roll.
+
+Measured after step 16, against the baseline:
+
+| area                   | lines  | was    |
+| ---------------------- | ------ | ------ |
+| internal/grid/src      | 16905  | 16971  |
+| internal/desktop/src   | 13445  | 13697  |
+| all three with scripts | +2045 -2391 over 65 files |
 
 A lesson from the deltas: a helper's doc comment costs lines. Keep a helper's comment to one line unless the why needs more.
 
@@ -55,9 +71,9 @@ A lesson from the deltas: a helper's doc comment costs lines. Keep a helper's co
 
 From the survey, not yet done, highest value first.
 
-- desktop main smoke scripts: `arrives` poller pasted into 30 checks, "wait for N edits" nine times in smoke/vim-style.ts, command typing, openPanel, foot buttons, the connection form filled three times, the panel `lines()` snippet in three files. About 110 lines. Only the real Electron smoke run covers it: `vp run smoke`.
-- desktop main/preview.ts: press with modifiers, fix() repeats type(), presses(n), `at` and menu:input built once, story table, waitIn. About 65 lines. Checked by `node scripts/preview.js <story>`.
-- desktop scripts/smoke.js and preview.js: one driven launcher in launch.js, rewrite(), withEngine, bucketConnection, freshDir. About 70 lines.
-- desktop renderer: workspace relink/append merge (~8), virtualiser frameOnce and fitPool (~14), sources filtered() and pages() (~10), settings radio/segment (~15), popup base for menu and formula (~12), text-field key guard (~15, medium risk).
-- grid: telemetry kind table (~10, medium risk), node.ts envKeys, profile error prefixes, readText, hold(); multi.ts refuse(); store/index.ts readEach for loadLibrary and loadConnections (~30 together).
+- desktop renderer: text-field key guard shared by six handlers (~15, medium risk: the six differ in composing and preventDefault); frameOnce for the two next-frame redraws (~5); Theming and Language listener lists (~3).
+- desktop main/index.ts: menu item and radio helpers (~12). No unit test; the smoke run covers it.
+- desktop smoke/vim-style.ts: the connection form filled three times across meets, sources and connections; the typed command repeated four times.
+- grid: telemetry kind table (~10, medium risk); sheet/kind.ts isDate as a table (~6); connection parseAuth profile and role as one rule (~12).
 - grid codec: field-table codec for sources (~25, medium risk: JSON key order must match the Go structs).
+- tests (28k lines) were left alone so far. Shared fixtures and helpers there are the next large pool, if a test's meaning is kept.
