@@ -10,11 +10,15 @@ import "./grid.css";
 import { m } from "../../paraglide/messages.js";
 import type { InputStrategy } from "../input/strategy.ts";
 import { NOTHING, changeOf, isJump, replay, showing, target } from "../keys.ts";
-import { el } from "../shell/util.ts";
+import { dispatch, el } from "../shell/util.ts";
+import type { Handlers } from "../shell/util.ts";
 import type { Action, Caret, Change, Motion, Pending } from "../keys.ts";
 import { num } from "../locale.ts";
 import { columnLabel } from "./rows.ts";
-import type { Cell, GridEvents, Rows } from "./rows.ts";
+import type { Cell, GridEvents, Rows, ShellAction } from "./rows.ts";
+
+/** The actions the grid carries out itself, which are every kind the shell does not. */
+type GridAction = Exclude<Action, ShellAction>;
 import { View } from "./view.ts";
 
 export type { GridEvents, Rows, ShellAction } from "./rows.ts";
@@ -200,58 +204,44 @@ export class Grid {
    * it for :{n}, which is {n}G typed at the command line.
    */
   act(action: Action): void {
-    switch (action.t) {
-      case "none":
-        return;
-      case "move":
-        this.move(action.motion, action.count);
-        return;
-      case "scroll":
-        this.view.scrollRow(this.selRow, action.where);
-        return;
-      case "mark":
-        this.marks.named.set(action.name, { row: this.selRow, col: this.selCol });
-        return;
-      case "to-mark": {
-        const mark = this.marks.named.get(action.name);
-        if (mark === undefined) this.events.onSay(m.mark_not_set({ name: action.name }), true);
-        else this.jump(mark.row, mark.col);
-        return;
-      }
-      case "back": {
-        const before = this.marks.before;
-        if (before !== undefined) this.jump(before.row, before.col);
-        return;
-      }
-      case "clear":
-        this.write({ t: "set", value: "" });
-        return;
-      case "yank":
-        this.yank();
-        return;
-      case "put":
-        if (this.register === undefined) this.events.onSay(m.nothing_yanked(), true);
-        else this.write({ t: "set", value: this.register });
-        return;
-      case "repeat":
-        if (this.last !== undefined) this.write(this.last);
-        return;
-      case "mode":
-        this.events.onMode(action.to);
-        return;
-      case "insert":
-        // a in view: the switch writes nothing and was asked for, so it happens
-        // even when the editor then refuses the cell.
-        if (action.transform) this.events.onMode("transform");
-        this.beginEdit(action.caret, action.text);
-        return;
-      case "say":
-        this.events.onSay(action.text, false);
-        return;
-      default:
-        this.events.onAction(action);
-    }
+    // What the grid does itself, and the rest, which is the shell's.
+    if (Object.hasOwn(this.doing, action.t)) dispatch(this.doing, action as GridAction);
+    else this.events.onAction(action as ShellAction);
   }
+
+  /** The actions the grid carries out itself, by kind. */
+  private readonly doing: Handlers<GridAction> = {
+    none: () => undefined,
+    move: (a) => this.move(a.motion, a.count),
+    scroll: (a) => this.view.scrollRow(this.selRow, a.where),
+    mark: (a) => this.marks.named.set(a.name, { row: this.selRow, col: this.selCol }),
+    "to-mark": (a) => {
+      const mark = this.marks.named.get(a.name);
+      if (mark === undefined) this.events.onSay(m.mark_not_set({ name: a.name }), true);
+      else this.jump(mark.row, mark.col);
+    },
+    back: () => {
+      const before = this.marks.before;
+      if (before !== undefined) this.jump(before.row, before.col);
+    },
+    clear: () => this.write({ t: "set", value: "" }),
+    yank: () => this.yank(),
+    put: () => {
+      if (this.register === undefined) this.events.onSay(m.nothing_yanked(), true);
+      else this.write({ t: "set", value: this.register });
+    },
+    repeat: () => {
+      if (this.last !== undefined) this.write(this.last);
+    },
+    mode: (a) => this.events.onMode(a.to),
+    insert: (a) => {
+      // a in view: the switch writes nothing and was asked for, so it happens
+      // even when the editor then refuses the cell.
+      if (a.transform) this.events.onMode("transform");
+      this.beginEdit(a.caret, a.text);
+    },
+    say: (a) => this.events.onSay(a.text, false),
+  };
 
   /** move goes where keys.ts says a motion lands. None of them write. */
   private move(motion: Motion, count: number | undefined): void {
