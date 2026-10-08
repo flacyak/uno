@@ -45,15 +45,7 @@ const FRAME_INTERVAL = 60;
  * opening frame and one for each of those three, and a take with fewer is one
  * where a beat did nothing.
  */
-const MIN_DISTINCT: Record<string, number> = {
-  edit: 8,
-  browse: 8,
-  refresh: 4,
-  sidebar: 8,
-  opening: 8,
-  connecting: 8,
-  refused: 8,
-};
+const MIN_DISTINCT = 8;
 
 /**
  * The edit story, as offsets from the moment the camera rolls.
@@ -293,20 +285,18 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // window. The edit story waits for rows; the browse story opens a workspace
   // whose source is missing, so it has none, and waits for the tab's ! instead.
   const story = process.env["UNO_PREVIEW_STORY"] ?? "edit";
-  // The sidebar story opens its workspaces itself, the last of them with rows.
-  const rows = ["edit", "sidebar", "opening", "connecting", "refused"].includes(story);
-  const ready = rows ? "tbody tr:not(.pending)" : ".tab .trouble";
+  const {
+    end,
+    script,
+    ready = "rows",
+    minDistinct = MIN_DISTINCT,
+  } = STORIES[story] ?? STORIES["edit"]!;
+  const drawn = ready === "rows" ? "tbody tr:not(.pending)" : ".tab .trouble";
   try {
+    // The sidebar story opens its workspaces itself, the last of them with rows.
     if (story === "sidebar") await openWorkspaces(win);
-    await win.webContents.executeJavaScript(`
-      (async () => {
-        for (let i = 0; i < 120; i++) {
-          if (document.querySelector(${JSON.stringify(ready)}) !== null) return;
-          await new Promise((r) => setTimeout(r, 50));
-        }
-        throw new Error("nothing was ever drawn at ${ready}");
-      })()
-    `);
+    const shown = `document.querySelector(${JSON.stringify(drawn)}) !== null`;
+    await waitIn(win, shown, `nothing was ever drawn at ${drawn}`);
   } catch (err) {
     console.error(`preview: ${(err as Error).message}`);
     quit(1);
@@ -318,10 +308,12 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   // One clock. The camera and the script start together and never consult each
   // other again, which is the whole reason for filming from inside the process.
   const start = Date.now();
-  const { end, script } = STORIES[story] ?? STORIES["edit"]!;
+  const at: Clock = (ms) => sleep(start + ms - Date.now());
+  // The story is told in the default keys, whichever this machine last chose.
+  win.webContents.send("menu:input", "default");
   let shots: (Shot & { hash: string })[];
   try {
-    [shots] = await Promise.all([film(win, dir, rect, start, end), script(win, start)]);
+    [shots] = await Promise.all([film(win, dir, rect, start, end), script(win, at)]);
   } catch (err) {
     // A take that fails says why and ends now, rather than leaving the app
     // open for the script's deadline to find.
@@ -343,7 +335,7 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
   console.log(`preview: ${shots.length} frames over ${(total / 1000).toFixed(1)}s (${fps}/s)`);
   console.log(`preview: ${distinct} distinct`);
 
-  if (distinct < (MIN_DISTINCT[story] ?? 8)) {
+  if (distinct < minDistinct) {
     console.error(`preview: FAILED -- ${distinct} distinct frames is a film of a still image`);
     quit(1);
     return;
@@ -489,18 +481,11 @@ async function film(
  * The window ignores real input while it is driven, so each one is sent inside
  * `through`, which lets the story's input past and nobody else's.
  */
-async function play(win: BrowserWindow, start: number): Promise<void> {
-  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
-
+async function play(win: BrowserWindow, at: Clock): Promise<void> {
   // The story is told in the default keys, whichever this machine last chose.
-  win.webContents.send("menu:input", "default");
-
   // A file opens in view, where nothing a key does changes it.
   await at(BEAT.transform);
-  through(win, () => {
-    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "E", modifiers: ["control"] });
-    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "E", modifiers: ["control"] });
-  });
+  press(win, "E", ["control"]);
 
   // Three corrections, each the same gesture: arrows to reach the cell, the
   // value typed where it sits, Enter to commit. The repetition is the argument.
@@ -542,17 +527,9 @@ async function play(win: BrowserWindow, start: number): Promise<void> {
  * Every key after Ctrl+Shift+B lands on the panel's list, which holds the keys
  * until the last Enter adds a tab and hands them to the grid.
  */
-async function playBrowse(win: BrowserWindow, start: number): Promise<void> {
-  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
-
-  win.webContents.send("menu:input", "default");
-
+async function playBrowse(win: BrowserWindow, at: Clock): Promise<void> {
   await at(BROWSE.panel);
-  through(win, () => {
-    const modifiers: ("control" | "shift")[] = ["control", "shift"];
-    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
-    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
-  });
+  press(win, "B", ["control", "shift"]);
 
   // p on the tab's line, where the panel opened with the keys.
   await at(BROWSE.repoint);
@@ -566,10 +543,7 @@ async function playBrowse(win: BrowserWindow, start: number): Promise<void> {
   press(win, "Backspace");
 
   await at(BROWSE.walk);
-  for (let i = 0; i < 3; i++) {
-    press(win, "Down");
-    await sleep(ARROW_GAP * 2);
-  }
+  await presses(win, "Down", 3, ARROW_GAP * 2);
   await at(BROWSE.pick);
   press(win, "Space");
 
@@ -578,10 +552,7 @@ async function playBrowse(win: BrowserWindow, start: number): Promise<void> {
   press(win, "Return");
 
   await at(BROWSE.add);
-  for (let i = 0; i < 2; i++) {
-    press(win, "Up");
-    await sleep(ARROW_GAP * 2);
-  }
+  await presses(win, "Up", 2, ARROW_GAP * 2);
   await sleep(OPEN_PAUSE);
   press(win, "Return");
 
@@ -617,17 +588,9 @@ async function playBrowse(win: BrowserWindow, start: number): Promise<void> {
  * The window is driven and keeps the focus the whole take, so coming back to
  * it is the focus event a window manager would deliver.
  */
-async function playRefresh(win: BrowserWindow, start: number): Promise<void> {
-  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
-
-  win.webContents.send("menu:input", "default");
-
+async function playRefresh(win: BrowserWindow, at: Clock): Promise<void> {
   await at(REFRESH.panel);
-  through(win, () => {
-    const modifiers: ("control" | "shift")[] = ["control", "shift"];
-    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
-    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
-  });
+  press(win, "B", ["control", "shift"]);
 
   await at(REFRESH.rewrite);
   await ask("preview", `rewrite ${REFRESH_KEY}`);
@@ -651,14 +614,25 @@ async function openWorkspaces(win: BrowserWindow): Promise<void> {
   const paths = JSON.parse(process.env["UNO_PREVIEW_WORKSPACES"] ?? "[]") as string[];
   for (const path of paths) {
     win.webContents.send("menu:open-path", path);
-    await win.webContents.executeJavaScript(`
-      (async () => {
-        const open = () => document.querySelector(".ws.open")?.dataset.path === ${JSON.stringify(path)};
-        for (let i = 0; i < 120 && !open(); i++) await new Promise((r) => setTimeout(r, 50));
-        if (!open()) throw new Error("${path} never opened");
-      })()
-    `);
+    const open = `document.querySelector(".ws.open")?.dataset.path === ${JSON.stringify(path)}`;
+    await waitIn(win, open, `${path} never opened`);
   }
+}
+
+/**
+ * waitIn polls the page for `condition`, an expression in its JavaScript, for
+ * six seconds, and fails with `failure` where it never holds.
+ */
+async function waitIn(win: BrowserWindow, condition: string, failure: string): Promise<void> {
+  await win.webContents.executeJavaScript(`
+    (async () => {
+      for (let i = 0; i < 120; i++) {
+        if (${condition}) return;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error(${JSON.stringify(failure)});
+    })()
+  `);
 }
 
 /**
@@ -666,11 +640,7 @@ async function openWorkspaces(win: BrowserWindow): Promise<void> {
  * workspace and back, a right click for the formula form, the expression
  * typed and entered, a save, the sidebar's switch, the + and the ×.
  */
-async function playSidebar(win: BrowserWindow, start: number): Promise<void> {
-  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
-
-  win.webContents.send("menu:input", "default");
-
+async function playSidebar(win: BrowserWindow, at: Clock): Promise<void> {
   // The workspaces under the open one, most recent first: the first of them,
   // then the one the take began on, which is first of them in its turn.
   await at(SIDEBAR.other);
@@ -716,14 +686,26 @@ async function playSidebar(win: BrowserWindow, start: number): Promise<void> {
   await at(SIDEBAR.end);
 }
 
-/** What each story is: how long it runs, and what plays it. */
-const STORIES: Record<
-  string,
-  { end: number; script: (win: BrowserWindow, start: number) => Promise<void> }
-> = {
+/** Clock is the story's time: a wait until an offset from the moment the camera rolled. */
+type Clock = (ms: number) => Promise<void>;
+
+/**
+ * What each story is: how long it runs, what plays it, what the window has to
+ * have drawn before the camera rolls, and the fewest distinct frames a take of
+ * it can have. The browse story opens a workspace whose source is missing, so
+ * it has no rows and waits for the tab's ! instead.
+ */
+interface Story {
+  end: number;
+  script: (win: BrowserWindow, at: Clock) => Promise<void>;
+  ready?: "rows" | "trouble";
+  minDistinct?: number;
+}
+
+const STORIES: Record<string, Story> = {
   edit: { end: BEAT.end, script: play },
-  browse: { end: BROWSE.end, script: playBrowse },
-  refresh: { end: REFRESH.end, script: playRefresh },
+  browse: { end: BROWSE.end, script: playBrowse, ready: "trouble" },
+  refresh: { end: REFRESH.end, script: playRefresh, ready: "trouble", minDistinct: 4 },
   sidebar: { end: SIDEBAR.end, script: playSidebar },
   opening: { end: OPENING.end, script: playOpening },
   connecting: { end: CONNECTING.end, script: playConnecting },
@@ -736,17 +718,9 @@ const STORIES: Record<
  * bucket is slow, so its line in the workspace section is seen opening before
  * its tab arrives.
  */
-async function playOpening(win: BrowserWindow, start: number): Promise<void> {
-  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
-
-  win.webContents.send("menu:input", "default");
-
+async function playOpening(win: BrowserWindow, at: Clock): Promise<void> {
   await at(OPENING.panel);
-  through(win, () => {
-    const modifiers: ("control" | "shift")[] = ["control", "shift"];
-    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
-    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
-  });
+  press(win, "B", ["control", "shift"]);
 
   // One tab, so one line down is the connection.
   await at(OPENING.connection);
@@ -774,9 +748,9 @@ async function playOpening(win: BrowserWindow, start: number): Promise<void> {
  * saved by the pointer while the bucket is slow, so its line in the connections section is
  * seen connecting before the bucket is browsed.
  */
-async function playConnecting(win: BrowserWindow, start: number): Promise<void> {
-  await connect(win, start, CONNECTING_BUCKET);
-  await sleep(start + CONNECTING.end - Date.now());
+async function playConnecting(win: BrowserWindow, at: Clock): Promise<void> {
+  await connect(win, at, CONNECTING_BUCKET);
+  await at(CONNECTING.end);
 }
 
 /**
@@ -784,10 +758,8 @@ async function playConnecting(win: BrowserWindow, start: number): Promise<void> 
  * bucket's name mistyped, its line failing where it was connecting, and Enter
  * on the line bringing the form back to be edited.
  */
-async function playRefused(win: BrowserWindow, start: number): Promise<void> {
-  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
-
-  await connect(win, start, REFUSED_BUCKET);
+async function playRefused(win: BrowserWindow, at: Clock): Promise<void> {
+  await connect(win, at, REFUSED_BUCKET);
   await at(REFUSED.edit);
   press(win, "Return");
   await at(REFUSED.end);
@@ -798,17 +770,9 @@ async function playRefused(win: BrowserWindow, start: number): Promise<void> {
  * in with `bucket` and saved while the stand-in is slow, as far as its line
  * having stopped connecting, one way or the other.
  */
-async function connect(win: BrowserWindow, start: number, bucket: string): Promise<void> {
-  const at = (ms: number): Promise<void> => sleep(start + ms - Date.now());
-
-  win.webContents.send("menu:input", "default");
-
+async function connect(win: BrowserWindow, at: Clock, bucket: string): Promise<void> {
   await at(CONNECTING.panel);
-  through(win, () => {
-    const modifiers: ("control" | "shift")[] = ["control", "shift"];
-    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "B", modifiers });
-    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "B", modifiers });
-  });
+  press(win, "B", ["control", "shift"]);
 
   // One tab and no connections, so one line down is + Connect a bucket.
   await at(CONNECTING.line);
@@ -914,14 +878,8 @@ async function fix(
   win: BrowserWindow,
   { right, down, value }: { right: number; down: number; value: string },
 ): Promise<void> {
-  for (let i = 0; i < right; i++) {
-    press(win, "Right");
-    await sleep(ARROW_GAP);
-  }
-  for (let i = 0; i < down; i++) {
-    press(win, "Down");
-    await sleep(ARROW_GAP);
-  }
+  await presses(win, "Right", right, ARROW_GAP);
+  await presses(win, "Down", down, ARROW_GAP);
   await sleep(OPEN_PAUSE);
 
   // The first character opens the editor over the selected cell already holding
@@ -935,24 +893,28 @@ async function fix(
   // The rest go to the field, which needs the char to insert anything. Typed a
   // character at a time rather than assigned, because a field that fills
   // instantly reads as a screenshot rather than as an edit.
-  for (const ch of value.slice(1)) {
-    through(win, () => {
-      win.webContents.sendInputEvent({ type: "keyDown", keyCode: ch });
-      win.webContents.sendInputEvent({ type: "char", keyCode: ch });
-      win.webContents.sendInputEvent({ type: "keyUp", keyCode: ch });
-    });
-    await sleep(KEYSTROKE);
-  }
+  await type(win, value.slice(1));
 
   await sleep(PRE_ENTER);
   press(win, "Return");
 }
 
-function press(win: BrowserWindow, keyCode: string): void {
+/** press is one key down and up, with whatever modifiers are held: a chord where there are. */
+function press(win: BrowserWindow, keyCode: string, modifiers: Modifier[] = []): void {
   through(win, () => {
-    win.webContents.sendInputEvent({ type: "keyDown", keyCode });
-    win.webContents.sendInputEvent({ type: "keyUp", keyCode });
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
   });
+}
+
+type Modifier = "control" | "shift";
+
+/** presses is a key pressed `n` times, `gap` apart, the way a person walks a list. */
+async function presses(win: BrowserWindow, keyCode: string, n: number, gap: number): Promise<void> {
+  for (let i = 0; i < n; i++) {
+    press(win, keyCode);
+    await sleep(gap);
+  }
 }
 
 /**
