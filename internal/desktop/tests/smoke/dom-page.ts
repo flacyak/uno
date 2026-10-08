@@ -15,8 +15,15 @@
 
 import type { KeyModifiers, Page, Row, Wait } from "../../src/main/smoke/page.ts";
 
-/** Matches electron-page.ts's own budget: see its TRIES for why. */
-const TRIES = 150;
+/**
+ * How long a wait here lasts, at most. electron-page.ts counts frames, 150 of
+ * them, which at a display's rate is a few seconds. happy-dom's frame is one
+ * turn of the event loop and no time at all, so counting them here would give
+ * the engine, which answers over a channel in its own turns, a budget that
+ * shrinks to nothing on a loaded machine. The wait is bounded by the clock
+ * instead, and polls once a frame as the real page does.
+ */
+const WAIT_MS = 5_000;
 
 /** A frame, the way the grid schedules its own layout: two rAFs, so a write
  * made in one is visible by the time the second's callback runs. */
@@ -37,9 +44,10 @@ function holds(wait: Wait): boolean {
   return "equals" in wait ? at === wait.equals : at.includes(wait.includes);
 }
 
-/** until waits, a frame at a time, for `holds` to say so. */
+/** until waits, a frame at a time and for WAIT_MS at most, for `holds` to say so. */
 export async function until(page: Page, holds: () => boolean): Promise<boolean> {
-  for (let i = 0; i < TRIES && !holds(); i++) await page.settle(2);
+  const deadline = Date.now() + WAIT_MS;
+  while (!holds() && Date.now() < deadline) await page.settle(2);
   return holds();
 }
 
@@ -110,7 +118,8 @@ export function domPage(): Page {
     // frame outside this backend either.
     until: async (waits) => {
       const ok = (): boolean => waits.every(holds);
-      for (let i = 0; i < TRIES && !ok(); i++) await frame();
+      const deadline = Date.now() + WAIT_MS;
+      while (!ok() && Date.now() < deadline) await frame();
       return ok();
     },
 
