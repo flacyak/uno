@@ -30,7 +30,7 @@ import type { HeaderMode } from "../../src/store/index.ts";
 import { connectionSigning, diskProvider, nodeStore } from "../../src/store/node.ts";
 import { connectionMeeting, s3Provider } from "../../src/store/s3.ts";
 import { HOME_REGION } from "../store/regions.ts";
-import { BUCKET, KEYS, bucket, etagOf, versionIdOf } from "../store/standin.ts";
+import { BUCKET, KEYS, bucket, keysOnly, etagOf, versionIdOf } from "../store/standin.ts";
 import type { Bucket } from "../store/standin.ts";
 import { ROWS, UNITS } from "../testdata/sales-q3.ts";
 import {
@@ -637,14 +637,7 @@ describe("parts in a bucket", () => {
     PART_NAMES.forEach((name, i) => history.set(name, partBytes[i]!));
   });
 
-  const env = () => ({
-    AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
-    AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
-    AWS_REGION: HOME_REGION,
-    AWS_PROFILE: undefined,
-    AWS_CONFIG_FILE: "/nonexistent/config",
-    AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/credentials",
-  });
+  const env = keysOnly;
 
   /** An engine the way the desktop wires one, with several files as one listed. */
   async function desktop(connections: Connection[]) {

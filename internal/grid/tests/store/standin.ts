@@ -30,6 +30,22 @@ export const KEYS: AwsCredentials = {
   region: "us-east-1",
 };
 
+/**
+ * keysOnly is the environment of a machine that holds the stand-in's keys and
+ * nothing else: no profile, and no ~/.aws to read one from, so nothing a test
+ * signs was signed by anybody but KEYS.
+ */
+export function keysOnly(region: string = HOME_REGION): Record<string, string | undefined> {
+  return {
+    AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
+    AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
+    AWS_REGION: region,
+    AWS_PROFILE: undefined,
+    AWS_CONFIG_FILE: "/nonexistent/config",
+    AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/credentials",
+  };
+}
+
 /** Where the stand-in keeps its one bucket. regions.ts says which region. */
 export const BUCKET = "acme-exports";
 
