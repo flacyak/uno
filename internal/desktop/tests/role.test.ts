@@ -9,6 +9,7 @@ import { beforeEach, expect, test, vi } from "vite-plus/test";
 
 import { setLocale } from "../src/paraglide/runtime.js";
 import { RoleBlock } from "../src/renderer/shell/role.ts";
+import { settle } from "./settle.ts";
 
 const TRUST = {
   principal: "arn:aws:iam::111122223333:role/uno-engine",
@@ -33,9 +34,6 @@ beforeEach(() => {
 
 const text = (selector: string): string => block.el.querySelector(selector)!.textContent ?? "";
 const buttons = (): HTMLButtonElement[] => [...block.el.querySelectorAll("button")];
-const settle = async (): Promise<void> => {
-  for (let i = 0; i < 3; i++) await Promise.resolve();
-};
 
 test("hidden until shown, then the account, the external ID, and what the role needs", () => {
   expect(block.el.hidden).toBe(true);

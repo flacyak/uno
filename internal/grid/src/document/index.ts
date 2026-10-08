@@ -12,6 +12,8 @@ export {
   RULE_VERSION,
   SOURCES_VERSION,
   STATE_ENTRY,
+  WORKSPACE_EXT,
+  isWorkspace,
   logOf,
   newManifest,
   resolvedPath,

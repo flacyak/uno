@@ -10,6 +10,17 @@ import type { Locale } from "../paraglide/runtime.js";
 /** Cached number formatter, rebuilt when the locale changes. */
 let grouping: { locale: Locale; format: Intl.NumberFormat } | undefined;
 
+/** Cached size formatters, whole and to a tenth, rebuilt when the locale changes. */
+let sizes: { locale: Locale; whole: Intl.NumberFormat; tenths: Intl.NumberFormat } | undefined;
+
+/** A formatter that writes exactly `digits` decimals. */
+function decimals(locale: Locale, digits: number): Intl.NumberFormat {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
 /** Formats a count in the app's locale: 1,204 in English. */
 export function num(n: number): string {
   const locale = getLocale();
@@ -35,11 +46,11 @@ export function bytes(n: number): string {
     size /= UNIT_STEP;
     unit++;
   }
-  const digits = size < DECIMAL_BELOW ? 1 : 0;
-  const written = new Intl.NumberFormat(getLocale(), {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(size);
+  const locale = getLocale();
+  if (sizes?.locale !== locale) {
+    sizes = { locale, whole: decimals(locale, 0), tenths: decimals(locale, 1) };
+  }
+  const written = (size < DECIMAL_BELOW ? sizes.tenths : sizes.whole).format(size);
   return UNITS[unit]!({ size: written });
 }
 

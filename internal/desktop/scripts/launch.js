@@ -51,6 +51,18 @@ export function displayMissing(env, platform) {
 }
 
 /**
+ * Exits with 2, saying so, when this process has no display to open a window
+ * on. `who` names the run for the message: "smoke", "preview".
+ *
+ * @param {string} who
+ */
+export function requireDisplay(who) {
+  if (!displayMissing(process.env, process.platform)) return;
+  console.error(`${who}: no DISPLAY. Run under Xvfb, or on a desktop session.`);
+  process.exit(2);
+}
+
+/**
  * The failure line for a finished run, or undefined if it passed. A run
  * passes only when it exited 0 and printed `banner`.
  *

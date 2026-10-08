@@ -31,9 +31,10 @@ export function pageKey(named: Named): string {
   return `${named.folder ? "d" : "f"}:${named.name}`;
 }
 
-/** byPageKey orders entries folders first, then by name. */
+/** byPageKey orders entries as their page keys do: folders first, then by name. */
 export function byPageKey(a: Named, b: Named): number {
-  return compareStrings(pageKey(a), pageKey(b));
+  if (a.folder !== b.folder) return a.folder ? -1 : 1;
+  return compareStrings(a.name, b.name);
 }
 
 /**

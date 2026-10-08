@@ -1182,8 +1182,9 @@ test("the panel reaches for no document and no window", () => {
     fileURLToPath(new URL("../src/renderer/sources.ts", import.meta.url)),
     "utf8",
   );
-  // Comments may say "window". Code saying it fails the test.
-  const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
+  // Comments and strings, such as an import's path, may say "document" or
+  // "window". Code saying it fails the test.
+  const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*|"(?:[^"\\]|\\.)*"/g, "");
   expect(code).not.toMatch(/\bdocument\b|\bwindow\b|\bHTML[A-Za-z]*Element\b/);
 });
 
