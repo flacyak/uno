@@ -24,6 +24,31 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return made;
 }
 
+/**
+ * hang places a surface hung off the page at `place`, moved in from the bottom
+ * or the right of the window until the whole of it shows, `edge` pixels clear.
+ */
+export function hang(box: HTMLElement, place: { left: number; top: number }, edge: number): void {
+  const { width, height } = box.getBoundingClientRect();
+  const left = Math.min(place.left, window.innerWidth - width - edge);
+  const top = Math.min(place.top, window.innerHeight - height - edge);
+  box.style.left = `${Math.max(edge, left)}px`;
+  box.style.top = `${Math.max(edge, top)}px`;
+}
+
+/**
+ * clickAway has a click outside a surface close it, armed after the click
+ * that opened it has finished, or it would close what it opened. It answers
+ * the disarm, for the close.
+ */
+export function clickAway(box: HTMLElement, close: () => void): () => void {
+  const away = (e: MouseEvent): void => {
+    if (!box.contains(e.target as Node)) close();
+  };
+  setTimeout(() => document.addEventListener("mousedown", away), 0);
+  return () => document.removeEventListener("mousedown", away);
+}
+
 /** option is one choice in a select: what it says, and the value it stands for. */
 export function option(label: string, value: string): HTMLOptionElement {
   const made = el("option", "", label);

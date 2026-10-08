@@ -244,12 +244,8 @@ export class Settings {
     const mode = this.theming.mode;
     for (const t of THEMES) {
       const chosen = t.id === this.theming.theme.id;
-      const item = row(t.name, chosen ? CHOSEN : "");
-      item.setAttribute("role", "menuitemradio");
-      item.setAttribute("aria-checked", String(chosen));
-      item.dataset["theme"] = t.id;
+      const item = radio(t.name, chosen, "theme", t.id, () => this.theming.choose(t.id));
       item.title = m.settings_theme_credit({ name: t.name, author: t.author });
-      if (chosen) item.classList.add("chosen");
 
       const p = t[mode];
       const chip = el("span", "chip");
@@ -261,7 +257,6 @@ export class Settings {
         chip.append(dot);
       }
       item.prepend(chip);
-      item.addEventListener("click", () => this.theming.choose(t.id));
       section.append(item);
     }
     return section;
@@ -269,36 +264,20 @@ export class Settings {
 
   /** Light, dark, or whatever the system is in, for whichever theme is worn. */
   private appearances(): HTMLElement {
-    const section = heading(m.settings_appearance());
-    const seg = el("div", "seg");
-    for (const a of APPEARANCES) {
-      const button = el("button", a === this.theming.appearance ? "on" : "", APPEARANCE_WORDS[a]());
-      button.setAttribute("aria-pressed", String(a === this.theming.appearance));
-      button.dataset["appearance"] = a;
-      button.addEventListener("click", () => this.theming.appear(a));
-      seg.append(button);
-    }
-    section.append(seg);
-    return section;
+    const on = this.theming.appearance;
+    const word = (a: Appearance): string => APPEARANCE_WORDS[a]();
+    return segment(m.settings_appearance(), APPEARANCES, on, word, "appearance", (a) =>
+      this.theming.appear(a),
+    );
   }
 
   /** How the grid reads keys: a spreadsheet's, or vim's. */
   private keys(): HTMLElement {
-    const section = heading(m.settings_keys());
-    const seg = el("div", "seg");
-    const now = this.asks.input();
-    for (const name of INPUTS) {
-      const button = el("button", name === now ? "on" : "", inputLabel(name));
-      button.setAttribute("aria-pressed", String(name === now));
-      button.dataset["input"] = name;
-      button.addEventListener("click", () => {
-        this.asks.setInput(name);
-        this.paint();
-      });
-      seg.append(button);
-    }
-    section.append(seg);
-    return section;
+    const on = this.asks.input();
+    return segment(m.settings_keys(), INPUTS, on, inputLabel, "input", (name) => {
+      this.asks.setInput(name);
+      this.paint();
+    });
   }
 
   /**
@@ -313,18 +292,55 @@ export class Settings {
     ];
     for (const [choice, name] of choices) {
       const chosen = choice === this.language.choice;
-      const item = row(name, chosen ? CHOSEN : "");
-      item.setAttribute("role", "menuitemradio");
-      item.setAttribute("aria-checked", String(chosen));
-      item.dataset["language"] = choice;
+      const item = radio(name, chosen, "language", choice, () => this.language.choose(choice));
       // The name is in the language itself, and the page is in another.
       if (choice !== SYSTEM) item.lang = choice;
-      if (chosen) item.classList.add("chosen");
-      item.addEventListener("click", () => this.language.choose(choice));
       section.append(item);
     }
     return section;
   }
+}
+
+/**
+ * radio is one line of a list where one is chosen: its name, the mark where it
+ * is the one, and under `key` what it stands for, for the keys and a reader.
+ */
+function radio(
+  name: string,
+  chosen: boolean,
+  key: string,
+  value: string,
+  choose: () => void,
+): HTMLElement {
+  const item = row(name, chosen ? CHOSEN : "");
+  item.setAttribute("role", "menuitemradio");
+  item.setAttribute("aria-checked", String(chosen));
+  item.dataset[key] = value;
+  if (chosen) item.classList.add("chosen");
+  item.addEventListener("click", choose);
+  return item;
+}
+
+/** segment is a section of buttons side by side, one of them pressed. */
+function segment<T extends string>(
+  title: string,
+  choices: readonly T[],
+  on: T,
+  label: (choice: T) => string,
+  key: string,
+  choose: (choice: T) => void,
+): HTMLElement {
+  const section = heading(title);
+  const seg = el("div", "seg");
+  for (const c of choices) {
+    const button = el("button", c === on ? "on" : "", label(c));
+    button.setAttribute("aria-pressed", String(c === on));
+    button.dataset[key] = c;
+    button.addEventListener("click", () => choose(c));
+    seg.append(button);
+  }
+  section.append(seg);
+  return section;
 }
 
 /** arrowStep reads the arrows as a step through the items, and Tab as one too. */
