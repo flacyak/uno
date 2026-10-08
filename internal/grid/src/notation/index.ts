@@ -92,18 +92,14 @@ class Scanner {
     this.i += name.length;
 
     if (name === "") {
-      this.fail("a lone \\ names no symbol");
-      this.literal(start);
-      return;
+      return this.bail("a lone \\ names no symbol", start);
     }
 
     if (name === "frac") {
       const num = this.group();
       const den = this.group();
       if (num === undefined || den === undefined) {
-        this.fail("\\frac needs two {…} groups to draw");
-        this.literal(start);
-        return;
+        return this.bail("\\frac needs two {…} groups to draw", start);
       }
       this.out += this.nested(num) + FRAC_SLASH + this.nested(den);
       return;
@@ -123,13 +119,13 @@ class Scanner {
     // in the cell.
     const missing = NO_GLYPH.get(name);
     if (missing !== undefined) {
-      this.fail(`\\${name} is ${formatU(missing)}, which uno's font has no glyph for`);
-      this.literal(start);
-      return;
+      return this.bail(
+        `\\${name} is ${formatU(missing)}, which uno's font has no glyph for`,
+        start,
+      );
     }
 
-    this.fail(`\\${name} is not a symbol uno can draw`);
-    this.literal(start);
+    this.bail(`\\${name} is not a symbol uno can draw`, start);
   }
 
   /**
@@ -151,9 +147,7 @@ class Scanner {
       this.i++;
     }
     if (content === undefined || content.length === 0) {
-      this.fail(`${quote(mark)} needs a symbol after it`);
-      this.literal(start);
-      return;
+      return this.bail(`${quote(mark)} needs a symbol after it`, start);
     }
 
     let small = "";
@@ -162,15 +156,11 @@ class Scanner {
       if (r === "\\") {
         // \alpha^{\beta}. Naming the command is more use to a person than
         // naming the backslash it happens to begin with.
-        this.fail(`\\${word(content.slice(i + 1))} has no ${kind} form to draw`);
-        this.literal(start);
-        return;
+        return this.bail(`\\${word(content.slice(i + 1))} has no ${kind} form to draw`, start);
       }
       const c = table.get(r);
       if (c === undefined) {
-        this.fail(`${quote(r)} has no ${kind} form to draw`);
-        this.literal(start);
-        return;
+        return this.bail(`${quote(r)} has no ${kind} form to draw`, start);
       }
       small += c;
     }
@@ -223,6 +213,12 @@ class Scanner {
 
   private fail(message: string): void {
     this.failErr(new Error(message));
+  }
+
+  /** bail is a construct that cannot be drawn: the complaint, and the text from `start` as it was typed. */
+  private bail(message: string, start: number): void {
+    this.fail(message);
+    this.literal(start);
   }
 
   private failErr(err: Error | undefined): void {

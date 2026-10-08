@@ -7,7 +7,6 @@
 // and added to, with the colleague's workspace beside it in the list.
 
 import type { Check } from "./check.ts";
-import { REMOTE } from "./sources.ts";
 
 /** A right click on a workspace's line, where a person's pointer would be. */
 const RIGHT_CLICK = `
@@ -72,7 +71,6 @@ export const SIDEBAR: Check[] = [
     // The workspace has sources nobody saved, so leaving it is said first.
     name: "another workspace picked over unsaved work says so, and opens on the second click",
     script: `
-      ${REMOTE}
       ${RIGHT_CLICK}
       const gone = () => [...document.querySelectorAll(".ws:not(.open)")].find((w) => w.querySelector(".name").textContent === "gone");
       gone().click();
@@ -92,7 +90,6 @@ export const SIDEBAR: Check[] = [
     // The dialog is answered with the second export: see pick.ts.
     name: "the + at the foot of the sidebar opens a file as a new workspace, not saved yet",
     script: `
-      ${REMOTE}
       ${RIGHT_CLICK}
       const plus = document.querySelector("#new");
       const foot = document.querySelector("#sidebar").getBoundingClientRect().bottom - plus.getBoundingClientRect().bottom;
@@ -115,7 +112,6 @@ export const SIDEBAR: Check[] = [
     // selection along the row as it does down the file.
     name: "the selection moved to a column off the side of a wide file brings it on screen",
     script: `
-      ${REMOTE}
       if (!(await arrives(() => document.querySelector("tbody tr:not(.pending)") !== null))) return "no rows were drawn";
       const scroller = document.querySelector(".grid-scroll");
       if (scroller.scrollWidth <= scroller.clientWidth) return "the file fits the window, so this checks nothing";
@@ -132,7 +128,6 @@ export const SIDEBAR: Check[] = [
   {
     name: "a workspace with nothing unsaved gives way at once, and the one opened is first again",
     script: `
-      ${REMOTE}
       ${RIGHT_CLICK}
       [...document.querySelectorAll(".ws:not(.open)")].find((w) => w.querySelector(".name").textContent === "sales-q3").click();
       if (!(await arrives(() => names(".ws.open")[0] === "sales-q3"))) {
@@ -160,7 +155,6 @@ export const SIDEBAR: Check[] = [
   {
     name: "Insert formula… opens on the selected column, and an expression the engine cannot read is refused in the form",
     script: `
-      ${REMOTE}
       ${RIGHT_CLICK}
       choose("Insert formula…");
       await frame();
@@ -190,7 +184,6 @@ export const SIDEBAR: Check[] = [
     name: "a formula computes the column in transform, as one edit, and the header says what from",
     shot: "sidebar-formula",
     script: `
-      ${REMOTE}
       const form = document.querySelector(".formula");
       form.querySelector("input").value = "revenue * 2";
       form.requestSubmit();
@@ -231,7 +224,6 @@ export const SIDEBAR: Check[] = [
   {
     name: "Ctrl+Z takes the formula back, and the column shows what it stored",
     script: `
-      ${REMOTE}
       await press("z", { ctrlKey: true });
       if (!(await arrives(() => document.querySelector("thead .badge.bound") === null))) return "the badge stayed";
       const cell = () => document.querySelectorAll("tbody tr")[0].children[GUTTER + ${CHANNEL}].textContent;
