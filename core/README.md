@@ -24,8 +24,10 @@ codebase.
 Everything above `store` is pure. This lets it share the same code across
 platforms. This property should continue. `store/node` and `store/disklister`
 are the only files that import `node:fs`, and `store/node` is the only one that
-runs a program, a profile's `credential_process`. `store/s3` and `store/sts`
-are the only ones that reach a network. Two tests hold each of them to that,
+runs a program, a profile's `credential_process`. `store/s3`, `store/sts`,
+`store/metadata` and `store/otlp` are the only ones that reach a network: S3,
+STS, the host's own role, and the collector a platform names for the
+engine's measurements. Two tests hold each of them to that,
 from one list in `tests/store/ways.ts`. `tests/store/opens.test.ts` reads the
 source, so it catches a way out however a module is written, `import()` and
 `require()` included, even in code no test runs. `tests/store/reaches.test.ts`
@@ -142,10 +144,13 @@ The `efficiency` workflow does both on every pull request.
 ## Telemetry
 
 `serve` takes a `Telemetry`, a function it calls with how long each request
-took to answer and each source took to index. The engine measures and sends
-nothing: `engine/telemetry.ts` is pure, like the rest of the core. Its `Meter`
-adds measurements up and writes them as an OTLP metrics request, and the
-platform sends that, as the desktop does from `src/engine/telemetry.ts`.
+took to answer and each source took to index. `engine/telemetry.ts` is pure,
+like the rest of the engine: its `Meter` adds measurements up and writes them
+as an OTLP metrics request. `store/otlp` sends them: `exporter` posts the
+totals every ten seconds and on `flush`, and its `fetch` counts the requests
+the engine makes to S3 on their way through. A platform reads the collector
+from its environment with `collector` and names what it is, as the desktop
+does from `src/engine/telemetry.ts` and the hosted server from its engine.
 A measurement names what was done and where the bytes were, and nothing about
 whose they are.
 
