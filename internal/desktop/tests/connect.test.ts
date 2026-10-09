@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
-// Connecting a bucket from the panel: the fields, the profile list the engine
-// names, the test that lists the folder, and save.
+// Connecting a bucket from the panel: the fields, the ways of signing in the
+// engine offers, the test that lists the folder, and save.
 //
 // What is under test is that nothing is kept that did not work. A test that
 // fails names what stopped it in the engine's own words -- a 403, a bucket
@@ -11,7 +11,7 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import type { Peeked, Said, SourceRef } from "@uno/grid/engine";
+import type { Peeked, Said, SignIns, SourceRef } from "@uno/grid/engine";
 import type { Connection } from "@uno/grid/library";
 import type { Listing } from "@uno/grid/store";
 import type { Tried } from "@uno/grid/store/s3";
@@ -23,6 +23,13 @@ import type { Listings } from "../src/renderer/sources.ts";
 import { Sources, stateOf } from "../src/renderer/sources.ts";
 
 const REGION = "eu-west-1";
+
+/** A role in the person's account, and what the hosted engine says it has to trust. */
+const ROLE = "arn:aws:iam::210987654321:role/uno-read";
+const TRUST = { principal: "arn:aws:iam::111122223333:role/uno-engine", externalId: "ext-4f9c" };
+
+/** What the desktop's engine offers: itself, its profiles, and public. */
+const DESKTOP: SignIns["modes"] = ["machine", "profile", "public"];
 
 function connection(over: Partial<Connection> = {}): Connection {
   return {
@@ -58,6 +65,10 @@ test("the fields are a connection named after its bucket and folder, signing in 
   expect(draftOf({ bucket: "open-data", prefix: "", signIn: "machine" }, []).name).toBe(
     "open-data",
   );
+  // A role's ARN is read when the role is the way chosen, and trimmed as the bucket is.
+  expect(
+    draftOf({ bucket: "lake", prefix: "", signIn: "role", roleArn: ` ${ROLE} ` }, []).auth,
+  ).toEqual({ mode: "role", roleArn: ROLE });
 });
 
 // A second folder of one bucket is a second connection, in a second file. The
@@ -129,11 +140,11 @@ class Asks implements ConnectAsks {
   tried: Connection[] = [];
   saved: Connection[] = [];
   refusal: string | undefined;
-  names = ["default", "finance"];
+  offered: SignIns = { modes: DESKTOP, profiles: ["default", "finance"] };
   kept: Connection[] = [];
 
-  profiles(): Promise<string[]> {
-    return Promise.resolve(this.names);
+  signIns(): Promise<SignIns> {
+    return Promise.resolve(this.offered);
   }
   tryConnection(c: Connection): Promise<Tried> {
     this.tried.push(c);
@@ -220,7 +231,7 @@ test("+ Connect a bucket is a line the keys reach, and Enter opens the form in t
   expect(document.activeElement).toBe(field("bucket"));
 });
 
-test("the profile list is the engine's names, between this machine and public, with default chosen", async () => {
+test("the sign-in list is the engine's profiles, between this machine and public, with default chosen", async () => {
   panel.connect();
   await settle();
   const options = [...select().options].map((o) => [o.value, o.textContent]);
@@ -231,6 +242,61 @@ test("the profile list is the engine's names, between this machine and public, w
     ["public", "public · no sign-in"],
   ]);
   expect(select().value).toBe("profile:default");
+  // The desktop offers no role, so nothing asks for one.
+  expect(field("roleArn").closest("label")!.hidden).toBe(true);
+  expect(form().querySelector(".fine")!.textContent).toBe(
+    "Each connection is one file in connections/. The profile list is read from ~/.aws; uno stores the name, never the keys.",
+  );
+});
+
+// The hosted engine signs in as a role in the person's account, and public.
+// The role's row asks for its ARN, and under it is what the role has to
+// trust: the engine's principal and the account's external ID, which is what
+// a person copies into the role's policy.
+test("an engine that signs in with a role asks for its ARN and says what the role has to trust", async () => {
+  asks.offered = { modes: ["role", "public"], profiles: [], trust: TRUST };
+  panel.connect({ bucket: "acme-finance-lake" });
+  await settle();
+  expect([...select().options].map((o) => [o.value, o.textContent])).toEqual([
+    ["role", "a role in your account"],
+    ["public", "public · no sign-in"],
+  ]);
+  expect(select().value).toBe("role");
+  const row = field("roleArn").closest("label")!;
+  expect(row.hidden).toBe(false);
+  expect(form().querySelector(".trust")!.textContent).toBe(
+    `Its trust policy lets ${TRUST.principal} assume it with external ID ${TRUST.externalId}.`,
+  );
+  expect(form().querySelector(".fine")!.textContent).toBe(
+    "Each connection is one file in connections/. uno stores the role's ARN and never a key; what lets uno read is the role's own trust policy.",
+  );
+
+  // No role named, and one that is not a role's ARN, are said before anything is asked.
+  form().requestSubmit();
+  await settle();
+  expect(result()).toBe("✗ name the role to assume");
+  type("roleArn", "uno-read");
+  form().requestSubmit();
+  await settle();
+  expect(result()).toBe(
+    `✗ "uno-read" is not a role's ARN · one reads arn:aws:iam::123456789012:role/name`,
+  );
+  expect(asks.tried).toEqual([]);
+
+  type("roleArn", ROLE);
+  expect(form().querySelector(".fine")!.textContent).toBe(
+    "Saves as connections/acme-finance-lake.unof. uno stores the role's ARN and never a key; what lets uno read is the role's own trust policy.",
+  );
+  press("Test");
+  await settle();
+  expect(asks.tried.map((c) => c.auth)).toEqual([{ mode: "role", roleArn: ROLE }]);
+  expect(result()).toBe("✓ listed the bucket · 3 folders, 41 files");
+
+  // Choosing public puts the role's row and its trust away.
+  select().value = "public";
+  select().dispatchEvent(new Event("change", { bubbles: true }));
+  expect(row.hidden).toBe(true);
+  expect(form().querySelector<HTMLElement>(".trust")!.hidden).toBe(true);
 });
 
 test("a test lists the folder and fills in the region nobody typed", async () => {
@@ -428,20 +494,23 @@ test("changing a field after a test takes the test back", async () => {
   expect(asks.tried.map((c) => c.prefix)).toEqual(["", "refunds/"]);
 });
 
-// The names can land after a quick Test, and pick a profile the test did not
+// The ways can land after a quick Test, and pick a profile the test did not
 // sign in with. The select moving is a field changing, and takes the test back
-// like typing would, so what the form says passed is what is on screen.
-test("the profile list arriving after a test takes the test back", async () => {
-  let name: (names: string[]) => void = () => {};
-  asks.profiles = () => new Promise<string[]>((resolve) => (name = resolve));
+// like typing would, so what the form says passed is what is on screen. Until
+// the engine has said, public is the one way on offer, since every engine
+// reads an open bucket unsigned.
+test("the sign-in list arriving after a test takes the test back", async () => {
+  let offer: (offered: SignIns) => void = () => {};
+  asks.signIns = () => new Promise<SignIns>((resolve) => (offer = resolve));
   panel.connect({ bucket: "acme-exports" });
   await settle();
+  expect([...select().options].map((o) => o.value)).toEqual(["public"]);
   press("Test");
   await settle();
-  expect(asks.tried.map((c) => c.auth)).toEqual([{ mode: "machine" }]);
+  expect(asks.tried.map((c) => c.auth)).toEqual([{ mode: "public" }]);
   expect(result()).toBe("✓ listed the bucket · 3 folders, 41 files");
 
-  name(["default"]);
+  offer({ modes: DESKTOP, profiles: ["default"] });
   await settle();
   expect(select().value).toBe("profile:default");
   expect(result()).toBe("");

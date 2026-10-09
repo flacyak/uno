@@ -9,6 +9,7 @@
   "exports": {
     "./renderer/*": "./src/renderer/*",
     "./shared/*": "./src/shared/*",
+    "./scripts/*": "./scripts/*",
     "./index.html": "./index.html"
   },
   "scripts": {

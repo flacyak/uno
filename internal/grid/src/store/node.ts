@@ -751,6 +751,96 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
 }
 
 /**
+ * What a hosted engine is: the keys it holds and whom they are allowed to be.
+ *
+ * `base` is the engine's own credentials, the role its instance runs as, which
+ * the customer's role trusts. `externalId` belongs to the account asking and
+ * is never in a connection's file: it is the condition the customer writes
+ * into the role's trust policy, so a .uno somebody else sent cannot make this
+ * engine assume a role it was not set up to. `principal` is what the engine
+ * signs as, for a person writing that policy to name.
+ */
+export interface HostedOptions {
+  base: () => Promise<AwsCredentials>;
+  externalId: string;
+  principal: string;
+  env?: Env;
+  /** Where STS is, for a stand-in in a test. The AWS_ENDPOINT_URL_STS variable otherwise. */
+  stsEndpoint?: string;
+}
+
+/**
+ * hostedAuth is uno's hosted engine's ways of signing in: `role` and `public`,
+ * and nothing of the machine it runs on. A `role` connection is taken on
+ * through STS with the account's external ID, the keys kept until shortly
+ * before they expire. `machine` and `profile` are refused by name -- a hosted
+ * engine has no ~/.aws and is nobody's machine -- and an address no connection
+ * covers is refused by `machine`, so a .uno naming any bucket cannot make the
+ * instance read it with the instance's own role.
+ */
+export function hostedAuth(opts: HostedOptions): ConnectionAuth {
+  const env = opts.env ?? process.env;
+  const roles = new Map<string, () => Promise<AwsCredentials>>();
+  const who = (c: Connection): string => (c.name === "" ? c.id : c.name);
+  return {
+    machine() {
+      return Promise.reject(
+        new Error(
+          "uno's hosted engine reads only the buckets a connection covers · " +
+            "it signs in with a role in your account, not with a machine of its own",
+        ),
+      );
+    },
+    async of(c) {
+      switch (c.auth.mode) {
+        case "role": {
+          const roleArn = c.auth.roleArn;
+          let read = roles.get(roleArn);
+          if (read === undefined) {
+            read = cached(async () => {
+              const source = await opts.base();
+              const session = await assumeRole(
+                {
+                  roleArn,
+                  sessionName: `uno-${Date.now()}`,
+                  externalId: opts.externalId,
+                  region: c.region ?? source.region,
+                },
+                source,
+                { endpoint: opts.stsEndpoint ?? env["AWS_ENDPOINT_URL_STS"] },
+              );
+              return {
+                creds: { ...session, region: c.region ?? source.region },
+                until: session.expiration.getTime() - EARLY_MS,
+              };
+            });
+            roles.set(roleArn, read);
+          }
+          const creds = await read();
+          return {
+            ...creds,
+            region: c.region ?? creds.region,
+            as: `${who(c)} (a role in your account)`,
+          };
+        }
+        case "public":
+          return {
+            unsigned: true,
+            region: c.region ?? envRegion(env) ?? DEFAULT_REGION,
+            as: `${who(c)} (read without signing in)`,
+          };
+        case "machine":
+        case "profile":
+          throw new Error(
+            `${who(c)} signs in as a machine of its own, which uno's hosted engine is not · ` +
+              "connect it with a role in your account that uno may assume",
+          );
+      }
+    },
+  };
+}
+
+/**
  * connectionSigning is how the desktop's S3 provider signs each request: with
  * the connection that covers where it is going, and with the machine's chain
  * where none does -- an address somebody pasted, a bucket nobody connected.

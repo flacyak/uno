@@ -5,9 +5,10 @@
 // src/paraglide: a typed function for each message, so a key that is not there
 // or a parameter left out fails `vp check` and never reaches a person.
 //
-// The options are here because three things compile with them: the Vite plugin
+// The options are here because four things compile with them: the Vite plugin
 // for the renderer and the tests, the build before it bundles main and preload,
-// and `vp run check`, which lints against the compiled functions.
+// `vp run check`, which lints against the compiled functions, and the web
+// build in @uno/web, which runs the same plugin over the same files.
 //
 // The pseudo-locale is written from the English before each of them compiles.
 // See pseudo.js for what it is for.
@@ -30,8 +31,9 @@ const messageFile = (locale) => join(PACKAGE, "messages", `${locale}.json`);
 
 /** @type {import("@inlang/paraglide-js").CompilerOptions} */
 export const MESSAGES = {
-  project: "./project.inlang",
-  outdir: "./src/paraglide",
+  // Absolute, so the web build compiles them from its own package's cwd.
+  project: join(PACKAGE, "project.inlang"),
+  outdir: join(PACKAGE, "src", "paraglide"),
   // The locale is a variable the app sets: the renderer from its settings, main
   // from what the renderer tells it. Until it is set the app speaks the base
   // locale, which is what a test gets.

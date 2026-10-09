@@ -8,7 +8,7 @@
 // same call.
 
 import { ROWS_AT_MOST } from "./protocol.ts";
-import type { Port, Reply, Request } from "./protocol.ts";
+import type { Port, Reply, Request, SignIns } from "./protocol.ts";
 import { Refusal, saidOf } from "../said/index.ts";
 import { NO_ROW } from "../sheet/index.ts";
 import type { Said } from "../said/index.ts";
@@ -35,11 +35,12 @@ export interface Connecting {
    */
   connections: Connections;
   /**
-   * The names of the AWS profiles this machine has, for a person choosing one,
-   * and nothing else about them. Absent where there is no ~/.aws to read: the
-   * hosted engine signs in with roles.
+   * How this engine signs in, for a person connecting a bucket: the modes its
+   * platform takes on, with the names of the AWS profiles this machine has
+   * where `profile` is one and nothing else about them, and what a role has
+   * to trust where `role` is. Absent where the platform connects to nothing.
    */
-  profiles?: () => Promise<string[]>;
+  signIns?: () => Promise<SignIns>;
   /**
    * Try a connection before it is saved: where its bucket is and a page of its
    * prefix, signed the way it says to sign in. Absent where the platform
@@ -125,7 +126,7 @@ function notARequest(msg: unknown): Said {
  * serve runs one engine over a port.
  *
  * An engine given no `connecting` -- a test, a build that connects to nothing
- * -- refuses to answer about connections and profiles by name, rather than
+ * -- refuses to answer about connections and sign-ins by name, rather than
  * with an empty list, which would read as a folder or a machine with nothing
  * in it.
  *
@@ -211,12 +212,12 @@ export function serve(
         loaded: { connections: read.connections, failed: read.failed.map(saidOf) },
       };
     },
-    // A person choosing how a connection signs in picks a profile by name,
-    // and a name is all that crosses: ~/.aws is read in this process, and
-    // what is in it besides the names stays here.
-    profiles: async () => {
-      if (connecting?.profiles === undefined) throw new Refusal({ t: "offers-no-profiles" });
-      return { t: "names", names: await connecting.profiles() };
+    // A person choosing how a connection signs in picks a mode, and a
+    // profile by name: names and ARNs are all that crosses. ~/.aws is read
+    // in this process, and what is in it besides the names stays here.
+    signins: async () => {
+      if (connecting?.signIns === undefined) throw new Refusal({ t: "offers-no-sign-ins" });
+      return { t: "offered", signins: await connecting.signIns() };
     },
     // Beside list for the same reason: it is a listing, and a save must
     // not hold it up.
