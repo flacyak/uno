@@ -717,7 +717,14 @@ function rewritten(): Uint8Array {
 const ZERO = 0x30;
 const NINE = 0x39;
 
-describe('parts in a bucket', () => {
+/**
+ * The bucket tests each send a thousand and more 4 KB reads through the
+ * signing path, the versioned reopen 1,700: about 2 s on a quiet machine, and
+ * past the default 5 s under a full run beside other work.
+ */
+const BUCKET_MS = 20_000;
+
+describe('parts in a bucket', { timeout: BUCKET_MS }, () => {
   const objects = new Map<string, Uint8Array>();
   const history = new Map<string, Uint8Array>();
   let b: Bucket;
