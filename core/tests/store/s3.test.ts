@@ -10,6 +10,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
 import { readContainer } from '@document';
@@ -479,6 +480,36 @@ describe('a source in a bucket', () => {
     await expect(file.read(0, 4)).rejects.toThrow(
       'changed in the bucket since it was opened',
     );
+  });
+
+  // As `aws s3 cp --content-encoding gzip` leaves a .gz: its bytes as they
+  // are, and every answer saying they are gzip, which fetch would undo.
+  test('reads an object stored with Content-Encoding gzip as the bytes it holds', async () => {
+    const s3 = s3Files({
+      credentials: () => Promise.resolve(KEYS),
+      endpoint: b.endpoint,
+    });
+    const key = '2025/sales-q3.csv.gz';
+    const stored = new Uint8Array(gzipSync(bytes));
+    b.objects.set(key, stored);
+    b.encodings.set(key, 'gzip');
+    b.seen.length = 0;
+
+    const file = await s3.open(at(key));
+    expect(file.size).toBe(stored.length);
+    const middle = Math.floor(stored.length / 2);
+    const SPAN = 100;
+    expect(await file.read(middle, SPAN)).toEqual(
+      stored.subarray(middle, middle + SPAN),
+    );
+    expect(await file.read(0, stored.length)).toEqual(stored);
+    await file.close();
+
+    // Each GET was signed asking for the bytes as stored, and S3 let it in.
+    const gets = b.seen.filter((r) => r.method === 'GET');
+    expect(gets.length).toBeGreaterThan(0);
+    for (const get of gets)
+      expect(get.query).toContain('response-content-encoding=identity');
   });
 
   // The saved path is the URL as it was opened.
