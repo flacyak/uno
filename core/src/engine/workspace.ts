@@ -23,7 +23,14 @@ import {
 } from '@document';
 import type { Document, Held, HeldParts, Logged, State } from '@document';
 import type { Edit } from '@sheet';
-import { bytesSource, headerModeOf, multiOf, openWith, partMap } from '@store';
+import {
+  bytesSource,
+  headerModeOf,
+  isRemote,
+  multiOf,
+  openWith,
+  partMap,
+} from '@store';
 import type { ByteSource, FileHandler, PartsRef, SingleRef } from '@store';
 import type {
   Opening,
@@ -47,7 +54,7 @@ import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { View } from './view.ts';
-import type { Carried, Part } from './view.ts';
+import type { Carried, Origin, Part } from './view.ts';
 
 /**
  * The largest .uno file read whole. It bounds the container file itself.
@@ -440,6 +447,7 @@ export class Workspace {
           name: src.name,
           path: '',
           source: bytesSource(src.raw),
+          origin: 'carried',
           carried,
           port: this.port,
           tuning: this.tuning,
@@ -525,6 +533,7 @@ export class Workspace {
       name: ref.name,
       path,
       source,
+      origin: originOf(ref),
       carried,
       port: this.port,
       tuning: this.tuning,
@@ -848,6 +857,13 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
       return extent === undefined ? { ref: now } : { ref: now, extent };
     }),
   };
+}
+
+/** originOf says what a ref hands its bytes over as. */
+function originOf(ref: SourceRef): Origin {
+  if ('parts' in ref) return 'joined';
+  if ('blob' in ref) return 'dropped';
+  return isRemote(ref.path) ? 'bucket' : 'disk';
 }
 
 /** pathsIn returns every address a ref reads from, in order. A dropped file has none. */
