@@ -10,6 +10,8 @@
 # one development machine that load set off L2 cache machine-check errors and
 # reset it, three times in a day. A run through this script:
 #
+# - waits for one of a few slots that every worktree on the machine shares,
+#   and a run that drives the display (smoke, preview) waits for the display;
 # - is pinned to a share of the CPUs, both threads of a core before the next
 #   core, inside a systemd scope under one slice whose CPU, memory and task
 #   limits all runs share;
@@ -25,16 +27,18 @@
 # UNO_BOUNDED_RUN, which is how the run finds it to stop it.
 #
 # Usage:
-#   scripts/bounded.sh [--timeout <seconds|Nm|Nh>] -- <command>...
+#   scripts/bounded.sh [--display] [--timeout <seconds|Nm|Nh>] -- <command>...
 #
 # Examples:
 #   scripts/bounded.sh -- vp run test
 #   scripts/bounded.sh -- vp run smoke
 #   (cd core && ../scripts/bounded.sh -- vp test tests/engine/save.test.ts)
 #
-# Inside a bounded run the script runs its command as it is.
+# A command that names smoke, preview or electron drives the display without
+# --display. Inside a bounded run the script runs its command as it is.
 #
 # The limits come from the environment, with defaults sized for a desktop:
+#   UNO_BOUNDED_SLOTS    runs at once on the machine (2)
 #   UNO_BOUNDED_CPUS     logical CPUs all runs share (half the machine's)
 #   UNO_BOUNDED_MEMORY   memory all runs share, as systemd takes it (half)
 #   UNO_BOUNDED_TASKS    processes and threads all runs share (4096)
@@ -45,9 +49,10 @@ set -euo pipefail
 readonly STATE="${XDG_CACHE_HOME:-${HOME}/.cache}/uno-bounded"
 readonly SLICE="uno-bounded.slice"
 readonly MARKER="UNO_BOUNDED_RUN"
+readonly SLOTS="${UNO_BOUNDED_SLOTS:-2}"
 readonly TASKS="${UNO_BOUNDED_TASKS:-4096}"
 readonly DEFAULT_TIMEOUT_SECONDS="${UNO_BOUNDED_TIMEOUT:-1800}"
-# How often the guard looks in on its run.
+# How often a waiting run looks for a free slot, and the guard for its run.
 readonly POLL_SECONDS=2
 # How long a stopped process has between SIGTERM and SIGKILL.
 readonly STOP_SECONDS=10
@@ -57,6 +62,9 @@ readonly BACKSTOP_SECONDS=60
 readonly NICENESS=10
 # coreutils timeout's exit status for a command stopped at its deadline.
 readonly TIMED_OUT_STATUS=124
+# Commands that start Electron: the smoke, the preview, and Electron itself.
+# The happy-dom tests under tests/smoke/ do not match.
+readonly DISPLAY_COMMANDS=' (smoke|preview) |smoke\.js|preview\.js|electron'
 
 #######################################
 # Prints a line to stderr, prefixed so it reads apart from the command's.
@@ -183,6 +191,37 @@ cleanup_run() {
 }
 
 #######################################
+# Waits for one of the machine's slots, and holds it on fd 8 for as long as
+# this script lives.
+#######################################
+take_slot() {
+  local n told=0
+  while true; do
+    for ((n = 1; n <= SLOTS; n++)); do
+      exec 8>"${STATE}/slots/${n}.lock"
+      flock -n 8 && return
+      exec 8>&-
+    done
+    if ((!told)); then
+      say "waiting for a slot"
+      told=1
+    fi
+    sleep "${POLL_SECONDS}"
+  done
+}
+
+#######################################
+# Waits for the display and holds it on fd 9 for as long as this script
+# lives.
+#######################################
+take_display() {
+  exec 9>"${STATE}/display.lock"
+  flock -n 9 && return
+  say "waiting for the display"
+  flock 9
+}
+
+#######################################
 # Watches run $1 from outside it: stops it at its deadline $3 (epoch
 # seconds), and cleans up once the script $2 that started it is gone, even
 # if that script was killed before it could.
@@ -206,9 +245,10 @@ guard() {
 # Runs a command bounded. See the top of the file.
 #######################################
 run() {
-  local timeout="${DEFAULT_TIMEOUT_SECONDS}"
+  local display=0 timeout="${DEFAULT_TIMEOUT_SECONDS}"
   while (($# > 0)); do
     case "$1" in
+      --display) display=1 ;;
       --timeout) timeout="$(seconds_of "$2")"; shift ;;
       --) shift; break ;;
       *) break ;;
@@ -222,7 +262,12 @@ run() {
   if [[ -n "${!MARKER:-}" ]]; then
     exec "$@"
   fi
-  mkdir -p "${STATE}/runs"
+  [[ " $* " =~ ${DISPLAY_COMMANDS} ]] && display=1
+
+  mkdir -p "${STATE}/slots" "${STATE}/runs"
+  take_slot
+  ((display)) && take_display
+
   local id cpus
   id="$(date +%s)-$$"
   cpus="$(cpu_list "${UNO_BOUNDED_CPUS:-$(($(cpu_count) / 2))}")"
@@ -234,7 +279,7 @@ run() {
   trap 'exit 143' TERM HUP
   setsid bash "${BASH_SOURCE[0]}" __guard "${id}" "$$" \
     "$(($(date +%s) + timeout))" \
-    </dev/null >/dev/null 2>&1 &
+    </dev/null >/dev/null 2>&1 8>&- 9>&- &
 
   local -a wrap=(env "${MARKER}=${id}" "TMPDIR=${dir}/tmp" nice -n "${NICENESS}")
   [[ -n "${cpus}" ]] && command -v taskset >/dev/null \
@@ -250,9 +295,9 @@ run() {
       --unit="uno-bounded-${id}.scope" \
       --property="TimeoutStopSec=${STOP_SECONDS}s" \
       --property="RuntimeMaxSec=$((timeout + BACKSTOP_SECONDS))s" \
-      -- "${wrap[@]}" "$@" &
+      -- "${wrap[@]}" "$@" 8>&- 9>&- &
   else
-    setsid "${wrap[@]}" "$@" &
+    setsid "${wrap[@]}" "$@" 8>&- 9>&- &
   fi
   local status=0
   wait "$!" || status=$?
