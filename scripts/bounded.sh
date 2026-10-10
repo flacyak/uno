@@ -28,6 +28,8 @@
 #
 # Usage:
 #   scripts/bounded.sh [--display] [--timeout <seconds|Nm|Nh>] -- <command>...
+#   scripts/bounded.sh status
+#   scripts/bounded.sh reap [--orphans]
 #
 # Examples:
 #   scripts/bounded.sh -- vp run test
@@ -65,6 +67,8 @@ readonly TIMED_OUT_STATUS=124
 # Commands that start Electron: the smoke, the preview, and Electron itself.
 # The happy-dom tests under tests/smoke/ do not match.
 readonly DISPLAY_COMMANDS=' (smoke|preview) |smoke\.js|preview\.js|electron'
+# What reap --orphans may stop: the tools a build, test or app run starts.
+readonly ORPHAN_COMMANDS='^(node|electron|esbuild|vp|vite|vitest)'
 
 #######################################
 # Prints a line to stderr, prefixed so it reads apart from the command's.
@@ -191,19 +195,22 @@ cleanup_run() {
 }
 
 #######################################
-# Waits for one of the machine's slots, and holds it on fd 8 for as long as
-# this script lives.
+# Waits for one of the machine's slots, holds it on fd 8 for as long as this
+# script lives, and sets slot to its number.
 #######################################
 take_slot() {
   local n told=0
   while true; do
     for ((n = 1; n <= SLOTS; n++)); do
       exec 8>"${STATE}/slots/${n}.lock"
-      flock -n 8 && return
+      if flock -n 8; then
+        slot="${n}"
+        return
+      fi
       exec 8>&-
     done
     if ((!told)); then
-      say "waiting for a slot"
+      say "waiting for a slot; scripts/bounded.sh status says who has them"
       told=1
     fi
     sleep "${POLL_SECONDS}"
@@ -265,6 +272,7 @@ run() {
   [[ " $* " =~ ${DISPLAY_COMMANDS} ]] && display=1
 
   mkdir -p "${STATE}/slots" "${STATE}/runs"
+  local slot
   take_slot
   ((display)) && take_display
 
@@ -273,6 +281,8 @@ run() {
   cpus="$(cpu_list "${UNO_BOUNDED_CPUS:-$(($(cpu_count) / 2))}")"
   local dir="${STATE}/runs/${id}"
   mkdir -p "${dir}/tmp"
+  printf 'pid=%s\nslot=%s\ndisplay=%s\ncwd=%s\ncommand=%s\n' \
+    "$$" "${slot}" "${display}" "${PWD}" "$*" >"${dir}/meta"
 
   trap 'cleanup_run "${id}"' EXIT
   trap 'exit 130' INT
@@ -308,8 +318,72 @@ run() {
   exit "${status}"
 }
 
+#######################################
+# Prints each run, who holds the slots and the display, and anything a run
+# that is gone left running.
+#######################################
+status() {
+  mkdir -p "${STATE}/runs"
+  local dir id pid
+  for dir in "${STATE}"/runs/*/; do
+    [[ -e "${dir}meta" ]] || continue
+    id="$(basename "${dir}")"
+    pid="$(sed -n 's/^pid=//p' "${dir}meta")"
+    local state="running"
+    kill -0 "${pid}" 2>/dev/null || state="gone (reap stops what it left)"
+    printf '%s  %s  slot %s  display %s  %ss  %s\n    in %s\n    processes: %s\n' \
+      "${id}" "${state}" "$(sed -n 's/^slot=//p' "${dir}meta")" \
+      "$(sed -n 's/^display=//p' "${dir}meta")" \
+      "$(($(date +%s) - ${id%%-*}))" \
+      "$(sed -n 's/^command=//p' "${dir}meta")" \
+      "$(sed -n 's/^cwd=//p' "${dir}meta")" \
+      "$(marked_pids "${id}" | wc -l)"
+  done
+  if have_systemd; then
+    systemctl --user show "${SLICE}" -p MemoryCurrent -p TasksCurrent \
+      -p CPUQuotaPerSecUSec -p MemoryMax 2>/dev/null || true
+  fi
+}
+
+#######################################
+# Stops what runs that are gone left behind. With --orphans, also stops
+# processes that were started in a worktree of the repository it runs in
+# without the script, and outlived whatever started them.
+#######################################
+reap() {
+  mkdir -p "${STATE}/runs"
+  local dir id pid
+  for dir in "${STATE}"/runs/*/; do
+    [[ -e "${dir}meta" ]] || continue
+    id="$(basename "${dir}")"
+    pid="$(sed -n 's/^pid=//p' "${dir}meta")"
+    kill -0 "${pid}" 2>/dev/null || cleanup_run "${id}"
+  done
+  [[ "${1:-}" == --orphans ]] || return 0
+
+  local -a roots
+  mapfile -t roots < <(git worktree list --porcelain | sed -n 's/^worktree //p')
+  local reapers
+  reapers=" 1 $(pgrep -u "${UID}" -x systemd | tr '\n' ' ')"
+  local ppid comm cwd root
+  while read -r pid ppid comm; do
+    [[ "${reapers}" == *" ${ppid} "* ]] || continue
+    [[ "${comm}" =~ ${ORPHAN_COMMANDS} ]] || continue
+    cwd="$(readlink "/proc/${pid}/cwd" 2>/dev/null)" || continue
+    for root in "${roots[@]}"; do
+      if [[ "${cwd}/" == "${root}/"* ]]; then
+        say "stopping orphan ${pid} ${comm} in ${cwd}"
+        kill -TERM "${pid}" 2>/dev/null || true
+        break
+      fi
+    done
+  done < <(ps -u "${UID}" -o pid=,ppid=,comm=)
+}
+
 main() {
   case "${1:-}" in
+    status) status ;;
+    reap) shift; reap "$@" ;;
     __guard) shift; guard "$@" ;;
     *) run "$@" ;;
   esac
