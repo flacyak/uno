@@ -138,6 +138,27 @@ test("text a step looks for is quoted with what cannot be seen in it escaped", (
   expect(say(tab)).toBe(english(tab));
 });
 
+describe("a kind from an engine newer than this page", () => {
+  // As it crosses the port: a kind this build's Said does not have.
+  const newer = JSON.parse('{"t":"read-sideways","name":"ads.csv"}') as Said;
+
+  test("is said as the engine says it: as a page to reload", () => {
+    expect(say(newer)).toBe("this page is older than its engine · reload it to read what it said");
+    expect(say(newer)).toBe(english(newer));
+  });
+
+  test("is said through a message in every other language", () => {
+    void setLocale(PSEUDO_LOCALE, { reload: false });
+    expect(say(newer).startsWith(PSEUDO_OPEN)).toBe(true);
+  });
+
+  test("is said when it is why a refusal was made", () => {
+    expect(said(new Refusal({ t: "about", subject: "q4.uno", why: newer }))).toBe(
+      "q4.uno: this page is older than its engine · reload it to read what it said",
+    );
+  });
+});
+
 test("an error from the engine is said through its message, and any other as it was written", () => {
   expect(said(new Refusal({ t: "nothing-to-undo" }))).toBe("there is nothing to undo");
   expect(said(new Error("EACCES: permission denied"))).toBe("EACCES: permission denied");
