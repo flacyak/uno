@@ -109,6 +109,7 @@ export type Said =
   | { t: 'file-closed' }
   | { t: 'cancelled'; name: string }
   | { t: 'changed-on-disk'; name: string }
+  | { t: 'stored-encoded'; name: string; encoding: string; bucket: string }
 
   // What an engine refuses because its platform left out the means.
   | { t: 'keeps-no-connections' }
@@ -278,6 +279,8 @@ const SENTENCES: Sentences<Said> = {
   'file-closed': () => 'the file was closed',
   cancelled: (s) => `opening ${s.name} was cancelled`,
   'changed-on-disk': (s) => `${s.name} changed on disk after it was opened`,
+  'stored-encoded': (s) =>
+    `${s.name} was stored with Content-Encoding ${s.encoding}, and uno reads such an object only when it signs in · connect ${s.bucket} with a sign-in to read it`,
 
   'keeps-no-connections': () =>
     'this engine keeps no connections · its platform gave it nowhere to read them from',
