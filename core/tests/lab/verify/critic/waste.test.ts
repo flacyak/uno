@@ -2,7 +2,9 @@
  * @fileoverview Counts, without timing anything, how many of the bucket
  * requests a band jump and a find send are read-ahead that no read takes.
  * A request is wasted when another request starts at the same offset with a
- * different length: readAhead guessed the next block's length from the last.
+ * different length: readAhead took reads of one length for a run and asked
+ * ahead, and the next read there was of another length. Blocks of rows differ
+ * in length, so that happens only where two blocks in a row match.
  */
 
 import { afterEach, expect, test } from 'vite-plus/test';
