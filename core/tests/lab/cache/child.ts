@@ -14,7 +14,6 @@ const PATHS = fileURLToPath(new URL('../../../../paths.js', import.meta.url));
 
 /** Node flags that run this lab's TypeScript with the alias map. */
 export const NODE_FLAGS: readonly string[] = [
-  '--experimental-transform-types',
   '--disable-warning=ExperimentalWarning',
   '--import',
   PATHS,

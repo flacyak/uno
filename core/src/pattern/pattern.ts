@@ -85,7 +85,11 @@ interface ColumnSnapshot {
  * copied.
  */
 export class Snapshot {
-  constructor(private readonly cols: ColumnSnapshot[]) {}
+  private readonly cols: ColumnSnapshot[];
+
+  constructor(cols: ColumnSnapshot[]) {
+    this.cols = cols;
+  }
 
   /** empty reports whether there is anything to scan. */
   empty(): boolean {
@@ -167,13 +171,17 @@ interface Reading {
  * once, it proposes what a whole-column scan does.
  */
 export class Survey {
+  readonly col: number;
+  readonly header: string;
+  private readonly readings: Reading[];
+
   private seen = 0;
 
-  private constructor(
-    readonly col: number,
-    readonly header: string,
-    private readonly readings: Reading[],
-  ) {}
+  private constructor(col: number, header: string, readings: Reading[]) {
+    this.col = col;
+    this.header = header;
+    this.readings = readings;
+  }
 
   /**
    * start induces the candidates for a column's examples. Returns undefined

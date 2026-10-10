@@ -72,16 +72,23 @@ export function load(path: string): Build {
 
 /** MutantScanner is WasmScanner's push over a given build, handing on runs. */
 export class MutantScanner implements LabScanner {
+  private readonly consumer: Consumer;
+  private readonly build: Build;
+  private readonly kernel: KernelName;
+
   state: State = LINE;
   crAt = 0;
   private readonly sep: number;
 
   constructor(
     comma: string,
-    private readonly consumer: Consumer,
-    private readonly build: Build,
-    private readonly kernel: KernelName,
+    consumer: Consumer,
+    build: Build,
+    kernel: KernelName,
   ) {
+    this.consumer = consumer;
+    this.build = build;
+    this.kernel = kernel;
     this.sep = separatorByte(comma);
   }
 

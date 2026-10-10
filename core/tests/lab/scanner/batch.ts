@@ -29,16 +29,16 @@ export const BATCH_BEGINS = 4096;
 
 /** BatchScanner is SwarScanner reporting begins in batches. */
 export class BatchScanner implements LabScanner {
+  private readonly many: Many;
+
   state: State = LINE;
   crAt = 0;
   private readonly sep: number;
   private readonly begins = new Float64Array(BATCH_BEGINS);
   private count = 0;
 
-  constructor(
-    comma: string,
-    private readonly many: Many,
-  ) {
+  constructor(comma: string, many: Many) {
+    this.many = many;
     if (!LITTLE_ENDIAN)
       throw new Error('BatchScanner needs a little-endian machine');
     this.sep = separatorByte(comma);

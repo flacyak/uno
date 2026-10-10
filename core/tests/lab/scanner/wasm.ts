@@ -105,6 +105,9 @@ export type Handoff = 'each' | 'many';
 
 /** WasmScanner runs the scan in WebAssembly with one of its kernels. */
 export class WasmScanner implements LabScanner {
+  private readonly consumer: Consumer;
+  private readonly handoff: Handoff;
+
   state: State = LINE;
   crAt = 0;
   private readonly sep: number;
@@ -112,10 +115,12 @@ export class WasmScanner implements LabScanner {
 
   constructor(
     comma: string,
-    private readonly consumer: Consumer,
+    consumer: Consumer,
     kernel: KernelName,
-    private readonly handoff: Handoff,
+    handoff: Handoff,
   ) {
+    this.consumer = consumer;
+    this.handoff = handoff;
     this.sep = separatorByte(comma);
     this.scan = MODULE.kernels[kernel];
   }
