@@ -1,13 +1,11 @@
-// The programs the recogniser proposes, one shape of fix at a time.
+// Tests for the program shapes the recogniser proposes.
 
 import { describe, expect, test } from "vite-plus/test";
 
 import { apply as applyProgram, text } from "../../src/program/index.ts";
 import { oneCol, propose } from "./harness.ts";
 
-// Not every fix changes characters. Pulling the code out of the middle of a
-// cell leaves every character it keeps exactly as it was, and no amount of
-// replacing describes it.
+// Pulling a substring out of the middle of a cell is proposed as a slice.
 test("proposes an extraction", () => {
   const s = oneCol("rep", "Ada (West)", "Ben (East)", "Cai (North)", "Dee (South)", "Eli (West)");
   s.set(0, 0, "West");
@@ -21,10 +19,8 @@ test("proposes an extraction", () => {
   expect(p!.affects).toBe(2);
 });
 
-// The anchor a slice is described by is a pattern between slashes, and a slash
-// is the one character that has to be escaped to sit there. Rows of different
-// lengths leave the anchored form as the only description they share, so a
-// column cut at a slash has no proposal at all if that form cannot be read back.
+// A slice anchored on a literal slash must escape it inside the /.../ pattern
+// so the program text parses back.
 test("proposes an extraction after a slash", () => {
   const s = oneCol("rep", "Ada/West", "Ben/East", "Celine/North", "Dee/South");
   s.set(0, 0, "West");
@@ -37,9 +33,8 @@ test("proposes an extraction after a slash", () => {
   expect(p!.affects).toBe(1);
 });
 
-// A class generalises over decoration: the separators and the marks. Drawn from
-// the letters or digits the examples happened to lose, it would say that those
-// are the whole alphabet, and the row holding a different one is left half done.
+// Removed digits or letters are kept as the shape "a digit" or "a letter",
+// so a row with a different digit or letter is still handled.
 test("digits lost are not a class", () => {
   const s = oneCol("term", "ab^2", "cd^3", "ef^4", "gh^5");
   s.set(0, 0, "ab");
@@ -62,8 +57,7 @@ test("letters lost are not a class", () => {
   expect(applyProgram(p!.prog, "9 oz")).toBe("9");
 });
 
-// The same characters in a different order is the case a pipeline of rewrites
-// cannot reach at all.
+// Swapping two parts of a value is proposed as a reordering.
 test("proposes a reordering", () => {
   const s = oneCol("rep", "Okafor, Ada", "Iyer, Ben", "Moreau, Cai", "Nakamura, Dee");
   s.set(0, 0, "Ada Okafor");
@@ -81,15 +75,14 @@ test("space at both ends is a trim", () => {
   s.set(1, 0, "7");
   s.set(2, 0, "120");
 
-  // Removing every space and trimming the ends agree on every value in this
-  // column, so it cannot say which was meant. What this pins is that there is
-  // an offer at all.
+  // "Remove every space" and "trim" agree on every value in this column. The
+  // test checks only that a proposal is made.
   const p = propose(s);
   expect(p, "no proposal from three trims").toBeDefined();
   expect(applyProgram(p!.prog, " 9 ")).toBe("9");
 });
 
-// The value that separates trimming the ends from removing every space.
+// An interior space separates trim from removing every space.
 test("trimming a name column", () => {
   const s = oneCol("rep", " Ada Okafor ", " Bo Silva ", " Cy Tan ", " Di Vaz ");
   s.set(0, 0, "Ada Okafor");
@@ -102,7 +95,7 @@ test("trimming a name column", () => {
   expect(applyProgram(p!.prog, " Di Vaz ")).toBe("Di Vaz");
 });
 
-// A date column is the other one whose badge a fix can flip.
+// Fixing date separators turns the column kind to date.
 test("proposes a date separator", () => {
   const s = oneCol("closed", "2026/09/03", "2025/01/11", "2024/12/30", "2026/07/04");
   s.set(0, 0, "2026-09-03");
@@ -111,21 +104,20 @@ test("proposes a date separator", () => {
 
   const p = propose(s);
   expect(p, "no proposal from three date separators").toBeDefined();
-  // The literal and the class both explain the examples and agree on every
-  // value in the column, so the tiebreak picks between them and this pins
-  // which one it picks.
+  // A literal "/" and the class [\/]+ both fit every value. The test pins
+  // which one the tiebreak picks.
   expect(text(p!.prog)).toBe('replace(/[\\/]+/, "-")');
 
   s.apply(p!.col, p!.prog);
   expect(s.columns[0]!.kind).toBe("date");
 });
 
-// The decoration a column wears is not worn by every row in it, and the three
-// rows a person demonstrates on are not chosen to be representative.
+// Only two of the three examples hold a comma, and the proposal still
+// covers both the currency sign and the comma.
 test("one demonstration cell without the separator", () => {
   const s = oneCol("amount", "$1,204", "$87", "$3,010", "$450", "$12,900");
   s.set(0, 0, "1204");
-  s.set(1, 0, "87"); // under a thousand: no comma to remove
+  s.set(1, 0, "87"); // the currency sign alone
   s.set(2, 0, "3010");
 
   const p = propose(s);
@@ -157,7 +149,7 @@ test("proposes a European decimal", () => {
   expect(applyProgram(p!.prog, "3.150,75")).toBe("3150.75");
 });
 
-// A one-step answer keeps its precedence over a two-step one.
+// A one-step program is preferred over a two-step one.
 test("commas stay one step", () => {
   const s = oneCol("units", "1,204", "9,870", "3,010", "5,500");
   s.set(0, 0, "1204");
@@ -169,16 +161,16 @@ test("commas stay one step", () => {
   expect(p!.prog).toHaveLength(1);
 });
 
-// Each row is three demonstrated edits, the program they induce, and one
-// untouched value the program then claims.
+// Each case: three edits, the program text they produce, and one untouched
+// value with its result.
 describe("the shapes the recogniser reaches", () => {
   const cases: Array<{
     name: string;
     values: string[]; // the column; the first three get edited
-    fixed: string[]; // what the person typed into them
-    want: string; // the program, in its text form
-    in: string; // a value nobody touched
-    out: string; // and what applying does to it
+    fixed: string[]; // the new values for those three
+    want: string; // the expected program text
+    in: string; // an untouched value
+    out: string; // the result of applying the program to it
   }> = [
     {
       name: "commas",
@@ -253,8 +245,8 @@ describe("the shapes the recogniser reaches", () => {
       out: "WA",
     },
     {
-      // "after the last @" and "after the first @" agree on every value here,
-      // so the tiebreak picks between them and this pins which.
+      // "After the last @" and "after the first @" agree on every value here.
+      // The test pins which one the tiebreak picks.
       name: "email domain",
       values: ["ada@corp.com", "bo@acme.io", "cy@x.net", "di@q.org"],
       fixed: ["corp.com", "acme.io", "x.net"],
@@ -263,8 +255,7 @@ describe("the shapes the recogniser reaches", () => {
       out: "q.org",
     },
     {
-      // A name column rather than a quantity one: the interior space is what
-      // separates trimming the ends from removing every space.
+      // The interior space separates trim from removing every space.
       name: "trim",
       values: [" Ada Okafor ", " Bo Silva ", " Cy Tan ", " Di Vaz "],
       fixed: ["Ada Okafor", "Bo Silva", "Cy Tan"],

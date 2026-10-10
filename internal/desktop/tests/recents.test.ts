@@ -1,5 +1,5 @@
-// The workspaces the sidebar lists: most recent first, kept between launches,
-// and never the reason the app fails to start.
+// The recent workspaces list: most recent first, kept between launches, and
+// read as empty when the kept value is bad.
 
 import { expect, test } from "vite-plus/test";
 

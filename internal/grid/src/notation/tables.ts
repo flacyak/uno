@@ -1,11 +1,8 @@
-// The subset, as three tables and a list of what did not make it.
-//
-// It is small because Unicode's small forms are small, not because anyone chose
-// to stop here: there is no subscript b, so x_b has nothing to draw and is
-// refused instead.
+// The notation subset: three tables, and NO_GLYPH, the symbols the font
+// refuses.
 
-/** superscripts is what ^ can raise. Digits are complete; letters are complete
- * but for q, which has no superscript codepoint at all. */
+/** SUPERSCRIPTS is what ^ can raise. Digits are complete; letters are
+ * complete except q, which Unicode leaves out. */
 export const SUPERSCRIPTS = new Map<string, string>(
   Object.entries({
     "0": "⁰",
@@ -45,8 +42,7 @@ export const SUPERSCRIPTS = new Map<string, string>(
     y: "ʸ",
     z: "ᶻ",
 
-    // The arithmetic a limit is written with: \sum^{n+1} has to raise the plus
-    // as well as the n, or the exponent is drawn at two different sizes.
+    // Arithmetic inside a limit: \sum^{n+1} raises the plus and the n.
     "+": "⁺",
     "-": "⁻",
     "=": "⁼",
@@ -55,9 +51,8 @@ export const SUPERSCRIPTS = new Map<string, string>(
   }),
 );
 
-/** subscripts is what _ can lower, and it is the real gap in the subset: only
- * these twelve letters have a subscript form, so b, c, d, f, g, h, q, r, s, u,
- * v, w, y and z are refused. */
+/** SUBSCRIPTS is what _ can lower. Only these twelve letters have a subscript
+ * form; b, c, d, f, g, h, q, r, s, u, v, w, y and z are refused. */
 export const SUBSCRIPTS = new Map<string, string>(
   Object.entries({
     "0": "₀",
@@ -93,11 +88,8 @@ export const SUBSCRIPTS = new Map<string, string>(
   }),
 );
 
-/** symbols is what a backslash name draws. Greek is by name because that is
- * what a person types.
- *
- * \frac is absent on purpose: it takes two groups, so it is read in `command`
- * rather than looked up here. */
+/** SYMBOLS is what a backslash name draws. \frac is absent: it takes two
+ * groups and is read in `command`. */
 export const SYMBOLS = new Map<string, string>(
   Object.entries({
     alpha: "α",
@@ -143,21 +135,12 @@ export const SYMBOLS = new Map<string, string>(
 );
 
 /**
- * NO_GLYPH is what the Go build's font test threw out, kept by name so a person
- * who types one is told what happened rather than told it is not a symbol.
+ * NO_GLYPH is the symbols the Go build's font test refused: Fyne v2.8.1's
+ * Noto Sans lacks the Mathematical Operators block. A person who types one is
+ * told why it is refused.
  *
- * TODO: this list is a measurement, and in TypeScript it is measuring nothing.
- *
- * Fyne v2.8.1 bundles a Noto Sans with no Mathematical Operators block, so on
- * the desktop these seven have codepoints and no glyphs, and uno would draw a
- * square on the reader's machine where the author saw a symbol. Refusing them
- * at authoring time is the honest answer to that.
- *
- * A browser will draw all seven. So the refusal is very probably wrong in
- * Electron and removing it is very probably an improvement -- but what uno's
- * notation subset *is* is a product decision, and quietly widening the language
- * while translating it would hide that decision inside a port. The list comes
- * across unchanged until somebody decides on purpose.
+ * TODO: a browser draws all seven, so this refusal is probably wrong in
+ * Electron. The list is kept until the subset is widened on purpose.
  */
 export const NO_GLYPH = new Map<string, string>(
   Object.entries({

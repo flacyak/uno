@@ -1,9 +1,5 @@
-// The stand-in's own tests.
-//
-// s3.test.ts is where uno is held to S3's behaviour, and it gets to assume the
-// stand-in is S3. These are the other direction: the few things standin.ts
-// promises to whoever starts it -- s3.test.ts, and the desktop smoke run --
-// which have no test of their own over there because nothing there uses them.
+// Tests of the stand-in itself: what standin.ts promises to s3.test.ts and
+// the desktop smoke run.
 
 import { expect, test } from "vite-plus/test";
 
@@ -29,11 +25,8 @@ test("serves the objects it was handed instead of the fixture", async () => {
   }
 });
 
-// standinEnv is what points a process at the stand-in, and the environment it
-// goes into is a developer's own: an AWS_PROFILE from some other afternoon, a
-// session token that has been in the shell since lunch. Either one is enough to
-// send a run that was meant for localhost at a real account, so what matters is
-// not only what standinEnv sets but what it puts out of the way.
+// standinEnv sets the keys and clears the profile and session token a shell
+// may carry.
 test("hands out an environment that signs as the stand-in, whatever the shell says", async () => {
   const b = await bucket();
   try {
@@ -60,9 +53,7 @@ test("hands out an environment that signs as the stand-in, whatever the shell sa
   }
 });
 
-// And the environment reaches an object, rather than only parsing into the
-// right credentials. Endpoint, keys and region all come out of standinEnv here,
-// so a wrong name for any of them is a failed read and not a passing test.
+// Endpoint, keys and region all come from standinEnv.
 test("reads an object out of the bucket that environment names", async () => {
   const b = await bucket();
   const env = standinEnv(b);
@@ -75,8 +66,8 @@ test("reads an object out of the bucket that environment names", async () => {
     await indexed(src);
     expect(src.progress.rows).toBe(ROWS);
     expect((await src.rows(100, 1)).rows[0]![UNITS]).toBe(sales.raw(100, UNITS));
-    // Every byte came off the stand-in, signed for the region the environment
-    // named, so nothing was redirected and nothing went to AWS instead.
+    // Every request was signed for the environment's region and went
+    // straight through.
     expect(b.seen[0]).toMatchObject({ method: "HEAD" });
     expect(b.seen.every((r) => r.region === HOME_REGION)).toBe(true);
   } finally {

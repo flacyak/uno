@@ -1,12 +1,12 @@
 // A credential_process program, as ~/.aws/config names one: it prints the AWS
-// CLI's version 1 answer and nothing else.
+// CLI's version 1 answer alone.
 //
 // Usage: node credential-process.mjs <runs file> <expiration | none> [answer]
 //
 // Every run appends a line to the runs file, so a test can count how often uno
-// ran it. `answer` is how it answers: keys (the default), v2 for a version this
-// build does not read, junk for something that is not JSON, and fail for a
-// program that exits 1 with a reason on stderr.
+// ran it. `answer` is how it answers: keys (the default), v2 for a version
+// newer than this build reads, junk for a plain text prompt in place of JSON,
+// and fail for a program that exits 1 with a reason on stderr.
 
 import { appendFileSync } from "node:fs";
 

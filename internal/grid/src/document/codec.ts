@@ -51,23 +51,15 @@ const decoder = new TextDecoder("utf-8");
 const encoder = new TextEncoder();
 
 /**
- * readDocument restores a document from the bytes of a .uno, and builds a sheet
- * for every source the file carries.
- *
- * It opens nothing: a source the workspace points at gets no sheet here,
- * because reading it means reading a file, and this module cannot. The engine
- * is what opens those, an index at a time. So `sheets` holds the carried
- * sources and `sources` holds them all, and a caller that wants the rest has
- * come to the wrong function.
- *
- * `name` is only ever used to name the file in an error. An error dialog that
- * does not say which of twelve dropped files failed is useless.
+ * readDocument reads a .uno from its bytes and builds a sheet for every
+ * source whose bytes the file carries. The engine opens each pointed-at
+ * source. `name` is used only in error messages.
  */
 export function readDocument(name: string, bytes: Uint8Array, at = ""): Document {
   const doc = readContainer(name, bytes, at);
 
-  // The same call a plain CSV takes. One way to build a sheet is the only
-  // reason a restored workspace is guaranteed to match the one that was saved.
+  // Each carried source is read the way a dropped file is, then its log is
+  // replayed over it.
   const sheets = new Map<string, Sheet>();
   for (const src of doc.sources) {
     const raw = src.raw;
@@ -80,30 +72,20 @@ export function readDocument(name: string, bytes: Uint8Array, at = ""): Document
 }
 
 /**
- * readContainer reads a .uno without building a sheet from it: the manifest,
- * the bytes of each source it carries, where each source it points at is, the
- * state, the log and whatever this build did not recognise. It is what the
- * engine opens a workspace with, since the engine reads each source through an
- * index and replays the log over pages instead.
+ * readContainer reads a .uno as stored: the manifest, the bytes of each
+ * carried source, the resolved path of each pointed-at source, the state,
+ * the log and any entries beyond what this build knows.
  *
- * `at` is where this .uno is, which is what the relative pointers in it are
- * read from. A caller that has no path for it -- a browser, a test holding
- * bytes -- passes nothing, and a relative pointer comes back as it was written
- * and fails to open under its own name.
+ * `at` is where the .uno is. Relative pointers are resolved from it. With
+ * `at` empty, a relative pointer is returned as written.
  */
 export function readContainer(name: string, bytes: Uint8Array, at = ""): Document {
   const entries = blamed(`${name} is not a readable .uno file`, () => unzipSync(bytes));
 
   const manifest = readJSON(name, entries, MANIFEST_ENTRY);
 
-  // A reader that guesses at a layout it does not know will either crash or,
-  // far worse, silently drop the entries it did not recognise and then save
-  // that loss back over the original.
-  //
-  // The format is the first thing read out of the manifest and the only thing
-  // read before this, so a newer file is refused as a newer file whatever it
-  // has done to the rest of the layout, and not as a broken one for holding a
-  // kind of source this build has never heard of.
+  // The format is checked before anything else is parsed, so a newer file is
+  // refused as a newer file.
   const format = asNumber(asRecord(manifest)["format"]);
   if (format > FORMAT_VERSION) {
     throw new Error(
@@ -124,8 +106,8 @@ export function readContainer(name: string, bytes: Uint8Array, at = ""): Documen
   return { manifest: m, sources, active, log, extra: readExtra(entries, m), at };
 }
 
-/** One file as the workspace holds it: the bytes the container carried for
- * it, or where it is, read from where the .uno is now. */
+/** heldFile builds the in-memory form of one file source: its carried bytes,
+ * or its path resolved from `at`. */
 function heldFile(
   name: string,
   entries: Record<string, Uint8Array>,
@@ -148,15 +130,9 @@ function heldFile(
 }
 
 /**
- * carriedBytes reads a carried source and holds it to the hash the save
- * recorded of it.
- *
- * The zip's own checksum is not checked by the unzip this reads with, so a
- * byte flipped on disk would otherwise open as the file it was, replay the
- * log over the wrong cells and save the damage back under a fresh hash. The
- * manifest's hash is what the save promised, and a mismatch is said in words
- * before a sheet is built. A file with no hash recorded is taken as it is,
- * since there is nothing to hold it to.
+ * carriedBytes reads a carried source's entry and checks it against the
+ * sha256 the manifest recorded. A mismatch is refused. A source whose hash
+ * is "" is returned as is.
  */
 function carriedBytes(
   name: string,
@@ -172,8 +148,8 @@ function carriedBytes(
   return raw;
 }
 
-/** Several files read as one as the workspace holds them: where each part is,
- * read from where the .uno is now, and what the save measured of it. */
+/** heldParts builds the in-memory form of a parts source, with each part's
+ * path resolved from `at`. */
 function heldParts(src: PartsSource, state: State, at: string): HeldParts {
   return {
     id: src.id,
@@ -199,22 +175,14 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
 }
 
 /**
- * writeDocument lays out the container.
+ * writeDocument lays out the container and returns its bytes.
  *
- * A source the workspace carries goes in byte for byte: uno has no opinion
- * about your file's line endings or quoting and must not acquire one by
- * round-tripping it. A source it points at goes in as a path and costs the zip
- * nothing, which is the whole reason a workspace can hold a 30 GB ledger.
+ * A carried source goes in byte for byte. A pointed-at source goes in as a
+ * path. A workspace of one carried source uses the layout from before
+ * format 4. A workspace of file sources only is written as format 5 wrote it.
  *
- * A workspace of one carried source is written the way every build before
- * format 4 wrote one, so it still opens in them. A second source, or a pointer,
- * changes the layout. Several files read as one are the only thing that needs
- * format 6, and a workspace without them is written as format 5 wrote it, to
- * the byte.
- *
- * The measured manifest is written back onto the document, so the next save
- * preserves the time of the first one and the status bar can report what was
- * written.
+ * The measured manifest is written back onto `d.manifest`, so the next save
+ * keeps the first save's `created` and callers can report what was written.
  */
 export function writeDocument(d: Document): Uint8Array {
   if (d.sources.length === 0) throw new Error("a workspace with no sources has nothing to save");
@@ -222,8 +190,7 @@ export function writeDocument(d: Document): Uint8Array {
   const m = manifestFor(d);
   const single = m.format < SOURCES_VERSION;
 
-  // fflate takes the modification time per entry, so `unzip -l` on a workspace
-  // lists the save time rather than the 1980-00-00 a zero timestamp renders as.
+  // Each entry carries the save time as its modification time.
   const mtime = m.modified ?? new Date();
 
   const entries: Entry[] = [
@@ -240,9 +207,8 @@ export function writeDocument(d: Document): Uint8Array {
     { name: LOG_ENTRY, bytes: encoder.encode(formatLog(d.log, single)) },
   );
 
-  // The entries this build did not understand go back in, in name order rather
-  // than in whatever order they were read, so the layout of a saved file does
-  // not shuffle between saves that changed nothing.
+  // Extra entries go back in, in name order, so a saved file keeps the same
+  // layout between saves.
   const named = new Set(entries.map((e) => e.name));
   for (const key of [...d.extra.keys()].sort(compareStrings)) {
     if (named.has(key)) continue;
@@ -256,43 +222,36 @@ export function writeDocument(d: Document): Uint8Array {
 
 // ------------------------------------------------------------- packing
 
-/** One entry of the container. `key` is what a carried source's deflated
- * bytes are kept under between saves: the hash the manifest records of them. */
+/** One entry of the container. `key` is the hash a carried source's deflated
+ * bytes are cached under between saves. */
 interface Entry {
   name: string;
   bytes: Uint8Array;
   key?: string;
 }
 
-/** An entry's bytes as the zip holds them, and what its header says of the
- * bytes they were. */
+/** An entry's deflated bytes, with the size and CRC of the bytes before
+ * deflation. */
 interface Deflated {
   bytes: Uint8Array<ArrayBuffer>;
   size: number;
   crc: number;
 }
 
-/** How hard an entry is squeezed, on fflate's scale of 0 to 9. */
+/** The deflate level, on fflate's scale of 0 to 9. */
 const DEFLATE_LEVEL = 6;
 
-/** The method a zip entry names DEFLATE by, from APPNOTE.txt section 4.4.5. */
+/** The zip compression method number for DEFLATE (APPNOTE.txt 4.4.5). */
 const DEFLATE_METHOD = 8;
 
 /**
- * What the last save deflated of the sources it carried, under the hash the
- * manifest recorded of each.
- *
- * A carried source's bytes never change: the log is what changes between one
- * save and the next. Deflating them is most of what a save costs -- the
- * better part of a second for 24 MB, during which the engine answers nothing
- * -- so the next save of the same bytes writes them as they were deflated the
- * first time. The hash is the key rather than the array, because a dropped
- * file is read into a fresh array at every save. What one save carried is
- * all that is kept, so this weighs at most one save's worth.
+ * The deflated bytes of the carried sources from the last save, keyed by
+ * their sha256. A carried source's bytes stay the same between saves, so the
+ * next save reuses the deflated form. Only the last save's entries are kept.
  */
 let deflated = new Map<string, Deflated>();
 
-/** squeeze deflates one entry's bytes, and measures what its header needs. */
+/** squeeze deflates one entry's bytes and measures its size and CRC. */
 function squeeze(bytes: Uint8Array): Deflated {
   return {
     bytes: deflateSync(bytes, { level: DEFLATE_LEVEL }),
@@ -302,10 +261,9 @@ function squeeze(bytes: Uint8Array): Deflated {
 }
 
 /**
- * pack writes the entries as one zip, in the order given. Every entry goes in
- * deflated already, through fflate's streaming writer, which is what lets a
- * carried source deflated by an earlier save go in without being deflated
- * again.
+ * pack writes the entries as one zip, in the order given. Every entry goes
+ * in already deflated, through fflate's streaming writer, so a deflate
+ * cached from an earlier save is reused.
  */
 function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
   const chunks: Uint8Array[] = [];
@@ -333,8 +291,8 @@ function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
     };
     zip.add(file);
     if (failed !== undefined) break;
-    // Adding the file is what gives it `ondata`, and the bytes go in through
-    // it, in one piece: there is nothing left to do to them.
+    // zip.add sets file.ondata. The deflated bytes go in through it in one
+    // piece.
     file.ondata!(null, entry.bytes, true);
   }
   zip.end();
@@ -344,13 +302,13 @@ function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
   return concat(chunks);
 }
 
-/** The CRC-32 polynomial, reflected, which is how a zip entry's checksum is computed. */
+/** The reflected CRC-32 polynomial zip uses. */
 const CRC32_POLYNOMIAL = 0xedb88320;
 const BITS_PER_BYTE = 8;
 const BYTE_VALUES = 1 << BITS_PER_BYTE;
 const BYTE_MASK = BYTE_VALUES - 1;
 
-/** The CRC-32 of every one-byte message, which is what each byte of a longer one is folded through. */
+/** The CRC-32 of each one-byte message. */
 const CRC32_TABLE = ((): Int32Array => {
   const table = new Int32Array(BYTE_VALUES);
   for (let byte = 0; byte < BYTE_VALUES; byte++) {
@@ -363,7 +321,7 @@ const CRC32_TABLE = ((): Int32Array => {
   return table;
 })();
 
-/** crc32 is the checksum a zip entry carries of its bytes before deflation. */
+/** crc32 computes the checksum a zip entry stores for its uncompressed bytes. */
 function crc32(bytes: Uint8Array): number {
   let c = -1;
   for (let i = 0; i < bytes.length; i++) {
@@ -373,9 +331,8 @@ function crc32(bytes: Uint8Array): number {
 }
 
 /**
- * checkLog refuses a document whose log names a source it does not hold, or
- * whose sources share an id. Either would write a file that replays edits
- * into the wrong grid, or into none.
+ * checkLog refuses a document with a source whose id is "" or shared, a log
+ * line naming a source outside it, or an active source outside it.
  */
 function checkLog(d: Document): void {
   const ids = new Set<string>();
@@ -385,8 +342,7 @@ function checkLog(d: Document): void {
     if (src.parts !== undefined) {
       checkParts(src);
     } else if ((src.raw === undefined) === (src.path === undefined)) {
-      // Neither is a source that would open as an empty grid and save over the
-      // one it came from. Both is a file the reader has two answers for.
+      // A file source is carried or pointed at: exactly one of the two.
       throw new Error(
         src.raw === undefined
           ? `${src.name} has neither bytes to carry nor a path to point at`
@@ -403,9 +359,8 @@ function checkLog(d: Document): void {
 }
 
 /**
- * checkParts refuses several files read as one with no files, or with one
- * there is no path to: a part is always pointed at, so a part without a path
- * is a part the file could not say anything about.
+ * checkParts refuses an empty parts source, or one with a part whose path
+ * is "".
  */
 function checkParts(src: HeldParts): void {
   if (src.parts.length === 0) throw new Error(`${src.name} has no parts to point at`);
@@ -419,19 +374,12 @@ function checkParts(src: HeldParts): void {
 }
 
 /**
- * manifestFor measures the container from the container.
+ * manifestFor builds the manifest from what is being written: the format,
+ * the generator, the timestamps, each source's entry and hash, and the edit
+ * count. `created` is kept from the previous manifest when it has one.
  *
- * Everything the file says about itself -- the sizes, the hashes, the counts,
- * the entry names, the version -- is taken from what is actually being
- * written, so no code path can produce a manifest describing a different file.
- * What the caller supplies is what the writer cannot see: where the bytes came
- * from, when the document was first saved, and the shape of the grid each log
- * builds.
- *
- * A pointed-at source is the one thing not measured here, because measuring it
- * means reading it. Its size is what the workspace saw when it opened the file,
- * and it carries no hash at all: a hash nobody can afford to check is a field
- * that only ever goes stale.
+ * A pointed-at source's size is what the workspace holds, and its hash is
+ * "".
  */
 function manifestFor(d: Document): Manifest {
   const modified = nowTruncated();
@@ -452,16 +400,14 @@ function manifestFor(d: Document): Manifest {
 }
 
 /**
- * What the manifest says of one file, for a .uno going to `at`. The keys are
- * in the order the Go struct has them, which is the order uno.json is written
- * in, because a person is expected to open that file and read it.
+ * fileSource is what the manifest records of one file source, for a .uno
+ * saved to `at`. The keys are in the order uno.json is written in.
  */
 function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
   return {
     id: src.id,
     name: src.name,
-    // Both the connection and the version are about the file pointed at, so a
-    // carried source has neither.
+    // Connection and version apply to a pointed-at file only.
     connection: src.path === undefined ? "" : (src.connection ?? ""),
     bytes: src.raw?.length ?? src.bytes ?? 0,
     sha256: src.raw === undefined ? "" : sha256Hex(src.raw),
@@ -475,9 +421,8 @@ function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
 }
 
 /**
- * What the manifest says of several files read as one, for a .uno going to
- * `at`. Each part is written down the way a file source's path is, so a
- * folder of parts beside the workspace moves with it.
+ * partsSource is what the manifest records of a parts source, for a .uno
+ * saved to `at`. Each part's path is stored the way a file source's path is.
  */
 function partsSource(src: HeldParts, at: string): PartsSource {
   return {
@@ -485,7 +430,7 @@ function partsSource(src: HeldParts, at: string): PartsSource {
     name: src.name,
     connection: src.connection ?? "",
     parts: src.parts.map((part): SourcePart => ({
-      // Only a name the path does not already say is worth a key.
+      // The name is written only when the path's last piece differs from it.
       name: part.name === baseOf(part.path) ? "" : part.name,
       path: storedPath(part.path, at),
       bytes: part.bytes,
@@ -501,10 +446,10 @@ function partsSource(src: HeldParts, at: string): PartsSource {
 }
 
 /**
- * formatFor is the oldest build that could open this workspace: several files
- * read as one need the layout that lists parts, a pointer the layout that can
- * hold one, a second source the layout that lists them, and one carried source
- * whatever its log needs.
+ * formatFor returns the lowest format version that can open this workspace:
+ * PARTS_VERSION with a parts source, POINTED_VERSION with a pointed-at
+ * source, SOURCES_VERSION with more than one source, and otherwise whatever
+ * the log needs.
  */
 export function formatFor(sources: readonly Held[], log: readonly Logged[]): number {
   if (sources.some((s) => s.parts !== undefined)) return PARTS_VERSION;
@@ -514,11 +459,7 @@ export function formatFor(sources: readonly Held[], log: readonly Logged[]): num
 }
 
 /**
- * versionFor is the oldest build that could replay this log.
- *
- * An operation an older uno does not know is not a thing to fail on halfway
- * through a replay, so a file carrying one says so in the manifest and the
- * reader refuses it by name before a single entry is decoded.
+ * versionFor returns the lowest format version that can replay this log.
  */
 export function versionFor(edits: readonly Edit[]): number {
   let v = BASE_VERSION;
@@ -528,9 +469,7 @@ export function versionFor(edits: readonly Edit[]): number {
       if (v < RULE_VERSION) v = RULE_VERSION;
       continue;
     }
-    // Anything newer than a rule, which today means a note or a binding. A
-    // build that does not know the operation cannot replay the log, and a
-    // column it silently skipped would open as an empty one.
+    // Any operation newer than apply: a note, a bind or an unbind.
     return FORMULA_VERSION;
   }
   return v;
@@ -553,9 +492,8 @@ function readJSON(name: string, entries: Record<string, Uint8Array>, entry: stri
 }
 
 /**
- * blamed runs `read`, and what it throws is thrown again with `about` in
- * front: the file, the entry, the source the failure was about, which a dialog
- * over twelve dropped files has to be able to say.
+ * blamed runs `read` and rethrows any error with `about` prefixed to its
+ * message.
  */
 function blamed<T>(about: string, read: () => T): T {
   try {
@@ -566,22 +504,16 @@ function blamed<T>(about: string, read: () => T): T {
 }
 
 /**
- * readLog reads the operations in order and tolerates exactly one thing: a
- * final line cut in half.
- *
- * Anything unparseable earlier in the file is a log that has been damaged in
- * the middle, where stopping would silently discard the operations after it, so
- * that is an error. So is a line naming a source the manifest does not list,
- * since there is no grid to replay it into, and a line numbered out of turn:
- * every build numbers a source's edits 1, 2, 3 and gives the next edit the
- * number after the last, so a log numbered any other way would hand a new
- * edit a number already taken, and a rule would run over the wrong writes.
+ * readLog reads the log lines in order. A broken final line is dropped as a
+ * truncated tail. Any earlier broken line is an error. So is a line naming
+ * a source outside the manifest, or an edit numbered out of turn: each
+ * source's edits must be numbered 1, 2, 3 in order.
  */
 function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest): Logged[] {
   const entry = m.edits.entry;
   const lines = decoder.decode(readEntry(name, entries, entry)).split("\n");
   const ids = new Set(m.sources.map((s) => s.id));
-  // A log written before format 4 names no source, because it had only one.
+  // A log written before format 4 had only one source, so its lines omit it.
   const only = m.sources.length === 1 ? m.sources[0]!.id : undefined;
 
   const log: Logged[] = [];
@@ -595,7 +527,7 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
     try {
       raw = JSON.parse(line);
     } catch (err) {
-      if (i === lines.length - 1) break; // a truncated tail costs the last operation, at worst
+      if (i === lines.length - 1) break; // a truncated final line is dropped
       throw new Error(`${where}: ${(err as Error).message}`);
     }
 
@@ -622,9 +554,8 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
 }
 
 /**
- * readExtra keeps whatever this build did not recognise, so it survives to the
- * next save. Version skew is only survivable if an older uno hands back the
- * entries it could not read.
+ * readExtra collects the entries beyond those the manifest names, so the
+ * next save writes them back.
  */
 function readExtra(entries: Record<string, Uint8Array>, m: Manifest): Map<string, Uint8Array> {
   const known = new Set([MANIFEST_ENTRY, m.sheet.entry, m.edits.entry]);
@@ -652,8 +583,7 @@ function asString(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
-/** Whether a value out of a file is a count of bytes: a whole number, and not
- * a negative one. */
+/** Whether a value is a byte count: a whole number of zero or more. */
 function isByteCount(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= 0;
 }
@@ -666,7 +596,7 @@ function isFlag(v: unknown): v is boolean {
   return typeof v === "boolean";
 }
 
-/** What a field that is not what it should be is said to be, by the guard it failed. */
+/** The wording a refusal uses for each guard. */
 const NOT = new Map<(v: unknown) => boolean, string>([
   [isText, "is not text"],
   [isFlag, "is neither true nor false"],
@@ -674,9 +604,9 @@ const NOT = new Map<(v: unknown) => boolean, string>([
 ]);
 
 /**
- * optional reads a field a record may leave out: undefined where it is not
- * there, the value where `is` holds, and otherwise the refusal `where: key is
- * not …`, in the guard's words.
+ * optional reads a field a record may leave out: undefined when absent, the
+ * value when `is` holds, and otherwise an error naming `where`, the key and
+ * the guard's wording.
  */
 function optional<T>(
   o: Record<string, unknown>,
@@ -690,12 +620,9 @@ function optional<T>(
 }
 
 /**
- * parseManifest reads either layout into the one shape: a list of sources.
- *
- * Before format 4 a manifest held one `source`, and the grid's shape sat under
- * `sheet`. That source is given the id a new workspace would give it, so
- * adding a second one later leaves the first called what it was always going
- * to be called.
+ * parseManifest reads either manifest layout into one shape with a list of
+ * sources. Before format 4 a manifest held one `source` and the grid's shape
+ * under `sheet`. That source gets the id a new workspace would give it.
  */
 function parseManifest(name: string, v: unknown): Manifest {
   const o = asRecord(v);
@@ -731,8 +658,7 @@ function parseManifest(name: string, v: unknown): Manifest {
     if (s.name === "") throw new Error(`${name}: the manifest names no source file`);
     if (s.id === "") throw new Error(`${name}: ${s.name} has no id in the manifest`);
     if (ids.has(s.id)) throw new Error(`${name}: two sources are both called ${s.id}`);
-    // A file source with neither would open as an empty grid and then save
-    // over whatever it came from. Better to say so before anything is decoded.
+    // A file source needs an entry or a path.
     if (s.parts === undefined && s.entry === "" && s.path === "") {
       throw new Error(`${name}: ${s.name} has no entry in this file and no path to the original`);
     }
@@ -751,14 +677,10 @@ function parseManifest(name: string, v: unknown): Manifest {
 }
 
 /**
- * parseSource reads one of the manifest's sources: one file, or several read
- * as one where it has `parts`.
- *
- * A file source is read the way it always was, a key at a time and with
- * nothing asked of a key that is missing. Parts are read strictly, because
- * every row's number depends on every part before it: a list that is not
- * quite what was written is refused, saying which part and what is wrong with
- * it, before a single file is opened.
+ * parseSource reads one of the manifest's sources: a parts source when it
+ * has `parts`, otherwise a file source. A file source is read leniently,
+ * with a missing key read as its zero value. Parts are read strictly, and a
+ * bad list is refused naming the part.
  */
 function parseSource(name: string, s: Record<string, unknown>): Source {
   const base = {
@@ -782,7 +704,7 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
   if (base.name === "") throw new Error(`${name}: the manifest names no source file`);
   const source = `${name}: ${base.name}`;
 
-  // One file and several at once is a source the reader has two answers for.
+  // A source has exactly one of a path, an entry or parts.
   const one = asString(s["path"]) !== "" ? "a path" : asString(s["entry"]) !== "" ? "an entry" : "";
   if (one !== "") {
     throw new Error(
@@ -816,11 +738,8 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
 }
 
 /**
- * parsePart reads one part. `which` is what an error calls it before its path
- * is known: the file, the source, and the part's place in the list.
- *
- * `skip` and `unterminated` are left out of the file where a part is there
- * whole and ends in a newline, which is what a missing key means.
+ * parsePart reads one part. `which` names it in an error before its path is
+ * known. `skip` and `unterminated` default to 0 and false when missing.
  */
 function parsePart(which: string, raw: unknown): SourcePart {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
@@ -851,9 +770,9 @@ function parsePart(which: string, raw: unknown): SourcePart {
 }
 
 /**
- * parseState reads either layout: before format 4 the entry was one grid's
- * state, and from it on the entry names the source that was showing and
- * holds one state per source.
+ * parseState reads either state layout. Before format 4 the entry was one
+ * grid's state. From format 4 it names the active source and holds one
+ * state per source.
  */
 function parseState(v: unknown, m: Manifest): { active: string; states: Map<string, State> } {
   const o = asRecord(v);
@@ -890,11 +809,9 @@ function parseSheetState(o: Record<string, unknown>): State {
 }
 
 /**
- * parseEdit reads one line of the log. `where` is what an error calls the
- * line. The numbers are held to whole ones here, where the line is known,
- * since a row of 0.5 is a cell no sheet has and the sheet would only say so
- * by its edit number. The operation is the sheet's to know, and the row and
- * column are the sheet's to bound.
+ * parseEdit reads one log line. `where` names the line in an error. `seq`,
+ * `row` and `col` must be whole numbers. The sheet checks the operation and
+ * bounds the row and column.
  */
 function parseEdit(where: string, v: unknown): Edit {
   const o = asRecord(v);
@@ -915,16 +832,11 @@ function parseEdit(where: string, v: unknown): Edit {
 
 // ------------------------------------------------------------- writing
 
-// The key order below, and in fileSource and partsSource above, is the field
-// order of the Go structs, because a person is expected to open this file and
-// read it. JSON.stringify follows insertion order, so building the object in
-// that order is the whole of what it takes.
+// The key order below, and in fileSource and partsSource above, is the order
+// uno.json is written in. JSON.stringify follows insertion order.
 //
-// The one difference from Go's encoder is that it escapes `<`, `>` and `&` and
-// this does not. The bytes differ; the value any reader parses out does not.
-//
-// `single` is the layout every build before format 4 reads: one source, and a
-// log that does not say which.
+// `single` is the layout every build before format 4 reads: one source, and
+// log lines that leave it implied.
 
 function manifestJSON(m: Manifest): unknown {
   const head = {
@@ -936,7 +848,7 @@ function manifestJSON(m: Manifest): unknown {
   const edits = m.edits;
 
   if (m.format < SOURCES_VERSION) {
-    // One carried file, which is the only source this layout can hold.
+    // This layout holds one carried file.
     const s = m.sources[0]!;
     return {
       ...head,
@@ -949,11 +861,9 @@ function manifestJSON(m: Manifest): unknown {
 }
 
 /**
- * sourceJSON leaves out the half that does not apply, so a person reading
- * uno.json sees either an entry or a path and never an empty one of each.
- * Several files read as one have neither, and a list of parts where a file has
- * its path; of a part, most have no name the path does not say, no version,
- * no header to leave out and a last row with its newline.
+ * sourceJSON writes a source's set fields only, so a file source has exactly
+ * one of an entry and a path. A parts source writes each part's set fields
+ * only.
  */
 function sourceJSON(s: Source): unknown {
   if (s.parts !== undefined) {
@@ -963,7 +873,8 @@ function sourceJSON(s: Source): unknown {
   return omitempty(s, "connection", "sha256", "entry", "path", "version");
 }
 
-/** omitempty is `o` without each of `keys` that holds its zero value -- "", 0 or false -- as Go's omitempty writes it. */
+/** omitempty returns `o` with each of `keys` dropped where its value is "",
+ * 0 or false. */
 function omitempty<T extends object>(o: T, ...keys: Array<keyof T>): Partial<T> {
   const empty = new Set<PropertyKey>(keys);
   const kept = Object.entries(o).filter(([k, v]) => !empty.has(k) || Boolean(v));
@@ -981,7 +892,7 @@ function stateJSON(d: Document, single: boolean): unknown {
 function sheetStateJSON(s: State): { active: State["active"]; columnFormulas?: unknown } {
   return {
     active: s.active,
-    // omitempty: a workspace with no bound columns writes no key at all.
+    // Written only when a column is bound.
     columnFormulas:
       s.columnFormulas !== undefined && s.columnFormulas.length > 0 ? s.columnFormulas : undefined,
   };
@@ -1000,18 +911,14 @@ function editJSON(l: Logged, single: boolean): unknown {
   };
 }
 
-/** Indented, and newline-terminated the way Go's Encoder leaves it: someone
- * will open the zip and read this. */
+/** formatJSON indents with two spaces and ends with a newline. */
 function formatJSON(v: unknown): string {
   return JSON.stringify(v, undefined, 2) + "\n";
 }
 
 /**
- * formatLog writes one operation per line.
- *
- * JSONL and not JSON because a line appends without rewriting what came before,
- * stays readable in a diff, and survives a truncated tail: a log cut short
- * still replays up to its last complete line.
+ * formatLog writes one edit per line as JSONL. A log cut short still
+ * replays up to its last complete line.
  */
 function formatLog(log: readonly Logged[], single: boolean): string {
   return log.map((l) => JSON.stringify(editJSON(l, single)) + "\n").join("");

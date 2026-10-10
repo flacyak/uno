@@ -1,8 +1,8 @@
-// A module that reaches outside the way no text guard can see: every name it
-// loads is put together at run time. reaches.test.ts runs it as if it were
-// src/engine/serve.ts, and it has to be caught doing each.
+// A module that reaches outside with every module name built at run time, so
+// only a run reveals them. reaches.test.ts runs it as if it were
+// src/engine/serve.ts and expects each use to be caught.
 
-/** A program, the disk and a socket, none of their modules written down whole. */
+/** The module names, assembled from pieces. */
 const PROGRAM = ["child", "process"].join("_");
 const DISK = ["f", "s"].join("");
 const SOCKET = ["n", "e", "t"].join("");

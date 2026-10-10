@@ -1,5 +1,5 @@
-/* A menu hung off the page: the + beside a workspace's sources, and a right
- * click on a workspace. */
+/* A pop-up menu: the + beside a workspace's sources, and the right-click
+ * menu on a workspace. */
 
 .pop-menu {
   position: fixed;

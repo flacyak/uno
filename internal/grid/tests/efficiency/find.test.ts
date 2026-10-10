@@ -1,11 +1,6 @@
-// What a find that reaches the end of a big file costs, beside a bound column.
-//
-// A find on one column reads every block from the row it starts at until it
-// matches, so on a column with no match it is a pass over the file. The cells
-// it has to look at are the ones in the column searched. What the log does to
-// the other columns -- a formula bound to one of them, computed over every row
-// of every block -- is not its concern, and a find should cost the same with
-// such a column in the file as without one.
+// Measures a find that reads to the end of a 24 MB file, plain and beside a
+// formula bound to another column. The bound column must keep it near plain
+// speed.
 
 import { afterEach, expect, test } from "vite-plus/test";
 
@@ -17,17 +12,17 @@ import { CHANNEL, REGION } from "../testdata/sales-q3.ts";
 import { record } from "./record.ts";
 import { repeated } from "./remote.ts";
 
-/** 24 MB and 481,200 rows: a file a find takes long enough over to time. */
+/** 24 MB and 481,200 rows. */
 const REPEATS = 100;
 const OBJECT = repeated(REPEATS);
 
-/** Text no region cell holds, so a find for it reads every row. */
+/** Text absent from every region cell, so a find for it reads every row. */
 const NOWHERE = "nowhere";
 
-/** How many times each find is run. The fastest run is the cost; the rest is noise. */
+/** How many times each find is run. The fastest run is kept. */
 const SAMPLES = 3;
 
-/** The most a find beside a bound column may cost, per find with an empty log. */
+/** The most a find beside a bound column may cost, relative to a plain one. */
 const BOUND_BUDGET = 1.5;
 
 let done: (() => void) | undefined;
@@ -44,7 +39,7 @@ async function open(): Promise<{ engine: Engine; src: SourceHandle }> {
   return { engine: c.engine, src };
 }
 
-/** fastest runs a find SAMPLES times and answers with its shortest wall-clock time. */
+/** fastest runs the find SAMPLES times and returns the quickest. */
 async function fastest(src: SourceHandle): Promise<{ found: Found; ms: number }> {
   let best: { found: Found; ms: number } | undefined;
   for (let i = 0; i < SAMPLES; i++) {
@@ -65,7 +60,7 @@ test("a find on one column costs the same beside a bound column", async () => {
   const { engine, src } = await open();
 
   const plain = await fastest(src);
-  // The row a find starts beside is never looked at, so one row fewer is searched.
+  // A find skips the row it starts from, so it searches one row fewer.
   expect(plain.found).toEqual({ row: null, searched: src.progress.rows - 1, complete: true });
 
   engine.mode(true);

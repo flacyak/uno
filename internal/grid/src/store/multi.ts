@@ -1,16 +1,11 @@
-// Several files read as one: the bytes of a multi-file source.
+// Several files read as one: the ByteSource of a multi-file source.
 //
-// A multi-file source is an ordered list of files, called parts, and this is
-// the one ByteSource that joins them end to end. The first part is there
-// whole. Each later part gives its rows and not its header, which would
-// otherwise turn up as a row in the middle of the table, and a part whose last
-// row has no newline is given one, so that row never runs into the next
-// part's first. Indexing, paging and the edit log read the join as they read
-// any file, and none of them knows there are three files behind it.
-//
-// It is pure: every part is opened through the handlers it is handed, so a
-// part is a file on a disk, an object in a bucket or bytes already in hand,
-// in any mix, and nothing here knows which.
+// The parts are joined end to end. The first part is included whole. Each
+// later part is included from its first data row, so its header is skipped.
+// A part whose last byte is something other than a newline gets a virtual
+// one, so its last row and the next part's first stay separate rows. Each
+// part is opened through the handlers given, so a part can be on a disk, in
+// a bucket or in memory.
 
 import { concat } from "../go/index.ts";
 import {
@@ -24,33 +19,26 @@ import {
 import type { Encoding, Format, HeaderMode } from "../ingest/index.ts";
 import { openWith } from "./index.ts";
 import type { ByteSource, FileHandler, SingleRef } from "./index.ts";
-// Type only, the way every provider factory beside its transport has it.
+// Type only.
 import type { Provider } from "../plugin/index.ts";
 
 /**
- * Whether the parts have a header row, which is ingest's to define: it is the
- * same choice a reader of one file is given.
- *
- * With "first", the first part's header names the columns, and every later
- * part opens with the same header, which is skipped. With "none" no part has
- * one, and every line of every part is a row.
+ * Whether the parts have a header row. With "first", the first part's header
+ * names the columns and every later part's header is skipped. With "none",
+ * every line of every part is a row.
  */
 export type { HeaderMode };
 
 /**
- * Extent is what the join needs to know about a part to place it, and all it
- * needs: with every part's extent in hand, where each one sits is arithmetic.
- *
- * It is a fact about the part alone, whichever parts are around it, so a part
- * added after it changes nothing in it.
+ * Extent is what the join needs to know about one part to place it. It
+ * depends on the part alone.
  */
 export interface Extent {
-  /** How big the part is. */
+  /** The part's size. */
   bytes: number;
   /**
-   * How many bytes at its start the join leaves out: a later part's repeat of
-   * the header, or its byte order mark where there is no header or no record
-   * in it. 0 for the first part, which is there whole.
+   * How many bytes at the start of the part the join leaves out: a later
+   * part's header, or its byte order mark. 0 for the first part.
    */
   skip: number;
   /** Whether its last byte is something other than a newline. */
@@ -58,16 +46,12 @@ export interface Extent {
 }
 
 /**
- * Part is one file of a multi-file source.
- *
- * `extent` is what an earlier open measured, handed back. A part that comes
- * with one is not opened until a read needs its bytes, and is held to it
- * then, and to the version on its ref where its place says which bytes it
- * has. A part without one is opened and measured as the source opens.
+ * Part is one file of a multi-file source. A part with an `extent` is opened
+ * by the first read that needs it, and is checked against the extent then. A
+ * part that came bare is opened and measured when the source opens.
  */
 export interface Part {
-  /** Where the part is, and which version of it where a save recorded one.
-   * One file, always: a part is never several files itself. */
+  /** Where the part is, and which version where a save recorded one. */
   ref: SingleRef;
   extent?: Extent;
 }
@@ -79,21 +63,20 @@ export interface Span {
   /** The joined offset of the first byte the part gives. */
   start: number;
   /**
-   * One past the last, the virtual newline included. A part that gives
-   * nothing has `end` equal to `start`.
+   * One past the last, the virtual newline included. A part that gives zero
+   * bytes has `end` equal to `start`.
    */
   end: number;
   /** How many bytes of the part come before the first one it gives. */
   skip: number;
-  /** Whether the byte at `end - 1` is a newline the part itself does not have. */
+  /** Whether the byte at `end - 1` is a virtual newline, added after the
+   * part's last byte. */
   newline: boolean;
 }
 
 /**
- * PartMap says which part every byte of the join came from.
- *
- * A row belongs to the part its first byte is in, so the offset an index
- * holds for a row is all it takes to name the row's file.
+ * PartMap says which part every byte of the join came from. A row belongs to
+ * the part its first byte is in.
  */
 export interface PartMap {
   /** One span per part, in order. */
@@ -109,25 +92,25 @@ export interface PartMap {
 }
 
 /**
- * MultiSource is the parts read as one file, and what a caller needs to know
- * about them besides.
- *
- * It has no `version` of its own. Each part has one, and `versions` says them.
+ * MultiSource is the parts read as one ByteSource, with the part map and
+ * extents beside it. Its own `version` is absent. `versions` gives each
+ * part's.
  */
 export interface MultiSource extends ByteSource {
   /** Where each part sits in the join. */
   readonly map: PartMap;
-  /** Each part's extent, in order: what a save records so the next open can
-   * leave the parts unopened. */
+  /** Each part's extent, in order. A save records them so the next open can
+   * skip opening the parts. */
   readonly extents: readonly Extent[];
   /**
-   * Which bytes each part is, in order, as its place says: undefined for a
-   * part whose place has no versions. It opens every part not yet open.
+   * Each part's version, in order, or undefined where its place leaves it
+   * out. Opens the parts that are still to open.
    */
   versions(): Promise<Array<string | undefined>>;
 }
 
-/** ColumnDifference is one column a later part names differently from the first. */
+/** ColumnDifference is one column a later part names differently from the
+ * first. */
 export interface ColumnDifference {
   /** Which column, counting from 0. */
   column: number;
@@ -137,7 +120,7 @@ export interface ColumnDifference {
   part: string;
 }
 
-/** NamedColumn is a column one part has and the other does not. */
+/** NamedColumn is a column only one of two parts has. */
 export interface NamedColumn {
   /** Which column of the part that has it, counting from 0. */
   column: number;
@@ -145,13 +128,9 @@ export interface NamedColumn {
 }
 
 /**
- * Disagreement is the way a later part reads differently from the first.
- * `first` is the first part's side of it throughout, and `part` the later
- * part's.
- *
- * A header can differ in several ways at once, and the one named is the one
- * that says the most: a part with the first part's columns in another order
- * is "reordered", and not every column renamed.
+ * Disagreement is one way a later part reads differently from the first.
+ * `first` is the first part's side and `part` the later part's. When a header
+ * differs in several ways, the most specific kind is reported.
  */
 export type Disagreement =
   | { kind: "encoding"; first: Encoding; part: Encoding }
@@ -162,25 +141,24 @@ export type Disagreement =
   | { kind: "reordered"; columns: ColumnDifference[] }
   /** Columns of the first part this one leaves out, the rest in order. */
   | { kind: "missing"; columns: NamedColumn[] }
-  /** Columns of this part the first does not have, the rest in order. */
+  /** Columns this part adds beyond the first, the rest in order. */
   | { kind: "extra"; columns: NamedColumn[] }
   /** Headers of different lengths, and the first column that differs. */
   | { kind: "columns"; first: number; part: number; column: ColumnDifference }
-  /** With no header row: first rows with different numbers of fields. */
+  /** Under a "none" header: first rows with different numbers of fields. */
   | { kind: "fields"; first: number; part: number };
 
 /**
- * DisagreementError is the refusal of a source one of whose parts does not
- * read the way the first does. It is thrown as the source opens, or by the
- * read that first reaches the part where the part came with an extent, and by
- * every read of the source after that.
+ * DisagreementError is thrown when a part reads differently from the first
+ * part: as the source opens, or by the first read that reaches a part
+ * that came with an extent, and by every read after that.
  */
 export class DisagreementError extends Error {
   /** Which part, counting from 0. */
   readonly part: number;
   /** The part's name. */
   readonly partName: string;
-  /** The name of the first part, which it is held to. */
+  /** The first part's name. */
   readonly firstName: string;
   readonly differs: Disagreement;
 
@@ -195,7 +173,7 @@ export class DisagreementError extends Error {
   }
 }
 
-/** How many columns a refusal says by name before it counts the rest. */
+/** How many columns an error names before counting the rest. */
 const COLUMNS_NAMED = 3;
 
 const LF = 0x0a;
@@ -203,20 +181,16 @@ const LF = 0x0a;
 /** How many bytes the virtual newline is. */
 const NEWLINE_BYTES = 1;
 
-/** How many bytes a byte order mark can take, which is all a part with no
- * header row is read for at its start. */
+/** How many bytes a byte order mark can take. */
 const BOM_BYTES = 3;
 
 /** How many parts are opened at once when several are opened together. */
 const OPENING = 4;
 
 /**
- * partMap lays the parts end to end.
- *
- * Each gives what is left of it after `skip`. A part that gives something,
- * does not end in a newline and has a part after it is followed by a virtual
- * one. The last part is left as it is, so the join ends the way the file
- * does.
+ * partMap lays the parts end to end. Each gives what is left after `skip`. A
+ * part that gives something, is unterminated and has a part after it is
+ * followed by a virtual newline.
  */
 export function partMap(extents: readonly Extent[]): PartMap {
   const spans: Span[] = [];
@@ -235,8 +209,9 @@ export function partMap(extents: readonly Extent[]): PartMap {
     size,
     partAt(offset) {
       if (!(offset >= 0 && offset < size)) return undefined;
-      // The last span that starts at or before the offset. A span that gives
-      // nothing starts where the next one does, so it is never the last.
+      // Binary search for the last span that starts at or before the offset.
+      // An empty span starts where the next one does, so the search lands
+      // past it.
       let low = 0;
       let high = spans.length - 1;
       while (low < high) {
@@ -252,17 +227,13 @@ export function partMap(extents: readonly Extent[]): PartMap {
 /**
  * openMulti opens `parts` as one file.
  *
- * A part with no extent is opened here and measured. One that has an extent
- * is left unopened until a read reaches it, so a source saved with its
- * extents opens without touching a single part. With a header, a later part
- * is opened together with the first, whose header it is held to.
+ * A part that came bare is opened and measured here. One with an extent is
+ * opened by the first read that reaches it. With a header, a later part is
+ * checked against the first part's header when it is opened.
  *
- * Every refusal names the part: one that cannot be opened, one that does not
- * read the way the first part does, one that is not what its extent says, and
- * one that changes while it is being read. A part that does not agree with
- * the first is a refusal of the whole source, a `DisagreementError`: found as
- * the source opens, nothing is opened, and found by a read, every read after
- * it is refused the same way.
+ * Every error names the part. A part that disagrees with the first throws a
+ * DisagreementError: found at open, every part is closed again; found by a
+ * read, every read after it throws the same error.
  */
 export async function openMulti(
   handlers: readonly FileHandler[],
@@ -281,10 +252,11 @@ export async function openMulti(
   const extents = opened.measured();
   const map = partMap(extents);
 
-  /** The bytes of one span from `from` up to `to`, both joined offsets inside it. */
+  /** The bytes of one span from `from` up to `to`, both joined offsets inside
+   * it. */
   async function piece(span: Span, from: number, to: number): Promise<Uint8Array> {
     const body = span.end - (span.newline ? NEWLINE_BYTES : 0);
-    // The virtual newline alone is nothing the part has to be opened for.
+    // Only the virtual newline is wanted, and it is made here.
     if (from >= body) return Uint8Array.of(LF);
     const length = Math.min(to, body) - from;
     const bytes = await opened.read(span.part, span.skip + (from - span.start), length);
@@ -304,8 +276,8 @@ export async function openMulti(
       const first = map.partAt(start);
       if (first === undefined || end <= start) return new Uint8Array();
 
-      // One part after another, in order. A read inside one part, which is
-      // nearly every read, is handed that part's bytes as they came.
+      // Pieces of each span in order. A read inside one part returns that
+      // part's bytes as they came.
       const pieces: Uint8Array[] = [];
       for (let i = first; i < map.spans.length && map.spans[i]!.start < end; i++) {
         const span = map.spans[i]!;
@@ -318,23 +290,23 @@ export async function openMulti(
 }
 
 /**
- * Parts opens each part once, when it is first wanted, and holds it to what
+ * Parts opens each part once, when first needed, and checks it against what
  * the source says of it.
  */
 class Parts {
-  /** Each part's open, once one has been asked for. */
+  /** Each part's open, once asked for. */
   private readonly sources: Array<Promise<ByteSource> | undefined>;
   /** Each part's extent: the one it came with, or the one its open measured. */
   private readonly extents: Array<Extent | undefined>;
   /**
-   * How the first part reads, which every later part is held to: undefined
-   * where it has no record in it, which only a source with no header row
-   * allows.
+   * How the first part reads. Undefined where it holds zero records, which
+   * only a "none" header allows.
    */
   private first: Promise<Format | undefined> | undefined;
-  /** The part that was found not to agree, which refuses the whole source. */
+  /** The disagreement that refuses the whole source, once found. */
   private refused: DisagreementError | undefined;
-  /** Whether `close` has been called, after which no part is opened or read. */
+  /** Whether `close` has been called, after which every open and read is
+   * refused. */
   private closed = false;
   private readonly handlers: readonly FileHandler[];
   private readonly parts: readonly Part[];
@@ -348,7 +320,7 @@ class Parts {
     this.extents = parts.map((p) => p.extent);
   }
 
-  /** measure opens every part that came without an extent. */
+  /** measure opens every part that came bare. */
   async measure(): Promise<void> {
     await this.each((i) => (this.extents[i] === undefined ? this.source(i) : undefined));
   }
@@ -361,11 +333,12 @@ class Parts {
     });
   }
 
-  /** `length` bytes of part `i` from `offset`, all of which its extent says it has. */
+  /** `length` bytes of part `i` from `offset`, all of which its extent says it
+   * has. */
   async read(i: number, offset: number, length: number): Promise<Uint8Array> {
     if (this.refused !== undefined) throw this.refused;
     const source = await this.source(i);
-    // Closed while the part was opening, and the part with it.
+    // Closed while the part was opening.
     if (this.closed) throw new ClosedError();
     let bytes: Uint8Array;
     try {
@@ -373,7 +346,7 @@ class Parts {
     } catch (err) {
       throw this.failed(i, err);
     }
-    // A part read short would move every row after it, in every part after it.
+    // A short read would shift every row after it.
     if (bytes.length !== length) {
       throw new PartError(this.named(i, "it changed since it was opened · open the source again"));
     }
@@ -389,10 +362,8 @@ class Parts {
   }
 
   /**
-   * close closes every part that was opened, and waits for one still opening
-   * to close that too. Nothing is opened after it: a read still on its way,
-   * as an index's is when its view is closed, is refused, since a part opened
-   * for it would have nobody left to close it.
+   * close closes every opened part, waiting for any still opening. After it,
+   * every open is refused and every read throws ClosedError.
    */
   async close(): Promise<void> {
     this.closed = true;
@@ -403,9 +374,8 @@ class Parts {
   }
 
   /**
-   * Part `i`, opened the first time it is asked for. An open that fails is
-   * forgotten, so the next read asks again rather than repeating the failure.
-   * Once the source is closed no part is opened, and the asking is refused.
+   * Part `i`, opened the first time it is asked for. A failed open is
+   * forgotten, so the next read tries again. After close, it rejects.
    */
   private source(i: number): Promise<ByteSource> {
     if (this.closed) return Promise.reject(new ClosedError());
@@ -415,16 +385,15 @@ class Parts {
     }));
   }
 
-  /** open opens part `i`, measures it, and holds it to the extent it came with. */
+  /** open opens part `i`, measures it, and checks it against the extent it
+   * came with. */
   private async open(i: number): Promise<ByteSource> {
     const ref = this.parts[i]!.ref;
     const source = await openWith(this.handlers, ref);
     try {
       const was = this.extents[i];
-      // An extent came out of a save, and the version beside it says which
-      // bytes that save's log was made against. Where the place says these
-      // are other bytes, the part is refused before any of it is read: a
-      // rewrite the same size would otherwise pass for the file it replaced.
+      // Where the part came with an extent and a saved version, and the place
+      // reports a different version, the part is refused before it is read.
       const saved = was !== undefined && "path" in ref ? ref.version : undefined;
       if (saved !== undefined && source.version !== undefined && source.version !== saved) {
         throw new Error("it is not the version this source was saved against");
@@ -448,15 +417,12 @@ class Parts {
   }
 
   /**
-   * skip is how much of part `i` the join leaves out at its start.
+   * skip is how many bytes at the start of part `i` the join leaves out.
    *
-   * The first part is there whole. A later part has to read the way the first
-   * does, and with a header it is left out up to its first row. A part with
-   * no record in it, whether it is no bytes, blank lines or a byte order mark
-   * alone, has nothing to check and gives no rows, header or none. With no
-   * header, only a byte order mark is left out, which in the middle of the
-   * join would be read as a character of the first cell, and a part of blank
-   * lines alone has no row to hold to the first part's.
+   * The first part and an empty part skip 0 bytes. A later part is checked
+   * against the first part's format, then skipped up to its first data row,
+   * which under a "none" header is just a byte order mark. A part holding
+   * zero records skips its byte order mark only.
    */
   private async skip(i: number, source: ByteSource): Promise<number> {
     if (i === 0 || source.size === 0) return 0;
@@ -469,19 +435,14 @@ class Parts {
         this.refuse(i, differs);
       }
     }
-    // A part read as having no header row starts its rows after a byte order
-    // mark and nothing else, so where its rows start is what is left out
-    // either way. A part with no record in it has only the mark to leave out:
-    // its blank lines are blank lines of the join, which no row begins in.
+    // A part holding zero records has only a byte order mark to skip.
     if (format === undefined) return bomLength(await source.read(0, BOM_BYTES));
     return format.dataStart;
   }
 
   /**
-   * formatOrDiffers is `format`, with a part in an encoding this build cannot
-   * read refused as the disagreement it is: it does not read the way the
-   * first part does, and both encodings are named, rather than the part's
-   * alone as if it were a file on its own.
+   * formatOrDiffers is `format`, with an unsupported encoding reported as an
+   * encoding disagreement against the first part.
    */
   private async formatOrDiffers(i: number, source: ByteSource): Promise<Format | undefined> {
     try {
@@ -495,10 +456,9 @@ class Parts {
   }
 
   /**
-   * refuse is part `i` not reading the way the first does. Parts are opened
-   * several at a time and land in any order. The one the source is refused
-   * for is the first in the list that disagrees, so the same parts give the
-   * same refusal on every open.
+   * refuse throws a DisagreementError for part `i`. The one kept on `refused`
+   * is for the earliest part found to disagree, so the same parts give the
+   * same error on every open.
    */
   private refuse(i: number, differs: Disagreement): never {
     const refusal = new DisagreementError(this.parts, i, differs);
@@ -507,11 +467,9 @@ class Parts {
   }
 
   /**
-   * How part `i` reads: undefined where it has no record in it. The first
-   * part is refused for that where there is a header row, since it is the
-   * header every other part is held to. A later part with no record in it
-   * has no header to hold to the first's and no rows to give, which is the
-   * same nothing whatever its bytes are.
+   * How part `i` reads, or undefined where it holds zero records. The first
+   * part of a source with a header row is read with openFormat, which throws
+   * on an empty file. Every other part is read with peekFormat.
    */
   private format(i: number, source: ByteSource): Promise<Format | undefined> {
     const name = this.parts[i]!.ref.name;
@@ -532,12 +490,8 @@ class Parts {
 
   /**
    * each runs `run` for every part, `OPENING` at a time, and waits for all
-   * that started. It stops starting them at the first failure.
-   *
-   * What it throws is the failure of the earliest part in the list that
-   * failed, whichever landed first. Parts are started in order, so every
-   * part before a failed one was started and waited for, and the earliest
-   * failure is the same one on every run.
+   * that started. It stops starting new ones after the first failure, and
+   * throws the failure of the earliest part that failed.
    */
   private async each(run: (i: number) => Promise<unknown> | undefined): Promise<void> {
     let next = 0;
@@ -564,17 +518,18 @@ class Parts {
     return `${partLabel(this.parts, i)}: ${what}`;
   }
 
-  /** failed is `err` with the part it happened to named, once. */
+  /** failed wraps `err` in a PartError naming part `i`. An error that
+   * already names one is returned as it is. */
   private failed(i: number, err: unknown): Error {
     if (err instanceof PartError || err instanceof DisagreementError) return err;
-    // The whole source was closed, which is no one part's failure.
+    // A closed source is a failure of the whole, passed through as it is.
     if (err instanceof ClosedError) return err;
     const message = err instanceof Error ? err.message : String(err);
     return new PartError(this.named(i, message), { cause: err });
   }
 }
 
-/** An error that already names its part, so it is not named again on the way out. */
+/** An error that already names its part. */
 class PartError extends Error {}
 
 /** The refusal of a read that reaches a source after it was closed. */
@@ -585,14 +540,9 @@ class ClosedError extends Error {
 }
 
 /**
- * disagreement says how a later part reads differently from the first, or
- * undefined where the two agree. Every way parts have to agree belongs here.
- *
- * The encoding comes first and the delimiter second, since a header read
- * with the wrong one of either is not a header to compare. A byte order mark
- * is no part of it: UTF-8 with one and without is the same encoding. With no
- * header row there are no names to hold a part to, and its first row has to
- * have as many fields as the first part's.
+ * disagreement says how `part` reads differently from `first`, or undefined
+ * where they agree. Encoding is checked first, then delimiter, then the
+ * header, or under a "none" header, the field count of the first row.
  */
 function disagreement(first: Format, part: Format, header: HeaderMode): Disagreement | undefined {
   if (first.encoding !== part.encoding) {
@@ -624,8 +574,7 @@ function headerDisagreement(
 
   if (first.length === part.length) {
     if (differing.length === 0) return undefined;
-    // Each header sorted once: sorting the part's again per column is a wait
-    // of seconds for a header thousands of columns wide.
+    // Each header is sorted once. A header can be thousands of columns wide.
     const sorted = part.toSorted();
     const reordered = first.toSorted().every((name, at) => name === sorted[at]);
     return { kind: reordered ? "reordered" : "renamed", columns: differing };
@@ -638,8 +587,8 @@ function headerDisagreement(
     const extra = without(part, first);
     if (extra !== undefined) return { kind: "extra", columns: extra };
   }
-  // Neither header is the other with columns taken out, so one of the
-  // columns they both have differs.
+  // The shorter header is more than the longer with columns taken out, so
+  // one of the columns they both have differs.
   return { kind: "columns", first: first.length, part: part.length, column: differing[0]! };
 }
 
@@ -658,7 +607,8 @@ function without(longer: readonly string[], shorter: readonly string[]): NamedCo
   return kept === shorter.length ? left : undefined;
 }
 
-/** said is a disagreement as the rest of a sentence that opens with the part's name. */
+/** said is a disagreement as the rest of a sentence that starts with the
+ * part's name. */
 function said(differs: Disagreement, first: string): string {
   switch (differs.kind) {
     case "encoding":
@@ -702,7 +652,8 @@ function counted(n: number, more = ""): string {
   return `${n} ${more}${n === 1 ? "column" : "columns"}`;
 }
 
-/** partLabel names part `i` as a person is told of it: its file, and its place in the list. */
+/** partLabel names part `i` for a person: its file, and its place in the
+ * list. */
 function partLabel(parts: readonly Part[], i: number): string {
   return `${parts[i]!.ref.name} (part ${i + 1} of ${parts.length})`;
 }
@@ -718,23 +669,17 @@ function same(a: Extent, b: Extent): boolean {
 
 // ------------------------------------------------------------ the handler
 
-/** What a person would call a source of several files, for an error that names it. */
+/** The label for a source of several files, for errors. */
 const LABEL = "several files as one";
 
-/** Every source `multiFiles` opened, so one can be told from any other ByteSource. */
+/** Every source multiFiles opened, so multiOf can tell one from any other
+ * ByteSource. */
 const joined = new WeakMap<ByteSource, MultiSource>();
 
 /**
- * multiFiles opens a ref of several parts as one file. It claims every ref
- * that has parts, and opens each part through `handlers`, so a part is
- * whatever those open: a platform lists it after the handlers it is given.
- *
- * It is a handler like the others so that reading several files as one is a
- * platform's decision. An engine that does not list it refuses such a ref by
- * name rather than opening its first part.
- *
- * What it opens is a MultiSource, and `multiOf` hands that back to a caller
- * that got it through `openWith` as a ByteSource.
+ * multiFiles opens a ref with parts as one file. It claims every ref that has
+ * `parts`, and opens each part through `handlers`. What it opens is a
+ * MultiSource, which `multiOf` gets back from the ByteSource.
  */
 export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
   return {
@@ -747,8 +692,8 @@ export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
       if (parts.length === 0) {
         throw new Error(`${name} has no parts · several files read as one needs at least one`);
       }
-      // A ref is plain data that crossed a channel or came out of a file, so
-      // what its type rules out is still looked for.
+      // A ref may have come over a channel or out of a file, so a nested
+      // PartsRef is checked for at run time.
       const nested = parts.findIndex((part) => "parts" in part.ref);
       if (nested >= 0) {
         throw new Error(
@@ -763,17 +708,16 @@ export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
 }
 
 /**
- * multiOf is the MultiSource behind a source `multiFiles` opened -- its map,
- * its extents, each part's version -- and undefined for any other source.
+ * multiOf is the MultiSource behind a source multiFiles opened, or undefined
+ * for any other source.
  */
 export function multiOf(source: ByteSource): MultiSource | undefined {
   return joined.get(source);
 }
 
 /**
- * multiProvider is several files read as one, plugged in over the providers a
- * platform lists: a handler and nothing to browse, since its parts are browsed
- * where they are.
+ * multiProvider is the several-files-as-one provider over the providers
+ * given: multiFiles over their handlers, for opening only.
  */
 export function multiProvider(providers: readonly Provider[]): Provider {
   return { name: "multi", label: LABEL, files: multiFiles(providers.map((p) => p.files)) };

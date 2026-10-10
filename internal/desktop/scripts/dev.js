@@ -1,13 +1,7 @@
 // `vp run dev`: a Vite dev server for the renderer, and Electron pointed at it.
 //
-// The dev server's URL is handed to Electron in the environment and is never
-// written into a config or a bundle. A localhost address compiled into a build
-// is one that ships, and the installed app then tries to reach a dev server
-// that is not running.
-//
-// The Electron process's pid is tracked so it can be stopped by pid. Killing by
-// name would take down whatever else on this machine happens to be called
-// electron, and there is usually something.
+// The dev server's URL is passed to Electron in UNO_RENDERER_URL, and lives
+// only in that environment.
 
 import { spawn } from "node:child_process";
 import { createServer } from "vite";
@@ -16,8 +10,8 @@ import { bundleElectron } from "./bundle.js";
 import { electronEnv } from "./launch.js";
 import { compileMessages } from "./messages.js";
 
-// Before the server and the bundles, since all of them import the messages.
-// The server's plugin compiles them again whenever one changes.
+// Compiled first: the server and the bundles all import the messages. The
+// server's plugin recompiles them when one changes.
 await compileMessages();
 
 const server = await createServer({ configFile: "vite.config.ts" });
@@ -30,8 +24,8 @@ if (url === undefined) {
 }
 server.printUrls();
 
-// Main and preload are not served by Vite, so they are built before Electron
-// starts and rebuilt whenever they change.
+// Main, preload and the engine are bundled by bundleElectron: built before
+// Electron starts and rebuilt when they change.
 await bundleElectron({ watch: true });
 
 const electron = spawn((await import("electron")).default, ["."], {
@@ -49,7 +43,8 @@ async function stop(code) {
   process.exit(code);
 }
 
-// Closing the window ends the session; Ctrl+C ends it from the other direction.
+// Closing the window stops the server. Ctrl+C stops Electron, which closes
+// the window.
 electron.on("close", (code) => void stop(code ?? 0));
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {

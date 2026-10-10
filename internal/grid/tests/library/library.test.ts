@@ -19,7 +19,7 @@ function column(id: string, name: string, expr: string, refs?: string[]): Formul
 /** The longest id library/index.ts accepts. */
 const ID_LIMIT = 200;
 
-/** What a save-then-read round trip does, without a filesystem in the way. */
+/** Formats a formula and parses the text back. */
 function roundTrip(f: Formula): Formula {
   const { text } = formatFormula(f);
   return parseFormula(f.id + ".unof", text);
@@ -39,8 +39,7 @@ test("a saved formula reads back with every field intact", () => {
   expect(back.modified).toBeDefined();
 });
 
-// Modified is what this save is; created is filled in only the first time, so a
-// formula cannot come to claim it was written after it was last edited.
+// formatFormula sets modified on every save and created only when it is unset.
 test("resaving keeps the time the formula was first written", () => {
   const first = formatFormula(column("f", "F", "a + b")).stamped;
   expect(first.created).toBeDefined();
@@ -49,8 +48,7 @@ test("resaving keeps the time the formula was first written", () => {
   expect(second.created).toEqual(first.created);
 });
 
-// A notation formula reads nothing, so it carries no refs key at all rather
-// than an empty list that would imply it could.
+// A notation formula is written with the refs key left out.
 test("a notation formula carries no refs key at all", () => {
   const f: Formula = {
     format: 0,
@@ -67,8 +65,7 @@ test("a notation formula carries no refs key at all", () => {
   expect(roundTrip(f).refs).toBeUndefined();
 });
 
-// An older uno opening a file written by a newer one must not quietly drop what
-// it could not read and then write that loss back over the file.
+// Unknown keys are kept in `extra` and written back on save.
 test("keys this build does not know survive a save and read", () => {
   const text = JSON.stringify(
     {
@@ -94,8 +91,7 @@ test("keys this build does not know survive a save and read", () => {
   expect(written["futureThing"]).toEqual({ nested: true });
 });
 
-// Unknown keys are written in name order, so a save that changed nothing
-// produces the same bytes as the one before it.
+// Unknown keys are written in name order.
 test("unknown keys are written in a stable order", () => {
   const text = JSON.stringify({
     format: FORMAT_VERSION,
@@ -114,8 +110,7 @@ test("unknown keys are written in a stable order", () => {
   expect(written.indexOf('"mu"')).toBeLessThan(written.indexOf('"zeta"'));
 });
 
-// Formulas arrive from other people -- that is the point of making each one a
-// file -- so the id is checked before it is ever joined to a path.
+// validID refuses ids that could name a path or are too long.
 describe("an id that could name a path is refused", () => {
   const bad = [
     "",
@@ -142,8 +137,7 @@ describe("an id that could name a path is refused", () => {
   });
 });
 
-// The id is checked on the way in as well as on the way out, so no id that
-// could name a path is ever handed to a caller in the first place.
+// parseFormula also validates the id.
 test("a file whose id names a path is refused on read", () => {
   const text = JSON.stringify({
     format: FORMAT_VERSION,
@@ -169,7 +163,7 @@ test("a formula from a newer uno is refused by name", () => {
   expect(thrown!.message).toContain("newer uno");
 });
 
-// A file that only works where it was written is not reusable anywhere.
+// The written file is portable between machines.
 test("a formula carries no path from the machine that wrote it", () => {
   const { text } = formatFormula(column("f", "F", "a + b", ["a", "b"]));
   expect(text).not.toContain("/home/");
@@ -185,8 +179,7 @@ test("the times are written as whole seconds in UTC", () => {
   expect(written["modified"]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
 });
 
-// Escaping a "<" would cost exactly the legibility that made markdown the right
-// thing to store.
+// "<" is written as is.
 test("a comparison is written as it was typed", () => {
   const { text } = formatFormula(column("f", "F", "a < b"));
   expect(text).toContain("a < b");
@@ -198,8 +191,8 @@ test("a file that is not readable is refused by name", () => {
   expect(() => parseFormula("broken.unof", "[1,2,3]")).toThrow(/broken\.unof/);
 });
 
-// A connection is a .unof too. Read as a formula it would come back as an empty
-// column formula, so a kind this build does not know is refused by name.
+// A kind other than column or notation is refused with the file name and kind
+// in the message.
 test("a kind this build does not know is refused by name", () => {
   const text = JSON.stringify({ format: FORMAT_VERSION, id: "f", name: "F", kind: "connection" });
   expect(() => parseFormula("f.unof", text)).toThrow(/f\.unof.*"connection"/);

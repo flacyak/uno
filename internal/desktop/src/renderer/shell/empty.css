@@ -1,4 +1,4 @@
-/* The empty state, which is also where a dropped file lights up. */
+/* The empty state, which is also the drop target's highlight. */
 
 .dropzone {
   flex: 1 1 auto;

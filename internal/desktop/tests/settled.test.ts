@@ -1,5 +1,5 @@
-// The window getting the focus asks the buckets once it has kept it: a burst
-// of focus events asks once, and one while an ask is out asks nothing more.
+// settled: a burst of triggers runs once after they stop, and a trigger while
+// a run is out is dropped.
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 

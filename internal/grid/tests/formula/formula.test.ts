@@ -2,8 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { Formula, parse } from "../../src/formula/index.ts";
 
-// The text form is what a .uno and a .unof both carry, so an expression that
-// has been through a file has to be the expression that went in.
+// parse then toString gives back the same text.
 describe("the text form round-trips", () => {
   const corpus = [
     "units",
@@ -35,17 +34,15 @@ describe("the text form round-trips", () => {
   }
 });
 
-// toString is a normal form rather than a transcription: spacing is the
-// parser's to decide, but bracketing is the person's. Their brackets are how
-// they show their working, and one this package removed would be an edit to an
-// expression it was only asked to store.
+// toString normalises spacing around operators and keeps every bracket as
+// written.
 describe("spacing is normalised and brackets are kept", () => {
   const cases: Array<[string, string]> = [
     ["units*price", "units * price"],
     ["  units   *price ", "units * price"],
     ["(price-cost)/price", "(price - cost) / price"],
-    ["(a) + b", "(a) + b"], // redundant, and still theirs
-    ["((a))", "((a))"], // twice redundant, and still theirs
+    ["(a) + b", "(a) + b"], // redundant brackets are kept
+    ["((a))", "((a))"], // nested redundant brackets are kept
     ["a + (b * c)", "a + (b * c)"],
   ];
 
@@ -58,10 +55,7 @@ describe("spacing is normalised and brackets are kept", () => {
   }
 });
 
-// refs is what the dependency graph is built out of, so a name it misses is an
-// edge the graph does not have and a cycle it would accept. Sorted and
-// deduplicated because the answer reaches a person, in a .unof's refs and in
-// the path a refused binding names.
+// refs returns every column name in the expression, sorted and deduplicated.
 describe("refs names every column read once", () => {
   const cases: Array<[string, string[]]> = [
     ["units * price", ["price", "units"]],
@@ -79,9 +73,7 @@ describe("refs names every column read once", () => {
   }
 });
 
-// A stored expression this build cannot read must fail before a single cell
-// moves, so everything that is not an expression has to be refused here rather
-// than surviving to the row it breaks on.
+// parse throws on malformed input.
 describe("parse refuses what it cannot run", () => {
   const corpus = [
     "",
@@ -99,11 +91,11 @@ describe("parse refuses what it cannot run", () => {
     "1..2",
     "1.",
     ".5",
-    "1e3", // an exponent is not a thing a spreadsheet holds
-    "1,204", // decoration belongs to the cell, not to the expression
+    "1e3", // exponents are refused
+    "1,204", // thousands separators are refused
     "a $ b",
-    '"price"', // there is no quoting syntax, on purpose
-    "Q3 (net)", // a header that is not an identifier cannot be referenced
+    '"price"', // quotes are refused
+    "Q3 (net)", // a header needs identifier syntax to be referenced
     "price * ",
   ];
 
@@ -114,9 +106,7 @@ describe("parse refuses what it cannot run", () => {
   }
 });
 
-// A binding can arrive out of a state.json written by another build. A missing
-// expression has to be a value that fails, not a crash on the path that reads
-// it.
+// An empty Formula has empty text and an empty refs list.
 test("the empty formula is empty rather than a crash", () => {
   const f = new Formula();
   expect(f.toString()).toBe("");

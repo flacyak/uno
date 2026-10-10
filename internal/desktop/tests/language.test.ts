@@ -1,5 +1,5 @@
-// The language the app speaks: the choice kept, the system's languages matched
-// to the ones the app has, and what hears of a change.
+// The app's language: the choice kept, the system's languages matched to the
+// ones the app has, and who hears of a change.
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
@@ -15,7 +15,7 @@ import {
 } from "../src/renderer/language.ts";
 import { Kept } from "./kept.ts";
 
-/** Every language the app has messages for, the pseudo-locale among them. */
+/** Every locale the app has messages for, including the pseudo-locale. */
 const ALL = offered(true);
 
 let kept: Kept;
@@ -32,7 +32,7 @@ test("the pseudo-locale is offered where the app is worked on, and nowhere else"
 
 test("the system's first language the app has is the one preferred", () => {
   expect(preferred([PSEUDO_LOCALE, "en-US"], ALL)).toBe(PSEUDO_LOCALE);
-  // One the app does not have is passed over for the next.
+  // A language the app lacks is skipped.
   expect(preferred(["tlh", PSEUDO_LOCALE], ALL)).toBe(PSEUDO_LOCALE);
 });
 
@@ -99,10 +99,11 @@ test("a change of language is heard, and a choice that changes nothing is not", 
 
   language.choose(PSEUDO_LOCALE);
   expect(heard).toBe(1);
-  // The same language again.
+  // The same language again leaves the count where it was.
   language.choose(PSEUDO_LOCALE);
   expect(heard).toBe(1);
-  // The system's is English, and so is the choice it is changed to: kept, not heard.
+  // The system's language is en-US. Choosing SYSTEM after en-US changes the
+  // choice kept, and the locale stays the same, so the count stays.
   language.choose("en-US");
   expect(heard).toBe(2);
   language.choose(SYSTEM);

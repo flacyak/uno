@@ -1,5 +1,5 @@
-// What the engine tests share: a real MessageChannel between a client and
-// `serve`, the fixture, and a way to compare rows with what a Sheet builds.
+// Shared helpers for the engine tests: a client and `serve` joined by a real
+// MessageChannel, the fixture, and row comparisons against a Sheet.
 
 import { Engine, english, messagePort, serve } from "../../src/engine/index.ts";
 import type {
@@ -21,9 +21,7 @@ import type { Connections } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { bytes, FIXTURE } from "../testdata/sales-q3.ts";
 
-// The fixture and its bytes live in testdata/sales-q3.ts, beside the facts
-// about what it holds. They are passed on from here because most of the tests
-// that want them want the rest of this file too.
+// Re-exported from testdata/sales-q3.ts.
 export { bytes, FIXTURE };
 export const sales = read("sales-q3.csv", bytes);
 
@@ -34,12 +32,8 @@ export const SCREEN = 22;
 export const TINY: Tuning = { chunkBytes: 4096, blockRows: 7, blockBytes: 512, cacheBytes: 8192 };
 
 /**
- * connect wires a client to an engine over a real channel.
- *
- * What it is handed is providers and not handlers, because that is what a
- * platform hands `serve`: opening and browsing are one decision, and a test
- * that wired the handler and forgot the lister would be testing an engine no
- * platform builds.
+ * connect serves an engine over a real MessageChannel and returns a client
+ * for it. `providers` go to `serve` as a platform would hand them.
  */
 export function connect(
   tuning?: Tuning,
@@ -51,8 +45,7 @@ export function connect(
     messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
     sources(providers),
     tuning,
-    // A bare Connections is the common case in a test, and is wired the way
-    // a platform with nothing else to offer would wire it.
+    // A bare Connections is wrapped as a Connecting holding only it.
     connecting === undefined || "connections" in connecting
       ? connecting
       : { connections: connecting },
@@ -60,22 +53,19 @@ export function connect(
   const engine = new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
   return {
     engine,
-    // Only the client's end is closed. It posts the close request first, and
-    // closing one end of a channel closes the other once what was already
-    // posted has been delivered. Closing the engine's end here as well would
-    // drop that request unread, and the workspace would never close the files
-    // it holds.
+    // Only the client's end is closed. Its close request is delivered to the
+    // engine before the channel shuts, so the engine closes its own files.
     done: () => engine.close(),
   };
 }
 
-/** The disk and the blob handlers, and several files read as one over them. */
+/** Disk and blob providers, plus a multi provider over both. */
 export function multiProviders(): Provider[] {
   const single = [diskProvider(), blobProvider()];
   return [...single, multiProvider(single)];
 }
 
-/** Every row of a source, as it shows them, read a page at a time. */
+/** Every row of a source, read `page` rows at a time. */
 export async function everyRow(src: SourceHandle, page = 500): Promise<string[][]> {
   const rows: string[][] = [];
   for (let first = 0; first < src.progress.rows; first += page) {
@@ -84,7 +74,7 @@ export async function everyRow(src: SourceHandle, page = 500): Promise<string[][
   return rows;
 }
 
-/** openOne adds a file that is one source, and hands back that source. */
+/** openOne opens `ref` and returns its one source. Throws if there are more. */
 export async function openOne(engine: Engine, ref: SourceRef): Promise<SourceHandle> {
   const { sources } = await engine.open(ref);
   if (sources.length !== 1) throw new Error(`${ref.name} opened ${sources.length} sources`);
@@ -100,7 +90,7 @@ export function indexed(source: SourceHandle): Promise<void> {
   });
 }
 
-/** What a Sheet shows and stores for a run of rows, as wide as its header. */
+/** `count` rows of a Sheet from `first`, raw or display, one cell per column. */
 export function sheetRows(
   s: Sheet,
   first: number,
@@ -114,12 +104,12 @@ export function sheetRows(
   return out;
 }
 
-/** Rows as wide as the header, the way a Sheet reads a short one: padded with "". */
+/** Rows padded with "" to the fixture's column count. */
 export function widened(rows: string[][]): string[][] {
   return rows.map((r) => sales.columns.map((_, col) => r[col] ?? ""));
 }
 
-/** What the engine said, in English, or undefined where it said nothing. */
+/** `said` in English, or undefined for an undefined `said`. */
 export function saidIn(said: Said | undefined): string | undefined {
   return said === undefined ? undefined : english(said);
 }

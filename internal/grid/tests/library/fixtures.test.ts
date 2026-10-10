@@ -7,9 +7,7 @@ import { parse as parseFormulaExpr } from "../../src/formula/index.ts";
 import { formatFormula, parseFormula } from "../../src/library/index.ts";
 import { supported } from "../../src/notation/index.ts";
 
-/** The .unof files the Go build ships as fixtures, read by the TypeScript one.
- * A formula is a file meant to travel, so a file written by either build has to
- * open in the other. */
+/** Reads a .unof fixture written by the Go build. */
 function fixture(id: string): string {
   const path = fileURLToPath(new URL(`../testdata/${id}.unof`, import.meta.url));
   return readFileSync(path, "utf8");
@@ -20,8 +18,7 @@ describe("the .unof files the Go build wrote", () => {
     const f = parseFormula("unit-margin.unof", fixture("unit-margin"));
     expect(f.kind).toBe("column");
     expect(f.id).toBe("unit-margin");
-    // The expression is the one thing that has to survive: it is what the
-    // column computes from.
+    // The expression parses and its refs match the file's refs.
     expect(() => parseFormulaExpr(f.expr)).not.toThrow();
     expect(parseFormulaExpr(f.expr).refs()).toEqual(f.refs ?? []);
   });

@@ -1,20 +1,15 @@
-// Trading one credential for another, over the network.
+// Exchanging one credential for another over the network: the SSO portal's
+// GetRoleCredentials, and STS's AssumeRole.
 //
-// Some ways of signing in never put keys on the disk. An SSO profile holds a
-// token from the last `aws sso login`, and a role holds only its ARN. Each is
-// turned into short-lived keys by asking AWS, and those asks live here: the
-// SSO portal's GetRoleCredentials now, and STS's AssumeRole beside it.
-//
-// This is the one module besides store/s3.ts allowed to reach a network, and
-// the guard test in tests/store/opens.test.ts holds it to that. Nothing here
-// reads a file: which token and which role are store/node.ts's business, which
-// reads ~/.aws, and hands the answer here to be exchanged.
+// This module and store/s3.ts are the only ones allowed to reach a network.
+// The guard test in tests/store/opens.test.ts checks that. Every file read
+// is in store/node.ts, which reads ~/.aws and passes the token or role in.
 
 import { encodeQuery, signV4 } from "./s3.ts";
 import type { AwsCredentials } from "./s3.ts";
 import { text } from "./s3xml.ts";
 
-/** Keys AWS handed out for a while, and when they stop working. */
+/** Temporary keys, and when they expire. */
 export interface Session {
   accessKeyId: string;
   secretAccessKey: string;
@@ -22,23 +17,22 @@ export interface Session {
   expiration: Date;
 }
 
-/** How an exchange reaches AWS: where, and through what. */
+/** Where an exchange is sent, and through what. */
 export interface ExchangeOptions {
   /**
-   * An endpoint to use instead of AWS's, for a stand-in in a test or a
-   * gateway in front of the real one. It is what AWS_ENDPOINT_URL_SSO and
-   * AWS_ENDPOINT_URL_STS name for every other AWS tool.
+   * An endpoint that replaces AWS's, for a test stand-in or a gateway.
+   * The same thing AWS_ENDPOINT_URL_SSO and AWS_ENDPOINT_URL_STS name.
    */
   endpoint?: string;
-  /** How requests go out. Defaults to the runtime's own fetch. */
+  /** How requests go out. Defaults to the runtime's fetch. */
   fetch?: typeof fetch;
 }
 
-/** What an SSO profile names, once its token has been read off the disk. */
+/** What an SSO profile names, with its cached access token. */
 export interface SsoAsk {
-  /** The profile, for the sentence a refusal is. */
+  /** The profile name, for error messages. */
   profile: string;
-  /** Where the SSO portal is: the sso_region, not the region the profile reads buckets in. */
+  /** The sso_region, where the SSO portal is. */
   region: string;
   accountId: string;
   roleName: string;
@@ -47,11 +41,9 @@ export interface SsoAsk {
 }
 
 /**
- * ssoRoleCredentials trades an SSO access token for a role's keys, which is
- * what the AWS CLI does under every command run with an SSO profile.
- *
- * A refused token is an expired or revoked sign-in, and the only thing that
- * mends one is the person signing in again, so that is what the refusal says.
+ * ssoRoleCredentials trades an SSO access token for a role's temporary keys
+ * through the SSO portal's GetRoleCredentials. A 401 or 403 means the sign-in
+ * has expired or been revoked, and the error says to sign in again.
  */
 export async function ssoRoleCredentials(
   ask: SsoAsk,
@@ -96,24 +88,23 @@ export async function ssoRoleCredentials(
 }
 
 /**
- * signInAgain is the sentence for an SSO sign-in that no longer works, with
- * the command that mends it. It is shared with store/node.ts, which says it
- * first when the cached token has already expired on disk.
+ * signInAgain is the error message for an SSO sign-in that has lapsed,
+ * with the command that fixes it. Also used by store/node.ts.
  */
 export function signInAgain(profile: string, why: string): string {
   return `the AWS profile ${profile} is not signed in · ${why} · sign in with \`aws sso login --profile ${profile}\``;
 }
 
-/** What AssumeRole is asked for: which role, as whom, and for how long. */
+/** What AssumeRole is asked for. */
 export interface RoleAsk {
   roleArn: string;
-  /** What the session is called in the role owner's CloudTrail. */
+  /** The session name shown in the role owner's CloudTrail. */
   sessionName: string;
-  /** The condition the role's trust policy checks, when it has one. */
+  /** The ExternalId the role's trust policy checks, when it has one. */
   externalId?: string;
-  /** How long the session lasts. The role's own maximum still applies. */
+  /** How long the session lasts, up to the role's own maximum. */
   durationSeconds?: number;
-  /** Which STS to ask, and so which region the call is signed for. */
+  /** Which regional STS endpoint to call, and the region to sign for. */
   region: string;
 }
 
@@ -121,27 +112,16 @@ export interface RoleAsk {
 const STS_VERSION = "2011-06-15";
 
 /**
- * What STS takes for a RoleSessionName: 2 to 64 of the characters its API
- * reference lists. It is checked here because the name can come off a
- * profile's role_session_name, and a refusal that says which setting is wrong
- * is better than STS's ValidationError sent back across the network.
+ * What STS accepts as a RoleSessionName: 2 to 64 of these characters. Checked
+ * here so a bad role_session_name is refused before the request goes out.
  */
 const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
 
 /**
- * assumeRole takes on a role with the credentials that are allowed to, and
- * hands back the role's session.
+ * assumeRole calls STS AssumeRole as one signed GET, with `source` as the
+ * caller's credentials, and returns the role's session.
  *
- * It is one signed GET to STS, the same SigV4 every S3 request is, for the
- * service "sts": what trusts the caller is the role's trust policy, and what
- * it checks -- the caller's account, and an external ID where the policy asks
- * for one -- is all in that one request. The desktop reaches it through a
- * profile with role_arn and source_profile; the hosted engine will reach it
- * with the requesting account's external ID.
- *
- * A refusal says what STS said, code and all: AccessDenied is almost always a
- * trust policy that does not name the caller, or an external ID that is not
- * the one it asks for, and the person fixing it needs to know which.
+ * An error includes STS's error code and message.
  */
 export async function assumeRole(
   ask: RoleAsk,
@@ -165,9 +145,8 @@ export async function assumeRole(
   if (ask.durationSeconds !== undefined)
     query.push(["DurationSeconds", String(ask.durationSeconds)]);
   if (ask.externalId !== undefined) query.push(["ExternalId", ask.externalId]);
-  // Written with the encoder SigV4 signs with, for the reason listUrl in
-  // store/s3.ts gives: a form-encoded space is a `+` on the wire and `%20` in
-  // the signature, and the two would not agree.
+  // Encoded with the encoder SigV4 signs with, so the query on the wire
+  // matches the signature. URLSearchParams would write a space as `+`.
   const url = new URL(`${base}/?${encodeQuery(query)}`);
 
   const headers = signV4(
@@ -187,7 +166,7 @@ export async function assumeRole(
     );
   }
 
-  // No Credentials element reads as an empty one, which holds none of the four.
+  // A missing Credentials element reads as empty, so every field is missing.
   const credentials = text(body, "Credentials") ?? "";
   const id = text(credentials, "AccessKeyId");
   const secret = text(credentials, "SecretAccessKey");

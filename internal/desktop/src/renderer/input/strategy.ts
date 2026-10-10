@@ -1,41 +1,40 @@
-// An input strategy: how a person's keys become the grid's actions.
-//
-// The grid and its editor ask the strategy what a key means and carry out the
-// answer, so a way of typing is one object rather than a branch through the
-// grid. A strategy is pure -- a mode, what is pending and a key in, a step out --
-// so each one is tested without a window.
+// An input strategy maps key presses to grid actions. The grid and its cell
+// editor ask the strategy what a key means and carry out the answer.
+// Strategies are pure functions of mode, pending keys and the press.
 
 import type { Mode, Pending, Press, Step } from "../keys.ts";
 
-/** The name the menu and the saved setting know a strategy by. */
+/** Strategy name used by the menu and the saved setting. */
 export type InputName = "default" | "vim-style";
 
-/** What a key in the cell editor does. Undefined leaves the key to the field. */
+/** What a key does in the cell editor. Undefined leaves it to the input
+ * field. */
 export type EditorKey = "commit" | "cancel" | undefined;
 
 export interface InputStrategy {
   readonly name: InputName;
-  /** What a key that writes says in view. */
+  /** Message shown when a writing key is pressed in view mode. */
   readonly locked: string;
-  /** What the status bar calls transform while the editor is open, or undefined to go on calling it transform. */
+  /** Status bar label while the editor is open, or undefined to keep the
+   * transform label. */
   readonly editing: string | undefined;
-  /** The mode switch's tooltip: how to get between view and transform. */
+  /** Tooltip for the mode switch. */
   readonly switchHint: string;
 
   /**
-   * interpret reads one key on the grid, in view or transform.
+   * Interprets one key press on the grid.
    *
-   * Undefined means the key is not the grid's -- a chord for the shell and the
-   * menu, or Shift on its way to a capital -- and leaves what is pending alone.
-   * Every other key is prevented, so a letter the grid takes is never typed into
-   * an editor it opened.
+   * Returns undefined when the key belongs elsewhere (a shell or menu chord,
+   * a bare modifier). The grid then leaves the event alone and keeps its
+   * pending keys. Any other result is treated as handled and the event is
+   * prevented.
    */
   interpret(mode: Mode, pending: Pending, press: Press): Step | undefined;
 
   /**
-   * editorKey reads one key in the cell editor. While an input method is
-   * composing, Enter and Esc belong to the composition, and closing the editor
-   * would cut a word in half.
+   * Interprets one key press in the cell editor. Returns undefined while an
+   * input method is composing, since Enter and Esc then belong to the
+   * composition.
    */
   editorKey(key: string, composing: boolean): EditorKey;
 }

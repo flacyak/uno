@@ -1,14 +1,9 @@
-// The Node implementation of FileStore, and the handler that opens a file on
-// this machine's disks.
+// The Node FileStore, the handler that opens a file on this machine's disks,
+// and the AWS credential chain read from ~/.aws.
 //
-// Its `write` is internal/safefile/write.go: build a sibling temp file, fsync
-// it, and rename over the target, so an interrupted write loses the new content
-// rather than the content already there.
-//
-// Browsing a folder is store/disklister.ts, beside this. The two are the only
-// files in the package that import node:fs, which is what the guard test in
-// tests/store/opens.test.ts holds them to: reaching a disk is allowed inside the
-// seam and nowhere else.
+// `write` builds a sibling temp file, fsyncs it and renames it over the
+// target. Only this file and store/disklister.ts import node:fs. The guard
+// test in tests/store/opens.test.ts checks that.
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -29,8 +24,8 @@ import { assumeRole, signInAgain, ssoRoleCredentials } from "./sts.ts";
 import type { Session } from "./sts.ts";
 
 /**
- * localFiles opens files on this machine's disks, by path, for reading. It
- * claims every path without a scheme in front of it.
+ * localFiles opens files on this machine's disks by path, for reading. It
+ * claims every scheme-free path.
  */
 export function localFiles(): FileHandler {
   return {
@@ -43,27 +38,17 @@ export function localFiles(): FileHandler {
   };
 }
 
-/**
- * diskProvider is this machine's disks plugged in as one thing: the handler that
- * opens a path and the lister that browses the folder it came out of.
- */
+/** diskProvider is this machine's disks: localFiles and diskLister. */
 export function diskProvider(): Provider {
   return { name: "disk", label: "local files", files: localFiles(), browse: diskLister() };
 }
 
 /**
- * nodeSource reads a file at an offset, so a 30 GB CSV costs a descriptor and
- * not 30 GB.
+ * nodeSource opens a file and reads it at an offset through one descriptor.
+ * Positional reads share the descriptor, so reads can be in flight together.
  *
- * Reads with an explicit position share the descriptor safely, so an index
- * scan and a page read can be in flight together.
- *
- * Only a regular file is a source. A folder opens, has a size that means
- * nothing and fails on the first read without saying where; a fifo does not
- * even open until something writes to it, which holds a thread of the pool
- * for as long as that takes. The open is non-blocking so that a fifo comes
- * back at once, which costs a regular file nothing, and the stat that follows
- * refuses anything that is not a file by its path.
+ * Only a regular file opens. The open is non-blocking so a fifo returns at
+ * once, and the stat after it refuses everything but a regular file.
  */
 export async function nodeSource(path: string): Promise<ByteSource> {
   const fh = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -85,7 +70,7 @@ export async function nodeSource(path: string): Promise<ByteSource> {
       const want = Math.max(0, Math.min(length, size - offset));
       const buf = new Uint8Array(want);
       let got = 0;
-      // A read may return fewer bytes than asked without being at the end.
+      // A read may return fewer bytes than asked while more remain.
       while (got < want) {
         const { bytesRead } = await fh.read(buf, got, want - got, offset + got);
         if (bytesRead === 0) break; // the file shrank since it was opened
@@ -97,24 +82,16 @@ export async function nodeSource(path: string): Promise<ByteSource> {
   };
 }
 
-/**
- * nodeStore is a FileStore backed by the local filesystem.
- *
- * It is created rather than exported as a singleton so a caller can wrap it --
- * a test with a temp directory, a sandbox with a path prefix -- without the
- * core learning that either exists.
- */
+/** nodeStore is a FileStore backed by the local filesystem. */
 export function nodeStore(): FileStore {
   return {
     files: [localFiles()],
 
     /**
-     * write publishes bytes to path atomically.
-     *
-     * Everything goes to a temp file in the same directory, so the rename that
-     * publishes it stays on one filesystem and stays atomic. A failure anywhere
-     * -- from the write, from the sync, from the rename -- leaves the previous
-     * file untouched and leaves no debris behind.
+     * write replaces the file at path atomically: the bytes go to a temp file
+     * in the same directory, which is fsynced and renamed over the target. A
+     * failure leaves the previous file untouched and removes the temp
+     * directory.
      */
     async write(path: string, bytes: Uint8Array): Promise<void> {
       const dir = dirname(path);
@@ -122,9 +99,7 @@ export function nodeStore(): FileStore {
       const tmp = join(scratch, "part");
 
       try {
-        // 0644 because the result is an ordinary user file. The private mode a
-        // temp file is created with is a decision about the temp file, not
-        // about the document.
+        // 0644: the result is an ordinary user file.
         const fh = await open(
           tmp,
           constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
@@ -132,24 +107,21 @@ export function nodeStore(): FileStore {
         );
         try {
           await fh.writeFile(bytes);
-          await fh.sync(); // durable before the swap, not after
+          await fh.sync(); // durable before the swap
         } finally {
           await fh.close();
         }
         await rename(tmp, path);
       } catch (err) {
-        await rm(scratch, { recursive: true, force: true }); // a failed write leaves no debris
+        await rm(scratch, { recursive: true, force: true }); // a failed write cleans up after itself
         throw err;
       }
       await rm(scratch, { recursive: true, force: true });
     },
 
     /**
-     * list names the files directly in dir.
-     *
-     * A directory that does not exist is empty rather than a failure: a person
-     * who has never written a formula has no folder, and that is not a fault
-     * worth reporting to them.
+     * list names the files directly in dir. A missing directory is an empty
+     * list.
      */
     async list(dir: string): Promise<string[]> {
       try {
@@ -168,7 +140,7 @@ const execFileAsync = promisify(execFile);
 /** How long credentials read from disk are reused before they are read again. */
 const CREDENTIALS_MS = 60_000;
 
-/** The region a request is signed for when nothing else has said one. */
+/** The fallback region a request is signed for. */
 const DEFAULT_REGION = "us-east-1";
 
 type Env = Record<string, string | undefined>;
@@ -181,7 +153,7 @@ interface AwsFiles {
   credentials: Map<string, Map<string, string>>;
 }
 
-/** Where the AWS files are, the way the CLI finds them: the variables, then ~/.aws. */
+/** Reads the AWS files from the paths the environment names, or ~/.aws. */
 async function awsFiles(env: Env): Promise<AwsFiles> {
   const aws = join(homeOf(env), ".aws");
   return {
@@ -190,24 +162,26 @@ async function awsFiles(env: Env): Promise<AwsFiles> {
   };
 }
 
-/** The config section a profile's settings are in: `default`, or `profile <name>`. */
+/** The config section a profile's settings are in: `default`, or
+ * `profile <name>`. */
 function configOf(files: AwsFiles, profile: string): Map<string, string> | undefined {
   return files.config.get(profile === "default" ? "default" : `profile ${profile}`);
 }
 
-/** The region a profile signs for: the environment first, as the CLI has it, then its config. */
+/** The region a profile signs for: the environment, then its config, then
+ * the default. */
 function regionOf(env: Env, files: AwsFiles, profile: string): string {
   return envRegion(env) ?? configOf(files, profile)?.get("region") ?? DEFAULT_REGION;
 }
 
-/** The region the environment names, as the CLI reads it, or nothing. */
+/** The region the environment names, or undefined. */
 function envRegion(env: Env): string | undefined {
   return env["AWS_REGION"] ?? env["AWS_DEFAULT_REGION"];
 }
 
 /**
- * envKeys is the keys the environment holds, as the CLI reads them, signing for
- * `region`, or nothing where it holds none. An empty variable is none.
+ * envKeys is the keys in the environment, signing for `region`, or undefined
+ * where there are none. An empty variable counts as none.
  */
 function envKeys(env: Env, region: string): AwsCredentials | undefined {
   const id = env["AWS_ACCESS_KEY_ID"];
@@ -217,35 +191,33 @@ function envKeys(env: Env, region: string): AwsCredentials | undefined {
   return { accessKeyId: id, secretAccessKey: secret, sessionToken, region };
 }
 
-/** Credentials, and the moment they stop being reused and are asked for again. */
+/** Credentials, and the time after which they are read again. */
 interface Held {
   creds: AwsCredentials;
   until: number;
 }
 
 /**
- * How long before temporary credentials expire they are traded for new ones,
- * so a range read in the last minute of a session is not signed with keys
- * that lapse on the way to S3. Five minutes is what the AWS SDKs allow.
+ * How long before temporary credentials expire they are replaced, so a request
+ * is signed with keys that outlast it. Five minutes, as the AWS SDKs use.
  */
 const EARLY_MS = 5 * 60_000;
 
-/** The home folder the AWS files hang off, as the environment says it. */
+/** The home folder the AWS files are under. */
 function homeOf(env: Env): string {
   return env["HOME"] ?? env["USERPROFILE"] ?? homedir();
 }
 
 /**
- * profileSession signs in as one named profile, the ways the AWS CLI does, or
- * answers undefined for a profile with no way in at all, which each caller
- * words for itself: the chain found nothing, or the profile a connection named
- * has nothing uno can use.
+ * profileSession signs in as one named profile the way the AWS CLI does,
+ * when the profile offers one of the ways below, and returns undefined
+ * otherwise.
  *
- * Keys in ~/.aws/credentials, or in the profile's config section, are read as
- * they are and read again a minute later. A credential_process profile runs
- * the program it names and reads the keys it prints. An SSO profile trades
- * the token its last `aws sso login` left behind for a role's keys. Keys that
- * expire are reused until shortly before they do.
+ * In order: a role_arn is assumed through its source. Static keys in
+ * ~/.aws/credentials or the config section are used as they are and read
+ * again after a minute. A credential_process is run and its output read. An
+ * SSO profile trades its cached token for keys. Expiring keys are reused
+ * until shortly before they expire.
  */
 async function profileSession(
   env: Env,
@@ -258,8 +230,8 @@ async function profileSession(
   const region = regionOf(env, files, profile);
   const as = `the AWS profile ${profile}`;
 
-  // A role comes first, as it does for the CLI: a profile with role_arn is the
-  // role, whatever else it holds, and its keys are whatever its source's are.
+  // A profile with role_arn is the role, whatever else it holds, as for the
+  // CLI.
   const roleArn = fromConfig?.get("role_arn") ?? p?.get("role_arn");
   if (roleArn !== undefined) {
     const setting = (key: string): string | undefined => fromConfig?.get(key) ?? p?.get(key);
@@ -275,7 +247,8 @@ async function profileSession(
   }
   return undefined;
 
-  /** hold is a session as this profile's credentials, kept until shortly before it expires, or for good where it does not. */
+  /** hold is a session as this profile's credentials, kept until shortly
+   * before it expires, or for good for keys that last. */
   function hold({ expiration, ...keys }: Printed | Session): Held {
     const until = expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS;
     return { creds: { ...keys, region, as }, until };
@@ -286,13 +259,11 @@ async function profileSession(
  * ssoSession reads the token `aws sso login` cached for a profile and trades
  * it at the SSO portal for the profile's role.
  *
- * Two layouts name the portal. The current one puts it in an `[sso-session
- * <name>]` section the profile names with sso_session, and caches the token
- * under the SHA-1 of that name. The older one puts sso_start_url and
- * sso_region in the profile itself and caches under the SHA-1 of the URL.
- *
- * uno never signs in for anybody. An expired or missing token is said, with
- * the command that mends it, before the portal is asked anything.
+ * The portal is named in one of two layouts: an `[sso-session <name>]`
+ * section the profile names with sso_session, cached under the SHA-1 of that
+ * name, or sso_start_url and sso_region in the profile itself, cached under
+ * the SHA-1 of the URL. A missing or expired token is refused with the
+ * command that fixes it, before the portal is asked.
  */
 async function ssoSession(
   env: Env,
@@ -326,10 +297,9 @@ async function ssoSession(
   const path = join(homeOf(env), ".aws", "sso", "cache", name);
   const text = await readText(path, name);
   if (text === undefined) throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
-  // `aws sso login` writes the cache in place, so a sign-in cut short leaves
-  // half a file: a sign-in uno cannot read, mended the same way as any other.
+  // A cache file that fails to parse is refused like a missing sign-in.
   const token = cachedToken(text);
-  // Older CLIs wrote the time with a UTC suffix rather than a Z.
+  // Older CLIs wrote the time with a UTC suffix, where newer write Z.
   const expires = new Date(String(token?.expiresAt).replace(/UTC$/, "Z"));
   if (typeof token?.accessToken !== "string" || Number.isNaN(expires.getTime())) {
     throw new Error(signInAgain(profile, "its cached SSO sign-in could not be read"));
@@ -350,7 +320,7 @@ async function ssoSession(
   );
 }
 
-/** What a cache file holds, where it holds a JSON object at all. */
+/** The JSON object a cache file holds, or undefined. */
 function cachedToken(text: string): Record<string, unknown> | undefined {
   let parsed: unknown;
   try {
@@ -364,13 +334,10 @@ function cachedToken(text: string): Record<string, unknown> | undefined {
 }
 
 /**
- * roleSession takes on the role a profile names, with the credentials of the
- * profile it names as source_profile -- which may be keys, a program, an SSO
- * sign-in, or another role, followed as far as the chain goes.
- *
- * A chain that comes back to a profile already on it would ask STS forever,
- * and is refused naming the whole loop. mfa_serial is refused by name: it
- * asks for a code from a device, and the engine has nobody to ask.
+ * roleSession assumes the role a profile names with the credentials of its
+ * source_profile, which may be any kind of profile, including another role.
+ * A chain that comes back to a profile already on it is refused naming the
+ * loop. mfa_serial is refused, since a code needs a prompt the engine lacks.
  */
 async function roleSession(
   env: Env,
@@ -397,8 +364,8 @@ async function roleSession(
         `the AWS profile ${profile} takes its credentials from a loop · ${[...chain, sourceProfile].join(" → ")}`,
       );
     }
-    // A profile that is its own source means the keys beside its role_arn,
-    // which is how the CLI reads it too.
+    // A profile that is its own source means the static keys beside its
+    // role_arn.
     const held =
       sourceProfile === profile
         ? profileKeysOnly(env, files, profile)
@@ -460,18 +427,13 @@ function profileKeysOnly(env: Env, files: AwsFiles, profile: string): Held | und
   };
 }
 
-/**
- * How long a credential_process program is given to answer. A program that
- * asks a vault or a hardware key can take a few seconds; one that has not
- * answered in thirty is waiting on something that is not coming, and a range
- * read waiting behind it would look like uno had hung.
- */
+/** How long a credential_process program is given to answer. */
 const PROCESS_MS = 30_000;
 
-/** The most a credential_process program may print. Its answer is a few hundred bytes. */
+/** The most a credential_process program may print. */
 const PROCESS_BYTES = 1 << 20;
 
-/** Keys a program printed, and when they stop working, where it said. */
+/** Keys a credential_process printed, and when they expire where it said. */
 interface Printed {
   accessKeyId: string;
   secretAccessKey: string;
@@ -480,17 +442,13 @@ interface Printed {
 }
 
 /**
- * processCredentials runs a profile's credential_process and reads the keys it
- * prints, which is how the AWS CLI hands signing in to another program: a
- * vault, a hardware key, a company's own tool.
- *
- * The command is split into words the way a shell would split it, quotes and
- * all, and run without a shell, so nothing in ~/.aws/config is ever handed to
- * one to interpret. What it prints is the CLI's version 1 answer, and anything
- * else is refused by name rather than guessed at.
+ * processCredentials runs a profile's credential_process and reads the keys
+ * it prints. The command is split into words the way a shell would and run
+ * directly, as a program and its arguments. The output must be the CLI's
+ * version 1 JSON.
  */
 async function processCredentials(profile: string, command: string): Promise<Printed> {
-  /** fail is what went wrong with the profile's credential_process, named. */
+  /** fail is an Error about this profile's credential_process. */
   const fail = (why: string): Error =>
     new Error(`the AWS profile ${profile}'s credential_process ${why}`);
   const words = splitCommand(command);
@@ -547,10 +505,10 @@ async function processCredentials(profile: string, command: string): Promise<Pri
 
 /**
  * splitCommand splits a command line into words the way a POSIX shell would,
- * and does nothing else a shell does: single quotes keep everything, double
- * quotes keep everything but a backslash before a quote or a backslash, and a
- * backslash outside quotes keeps the next character. There is no expansion,
- * no globbing, and no second command after a semicolon, which stays a word.
+ * and that is all of the shell it has: single quotes keep everything, double
+ * quotes keep everything but a backslash before a quote or a backslash, and
+ * a backslash outside quotes keeps the next character. Every other character
+ * is plain text: a `$`, a `*` and a semicolon are each part of a word.
  */
 export function splitCommand(line: string): string[] {
   const words: string[] = [];
@@ -588,17 +546,9 @@ export function splitCommand(line: string): string[] {
 }
 
 /**
- * cached reuses what `read` answered until it says to stop: a minute for keys
- * read off the disk, so a key rotated there is picked up within it, and until
- * shortly before expiry for keys AWS handed out, so a request per range does
- * not trade a token per range.
- *
- * Asks that land while one read is on its way share it. Forty sources opening
- * at once ask forty times before the first answer is back, and each ask that
- * read on its own would be a program run, a portal call or an AssumeRole of
- * its own: a credential_process that asks a vault for its answer would ask
- * forty times. A read that fails answers everybody waiting on it with the
- * failure, and is not kept, so the next ask reads again.
+ * cached reuses what `read` returned until its `until` time passes. Calls
+ * that land while a read is in flight share it. A read that fails rejects
+ * every waiting call and is dropped, so the next call reads again.
  */
 function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
   let kept: Held | undefined;
@@ -621,14 +571,10 @@ function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
 }
 
 /**
- * awsCredentials finds AWS credentials the way the AWS CLI does: the
- * environment first, then the profile AWS_PROFILE names, or `default`, signed
- * in to whichever way that profile says.
- *
- * This is the `machine` way of signing in, and what a request covered by no
- * connection signs with. uno stores nothing. What it can read is what the
- * person already set up for every other tool, and it is read in the engine's
- * process, so a key never reaches the page that draws the grid.
+ * awsCredentials finds credentials the way the AWS CLI does: the environment
+ * first, then the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or
+ * `default`. This is the `machine` way of signing in, and what a request
+ * outside every connection signs with.
  */
 export function awsCredentials(env: Env = process.env): () => Promise<AwsCredentials> {
   return cached(async () => {
@@ -645,9 +591,8 @@ export function awsCredentials(env: Env = process.env): () => Promise<AwsCredent
 }
 
 /**
- * profileCredentials signs in as one named profile, whatever AWS_PROFILE says
- * and whatever keys are in the environment: a connection that names a profile
- * means that one.
+ * profileCredentials signs in as one named profile, ignoring AWS_PROFILE and
+ * any keys in the environment.
  */
 export function profileCredentials(
   profile: string,
@@ -669,14 +614,9 @@ export function profileCredentials(
 }
 
 /**
- * awsProfiles names the profiles this machine has, for a person choosing which
- * one a connection signs in as, and answers nothing else out of the files.
- *
- * A profile is a `[profile <name>]` or `[default]` section of ~/.aws/config, or
- * any section of ~/.aws/credentials. The other sections of config --
- * sso-session, services -- are not profiles and are not named. `default`
- * comes first, since it is the one a person means when they did not say, and
- * the rest in name order.
+ * awsProfiles names the profiles on this machine: every `[profile <name>]`
+ * or `[default]` section of ~/.aws/config and every section of
+ * ~/.aws/credentials. `default` comes first, then the rest in name order.
  */
 export async function awsProfiles(env: Env = process.env): Promise<string[]> {
   const files = await awsFiles(env);
@@ -693,26 +633,27 @@ export async function awsProfiles(env: Env = process.env): Promise<string[]> {
 
 /**
  * ConnectionAuth signs in the way a connection says to, keeping one set of
- * credentials per way so two connections on one profile read it once.
+ * credentials per way.
  */
 export interface ConnectionAuth {
-  /** The machine's chain: what a request no connection covers signs with. */
+  /** The machine's chain: what a request outside every connection signs
+   * with. */
   machine(): Promise<AwsCredentials>;
-  /** How a request through `c` goes out. Refuses a way this platform does not sign in. */
+  /** How a request through `c` is signed. Refuses a mode this platform
+   * lacks. */
   of(c: Connection): Promise<Signing>;
 }
 
 /**
- * connectionAuth is the desktop's ways of signing in: `machine`, `profile` and
- * `public`. `role` is the hosted engine's, taken on with the requesting
- * account's external ID, and is refused here by name rather than tried with
- * whatever this machine has.
+ * connectionAuth is the desktop's ways of signing in: `machine`, `profile`
+ * and `public`. `role` is refused. It is the hosted engine's.
  */
 export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const machine = awsCredentials(env);
   const profiles = new Map<string, () => Promise<AwsCredentials>>();
   const who = (c: Connection): string => (c.name === "" ? c.id : c.name);
-  /** signed is credentials for c, in c's region where it names one, saying whose they are. */
+  /** signed is `creds` in c's region where it names one, labelled with whose
+   * they are. */
   const signed = (c: Connection, creds: AwsCredentials, through: string): Signing => ({
     ...creds,
     region: c.region ?? creds.region,
@@ -751,32 +692,27 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
 }
 
 /**
- * What a hosted engine is: the keys it holds and whom they are allowed to be.
- *
- * `base` is the engine's own credentials, the role its instance runs as, which
- * the customer's role trusts. `externalId` belongs to the account asking and
- * is never in a connection's file: it is the condition the customer writes
- * into the role's trust policy, so a .uno somebody else sent cannot make this
- * engine assume a role it was not set up to. `principal` is what the engine
- * signs as, for a person writing that policy to name.
+ * What a hosted engine signs in with. `base` is the engine's own credentials,
+ * which the customer's role trusts. `externalId` is the condition the
+ * customer's trust policy checks. It comes from the requesting account and
+ * stays out of connection files. `principal` is what the engine signs as, for
+ * writing that policy.
  */
 export interface HostedOptions {
   base: () => Promise<AwsCredentials>;
   externalId: string;
   principal: string;
   env?: Env;
-  /** Where STS is, for a stand-in in a test. The AWS_ENDPOINT_URL_STS variable otherwise. */
+  /** Where STS is, for a test stand-in. Otherwise AWS_ENDPOINT_URL_STS. */
   stsEndpoint?: string;
 }
 
 /**
- * hostedAuth is uno's hosted engine's ways of signing in: `role` and `public`,
- * and nothing of the machine it runs on. A `role` connection is taken on
- * through STS with the account's external ID, the keys kept until shortly
- * before they expire. `machine` and `profile` are refused by name -- a hosted
- * engine has no ~/.aws and is nobody's machine -- and an address no connection
- * covers is refused by `machine`, so a .uno naming any bucket cannot make the
- * instance read it with the instance's own role.
+ * hostedAuth is the hosted engine's ways of signing in: `role` and `public`.
+ * A `role` connection is assumed through STS with the account's external ID,
+ * and its keys are kept until shortly before they expire. `machine` and
+ * `profile` are refused, and `machine()` rejects, so only an address a
+ * connection covers is read.
  */
 export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   const env = opts.env ?? process.env;
@@ -841,12 +777,10 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
 }
 
 /**
- * connectionSigning is how the desktop's S3 provider signs each request: with
- * the connection that covers where it is going, and with the machine's chain
- * where none does -- an address somebody pasted, a bucket nobody connected.
- *
- * `connections` is asked on every request rather than handed over once, so a
- * connection saved while the engine runs is the one its next request uses.
+ * connectionSigning signs each request with the connection that covers its
+ * location, or with the machine's chain where none does. `connections` is
+ * called on every request, so a connection saved while the engine runs is
+ * used by the next request.
  */
 export function connectionSigning(
   connections: () => readonly Connection[],
@@ -859,7 +793,7 @@ export function connectionSigning(
   };
 }
 
-/** readText is a file's text through the local handler, or nothing where there is no such file. */
+/** readText is a file's text, or undefined for a missing file. */
 async function readText(path: string, name = basename(path)): Promise<string | undefined> {
   try {
     return new TextDecoder().decode(await readAll([localFiles()], { name, path }));
@@ -869,7 +803,8 @@ async function readText(path: string, name = basename(path)): Promise<string | u
   }
 }
 
-/** ini reads an AWS-style ini file into sections of keys. A missing file is empty. */
+/** ini reads an AWS-style ini file into sections of keys. A missing file is
+ * empty. */
 async function ini(path: string): Promise<Map<string, Map<string, string>>> {
   const out = new Map<string, Map<string, string>>();
   const text = await readText(path);

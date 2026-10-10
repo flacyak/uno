@@ -1,5 +1,4 @@
-// Package sheet holds one table per workspace. It imports nothing from the
-// packages above it, which is what lets it be tested with no display attached.
+// Package sheet holds one table per workspace.
 
 export { Sheet } from "./sheet.ts";
 export type { Column } from "./sheet.ts";

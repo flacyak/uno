@@ -1,17 +1,13 @@
-// The workspace an engine owns: its sources, one View each, and the order the
-// log was made in across them.
+// The workspace an engine owns: its sources, one View each, and the order
+// edits were made across them.
 //
-// A View knows one file and its own edits. What only the workspace knows is
-// which source each line of the log changed, in the order the lines were
-// written, because that order is what a person reads back and what a save
-// writes. Everything that changes the log runs here one at a time, so a save
-// always pairs each source's edits with the order they were made in.
+// Each View holds its own edits. The workspace holds the trail: which source
+// each edit changed, in order. Everything that changes the log runs through
+// one queue.
 //
-// A saved workspace points at its files rather than copying them, so opening one
-// is opening every file it names, and one of them may be gone. That source comes
-// back as an Absent: no grid, but its id, its edits, its place in the log and its
-// path are all still here, and `relink` turns it back into a View. Losing a path
-// must not cost the work done through it.
+// A source from a .uno that fails to open becomes an Absent. It keeps its
+// id, edits, place in the log and path, and `relink` turns it back into a
+// View.
 
 import {
   isAbsolute,
@@ -50,24 +46,16 @@ import { View } from "./view.ts";
 import type { Carried, Part } from "./view.ts";
 
 /**
- * The largest .uno read whole.
- *
- * It bounds the container and not the data in it. A workspace that points at
- * five 4 GB exports is a few kilobytes of JSON, and nothing under this ceiling
- * is a file anybody meant to make by hand.
+ * The largest .uno file read whole. It bounds the container file itself.
  */
 export const WHOLE_LIMIT = 256 << 20;
 
 /**
- * Absent is a source the workspace could not open: the file it pointed at has
- * moved, or been deleted, or will not parse, or one of the parts it reads as
- * one has.
+ * Absent is a source whose open failed: its file moved, was deleted or
+ * fails to parse, or one of its parts did.
  *
- * It holds everything about the source except its rows -- the id the log names,
- * the edits made through it, the path that used to work, the state the .uno left
- * it in -- so a save writes it back exactly as it was found. A workspace that
- * dropped a source it could not read would quietly throw away somebody's
- * afternoon on the next Ctrl+S.
+ * It holds everything about the source except its rows, so a save writes it
+ * back exactly as it was read.
  */
 class Absent {
   readonly opened: Opened;
@@ -75,16 +63,10 @@ class Absent {
   constructor(
     readonly id: string,
     readonly name: string,
-    /**
-     * Everything a save writes of it, as the .uno held it: the pointer and
-     * which bytes it was made against, or every part's, or the bytes a
-     * container carried for a source that had no path and would not parse.
-     * Those go back in at the next save: uno could not read them, but that is
-     * not a reason to be the thing that finally loses them.
-     */
+    /** What a save writes of it, exactly as the .uno held it. */
     private readonly kept: Part,
     why: Said,
-    /** The bucket it reads that no connection covers, when that is why. */
+    /** The uncovered bucket it reads, when that is why it is absent. */
     connect?: Unconnected,
   ) {
     const path = this.path;
@@ -94,9 +76,7 @@ class Absent {
       name,
       size,
       columns: [],
-      // Complete, because nothing is going to arrive. A grid that waits for rows
-      // out of a file that is not there waits forever, and says "indexing 0%"
-      // the whole time.
+      // Marked complete so the grid settles with zero rows.
       progress: { done: 0, total: size, readable: 0, rows: 0, complete: true },
       edits: kept.edits,
       generation: 0,
@@ -104,75 +84,70 @@ class Absent {
     };
   }
 
-  /** Where the file was, or "" for bytes the container carried and for
-   * several files read as one, which have no one path. */
+  /** The file's path, or "" for a carried source or one over several files. */
   get path(): string {
     return this.kept.path ?? "";
   }
 
-  /** The parts it reads as one, for a source that is several: each where the
-   * .uno said it was, with the extent the save measured of it. */
+  /** The parts ref for a source over several files, built from what the .uno
+   * saved. */
   get parts(): PartsRef | undefined {
     const kept = this.kept;
     return kept.parts === undefined ? undefined : joinedFrom({ ...kept, name: this.name });
   }
 
-  /** Whatever the container carried for it, which for a pointed-at source is
-   * nothing. */
+  /** The size of the carried bytes, or 0 for a pointed-at source. */
   get carries(): number {
     return this.kept.raw?.length ?? 0;
   }
 
-  /** What a save writes: the pointer or the bytes it was given, and the log,
-   * all exactly as they were read. */
+  /** Returns what the .uno held, unchanged. */
   part(): Promise<Part> {
     return Promise.resolve(this.kept);
   }
 
-  /** The log as it stands, which is what a relink replays over the file it is
-   * pointed at. */
+  /** The edit log. */
   get log(): Edit[] {
     return this.kept.edits;
   }
 
-  /** The bucket it waits to have connected, when that is why it has no file. */
+  /** The bucket it waits on being connected, if that is why it is absent. */
   get waiting(): Unconnected | undefined {
     return this.opened.link?.connect;
   }
 
   /**
-   * missing is this source once it has stopped waiting for its bucket but its
-   * file still does not open: the same source, saying why it has no file.
+   * missing returns the same source with a new reason and its bucket wait
+   * cleared.
    */
   missing(why: Said): Absent {
     return new Absent(this.id, this.name, this.kept, why);
   }
 
-  /** Nothing to switch, and nothing to close. */
   mode(_transform: boolean): void {}
   close(): Promise<void> {
     return Promise.resolve();
   }
 }
 
-/** A source in the workspace, whether or not there is a file behind it. */
+/** A source in the workspace: a View over its rows, or an Absent. */
 type Source = View | Absent;
 
 export class Workspace {
-  /** In the order the workspace shows them, which is the order they were added. */
+  /** Sources in display order, which is the order they were added. */
   private readonly sources = new Map<string, Source>();
 
   /**
-   * Which source each line of the log changed, oldest first. The edits
-   * themselves are in each View; this is how they interleave.
+   * Which source each edit in the log changed, oldest first. The edits
+   * themselves are in each View.
    */
   private trail: string[] = [];
 
-  /** When the .uno this came from was first saved. Undefined until the first save. */
+  /** When the .uno was first saved. Undefined until the first save. */
   private created: Date | undefined;
-  /** What a .uno held that this build did not recognise, kept for the next save. */
+  /** Entries of the .uno unknown to this build, kept for the next save. */
   private extra = new Map<string, Uint8Array>();
-  /** Each source's state as a .uno left it, so what a save does not replace survives it. */
+  /** Each source's saved state from the .uno, carried into the next save. */
   private readonly states = new Map<string, State>();
 
   private transform = false;
@@ -180,26 +155,21 @@ export class Workspace {
   private closed = false;
 
   constructor(
-    /** Every kind of place this engine can open a file from. */
+    /** The handlers this engine can open files through. */
     private readonly handlers: readonly FileHandler[],
     private readonly port: Port<Request, Reply>,
     private readonly tuning: Tuning,
     /**
-     * Which connection an address is read through, or the bucket no connection
-     * covers. Undefined for a platform with no connections, and its answer
-     * undefined for an address that is not in a bucket.
+     * Returns which connection an address is read through, or the uncovered
+     * bucket it sits in. Returns undefined for a local address. Undefined on
+     * a platform that keeps only local files.
      */
     private readonly meet?: (path: string) => Meeting | undefined,
-    /** Told how long each source took to index. */
+    /** Receives how long each source took to index. */
     private readonly telemetry: Telemetry = unmeasured,
   ) {}
 
-  /**
-   * openSource opens a ref through whichever handler claims it: a path on a
-   * disk, an object in a bucket, a dropped Blob. It is the only way a source or
-   * a .uno comes in, so what this engine can read is exactly the handlers its
-   * platform listed.
-   */
+  /** openSource opens a ref through whichever handler claims it. */
   private openSource(ref: SourceRef): Promise<ByteSource> {
     return openWith(this.handlers, ref);
   }
@@ -207,15 +177,12 @@ export class Workspace {
   // ------------------------------------------------------------ sources
 
   /**
-   * open adds a file to the workspace and answers with what it opened.
-   *
-   * A .uno is a workspace of its own, so it opens every source it holds, and
-   * only into an engine that holds none. Anything else is one more source,
-   * named after its file.
+   * open adds a file to the workspace and returns what it opened. A .uno
+   * opens every source it holds, and only into an empty workspace.
    */
   open(ref: SourceRef): Promise<Opening> {
     return this.serially(async () => {
-      // Several files read as one are a source whatever they are called.
+      // A parts ref is always a source, whatever its name.
       const workspace = !("parts" in ref) && ref.name.toLowerCase().endsWith(".uno");
       if (workspace) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
@@ -225,8 +192,8 @@ export class Workspace {
   }
 
   /**
-   * remove takes a source out of the workspace, and its edits out of the log.
-   * The last source stays: a workspace of none has nothing to show or save.
+   * remove takes a source out of the workspace, and its edits out of the
+   * log. Removing the last source is refused.
    */
   remove(id: string): Promise<void> {
     return this.serially(async () => {
@@ -242,30 +209,17 @@ export class Workspace {
   }
 
   /**
-   * relink points a source at a file: one whose file has gone, or one whose
-   * file has changed under the log.
+   * relink points a source at a different file. The id stays, and the edits
+   * are replayed over the new file. A failed open leaves the source as it
+   * was and throws.
    *
-   * The id stays, which is what keeps the log attached to it, and the edits are
-   * replayed over what the file holds now. A file that will not take them --
-   * because it is a quarter the size and the log names a row past its end --
-   * leaves the source as it was and says so, so a wrong pick costs nothing.
+   * One exception: a source that was waiting for its bucket to be connected,
+   * relinked to the same addresses now that they are covered, becomes a
+   * plain Absent with the failure as its reason, and relink returns it.
    *
-   * The one exception is a source that was waiting for its bucket to be
-   * connected, read where it already points once a connection covers it. It
-   * is not waiting any more whether or not the read works, so a read that
-   * fails leaves it missing and saying why, and that is the answer: asking
-   * again to connect a bucket that is connected would send the person round
-   * the same form for nothing.
-   *
-   * Several files read as one are pointed at as many again, part for part:
-   * the one that moved where it is now, the others where they were. No part
-   * may change under the log. Each is held to the extent a save recorded of
-   * the part in its place, because the log names rows by number and another
-   * file there would move every row after it out from under its edits. And
-   * each is opened before the source is swapped, so a part that is still gone
-   * is refused by name here and not by whichever read reaches it later.
-   *
-   * One file is still refused several, and several one.
+   * A source over several files is relinked part for part. Each part is
+   * held to the extent the save recorded, and every part is opened before
+   * the source is swapped.
    */
   relink(id: string, ref: SourceRef): Promise<Opened> {
     return this.serially(async () => {
@@ -289,24 +243,17 @@ export class Workspace {
         return now.opened;
       }
 
-      // Only once the new one is open, so a refused relink leaves the source
-      // showing whatever it was showing before.
+      // Swapped only after the new view is open, so a failed relink leaves
+      // the old source in place.
       return this.replace(was, view);
     });
   }
 
   /**
-   * append adds files at the end of a source that is several read as one.
-   *
-   * The parts it has keep their places in the list, so every row keeps its
-   * number, and the log is replayed as it stands over the longer source:
-   * nothing in it is rewritten and nothing is added to it. The id stays, which
-   * is what keeps the log attached, as it does through a relink.
-   *
-   * A file is held to the first part as it would have been had the source
-   * been opened with it. One that reads differently is refused naming it and
-   * what differs, and so is a file the source already reads, whose rows would
-   * be there twice. A refused append leaves the source as it was.
+   * append adds files at the end of a source over several files. Existing
+   * parts keep their places, so every row keeps its number and the log is
+   * replayed unchanged. A file already in the source, or given twice, is
+   * refused. A failed append leaves the source as it was.
    */
   append(id: string, files: readonly SingleRef[]): Promise<Opened> {
     return this.serially(async () => {
@@ -336,22 +283,19 @@ export class Workspace {
 
       const view = await this.view(id, ref, { container: "", edits: was.log });
 
-      // Only once the longer one is open, so a refused append leaves the
-      // source showing what it was showing before.
+      // Swapped only after the new view is open, so a failed append leaves
+      // the old source in place.
       return this.replace(was, view);
     });
   }
 
-  /** A .uno's sources: each opened from the file it points at, or carried. */
+  /** openWorkspace opens every source of a .uno, each from its file or its carried bytes. */
   private async openWorkspace(ref: SourceRef): Promise<Opening> {
     if (this.sources.size > 0) {
       throw new Refusal({ t: "workspace-as-source", name: ref.name });
     }
 
-    // A .uno is a zip, and whatever it carries has to come out of it before
-    // anything can index it. It was written from memory, so it is read into
-    // memory -- which is what the ceiling is for, and why a pointed-at source
-    // costs the container nothing.
+    // The .uno is read whole into memory, up to WHOLE_LIMIT.
     const at = "path" in ref ? ref.path : "";
     const file = await this.openSource(ref);
     let bytes: Uint8Array;
@@ -382,25 +326,18 @@ export class Workspace {
   }
 
   /**
-   * reopen builds one source of a .uno back: from the file it points at, from
-   * the parts it reads as one, or from the bytes it carried.
+   * reopen opens one source of a .uno from its file, its parts, or its
+   * carried bytes. A source that fails to open becomes an Absent, and the
+   * rest of the workspace opens.
    *
-   * A source that will not open is an Absent rather than a failed open of the
-   * whole workspace. Refusing all of it over one moved CSV would leave a person
-   * with a file full of their own work and no way into it.
-   *
-   * Several files read as one come back with the extent the save measured of
-   * each part, so none of them is opened here: a part is opened by the first
-   * read that reaches it, and held then to what the save recorded of it.
+   * Parts open lazily. Each is opened by the first read that
+   * reaches it and held to the extent the save recorded.
    */
   private async reopen(container: string, src: Held, edits: Edit[]): Promise<Source> {
     // What a save writes back of it, exactly as the .uno held it.
     const kept: Part = { ...src, edits };
-    // A .uno travels, and the person opening one did not choose the buckets
-    // it names. One no connection covers is not read at all -- not a HEAD --
-    // until they connect it: the source is kept, edits and all, and says why.
-    // Every part of several files is asked about before any of them is read,
-    // so one part in a bucket nobody connected keeps the rest unread too.
+    // A source in an uncovered bucket skips the read. It becomes an Absent
+    // that waits for the bucket to be connected.
     const needs = this.unconnectedIn(src);
     if (needs !== undefined) {
       return new Absent(
@@ -417,8 +354,7 @@ export class Workspace {
         src.parts !== undefined
           ? await this.view(src.id, joinedFrom(src), carried)
           : src.raw === undefined
-            ? // By where the file is, and which bytes of it the log was made
-              // against, for a place that can hand those over again.
+            ? // By path, pinned to the saved version where there is one.
               await this.view(src.id, fileAt(src.name, src.path ?? "", src.version), carried)
             : await View.open(
                 src.id,
@@ -437,16 +373,15 @@ export class Workspace {
     }
   }
 
-  /** The bucket an address is in that no connection covers, if it is. */
+  /** unconnected returns the uncovered bucket an address is in, if any. */
   private unconnected(path: string): Unconnected | undefined {
     const met = this.meet?.(path);
     return met !== undefined && "unconnected" in met ? met.unconnected : undefined;
   }
 
   /**
-   * The first bucket a source of a .uno would read that no connection covers:
-   * the one its file is in, or the one any of its parts is in. A carried
-   * source reads no bucket.
+   * unconnectedIn returns the first uncovered bucket among the addresses a
+   * .uno source reads, if any.
    */
   private unconnectedIn(src: Held): Unconnected | undefined {
     for (const path of pathsOf(src)) {
@@ -457,11 +392,9 @@ export class Workspace {
   }
 
   /**
-   * The connection a ref is read through, for the save to write down as a
-   * hint. Several files have one where every part that is in a bucket came
-   * through the same connection, and none where they came through more than
-   * one: the hint is one id, and an opener matches each part's address to its
-   * own connections regardless.
+   * through returns the id of the connection a ref is read through, saved
+   * as a hint. For several files it is the one connection all bucket parts
+   * share, or undefined if they use more than one.
    */
   private through(ref: SourceRef): string | undefined {
     const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
@@ -474,11 +407,8 @@ export class Workspace {
     return ids.size === 1 ? id : undefined;
   }
 
-  /** view opens one file as a source, through whatever this platform hands back
-   * for a SourceRef. A ref with no path is bytes a save will have to carry, or
-   * several files read as one, which the view keeps the parts of. `whole`
-   * opens every one of those parts first, for a caller that must know none is
-   * gone before it has a source at all. */
+  /** view opens a ref as a View. With `whole`, every part of a source over
+   * several files is opened first, so a missing part fails here by name. */
   private async view(
     id: string,
     ref: SourceRef,
@@ -487,11 +417,8 @@ export class Workspace {
   ): Promise<View> {
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
-    // Opened whole, each part of several files read as one that no read has
-    // reached yet is opened too, which is what holds it to its extent: asking a
-    // part its version is asking for the part. One that will not open, or is
-    // another file, closes the source and is the error, by name. Any other
-    // source has no parts and is left alone.
+    // versions() opens every part still unread. A part that fails to open
+    // closes the source and is the error.
     if (whole) {
       await multiOf(source)
         ?.versions()
@@ -509,8 +436,7 @@ export class Workspace {
       this.port,
       this.tuning,
       this.telemetry,
-      // Only several files read as one say whether they have a header row.
-      // One file on its own has one.
+      // A parts ref carries its own header mode. A single file has a header row.
       "parts" in ref ? ref.header : "first",
       "parts" in ref ? ref : undefined,
     );
@@ -530,14 +456,14 @@ export class Workspace {
     return source.opened;
   }
 
-  /** replace puts `now` where `was` stood, under the same id, and closes what was there. */
+  /** replace puts `now` under `was`'s id and closes `was`. */
   private async replace(was: Source, now: View): Promise<Opened> {
     const opened = this.keep(now);
     await was.close();
     return opened;
   }
 
-  /** drop closes every source, for a workspace that is going away. */
+  /** drop removes and closes every source. */
   private async drop(): Promise<void> {
     const sources = [...this.sources.values()];
     this.sources.clear();
@@ -562,7 +488,7 @@ export class Workspace {
 
   // ------------------------------------------------------------ changing
 
-  /** mode switches every source between view and transform, and any added later. */
+  /** mode switches every source, and any added later, between view and transform. */
   mode(transform: boolean): void {
     this.transform = transform;
     for (const source of this.sources.values()) source.mode(transform);
@@ -572,7 +498,7 @@ export class Workspace {
     return this.changing(id, (view) => view.edit(req), "push");
   }
 
-  /** undo takes back the source's last edit, wherever it sits in the workspace's log. */
+  /** undo takes back the source's last edit and removes its last mention from the trail. */
   undo(id: string): Promise<Changed> {
     return this.changing(id, (view) => view.undo(), "pull");
   }
@@ -582,9 +508,8 @@ export class Workspace {
   }
 
   /**
-   * changing is one change to a source's log, run in its turn, and then the
-   * workspace's trail of which source changed last kept with it: an edit and
-   * a redo push the source onto it, and an undo pulls its last mention off.
+   * changing runs one change to a source's log in the queue and updates the
+   * trail: "push" appends the source, "pull" removes its last mention.
    */
   private changing(
     id: string,
@@ -602,12 +527,9 @@ export class Workspace {
   // ------------------------------------------------------------ saving
 
   /**
-   * save writes the workspace as a .uno: where each source's file is, the bytes
-   * of any source there is no file for, and the log in the order it was made.
-   *
-   * A source uno can name by path is pointed at, so the size of the data has
-   * nothing to do with the size of the save. `limit` bounds what is left --
-   * bytes with no file behind them, which a container has to carry or lose.
+   * save writes the workspace as a .uno: each source's path or carried
+   * bytes, and the log in the order it was made. `limit` bounds the total
+   * carried bytes.
    */
   save(place: Place, limit: number): Promise<Uint8Array> {
     return this.serially(async () => {
@@ -646,13 +568,8 @@ export class Workspace {
   }
 
   /**
-   * refuseOver stops a save that would have to carry more bytes than a container
-   * should hold.
-   *
-   * Only a source with no file behind it counts: bytes dropped into a browser
-   * tab, which uno has nothing to point at and so must copy or lose. Everything
-   * opened from a path is a path in the manifest and weighs nothing, and so
-   * are several files read as one, whose every part is pointed at.
+   * refuseOver throws if the carried sources total more than `limit` bytes.
+   * Only carried sources count.
    */
   private refuseOver(sources: Source[], limit: number): void {
     const carried = sources.filter((s) => s.carries > 0);
@@ -671,15 +588,8 @@ export class Workspace {
   }
 
   /**
-   * refuseWhere stops a save that would write the .uno over a file the
-   * workspace reads, or point at a file by a path that is true from nowhere.
-   *
-   * The first would destroy the source, and the dialog makes it easy: it opens
-   * on the folder the data is in, where sales.csv is a name already there. The
-   * second is a file opened by a path relative to the process that opened it,
-   * `uno data/sales.csv` from a terminal. Written down as it is, the path would
-   * be read back from the .uno's own folder, and the file is not there: the
-   * manifest only ever holds a path that is absolute or under that folder.
+   * refuseWhere throws if any source path is relative, or if the .uno would
+   * be written over a file the workspace reads.
    */
   private refuseWhere(held: readonly Held[], at: string): void {
     for (const src of held) {
@@ -703,12 +613,9 @@ export class Workspace {
   // ------------------------------------------------------------ lifetime
 
   /**
-   * close closes every source, and nothing is opened after it.
-   *
-   * What the workspace holds is closed at once. An open already under way
-   * lands after that with a file of its own, so the queue is waited out and
-   * what it left is closed as well. Whatever was still waiting its turn is
-   * refused before it starts.
+   * close closes every source and refuses every later request. It drops
+   * sources, waits for the queue to drain, then drops again to close any
+   * source an in-flight open added.
    */
   async close(): Promise<void> {
     this.closed = true;
@@ -717,7 +624,7 @@ export class Workspace {
     await this.drop();
   }
 
-  /** live refuses whatever is asked of a workspace that was closed. */
+  /** live throws if the workspace is closed. */
   private live(): void {
     if (this.closed) throw new Refusal({ t: "workspace-closed" });
   }
@@ -732,8 +639,7 @@ export class Workspace {
     return source;
   }
 
-  /** needView is `need` for the requests that read or change rows, which an
-   * Absent has none of. */
+  /** needView is `need`, and throws for an Absent. */
   private needView(id: string): View {
     const source = this.need(id);
     if (!(source instanceof View)) {
@@ -752,26 +658,23 @@ export class Workspace {
   }
 }
 
-/** Every address a source of a .uno is read from, which for one it carries
- * is none. */
+/** pathsOf returns every address a .uno source reads from. A carried source has none. */
 function pathsOf(src: Held): string[] {
   if (src.parts !== undefined) return src.parts.map((part) => part.path);
   return src.raw === undefined && src.path !== undefined ? [src.path] : [];
 }
 
 /**
- * sizeOf is how big a source a .uno held is: what its file measured, or how
- * long its parts are once joined, which is the size it opens at.
+ * sizeOf returns the saved size of a .uno source: its file's size, or the
+ * joined size of its parts.
  */
 function sizeOf(kept: Part): number {
   return kept.parts !== undefined ? partMap(kept.parts).size : (kept.bytes ?? 0);
 }
 
 /**
- * joinedFrom is the ref several files read as one are opened by again: each
- * part where it is, pinned to the bytes the log was made against, and beside
- * it the extent the save measured, which is what leaves it unopened until a
- * read reaches it.
+ * joinedFrom builds the parts ref a saved multi-file source is reopened by:
+ * each part by path and saved version, with the extent the save measured.
  */
 function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header" | "fileColumn">): PartsRef {
   return {
@@ -786,18 +689,13 @@ function joinedFrom(src: Pick<HeldParts, "name" | "parts" | "header" | "fileColu
 }
 
 /**
- * pointedTo is what a relink opens: the ref it was given, or for several
- * files read as one, that ref with each part held to what the source knows of
- * the part in its place.
+ * pointedTo returns the ref a relink opens. For a single-file source it is
+ * the given ref. For a multi-file source it is the given ref with the
+ * source's header mode, and each part keeping its saved version if its path
+ * is unchanged, and its saved extent either way.
  *
- * A part still where it was is opened as the source had it, by the version a
- * save recorded. A part somewhere else is opened as it is there, and both are
- * held to the extent the part had, where a save measured one. The header mode
- * is the source's own: it decides which line is row 0, and the log was made
- * against that.
- *
- * It refuses one file for a source that is several, several for one that is
- * one file, and any other number of parts than the source has.
+ * It refuses a part count that differs from the source's, and a single file
+ * for a multi-file source or the reverse.
  */
 function pointedTo(was: Source, ref: SourceRef): SourceRef {
   const made = was.parts;
@@ -834,26 +732,25 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
   };
 }
 
-/** Every address a ref is read from, in order. A dropped file has none. */
+/** pathsIn returns every address a ref reads from, in order. A dropped file has none. */
 function pathsIn(ref: SourceRef): string[] {
   const files = "parts" in ref ? ref.parts.map((part) => part.ref) : [ref];
   return files.flatMap((file) => ("path" in file ? [file.path] : []));
 }
 
-/** Whether two lists of addresses are the same addresses in the same order. */
+/** sameList reports whether two address lists are equal element by element. */
 function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((path, i) => path === b[i]);
 }
 
-/** One file by its path, and by its version where a save recorded one. */
+/** fileAt builds a SingleRef from a name, path, and optional version. */
 function fileAt(name: string, path: string, version: string | undefined): SingleRef {
   return version === undefined ? { name, path } : { name, path, version };
 }
 
 /**
- * linkOf is what the client is told about the file behind a source it just
- * reopened: where it is, which bytes were read, and how they differ from the
- * ones the log was made against.
+ * linkOf returns a reopened source's link with `changed` set when the file
+ * differs from what the log was made against.
  */
 function linkOf(view: View, src: Held): Link | undefined {
   const link = view.opened.link;
@@ -863,18 +760,12 @@ function linkOf(view: View, src: Held): Link | undefined {
 }
 
 /**
- * changeOf says how the bytes a source reopened differ from the ones its log
- * was made against, or undefined where nothing says they do.
+ * changeOf describes how a reopened source's bytes differ from the saved
+ * ones, or undefined when every comparable field matches.
  *
- * A version is the test where the save recorded one: it catches an export
- * written over at the same size, which a size never could, and a version
- * that is the same is the same bytes. A file with no version -- one on a
- * disk, or a workspace saved before versions were -- falls back to its size,
- * the only check free at open.
- *
- * Either way it is said and not acted on. The log still replays, because a
- * person looking at the grid is better placed than uno to say whether it is
- * still the right file.
+ * When both sides have a version, equal versions mean unchanged, and
+ * different versions report "version-changed". Otherwise a size difference
+ * reports "size-changed". A saved size of 0 is treated as unknown.
  */
 function changeOf(view: View, src: Held): Said | undefined {
   const was = src.bytes ?? 0;
@@ -889,10 +780,8 @@ function changeOf(view: View, src: Held): Said | undefined {
 }
 
 /**
- * interleave lays each source's edits out in the order the trail says they
- * were made. A trail and a set of logs that disagree would write a file whose
- * log says something different from what the person did, so that is an error
- * rather than a best effort.
+ * interleave lays each source's edits out in trail order. It throws if the
+ * trail and the per-source logs disagree on edit counts.
  */
 function interleave(trail: readonly string[], parts: ReadonlyMap<string, Part>): Logged[] {
   const next = new Map<string, number>();

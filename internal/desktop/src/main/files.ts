@@ -1,13 +1,8 @@
-// Naming files and writing bytes, and nothing else.
+// File paths and file writes for the main process.
 //
-// Reading is not here. An engine reads a file by path in a process of its own,
-// a piece at a time, so the main process never holds a file's contents on the
-// way in.
-//
-// The atomic write is `internal/safefile/write.go`, which the node store
-// carries: saving is the one operation in uno that can destroy something, and
-// the promise -- the previously saved file is still there -- is kept in the one
-// place that writes to a disk, and reached from here, where the filesystem is.
+// An engine reads a file by path in its own process.
+// Writes go through the node store, which does an atomic temp-file-and-rename
+// write (internal/safefile/write.go).
 
 import type { SourceRef } from "@uno/grid/engine";
 import { fileName, parseConnection } from "@uno/grid/library";
@@ -19,41 +14,31 @@ export function sourceAt(path: string): SourceRef {
   return { name: basename(path), path };
 }
 
-/** What a workspace file is called by. The engine knows a .uno by this. */
+/** The workspace file extension. The engine recognises a workspace by it. */
 const WORKSPACE_EXT = ".uno";
 
 /**
- * unoPath is where a Save As goes, from what its dialog answered.
- *
- * The dialog filters on .uno, and Windows and macOS add it to a name typed
- * without. GTK answers with the name as typed, and a workspace saved as
- * `sales` opens as a spreadsheet the next time, since the engine knows a .uno
- * by its name. So it is added here, once, whatever the desktop did.
+ * unoPath returns the path a Save As dialog answered with, with `.uno` added
+ * if it is missing. Windows and macOS add the extension themselves; GTK
+ * returns the name as typed.
  */
 export function unoPath(picked: string): string {
   return picked.toLowerCase().endsWith(WORKSPACE_EXT) ? picked : picked + WORKSPACE_EXT;
 }
 
 /**
- * writeAtomic publishes bytes to path.
- *
- * Everything goes to a temp file in the same directory, so the rename that
- * publishes it stays on one filesystem and stays atomic. A failure anywhere --
- * from the write, from the sync, from the rename -- leaves the previous file
- * untouched and leaves no half-written part behind for the next person to find.
+ * writeAtomic writes bytes to path through a temp file in the same directory
+ * and a rename. A failure at any step leaves the previous file untouched.
  */
 export function writeAtomic(path: string, bytes: Uint8Array): Promise<void> {
   return nodeStore().write(path, bytes);
 }
 
 /**
- * writeConnection saves one connection into the folder the engines read them
- * from, as <id>.unof, atomically.
+ * writeConnection saves one connection as `<id>.unof` in dir, atomically.
  *
- * The text arrives from the page, and the page is treated as a web page: it is
- * read back as a connection here before a byte is written, so what lands in
- * the folder is a connection whose id names this file and which holds no key,
- * whatever the renderer was persuaded to send.
+ * The text is parsed as a connection before anything is written. Parsing
+ * rejects a connection that holds a key, and the parsed id must match `id`.
  */
 export async function writeConnection(dir: string, id: string, text: string): Promise<void> {
   const name = fileName(id, "connection");

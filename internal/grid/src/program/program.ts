@@ -4,19 +4,14 @@ import type { Said } from "../said/index.ts";
 import { describedStep, runStep, stepText } from "./steps.ts";
 
 /**
- * Program is a pipeline applied left to right. The empty Program is valid and
- * changes nothing, which is what lets a caller treat "no transform" as a
- * program rather than as a special case.
+ * Program is a pipeline of steps applied left to right. The empty Program is
+ * valid and returns the value as it is.
  */
 export type Program = Step[];
 
 /**
- * apply runs the pipeline over one value.
- *
- * A program applies wholly or not at all: a step that does not fit abandons the
- * whole pipeline and the original value is returned. Half-transforming a cell --
- * trimming it and then failing to slice it -- would leave data in a state no
- * program describes, and would make the count of affected cells a guess.
+ * apply runs the pipeline over one value. If any step fails to apply, the
+ * original value is returned unchanged.
  */
 export function apply(p: Program, v: string): string {
   let out = v;
@@ -28,24 +23,20 @@ export function apply(p: Program, v: string): string {
   return out;
 }
 
-/** The text form, which is what a .uno log carries. */
+/** text is the text form, which a .uno log carries. */
 export function text(p: Program): string {
   return p.map(stepText).join(" | ");
 }
 
 /**
- * describe names the program in the plain language a banner asks the question
- * in.
- *
- * It falls back to the program text for anything it cannot name, which is the
- * honest answer: a person asked to approve a transformation is better shown a
- * notation they can learn than a description that glosses over what it does.
+ * describe renders the program in plain English. A slice, a concat or a
+ * constant is shown in program notation.
  */
 export function describe(p: Program): string {
   return english(described(p));
 }
 
-/** described is what `describe` says, as data for a client to say in another language. */
+/** described returns what `describe` says, as data. */
 export function described(p: Program): Said {
   return { t: "program", steps: p.map(describedStep) };
 }

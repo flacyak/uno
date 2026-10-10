@@ -1,7 +1,6 @@
-/* The recogniser's banner. */
+/* The offer banner. */
 
-/* Amber, like the badge it answers: the column that looked numeric and did not
- * parse is the one the question is about. */
+/* Amber, matching the flag badge on the column the offer is about. */
 .banner {
   display: flex;
   align-items: center;
@@ -40,8 +39,8 @@
   color: var(--flag);
 }
 
-/* With the sources panel closed it reaches the top right of the window, where
- * the × is, and ends short of it. */
+/* With the panel closed the banner reaches the window's top right, and
+ * leaves room for the × there. */
 .win-sheet:has(+ .panel[hidden]) .banner {
   padding-right: var(--corner);
 }

@@ -53,7 +53,7 @@ function list(
   return { els: sidebarRows(w, recents, act), asked };
 }
 
-/** One source, as the workspace the old strip's tests were about. */
+/** A workspace of one source. */
 function one(link: Tab["link"]): { els: HTMLElement[]; asked: string[] } {
   return list(workspace("/work/q3-close.uno", [tab("b", "google-ads.csv", link)]));
 }
@@ -77,7 +77,7 @@ test("a source still opening is listed after the sources, dimmed, with nothing o
   expect(names(els)).toEqual([
     "ws open:q3-close",
     "tab active:sales-q3.csv",
-    // The class is what draws the bar that fills along the bottom of its line.
+    // The class draws the progress bar along the bottom of the line.
     "tab-opening:ads-q3.csv",
     "tab-add:+ add source",
   ]);
@@ -138,7 +138,7 @@ test("a right click on a workspace asks for its menu where the pointer is", () =
   els.at(-1)!.dispatchEvent(onOther);
 
   expect(asked).toEqual(["menu  40,90", "menu /work/liquidity.uno 40,90"]);
-  // The page's own menu stays away.
+  // The browser's own context menu is prevented.
   expect(onOpen.defaultPrevented && onOther.defaultPrevented).toBe(true);
 });
 
@@ -183,8 +183,8 @@ test("a tab with nothing wrong has no mark", () => {
   expect(els[1]!.querySelector(".trouble")).toBeNull();
 });
 
-// A name longer than the sidebar is cut short, so the name is in a box that
-// can be, and the whole of it is on the tab for whoever hovers.
+// The name is in its own element so CSS can cut it short, and the whole
+// name is in the tab's title.
 test("a tab's name is a box of its own, and whole in its title", () => {
   const { els } = one({ path: "/home/jo/ledger-2025.csv" });
   const source = els[1]!;

@@ -1,19 +1,18 @@
-// Asking the script that started the app to do what only it can.
+// Asks the script that started the app to do something, over stdio.
 //
-// The smoke run and the preview both start the app from a script that holds
-// the stand-in bucket, and a change a person would make in the bucket -- an
-// export written over -- is made there. The app asks on stdout and the script
-// answers on the app's stdin once it has acted, so what follows can rely on
-// the change having happened rather than on a timer.
+// The smoke run and the preview are started by a script that holds the
+// stand-in bucket. The app prints a request on stdout and waits for the
+// script to print a matching done line on the app's stdin.
 
 import { createInterface } from "node:readline";
 
-/** The script's answers, a line each, read off this process's stdin. */
+/** The script's answers, one line each, read from this process's stdin. */
 let answers: AsyncIterator<string> | undefined;
 
 /**
- * ask has the script that started the app do `what`, and waits for it to be
- * done. `who` is the script's name as the lines carry it: `smoke`, `preview`.
+ * ask prints `<who>: ask <what>` and waits for `<who>: done <what>` on stdin.
+ * `who` is the script's name: `smoke` or `preview`. Any other line is thrown
+ * as an error.
  */
 export async function ask(who: string, what: string): Promise<void> {
   answers ??= createInterface({ input: process.stdin })[Symbol.asyncIterator]();

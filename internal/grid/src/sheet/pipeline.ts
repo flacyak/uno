@@ -1,10 +1,8 @@
-// Finishing a row: its source values, with the log applied.
+// Finishing a row: its source values with the log applied.
 //
-// Every operation the log holds reads one row and nothing else, which is what
-// lets this run over whichever rows someone is looking at, in any order. A
-// formula is computed a column at a time across the block being read, and each
-// of its cells still reads only its own row. Nothing here is kept. A row is finished when it is read, so an
-// apply over 50 million rows costs one log line and the rows on screen.
+// Every operation in the log reads one row, so rows can be finished in any
+// order and each call starts fresh. A formula is computed a column at a time
+// over the block of rows being finished.
 
 import { formatFloat, roundSignificant } from "../go/index.ts";
 import type { Columns } from "../formula/index.ts";
@@ -14,56 +12,39 @@ import type { Program } from "../program/index.ts";
 import type { Schema, Written } from "./schema.ts";
 
 /**
- * ERR_CELL is what a bound column shows where its expression could not read a
- * row: a divisor of zero, a cell holding "N/A".
- *
- * It is short because it has to fit a column sized for numbers, and it is
- * unmistakable because the alternative -- an empty cell -- reads as missing
- * data rather than as a failure. The reason is said in the editor, beside the
- * expression, where there is room for it.
+ * ERR_CELL is what a bound column shows where its expression failed on a
+ * row. The reason is shown in the editor.
  */
 export const ERR_CELL = "#ERR";
 
 /**
  * SHOWN_DIGITS is how many significant digits a computed cell keeps: the
- * fifteen a float64 carries faithfully, which is also what a spreadsheet shows.
- *
- * Fewer would lose answers rather than noise. A sum in cents or a timestamp in
- * milliseconds is twelve or thirteen digits, and rounding it to ten is a
- * wrong number shown as a right one. More would show the noise: the artefact
- * of binary arithmetic sits in the sixteenth and seventeenth digits.
+ * fifteen a float64 carries exactly.
  */
 const SHOWN_DIGITS = 15;
 
 /**
- * formatValue renders a computed number the way a spreadsheet does.
- *
- * The rounding is the point. (40.00 - 31.20) / 40.00 is 0.21999999999999997 in
- * binary floating point, and a column of those is arithmetic showing its
- * working. Rounding to `SHOWN_DIGITS` removes the artefact without removing an
- * answer. The second pass turns the result back into plain notation, since a
- * spreadsheet column showing 1.234567890e+12 has helped nobody.
+ * formatValue renders a computed number: rounded to SHOWN_DIGITS, which
+ * drops binary artefacts like 0.21999999999999997, then written in plain
+ * notation.
  */
 export function formatValue(v: number): string {
   return formatFloat(roundSignificant(v, SHOWN_DIGITS));
 }
 
-/** A row with the log applied: what each cell stores, and what it shows. */
+/** A row with the log applied. */
 export interface Finished {
-  /** What the log records, undo restores and the recogniser reads. */
+  /** What each cell stores. The log, undo and the recogniser read this. */
   raw: readonly string[];
   /** What the grid draws: raw, except where notation or a formula fills a cell. */
   shown: readonly string[];
 }
 
 /**
- * valueAt is what one cell stores: the last value written into it, or else its
- * source value, rewritten by every program recorded after that.
- *
- * Order is the rule. A value typed before an apply is rewritten by it and one
- * typed after is not, because the programs that count are the ones with a later
- * sequence number than the write. The exception is a write the program is
- * settled over -- see `settled`.
+ * valueAt returns what one cell stores: the last value written into it, or
+ * else its source value, with every program recorded on the column after
+ * that value run over it. A program is skipped for a written cell it is
+ * `settled` over.
  */
 export function valueAt(
   schema: Schema,
@@ -83,8 +64,7 @@ function stored(
   const runs = schema.runsOver(col);
 
   if (w === undefined) {
-    // A cell the source row does not reach and nobody wrote into is not there,
-    // and a program has nothing in it to rewrite. A short row stays short.
+    // A short row ends before this column, so the cell is "" as it stands.
     if (col >= source.length) return "";
     let v = source[col]!;
     if (runs !== undefined) for (const r of runs) v = applyProgram(r.prog, v);
@@ -99,44 +79,33 @@ function stored(
 }
 
 /**
- * settled says whether a program has nothing left to do in a written cell: run
- * over what the cell held before it was typed into, it gives what was typed.
- *
- * Those are the fixes the recogniser learned the program from, and they are
- * typed before the apply that follows. Running the program over them again
- * fixes them twice -- remove commas does not show it, but 12 fixed to 12.00
- * would read 12.00.00. So an apply leaves such a cell alone, and the recogniser
- * does not count it.
+ * settled is true when running `prog` over what the cell held before it was
+ * written gives what was written. Such a cell is one the program was learned
+ * from, so an apply leaves it alone and the recogniser skips it.
  */
 export function settled(prog: Program, w: Pick<Written, "was" | "now">): boolean {
   return w.was !== undefined && applyProgram(prog, w.was) === w.now;
 }
 
 /**
- * finish applies the log to one source row. It is `finishRows` over a block of
- * one, for a caller holding a single row.
+ * finish applies the log to one source row.
  */
 export function finish(schema: Schema, row: number, source: readonly string[]): Finished {
   return finishRows(schema, row, [source])[0]!;
 }
 
 /**
- * finishRows applies the log to a block of source rows, the first of which is
- * row `first`.
+ * finishRows applies the log to a block of source rows starting at row
+ * `first`. Everything but formulas is applied a row at a time. Formulas are
+ * then computed a column at a time over the block, in dependency order.
  *
- * Everything but formulas is finished a row at a time. Formulas are then
- * computed a column at a time over the block: a bound column is one expression
- * over a whole column, so it is walked once for the block rather than once per
+ * With an empty log and a schema whose `supplied` is undefined, each row is
+ * returned as the source array itself.
+ *
+ * `supplied` holds the value of the schema's supplied column for each row of
+ * the block. It is written into the finished row, and a formula that names
+ * the column reads it there. A schema with a supplied column copies every
  * row.
- *
- * A row nothing touched comes back as the source itself, with no copy, so a
- * file with an empty log reads as fast as it did before there was a log.
- *
- * `supplied` is the cell of the schema's supplied column for each row of the
- * block, from whoever holds the rows. It is written into the row as it is
- * finished and kept nowhere, the way a formula's answer is, and a formula
- * that names the column reads it there. A schema with such a column copies
- * every row, since the source has no cell for it.
  */
 export function finishRows(
   schema: Schema,
@@ -154,10 +123,9 @@ export function finishRows(
   );
   if (order.length === 0 || out.length === 0) return out;
 
-  // A formula reads what a cell shows, not what it stores: a column it names may
-  // be bound too, and what that column is worth is what it computed. The order
-  // puts every bound column after the ones it reads, so the answer is written
-  // into the block before it is gathered from it.
+  // A formula reads what a cell shows. Bound columns are computed in
+  // dependency order, so a column that reads another bound column reads what
+  // that column computed.
   const shown = out.map((f) => f.shown as string[]);
   const columns: Columns = {
     column(name) {
@@ -175,12 +143,12 @@ export function finishRows(
 }
 
 /**
- * finishCells applies everything in the log but formulas to one row. shown is
- * a copy of raw wherever a formula is about to write into it.
+ * finishCells applies everything but formulas to one row. `shown` is a copy
+ * of `raw` when a note or a formula writes into it, and `raw` itself
+ * otherwise.
  *
- * `supplied` is the row's cell of the schema's supplied column. Nothing is
- * stored there and nothing in the log can change it, so it reads the same
- * both ways, whatever the source row has at that place.
+ * `supplied` is the row's value for the schema's supplied column. It is
+ * written into both `raw` and `shown`.
  */
 function finishCells(
   schema: Schema,

@@ -1,4 +1,4 @@
-// A stand-in for what the page keeps between launches: localStorage, as a Map.
+// A stand-in for localStorage, backed by a Map.
 
 import type { Keeps } from "../src/renderer/theme.ts";
 

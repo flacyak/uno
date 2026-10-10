@@ -1,24 +1,19 @@
-// Where records start, found without decoding them.
+// Finds where records start, working on raw bytes.
 //
-// An index over a file larger than memory cannot hand its text to `readAll`, so
-// this walks the raw bytes under the same rules and reports only the offset of
-// each record's first byte. The bytes it acts on are all ASCII -- the quote, the
-// separator, CR and LF -- and no byte inside a multi-byte UTF-8 character is
-// ever one of those, so it never decodes anything.
-//
-// It has to agree with csv.ts exactly, quirks included: a line holding only its
-// terminator is not a record, a quote opens a quoted field only as the field's
-// first byte, and inside one a quote followed by anything but a quote, the
-// separator or the end of the line is data. tests/ingest/scan.test.ts holds the
-// two to each other over random input.
+// It follows the same rules as csv.ts: a line holding only its terminator is
+// skipped, a quote opens a quoted field only as the field's first byte,
+// and inside one a quote followed by anything but a quote, the separator or
+// the end of the line is data. The bytes it reacts to are all ASCII, so a
+// every byte of a multi-byte UTF-8 character is data. tests/ingest/scan.test.ts
+// checks it against csv.ts over random input.
 
 const LF = 0x0a;
 const CR = 0x0d;
 const QUOTE = 0x22;
 
-/** Between records, where a blank line is skipped rather than counted. */
+/** Between records. A blank line here is skipped. */
 const LINE = 0;
-/** Between records, having seen a CR that is blank-line only if LF follows. */
+/** Between records, after a CR. It is a blank line only if LF follows. */
 const LINE_CR = 1;
 /** Inside a record, at the first byte of a field. */
 const FIELD = 2;
@@ -33,12 +28,9 @@ const QUOTE_CR = 6;
 
 /**
  * RecordScanner is fed a file's bytes in order, in chunks of any size, and
- * calls `begin` with the offset of every record's first byte.
- *
- * Its state carries across chunks, so a quoted field or a CRLF split by a chunk
- * boundary reads the same as one that is not. There is no finish step: a record
- * is reported when it begins, and the one thing end of file changes -- a lone
- * CR at the very end is dropped -- changes no record's start.
+ * calls `begin` with the offset of every record's first byte. State carries
+ * across chunks. A record is reported when it begins, so pushing the last
+ * chunk finishes the scan.
  */
 export class RecordScanner {
   private state = LINE;
@@ -57,15 +49,9 @@ export class RecordScanner {
   }
 
   /**
-   * push scans `chunk`, whose first byte sits at `base` in the file.
-   *
-   * Nearly every byte is inside a field, and a byte inside a field changes
-   * nothing unless it is one of two: the quote and LF outside quotes, the
-   * quote alone inside them. Those two states run their own loop that looks
-   * for only those bytes, and the switch is reached once per transition rather
-   * than once per byte. Where the loop stops decides the state exactly as the
-   * byte-by-byte rules would: a quote opens a quoted field only as a field's
-   * first byte, which is where the byte before it is the separator.
+   * push scans `chunk`, whose first byte sits at offset `base` in the file.
+   * The FIELD, BARE and QUOTED states run an inner loop that looks only for
+   * the bytes that change state.
    */
   push(chunk: Uint8Array, base: number): void {
     const sep = this.sep;
@@ -102,7 +88,7 @@ export class RecordScanner {
         case BARE: {
           // Unquoted, until the line ends or a quote comes. A quote at a
           // field's first byte opens a quoted field; anywhere else it is data.
-          // The byte before it says which, and for the byte at `i` the state does.
+          // The byte before it says which; for the byte at `i` the state does.
           let j = i;
           let c = b;
           while (c !== LF && c !== QUOTE) {
@@ -145,8 +131,8 @@ export class RecordScanner {
           break;
 
         case QUOTE_CR:
-          // CRLF ends the line, and so the field. A CR before anything else
-          // made the quote a bare one and is data itself.
+          // CRLF ends the line and the field. A CR followed by anything else
+          // is data, and the quote before it was a bare one.
           if (b === LF) s = LINE;
           else s = b === QUOTE ? QUOTE_SEEN : QUOTED;
           break;
@@ -158,7 +144,7 @@ export class RecordScanner {
   }
 }
 
-/** The UTF-8 byte order mark, which the decoder strips at the start of a file. */
+/** bomLength is 3 when `head` starts with the UTF-8 byte order mark, else 0. */
 export function bomLength(head: Uint8Array): number {
   return head[0] === 0xef && head[1] === 0xbb && head[2] === 0xbf ? 3 : 0;
 }

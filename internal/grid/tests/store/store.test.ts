@@ -30,8 +30,6 @@ test("a saved formula reads back out of the directory", async () => {
   expect(formulas[0]!.expr).toBe("(price - cost) / price");
 });
 
-// Sorted by id, so the caller is handed a stable order instead of whatever the
-// directory happened to give.
 test("the library comes back in id order", async () => {
   const store = nodeStore();
   const dir = await scratch();
@@ -44,9 +42,6 @@ test("the library comes back in id order", async () => {
   expect(formulas.map((f) => f.id)).toEqual(["alpha", "mu", "zeta"]);
 });
 
-// One bad file costs one formula and not the library: the drawer still opens
-// with the others in it, and the caller still has something specific to say
-// about the missing one.
 test("one unreadable file costs one formula and not the library", async () => {
   const store = nodeStore();
   const dir = await scratch();
@@ -61,7 +56,6 @@ test("one unreadable file costs one formula and not the library", async () => {
   expect(failed[0]!.message, "the failure should name the file").toContain("broken.unof");
 });
 
-// A connection that ends up in the formula folder is not an empty formula.
 test("a connection in the formula folder is a failure, not a formula", async () => {
   const store = nodeStore();
   const dir = await scratch();
@@ -77,8 +71,6 @@ test("a connection in the formula folder is a failure, not a formula", async () 
   expect(failed[0]!.message, "the failure should name the kind").toContain('"connection"');
 });
 
-// A person who has never written a formula has no folder, and that is not a
-// fault worth reporting to them.
 test("a library that does not exist yet is empty rather than broken", async () => {
   const store = nodeStore();
   const dir = join(await scratch(), "never-created");
@@ -100,8 +92,7 @@ test("files that are not .unof are ignored", async () => {
   expect(formulas.map((f) => f.id)).toEqual(["real"]);
 });
 
-// The write is the one operation that can destroy something, and the promise is
-// that the previously saved file is still there.
+// Only the saved file is left in the folder.
 test("a write leaves no debris behind", async () => {
   const store = nodeStore();
   const dir = await scratch();
@@ -125,8 +116,7 @@ test("a write replaces the previous file rather than appending to it", async () 
   expect(await readdir(dir)).toEqual(["f.unof"]);
 });
 
-// An id is checked before it is ever joined to a path, so a formula somebody
-// sent cannot write outside the directory it was meant for.
+// The id is checked before it is joined to a path.
 test("an id that names a path never reaches the filesystem", async () => {
   const store = nodeStore();
   const dir = await scratch();
@@ -135,8 +125,7 @@ test("an id that names a path never reaches the filesystem", async () => {
   expect(await readdir(dir)).toEqual([]);
 });
 
-// The library is read the way every other file is, through its store's
-// handlers. A store that lists none cannot read a formula, and says why.
+// A store with an empty handler list fails every formula, and says so.
 test("formulas are read through the store's handlers, and nothing else", async () => {
   const store = nodeStore();
   const dir = await scratch();

@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
 //
-// What the grid and the status bar draw of a sheet at its edges: a file with a
-// header and no rows, and a header the file left blank. Over the real shell
-// and the real engine, as history.test.ts is, since both come from what the
-// engine makes of the bytes.
+// What the grid and the status bar draw for a file with a header and no
+// rows, and for a header the file left blank. Runs over the real shell and
+// engine.
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -30,7 +29,7 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-/** open writes a file and opens it, waiting for the status bar to count its rows. */
+/** Writes a file, opens it, and waits for the status bar to count its rows. */
 async function open(name: string, text: string, rows: number): Promise<void> {
   const path = join(dir, name);
   await writeFile(path, text);
@@ -55,7 +54,7 @@ test("a column the file left nameless is called by its place, in the header and 
   expect(await page.hasClass("thead th .colname", "unnamed", 0)).toBe(true);
   expect(await page.text("#status-cell")).toBe(`${first} · ${m.status_row({ row: num(1) })}`);
 
-  // The column is one to be on and to leave, like any other.
+  // The arrows move off and back onto the unnamed column like any other.
   await page.press("ArrowRight");
   expect(await page.text("#status-cell")).toBe(`region · ${m.status_row({ row: num(1) })}`);
   await page.press("ArrowLeft");

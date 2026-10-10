@@ -1,8 +1,5 @@
-// A file with no header row, read by ingest.
-//
-// Told there is no header, a reader names the columns itself and takes the
-// first line as the first row. Nothing else about the read changes: the same
-// extension rules, the same sniff, the same refusals.
+// Ingest tests for files read with header mode "none": the columns are
+// numbered and the first line is a data row.
 
 import { describe, expect, test } from "vite-plus/test";
 
@@ -14,7 +11,7 @@ import { BOM, COLUMNS, allRows, marked } from "./parts.ts";
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 const source = (text: string) => bytesSource(encode(text));
 
-/** The whole fixture read the ordinary way: what the headerless rows are held to. */
+/** sales-q3.csv read with its header, for comparing cells against. */
 const whole = read("sales-q3.csv", wholeBytes);
 
 describe("columns that a file does not name", () => {
@@ -44,7 +41,7 @@ describe("a format read with no header row", () => {
     expect((await openFormat("rows.tsv", source("a\tb\n"), "none")).label).toBe(
       "UTF-8 · tab-separated · no header row",
     );
-    // And a file with a header says what it always has.
+    // A file with a header is labelled by its encoding and delimiter alone.
     expect((await openFormat("rows.csv", source("a,b\n"))).label).toBe("UTF-8 · delimiter ','");
   });
 
@@ -83,7 +80,7 @@ describe("a format read with no header row", () => {
   });
 
   test("reads a first row longer than the head it reads first", async () => {
-    /** More cells than fit in the 64 KB a format reads to begin with. */
+    /** More cells than fit in the 64 KB head openFormat reads first. */
     const WIDE = 20_000;
     const row = Array.from({ length: WIDE }, (_, i) => `cell${i}`).join(",");
     const format = await openFormat("rows.csv", source(`${row}\n1,2\n`), "none");

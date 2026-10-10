@@ -1,18 +1,9 @@
-// Connect a bucket: a bucket, a folder in it, how to sign in, and a test that
-// lists the folder before anything is kept.
+// The connect form: a bucket, a folder in it, how to sign in, and a test that
+// lists the folder. It takes the panel list's place while open.
 //
-// It takes the panel's place while it is open, because connecting is the one
-// thing in the panel that is a form rather than a list, and a person filling
-// it in is not also browsing. The test is the point of it. A connection that
-// cannot list its folder -- a 403, a bucket that is not there, an SSO sign-in
-// that has expired -- says why in the engine's own words and saves nothing, so
-// a connection in the folder is one that worked at least once.
-//
-// The ways of signing in come from the engine, which is the one that signs:
-// the desktop's reads ~/.aws in its own process and hands over names and
-// nothing else (2.10), and the hosted one takes on a role in the person's
-// account and says what the role has to trust. The region is not asked for at
-// all: the test finds it (2.9), and the connection keeps it.
+// A connection is saved only after a test that lists its folder succeeds. The
+// sign-in options come from the engine. The region is found by the test and
+// kept in the connection.
 
 import type { SignIns } from "@uno/grid/engine";
 import type { AuthMode, Connection } from "@uno/grid/library";
@@ -22,56 +13,57 @@ import type { Tried } from "@uno/grid/store/s3";
 import { m } from "../../paraglide/messages.js";
 import { Words, el, message, option } from "./util.ts";
 
-/** What the form needs of the engine and the host. The shell decides how. */
+/** What the form asks of the shell. */
 export interface ConnectAsks {
-  /** How the engine signs in: its modes, the AWS profiles its machine has, and what a role has to trust. */
+  /**
+   * The engine's sign-in modes, the AWS profiles on its machine, and what a
+   * role has to trust.
+   */
   signIns(): Promise<SignIns>;
-  /** A connection tried without keeping it: its region, and a page of its prefix. */
+  /**
+   * Test a connection before it is saved. Returns its region and a page of its
+   * prefix.
+   */
   tryConnection(c: Connection): Promise<Tried>;
-  /** Keep a connection, and hand back the copy that was written. */
+  /** Save a connection. Returns the copy that was written. */
   save(c: Connection): Promise<Connection>;
-  /** The connections already kept, so a new one does not take an old one's file. */
+  /** The connections already saved, so a new one gets an unused id. */
   known(): readonly Connection[];
 }
 
 /**
- * What the form says of a save while it is under way. A save takes a test and
- * a write, and the form steps aside for both, so that the connection is seen
- * arriving where it will be listed.
+ * What the form tells the panel about a save in progress. The form hides
+ * itself during the test and the write.
  */
 export interface ConnectTells {
-  /** A save began, and the form has stepped aside for this connection. */
+  /** A save began and the form has hidden itself. */
   keeping(draft: Connection): void;
-  /**
-   * The save was refused, and why. The form stays aside, as it was left, until
-   * `reopen` brings it back to be edited and saved again.
-   */
+  /** The save was refused with `why`. The form stays hidden until `reopen`. */
   refused(draft: Connection, why: string): void;
 }
 
-/** What the form can be opened with: a bucket somebody already named. */
+/** Values the form can be opened with. */
 export interface Filled {
   bucket?: string;
   prefix?: string;
 }
 
 /**
- * SignIn is the sign-in list's choice, as the select carries it: the machine's
- * own chain, a named profile, a role in the person's account, or no signing
- * in at all.
+ * SignIn is the sign-in select's value: the machine's credential chain, a
+ * named profile, a role, or public access.
  */
 export type SignIn = "machine" | "public" | "role" | `profile:${string}`;
 
-/** The fields as a person left them. */
+/** The field values. */
 export interface Fields {
   bucket: string;
   prefix: string;
   signIn: SignIn;
-  /** The role's ARN, read when `signIn` is the role. */
+  /** The role's ARN, used when `signIn` is "role". */
   roleArn?: string;
 }
 
-/** What the list offers for each way an engine signs in: one line, or one a profile. */
+/** The select options for each sign-in mode: one option, or one per profile. */
 const CHOICES: { [M in AuthMode]: (offered: SignIns) => Array<[SignIn, string]> } = {
   machine: () => [["machine", m.connect_sign_in_machine()]],
   profile: (offered) => offered.profiles.map((n) => [`profile:${n}`, n]),
@@ -79,16 +71,12 @@ const CHOICES: { [M in AuthMode]: (offered: SignIns) => Array<[SignIn, string]> 
   public: () => [["public", m.connect_sign_in_public()]],
 };
 
-/**
- * What is on offer before the engine has said, and when it cannot say: a
- * bucket anybody may read, which every engine reads unsigned.
- */
+/** The options before the engine answers, and when it fails to: public only. */
 const PUBLIC_ONLY: SignIns = { modes: ["public"], profiles: [] };
 
 /**
- * folderOf is a prefix as a connection keeps it: no slash in front, and one on
- * the end, since `shop` without it would cover `shop-old/` too. Typed with or
- * without either, it means the same folder.
+ * folderOf normalises a prefix: leading slashes stripped, one trailing slash,
+ * and "" for an empty prefix.
  */
 export function folderOf(typed: string): string {
   const inner = typed.trim().replace(/^\/+/, "").replace(/\/+$/, "");
@@ -96,15 +84,12 @@ export function folderOf(typed: string): string {
 }
 
 /**
- * draftOf is the connection the fields describe, not yet tried or kept.
+ * draftOf builds the connection the fields describe.
  *
- * Its id names its file, so it is the bucket's name, and a connection already
- * kept for another folder of the same bucket keeps its file: the new one is
- * `-2`, `-3`. One already kept for this same bucket and folder is the one
- * being made again, and keeps its id, its name, when it was created, and the
- * keys this build did not recognise, so a save from here never writes their
- * loss back over a file a newer uno wrote. The auth block's own unknown keys
- * were about its way of signing in, and stay only while that way does.
+ * The id is the bucket name, with `-2`, `-3` appended while that id is
+ * taken. A known connection with the same bucket and prefix is being edited:
+ * its id, name, created, modified and unknown keys are kept. The auth
+ * block's unknown keys are kept only while the auth mode is the same.
  */
 export function draftOf(fields: Fields, known: readonly Connection[]): Connection {
   const bucket = fields.bucket.trim();
@@ -140,16 +125,18 @@ export function draftOf(fields: Fields, known: readonly Connection[]): Connectio
   return draft;
 }
 
-/** A bucket's name as an example of one, in the field before anything is typed. */
+/** The bucket field's placeholder. */
 const EXAMPLE_BUCKET = "acme-exports";
 
-/** A role's ARN as an example of one, which is also the shape the library holds one to. */
+/** The role field's placeholder, in the shape the library requires. */
 const EXAMPLE_ROLE = "arn:aws:iam::123456789012:role/uno-read";
 
-/** What stands for the region of a bucket the test could not place. */
+/** Shown as the region when the test left it blank. */
 const UNKNOWN_REGION = "?";
 
-/** triedLine is what a test that worked says: the folder, and what it held. */
+/**
+ * triedLine is the message for a successful test: the folder and what it held.
+ */
 export function triedLine(tried: Tried): string {
   const held = {
     folders: m.folders_count({ count: tried.folders }),
@@ -162,7 +149,7 @@ export function triedLine(tried: Tried): string {
     : m.connect_listed_prefix({ prefix, found });
 }
 
-/** Where the form is: waiting to be tried, trying, tried and fine, or refused. */
+/** The form's state. */
 type Status =
   | { t: "untried" }
   | { t: "trying" }
@@ -171,34 +158,44 @@ type Status =
 
 export class ConnectForm {
   readonly el = document.createElement("form");
-  /** What the form says that does not change with what is typed in it. */
+  /** The form's fixed text, rewritten on relabel. */
   private readonly words = new Words();
   private readonly bucket = input("bucket");
   private readonly prefix = input("prefix");
   private readonly signIn = document.createElement("select");
   private readonly roleArn = input("roleArn");
-  /** The role's row, shown while the role is the way chosen. */
+  /** The role's row, shown while "role" is selected. */
   private readonly roleRow: HTMLElement;
-  /** What the role has to trust, under its ARN, once the engine has said. */
+  /**
+   * What the role has to trust, shown under its ARN once the engine has said.
+   */
   private readonly trust = el("div", "trust");
   private readonly region = document.createElement("div");
   private readonly result = document.createElement("div");
   private readonly saving = document.createElement("div");
   private readonly tryButton = el("button", "");
   private readonly saveButton = el("button", "primary");
-  /** The ways of signing in the engine last answered with, for the list to be drawn from again. */
+  /** The sign-in options the engine last answered with. */
   private offered: SignIns = PUBLIC_ONLY;
   private status: Status = { t: "untried" };
-  /** Counts tries, so an answer for fields that have since changed is dropped. */
+  /**
+   * Counts tries, so an answer for fields that have since changed is dropped.
+   */
   private tries = 0;
-  /** Whether the person picked a profile, so the names arriving do not undo it. */
+  /**
+   * Whether the person chose a sign-in option, so arriving options leave it
+   * in place.
+   */
   private picked = false;
-  /** The connection a save has stepped aside for, until it is kept or refused. */
+  /** The connection a save is in progress for. */
   private keeping: Connection | undefined;
 
   constructor(
     private readonly asks: ConnectAsks,
-    /** Called when the form is done: with what was saved, or nothing for Cancel. */
+    /**
+     * Called when the form is done: with the saved connection, or undefined on
+     * Cancel.
+     */
     private readonly done: (saved: Connection | undefined) => void,
     private readonly tells: ConnectTells,
   ) {
@@ -248,8 +245,7 @@ export class ConnectForm {
       this.saving,
     );
 
-    // Enter in any field, and the Save button, are one submit: save, testing
-    // first when what is on screen has not been tested yet.
+    // Enter in any field and the Save button both submit.
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       void this.save();
@@ -257,7 +253,7 @@ export class ConnectForm {
     form.addEventListener("input", () => this.edited());
     form.addEventListener("change", () => this.edited());
     form.addEventListener("keydown", (e) => {
-      // The grid's keys and the shell's chords stay out of what is typed here.
+      // Keep the key from reaching the grid and the shell's shortcuts.
       e.stopPropagation();
       if (e.key === "Escape" && !e.isComposing) {
         e.preventDefault();
@@ -270,7 +266,7 @@ export class ConnectForm {
     return !this.el.hidden;
   }
 
-  /** relabel writes the form again in the language the app is in now, as it stands. */
+  /** relabel rewrites the form's text in the current language. */
   relabel(): void {
     this.words.write();
     this.options(this.offered);
@@ -278,8 +274,8 @@ export class ConnectForm {
   }
 
   /**
-   * show opens the form, filled in with what the caller knows, and asks the
-   * engine how it signs in while the person types the bucket.
+   * show opens the form with `filled` and asks the engine for its sign-in
+   * options.
    */
   show(filled: Filled = {}): void {
     this.bucket.value = filled.bucket ?? "";
@@ -294,7 +290,7 @@ export class ConnectForm {
     this.paint();
     void this.asks.signIns().then(
       (offered) => this.options(offered),
-      // An engine that cannot say still reads a public bucket.
+      // When the engine fails to answer, offer public only.
       () => this.options(PUBLIC_ONLY),
     );
     (filled.bucket === undefined ? this.bucket : this.prefix).focus();
@@ -306,7 +302,9 @@ export class ConnectForm {
     this.keeping = undefined;
   }
 
-  /** The fields as a connection, or the reason they are not one yet. */
+  /**
+   * The fields as a connection, or the message saying why they are refused.
+   */
   private draft(): Connection | string {
     const c = draftOf(
       {
@@ -328,9 +326,8 @@ export class ConnectForm {
   }
 
   /**
-   * test tries what is on screen and says what came of it. An answer that
-   * lands after the fields changed is for a connection nobody is looking at
-   * any more, and is dropped.
+   * test tries the current fields and shows the result. An answer that lands
+   * after the fields changed is dropped.
    */
   private async test(): Promise<Tried | undefined> {
     const draft = this.draft();
@@ -357,13 +354,12 @@ export class ConnectForm {
   }
 
   /**
-   * save keeps the connection the test found, with its region in it. What has
-   * not been tested is tested first, and a test that fails saves nothing.
+   * save tests the fields, reusing a test already made for them, then saves
+   * the connection the test returned. A failed test ends in a refusal.
    *
-   * The form steps aside while it does, and stays aside when the test or the
-   * write is refused, as it was left and holding why, for `reopen`. A form
-   * opened again or closed meanwhile has given this save up, and what lands
-   * for it is dropped.
+   * The form hides itself while this runs. On refusal it stays hidden, holding
+   * the reason, until `reopen`. If the form was reopened or closed meanwhile,
+   * the result is dropped.
    */
   private async save(): Promise<void> {
     const draft = this.draft();
@@ -381,7 +377,7 @@ export class ConnectForm {
 
     const tried = tested ?? (await this.test());
     if (this.keeping !== draft) return;
-    // A test that came back with nothing for this save was refused, and said why.
+    // The test failed and set the status to refused.
     if (tried === undefined) {
       return this.refuse(draft, this.status.t === "refused" ? this.status.why : "");
     }
@@ -396,18 +392,14 @@ export class ConnectForm {
     }
   }
 
-  /** refuse ends the save the form stepped aside for, and says why to whoever holds it. */
+  /** refuse ends the save in progress and reports why. */
   private refuse(draft: Connection, why: string): void {
     this.keeping = undefined;
     this.status = { t: "refused", why };
     this.tells.refused(draft, why);
   }
 
-  /**
-   * reopen brings the form back as it was left when its save was refused,
-   * saying why, with the keys in the bucket: the connection is edited, and
-   * saving it is trying it again.
-   */
+  /** reopen shows the form again as it was left, with the refusal shown. */
   reopen(): void {
     this.el.hidden = false;
     this.paint();
@@ -419,7 +411,7 @@ export class ConnectForm {
     this.done(undefined);
   }
 
-  /** A field changed, so whatever the last test said is about something else. */
+  /** A field changed, so the last test is set aside. */
   private edited(): void {
     if (this.status.t === "untried") return this.paint();
     this.tries++;
@@ -428,17 +420,15 @@ export class ConnectForm {
   }
 
   /**
-   * options fills the sign-in list with what the engine offers, in its
-   * order: the machine's own chain, each profile, a role, public.
+   * options fills the sign-in select with the engine's options, in its order.
    */
   private options(offered: SignIns): void {
     this.offered = offered;
     const was = this.signIn.value;
     const choices = offered.modes.flatMap((mode) => CHOICES[mode](offered));
     this.signIn.replaceChildren(...choices.map(([value, label]) => option(label, value)));
-    // A choice made before the ways arrived is kept; otherwise `default` is
-    // what a person means when they did not say, where there is one, and the
-    // first way offered otherwise.
+    // Keep the person's choice if it is still offered. Otherwise pick the
+    // "default" profile if there is one, else the first option.
     const keep =
       this.picked && choices.some(([v]) => v === was)
         ? was
@@ -446,19 +436,16 @@ export class ConnectForm {
           ? "profile:default"
           : (choices[0]?.[0] ?? "public");
     this.signIn.value = keep;
-    // The ways landing after a quick Test can move the choice to a profile
-    // the test did not sign in with. A select moved is a field changed, and
-    // takes the test back the way typing in one does. Only while the form is
-    // on screen: a save has stepped aside with its draft already taken, and
-    // the ways landing then are not an edit of it.
+    // A changed select counts as an edit, which drops the last test. Only
+    // while the form is on screen: during a save the draft is already taken.
     if (this.open && this.signIn.value !== was) this.edited();
     else this.paint();
   }
 
   private paint(): void {
     const s = this.status;
-    // The role's ARN is asked for while the role is the way chosen, and what
-    // the role has to trust is said under it once the engine has said.
+    // The role row shows while "role" is selected. The trust line shows once
+    // the engine has said what the role has to trust.
     const role = this.signIn.value === "role";
     this.roleRow.hidden = !role;
     const trust = this.offered.trust;
@@ -485,8 +472,8 @@ export class ConnectForm {
     this.tryButton.disabled = s.t === "trying";
     this.saveButton.disabled = s.t === "trying";
 
-    // Where it will go, once there is a bucket to name the file after, and
-    // what the file holds of the way it signs in: a name or an ARN, never a key.
+    // The save line: the file the connection will be saved as, and what it
+    // holds of the sign-in.
     const draft = this.draft();
     const where =
       typeof draft === "string" ? m.connect_saving_each() : m.connect_saving_as({ id: draft.id });
@@ -497,12 +484,15 @@ export class ConnectForm {
   }
 }
 
-/** key is what a test was of, so a save can tell whether the fields moved since. */
+/**
+ * key identifies what a test was of, so save can tell whether the fields
+ * changed since.
+ */
 function key(c: Connection): string {
   return JSON.stringify([c.bucket, c.prefix, c.auth]);
 }
 
-/** input is one text field, by its name in the form. */
+/** input creates one text field with `name`. */
 function input(name: string): HTMLInputElement {
   const box = el("input");
   box.name = name;

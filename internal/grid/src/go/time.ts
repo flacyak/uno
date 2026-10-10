@@ -1,4 +1,4 @@
-// Timestamps, spelled the way Go spells them.
+// Timestamps in Go's formats.
 
 /** time.Now().UTC().Truncate(time.Second). */
 export function nowTruncated(): Date {
@@ -6,19 +6,15 @@ export function nowTruncated(): Date {
 }
 
 /**
- * rfc3339 is what `encoding/json` writes for a `time.Time`.
- *
- * `toISOString` emits milliseconds. Go, on a value already truncated to the
- * second, does not -- and a .unof written by either build should look the same
- * in a diff.
+ * rfc3339 formats a Date the way `encoding/json` writes a `time.Time`
+ * truncated to the second: whole seconds only.
  */
 export function rfc3339(d: Date): string {
   return d.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-// What encoding/json writes for a time.Time nothing ever set: the zero value
-// is January 1 of year 1, which is not the Unix epoch `new Date(0)` names.
-// Date.UTC reads a year under 100 as 19xx, so the year is set on its own.
+// Go's zero time.Time: January 1 of year 1. Date.UTC reads a year under 100
+// as 19xx, so the year is set separately.
 const ZERO_TIME = ((): number => {
   const d = new Date(0);
   d.setUTCFullYear(1, 0, 1);
@@ -26,9 +22,8 @@ const ZERO_TIME = ((): number => {
 })();
 
 /**
- * The zero time.Time, which is what "never saved" looks like in a manifest.
- * The Unix epoch counts as one too: nothing was saved in 1970, and a build
- * that took `new Date(0)` for the zero may have written it.
+ * isZeroTime reports whether `d` is absent, invalid, the Unix epoch, or Go's
+ * zero time.Time.
  */
 export function isZeroTime(d: Date | undefined): boolean {
   if (d === undefined) return true;
@@ -37,11 +32,8 @@ export function isZeroTime(d: Date | undefined): boolean {
 }
 
 /**
- * parseTime reads a timestamp back. An unparseable one is treated as absent
- * rather than as a failure: a manifest with a broken date is still a manifest,
- * and the next save writes a good one. So is the zero time.Time, which the Go
- * build writes for a stamp it never set: read as a date it would be kept as
- * the moment of creation, and the next save would never fill it in.
+ * parseTime reads a timestamp. Returns undefined for an empty, unparseable
+ * or zero time.
  */
 export function parseTime(s: string | undefined): Date | undefined {
   if (s === undefined || s === "") return undefined;

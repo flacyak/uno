@@ -1,5 +1,5 @@
-// An engine over a real channel, reaching the disk and a stand-in bucket: what
-// a renderer test opens a workspace with when its sources are in S3.
+// An engine over a MessageChannel that reads the disk and a stand-in S3
+// bucket. Renderer tests use it to open a workspace whose sources are in S3.
 
 import { Engine, messagePort, serve } from "@uno/grid/engine";
 import type { MessagePortLike, Reply, Request } from "@uno/grid/engine";

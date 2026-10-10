@@ -1,7 +1,8 @@
-// Finding in a column: ]f and [f for the cells that do not parse, / and ? for
-// text, and n and N for the last search again.
+// Find in a column: ]f and [f for cells that fail to parse, / and ? for text,
+// and n and N to repeat the last search.
 //
-// The engine reads the file for each, so a find reaches rows no band holds.
+// The engine answers each find by reading the file, so a find reaches rows
+// beyond what the grid has loaded.
 
 import type { FindRequest } from "@uno/grid/engine";
 
@@ -12,7 +13,7 @@ import { num } from "../locale.ts";
 import type { Workspace } from "../workspace.ts";
 import { message } from "./util.ts";
 
-/** How long a find may take before the status bar says it is searching. */
+/** How long a find may take before the status bar says "searching". */
 const SLOW_MS = 200;
 
 /** The open workspace and the grid showing it. */
@@ -22,9 +23,9 @@ export interface Showing {
 }
 
 export class Finder {
-  /** Counts finds, so the answer to one a person has since asked again over is dropped. */
+  /** Counts finds, so the answer to a superseded find is dropped. */
   private finds = 0;
-  /** The last text searched for, and which way, for n and N. */
+  /** The last text searched for and its direction, for n and N. */
   private searched: { text: string; dir: 1 | -1 } | undefined;
 
   constructor(
@@ -33,8 +34,8 @@ export class Finder {
   ) {}
 
   /**
-   * unparsed is ]f and [f: the next cell down or up this column that does not
-   * parse as its badge says it should. Fixing those is what uno is for.
+   * unparsed is ]f and [f: moves to the next cell down or up this column that
+   * fails to parse as its column's kind.
    */
   unparsed(dir: 1 | -1): void {
     const on = this.showing();
@@ -43,8 +44,7 @@ export class Finder {
     const column = on.workspace.rows.columns[col];
     if (column === undefined) return;
 
-    // Plain text has nothing in it to fail, and reading the file to say so
-    // would be slow for nothing.
+    // Every cell of a plain text column parses.
     if (column.kind === "text" && !column.flagged) {
       this.say(m.find_column_is_text({ column: columnLabel(column.header, col) }), true);
       return;
@@ -62,8 +62,8 @@ export class Finder {
   }
 
   /**
-   * search is / and ?: the next cell down or up this column that shows some
-   * text. Enter on nothing searches for the last text again, as vim does.
+   * search is / and ?: moves to the next cell down or up this column whose
+   * text matches. Empty input repeats the last search.
    */
   search(typed: string, dir: 1 | -1): void {
     const text = typed === "" ? this.searched?.text : typed;
@@ -75,7 +75,10 @@ export class Finder {
     this.searchFor(text, dir);
   }
 
-  /** next is n and N: the last search again, the same way or the other. */
+  /**
+   * next is n and N: repeats the last search, in the same or the opposite
+   * direction.
+   */
   next(reverse: boolean): void {
     const last = this.searched;
     if (last === undefined) {
@@ -98,9 +101,9 @@ export class Finder {
   }
 
   /**
-   * find asks the engine for the next row down or up this column that matches,
-   * and selects it. `missing` is what to say when there is none, written when
-   * it is said: a find that outlasts a change of language answers in the new one.
+   * find asks the engine for the next matching row down or up this column and
+   * selects it. `missing` builds the message shown when there is none. It is
+   * called when the message is shown, so it is in the current language.
    */
   private async find(
     match: FindRequest["match"],
@@ -110,14 +113,13 @@ export class Finder {
     const on = this.showing();
     if (on === undefined) return;
     const { workspace: w, grid } = on;
-    // The find reads the tab showing now, and the row it finds is a row of
-    // that tab: one the person has since left is not moved to in the other.
+    // The find is for the active tab. If the tab changes before the answer
+    // lands, the result is dropped.
     const tab = w.active;
     const { row, col } = grid.selection();
     const asked = ++this.finds;
 
-    // Most finds answer within a frame. Saying so only for one that does not
-    // keeps the status bar from blinking on every ]f.
+    // Say "searching" only when the find takes longer than SLOW_MS.
     let spoke = false;
     const slow = setTimeout(() => {
       spoke = true;
@@ -125,10 +127,10 @@ export class Finder {
     }, SLOW_MS);
     try {
       const found = await w.find({ col, from: row, dir, match });
-      // A newer find speaks for itself, over whatever this one said.
+      // A newer find has superseded this one.
       if (asked !== this.finds) return;
       if (this.showing()?.workspace !== w || w.active !== tab) {
-        // The answer is to a tab since left, and so is what was said of it.
+        // The tab or workspace changed. Clear what this find said.
         if (spoke) this.say("");
         return;
       }

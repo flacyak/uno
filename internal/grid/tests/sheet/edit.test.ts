@@ -7,7 +7,7 @@ import { parse as parseProgram } from "../../src/program/index.ts";
 const REGION = 1;
 const UNITS = 2;
 
-// A fresh sheet each call, since the operations mutate in place.
+// Returns a fresh sheet each call because the operations mutate in place.
 function fixture(): Sheet {
   return new Sheet(
     "sales.csv",
@@ -20,8 +20,7 @@ function fixture(): Sheet {
   );
 }
 
-// An edit records what it replaced, which is what makes it readable on its own
-// and reversible without re-reading the source.
+// A set edit records the value it replaced in `was`.
 test("set records the value it replaced", () => {
   const s = fixture();
   s.set(0, UNITS, "1204");
@@ -33,8 +32,7 @@ test("set records the value it replaced", () => {
   expect(log[0]).toEqual({ seq: 1, op: Op.Set, row: 0, col: UNITS, was: "1,204", now: "1204" });
 });
 
-// edits() is handed to whatever writes it while the person keeps typing, so it
-// must not alias the log the sheet goes on appending to.
+// edits() returns a copy of the log.
 test("edits does not alias the log", () => {
   const s = fixture();
   s.set(0, UNITS, "1204");
@@ -46,9 +44,7 @@ test("edits does not alias the log", () => {
   expect(s.editCount()).toBe(2);
 });
 
-// Fixing the last unparseable value in a column is what clears its warning
-// badge, so the kind is re-inferred as the edit lands rather than at the next
-// open.
+// The column kind and flag are re-inferred as each edit lands.
 test("fixing the last bad value clears the flag", () => {
   const s = fixture();
   expect(s.columns[UNITS]!.kind).toBe("text");
@@ -62,8 +58,7 @@ test("fixing the last bad value clears the flag", () => {
   expect(s.columns[UNITS]!.header, "re-inferring lost the header").toBe("units");
 });
 
-// Ragged rows are normal in real exports. Editing a cell past the end of its
-// row has to create it rather than be swallowed by raw's tolerance of short rows.
+// Setting a cell past the end of a short row pads the row with empty cells.
 test("set grows a short row", () => {
   const s = new Sheet("ragged.csv", ["a", "b", "c"], [["1"], ["2", "3", "4"]]);
 
@@ -73,9 +68,8 @@ test("set grows a short row", () => {
   expect(s.raw(0, 1), "the padded cell").toBe("");
 });
 
-// Replay is how a .uno rebuilds itself, and it must keep the log it replayed so
-// that saving a reopened file preserves the history rather than starting a new
-// one.
+// replay applies the edits and keeps them in the log, so later edits continue
+// the seq numbering.
 test("replay rebuilds and keeps the log", () => {
   const edits: Edit[] = [
     { seq: 1, op: Op.Set, row: 0, col: UNITS, was: "1,204", now: "1204" },
@@ -92,8 +86,8 @@ test("replay rebuilds and keeps the log", () => {
   expect(s.edits()[2]!.seq, "seq carries on after a replay").toBe(3);
 });
 
-// A log that names a cell this sheet does not have is a log that does not
-// belong to these bytes, and opening must say so rather than build a wrong grid.
+// replay throws on an edit that names a cell outside the sheet, or an
+// unknown operation.
 describe("replay refuses a log that does not fit", () => {
   const cases: Array<[string, Edit]> = [
     ["row past the end", { seq: 1, op: Op.Set, row: 9, col: 0, now: "x" }],
@@ -108,8 +102,8 @@ describe("replay refuses a log that does not fit", () => {
   }
 });
 
-// The point of a column op is that the log grows with what a person did and not
-// with how much data they did it to. Three cells change and one line is written.
+// apply rewrites every cell in the column and records one log entry holding
+// the program text.
 test("apply writes one operation for a whole column", () => {
   const s = fixture();
   s.apply(UNITS, parseProgram('replace(/,/, "")'));
@@ -129,8 +123,7 @@ test("apply writes one operation for a whole column", () => {
   });
 });
 
-// Fixing a whole column is what clears its warning badge, and the kind has to
-// be re-read as the operation lands rather than at the next open.
+// apply re-infers the column kind and flag when it lands.
 test("applying a program renames the column", () => {
   const s = fixture();
   expect(s.columns[UNITS]!.flagged).toBe(true);
@@ -141,9 +134,7 @@ test("applying a program renames the column", () => {
   expect(s.columns[UNITS]!.flagged).toBe(false);
 });
 
-// A transform rewrites values that are there. A row that never had this column
-// has no value to be wrong about, and inventing an empty cell would change the
-// shape of the data on the strength of an inference.
+// apply skips rows shorter than the column and keeps their length.
 test("apply skips rows without the column", () => {
   const s = new Sheet(
     "ragged.csv",
@@ -158,9 +149,7 @@ test("apply skips rows without the column", () => {
   expect(s.raw(1, UNITS), "the short row grew a cell").toBe("");
 });
 
-// Undo replays, and a column op is the case that mechanism exists for: there is
-// no old value to put back, so the rebuild has to produce the same column the
-// operation did the first time.
+// Replaying a log with an apply entry produces the same column values and kind.
 test("replay rebuilds an applied column", () => {
   const s = fixture();
   s.set(1, UNITS, "9,870");
@@ -176,14 +165,14 @@ test("replay rebuilds an applied column", () => {
   expect(rebuilt.columns[UNITS]!.flagged).toBe(false);
 });
 
-// The recogniser learns a program from cells a person fixed, and those were
-// typed before the apply that follows. Running a program that is not idempotent
-// over them again would fix them twice: West-q3 would read West-q3-q3.
+// apply leaves a cell alone when running the program on its original value
+// gives the current value. Otherwise it rewrites the current value. The same
+// holds on replay.
 test("apply leaves a cell it would have fixed the same way, and rewrites one it would not", () => {
   const s = fixture();
   s.set(0, REGION, "West-q3");
   s.set(1, REGION, "Eas");
-  s.set(1, REGION, "East-q3"); // a slip on the way is still East to East-q3
+  s.set(1, REGION, "East-q3"); // the net change is still East to East-q3
   s.set(2, REGION, "N");
   s.apply(REGION, parseProgram('concat(slice(0, len), "-q3")'));
 
@@ -198,9 +187,7 @@ test("apply leaves a cell it would have fixed the same way, and rewrites one it 
   }
 });
 
-// A log naming a program this build cannot read has to fail before a single
-// cell moves. Refusing to open a workspace is recoverable; half-transforming
-// one is not.
+// replay throws on a malformed program, before changing any cell.
 test("replay refuses a program it cannot read", () => {
   const s = fixture();
   expect(() =>
@@ -209,10 +196,8 @@ test("replay refuses a program it cannot read", () => {
   expect(s.raw(0, UNITS), "the cell should be untouched").toBe("1,204");
 });
 
-// A log that fails partway has edits before the failure that were valid, and
-// the Schema has already folded them. They are kept in the log too, so what
-// the sheet shows and what it would save agree: a folded write the log does
-// not hold would come back the moment any later edit made the log non-empty.
+// When replay fails partway, the edits applied before the failure stay in the
+// log, so the sheet's values and its log agree.
 test("a replay that fails partway keeps the edits it folded", () => {
   const s = fixture();
   expect(() =>
@@ -227,8 +212,7 @@ test("a replay that fails partway keeps the edits it folded", () => {
   expect(s.edits().map((e) => e.seq)).toEqual([1]);
 });
 
-// A column pasted in a cell at a time is one line per cell, and a log that
-// long is longer than a call can take as arguments.
+// A log longer than the maximum argument count of a spread call.
 const LONG_LOG = 200_000;
 
 test("replay takes a log longer than a call can spread", () => {
@@ -247,13 +231,11 @@ test("replay takes a log longer than a call can spread", () => {
   expect(s.raw(0, UNITS)).toBe(`${last}`);
 });
 
-// Typing into one cell reaches one row, and should cost about that. Before
-// this budget a set threw away every finished row and re-read a sample of
-// every column, so a paste of a thousand cells into a wide sheet took seconds.
+// Performance check: a set re-reads only its own row.
 const WIDE = 20;
 const TALL = 5000;
 const SETS = 1000;
-/** Milliseconds for SETS sets. The old way took over two thousand. */
+/** Time budget in milliseconds for SETS sets. */
 const SETS_BUDGET = 400;
 
 test("a set costs its own row, not the sheet", () => {

@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 //
-// Changing the language writes the window again, and writing a window again
-// is where what was in it is lost. Over the real shell and the real engine:
-// the edit, the selection, the scroll, the mark and the undo history that were
-// there before the change are there after it, the counts are grouped the new
-// language's way, and a change made twice in a row leaves one of everything.
+// Changing the language redraws the window. Runs over the real shell and
+// engine: the edit, the selection, the scroll, the mark, and the undo history
+// survive the change, the counts are grouped the new language's way, and two
+// changes in a row leave one of everything.
 
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,14 +23,14 @@ const UNITS = 2;
 /** A row the mark is set on, and one the selection is left on. */
 const MARKED_ROW = 2;
 const LEFT_ROW = 5;
-/** Far enough down that the gutter shows a number with a group in it. */
+/** Far enough down that the gutter shows a grouped number. */
 const DEEP_SCROLL_PX = 29 * 1200;
 
 const page = domPage();
 let shell: Shell;
 
 const dir = mkdtempSync(join(tmpdir(), "uno-relabel-"));
-/** Lets a write finish, for a test that holds one open. */
+/** Resolves the save in flight. */
 let release: (() => void) | undefined;
 
 function message(): string {
@@ -55,8 +54,8 @@ function scroller(): HTMLElement {
 }
 
 async function edit(row: number, value: string): Promise<void> {
-  // The rows drawn are the ones scrolled to, so the row clicked is counted
-  // from the top of the file only once the grid is there.
+  // Scroll to the top first, so the row clicked is counted from the top of
+  // the file.
   await page.scrollTo(0);
   await page.settle(2);
   await page.clickCell(row, UNITS);
@@ -97,27 +96,27 @@ test("an edit, the selection, the scroll, a mark and the undo history survive a 
 
   expect(getLocale()).toBe("pt-BR");
   expect(document.documentElement.lang).toBe("pt-BR");
-  // The workspace and its tab are still open, with the edit still in them.
+  // The workspace and its tab are still open, with the edit.
   expect(shell.unsaved).toBe(true);
   expect(document.querySelectorAll(".dirty").length).toBeGreaterThan(0);
   expect(fileLine()).toContain(m.edits_count({ count: 1 }));
   expect(fileLine()).toContain(m.rows_count({ count: ROWS }));
   expect(fileLine()).toContain("4.812");
-  // The selection is where it was, said the new way.
+  // The selection is where it was, in the new language.
   expect(cellLine()).toContain(m.status_row({ row: num(LEFT_ROW + 1) }));
-  // The scroll is where it was, and the gutter beside it is grouped the new way.
+  // The scroll is where it was, and the gutter is grouped the new way.
   expect(scroller().scrollTop).toBe(top);
   const gutters = [...document.querySelectorAll("tbody td.gutter")].map((td) => td.textContent);
   expect(gutters.some((g) => g?.includes("1.2"))).toBe(true);
   expect(gutters.every((g) => !g?.includes(","))).toBe(true);
 
-  // The mark is still set: jumping to it lands on the row it was set on.
+  // The mark is still set.
   await page.press("'");
   await page.press("a");
   await page.settle(1);
   expect(cellLine()).toContain(m.status_row({ row: num(MARKED_ROW + 1) }));
 
-  // The undo history is still there: u takes the edit back.
+  // The undo history is still there.
   await page.press("u");
   expect(await until(page, () => fileLine().indexOf(m.edits_count({ count: 1 })) < 0)).toBe(true);
   expect(shell.unsaved).toBe(false);
@@ -125,7 +124,7 @@ test("an edit, the selection, the scroll, a mark and the undo history survive a 
 });
 
 test("what the bar said before the change is not left in the language before", async () => {
-  // The command line is vim-style's: under the default keys a colon is typed
+  // The command line is vim-style's. Under the default keys a colon is typed
   // into the cell.
   shell.setInput("vim-style");
   await page.press(":");
@@ -151,7 +150,7 @@ test("a change made twice before the first settles ends in the last, with one of
   expect(getLocale()).toBe("pt-BR");
   expect(document.documentElement.lang).toBe("pt-BR");
 
-  // One keydown listener: Ctrl+B toggles the sidebar once, not three times.
+  // One keydown listener: Ctrl+B toggles the sidebar exactly once.
   const was = sidebarHidden();
   await page.press("b", { ctrlKey: true });
   expect(sidebarHidden()).toBe(!was);
@@ -194,7 +193,7 @@ test("the settings menu and the sources panel open through the change are in the
 });
 
 test("a find in flight finishes, in the language chosen while it ran", async () => {
-  // A search prompt is vim-style's too.
+  // The search prompt is vim-style's too.
   shell.setInput("vim-style");
   await page.press("/");
   const cmd = document.querySelector<HTMLInputElement>("#status-cmd")!;

@@ -1,9 +1,8 @@
-// Main writing a workspace: the one operation that can destroy something.
+// Main writing a workspace file.
 //
-// Every failure a write can meet leaves the file that was there, and leaves
-// no scratch of its own behind beside it. The path a Save As dialog answers
-// with is a workspace's, which on a desktop that does not add the extension
-// for the filter means adding it here.
+// A failed write leaves the existing file as it was, and removes its
+// scratch file. unoPath adds the .uno extension when a Save As path lacks
+// it.
 
 import { mkdtemp, mkdir, readFile, readdir, stat, chmod, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +13,7 @@ import { unoPath, writeAtomic } from "../src/main/files.ts";
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 
-/** The mode an ordinary user file has, as stat reports it with the type bits. */
+/** The mode of an ordinary user file, as stat reports it with the type bits. */
 const USER_FILE = 0o100644;
 
 async function folder(): Promise<string> {
@@ -49,8 +48,7 @@ test("a folder that cannot be written is said, and no scratch is left in the par
   expect(await readdir(ro)).toEqual([]);
 });
 
-// The rename is where this fails, after the bytes are written: the scratch
-// the bytes went to is removed all the same.
+// The rename fails after the bytes are written. The scratch is still removed.
 test("a path that is a folder is refused, and the scratch is removed", async () => {
   const dir = await folder();
   await mkdir(join(dir, "d.uno"));
@@ -70,8 +68,8 @@ test("a file that was there is still there after a failed write", async () => {
   expect(await readFile(join(dir, "a.uno"), "utf8")).toBe("was");
 });
 
-// Two saves of one path at once each write their own scratch and publish it
-// whole: whichever lands last is the file, and no byte of the other is in it.
+// Two writes of one path each use their own scratch file. The last to land
+// is the file, whole.
 test("two writes of one path at once leave one of them, whole", async () => {
   const dir = await folder();
   const one = "one".repeat(10_000);
@@ -85,9 +83,8 @@ test("two writes of one path at once leave one of them, whole", async () => {
   expect(await readdir(dir)).toEqual(["a.uno"]);
 });
 
-// The Save As dialog filters on .uno, and on GTK answers with the name as
-// typed. A workspace saved without the extension would open as a spreadsheet
-// the next time, since the engine knows a .uno by its name.
+// The Save As dialog on GTK answers with the bare name as typed. The engine
+// knows a workspace by its .uno extension.
 test("a picked path is given the workspace extension when it was typed without", () => {
   expect(unoPath("/home/me/sales")).toBe("/home/me/sales.uno");
   expect(unoPath("/home/me/sales.csv")).toBe("/home/me/sales.csv.uno");

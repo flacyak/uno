@@ -1,18 +1,13 @@
-// The engine's entry in Electron: a utility process that owns one file.
+// Entry point of the engine utility process in Electron. One process serves
+// one workspace.
 //
-// The engine itself is `serve` in @uno/grid. This file holds the facts only this
-// runtime knows: the port arrives as a MessagePortMain on parentPort, and what
-// the process can open -- files on this machine's disks, and objects in S3 read
-// the way the connection covering each one says to sign in, or with whatever
-// AWS credentials this machine already has where no connection covers it, and
-// several of either read as one.
+// `serve` from @uno/grid does the work. This file wires it to the runtime:
+// the MessagePort arrives on parentPort, and the providers are local disk
+// files, S3 objects, and several of either read as one. Every file arrives
+// as a path.
 //
-// There is no blob handler: every file the desktop hands its engine has a
-// path, and a Blob that arrives anyway is refused by name.
-//
-// The credentials are read here, in the engine's own process. The renderer
-// asks for an s3:// URL and gets rows back; no key ever crosses into the page.
-// So are the connections: main names the folder, and the engine reads it.
+// AWS credentials and the saved connections are read in this process. The
+// renderer only sends s3:// URLs and receives rows.
 
 import { TUNING, serve } from "@uno/grid/engine";
 import type { Reply, Request } from "@uno/grid/engine";
@@ -29,24 +24,18 @@ import { connectionMeeting, s3Provider, tryConnection } from "@uno/grid/store/s3
 
 import { exporting } from "./telemetry.ts";
 
-/**
- * Where S3 is: the same variables the AWS CLI reads, so MinIO or a local
- * stand-in is pointed at the way every other tool on the machine is.
- */
+/** S3 endpoint override, read from the same variables the AWS CLI uses. */
 const ENDPOINT = process.env["AWS_ENDPOINT_URL_S3"] ?? process.env["AWS_ENDPOINT_URL"];
 
 /**
- * Where the connections are kept, as main passed it. An engine started any
- * other way has no folder, and keeps no connections rather than guessing one.
+ * Folder holding the saved connections, passed by main as `--connections=`.
+ * Undefined when the flag is absent; the engine then serves files alone.
  */
 const CONNECTIONS = process.argv
   .find((a) => a.startsWith("--connections="))
   ?.slice("--connections=".length);
 
-/**
- * This build's version, as main passed it. It is what a collector files the
- * measurements under, so two builds can be told apart on a chart.
- */
+/** App version passed by main as `--version=`. Tags exported telemetry. */
 const VERSION =
   process.argv.find((a) => a.startsWith("--version="))?.slice("--version=".length) ?? "";
 
@@ -57,29 +46,23 @@ process.parentPort.once("message", (e) => {
     return;
   }
 
-  // Where the engine's measurements go, on a machine that names a collector.
-  // On every other machine this is undefined and nothing is measured.
+  // Defined when the environment names an OTLP collector.
   const telemetry = exporting(process.env, VERSION);
 
-  // The renderer closing its end is how a workspace closes, and this process
-  // has nothing else to do. What was measured since the last send goes first,
-  // and the send is given up on rather than waited for past its timeout.
+  // The renderer closes its port to close the workspace. Flush pending
+  // telemetry, then exit.
   port.on("close", () => {
     void (telemetry?.flush() ?? Promise.resolve()).finally(() => process.exit(0));
   });
 
-  // Read through the same disk handler every other file is, from the one
-  // folder main named. The S3 provider asks it on every request, so a request
-  // is signed by the connection covering where it goes as that connection
-  // stands now, and by the machine's own chain where no connection covers it.
+  // Saved connections, read from disk on each request so edits take effect
+  // at once.
   const kept = CONNECTIONS === undefined ? undefined : connectionsIn(nodeStore(), CONNECTIONS);
-  // One set of credentials per way of signing in, shared by every request and
-  // by a connection being tried, so trying one does not sign in twice.
+  // Credential cache shared by S3 requests and by `test`.
   const auth = connectionAuth();
 
-  // The places one file can be. Several files read as one are listed over
-  // them, so a part is whatever one of these opens, signed as it would be
-  // alone.
+  // Providers for a single file. The multi provider below reads each part
+  // through one of these.
   const single = [
     diskProvider(),
     s3Provider({
@@ -98,24 +81,21 @@ process.parentPort.once("message", (e) => {
       },
       close: () => port.close(),
     },
-    // What this build can reach, written in one place: both the handler list
-    // and the lister list come off this same set of providers.
+    // Handlers and listers both come from this provider set.
     sources([...single, multiProvider(single)]),
     TUNING,
     kept === undefined
       ? undefined
       : {
           connections: kept,
-          // The desktop signs in as this machine, as one of its profiles, or
-          // not at all. Names only: the files are read here, and what else
-          // is in them never leaves this process.
+          // Sign-in modes the connect form offers. Only profile names are
+          // returned; the credential files stay in this process.
           signIns: async () => ({
             modes: ["machine", "profile", "public"],
             profiles: await awsProfiles(),
           }),
           test: (c) => tryConnection(c, { sign: (x) => auth.of(x), endpoint: ENDPOINT }),
-          // A .uno somebody sent reads no bucket this machine has not
-          // connected, and one this machine has is saved naming it.
+          // Matches a workspace's sources against saved connections.
           meet: connectionMeeting(() => kept.all),
         },
     telemetry?.record,

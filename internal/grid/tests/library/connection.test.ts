@@ -1,8 +1,5 @@
-// A connection is a .unof that says where a bucket is and how to sign in to it.
-//
-// What is under test is that the file travels: it reads back as the bytes it
-// was written as, it carries what this build does not know, and it never holds
-// anything a person could sign in with.
+// Tests for connection files (.unof): parsing, byte-for-byte round trips,
+// unknown keys, secret detection, and field validation.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -22,7 +19,7 @@ function fixture(id: string): string {
   return readFileSync(fileURLToPath(new URL(`../testdata/${id}.unof`, import.meta.url)), "utf8");
 }
 
-/** A connection file as an object, so a test can change one key of it. */
+/** The acme-exports fixture parsed as a plain object, for changing one key. */
 function acme(): Record<string, unknown> {
   return JSON.parse(fixture("acme-exports")) as Record<string, unknown>;
 }
@@ -47,8 +44,7 @@ describe("the connection files in testdata", () => {
     expect(c.extra).toBeUndefined();
   });
 
-  // The file is meant to be diffed. A read and a write with nothing changed in
-  // between has to be no change at all.
+  // parse then format gives back the same bytes.
   test("both round-trip byte for byte", () => {
     for (const id of ["acme-exports", "finance-lake"]) {
       const bytes = fixture(id);
@@ -64,8 +60,7 @@ describe("the connection files in testdata", () => {
 });
 
 describe("what this build does not know", () => {
-  // A newer uno may add keys. An older one opening its file must not drop them
-  // and then save the loss back over it.
+  // Unknown keys at the top level and inside auth survive a parse and format.
   test("unknown keys are carried through, around auth and inside it, in name order", () => {
     const o = acme();
     o["zeta"] = { note: "kept" };
@@ -102,7 +97,7 @@ describe("what this build does not know", () => {
     expect(() => parseConnection("acme-exports.unof", text(o))).toThrow(/newer uno/);
   });
 
-  // The other direction of 2.1: a formula in connections/ is not a connection.
+  // A formula file parsed as a connection is refused with its kind named.
   test("a formula is refused by name, and told where it belongs", () => {
     const formula = fixture("unit-margin");
     expect(() => parseConnection("unit-margin.unof", formula)).toThrow(
@@ -144,15 +139,13 @@ describe("a connection never holds a secret", () => {
     expect(() => formatConnection(leaky)).toThrow("auth.aws_session_token looks like a secret");
   });
 
-  // An access key id has a shape of its own, so one pasted under an innocent
-  // name is caught by what it is rather than what it is called.
+  // An AWS access key id is detected by its shape under any key name.
   test("an access key id under any name", () => {
     const c = withKey((o) => (o["note"] = "ask ana for AKIAIOSFODNN7EXAMPLE"));
     expect(() => formatConnection(c)).toThrow("note holds an AWS access key id");
   });
 
-  // A file somebody sent that carries a key is refused on the way in, so it is
-  // never half-loaded into something that could be saved again.
+  // parseConnection refuses a file holding a secret.
   test("the reader refuses one as well", () => {
     const o = acme();
     o["aws_secret_access_key"] = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
@@ -169,8 +162,7 @@ describe("the values that reach outside the file", () => {
     return () => parseConnection("acme-exports.unof", text(o));
   }
 
-  // The bucket becomes part of a hostname, so one that could end the host or
-  // start a path is a different server to sign for.
+  // The bucket becomes part of a hostname, so it must be a valid bucket name.
   test("a bucket that is not a bucket name", () => {
     for (const bucket of ["evil.example/x", "Acme", "a", "acme..exports", "acme@evil"]) {
       expect(
@@ -181,7 +173,7 @@ describe("the values that reach outside the file", () => {
     expect(refused((o) => delete o["bucket"])).toThrow("acme-exports.unof: names no bucket");
   });
 
-  // Without the trailing slash, shop would cover shop-old/ as well.
+  // A prefix is empty, or starts with a name and ends in a slash.
   test("a prefix that is not a folder", () => {
     for (const prefix of ["shop", "/shop/"]) {
       expect(
@@ -195,8 +187,7 @@ describe("the values that reach outside the file", () => {
     expect(refused((o) => (o["region"] = "eu-west-1.evil.example"))).toThrow(/is not a region/);
   });
 
-  // The ARN is what the hosted engine asks STS to let it be, so one that is
-  // not a role's is refused before it is asked for.
+  // roleArn must be an IAM role ARN with a 12-digit account id.
   test("a role that is not a role's ARN", () => {
     for (const roleArn of ["uno-read", "arn:aws:iam::12345:role/uno-read", "arn:aws:s3:::bucket"]) {
       expect(
@@ -244,7 +235,7 @@ describe("which connection covers an address", () => {
     expect(covering([shop], "acme-finance", "shop/a.csv")).toBeUndefined();
   });
 
-  // The trailing slash 2.2 insists on is what keeps shop/ off shop-old/.
+  // The prefix shop/ covers names inside the shop/ folder only.
   test("a prefix is a folder, not the start of a name", () => {
     expect(covering([shop], "acme-exports", "shop-old/a.csv")).toBeUndefined();
   });

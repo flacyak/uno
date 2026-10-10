@@ -1,10 +1,9 @@
-// A stand-in for STS, on localhost: AssumeRole and nothing else.
+// A stand-in for STS, on localhost. It answers AssumeRole only.
 //
-// It checks every request the way STS does. The signature is taken again with
-// the secret of the key that claims to have signed it, for the service "sts",
-// and a role is handed out only to a caller its trust names, with the external
-// ID its trust asks for. A test that gets a session out of it has proved the
-// call was signed right and asked for the right thing.
+// It signs each request again with the secret of the claimed access key and
+// refuses a mismatch. A role is handed out only to a caller its trust names,
+// with the external ID the trust asks for. Every request is recorded in
+// `seen`.
 
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -13,11 +12,14 @@ import { signV4 } from "../../src/store/s3.ts";
 import type { AwsCredentials } from "../../src/store/s3.ts";
 import { amzDate } from "./standin.ts";
 
-/** One role: who may take it on, what it asks of them, and what it hands out. */
+/**
+ * One role: who may assume it, the external ID it needs, and the session it
+ * hands out.
+ */
 export interface Trust {
   /** The access key ids allowed to assume it. */
   callers: string[];
-  /** The external ID the trust policy's condition asks for, where it asks. */
+  /** The external ID the trust requires, if any. */
   externalId?: string;
   /** The session's keys. */
   session: Required<Pick<AwsCredentials, "accessKeyId" | "secretAccessKey" | "sessionToken">>;

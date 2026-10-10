@@ -1,17 +1,16 @@
-// The workspaces opened on this machine, most recent first: what the sidebar
-// lists.
+// The list of recently opened workspace paths, most recent first. The
+// sidebar shows it.
 //
-// A .uno is listed once it has been opened from a path or saved to one. The
-// list is this machine's, kept the way the theme and the input strategy are,
-// and it holds paths and nothing else: a workspace that moved or was deleted
-// is found out when it is opened, and says so then.
+// A .uno path is added when it is opened or saved. The list is kept in local
+// storage and holds only paths. A path deleted since is only found out
+// when it is opened.
 
 import type { Keeps } from "./theme.ts";
 
-/** Where the list is kept. */
+/** Storage key for the list. */
 export const RECENTS_KEY = "uno.recents";
 
-/** The most the list holds. The one opened longest ago goes first. */
+/** Maximum list length. The oldest entry is dropped first. */
 export const RECENTS_MAX = 30;
 
 export class Recents {
@@ -21,17 +20,17 @@ export class Recents {
     this.paths = read(kept.getItem(RECENTS_KEY));
   }
 
-  /** Every workspace kept, most recently opened first. */
+  /** All kept paths, most recently opened first. */
   get all(): readonly string[] {
     return this.paths;
   }
 
-  /** opened puts a workspace at the top: it was opened, or saved, just now. */
+  /** Moves a path to the top of the list, adding it if needed. */
   opened(path: string): void {
     this.keep([path, ...this.paths.filter((p) => p !== path)].slice(0, RECENTS_MAX));
   }
 
-  /** forget takes a workspace off the list. The file is left where it is. */
+  /** Removes a path from the list. The file itself is untouched. */
   forget(path: string): void {
     this.keep(this.paths.filter((p) => p !== path));
   }
@@ -43,9 +42,8 @@ export class Recents {
 }
 
 /**
- * read is the list as it was kept. Anything else in its place -- nothing, a
- * value another build wrote, a file edited by hand -- reads as an empty list,
- * since a list of recents is not worth refusing to start over.
+ * Parses the stored list. Missing or malformed storage returns an empty
+ * list. Duplicates and empty strings are dropped.
  */
 function read(kept: string | null): string[] {
   if (kept === null) return [];

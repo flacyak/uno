@@ -9,40 +9,34 @@ export type Input = Parameters<BrowserWindow["webContents"]["sendInputEvent"]>[0
 export interface Check {
   name: string;
   /**
-   * Something only smoke.js can do, asked of it before the check runs and
-   * answered once it is done: `rewrite <key>` writes the stand-in's object at
-   * <key> over with other bytes of the same size, and `put <key> ...` puts
-   * the objects it holds for those keys into the bucket. The stand-in bucket
-   * lives in smoke.js, so a change a person would make in the bucket is made
-   * there.
+   * A request to smoke.js, sent before the check runs and waited on until it
+   * is done: `rewrite <key>` rewrites the stand-in's object at <key> with one
+   * digit changed, and `put <key> ...` puts the objects it holds for those
+   * keys into the bucket.
    */
   ask?: string;
   /**
-   * A menu item's message and what it carries, sent before the check runs the
-   * way the menu sends it. An accelerator is the main process's, so a key the
-   * page dispatches never reaches one.
+   * A menu item's message and its arguments, sent to the renderer before the
+   * check runs, the way the menu sends it.
    */
   send?: readonly [channel: string, ...args: unknown[]];
   /**
-   * Input sent before the check runs, down the path the window system sends a
-   * person's. The window is driven, so it drops all of it unless `through` is set.
+   * Input events sent to the window before the check runs, by the path a
+   * person's input takes. The window is driven, so it takes them only when
+   * `through` is set.
    */
   input?: { events: readonly Input[]; through: boolean };
-  /**
-   * A check over `Page`, for the ones that only ever need what `Page` can say.
-   * Returns a message on failure, or "" when it passes.
-   */
+  /** A check over `Page`. Returns a message on failure, or "" on success. */
   run?: (page: Page) => Promise<string>;
   /**
-   * A check that still needs the renderer itself: real layout, the real
-   * preload bridge, or a person's own input. Runs in the renderer, wrapped in
-   * index.ts's PRELUDE. Exactly one of `run` or `script` is set.
+   * A check that runs in the renderer, as an async function body wrapped in
+   * index.ts's PRELUDE. Returns the same as `run`. Exactly one of `run` or
+   * `script` is set.
    */
   script?: string;
   /**
-   * A picture of the window to take once the check passes, named so: for the
-   * states a list of green ticks cannot show -- a form half filled in, the
-   * line a refusal left. Written beside window.png.
+   * The name of a screenshot to take once the check passes. Written as
+   * <name>.png beside window.png.
    */
   shot?: string;
 }

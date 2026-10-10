@@ -1,10 +1,7 @@
-// Each request signed the way the connection covering it says to.
+// connectionSigning: each request signed by the connection covering it.
 //
-// Before this, one set of credentials signed everything an engine sent, so a
-// workspace could only ever read the buckets one profile could. What is under
-// test is the choice: which connection covers an address, what each way of
-// signing in sends, and that a connection saved while the engine runs is the
-// one its next request uses.
+// Which connection covers an address, what each auth mode sends, and that a
+// connection saved while the engine runs is used by its next request.
 
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,9 +39,8 @@ beforeAll(async () => {
 afterAll(() => b.close());
 
 /**
- * The environment of a machine with the two profiles and, unless a test says
- * otherwise, no keys of its own: whatever the developer's shell exports is
- * cleared, so nothing a test reads was signed by anybody but the files here.
+ * The environment of a machine with the two profiles and, when `machine` is
+ * given, its own keys.
  */
 function env(machine?: AwsCredentials): Record<string, string | undefined> {
   return profilesEnv(aws, machine);
@@ -98,7 +94,6 @@ function keysFor(bucketName: string): string[] {
 }
 
 describe("which connection signs", () => {
-  // The task's own sentence.
   test("two connections on two profiles read two buckets in one workspace", async () => {
     const { engine: e, done } = await engine([
       connection("finance", "acme-finance", { mode: "profile", profile: "finance" }),
@@ -117,8 +112,7 @@ describe("which connection signs", () => {
     }
   });
 
-  // A connection that names the wrong profile gets that profile's refusal,
-  // and the refusal says which connection and which profile it was.
+  // The refusal names the connection and the profile.
   test("a profile without access to a bucket is refused, named", async () => {
     const { engine: e, done } = await engine([
       connection("marketing", "acme-finance", { mode: "profile", profile: "marketing" }),
@@ -148,8 +142,6 @@ describe("which connection signs", () => {
     }
   });
 
-  // An address somebody pasted, in a bucket nobody connected, reads the way
-  // it did before connections existed.
   test("an address no connection covers signs with the machine's own credentials", async () => {
     const { engine: e, done } = await engine([], KEYS);
     try {
@@ -166,8 +158,6 @@ describe("which connection signs", () => {
 });
 
 describe("the ways a connection signs in", () => {
-  // Nobody's name goes in the bucket owner's logs for a read that never
-  // needed one.
   test("public reads a bucket without signing anything", async () => {
     const { engine: e, done } = await engine(
       [connection("census", "open-data", { mode: "public" })],
@@ -199,8 +189,6 @@ describe("the ways a connection signs in", () => {
     }
   });
 
-  // A role is the hosted engine's, taken on with the requesting account's
-  // external ID. The desktop does not try it with whatever it has.
   test("role is refused by name on the desktop", async () => {
     const roleArn = "arn:aws:iam::210987654321:role/uno-read";
     const { engine: e, done } = await engine(
@@ -234,8 +222,6 @@ describe("the ways a connection signs in", () => {
   });
 });
 
-// 2.4's sentence, now for signing: a connection saved while the engine runs is
-// the one its next request signs with, without starting it again.
 test("a connection saved while the engine runs signs its next request", async () => {
   const { engine: e, done, store, dir } = await engine([]);
   try {

@@ -14,9 +14,8 @@ function noted(): Sheet {
   );
 }
 
-// A notation cell keeps the markdown someone typed and shows the symbols it
-// describes. Both halves matter: the source is what they edit and what a diff
-// reads, and the symbols are what the grid draws.
+// A notation cell stores the typed source as raw and displays the rendered
+// symbols.
 test("a notation cell stores its source and shows its symbols", () => {
   const s = noted();
   s.note(0, 0, "x^2");
@@ -25,8 +24,7 @@ test("a notation cell stores its source and shows its symbols", () => {
   expect(s.display(0, 0)).toBe("x²");
 });
 
-// The whole point of refusing at authoring time is that a person finds out
-// while they are still typing, rather than finding an empty box in a cell later.
+// note throws on a symbol outside the font and leaves the log as it was.
 test("a symbol the font cannot draw is refused when it is typed", () => {
   const s = noted();
 
@@ -35,8 +33,8 @@ test("a symbol the font cannot draw is refused when it is typed", () => {
   expect(s.editCount(), "the refused note was recorded").toBe(0);
 });
 
-// One cache serves both kinds. A notation cell fills its own entry, and every
-// other cell in that column still falls through to what it stores.
+// A notation cell changes only its own display; other cells in the column
+// still show their stored values.
 test("a notation cell leaves the rest of its column alone", () => {
   const s = noted();
   s.set(1, 0, "plain");
@@ -46,8 +44,7 @@ test("a notation cell leaves the rest of its column alone", () => {
   expect(s.display(1, 0)).toBe("plain");
 });
 
-// Notation replays out of the log like everything else, which is what lets the
-// file store the source and rebuild the symbols rather than storing both.
+// Replaying a note edit renders the same symbols from the source.
 test("notation replays from its source", () => {
   const s = noted();
   s.note(0, 0, "e^{x}");
@@ -58,9 +55,8 @@ test("notation replays from its source", () => {
   expect(replayed.display(0, 0)).toBe(s.display(0, 0));
 });
 
-// Binding over notation would leave the sources stored and stop drawing them,
-// because recalculation replaces a column's cache wholesale. That is a loss a
-// person would have to spot for themselves, so it is refused instead.
+// bind throws on a column that holds notation. The error mentions notation
+// and the cell keeps drawing.
 test("a formula cannot be bound over a column holding notation", () => {
   const s = noted();
   s.note(0, 0, "x^2");
@@ -77,8 +73,7 @@ test("a formula cannot be bound over a column holding notation", () => {
   expect(s.display(0, 0), "the notation should still be drawn").toBe("x²");
 });
 
-// And the other way round: a derived column shows what it computes, so there is
-// nowhere in it to put notation.
+// note throws on a bound column.
 test("notation cannot be written into a bound column", () => {
   const s = noted();
   s.bind(0, parse("value * 2"));

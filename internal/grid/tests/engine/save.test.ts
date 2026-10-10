@@ -1,10 +1,7 @@
 // The engine and a .uno: opening one with its log applied, saving back, and a
-// workspace of several sources.
-//
-// A save points at the files it can name and carries the ones it cannot, so
-// most of what follows is about paths: where they are written down, what
-// happens when one stops resolving, and what a person gets back when they point
-// the source at a file again.
+// workspace of several sources. A save points at sources with a path and
+// carries the rest, so most tests are about paths: how they are written,
+// what happens when one stops resolving, and relinking.
 
 import { strFromU8, unzipSync, zipSync } from "fflate";
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -31,17 +28,16 @@ import { Op } from "../../src/sheet/index.ts";
 import { COLS, ROWS, UNITS } from "../testdata/sales-q3.ts";
 import { FIXTURE, bytes, connect, indexed, openOne, saidIn } from "./harness.ts";
 
-/** A carry limit the 240 KB fixture fits under, and one it does not. */
+/** A carry limit the 240 KB fixture fits under, and one it overflows. */
 const ROOMY = 1 << 20;
 const CRAMPED = 1 << 10;
 
-/** A second export, small and of another shape, for a workspace of two. */
+/** A second, small export of another shape. */
 const ADS = "Ad_Date,Cost\n2024-11-16,$12.50\n20-11-2024,$8.00\n2024/11/16,$3.10\n";
 const ADS_ROWS = 3;
 const COST = 1;
 
-/** Where a save should leave one source, and that it was showing. `at` is where
- * the .uno itself goes, which is what its pointers are written relative to. */
+/** A save place showing `source` at `row`, `col`, with the .uno at `uno`. */
 function at(source: SourceHandle, row: number, col: number, uno = "") {
   return { source: source.id, cells: [{ source: source.id, row, col }], at: uno };
 }
@@ -52,7 +48,7 @@ function only(doc: Document) {
   return sheet!;
 }
 
-/** What the manifest says about each source, which is where a path shows up. */
+/** The manifest's sources. */
 function listed(uno: Uint8Array): Source[] {
   return readContainer("test.uno", uno).manifest.sources;
 }
@@ -105,8 +101,6 @@ test("a .uno opens with its log applied, and saves back", async () => {
   }
 });
 
-// The point of the whole thing: a workspace of large sources is a small file,
-// because the data stays where it already was.
 test("a source opened from a path is pointed at, not copied", async () => {
   const { engine, done } = connect();
   try {
@@ -114,8 +108,7 @@ test("a source opened from a path is pointed at, not copied", async () => {
     await indexed(src);
     const uno = await engine.save(at(src, 0, 0), CRAMPED);
 
-    // Under a limit a quarter the size of the source, because none of it is in
-    // here.
+    // Under a limit far smaller than the source.
     expect(uno.length).toBeLessThan(CRAMPED);
     const [s] = listed(uno);
     expect(s!.path).toBe(FIXTURE);
@@ -135,8 +128,6 @@ test("a source opened from a path is pointed at, not copied", async () => {
   }
 });
 
-// Move the folder, and the workspace still opens: a source under the .uno's own
-// folder is written down relative to it.
 test("a source beside the workspace is pointed at relative to it, and survives the move", async () => {
   const here = await scratch();
   const there = await scratch();
@@ -157,7 +148,7 @@ test("a source beside the workspace is pointed at relative to it, and survives t
   }
   expect(listed(uno)[0]!.path).toBe("sales-q3.csv");
 
-  // The same two files, somewhere else entirely, opened from their new home.
+  // Both files moved to another folder and opened from there.
   await writeFile(join(there, "q3.uno"), uno);
   await copyFile(FIXTURE, join(there, "sales-q3.csv"));
   await rm(here, { recursive: true, force: true });
@@ -173,8 +164,6 @@ test("a source beside the workspace is pointed at relative to it, and survives t
   }
 });
 
-// A moved CSV costs its rows and nothing else. The edits made through it are in
-// the log, and the log is the only place they ever were.
 test("a source whose file has gone opens as itself, without its rows", async () => {
   const dir = await scratch();
   const csv = join(dir, "ads.csv");
@@ -215,7 +204,7 @@ test("a source whose file has gone opens as itself, without its rows", async () 
     expect(ads.opened.edits, "the edit made through it is still here").toHaveLength(1);
     await expect(ads.rows(0, 1)).rejects.toThrow("point it at one to read its rows");
 
-    // And saving again writes the source back untouched rather than dropping it.
+    // A save keeps the missing source and its log.
     const again = await second.engine.save(
       { source: "sales-q3", cells: [], at: join(dir, "q3.uno") },
       ROOMY,
@@ -245,8 +234,7 @@ test("pointing a source at a file again replays its edits over it", async () => 
   }
   await writeFile(join(dir, "ads.uno"), uno);
 
-  // The same export, saved somewhere else under another name, which is what
-  // moving a file actually looks like a week later.
+  // The same file under another name, with the original removed.
   await writeFile(join(dir, "elsewhere.csv"), ADS);
   await rm(was);
 
@@ -255,7 +243,7 @@ test("pointing a source at a file again replays its edits over it", async () => 
     const gone = await openOne(second.engine, { name: "ads.uno", path: join(dir, "ads.uno") });
     expect(gone.opened.link?.missing).toBeDefined();
 
-    // A file that cannot take the log leaves the source as it was.
+    // A relink to a file too short for the log to replay on is refused.
     await writeFile(join(dir, "short.csv"), "Ad_Date,Cost\n");
     await expect(
       second.engine.relink(gone, { name: "short.csv", path: join(dir, "short.csv") }),
@@ -274,7 +262,7 @@ test("pointing a source at a file again replays its edits over it", async () => 
       "$3.10",
     ]);
 
-    // And the save now points at where it was actually found.
+    // The save points at the new path.
     const again = await second.engine.save(at(back, 0, COST, join(dir, "ads.uno")), ROOMY);
     expect(listed(again)[0]!.path).toBe("elsewhere.csv");
   } finally {
@@ -282,8 +270,6 @@ test("pointing a source at a file again replays its edits over it", async () => 
   }
 });
 
-// The file is there, and is not the file the log was written against. Said out
-// loud, and not acted on: the rows may be fine, and only the person can tell.
 test("a source whose file changed size opens and says so", async () => {
   const dir = await scratch();
   const csv = join(dir, "ads.csv");
@@ -311,8 +297,6 @@ test("a source whose file changed size opens and says so", async () => {
   }
 });
 
-// The work the CPA plan starts from: several exports in one workspace, each
-// fixed where it is, saved as one file and opened again whole.
 test("sources added to one workspace save and reopen together", async () => {
   const dir = await scratch();
   const adsPath = join(dir, "Google Ads.csv");
@@ -328,7 +312,7 @@ test("sources added to one workspace save and reopen together", async () => {
     expect(ads.opened.columns.map((c) => c.header)).toEqual(["Ad_Date", "Cost"]);
     await indexed(sales);
 
-    // Edits in turn across the two, the way a person moves between tabs.
+    // Edits alternate between the two sources.
     engine.mode(true);
     await sales.edit({ op: Op.Set, row: 0, col: UNITS, now: "1204" });
     await ads.edit({ op: Op.Set, row: 0, col: COST, now: "12.50" });
@@ -339,7 +323,7 @@ test("sources added to one workspace save and reopen together", async () => {
       "$3.10",
     ]);
 
-    // Undo takes back the tab's own last edit, not the workspace's.
+    // Undo takes back the source's own last edit.
     const undone = await ads.undo();
     expect(undone.edit).toMatchObject({ op: "set", row: 0, col: COST });
     await ads.redo();
@@ -365,10 +349,10 @@ test("sources added to one workspace save and reopen together", async () => {
   expect(back.sources.map((s) => s.name)).toEqual(["sales-q3.csv", "Google Ads.csv"]);
   expect(back.active).toBe("google-ads");
   expect(back.sources[1]!.state.active).toEqual({ row: 0, col: COST });
-  // One is somewhere else on the disk and one is beside the workspace.
+  // One path is absolute. The one beside the .uno is relative.
   expect(back.manifest.sources.map((s) => s.path)).toEqual([FIXTURE, "Google Ads.csv"]);
 
-  // The redo went on the end of the log, which is when it was made.
+  // The redone edit is at the end of the log.
   const lines = strFromU8(unzipSync(uno)[LOG_ENTRY]!).trim().split("\n");
   expect(lines.map((l) => (JSON.parse(l) as { source: string }).source)).toEqual([
     "sales-q3",
@@ -376,7 +360,7 @@ test("sources added to one workspace save and reopen together", async () => {
     "google-ads",
   ]);
 
-  // And the engine opens it again as the same two sources, off the same files.
+  // Reopened as the same two sources.
   const second = connect();
   try {
     const { sources, showing } = await second.engine.open({
@@ -426,8 +410,6 @@ test("removing a source takes its edits out of the log, and keeps the last one",
   }
 });
 
-// The ceiling that is left: bytes uno has nothing to point at, which a
-// container either carries or loses.
 test("sources with no file behind them are refused over the limit, counted", async () => {
   const { engine, done } = connect();
   try {
@@ -445,10 +427,8 @@ test("sources with no file behind them are refused over the limit, counted", asy
   }
 });
 
-// uno could not read these bytes, which is not a reason for uno to be the thing
-// that finally loses them.
 test("a carried source that will not open keeps its bytes through a save", async () => {
-  const broken = new Uint8Array(); // an empty entry, which no decoder takes
+  const broken = new Uint8Array(); // an empty entry, which every decoder refuses
   const uno = writeDocument({
     manifest: newManifest(),
     sources: [
@@ -466,9 +446,7 @@ test("a carried source that will not open keeps its bytes through a save", async
     extra: new Map(),
     at: "",
   });
-  // Swap the entry for something no decoder will take, and keep the manifest
-  // honest about it: a hash that does not match is a damaged file, not a
-  // source that will not open.
+  // Swap in the broken entry and update the manifest's size and hash to match.
   const entries = unzipSync(uno);
   entries["data/source.csv"] = broken;
   const manifest = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as {
@@ -506,9 +484,6 @@ test("a .uno opens only into an empty workspace", async () => {
   }
 });
 
-// A .uno is written where the person says, and one of the places they can say
-// is the file a source is read from: the dialog offers the folder the data is
-// in, and sales.csv is a name that is already there.
 test("saving the workspace over one of its own files is refused", async () => {
   const dir = await scratch();
   const csv = join(dir, "ads.csv");
@@ -520,7 +495,7 @@ test("saving the workspace over one of its own files is refused", async () => {
     await expect(engine.save(at(ads, 0, 0, csv), ROOMY)).rejects.toThrow(
       `${csv} is where ads.csv is read from · saving the workspace there would write over it`,
     );
-    // The same name in another folder is just a name.
+    // The same name in another folder is allowed.
     const other = await scratch();
     expect(listed(await engine.save(at(ads, 0, 0, join(other, "ads.csv")), ROOMY))).toHaveLength(1);
   } finally {
@@ -528,9 +503,8 @@ test("saving the workspace over one of its own files is refused", async () => {
   }
 });
 
-// A file opened by a path relative to the process that opened it -- `uno
-// data/sales.csv` from a terminal -- is nowhere a .uno can point from: written
-// down as it is, the path would be read back from the .uno's own folder.
+// A .uno points at a source by an absolute path, so a save of a source opened
+// by a relative path is refused.
 test("a source opened by a path that is true from nowhere is not pointed at", async () => {
   const dir = await scratch();
   const here = relative(process.cwd(), FIXTURE);

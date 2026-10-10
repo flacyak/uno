@@ -1,25 +1,25 @@
-// Shooting docs/preview.gif.
+// Records docs/preview.gif.
 //
-// The app films itself -- see src/main/preview.ts for why -- and this is the
-// half that lives outside it: set the scene, start the real built app on it,
-// then turn the frames it left behind into a GIF.
+// The app films itself (src/main/preview.ts). This script sets the scene,
+// starts the built app on it, then turns the frames it wrote into a GIF.
 //
-// There are seven stories. `browse`, the README's, finds a workspace's moved
-// export again through the sources panel, then tries the themes in settings.
-// `sidebar` moves between the workspaces in the sidebar, puts a formula into
-// one from a right click, and makes a new one from the + at its foot; it goes
-// to docs/sidebar.gif, beside the README's. `edit` fixes three cells of the
-// fixture and applies the offer to fix the rest. `refresh` reopens a workspace
-// whose export in a bucket was regenerated since, sees it regenerated again on
-// coming back to the window, and reloads it; it is filmed against the stand-in
-// bucket, and goes to out/refresh.gif rather than the README's. `opening`
-// adds an export from a bucket made slow, and watches its line in the sources
-// panel while it opens; it is filmed against the stand-in too, and goes to
-// out/opening.gif. `connecting` connects that slow bucket from the panel's
-// form, and watches the connection's line while it is tried and kept; it goes
-// to out/connecting.gif. `refused` is that with the bucket's name mistyped:
-// the line fails, and is chosen to edit the connection; it goes to
-// out/refused.gif.
+// The stories:
+// - `browse` (the README's): finds a workspace's moved export through the
+//   sources panel, then tries the themes in settings.
+// - `sidebar`: moves between workspaces in the sidebar, inserts a formula from
+//   a right click, and opens a new one from the +. Goes to docs/sidebar.gif.
+// - `edit`: fixes three cells of the fixture and applies the offer to fix the
+//   rest.
+// - `refresh`: reopens a workspace whose export in the bucket was rewritten,
+//   sees it rewritten again on focus, and reloads it. Filmed against the
+//   stand-in bucket. Goes to out/refresh.gif.
+// - `opening`: adds an export from a bucket with latency and watches its line
+//   in the sources panel while it opens. Goes to out/opening.gif.
+// - `connecting`: connects that bucket from the panel's form and watches the
+//   connection's line while it is tested and saved. Goes to
+//   out/connecting.gif.
+// - `refused`: the same with the bucket's name mistyped. The line fails and
+//   is chosen to edit the connection. Goes to out/refused.gif.
 //
 // Usage: node scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
 // (after node scripts/build.js)
@@ -47,7 +47,7 @@ const testdata = join(pkg, "../grid/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 
 const STORIES = ["browse", "sidebar", "edit", "refresh", "opening", "connecting", "refused"];
-/** The stories filmed against the stand-in bucket, whose GIFs go to out/. */
+/** The stories filmed against the stand-in bucket. Their GIFs go to out/. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
@@ -55,21 +55,18 @@ if (!STORIES.includes(story)) {
   process.exit(2);
 }
 
-// The frames are scratch; the GIF is the artefact, and it goes where the rest of
-// the shots of this app go.
+// The frames are scratch. The GIF goes to docs/, or to out/ for the stories
+// filmed against the bucket.
 const frames = join(pkg, "out/preview");
 const takes = join(root, "docs");
 const gif = AGAINST_BUCKET.includes(story)
   ? join(pkg, `out/${story}.gif`)
   : join(takes, story === "sidebar" ? "sidebar.gif" : "preview.gif");
 
-/** What the GIF is resampled to. Twelve is enough for a caret and a scroll to
- * look continuous, and low enough that sixteen seconds of a mostly still window
- * stays a file worth putting in a README. */
+/** The frame rate the GIF is resampled to. */
 const FPS = 12;
 
-/** The window is filmed at its real 1100x720 and scaled here, because scaling
- * once at the end is sharper than filming small. */
+/** The GIF's width. The window is filmed at 1100x720 and scaled here. */
 const WIDTH = 1100;
 
 await rm(frames, { recursive: true, force: true });
@@ -78,18 +75,13 @@ await mkdir(takes, { recursive: true });
 
 /**
  * stage lays out the folder the browse story is filmed in: a workspace saved
- * over the fixture with three cells fixed, and the fixture renamed since, the
- * way an export gets a "-final" on the end the week after. Beside it, another
- * export and a folder of last year's.
- *
- * The workspace is saved by the engine itself, so the scene is a real .uno and
- * a real missing source rather than one written by hand to look like one. It
- * returns the .uno's path, which is what the app opens.
+ * over the fixture with three cells fixed, the fixture renamed to
+ * sales-q3-final.csv since, another export beside it, and a folder of last
+ * year's. Returns the .uno's path.
  */
 async function stage() {
-  // Under the temp folder rather than out/, because the status bar says where a
-  // missing file was, and the GIF is published: a path into somebody's home
-  // folder does not belong in it.
+  // Under the temp folder: the status bar shows the missing file's path, and
+  // the GIF is published.
   const dir = await freshDir("exports");
   await mkdir(join(dir, "2024"), { recursive: true });
   const csv = join(dir, "sales-q3.csv");
@@ -98,7 +90,7 @@ async function stage() {
   await copyFile(join(testdata, "google-ads-sales.csv"), join(dir, "google-ads.csv"));
   await copyFile(join(testdata, "google-ads-sales.csv"), join(dir, "2024", "google-ads-2024.csv"));
 
-  // The three the edit story fixes: `units` with a thousands separator in it.
+  // The three cells the edit story fixes, in the units column.
   const fixes = [
     [0, 4, "1204"],
     [2, 4, "1455"],
@@ -109,10 +101,7 @@ async function stage() {
   return uno;
 }
 
-/**
- * freshDir is an empty folder under the temp folder for one story's scene,
- * emptied of the last take's.
- */
+/** freshDir returns an empty folder under the temp folder for one story. */
 async function freshDir(name) {
   const dir = join(tmpdir(), "uno-preview", name);
   await rm(dir, { recursive: true, force: true });
@@ -122,10 +111,8 @@ async function freshDir(name) {
 
 /**
  * savedWorkspace saves a workspace at `uno` over the export `ref` names, with
- * `edits` made to it, each a row, a column and a value, and left on `cell`.
- *
- * The workspace is saved by the engine itself, so a scene is a real .uno
- * rather than one written by hand to look like one. `more` is the providers
+ * `edits` applied (each a row, a column and a value) and the selection left
+ * on `cell`. The engine itself writes the file. `more` is extra providers
  * beside the disk's, for an export in a bucket.
  */
 async function savedWorkspace(uno, ref, edits, cell, more = []) {
@@ -146,13 +133,13 @@ async function savedWorkspace(uno, ref, edits, cell, more = []) {
     const cells = [{ source: src.id, ...cell }];
     await writeFile(uno, await engine.save({ source: src.id, cells, at: uno }, 1 << 20));
   } finally {
-    // Only the client's end is closed: closing the engine's end too would drop
-    // the close request unread, and the engine would never close its files.
+    // Only the client's end is closed. Closing the engine's end too would
+    // drop the close request before the engine reads it.
     engine.close();
   }
 }
 
-/** bucketConnection is this machine's connection to the stand-in bucket's 2025 prefix. */
+/** A connection to the stand-in bucket's 2025/ folder, with machine auth. */
 function bucketConnection(bucket, region) {
   return {
     format: 1,
@@ -168,23 +155,22 @@ function bucketConnection(bucket, region) {
   };
 }
 
-/** The column the sidebar story's formula goes into, added at the end of an export. */
+/** The column the sidebar story's formula goes into, added to the export. */
 const COMMISSION = "commission";
 
 /**
  * stageSidebar lays out the sidebar story: three workspaces in three folders,
- * each saved by the engine over an export of its own, and a fourth export
- * that is no workspace yet, which is what the + opens.
+ * each saved by the engine over its own export, and a fourth export with no
+ * workspace yet, which the + opens.
  *
  * The export of the workspace the take begins on has an empty commission
- * column at its end, for the formula to go into. It answers with the
- * workspaces in the order to open them, the one the take begins on last, and
- * the export for the +.
+ * column at its end for the formula. Returns the workspaces in the order to
+ * open them, the one the take begins on last, and the export for the +.
  */
 async function stageSidebar() {
   const dir = await freshDir("sidebar");
 
-  // The fixture with one more column, named and empty in every row.
+  // The fixture with one more column, named in the header and empty below.
   const lines = (await readFile(fixture, "utf8")).trimEnd().split(/\r?\n/);
   const widened = lines.map((line, i) => `${line},${i === 0 ? COMMISSION : ""}`).join("\n");
 
@@ -220,9 +206,9 @@ const REFRESH_KEY = "2025/ads-q3.csv";
 
 /**
  * stageRefresh lays out the refresh story: the stand-in bucket holding an
- * export, a workspace a colleague saved over it with three campaign names
- * corrected, and the export regenerated since at the same size. It answers
- * with the .uno to open, the bucket, and the connection this machine has to it.
+ * export, a workspace saved over it with three campaign names corrected, and
+ * the export rewritten since at the same size. Returns the .uno to open, the
+ * bucket, and this machine's connection to it.
  */
 async function stageRefresh() {
   const { s3Provider } = await import("@uno/grid/store/s3");
@@ -250,15 +236,14 @@ async function stageRefresh() {
   return { uno, standin, connection };
 }
 
-/** The exports the opening story's bucket holds, by key: the first is the one added. */
+/** The exports the opening story's bucket holds. The first is the one added. */
 const OPENING_KEYS = ["2025/ads-q3.csv", "2025/ads-q4.csv", "2025/orders-q3.csv"];
 
 /**
  * stageOpening lays out the opening story: the stand-in bucket holding three
- * exports, the connection this machine has to it, and the fixture on disk to
- * open first. It answers in stageRefresh's shape, with the fixture where the
- * .uno is. The connecting story is the same scene with no connection kept,
- * since making one is its story.
+ * exports, this machine's connection to it, and the fixture on disk to open
+ * first. Returns stageRefresh's shape, with the fixture as the .uno. With
+ * `connected` false the connection is left out, for the connecting story.
  */
 async function stageOpening(connected) {
   const { BUCKET, bucket } = await import("../../grid/tests/store/standin.ts");
@@ -270,8 +255,7 @@ async function stageOpening(connected) {
     undefined,
     new Map(OPENING_KEYS.map((key) => [key, ads])),
   );
-  // Under the temp folder, as the browse story's files are: a path into
-  // somebody's home folder does not belong in a published GIF.
+  // Under the temp folder, so the path in the GIF is a temp one.
   const csv = join(await freshDir("opening"), "sales-q3.csv");
   await copyFile(fixture, csv);
 
@@ -286,8 +270,8 @@ const remote =
       ? await stageOpening(story === "opening")
       : undefined;
 const sidebar = story === "sidebar" ? await stageSidebar() : undefined;
-// The sidebar story opens its own workspaces once the window is up, so it is
-// started on none.
+// The sidebar story opens its own workspaces once the window is up, so the
+// app starts with none.
 const opened =
   sidebar !== undefined ? [] : [story === "browse" ? await stage() : (remote?.uno ?? fixture)];
 
@@ -298,16 +282,14 @@ if (displayMissing(process.env, process.platform)) {
   process.exit(2);
 }
 
-// The app's own data -- its connections, the page's storage, the theme -- for
-// this take only, emptied first. The GIF is published, so it must show none of
-// the connections of whoever films it, and a theme the story chooses must not
-// become the one their own uno opens in.
+// The app's own data (connections, page storage, theme), for this take only
+// and emptied first. The GIF is published, and shows only this take's
+// connections and theme.
 const data = join(pkg, "out/preview-data");
 await rm(data, { recursive: true, force: true });
 
-// A story told against the bucket has a machine of its own: the connection to
-// the bucket, AWS files of its own so no profile of whoever films it can reach
-// a published GIF, and the stand-in's address and keys.
+// A story filmed against the bucket gets its own connection, empty AWS files
+// in place of the machine's own, and the stand-in's address and keys.
 let aws = {};
 if (remote !== undefined) {
   const { saveConnection } = await import("@uno/grid/store");
@@ -328,8 +310,8 @@ if (remote !== undefined) {
   };
 }
 
-// The sidebar story's workspaces, and what its + opens in place of the dialog
-// a driven window cannot answer.
+// The sidebar story's workspaces, and the file its + opens in place of the
+// dialog.
 const scene =
   sidebar === undefined
     ? {}
@@ -339,9 +321,9 @@ const scene =
       };
 
 /**
- * answer does what the story asked of this script, which holds the stand-in:
- * `rewrite <key>` regenerates the object, and `latency <ms>` is how long the
- * stand-in takes over each answer from here on.
+ * answer handles what the story asks of this script: `rewrite <key>` rewrites
+ * the object, and `latency <ms>` sets how long the stand-in delays each
+ * answer from here on.
  */
 function answer(what) {
   const [verb, key] = what.split(" ");
@@ -381,30 +363,22 @@ if (failed !== undefined) {
 
 const { total, frames: shots } = JSON.parse(await readFile(join(frames, "frames.json"), "utf8"));
 
-// The playlist is what carries the camera's real timing into the encoder. Handing
-// ffmpeg a directory of PNGs instead would assert they were evenly spaced, and a
-// grab takes as long as it takes.
+// The playlist carries each frame's real duration into the encoder.
 const list = join(frames, "playlist.txt");
 let text = "ffconcat version 1.0\n";
 for (const [i, f] of shots.entries()) {
   const end = i + 1 < shots.length ? shots[i + 1].at : total;
   text += `file ${join(frames, f.file)}\nduration ${((end - f.at) / 1000).toFixed(4)}\n`;
 }
-// The concat demuxer reads a duration as the gap before the next entry, so the
-// last frame needs one more mention to be held rather than flashed.
+// The concat demuxer reads a duration as the gap before the next entry, so
+// the last frame is listed once more to hold it.
 if (shots.length > 0) text += `file ${join(frames, shots[shots.length - 1].file)}\n`;
 await writeFile(list, text);
 
-// The palette is generated from the recording itself in the same pass that uses
-// it: 256 colours chosen from these frames rather than from a fixed web palette
-// is the difference between readable 12px text and a dithered mess. Most of this
-// window is unchanged most of the time, so the palette is spent on what moves,
-// and only the rectangle that moved is rewritten in each frame.
-//
-// Nothing is dithered. Dithering trades bytes for gradients, and this window has
-// none -- flat panels, a rule, and antialiased text. Turning it off is both a
-// fifth off the file and a cleaner picture, because bayer noise across a white
-// grid is the only gradient there would have been.
+// The palette is generated from the frames themselves, in the same pass that
+// uses it. stats_mode=diff spends the palette on what changes between frames,
+// and diff_mode=rectangle rewrites only the rectangle that changed. Each
+// pixel takes its nearest palette colour (dither=none).
 const filter =
   `fps=${FPS},scale=w=min(${WIDTH}\\,iw):h=-1:flags=lanczos,split[a][b];` +
   `[a]palettegen=stats_mode=diff[p];` +

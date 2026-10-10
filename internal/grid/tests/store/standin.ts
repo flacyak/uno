@@ -1,16 +1,10 @@
 // A stand-in for S3, on localhost.
 //
-// Reaching a real bucket costs credentials, a network and somebody's money, so
-// nothing but s3.live.test.ts does it. Everything else runs against this: it
-// checks every request's signature the way S3 does, answers ranges, lists a
-// prefix the way ListObjectsV2 does, redirects a request signed for the wrong
-// region, and serves objects out of a Map. A test that reads bytes out of it has
-// proved the signature was right, because a signature that is wrong in one byte
-// gets a 403 here too.
-//
-// It lives beside the tests rather than inside one because the desktop smoke
-// run starts the same server, and two stand-ins that drift apart would be two
-// different S3s to be correct against.
+// It checks every request's signature the way S3 does, answers HEAD and
+// ranged GET, lists a prefix the way ListObjectsV2 does, redirects a request
+// signed for the wrong region, and serves objects out of a Map. Every test
+// but s3.live.test.ts runs against it. The desktop smoke run starts the same
+// server.
 
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
@@ -31,9 +25,8 @@ export const KEYS: AwsCredentials = {
 };
 
 /**
- * keysOnly is the environment of a machine that holds the stand-in's keys and
- * nothing else: no profile, and no ~/.aws to read one from, so nothing a test
- * signs was signed by anybody but KEYS.
+ * keysOnly is an environment holding the stand-in's keys only: the profile
+ * cleared, and config paths that point at missing files.
  */
 export function keysOnly(region: string = HOME_REGION): Record<string, string | undefined> {
   return {
@@ -46,42 +39,33 @@ export function keysOnly(region: string = HOME_REGION): Record<string, string | 
   };
 }
 
-/** Where the stand-in keeps its one bucket. regions.ts says which region. */
+/** The stand-in's default bucket. */
 export const BUCKET = "acme-exports";
 
-/**
- * When every object in the stand-in was last written.
- *
- * One stamp for all of them, so a test can say what a listing's `modified` has
- * to be rather than that it is a Date of some kind.
- */
+/** The LastModified stamp every object in the stand-in reports. */
 export const MODIFIED = "2026-09-20T12:00:00.000Z";
 
 /**
- * Beside is another bucket in the same stand-in: its own objects, and who may
- * read it. A bucket with keys answers only a request signed with those keys,
- * the way a bucket policy naming one role does, and a public one answers a
- * request with no signature at all.
+ * Beside is another bucket in the same stand-in: its objects and who may read
+ * it. A bucket with keys answers only requests signed with those keys. A
+ * public one answers unsigned requests.
  */
 export interface Beside {
   objects: Map<string, Uint8Array>;
   keys?: AwsCredentials;
   public?: boolean;
   /**
-   * Whether the bucket keeps every version of an object, as one with
-   * versioning on does: each answer names the version it is, and one asked
-   * for by VersionId is served however the object has changed since, or
-   * after it is deleted.
+   * Whether the bucket keeps every version of an object. Each answer carries
+   * its version id, and a request with a VersionId is served that version
+   * however the object has changed since.
    */
   versioned?: boolean;
 }
 
 /**
- * versionIdOf is the VersionId a versioned stand-in bucket gives a body: its
- * MD5 in base64, so an id holds the `+`, `/` and `=` a request has to carry
- * encoded and signed as sent, the way S3's own ids hold them. S3 gives every
- * PUT a new id; this gives every distinct body one, which is the same thing
- * for a test that never writes the same bytes twice.
+ * versionIdOf is the VersionId a versioned bucket gives a body: its MD5 in
+ * base64, so the id holds `+`, `/` and `=`, which a request must encode and
+ * sign as sent.
  */
 export function versionIdOf(body: Uint8Array): string {
   return createHash("md5").update(body).digest("base64");
@@ -89,9 +73,7 @@ export function versionIdOf(body: Uint8Array): string {
 
 /**
  * etagOf is the ETag the stand-in gives an object: the MD5 of its bytes in
- * quotes, which is what S3 gives an object uploaded in one piece. A rewrite
- * the same size as the file it replaced has a different one, which is the
- * whole of what an ETag is for.
+ * quotes, as S3 gives an object uploaded in one piece.
  */
 export function etagOf(body: Uint8Array): string {
   let etag = etags.get(body);
@@ -102,51 +84,38 @@ export function etagOf(body: Uint8Array): string {
   return etag;
 }
 
-/**
- * Each body's ETag, worked out once. S3 stores an object's ETag with it; a
- * stand-in that hashed the whole object again for every ranged read would
- * spend its time on that rather than answering, in the same process as the
- * reader it is answering.
- */
+/** Each body's ETag, computed once. */
 const etags = new WeakMap<Uint8Array, string>();
 
-/** How the stand-in turns a request away by default: the way AWS does it. */
+/** The default wrong-region reply: a 301 with the x-amz-bucket-region header. */
 export const MOVED: Misdirect = { status: 301, headers: { "x-amz-bucket-region": "$REGION" } };
 
 export interface Bucket {
   endpoint: string;
-  /** Every request that reached it: the raw target too, for counting and for
-   * checking that a key arrived on the wire exactly as it was written, and the
-   * raw query, which is the whole of what a listing asked for. */
+  /** Every request that reached it, with the raw path and query as sent. */
   seen: Array<{
     method: string;
     path: string;
     query: string | undefined;
     range: string | undefined;
     region: string;
-    /** The access key id it was signed with, or "" for a request not signed at all. */
+    /** The access key id it was signed with, or "" when unsigned. */
     key: string;
   }>;
-  /** What each key holds. Change one to rewrite the object under a reader. */
+  /** What each key holds. Change an entry to rewrite an object under a reader. */
   objects: Map<string, Uint8Array>;
-  /**
-   * What each answer waits before it goes, in ms: a bucket on the other side
-   * of an ocean, for a test about how many round trips a read costs. 0 unless
-   * a test sets it.
-   */
+  /** How long each answer waits before it is sent, in ms. 0 by default. */
   latency: number;
   close(): Promise<void>;
 }
 
 /**
- * bucket is S3 as far as uno can tell: HEAD, ranged GET, If-Match, a redirect
- * for the wrong region, and a 403 for a signature that does not check out --
- * checked by signing the same request again with the same secret.
+ * bucket starts the stand-in: HEAD, ranged GET, If-Match, ListObjectsV2, a
+ * redirect for the wrong region, and a 403 for a bad signature.
  *
- * It turns a request signed for the wrong region away with `misdirect`, which
- * is how AWS does it unless a test says otherwise, and lives in `home`. It
- * serves `objects`, which a caller hands in when the fixture under its usual
- * key is not what the run is about.
+ * A request signed for a region other than `home` is answered with
+ * `misdirect`. `objects` are the default bucket's contents, and `beside`
+ * adds other buckets.
  */
 export async function bucket(
   misdirect: Misdirect = MOVED,
@@ -155,14 +124,14 @@ export async function bucket(
   beside: Record<string, Beside> = {},
 ): Promise<Bucket> {
   const seen: Bucket["seen"] = [];
-  /** Every bucket it holds, and every key it knows the secret of. */
+  /** Every bucket it holds. */
   const buckets = new Map<string, Beside>([
     [BUCKET, { objects, keys: KEYS }],
     ...Object.entries(beside),
   ]);
   /** Every body a versioned bucket has held under each key, by VersionId. */
   const history = new Map<string, Map<string, Uint8Array>>();
-  /** remember keeps what a versioned bucket holds now, before it is changed. */
+  /** remember records the current body of every key in a versioned bucket. */
   function remember(name: string, held: Beside): void {
     if (held.versioned !== true) return;
     for (const [key, body] of held.objects) {
@@ -184,12 +153,11 @@ export async function bucket(
     else answer(req, res);
   });
 
-  /** One request, answered the way S3 would answer it. */
+  /** answer handles one request. */
   function answer(req: IncomingMessage, res: ServerResponse): void {
     const range = req.headers["range"];
-    // req.url is the target as it was sent. Everything that looks at the path
-    // works off this, because `new URL` would resolve away a `.` or `..`
-    // segment that is part of a key's name.
+    // The path is taken from req.url as sent. `new URL` would collapse a `.`
+    // or `..` segment in a key.
     const raw = req.url!.split("?")[0]!;
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const auth = req.headers["authorization"] ?? "";
@@ -207,8 +175,7 @@ export async function bucket(
     const held = buckets.get(name ?? "");
     if (held !== undefined) remember(name!, held);
 
-    // A request with no signature is somebody reading a public bucket, and
-    // nothing else is ever answered without one.
+    // An unsigned request is answered only by a public bucket.
     if (auth === "") {
       if (held?.public === true) {
         serve(held, name!, rest, url, req, res);
@@ -218,7 +185,7 @@ export async function bucket(
       return;
     }
 
-    // S3 checks the signature before anything else, and so does this.
+    // The signature is checked before anything else.
     const signer = secrets.get(key);
     if (signer === undefined) {
       res.writeHead(403).end();
@@ -246,9 +213,8 @@ export async function bucket(
     }
     if (region !== home) {
       const away = rendered(misdirect, home);
-      // A reply to a HEAD carries no body however the server writes it, so a
-      // region that is only in the body cannot reach a HEAD at all. Node
-      // drops it for us; content-length still says what a GET would send.
+      // A HEAD reply carries headers only. content-length still says what a GET
+      // would send.
       res.writeHead(away.status, {
         ...away.headers,
         "content-length": Buffer.byteLength(away.body),
@@ -257,8 +223,7 @@ export async function bucket(
       return;
     }
 
-    // A good signature from somebody the bucket does not let in: a real key,
-    // for another bucket.
+    // A valid signature with keys foreign to the bucket.
     if (held !== undefined && held.public !== true && held.keys?.accessKeyId !== key) {
       res.writeHead(403).end();
       return;
@@ -270,7 +235,7 @@ export async function bucket(
     serve(held, name!, rest, url, req, res);
   }
 
-  /** What a bucket answers, once the request is one it lets in. */
+  /** serve answers a request the bucket has let in. */
   function serve(
     held: Beside,
     name: string,
@@ -281,9 +246,7 @@ export async function bucket(
   ): void {
     const range = req.headers["range"];
     if (url.searchParams.has("list-type")) {
-      // Anything but ListObjectsV2 is a request this stand-in has never been
-      // asked to answer, and answering it with an empty listing would let a
-      // caller that asked for the wrong thing look like it worked.
+      // Only ListObjectsV2 is answered.
       if (url.searchParams.get("list-type") !== "2") {
         res.writeHead(400).end();
         return;
@@ -299,13 +262,12 @@ export async function bucket(
     }
 
     const key = rest.map((seg) => decodeURIComponent(seg)).join("/");
-    // A HEAD of the bucket itself is HeadBucket, which says where it is.
+    // A HEAD of the bucket itself is HeadBucket, answered with the region.
     if (key === "" && req.method === "HEAD") {
       res.writeHead(200, { "x-amz-bucket-region": home }).end();
       return;
     }
-    // One version asked for by name is served whatever the object is now,
-    // and a bucket that keeps no versions has none to give.
+    // A VersionId is served from history. An unversioned bucket refuses it.
     const asked = url.searchParams.get("versionId");
     if (asked !== null && held.versioned !== true) {
       res.writeHead(400).end();
@@ -351,18 +313,13 @@ export async function bucket(
 }
 
 /**
- * listing is ListObjectsV2 over the Map: a prefix, a delimiter, max-keys, and a
- * continuation token, paged the one way S3 pages.
+ * listing is ListObjectsV2 over the Map: prefix, delimiter, max-keys and a
+ * continuation token.
  *
- * Keys and the prefixes they fold into are one sequence in one order, and the
- * page is a window on that sequence -- which is why a listing cannot promise
- * folders first across pages, and why this is modelled rather than answered in
- * whatever order was convenient.
- *
- * The token is the last item of the page in base64, which is not what AWS puts
- * in one but is the same shape of thing: opaque, and full of the characters --
- * `+`, `/`, `=` -- that a caller has to send back in a signed query without
- * rewriting any of them.
+ * Keys and the prefixes they fold into are one sorted sequence, and a page is
+ * a window on it, so folders and keys stay interleaved across pages.
+ * The token is the last item of the page in base64, which holds `+`, `/` and
+ * `=` that a caller must send back encoded.
  */
 function listing(name: string, objects: Map<string, Uint8Array>, url: URL): string {
   const prefix = url.searchParams.get("prefix") ?? "";
@@ -372,17 +329,15 @@ function listing(name: string, objects: Map<string, Uint8Array>, url: URL): stri
   const after = token === null ? "" : Buffer.from(token, "base64").toString("utf8");
 
   const items: string[] = [];
-  // Which of them are prefixes rather than keys. It is whether the key was
-  // folded and not whether it ends in a slash: the marker object a console
-  // leaves behind is called `shop/`, and listing `shop/` has no delimiter left
-  // after the prefix to fold it on, so S3 hands that one back as a key.
+  // The items that are folded prefixes. A key ending in a slash, such as the
+  // folder marker `shop/` listed under prefix `shop/`, stays a key.
   const folded = new Set<string>();
   for (const key of [...objects.keys()].toSorted(compareStrings)) {
     if (!key.startsWith(prefix)) continue;
     const cut = delimiter === "" ? -1 : key.indexOf(delimiter, prefix.length);
     const item = cut === -1 ? key : key.slice(0, cut + delimiter.length);
     if (cut !== -1) folded.add(item);
-    // Sorted, so every key that folds into one prefix arrives in a run.
+    // Keys are sorted, so keys folding into one prefix arrive together.
     if (items.at(-1) !== item) items.push(item);
   }
 
@@ -422,13 +377,7 @@ function listing(name: string, objects: Map<string, Uint8Array>, url: URL): stri
   return parts.join("");
 }
 
-/**
- * xml escapes what XML cannot carry raw.
- *
- * A key is any UTF-8 string, so `a&b.csv` and a quoted ETag both have to go out
- * escaped -- which is the half of the reply the reader has to undo, and a
- * stand-in that skipped it would never let it prove that it does.
- */
+/** xml escapes `&`, `<`, `>`, `"` and `'` for an XML body. */
 function xml(text: string): string {
   return text.replace(
     /[&<>"']/g,
@@ -441,22 +390,17 @@ export function at(key: string): { name: string; path: string } {
   return { name: key.slice(key.lastIndexOf("/") + 1), path: `s3://${BUCKET}/${key}` };
 }
 
-/** The date a request was signed at, back out of its x-amz-date. */
+/** The Date an x-amz-date header names. */
 export function amzDate(s: string): Date {
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s)!;
   return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`);
 }
 
 /**
- * standinEnv is the environment that points an AWS-shaped tool at this bucket:
- * a process uno starts, a CLI a smoke run drives, uno itself.
- *
- * The undefined entries are as much the point as the keys. A developer's shell
- * carries an AWS_PROFILE and often a session token left over from something
- * else, and either one gets to decide which credentials a run signs with --
- * so a run meant for localhost reaches a real account, or fails in a way that
- * reads like uno's fault. Spreading this over an inherited environment clears
- * them, because an explicit undefined overwrites what was there.
+ * standinEnv is an environment that points an AWS-shaped tool at this bucket:
+ * endpoint, keys and region. The undefined entries clear a profile or session
+ * token the shell may carry, since an explicit undefined overwrites what was
+ * there when spread over an inherited environment.
  */
 export function standinEnv(b: Bucket, home = HOME_REGION): Record<string, string | undefined> {
   return {

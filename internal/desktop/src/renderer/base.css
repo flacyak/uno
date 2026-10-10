@@ -1,16 +1,11 @@
-/* uno desktop: the tokens, the reset, and the frame every window has.
+/* uno desktop: the design tokens, the reset, and the window frame.
  *
- * The tokens and the chrome rules are lifted from resource/uno-doc.css, so the
- * app and the design documents stay one visual language: change a colour here
- * and the mock in resource/workspace.html is describing a different product.
+ * The tokens and chrome rules match resource/uno-doc.css, so the app and the
+ * design mocks share one set of colours. The page fills the viewport and only
+ * the grid scrolls.
  *
- * What is not lifted is everything that made that file a document stylesheet --
- * the prose, the mastheads, the figure captions. This is an app: it fills the
- * viewport, and the only thing that scrolls is the grid.
- *
- * The rest of the styles sit beside the module that draws what they style, and
- * are imported by it, so each loads with the code that needs it. The grid's
- * arrive with the grid, when the first file opens. */
+ * Other styles live beside the module that uses them and are imported by it.
+ * The grid's styles load with the grid, when the first file opens. */
 
 :root {
   --paper: #eff2f3;
@@ -31,21 +26,17 @@
   --body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  /* One row height, in one place. The virtualiser does arithmetic with it, so
-   * it cannot be a number the stylesheet and the script each decide for
-   * themselves. */
+  /* Row height. The virtualiser reads this value, so it is defined once. */
   --row-h: 29px;
 
-  /* How wide a scrollbar is. */
+  /* Scrollbar width. */
   --bar: 12px;
 
-  /* The width kept clear at the top right of the window for its ×. The
-   * window has no frame, so whatever reaches that corner -- the grid's
-   * header, the banner -- ends this far short of it. */
+  /* Width kept clear at the top right of the window for the close button.
+   * Whatever reaches that corner ends this far short of it. */
   --corner: 34px;
 
-  /* How long the sources panel takes to come in. The scrim over the workspace
-   * darkens over the same time, so the two read as one motion. */
+  /* Duration of the sources panel slide-in and the scrim fade. */
   --panel-in: 180ms;
 
   color-scheme: light;
@@ -74,9 +65,8 @@
   box-sizing: border-box;
 }
 
-/* `hidden` has to win. The browser's own [hidden] { display: none } is a UA
- * rule, so any author `display` beats it -- and both .dropzone and #content set
- * one, which left the empty state showing over an open file. */
+/* !important so [hidden] beats author `display` rules such as those on
+ * .dropzone and #content. The UA rule alone loses to them. */
 [hidden] {
   display: none !important;
 }
@@ -103,9 +93,8 @@ body {
   background: var(--surface);
 }
 
-/* The window's three columns: the sidebar, the sheet, and the sources panel.
- * `min-height: 0` so the grid scrolls rather than pushing the status bar off
- * the window. */
+/* The window's three columns: sidebar, sheet, sources panel. `min-height: 0`
+ * so the grid scrolls and the status bar stays on the window. */
 .win-frame {
   position: relative;
   display: flex;
@@ -113,10 +102,9 @@ body {
   min-height: 0;
 }
 
-/* `min-width: 0` so the sheet gives up the width the columns either side take
- * rather than pushing one off the window. `isolation`, so the grid's sticky
- * headers stack inside it and the scrim needs only to be above the sheet as a
- * whole. */
+/* `min-width: 0` so the sheet shrinks for the side columns and both stay on
+ * the window. `isolation` keeps the grid's sticky headers in their
+ * own stacking context, so the scrim only needs to be above the sheet. */
 .win-sheet {
   display: flex;
   flex-direction: column;
@@ -126,10 +114,9 @@ body {
   isolation: isolate;
 }
 
-/* The scrim: the workspace darkened while the keys are in the sources panel,
- * so the panel is what the eye goes to. It is drawn over all three columns,
- * the sidebar with the sheet, and the panel sits above it. A click goes
- * through it to the grid, which takes the keys back and with them the light. */
+/* The scrim darkens the workspace while focus is in the sources panel. It
+ * covers all three columns; the panel sits above it. Clicks pass through it
+ * to the grid, which takes focus and clears the scrim. */
 .win-frame::after {
   content: "";
   position: absolute;
@@ -151,10 +138,9 @@ body {
   }
 }
 
-/* The head a column begins with: what the column is, in a band one row high.
- * The grid's own header row is the sheet's, so the three make one line across
- * the top of the window. The window has no frame, so the heads are also where
- * it is taken hold of. */
+/* The header band at the top of a column, one row high. With the grid's own
+ * header row it forms one line across the top of the window. The window is
+ * frameless, so the heads are its drag region. */
 .col-head {
   display: flex;
   align-items: center;
@@ -171,11 +157,9 @@ body {
   -webkit-app-region: drag;
 }
 
-/* The column the sources panel is in: the end of the window's top line, and
- * the panel under it. The line's end is the window's and not the panel's, so
- * it stays under the scrim with the rest of the line while the panel is lit,
- * and the × on it reads as closing the window. The column is there while the
- * panel is open, and its width is what the panel has. */
+/* The column holding the sources panel: a head at the top and the panel
+ * under it. The head stays under the scrim with the rest of the top line.
+ * The column is hidden while the panel is hidden. */
 .win-side {
   display: flex;
   flex-direction: column;
@@ -188,9 +172,8 @@ body {
   display: none;
 }
 
-/* A narrow window has three columns to fit when the sidebar and the sources
- * panel are both open, so each gives some up and the grid between them keeps
- * enough to read. Ctrl+B gives the grid the sidebar's width as well. */
+/* In a narrow window the sidebar and sources panel are narrower, so the grid
+ * between them keeps enough width. */
 @media (max-width: 900px) {
   #sidebar {
     flex-basis: 168px;
@@ -201,9 +184,8 @@ body {
   }
 }
 
-/* Closing the window, at the end of that line. The window has no frame, so
- * there is no title bar to hold this; it sits over the end of whichever head
- * reaches the top right, and each keeps `--corner` clear for it. */
+/* The close button. The window is frameless, so it is fixed at the top right
+ * over whichever head reaches that corner. Each head keeps `--corner` clear. */
 .win-close {
   --size: 20px;
   position: fixed;

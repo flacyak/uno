@@ -1,9 +1,6 @@
-// What a find matches and where it lands, over the fixture.
-//
-// A find is a substring test on what a cell shows: case as typed, no regex,
-// the log applied. It never matches the row it starts beside, stops at the
-// end of the file in its direction rather than wrapping, and a newer find
-// stops an older one.
+// `find` over the fixture: a case-sensitive substring test on what a cell
+// shows with the log applied. It skips the row it starts from, stops at the
+// end of the file in its direction, and a newer find cancels an older one.
 
 import { afterEach, expect, test } from "vite-plus/test";
 
@@ -13,10 +10,10 @@ import { NO_ROW, Op } from "../../src/sheet/index.ts";
 import { CHANNEL, COLS, LAST_ROW, REGION, UNITS } from "../testdata/sales-q3.ts";
 import { FIXTURE, connect, indexed, openOne, sales } from "./harness.ts";
 
-// date,region,rep,channel,units,revenue
+// Column index of rep in date,region,rep,channel,units,revenue.
 const REP = 2;
 
-/** Before the first row: a find from here looks at row 0 too. */
+/** A start row before the first, so row 0 is searched. */
 const BEFORE = -1;
 
 let done: (() => void) | undefined;
@@ -43,7 +40,7 @@ function text(
   return src.find({ col, from, dir, match: { t: "text", text: t } });
 }
 
-/** The first row past `from` in `dir` whose cell shows `t`, as the sheet reads the file. */
+/** The first row past `from` in `dir` whose cell shows `t`, per the Sheet. */
 function expected(col: number, from: number, dir: 1 | -1, t: string): number | null {
   for (let row = from + dir; row >= 0 && row <= LAST_ROW; row += dir) {
     if (sales.display(row, col).includes(t)) return row;
@@ -61,7 +58,7 @@ test("a find lands on the next cell down or up that shows the text, and skips it
   });
   expect(down.row).toBe(2);
 
-  // Row 2 is North, and a find from it looks past it.
+  // Row 2 is North. A find from row 2 skips it.
   const next = await text(src, REGION, 2, 1, "North");
   expect(next.row).toBe(expected(REGION, 2, 1, "North"));
   expect(next.row).toBeGreaterThan(2);
@@ -76,7 +73,7 @@ test("a find matches a substring, with the case as typed and no regex", async ()
   expect((await text(src, REGION, BEFORE, 1, "ort")).row).toBe(expected(REGION, BEFORE, 1, "ort"));
   expect((await text(src, REGION, BEFORE, 1, "north")).row).toBeNull();
   expect((await text(src, REP, BEFORE, 1, "Ada Okafor")).row).toBe(0);
-  // Regex would read these as any character, any run, a group, and a class.
+  // Regex metacharacters are matched literally.
   for (const special of [".", ".*", "(", "[", "\\", "N.rth", "^North$"]) {
     expect((await text(src, REGION, BEFORE, 1, special)).row).toBe(
       expected(REGION, BEFORE, 1, special),

@@ -1,9 +1,7 @@
-// The profile names the engine offers a person choosing how to sign in.
+// awsProfiles: the profile names the engine offers for signing in.
 //
-// What is under test is what does not cross. ~/.aws holds keys, session
-// tokens, role ARNs and the addresses of SSO portals, and the page that asks
-// for the names is treated as a web page. So the reply is taken off the
-// channel whole and searched for every secret the files hold.
+// The reply holds names only. It is taken off the engine channel and
+// searched for every secret the ~/.aws files hold.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,7 +15,7 @@ import { connectionsIn } from "../../src/store/index.ts";
 import { awsProfiles, diskProvider, nodeStore } from "../../src/store/node.ts";
 import { connect } from "../engine/harness.ts";
 
-/** Everything in the files below that is not a profile's name. */
+/** Everything in the files below besides the profile names. */
 const SECRETS = [
   "AKIAIOSFODNN7EXAMPLE",
   "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
@@ -89,7 +87,6 @@ test("a machine with no ~/.aws has no profiles rather than a failure", async () 
   expect(await awsProfiles({ HOME: dir })).toEqual([]);
 });
 
-// The task's own sentence: the reply holds names only, and no key reaches it.
 test("the engine's reply holds names only, and no key reaches it", async () => {
   const env = await machine();
   const dir = await mkdtemp(join(tmpdir(), "uno-profiles-connections-"));

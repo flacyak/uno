@@ -1,4 +1,5 @@
-// What the engine measures, and how a Meter writes it for a collector.
+// What the engine measures, how a Meter writes it as OTLP JSON, and how a
+// collector's address is read from the environment.
 
 import { expect, test } from "vite-plus/test";
 
@@ -28,7 +29,7 @@ import { sources } from "../../src/plugin/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { FIXTURE, bytes, indexed } from "./harness.ts";
 
-/** An engine over a real channel, with everything it measures kept. */
+/** An engine over a real channel, with every measurement kept in `seen`. */
 function measured(): { engine: Engine; seen: Measurement[] } {
   const seen: Measurement[] = [];
   const { port1, port2 } = new MessageChannel();
@@ -45,7 +46,7 @@ function measured(): { engine: Engine; seen: Measurement[] } {
   };
 }
 
-/** until waits for the engine to have measured something `found` picks out. */
+/** until waits for a measurement `found` picks out. */
 async function until(
   seen: Measurement[],
   found: (m: Measurement) => boolean,
@@ -86,7 +87,7 @@ test("an engine says how long each request and each index took, and nothing abou
     expect(size).toMatchObject({ kind: "count", unit: BYTES, value: bytes.length });
     expect(seen.filter((m) => m.name === INDEX).length, "an index finishes once").toBe(1);
 
-    // A measurement leaves the machine, so it says what was done and not to what.
+    // Every measurement keeps the file's name out.
     const said = JSON.stringify(seen);
     expect(said).not.toContain("sales-q3");
     expect(said).not.toContain(FIXTURE);
@@ -106,7 +107,7 @@ test("a request the engine refuses is measured as refused", async () => {
   }
 });
 
-/** A clock that says what it is told to. */
+/** Fixed clock values. */
 const BEGAN = 1_700_000_000_000;
 const LATER = BEGAN + 10_000;
 
@@ -152,8 +153,8 @@ test("a meter adds measurements up into one OTLP request", () => {
   const [request, indexed, level] = resource.scopeMetrics[0]!.metrics;
   const times = { startTimeUnixNano: `${BEGAN}000000`, timeUnixNano: `${LATER}000000` };
 
-  // 3 ms is in the bucket up to 5, 40 in the one up to 50, and a billion in
-  // the last, which holds what is over every bound.
+  // 3 ms falls in the bucket up to 5, 40 in the one up to 50, and 1e9 in the
+  // overflow bucket.
   const buckets = DURATION_BOUNDS.map(() => "0").concat("0");
   buckets[DURATION_BOUNDS.indexOf(5)] = "1";
   buckets[DURATION_BOUNDS.indexOf(50)] = "1";
@@ -211,7 +212,7 @@ test("the JSON a collector reads has every 64-bit integer in a string and every 
     attributes: { place: "disk" },
   });
 
-  // What the collector sees is the text, so the text is what is checked.
+  // The JSON text is what is checked.
   const sent = JSON.parse(JSON.stringify(meter.payload())) as Payload;
   const [histogram, sum] = sent.resourceMetrics[0]!.scopeMetrics[0]!.metrics;
   if (!("histogram" in histogram!) || !("sum" in sum!))
@@ -266,8 +267,8 @@ test("an environment that names no collector sends nowhere", () => {
   expect(collector({ OTEL_EXPORTER_OTLP_ENDPOINT: "  " })).toBeUndefined();
 });
 
-// A settings page shows `NAME="value"` for a shell, and what is pasted into
-// a secret is often the whole line or the value in its quotes.
+// The value may be pasted with quotes, a trailing slash, a line break, or as
+// the whole NAME="value" line.
 test.each([
   ["as it is", GATEWAY, SIGNED],
   ["with a slash after it", `${GATEWAY}/`, SIGNED],
@@ -285,8 +286,8 @@ test.each([
   ).toEqual(READ);
 });
 
-// The variable for metrics alone names the whole address, with no path put
-// after it, and stands over the one for every signal. So does its headers one.
+// The metrics-specific endpoint is used exactly as given, and takes precedence
+// over the general one. So do the metrics headers.
 test("an address for metrics alone is taken as it is, over the one for every signal", () => {
   const METRICS = `${GATEWAY}/metrics-here`;
   expect(
@@ -306,9 +307,7 @@ test("an address for metrics alone is taken as it is, over the one for every sig
   );
 });
 
-// Metrics go out as OTLP over HTTP, as JSON. A collector that takes OTLP over
-// HTTP takes JSON and protobuf on the same path, so either HTTP setting is
-// kept. gRPC is another port and another wire, and a post to it says nothing.
+// http/json, http/protobuf and unset are accepted. grpc is refused.
 test("a protocol that is not OTLP over HTTP is refused by name", () => {
   for (const protocol of ["http/json", "http/protobuf", ""]) {
     expect(

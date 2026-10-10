@@ -1,18 +1,11 @@
-// What a check can ask of a running app, without knowing whether that app is a
-// real Electron window or something standing in for one.
+// What a check can ask of a running app, whether it is a real Electron window
+// or something standing in for one.
 //
-// Every operation here is a fact a person could ask about a spreadsheet on
-// screen -- what a label says, how many of something there are, what a row
-// looks like -- and every answer is a plain value: text, a count, a boolean, a
-// `Row`. No `Element` or `HTMLElement` crosses this interface in either
-// direction, so a backend that never built a document could still answer
-// honestly, and a check written against `Page` never has to know which kind of
-// backend it got.
+// Every answer is a plain value: text, a count, a boolean, a `Row`. No
+// `Element` crosses this interface in either direction.
 //
-// A check that needs more than this -- real layout, the real preload bridge, a
-// person's own input reaching (or not reaching) the page -- is not a gap in
-// this list to fill in later. It is a check that stays a string, run the old
-// way. See check.ts.
+// A check that needs more than this (real layout, the preload bridge, a
+// person's own input) stays a string. See check.ts.
 
 /** One row as the grid draws it. */
 export interface Row {
@@ -31,14 +24,13 @@ export interface KeyModifiers {
 }
 
 /** Where a `Wait` looks: a selector's first match, or a drawn cell by row and
- * column -- `col` counted the way `Row.cells` counts them, after the gutter. */
+ * column. `col` is counted after the gutter, as `Row.cells` counts them. */
 export type Locator = { selector: string } | { row: number; col: number };
 
 /** What a `Wait` requires to be true there. */
 export type Expectation = { equals: string } | { includes: string };
 
-/** One condition a wait polls for. `Page.until` ANDs every one of these
- * together, and does not report until they all hold or the budget runs out. */
+/** One condition a wait polls for. `Page.until` requires every one to hold. */
 export type Wait = Locator & Expectation;
 
 export interface Page {
@@ -49,8 +41,8 @@ export interface Page {
   text(selector: string): Promise<string>;
   /** The text of every match of `selector`, in document order. */
   allText(selector: string): Promise<string[]>;
-  /** Each match's own text, before any element nested inside it -- a column
-   * header's name, say, without the badge drawn beside it. */
+  /** Each match's own text, before any nested element: for a column header,
+   * the name alone. */
   ownText(selector: string): Promise<string[]>;
   /** How many elements match `selector`. */
   count(selector: string): Promise<number>;
@@ -62,15 +54,15 @@ export interface Page {
   /** The drawn rows, top to bottom, as the virtualiser currently holds them. */
   rows(): Promise<Row[]>;
 
-  /** Click the cell at `row`, `col` among the drawn rows -- `col` is 0 for the
-   * first column after the gutter, the way `Row.cells` counts them. */
+  /** Click the cell at `row`, `col` among the drawn rows. `col` is 0 for the
+   * first column after the gutter, as `Row.cells` counts them. */
   clickCell(row: number, col: number): Promise<void>;
   /** Click the first match of `selector`. */
   click(selector: string): Promise<void>;
 
   /** The open cell editor's value, or undefined when none is open. */
   editorValue(): Promise<string | undefined>;
-  /** Set the open cell editor's value, without committing it. */
+  /** Set the open cell editor's value. The editor stays open. */
   setEditorValue(value: string): Promise<void>;
 
   /** Press a key, routed the way a real one would be: to the cell editor while
@@ -81,14 +73,8 @@ export interface Page {
   settle(frames: number): Promise<void>;
 
   /**
-   * Poll until every `Wait` holds, or give up after the shared budget and
-   * report which.
-   *
-   * The whole loop runs in one round trip to the page, because a check waiting
-   * on a frame-by-frame condition must not pay one evaluate per frame -- at up
-   * to 150 frames a wait, that is the difference between a smoke run and a
-   * nap. A backend answers this by looping inside its own evaluate, not by
-   * calling back out to whatever asked.
+   * Poll until every `Wait` holds, or give up after the shared budget. Returns
+   * whether they all held. The whole loop runs in one round trip to the page.
    */
   until(waits: Wait[]): Promise<boolean>;
 

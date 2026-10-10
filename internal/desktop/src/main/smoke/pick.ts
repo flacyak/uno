@@ -1,17 +1,15 @@
-// What a driven run opens.
+// What a driven run's Open dialog answers.
 //
-// Open is a dialog, as Save As is, and a driven window can answer neither --
-// see save.ts. The + at the foot of the sidebar asks for a file to open, so a
-// run that presses it is told which file instead of being asked: an
-// environment in, a path out, no fs and no Electron. main swaps it in for the
-// dialog inside the branch that already knows what a test is.
+// A driven window ignores a dialog (see save.ts). The + at the foot of the
+// sidebar asks for a file to open, so a driven run is told which file in the
+// environment. main uses this in place of the dialog when a run is driven.
 
 /** The variable a driven run names the file in. */
 export const DRIVEN_OPEN = "UNO_DRIVEN_OPEN";
 
 /**
- * openPathFor is the file a driven run's Open picks, or undefined when nobody
- * said, which is what cancelling the dialog answers.
+ * openPathFor is the file a driven run's Open picks, or undefined when the
+ * variable is empty or absent, the answer cancelling the dialog gives.
  *
  * @param env  usually process.env
  */

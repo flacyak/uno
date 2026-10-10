@@ -1,34 +1,29 @@
-// The virtualiser's arithmetic, pulled out of View so it can be checked
-// without a display. Nothing here touches the DOM: every function is a
-// question about numbers, and View decides what to do with the answer.
+// Pure arithmetic for the row virtualiser in View. Every function here
+// works on numbers alone.
 
-/** Rows drawn beyond the viewport, so a fast scroll does not show a gap before
- * the next frame catches up. */
+/** Extra rows drawn past the viewport. */
 export const OVERSCAN = 6;
 
 /**
- * The tallest the scroller's content is allowed to be.
- *
- * Browsers stop laying out past a limit -- about 33.5 million pixels in
- * Chromium, less in Firefox -- so a sheet taller than this scrolls by
- * proportion: the scrollbar maps onto the rows, and the wheel and the keys still
- * move by rows.
+ * Maximum height of the scroller's content, in pixels. Browsers stop laying
+ * out past about 33.5 million pixels. A sheet taller than this is "scaled":
+ * the scrollbar position maps proportionally onto the sheet.
  */
 export const MAX_SCROLL_PX = 15_000_000;
 
-/** What layout needs to know about the sheet's size before it draws anything. */
+/** Sheet size figures used by layout. */
 export interface Measure {
-  /** The scroller's actual content height: the sheet's height, capped. */
+  /** Content height given to the scroller: the sheet height, capped. */
   real: number;
-  /** Whether the sheet is past the cap, and so scrolls by proportion. */
+  /** Whether the sheet height exceeds the cap. */
   scaled: boolean;
-  /** How far the view can move down the uncapped sheet. */
+  /** Maximum view position on the uncapped sheet. */
   vMax: number;
-  /** How far the scrollbar can move down the capped one. */
+  /** Maximum scrollTop on the capped scroller. */
   rMax: number;
 }
 
-/** measure sizes the sheet against the cap. `total` is the row count. */
+/** Computes the Measure for a sheet of `total` rows. */
 export function measure(
   total: number,
   rowHeight: number,
@@ -45,47 +40,39 @@ export function measure(
   };
 }
 
-/** clampTop keeps a view position on the uncapped sheet, between its top and
- * how far down it can go. */
+/** Clamps a view position to [0, vMax]. */
 export function clampTop(top: number, vMax: number): number {
   return Math.min(Math.max(0, top), vMax);
 }
 
 /**
- * scrollerToTop reads where the scrollbar sits, above the cap, and answers
- * where that puts the view on the uncapped sheet. `rMax` is zero exactly when
- * the whole sheet fits without scrolling, and the answer is then the top,
- * rather than a division by zero.
+ * Converts a scrollTop to a view position on the uncapped sheet. Returns 0
+ * when `rMax` is 0 (the whole sheet fits in the viewport).
  *
- * Below the cap the two are the same length, and the scrollbar's position is
- * the answer as it is. Dividing and multiplying it back lands a hair off a
- * row's edge -- 203 / 358 * 358 is more than 203 -- which ceil then reads as
- * the next row down, so H after zt landed one row under the top.
+ * An unscaled sheet gets the value back unchanged. Scaling by
+ * rMax / vMax when they are equal can produce a value a hair off a row edge,
+ * which ceil would then read as the next row.
  */
 export function scrollerToTop(scrollTop: number, rMax: number, vMax: number): number {
   if (rMax === 0) return 0;
   return rMax === vMax ? scrollTop : (scrollTop / rMax) * vMax;
 }
 
-/** topToScroller is the inverse: where the scrollbar should sit, above the
- * cap, for the view to be at `top` on the uncapped sheet. */
+/** Converts a view position on the uncapped sheet to a scrollTop. Inverse
+ * of scrollerToTop. */
 export function topToScroller(top: number, vMax: number, rMax: number): number {
   if (vMax === 0) return 0;
   return vMax === rMax ? top : (top / vMax) * rMax;
 }
 
-/** poolSize is how many row elements the pool needs: a screenful, plus the
- * overscan, never more than the sheet has rows. */
+/** Number of row elements needed: a screenful plus overscan, at most
+ * `total`. */
 export function poolSize(total: number, viewport: number, rowHeight: number): number {
   return Math.min(total, Math.ceil(viewport / rowHeight) + OVERSCAN);
 }
 
-/**
- * fitPool grows or shrinks a pool of row elements to `want`, making a new one
- * with `make` and hanging it under `parent`. It runs on a resize and on the
- * first draw, and not while scrolling: once the pool fits, a scroll only
- * writes text into it.
- */
+/** Grows or shrinks `pool` to `want` elements. New elements come from `make`
+ * and are appended to `parent`. */
 export function fitPool<T extends Element>(
   pool: T[],
   want: number,
@@ -100,27 +87,23 @@ export function fitPool<T extends Element>(
   while (pool.length > want) pool.pop()?.remove();
 }
 
-/** firstRow is the first row the pool draws, clamped so the last screenful
- * stays full at the very end of the sheet. */
+/** Index of the first row the pool draws, clamped so the pool stays full at
+ * the end of the sheet. */
 export function firstRow(total: number, pool: number, top: number, rowHeight: number): number {
   const maxFirst = Math.max(0, total - pool);
   return Math.min(maxFirst, Math.floor(top / rowHeight));
 }
 
-/**
- * tableOffset is how far the table sits above the scroller's top, so it moves
- * as one element rather than each row being positioned. Whole pixels, because
- * at millions of pixels down a fraction draws the text blurred.
- */
+/** The table's `top` within the sizer, so row `first` lands where the view
+ * is. Rounded to whole pixels; fractional offsets blur the text. */
 export function tableOffset(seen: number, top: number, first: number, rowHeight: number): number {
   return Math.round(seen - (top - first * rowHeight));
 }
 
 /**
- * spanIntoView is the least scroll that puts a span wholly inside a window
- * `extent` long that begins at `at`, or undefined when it already is, so the
- * caller does no arithmetic of its own. A span longer than the window is
- * shown from its start.
+ * The smallest scroll position that shows the whole span [start, start+size)
+ * in a window of `extent` starting at `at`. Returns undefined when it is
+ * already visible. A span larger than the window is aligned to its start.
  */
 export function spanIntoView(
   start: number,
@@ -133,8 +116,8 @@ export function spanIntoView(
   return undefined;
 }
 
-/** intoView is the least scroll that puts `row` wholly on screen, or undefined
- * when it already is. */
+/** The smallest view position that shows the whole of `row`, or undefined
+ * when it is already visible. */
 export function intoView(
   row: number,
   rowHeight: number,
@@ -144,11 +127,11 @@ export function intoView(
   return spanIntoView(row * rowHeight, rowHeight, top, height);
 }
 
-/** Where a row lands on screen: at the top, centred, or at the bottom. */
+/** Where to place a row on screen. */
 export type RowPlacement = "top" | "middle" | "bottom";
 
-/** scrollTarget is the view position that puts `row` at `where` on screen,
- * before clamping to the sheet's ends. */
+/** The view position that puts `row` at `where` on screen. May fall
+ * outside [0, vMax]; the caller clamps. */
 export function scrollTarget(
   row: number,
   rowHeight: number,
@@ -161,13 +144,13 @@ export function scrollTarget(
   return y + (rowHeight - height) / 2;
 }
 
-/** The first and last rows wholly on screen. */
+/** First and last rows fully on screen. */
 export interface VisibleRange {
   top: number;
   bottom: number;
 }
 
-/** visibleRange is the rows H, M and L land on, clamped to the sheet. */
+/** Computes the first and last rows fully on screen, clamped to the sheet. */
 export function visibleRange(
   top: number,
   rowHeight: number,
@@ -180,7 +163,7 @@ export function visibleRange(
   return { top: first, bottom: Math.max(first, Math.min(last, bottom)) };
 }
 
-/** pageSize is how many rows a page moves: a screen, less one to keep in sight. */
+/** Rows moved by one page: a screenful minus one. */
 export function pageSize(viewport: number, rowHeight: number): number {
   return Math.max(1, Math.floor(viewport / rowHeight) - 1);
 }

@@ -1,9 +1,8 @@
-// Where connections live on the desktop: main writing one into the folder the
-// engines read, and the panel's line for each.
+// Connections on the desktop: main writes one into the connections folder,
+// and the panel draws a line for each.
 //
-// The text main writes arrives from the page, and the page is treated as a web
-// page, so most of what is here is what main refuses to write whatever it was
-// sent.
+// The text main writes comes from the page, which is untrusted, so most
+// tests here check what main refuses to write.
 
 import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,7 +17,7 @@ import { connectionLine } from "../src/renderer/sources.ts";
 
 const ACME = fileURLToPath(new URL("../../grid/tests/testdata/acme-exports.unof", import.meta.url));
 
-/** The folder a first save makes: it is not there before anything is connected. */
+/** A path for a connections folder. The first write creates it. */
 async function folder(): Promise<string> {
   return join(await mkdtemp(join(tmpdir(), "uno-main-connections-")), "connections");
 }
@@ -43,8 +42,7 @@ test("text holding a key is refused, and nothing is written", async () => {
   await expect(readdir(dir)).rejects.toThrow(/ENOENT/);
 });
 
-// The id names the file, so text claiming another id would put one
-// connection's file under another's name.
+// The id names the file, so text with a different id is refused.
 test("text whose id is not the file it is written to is refused", async () => {
   const dir = await folder();
   await expect(writeConnection(dir, "finance", await readFile(ACME, "utf8"))).rejects.toThrow(
@@ -76,8 +74,8 @@ test("a connection's line is its name, where browsing starts, and its region", a
     where: "eu-west-1",
   });
 
-  // The whole bucket starts at its root, and a region nobody has asked for
-  // yet is left unsaid rather than guessed.
+  // With name, prefix, and region blank: the line is named after the bucket,
+  // its path is the bucket root, and its `where` is undefined.
   const root = { ...c, name: "", prefix: "", region: undefined };
   expect(connectionLine(root)).toEqual({
     id: "acme-exports",

@@ -1,11 +1,10 @@
-// Checks that the settings control works in a window: it opens upward from the
-// bottom left on the run's connections and the four themes, each theme in
-// each mode is what the page is drawn in, and a language chosen is the one
-// the window is written in.
+// Checks of the settings control: it opens upward from the bottom left on the
+// run's connections and the four themes, each theme in each mode is what the
+// page is drawn in, and a language chosen is the one the window is written
+// in.
 //
-// They run last, over whatever the checks before them left open, with the
-// run's own --user-data-dir, so the theme chosen here is never the one kept on
-// the machine of whoever runs it.
+// They run with the run's own --user-data-dir, so the theme chosen here
+// stays with the run.
 
 import { THEMES } from "../../renderer/theme.ts";
 import type { Check } from "./check.ts";
@@ -14,7 +13,7 @@ import { LOCALE } from "./fixture.ts";
 const MENU = `
   const menu = () => document.querySelector(".settings");
   const gear = () => document.querySelector("#settings");
-  // What the page is painted in, as the browser computes it, against a hex.
+  // The body's computed background colour, and a hex in the same form.
   const rgb = (hex) => "rgb(" + [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ") + ")";
   const painted = () => getComputedStyle(document.body).backgroundColor;
 `;
@@ -60,8 +59,8 @@ export const SETTINGS: Check[] = [
   },
   ...WORN,
   {
-    // The run is in English, pinned by the script that started it. This is the
-    // one place it is not: a person choosing another language in settings.
+    // The run is pinned to English by the script that started it. Choosing a
+    // language in settings overrides that.
     name: "Español is spoken the moment it is chosen: the window, the open menu and the status bar",
     shot: "settings-language-es",
     script: `

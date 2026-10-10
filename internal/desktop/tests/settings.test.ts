@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 //
-// The settings control and its menu: the top-level sources, the four themes,
-// the appearance and the keys, opened upward from the bottom left.
+// The settings control and its menu: the sources, the themes, the appearance,
+// the keys, and the languages.
 //
-// What is under test is what the menu offers and what choosing does: a theme
-// is worn the moment it is chosen, a source opens the panel on it, and the
-// menu gets out of the way the ways a menu should.
+// Checks what the menu offers and what choosing does: a theme applies at
+// once, a source opens the panel on it, and the menu closes the ways a menu
+// should.
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
@@ -63,7 +63,7 @@ class Asked implements SettingsAsks {
   }
 }
 
-/** A system that prefers the base locale, so each test starts in English. */
+/** A system preferring the base locale, so each test starts in English. */
 const SYSTEM_LANGUAGES = ["en-US"];
 
 let asked: Asked;
@@ -79,7 +79,7 @@ beforeEach(() => {
   asked = new Asked();
   theming = new Theming(new Kept(), light, document.documentElement);
   spoken = new Kept();
-  // Every language, the pseudo-locale among them, as where the app is worked on offers.
+  // Every locale, including the pseudo-locale.
   language = new Language(spoken, SYSTEM_LANGUAGES, offered(true));
   new Settings(toggle, theming, language, asked);
 });
@@ -88,7 +88,7 @@ const menu = (): HTMLElement => document.querySelector<HTMLElement>(".settings")
 const settle = async (): Promise<void> => {
   for (let i = 0; i < 4; i++) await Promise.resolve();
 };
-/** Each section's items, as what they say, by the section's heading. */
+/** Each section's items as text, keyed by the section's heading. */
 function sections(): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const s of menu().querySelectorAll("section")) {
@@ -121,7 +121,7 @@ test("clicked, it opens on every top-level source, the four themes, the appearan
     Keys: ["Default", "Vim-style"],
     Language: ["System|✓", ...offered(true).map((locale) => `${languageName(locale)}|`)],
   });
-  // The keys land in the menu, on its first item.
+  // Focus lands on the menu's first item.
   expect(document.activeElement?.textContent).toContain("ACME exports");
 });
 
@@ -132,8 +132,7 @@ test("with no connections it says so, and still offers to connect one", async ()
   expect(sections()["Sources"]).toEqual(["no connections yet", "+ Connect a bucket|"]);
 });
 
-// Choosing is previewing: the page wears the theme at once, and the menu stays
-// open on it so the next can be tried.
+// Choosing a theme applies it at once, and the menu stays open.
 test("a theme is worn the moment it is chosen, and marked", async () => {
   toggle.click();
   await settle();
@@ -159,7 +158,8 @@ test("the appearance puts the theme in a mode, and says which it is in", async (
   expect(on).toEqual(["Dark"]);
 });
 
-// The window has no menu bar to pick an input strategy from, so it is here.
+// The settings menu stands in for a menu bar, so the input strategy is
+// chosen here.
 test("the keys are read another way the moment one is chosen, and it is marked", async () => {
   toggle.click();
   await settle();
@@ -182,7 +182,7 @@ test("a language is spoken the moment it is chosen: the open menu, its control, 
   await settle();
   languageItem(PSEUDO_LOCALE).click();
 
-  // The menu stays open, written again in the language chosen.
+  // The menu stays open, redrawn in the chosen language.
   expect(menu().hidden).toBe(false);
   expect(menu().querySelector(".title")?.textContent).toBe(m.settings_title());
   expect(m.settings_title().startsWith(PSEUDO_OPEN)).toBe(true);
@@ -205,7 +205,7 @@ test("a language is listed under the name it calls itself, marked as that langua
   toggle.click();
   await settle();
   languageItem(PSEUDO_LOCALE).click();
-  // Still English under English, whatever the menu around it is in.
+  // A language's name is in that language, whatever the menu is in.
   expect(languageItem(baseLocale).querySelector(".name")?.textContent).toBe("American English");
   expect(languageItem(baseLocale).lang).toBe(baseLocale);
   expect(languageItem("system").lang).toBe("");
@@ -287,8 +287,8 @@ test("the arrows walk the items, round the ends", async () => {
   expect(document.activeElement?.textContent).toContain("Finance lake");
 });
 
-// The list is read again on every open, and one that lands after the menu
-// closed is for a menu nobody is looking at.
+// The list is read on every open. One that lands after the menu closed is
+// dropped.
 test("connections that land after the menu closed are not drawn into it", async () => {
   let land: (list: readonly Connection[]) => void = () => {};
   asked.connections = () => new Promise((resolve) => (land = resolve));
@@ -301,8 +301,7 @@ test("connections that land after the menu closed are not drawn into it", async 
   expect(sections()["Sources"]).toEqual(["reading…", "+ Connect a bucket|"]);
 });
 
-// The menu hangs off the end of the page, so Tab would otherwise carry the
-// keys to the window's × behind it, with the menu left open.
+// The menu is at the end of the page, so Tab wraps within it.
 test("Tab walks the items round the ends, and never leaves the menu", async () => {
   toggle.click();
   await settle();

@@ -1,12 +1,6 @@
-// The engine answers whatever its port hands it.
-//
-// The renderer on the other end of the port is treated as a web page: what it
-// posts is data it made up, and an engine that throws on one request takes
-// every tab down with it. So each probe here is a message something other
-// than the client would send -- not an object, a kind that does not exist, a
-// field of the wrong type -- and the claim is the same for all of them: the
-// handler never throws, nothing is left rejecting with nobody to catch it, and
-// a request that carried a usable id gets exactly one reply.
+// Malformed messages at the engine's port: a bare value in place of an object,
+// an unknown kind, fields of the wrong type. For each: the handler returns,
+// every rejection is caught, and a request with a usable id gets one reply.
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,12 +15,12 @@ import { blobProvider } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { FIXTURE, TINY, connect } from "./harness.ts";
 
-/** A port whose far end is this test: it posts anything, and reads every reply. */
+/** An engine served on a port the test drives directly. */
 interface Probe {
   replies: Reply[];
-  /** What `listen`'s callback threw, which in a worker would have ended the engine. */
+  /** Everything the handler threw. */
   thrown: unknown[];
-  /** The ids of every message sent that a reply can be matched by. */
+  /** The numeric ids of every message sent. */
   asked: Set<number>;
   send(msg: unknown): void;
 }
@@ -60,20 +54,18 @@ function probe(): Probe {
   };
 }
 
-/** The id a message carries, where it is a number a reply's can equal. */
+/** A message's id, if it is a number. */
 function idOf(msg: unknown): number | undefined {
   if (typeof msg !== "object" || msg === null || !("id" in msg)) return undefined;
   return typeof msg.id === "number" && !Number.isNaN(msg.id) ? msg.id : undefined;
 }
 
-/** The most turns `answered` waits before letting the assertions say what is missing. */
+/** The most turns `answered` waits for replies. */
 const ANSWER_TURNS = 2000;
 
 /**
- * answered waits until every message sent with an id has its reply, and a
- * few turns more so a rejection nobody caught is reported. A reply to an open
- * takes as long as the disk takes, and a count of turns that is enough on an
- * idle machine is not enough beside a full suite.
+ * answered waits until every id sent has a reply, or ANSWER_TURNS turns
+ * pass, then a few turns more for uncaught rejections to be reported.
  */
 async function answered(p: Probe): Promise<void> {
   for (let i = 0; i < ANSWER_TURNS; i++) {
@@ -83,7 +75,7 @@ async function answered(p: Probe): Promise<void> {
   await settle();
 }
 
-/** Rejections nobody caught while a test ran. */
+/** Uncaught rejections during the test. */
 let unhandled: unknown[] = [];
 const onUnhandled = (reason: unknown): void => {
   unhandled.push(reason);
@@ -98,7 +90,7 @@ afterEach(() => {
   process.off("unhandledRejection", onUnhandled);
 });
 
-/** settle waits long enough for a rejection nobody caught to be reported. */
+/** settle waits `turns` turns of the event loop. */
 async function settle(turns = 5): Promise<void> {
   for (let i = 0; i < turns; i++) {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -312,11 +304,11 @@ test("a rows or edit request with a number that is not whole is refused, not rea
   await answered(p);
   const opened = withId(p.replies, 1)[0]!;
   const source = opened.t === "opened" ? opened.added.showing : "";
-  // "9" + 2000 is "92000", which read as the whole file.
+  // A string `first` is refused ahead of any arithmetic with `count`.
   p.send({ t: "rows", id: 2, source, first: "9", count: 2000 });
   p.send({ t: "rows", id: 3, source, first: -5, count: 10 });
   p.send({ t: "rows", id: 4, source, first: 1.5, count: 10 });
-  // A row of "3" compared as 3 and was logged as "3", which the saved file refused.
+  // A string `row` is refused.
   p.send({ t: "edit", id: 5, source, edit: { op: "set", row: "3", col: 0, now: "x" } });
   p.send({ t: "edit", id: 6, source, edit: { op: "set", row: 3, col: "0", now: "x" } });
   p.send({ t: "edit", id: 7, source, edit: { op: "set", row: -2, col: 0, now: "x" } });
@@ -329,7 +321,7 @@ test("a rows or edit request with a number that is not whole is refused, not rea
       `request ${id}`,
     ).toEqual(["error"]);
   }
-  // A whole row that is what it says still lands, once the workspace can write.
+  // A whole-number row is accepted once in transform mode.
   p.send({ t: "mode", transform: true });
   p.send({ t: "edit", id: 8, source, edit: { op: "set", row: 3, col: 0, now: "x" } });
   await answered(p);

@@ -1,40 +1,32 @@
-// Page, over a plain DOM: happy-dom's document, driven directly.
+// Page over a plain DOM: happy-dom's document, driven directly.
 //
-// electron-page.ts answers every question by shipping a string across
-// `webContents.executeJavaScript` to a document in another process. There is no
-// such boundary here -- this backend and the page it reads share one realm --
-// so there is nothing to serialise. Each method below does in plain TypeScript
-// exactly what the matching string in electron-page.ts does in the renderer:
-// same selectors, same DOM reads, same key-dispatch shape. Keeping the two
-// side by side is what makes a difference between them worth noticing.
+// electron-page.ts sends each question as a string across
+// `webContents.executeJavaScript`. Here the backend and the page share one
+// realm, so each method does in TypeScript what the matching string in
+// electron-page.ts does: same selectors, same DOM reads, same key dispatch.
 //
-// What this file cannot do anything about is layout: happy-dom parses and
-// mutates a tree but never lays it out, so `clientHeight`, `offsetHeight` and
-// `getBoundingClientRect()` are all zero unless something fakes them first. See
-// dom-harness.ts.
+// happy-dom skips layout, so `clientHeight`, `offsetHeight` and
+// `getBoundingClientRect()` are zero until faked. See dom-harness.ts.
 
 import type { KeyModifiers, Page, Row, Wait } from "../../src/main/smoke/page.ts";
 
 /**
- * How long a wait here lasts, at most. electron-page.ts counts frames, 150 of
- * them, which at a display's rate is a few seconds. happy-dom's frame is one
- * turn of the event loop and no time at all, so counting them here would give
- * the engine, which answers over a channel in its own turns, a budget that
- * shrinks to nothing on a loaded machine. The wait is bounded by the clock
- * instead, and polls once a frame as the real page does.
+ * The longest a wait lasts. electron-page.ts counts 150 frames. happy-dom's
+ * frame is one turn of the event loop and is over at once, so the wait here
+ * is bounded by the clock, and polls once a frame.
  */
 const WAIT_MS = 5_000;
 
-/** A frame, the way the grid schedules its own layout: two rAFs, so a write
- * made in one is visible by the time the second's callback runs. */
+/** Two rAFs, which is how the grid schedules its layout, so a write made in
+ * one is visible in the second's callback. */
 function frame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
 }
 
-/** A `Wait`, as a predicate over the live document -- the direct-call twin of
- * electron-page.ts's `condition`, which builds the same check as a string. */
+/** A `Wait` as a predicate over the live document, the twin of
+ * electron-page.ts's `condition`. */
 function holds(wait: Wait): boolean {
   const at =
     "selector" in wait
@@ -44,7 +36,7 @@ function holds(wait: Wait): boolean {
   return "equals" in wait ? at === wait.equals : at.includes(wait.includes);
 }
 
-/** until waits, a frame at a time and for WAIT_MS at most, for `holds` to say so. */
+/** Waits a frame at a time, for WAIT_MS at most, for `holds` to be true. */
 export async function until(page: Page, holds: () => boolean): Promise<boolean> {
   const deadline = Date.now() + WAIT_MS;
   while (!holds() && Date.now() < deadline) await page.settle(2);
@@ -95,12 +87,12 @@ export function domPage(): Page {
       if (editor !== null) editor.value = value;
     },
 
-    // A key goes where a real one would: to the editor while it is open, to the
-    // grid otherwise. Matches electron-page.ts's own press.
+    // A key goes to the editor while it is open, and to the grid otherwise.
+    // Matches electron-page.ts's press.
     press: async (key, modifiers: KeyModifiers = {}) => {
       const target = document.querySelector(".cell-editor") ?? document.querySelector("#content");
-      // Cancelable as a browser's keydown is, so what one listener took the
-      // next can see was taken.
+      // Cancelable, as a browser's keydown is, so a later listener sees when
+      // an earlier one took the key.
       target?.dispatchEvent(
         new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...modifiers }),
       );
@@ -113,9 +105,7 @@ export function domPage(): Page {
       }
     },
 
-    // The whole poll runs in one call, same as electron-page.ts's until: a
-    // check waiting on a frame-by-frame condition must not pay one await per
-    // frame outside this backend either.
+    // The whole poll runs in one call, as electron-page.ts's until does.
     until: async (waits) => {
       const ok = (): boolean => waits.every(holds);
       const deadline = Date.now() + WAIT_MS;

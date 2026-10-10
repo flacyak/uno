@@ -1,16 +1,8 @@
-// A bucket whose answers the test hands out one at a time.
+// A stand-in bucket behind a Door that holds every ranged read until the test
+// lets it through, once the engine has gone quiet. This makes the order of
+// reads, and so the request and byte counts, the same on every run.
 //
-// What reading from a bucket costs is requests and bytes, and both depend on
-// the order things happen in: the index pass asks for a chunk, the grid asks
-// for a block, read-ahead asks for what it guesses comes next. Left to run
-// against a server on this machine that order is a race, and the count changes
-// from run to run. So every ranged read here is held at the door until the
-// test lets it through, and the test only does that once the engine has gone
-// quiet. The same scenario then asks for the same ranges in the same order
-// every time, and its counts are exact.
-//
-// The engine is the real one, opening through the real S3 provider against
-// the stand-in bucket. Only `fetch` is wrapped.
+// The engine and the S3 provider are the real ones. Only `fetch` is wrapped.
 
 import { Engine } from "../../src/engine/index.ts";
 import type { SourceHandle, Tuning } from "../../src/engine/index.ts";
@@ -23,9 +15,9 @@ import type { Bucket } from "../store/standin.ts";
 
 /** Asked is one request the engine sent. */
 export interface Asked {
-  /** Where the range starts, or undefined for a request with no range. */
+  /** Where the range starts, or undefined for an unranged request. */
   offset: number | undefined;
-  /** How many bytes the range asks for. 0 for a request with no range. */
+  /** How many bytes the range asks for. 0 for an unranged request. */
   length: number;
 }
 
@@ -35,10 +27,9 @@ interface Held {
   go(): void;
 }
 
-/** How long the engine has to send nothing for before it counts as quiet. */
+/** Milliseconds of silence that make one quiet round. */
 const QUIET_MS = 5;
-/** How many quiet stretches in a row it takes. One could fall between two of
- * the engine's own steps. */
+/** Quiet rounds in a row before the engine counts as quiet. */
 const QUIET_ROUNDS = 3;
 
 const RANGE = /^bytes=(\d+)-(\d+)$/;
@@ -49,16 +40,15 @@ function askedOf(init: RequestInit | undefined): Asked {
   return { offset: Number(m[1]), length: Number(m[2]) - Number(m[1]) + 1 };
 }
 
-/** The order ranged reads are let through in when one is let through at a time. */
+/** Sorts held reads by offset, lowest first. */
 function byOffset(a: Held, b: Held): number {
   return (a.asked.offset ?? 0) - (b.asked.offset ?? 0);
 }
 
 /**
- * Door stands between the engine and the bucket.
- *
- * `asked` is every request the engine sent, in the order it sent them, whether
- * or not it has been let through. `passed` is the ones that were.
+ * Door wraps `fetch` between the engine and the bucket. Ranged reads wait in
+ * `held` until let through. `asked` is every request in the order sent, and
+ * `passed` is every request that was let through.
  */
 export class Door {
   readonly asked: Asked[] = [];
@@ -77,8 +67,8 @@ export class Door {
     this.out++;
     try {
       const res = await fetch(input, init);
-      // The body is read here, so that once nothing is out, nothing is still
-      // arriving either.
+      // The whole body is read before `out` drops, so every byte has arrived
+      // once `out` is 0.
       const body = await res.arrayBuffer();
       return new Response(body.byteLength === 0 ? null : body, {
         status: res.status,
@@ -89,7 +79,7 @@ export class Door {
     }
   };
 
-  /** quiet waits until the engine has stopped asking and nothing is on its way. */
+  /** quiet resolves after QUIET_ROUNDS silent rounds with all requests done. */
   async quiet(): Promise<void> {
     for (let rounds = 0; rounds < QUIET_ROUNDS;) {
       const before = this.asked.length;
@@ -103,7 +93,7 @@ export class Door {
     for (const h of this.held.splice(0)) h.go();
   }
 
-  /** letLowest lets through the waiting read nearest the front of the object. */
+  /** letLowest lets through the waiting read with the lowest offset. */
   letLowest(): void {
     const next = this.held.toSorted(byOffset)[0];
     if (next === undefined) return;
@@ -112,15 +102,15 @@ export class Door {
   }
 
   /**
-   * during runs `work` to its end, letting reads through with `step` each time
-   * the engine goes quiet without having finished it.
+   * during waits for `work`, calling `step` each time the engine goes quiet
+   * before `work` has settled. Throws on a quiet with the hold empty.
    */
   async during<T>(work: Promise<T>, step: () => void = () => this.letAll()): Promise<T> {
     let settled = false;
     const done = work.finally(() => {
       settled = true;
     });
-    // Reported by `done` below, which is what the caller awaits.
+    // A rejection is reported through `done` below.
     done.catch(() => undefined);
     for (;;) {
       await this.quiet();
@@ -131,13 +121,13 @@ export class Door {
     }
   }
 
-  /** release stops holding anything, so what is left can finish and be closed. */
+  /** release lets every held read through and passes every later one. */
   release(): void {
     this.open = true;
     this.letAll();
   }
 
-  /** How many requests were sent from the `from`th on, and the bytes their ranges asked for. */
+  /** Requests in `of` from index `from` on, and the bytes their ranges cover. */
   since(from: number, of: readonly Asked[] = this.asked): { requests: number; bytes: number } {
     const sent = of.slice(from);
     return { requests: sent.length, bytes: sent.reduce((sum, a) => sum + a.length, 0) };
@@ -156,7 +146,7 @@ export function repeated(repeats: number): Uint8Array<ArrayBuffer> {
 
 const KEY = "2025/big.csv";
 
-/** Remote is one object in a bucket, an engine that can open it, and the door between. */
+/** Remote is one object in a stand-in bucket, an engine, and the Door between. */
 export interface Remote {
   door: Door;
   engine: Engine;
