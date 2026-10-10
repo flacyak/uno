@@ -1,5 +1,5 @@
 // hostedAuth: the hosted engine signs in as a role in the customer's account,
-// assumed with the account's external ID.
+// assumed with the tenant's external ID, as a session named for the person.
 //
 // The stand-in STS checks the signature and the external ID. A machine or
 // profile connection, and an address outside every connection, are refused.
@@ -21,6 +21,8 @@ const INSTANCE: AwsCredentials = {
 };
 const PRINCIPAL = "arn:aws:iam::111122223333:role/uno-engine";
 const EXTERNAL = "acme-7f3c9a21e04b";
+/** Who the session is for: the person, as the gate named them. */
+const SESSION_NAME = "uno-user_ana";
 const CUSTOMER = "arn:aws:iam::210987654321:role/uno-read";
 const SESSION = {
   accessKeyId: "ASIDCUSTOMER",
@@ -44,6 +46,7 @@ function auth() {
     base: () => Promise.resolve(INSTANCE),
     externalId: EXTERNAL,
     principal: PRINCIPAL,
+    sessionName: SESSION_NAME,
     stsEndpoint: s.endpoint,
     env: {},
   });
@@ -67,7 +70,7 @@ function connection(auth: Connection["auth"], over: Partial<Connection> = {}): C
 
 const LOC: S3Location = { bucket: "acme-finance-lake", key: "exports/ledger.csv" };
 
-test("a role connection is the session STS hands out, signed for the bucket's region", async () => {
+test("a role connection is the session STS hands out, named for the person and signed for the bucket's region", async () => {
   const signing = await auth().of(connection({ mode: "role", roleArn: CUSTOMER }));
   expect(signing).toMatchObject({ ...SESSION, region: HOME_REGION });
   expect(s.seen).toEqual([
@@ -75,7 +78,7 @@ test("a role connection is the session STS hands out, signed for the bucket's re
       caller: INSTANCE.accessKeyId,
       roleArn: CUSTOMER,
       externalId: EXTERNAL,
-      sessionName: expect.stringMatching(/^uno-\d+$/),
+      sessionName: SESSION_NAME,
       region: HOME_REGION,
     },
   ]);
