@@ -14,6 +14,7 @@ import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
 import { readContainer } from '@document';
+import { Refusal } from '@said';
 import {
   EMPTY_SHA256,
   encode,
@@ -580,6 +581,63 @@ describe('a source in a bucket', () => {
     } finally {
       local.done();
     }
+  });
+});
+
+// S3 refuses response-content-encoding on a request that is not signed, so a
+// read without signing in gets an object's bytes back as fetch leaves them.
+describe('an object in a public bucket', () => {
+  const PUBLIC = 'open-data';
+  const GZIPPED = 'census/2025.csv.gz';
+  const LABELLED = 'census/2025.csv';
+  let b: Bucket;
+  beforeAll(async () => {
+    b = await bucket(undefined, HOME_REGION, undefined, {
+      [PUBLIC]: {
+        objects: new Map([
+          [GZIPPED, new Uint8Array(gzipSync(bytes))],
+          [LABELLED, bytes],
+        ]),
+        encodings: new Map([
+          [GZIPPED, 'gzip'],
+          [LABELLED, 'utf-8'],
+        ]),
+        public: true,
+      },
+    });
+  });
+  afterAll(() => b.close());
+
+  const anonymous = () =>
+    s3Files({
+      credentials: () =>
+        Promise.resolve({ unsigned: true, region: HOME_REGION }),
+      endpoint: b.endpoint,
+    });
+
+  // fetch would undo the gzip, and a range from its middle would not inflate.
+  test('stored with Content-Encoding gzip is refused before a byte is read, saying to sign in', async () => {
+    b.seen.length = 0;
+    const path = `s3://${PUBLIC}/${GZIPPED}`;
+    const opening = anonymous().open({ name: '2025.csv.gz', path });
+    await expect(opening).rejects.toBeInstanceOf(Refusal);
+    await expect(opening).rejects.toMatchObject({
+      said: {
+        t: 'stored-encoded',
+        name: path,
+        encoding: 'gzip',
+        bucket: PUBLIC,
+      },
+    });
+    expect(b.seen.map((r) => r.method)).toEqual(['HEAD']);
+  });
+
+  // An upload often labels text utf-8, a coding fetch does not know.
+  test('labelled with a coding fetch leaves alone is read as it is', async () => {
+    const path = `s3://${PUBLIC}/${LABELLED}`;
+    const file = await anonymous().open({ name: '2025.csv', path });
+    expect(await file.read(0, bytes.length)).toEqual(bytes);
+    await file.close();
   });
 });
 
