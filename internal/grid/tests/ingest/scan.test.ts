@@ -7,7 +7,7 @@ const encoder = new TextEncoder();
 const whole = new TextDecoder("utf-8");
 const piece = new TextDecoder("utf-8", { ignoreBOM: true });
 
-/** Where the scanner says records begin, fed `chunk` bytes at a time. */
+/** Record start offsets reported by the scanner when fed `chunk` bytes at a time. */
 function starts(bytes: Uint8Array, comma: string, chunk: number): number[] {
   const out: number[] = [];
   const s = new RecordScanner(comma, (offset) => out.push(offset));
@@ -19,8 +19,8 @@ function starts(bytes: Uint8Array, comma: string, chunk: number): number[] {
 }
 
 /**
- * The file read the way the engine reads it: split at every `every`th record
- * start, each run decoded and parsed on its own, and the rows put back together.
+ * Reads the file the way the engine does: split at every `every`th record
+ * start, decode and parse each run on its own, and concatenate the rows.
  */
 function piecewise(bytes: Uint8Array, comma: string, begins: number[], every: number): string[][] {
   const cuts = [0];
@@ -35,7 +35,7 @@ function piecewise(bytes: Uint8Array, comma: string, begins: number[], every: nu
   return rows;
 }
 
-/** mulberry32, so a failure names a seed that reproduces it. */
+/** mulberry32 random number generator. A failure reports its seed. */
 function random(seed: number): () => number {
   return () => {
     seed = (seed + 0x6d2b79f5) | 0;
@@ -46,15 +46,15 @@ function random(seed: number): () => number {
   };
 }
 
-// Every byte the scanner acts on, plus the characters that would break a scanner
-// that decoded: a multi-byte letter, and a U+FEFF in the middle of a file.
+// Every byte the scanner acts on, plus multi-byte letters and a U+FEFF that
+// can land anywhere in the file.
 const ALPHABET = ["a", "b", ",", ";", '"', '"', "\n", "\n", "\r", "\r\n", " ", "é", "日", "\uFEFF"];
 
-/** How often a random file opens with a byte order mark, and how long it runs. */
+/** Chance a random file starts with a byte order mark, and its maximum length. */
 const BOM_CHANCE = 0.1;
 const MAX_CHARS = 40;
 
-/** How many random files the scanner is checked against. */
+/** Number of random files to check. */
 const SEEDS = 4000;
 
 function csvish(rand: () => number): string {
@@ -103,7 +103,7 @@ describe("the scanner agrees with readAll", () => {
     test(name, () => {
       const bytes = encoder.encode(text);
       expect(starts(bytes, ",", bytes.length)).toEqual(want);
-      // A boundary between any two bytes changes nothing.
+      // Feeding one byte at a time gives the same offsets.
       expect(starts(bytes, ",", 1)).toEqual(want);
     });
   }

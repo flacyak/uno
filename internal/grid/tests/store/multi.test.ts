@@ -1,6 +1,6 @@
-// Several files read as one: the three parts of sales-q3.csv read back as the
-// whole file, wherever a read starts and however far it goes, with each part
-// opened only when a read needs it and every byte traceable to its part.
+// openMulti: the three parts of sales-q3.csv read back as the whole file,
+// from any offset and length, with each part opened only when a read needs
+// it, and a map from every byte to its part.
 
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
@@ -26,7 +26,7 @@ const BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
 /** The header line every part of the fixture opens with, its CRLF included. */
 const HEADER_BYTES = partBytes[0]!.indexOf(LF) + 1;
 
-/** Where a file held in memory is said to be. */
+/** The path prefix of a file held in memory. */
 const MEMORY = "memory://";
 
 /** A handler over files held in memory, which remembers what was asked of it. */
@@ -88,7 +88,7 @@ function texts(...contents: string[]): { files: Map<string, Uint8Array>; parts: 
   };
 }
 
-/** What the parts read as, joined, as text. */
+/** The parts read as one, decoded as text. */
 async function joined(header: HeaderMode, ...contents: string[]): Promise<string> {
   const { files, parts } = texts(...contents);
   const source = await openMulti([memory(files).handler], parts, header);
@@ -102,7 +102,7 @@ async function measuredParts(): Promise<Part[]> {
   return parts.map((part, i) => ({ ...part, extent: source.extents[i]! }));
 }
 
-/** A generator of the same numbers every run, each from 0 up to but not 1. */
+/** A deterministic generator of numbers in [0, 1). */
 function seeded(seed: number): () => number {
   const MODULUS = 2 ** 32;
   const MULTIPLIER = 1664525;
@@ -114,7 +114,6 @@ function seeded(seed: number): () => number {
   };
 }
 
-// The task's own sentence.
 test("sales-q3.csv split into three parts reads back identical to the whole", async () => {
   const parts = PART_FIXTURES.map((path, i) => ({ ref: { name: PART_NAMES[i]!, path } }));
   const source = await openMulti([localFiles()], parts, "first");
@@ -170,7 +169,7 @@ test("a read across a boundary takes up in the next part where the last one left
   expect((await source.read(source.size, AROUND)).length).toBe(0);
 });
 
-// The way indexing reads: front to back in chunks that fit no part.
+// Front to back in chunks that straddle part boundaries.
 test("read front to back in chunks, the join is the whole", async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
   const source = await openMulti([memory(fixtureFiles()).handler], parts, "first");
@@ -185,8 +184,8 @@ test("read front to back in chunks, the join is the whole", async () => {
 test("a part that does not end in a newline is given one before the next part", async () => {
   expect(await joined("first", "a,b\n1,2", "a,b\n3,4", "a,b\n5,6\n")).toBe("a,b\n1,2\n3,4\n5,6\n");
 
-  // In the fixture: part two loses the CRLF of its last row, and reads back
-  // with a newline there, so the whole differs by that row's CR and no more.
+  // Part two with its final CRLF cut off reads back with an LF there, so the
+  // whole differs from the fixture by that one CR.
   const files = fixtureFiles();
   const cut = partBytes[1]!.subarray(0, partBytes[1]!.length - CRLF_BYTES);
   files.set(PART_NAMES[1]!, cut);
@@ -235,8 +234,8 @@ test("a header that is all a part holds is left out, and the part gives no rows"
   expect(await joined("first", "a,b", "a,b\n1,2\n")).toBe("a,b\n1,2\n");
 });
 
-// An export with no rows for the day is a file of nothing, a newline or two,
-// or the mark an editor writes before anything: the same nothing each time.
+// A part that is empty, only newlines, or only a byte order mark gives no
+// rows.
 test("a later part with no record in it gives no rows, whatever its bytes are", async () => {
   expect(await joined("first", "a,b\n1,2\n", "\n\n", "a,b\n3,4\n")).toBe("a,b\n1,2\n\n\n3,4\n");
   expect(await joined("first", "a,b\n1,2\n", "\r", "a,b\n3,4\n")).toBe("a,b\n1,2\n\r\n3,4\n");
@@ -249,7 +248,7 @@ test("a later part with no record in it gives no rows, whatever its bytes are", 
     unterminated: false,
   });
   expect(decoder.decode(await source.read(0, source.size))).toBe("a,b\n1,2\n\n3,4\n");
-  // The first part is the header every other is held to, so it has to have one.
+  // The first part must have a header.
   await expect(joined("first", "\n\n", "a,b\n3,4\n")).rejects.toThrow(
     "a.csv (part 1 of 2): a.csv: file is empty",
   );
@@ -276,7 +275,7 @@ test("with no header row, nothing is skipped", async () => {
   );
 });
 
-// In the middle of the join a byte order mark would be a character of a cell.
+// A later part's byte order mark is skipped.
 test("with no header row, a later part's byte order mark is still left out", async () => {
   const { files, parts } = texts("1,2\n", "3,4\n");
   for (const [name, held] of files) files.set(name, Uint8Array.of(...BOM, ...held));
@@ -322,8 +321,8 @@ test("a part with its extent is not opened until a read needs it", async () => {
   expect(m.opened, "each part once").toHaveLength(PARTS);
 });
 
-// The first part's header is what a later part is held to, so the first part
-// is opened with it.
+// A later part is checked against the first part's header, so the first
+// part is opened with it.
 test("a later part read first is opened with the first part, and no other", async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
@@ -336,8 +335,8 @@ test("a later part read first is opened with the first part, and no other", asyn
   expect(m.opened.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[2]]);
 });
 
-// With no header row it is still held to the first part's delimiter, encoding
-// and number of columns.
+// With header mode none, a later part is still checked against the first
+// part's delimiter, encoding and column count.
 test("with no header row, a later part read first is opened with the first part too", async () => {
   const m = memory(fixtureFiles());
   const unmeasured = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
@@ -370,7 +369,7 @@ test("the map says which part every byte came from, at every boundary", async ()
 
   expect(map.size).toBe(size);
   expect(map.spans.map((s) => s.part)).toEqual([0, 1, 2]);
-  // The first part is there whole, and each later one without its header.
+  // The first part is there whole, and each later one minus its header.
   expect(map.spans.map((s) => s.skip)).toEqual([0, HEADER_BYTES, HEADER_BYTES]);
   expect(map.spans.map((s) => s.end - s.start)).toEqual(
     partBytes.map((held, i) => held.length - (i === 0 ? 0 : HEADER_BYTES)),
@@ -391,7 +390,7 @@ test("the map says which part every byte came from, at every boundary", async ()
   expect(map.partAt(Number.NaN)).toBeUndefined();
 });
 
-// What the _file column goes on: a row is in the part its first byte is in.
+// A row is in the part its first byte is in.
 test("the map puts every row of the fixture in the part that holds it", async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
   const { map } = await openMulti([memory(fixtureFiles()).handler], parts, "first");
@@ -425,7 +424,7 @@ test("the map lays out a virtual newline, and a part that gives nothing", () => 
   expect(map.partAt(9)).toBe(0);
   // The virtual newline belongs to the part it ends.
   expect(map.partAt(10)).toBe(0);
-  // No byte is in a part that gives nothing.
+  // Every byte belongs to a part that holds bytes.
   expect(map.partAt(11)).toBe(3);
   expect(map.partAt(15)).toBe(3);
   expect(map.partAt(16)).toBeUndefined();
@@ -449,7 +448,7 @@ test("a part that cannot be opened is named", async () => {
     "b.csv (part 2 of 2): b.csv: no such file",
   );
   expect(m.closed).toEqual(m.opened);
-  // A part no handler listed opens is refused the way any ref is, by part.
+  // A part outside every handler is refused, naming the part.
   await expect(
     openMulti([m.handler], [parts[0]!, { ref: { name: "c.csv", path: "/tmp/c.csv" } }], "first"),
   ).rejects.toThrow(/^c\.csv \(part 2 of 2\): /);
@@ -470,7 +469,7 @@ test("a part that is not what its extent says is refused when a read reaches it"
   );
   expect(m.closed, "and it is not left open").toEqual([PART_NAMES[1]]);
 
-  // Put back, it reads: a failed open is asked for again.
+  // Restored, it reads: a failed open is retried.
   files.set(PART_NAMES[1]!, partBytes[1]!);
   expect((await source.read(second!.start, HEADER_BYTES)).length).toBe(HEADER_BYTES);
 });
@@ -483,7 +482,7 @@ test("a part that comes up short under a read is named", async () => {
     handles: () => true,
     open(ref) {
       const source = bytesSource(held.get(ref.name)!);
-      // The file as it was when it was opened, cut short under the reader.
+      // Reads of the third part return fewer bytes than asked.
       const cut = ref.name === PART_NAMES[2];
       return Promise.resolve({
         ...source,
@@ -525,8 +524,7 @@ test("closing closes each part that was opened, and no other", async () => {
 /** What a read of a source that was closed is refused with. */
 const CLOSED = "the source was closed";
 
-// A view that is closed while its index is still reading asks for bytes after
-// the close. A part opened for that read would have nobody left to close it.
+// A read after close is refused, with every part left closed.
 test("a read after close is refused, and opens nothing", async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
@@ -535,7 +533,7 @@ test("a read after close is refused, and opens nothing", async () => {
   await source.read(first!.start, HEADER_BYTES);
   await source.close();
 
-  // A part that was open, one that never was, and a read across all three.
+  // A part that was open, one that stayed closed, and a read across all three.
   await expect(source.read(first!.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
   await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
   await expect(source.read(0, source.size)).rejects.toThrow(CLOSED);
@@ -544,14 +542,14 @@ test("a read after close is refused, and opens nothing", async () => {
   expect(m.opened, "nothing is opened for a read that is refused").toEqual([PART_NAMES[0]]);
   expect(m.closed, "and nothing is left open").toEqual([PART_NAMES[0]]);
 
-  // Closed again, it is as closed as it was.
+  // A second close leaves things as they are.
   await source.close();
   expect(m.closed).toEqual([PART_NAMES[0]]);
 });
 
 /**
- * slow is `inner` with its opens held back: a part is opened when it is asked
- * for, and handed over only once `release` is called.
+ * slow is `inner` with its opens held back: an open completes only once
+ * `release` is called.
  */
 function slow(inner: FileHandler): {
   handler: FileHandler;
@@ -599,8 +597,8 @@ test("a part whose open is in flight when the source closes is closed when it la
   expect(m.closed, "the open that landed after the close").toEqual([PART_NAMES[0]]);
 });
 
-// A later part is held to the first part's header, so its open asks for the
-// first part. Landing after the close, it must not open that one either.
+// Opening a later part also opens the first part for its header. After the
+// close, the first part stays closed.
 test("a later part landing after the close does not open the first part behind it", async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
@@ -617,8 +615,8 @@ test("a later part landing after the close does not open the first part behind i
   expect(m.closed).toEqual([PART_NAMES[1]]);
 });
 
-// Any handler, in any mix: a file on disk, an object in a bucket, and bytes
-// already in hand, as one table.
+// Parts from three handlers: a file on disk, an object in a bucket, and a
+// Blob.
 const KEY = `2025/${PART_NAMES[1]}`;
 let b: Bucket;
 beforeAll(async () => {
@@ -657,7 +655,7 @@ test("an object written over while it is being read is an error that names the p
   const source = await openMulti(handlers, parts, "first");
   try {
     const [first, second] = source.map.spans;
-    // Another export the same size: only the version says it changed.
+    // Same size, different bytes: only the version shows the change.
     b.objects.set(
       KEY,
       partBytes[1]!.map((byte) => (byte === LF ? LF : byte ^ 1)),

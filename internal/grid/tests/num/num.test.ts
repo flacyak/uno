@@ -2,8 +2,8 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { isNumber, parse, undress } from "../../src/num/index.ts";
 
-// The list is the point: a plain parse accepts everything in the second group,
-// and a column of them is not numeric data.
+// isNumber accepts plain and accounting-style numbers and refuses the rest,
+// including values Number() would accept.
 describe("isNumber rejects what a spreadsheet does not mean", () => {
   for (const v of ["12", "-3.5", "+7", "1e3", "0.0", "1234.00-", "(1234.00)"]) {
     test(`accepts ${JSON.stringify(v)}`, () => {
@@ -33,10 +33,8 @@ describe("isNumber rejects what a spreadsheet does not mean", () => {
   }
 });
 
-// Undressing is what separates a number in a costume from text. It has to take
-// the costume off and leave everything else on: the full stop it does not strip
-// is what keeps 3.5 a number, and the letters it does not strip are what keep
-// "N/A" out of a numeric column.
+// undress strips currency signs, thousands separators, percent signs and
+// surrounding space. It keeps the decimal point and letters.
 describe("undress takes off the costume and nothing else", () => {
   const cases: Array<[string, string]> = [
     ["1,204", "1204"],
@@ -58,10 +56,7 @@ describe("undress takes off the costume and nothing else", () => {
   }
 });
 
-// parse is the coercion an evaluator runs per cell, so what it accepts decides
-// which columns arithmetic can be bound to. It undresses first: a column of
-// 1,204 is one people expect to multiply, and refusing it for wearing a comma
-// would make the numeric badge's promise a lie one screen later.
+// parse undresses the value first, then reads it as a number.
 describe("parse reads the number a person sees", () => {
   const cases: Array<[string, number | undefined]> = [
     ["12", 12],
@@ -71,20 +66,17 @@ describe("parse reads the number a person sees", () => {
     ["£40.00", 40],
     [" 987 ", 987],
 
-    // The badge trims by strings.TrimSpace before it calls a column numeric, so
-    // a tab, a carriage return or a no-break space at either edge is read the
-    // same way here. A column the badge promises is numeric must compute.
+    // Whitespace at either edge is trimmed the same way column kind inference
+    // trims it, including tab, CR and no-break space.
     ["12\t", 12],
     ["12\r", 12],
     ["\u00a012", 12],
     ["\t1,204\t", 1204],
 
-    // A percent sign is decoration, so 12% reads as the 12 that was written.
-    // Dividing by a hundred here would invent a value nobody typed and no cell
-    // displays.
+    // A percent sign is stripped and the number keeps its written scale.
     ["12%", 12],
 
-    // Accounting negatives: SAP writes the sign last, Oracle in parentheses.
+    // Accounting negatives: trailing minus sign or parentheses.
     ["1234.00-", -1234],
     ["(1234.00)", -1234],
     ["1,234.00-", -1234],

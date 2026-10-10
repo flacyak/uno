@@ -1,25 +1,20 @@
 // Checks that a workspace holds more than one source: a second export added
 // beside the first, a tab for each, moving between them, and taking one out.
-// Then the same again for a source that is not on this machine at all: an
-// object in a bucket, pasted into the sources panel the + menu opens, drawn,
-// saved as an `s3://` pointer and read back from one.
+// Then the same for an object in a bucket: pasted into the sources panel the
+// + menu opens, drawn, saved as an `s3://` pointer and read back from one.
 //
-// They run last, over the fixture the checks before them left edited.
+// They run over the fixture the checks before them left edited.
 
 import { join } from "node:path";
 
 import type { Check } from "./check.ts";
 
-/**
- * The second export: the Google Ads sample the CPA plan measures. smoke.js
- * names it, since only it knows where the fixtures are.
- */
+/** The second export: the Google Ads sample. smoke.js names it. */
 const ADS = process.env["UNO_SMOKE_SOURCE"] ?? "";
 
 /**
- * The same export again, as an object: the address a person would paste into
- * the sources panel's filter. smoke.js stands an S3 up in front of the fixture and names it
- * here, so nothing in the app knows the bucket is a stand-in.
+ * The same export as an object in the stand-in bucket: the address pasted
+ * into the sources panel's filter. smoke.js names it.
  */
 const OBJECT = process.env["UNO_SMOKE_OBJECT"] ?? "";
 
@@ -27,13 +22,9 @@ const OBJECT = process.env["UNO_SMOKE_OBJECT"] ?? "";
 const SCRATCH = process.env["UNO_SMOKE"] ?? "";
 
 /**
- * Where the save lands: the scratch folder the save dialog's stand-in answers
- * from, under the name the workspace suggests -- its first source's, which is
- * the fixture the run opened with.
- *
- * The reopen has to name it before the run starts, since a check's message to
- * the window is fixed when this list is built and cannot read what an earlier
- * check saw. The save check says so when the two disagree.
+ * Where the save lands: the scratch folder, under the name the workspace
+ * suggests (its first source's, the fixture). The reopen check names this
+ * path before the run starts, and the save check fails if the two disagree.
  */
 const SAVED = join(SCRATCH, "sales-q3.uno");
 
@@ -114,8 +105,7 @@ export const SOURCES: Check[] = [
       await frame();
       const menu = document.querySelector(".pop-menu");
       if (menu === null) return "the + opened no menu";
-      // The label is the item's first child: what follows it is the keys it
-      // answers to.
+      // The label is the item's first child; its shortcut follows it.
       const items = [...menu.querySelectorAll(".pop-item")].map((i) => i.firstChild.textContent);
       return JSON.stringify(items) === JSON.stringify(["File…", "Browse sources…"])
         ? ""
@@ -145,13 +135,13 @@ export const SOURCES: Check[] = [
       const form = document.querySelector("#panel .panel-filter");
       if (form === null) return "the panel has no filter box";
       form.querySelector("input").value = ${JSON.stringify(OBJECT)};
-      // Enter in the box is the form's submit, and the PRELUDE's press aims at
-      // the grid, which the box stops keys short of.
+      // Enter in the box submits the form. The PRELUDE's press aims at the
+      // grid.
       form.requestSubmit();
 
-      // Everything the engine can refuse comes back as one line, and this is
-      // the only place a run leaves it: a 403 is the signature or the region, a
-      // 404 is the key, and neither is visible anywhere else afterwards.
+      // Anything the engine refuses comes back as one status line, and this
+      // is the only place it is shown: a 403 is the signature or the region,
+      // a 404 is the key.
       if (!(await arrives(() => document.querySelectorAll(".tab").length === 2))) {
         return "the sidebar has " + document.querySelectorAll(".tab").length +
           " tabs · " + JSON.stringify(text("#status-msg"));
@@ -171,8 +161,7 @@ export const SOURCES: Check[] = [
     `,
   },
   {
-    // A stand-in that quietly served the fixture sitting next to it would pass
-    // everything above. These values are only in the object.
+    // These values are only in the object the bucket holds.
     name: "the rows came out of the bucket, not from beside it",
     script: `
       document.querySelector(".grid-scroll").scrollTop = 0;
@@ -181,9 +170,9 @@ export const SOURCES: Check[] = [
         return "no row of the object was drawn · " + JSON.stringify(text("#status-msg"));
       }
 
-      // Ad_ID,Campaign_Name,Clicks,Impressions,Cost,Leads,Conversions,
-      // Conversion Rate,Sale_Amount,Ad_Date,... -- row 1, spelt as the file
-      // spells it, costume and all.
+      // Row 1 of Ad_ID,Campaign_Name,Clicks,Impressions,Cost,Leads,
+      // Conversions,Conversion Rate,Sale_Amount,Ad_Date,..., spelt as the
+      // file spells it.
       const AD_ID = 0, CAMPAIGN = 1, COST = 4, AD_DATE = 9;
       const cells = [...document.querySelectorAll("tbody tr")[0].children].map((c) => c.textContent);
       const got = [cells[GUTTER + AD_ID], cells[GUTTER + CAMPAIGN], cells[GUTTER + COST], cells[GUTTER + AD_DATE]];
@@ -204,23 +193,22 @@ export const SOURCES: Check[] = [
         return "the workspace saved to " + JSON.stringify(path) +
           ", outside this run's " + ${JSON.stringify(SCRATCH)};
       }
-      // What is in the file is smoke.js's to say: the page cannot read a .uno
-      // back off the disk, and has no business being able to.
+      // smoke.js reads the file back and checks what is in it.
       return path === ${JSON.stringify(SAVED)}
         ? ""
         : "saved to " + JSON.stringify(path) + ", but the reopen asks for " + ${JSON.stringify(SAVED)};
     `,
   },
   {
-    // The .uno names a bucket this run has made no connection to, so the
-    // object is not read: it opens waiting, and says which bucket it wants.
+    // The .uno names a bucket this run has yet to connect, so the object
+    // opens waiting, and says which bucket it wants.
     name: "the saved workspace opens again, and the object waits for its bucket to be connected",
     send: ["menu:open-path", SAVED],
     shot: "meets-waiting",
     script: `
-      // A load that works clears the line the save left. One that fails puts
-      // its reason there and leaves the old workspace showing -- which holds
-      // the same two tabs, and would otherwise look exactly like a reopen.
+      // A load that works clears the status line the save left. One that
+      // fails puts its reason there and leaves the old workspace showing,
+      // which has the same two tabs.
       if (!(await arrives(() => text("#status-msg") === ""))) {
         return "reopening " + ${JSON.stringify(SAVED)} + " says " + JSON.stringify(text("#status-msg"));
       }
@@ -232,7 +220,7 @@ export const SOURCES: Check[] = [
       if (!(await arrives(() => text("#status-file") === want))) {
         return "the status bar says " + JSON.stringify(text("#status-file"));
       }
-      // No file, so no cell for the selection to be on.
+      // With the object waiting, the selection is empty.
       return text("#status-cell") === "" ? "" : "the selection is at " + JSON.stringify(text("#status-cell"));
     `,
   },
@@ -267,10 +255,9 @@ export const SOURCES: Check[] = [
       }
       const first = document.querySelector("thead th .colhead").firstChild.textContent;
       if (first !== "Ad_ID") return "the first header is " + JSON.stringify(first);
-      // The panel checks after these open it themselves, and expect the keys
-      // on the tabs, where a panel nobody has used yet has them. The keys stay
-      // where they were left when a panel closes, so they are walked back up
-      // first: saving the connection left them in the browser.
+      // The panel checks after this expect the selection on the tabs, as in
+      // an unused panel. The selection stays where it was when the panel
+      // closes, so it is walked back up first.
       const list = document.querySelector("#panel .panel-list");
       const key = (k) => list.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
       for (let i = 0; i < 20; i++) key("ArrowUp");

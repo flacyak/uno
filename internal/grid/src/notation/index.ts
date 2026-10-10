@@ -1,15 +1,9 @@
 // Package notation turns the markdown a math cell stores into the text it
 // shows: x^2 in, x² out.
 //
-// The whole design is about being honest that the subset is narrow: `supported`
-// names the first symbol it cannot draw so the editor can refuse a cell at
-// authoring time, rather than leaving a person to find a missing-glyph box in
-// their sheet later.
-//
-// Rendering happens once, when the cell is authored, so what leaves here is
-// finished text and the grid goes on drawing plain text. Putting the
-// transliteration on the display path instead would mean parsing markdown for
-// every visible cell on every scroll frame, including the plain ones.
+// `supported` names the first symbol outside the subset, so the editor can
+// refuse a cell when it is authored. Rendering happens once at authoring
+// time; the grid draws the result as plain text.
 
 import { formatU, quote, runes } from "../go/index.ts";
 import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from "./tables.ts";
@@ -17,24 +11,14 @@ import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from "./tables.ts";
 export { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from "./tables.ts";
 
 /**
- * FRAC_SLASH renders \frac{a}{b} as a⁄b, on one line.
- *
- * A real fraction is stacked, which a line of text cannot be, so this is an
- * approximation and is meant to read as one -- not a pretence that the subset
- * does fractions. It is the only character this module emits that comes from no
- * table.
+ * FRAC_SLASH renders \frac{a}{b} as a⁄b on one line. It is the only output
+ * character defined here; the rest come from the tables.
  */
 const FRAC_SLASH = "⁄";
 
 /**
- * render transliterates the supported subset and never fails.
- *
- * A cell can only be saved once `supported` has accepted it, so the source
- * `render` meets has already been checked. When it meets something it cannot
- * draw anyway -- a .unof edited by hand, a subset narrowed by a later release --
- * it copies that piece through verbatim rather than dropping it. A cell showing
- * a backslash is recoverable; a cell that silently swallowed part of what
- * someone typed is not.
+ * render transliterates the supported subset and always returns text. A
+ * piece outside the subset is copied through verbatim.
  */
 export function render(src: string): string {
   const s = new Scanner(runes(src));
@@ -43,12 +27,8 @@ export function render(src: string): string {
 }
 
 /**
- * supported names the first symbol the subset cannot draw, or returns undefined.
- *
- * First rather than all of them: the editor is asking whether this cell can be
- * saved, and one named symbol is what a person can act on. The message always
- * names the symbol itself, because "unsupported notation" would send someone
- * hunting through their own expression for it.
+ * supported returns an Error naming the first symbol outside the subset, or
+ * undefined when the subset draws everything.
  */
 export function supported(src: string): Error | undefined {
   const s = new Scanner(runes(src));
@@ -58,11 +38,7 @@ export function supported(src: string): Error | undefined {
 
 /**
  * Scanner walks the source once, building the rendered text and keeping the
- * first complaint.
- *
- * One walk serves both entry points so that what `supported` accepts is exactly
- * what `render` draws. Two separate passes would drift apart on the first table
- * somebody edited.
+ * first error. One walk serves both `render` and `supported`.
  */
 class Scanner {
   out = "";
@@ -111,12 +87,9 @@ class Scanner {
       return;
     }
 
-    // The complaint names the codepoint and never prints the character: the
-    // dialog carrying this message is drawn in the same font, so a message
-    // about an empty box would contain one. Command names go through plain
-    // interpolation rather than through `quote` for the same reason of reading
-    // back what was typed -- quoting would show \\sum for the \sum a person put
-    // in the cell.
+    // The message names the code point in place of the character: the dialog
+    // uses the same font and would show an empty box. Command names are
+    // interpolated plainly, so \sum reads as typed.
     const missing = NO_GLYPH.get(name);
     if (missing !== undefined) {
       return this.bail(
@@ -129,12 +102,9 @@ class Scanner {
   }
 
   /**
-   * script raises or lowers what follows a ^ or a _, in either the bare form
-   * x^2 or the braced form e^{x}.
-   *
-   * Every character of the group has to have a small form or none of it is
-   * drawn: half a raised exponent sitting next to a full-size character reads
-   * as a different expression from the one that was typed.
+   * script raises or lowers what follows a ^ or a _, bare (x^2) or braced
+   * (e^{x}). Every character of the group needs a small form, or none of it
+   * is drawn.
    */
   private script(table: Map<string, string>, kind: string): void {
     const start = this.i;
@@ -154,8 +124,7 @@ class Scanner {
     for (let i = 0; i < content.length; i++) {
       const r = content[i]!;
       if (r === "\\") {
-        // \alpha^{\beta}. Naming the command is more use to a person than
-        // naming the backslash it happens to begin with.
+        // \alpha^{\beta}: name the whole command.
         return this.bail(`\\${word(content.slice(i + 1))} has no ${kind} form to draw`, start);
       }
       const c = table.get(r);
@@ -168,10 +137,9 @@ class Scanner {
   }
 
   /**
-   * group takes a balanced {…} at the cursor and returns what is inside it,
-   * leaving the cursor untouched when there is no group to take. It counts
-   * depth so that \frac{1}{\frac{a}{b}} finds the closing brace that belongs
-   * to it.
+   * group takes a balanced {…} at the cursor and returns its contents.
+   * Otherwise it returns undefined and leaves the cursor where it was.
+   * Nesting is counted.
    */
   private group(): string[] | undefined {
     if (this.i >= this.src.length || this.src[this.i] !== "{") return undefined;
@@ -188,13 +156,12 @@ class Scanner {
         }
       }
     }
-    return undefined; // unclosed, so there is no group here
+    return undefined; // the brace is unclosed
   }
 
   /**
-   * nested renders the inside of a group, folding its first complaint into this
-   * scanner's so that the symbol `supported` names is the first one in the
-   * source and not the first one at the outermost level.
+   * nested renders the inside of a group and folds its first error into this
+   * scanner's.
    */
   private nested(inner: string[]): string {
     const n = new Scanner(inner);
@@ -203,10 +170,7 @@ class Scanner {
     return n.out;
   }
 
-  /**
-   * literal copies the source from start to the cursor through unrendered. See
-   * `render` on why an unsupported piece survives rather than vanishing.
-   */
+  /** literal copies the source from `start` to the cursor through unrendered. */
   private literal(start: number): void {
     this.out += this.src.slice(start, this.i).join("");
   }
@@ -215,7 +179,7 @@ class Scanner {
     this.failErr(new Error(message));
   }
 
-  /** bail is a construct that cannot be drawn: the complaint, and the text from `start` as it was typed. */
+  /** bail records the error and copies the text from `start` through as typed. */
   private bail(message: string, start: number): void {
     this.fail(message);
     this.literal(start);
@@ -226,10 +190,7 @@ class Scanner {
   }
 }
 
-/**
- * word reads a command name: ASCII letters only, which is every name the subset
- * has and stops \alpha+\beta at the plus.
- */
+/** word reads a command name: ASCII letters only. */
 function word(rs: string[]): string {
   let n = 0;
   while (n < rs.length && /^[A-Za-z]$/.test(rs[n]!)) n++;

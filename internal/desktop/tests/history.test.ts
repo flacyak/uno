@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 //
 // What lands on which tab when the engine answers after Ctrl+Tab. An undo is
-// asked of the tab showing, and the cell it brings back is that tab's: one the
-// person has since left is not moved to in the other. Over the real shell and
-// the real engine, so the window between asking and the answer is the
-// channel's own, and Ctrl+Tab pressed straight after lands inside it.
+// asked of the tab showing, and the cell it restores is that tab's, so the
+// grid on another tab stays put. Runs over the real shell and engine, so
+// Ctrl+Tab lands between the ask and the answer.
 
 import { dirname, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
@@ -23,10 +22,7 @@ const ADS = join(dirname(FIXTURE), ADS_NAME);
 
 const page = domPage();
 
-/**
- * A key the way `press` sends one, with no frame waited after it: the next
- * key goes before the engine has answered the first.
- */
+/** Sends a key like `press` does, and returns before the next frame. */
 function key(k: string, modifiers: KeyModifiers = {}): void {
   const target = document.querySelector(".cell-editor") ?? document.querySelector("#content");
   target?.dispatchEvent(
@@ -45,7 +41,7 @@ beforeAll(async () => {
 }, 20_000);
 
 test("an undo answered after Ctrl+Tab moves nothing on the tab now showing", async () => {
-  // Adding shows the file added. Back to the fixture, where the edit goes.
+  // Adding shows the file added. Ctrl+PageUp goes back to the fixture.
   await page.press("PageUp", { ctrlKey: true });
   expect(await page.until([{ selector: "#status-file", includes: `${counted(ROWS)} rows` }])).toBe(
     true,
@@ -60,19 +56,19 @@ test("an undo answered after Ctrl+Tab moves nothing on the tab now showing", asy
   await page.press("Enter");
   expect(await page.until([{ selector: "#status-file", includes: "1 edit" }])).toBe(true);
 
-  // Away from the cell, so the undo has somewhere to move back to.
+  // Move off the cell, so the undo has somewhere to move back to.
   await page.clickCell(0, 0);
   await page.settle(1);
   expect(await page.text("#status-cell")).toContain(m.status_row({ row: num(1) }));
 
-  // Ctrl+Z, and Ctrl+Tab before the engine has answered it.
+  // Ctrl+Z, then Ctrl+Tab before the engine has answered.
   key("z", { ctrlKey: true });
   key("Tab", { ctrlKey: true });
   expect(await until(page, () => tabNamed(FIXTURE_NAME)?.querySelector(".dirty") === null)).toBe(
     true,
   );
 
-  // The other tab is showing, where it was left: on its first row.
+  // The other tab is showing, still on its first row.
   expect(await page.text("#status-file")).not.toContain(`${counted(ROWS)} rows`);
   expect(await page.text("#status-cell")).toContain(m.status_row({ row: num(1) }));
 });
@@ -83,7 +79,8 @@ test("a source removed after Ctrl+Tab leaves the grid on the tab the workspace s
     true,
   );
 
-  // The other tab's ×, and Ctrl+Tab onto it before the engine has taken it out.
+  // Click the other tab's close, then Ctrl+Tab onto it before the engine
+  // removes it.
   const ads = tabNamed(ADS_NAME);
   expect(ads).toBeDefined();
   ads?.querySelector<HTMLElement>(".close")?.click();

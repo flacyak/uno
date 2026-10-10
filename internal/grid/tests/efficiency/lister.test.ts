@@ -1,10 +1,6 @@
-// What scrolling a large folder costs after its first page.
-//
-// A folder is read whole to put it in order, which the first page has to pay
-// for. The measure here is what every page after it pays: how many directory
-// entries are read from the disk again, and how long the page takes. The
-// entries are counted and exact. The time is a wall clock and moves with the
-// machine, so it is recorded and not held to anything.
+// Measures what a page after the first costs when listing a folder of 20,000
+// files: directory entries read again, and wall-clock time. Only the entry
+// count is held to a budget.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import type * as FsPromises from "node:fs/promises";
@@ -15,7 +11,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vite-plus/test";
 import { PAGE, diskLister } from "../../src/store/disklister.ts";
 import { record } from "./record.ts";
 
-/** How many directory entries every readdir has handed back, in all. */
+/** Directory entries returned by every readdir so far. */
 const read = vi.hoisted(() => ({ entries: 0 }));
 
 vi.mock("node:fs/promises", async (original) => {
@@ -28,11 +24,11 @@ vi.mock("node:fs/promises", async (original) => {
   return { ...fs, readdir };
 });
 
-/** Twenty pages of files: enough that reading the folder again is most of a page's cost. */
+/** Twenty pages of files. */
 const FILES = 20_000;
 /** How many pages are read after the first. */
 const LATER_PAGES = 5;
-/** How wide the number in a file's name is, so names sort in the order they were made. */
+/** Digits in a file's name, so names sort in the order made. */
 const DIGITS = 6;
 
 /** The most directory entries a page after the first may read from the disk. */

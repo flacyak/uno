@@ -1,11 +1,6 @@
-// A scanner over runes, which is how every hand-written parser here walks its
-// text: as much of Go's text/scanner as three small grammars need.
-//
-// They are hand-written because each grammar is a few names deep and a
-// generated parser would be a build step and a dependency for something
-// smaller than the file describing it. What they share is here: the cursor,
-// skipping space, taking one rune, insisting on one, and saying where it was
-// when it could not.
+// A cursor over an array of runes, shared by the hand-written parsers. It
+// skips space, accepts one rune, expects one, and reports where it was when
+// the expected rune is missing.
 
 import { quote } from "./strconv.ts";
 import { isSpace } from "./strings.ts";
@@ -13,11 +8,11 @@ import { isSpace } from "./strings.ts";
 export class Scanner {
   i = 0;
   readonly s: string[];
-  /** What the text is called in a complaint: a formula, a program. */
+  /** What the text is called in an error: "formula" or "program". */
   protected readonly noun: string;
 
-  // Written out rather than as parameter properties, which Node's strip-only
-  // TypeScript cannot run, and the smoke run loads this source under it.
+  // Plain fields assigned in the body: Node's strip-only TypeScript rejects
+  // parameter properties, and the smoke run loads this source under it.
   constructor(s: string[], noun: string) {
     this.s = s;
     this.noun = noun;
@@ -41,8 +36,7 @@ export class Scanner {
     throw new Error(`expected ${quote(r)} at character ${this.i + 1}, ${this.here()}`);
   }
 
-  /** here names what was found instead, so an error points at the text rather
-   * than only at an offset into it. */
+  /** here describes the text at the cursor, for an error message. */
   here(): string {
     if (this.i >= this.s.length) return `and the ${this.noun} ends there`;
     const ahead = this.s.slice(this.i, Math.min(this.i + 8, this.s.length)).join("");
@@ -50,9 +44,8 @@ export class Scanner {
   }
 
   /**
-   * whole runs the grammar over the text and refuses what it left unread, and
-   * anything either refuses names the text, so what reaches a person says
-   * which formula or program it was about.
+   * whole runs `grammar` over the text, then refuses any unread remainder.
+   * Any error is rethrown naming `src`.
    */
   whole<T>(src: string, grammar: () => T): T {
     const out = this.about(src, grammar);
@@ -63,7 +56,7 @@ export class Scanner {
     return out;
   }
 
-  /** refuse is a complaint about the text, named. */
+  /** refuse throws an error naming the text and the reason. */
   refuse(src: string, why: string): never {
     throw new Error(`${this.noun} ${quote(src)}: ${why}`);
   }

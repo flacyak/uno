@@ -1,10 +1,7 @@
-// Where a connection's bucket is, asked once when it is made and kept in it.
+// locate: a connection's bucket region, found with a HeadBucket when the
+// connection is made and kept in it.
 //
-// The stand-in lives in eu-west-1, and the credentials say us-east-1, which is
-// the ordinary case: a person's default region and the region a bucket was
-// made in are two decisions made by two people. What is under test is that the
-// connection finds out without being told, says so in its file, and that every
-// request through it afterwards goes straight to the bucket.
+// The stand-in lives in eu-west-1 and the credentials say us-east-1.
 
 import { afterAll, beforeAll, beforeEach, expect, test } from "vite-plus/test";
 
@@ -33,7 +30,7 @@ function sent(): string[] {
   return b.seen.slice(from).map((r) => `${r.method} ${r.path} ${r.region}`);
 }
 
-/** The machine's keys, which say us-east-1, as the draft connection signs in. */
+/** The machine's keys, with region us-east-1. */
 const MACHINE = { ...KEYS, region: "us-east-1" };
 
 function draft(region?: string): Connection {
@@ -56,22 +53,20 @@ function options(endpoint = b.endpoint): S3Options {
   return { credentials: () => Promise.resolve(MACHINE), endpoint };
 }
 
-// The task's own sentence.
 test("a bucket in another region is connected without typing its region", async () => {
   const c = await locate(draft(), options());
   expect(c.region).toBe(HOME_REGION);
   expect(JSON.parse(formatConnection(c))["region"]).toBe(HOME_REGION);
 });
 
-// Once, and nothing but the bucket: no listing, no object, and one redirect
-// from where the credentials pointed to where the bucket is.
+// One HeadBucket for the credentials' region, redirected once.
 test("it costs a HeadBucket, followed once", async () => {
   await locate(draft(), options());
   expect(sent()).toEqual([`HEAD /${BUCKET}/ us-east-1`, `HEAD /${BUCKET}/ ${HOME_REGION}`]);
 });
 
-// The point of keeping it: a connection that knows its region sends every
-// request there, and one that does not pays a redirect on its first.
+// A connection with its region set sends every request to that region.
+// One still to find it pays one redirect.
 test("a connection holding its region sends its first request straight there", async () => {
   const env = keysOnly("us-east-1");
   const ref = { name: "sales-q3.csv", path: `s3://${BUCKET}/2025/sales-q3.csv` };
@@ -93,8 +88,7 @@ test("a connection holding its region sends its first request straight there", a
   }
 });
 
-// A bucket that names its region only in a refusal's body is asked again in
-// a way that carries one, which is regions.ts's whole reason to exist.
+// A reply naming the region only in the body is followed too.
 test("a bucket that says where it is only in a body is followed there too", async () => {
   const format = REGION_FORMATS.find(
     (f) => f.follow && f.reply.headers?.["x-amz-bucket-region"] === undefined,

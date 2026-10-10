@@ -1,9 +1,8 @@
-// Newer in the bucket, and Reload. When the window gets the focus back, each
-// tab reading an object asks its bucket, one HEAD each, which version it holds
-// now, and a tab reading another one is marked. Reload reads the newer one.
+// Newer in the bucket, and Reload. askNewer sends one HEAD per tab reading an
+// object, and marks a tab whose object has a new version. Reload reads the
+// newer version.
 //
-// Over the real engine and the stand-in bucket, so the version asked about is
-// the one S3 would answer with, and the HEADs counted are the ones that went.
+// Runs over the real engine and the stand-in bucket.
 
 import { writeFile } from "node:fs/promises";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -20,7 +19,7 @@ import { stateOf, stateWord } from "../src/renderer/sources.ts";
 import { Workspace, reloaded } from "../src/renderer/workspace.ts";
 
 const ADS = "Ad_Date,Cost\n2024-11-16,$12.50\n2024-11-17,$8.00\n";
-/** The same export regenerated with one figure corrected: the same size. */
+/** The same export with one figure changed, at the same size. */
 const ADS_AGAIN = "Ad_Date,Cost\n2024-11-16,$12.50\n2024-11-17,$9.00\n";
 const KEY = "ads/google-ads.csv";
 const OBJECT = `s3://acme-exports/${KEY}`;
@@ -57,12 +56,11 @@ async function both(): Promise<Workspace> {
   return w;
 }
 
-/** The HEADs that reached the object since the count was last cleared. */
+/** The HEADs that reached the object since b.seen was last cleared. */
 const heads = (): number =>
   b.seen.filter((s) => s.method === "HEAD" && s.path.endsWith(KEY)).length;
 
-// The task's own sentence, below the window: replacing the object is seen
-// the next time anybody asks.
+// Replacing the object is seen on the next askNewer.
 test("replacing the object in the bucket marks its tab on the next ask", async () => {
   const w = await both();
   try {
@@ -82,7 +80,8 @@ test("replacing the object in the bucket marks its tab on the next ask", async (
     w.show(remote);
     expect(w.status()).toContain(m.newer_version());
 
-    // Asked again with nothing new, the mark stays and nothing is repainted.
+    // Asked again while the bucket is unchanged, the mark stays and askNewer
+    // is false.
     expect(await w.askNewer()).toBe(false);
     expect(remote.newer).toBeDefined();
 
@@ -95,7 +94,7 @@ test("replacing the object in the bucket marks its tab on the next ask", async (
   }
 });
 
-// A bucket out of reach for a moment says nothing about what is in it.
+// A failed HEAD leaves the tab as it was.
 test("a HEAD that fails leaves the tab as it was", async () => {
   const w = await both();
   try {
@@ -111,9 +110,8 @@ test("a HEAD that fails leaves the tab as it was", async () => {
   }
 });
 
-// 3.5, the task's own sentence: Reload is a re-point at the same URL, which
-// asks for no version, so it reads what the bucket holds now. The edits land
-// on those bytes and the tab's version is the new one.
+// Reload is an unversioned relink at the same URL, so it reads what the
+// bucket holds now. The edits replay on the new bytes.
 test("Reload reads the newer version, lands the edits on it, and says what changed", async () => {
   const w = await both();
   try {
@@ -130,15 +128,14 @@ test("Reload reads the newer version, lands the edits on it, and says what chang
     expect(fresh.link).toEqual({ path: OBJECT, version: etagOf(enc.encode(ADS_AGAIN)) });
     expect(fresh.newer).toBeUndefined();
     expect(stateOf(fresh)).toBe("fine");
-    // The edit, on the new bytes: the corrected figure is there, and so is the
-    // cell the log changed.
+    // The new bytes hold the changed figure and the replayed edit.
     const rows = (await fresh.source.rows(0, 2)).rows;
     expect(rows[0]![0]).toBe("2024-11-15");
     expect(rows[1]![1]).toBe("$9.00");
     expect(reloaded(remote, fresh)).toBe(
       "reloaded google-ads.csv · a new version, the same size · 1 edit replayed",
     );
-    // And nothing newer is left to find.
+    // The tab is at the latest version.
     expect(await w.askNewer()).toBe(false);
     expect(fresh.newer).toBeUndefined();
   } finally {

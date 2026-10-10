@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 //
-// Connecting a bucket from the panel: the fields, the ways of signing in the
-// engine offers, the test that lists the folder, and save.
+// The connect form in the panel: its fields, the sign-in modes the engine
+// offers, Test (which lists the folder), and Save.
 //
-// What is under test is that nothing is kept that did not work. A test that
-// fails names what stopped it in the engine's own words -- a 403, a bucket
-// that is not there, an SSO sign-in that has expired -- and a save that finds
-// the same saves nothing. A save that works keeps the connection the test
-// found, region and all, and the panel browses it.
+// A failed test shows the engine's error and stops there. A save tests
+// first, keeps the connection the test returned with its region, and the
+// panel browses it.
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
@@ -24,11 +22,11 @@ import { Sources, stateOf } from "../src/renderer/sources.ts";
 
 const REGION = "eu-west-1";
 
-/** A role in the person's account, and what the hosted engine says it has to trust. */
+/** A role in the person's account, and the trust the hosted engine reports. */
 const ROLE = "arn:aws:iam::210987654321:role/uno-read";
 const TRUST = { principal: "arn:aws:iam::111122223333:role/uno-engine", externalId: "ext-4f9c" };
 
-/** What the desktop's engine offers: itself, its profiles, and public. */
+/** The sign-in modes the desktop's engine offers. */
 const DESKTOP: SignIns["modes"] = ["machine", "profile", "public"];
 
 function connection(over: Partial<Connection> = {}): Connection {
@@ -65,14 +63,14 @@ test("the fields are a connection named after its bucket and folder, signing in 
   expect(draftOf({ bucket: "open-data", prefix: "", signIn: "machine" }, []).name).toBe(
     "open-data",
   );
-  // A role's ARN is read when the role is the way chosen, and trimmed as the bucket is.
+  // The role ARN is read when the role mode is chosen, and trimmed.
   expect(
     draftOf({ bucket: "lake", prefix: "", signIn: "role", roleArn: ` ${ROLE} ` }, []).auth,
   ).toEqual({ mode: "role", roleArn: ROLE });
 });
 
-// A second folder of one bucket is a second connection, in a second file. The
-// same folder again is the one already kept, made again.
+// A second folder of one bucket gets a new id. The same folder again reuses
+// the kept connection's id and created date.
 test("an id already kept for another folder is not taken; the same folder keeps its own", () => {
   const kept = [connection({ prefix: "refunds/", created: new Date("2026-09-01T00:00:00Z") })];
   expect(draftOf({ bucket: "acme-exports", prefix: "shop", signIn: "machine" }, kept).id).toBe(
@@ -83,9 +81,8 @@ test("an id already kept for another folder is not taken; the same folder keeps 
   expect(again.created).toEqual(kept[0]!.created);
 });
 
-// The library's rule for a newer uno's keys holds in the form too: a connection
-// made again is the kept one edited, and what this build did not recognise in
-// it is still there after the save.
+// A connection made again keeps the unrecognised keys of the kept one, in
+// both the connection and its auth block.
 test("the same folder made again carries what this build did not recognise", () => {
   const extra = new Map<string, unknown>([["sso_session", "corp"]]);
   const authExtra = new Map<string, unknown>([["sso_account_id", "123456789012"]]);
@@ -97,7 +94,7 @@ test("the same folder made again carries what this build did not recognise", () 
   expect(same.extra).toEqual(extra);
   expect(same.auth).toEqual({ mode: "profile", profile: "finance", extra: authExtra });
 
-  // Signing in another way is another auth block, and the old one's keys were about the old one.
+  // A different sign-in mode is a fresh auth block of the mode alone.
   const other = draftOf({ bucket: "acme-exports", prefix: "shop", signIn: "machine" }, kept);
   expect(other.extra).toEqual(extra);
   expect(other.auth).toEqual({ mode: "machine" });
@@ -121,7 +118,7 @@ test("a test that worked says what the folder held", () => {
 
 // ------------------------------------------------------------ the form
 
-/** Nothing is browsed in these tests but the connection just saved. */
+/** Listings that answer any path with one file, and record what was asked. */
 class Listed implements Listings {
   readonly asked: string[] = [];
   list(path: string): Promise<Listing> {
@@ -135,7 +132,7 @@ class Listed implements Listings {
   }
 }
 
-/** An engine and a host that answer the way the test says, and remember what they were asked. */
+/** A ConnectAsks that answers as the test sets it up, and records what was asked. */
 class Asks implements ConnectAsks {
   tried: Connection[] = [];
   saved: Connection[] = [];
@@ -242,17 +239,15 @@ test("the sign-in list is the engine's profiles, between this machine and public
     ["public", "public · no sign-in"],
   ]);
   expect(select().value).toBe("profile:default");
-  // The desktop offers no role, so nothing asks for one.
+  // Role is absent from the desktop's modes, so the role field is hidden.
   expect(field("roleArn").closest("label")!.hidden).toBe(true);
   expect(form().querySelector(".fine")!.textContent).toBe(
     "Each connection is one file in connections/. The profile list is read from ~/.aws; uno stores the name, never the keys.",
   );
 });
 
-// The hosted engine signs in as a role in the person's account, and public.
-// The role's row asks for its ARN, and under it is what the role has to
-// trust: the engine's principal and the account's external ID, which is what
-// a person copies into the role's policy.
+// With a role mode on offer, the form asks for the role's ARN and shows the
+// trust the engine reports: its principal and the external ID.
 test("an engine that signs in with a role asks for its ARN and says what the role has to trust", async () => {
   asks.offered = { modes: ["role", "public"], profiles: [], trust: TRUST };
   panel.connect({ bucket: "acme-finance-lake" });
@@ -271,7 +266,7 @@ test("an engine that signs in with a role asks for its ARN and says what the rol
     "Each connection is one file in connections/. uno stores the role's ARN and never a key; what lets uno read is the role's own trust policy.",
   );
 
-  // No role named, and one that is not a role's ARN, are said before anything is asked.
+  // An empty ARN, and a bare name, are refused before the engine is asked.
   form().requestSubmit();
   await settle();
   expect(result()).toBe("✗ name the role to assume");
@@ -292,7 +287,7 @@ test("an engine that signs in with a role asks for its ARN and says what the rol
   expect(asks.tried.map((c) => c.auth)).toEqual([{ mode: "role", roleArn: ROLE }]);
   expect(result()).toBe("✓ listed the bucket · 3 folders, 41 files");
 
-  // Choosing public puts the role's row and its trust away.
+  // Choosing public hides the role field and the trust line.
   select().value = "public";
   select().dispatchEvent(new Event("change", { bubbles: true }));
   expect(row.hidden).toBe(true);
@@ -317,7 +312,7 @@ test("a test lists the folder and fills in the region nobody typed", async () =>
   expect(asks.saved).toEqual([]);
 });
 
-// The task's own sentence: a failed test names the reason and saves nothing.
+// A failed test shows the engine's reason and stops there.
 test.each([
   [
     "403",
@@ -337,8 +332,7 @@ test.each([
 
   expect(asks.tried).toHaveLength(1);
   expect(asks.saved).toEqual([]);
-  // The reason is under the refused connection's line, and in the form it is
-  // edited from.
+  // The reason is shown in the panel foot and in the form.
   expect(root.querySelector(".panel-foot .why")!.textContent).toBe(`✗ ${why}`);
   expect(result()).toBe(`✗ ${why}`);
 });
@@ -360,8 +354,8 @@ test("fields that are not a connection are said before anything is asked", async
   expect(asks.tried).toEqual([]);
 });
 
-// Save tests first when what is on screen has not been tested, and keeps what
-// the test found -- the region with it -- and the panel browses it at once.
+// Save tests first when the draft is untested, keeps the connection the test
+// returned with its region, and browses it.
 test("save tests first, keeps the connection the test found, and browses it", async () => {
   panel.connect({ bucket: "acme-exports", prefix: "shop/" });
   await settle();
@@ -382,7 +376,7 @@ test("a save steps aside for a line that says connecting, until it is kept or re
   const line = (cls: string): HTMLElement | null =>
     root.querySelector<HTMLElement>(`.panel-row.${cls}`);
   const foot = (): HTMLElement => root.querySelector<HTMLElement>(".panel-foot")!;
-  // The bucket answers when the test says so, as one a long way off does.
+  // tryConnection settles only when the test calls `answer`.
   let answer: { worked(): void; refused(why: string): void } | undefined;
   asks.tryConnection = (c) =>
     new Promise<Tried>((resolve, reject) => {
@@ -399,8 +393,8 @@ test("a save steps aside for a line that says connecting, until it is kept or re
   press("Save connection");
   await settle();
 
-  // The list has the form's place, the connection is its last line before the
-  // one that connects another, and the keys are on it.
+  // The list is shown. The connecting line is selected, and sits just before
+  // the "+ Connect a bucket" line.
   expect(form().hidden).toBe(true);
   expect(list.hidden).toBe(false);
   expect(line("opening")!.children[0]!.textContent).toBe("acme-exprots / shop");
@@ -408,11 +402,12 @@ test("a save steps aside for a line that says connecting, until it is kept or re
   expect(line("opening")!.classList.contains("sel")).toBe(true);
   expect(sources.isConnect(sources.place.line + 1)).toBe(true);
 
-  // A click on it while it connects opens nothing.
+  // A click on a connecting line leaves the form hidden.
   line("opening")!.click();
   expect(form().hidden).toBe(true);
 
-  // Refused, the line stays and says so, with why under the list and on hover.
+  // When refused, the line stays and says failed. The reason is in the foot
+  // and in the line's title.
   answer!.refused("404 · no such bucket");
   await settle();
   expect(line("opening")).toBeNull();
@@ -424,7 +419,7 @@ test("a save steps aside for a line that says connecting, until it is kept or re
   expect(foot().querySelector(".why")!.textContent).toBe("✗ 404 · no such bucket");
   expect(asks.saved).toEqual([]);
 
-  // Enter on it brings the form back as it was left, saying why, to be edited.
+  // Enter on the failed line reopens the form with its fields and the reason.
   list.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   expect(form().hidden).toBe(false);
   expect(list.hidden).toBe(true);
@@ -432,7 +427,7 @@ test("a save steps aside for a line that says connecting, until it is kept or re
   expect(field("bucket").value).toBe("acme-exprots");
   expect(document.activeElement).toBe(field("bucket"));
 
-  // Edited and saved, it is tried again, kept and browsed, and no line is left waiting.
+  // Edited and saved: tried again, kept, and browsed. Every line is settled.
   type("bucket", "acme-exports");
   press("Save connection");
   await settle();
@@ -479,8 +474,7 @@ test("a test already passed for what is on screen is not asked again on save", a
   expect(asks.saved).toHaveLength(1);
 });
 
-// A field changed after a test makes the test about something else: it is
-// taken back, and a save tests again.
+// Changing a field after a test clears the result, and a save tests again.
 test("changing a field after a test takes the test back", async () => {
   panel.connect({ bucket: "acme-exports" });
   await settle();
@@ -494,11 +488,9 @@ test("changing a field after a test takes the test back", async () => {
   expect(asks.tried.map((c) => c.prefix)).toEqual(["", "refunds/"]);
 });
 
-// The ways can land after a quick Test, and pick a profile the test did not
-// sign in with. The select moving is a field changing, and takes the test back
-// like typing would, so what the form says passed is what is on screen. Until
-// the engine has said, public is the one way on offer, since every engine
-// reads an open bucket unsigned.
+// Until signIns answers, public is the only option. When the modes arrive,
+// the select moves to the default profile, which clears the test result like
+// typing would.
 test("the sign-in list arriving after a test takes the test back", async () => {
   let offer: (offered: SignIns) => void = () => {};
   asks.signIns = () => new Promise<SignIns>((resolve) => (offer = resolve));
@@ -528,9 +520,8 @@ test("Esc gives up, keeps nothing, and gives the list back its place", async () 
 
 // ------------------------------------------------------------ a tab waiting for one
 
-// A .uno that names a bucket nobody connected opens that tab missing, having
-// read nothing. Its line offers to connect the bucket and does not offer to
-// reload, which would read it with this machine's credentials.
+// A tab in a bucket outside every connection is "unconnected". Its actions
+// offer Connect in place of Reload.
 test("a tab in a bucket nobody connected offers Connect, filled in with its folder, and no Reload", async () => {
   const waiting = {
     id: "q4",
@@ -593,14 +584,13 @@ test("a tab in a bucket nobody connected offers Connect, filled in with its fold
   await settle();
   expect(form().hidden).toBe(false);
   expect(field("bucket").value).toBe("acme-exports");
-  // The object's folder, which a person can widen to the whole bucket.
+  // The prefix is filled with the object's folder.
   expect(field("prefix").value).toBe("shop/");
   expect(document.activeElement).toBe(field("prefix"));
   expect(asks.tried).toEqual([]);
 });
 
-// The keys reach it as the buttons do: c is Connect in Reload's place, and r,
-// which would read the bucket with this machine's credentials, does nothing.
+// On an unconnected tab, c opens Connect and r leaves `tried` empty.
 test("c on a tab waiting for its bucket connects it, and r does not read it", async () => {
   const waiting = {
     id: "q4",

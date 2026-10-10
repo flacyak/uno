@@ -1,5 +1,5 @@
-// What the engine says, as data: the English it has always been, and what
-// crosses a port so a client can say it in another language.
+// Tests for Said values: their English text, Refusal errors, and crossing the
+// engine port as data.
 
 import { describe, expect, test } from "vite-plus/test";
 

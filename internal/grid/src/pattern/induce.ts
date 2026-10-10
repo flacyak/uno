@@ -16,35 +16,20 @@ import { parse as parseProgram, quoteRegex } from "../program/index.ts";
 import type { Run } from "./align.ts";
 import { MAX_DIFF, align } from "./align.ts";
 
-/** One demonstrated change: what a cell held before the person touched it, and
- * what they left in it. */
+/** One demonstrated change: what a cell held before and after the person
+ * edited it. */
 export interface Example {
   was: string;
   now: string;
 }
 
-/**
- * maxPerExample bounds how many programs one example may suggest.
- *
- * The bound matters because the candidate sets are intersected: a wide set
- * costs its width once per example, and the intersection is what narrows it,
- * not the generator.
- */
+/** MAX_PER_EXAMPLE is the most candidate programs one example may suggest. */
 export const MAX_PER_EXAMPLE = 256;
 
 /**
- * induce is the synthesiser. It asks each example what programs could have
- * produced it, then keeps only the programs every example agrees on.
- *
- * This is a version space, intersected: the candidate set for one example is
- * every program in the language consistent with it, and the answer is the
- * intersection across all of them. The set is enumerated rather than held
- * symbolically, which is what keeps this a few hundred lines instead of a few
- * thousand -- the lattice each witness draws from is deliberately small, so a
- * finite list is the whole space rather than a sample of it.
- *
- * A fourth example can only ever shrink the result. That is the property the
- * whole design leans on: watching someone work never makes the guess worse.
+ * induce asks `witness` for the candidate programs of each example, then
+ * keeps only the candidates every example shares. Returns them parsed, in
+ * sorted order. Adding an example can only shrink the result.
  */
 export function induce(ex: Example[], witness: (was: string, now: string) => string[]): Program[] {
   if (ex.length === 0) return [];
@@ -65,10 +50,8 @@ function intersect(a: string[], b: string[]): string[] {
 }
 
 /**
- * parseAll turns the generated text into programs. A candidate that does not
- * parse is a bug in a witness function, and it is dropped rather than raised:
- * the tests are where that is caught, and a person editing a spreadsheet should
- * not be shown a dialog about it.
+ * parseAll parses candidate text into programs. A candidate that fails to
+ * parse is dropped.
  */
 export function parseAll(srcs: string[]): Program[] {
   const out: Program[] = [];
@@ -76,21 +59,24 @@ export function parseAll(srcs: string[]): Program[] {
     try {
       out.push(parseProgram(s));
     } catch {
-      // dropped on purpose; see above
+      // a candidate that fails to parse is dropped
     }
   }
   return out;
 }
 
-/** dedup keeps each candidate once, in the order first seen, and no more than MAX_PER_EXAMPLE of them. */
+/**
+ * dedup keeps each candidate once, in first-seen order, and at most
+ * MAX_PER_EXAMPLE of them.
+ */
 function dedup(input: string[]): string[] {
   const out = [...new Set(input)];
   return out.length > MAX_PER_EXAMPLE ? out.sort(compareStrings).slice(0, MAX_PER_EXAMPLE) : out;
 }
 
 /**
- * rewrites induces the programs that change characters where they stand: the
- * deletions, the substitutions and the case changes.
+ * rewrites induces the programs that change characters in place: case
+ * changes, deletions and substitutions.
  */
 export function rewrites(was: string, now: string): string[] {
   if (was === now) return [];
@@ -115,19 +101,11 @@ export function rewrites(was: string, now: string): string[] {
 }
 
 /**
- * deletions generalises "these stretches went away".
- *
- * The lattice is four rungs: the exact text, the class of characters it is made
- * of, and each of those anchored to the end the deletions actually sat at. It
- * climbs from specific to general so that ranking can prefer the narrowest
- * program that still explains every example, which is the guard against reading
- * one habit as a licence to rewrite a whole column.
- *
- * The class rungs are drawn from decoration only. Letters and digits that went
- * away are a stretch the person cut, not a set they cleared: x^2, y^3 and z^4
- * losing their exponents is not "[234^] goes", and said that way it leaves
- * w^5 as w5. Those edits are left to the restructuring reading, which runs when
- * this one declines, and finds the cut.
+ * deletions generalises the removed runs into candidates: the exact text when
+ * every run is the same, a character class of the removed characters, and
+ * that class anchored to the start or the end where every run sat there.
+ * Class candidates are built only from decoration.
+ * `trim()` is added when every run is whitespace touching an end.
  */
 function deletions(a: string[], dels: Run[]): string[] {
   const out: string[] = [];
@@ -137,7 +115,7 @@ function deletions(a: string[], dels: Run[]): string[] {
   let prefix = true;
   let suffix = true;
   let spaces = true;
-  let edges = true; // every run touches an end, not necessarily the same one
+  let edges = true; // every run touches the start or the end
 
   for (const d of dels) {
     texts.add(d.text);
@@ -165,19 +143,16 @@ function deletions(a: string[], dels: Run[]): string[] {
     if (prefix) out.push(replaceSrc("^" + cls + "+", ""));
   }
 
-  // Both ends at once is the ordinary case and neither anchor covers it, so
-  // trim asks about the ends rather than about the anchor they share.
+  // Space removed at both ends is trim's case: each anchor wants one end.
   if (spaces && edges) out.push("trim()");
   return out;
 }
 
 /**
- * substitutions generalises "this stretch became that one", once or many times.
- *
- * Many times only when it is the same stretch becoming the same thing, which is
- * one rule the person applied more than once: 2026/09/03 has two slashes and
- * one rule, and a value where two different stretches changed has no single
- * rule in it to find.
+ * substitutions generalises "this run became that one". It applies only when
+ * every removed run is the same text and every inserted run is the same
+ * text. Candidates: the exact text, a class of its characters, and `\s+`
+ * when it is all whitespace.
  */
 function substitutions(dels: Run[], ins: Run[]): string[] {
   const d = dels[0]!;
@@ -195,10 +170,8 @@ function substitutions(dels: Run[], ins: Run[]): string[] {
 }
 
 /**
- * droppedChars is every character the examples lost, across all of them.
- *
- * Insertions are ignored: a caller wanting a whole transformation checks that,
- * a caller wanting a first step does not.
+ * droppedChars is every character removed across all examples, sorted.
+ * Insertions are ignored. Returns [] if any example is too long to align.
  */
 export function droppedChars(ex: Example[]): string[] {
   const chars = new Set<string>();
@@ -215,12 +188,10 @@ export function droppedChars(ex: Example[]): string[] {
 }
 
 /**
- * unionDeletion is droppedChars as a candidate, for the columns whose
- * decoration only some rows wear: $1,204 offers [$,] and $87 offers [$], the
- * intersection of those two is empty, and [$,] is what both meant.
- *
- * This is the one reading that is not intersected, so it is offered rather than
- * concluded: `explains` decides whether it stands.
+ * unionDeletion is one candidate that removes every dropped character as a
+ * class, for columns where only some rows wear the decoration: $1,204 and $87
+ * share [$,]. Returns [] when any example has an insertion, or when a dropped
+ * character is a letter or digit.
  */
 export function unionDeletion(ex: Example[]): string[] {
   for (const e of ex) {
@@ -233,10 +204,8 @@ export function unionDeletion(ex: Example[]): string[] {
 }
 
 /**
- * decoration says whether a set of characters is one a class may generalise
- * over: the separators, the currency marks, the brackets, the space. A class is
- * a claim that these characters are the whole of what goes, wherever they
- * stand, and only decoration is ever meant that way.
+ * decoration reports whether every character is punctuation, a symbol or
+ * space.
  */
 export function decoration(chars: readonly string[]): boolean {
   return chars.every((r) => !isLetter(r) && !isDigit(r));
@@ -246,11 +215,7 @@ export function replaceSrc(re: string, lit: string): string {
   return "replace(" + quoteRegex(re) + ", " + quote(lit) + ")";
 }
 
-/**
- * quoteClass escapes what a character class treats specially. The characters
- * this matters for -- the separators, the currency marks -- are exactly the
- * ones the recogniser exists to remove.
- */
+/** quoteClass escapes `]`, `\`, `^` and `-` for use inside a character class. */
 export function quoteClass(rs: string[]): string {
   let out = "";
   for (const r of rs) {

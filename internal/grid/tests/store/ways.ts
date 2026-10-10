@@ -1,11 +1,8 @@
-// The ways out of the core -- a disk, a network, a program -- and the only
-// modules of src/ allowed to take each one.
+// The ways out of the core (the disk, the network, a program) and the src/
+// modules allowed to take each one.
 //
-// Two guards read this. opens.test.ts reads the source as text, which catches
-// a way out wherever it is written, including in code no test runs.
-// reaches.test.ts runs the core and watches, which catches a way out however
-// it is reached for, including a module name put together at run time. Each
-// covers what the other cannot, and both hold the core to this one list.
+// opens.test.ts checks the source text against this list. reaches.test.ts
+// runs the core and checks what it reached against the same list.
 
 export type Way =
   | "the disk"
@@ -16,41 +13,32 @@ export type Way =
   | "a page's own requests";
 
 /**
- * Where each way out is allowed: inside a handler, the lister beside it, or
- * the exchange that turns a sign-in into keys, and nowhere else. Paths are
- * under src/.
- *
- * A lister is allowed exactly the reads its handler is, because they reach
- * the same place. The list names modules and not interfaces, so where the two
- * are one file it holds one name and where they are split -- the disk's are --
- * it holds both.
+ * The modules allowed each way out, as paths under src/. A lister is allowed
+ * the same reads as its handler. Where a handler and its lister are two
+ * files, both are named.
  */
 export const PLACES: Record<Way, readonly string[]> = {
-  // The local handler's descriptor and the store's atomic write, and beside
-  // them the disk lister's readdir and stat.
+  // The local file handler, the store's write, and the disk lister.
   "the disk": ["store/node.ts", "store/disklister.ts"],
-  // The S3 handler's requests, and through them the S3 lister's
-  // ListObjectsV2. Beside them, the exchanges that turn a sign-in into keys:
-  // the SSO portal and STS.
+  // The S3 handler and lister, and the SSO portal and STS exchanges.
   fetch: ["store/s3.ts", "store/sts.ts"],
-  // A profile's credential_process, which is the one program uno runs.
+  // A profile's credential_process.
   "a program": ["store/node.ts"],
   // The blob handler.
   "a Blob's bytes": ["store/index.ts"],
-  // Every other way to a network or a process, which nothing in the core
-  // takes: a socket, a server, a name lookup, a worker's own requests.
+  // Every module is barred from a socket, a server, and a page request.
   "a socket": [],
   "a page's own requests": [],
 };
 
-/** The Node modules each way is reached through, by name without `node:`. */
+/** The Node modules each way is reached through, as bare names. */
 export const MODULES: Partial<Record<Way, readonly string[]>> = {
   "the disk": ["fs", "fs/promises"],
   "a program": ["child_process"],
   "a socket": ["net", "http", "https", "http2", "dgram", "tls", "dns", "worker_threads", "cluster"],
 };
 
-/** Every way used outside its places, as `file: way`, sorted. */
+/** Every use outside its allowed places, as `file: way`, sorted. */
 export function offences(uses: Iterable<{ file: string; way: Way }>): string[] {
   const found = new Set<string>();
   for (const { file, way } of uses) {
