@@ -6,7 +6,7 @@
  * synthetic and wide shapes in the same process.
  *
  * Usage, from core/:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/cache/find.ts <sales.csv> [finds]
  */
 

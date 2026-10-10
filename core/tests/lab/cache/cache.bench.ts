@@ -22,7 +22,7 @@
  * differ by cacheBytes alone.
  *
  * Run from core/, alone on the machine:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/cache/cache.bench.ts [--scale=small] [--dir=<folder>]
  *
  * --dir is where the large files are written, once, and reused: by default

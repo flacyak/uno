@@ -10,7 +10,7 @@
  *   the loop reads every block of the file through a full, evicting cache.
  *
  * Usage, from core/:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/cache/fill2.ts <file.csv> <level MB>...
  */
 

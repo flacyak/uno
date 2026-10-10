@@ -12,7 +12,7 @@
  * it also writes to core/out/lab/scanner.json.
  *
  * From core/:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/scanner/scanner.bench.ts [--mb 96] [--samples 7] [--warmup 2]
  *     [--shapes a,b] [--variants a,b]
  */

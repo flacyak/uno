@@ -4,7 +4,7 @@
  * sample measured as one JSON line.
  *
  * read.bench.ts starts it as
- *   node --experimental-transform-types --expose-gc --import ../paths.js \
+ *   node --expose-gc --import ../paths.js \
  *     tests/lab/read/child.ts '<a Job as JSON>'
  *
  * The code is warmed by one untimed run over the job's warm-up file. A warm

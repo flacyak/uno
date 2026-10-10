@@ -8,7 +8,7 @@
  * samples unless dropped outside.
  *
  * From core/, alone on a quiet machine:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/scanner/pass.bench.ts [--file PATH] [--samples 3]
  */
 
