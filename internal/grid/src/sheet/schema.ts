@@ -1,14 +1,12 @@
-// The log, folded into what a row needs to be finished.
+// The edit log folded into what a row needs to be finished.
 //
-// A Schema holds no rows. It is the edit log read into facts about cells and
-// columns: which cells a person typed or wrote notation into, which programs run
-// over a column and in what order, and which columns a formula computes. It
-// checks every edit the way a sheet always has, in the same words, and it grows
-// with what a person did rather than with the file.
+// A Schema holds the facts the log adds up to: which cells were written,
+// which programs run over each column and in what order, and which columns
+// a formula computes. It checks every edit as it is folded.
 //
-// `pipeline.ts` turns a row of source values and a Schema into the row the grid
-// draws. A Sheet does that over rows in memory and the engine over pages of a
-// file, which is how the two follow one set of rules.
+// `pipeline.ts` turns a row of source values and a Schema into the row the
+// grid draws. A Sheet does that over rows in memory and the engine over
+// pages of a file.
 
 import type { Formula } from "../formula/index.ts";
 import { Graph, parse as parseFormula } from "../formula/index.ts";
@@ -26,9 +24,10 @@ export interface Written {
   /** What a notation cell shows. Undefined for a typed value. */
   rendered?: string;
   /**
-   * What the cell held before the typing this write ends began: its own `was`
-   * for the first write since the last apply over the column, and the first's
-   * for any after it. Undefined for notation.
+   * What the cell held before the run of writes this one continues: the
+   * edit's own `was` for the first write since the last apply over the
+   * column, and that first write's `was` for any after it. Undefined for
+   * notation.
    */
   was?: string;
 }
@@ -40,28 +39,27 @@ export interface Run {
 }
 
 /**
- * A column whoever holds the rows fills in as it reads them, from something
- * about a row that is not in it: which file it came from.
- *
- * Like a bound column it stores nothing of its own, and unlike one there is
- * no expression behind it to change, so every edit that names it is refused.
+ * A column whose values the holder of the rows fills in as it reads them,
+ * such as which file a row came from. Its values come from the holder alone,
+ * so every edit that names it is refused.
  */
 export interface Supplied {
   /** Which column, counting from 0. */
   col: number;
-  /** What it shows, as the end of a sentence refusing an edit to it. */
+  /** What it shows, used in the message refusing an edit to it. */
   shows: string;
 }
 
 export class Schema {
-  /** How many rows an edit may name. Whoever holds the rows keeps it current. */
+  /** How many rows an edit may name. The holder of the rows keeps it current. */
   rows: number;
 
   private readonly log: Edit[] = [];
   /** Row, then column, then the last write. Sparse: only cells someone wrote. */
   private readonly written = new Map<number, Map<number, Written>>();
   private readonly runs = new Map<number, Run[]>();
-  /** Live notation cells per column. A formula may not be bound over one. */
+  /** Count of live notation cells per column. A bind over a column that has
+   * any is refused. */
   private readonly notation = new Map<number, number>();
   private readonly bound = new Map<number, Formula>();
   private readonly graph = new Graph();
@@ -72,15 +70,15 @@ export class Schema {
   constructor(
     readonly headers: readonly string[],
     rows: number,
-    /** The column the holder of the rows fills in, where there is one. It is
-     * one of `headers`, so an expression can name it like any other. */
+    /** The column the holder of the rows fills in, if any. It is one of
+     * `headers`, so an expression can name it. */
     readonly supplied?: Supplied,
   ) {
     this.rows = rows;
     headers.forEach((h, i) => this.names.set(h, this.names.has(h) ? -1 : i));
   }
 
-  /** of builds a Schema from a saved log, which is how undo rebuilds one. */
+  /** of builds a Schema from a saved log. */
   static of(
     headers: readonly string[],
     rows: number,
@@ -93,8 +91,9 @@ export class Schema {
   }
 
   /**
-   * record checks an edit, numbers it and keeps it. Every check runs before
-   * anything changes, so a refused edit leaves the Schema as it was.
+   * record numbers an edit, checks and folds it, and keeps it. Every check
+   * runs before anything changes, so a refused edit leaves the Schema as it
+   * was.
    */
   record(e: Edit): Edit {
     e.seq = this.log.length + 1;
@@ -104,13 +103,9 @@ export class Schema {
   }
 
   /**
-   * replay folds a saved log in, keeping each edit's own number.
-   *
-   * Each edit is kept as soon as it is folded, so a log refused partway leaves
-   * the edits before the refusal both folded and kept, and what the Schema
-   * shows agrees with what it would write. One at a time rather than spread
-   * into one push, since a column pasted in a cell at a time is a log longer
-   * than a call can take as arguments.
+   * replay folds a saved log in, keeping each edit's own `seq`. Each edit is
+   * kept as soon as it is folded, so a log refused partway keeps the edits
+   * before the refusal.
    */
   replay(edits: readonly Edit[]): void {
     for (const e of edits) {
@@ -121,7 +116,7 @@ export class Schema {
 
   // ------------------------------------------------------------ reading
 
-  /** No edits, so every row is its source. */
+  /** True when the log is empty. */
   get empty(): boolean {
     return this.log.length === 0;
   }
@@ -138,7 +133,7 @@ export class Schema {
     return this.bound.get(col);
   }
 
-  /** The expression a column resolves to. */
+  /** The text of the formula bound to a column, if any. */
   binding(col: number): string | undefined {
     return this.bound.get(col)?.toString();
   }
@@ -149,10 +144,8 @@ export class Schema {
   }
 
   /**
-   * resolve names a column the way an expression does. An ambiguous name is a
-   * failure rather than a guess: two columns called "total" are a spreadsheet a
-   * person can work with and an expression nobody can read. Ingest gives every
-   * column of a file its own name, so this is for a header built some other way.
+   * resolve returns the index of the column with this header. It throws for
+   * a header held by zero columns or by more than one.
    */
   resolve(name: string): number {
     const i = this.names.get(name);
@@ -161,7 +154,8 @@ export class Schema {
     return i;
   }
 
-  /** resolve without the reasons, for an expression reading a row. */
+  /** indexOf is resolve returning undefined, in place of an error, for a
+   * missing or ambiguous name. */
   indexOf(name: string): number | undefined {
     const i = this.names.get(name);
     return i === undefined || i < 0 ? undefined : i;
@@ -171,7 +165,7 @@ export class Schema {
     return this.log.length;
   }
 
-  /** The log, copied, because the copy is handed to whatever writes it. */
+  /** The log, copied. */
   edits(): Edit[] {
     return this.log.map((e) => ({ ...e }));
   }
@@ -183,15 +177,14 @@ export class Schema {
   // ------------------------------------------------------------ folding
 
   private fold(e: Edit): void {
-    // Every operation names a column, whatever it does to the rows under it.
+    // Every operation names a column.
     const cols = this.headers.length;
     if (e.col < 0 || e.col >= cols) {
       throw new Error(
         `edit ${e.seq}: column ${e.col} is outside the ${cols} columns of this sheet`,
       );
     }
-    // Nothing is stored in a supplied column and nothing computes it here, so
-    // there is no operation that could change what it shows.
+    // A supplied column refuses every operation.
     if (e.col === this.supplied?.col) {
       throw new Error(
         `edit ${e.seq}: ${this.headers[e.col]} shows ${this.supplied.shows}, so it cannot be changed`,
@@ -207,8 +200,7 @@ export class Schema {
 
       case Op.Note: {
         this.refuseBound(e, "hold notation");
-        // Checked where the notation is written, so a person finds out while
-        // they are still typing rather than finding an empty box later.
+        // Unsupported notation is refused here, when it is written.
         const bad = notationSupported(e.now);
         if (bad !== undefined) throw new Error(`edit ${e.seq}: ${bad.message}`);
         this.refuseRow(e);
@@ -218,9 +210,8 @@ export class Schema {
 
       case Op.Apply: {
         this.refuseBound(e, "rewritten by a program");
-        // Parsed here rather than carried in the Edit, because an Edit is what a
-        // file holds and a file holds text. A log naming a program this build
-        // cannot read fails before anything changes.
+        // The Edit holds the program's text. A program that fails to parse
+        // is refused before anything changes.
         const prog = atEdit(e, () => parseProgram(e.now));
         const runs = this.runs.get(e.col);
         if (runs === undefined) this.runs.set(e.col, [{ seq: e.seq, prog }]);
@@ -242,8 +233,8 @@ export class Schema {
   }
 
   /**
-   * A derived column has no stored values of its own, so there is nothing in it
-   * for a person to write: what they typed would never be what it shows.
+   * refuseBound throws when the column is bound to a formula. `verb`
+   * completes the message.
    */
   private refuseBound(e: Edit, verb: string): void {
     if (this.bound.has(e.col)) {
@@ -253,8 +244,7 @@ export class Schema {
     }
   }
 
-  /** An out-of-range cell cannot come from the grid, so it means a log that does
-   * not belong to these rows. */
+  /** refuseRow throws when the row is outside the sheet. */
   private refuseRow(e: Edit): void {
     if (e.row < 0 || e.row >= this.rows) {
       throw new Error(`edit ${e.seq}: row ${e.row} is outside the ${this.rows} rows of this sheet`);
@@ -262,11 +252,10 @@ export class Schema {
   }
 
   /**
-   * firstWas is what a set's cell held before the typing it ends began. A cell
-   * typed into twice is one change, from before the first write to after the
-   * last, and an apply over the column starts afresh -- the same reading the
-   * recogniser's examples take. A log line without a `was` read it as "", as
-   * the file does.
+   * firstWas returns what a set's cell held before the run of writes it
+   * continues. If the cell was written since the last apply over its column,
+   * that write's `was` is reused. Otherwise it is the edit's own `was`, or
+   * "" when it has none.
    */
   private firstWas(e: Edit): string {
     const w = this.written.get(e.row)?.get(e.col);
@@ -294,12 +283,11 @@ export class Schema {
   private bindColumn(e: Edit): void {
     const f = atEdit(e, () => parseFormula(e.now));
 
-    // The graph names columns the way a person does, so the column being bound
-    // needs a name that means one column.
+    // The graph names columns by header, so the header has to name exactly
+    // one column.
     const name = atEdit(e, () => this.uniqueHeader(e.col));
 
-    // Binding over notation would stop drawing the sources a person wrote,
-    // which is a loss they would have to notice rather than be told about.
+    // A column holding notation refuses a bind.
     if (!this.bound.has(e.col) && (this.notation.get(e.col) ?? 0) > 0) {
       throw new Error(
         `edit ${e.seq}: ${name} holds notation, so a formula cannot be bound over it`,
@@ -335,8 +323,8 @@ export class Schema {
 }
 
 /**
- * atEdit runs one step of folding an edit, and what it refuses is refused
- * again naming the edit, so a log that cannot be replayed says which line.
+ * atEdit runs one step of folding an edit and rethrows any error with the
+ * edit's number prefixed.
  */
 function atEdit<T>(e: Edit, step: () => T): T {
   try {

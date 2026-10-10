@@ -2,11 +2,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
 /**
- * sha256Hex is what a .uno manifest records about the bytes it carries.
- *
- * It is synchronous, which is the reason for the dependency: Web Crypto is
- * async, and awaiting it would make `writeDocument` async for a reason no
- * caller can see.
+ * sha256Hex returns the SHA-256 of `bytes` as lower-case hex. It is
+ * synchronous, as `writeDocument` needs; Web Crypto is async.
  */
 export function sha256Hex(bytes: Uint8Array): string {
   return bytesToHex(sha256(bytes));

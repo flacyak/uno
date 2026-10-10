@@ -4,20 +4,15 @@ import { MAX_DIFF } from "./align.ts";
 import { MAX_PER_EXAMPLE } from "./induce.ts";
 
 /**
- * minPiece is the shortest run of characters taken as a piece of the old value
- * rather than as a constant. One character that happens to appear in both is a
- * coincidence; two are a quotation.
+ * MIN_PIECE is the shortest run of the old value taken as a slice. Shorter
+ * runs become typed constant text.
  */
 const MIN_PIECE = 2;
 
 /**
- * restructures induces the programs that move characters rather than change
- * them: pulling a code out of the middle of a cell, or putting two fields back
- * in the other order.
- *
- * It runs only when no rewrite fits, because the two readings of an edit are
- * different intents. Stripping the separators from 1,204 and slicing four
- * characters out of it agree on that row and on nothing after it.
+ * restructures induces the programs that move characters: slices of the old
+ * value, joined with constants. The Survey runs it only when the rewrites come
+ * up empty.
  */
 export function restructures(was: string, now: string): string[] {
   const a = runes(was);
@@ -27,8 +22,8 @@ export function restructures(was: string, now: string): string[] {
   const parts = decompose(a, b);
   if (parts === undefined || parts.length === 0 || parts.length > MAX_PARTS) return [];
 
-  // A decomposition that quotes nothing describes setting the column to a
-  // constant, which is a thing to type rather than a thing to infer.
+  // A decomposition must hold a slice. Constants alone would set the column
+  // to one value.
   let quoted = false;
   const sets: string[][] = [];
   for (const p of parts) {
@@ -43,14 +38,14 @@ export function restructures(was: string, now: string): string[] {
 
   const out: string[] = [];
   for (const c of cross(sets)) {
-    // A lone slice is a step, not a concat of one.
+    // A lone slice is a step of its own.
     out.push(c.length === 1 ? c[0]! : "concat(" + c.join(", ") + ")");
   }
   return out;
 }
 
-/** One stretch of the new value: either a constant the person typed, or a
- * quotation from the old value. */
+/** One stretch of the new value: a constant the person typed, or a slice of
+ * the old value. */
 interface Piece {
   lit: string;
   from: number;
@@ -59,12 +54,9 @@ interface Piece {
 }
 
 /**
- * decompose reads the new value as a sequence of quotations from the old one
- * with constants between them.
- *
- * It is greedy from the left, taking the longest quotation available at each
- * point, which is what makes the same reading come back for the same pair of
- * values every time.
+ * decompose reads the new value as slices of the old value with constants
+ * between them. It is greedy from the left, taking the longest slice at each
+ * point. Returns undefined when there are more than MAX_PARTS parts.
  */
 function decompose(a: string[], b: string[]): Piece[] | undefined {
   const parts: Piece[] = [];
@@ -93,7 +85,7 @@ function decompose(a: string[], b: string[]): Piece[] | undefined {
   return parts;
 }
 
-/** longestQuote finds the longest prefix of rest that appears in a, and where. */
+/** longestQuote finds the longest prefix of `rest` found in `a`, and where. */
 function longestQuote(a: string[], rest: string[]): [number, number] {
   const limit = Math.min(rest.length, a.length);
   for (let n = limit; n >= MIN_PIECE; n--) {
@@ -104,12 +96,9 @@ function longestQuote(a: string[], rest: string[]): [number, number] {
 }
 
 /**
- * sliceSrcs is the lattice for one quotation: where its two ends could be said
- * to be.
- *
- * A character count holds only for rows shaped exactly like this one, so each
- * end also gets a description in terms of the delimiter beside it, which is the
- * form that survives a row of a different length.
+ * sliceSrcs lists the ways to name each end of a slice: by index from the
+ * front, by index from the back, and by the character beside it. Returns
+ * every from/to pairing as slice(...) text.
  */
 function sliceSrcs(a: string[], from: number, to: number): string[] {
   const froms = [String(from)];
@@ -132,17 +121,12 @@ function sliceSrcs(a: string[], from: number, to: number): string[] {
 }
 
 /**
- * boundary describes a position by the character sitting at it: the k-th comma,
- * counted from the front and from the back.
- *
- * Both, because "after the first comma" and "after the last comma" are
- * different intents that agree on a value holding one comma, and only more
- * examples can tell them apart.
+ * boundary names a position by the character at it: the k-th occurrence
+ * counted from the front, and counted from the back.
  */
 function boundary(a: string[], at: number, side: string): string[] {
   const target = a[at]!;
-  // Through quoteRegex, as a replace step's pattern is: a slash is a delimiter
-  // people cut at, and a bare one would end the pattern it was meant to be.
+  // Through quoteRegex, so a `/` is escaped.
   const c = quoteRegex(quoteMeta(target));
 
   let k = 0;
@@ -156,8 +140,7 @@ function boundary(a: string[], at: number, side: string): string[] {
   ];
 }
 
-/** cross enumerates one choice per part, stopping at the same bound every other
- * generator here respects. */
+/** cross enumerates one choice per part, stopping at MAX_PER_EXAMPLE results. */
 function cross(sets: string[][]): string[][] {
   let out: string[][] = [[]];
   for (const set of sets) {

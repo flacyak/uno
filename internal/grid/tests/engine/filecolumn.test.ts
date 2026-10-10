@@ -1,10 +1,7 @@
-// The `_file` column of several files read as one: a column asked for when
-// the source is made, whose cell says which part a row came from.
-//
-// Nothing stores it. Each cell is worked out from where its row starts in the
-// join, so what has to hold is the two rows either side of every boundary
-// between parts: the last row of one part says that part, and the first row
-// of the next says the next.
+// The `_file` column of several files read as one: an extra column, asked for
+// in the ref, whose cell names the part a row came from. The cell is computed
+// from the row's byte offset, so the checks focus on the rows either side of
+// each part boundary.
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -43,10 +40,10 @@ const NAME = "sales-q3";
 /** What the workspace is saved as. */
 const UNO = "q3.uno";
 
-/** Where the `_file` column sits: after every column the files have. */
+/** The index of the `_file` column, after the files' own columns. */
 const FILE = COLS;
 
-/** More than any source here would need a save to carry. */
+/** A save limit larger than any carried source here. */
 const ROOMY = 1 << 20;
 
 const LF = 0x0a;
@@ -55,12 +52,12 @@ const BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
 
 const encoder = new TextEncoder();
 
-/** The first row of each part after the first: the row just past a boundary. */
+/** The first row of each part after the first. */
 const BOUNDARIES = Array.from({ length: PARTS - 1 }, (_, i) => (i + 1) * PART_ROWS);
 
 /**
- * Blocks of 7 rows, none of which holds a boundary by design, and blocks of
- * 1024, where a boundary falls in the middle of one.
+ * Blocks of 7 rows, where every block stays inside one part, and blocks of
+ * 1024, where one spans a boundary.
  */
 const TUNINGS: ReadonlyArray<[string, Tuning]> = [
   ["small blocks", TINY],
@@ -70,7 +67,7 @@ const TUNINGS: ReadonlyArray<[string, Tuning]> = [
 const dirs: string[] = [];
 afterAll(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true }))));
 
-/** The two ways a source has no `_file` column. */
+/** The two ways a ref asks for no `_file` column. */
 const UNASKED: ReadonlyArray<[string, Asked]> = [
   ["said nothing", "unsaid"],
   ["said no", false],
@@ -82,17 +79,17 @@ afterEach(() => {
   done = undefined;
 });
 
-/** An engine that reads disks, and several files as one. */
+/** An engine over disk, blob and multi providers, closed after each test. */
 function engine(tuning: Tuning = TINY): Engine {
   const made = connect(tuning, multiProviders());
   done = made.done;
   return made.engine;
 }
 
-/** Whether a ref asks for a `_file` column, or says nothing either way. */
+/** Whether a ref asks for a `_file` column, or leaves it unsaid. */
 type Asked = boolean | "unsaid";
 
-/** The files at `paths` as one source under `names`, with a `_file` column unless said. */
+/** A ref of `paths` as one source under `names`, with `_file` by default. */
 function asOne(
   paths: readonly string[],
   names: readonly string[] = PART_NAMES,
@@ -105,7 +102,7 @@ function asOne(
     : { name: NAME, parts, header, fileColumn };
 }
 
-/** `files` written into a folder of their own under `names`, and where each is. */
+/** Writes `files` under `names` into a new temp folder and returns their paths. */
 async function onDisk(files: readonly Uint8Array[], names: readonly string[]): Promise<string[]> {
   const dir = await mkdtemp(join(tmpdir(), "uno-filecolumn-"));
   dirs.push(dir);
@@ -119,15 +116,14 @@ async function fileOf(src: SourceHandle, row: number): Promise<string | undefine
   return (await src.rows(row, 1)).rows[0]![FILE];
 }
 
-/** The part of the fixture a row is in, by name. */
+/** The name of the part holding `row`. */
 function partOf(row: number, names: readonly string[] = PART_NAMES): string {
   return names[Math.floor(row / PART_ROWS)]!;
 }
 
 /**
- * Holds the `_file` column to the three parts of the fixture: the two rows
- * either side of each boundary, asked for alone and together, the two ends,
- * and then every row there is.
+ * Checks the `_file` cell of the rows either side of each boundary, alone and
+ * in one reply, of the first and last rows, and then of every row.
  */
 async function expectParts(src: SourceHandle, names: readonly string[]): Promise<void> {
   for (const first of BOUNDARIES) {
@@ -136,7 +132,7 @@ async function expectParts(src: SourceHandle, names: readonly string[]): Promise
     expect(await fileOf(src, first), `row ${first}, the first of its part`).toBe(
       partOf(first, names),
     );
-    // One reply across the boundary, as a viewport sitting on it asks.
+    // Both rows in one reply.
     const across = (await src.rows(last, 2)).rows.map((row) => row[FILE]);
     expect(across, `rows ${last} and ${first}`).toEqual([
       partOf(last, names),
@@ -160,8 +156,7 @@ describe.each(TUNINGS)("the _file column, over %s", (_, tuning) => {
   });
 
   test("is right where a part's last row has no newline", async () => {
-    // Every part but the last loses the line ending of its last row, so the
-    // join gives each a newline the file does not have.
+    // Every part but the last loses its final line ending.
     const cut = partBytes.map((part, i) =>
       i < PARTS - 1 ? part.subarray(0, part.length - CRLF_BYTES) : part,
     );
@@ -178,13 +173,13 @@ describe.each(TUNINGS)("the _file column, over %s", (_, tuning) => {
     const src = await openOne(engine(tuning), asOne(paths, ROWS_ONLY_NAMES, "none"));
     await indexed(src);
     expect(src.progress).toMatchObject({ rows: ROWS, complete: true });
-    // The first line of every part is a row, and it is that part's.
+    // With header mode "none", the first line of every part is a row of that
+    // part.
     await expectParts(src, ROWS_ONLY_NAMES);
   });
 
   test("passes over a part that gives no rows, and one of two rows", async () => {
-    // The header alone, and the header over the first two rows of the second
-    // part with no newline after the last.
+    // A header-only part, and a two-row part cut short of its final newline.
     const header = partBytes[0]!.subarray(0, partBytes[0]!.indexOf(LF) + 1);
     const second = partBytes[1]!;
     let end = header.length;
@@ -232,7 +227,7 @@ describe("a source with a _file column", () => {
     expect(src.opened.columns.slice(0, COLS)).toEqual(sales.columns);
     expect(src.opened.columns[FILE]).toEqual({ header: FILE_COLUMN, kind: "text", flagged: false });
 
-    // Every other cell is what it is without the column.
+    // The other cells are unchanged.
     const rows = await everyRow(src);
     for (const row of [0, BOUNDARIES[0]! - 1, BOUNDARIES[0]!, ROWS - 1]) {
       expect(rows[row], `row ${row}`).toHaveLength(COLS + 1);
@@ -277,7 +272,7 @@ describe("a source with a _file column", () => {
     }
     expect(await fileOf(src, boundary!)).toBe(PART_NAMES[1]);
 
-    // Either side of the boundary, in a column the files do have.
+    // Edits either side of the boundary, in a column the files have.
     for (const row of [boundary! - 1, boundary!]) {
       await src.edit({ op: Op.Set, row, col: UNITS, now: "7" });
       const [shown] = (await src.rows(row, 1)).rows;
@@ -285,7 +280,7 @@ describe("a source with a _file column", () => {
       expect(shown![FILE]).toBe(partOf(row));
       expect(shown![REGION]).toBe(sales.raw(row, REGION));
     }
-    // The column is as it was with a log beside it, at every row.
+    // The column is unchanged at every row.
     await expectParts(src, PART_NAMES);
   });
 });
@@ -300,12 +295,12 @@ describe("a source that did not ask for a _file column", () => {
 });
 
 describe("a save of a source with a _file column", () => {
-  /** uno.json as it was written, as text. */
+  /** The manifest entry of a .uno, as text. */
   function manifestOf(uno: Uint8Array): string {
     return strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!);
   }
 
-  /** The fixture's parts in a folder of their own, opened, edited and saved beside them. */
+  /** Copies the parts to a folder, opens them, edits one cell, and saves there. */
   async function saved(fileColumn: Asked) {
     const paths = await onDisk(partBytes, PART_NAMES);
     const file = join(paths[0]!, "..", UNO);
@@ -329,8 +324,7 @@ describe("a save of a source with a _file column", () => {
     expect(doc.sources[0]).toMatchObject({ id: NAME, fileColumn: true, rows: ROWS });
     expect(JSON.parse(manifestOf(uno)).sources[0].fileColumn).toBe(true);
 
-    // The log holds the one edit, to a column the files have. A part's name
-    // is in the save where the part is pointed at, and nowhere a cell would be.
+    // The log holds one edit. Part names appear only in the manifest.
     expect(doc.log.map((l) => l.edit.col)).toEqual([UNITS]);
     const entries = unzipSync(uno);
     for (const [entry, bytes] of Object.entries(entries)) {
@@ -338,7 +332,7 @@ describe("a save of a source with a _file column", () => {
       for (const name of PART_NAMES) expect(strFromU8(bytes), entry).not.toContain(name);
     }
 
-    // Opened again from the save alone: the column, and the edit beside it.
+    // Reopened from the save: the column and the edit are there.
     const src = await openOne(engine(), { name: UNO, path: file });
     await indexed(src);
     expect(src.opened.columns.at(-1)?.header).toBe(FILE_COLUMN);
@@ -346,9 +340,8 @@ describe("a save of a source with a _file column", () => {
     await expectParts(src, PART_NAMES);
   });
 
-  // The edit is in part two, so the open reaches for it and finds it gone.
-  // What the source was asked to show is part of what it is, with or without
-  // its files, so pointed at them again it shows the column as it did.
+  // The edit is in part two, so the open reads it and finds it gone. After
+  // a relink the column is still there.
   test("keeps it through a part going missing and the source being pointed at it again", async () => {
     const { file, paths, rows } = await saved(true);
     const gone = paths[1]!;

@@ -1,4 +1,4 @@
-// The panel's three sections and its browsing, driven with no window.
+// The panel's state (Sources), as plain data: its three sections and browsing.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -50,8 +50,8 @@ const PAGES: Record<string, Entry[]> = {
   ],
 };
 
-// A prefix as the S3 lister names it, with its trailing slash, which is where
-// re-pointing a tab whose object was in it starts.
+// A prefix with its trailing slash, as the S3 lister names it. Re-pointing a
+// tab whose object was in it starts here.
 PAGES["s3://acme-exports/ads/"] = [
   file("ads-2025-10.csv", "s3://acme-exports/ads/ads-2025-10.csv", 512),
   file("ads-2025-11.csv", "s3://acme-exports/ads/ads-2025-11.csv", 640),
@@ -61,8 +61,8 @@ PAGES["s3://acme-exports/ads/"] = [
 const Q3: Connection = { name: "q3", path: "s3://acme-exports/2025/q3", kind: "s3" };
 
 /**
- * A prefix too big for one listing, as the lister pages it: each page is one
- * list, and the cursor that asks for the next is its index.
+ * A prefix listed in pages. Each inner list is one page, and the cursor for
+ * the next page is its index.
  */
 const BOOKS: Record<string, Entry[][]> = {
   "s3://acme-exports/big": [
@@ -81,8 +81,8 @@ const BOOKS: Record<string, Entry[][]> = {
 
 const BIG: Connection = { name: "big", path: "s3://acme-exports/big", kind: "s3" };
 
-/** What a peek of a file answers: its name as the one header, so a test can
- * tell whose front it is looking at. */
+/** A peek answering the file's name as its one header, so a test can tell
+ * which file was peeked. */
 function front(ref: SourceRef): Peeked {
   return {
     label: { t: "read", delimiter: ",", header: "first", charset: "UTF-8" },
@@ -92,14 +92,11 @@ function front(ref: SourceRef): Peeked {
 }
 
 /**
- * A place to browse that answers out of the pages above. Holding it makes the
- * asks pending until the test says which one is answered, which is the only
- * way to have two in flight at once on purpose. Peeks are held the same way,
- * by a switch of their own, so a listing can land while a peek waits.
- *
- * A later page is asked for, held and answered as `path@cursor`, so a test can
- * tell it from the first page of the same folder. Setting `refuse` makes every
- * listing asked for after it a refusal with that message.
+ * Listings answering out of PAGES and BOOKS. With `hold` set, listings are
+ * held until `answer(path)` is called, so two can be in flight at once.
+ * `holdPeeks` holds peeks the same way. A later page is keyed as
+ * `path@cursor`. Setting `refuse` makes every listing after it reject with
+ * that message.
  */
 class Stand implements Listings {
   readonly asked: string[] = [];
@@ -190,8 +187,8 @@ test("entering a folder lists it, and the crumb says where you are", async () =>
   expect(stand.asked).toEqual(["s3://acme-exports", "s3://acme-exports/2025"]);
   expect(names(panel.entries)).toEqual(["q3", "jan.csv"]);
   expect(panel.crumb.map((c) => c.name)).toEqual(["acme-exports", "2025"]);
-  // The keys go back to the top, since the line they were on was a line of the
-  // folder that has just been left.
+  // The keys go back to the top, since the line they were on was in the
+  // folder just left.
   expect(panel.place).toEqual({ section: "browser", line: 0 });
 });
 
@@ -230,8 +227,8 @@ test("a listing for a folder nobody is in any more is dropped", async () => {
   await panel.open(ACME);
   stand.hold = true;
 
-  // Into a folder and straight back out of it, with both asks in flight. The
-  // one for the folder left behind is answered last, and must not land.
+  // Enter a folder and go straight back up, with both asks in flight. The
+  // folder's listing lands last and is dropped.
   const down = panel.enter(panel.entries[0]!);
   const back = panel.up();
   stand.answer("s3://acme-exports");
@@ -269,7 +266,7 @@ test("moving down the last line of a section carries on into the next one", asyn
     panel.move(1);
   }
 
-  // The connections end on the line that connects another, which the keys
+  // The connections end on the "+ Connect a bucket" line, which the keys
   // land on like any other.
   expect(walked).toEqual([
     { section: "workspace", line: 0 },
@@ -281,8 +278,8 @@ test("moving down the last line of a section carries on into the next one", asyn
   ]);
   expect(panel.isConnect(2)).toBe(true);
 
-  // The last line of the last section is as far as it goes, and coming back up
-  // walks the same lines the other way.
+  // The last line of the last section is as far as it goes. Moving back up
+  // walks the same lines.
   panel.move(1);
   expect(panel.place).toEqual({ section: "browser", line: 0 });
   panel.move(-5);
@@ -296,7 +293,7 @@ test("a section with no lines is stepped over, and the top of the panel holds", 
   panel.move(1);
   expect(panel.place).toEqual({ section: "connections", line: 0 });
   panel.move(-1);
-  // Nothing is open, so there is no line above the first connection to reach.
+  // With the workspace empty, the first connection is the top line.
   expect(panel.place).toEqual({ section: "connections", line: 0 });
 });
 
@@ -323,24 +320,24 @@ test("a source still opening is a workspace line after the tabs, until it has op
   expect(panel.opening.map((a) => a.name)).toEqual(["orders-2025.csv", "ads-q4.csv"]);
   expect(panel.count("workspace")).toBe(TABS.length + 2);
 
-  // The keys can rest on its line, and nothing is offered there: it is no tab yet.
+  // The keys can rest on its line, and its actions are empty.
   panel.focus("workspace", TABS.length);
   expect(panel.place).toEqual({ section: "workspace", line: TABS.length });
   expect(panel.doings).toEqual([]);
 
-  // A filter keeps the ones it matches, as it does the tabs.
+  // A filter keeps the ones it matches, as with the tabs.
   panel.search("q4");
   expect(panel.opening.map((a) => a.name)).toEqual(["ads-q4.csv"]);
   panel.search("");
   panel.focus("workspace", TABS.length);
 
-  // Opened, its line is gone and the keys are back on a line that exists.
+  // Once opened, its line is gone and the keys move to a line that exists.
   arriving = [];
   expect(panel.count("workspace")).toBe(TABS.length);
   expect(panel.place).toEqual({ section: "workspace", line: TABS.length - 1 });
 });
 
-/** The entry on the page by that name, since a toggle takes the entry itself. */
+/** The entry on the page with that name. */
 function named(panel: Sources, name: string): Entry {
   const entry = panel.entries.find((e) => e.name === name);
   if (entry === undefined) throw new Error(`no ${name} on the page`);
@@ -416,8 +413,8 @@ test("the buttons offer nothing, then one file, then each file or all of them as
     { name: "aug.tsv", path: "s3://acme-exports/2025/q3/aug.tsv" },
     { name: "sep.CSV", path: "s3://acme-exports/2025/q3/sep.CSV" },
   ];
-  // As one they are one ref of all three in that order, named after the
-  // folder, since their names share nothing.
+  // As one, they are one ref of all three in listing order, named after the
+  // folder since their common start is empty.
   expect(panel.buttons).toEqual([
     { label: "Add 3", one: false, refs },
     {
@@ -437,7 +434,7 @@ test("files added as one are named for what their names share, back to a whole w
   expect(joinedName(at("ads-q3.csv", "ads-q4.csv"))).toBe("ads.csv");
   // One name that is the start of the other ends on a whole word already.
   expect(joinedName(at("sales.tsv", "sales_eu.tsv"))).toBe("sales.tsv");
-  // Nothing shared but a letter is nothing shared: the folder names them.
+  // A shared start of one letter is too short: the folder names them.
   expect(joinedName(at("jan.csv", "jul.csv"))).toBe("2025.csv");
   expect(joinedName([{ name: "jan.csv", path: "/home/jo/exports/jan.csv" }])).toBe("jan.csv");
   expect(
@@ -446,7 +443,7 @@ test("files added as one are named for what their names share, back to a whole w
       { name: "b.csv", path: "/home/jo/exports/b.csv" },
     ]),
   ).toBe("exports.csv");
-  // With no folder to be named after, the first file names them.
+  // With bare paths, the first file names them.
   expect(
     joinedName([
       { name: "a.csv", path: "a.csv" },
@@ -481,14 +478,14 @@ test("how files are read as one is chosen while Add as one is offered, and kept"
   expect(panel.joining).toEqual({ header: "none", fileColumn: true });
   expect(one()).toMatchObject({ header: "none", fileColumn: true });
 
-  // Somewhere else, with other files picked, the choices are as they were left.
+  // In another folder with other files picked, the choices are as left.
   await panel.open(BIG);
   expect(panel.joining).toBeUndefined();
   await panel.toggle(named(panel, "a.csv"));
   await panel.toggle(named(panel, "b.csv"));
   expect(panel.joining).toEqual({ header: "none", fileColumn: true });
 
-  // A tab reads one file, so picking for one offers no way to read several.
+  // Re-pointing picks one file, so `joining` is undefined.
   await panel.repoint(TABS[0]!);
   expect(panel.joining).toBeUndefined();
 });
@@ -506,7 +503,8 @@ test("one selected file is peeked at, and a second selected puts the peek away",
 
   await panel.toggle(named(panel, "aug.tsv"));
 
-  // Two files have no one front to show, so nothing more is asked for.
+  // A peek is of one file, so two picked leaves the one peek made and clears
+  // what was shown.
   expect(stand.peeks).toEqual(["s3://acme-exports/2025/q3/jul.csv"]);
   expect(panel.peeked).toBeUndefined();
   expect(panel.peeking).toBe(false);
@@ -518,8 +516,8 @@ test("a peek of a file that is no longer the one selected is dropped", async () 
   await panel.open(Q3);
   stand.holdPeeks = true;
 
-  // Pick one file, then swap it for the next, with both peeks in flight. The
-  // first is answered last, and must not land under the second's name.
+  // Pick a file, unpick it, and pick the next, with both peeks in flight.
+  // The first lands last and is dropped.
   const first = panel.toggle(named(panel, "jul.csv"));
   const off = panel.toggle(named(panel, "jul.csv"));
   const second = panel.toggle(named(panel, "aug.tsv"));
@@ -549,15 +547,14 @@ test("browsing somewhere else lets go of the selection and the peek on its way",
   expect(panel.buttons).toEqual([]);
   expect(panel.peeking).toBe(false);
 
-  // The peek lands after the person has gone, and is not shown in the folder
-  // they went to.
+  // The peek lands after leaving the folder, and is dropped.
   stand.answer("s3://acme-exports/2025/q3/jul.csv");
   await peek;
 
   expect(panel.peeked).toBeUndefined();
   expect(panel.peeking).toBe(false);
 
-  // Going back to where the file was does not bring its selection back.
+  // Going back to where the file was finds it unpicked.
   await panel.up();
   expect(panel.chosen(named(panel, "jul.csv"))).toBe(false);
 });
@@ -705,10 +702,8 @@ test("an address with no object in it is only a filter", () => {
 });
 
 test("an address the URL parser chokes on is a filter, not a throw", () => {
-  // A bare per cent is a stray escape, and decoding a path that holds one
-  // raises a URIError rather than returning anything. The filter is where an
-  // address is pasted now, so a typo like this reaches the check before
-  // anything else, and a search that threw would leave the box doing nothing.
+  // A bare per cent sign makes decoding the path throw a URIError. The search
+  // catches it and treats the address as a filter.
   const panel = new Sources(new Stand(), () => TABS, [ACME]);
 
   for (const typed of [
@@ -826,8 +821,7 @@ test("browsing starts every folder from its first page, whatever was paged befor
   await panel.open(Q3);
   expect(panel.more).toBe(false);
 
-  // Back to the big folder: its first page again, and the cursor is the one it
-  // hands back rather than wherever paging had got to last time.
+  // Back to the big folder: its first page again, with a fresh cursor.
   await panel.open(BIG);
   expect(names(panel.entries)).toEqual(["archive", "a.csv", "b.csv"]);
   await panel.next();
@@ -869,7 +863,8 @@ test("a search on while a page lands sees the new entries, not what it kept befo
   await panel.next();
 
   expect(names(panel.entries)).toEqual(["a.csv", "b.csv", "c.csv"]);
-  // The page before is left as it was, since something may still be drawing it.
+  // The previous entries array is unchanged, since something may still be
+  // drawing it.
   expect(names(before)).toEqual(["a.csv", "b.csv"]);
 });
 
@@ -898,9 +893,6 @@ test("a later page that fails keeps what was shown, and the next ask tries it ag
   ]);
 });
 
-// No DOM, and it has to stay that way: the panel is the part of the shell whose
-// browsing is worth testing, and it is only testable at all while it can be
-// built without a document.
 // ------------------------------------------------------------ in this workspace
 
 /** Three tabs: one that reads, one whose object is gone, one whose file changed. */
@@ -927,7 +919,7 @@ const STATED: Open[] = [
 
 test("each tab's line says whether its file reads, changed, or is missing", () => {
   expect(STATED.map(stateOf)).toEqual(["fine", "missing", "changed"]);
-  // A tab carried in the workspace has no file to have gone wrong.
+  // A tab carried in the workspace, its file left out, is fine.
   expect(stateOf({ id: "d", name: "carried.csv" })).toBe("fine");
 });
 
@@ -967,20 +959,20 @@ test("a tab of several files is offered the files after its last that its folder
     () => drawn++,
   );
 
-  // Nothing is offered that nobody has asked about.
+  // grown is undefined before askGrown.
   expect(panel.grown(tab)).toBeUndefined();
 
   await panel.askGrown();
 
-  // Only the folder of a tab with parts is listed, as the lister names it.
+  // Only the folder of a tab with parts is listed, with its trailing slash.
   expect(stand.asked).toEqual(["s3://acme-exports/ads/"]);
   expect(drawn).toBe(1);
-  // The PDF sorts after it too, and is not a file a part can be.
+  // The PDF sorts after the last part too, and a part is a CSV or TSV.
   const files = [{ name: "ads-2025-11.csv", path: "s3://acme-exports/ads/ads-2025-11.csv" }];
   expect(panel.grown(tab)).toEqual({ folder: "ads/", files });
   expect(panel.grown(TABS[0]!)).toBeUndefined();
 
-  // The offer is the first thing its line has, and it is not re-pointed.
+  // The offer is the line's first action, and Remove is the only other.
   panel.focus("workspace", 2);
   expect(panel.doings).toEqual([
     { label: "1 new file in ads/ · append", does: "append", id: "m", files },
@@ -1016,8 +1008,8 @@ test("a file that sorts before the last part is not offered, wherever it came fr
 
   await panel.askGrown();
 
-  // ads-2025-10.csv is in the folder and is not a part, and appending it
-  // would not be reading the folder in order.
+  // ads-2025-10.csv is in the folder and outside the parts, and it sorts
+  // before the last part.
   expect(panel.grown(tab)).toBeUndefined();
   expect(panel.doings).toEqual([]);
 });
@@ -1045,8 +1037,7 @@ test("what a folder gained is not offered to a tab that has been appended to sin
   await panel.askGrown();
   expect(panel.grown(tab)).toBeDefined();
 
-  // The append lands before anything is asked again: the answer in hand is
-  // about a list of parts the tab no longer has.
+  // The tab's parts changed since the ask, so the answer in hand is stale.
   tab = joined("s3://acme-exports/ads/", "ads-2025-10.csv", "ads-2025-11.csv");
   expect(panel.grown(tab)).toBeUndefined();
 
@@ -1114,7 +1105,7 @@ test("re-pointing a missing object browses the prefix it was in, with the keys t
   expect(names(panel.entries)).toEqual(["ads-2025-10.csv", "ads-2025-11.csv", "notes.pdf"]);
   expect(panel.place).toEqual({ section: "browser", line: 0 });
 
-  // Up goes as far as the bucket, as it would from the connection.
+  // Up goes as far as the bucket.
   await panel.up();
   expect(stand.asked).toEqual(["s3://acme-exports/ads/", "s3://acme-exports"]);
 });
@@ -1191,7 +1182,7 @@ test("the panel reaches for no document and no window", () => {
     fileURLToPath(new URL("../src/renderer/sources.ts", import.meta.url)),
     "utf8",
   );
-  // The prose says "window" often enough; it is the code that has to be clean.
+  // Comments may say "window". Code saying it fails the test.
   const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
   expect(code).not.toMatch(/\bdocument\b|\bwindow\b|\bHTML[A-Za-z]*Element\b/);
 });
@@ -1201,8 +1192,8 @@ test("the selected files are read once per page and per pick, not once per draw"
   await panel.open(BIG);
   await panel.toggle(named(panel, "a.csv"));
 
-  // Every draw asks, through the buttons and the choices, and a page can be
-  // 200,000 entries: the same page and the same picks are the same answer.
+  // Every draw reads `selected`, and a page can be 200,000 entries, so the
+  // same page and picks return the same array.
   const once = panel.selected;
   expect(names(once)).toEqual(["a.csv"]);
   expect(panel.selected).toBe(once);
@@ -1222,10 +1213,9 @@ test("the selected files are read once per page and per pick, not once per draw"
 // ------------------------------------------------------------ a big prefix
 
 /**
- * A prefix of `n` files that counts how many times an entry's path is read,
- * which is what every look through the page costs. A page can be 200,000
- * entries, so what the selection asks of it is held to a bound rather than
- * timed.
+ * A listing of `n` files that counts reads of each entry's path, which is
+ * what every pass over the page costs. A page can be 200,000 entries, so the
+ * selection is held to a bound on its reads.
  */
 class Prefix implements Listings {
   reads = 0;
@@ -1261,10 +1251,10 @@ class Prefix implements Listings {
 
 const ORDERS: Connection = { name: "orders", path: "s3://acme-exports/orders", kind: "s3" };
 
-/** A page of this many, and how many of its files are picked, from the end. */
+/** The page size, and how many of its files are picked from the end. */
 const PAGE = 2_000;
 const PICKS = 50;
-/** The page read once over, with room for what each pick reads of its own entry. */
+/** One pass over the page, with room for what each pick reads of its own entry. */
 const ONCE_OVER = 2 * PAGE;
 
 /** The last `PICKS` names of the page, in the page's order. */

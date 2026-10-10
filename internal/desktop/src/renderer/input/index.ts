@@ -1,5 +1,5 @@
-// The input strategies, by the name settings, the Edit menu and the saved
-// setting use.
+// Registry of input strategies, keyed by the name the Edit menu and the
+// saved setting use.
 
 import { m } from "../../paraglide/messages.js";
 import { defaultInput } from "./default.ts";
@@ -9,10 +9,10 @@ import { vimStyle } from "./vim-style.ts";
 
 export type { EditorKey, InputName, InputStrategy } from "./strategy.ts";
 
-/** Every strategy, in the order it is offered. */
+/** All strategy names, in menu order. */
 export const INPUTS: readonly InputName[] = ["default", "vim-style"];
 
-/** inputLabel is what a strategy is called where it is offered. */
+/** Returns the localized label for a strategy name. */
 export function inputLabel(name: InputName): string {
   return INPUT_LABELS[name]();
 }
@@ -22,10 +22,8 @@ const INPUT_LABELS: Record<InputName, () => string> = {
   "vim-style": m.input_vim_style,
 };
 
-/**
- * strategy is the one a name picks. Anything else -- nothing saved yet, or a
- * name a later build saved -- is the default.
- */
+/** Returns the strategy for a name. Unknown or missing names give the
+ * default. */
 export function strategy(name: string | null | undefined): InputStrategy {
   switch (name) {
     case "vim-style":

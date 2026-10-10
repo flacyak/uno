@@ -1,17 +1,14 @@
-// Compiling the app's text.
+// Compiles the app's messages.
 //
-// Every sentence the app says is in messages/<locale>.json, one file a
-// language, in inlang's message format. Paraglide compiles them to
-// src/paraglide: a typed function for each message, so a key that is not there
-// or a parameter left out fails `vp check` and never reaches a person.
+// The messages are in messages/<locale>.json, one file per language, in
+// inlang's message format. Paraglide compiles them to src/paraglide, one
+// typed function per message.
 //
-// The options are here because four things compile with them: the Vite plugin
-// for the renderer and the tests, the build before it bundles main and preload,
-// `vp run check`, which lints against the compiled functions, and the web
-// build in @uno/web, which runs the same plugin over the same files.
+// The options are shared by the Vite plugin for the renderer and the tests,
+// the build before it bundles main and preload, and `vp run check`.
 //
-// The pseudo-locale is written from the English before each of them compiles.
-// See pseudo.js for what it is for.
+// The pseudo-locale is written from the English before each compile. See
+// pseudo.js.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -31,25 +28,22 @@ const messageFile = (locale) => join(PACKAGE, "messages", `${locale}.json`);
 
 /** @type {import("@inlang/paraglide-js").CompilerOptions} */
 export const MESSAGES = {
-  // Absolute, so the web build compiles them from its own package's cwd.
+  // Absolute, so the compile works from any cwd.
   project: join(PACKAGE, "project.inlang"),
   outdir: join(PACKAGE, "src", "paraglide"),
-  // The locale is a variable the app sets: the renderer from its settings, main
-  // from what the renderer tells it. Until it is set the app speaks the base
-  // locale, which is what a test gets.
+  // The locale is a global variable the app sets. Until it is set, the base
+  // locale is used.
   strategy: ["globalVariable", "baseLocale"],
-  // The same output in dev and in a build, where the plugin would otherwise
-  // choose by NODE_ENV.
+  // The same output structure in dev and in a build.
   outputStructure: "message-modules",
-  // Main has no requests to keep apart, so the locale needs no async storage.
+  // The locale is one plain global.
   disableAsyncLocalStorage: true,
   emitReadme: false,
 };
 
 /**
- * writePseudo writes the pseudo-locale's messages from the base locale's. It
- * leaves a file that already says the same alone, so a watcher is not told of
- * a change that was not one.
+ * writePseudo writes the pseudo-locale's messages from the base locale's. A
+ * file that already has the same text is left alone, so watchers stay quiet.
  */
 export function writePseudo() {
   const base = JSON.parse(readFileSync(messageFile(BASE_LOCALE), "utf8"));
@@ -70,15 +64,15 @@ export async function compileMessages() {
 }
 
 /**
- * The Vite plugins that keep the compiled messages current: the pseudo-locale
- * written again whenever the English changes, and Paraglide compiling whatever
+ * The Vite plugins that keep the compiled messages current: one rewrites the
+ * pseudo-locale when the English changes, and Paraglide recompiles whatever
  * message file changed.
  *
  * @returns {import("vite").PluginOption[]}
  */
 export function messagesPlugins() {
-  // Now, and not in a hook: Paraglide compiles as the build starts, and the
-  // pseudo-locale has to be on disk by then.
+  // Written as the plugins are made: Paraglide compiles as the build starts,
+  // and the pseudo-locale has to be on disk by then.
   writePseudo();
   const base = messageFile(BASE_LOCALE);
   return [
@@ -92,7 +86,7 @@ export function messagesPlugins() {
   ];
 }
 
-// `node scripts/messages.js`, for a check that has no build before it.
+// Run directly as `node scripts/messages.js`: compile once.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   await compileMessages();
 }

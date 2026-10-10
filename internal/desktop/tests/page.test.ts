@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 //
-// The words in the page's own markup: index.html ships the elements empty, and
-// labelPage writes them in the language the app is in.
+// The words in the page's markup: index.html ships the elements empty, and
+// labelPage writes them in the app's language.
 //
-// What is under test is that nothing the markup shows is left without its
-// words, and that writing them again keeps what is wired to the elements.
+// Checks that every element gets its words, and that writing them again
+// keeps the elements that have handlers wired to them.
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
@@ -20,8 +20,8 @@ beforeEach(() => {
 const text = (selector: string): string => document.querySelector(selector)?.textContent ?? "";
 
 test("the markup ships its elements without their words", () => {
-  // The dot between the file and the message, the + and the extensions are
-  // the same in every language, so they are all the markup says.
+  // The dot, the + and the extensions are the same in every language, so they
+  // are all the text the markup holds.
   expect(document.body.textContent.replace(/\s+/g, " ").trim()).toBe("+ csv · tsv · uno ·");
 });
 

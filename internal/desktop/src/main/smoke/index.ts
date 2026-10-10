@@ -1,13 +1,7 @@
-// The assertions the smoke test makes against a running window.
+// The checks the smoke test runs against a window.
 //
-// This is test code living in the app, which is a smell worth naming: it is
-// here because a virtualiser, a preload bridge and an IPC round trip cannot be
-// checked anywhere but inside a real Electron, and the alternative was a
-// browser-automation dependency larger than the app it would be testing.
-//
-// It is reached only when UNO_SMOKE is set in the environment, it is the only
-// thing in `src/main` that knows what a test is, and nothing in the app calls
-// it.
+// This is test code inside the app. It is reached only when UNO_SMOKE is set
+// in the environment, from main's index.ts.
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -43,24 +37,14 @@ import { VIM_STYLE } from "./vim-style.ts";
 
 /**
  * How long the first rows get to arrive from the engine, and how often the
- * page is asked whether they have.
- *
- * A third of the 60 s smoke.js gives the whole run. A warm machine draws in
- * well under a second, but a CI runner starting Electron for the first time
- * has taken most of six, and a budget that close to what it needs fails on a
- * slow morning rather than on a broken app.
+ * page is asked whether they have. A third of the 60 s smoke.js gives the run.
  */
 const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
 
 /**
- * What a person would look at to decide the app works.
- *
- * Each one is a claim about the real fixture: 4,812 rows of a real export, the
- * units column wearing thousands separators, and a grid that must not put all
- * of it in the DOM.
- *
- * They run in order, and each picks up the window where the one before left it.
+ * Every check, in order. Each picks up the window where the one before left
+ * it.
  */
 const CHECKS: Check[] = [
   ...OPEN,
@@ -77,13 +61,11 @@ const CHECKS: Check[] = [
 ];
 
 /**
- * What every check that is still a string can call. A check's body runs in a
- * block of its own, so one that declares its own `frame` shadows this one
- * rather than colliding with it.
+ * What a check written as a string can call. The check's body runs in a block
+ * of its own, so a name it declares shadows one here.
  *
- * The fixture's own facts -- ROWS, DATE and the rest -- live in fixture.ts, so
- * a check that has become a function and one that is still a string read the
- * same values under the same names.
+ * The fixture's values come from fixture.ts, so string and function checks
+ * read the same values under the same names.
  */
 const PRELUDE = `
   // The fixture: date,region,rep,channel,units,revenue. A body row has the
@@ -94,7 +76,7 @@ const PRELUDE = `
   // What remove commas changes once rows 1, 3 and 5 of units are fixed by hand.
   const COMMAS_LEFT = ${COMMAS_LEFT};
 
-  // More rows than this in the DOM means the grid is not virtualising.
+  // A virtualising grid keeps fewer rows than this in the DOM.
   const DOM_ROWS = ${DOM_ROWS};
 
   // A count as the app writes it on screen: 4,812.
@@ -103,13 +85,12 @@ const PRELUDE = `
   // How long a check waits on the app: this many frames, or polls POLL_MS apart.
   const TRIES = 150;
   const POLL_MS = 20;
-  // Frames for input sent before a check to have landed, had it reached the page.
+  // Frames to wait for input sent before a check to land.
   const SETTLE_FRAMES = 10;
 
   const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const text = (selector) => document.querySelector(selector)?.textContent ?? "";
-  // A key goes where a real one would: to the editor while it is open, to the
-  // grid otherwise.
+  // A key goes to the editor while one is open, to the grid otherwise.
   const press = async (key, init = {}) => {
     const target = document.querySelector(".cell-editor") ?? document.querySelector("#content");
     target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
@@ -119,21 +100,19 @@ const PRELUDE = `
     for (let i = 0; i < TRIES && !ok(); i++) await frame();
     return ok();
   };
-  // A wait for something coming over the network. \`until\` is counted in
-  // frames, which is the right size for the app catching up with itself and
-  // too small for a signed request, a bucket, and 2,600 rows on the way back.
+  // A longer wait, four until budgets, for something coming over the network.
   const arrives = async (ok) => {
     for (let i = 0; i < 4; i++) if (await until(ok)) return true;
     return false;
   };
   // Whether the status bar counts this many edits.
   const edited = (n) => text("#status-file").includes(n + " edits");
-  // The sources panel, opened where it is closed.
+  // Opens the sources panel if it is closed.
   const openPanel = async () => {
     if (document.querySelector("#panel").hidden) await press("B", { ctrlKey: true, shiftKey: true });
   };
-  // The panel's lines, each with the section it is under: the titles come
-  // workspace, connections, browser, and a column this short is all on screen.
+  // The panel's lines, each with the index of the section it is under. The
+  // sections are workspace, connections, browser.
   const lines = () => {
     let at = -1;
     return [...document.querySelectorAll("#panel .panel-row")].map((r) => ({
@@ -143,16 +122,15 @@ const PRELUDE = `
   };
   const WORKSPACE = 0, CONNECTIONS = 1, BROWSER = 2;
   const head = (section) => lines().find((l) => l.section === section && l.cls.includes("head"));
-  // A section's lines, not its title or note.
+  // A section's entries, below its title and note.
   const named = (section) => lines().filter((l) => l.section === section && !/\\b(head|note)\\b/.test(l.cls));
-  // A key pressed where the panel reads them.
+  // A key pressed on the panel's list.
   const key = async (k) => {
     document.querySelector("#panel .panel-list")
       .dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
     await frame();
   };
-  // The form that connects a bucket, in the list's place while it is open, and
-  // its Save, pressed after the sign-in is chosen as a person chooses it.
+  // The form that connects a bucket, its sign-in select, and its Save button.
   const connectForm = () => document.querySelector("#panel .panel-connect");
   const signInAs = (value) => {
     const choose = connectForm().querySelector("select");
@@ -168,17 +146,15 @@ const PRELUDE = `
 `;
 
 /**
- * How long a shot waits after the page's frames for the compositor to put the
- * last of them on screen. Two animation frames say the page has drawn its
- * change; they do not say the window has, and capturePage returns whatever the
- * window last showed. Without this, one shot in four of a theme changed a
- * moment before came back as the frame before it.
+ * How long a shot waits after the page's frames for the compositor to put
+ * them on screen. capturePage returns what the window last showed, which can
+ * be a frame behind the page.
  */
 const COMPOSITED_MS = 120;
 
 /**
- * shoot writes a picture of the window into the run's folder, as <name>.png,
- * once the check's last change is drawn and composited.
+ * shoot writes a picture of the window into the run's folder as <name>.png,
+ * once the page has drawn and the compositor has caught up.
  */
 async function shoot(win: BrowserWindow, name: string): Promise<void> {
   const dir = process.env["UNO_SMOKE"];
@@ -194,22 +170,19 @@ async function shoot(win: BrowserWindow, name: string): Promise<void> {
 }
 
 /**
- * run drives the window, reports to stdout, and quits with a status the shell
- * can read.
+ * runSmoke drives the window, reports to stdout, and quits with a status the
+ * shell can read.
  *
- * A check with `run` is called with a `Page` over this window. One still
- * carrying `script` is evaluated in the renderer as an async function body, so
- * it can wait a frame for the virtualiser to catch up -- which several of them
- * have to.
+ * A check with `run` is called with a `Page` over this window. One with
+ * `script` is evaluated in the renderer as an async function body.
  */
 export async function runSmoke(win: BrowserWindow, quit: (code: number) => void): Promise<void> {
   let failed = 0;
   const page = electronPage(win);
 
-  // The window has loaded, but the fixture's first rows come from an engine a
-  // moment later. How long that took is said, so a slow start is a number in
-  // the log rather than a guess; one that never comes fails now, saying what
-  // the window showed instead, rather than leaving the run to its deadline.
+  // The window has loaded, but the first rows come from the engine a moment
+  // later. How long that took is logged. If none come in time, the run fails
+  // now, saying what the window showed instead.
   const drawn = (await win.webContents.executeJavaScript(`
     (async () => {
       const start = performance.now();
@@ -233,9 +206,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   }
   console.log(`smoke: first rows drawn ${(drawn.ms / 1000).toFixed(1)}s after the window loaded`);
 
-  // The input strategy outlives the window. A run stopped partway through the
-  // vim-style checks would leave the next one reading keys the vim way, so every
-  // run starts from the default.
+  // Every run starts from the default input strategy.
   win.webContents.send("menu:input", "default");
 
   for (const check of CHECKS) {
@@ -270,8 +241,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
     }
   }
 
-  // A picture of the window, because a list of green ticks does not show
-  // whether the thing is laid out like the design says.
+  // A picture of the whole window, for checking the layout.
   await shoot(win, "window");
 
   if (failed === 0) console.log("smoke: all checks passed");

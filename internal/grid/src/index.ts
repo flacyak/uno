@@ -1,9 +1,7 @@
 // uno's core: sheets, formulas, the transform language and the .uno container.
 //
-// The subpath exports are the ones to reach for -- `@uno/grid/sheet`,
-// `@uno/grid/formula` and so on -- so the Electron main process and the
-// renderer each pull only what they need. This barrel is for the rare caller
-// that wants the lot.
+// The subpath exports (`@uno/grid/sheet`, `@uno/grid/formula` and so on) are
+// the usual way in. This barrel exports everything.
 
 export * as go from "./go/index.ts";
 export * as num from "./num/index.ts";

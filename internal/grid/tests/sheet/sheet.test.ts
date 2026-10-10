@@ -8,8 +8,7 @@ import { Sheet } from "../../src/sheet/index.ts";
 import { parse } from "../../src/formula/index.ts";
 
 test("raw tolerates ragged and out-of-range", () => {
-  // The second row is short: a real export does this, and the grid must not
-  // have to bounds-check while scrolling.
+  // The second row is short. raw returns "" for any missing or out-of-range cell.
   const s = new Sheet("t.csv", ["a", "b", "c"], [["1", "2", "3"], ["4"]]);
 
   const cases: Array<[string, number, number, string]> = [
@@ -26,8 +25,8 @@ test("raw tolerates ragged and out-of-range", () => {
   }
 });
 
-// What this pins still holds everywhere nothing has been computed: an unbound
-// column shows what it stores, and out-of-range stays empty on both paths.
+// Before any column is bound, display equals raw for every cell, including
+// out-of-range ones.
 test("display is raw where nothing fills it", () => {
   const s = new Sheet("t.csv", ["a", "b", "c"], [["1", "2", "3"], ["4"]]);
 
@@ -38,9 +37,8 @@ test("display is raw where nothing fills it", () => {
   }
 });
 
-// And the other half of it: once a column is bound the two part company, which
-// is the whole point of having split them. raw keeps saying what the cell
-// stores, which is nothing, because a derived column holds no values of its own.
+// Once a column is bound, display shows the computed value and raw still
+// returns the stored value, which is empty.
 test("display leaves raw behind once a column is bound", () => {
   const s = new Sheet(
     "t.csv",
@@ -70,8 +68,7 @@ test("rows and cols count data, not the header", () => {
   expect(s.cols()).toBe(2);
 });
 
-// The four columns the design doc draws, including the flagged one the whole
-// feature exists for.
+// Column kinds for date, text, flagged text, num, and empty columns.
 describe("inferKind", () => {
   const s = new Sheet(
     "t.csv",
@@ -86,9 +83,9 @@ describe("inferKind", () => {
   const cases: Array<[number, string, boolean]> = [
     [0, "date", false],
     [1, "text", false],
-    [2, "text", true], // numbers wearing thousands separators
+    [2, "text", true], // numbers with thousands separators
     [3, "num", false],
-    [4, "text", false], // no evidence at all
+    [4, "text", false], // every cell empty
   ];
 
   for (const [col, kind, flagged] of cases) {
@@ -99,7 +96,7 @@ describe("inferKind", () => {
   }
 });
 
-// The costume a number wears is not always a comma.
+// Other number decorations that set the flag.
 describe("inferKind flags the other decorations", () => {
   const s = new Sheet(
     "t.csv",
@@ -116,7 +113,7 @@ describe("inferKind flags the other decorations", () => {
     [1, "text", true], // percent
     [2, "text", true], // apostrophe separator
     [3, "text", true], // space separator
-    [4, "text", false], // a genuine non-number keeps it mixed
+    [4, "text", false], // N/A is a word, so the column is mixed
   ];
 
   for (const [col, kind, flagged] of cases) {
@@ -127,8 +124,7 @@ describe("inferKind flags the other decorations", () => {
   }
 });
 
-// Accounting exports write a negative with the sign last (SAP) or in
-// parentheses (Oracle). Either is a number, beside plain ones or alone.
+// A trailing minus sign or parentheses count as a negative number.
 test("inferKind reads accounting negatives as numbers", () => {
   const cases: Array<[string, string[], string, boolean]> = [
     ["sap", ["1234.00-", "87.50", "0.00", "12.00-"], "num", false],
@@ -148,17 +144,14 @@ test("inferKind reads accounting negatives as numbers", () => {
   }
 });
 
-// A column of numbers with genuinely non-numeric values in it is mixed, not
-// misformatted, so it must not raise the flag the recogniser acts on.
+// A column mixing numbers with a word like N/A is text and stays unflagged.
 test("inferKind does not flag genuinely mixed columns", () => {
   const s = new Sheet("t.csv", ["units"], [["12"], ["34"], ["56"], ["N/A"]]);
   expect(s.columns[0]!.kind).toBe("text");
   expect(s.columns[0]!.flagged).toBe(false);
 });
 
-// `new Date` would accept every one of the not-dates; the written layouts do
-// not, and a text column wearing a date badge is a wrong answer that looks
-// deliberate.
+// Date detection accepts only the listed layouts.
 describe("isDate is the written layouts and not whatever Date can parse", () => {
   const dates = [
     "2026-07-01",
@@ -213,8 +206,8 @@ describe("isDate is the written layouts and not whatever Date can parse", () => 
   }
 });
 
-// An ad export that wrote its dates three ways down one column: 2024-11-16,
-// 2024/11/16 and 20-11-2024. Every one is a date, so the column is.
+// The Ad_Date column mixes the layouts 2024-11-16, 2024/11/16 and 20-11-2024.
+// Every value is a date, so the column kind is date.
 test("a column of mixed date layouts is a date column", () => {
   const path = fileURLToPath(new URL("../testdata/google-ads-sales.csv", import.meta.url));
   const s = read("google-ads-sales.csv", readFileSync(path));

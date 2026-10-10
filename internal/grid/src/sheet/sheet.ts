@@ -1,10 +1,8 @@
-// Package sheet holds one table per workspace. It imports nothing from the
-// packages above it, which is what lets it be tested with no display attached.
+// Package sheet holds one table per workspace.
 //
-// A Sheet is a table held in memory: its source rows, a Schema folded from the
-// log, and the rows finished from both as they are read. The engine does the
-// same over a file it never holds, with the same Schema and the same pipeline,
-// so the rules a test pins here are the rules a 30 GB file follows.
+// A Sheet is a table in memory: its source rows, a Schema folded from the
+// log, and rows finished from both as they are read. The engine does the
+// same over a file, with the same Schema and the same pipeline.
 
 import type { Formula } from "../formula/index.ts";
 import { evaluate } from "../formula/index.ts";
@@ -19,51 +17,41 @@ import { finish, finishRows, formatValue } from "./pipeline.ts";
 import { Schema } from "./schema.ts";
 import type { Written } from "./schema.ts";
 
-/** Column pairs a header with the kind inferred from the values beneath it. */
+/** Column pairs a header with the kind inferred from its values. */
 export interface Column {
   header: string;
-  /** Inferred at load; never stored in the file. */
+  /** Inferred at load; lives in memory only. */
   kind: Kind;
   /**
-   * Marks a column that looks numeric but does not parse cleanly, such as one
-   * whose thousands separators break half its values. It is the condition the
-   * recogniser acts on.
+   * True for a column that would be numeric but for formatting, such as
+   * thousands separators. The recogniser acts on it.
    */
   flagged: boolean;
 }
 
 /**
- * FINISH_ROWS is how many rows are finished together when one of them is read:
- * the engine's block size, so a sheet and a file compute formulas in the same
- * steps.
+ * FINISH_ROWS is how many rows are finished together: the engine's block
+ * size, so a sheet and a file compute formulas in the same blocks.
  */
 const FINISH_ROWS = 1024;
 
 export class Sheet {
   readonly columns: Column[];
-  /** How `ingest` read these bytes, for the status bar to show verbatim. It is
-   * an opaque label here on purpose: `ingest` owns the wording, so `sheet` still
-   * knows nothing about delimiters or encodings. */
+  /** How `ingest` read these bytes, shown verbatim in the status bar. */
   source = "";
 
   private readonly rowData: readonly (readonly string[])[];
   private readonly schema: Schema;
 
   /**
-   * Rows finished since the log last changed, indexed by row.
-   *
-   * `display` runs about two hundred times a frame, so it has to be an array
-   * read. The first read of a row after an edit finishes it; every read after
-   * that is the lookup.
+   * Rows finished since the log last changed, by row index. A row is
+   * finished on its first read after an edit and looked up after that.
    */
   private finished: Array<Finished | undefined> = [];
 
   /**
-   * Builds a sheet from a header row and the data rows beneath it, inferring
-   * each column's kind as it goes.
-   *
-   * A row longer than the header contributes no column: the header decides the
-   * shape.
+   * Builds a sheet from a header row and the data rows under it, and infers
+   * each column's kind. The header decides the column count.
    */
   constructor(
     readonly name: string,
@@ -85,13 +73,7 @@ export class Sheet {
   }
 
   /**
-   * raw is what the cell stores. The log records it, undo restores it, and the
-   * recogniser reads it, because all three are about the value a person put
-   * there rather than the one they are being shown.
-   *
-   * An absent cell is empty rather than an error: short rows are normal in real
-   * exports, and returning "" is what lets the table skip bounds checks while
-   * scrolling.
+   * raw returns what a cell stores. A cell outside the sheet is "".
    */
   raw(row: number, col: number): string {
     if (col < 0) return "";
@@ -99,22 +81,21 @@ export class Sheet {
   }
 
   /**
-   * display is what the cell shows, and what the grid binds to: raw, except
-   * where notation or a formula fills the cell in.
+   * display returns what a cell shows: raw, except where notation or a
+   * formula fills it in. A cell outside the sheet is "".
    */
   display(row: number, col: number): string {
     if (col < 0) return "";
     return this.row(row)?.shown[col] ?? "";
   }
 
-  /** written is the last write into a cell, or undefined where nobody typed. */
+  /** written returns the last write into a cell, or undefined. */
   written(row: number, col: number): Written | undefined {
     return this.schema.writtenIn(row)?.get(col);
   }
 
   /**
-   * row finishes the block a row is in, not the row alone, so that a bound
-   * column is computed over the block a column at a time.
+   * row finishes the block the row is in, caches it, and returns the row.
    */
   private row(row: number): Finished | undefined {
     if (row < 0 || row >= this.rowData.length) return undefined;
@@ -130,53 +111,39 @@ export class Sheet {
   // ------------------------------------------------------------ the log
 
   /**
-   * set records a value typed into one cell. It is the only way the grid
-   * changes a single value, so the log can never fall behind the data it
-   * describes.
+   * set records a value typed into one cell.
    */
   set(row: number, col: number, v: string): void {
     this.record({ seq: 0, op: Op.Set, row, col, was: this.raw(row, col), now: v });
   }
 
   /**
-   * apply runs a program over every value in a column and records it as one
-   * operation.
-   *
-   * It is the door a pattern proposal comes through, and the reason the log
-   * stays proportional to what a person did rather than to how much data they
-   * did it to: 3,149 cells change and one line is written.
+   * apply records a program run over every value in a column, as one edit.
    */
   apply(col: number, p: Program): void {
     this.record({ seq: 0, op: Op.Apply, row: NO_ROW, col, now: programText(p) });
   }
 
   /**
-   * note puts notation in one cell: the person types markdown and the cell
-   * shows the symbols it describes.
-   *
-   * A notation cell stores its source and shows what the source describes,
-   * which is the same relationship a bound column has to its expression. It
-   * reads no columns and joins no dependency graph, which is everything else.
+   * note records notation in one cell: markdown is stored and the symbols
+   * it describes are shown.
    */
   note(row: number, col: number, src: string): void {
     this.record({ seq: 0, op: Op.Note, row, col, was: this.raw(row, col), now: src });
   }
 
   /**
-   * bind makes a column derived: what it shows is computed from the columns
-   * the expression names. It records one line for a column of any length, and
-   * the expression is what the file carries, not the results.
+   * bind records a formula on a column. The column then shows what the
+   * expression computes.
    */
   bind(col: number, f: Formula): void {
     this.record({ seq: 0, op: Op.Bind, row: NO_ROW, col, now: f.toString() });
   }
 
   /**
-   * unbind takes the formula off a column. What it stored before it was bound
-   * is what it shows again: binding never removed those values.
-   *
-   * It is recorded, so it can be undone, and it refuses a column nothing is
-   * bound to rather than doing nothing quietly.
+   * unbind records the removal of a column's formula. The column shows its
+   * stored values again. It throws for a column outside the sheet or an
+   * unbound one.
    */
   unbind(col: number): void {
     if (col < 0 || col >= this.columns.length) {
@@ -189,7 +156,7 @@ export class Sheet {
     this.record({ seq: 0, op: Op.Unbind, row: NO_ROW, col, was, now: "" });
   }
 
-  /** binding reports the expression a column resolves to. */
+  /** binding returns the text of the formula bound to a column, if any. */
   binding(col: number): string | undefined {
     return this.schema.binding(col);
   }
@@ -200,18 +167,12 @@ export class Sheet {
   }
 
   /**
-   * settle brings what is finished and what the columns are called up to
-   * date with an edit.
+   * settle updates the finished rows and the column kinds after an edit.
    *
-   * A write into one cell reaches its own row and nothing else: every
-   * operation in the log reads one row, and a formula's cell reads only its
-   * own. So that row is finished again where it was finished, and the rest of
-   * its block stands; finishing one row says the same as finishing the block
-   * it is in, since the block is only how a formula is walked. The write can
-   * rename the column it wrote and any computed from it, and only when the
-   * row is one a kind is read from. A column operation can reach every row
-   * and every column, so everything goes. The difference is a paste of a
-   * thousand cells costing a thousand rows rather than a thousand sheets.
+   * A set or a note reaches one row. That row is finished again if it was
+   * finished, and if the row is within the sample, the kinds of its column
+   * and of every computed column are re-read. Any other operation clears
+   * every finished row and re-reads every kind.
    */
   private settle(e: Edit): void {
     if (e.op !== Op.Set && e.op !== Op.Note) {
@@ -231,9 +192,8 @@ export class Sheet {
   }
 
   /**
-   * replay applies a log and keeps it, so that saving a reopened file preserves
-   * the history rather than starting a new one. It is linear in the number of
-   * operations, not in the rows they touch.
+   * replay folds a saved log in and keeps it, so a reopened file saves with
+   * its history. Finished rows are cleared even when the replay throws.
    */
   replay(edits: Edit[]): void {
     try {
@@ -245,8 +205,7 @@ export class Sheet {
   }
 
   /**
-   * logEquals reports whether this sheet's log is exactly the one given. It
-   * compares rather than counting, because undo makes a count ambiguous.
+   * logEquals is true when this sheet's log is exactly `other`.
    */
   logEquals(other: Edit[]): boolean {
     return this.schema.logEquals(other);
@@ -256,7 +215,7 @@ export class Sheet {
     return this.schema.editCount();
   }
 
-  /** edits returns the log to be written, copied. */
+  /** edits returns the log, copied. */
   edits(): Edit[] {
     return this.schema.edits();
   }
@@ -268,9 +227,9 @@ export class Sheet {
   }
 
   /**
-   * evaluateAt computes one row of an expression without binding it, which is
-   * what the editor's preview is: an answer to "what would this do", read the
-   * way a binding reads the row.
+   * evaluateAt computes an unbound expression for one row, reading the row
+   * as a binding would, and formats the result. It throws when the
+   * expression fails on the row.
    */
   evaluateAt(f: Formula, row: number): string {
     const shown = this.row(row)?.shown ?? [];
@@ -285,9 +244,7 @@ export class Sheet {
   }
 
   /**
-   * infer re-reads every column's sample and renames it. A column whose last
-   * unparseable value was just fixed is a number column now, and a column that
-   * reads it may have become one too.
+   * infer re-reads every column's sample and sets its kind.
    */
   private infer(): void {
     for (let col = 0; col < this.columns.length; col++) this.inferColumn(col);
