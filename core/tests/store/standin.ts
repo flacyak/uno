@@ -72,8 +72,19 @@ export interface Beside {
  * sign as sent.
  */
 export function versionIdOf(body: Uint8Array): string {
-  return createHash('md5').update(body).digest('base64');
+  let id = versions.get(body);
+  if (id === undefined) {
+    id = createHash('md5').update(body).digest('base64');
+    versions.set(body, id);
+  }
+  return id;
 }
+
+/**
+ * Each body's version id, computed once. remember asks for every object's on
+ * every request.
+ */
+const versions = new WeakMap<Uint8Array, string>();
 
 /**
  * etagOf is the ETag the stand-in gives an object: the MD5 of its bytes in
