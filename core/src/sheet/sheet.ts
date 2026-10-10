@@ -38,6 +38,8 @@ export interface Column {
 const FINISH_ROWS = 1024;
 
 export class Sheet {
+  readonly name: string;
+
   readonly columns: Column[];
   /** How `ingest` read these bytes, shown verbatim in the status bar. */
   source = '';
@@ -55,11 +57,8 @@ export class Sheet {
    * Builds a sheet from a header row and the data rows under it, and infers
    * each column's kind. The header decides the column count.
    */
-  constructor(
-    readonly name: string,
-    header: string[],
-    rows: string[][],
-  ) {
+  constructor(name: string, header: string[], rows: string[][]) {
+    this.name = name;
     this.rowData = rows;
     this.schema = new Schema(header, rows.length);
     this.columns = header.map((h) => ({
