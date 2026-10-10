@@ -151,7 +151,7 @@ export class Panel {
   private readonly list = el("div", "panel-list");
   private readonly sizer = el("div", "panel-sizer");
   private readonly rows = el("div", "panel-rows");
-  /** The first rows of the picked file, under the list. */
+  /** The first rows of the picked file, or why it has none, under the list. */
   private readonly peek = el("div", "panel-peek");
   /** The buttons that add what is picked. */
   private readonly foot = el("div", "panel-foot");
@@ -627,7 +627,7 @@ export class Panel {
     if (wants !== undefined) this.connect({ bucket: wants.bucket, prefix: wants.prefix });
   }
 
-  /** paintPeek draws the header and first rows of the picked file. */
+  /** paintPeek draws the header and first rows of the picked file, or why they could not be read. */
   private paintPeek(): void {
     const now = this.sources.peek;
     if (now === this.drawnPeek) return;
@@ -636,6 +636,10 @@ export class Panel {
     if (now === undefined) return this.peek.replaceChildren();
     if (now.t === "reading") {
       this.peek.replaceChildren(el("div", "note", m.panel_peeking()));
+      return;
+    }
+    if (now.t === "refused") {
+      this.peek.replaceChildren(el("div", "note", say(now.why)));
       return;
     }
 

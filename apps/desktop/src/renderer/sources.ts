@@ -11,7 +11,8 @@
  */
 
 import { baseOf } from "@document";
-import type { Link, PartInfo, Peeked, SourceRef } from "@engine";
+import { saidOf } from "@engine";
+import type { Link, PartInfo, Peeked, Said, SourceRef } from "@engine";
 import { compareStrings } from "@go";
 import type { Connection as Saved } from "@library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@store";
@@ -211,8 +212,8 @@ export interface Crumb {
   path: string;
 }
 
-/** What the peek under the browser shows of the one picked file. */
-export type Peek = { t: "reading" } | { t: "peeked"; peeked: Peeked };
+/** What the peek under the browser shows of the one picked file, or why it shows none. */
+export type Peek = { t: "reading" } | { t: "peeked"; peeked: Peeked } | { t: "refused"; why: Said };
 
 /**
  * A button under the browser. The panel builds the refs; the shell opens
@@ -1016,10 +1017,10 @@ export class Sources {
       const peeked = await this.listings.peek({ name: one.name, path: one.path });
       if (mine !== this.looked) return;
       this.shown = { t: "peeked", peeked };
-    } catch {
-      // A failed peek leaves the preview empty. The file can still be added.
+    } catch (err) {
+      // A failed peek says why in place of the rows. The file can still be added.
       if (mine !== this.looked) return;
-      this.shown = undefined;
+      this.shown = { t: "refused", why: saidOf(err) };
     }
     this.changed();
   }
