@@ -1,6 +1,6 @@
-// Read-ahead, end to end: an object indexed through the engine from a bucket
-// every request to which takes 50 ms, once reading a chunk at a time and once
-// with the next chunks asked for while the first is scanned.
+// Read-ahead end to end: an object indexed through the engine from a bucket
+// that adds 50 ms to every request, once one chunk at a time and once with
+// AHEAD chunks in flight.
 
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
@@ -14,16 +14,12 @@ import { BUCKET, KEYS, bucket } from "../store/standin.ts";
 import type { Bucket } from "../store/standin.ts";
 import { bytes, connect, indexed, openOne } from "./harness.ts";
 
-/** What each request to the bucket waits, as the task says. */
+/** Milliseconds added to each request to the bucket. */
 const LATENCY_MS = 50;
-/** How much faster indexing has to be with read-ahead, as the task says. */
+/** How much faster indexing must be with read-ahead. */
 const FASTER = 3;
 
-/**
- * The chunk indexing reads here: small, so the object is some 120 of them.
- * A real 30 GB object is 3,800, and the handful of requests every open makes
- * before indexing starts are what a short object would be measuring instead.
- */
+/** The chunk size: small, so the object is about 120 chunks. */
 const CHUNK = 16 << 10;
 const SMALL: Tuning = { ...TUNING, chunkBytes: CHUNK };
 
@@ -47,9 +43,9 @@ beforeAll(async () => {
 afterAll(() => b.close());
 
 /**
- * How long indexing the object takes reading `ahead` chunks at a time, and the
- * most chunk reads that were out at once. A read of any other length is the
- * grid fetching its first rows, which read-ahead has nothing to do with.
+ * indexing opens and indexes the object with `ahead` chunks in flight. Returns
+ * the time taken and the most chunk-sized reads out at once. Only reads of
+ * exactly the chunk size are counted.
  */
 async function indexing(ahead: number): Promise<{ ms: number; peak: number }> {
   let out = 0;
@@ -66,7 +62,7 @@ async function indexing(ahead: number): Promise<{ ms: number; peak: number }> {
     }
   };
   const s3 = s3Provider({
-    // Signed for the bucket's own region, as a connection that found it does.
+    // Signed for the bucket's own region.
     credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
     endpoint: b.endpoint,
     fetch: counted,
@@ -83,7 +79,6 @@ async function indexing(ahead: number): Promise<{ ms: number; peak: number }> {
   }
 }
 
-// The task's own sentence.
 test("with 50 ms added per request, indexing is at least 3× faster and holds at most four chunks", async () => {
   expect(BIG.length / CHUNK, "enough chunks to wait on").toBeGreaterThan(100);
 
@@ -91,8 +86,7 @@ test("with 50 ms added per request, indexing is at least 3× faster and holds at
   const four = await indexing(AHEAD);
   expect(one.peak, "one at a time").toBe(1);
   expect(one.ms / four.ms).toBeGreaterThanOrEqual(FASTER);
-  // Never more than AHEAD out at once, which is what bounds the memory: at
-  // the chunk size indexing really reads, under 40 MB.
+  // At most AHEAD chunks out at once: under 40 MB at the default chunk size.
   expect(four.peak).toBe(AHEAD);
   expect(AHEAD * TUNING.chunkBytes).toBeLessThan(40 << 20);
 }, 60_000);

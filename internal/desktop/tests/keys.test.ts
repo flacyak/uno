@@ -1,5 +1,5 @@
-// What keys mean, whichever strategy read them: where each motion lands, what .
-// makes again, and what the command line reads.
+// What keys mean in either strategy: where each motion lands, what . repeats,
+// and what the command line reads.
 
 import { expect, test } from "vite-plus/test";
 
@@ -9,7 +9,7 @@ import type { Place } from "../src/renderer/keys.ts";
 // ----------------------------------------------------------------- repeat
 
 test(". appends what a added at the end, and prepends what i added at the start", () => {
-  // The recogniser's opening: 12 should read 12.00, and so should the next row.
+  // 12 edited to 12.00 is an append of ".00". Replayed on 7 it gives 7.00.
   const append = changeOf("end", "12", "12.00");
   expect(append).toEqual({ t: "append", text: ".00" });
   expect(replay(append, "7")).toBe("7.00");

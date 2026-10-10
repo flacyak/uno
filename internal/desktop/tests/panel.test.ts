@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 //
-// The panel's column over the panel's state: the filter box, the list that
-// holds only the rows on screen, the keys that walk it the way the grid's are
-// read, and the peek and buttons underneath. What `Sources` decides is tested
-// in sources.test.ts; this is whether the view asks it and draws what it says.
+// The panel's view over its state: the filter box, the virtual list, the keys
+// that walk it, and the peek and buttons under it. What `Sources` decides is
+// tested in sources.test.ts; this checks that the view asks it and draws what
+// it says.
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
@@ -25,8 +25,8 @@ const TABS: Open[] = [
   { id: "c", name: "Ledger-2024.csv" },
 ];
 
-/** The list is told it is 600 pixels tall, twenty-five of its rows, since
- * happy-dom lays nothing out. */
+/** The list is told it is 600 pixels tall, twenty-five rows, since happy-dom
+ * skips layout. */
 const VIEWPORT = 600;
 const ROW = 24;
 
@@ -34,7 +34,7 @@ function name(i: number): string {
   return `orders-${String(i).padStart(6, "0")}.csv`;
 }
 
-/** A prefix of `n` objects. */
+/** `n` objects in the bucket. */
 function objects(n: number): Entry[] {
   return Array.from({ length: n }, (_, i) => ({
     name: name(i),
@@ -51,8 +51,8 @@ const PEEKED: Peeked = {
 };
 
 /**
- * A bucket that answers `entries` a page of `size` at a time, with the cursor
- * being where the next page starts, and counts the asks.
+ * Listings that answer `entries` a page of `size` at a time. The cursor is
+ * the index where the next page starts. Records each ask's cursor.
  */
 class Bucket implements Listings {
   readonly asked: (string | undefined)[] = [];
@@ -86,16 +86,17 @@ interface Drawn {
   chosen: string[];
   /** What was added, and whether it was one source of several files. */
   added: { names: string[]; one: boolean }[];
-  /** Every ref the buttons handed over to add, in order. */
+  /** Every ref handed to add, in order. */
   refs: SourceRef[];
-  /** Whether the shell says what it was handed opened. It does not, until a test says so. */
+  /** Whether add reports that everything opened. False until a test sets it. */
   opens: { all: boolean };
   /** What the tab buttons and keys asked of the shell, as `does id [path]`. */
   done: string[];
   closed: () => number;
 }
 
-/** A connect form's asks for a panel that never connects anything. connect.test.ts drives the form. */
+/** ConnectAsks for a panel that stays unconnected. connect.test.ts drives
+ * the form. */
 const NOT_CONNECTING: ConnectAsks = {
   signIns: () => Promise.resolve({ modes: ["machine", "profile", "public"], profiles: [] }),
   tryConnection: () => Promise.reject(new Error("not tried in this test")),
@@ -166,7 +167,7 @@ function press(el: HTMLElement, key: string): void {
   el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
 }
 
-/** settle lets the asks in flight land and the frame they asked for draw. */
+/** Lets pending promises settle and the frames they asked for draw. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 3; i++) {
     await new Promise((r) => setTimeout(r, 0));
@@ -203,7 +204,7 @@ function buttons(root: HTMLElement): string[] {
   return [...foot.querySelectorAll("button")].map((b) => b.textContent ?? "");
 }
 
-/** Open the bucket, which puts the keys on its first entry. */
+/** Opens the bucket, which puts the keys on its first entry. */
 async function browse(d: Drawn): Promise<void> {
   d.sources.focus("connections");
   press(d.list, "Enter");
@@ -267,17 +268,17 @@ test("a source still opening has a line under the tabs that says so and cannot b
     "Ledger-2024.csv",
     "orders-2025.csv",
   ]);
-  // The class is what draws the bar that fills along the bottom of its line.
+  // The class draws the progress bar along the bottom of the line.
   expect(coming.classList.contains("opening")).toBe(true);
   expect(coming.children[1]!.textContent).toBe("opening…");
   expect(row(d.root, "google-ads.csv")!.classList.contains("opening")).toBe(false);
 
-  // A click on it moves no keys and shows no tab.
+  // A click on it leaves the selection and the tab as they were.
   coming.click();
   expect(selected(d.root)).toBe("ledger-2025.csv");
   expect(d.chosen).toEqual([]);
 
-  // Opened, the line is its tab's, and the bar is gone with the class.
+  // Once opened, the opening class is gone from every line.
   arriving = [];
   d.panel.draw();
   await settle();
@@ -309,14 +310,14 @@ test("the next page is asked for as the end of the folder scrolls into view, and
   expect(d.bucket.asked).toEqual([undefined]);
   expect(d.sources.entries).toHaveLength(1000);
 
-  // The last line of the page is the end of the list, and reaching it is the ask.
+  // Reaching the last line of the page asks for the next.
   d.sources.focus("browser", 998);
   press(d.list, "ArrowDown");
   await settle();
   expect(d.bucket.asked).toEqual([undefined, "1000"]);
   expect(d.sources.entries).toHaveLength(2000);
 
-  // Scrolling to the end the mouse's way asks for the last.
+  // Scrolling to the end asks for the last page.
   d.list.scrollTop = (8 + 2000) * ROW;
   d.list.dispatchEvent(new Event("scroll"));
   await settle();
@@ -460,7 +461,7 @@ test("Space picks files, marks them, peeks at one, and the buttons add them", as
   expect(buttons(d.root)).toEqual(["Add 2", "Add as one"]);
   expect(peek.hidden).toBe(true);
 
-  // Space on a file nothing reads leaves the selection as it was.
+  // Space on a file marked off, the PDF, leaves the selection as it was.
   press(d.list, "ArrowDown");
   press(d.list, " ");
   await settle();
@@ -469,13 +470,13 @@ test("Space picks files, marks them, peeks at one, and the buttons add them", as
   const [each, one] = d.root.querySelectorAll<HTMLButtonElement>(".panel-foot button");
   one!.click();
   each!.click();
-  // As one, they are one source named for what their names share.
+  // As one, they are one source named for the prefix their names share.
   expect(d.added).toEqual([
     { names: ["orders.csv"], one: true },
     { names: ["orders-000000.csv", "orders-000002.csv"], one: false },
   ]);
 
-  // Enter on a file with others picked adds what is picked, not the line.
+  // Enter on a file with others picked adds what is picked.
   press(d.list, "ArrowUp");
   press(d.list, "ArrowUp");
   press(d.list, "Enter");
@@ -493,7 +494,7 @@ test("files added as one have a header row and no _file column until the choices
   const d = draw(new Bucket(objects(3)));
   await browse(d);
 
-  // One file is one source however it is added, so there is nothing to choose.
+  // One file is one source either way, so the choices are left out.
   press(d.list, " ");
   await settle();
   expect(choices(d.root)).toBeUndefined();
@@ -516,7 +517,7 @@ test("files added as one have a header row and no _file column until the choices
   one().click();
   expect(d.refs).toEqual([{ name: "orders.csv", parts, header: "first" }]);
 
-  // Ticking redraws nothing, so the boxes are the ones that were ticked.
+  // Ticking keeps the drawing, so the boxes are the same elements.
   shown.boxes[0]!.click();
   shown.boxes[1]!.click();
   await settle();
@@ -524,7 +525,7 @@ test("files added as one have a header row and no _file column until the choices
   one().click();
   expect(d.refs[1]).toEqual({ name: "orders.csv", parts, header: "none", fileColumn: true });
 
-  // The choices are as they were left for the next files picked.
+  // The choices stay as left for the next files picked.
   press(d.list, " ");
   press(d.list, "ArrowDown");
   press(d.list, " ");
@@ -544,7 +545,7 @@ test("files that were added are let go of, and ones that did not open stay picke
       (b) => b.textContent === "Add as one",
     )!;
 
-  // Refused, as parts that do not agree are: they are still there to change.
+  // add returns false: the files stay picked.
   one().click();
   await settle();
   expect(d.sources.selected.map((e) => e.name)).toEqual(["orders-000000.csv", "orders-000001.csv"]);
@@ -602,7 +603,7 @@ test("each tab's line says its size, or that its file changed or is missing", ()
   );
 });
 
-/** A tab reading the folder's first two objects as one, beside one that reads a file. */
+/** A tab reading the folder's first two objects as one, beside one reading a file. */
 const JOINED: Open[] = [
   { id: "a", name: "ledger-2025.csv", link: { path: "/home/jo/ledger-2025.csv" }, bytes: 2048 },
   {
@@ -624,13 +625,13 @@ test("a tab of several files says how many, and offers what its folder has gaine
   expect(row(d.root, "orders.csv")!.title).toBe(
     "s3://acme-exports/orders-000000.csv · s3://acme-exports/orders-000001.csv",
   );
-  // Its parts are the source, so there is no other file to point it at.
+  // A tab of parts offers only Remove, and a leaves `done` as it was.
   press(d.list, "ArrowDown");
   expect(buttons(d.root)).toEqual(["Remove"]);
   press(d.list, "a");
   expect(d.done).toEqual([]);
 
-  // Two more land in the folder, after the last it reads.
+  // Two more objects land in the folder after the last one it reads.
   const grown = draw(new Bucket(objects(4)), { name: "default" }, JOINED);
   await grown.sources.askGrown();
   await settle();
@@ -657,7 +658,7 @@ test("the keys on a tab offer its buttons, and r and Delete reload and remove it
   d.root.querySelector<HTMLButtonElement>(".panel-foot button")!.click();
   expect(d.done).toEqual(["reload a", "remove a", "reload a"]);
 
-  // Off the tabs, there is no tab to do anything to.
+  // Off the tabs, r leaves `done` as it was.
   d.sources.focus("connections");
   press(d.list, "r");
   d.panel.draw();
@@ -683,7 +684,7 @@ test("p on a missing object browses where it was, and Enter on a file points the
   await settle();
   expect(d.done).toEqual(["repoint b s3://acme-exports/orders-000001.csv"]);
   expect(d.added).toEqual([]);
-  // Pointed, the browser is for adding again.
+  // After pointing, the browser is back to adding.
   expect(lines(d.root)).toContain("Browser");
 });
 

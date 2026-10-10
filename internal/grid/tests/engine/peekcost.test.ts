@@ -1,15 +1,5 @@
-// What a peek costs, against something that charges for it.
-//
-// peek.test.ts watches a source it wrote itself, which proves the module asks
-// for one read and lets go of the file. That is the arithmetic. This is the
-// bill: the same peek against a server that answers the way S3 does, and
-// against a file that really is 2.5 GB.
-//
-// The number this is defending is one HEAD and one ranged GET, whatever the
-// object weighs. It is the whole reason a panel can let somebody click down a
-// folder of four hundred exports: the request that gets sent has nothing to do
-// with what they landed on. A peek that read the object to find its rows would
-// still pass every check in peek.test.ts and cost thirty gigabytes here.
+// What a peek costs in requests: one HEAD and one ranged GET of PEEK_BYTES,
+// against a stand-in S3 bucket and, where present, a 2.5 GB file on disk.
 
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -25,7 +15,7 @@ import type { Bucket } from "../store/standin.ts";
 import { bytes } from "../testdata/sales-q3.ts";
 import { saidIn } from "./harness.ts";
 
-/** The six columns every copy of the fixture has, however large the copy is. */
+/** The fixture's six columns. */
 const COLUMNS = ["date", "region", "rep", "channel", "units", "revenue"];
 
 // ------------------------------------------------------------ an object in a bucket
@@ -37,9 +27,7 @@ describe("a peek at an object in a bucket", () => {
   });
   afterAll(() => b.close());
 
-  // Signed for the region the bucket is in, so the one extra HEAD a redirect
-  // costs is not in the way of counting. Following a bucket to its region is
-  // s3.test.ts's business and happens once per handler, not once per peek.
+  // Signed for the bucket's own region, so every request lands first time.
   const s3 = () =>
     s3Files({
       credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
@@ -60,10 +48,8 @@ describe("a peek at an object in a bucket", () => {
     ]);
   });
 
-  // The object in the stand-in is 240 KB and the one in the sentence above is
-  // 30 GB. The requests are the same two requests, which is the claim.
   test("costs the same for an object many windows long", async () => {
-    // The fixture end to end, twelve times: 2.9 MB, forty-four windows.
+    // The fixture twelve times over: 2.9 MB.
     const big = new Uint8Array(bytes.length * 12);
     for (let at = 0; at < big.length; at += bytes.length) big.set(bytes, at);
 
@@ -95,10 +81,7 @@ describe("a peek at an object in a bucket", () => {
 // ------------------------------------------------------------ 2.5 GB on a disk
 //
 // tests/testdata/generated/sales-q3-50m.csv is sales-q3.csv repeated 10,400
-// times: 2.5 GB, too large to commit, and made by hand on the machines that
-// want it. So this skips where it is absent rather than failing, and the
-// synthetic 2.5 GB source in peek.test.ts is what CI holds the same promise
-// with. When the file is there, this is the task's own check.
+// times. It is generated locally, so this is skipped where it is absent.
 
 const HUGE = fileURLToPath(new URL("../testdata/generated/sales-q3-50m.csv", import.meta.url));
 

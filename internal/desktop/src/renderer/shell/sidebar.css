@@ -1,5 +1,5 @@
-/* The sidebar: the workspaces on the left, the open one's sources under it,
- * and the + at its foot. */
+/* The sidebar: the workspaces, the open one's sources under it, and the +
+ * at its foot. */
 
 .sidebar {
   flex: 0 0 216px;
@@ -15,7 +15,7 @@
   user-select: none;
 }
 
-/* Closed from the status bar, or with Ctrl+B. The grid takes the width. */
+/* Hidden while the sidebar is closed. */
 #app.no-sidebar .sidebar {
   display: none;
 }
@@ -32,8 +32,7 @@
   color: var(--ink-3);
 }
 
-/* One workspace. The one open is the ink's colour, since it is what the rest
- * of the window is showing. */
+/* One workspace. The open one is in the ink colour. */
 .ws {
   display: flex;
   align-items: center;
@@ -57,7 +56,7 @@
   flex: 0 1 auto;
 }
 
-/* The folder it is in, given up before the name is. */
+/* The folder, which shrinks before the name does. */
 .ws .meta {
   flex: 1 100 0;
   font-weight: 400;
@@ -89,10 +88,9 @@
   background: var(--flag);
 }
 
-/* A source of the open workspace, hung under it on a rule the way a folder's
- * files are. Marks and dots keep their width; the name is what is cut short.
- * One still opening has the same line, and is no tab yet: arriving.css has
- * the bar that fills along the bottom of it. */
+/* A source of the open workspace, indented under it on a rule. Marks and
+ * dots keep their width; the name is cut short. A source still opening
+ * shares the line style; arriving.css adds its bar. */
 .tab,
 .tab-opening {
   position: relative;
@@ -131,10 +129,8 @@
   box-shadow: -1px 0 0 var(--accent);
 }
 
-/* A source whose file is not where the workspace left it. Amber for a file that
- * changed under the log, since the rows are still there to look at; filled for
- * one that is gone, since there is nothing behind the tab until it is pointed
- * somewhere. Both click through to the same question. */
+/* The ! mark on a source whose file changed (outlined) or is gone (filled).
+ * Both open the panel to re-point it. */
 .tab .trouble {
   display: inline-flex;
   align-items: center;
@@ -154,7 +150,7 @@
   color: var(--surface);
 }
 
-/* The × is quiet until the tab it closes is under the pointer. */
+/* The × shows on hover and on the active tab. */
 .tab .close {
   margin: 0 -4px 0 -2px;
   padding: 0 4px;
@@ -191,7 +187,7 @@
   color: var(--accent);
 }
 
-/* The + at the foot: a new workspace, from a file. */
+/* The + at the foot: opens a file as a new workspace. */
 .sidebar-new {
   flex: 0 0 auto;
   display: flex;

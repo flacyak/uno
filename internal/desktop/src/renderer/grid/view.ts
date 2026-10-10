@@ -1,15 +1,10 @@
-// The view: a table that holds only the rows you can see.
+// The view: a virtualised table that holds only the rows on screen.
 //
-// A 4,812-row export is about forty elements in the DOM, and scrolling moves
-// them rather than making more. That is the same trade the Go build makes with
-// widget.Table, and it is why what the grid reads has to stay a cache read: it
-// calls `display` once per visible cell on every frame, so anything done there
-// beyond reading an array is work multiplied by two hundred and then by sixty.
+// A pool of about forty row elements is reused as the view scrolls. Each
+// frame calls `display` once per visible cell, so `display` must be cheap.
 //
-// Rows are virtualised and columns are not: every row in the pool holds a cell
-// for every column, so a sheet of 500 columns is about forty rows of 500 cells,
-// and each frame compares that many strings. The bound is the pool's height
-// times the sheet's width, and a frame writes only the cells whose text moved.
+// Rows are virtualised and columns are drawn in full: every pooled row holds
+// a cell per column. A frame writes only the cells whose text changed.
 
 import type { Kind } from "@uno/grid/sheet";
 
@@ -35,7 +30,7 @@ import { columnLabel, unnamed } from "./rows.ts";
 import type { Cell, Rows } from "./rows.ts";
 
 export class View {
-  /** What is drawn, or nothing. */
+  /** The rows being drawn, or undefined. */
   source: Rows | undefined;
 
   readonly scroller: HTMLElement;
@@ -44,21 +39,22 @@ export class View {
   private readonly head: HTMLTableSectionElement;
   private readonly body: HTMLTableSectionElement;
 
-  /** The pool. One row element per visible line, reused as the view moves. */
+  /** Row elements, one per visible line, reused as the view scrolls. */
   private pool: HTMLTableRowElement[] = [];
   private first = 0;
-  /** How far down the table is translated, for the editor to sit over a cell. */
+  /** The table's current `top` offset within the sizer. */
   private offset = 0;
 
   /**
-   * How far down the sheet the view is, in pixels of a sheet nothing capped.
+   * View position in pixels on the uncapped sheet.
    *
-   * Below the cap this is the scroller's scrollTop. Above it, it is kept here,
-   * because at many rows to a pixel, reading scrollTop back would round a
-   * one-row step to nothing.
+   * On an unscaled sheet this equals the scroller's scrollTop. On a scaled
+   * sheet it is tracked here, since scrollTop is too coarse to hold a one-row
+   * step.
    */
   private top = 0;
-  /** The scrollTop the grid last saw or set, so a scroll it did not cause stands out. */
+  /** The scrollTop last read or set by layout. Used to detect scrollbar
+   * drags while scaled. */
   private seen = 0;
   private scaled = false;
   private digits = 0;
@@ -69,9 +65,9 @@ export class View {
 
   constructor(
     host: HTMLElement,
-    /** The selected cell, which paint marks. */
+    /** Returns the selected cell. */
     private readonly selected: () => Cell,
-    /** Called after every layout, so what sits over a cell can follow it. */
+    /** Called after every layout. */
     private readonly laidOut: () => void,
   ) {
     this.scroller = el("div", "grid-scroll");
@@ -85,27 +81,23 @@ export class View {
     this.scroller.append(this.sizer);
     host.append(this.scroller);
 
-    // Scrolling is the hot path, so it schedules a frame rather than laying out
-    // synchronously on every one of the events a trackpad produces.
+    // Scroll events coalesce into one layout per animation frame.
     this.scroller.addEventListener("scroll", () => this.schedule(), { passive: true });
-    // The pool is sized to the scroller, so a window grown taller, or a panel
-    // closed beside the grid, needs more rows than were made for the old size.
+    // The pool size depends on the scroller's height.
     new ResizeObserver(() => this.schedule()).observe(this.scroller);
 
     this.rowHeight = readRowHeight(this.scroller);
   }
 
-  /**
-   * show draws rows, or nothing. `keep` holds the scroll position, for the same
-   * rows drawn from somewhere else.
-   */
+  /** Draws `source`, or clears the view. `keep` preserves the scroll
+   * position. */
   show(source: Rows | undefined, keep: boolean): void {
     this.source = source;
     if (!keep) {
       this.top = 0;
       this.scroller.scrollTop = 0;
       // Along the row too: a fresh open starts at the first cell, and the
-      // selection is put there without a scroll to bring it on screen.
+      // selection is placed there directly, so the view must already show it.
       this.scroller.scrollLeft = 0;
       this.seen = 0;
     }
@@ -114,13 +106,13 @@ export class View {
     this.refresh();
   }
 
-  /** refresh redraws the header and the rows on screen. */
+  /** Redraws the header and the visible rows. */
   refresh(): void {
     this.buildHead();
     this.layout();
   }
 
-  /** schedule lays out on the next frame, once however often it is asked. */
+  /** Runs layout on the next animation frame. Repeated calls coalesce. */
   schedule(): void {
     if (this.frame !== 0) return;
     this.frame = requestAnimationFrame(() => {
@@ -130,10 +122,9 @@ export class View {
   }
 
   /**
-   * buildHead draws the header, which is the one place a column's inferred kind
-   * is visible: the badge says what uno thinks the column is, and says it in
-   * amber when the column looks numeric and does not parse. A column computed
-   * from a formula wears a second badge that says so.
+   * Draws the header row. Each column shows its name, a kind badge (flagged
+   * when the column holds formatted numbers that read as text), and an "fx"
+   * badge when a formula computes it.
    */
   private buildHead(): void {
     this.head.replaceChildren();
@@ -144,12 +135,11 @@ export class View {
 
     for (const [col, column] of this.source.columns.entries()) {
       const wrap = el("span", "colhead");
-      // A blank header is named by its place, and dressed as a name the file
-      // did not give, so it is not read as one a formula can use.
+      // A blank header is named by its position and styled as unnamed.
       const cls = unnamed(column.header) ? "colname unnamed" : "colname";
       wrap.append(el("span", cls, columnLabel(column.header, col)));
 
-      // A column a formula computes says so, and what from.
+      // Formula badge, with the formula as its tooltip.
       const binding = this.source.binding(col);
       if (binding !== undefined) {
         const fx = el("span", "badge bound", "fx");
@@ -158,7 +148,6 @@ export class View {
       }
 
       const badge = el("span", column.flagged ? "badge flagged" : "badge", column.kind);
-      // The flag is the recogniser's opening: numeric data wearing a costume.
       if (column.flagged) badge.title = m.column_flagged_hint();
       wrap.append(badge);
 
@@ -170,11 +159,9 @@ export class View {
   }
 
   /**
-   * layout is the whole virtualiser.
-   *
-   * It decides which rows are visible, makes exactly that many row elements
-   * once, and from then on only writes text into them. No element is created or
-   * destroyed while a person scrolls.
+   * Lays out the visible rows. Sizes the pool, positions the table, and
+   * paints each pooled row. Scrolling reuses the pooled elements as they
+   * are.
    */
   layout(): void {
     const source = this.source;
@@ -192,8 +179,9 @@ export class View {
     if (this.sizer.style.height !== height) this.sizer.style.height = height;
     this.scale(m.scaled);
 
-    // Below the cap the scroller is the truth. Above it, only a scroll the grid
-    // did not cause -- the scrollbar dragged -- moves the view to match it.
+    // On an unscaled sheet, scrollTop is the view position. On a scaled sheet,
+    // only a scrollTop change from outside this class (a scrollbar drag)
+    // moves it.
     const scrollTop = Math.max(0, this.scroller.scrollTop);
     if (!this.scaled || Math.abs(scrollTop - this.seen) >= 0.5) {
       this.top = scrollerToTop(scrollTop, m.rMax, m.vMax);
@@ -202,7 +190,7 @@ export class View {
     this.seen = scrollTop;
     if (this.scaled) this.syncScroll(m.vMax, m.rMax);
 
-    // As wide as the last row's number, grouped as the status bar groups it.
+    // Gutter width follows the digit count of the formatted row total.
     const digits = num(total).length;
     if (digits !== this.digits) {
       this.digits = digits;
@@ -216,15 +204,9 @@ export class View {
     const first = firstRow(total, this.pool.length, this.top, this.rowHeight);
     this.first = first;
 
-    // The table is moved as one element rather than each row being positioned,
-    // so a scroll is one style write and not forty. It sits as far above the
-    // scroller's top as the view is past row `first`, which below the cap is
-    // exactly where row `first` is.
-    //
-    // It moves by `top` and not by a transform. A sticky header is placed from
-    // the table's layout box, which a transform does not move, so past the
-    // table's own height the header stuck to where the table had been and
-    // scrolled out of sight.
+    // The whole table is positioned once per frame with `top`, which moves
+    // the table's layout box. The sticky header is placed from that box, so
+    // it follows.
     this.offset = tableOffset(this.seen, this.top, first, this.rowHeight);
     const top = `${this.offset}px`;
     if (this.table.style.top !== top) this.table.style.top = top;
@@ -238,7 +220,7 @@ export class View {
     this.laidOut();
   }
 
-  /** syncScroll puts the scrollbar where the view is, for a sheet above the cap. */
+  /** Sets scrollTop to match `top` on a scaled sheet. */
   private syncScroll(vMax: number, rMax: number): void {
     const want = topToScroller(this.top, vMax, rMax);
     if (Math.abs(want - this.scroller.scrollTop) >= 1) this.scroller.scrollTop = want;
@@ -246,9 +228,9 @@ export class View {
   }
 
   /**
-   * scale turns the grid's own wheel handling on above the cap and off below it.
-   * A wheel listener that can cancel sends every scroll through script first, so
-   * it is only there while the grid has to move by rows itself.
+   * Adds the wheel listener when the sheet becomes scaled and removes it
+   * when the sheet returns to normal size. The listener is non-passive, so
+   * it is attached only while scaled.
    */
   private scale(on: boolean): void {
     if (on === this.scaled) return;
@@ -258,7 +240,7 @@ export class View {
   }
 
   private wheel(e: WheelEvent): void {
-    if (e.ctrlKey) return; // a pinch is a zoom, and belongs to the browser
+    if (e.ctrlKey) return; // Ctrl+wheel is zoom
     e.preventDefault();
     const unit =
       e.deltaMode === WheelEvent.DOM_DELTA_LINE
@@ -271,7 +253,7 @@ export class View {
     this.schedule();
   }
 
-  /** paint writes one row. Every read here is `display`, which is a cache read. */
+  /** Writes one row's text and classes, touching only what changed. */
   private paint(tr: HTMLTableRowElement, row: number, source: Rows, sel: Cell): void {
     const ready = source.ready?.(row) ?? true;
     const even = row % 2 === 1;
@@ -280,8 +262,7 @@ export class View {
 
     const cells = tr.children;
     const gutter = cells[0] as HTMLTableCellElement;
-    // Grouped the way every other count in the window is: the status bar
-    // says 4,812 rows, and the gutter beside them does not say 4812.
+    // Row number, locale-formatted.
     const label = num(row + 1);
     if (gutter.textContent !== label) gutter.textContent = label;
 
@@ -290,8 +271,6 @@ export class View {
       if (td === undefined) continue;
 
       const value = ready ? source.display(row, col) : "";
-      // Writing textContent unconditionally would dirty every cell on every
-      // frame; most of them have not changed.
       if (td.textContent !== value) td.textContent = value;
 
       const selected = row === sel.row && col === sel.col;
@@ -300,7 +279,8 @@ export class View {
     }
   }
 
-  /** cellAt is the cell a click landed in, or undefined for the gutter and the header. */
+  /** Returns the cell containing `target`, or undefined for the gutter and
+   * the header. */
   cellAt(target: HTMLElement): Cell | undefined {
     const td = target.closest("td");
     const tr = td?.closest("tr");
@@ -312,20 +292,17 @@ export class View {
     return { row, col };
   }
 
-  /**
-   * scrollIntoView scrolls as little as puts a cell wholly on screen: down or
-   * up to its row, and along to its column in a file wider than the window.
-   */
+  /** Scrolls the least amount needed to show the whole cell, vertically and
+   * horizontally. */
   scrollIntoView(row: number, col: number): void {
     const want = intoView(row, this.rowHeight, this.top, this.bodyHeight());
     if (want !== undefined) this.scrollTo(want);
 
-    // Every row's cells sit under the header's, so the header says where a
-    // column is whether or not the row is drawn yet.
+    // The header cell gives the column's position for every row, drawn or
+    // pending.
     const th = this.head.firstElementChild?.children[col + 1];
     if (!(th instanceof HTMLElement)) return;
-    // The first column brings the gutter back with it, so going home along a
-    // row ends where the row began.
+    // Column 0 scrolls to include the gutter.
     const start = col === 0 ? 0 : th.offsetLeft;
     const size = th.offsetLeft + th.offsetWidth - start;
     const { scrollLeft, clientWidth } = this.scroller;
@@ -333,19 +310,14 @@ export class View {
     if (left !== undefined) this.scroller.scrollLeft = left;
   }
 
-  /**
-   * scrollRow puts a row at the top, middle or bottom of the screen and leaves
-   * the selection where it is. Near either end of the sheet the scroll clamps.
-   */
+  /** Scrolls so `row` sits at the top, middle or bottom of the screen. The
+   * selection stays where it is. */
   scrollRow(row: number, where: "top" | "middle" | "bottom"): void {
     this.scrollTo(scrollTarget(row, this.rowHeight, this.bodyHeight(), where));
     this.layout();
   }
 
-  /**
-   * scrollTo moves the view to `top`, in pixels of a sheet nothing capped. Above
-   * the cap the scrollbar is put where that is, rather than read back.
-   */
+  /** Moves the view to `top`, in pixels on the uncapped sheet. */
   private scrollTo(top: number): void {
     const headH = this.head.offsetHeight;
     const m = measure(this.source?.rows() ?? 0, this.rowHeight, headH, this.scroller.clientHeight);
@@ -354,25 +326,23 @@ export class View {
     else this.scroller.scrollTop = this.top;
   }
 
-  /** The height the rows have on screen: the viewport, less the header over it. */
+  /** Viewport height minus the header. */
   private bodyHeight(): number {
     return this.scroller.clientHeight - this.head.offsetHeight;
   }
 
-  /** The first and last rows wholly on screen, for H, M and L. */
+  /** First and last rows fully on screen. */
   visibleRows(): { top: number; bottom: number } {
     return visibleRange(this.top, this.rowHeight, this.bodyHeight(), this.source?.rows() ?? 0);
   }
 
-  /** page is how many rows a page moves: a screen, less one to keep in sight. */
+  /** Rows moved by one page. */
   page(): number {
     return pageSize(this.scroller.clientHeight, this.rowHeight);
   }
 
-  /**
-   * place puts an element exactly over a cell, and says false when the cell is
-   * not on screen to be put over.
-   */
+  /** Positions `node` over a cell. Returns false for a cell outside the
+   * pooled rows. */
   place(node: HTMLElement, row: number, col: number): boolean {
     const td = this.cellElement(row, col);
     if (td === undefined) return false;
@@ -383,7 +353,7 @@ export class View {
     return true;
   }
 
-  /** hold puts an element in the scrolled content, where `place` positions it. */
+  /** Appends `node` to the scrolled content, where `place` can position it. */
   hold(node: HTMLElement): void {
     this.sizer.append(node);
   }
@@ -401,15 +371,14 @@ function className(kind: Kind, selected: boolean): string {
   return numeric;
 }
 
-/** The row height lives in the stylesheet, so the virtualiser asks for it
- * rather than keeping a second copy that can disagree. */
+/** Reads the `--row-h` CSS variable. Falls back to 29. */
 function readRowHeight(scope: Element): number {
   const declared = getComputedStyle(scope).getPropertyValue("--row-h").trim();
   const parsed = Number.parseFloat(declared);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 29;
 }
 
-/** blankRow is one row of the grid before anything is written into it: the gutter, then a cell a column. */
+/** Creates an empty row: a gutter cell, then one cell per column. */
 function blankRow(cols: number): HTMLTableRowElement {
   const tr = el("tr");
   tr.append(el("td", "gutter"));

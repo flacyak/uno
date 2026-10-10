@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 //
-// The formula form hung off the page: the keys stay in it while it is open,
-// and get out of the way the ways a form should.
+// The formula form: what it opens on, and how Esc and Tab behave in it.
 
 import { expect, test } from "vite-plus/test";
 
@@ -51,8 +50,7 @@ test("a blank header is offered by its place, as the grid names it", () => {
   expect(options.map((o) => o.textContent)).toEqual([m.column_unnamed({ number: 1 }), "qty"]);
 });
 
-// The form hangs off the end of the page, so Tab would otherwise carry the
-// keys to the window's × behind it, with the form left open.
+// The form is at the end of the page, so Tab wraps within it.
 test("Tab walks the controls round the ends, and never leaves the form", () => {
   const { box } = form();
   const controls = [...box.querySelectorAll<HTMLElement>("select, input, button")];
@@ -75,8 +73,8 @@ test("Tab walks the controls round the ends, and never leaves the form", () => {
   expect(document.querySelector(".formula")).toBe(box);
 });
 
-// A disabled control takes no focus, so a step that stopped on it would stop
-// there for good: Insert is disabled while an insert is on its way.
+// Insert is disabled while an insert is in flight. Tab skips a disabled
+// control, as a browser would.
 test("Tab steps over a control that is disabled", () => {
   const { box } = form();
   const controls = [...box.querySelectorAll<HTMLElement>("select, input, button")];

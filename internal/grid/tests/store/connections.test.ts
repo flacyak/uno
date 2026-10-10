@@ -1,9 +1,7 @@
-// Connections kept in a folder, the way the formula library is.
+// Connections kept in a folder, loaded and saved through the store.
 //
-// What is under test is the folder and not the file: one broken connection
-// costs that connection and not the rest, two files that claim one id are not
-// resolved by whichever the directory listed first, and a save that is refused
-// leaves nothing behind.
+// One broken file costs that connection only, two files with one id are
+// reported, and a refused save leaves the folder as it was.
 
 import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,7 +21,7 @@ async function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), "uno-connections-"));
 }
 
-/** The desktop fixture as a connection, to save under whatever id a test wants. */
+/** The desktop fixture as a connection, under the given id. */
 async function acme(id = "acme-exports"): Promise<Connection> {
   const text = await readFile(join(TESTDATA, "acme-exports.unof"), "utf8");
   return { ...parseConnection("acme-exports.unof", text), id, name: id };
@@ -41,7 +39,6 @@ test("a saved connection reads back out of the folder", async () => {
   expect(connections).toEqual([saved]);
 });
 
-// The one rule this task is named for: one bad file costs one connection.
 test("one broken file costs one connection, and the rest load", async () => {
   const store = nodeStore();
   const dir = await scratch();
@@ -68,9 +65,8 @@ test("they come back in id order, whatever the files are called", async () => {
   expect(connections.map((c) => c.id)).toEqual(["alpha", "mu", "zeta"]);
 });
 
-// A workspace names its connection by id, so two files with one id are two
-// answers to one question. The file a save writes to is the one that loads,
-// even when a copy of it sorts first.
+// The file named after the id loads. Other files with the same id are
+// failures.
 test("a second file with an id already loaded is a failure naming both", async () => {
   const store = nodeStore();
   const dir = await scratch();
@@ -100,8 +96,6 @@ test("with no file named after the id, the first in name order loads", async () 
   expect(failed.map((e) => e.message.split(" ")[0])).toEqual(["b.unof"]);
 });
 
-// A person who has never connected anything has no folder, which is not a
-// fault worth reporting to them.
 test("a folder that does not exist yet is no connections rather than a failure", async () => {
   const dir = join(await scratch(), "connections");
   expect(await loadConnections(nodeStore(), dir)).toEqual({ connections: [], failed: [] });
@@ -122,8 +116,7 @@ test("a save stamps the times, and a second save keeps when it was created", asy
   expect(connections[0]!.name).toBe("ACME, renamed");
 });
 
-// The key is refused before anything is written, so the connection that was
-// already there is the one still there.
+// The secret is refused before anything is written.
 test("a connection holding a key is refused, and the file already there is untouched", async () => {
   const store = nodeStore();
   const dir = await scratch();

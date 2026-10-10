@@ -1,11 +1,7 @@
-// The engine and a .uno of several files read as one: saving such a source
-// as its parts, and opening the save again.
-//
-// A save points at every part and writes down what the join measured of it,
-// so the next open places the parts without opening one and a part is read
-// for the first time when a row in it is. It is held then to what the save
-// recorded, because the log names rows by number and a part that is another
-// file would move every row after it out from under its edits.
+// Saving a source of several files read as one, and reopening the save. The
+// save points at every part with what the join measured of it. A reopen
+// places the parts from that record, opens a part when a read reaches it,
+// and refuses a part that has drifted from the record.
 
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -48,13 +44,15 @@ const NAME = "sales-q3";
 /** What the workspace is saved as. */
 const UNO = "q3.uno";
 
-/** More than any source here would need a save to carry. */
+/** A save limit larger than any carried source here. */
 const ROOMY = 1 << 20;
 
 const LF = 0x0a;
 
-/** How long the header every part opens with is, its line ending included:
- * what the join leaves out of each part after the first. */
+/**
+ * The header line's length, line ending included. The join skips it in every
+ * part after the first.
+ */
 const HEADER_BYTES = partBytes[0]!.indexOf(LF) + 1;
 
 /** A row in each part, and what its units are changed to. */
@@ -64,7 +62,7 @@ const EDITS = [
   { row: ROWS - 1, now: "4" },
 ];
 
-/** One edit near the top, so an open has no reason to read past the first part. */
+/** One edit in the first part only. */
 const SHALLOW = EDITS.slice(0, 1);
 
 /** The parts as one ref, each at `paths[i]`. */
@@ -76,13 +74,13 @@ function threeAt(paths: readonly string[], header: HeaderMode = "first"): Source
   };
 }
 
-/** The places a part can be on a machine with no bucket, and over them several read as one. */
+/** Disk and blob providers plus `extra`, and a multi provider over them all. */
 function providers(extra: Provider[] = []): Provider[] {
   const single = [diskProvider(), blobProvider(), ...extra];
   return [...single, multiProvider(single)];
 }
 
-/** A folder holding a copy of each part, which a test can change. */
+/** A temp folder with a copy of each part. */
 async function copied(): Promise<{ dir: string; paths: string[] }> {
   const dir = await mkdtemp(join(tmpdir(), "uno-multisave-"));
   const paths = PART_NAMES.map((name) => join(dir, name));
@@ -90,7 +88,7 @@ async function copied(): Promise<{ dir: string; paths: string[] }> {
   return { dir, paths };
 }
 
-/** What a client is handed of the parts open as one source, edited and saved. */
+/** A saved workspace and the rows its source showed. */
 interface Saved {
   /** The .uno's bytes. */
   uno: Uint8Array;
@@ -113,7 +111,7 @@ async function saved(
   return { uno: await engine.save({ source: src.id, cells: [], at }, ROOMY), rows };
 }
 
-/** The parts on disk in a folder of their own, saved beside them with `edits`. */
+/** Copies the parts to a folder, makes `edits`, and saves the .uno beside them. */
 async function savedOnDisk(edits: ReadonlyArray<{ row: number; now: string }>) {
   const { dir, paths } = await copied();
   const file = join(dir, UNO);
@@ -134,7 +132,7 @@ function held(uno: Uint8Array, at = ""): Document["sources"][number] {
   return doc.sources[0]!;
 }
 
-/** What a part of the fixture measures in the join, in order. */
+/** The HeldPart record expected for each part at `paths`. */
 function measured(paths: readonly string[], versions: ReadonlyArray<string | undefined>) {
   return paths.map((path, i): HeldPart => ({
     name: PART_NAMES[i]!,
@@ -150,11 +148,10 @@ const NO_VERSIONS = PART_NAMES.map(() => undefined);
 
 // ------------------------------------------------------------ on a disk
 
-// The task's own sentence, from the engine's side.
 test("three parts open as one, edited in each part, save as format 6 and reopen the same", async () => {
   const { uno, rows, paths, file } = await savedOnDisk(EDITS);
 
-  // What was written: every part where it is, and what the join measured of it.
+  // The save records every part and what the join measured.
   const doc = readContainer(UNO, uno, file);
   expect(doc.manifest.format).toBe(PARTS_VERSION);
   expect(doc.sources[0]).toMatchObject({
@@ -164,7 +161,7 @@ test("three parts open as one, edited in each part, save as format 6 and reopen 
     header: "first",
     rows: ROWS,
   });
-  // Beside the workspace, so written relative to it, and the folder moves whole.
+  // Parts beside the .uno are written relative to it.
   expect(doc.manifest.sources[0]!.parts!.map((part) => part.path)).toEqual(PART_NAMES);
   expect(doc.log.map((l) => [l.edit.row, l.edit.now])).toEqual(EDITS.map((e) => [e.row, e.now]));
 
@@ -177,14 +174,14 @@ test("three parts open as one, edited in each part, save as format 6 and reopen 
     expect(src.progress).toMatchObject({ rows: ROWS, complete: true });
     expect(src.opened.edits.map((e) => [e.row, e.now])).toEqual(EDITS.map((e) => [e.row, e.now]));
 
-    // Every row is what it was, and every edit is on the cell it was made to.
+    // Every row and edit is as saved.
     expect(await everyRow(src)).toEqual(rows);
     for (const e of EDITS) {
       expect((await src.rows(e.row, 1)).rows[0]![UNITS]).toBe(e.now);
       expect((await src.rows(e.row - 1, 1)).rows[0]![UNITS]).toBe(sales.raw(e.row - 1, UNITS));
     }
 
-    // And it saves again as what it was opened from.
+    // A second save matches the first.
     const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
     expect(held(again, file)).toEqual(doc.sources[0]);
     expect(readContainer(UNO, again, file).log).toEqual(doc.log);
@@ -206,7 +203,7 @@ test("a workspace is format 6 only while it holds several files as one", async (
     const three = await openOne(engine, threeAt(PART_FIXTURES));
     await indexed(three);
     expect(readContainer(UNO, await engine.save(place, ROOMY)).manifest.format).toBe(PARTS_VERSION);
-    // None of the parts' bytes are a save's to carry, whatever the limit.
+    // Parts are only ever pointed at, so a limit of 0 still saves.
     expect((await engine.save(place, 0)).length).toBeGreaterThan(0);
 
     await engine.remove(three);
@@ -218,7 +215,6 @@ test("a workspace is format 6 only while it holds several files as one", async (
   }
 });
 
-// A part dropped into a browser has no path, and a .uno points at parts.
 test("a save is refused naming a part that is a dropped file", async () => {
   const { engine, done } = connect(TINY, providers());
   try {
@@ -242,8 +238,7 @@ test("a save is refused naming a part that is a dropped file", async () => {
   }
 });
 
-// The mode is kept. What the engine makes of the rows is the same before and
-// after: it has one way of reading a first line, whatever the mode.
+// The header mode is saved, and the row count is the same on reopen.
 test("parts with no header row save and reopen with that mode", async () => {
   const { dir, paths } = await copied();
   const file = join(dir, UNO);
@@ -260,7 +255,7 @@ test("parts with no header row save and reopen with that mode", async () => {
 
   const source = held(await readFile(file), file);
   expect(source.header).toBe("none");
-  // Nothing is left out of any part.
+  // Every part is taken whole.
   expect(source.parts!.map((part) => part.skip)).toEqual([0, 0, 0]);
 
   const { engine, done } = connect(TINY, providers());
@@ -275,7 +270,7 @@ test("parts with no header row save and reopen with that mode", async () => {
 
 // ------------------------------------------------------------ unopened parts
 
-/** A promise, and the way to keep it. */
+/** A promise and its resolver. */
 function gate(): { promise: Promise<void>; open: () => void } {
   let open = (): void => {};
   const promise = new Promise<void>((resolve) => {
@@ -284,12 +279,12 @@ function gate(): { promise: Promise<void>; open: () => void } {
   return { promise, open };
 }
 
-/** Where a part held in memory is said to be. */
+/** The path prefix of parts in the memory provider. */
 const MEMORY = "memory://";
 
 /**
- * A provider over the fixture's parts held in memory, which says which parts
- * it was asked for and hands none over until it is let.
+ * memory is a provider over the fixture's parts in memory. It records which
+ * parts were asked for and, when `holding`, hands none over until released.
  */
 function memory(holding = false) {
   /** Every part an open asked for, in order. */
@@ -333,7 +328,7 @@ function memory(holding = false) {
   };
 }
 
-/** Long enough for anything asked for alongside the first part to have been. */
+/** Waits SETTLE_MS for any other open to be asked. */
 function settled(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 }
@@ -355,13 +350,12 @@ test("a reopened source opens no part until a read reaches it", async () => {
   try {
     const opening = engine.open({ name: UNO, blob: new Blob([made.uno.slice()]) });
 
-    // The header is in the first part, and that is the one part asked for. A
-    // source that measured its parts again would have asked for all three.
+    // Only the first part is asked for.
     await m.first;
     await settled();
     expect(m.asked).toEqual([PART_NAMES[0]]);
 
-    // With the first part in hand the open answers, the third part unopened.
+    // With the first part alone the open answers. The third stays unasked.
     m.release(PART_NAMES[0]!);
     const { sources } = await opening;
     const src = sources[0]!;
@@ -369,7 +363,7 @@ test("a reopened source opens no part until a read reaches it", async () => {
     expect(m.asked).not.toContain(PART_NAMES[2]);
     expect((await src.rows(SHALLOW[0]!.row, 1)).rows[0]![UNITS]).toBe(SHALLOW[0]!.now);
 
-    // The index reads on into the others as they are handed over.
+    // The index continues into the other parts once released.
     m.release(PART_NAMES[1]!);
     m.release(PART_NAMES[2]!);
     await indexed(src);
@@ -382,7 +376,7 @@ test("a reopened source opens no part until a read reaches it", async () => {
 
 // ------------------------------------------------------------ a part that changed
 
-/** Part two with its last row gone: a shorter file under the same name. */
+/** Part two cut short of its last row. */
 function shortened(): Uint8Array {
   const whole = partBytes[1]!;
   return whole.slice(0, whole.lastIndexOf(LF, whole.length - 2) + 1);
@@ -392,8 +386,7 @@ describe("a part changed on disk after the save", () => {
   const CHANGED = (now: number): string =>
     `${PART_NAMES[1]} (part 2 of ${PARTS}): it is not the file this source was made from · it is ${now} bytes and was ${partBytes[1]!.length}`;
 
-  // The log names a row in the third part, so the open reads through the
-  // second to place it, and finds it is another file.
+  // An edit is in the third part, so the open reads through the second.
   test("is refused by name as the workspace opens, and the log is kept", async () => {
     const { uno, paths, file } = await savedOnDisk(EDITS);
     await writeFile(paths[1]!, shortened());
@@ -403,12 +396,12 @@ describe("a part changed on disk after the save", () => {
       const src = await openOne(engine, { name: UNO, path: file });
       expect(saidIn(src.opened.link?.missing)).toBe(CHANGED(shortened().length));
       expect(src.opened.edits).toHaveLength(EDITS.length);
-      // It is still several files, so it is not pointed at one.
+      // A relink to one file is refused.
       await expect(engine.relink(src, { name: PART_NAMES[1]!, path: paths[1]! })).rejects.toThrow(
         `${NAME} is ${PARTS} files read as one, and ${PART_NAMES[1]} is one file`,
       );
 
-      // A save writes it back as it was found: every part, and every edit.
+      // A save writes the parts and log back as they were.
       const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
       expect(held(again, file)).toEqual(held(uno, file));
       expect(readContainer(UNO, again, file).log).toEqual(readContainer(UNO, uno, file).log);
@@ -417,8 +410,8 @@ describe("a part changed on disk after the save", () => {
     }
   });
 
-  // The log stops in the first part, so the open has no need of the second.
-  // The read that reaches it is what is refused.
+  // The only edit is in the first part, so the open reads only that part. The
+  // index reads the second, and reports it through onError.
   test("is refused by name by the read that reaches it", async () => {
     const { uno, paths, file } = await savedOnDisk(SHALLOW);
     await writeFile(paths[1]!, shortened());
@@ -430,14 +423,12 @@ describe("a part changed on disk after the save", () => {
     try {
       const src = await openOne(engine, { name: UNO, path: file });
       expect(src.opened.link).toBeUndefined();
-      // The index is the read that gets there first, and says so.
       expect(await said).toBe(`${NAME}: ${CHANGED(shortened().length)}`);
-      // No row of the changed part is given, and the first part is still
-      // read, with its edit.
+      // Rows of the changed part are empty. The first part still reads.
       expect((await src.rows(PART_ROWS + 5, 1)).rows).toEqual([]);
       expect((await src.rows(SHALLOW[0]!.row, 1)).rows[0]![UNITS]).toBe(SHALLOW[0]!.now);
 
-      // And a save still keeps every part as the workspace recorded it.
+      // A save keeps the parts as recorded.
       const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
       expect(held(again, file).parts).toEqual(held(uno, file).parts);
       expect(readContainer(UNO, again, file).log).toHaveLength(SHALLOW.length);
@@ -476,14 +467,12 @@ describe("a part changed on disk after the save", () => {
 
 // ------------------------------------------------------------ a part that has gone
 
-/** What part two is called once it has been moved. */
+/** Part two's name after it is moved. */
 const MOVED = "sales-q3-part-2-moved.csv";
 
 describe("a part deleted after the save", () => {
   const SECOND = `${PART_NAMES[1]} (part 2 of ${PARTS}): `;
 
-  // 4.5's own sentence: deleting part two leaves the source openable once
-  // re-pointed, with every edit intact.
   test("opens the source with no rows, naming the part, and re-pointed it has every edit", async () => {
     const { uno, rows, dir, paths, file } = await savedOnDisk(EDITS);
     await rm(paths[1]!);
@@ -495,8 +484,7 @@ describe("a part deleted after the save", () => {
       expect(gone.opened.edits).toHaveLength(EDITS.length);
       await expect(gone.rows(0, 1)).rejects.toThrow("point it at one to read its rows");
 
-      // It is several files, so one file is not what it is pointed at, and
-      // neither are the same parts while one of them is still gone.
+      // Relinks to one file, to two parts, or to the same paths are refused.
       await expect(engine.relink(gone, { name: PART_NAMES[1]!, path: paths[1]! })).rejects.toThrow(
         `${NAME} is ${PARTS} files read as one, and ${PART_NAMES[1]} is one file`,
       );
@@ -505,7 +493,7 @@ describe("a part deleted after the save", () => {
       );
       await expect(engine.relink(gone, threeAt(paths))).rejects.toThrow(SECOND);
 
-      // Part two turns up somewhere else, and the source is pointed at it there.
+      // Part two is copied elsewhere and the source relinked to it.
       const moved = join(dir, MOVED);
       await copyFile(PART_FIXTURES[1]!, moved);
       const at = [paths[0]!, moved, paths[2]!];
@@ -516,7 +504,7 @@ describe("a part deleted after the save", () => {
       expect(src.opened.edits).toHaveLength(EDITS.length);
       expect(await everyRow(src)).toEqual(rows);
 
-      // A save points at the part where it is now, under the same log.
+      // A save points at the new path, with the same log.
       const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
       expect(held(again, file).parts).toEqual(measured(at, NO_VERSIONS));
       expect(readContainer(UNO, again, file).log).toEqual(readContainer(UNO, uno, file).log);
@@ -525,9 +513,8 @@ describe("a part deleted after the save", () => {
     }
   });
 
-  // The log stops in the first part, so the open has no need of the second,
-  // and the read that reaches it is what says it has gone. The source is
-  // pointed at its parts again all the same.
+  // The only edit is in the first part, so the index is what finds part two
+  // gone.
   test("is named by the read that reaches it, and the source is re-pointed the same way", async () => {
     const { rows, dir, paths, file } = await savedOnDisk(SHALLOW);
     await rm(paths[1]!);
@@ -541,7 +528,7 @@ describe("a part deleted after the save", () => {
       expect(gone.opened.link).toBeUndefined();
       expect(await said).toContain(`${NAME}: ${SECOND}`);
 
-      // No read has to reach a part for a re-point to find it gone.
+      // A relink checks every part.
       await expect(engine.relink(gone, threeAt(paths))).rejects.toThrow(SECOND);
       expect((await gone.rows(SHALLOW[0]!.row, 1)).rows[0]![UNITS]).toBe(SHALLOW[0]!.now);
 
@@ -556,9 +543,7 @@ describe("a part deleted after the save", () => {
     }
   });
 
-  // The log names rows by number, so a part is held to what the save recorded
-  // of it wherever it is: another file in its place would move every row
-  // after it out from under its edits.
+  // A relink to a part of another size is refused.
   test("is not replaced by another file, which is refused by name", async () => {
     const { uno, dir, paths, file } = await savedOnDisk(EDITS);
     await rm(paths[1]!);
@@ -572,7 +557,7 @@ describe("a part deleted after the save", () => {
         `${SECOND}it is not the file this source was made from · it is ${shortened().length} bytes and was ${partBytes[1]!.length}`,
       );
 
-      // A refused re-point costs nothing: the source is as the save left it.
+      // After the refusal the source is as saved.
       const again = await engine.save({ source: gone.id, cells: [], at: file }, ROOMY);
       expect(held(again, file)).toEqual(held(uno, file));
       expect(readContainer(UNO, again, file).log).toEqual(readContainer(UNO, uno, file).log);
@@ -584,16 +569,16 @@ describe("a part deleted after the save", () => {
 
 // ------------------------------------------------------------ in a bucket
 
-/** Where the two later parts are in the stand-in, under the prefix a connection covers. */
+/** The parts' keys in the stand-in bucket, under the connection's prefix. */
 const KEYS_IN_BUCKET = PART_NAMES.map((name) => `2025/${name}`);
 
-/** The first part on a disk and the other two in the bucket: every part its own place. */
+/** The first part on disk and the other two in the bucket. */
 const ACROSS = [
   PART_FIXTURES[0]!,
   ...KEYS_IN_BUCKET.slice(1).map((key) => `s3://${BUCKET}/${key}`),
 ];
 
-/** A versioned bucket beside it, holding all three parts. */
+/** A versioned bucket holding all three parts. */
 const HISTORY = "acme-history";
 const IN_HISTORY = PART_NAMES.map((name) => `s3://${HISTORY}/${name}`);
 
@@ -611,7 +596,7 @@ const EXPORTS: Connection = {
 
 const KEPT: Connection = { ...EXPORTS, id: "acme-history", bucket: HISTORY, prefix: "" };
 
-/** Part two rewritten at the same size: one digit of its last row is another. */
+/** Part two with one digit of its last row changed: same size, different bytes. */
 function rewritten(): Uint8Array {
   const body = partBytes[1]!.slice();
   const at = body.findLastIndex((byte) => byte >= ZERO && byte <= NINE);
@@ -639,7 +624,7 @@ describe("parts in a bucket", () => {
 
   const env = keysOnly;
 
-  /** An engine the way the desktop wires one, with several files as one listed. */
+  /** An engine wired like the desktop, with a multi provider. */
   async function desktop(connections: Connection[]) {
     const dir = await mkdtemp(join(tmpdir(), "uno-multisave-connections-"));
     const store = nodeStore();
@@ -656,7 +641,7 @@ describe("parts in a bucket", () => {
     return { ...made, store, dir };
   }
 
-  /** The parts saved from a machine that has the connection, as the file it wrote. */
+  /** Saves the parts at `paths` from an engine with both connections. */
   async function savedAcross(
     paths: readonly string[],
     edits: ReadonlyArray<{ row: number; now: string }>,
@@ -675,7 +660,8 @@ describe("parts in a bucket", () => {
   test("are saved with the version each was read as, and the connection they came through", async () => {
     const { uno, rows, file } = await savedAcross(ACROSS, EDITS);
     const source = held(uno, file);
-    // A part on a disk has no version, and one in a bucket has its ETag.
+    // A part on a disk is recorded with an undefined version, and one in a
+    // bucket with its ETag.
     expect(source.parts).toEqual(
       measured(ACROSS, [undefined, etagOf(partBytes[1]!), etagOf(partBytes[2]!)]),
     );
@@ -691,8 +677,7 @@ describe("parts in a bucket", () => {
     }
   });
 
-  // The same size, the same header and the same last byte, so nothing the
-  // join measures has moved. Only the version says it is another file.
+  // Same size, so only the version shows the change.
   test("a part rewritten at the same size is refused by name, by its version", async () => {
     const { uno, file } = await savedAcross(ACROSS, EDITS);
     objects.set(KEYS_IN_BUCKET[1]!, rewritten());
@@ -704,7 +689,7 @@ describe("parts in a bucket", () => {
       expect(saidIn(src.opened.link?.missing)).toBe(
         `${PART_NAMES[1]} (part 2 of ${PARTS}): it is not the version this source was saved against`,
       );
-      // The save keeps the versions the log was made against, not the ones there now.
+      // The save keeps the recorded versions.
       const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
       expect(held(again, file)).toEqual(held(uno, file));
     } finally {
@@ -712,8 +697,6 @@ describe("parts in a bucket", () => {
     }
   });
 
-  // An S3 VersionId pins the exact bytes, so a shared workspace reopens the
-  // same data whatever has been written over a part since.
   test("in a bucket that keeps versions reopen as the bytes that were saved", async () => {
     const { uno, rows, file } = await savedAcross(IN_HISTORY, EDITS);
     expect(held(uno, file).parts!.map((part) => part.version)).toEqual(
@@ -732,8 +715,8 @@ describe("parts in a bucket", () => {
     }
   });
 
-  // A workspace somebody sent reads no bucket this machine has not connected.
-  // One part in such a bucket keeps every part unread, the one on a disk too.
+  // One part in an unconnected bucket keeps every part unread, including the
+  // one on disk.
   test("no connection covers are not read at all, and the source waits with its log", async () => {
     const { uno, file } = await savedAcross(ACROSS, EDITS);
 
@@ -749,7 +732,7 @@ describe("parts in a bucket", () => {
       expect(src.opened.edits).toHaveLength(EDITS.length);
       expect(b.seen.slice(from), "not a HEAD").toEqual([]);
 
-      // Saved back as it came: the parts, their versions, the hint and the log.
+      // Saved back unchanged: parts, versions, connection and log.
       const again = await engine.save({ source: src.id, cells: [], at: file }, ROOMY);
       expect(held(again, file)).toEqual(held(uno, file));
       expect(readContainer(UNO, again, file).log).toEqual(readContainer(UNO, uno, file).log);
@@ -759,9 +742,8 @@ describe("parts in a bucket", () => {
     }
   });
 
-  // Connecting the bucket is what the source waited for. Pointed at the parts
-  // it already names, it stops waiting whether or not they are all there: a
-  // part that has gone is said by name, and with it back the source reads.
+  // After the bucket is connected, a relink names a part that is gone. Once
+  // it is back, the source reads.
   test("stop waiting once the bucket is connected, and read once every part is there", async () => {
     const { rows, file } = await savedAcross(ACROSS, EDITS);
     objects.delete(KEYS_IN_BUCKET[2]!);

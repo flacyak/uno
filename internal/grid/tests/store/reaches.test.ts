@@ -1,10 +1,8 @@
 // The guard of opens.test.ts, with the core running.
 //
-// Reading the source catches a way out wherever it is written, but not one
-// whose name is put together at run time, or one a module is handed rather
-// than loads. So this runs the core -- the way the desktop engine does, through
-// every way out it has -- in a process of its own where each of them is
-// watched, and holds what it saw to the places in ways.ts.
+// reach/run.ts runs a scenario in its own process with every way out watched
+// and prints which module took which way. The uses are held to the places in
+// ways.ts.
 
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -37,8 +35,7 @@ test(
   async () => {
     const uses = await watched(SRC, `${REACH}everything.ts`);
     expect(offences(uses)).toEqual([]);
-    // And the run took every way the core has, each in a place it is allowed,
-    // which is what makes nothing else doing so worth saying.
+    // Every way with an allowed place was taken somewhere in the run.
     const taken = new Set(uses.map((u) => u.way));
     for (const way of Object.keys(PLACES) as Way[]) {
       if (PLACES[way].length > 0) expect(taken, way).toContain(way);
@@ -47,8 +44,8 @@ test(
   RUN_MS,
 );
 
-// The plant puts every name together at run time, so there is nothing in its
-// text for opens.test.ts to find, and this has to find it doing each.
+// The plant builds every module name at run time, so only this guard can
+// find it.
 test(
   "a planted module that builds the names it loads is caught at run time",
   async () => {

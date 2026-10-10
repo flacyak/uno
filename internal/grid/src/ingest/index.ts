@@ -1,10 +1,8 @@
-// Package ingest turns bytes into rows. It is the only module that knows a file
-// had a delimiter, an encoding or a header row, so adding a format later never
-// reaches the grid.
+// Package ingest turns bytes into rows. It is the only module that knows about
+// delimiters, encodings and header rows.
 //
-// There are two ways in. `read` takes a whole file and returns a Sheet, for a
-// file that fits in memory. `openFormat` reads a file a piece at a time through
-// a ByteSource, for the engine, which never holds one.
+// `read` takes a whole file and returns a Sheet. `openFormat` reads a file a
+// piece at a time through a ByteSource, for the engine.
 
 import { Sheet } from "../sheet/index.ts";
 import { readAll } from "./csv.ts";
@@ -30,13 +28,9 @@ export { sniffDelimiter, sniffEncoding } from "./sniff.ts";
 export type { Encoding } from "./sniff.ts";
 
 /**
- * read picks a decoder from the extension, then from the bytes.
- *
- * It takes the bytes rather than a path: a .uno carries its source embedded,
- * and the web build has no filesystem to read one from.
- *
- * `header` says whether the first record names the columns, as it does for
- * `openFormat`.
+ * read decodes the bytes, picks the delimiter from the extension or by
+ * sniffing, and returns a Sheet. `header` says whether the first record names
+ * the columns.
  */
 export function read(
   name: string,
@@ -50,8 +44,7 @@ export function read(
   if (ext === ".json") throw new Error(`${name}: JSON is not supported yet`);
   const comma = ext === ".tsv" ? "\t" : sniffDelimiter(text);
 
-  // Ragged rows are the norm in real exports, so short rows are tolerated
-  // rather than made a reason to reject the file.
+  // Short rows are tolerated.
   const rows = readAll(text, comma);
   if (rows.length === 0) throw new Error(`${name}: file is empty`);
 
@@ -64,20 +57,19 @@ export function read(
 }
 
 /**
- * decoded reads a file's bytes as the encoding they are in, the way
- * `openFormat` reads a file's head: a UTF-8 mark goes, Windows-1252 is read
- * as itself, and UTF-16 is refused by name.
+ * decoded decodes a file's bytes by their sniffed encoding: a UTF-8 byte
+ * order mark is stripped, Windows-1252 is read as itself, and UTF-16 throws.
  */
 function decoded(name: string, bytes: Uint8Array): [string, Charset] {
   const decoders = decodersFor(name, sniffEncoding(bytes));
   return [decoders.head.decode(bytes), decoders.charset];
 }
 
-/** The byte order mark as a character, which the decoder strips from bytes. */
+/** The byte order mark as a character. */
 const BOM = "\uFEFF";
 
-/** stripBOM does for a string what the decoder does for bytes, so both ways in
- * read the same header. */
+/** stripBOM strips a leading byte order mark from a string, as the decoder
+ * does for bytes. */
 function stripBOM(text: string): string {
   return text.startsWith(BOM) ? text.slice(BOM.length) : text;
 }

@@ -9,27 +9,24 @@ import {
   supported,
 } from "../../src/notation/index.ts";
 
-// The subset, expression by expression.
-//
-// Rendering and acceptance are checked together on purpose. Two tables would
-// let a source drift into being drawn one way and refused for another.
+// Each case checks render and supported together on the same source.
 describe("the subset draws the notation a person types", () => {
   const cases: Array<[string, string]> = [
     ["x^2", "x²"],
     ["x_1", "x₁"],
     ["e^{x}", "eˣ"],
-    ["x^{10}", "x¹⁰"], // a group, because a bare ^ takes one character
-    ["x^{n+1}", "xⁿ⁺¹"], // the plus is raised too, or the exponent is two sizes
+    ["x^{10}", "x¹⁰"], // a bare ^ takes one character; a group takes several
+    ["x^{n+1}", "xⁿ⁺¹"], // the plus is raised too
     ["T_{max}", "Tₘₐₓ"],
     ["\\alpha + \\beta", "α + β"],
     ["\\pm \\times \\div", "± × ÷"],
     ["\\Sigma \\mu \\Omega", "Σ μ Ω"],
     ["\\frac{a}{b}", "a⁄b"],
-    ["\\frac{x^2}{y_1}", "x²⁄y₁"], // a group is rendered, not copied
+    ["\\frac{x^2}{y_1}", "x²⁄y₁"], // groups inside a fraction are rendered
     ["\\sigma = \\frac{1}{n}", "σ = 1⁄n"],
     ["(a+b)^{2}", "(a+b)²"],
     ["\\mu_i", "μᵢ"],
-    ["revenue", "revenue"], // a cell with no notation in it is left alone
+    ["revenue", "revenue"], // plain text is unchanged
     ["", ""],
   ];
 
@@ -41,28 +38,24 @@ describe("the subset draws the notation a person types", () => {
   }
 });
 
-// The editor's whole promise: a symbol outside the subset is refused by name at
-// authoring time, never discovered later as an empty box. An error that failed
-// to name the symbol would leave a person hunting through their own expression
-// for whichever part of it uno meant.
+// supported returns an error naming the first symbol outside the subset.
 describe("supported names the first symbol it cannot draw", () => {
   const cases: Array<[string, string]> = [
-    ["x_q", '"q"'], // 14 of the 26 subscript letters do not exist
+    ["x_q", '"q"'], // subscript q is outside the glyph table
     ["x_b", '"b"'],
     ["x_z", '"z"'],
-    ["\\sum_{i=1}^{n} x_i", "\\sum"], // no glyph in the font the desktop bundles
+    ["\\sum_{i=1}^{n} x_i", "\\sum"], // in NO_GLYPH
     ["\\sqrt{x^2+y^2}", "\\sqrt"],
     ["a \\ne b", "\\ne"],
-    ["\\arctan", "\\arctan"], // never in the subset at all
+    ["\\arctan", "\\arctan"], // outside every table
     ["x^", '"^"'],
     ["x_", '"_"'],
     ["\\frac{a}", "\\frac"],
     ["a \\ b", "\\ names no symbol"],
-    ["x^{\\alpha}", "\\alpha"], // Greek has no raised form
-    ["\\frac{x_q}{b}", '"q"'], // inside a group counts as inside the source
+    ["x^{\\alpha}", "\\alpha"], // superscript Greek is refused
+    ["\\frac{x_q}{b}", '"q"'], // groups are checked too
 
-    // First, not last: a person is being asked whether this cell can be saved,
-    // and one symbol they can act on is the useful answer.
+    // The first unsupported symbol is named.
     ["x_q + \\arctan", '"q"'],
     ["\\arctan + x_q", "\\arctan"],
   ];
@@ -76,17 +69,15 @@ describe("supported names the first symbol it cannot draw", () => {
   }
 });
 
-// render is total, and what it cannot draw it copies through. A .unof can be
-// edited by hand and a later release can narrow the subset, so render will meet
-// sources supported would refuse; a cell showing a backslash can be recovered
-// from, and one that quietly swallowed half of what someone typed cannot.
+// render always returns a string. Anything outside its glyph table is copied
+// through as typed.
 describe("render keeps what it cannot draw", () => {
   const cases: Array<[string, string]> = [
     ["x_q", "x_q"],
     ["\\arctan{x}", "\\arctan{x}"],
-    ["\\sqrt{x^2}", "\\sqrt{x²}"], // refused, and still draws what it can
-    ["\\sum_{i=1}^{n}", "\\sumᵢ₌₁ⁿ"], // the loss the font measurement caused, in full
-    ["x^{\\alpha} y_2", "x^{\\alpha} y₂"], // the refused script survives whole
+    ["\\sqrt{x^2}", "\\sqrt{x²}"], // the group inside is still rendered
+    ["\\sum_{i=1}^{n}", "\\sumᵢ₌₁ⁿ"], // the scripts are still rendered
+    ["x^{\\alpha} y_2", "x^{\\alpha} y₂"], // an unsupported script is kept whole
   ];
 
   for (const [src, want] of cases) {
@@ -96,9 +87,7 @@ describe("render keeps what it cannot draw", () => {
   }
 });
 
-// Every entry in the tables has to be reachable from something a person could
-// type. A mistyped key is a symbol that is in the subset by one reckoning and
-// unreachable by anyone else's.
+// Every key in SYMBOLS, SUPERSCRIPTS and SUBSCRIPTS renders and is supported.
 describe("every table entry is reachable from a source", () => {
   test("symbols", () => {
     for (const [name, want] of SYMBOLS) {
@@ -122,8 +111,7 @@ describe("every table entry is reachable from a source", () => {
   }
 });
 
-// The two tables answer separately, so nothing is both drawable and refused. A
-// name in both would make render and supported disagree about the same cell.
+// NO_GLYPH and SYMBOLS are disjoint.
 test("no name is both drawable and refused", () => {
   for (const name of NO_GLYPH.keys()) {
     expect(SYMBOLS.has(name), `\\${name} is refused and also drawn`).toBe(false);

@@ -1,6 +1,6 @@
-// Checks that the sources panel works in a window: the workspace's tabs listed
-// in it, the stand-in bucket browsed, an object peeked at, two added, and one
-// tab re-pointed at another object.
+// Checks of the sources panel: the workspace's tabs listed in it, the stand-in
+// bucket browsed, an object peeked at, two added, and one tab re-pointed at
+// another object.
 //
 // They run after sources.ts, over the reopened workspace it leaves: the fixture
 // and the bucket's ads-q3.csv. smoke.js puts ads-q4.csv and sales-q3.csv beside
@@ -8,7 +8,7 @@
 
 import type { Check } from "./check.ts";
 
-/** The names on a section's lines, beside what the PRELUDE says of the panel. */
+/** The names on a section's lines, beside the PRELUDE's helpers. */
 const LINES = `
   const names = (section) => named(section).map((l) => l.name);
 `;
@@ -30,7 +30,7 @@ export const PANEL: Check[] = [
     `,
   },
   {
-    // Only a window lays anything out, so this is the one place it is measured.
+    // Measures layout, which only a real window has.
     name: "the grid gives the panel its width rather than sitting under it",
     script: `
       const grid = document.querySelector(".grid-scroll").getBoundingClientRect();
@@ -42,11 +42,11 @@ export const PANEL: Check[] = [
     `,
   },
   {
-    // The × at the top right closes the window, so the panel must not be what
-    // it sits on: only a window lays this out, too.
+    // The × at the top right closes the window, so it sits on the top line,
+    // above the panel.
     name: "the panel begins under the window's top line, and the × is on the line and not the panel",
     script: `
-      // The panel slides in from the edge, and is measured where it comes to rest.
+      // The panel slides in, and is measured once its animation ends.
       await Promise.all(document.querySelector("#panel").getAnimations().map((a) => a.finished));
       const panel = document.querySelector("#panel").getBoundingClientRect();
       const line = document.querySelector(".win-top").getBoundingClientRect();
@@ -93,7 +93,7 @@ export const PANEL: Check[] = [
       await key(" ");
       const peek = document.querySelector("#panel .panel-peek");
       const heads = () => [...peek.querySelectorAll("th")].map((th) => th.textContent);
-      // The fixture's header, which is only in sales-q3.csv: the other two
+      // The fixture's header, which only sales-q3.csv has. The other two
       // objects are the ads export.
       const want = ["date", "region", "rep", "channel", "units", "revenue"];
       if (!(await until(() => JSON.stringify(heads()) === JSON.stringify(want)))) {
@@ -117,7 +117,7 @@ export const PANEL: Check[] = [
       if (!(await arrives(() => document.querySelectorAll(".tab").length === 4))) {
         return "the sidebar has " + document.querySelectorAll(".tab").length + " tabs · " + JSON.stringify(text("#status-msg"));
       }
-      // A tab's line says where it reads from to whoever hovers.
+      // A tab's line has the path it reads from as its title.
       const want = ["s3://acme-exports/2025/ads-q4.csv", "s3://acme-exports/2025/sales-q3.csv"];
       if (!(await until(() => want.every((p) => lines().some((l) => l.title.startsWith(p)))))) {
         return "the tabs read from " + JSON.stringify(lines().map((l) => l.title).filter((t) => t !== ""));
@@ -137,13 +137,13 @@ export const PANEL: Check[] = [
       await frame();
       if (footButton("Re-point") === undefined) return "the ads-q4.csv line offers no Re-point";
       footButton("Re-point").click();
-      // The folder is on screen from the adding before, so what is waited for
-      // is the listing drawn under the re-point's title. A pick made in the
-      // old one is dropped when the new one lands.
+      // The folder is already listed from the adding before, so the wait is
+      // for the listing under the re-point's title. A pick made in the old
+      // listing is dropped when the new one lands.
       if (!(await arrives(() => head(BROWSER).name === "Point ads-q4.csv at…" && names(BROWSER).includes("ads-q3.csv")))) {
         return "the browser lists " + JSON.stringify(names(BROWSER)) + " · " + JSON.stringify(head(BROWSER));
       }
-      // The keys are on the folder's first line, which is ads-q3.csv.
+      // The selection is on the folder's first line, which is ads-q3.csv.
       await key(" ");
       if (!(await until(() => footButton("Point ads-q4.csv here") !== undefined))) {
         return "the buttons are " + JSON.stringify(foot());

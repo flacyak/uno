@@ -1,5 +1,5 @@
-// Finding in a column over the engine's answer, with no window: what the
-// finder says, where it moves the grid, and which answers it drops.
+// The finder on its own: what it says, where it moves the grid, and
+// which answers it drops.
 
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -10,15 +10,14 @@ import { Finder } from "../src/renderer/shell/find.ts";
 import type { Showing } from "../src/renderer/shell/find.ts";
 import type { Tab, Workspace } from "../src/renderer/workspace.ts";
 
-/** A tab with the one thing the finder reads of it: that it is this one and not another. */
+/** A tab with only a name. The finder compares tabs by identity. */
 function tab(name: string): Tab {
   return { name } as unknown as Tab;
 }
 
 /**
- * The finds still out, held until the test answers them, the way a find that
- * reads a long file is, and the tab showing meanwhile, which the test can
- * change the way gt does.
+ * Holds each find's resolve function until the test answers it, and the
+ * active tab, which the test can change while a find is out.
  */
 class Held {
   active: Tab;
@@ -32,18 +31,18 @@ class Held {
     this.active = tabs[0]!;
   }
 
-  /** answer lands the oldest find still out with a row. */
+  /** Answers the oldest find still out with a row. */
   answer(row: number): void {
     this.asked.shift()?.({ row, searched: row, complete: true });
   }
 
-  /** miss lands the oldest find still out with nothing, having read the file. */
+  /** Answers the oldest find still out with a null row. */
   miss(searched: number, complete: boolean): void {
     this.asked.shift()?.({ row: null, searched, complete });
   }
 }
 
-/** A workspace with the one column, whose finds `held` holds. */
+/** A workspace with one column, whose finds `held` holds. */
 function workspaceOf(held: Held): Workspace {
   return {
     rows: { columns: [{ header: "amount", kind: "num", flagged: false }] },
@@ -58,7 +57,7 @@ function workspaceOf(held: Held): Workspace {
   } as unknown as Workspace;
 }
 
-/** A grid that remembers where it was moved, and is where `held` says. */
+/** A grid that records where it was moved, with the selection `held` says. */
 function grid(held: Held, moved: number[][]): Grid {
   return {
     selection: () => held.selection,
@@ -95,8 +94,7 @@ test("a find answered after the person moved to another tab moves nothing", asyn
   const f = finder(held, moved, said);
 
   f.search("refund", 1);
-  // gt, while the file is still being read: the row found is a row of the
-  // tab left behind, and the grid now shows another.
+  // The active tab changes while the find is still out.
   held.active = held.tabs[1]!;
   held.answer(7);
   await Promise.resolve();
@@ -109,7 +107,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Past the wait a find gets before the status bar says it is searching. */
+/** The wait before the status bar says searching. */
 const SLOW_MS = 250;
 
 test("n goes on the way the last search went, N the other, from where the grid is now", async () => {

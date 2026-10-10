@@ -1,6 +1,6 @@
-// A supplied column: one whoever holds the rows fills in as it reads them,
-// like the `_file` column of several files read as one. The schema stores
-// nothing for it, and the pipeline writes into each row what it is handed.
+// Tests for a supplied column, such as `_file` when several files are read as
+// one. The schema holds only its position and what it shows; finishRows
+// writes the supplied value into each row.
 
 import { describe, expect, test } from "vite-plus/test";
 
@@ -13,7 +13,7 @@ const FILE = 3;
 
 const HEADERS = ["region", "units", "double", "_file"];
 
-/** Rows as a file gives them: one short, and one with a field too many. */
+/** Source rows: one short, and one with extra fields. */
 const SOURCES = [["West", "4"], ["East", "5", "", "left over", "and more"], ["North"]];
 
 const FILES = ["a.csv", "a.csv", "b.csv"];
@@ -36,7 +36,7 @@ describe("a supplied column", () => {
       ["East", "5", "", "a.csv"],
       ["North", "", "", "b.csv"],
     ]);
-    // Nothing shows that is not what the row reads as, so no row is sent twice.
+    // raw and shown are the same array until a column is bound.
     for (const f of finished) expect(f.raw).toBe(f.shown);
   });
 
@@ -54,7 +54,7 @@ describe("a supplied column", () => {
   test("can be named by a formula, which reads what it shows", () => {
     const s = schema();
     s.record(edit(Op.Bind, DOUBLE, "_file * 2"));
-    // A file's name is no number, and the formula says so in every row.
+    // A file name is text, so every row is an error cell.
     expect(finishRows(s, 0, SOURCES, FILES).map((f) => f.shown[DOUBLE])).toEqual(
       SOURCES.map(() => ERR_CELL),
     );

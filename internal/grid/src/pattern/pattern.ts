@@ -1,13 +1,8 @@
-// Package pattern watches what someone has already done to a column and works
-// out what they meant, so the app can offer to do the rest.
+// Package pattern induces a transform program from the edits a person made to
+// a column, so the app can offer to apply it to the rest.
 //
-// It observes the edit log and nothing else. The log is the record of what was
-// done, the format a workspace is saved in, and the examples this module learns
-// from, all at once -- which is why a recogniser needs no channel of its own and
-// no state that could fall out of step with the data.
-//
-// Nothing here decides anything. `propose` returns a question; applying the
-// answer is `sheet.apply`, and only a person reaches it.
+// It reads only the edit log. `propose` returns a question;
+// applying the answer is `sheet.apply`.
 
 import { compareStrings, quoteMeta } from "../go/index.ts";
 import type { Program } from "../program/index.ts";
@@ -27,26 +22,16 @@ import {
 } from "./induce.ts";
 import { restructures } from "./restructure.ts";
 
-/**
- * MIN_EXAMPLES is how many consistent changes make a question worth asking. Two
- * is a coincidence often enough to be annoying; the third is the one that says
- * this is a habit and not a typo.
- */
+/** MIN_EXAMPLES is how many changed cells a column needs for a proposal. */
 export const MIN_EXAMPLES = 3;
 
-/** SAMPLE_SIZE bounds the preview. Twenty rows is more than anyone reads and
- * few enough to build without measuring. */
+/** SAMPLE_SIZE is the most changes a proposal's preview holds. */
 export const SAMPLE_SIZE = 20;
 
-/**
- * maxRanked bounds the programs that get scored against the whole column.
- * Scoring is the only part of this that touches every row, and the candidates
- * past the first few dozen are refinements of each other.
- */
+/** MAX_RANKED is the most candidates per reading scored against the column. */
 const MAX_RANKED = 32;
 
-/** maxFirstSteps bounds the fan-out. Each candidate costs a full induction over
- * every example. */
+/** MAX_FIRST_STEPS is the most dropped characters `compose` will try first. */
 const MAX_FIRST_STEPS = 8;
 
 /** One cell a proposal would alter, for the preview to show. */
@@ -57,30 +42,23 @@ export interface Change {
 }
 
 /**
- * Proposal is the question. It carries what it would do and how much of it,
- * because a person cannot agree to a transformation they have only been told
- * the name of.
+ * Proposal is the question put to the person: the program, how many cells it
+ * would change, and a preview.
  */
 export interface Proposal {
   col: number;
   header: string;
   prog: Program;
 
-  /**
-   * How many cells would change, not counting the ones already fixed by hand --
-   * those are the examples, and offering to redo them would be counting the
-   * person's own work as the app's.
-   */
+  /** How many cells would change. The count skips cells already fixed by
+   * hand. */
   affects: number;
 
   sample: Change[];
 
   /**
-   * Marks a proposal whose runner-up disagrees with it somewhere in the column.
-   *
-   * The examples do not settle which was meant, so the offer leads with the
-   * preview rather than with the button: a guess that says it is a guess is
-   * worth making, and one that does not is not.
+   * True when the runner-up candidate gives a different answer somewhere in
+   * the column. The offer then leads with the preview.
    */
   ambiguous: boolean;
 }
@@ -96,28 +74,21 @@ interface ColumnSnapshot {
 }
 
 /**
- * Snapshot is the copy a scan runs over. The values are taken where the sheet
- * lives and the scan can then happen anywhere, because counting matches across
- * a few thousand rows is felt in a scroll.
- *
- * Only columns with enough examples to ask about are copied, so a snapshot
- * taken after an ordinary edit is usually empty and costs nothing.
+ * Snapshot is a copy of the columns a scan runs over, so the scan can run
+ * away from the sheet. Only columns with at least MIN_EXAMPLES examples are
+ * copied.
  */
 export class Snapshot {
   constructor(private readonly cols: ColumnSnapshot[]) {}
 
-  /** Whether there is anything to scan, so a caller can skip starting work that
-   * would have nothing to do. */
+  /** empty reports whether there is anything to scan. */
   empty(): boolean {
     return this.cols.length === 0;
   }
 
   /**
-   * propose returns the strongest question the snapshot supports, or undefined
-   * for none.
-   *
-   * One at a time: a person asked two questions about their spreadsheet at once
-   * answers neither.
+   * propose returns the first column's proposal, or undefined when every
+   * column comes up empty.
    */
   propose(): Proposal | undefined {
     for (const c of this.cols) {
@@ -131,7 +102,7 @@ export class Snapshot {
   }
 }
 
-/** snap copies what `propose` will need. */
+/** snap copies what `propose` will need from the sheet. */
 export function snap(s: Sheet | undefined): Snapshot {
   if (s === undefined) return new Snapshot([]);
 
@@ -163,17 +134,16 @@ interface Candidate {
 }
 
 /**
- * Reading is the candidates one way of reading the examples produced, kept only
- * if they reproduce every example, narrowest first.
+ * Reading is the candidates one witness produced, kept only if they
+ * reproduce every example, narrowest first.
  *
- * Candidates that have agreed on every value read so far share a class. Two in
- * different classes part company somewhere in the column, which is what makes a
- * proposal ambiguous, and tracking classes costs a comparison per candidate per
- * value rather than one per pair.
+ * Candidates that have agreed on every value read so far share a class. Two
+ * candidates in different classes differ somewhere in the column, which
+ * marks a proposal ambiguous.
  */
 interface Reading {
   cands: Candidate[];
-  /** The classes with more than one member. Singletons need no checking. */
+  /** The classes with more than one member. */
   classes: number[][];
   classOf: Int32Array;
   nextClass: number;
@@ -181,13 +151,8 @@ interface Reading {
 
 /**
  * Survey scores a column's candidates against its values, a run of rows at a
- * time.
- *
- * It is what lets the recogniser read a file it never holds. The engine feeds
- * it a block of rows and asks for the proposal as it stands, so a banner can say
- * "at least 18,204 in the first 12M rows" and be right, then say the exact count
- * when the last block has been read. Fed every value at once, it proposes
- * exactly what a whole-column scan does.
+ * time. `proposal` is correct for the rows read so far. Fed every value at
+ * once, it proposes what a whole-column scan does.
  */
 export class Survey {
   private seen = 0;
@@ -199,8 +164,9 @@ export class Survey {
   ) {}
 
   /**
-   * start induces the candidates for a column's examples. Undefined when there
-   * are too few examples, or when nothing reproduces them.
+   * start induces the candidates for a column's examples. Returns undefined
+   * when there are too few examples, or when every candidate fails to
+   * reproduce them.
    */
   static start(col: number, header: string, examples: Example[]): Survey | undefined {
     if (examples.length < MIN_EXAMPLES) return undefined;
@@ -211,8 +177,8 @@ export class Survey {
       if (w.together !== undefined) cands.push(...parseAll(w.together(examples)));
       readings.push(reading(examples, cands));
     }
-    // Two steps where one will not do, read last. The ranking puts fewer steps
-    // first anyway, so this only wins for a column no single step explains.
+    // Two-step programs are read last. The ranking prefers fewer steps, so
+    // they only win for a column that needs two.
     readings.push(reading(examples, compose(examples)));
 
     const kept = readings.filter((r) => r.cands.length > 0);
@@ -226,19 +192,17 @@ export class Survey {
 
   /**
    * add reads the column's values for a run of rows starting at `first`. Runs
-   * arrive in row order, so the sample is the first changes in the column rather
-   * than the first ones read.
-   *
-   * `written` is what was typed into each of those cells, where anything was,
-   * so a cell already fixed the way a program would fix it is not counted.
+   * must arrive in row order. `written` is what was typed into each cell,
+   * where anything was; a cell a program is already settled over is left as
+   * it is.
    */
   add(values: readonly string[], first: number, written: readonly (Written | undefined)[]): void {
     for (let i = 0; i < this.readings.length; i++) {
       const r = this.readings[i]!;
       scan(r, values, first, written);
 
-      // A reading with a candidate that claims a cell outranks every reading
-      // after it, whatever those go on to find, so they are not read again.
+      // A reading with a candidate that changes a cell outranks every later
+      // reading, so the later ones are dropped.
       if (r.cands.some((c) => c.affects > 0)) {
         this.readings.length = i + 1;
         break;
@@ -247,21 +211,18 @@ export class Survey {
     this.seen += values.length;
   }
 
-  /** proposal is the question the values read so far support. */
+  /** proposal returns the question the values read so far support. */
   proposal(): Proposal | undefined {
     for (const r of this.readings) {
       const scored: number[] = [];
       r.cands.forEach((c, i) => {
-        // It explains the examples and claims nothing else.
+        // Only candidates that change at least one cell.
         if (c.affects > 0) scored.push(i);
       });
       if (scored.length === 0) continue;
 
-      // Fewest steps, then fewest cells claimed. Preferring the narrowest program
-      // that still explains every example is the guard against reading one habit
-      // as a licence to rewrite a column: given the choice between "remove the
-      // commas" and "remove the commas and the digits", both of which fit, the
-      // smaller claim wins.
+      // Fewest steps, then fewest cells changed, then text order. The
+      // narrowest program that still explains every example wins.
       scored.sort((a, b) => {
         const A = r.cands[a]!;
         const B = r.cands[b]!;
@@ -287,12 +248,9 @@ export class Survey {
 }
 
 /**
- * witness is the two ways to read a set of examples: one at a time, whose
- * candidate sets are intersected, and all at once, whose candidates are not.
- *
- * Intersecting asks what the examples have in common, which is the right
- * question and the whole of the design -- but a column whose decoration only
- * some rows wear has its answer in their union instead.
+ * Witness is one way of reading the examples. `each` gives candidates per
+ * example, which are intersected. `together` gives candidates from all
+ * examples at once, kept as they are.
  */
 interface Witness {
   each: (was: string, now: string) => string[];
@@ -300,28 +258,14 @@ interface Witness {
 }
 
 /**
- * The witnesses, tried in order, and the first that yields a proposal for this
- * column wins.
- *
- * The order is the point. Rewrites and restructurings are different readings of
- * the same edit -- deleting the separators from 1,204 and slicing four
- * characters out of it agree on that row and on nothing after it -- and a
- * column where characters changed is almost always a column where characters
- * were meant to change. Falling back a whole column at a time rather than a
- * single example at a time is what keeps one reading from answering for the
- * other.
+ * The witnesses, tried in order. Rewrites are read first; restructures are
+ * used only when every rewrite leaves the column as it is.
  */
 const WITNESSES: Witness[] = [{ each: rewrites, together: unionDeletion }, { each: restructures }];
 
 /**
- * compose builds the two-step programs, by clearing characters first and
- * reading what is left second.
- *
- * The first step comes from the characters the examples lost rather than from a
- * lattice that has to explain them, and what it leaves is a shape the second
- * step reads the same way in every row: (1,204) and (87) have no decomposition
- * in common until the comma is gone, and 1.204,50 and 9.870,25 have no
- * substitution in common until the full stop is.
+ * compose builds two-step programs: first remove one dropped character (or a
+ * class of all of them), then induce a second step from what is left.
  */
 function compose(ex: Example[]): Program[] {
   const chars = droppedChars(ex);
@@ -345,17 +289,13 @@ function compose(ex: Example[]): Program[] {
   return out;
 }
 
-/** reading keeps the candidates that reproduce the examples, narrowest first. */
+/**
+ * reading keeps the candidates that reproduce every example, deduplicated by
+ * text and sorted narrowest first.
+ */
 function reading(ex: Example[], cands: Program[]): Reading {
-  // Verification is separate from induction on purpose. A witness function that
-  // generalises too far is a bug that shows up here as a candidate that does
-  // not reproduce an example, and it is dropped rather than ranked down: a
-  // program that cannot reproduce what it was induced from has no claim on
-  // anything else in the column.
-  //
-  // The two readings can land on the same program, and a duplicate at the top
-  // of the ranking would compare a program with itself and report a column
-  // unambiguous that is not.
+  // A candidate that fails an example is dropped. Duplicates are dropped too,
+  // so the ambiguity check always compares two different programs.
   const kept: Program[] = [];
   const seen = new Set<string>();
   for (const p of cands) {
@@ -382,10 +322,8 @@ function reading(ex: Example[], cands: Program[]): Reading {
 }
 
 /**
- * scan counts what each candidate would change in a run of values and collects
- * the first few for the preview. A cell a program leaves alone is a cell it
- * does not claim, so the count is exactly the number of cells the person is
- * being asked about.
+ * scan counts the cells each candidate would change in a run of values and
+ * collects the first SAMPLE_SIZE for the preview.
  */
 function scan(
   r: Reading,
@@ -400,8 +338,7 @@ function scan(
     const w = written[i];
     for (let j = 0; j < r.cands.length; j++) {
       const c = r.cands[j]!;
-      // An apply leaves a cell the program is settled over, so the person is not
-      // being asked about it.
+      // A cell the program is already settled over is left as it is.
       const out = w !== undefined && settled(c.prog, w) ? v : applyProgram(c.prog, v);
       outs[j] = out;
       if (out === v) continue;
@@ -412,11 +349,7 @@ function scan(
   }
 }
 
-/**
- * split breaks up any class whose members gave different answers for one value.
- * Two spellings of the same transformation are never split, however different
- * they look; two that part company on row 400 are, however similar.
- */
+/** split breaks up any class whose members gave different outputs for a value. */
 function split(r: Reading, outs: readonly string[]): void {
   let differs = false;
   for (const members of r.classes) {
@@ -443,7 +376,7 @@ function split(r: Reading, outs: readonly string[]): void {
   r.classes = next;
 }
 
-/** pushTo adds a value to the list under a key, starting the list where there is none. */
+/** pushTo appends a value to the list under a key, creating the list if needed. */
 function pushTo<K, V>(m: Map<K, V[]>, k: K, v: V): void {
   const have = m.get(k);
   if (have === undefined) m.set(k, [v]);
@@ -457,17 +390,10 @@ function bySize(a: Program, b: Program): number {
 }
 
 /**
- * gather reads the log back into the changes it describes.
- *
- * A cell edited twice contributes one example, from what it held before the
- * first edit to what it holds after the last: the net change is what was meant,
- * and the intermediate value was a keystroke. Edits need not be adjacent in the
- * log -- someone fixing a column will wander off to another one and come back,
- * and a recogniser that only reads the tail would never see the pattern.
- *
- * An apply on a column clears its examples. The values those edits recorded no
- * longer exist, and generalising from them again would be inducing a rule from
- * the results of a rule.
+ * gather reads the edit log into examples per column. A cell edited more than
+ * once gives one example, from before its first edit to after its last. Edits
+ * may sit anywhere in the log. An Apply on a column clears that column's
+ * examples.
  */
 export function gather(log: readonly Edit[]): Map<number, Example[]> {
   const first = new Map<string, string>();
@@ -500,7 +426,7 @@ export function gather(log: readonly Edit[]): Map<number, Example[]> {
     for (const c of cells) {
       const was = first.get(c)!;
       const now = last.get(c)!;
-      // A value typed and then typed back is not a demonstration.
+      // A value typed and then typed back counts as unchanged.
       if (was === now) continue;
 
       pushTo(out, col, { was, now });

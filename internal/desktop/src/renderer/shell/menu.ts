@@ -1,30 +1,30 @@
-// A small menu that hangs off the page: what the + beside a workspace's
-// sources offers, and what a right click on a workspace in the sidebar does.
+// A pop-up menu appended to document.body: the + menu beside a workspace's
+// sources, and the right-click menu on a workspace in the sidebar.
 //
-// It hangs off the page rather than the sidebar, because the sidebar is drawn
-// again on every edit and would take an open menu down with it.
+// It is appended to the body because the sidebar is redrawn on every edit
+// and would remove an open menu.
 
 import "./menu.css";
 
 import { clickAway, el, hang } from "./util.ts";
 
-/** One thing a menu offers, and the keys that do the same. */
+/** One menu item: its label, the shortcut shown beside it, and what it does. */
 export interface MenuItem {
   label: string;
   keys?: string;
   choose: () => void;
 }
 
-/** Where a menu opens: its top left corner, in the window. */
+/** Where a menu opens: its top-left corner, in window coordinates. */
 export interface MenuPlace {
   left: number;
   top: number;
 }
 
-/** The least room a menu keeps between itself and the window's edge, in pixels. */
+/** The minimum gap between a menu and the window's edge, in pixels. */
 const EDGE = 4;
 
-/** below is the place under an element, its left edge on the element's. */
+/** below returns the place directly under an element, left edges aligned. */
 export function below(anchor: HTMLElement): MenuPlace {
   const at = anchor.getBoundingClientRect();
   return { left: Math.round(at.left), top: Math.round(at.bottom) };
@@ -37,21 +37,21 @@ export class PopMenu {
   constructor(
     place: MenuPlace,
     items: readonly MenuItem[],
-    /** The menu closed, so the keys go back to the grid. */
+    /** Called when the menu closes. */
     private readonly closed: () => void,
   ) {
     this.box.setAttribute("role", "menu");
     this.box.addEventListener("keydown", (e) => {
-      // The grid's keys and the shell's chords stay out of what is typed here.
+      // Keep the key from reaching the grid and the shell's shortcuts.
       e.stopPropagation();
       if (e.key === "Escape") this.close();
     });
-    // A right click on the menu is not a second menu.
+    // A right click on the menu leaves it as it is.
     this.box.addEventListener("contextmenu", (e) => e.preventDefault());
 
     this.box.append(...items.map((item) => this.item(item)));
     document.body.append(this.box);
-    // The keys come here, so Esc closes it whatever had them before.
+    // Focus the menu so Esc closes it.
     this.box.tabIndex = -1;
     this.box.focus();
 

@@ -1,12 +1,11 @@
 // Checks that several objects are one tab: three picked in a folder of the
 // stand-in bucket and added as one, read end to end as one table, and a
-// fourth that lands in the folder afterwards offered on the tab's line and
+// fourth that lands in the folder afterwards, offered on the tab's line and
 // appended to it.
 //
-// They run last, over the workspace refresh.ts leaves open, and reach the
-// folder through the connection to the whole bucket connections.ts saved.
-// The objects are not in the bucket until a check asks smoke.js to put them
-// there, so nothing before these lists a folder it did not expect.
+// They run over the workspace refresh.ts leaves open, and reach the folder
+// through the whole-bucket connection connections.ts saved. The objects are
+// put in the bucket when a check asks smoke.js to.
 
 import type { Check } from "./check.ts";
 import { ROWS, counted } from "./fixture.ts";
@@ -17,25 +16,25 @@ const PARTS = 3;
 /** The folder the objects are in, as the bucket keys it and as the panel says it. */
 const FOLDER = "shop/2025/";
 
-/** What each object is called: the fixture cut into parts, and one more. */
+/** The objects' names: the fixture cut into parts, and one more. */
 const NAMES = Array.from({ length: PARTS + 1 }, (_, i) => `sales-q3-part-${i + 1}.csv`);
 
-/** The three added as one, and the one that lands after them, by their keys. */
+/** The keys: the three added as one, and the one that lands after them. */
 const KEYS = NAMES.map((name) => FOLDER + name);
 const FIRST = KEYS.slice(0, PARTS);
 const LATER = KEYS[PARTS]!;
 
-/** What the three are called as one tab: what their names share. */
+/** The tab's name for the three: the part their names share. */
 const TAB = "sales-q3-part.csv";
 
 /**
- * How many rows the three hold between them, which is the whole fixture, and
- * how many the fourth adds: it is the first part again, a third of it.
+ * How many rows the three hold together (the whole fixture), and how many
+ * once the fourth is appended (the first part again, a third more).
  */
 const ROWS_AS_ONE = ROWS;
 const ROWS_APPENDED = ROWS + ROWS / PARTS;
 
-/** What the panel's lines say here, beside what the PRELUDE says of the panel. */
+/** Helpers over the panel's lines, beside the PRELUDE's. */
 const LINES = `
   const names = (section) => JSON.stringify(named(section).map((l) => l.name));
   const line = (section, name) => named(section).find((l) => l.name === name);
@@ -47,8 +46,6 @@ const LINES = `
 
 export const MULTI: Check[] = [
   {
-    // The task's own sentence, first half: three stand-in objects, picked in
-    // the folder they are in.
     name: "three objects picked in a folder are offered as one, with how they are read",
     ask: `put ${FIRST.join(" ")}`,
     shot: "multi-picked",
@@ -68,7 +65,7 @@ export const MULTI: Check[] = [
       const want = ${JSON.stringify(JSON.stringify(NAMES.slice(0, PARTS)))};
       if (!(await arrives(() => names(BROWSER) === want))) return "the folder lists " + names(BROWSER);
 
-      // Entering the folder left the keys on its first line.
+      // Entering the folder left the selection on its first line.
       await key(" ");
       for (let i = 1; i < ${PARTS}; i++) {
         await key("ArrowDown");
@@ -83,8 +80,8 @@ export const MULTI: Check[] = [
       const ticked = [...choices.querySelectorAll("input")].map((i) => i.checked);
       if (JSON.stringify(ticked) !== "[true,false]") return "the choices are ticked " + JSON.stringify(ticked);
 
-      // Only a window lays anything out: the choices have a line to
-      // themselves above the buttons, inside the panel, and none is cut short.
+      // Layout: the choices have a line of their own above the buttons,
+      // inside the panel, and none is cut short.
       const panel = box(document.querySelector("#panel"));
       const at = box(choices);
       if (at.left < panel.left || at.right > panel.right) return "the choices run from " + at.left + " to " + at.right + ", outside the panel";
@@ -99,7 +96,7 @@ export const MULTI: Check[] = [
     script: `
       ${LINES}
       const tabs = document.querySelectorAll(".tab").length;
-      // Asked for here, where the source is made, which is the one place it can be.
+      // The _file column is chosen here, where the source is made.
       const file = [...footer().querySelectorAll(".choices input")].at(-1);
       file.click();
       if (!(await until(() => [...footer().querySelectorAll(".choices input")].at(-1)?.checked === true))) {
@@ -114,15 +111,14 @@ export const MULTI: Check[] = [
       if (now !== tabs + 1) return "the sidebar went from " + tabs + " tabs to " + now;
       if (text("#status-msg") !== ${JSON.stringify(`added ${TAB}`)}) return "the status bar says " + JSON.stringify(text("#status-msg"));
 
-      // Every row of all three, and no part's header among them: the whole
-      // fixture, which is what they were cut from.
+      // Every row of all three under one header: the whole fixture.
       const rows = ${JSON.stringify(counted(ROWS_AS_ONE))} + " rows";
       if (!(await arrives(() => text("#status-file").startsWith(rows)))) {
         return "the status bar says " + JSON.stringify(text("#status-file"));
       }
       const head = [...document.querySelectorAll("thead th .colhead")].map((h) => h.firstChild.textContent);
       if (JSON.stringify(head) !== '["date","region","rep","channel","units","revenue","_file"]') return "the header is " + JSON.stringify(head);
-      // The first row drawn is the first object's, and says so.
+      // The first row drawn is the first object's, and its _file cell says so.
       const first = () => document.querySelector("tbody tr:not(.pending)")?.lastElementChild?.textContent;
       if (!(await arrives(() => first() === ${JSON.stringify(NAMES[0])}))) return "the first row's _file says " + JSON.stringify(first());
       const meta = () => line(WORKSPACE, ${JSON.stringify(TAB)})?.meta;
@@ -130,8 +126,8 @@ export const MULTI: Check[] = [
     `,
   },
   {
-    // The folder is not read again for the tab's parts. What it has gained
-    // after the last of them is offered, on the next focus.
+    // On the next focus the folder is listed again, and what it gained after
+    // the last part is offered.
     name: "a fourth object landing in the folder is offered on the tab's line",
     ask: `put ${LATER}`,
     shot: "multi-grown",
@@ -150,8 +146,8 @@ export const MULTI: Check[] = [
       const offer = ${JSON.stringify(`1 new file in ${FOLDER} · append`)};
       if (!(await until(() => labels() === JSON.stringify([offer, "Remove"])))) return "its line offers " + labels();
 
-      // The offer is a sentence with a line of the foot to itself, as wide
-      // as the foot's own padding lets it be, and Remove sits under it.
+      // The offer has a line of the foot to itself, as wide as the foot's
+      // padding allows, with Remove under it.
       const [wide, remove] = footButtons();
       const inside = box(footer());
       const at = box(wide);
@@ -164,7 +160,6 @@ export const MULTI: Check[] = [
     `,
   },
   {
-    // The task's own sentence, second half.
     name: "taking the offer appends the fourth, and the rows extend",
     shot: "multi-appended",
     script: `
@@ -179,18 +174,18 @@ export const MULTI: Check[] = [
       }
       if (document.querySelectorAll(".tab").length !== tabs) return "the sidebar has " + document.querySelectorAll(".tab").length + " tabs, not " + tabs;
 
-      // Nothing is left to offer: the line says how many it reads now.
+      // Remove is all the line offers, and it says how many files it reads now.
       const meta = () => line(WORKSPACE, ${JSON.stringify(TAB)})?.meta;
       if (!(await arrives(() => meta() === "${PARTS + 1} files"))) return "its line says " + JSON.stringify(meta());
       if (labels() !== '["Remove"]') return "its line offers " + labels();
 
-      // The last row is the fourth object's last, drawn and not waited for.
+      // The last row is the fourth object's last, and it is drawn.
       const sc = document.querySelector(".grid-scroll");
       sc.scrollTop = sc.scrollHeight;
       const last = () => [...document.querySelectorAll("tbody tr")].at(-1);
       const drawn = () => last()?.children[0].textContent === ${JSON.stringify(counted(ROWS_APPENDED))} && !last().classList.contains("pending");
       if (!(await arrives(drawn))) return "the last row drawn is " + JSON.stringify(last()?.children[0].textContent);
-      // It came from the object that was appended, and its _file cell names it.
+      // Its _file cell names the object that was appended.
       const from = last().lastElementChild.textContent;
       return from === ${JSON.stringify(NAMES[PARTS])} ? "" : "the last row's _file says " + JSON.stringify(from);
     `,

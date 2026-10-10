@@ -1,40 +1,22 @@
-// The ways a bucket says it is somewhere else.
+// The replies a bucket sends when a request is signed for the wrong region.
 //
-// A request signed for the wrong region is refused, and the refusal carries
-// where the bucket actually is. AWS puts it in `x-amz-bucket-region`, and uno
-// follows that already. Not every reply has the header: an S3-compatible
-// endpoint, an older PermanentRedirect, a proxy that drops headers it does not
-// know about, all answer with the region in the XML body and nothing on the
-// outside. Without reading the body those buckets are unreachable, because the
-// request that fails is the first one uno sends.
+// Some carry the region in the `x-amz-bucket-region` header. Others carry it
+// only in the XML body. Half the rows are bodies that must be refused,
+// since a region read out of a body becomes a hostname to sign for.
 //
-// The body is also the least trustworthy thing in the exchange. A region read
-// out of it becomes a hostname -- `https://<bucket>.s3.<region>.amazonaws.com`
-// -- so anything not shaped like a region is a different host to sign for and
-// send credentials to. Half the list below is bodies that must not be followed
-// for that reason, and they are the half worth keeping.
+// Every reply here was written by hand from documentation and memory. Each
+// is still waiting on a capture from a real server. s3.test.ts serves each
+// row from the stand-in, so the suite proves the parser agrees with this
+// file. Each row records that in `from`.
 //
-// None of it has been confirmed. Every reply here was written by hand, from
-// the documentation and from memory of what AWS, R2 and MinIO answer, and no
-// server has been seen sending a single one of them. s3.test.ts serves each
-// row from a stand-in that replies with exactly the bytes written below, so
-// what the suite proves is that the parser agrees with this file · whether
-// this file agrees with S3 is a separate question, and one nothing here can
-// ask. Each row carries that admission in `from`, and keeps it until a real
-// server has been watched saying it.
+// To replace a row with a real reply, run the live test against a bucket
+// outside the credentials' region with refusal bodies recorded, paste the
+// reply in as a new row marked captured, and keep the reconstruction beside
+// it.
 //
-// Lifting a row takes credentials and a bucket outside the region they are
-// signed for. Run the live test with refusal bodies recorded, against such a
-// bucket, and it prints the reply S3 actually sent. Paste that in as a new row
-// marked captured, naming the server it came off and the day it came off, and
-// leave the reconstruction in place beside it: the two disagreeing is the
-// finding, and a reconstruction that the parser still has to handle is worth
-// keeping either way. Most of the refusing half can never be lifted at all,
-// since no cooperating server sends a body pointing at somebody else's host.
-//
-// `$REGION` stands for where the stand-in says the bucket is, and is filled in
-// when the reply is served. A region written out in full is one the reply
-// names wrongly on purpose.
+// `$REGION` stands for the stand-in's home region and is filled in when the
+// reply is served. A region written out in full is one the reply names
+// wrongly on purpose.
 
 /** One reply, as it comes off the wire. */
 export interface Misdirect {
@@ -44,13 +26,9 @@ export interface Misdirect {
 }
 
 /**
- * Where a reply's bytes came from, which is what decides how much agreeing
- * with them is worth.
- *
- * A reconstruction is written from the documentation and from memory, and no
- * server has been seen sending it: it says what uno's authors believe S3 does.
- * A capture was copied off the wire from the server it names on the day it
- * names, and says what that server did.
+ * Where a reply's bytes came from. A reconstruction was written from
+ * documentation and memory. A capture was copied off the wire from the named
+ * server on the named day.
  */
 export type Provenance = "reconstructed" | { captured: string; on: string };
 
@@ -58,30 +36,29 @@ export interface RegionFormat {
   name: string;
   reply: Misdirect;
   /**
-   * Whether uno should follow it: sign again for the region named, reach the
-   * object, and remember the bucket is there. Not following means handing the
-   * caller the status, having sent no request anywhere it was not already
-   * going.
+   * Whether uno follows it: signs again for the named region and reaches the
+   * object. When false, uno hands back the status and keeps every request in
+   * the credentials' region.
    */
   follow: boolean;
-  /** Where the stand-in is, when that is not the usual eu-west-1. */
+  /** The stand-in's region, when it differs from HOME_REGION. */
   home?: string;
   /**
-   * Where the bytes in `reply` came from. Optional so that nothing outside
-   * this file has to know the field exists, but every row below answers it.
+   * Where the bytes in `reply` came from. Optional in the type; every row
+   * sets it.
    */
   from?: Provenance;
 }
 
 const XML = { "content-type": "application/xml" };
 
-/** The RequestId and HostId every real reply carries, so a parser meets them. */
+/** The RequestId and HostId a real reply carries. */
 const IDS = "<RequestId>8H4KZ1N0CJ0V4S9P</RequestId><HostId>0Lp1kQ5rW8xT2</HostId>";
 
 export const REGION_FORMATS: readonly RegionFormat[] = [
   // ------------------------------------------------------------- to follow
 
-  // The common one: us-east-1 credentials against a bucket anywhere else.
+  // The common case: us-east-1 credentials against a bucket elsewhere.
   {
     name: "AuthorizationHeaderMalformed, with a Region element",
     from: "reconstructed",
@@ -96,7 +73,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // Some endpoints send the sentence without the element beside it.
+  // The region in the Message only.
   {
     name: "AuthorizationHeaderMalformed, region only in the Message",
     from: "reconstructed",
@@ -111,7 +88,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // No region as such anywhere in it: the region is inside a hostname.
+  // The region appears only inside the Endpoint hostname.
   {
     name: "PermanentRedirect, region inside the Endpoint host",
     from: "reconstructed",
@@ -128,7 +105,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // The endpoint spelled the way it was before 2019.
+  // The older dashed endpoint form.
   {
     name: "PermanentRedirect, the dashed endpoint",
     from: "reconstructed",
@@ -143,12 +120,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // The header, which is what AWS is thought to send. 0.1 did open a bucket
-  // in another region back when the header was the only channel uno could
-  // follow, so something carried the region that day, but 0.1 never looked at
-  // a reply and did not record what. The same open succeeds either way now.
-  // So this is a reconstruction like the rest. It stays in the list so that
-  // reading bodies cannot cost the header path.
+  // The header alone.
   {
     name: "the header, with no body at all",
     from: "reconstructed",
@@ -156,8 +128,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     reply: { status: 301, headers: { "x-amz-bucket-region": "$REGION" } },
   },
 
-  // Both, disagreeing. The header is the one S3 maintains; the sentence in the
-  // body is prose, and prose has been wrong before.
+  // Header and body disagree. The header wins.
   {
     name: "the header, against a body naming somewhere else",
     from: "reconstructed",
@@ -185,8 +156,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // R2 signs everything as `auto`. A region with no digits and no hyphen in it
-  // is still a region, so the check on the shape cannot be tighter than this.
+  // R2 uses the region `auto`. A region made of letters alone is still a
+  // region.
   {
     name: "a region that is a word rather than a place",
     from: "reconstructed",
@@ -201,8 +172,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
 
   // ------------------------------------------------------------- to refuse
 
-  // The region uno already signed for. Following it sends the identical
-  // request again, and the identical reply comes back, and so on forever.
+  // The region the request already used. Following it would loop.
   {
     name: "a body naming the region the request already used",
     from: "reconstructed",
@@ -217,7 +187,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // A 400 about something else entirely. There is nowhere to go.
+  // A 400 that is silent about the region.
   {
     name: "IllegalLocationConstraintException, which names no region",
     from: "reconstructed",
@@ -232,8 +202,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // A bad signature is a bad signature. Sending it somewhere else does not fix
-  // it, and retrying quietly hides which key was the wrong one.
+  // A signature error is refused, even though it quotes a region.
   {
     name: "SignatureDoesNotMatch, which quotes a region in passing",
     from: "reconstructed",
@@ -248,9 +217,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // A region becomes a hostname, so a body that gets to choose the region gets
-  // to choose where the next request -- signed, with the session token on it
-  // -- is sent. These three are the shapes that buy a host.
+  // A region becomes a hostname. These three bodies name a host where a
+  // region belongs, and must be refused.
   {
     name: "a Region element holding a host",
     from: "reconstructed",
@@ -285,8 +253,7 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     },
   },
 
-  // A captive portal, a corporate proxy, a load balancer with nothing behind
-  // it. None of it is XML, and none of it should take uno anywhere.
+  // An HTML reply from a proxy or portal, refused whole.
   {
     name: "an HTML page from something in the way",
     from: "reconstructed",
@@ -315,8 +282,8 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
     follow: false,
     reply: { status: 400, headers: XML },
   },
-  // Long enough to be worth not reading all of, and the region is past the end
-  // of anything sensible to read.
+  // A body larger than uno reads of a refusal, with the region past that
+  // limit.
   {
     name: "a megabyte before it gets to the point",
     from: "reconstructed",
@@ -331,10 +298,10 @@ export const REGION_FORMATS: readonly RegionFormat[] = [
   },
 ];
 
-/** Where a format's stand-in says its bucket is. */
+/** The region the stand-in's bucket is in by default. */
 export const HOME_REGION = "eu-west-1";
 
-/** One reply with `$REGION` filled in, ready to serve. */
+/** One reply with `$REGION` filled in. */
 export function rendered(reply: Misdirect, region: string): Required<Misdirect> {
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(reply.headers ?? {})) {

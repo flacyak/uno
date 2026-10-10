@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
 //
-// The view over a plain DOM: what happens between the scroller the browser
-// moves and the arithmetic in metrics.ts. happy-dom lays nothing out, so the
-// scroller is told how tall it is, and a resize is the observer's callback
-// fired by hand.
+// The view over a plain DOM: what sits between the browser's scroller and the
+// arithmetic in metrics.ts. happy-dom skips layout, so the scroller is
+// told its height, and a resize is the observer's callback fired by hand.
 
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -14,16 +13,16 @@ import type { Rows } from "../../src/renderer/grid/rows.ts";
 import { View } from "../../src/renderer/grid/view.ts";
 import { m } from "../../src/paraglide/messages.js";
 
-/** The row height the view falls back to when the stylesheet is not loaded. */
+/** The row height the view falls back to with the stylesheet unloaded. */
 const ROW_H = 29;
-/** What the header is told it measures, since happy-dom measures nothing. */
+/** The header height the view is told, since happy-dom skips layout. */
 const HEAD_H = 30;
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A sheet of `total` rows and `cols` columns, every cell its own coordinates. */
+/** A sheet of `total` rows and `cols` columns. Each cell's text is its coordinates. */
 function sheet(total: number, cols = 2): Rows {
   const kind: Kind = "text";
   return {
@@ -36,7 +35,7 @@ function sheet(total: number, cols = 2): Rows {
   };
 }
 
-/** make builds a view on a scroller told it is `viewport` pixels tall. */
+/** Builds a view on a scroller told it is `viewport` pixels tall. */
 function make(viewport: number): {
   view: View;
   scroller: HTMLElement;
@@ -58,7 +57,7 @@ function make(viewport: number): {
   return { view, scroller: view.scroller, height };
 }
 
-/** A frame, the way the view schedules its own layout. */
+/** Waits two animation frames, which is how the view schedules its layout. */
 function frame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
@@ -78,7 +77,7 @@ test("the gutter numbers rows grouped the way the status bar counts them", async
   await frame();
   const last = [...scroller.querySelectorAll("tbody tr")].at(-1)!;
   expect(last.children[0]!.textContent).toBe("4,812");
-  // The gutter is as wide as that number, grouping included.
+  // The gutter width is that number's digit count, grouping included.
   expect(view.scroller.querySelector("table")!.style.getPropertyValue("--gutter-digits")).toBe("5");
 });
 
@@ -86,8 +85,8 @@ test("the gutter numbers rows grouped the way the status bar counts them", async
 
 test("zt puts the row at the top of the visible range, with nothing lost to rounding", () => {
   // 32 rows at 29px under a 30px header in a 600px viewport leave 358px of
-  // scroll. Row 7 sits at 203px, and 203 / 358 * 358 is a hair over 203, which
-  // ceil then reads as row 8: H after zt landed one row under the top.
+  // scroll. Row 7 is at 203px, and 203 / 358 * 358 is a hair over 203, which
+  // ceil would read as row 8.
   const { view } = make(600);
   view.show(sheet(32), false);
 
@@ -120,8 +119,8 @@ test("the same rows shown again keep where they were scrolled to", () => {
 // --------------------------------------------------------------- resizing
 
 test("a taller scroller draws more rows on the next frame", async () => {
-  // happy-dom's ResizeObserver observes nothing, so a resize is the callback
-  // the view handed over, fired by the test.
+  // happy-dom's ResizeObserver is inert, so the test captures the
+  // view's callback and fires it.
   let resized: (() => void) | undefined;
   vi.stubGlobal(
     "ResizeObserver",
@@ -152,7 +151,7 @@ test("a taller scroller draws more rows on the next frame", async () => {
 test("a blank header is drawn as the column's place, and dressed as a name the file did not give", () => {
   const { view, scroller } = make(600);
   const rows = sheet(10, 3);
-  // What pandas writes for an index column, and a header of nothing but spaces.
+  // An empty header, and one of only spaces.
   const columns = [...rows.columns];
   columns[0] = { ...columns[0]!, header: "" };
   columns[2] = { ...columns[2]!, header: "   " };
@@ -165,7 +164,7 @@ test("a blank header is drawn as the column's place, and dressed as a name the f
     m.column_unnamed({ number: 3 }),
   ]);
   expect(names.map((n) => n.classList.contains("unnamed"))).toEqual([true, false, true]);
-  // Every column still wears its badge, and the body still has its cell.
+  // Every column still has its badge, and the body row has all its cells.
   expect(scroller.querySelectorAll("thead th .badge").length).toBe(3);
   expect(scroller.querySelector("tbody tr")?.children.length).toBe(4);
 });

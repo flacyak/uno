@@ -1,13 +1,8 @@
-// The formula form: which column of the source showing is computed, and from
-// what. It opens from a right click on a workspace in the sidebar.
+// The formula form: picks a column of the active source and the expression it
+// is computed from. It opens from the right-click menu on a workspace.
 //
-// A formula is arithmetic over the row's other columns, by their names. The
-// column it is put on stops storing values of its own and shows what the
-// expression computes, and it is one edit in the log, so Ctrl+Z takes it back.
-//
-// The form says nothing about what an expression may be. The engine parses it
-// and answers in its own words, here, with the form still open on what was
-// typed.
+// The engine parses the expression. A refusal is shown in the form, which
+// stays open.
 
 import "./formula.css";
 
@@ -16,27 +11,28 @@ import { columnLabel } from "../grid/rows.ts";
 import type { MenuPlace } from "./menu.ts";
 import { clickAway, el, hang, message, option, walk } from "./util.ts";
 
-/** A column the form offers, with the expression it is computed from already. */
+/**
+ * A column the form offers, with the expression it is already computed from, if
+ * any.
+ */
 export interface FormulaColumn {
   header: string;
   binding?: string;
 }
 
-/** What the form asks of the shell. The shell decides; the form only asks. */
+/** What the form asks of the shell. */
 export interface FormulaAsks {
-  /** Compute column `col` from `expr`. A refusal is thrown, saying why. */
+  /** Compute column `col` from `expr`. Throws with a message when refused. */
   insert(col: number, expr: string): Promise<void>;
-  /** The form closed, so the keys go back to the grid. */
+  /** Called when the form closes. */
   closed(): void;
 }
 
-/** What the form says under the expression until the engine has said something else. */
-
-/** A header an expression can name: letters, digits and underscores, not
- * starting with a digit, as the engine reads one. */
+/** A header an expression can refer to: a letter or underscore, then
+ * letters, digits and underscores. */
 const NAMEABLE = /^[\p{L}_][\p{L}\p{N}_]*$/u;
 
-/** The least room the form keeps between itself and the window's edge, in pixels. */
+/** The minimum gap between the form and the window's edge, in pixels. */
 const EDGE = 8;
 
 export class FormulaForm {
@@ -49,10 +45,10 @@ export class FormulaForm {
 
   constructor(
     place: MenuPlace,
-    /** The source the formula goes into, by the name on its tab. */
+    /** The name of the source the formula goes into. */
     source: string,
     private readonly columns: readonly FormulaColumn[],
-    /** The column the grid has selected, which is the one offered first. */
+    /** The column selected in the grid, which is offered first. */
     selected: number,
     private readonly asks: FormulaAsks,
   ) {
@@ -62,12 +58,12 @@ export class FormulaForm {
     const title = el("div", "title", m.formula_title_source({ source }));
 
     for (const [i, c] of columns.entries()) {
-      // A blank header is named by its place here as it is in the grid.
+      // A blank header is labelled by its position, as in the grid.
       this.column.append(option(columnLabel(c.header, i), String(i)));
     }
     this.column.value = String(Math.min(Math.max(selected, 0), columns.length - 1));
     this.column.setAttribute("aria-label", m.formula_column());
-    // A column that is computed already opens on its expression, to change it.
+    // Changing the column fills in its current expression, if any.
     this.column.addEventListener("change", () => this.fill());
 
     this.expr.type = "text";
@@ -92,7 +88,7 @@ export class FormulaForm {
     );
 
     this.box.addEventListener("keydown", (e) => {
-      // The grid's keys and the shell's chords stay out of what is typed here.
+      // Keep the key from reaching the grid and the shell's shortcuts.
       e.stopPropagation();
       if (e.isComposing) return;
       if (e.key === "Escape") {
@@ -100,11 +96,10 @@ export class FormulaForm {
         this.close();
         return;
       }
-      // Tab stays in the form, round its ends.
+      // Tab stays inside the form.
       if (walk(e, this.controls())) return;
       if (e.key === "Enter" && e.target === this.expr) {
-        // Enter in the expression is Insert, said here rather than left to
-        // the form, so it is the same key however the key arrived.
+        // Enter in the expression field submits.
         e.preventDefault();
         void this.insert();
       }
@@ -128,13 +123,13 @@ export class FormulaForm {
     this.asks.closed();
   }
 
-  /** Every control the keys can land on, in the order they are drawn. */
+  /** Every focusable control, in document order. */
   private controls(): HTMLElement[] {
     return [...this.box.querySelectorAll<HTMLElement>("select, input, button")];
   }
 
   /** fill writes the chosen column's expression into the field, or clears it,
-   * and names two of the other columns as an example of one. */
+   * and sets a placeholder naming two other columns as an example. */
   private fill(): void {
     const col = Number(this.column.value);
     const others = this.columns
@@ -146,7 +141,7 @@ export class FormulaForm {
     this.say(m.formula_hint(), false);
   }
 
-  /** insert asks for the formula, and closes once the engine has taken it. */
+  /** insert submits the formula and closes once the engine accepts it. */
   private async insert(): Promise<void> {
     const expr = this.expr.value.trim();
     if (expr === "") {
@@ -173,7 +168,7 @@ export class FormulaForm {
   }
 }
 
-/** field is one line of the form: what the control is, and the control. */
+/** field is one row of the form: a label and a control. */
 function field(name: string, control: HTMLElement): HTMLElement {
   const line = el("label", "field");
   line.append(el("span", "what", name), control);

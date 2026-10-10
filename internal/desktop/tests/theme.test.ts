@@ -2,10 +2,9 @@
 //
 // The themes, and which one the page wears.
 //
-// What is under test is the choice and what it puts on the page: kept between
-// launches, a value this build does not know worn as the default, the system's
-// mode followed while the page follows it, and every palette one a person can
-// read.
+// Checks the choice and what it puts on the page: kept between launches, an
+// unknown kept value read as the default, the system's mode followed while
+// the appearance is "system", and every palette readable.
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
@@ -20,7 +19,7 @@ import {
 import type { Mode, Palette, Scheme } from "../src/renderer/theme.ts";
 import { Kept } from "./kept.ts";
 
-/** A system that is in whichever mode a test says, and says when it changes. */
+/** A Scheme in whichever mode the test sets, which notifies listeners on change. */
 class System implements Scheme {
   matches = false;
   private readonly heard: Array<() => void> = [];
@@ -77,8 +76,7 @@ test("a choice is worn at once, and kept for the next launch", () => {
   expect(token("--surface")).toBe("#1e202e");
 });
 
-// A value some other build kept is not an error: the default is worn, and the
-// next choice writes over it.
+// An unknown kept value reads as the default.
 test("a kept value this build does not know is worn as the default", () => {
   kept.setItem(THEME_KEY, "solarized");
   kept.setItem(APPEARANCE_KEY, "sepia");
@@ -104,7 +102,7 @@ test("the tokens a palette does not give are mixed from the ones it does", () =>
   const t = tokensOf(THEMES[3].dark, "dark");
   expect(t["--ink-2"]).toBe("color-mix(in srgb, #c6d0f5 62%, #b5bfe2)");
   expect(t["--accent-b"]).toBe("color-mix(in srgb, #ca9ee6 22%, #414559)");
-  // The warning is T3 Code's standard one under every theme.
+  // The flag colour is T3 Code's standard, the same under every theme.
   expect(t["--flag"]).toBe("#ffb900");
   expect(tokensOf(THEMES[3].light, "light")["--flag"]).toBe("#973e00");
 });
@@ -141,12 +139,12 @@ test.each(palettes)("%s, %s: its ink reads on the grid", (_, _mode, p) => {
 
 // ----------------------------------------------------------------- contrast
 
-/** WCAG's bound for text at the sizes the window writes: 4.5 to 1. */
+/** WCAG's AA bound for body text: 4.5 to 1. */
 const READABLE = 4.5;
 
 // The muted ink writes the gutter, the sidebar's sizes and the status bar's
-// separators: words a person reads, on every ground the window has. So does
-// the flag, which is how a refusal is said. Each has to read on each.
+// separators, on every ground. The flag writes refusals. Each must read on
+// each ground.
 test("muted ink and the flag read on every ground of every theme", () => {
   for (const theme of THEMES) {
     for (const mode of ["light", "dark"] as const) {

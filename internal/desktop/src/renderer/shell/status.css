@@ -1,6 +1,6 @@
-/* The status bar, the prompt that stands in for its file line, and the
- * window's switches at either end: the sidebar's on the left, the mode's and
- * the sources panel's on the right. */
+/* The status bar, the prompt that replaces its file line, and the switches
+ * at its ends: the sidebar's on the left, the mode's and the panel's on the
+ * right. */
 
 .win-status {
   display: flex;
@@ -15,10 +15,9 @@
   color: var(--ink-2);
 }
 
-/* One line, however narrow the window: nothing wraps, the mode and where the
- * selection is keep their width, and the two sentences give way instead, each
- * in proportion to its length, so neither vanishes while the other is whole.
- * Each keeps its whole text in its title for whoever hovers. */
+/* One line, however narrow: everything stays on it. The mode and the cell
+ * keep their width; the file and message lines shrink in proportion to their
+ * length. Each has its full text as its hover text. */
 .win-status > * {
   flex-shrink: 0;
   white-space: nowrap;
@@ -40,13 +39,12 @@
   color: var(--ink-3);
 }
 
-/* Nothing said, so nothing to set the file's line apart from. */
+/* The separator is hidden along with an empty message. */
 .win-status .sep:has(+ #status-msg:empty) {
   display: none;
 }
 
-/* The window has no frame, so the bar's empty middle takes hold of it too,
- * which is what is left to grab while the sidebar is closed. */
+/* The window is frameless, so the bar's empty middle is a drag region. */
 .win-status .grow {
   flex: 1;
   align-self: stretch;
@@ -70,7 +68,7 @@
   color: var(--flag);
 }
 
-/* A half-typed 12g stays visible until it finishes or Esc drops it. */
+/* A partly typed command, such as 12g, until it finishes or Esc drops it. */
 .win-status .keys {
   color: var(--ink);
   background: var(--surface);
@@ -82,7 +80,7 @@
   display: none;
 }
 
-/* The command line is typed where the status bar talks, over the file's line. */
+/* The command line, shown in place of the file line. */
 .win-status .cmd {
   flex: 1;
   min-width: 0;
@@ -100,8 +98,7 @@
   display: none;
 }
 
-/* The mode switch. View in the accent, transform in amber, because transform is
- * where a keystroke changes the file. */
+/* The mode switch: view in the accent, transform in amber. */
 .win-status .seg {
   display: inline-flex;
   margin: -3px 0;
@@ -129,9 +126,8 @@
   color: var(--flag);
 }
 
-/* The two switches that open and close a column: a window with its left
- * column filled in while the sidebar is open, and one with its right column
- * filled in while the sources panel is. */
+/* The two column toggles: a window icon with its left column filled while
+ * the sidebar is open, and its right column filled while the panel is. */
 .side-toggle,
 .panel-toggle {
   --c: var(--ink-3);

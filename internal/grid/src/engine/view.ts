@@ -1,11 +1,8 @@
-// One source in a workspace: its format, its index, its part of the log, and
-// the pages read through them.
+// One source in a workspace: its format, its index, its edit log, and the
+// pages read through them.
 //
-// Every row that leaves here has been finished through the pipeline, so what a
-// client draws is the file with the log applied. The log lives here and nowhere
-// else. An edit is one line folded into the Schema and a new generation number:
-// no stored row is rewritten, and the rows a client asks for next come back
-// changed, wherever in the file they are.
+// Every row returned has the log applied. An edit is one line folded into
+// the Schema and a new generation number. Every stored row stays as read.
 
 import type { HeldFile, HeldPart, HeldParts } from "../document/index.ts";
 import { trimSpace } from "../go/index.ts";
@@ -49,15 +46,15 @@ import type { Tuning } from "./rows.ts";
 import { BYTES, INDEX, INDEXED, MILLISECONDS, unmeasured } from "./telemetry.ts";
 import type { Telemetry } from "./telemetry.ts";
 
-/** How often a pass posts how far it has got. The status bar needs no more. */
+/** Minimum milliseconds between progress messages. */
 const PROGRESS_MS = 100;
 
-/** How long a pass computes before it lets a waiting request through. */
+/** Milliseconds a long loop runs before yielding to the event loop. */
 const SLICE_MS = 8;
 
 /**
- * What the column saying which file each row came from is headed, in a source
- * of several files that asked for one.
+ * The header of the column that names each row's file, in a source over
+ * several files that asked for one.
  */
 export const FILE_COLUMN = "_file";
 
@@ -72,9 +69,8 @@ interface Run {
 }
 
 /**
- * Crossing is the runs of a block that holds rows of more than one part,
- * kept because finding them reads the block's bytes a second time. It is
- * good for the bytes and the map it was found in, and found again for others.
+ * Crossing caches the runs of a block that holds rows from more than one
+ * part. It is valid for the map and byte range it was computed from.
  */
 interface Crossing {
   map: PartMap;
@@ -83,24 +79,20 @@ interface Crossing {
   runs: Run[];
 }
 
-/** A source as a .uno left it: its part of the log, and its bytes where the
- * workspace carried them rather than pointing at the file. */
+/** A source's edits and, for a carried source, its bytes, as read from a
+ * .uno. */
 export interface Carried {
-  /** The .uno it came out of, which is what an error about the log blames.
-   * Empty where there is none: a file picked to replace a source that lost
-   * its own speaks for itself. */
+  /** The .uno it came from, named in log errors. Empty when there is none. */
   container: string;
-  /** The bytes the container held. Undefined for a source it pointed at, which
-   * is read from its own file like any other. */
+  /** The bytes the container held. Undefined for a pointed-at source. */
   raw?: Uint8Array;
   edits: Edit[];
 }
 
 /**
- * Part is what a save writes of one source: what a workspace holds of it, less
- * what the workspace gives it -- its id, its name, where its grid was left --
- * and with its log. The bytes are one file or several read as one, and `parts`
- * is what says which.
+ * Part is what a save writes of one source, plus its edits. It omits the
+ * id, name and state, which the workspace adds. `parts` is present for a
+ * source over several files.
  */
 export type Part = (Omit<HeldFile, Unsaved> | Omit<HeldParts, Unsaved>) & { edits: Edit[] };
 type Unsaved = "id" | "name" | "state";
@@ -118,29 +110,24 @@ export class View {
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
   private carried: Uint8Array | undefined;
 
-  /** Where the file is, so a save can point at it. Empty for bytes with no file
-   * behind them, which a save has to carry. */
+  /** The file's path. Empty for carried bytes, and for a source over several
+   * files. */
   readonly path: string;
 
-  /** The id of the connection the file was read through, when one covered it. */
+  /** The id of the connection the file was read through, if any. */
   connection: string | undefined;
 
-  /**
-   * The parts it was opened from, for a source that is several files read as
-   * one. Such a source has files behind it and no one path to them, so `path`
-   * is empty and this is what says where its bytes are.
-   */
+  /** The parts ref a source over several files was opened from. */
   parts: PartsRef | undefined;
 
-  /** Where the parts change in each block read so far that more than one has
-   * rows in. */
+  /** Cached runs for blocks that hold rows from more than one part. */
   private readonly crossings = new Map<number, Crossing>();
 
   private transform = false;
   private survey: AbortController | undefined;
-  /** The find running now. A newer one stops it. */
+  /** The find running now. A newer find aborts it. */
   private finding: AbortController | undefined;
-  /** What undo took back, newest last, for redo. A new edit empties it. */
+  /** Edits undo took back, newest last, for redo. A new edit empties it. */
   private undone: Edit[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private waiters: Waiter[] = [];
@@ -148,9 +135,9 @@ export class View {
   private readonly abort = new AbortController();
 
   private constructor(
-    /** What the workspace and its log call this source. */
+    /** The source's id in the workspace and its log. */
     readonly id: string,
-    /** The file's name, which `ingest` picks a decoder by. */
+    /** The file's name. `ingest` picks a decoder by it. */
     readonly name: string,
     path: string,
     private readonly port: Port<Request, Reply>,
@@ -159,14 +146,13 @@ export class View {
   }
 
   /**
-   * open starts viewing one source. `source` is the file, or the bytes a .uno
-   * carried when `carried` says so. `path` is where the file is, which is what
-   * a save points at; bytes with no file behind them pass "". The view owns
-   * `source` from here on, and closes it if the open fails. `telemetry` is
-   * told how long the index took once it has finished. `header` says whether
-   * the first line names the columns, which it does unless the source was
-   * added as having no header row. `parts` is the files `source` joins, for
-   * several read as one, and says whether they are shown a `_file` column.
+   * open detects the format, starts indexing, waits for the sample rows,
+   * replays any carried edits, and returns the view.
+   *
+   * `path` is "" for carried bytes. The view owns `source`
+   * from here on and closes it if the open fails. `header` says whether the
+   * first line names the columns. `parts` is set for a source over several
+   * files.
    */
   static async open(
     id: string,
@@ -184,10 +170,7 @@ export class View {
     v.carried = carried?.raw;
     v.parts = parts;
 
-    // What to blame in an error: the .uno a source came out of, where there is
-    // one. A file opened on its own, or picked to replace a source that lost
-    // its own, speaks for itself.
-    // What goes wrong reading a source a .uno carried is said of the .uno too.
+    // Errors for a source from a .uno name the .uno as well.
     const container = carried === undefined ? "" : carried.container;
     const within = (why: Said): Said =>
       container === "" ? why : { t: "about", subject: container, why };
@@ -211,7 +194,7 @@ export class View {
     let started = false;
     const index = v.index;
     const began = performance.now();
-    // Where the bytes are, and nothing about whose they are.
+    // The telemetry attribute for where the bytes came from.
     const place =
       carried?.raw !== undefined
         ? "carried"
@@ -246,8 +229,8 @@ export class View {
       },
     }).catch((err: unknown) => {
       v.fail(err);
-      // Before the open answers, the open fails with it instead. A view that
-      // was closed has nothing to report: its close is what cut the read short.
+      // Before open returns, the failure is thrown from open instead. After
+      // a close, the abort is the cause and the failure is swallowed.
       if (started && !v.abort.signal.aborted) {
         port.post({
           t: "error",
@@ -258,15 +241,8 @@ export class View {
     });
 
     try {
-      // Kinds come from the first rows, the sample a Sheet reads. A .uno's log
-      // names rows by number, and one naming a row the file does not have
-      // belongs to a different file, so a log is not replayed until the index
-      // has reached the deepest row it names.
-      //
-      // For bytes the container carried that is the whole of them, which is a
-      // moment. For a file the workspace points at it is as far in as the log
-      // actually goes: edits near the top of a 30 GB ledger cost a 30 GB
-      // ledger's first pages, and nobody waits for the rest.
+      // Wait until the index covers the sample rows and the deepest row the
+      // carried edits name. Carried bytes wait for the whole index.
       const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
       const whole = carried?.raw !== undefined;
       await v.until(() => index.complete || (!whole && index.readable() >= want));
@@ -322,7 +298,7 @@ export class View {
     return { generation, rows, raws };
   }
 
-  /** columns names each column from the sample, as the log now leaves it. */
+  /** columns infers each column's kind from the sample rows, with the log applied. */
   private async columns(): Promise<ColumnInfo[]> {
     const source = await this.pages.rows(0, SAMPLE_ROWS);
     const files = await this.files(0, source.length);
@@ -337,12 +313,9 @@ export class View {
   }
 
   /**
-   * files is the `_file` cell of each of `count` readable rows from `first`:
-   * the name of the part the row's first byte is in. Undefined for a source
-   * that shows no such column.
-   *
-   * It is asked of the parts and the map as they are when the rows are read,
-   * and no cell of it is kept.
+   * files returns the `_file` cell for each of `count` rows from `first`:
+   * the name of the part holding the row's first byte. Undefined for a
+   * source that lacks the column.
    */
   private async files(first: number, count: number): Promise<string[] | undefined> {
     if (this.schema.supplied === undefined) return undefined;
@@ -367,12 +340,11 @@ export class View {
   }
 
   /**
-   * runsIn says which part each row of a block came from, as runs of rows.
+   * runsIn returns which part each row of a block came from, as runs.
    *
-   * Nearly every block lies inside one part, and where it starts says which
-   * with nothing read. A block that holds a boundary is read again as far as
-   * its last part and scanned for where its rows start, since the index keeps
-   * an offset for a block and none for a row.
+   * A block inside one part is one run. A block that crosses a part boundary
+   * is re-read up to its last part and scanned for row starts, and the
+   * result is cached.
    */
   private async runsIn(block: number, map: PartMap): Promise<Run[]> {
     const [start, end] = this.index.bytesOf(block);
@@ -388,8 +360,8 @@ export class View {
       return known.runs;
     }
 
-    // Every row from the last part's first byte on is that part's, so only
-    // the rows before it are looked for.
+    // Rows from the last part's first byte on belong to it, so only the
+    // bytes before it are scanned.
     const until = map.spans[last]!.start;
     const runs: Run[] = [];
     let row = 0;
@@ -408,23 +380,21 @@ export class View {
   // ------------------------------------------------------------ changing
 
   /**
-   * mode switches between view and transform. Entering transform loads nothing:
-   * it allows edits and starts the recogniser over the log that is already here.
+   * mode switches between view and transform, and restarts the recogniser.
    */
   mode(transform: boolean): void {
     this.transform = transform;
     this.recognise();
   }
 
-  /** edit records one edit. Edits run one at a time, in the order they arrived. */
+  /** edit records one edit. Edits run one at a time, in arrival order. */
   edit(req: EditRequest): Promise<Changed> {
     return this.serially(() => this.record(req));
   }
 
   /**
-   * undo takes the last edit back. It is truncate and replay, which is linear in
-   * the edits and reads no rows: taking back an apply over 50 million rows costs
-   * the length of the log, and the source pages already decoded stay decoded.
+   * undo takes the last edit back by rebuilding the schema from the edits
+   * before it. It touches the schema alone.
    */
   undo(): Promise<Changed> {
     return this.serially(async () => {
@@ -440,9 +410,7 @@ export class View {
   }
 
   /**
-   * redo records again the edit undo last took back. It is one fold, like any
-   * edit. A new edit empties what there was to redo, because the log those
-   * edits followed no longer exists.
+   * redo records again the edit undo last took back.
    */
   redo(): Promise<Changed> {
     return this.serially(async () => {
@@ -477,8 +445,8 @@ export class View {
       now: req.now,
     };
 
-    // `was` makes a log line readable on its own, and it is what the recogniser
-    // learns from, so it is the value the cell stored as the edit landed.
+    // `was` is the value the cell stored before the edit. The recogniser
+    // learns from it.
     const inRange = req.row >= 0 && req.row < schema.rows && req.col >= 0;
     if (cell && inRange && req.col < schema.headers.length) {
       const [row] = await this.pages.rows(req.row, 1);
@@ -500,8 +468,7 @@ export class View {
     return { edit: e, generation: this.generation, columns: await this.columns() };
   }
 
-  /** The grid offers editing only in transform, so an edit in view is refused
-   * here too rather than trusted. */
+  /** refuseInView throws while the view is in view mode. */
   private refuseInView(): void {
     if (!this.transform) throw new Refusal({ t: "in-view" });
   }
@@ -515,9 +482,8 @@ export class View {
   // ------------------------------------------------------------ recognising
 
   /**
-   * recognise starts the survey again for the log as it now stands. A survey
-   * already running is answering a question about a log that no longer exists,
-   * so it stops.
+   * recognise aborts any running survey and starts a new one over the
+   * current log. In view mode it posts a null offer.
    */
   private recognise(): void {
     this.survey?.abort();
@@ -545,12 +511,10 @@ export class View {
   }
 
   /**
-   * surveyColumns reads each column with enough examples, a block at a time,
-   * and offers the first question one of them supports.
-   *
-   * The count grows as it reads, and the client hears about it every
-   * PROGRESS_MS. Before the index reaches the end it waits at the frontier
-   * rather than guessing.
+   * surveyColumns reads each column with enough examples, a block at a
+   * time, and posts the first proposal one of them supports. Partial offers
+   * are posted every PROGRESS_MS. It waits for the index to reach each row
+   * before reading it.
    */
   private async surveyColumns(
     cols: number[],
@@ -629,13 +593,9 @@ export class View {
   // ------------------------------------------------------------ finding
 
   /**
-   * find looks down or up one column for the next cell that matches, with the
-   * log applied. A client's band is a few screens of rows, so anything that
-   * looks beyond it runs here, as a pass over the blocks.
-   *
-   * It searches what the index can serve now rather than waiting for the rest,
-   * and says how far it got. A newer find stops an older one: a person who has
-   * pressed ]f again has already moved past the first answer.
+   * find searches down or up one column for the next matching cell, with
+   * the log applied. It searches only the readable rows and reports how far
+   * it got. A newer find aborts an older one.
    */
   async find(req: FindRequest): Promise<Found> {
     this.finding?.abort();
@@ -658,9 +618,7 @@ export class View {
       const files = await this.files(from, records.length);
       if (abort.signal.aborted) return { row: null, searched, complete: false };
 
-      // Only the column searched is finished: a find reads one cell of each
-      // row, and the formulas bound to the other columns are none of its
-      // concern.
+      // Only the searched column is finished.
       const shown = this.shownIn(req.col, from, records, files);
       for (; down ? row < end : row >= from; row += req.dir) {
         searched++;
@@ -672,14 +630,12 @@ export class View {
   }
 
   /**
-   * shownIn is what one column of a block shows, row by row, as `finishRows`
-   * would leave it, without finishing the rest of the block.
+   * shownIn returns a function giving what one column of a block shows for
+   * a row, as `finishRows` would.
    *
-   * A column nothing computes is finished a cell at a time: what the cell
-   * stores, or a note's rendering of it, and for the supplied column the name
-   * of the row's file. A bound column reads the others, so a block of it is
-   * finished whole, once, rather than once for every row the search steps
-   * through.
+   * A formula column finishes the whole block once, since it reads other
+   * columns. A plain column is read a cell at a time: a note's rendering,
+   * the file name for the supplied column, or the stored value.
    */
   private shownIn(
     col: number,
@@ -700,12 +656,11 @@ export class View {
   }
 
   /**
-   * matcher is the test a find puts to what each cell shows, or undefined when
-   * no cell could pass it.
+   * matcher returns the test a find applies to each cell's shown value, or
+   * undefined for a request with zero possible matches.
    *
-   * Not parsing means what the column's badge means: a date column's cells
-   * should be dates, and a numeric one's -- or text flagged as numeric data in a
-   * costume -- numbers. A blank is no evidence either way, as the badge reads it.
+   * An "unparsed" match tests a date column with isDate and a numeric or
+   * flagged column with isNumber. A blank cell is skipped.
    */
   private async matcher(req: FindRequest): Promise<((shown: string) => boolean) | undefined> {
     if (req.match.t === "text") {
@@ -730,51 +685,40 @@ export class View {
 
   // ------------------------------------------------------------ saving
 
-  /** The file's size: what a save carries, or what it records about what it
-   * points at. */
+  /** The size of the carried bytes, or of the source. */
   get size(): number {
     return this.carried?.length ?? this.source.size;
   }
 
-  /** Which bytes of the file were read, where the place it is in can say.
-   * Undefined for bytes a save carries, which are their own version. */
+  /** The version the source was read at, where the store reports one.
+   * Undefined for a carried source and a source over several files. */
   get version(): string | undefined {
     return this.path === "" ? undefined : this.source.version;
   }
 
-  /** How many bytes a save would have to copy into the container, which for a
-   * source with a file behind it is none. */
+  /** Bytes a save would copy into the container: the size for a carried
+   * source, otherwise 0. */
   get carries(): number {
     return this.path === "" && this.parts === undefined ? this.size : 0;
   }
 
-  /** The log as it stands: what a relink replays over whatever file it is
-   * pointed at. */
+  /** The current edit log. */
   get log(): Edit[] {
     return this.schema.edits();
   }
 
-  /** How many edits this source's log holds now. */
+  /** The number of edits in the log. */
   get logged(): number {
     return this.schema.edits().length;
   }
 
   /**
-   * part is what a save writes of this source. It runs in turn with the edits,
-   * so the log it hands back is one a save can pair with every other source's.
+   * part returns what a save writes of this source. It runs in the edit
+   * queue, so its log is consistent with the other sources.
    *
-   * A source with a file behind it is written as that path and read no further.
-   * One with no file -- bytes dropped into a browser -- is read whole, because
-   * carrying them is the only way to keep them at all.
-   *
-   * Only a carried source waits for the index. Its bytes are already in memory,
-   * so the wait is nothing and the row count in the manifest comes out exact. A
-   * pointed-at source reports how far the index has got, and nothing replays
-   * against that number, so a save never blocks on a scan of 30 GB.
-   *
-   * Several files read as one are written as their parts, each pointed at:
-   * carrying the join in their place would save a different source from the
-   * one that is open.
+   * A source with a path is written as the path. A source over several
+   * files is written as its parts. A carried source is read whole and
+   * written as its bytes; only that case waits for the index to complete.
    */
   part(): Promise<Part> {
     return this.serially(async () => {
@@ -794,7 +738,7 @@ export class View {
     });
   }
 
-  /** kept is what a save writes down of the log, whatever the bytes are: the edits, and the shape they were made over. */
+  /** kept returns the edits and the row and column counts they were made over. */
   private kept(): Pick<Part, "edits" | "rows" | "cols"> {
     return {
       edits: this.schema.edits(),
@@ -804,15 +748,9 @@ export class View {
   }
 
   /**
-   * joined is what a save writes of the parts this source was opened from:
-   * each part's path, the version it was read as, and the extent the join
-   * measured of it, which is what lets the next open place every part without
-   * opening one.
-   *
-   * Every part has to have a path. A part dropped into a browser has none, and
-   * the save is refused naming it: a .uno points at parts and has no way to
-   * carry one, and writing the others down without it would save a different
-   * table from the one that is open.
+   * joined returns what a save writes of the parts: each part's path,
+   * version, and measured extent. A part is refused by name when its path is
+   * empty.
    */
   private async joined(
     ref: PartsRef,
@@ -836,11 +774,8 @@ export class View {
       return file;
     });
 
-    // Asking opens any part no read has reached yet. One that will not open
-    // now -- moved, or no longer the file the log was made against -- must not
-    // cost the save, so the parts then keep the versions they were opened by:
-    // a part a read did reach was held to its own, and one no read reached has
-    // nothing newer to say.
+    // versions() opens any part still unread. If that fails, the parts keep
+    // the versions they were opened by.
     const versions = await multi.versions().catch(() => files.map((file) => file.version));
 
     return {
@@ -856,20 +791,15 @@ export class View {
         };
       }),
       header: ref.header,
-      // The choice is part of what the source is. What the column shows is
-      // worked out from the parts again, so none of it is written.
+      // Only the choice is saved. The column's values are recomputed on open.
       fileColumn: ref.fileColumn === true ? true : undefined,
     };
   }
 
   /**
-   * extended is the ref this source is opened by with `files` added at its
-   * end, or undefined for a source that is one file.
-   *
-   * Each part it has now goes with the extent the join measured of it. A part
-   * measures the same whatever comes after it, so the longer source places
-   * every one of them where it is now without opening it, and holds it to
-   * that when a read reaches it: every row keeps its number.
+   * extended returns this source's parts ref with `files` appended, or
+   * undefined for a single-file source. Each existing part carries the
+   * extent the join measured, so every row keeps its number.
    */
   extended(files: readonly SingleRef[]): PartsRef | undefined {
     const ref = this.parts;
@@ -897,7 +827,7 @@ export class View {
     await this.source.close();
   }
 
-  /** until resolves once ready holds, or rejects if the index fails first. */
+  /** until resolves once `ready` returns true, or rejects if the index fails first. */
   private until(ready: () => boolean): Promise<void> {
     if (this.failed !== undefined) return Promise.reject(this.failed);
     if (ready()) return Promise.resolve();
@@ -922,13 +852,10 @@ export class View {
 }
 
 /**
- * schemaOf is the empty log of a source just opened, over the columns it
- * shows: the file's, and after them a `_file` column where several files read
- * as one asked for it.
- *
- * The column goes last, so every column the files have keeps the number an
- * edit names it by. It is named as a header's columns are, each once: a file
- * with a `_file` of its own keeps the name, and this one takes a suffix.
+ * schemaOf builds an empty schema over the file's columns, plus a `_file`
+ * column at the end when the parts ref asks for one. The header is
+ * deduplicated, so an existing `_file` column keeps its name and the added
+ * one takes a suffix.
  */
 function schemaOf(format: Format, parts: PartsRef | undefined): Schema {
   if (parts?.fileColumn !== true) return new Schema(format.columns, 0);
@@ -938,8 +865,8 @@ function schemaOf(format: Format, parts: PartsRef | undefined): Schema {
   });
 }
 
-/** deepest is one past the last row a log names, and 0 for a log that names
- * none: every operation in it covers a whole column. */
+/** deepest returns one past the highest row the edits name, or 0 when none
+ * names a row. */
 function deepest(edits: readonly Edit[] | undefined): number {
   let row = NO_ROW;
   for (const e of edits ?? []) if (e.row > row) row = e.row;
@@ -956,15 +883,14 @@ function progressOf(index: RowIndex): Progress {
   };
 }
 
-/** The link to a file just opened: where it is, and which bytes of it were read. */
+/** linkTo builds a Link from a path and an optional version. */
 function linkTo(path: string, version: string | undefined): Link {
   return version === undefined ? { path } : { path, version };
 }
 
 /**
- * turn lets the event loop turn once, so a progress message, or a request that
- * arrived while a long loop ran, goes out before the loop goes on. It answers
- * with the time, which is when the next slice starts.
+ * turn yields to the event loop once and returns the current time, which is
+ * when the next slice starts.
  */
 async function turn(): Promise<number> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));

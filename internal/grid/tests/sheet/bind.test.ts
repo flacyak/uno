@@ -14,7 +14,7 @@ const PRICE = 1;
 const COST = 2;
 const MARGIN = 3;
 
-// A fresh sheet each call, since binding mutates in place.
+// Returns a fresh sheet each call because bind mutates in place.
 function sales(): Sheet {
   return new Sheet(
     "sales.csv",
@@ -27,9 +27,7 @@ function sales(): Sheet {
   );
 }
 
-// A bound column computes every row from the columns its expression names, and
-// it does so from one recorded line rather than from three stored values. That
-// ratio is the whole argument for storing the expression instead of the results.
+// Binding fills every row from the expression and records one log entry.
 test("binding a column fills it from one line", () => {
   const s = sales();
   s.bind(MARGIN, parse("(price - cost) / price"));
@@ -42,9 +40,8 @@ test("binding a column fills it from one line", () => {
   expect(s.editCount(), "the binding should be one line").toBe(1);
 });
 
-// The badge reads a column after strings.TrimSpace, so "40.00\t" is numeric. A
-// formula bound over that column has to read the same 40.00 rather than show
-// #ERR beside a badge that promised arithmetic.
+// Column kind inference trims whitespace, so "40.00\t" counts as numeric. A
+// formula over that column must parse the same trimmed value.
 test("a cell the badge calls numeric computes, however it is padded", () => {
   const s = new Sheet(
     "sales.csv",
@@ -61,18 +58,16 @@ test("a cell the badge calls numeric computes, however it is padded", () => {
   expect([0, 1].map((row) => s.display(row, MARGIN))).toEqual(["0.22", "0.25"]);
 });
 
-// Binary floating point makes (40.00 - 31.20) / 40.00 into 0.21999999999999997,
-// and a column of those is arithmetic showing its working rather than answering.
+// (40.00 - 31.20) / 40.00 is 0.21999999999999997 in binary floating point.
+// The displayed value is rounded.
 test("a computed value is not shown with its floating point noise", () => {
   const s = sales();
   s.bind(MARGIN, parse("(price - cost) / price"));
   expect(s.display(0, MARGIN)).not.toContain("999999");
 });
 
-// Removing the noise must not remove the answer. A float64 carries fifteen
-// significant digits faithfully, and a sum in cents or a timestamp in
-// milliseconds uses twelve or thirteen of them: rounding harder than the
-// number is wrong in the cents, which is a wrong answer shown as a right one.
+// Rounding keeps all significant digits a float64 carries, so a twelve-digit
+// cents value divided by 100 keeps its cents.
 test("a computed value keeps every digit the number has", () => {
   const s = new Sheet("ledger.csv", ["cents", "dollars"], [["123456789012", ""]]);
   s.bind(1, parse("cents / 100"));
@@ -80,8 +75,7 @@ test("a computed value keeps every digit the number has", () => {
   expect(s.display(0, 1)).toBe("1234567890.12");
 });
 
-// Editing an input recomputes what reads it. Nothing else moves, because the
-// walk is over what is downstream of the change rather than over the sheet.
+// Editing an input cell recomputes only the rows that depend on it.
 test("editing an input updates the column that reads it", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -93,8 +87,8 @@ test("editing an input updates the column that reads it", () => {
   expect(s.display(1, MARGIN), "the untouched row moved").toBe(before);
 });
 
-// A cycle is refused where a person can still do something about it, and the
-// error names the loop rather than reporting that one exists.
+// A binding that would form a cycle throws at bind time. The error names the
+// columns in the loop and the log is left as it was.
 test("a cycle is refused at bind time with the path named", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -113,8 +107,7 @@ test("a cycle is refused at bind time with the path named", () => {
   expect(s.display(0, PRICE), "the refusal changed something").toBe("40.00");
 });
 
-// A derived column stores nothing, so typing into one would be typing something
-// the next recalculation discards without saying so.
+// set() throws on a bound column.
 test("a cell in a bound column cannot be typed into", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -123,8 +116,8 @@ test("a cell in a bound column cannot be typed into", () => {
   expect(s.display(0, MARGIN)).toBe("8.8");
 });
 
-// The same holds for a program over the column: it would rewrite values nobody
-// can see, and the rewrite would surface only when the formula came off.
+// apply() throws on a bound column, and the stored values underneath are
+// untouched.
 test("a program cannot run over a bound column", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -144,8 +137,7 @@ test("a program cannot run over a bound column", () => {
   expect(s.display(0, MARGIN), "the refused program ran over the stored values").toBe("");
 });
 
-// A row the expression cannot read says so in the cell it happened in. An empty
-// cell would read as missing data, which is a different thing entirely.
+// A row the expression fails on displays ERR_CELL.
 describe("a row the expression cannot read says so", () => {
   const s = new Sheet(
     "t.csv",
@@ -161,7 +153,7 @@ describe("a row the expression cannot read says so", () => {
   const cases: Array<[number, string]> = [
     [0, "5"],
     [1, ERR_CELL], // divide by zero
-    [2, ERR_CELL], // not a number
+    [2, ERR_CELL], // text in b
   ];
 
   for (const [row, want] of cases) {
@@ -171,23 +163,22 @@ describe("a row the expression cannot read says so", () => {
   }
 });
 
-// An expression names columns the way a person does, so a name that means two
-// columns means nothing the graph can reason about.
+// A column name that matches two headers is refused.
 test("an ambiguous column name is refused rather than guessed at", () => {
   const s = new Sheet("t.csv", ["total", "total", "out"], [["1", "2", ""]]);
   expect(() => s.bind(2, parse("total + 1"))).toThrow();
 });
 
-// A formula naming a column that is not there is refused before anything is
-// computed, rather than filling 4,812 rows with a failure.
+// A formula naming an unknown column throws at bind time and leaves the log
+// as it was.
 test("a formula naming a column that is not there is refused", () => {
   const s = sales();
   expect(() => s.bind(MARGIN, parse("price - postage"))).toThrow();
   expect(s.editCount(), "the refused binding was recorded").toBe(0);
 });
 
-// A chain recomputes in dependency order, so a column that reads a bound column
-// reads the value it computed and not the empty cell underneath it.
+// Bound columns recompute in dependency order, so a column that reads another
+// bound column sees its computed value.
 test("a column that reads a bound column sees what it computed", () => {
   const s = new Sheet(
     "t.csv",
@@ -202,13 +193,12 @@ test("a column that reads a bound column sees what it computed", () => {
 
   expect(s.display(0, 3)).toBe("3");
 
-  // And the chain holds when the far end of it moves.
+  // Editing the first input recomputes the whole chain.
   s.set(0, 0, "20");
   expect(s.display(0, 3)).toBe("6");
 });
 
-// Replaying the log rebuilds every computed value, which is what lets the file
-// carry one expression instead of a column of results.
+// Replaying the log rebuilds every computed value.
 test("replay rebuilds what was computed", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -222,9 +212,8 @@ test("replay rebuilds what was computed", () => {
   }
 });
 
-// Undo is truncate-and-replay, so a binding has to come back out the way any
-// other operation does. This is the reason a binding is a log line and not a
-// line of sheet state, which Ctrl+Z could never have reached.
+// Undo is truncate-and-replay. Replaying the log cut before the binding
+// leaves the column unbound and empty.
 test("a binding can be undone", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -236,18 +225,14 @@ test("a binding can be undone", () => {
   expect(undone.binding(MARGIN), "still bound after replaying the binding away").toBeUndefined();
 });
 
-// The badge over a bound column has to describe what a person can see in it.
-// Reading the stored values would call a column of numbers text, because a
-// derived column stores nothing at all.
+// A bound column's kind is inferred from its computed values.
 test("a bound column is named for what it computes", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
   expect(s.columns[MARGIN]!.kind).toBe("num");
 });
 
-// Binding never removed a column's values; it stopped them being what display
-// handed out. Taking the formula off has to give them back, and the badge over
-// the column with them.
+// Unbinding shows the stored values again and re-infers the column kind.
 test("removing a formula gives a column its own values back", () => {
   const s = sales();
   s.bind(REGION, parse("price * 2"));
@@ -264,10 +249,8 @@ test("removing a formula gives a column its own values back", () => {
   expect(s.columns[REGION]!.kind, "re-inferred from the values that came back").toBe("text");
 });
 
-// A column that read a bound one was reading what that column computed. Once
-// nothing computes it, they are reading what it stores, and a recalculation
-// that stopped at the column being unbound would leave them showing arithmetic
-// on values nobody can see any more.
+// Unbinding a column recomputes the columns that read it, now from its stored
+// values.
 test("removing a formula recalculates what read it", () => {
   const s = sales();
   s.bind(COST, parse("price * 2"));
@@ -279,8 +262,8 @@ test("removing a formula recalculates what read it", () => {
   expect(s.display(0, MARGIN)).toBe("32.2");
 });
 
-// Undo is truncate-and-replay, which is why removing a formula is an operation
-// rather than something done to the sheet on the side.
+// Unbind is its own log entry, so replaying the log cut before it restores
+// the binding.
 test("removing a formula can be undone", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -293,7 +276,7 @@ test("removing a formula can be undone", () => {
   expect(undone.display(0, MARGIN)).toBe("8.8");
 });
 
-// A log line that removes nothing is a log that does not belong to these bytes.
+// Unbinding an unbound column throws and leaves the log as it was.
 test("removing a formula from a column that has none is refused", () => {
   const s = sales();
 
@@ -309,10 +292,7 @@ test("removing a formula from a column that has none is refused", () => {
   expect(s.editCount(), "a refused removal wrote a line").toBe(0);
 });
 
-// The cache entry has to go back to empty and not to a filled array. A column
-// nothing computes but whose cache is filled is a column holding notation, and
-// binding refuses to write over one of those -- so a stale cache would make a
-// removal a one-way door.
+// Unbind clears the computed cache, so the column can be bound again.
 test("a column can be bound again after its formula is removed", () => {
   const s = sales();
   s.bind(MARGIN, parse("price - cost"));
@@ -322,8 +302,8 @@ test("a column can be bound again after its formula is removed", () => {
   expect(s.display(0, MARGIN)).toBe("71.2");
 });
 
-// A .uno is raw bytes plus the log, so a workspace whose formula was removed
-// has to rebuild that way on open rather than only in the session it happened in.
+// Replaying a log with a bind and an unbind leaves the column unbound with its
+// stored values.
 test("replay rebuilds a column whose formula was removed", () => {
   const s = sales();
   s.bind(REGION, parse("price * 2"));
@@ -336,8 +316,8 @@ test("replay rebuilds a column whose formula was removed", () => {
   expect(replayed.binding(REGION)).toBeUndefined();
 });
 
-// A sheet computes a bound column a block at a time. Every row, either side of
-// every block boundary, has to read what the one-row preview computes for it.
+// Bound columns are computed in blocks. Every row of the full file must match
+// the single-row evaluateAt result, including across block boundaries.
 test("a bound column over the whole file agrees with the preview row by row", () => {
   const path = fileURLToPath(new URL("../testdata/sales-q3.csv", import.meta.url));
   const s = read("sales-q3.csv", readFileSync(path));
@@ -358,6 +338,6 @@ test("a bound column over the whole file agrees with the preview row by row", ()
       expect(s.display(row, channel), `row ${row}`).toBe(want);
     }
   }
-  // A few rows of the file cannot be read as numbers, so failures are compared too.
+  // Some rows of the file hold text in units, so error rows are covered too.
   expect(failed).toBeGreaterThan(0);
 });

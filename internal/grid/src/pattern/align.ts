@@ -1,13 +1,9 @@
 import { runes } from "../go/index.ts";
 
-/**
- * maxDiff bounds the alignment. Two 128-character values cost 16,384 cells to
- * align, and a cell longer than that is prose rather than a field with a
- * convention in it -- there is no transformation to induce from a paragraph.
- */
+/** MAX_DIFF is the longest value `align` will diff, in code points. */
 export const MAX_DIFF = 128;
 
-/** A stretch of characters the alignment says was removed or added. */
+/** A run of characters the alignment says was removed or added. */
 export interface Run {
   text: string;
   /** Code-point offset into the value it belongs to. */
@@ -20,17 +16,15 @@ export interface Alignment {
 }
 
 /**
- * align is a longest-common-subsequence diff, returning what was removed from a
- * and what was added from b, as runs rather than as characters: 1,204,567 has
- * two deletions of one comma, not two unrelated character events.
- *
- * It reports undefined for a pair too long to be worth aligning.
+ * align is a longest-common-subsequence diff. It returns the runs removed
+ * from `a` and the runs added in `b`, with adjacent characters merged into one
+ * run. Returns undefined when either side is longer than MAX_DIFF.
  */
 export function align(a: string[], b: string[]): Alignment | undefined {
   if (a.length > MAX_DIFF || b.length > MAX_DIFF) return undefined;
 
-  // lcs[i][j] is the length of the longest common subsequence of a[i:] and
-  // b[j:], which lets the reconstruction below walk forwards.
+  // lcs[i][j] is the LCS length of a[i:] and b[j:], so the reconstruction
+  // below walks forwards.
   const lcs: number[][] = [];
   for (let i = 0; i <= a.length; i++) lcs.push(Array.from({ length: b.length + 1 }, () => 0));
 
@@ -81,7 +75,7 @@ export function align(a: string[], b: string[]): Alignment | undefined {
   return { dels, ins };
 }
 
-/** align over two strings, for callers that hold text rather than code points. */
+/** alignText is `align` over two strings. */
 export function alignText(was: string, now: string): Alignment | undefined {
   return align(runes(was), runes(now));
 }

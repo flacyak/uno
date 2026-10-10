@@ -1,20 +1,21 @@
-// The row index, and the pages read through it.
+// The row index, and the page cache that reads rows through it.
 //
-// Neither holds a file. The index is two arrays of numbers with one entry per
-// block of rows, and the page cache keeps decoded blocks up to a byte budget.
-// Both are bounded by something other than the file's size, which is what
-// opening a file larger than memory comes down to.
+// The index is two arrays of numbers with one entry per block of rows. The
+// page cache keeps decoded blocks up to a byte budget.
 
 import type { Format } from "../ingest/index.ts";
 import { Refusal } from "../said/index.ts";
 import type { ByteSource } from "../store/index.ts";
 
 export interface Tuning {
-  /** Bytes a pass reads at a time. A request waits for at most one chunk. */
+  /** Bytes a pass reads at a time. */
   chunkBytes: number;
   /** The most rows in a block. */
   blockRows: number;
-  /** The most bytes in a block, unless a single row is larger. */
+  /**
+   * The bytes a block reaches before the next row starts a new one. A single
+   * row larger than this is a block on its own.
+   */
   blockBytes: number;
   /** Bytes of source the page cache keeps decoded. */
   cacheBytes: number;
@@ -28,21 +29,20 @@ export const TUNING: Tuning = {
 };
 
 /**
- * RowIndex is where each block of rows starts in the file.
+ * RowIndex records where each block of rows starts in the file, as a row
+ * number and a byte offset.
  *
  * A block is a run of whole records, so any block can be read and decoded on
- * its own, and a row is found by searching the block starts. The arrays are
- * plain numbers on purpose: an index can be copied to another worker or written
- * to disk as it is.
+ * its own. A row's block is found by binary search over the block starts.
  */
 export class RowIndex {
   private firsts = new Float64Array(64);
   private offsets = new Float64Array(64);
   private blocks = 0;
 
-  /** Records the scan has passed. All of them once `complete`. */
+  /** Records the scan has passed so far. */
   counted = 0;
-  /** How far into the file the scan has read. */
+  /** Byte offset the scan has read to. */
   scanned: number;
   complete = false;
 
@@ -55,7 +55,7 @@ export class RowIndex {
     this.scanned = start;
   }
 
-  /** begin notes that the next record starts at offset. The scanner calls it once per record, in order. */
+  /** begin records that the next record starts at offset. Called once per record, in order. */
   begin(offset: number): void {
     const b = this.blocks;
     if (
@@ -75,15 +75,15 @@ export class RowIndex {
   }
 
   /**
-   * readable is how many rows can be read now. Before the scan finishes, the
-   * last block may still be growing, so its rows wait for the next one to start.
+   * readable returns how many rows can be read now. Before the scan finishes
+   * this excludes the last block, which may still be growing.
    */
   readable(): number {
     if (this.complete) return this.counted;
     return this.blocks === 0 ? 0 : this.firsts[this.blocks - 1]!;
   }
 
-  /** rows is the row count, or a projection of it from the bytes scanned so far. */
+  /** rows returns the row count once complete, or an estimate from the bytes scanned so far. */
   rows(): number {
     if (this.complete) return this.counted;
     const read = this.scanned - this.start;
@@ -91,7 +91,7 @@ export class RowIndex {
     return Math.max(this.counted, Math.round((this.counted / read) * (this.size - this.start)));
   }
 
-  /** The block holding a readable row. */
+  /** Returns the block holding a readable row. */
   blockOf(row: number): number {
     let lo = 0;
     let hi = this.blocks - 1;
@@ -103,13 +103,13 @@ export class RowIndex {
     return lo;
   }
 
-  /** The rows of a block, as [first, end). */
+  /** Returns the row range of a block, as [first, end). */
   rowsOf(block: number): [number, number] {
     const end = block + 1 < this.blocks ? this.firsts[block + 1]! : this.counted;
     return [this.firsts[block]!, end];
   }
 
-  /** The bytes of a block, as [start, end). */
+  /** Returns the byte range of a block, as [start, end). */
   bytesOf(block: number): [number, number] {
     const end = block + 1 < this.blocks ? this.offsets[block + 1]! : this.size;
     return [this.offsets[block]!, end];
@@ -123,11 +123,10 @@ function grow(a: Float64Array<ArrayBuffer>): Float64Array<ArrayBuffer> {
 }
 
 /**
- * Pages reads rows through an index, keeping recently used blocks decoded.
+ * Pages reads rows through an index and caches decoded blocks.
  *
- * The cache is bounded by the source bytes it has decoded, least recently used
- * out first. What that costs in strings is a small multiple of the bytes, and
- * neither depends on how long the file is.
+ * The cache is bounded by the source bytes of the blocks it holds. The least
+ * recently used block is evicted first.
  */
 export class Pages {
   private readonly cache = new Map<number, { records: string[][]; bytes: number }>();
@@ -142,12 +141,12 @@ export class Pages {
     private readonly budget: number,
   ) {}
 
-  /** Source bytes held decoded right now. */
+  /** Source bytes of the blocks in the cache. */
   get held(): number {
     return this.kept;
   }
 
-  /** rows reads up to count rows from first, stopping where the index stops. */
+  /** rows reads up to count rows from first, stopping at the readable limit. */
   async rows(first: number, count: number): Promise<string[][]> {
     const end = Math.min(first + count, this.index.readable());
     const out: string[][] = [];
@@ -162,16 +161,13 @@ export class Pages {
   }
 
   /**
-   * records reads one block's source rows.
-   *
-   * A pass reading the whole file passes `keep = false`, so a survey over 50
-   * million rows reads the blocks it needs without pushing out the ones around
-   * the viewport that a person is looking at.
+   * records reads one block's source rows. With `keep = false` the block is
+   * decoded and the cache is left as it is.
    */
   records(block: number, keep = true): Promise<string[][]> {
     const hit = this.cache.get(block);
     if (hit !== undefined) {
-      // A Map iterates in insertion order, so re-inserting makes it the newest.
+      // Re-insert so the block becomes the newest entry in the Map.
       this.cache.delete(block);
       this.cache.set(block, hit);
       return Promise.resolve(hit.records);
@@ -196,9 +192,8 @@ export class Pages {
     const [from, to] = this.index.rowsOf(block);
     const records = this.format.decode(await this.source.read(start, end - start));
 
-    // The index was built from these bytes. A block that no longer holds the
-    // rows it did is a file somebody rewrote while it was open, and showing
-    // rows from two versions of it would be worse than saying so.
+    // A block with a different row count than the index recorded means the
+    // file was rewritten while open.
     if (records.length !== to - from) {
       throw new Refusal({ t: "changed-on-disk", name: this.name });
     }

@@ -1,6 +1,6 @@
-// Parts must agree: a part that does not read the way the first part does is
-// a refusal of the whole source, naming the part and what differs, whether it
-// is found as the source opens or by the read that first reaches the part.
+// Parts must agree with the first part. A part that differs is refused with a
+// DisagreementError naming the part and what differs, whether found as the
+// source opens or by the first read that reaches the part.
 
 import { describe, expect, test } from "vite-plus/test";
 
@@ -12,7 +12,7 @@ import type { Disagreement, HeaderMode, MultiSource, Part } from "../../src/stor
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/** Where a file held in memory is said to be. */
+/** The path prefix of a file held in memory. */
 const MEMORY = "memory://";
 
 const UTF8_MARK = Uint8Array.of(0xef, 0xbb, 0xbf);
@@ -24,7 +24,7 @@ const UTF16_UNIT_BYTES = 2;
 const BYTE_BITS = 8;
 const BYTE_MASK = 0xff;
 
-/** A file as a test writes it: text, which is UTF-8, or the bytes themselves. */
+/** A file's contents: text, encoded as UTF-8, or raw bytes. */
 type Content = string | Uint8Array;
 
 function bytesOf(content: Content): Uint8Array {
@@ -35,7 +35,7 @@ function concat(...pieces: Uint8Array[]): Uint8Array {
   return Uint8Array.from(pieces.flatMap((piece) => [...piece]));
 }
 
-/** `text` in UTF-16 with no byte order mark, low byte first or high byte first. */
+/** `text` in UTF-16 with the byte order mark left off, low or high byte first. */
 function utf16(text: string, order: "le" | "be"): Uint8Array {
   const out = new Uint8Array(text.length * UTF16_UNIT_BYTES);
   for (let i = 0; i < text.length; i++) {
@@ -48,7 +48,7 @@ function utf16(text: string, order: "le" | "be"): Uint8Array {
   return out;
 }
 
-/** "café" in Windows-1252, where é is one byte that is no UTF-8. */
+/** `before`, then é as the one Windows-1252 byte, then `after`. */
 const E_ACUTE_1252 = 0xe9;
 function windows1252(before: string, after: string): Uint8Array {
   return concat(encoder.encode(before), Uint8Array.of(E_ACUTE_1252), encoder.encode(after));
@@ -105,7 +105,7 @@ function open(header: HeaderMode, contents: readonly Content[]): Promise<MultiSo
   return openMulti([memory(files).handler], parts, header);
 }
 
-/** What `run` is refused with, which has to be a disagreement. */
+/** The DisagreementError `run` rejects with. Fails if it is anything else. */
 async function refusal(run: () => Promise<unknown>): Promise<DisagreementError> {
   const err: unknown = await run().then(
     () => undefined,
@@ -118,13 +118,11 @@ async function refusal(run: () => Promise<unknown>): Promise<DisagreementError> 
 }
 
 /**
- * Both ways a part that does not agree is found.
+ * The error found both ways.
  *
- * `eager` is the source opened with nothing known of its parts, which opens
- * and checks every one. `lazy` is the source opened with the extents an
- * earlier open measured, when every part read as the first of `was` does:
- * part `at` has been written over since with `now`, and is not opened until a
- * read reaches it.
+ * `eager` is from opening the source unmeasured, which opens and checks
+ * every part. `lazy` is from opening the source with extents measured from
+ * `was`, then reading part `at`, which has been replaced with `now`.
  */
 async function refusals(
   header: HeaderMode,
@@ -401,13 +399,10 @@ test("parts in UTF-8 agree whether or not each has a character past ASCII", asyn
   expect(decoder.decode(await source.read(0, source.size))).toBe("city,total\nLyon,5\nOrléans,6\n");
 });
 
-// A feature export is thousands of columns wide, and its parts written by two
-// tools can carry the same columns in two orders. Saying so is two sorts of the
-// header, whatever its width: a check that sorted the part's header once per
-// column took seconds at ten thousand of them.
+// A wide header in another order is detected in about two sorts of the
+// header, whatever its width.
 const WIDE_COLUMNS = 10_000;
-/** Long enough to be sure of on a slow machine, and well short of the seconds a
- * sort per column takes. */
+/** The time limit, well under what a sort per column would take. */
 const WIDE_MS = 1_000;
 test(
   "a wide header in another order is refused as reordered in the time two sorts take",
@@ -439,7 +434,7 @@ test("with no header row, a first part with no row in it holds the others to not
 test("the first part that does not agree is the one refused, in the order of the parts", async () => {
   const { files, parts } = held(["a,b\n1,2\n", "a,c\n3,4\n", "a;b\n5;6\n"]);
   const one = [memory(files).handler];
-  // One at a time, so the order they are checked in is the order they are in.
+  // Each later part is checked against the first on its own.
   const second = await refusal(() => openMulti(one, parts.slice(0, 2), "first"));
   expect(second.partName).toBe("b.csv");
   const third = await refusal(() => openMulti(one, [parts[0]!, parts[2]!], "first"));
@@ -461,13 +456,13 @@ test("a part found not to agree by a read refuses every read of the source after
   expect(m.opened, "nothing is opened, so nothing is refused yet").toEqual([]);
 
   const [first, second, third] = source.map.spans;
-  // Until a read reaches the part, the parts before and after it read.
+  // Before a read reaches the part, the first part reads.
   expect(decoder.decode(await source.read(first!.start, first!.end))).toBe(was[0]);
 
   const found = await refusal(() => source.read(second!.start, 1));
   expect(found.message).toBe('b.csv (part 2 of 3): column 2 is "c" where a.csv has "b"');
 
-  // And from then on the source is refused, whichever part is asked for.
+  // After that, every read is refused with the same error.
   expect(await refusal(() => source.read(first!.start, 1))).toBe(found);
   expect(await refusal(() => source.read(third!.start, 1))).toBe(found);
   expect(m.opened, "the part past it was never opened").toEqual(["a.csv", "b.csv"]);

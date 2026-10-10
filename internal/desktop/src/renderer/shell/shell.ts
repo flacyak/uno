@@ -1,14 +1,10 @@
-// The shell: the sidebar, the banner, the grid, the status bar, and what the
-// menu's keys mean.
+// The shell: the sidebar, the banner, the grid, the status bar, the panel, and
+// the keys and menus that drive them.
 //
-// It owns *when* things happen and nothing about what they do. Opening a file
-// is `Workspace.open` over an engine, adding one is `workspace.add`, changing a
-// cell is `workspace.set`, saving is `workspace.bytes` handed to the host.
-// Every one of those is testable without a window, which is the seam this file
-// exists to keep.
+// It decides when things happen. What they do is in Workspace, Sources and
+// the host, which are testable on their own.
 //
-// The grid is not loaded until the first file opens. The empty window has no use
-// for it, or for its stylesheet.
+// The grid is loaded when the first file opens.
 
 import { Engine, messagePort } from "@uno/grid/engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
@@ -54,74 +50,71 @@ import { StatusBar } from "./status.ts";
 import { baseName, dispatch, found, message, must, settled } from "./util.ts";
 import type { Handlers } from "./util.ts";
 
-/** Where the chosen input strategy is kept. It is this machine's choice, not a workspace's. */
+/** The localStorage key for the input strategy. */
 const INPUT_KEY = "uno.input";
 
-/** Where it is kept that the sidebar is closed. Open is what a new install gets. */
+/**
+ * The localStorage key for whether the sidebar is closed. Open is the default.
+ */
 const SIDEBAR_KEY = "uno.sidebar";
 const SIDEBAR_CLOSED = "closed";
 
-/** What the window wears while the sidebar is closed. */
+/** The class on #app while the sidebar is closed. */
 const NO_SIDEBAR = "no-sidebar";
 
 /**
- * What would close the workspace without asking, so a warning about its
- * unsaved edits knows what it warned about: Ctrl+O, the window's ×, or a
- * workspace picked from the sidebar.
+ * An action that would close the workspace and drop its edits: Ctrl+O, the
+ * window's ×, or a workspace picked from the sidebar.
  */
 type Dropping = "open" | "quit" | `recent:${string}`;
 
 export class Shell {
-  /** Told how keys are read whenever that changes, for whatever else shows it. */
+  /** Called with the input strategy's name whenever it changes. */
   onInput: (name: InputName) => void = () => undefined;
 
   private workspace: Workspace | undefined;
-  /** The grid, from the first open on. */
+  /** The grid, loaded on the first open. */
   private grid: Grid | undefined;
   private gridLoading: Promise<Grid> | undefined;
-  /** Counts opens, so one that finishes after a later one does not replace it. */
+  /**
+   * Counts opens, so the latest wins over an earlier one that finishes later.
+   */
   private opens = 0;
-  /** The sources being opened, which the sidebar and the panel list until each has. */
+  /** The sources still opening, listed in the sidebar and the panel. */
   private arriving: readonly Arriving[] = [];
-  /** The offer a person said "not now" to, so it stays gone until it changes. */
+  /** The key of the offer dismissed with Not now. */
   private dismissed = "";
-  /** What was warned about, for as long as the warning is on screen: the tab
-   * its × would remove, or what would drop the workspace's unsaved edits. */
+  /** What the warning on screen is about: the tab whose × would remove it, or
+   * the action that would drop unsaved edits. */
   private warned: Tab | Dropping | undefined;
-  /** The save in flight, while one is: a second Ctrl+S joins it rather than
-   * writing the same bytes twice, and the × waits for it to land. */
+  /** The save in flight. A second Ctrl+S joins it, and the × waits for it. */
   private saving: Promise<void> | undefined;
-  /** How keys are read, which the grid and the status bar both follow. */
+  /** The input strategy, used by the grid and the status bar. */
   private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
-  /** The menu hung off the sidebar, while one is open, and the formula form. */
+  /** The open pop-up menu and formula form, if any. */
   private menu: PopMenu | undefined;
   private formula: FormulaForm | undefined;
-  /** Whether the sidebar is open, which is this machine's choice. */
+  /** Whether the sidebar is open. */
   private sidebarOpen = localStorage.getItem(SIDEBAR_KEY) !== SIDEBAR_CLOSED;
   /** The workspaces the sidebar lists. */
   private readonly recents = new Recents(localStorage);
   /**
-   * An engine that holds no workspace, for the panel while nothing is open.
-   *
-   * Browsing and the connections go through an engine, because the engine is
-   * what holds the listers and the credentials. Before the first file there is
-   * no workspace to own one, and "open a file first" is a poor answer to a
-   * person who opened the panel to find that file. So one is started the first
-   * time it is wanted, and closed once a workspace brings its own.
+   * An engine for the panel until a workspace is open. Started on first use
+   * and closed when a workspace brings its own.
    */
   private spare: Promise<Engine> | undefined;
-  /** What the last connections read said it could not read, so it is said once. */
+  /** The last connections-read error, so it is said once. */
   private connectionTrouble = "";
-  /** The connections the engine last read, whole, for a new one's id to avoid. */
+  /** The connections the engine last read. */
   private known: readonly Connection[] = [];
 
   private readonly status: StatusBar;
   private readonly finder: Finder;
   private readonly sources: Sources;
   private readonly panel: Panel;
-  /** The theme the page wears, which the settings menu changes. */
+  /** The page's theme. */
   readonly theming: Theming;
-  /** The language the app speaks, which the settings menu changes. */
+  /** The app's language. */
   readonly language: Language;
 
   private readonly root = must(document.querySelector<HTMLElement>("#app"));
@@ -131,13 +124,13 @@ export class Shell {
   private readonly content = must(document.querySelector<HTMLElement>("#content"));
 
   constructor(private readonly host: Host) {
-    // First of all, so every word written after it is in the language chosen.
+    // Language first, so everything written after is in the chosen language.
     this.language = new Language(localStorage, navigator.languages, offered(import.meta.env.DEV));
     this.language.onChange(() => this.relabel());
-    // The page's own words, before the rest is drawn beside them.
+    // The page's static text.
     labelPage();
 
-    // First of what is drawn, so the page is in its theme before anything is drawn in it.
+    // Theme next, so the page is themed before anything is drawn.
     this.theming = new Theming(
       localStorage,
       window.matchMedia("(prefers-color-scheme: dark)"),
@@ -163,8 +156,8 @@ export class Shell {
 
     this.sources = new Sources(
       {
-        // Browsing goes through an engine, which holds the listers and the
-        // credentials. The page never lists anything itself.
+        // Listing and peeking go through an engine, which holds the listers
+        // and the credentials.
         list: async (path, cursor) => (await this.browser()).list(path, cursor),
         peek: async (ref) => (await this.browser()).peek(ref),
       },
@@ -209,16 +202,14 @@ export class Shell {
           this.say(message(err), true);
           return;
         }
-        // A dropped workspace saves with a dialog the first time. That is one
-        // question, once, and it keeps a drop from quietly writing over a file
-        // the person may have dragged out of somewhere they did not mean to.
+        // A single dropped .uno opens with an empty save path, so the first
+        // save asks where to write.
         if (refs.length === 1 && isWorkspace(refs[0]!)) void this.load(refs[0]!, "");
         else void this.addSources(refs);
       },
       (text) => this.say(text, true),
     );
-    // It wires itself to the control and asks through these, so the shell
-    // holds nothing of it.
+    // Settings wires itself to the control and runs on its own from there.
     new Settings(found<HTMLButtonElement>("#settings"), this.theming, this.language, {
       connections: async () => {
         await this.refreshConnections();
@@ -242,9 +233,8 @@ export class Shell {
     found("#new").addEventListener("click", () => void this.open());
     found("#close").addEventListener("click", () => this.quit());
     this.wireKeys();
-    // Coming back to the window is when a person has had the chance to change
-    // something in a bucket, so it is when the buckets are asked.
-    // It is when a folder has had the chance to grow, too.
+    // When the window regains focus, ask the buckets for newer versions and
+    // the folders for new files.
     window.addEventListener(
       "focus",
       settled(NEWER_AFTER_MS, async () => {
@@ -256,8 +246,8 @@ export class Shell {
   }
 
   /**
-   * askNewer asks each remote source's bucket, one HEAD each, whether it holds
-   * a newer version than the tab reads, and repaints whatever that changed.
+   * askNewer asks each remote source's bucket whether it holds a newer
+   * version, and repaints if anything changed.
    */
   private async askNewer(): Promise<void> {
     const w = this.workspace;
@@ -269,8 +259,8 @@ export class Shell {
   }
 
   /**
-   * browser is the engine the panel asks: the open workspace's, or a spare one
-   * while nothing is open.
+   * browser returns the engine the panel uses: the open workspace's, or the
+   * spare one until a workspace opens.
    */
   private browser(): Promise<Engine> {
     const w = this.workspace;
@@ -285,7 +275,7 @@ export class Shell {
     return this.spare;
   }
 
-  /** closeSpare stops the spare engine, once a workspace has one of its own. */
+  /** closeSpare stops the spare engine. */
   private closeSpare(): void {
     const spare = this.spare;
     this.spare = undefined;
@@ -293,12 +283,8 @@ export class Shell {
   }
 
   /**
-   * refreshConnections asks the engine to read the connections again and
-   * lists them in the panel: when the panel opens, when a workspace comes with
-   * an engine of its own, and when one is saved.
-   *
-   * A file it could not read is said once, and not again every time the panel
-   * opens over the same broken file.
+   * refreshConnections reads the connections from the engine again and lists
+   * them in the panel. A file that failed to read is said once.
    */
   private async refreshConnections(): Promise<void> {
     try {
@@ -317,14 +303,13 @@ export class Shell {
   }
 
   /**
-   * saveConnection keeps a connection and has the engine read them again, so
-   * it is listed and signed with at once, without a restart.
+   * saveConnection saves a connection and reads the connections again. Tabs
+   * waiting for this bucket are then read.
    */
   async saveConnection(c: Connection): Promise<Connection> {
     const saved = await this.host.saveConnection(c);
     await this.refreshConnections();
-    // The tabs that were waiting for this connection are read now: the person
-    // connecting the bucket is the person saying it may be read.
+    // Read the tabs that were waiting for this connection.
     for (const tab of this.workspace?.sources ?? []) {
       const path = tab.link?.path;
       if (path === undefined || tab.link?.connect === undefined) continue;
@@ -338,12 +323,15 @@ export class Shell {
     return saved;
   }
 
-  /** The open tab with this id, which is how the panel names one. */
+  /** The open tab with this id. */
   private tabAt(id: string): Tab | undefined {
     return this.workspace?.sources.find((t) => t.id === id);
   }
 
-  /** The open workspace and the grid showing it, or undefined before a file opens. */
+  /**
+   * The open workspace and the grid showing it, or undefined before a file
+   * opens.
+   */
   private showing(): Showing | undefined {
     const workspace = this.workspace;
     const grid = this.grid;
@@ -353,9 +341,9 @@ export class Shell {
   // --------------------------------------------------------------- opening
 
   /**
-   * drops says whether `what` may go ahead, given that it closes the workspace
-   * without asking. Over unsaved edits the first try says so and is refused.
-   * The second, while that is still on screen, goes ahead, as :e! does.
+   * drops returns whether `what` may go ahead. Over unsaved edits the first
+   * try warns and returns false. The second, while the warning is still on
+   * screen, returns true.
    */
   private drops(what: Dropping): boolean {
     if (this.workspace?.dirty !== true || this.warned === what) return true;
@@ -372,33 +360,31 @@ export class Shell {
   }
 
   /**
-   * open asks for a file and opens it in place of the one open now: Ctrl+O,
-   * and the + at the foot of the sidebar. A spreadsheet opens as a new
-   * workspace, and a .uno as the one it is.
-   *
-   * `force` is :e!, and :e, which has asked already.
+   * open asks for a file and opens it in place of the open workspace: Ctrl+O
+   * and the + at the foot of the sidebar. `force` skips the unsaved-edits
+   * check, for :e and :e!.
    */
   async open(force = false): Promise<void> {
     if (!force && !this.drops("open")) return;
     try {
       const ref = await this.host.open();
-      if (ref === undefined) return; // cancelled, which is not a failure
+      if (ref === undefined) return; // cancelled
       await this.load(ref, "path" in ref ? ref.path : "");
     } catch (err) {
       this.say(message(err), true);
     }
   }
 
-  /** Open a file by path: named on the command line, or double-clicked in the
-   * file manager. */
+  /**
+   * openPath opens a file by path: from the command line or the file manager.
+   */
   async openPath(path: string): Promise<void> {
     await this.load(refAt(path), path);
   }
 
   /**
-   * openRecent opens a workspace from the sidebar, and answers whether it is
-   * the one open afterwards. One that will not open says why and stays
-   * listed, since a folder that is not mounted today is there tomorrow.
+   * openRecent opens a workspace from the sidebar. Returns whether it is open
+   * afterwards. One that fails to open stays listed.
    */
   private async openRecent(path: string): Promise<boolean> {
     if (this.workspace?.path === path) return true;
@@ -407,17 +393,14 @@ export class Shell {
     return this.workspace?.path === path;
   }
 
-  /**
-   * Whether closing now would lose something: what a page asks before a
-   * browser lets its tab go, where there is no × of uno's own to ask twice.
-   */
+  /** Whether the open workspace has unsaved edits. */
   get unsaved(): boolean {
     return this.workspace?.dirty === true;
   }
 
   /**
-   * quit closes the window, from the × at its top right. Over unsaved edits
-   * the first × says so, as Ctrl+O does.
+   * quit closes the window, after any save in flight. Over unsaved edits the
+   * first × warns.
    */
   quit(): void {
     if (this.saving !== undefined) {
@@ -427,12 +410,15 @@ export class Shell {
     if (this.drops("quit")) this.host.quit();
   }
 
-  /** Add files by path, as sources: several named together on the command line. */
+  /** addPaths adds files by path as sources: from the command line. */
   async addPaths(paths: string[]): Promise<void> {
     await this.addSources(paths.map(refAt));
   }
 
-  /** add asks for files and adds them to the open workspace, or opens them as one. */
+  /**
+   * add asks for files and adds them as sources, or opens them as a new
+   * workspace.
+   */
   async add(): Promise<void> {
     try {
       const refs = await this.host.add();
@@ -442,7 +428,7 @@ export class Shell {
     }
   }
 
-  /** offer hangs a menu off the page, in place of any already there. */
+  /** offer opens a pop-up menu, closing any menu or form already open. */
   private offer(place: MenuPlace, items: readonly MenuItem[]): void {
     this.menu?.close();
     this.formula?.close();
@@ -453,8 +439,7 @@ export class Shell {
   }
 
   /**
-   * offerAdd opens the + menu: a file off this machine, or the sources panel,
-   * where an object in S3 is browsed to or its address pasted into the filter.
+   * offerAdd opens the + menu: a file from this machine, or the sources panel.
    */
   private offerAdd(plus: HTMLElement): void {
     this.offer(below(plus), [
@@ -464,10 +449,8 @@ export class Shell {
   }
 
   /**
-   * offerWorkspace is a right click on a workspace in the sidebar: a formula
-   * into it, and what else is done to a workspace as a whole. One that is not
-   * open is opened first by whatever needs it open. `path` is "" for the open
-   * workspace while it has never been saved.
+   * offerWorkspace opens the right-click menu on a workspace. `path` is "" for
+   * an open workspace that is still unsaved.
    */
   private offerWorkspace(path: string, place: MenuPlace): void {
     const isOpen = this.workspace !== undefined && this.workspace.path === path;
@@ -494,9 +477,8 @@ export class Shell {
   }
 
   /**
-   * insertFormula opens the formula form on the source showing in a workspace,
-   * opening the workspace first when it is another one. The form opens where
-   * the workspace was right-clicked.
+   * insertFormula opens the formula form at `place` on the active source of
+   * the workspace at `path`, opening that workspace first if needed.
    */
   private async insertFormula(path: string, place: MenuPlace): Promise<void> {
     if (!(await this.openRecent(path))) return;
@@ -521,9 +503,8 @@ export class Shell {
   }
 
   /**
-   * bind computes a column from an expression. A formula changes the file, so
-   * it is made in transform, and asking for one is the decision to be there.
-   * What the engine refuses is thrown for the form to say.
+   * bind computes a column from an expression, switching to transform first.
+   * What the engine refuses is thrown for the form to show.
    */
   private async bind(w: Workspace, tab: Tab, col: number, expr: string): Promise<void> {
     if (this.workspace !== w || !w.sources.includes(tab)) {
@@ -535,8 +516,7 @@ export class Shell {
     } finally {
       this.changed(w);
     }
-    // The column it went into is selected, as undo selects the cell it
-    // changed, which also brings a column off the side of the window on screen.
+    // Select the column, which also scrolls it into view.
     const on = this.showing();
     if (on?.workspace === w && w.active === tab) on.grid.moveTo(on.grid.selection().row, col);
     const column = tab.band.columns[col];
@@ -549,10 +529,9 @@ export class Shell {
   }
 
   /**
-   * addSources puts files in the open workspace as sources, beside the ones
-   * already there, and shows the last. With no workspace open the first file
-   * opens one. A .uno is a workspace of its own, so it is refused by name.
-   * It answers whether every one of them opened.
+   * addSources adds files as sources and shows the last. The first file opens
+   * a workspace when the shell lacks one. A .uno is refused by name. Returns
+   * whether every one opened.
    */
   private async addSources(refs: SourceRef[]): Promise<boolean> {
     const uno = refs.find(isWorkspace);
@@ -561,8 +540,7 @@ export class Shell {
       return false;
     }
 
-    // Each is listed in the sidebar and in the panel as opening from now
-    // until it has opened or been refused, in the order they are opened in.
+    // Each is listed as opening until it has opened or been refused.
     const coming = refs.map((ref): Arriving => ({ name: ref.name }));
     this.arriving = [...this.arriving, ...coming];
     this.paintTabs();
@@ -574,14 +552,14 @@ export class Shell {
     try {
       return await this.addEach(refs, settled);
     } finally {
-      // Whatever was never reached -- another open took the workspace's place.
+      // Clear any still listed, as when another open replaced the workspace.
       while (coming.length > 0) settled();
     }
   }
 
   /**
-   * addEach opens the files one after another and says `settled` as each one
-   * has opened or been refused. It answers whether every one of them opened.
+   * addEach opens the files one after another, calling `settled` after each.
+   * Returns whether every one opened.
    */
   private async addEach(refs: SourceRef[], settled: () => void): Promise<boolean> {
     let rest = refs;
@@ -621,17 +599,15 @@ export class Shell {
   }
 
   /**
-   * load starts an engine for the file and shows what it serves.
-   *
-   * A file that will not open leaves whatever was already open alone, and its
-   * engine is closed. A half-loaded workspace is worse than a refused one.
+   * load starts an engine for the file and shows it. A file that fails to
+   * open leaves the open workspace alone, and its engine is closed.
    */
   private async load(ref: SourceRef, savePath: string): Promise<void> {
     const open = ++this.opens;
     let engine: Engine | undefined;
 
     try {
-      // Before the engine, so a grid that fails to load leaves no engine running.
+      // Load the grid first, so a grid that fails leaves the engine unstarted.
       const grid = await this.loadGrid();
       engine = this.engineOn(await this.host.connect());
       let opened: Workspace | undefined;
@@ -642,7 +618,7 @@ export class Shell {
         savePath,
         () => this.repaint(),
         (tab) => {
-          // Only the question about the source showing is asked.
+          // Repaint the banner only for the active tab's offer.
           if (opened !== undefined && this.workspace === opened && opened.active === tab) {
             this.paintBanner();
           }
@@ -656,11 +632,11 @@ export class Shell {
 
       this.workspace?.close();
       this.workspace = w;
-      // A menu or a form left open was about the workspace this one replaces.
+      // Close any menu or form open for the replaced workspace.
       this.menu?.close();
       this.formula?.close();
       if (w.path !== "") this.recents.opened(w.path);
-      // The workspace's engine answers the panel from here on.
+      // The workspace's engine serves the panel from here on.
       this.closeSpare();
       void this.refreshConnections();
       this.dismissed = "";
@@ -676,7 +652,9 @@ export class Shell {
     this.paintAll();
   }
 
-  /** loadGrid fetches the grid and its stylesheet the first time a file opens. */
+  /**
+   * loadGrid imports the grid and its stylesheet the first time a file opens.
+   */
   private loadGrid(): Promise<Grid> {
     this.gridLoading ??= import("../grid/index.ts").then(
       ({ Grid }) => {
@@ -714,12 +692,12 @@ export class Shell {
     };
   }
 
-  /** What the grid's keys ask of the shell, by kind. */
+  /** The handlers for the actions the grid's keys ask of the shell. */
   private readonly actions: Handlers<ShellAction> = {
     undo: () => void this.history("undo"),
     redo: () => void this.history("redo"),
     apply: () => {
-      // From any cell, since the offer names its own column.
+      // The offer names its own column, so this works from any cell.
       const offer = this.offered();
       if (offer === null) this.say(m.nothing_to_apply(), true);
       else void this.apply(offer);
@@ -734,7 +712,7 @@ export class Shell {
     tab: (a) => {
       const w = this.workspace;
       if (w === undefined) return;
-      // 3gt is the third tab, as in vim. A count past the last goes nowhere.
+      // 3gt is the third tab, as in vim. A count past the last keeps the tab.
       const to =
         a.step === 1 && a.count !== undefined
           ? w.sources[a.count - 1]
@@ -746,14 +724,13 @@ export class Shell {
   // ----------------------------------------------------------------- modes
 
   private wireKeys(): void {
-    // Here rather than as menu accelerators, so the key reaches the page. The
-    // cell editor stops its own keys, so these never fire while typing in one.
+    // Shortcuts are read here in place of menu accelerators, so the key
+    // reaches the page. The cell editor stops its own keys.
     window.addEventListener("keydown", (e) => {
-      // A key the grid read is not read again here: Ctrl+B pages up under
-      // vim-style, and the sidebar stays as it is.
+      // A key the grid already handled stops here.
       if (e.defaultPrevented) return;
-      // Ctrl+PageDown and Ctrl+PageUp are how a browser or an editor moves between
-      // tabs, and Ctrl+Tab too. Neither input strategy reads them.
+      // Ctrl+PageDown, Ctrl+PageUp, Ctrl+Tab and Ctrl+Shift+Tab move between
+      // tabs.
       if (e.ctrlKey && !e.altKey && !e.metaKey && this.workspace !== undefined) {
         const step =
           e.key === "PageDown" || (e.key === "Tab" && !e.shiftKey)
@@ -776,9 +753,8 @@ export class Shell {
   }
 
   /**
-   * The shell's chords, under Ctrl or Cmd: what each does, and for one, when
-   * it is the shell's at all. Ctrl+Z over a workspace that cannot be edited
-   * is left to the page, as every other chord is.
+   * The shell's Ctrl or Cmd shortcuts. `when` says whether the shortcut
+   * applies; Ctrl+Z over a read-only workspace is left to the page.
    */
   private readonly chords: ReadonlyMap<string, { run: () => void; when?: () => boolean }> = new Map(
     [
@@ -792,13 +768,7 @@ export class Shell {
     ],
   );
 
-  /**
-   * toggleMode moves between view and transform.
-   *
-   * The switch is explicit because transform is where a keystroke changes the
-   * file, and that should follow a decision to change it rather than a stray key
-   * while scrolling. It loads nothing either way.
-   */
+  /** toggleMode switches between view and transform. */
   toggleMode(): void {
     const on = this.showing();
     if (on === undefined) return;
@@ -815,9 +785,8 @@ export class Shell {
   // ------------------------------------------------------------------ tabs
 
   /**
-   * toggleSidebar opens the sidebar, or closes it so the grid has the width:
-   * Ctrl+B, and the switch at the left of the status bar. The choice is kept,
-   * so the next launch opens the same way.
+   * toggleSidebar opens or closes the sidebar: Ctrl+B and the switch at the
+   * left of the status bar. The choice is kept for the next launch.
    */
   toggleSidebar(): void {
     this.sidebarOpen = !this.sidebarOpen;
@@ -829,15 +798,10 @@ export class Shell {
     this.paintStatus();
   }
 
-  /**
-   * togglePanel opens the sources panel beside the grid, or closes it. The
-   * grid gives up the width and keeps its rows, so it is laid out again and
-   * nothing is fetched.
-   */
+  /** togglePanel opens or closes the sources panel. */
   togglePanel(): void {
     this.panel.toggle();
-    // A connection saved in another window, or put in the folder by hand, is
-    // listed the next time the panel opens, and so is what a folder gained.
+    // Read the connections and the folders again when the panel opens.
     if (this.panel.open) this.refreshPanel();
     this.paintTabs();
     this.paintStatus();
@@ -845,9 +809,8 @@ export class Shell {
   }
 
   /**
-   * showPanel opens the sources panel with the keys in it: the + menu's
-   * Browse sources…, Ctrl+Shift+B and :sources. Open already, it only takes
-   * the keys back, so a second Ctrl+Shift+B is not a close.
+   * showPanel opens the sources panel and focuses it. If it is already open,
+   * it only takes focus.
    */
   showPanel(): void {
     if (this.panel.open) {
@@ -858,17 +821,18 @@ export class Shell {
     this.togglePanel();
   }
 
-  /** refreshPanel asks again for what the panel shows that it does not own:
-   * the connections, and the files each tab of several could append. */
+  /**
+   * refreshPanel reads the connections and the folders of multi-file tabs
+   * again.
+   */
   private refreshPanel(): void {
     void this.refreshConnections();
     void this.sources.askGrown();
   }
 
   /**
-   * select shows another source. The grid it leaves remembers where it was, and
-   * the one it shows goes back to where it was left. The tab already showing
-   * stays as it is, marks and all.
+   * select shows another source. The selection is saved on the tab it leaves
+   * and restored on the one it shows.
    */
   private select(tab: Tab): void {
     const on = this.showing();
@@ -882,7 +846,7 @@ export class Shell {
     grid.focus();
   }
 
-  /** showActive draws the tab the workspace says is showing, where it was left. */
+  /** showActive shows the workspace's active tab at its saved selection. */
   private showActive(): void {
     const on = this.showing();
     if (on === undefined) return;
@@ -893,9 +857,8 @@ export class Shell {
   }
 
   /**
-   * remove takes a source out of the workspace. One with edits goes on the
-   * second ×, since its edits go with it and the log is the only place they
-   * were.
+   * remove takes a source out of the workspace. One with edits is removed on
+   * the second ×.
    */
   private async remove(tab: Tab): Promise<void> {
     const w = this.workspace;
@@ -906,12 +869,11 @@ export class Shell {
       return;
     }
     try {
-      // Whether the tab was on screen is the workspace's answer, not a look
-      // taken before asking: Ctrl+Tab pressed meanwhile moves what is.
+      // The workspace says whether the removed tab was showing.
       const showing = await w.remove(tab);
       if (this.workspace !== w) return;
       this.say(m.removed_name({ name: tab.name }));
-      // Taking out the tab on screen puts its neighbour there.
+      // Removing the showing tab shows its neighbour.
       this.shown(showing);
     } catch (err) {
       this.say(message(err), true);
@@ -919,28 +881,23 @@ export class Shell {
   }
 
   /**
-   * repoint is a tab's ! mark: the panel opens picking a file for it, from the
-   * browser, so a source in S3 is pointed at another object and not only at
-   * whatever the local file dialog can reach.
+   * repoint is a tab's ! mark: opens the panel to connect its bucket, to
+   * reload a newer version, or to pick another file for it.
    */
   private repoint(tab: Tab): void {
     if (!this.panel.open) this.togglePanel();
-    // A tab in a bucket nobody connected is not fixed by another file: its
-    // mark asks to connect the bucket, filled in.
+    // A tab in a bucket still waiting for a connection opens the connect form.
     if (tab.link?.connect !== undefined) this.panel.connectFor(tab.id);
-    // One whose bucket holds a newer version has its answer on its own line:
-    // Reload reads it.
+    // A tab with a newer version in its bucket opens on its own line, where
+    // Reload is offered.
     else if (tab.newer !== undefined && !tab.missing) this.panel.showTab(tab.id);
     else this.panel.repoint(tab.id);
   }
 
   /**
-   * reload reads a tab's file again from where it already points, which is a
-   * re-point at the same path: the log replays over whatever is there now. A
-   * file that came back after going missing is found again the same way. It
-   * asks for no version, so an object is read as its bucket holds it now --
-   * the newer one a mark said was there, or the newest after a pinned one --
-   * and it says what it found.
+   * reload points a tab at its own path again. The edits replay over the file
+   * as it is now. An object is read as its bucket holds it now, with no
+   * version pinned.
    */
   private async reload(tab: Tab): Promise<void> {
     const path = tab.link?.path;
@@ -949,9 +906,8 @@ export class Shell {
   }
 
   /**
-   * pointAt points a tab at a file, from the panel's browser or its reload.
-   * The edits replay over the file; one that cannot take them is refused and
-   * the tab is left as it was.
+   * pointAt points a tab at a file. The edits replay over the file. A file
+   * that fails to take them is refused and the tab is left as it was.
    */
   private async pointAt(tab: Tab, ref: SourceRef, said?: (fresh: Tab) => string): Promise<void> {
     const w = this.workspace;
@@ -960,9 +916,8 @@ export class Shell {
       const fresh = await w.relink(tab, ref);
       if (this.workspace !== w) return;
 
-      // A tab that waited for its bucket stops waiting once it is connected,
-      // read or not. One that still has no file says why on its own line, so
-      // the message beside it would only say it twice.
+      // A tab still missing its file says why on its own line, so the message
+      // here is empty.
       this.say(
         fresh.missing
           ? ""
@@ -976,10 +931,8 @@ export class Shell {
   }
 
   /**
-   * append adds the files a tab's folder has gained at its end, from the
-   * panel's offer. The rows extend and the edits stay on the cells they were
-   * made to; files that do not read the way the tab's first does are refused
-   * and the tab is left as it was.
+   * append adds files to the end of a multi-file tab. Files that read
+   * differently from the tab's first are refused and the tab is left as it was.
    */
   private async append(tab: Tab, files: readonly SingleRef[]): Promise<void> {
     const w = this.workspace;
@@ -992,21 +945,20 @@ export class Shell {
     } catch (err) {
       this.say(message(err), true);
     }
-    // What was offered is appended, or was refused and may be offered again.
+    // Ask the folders again: what was offered is now appended or refused.
     void this.sources.askGrown();
   }
 
   // ----------------------------------------------------------------- input
 
-  /** The input strategy reading keys now, for the Edit menu to check. */
+  /** The current input strategy's name. */
   get inputName(): InputName {
     return this.input.name;
   }
 
   /**
-   * setInput changes how keys are read, from settings or Edit → Input. The
-   * choice is kept in the page's storage, so the next launch reads keys the
-   * same way.
+   * setInput changes the input strategy, from settings or the Edit menu, and
+   * keeps the choice for the next launch.
    */
   setInput(name: string): void {
     this.input = strategy(name);
@@ -1022,9 +974,8 @@ export class Shell {
   // --------------------------------------------------------------- editing
 
   private edit(row: number, col: number, value: string): void {
-    // The engine refuses a cell it will not let a person type into -- a bound
-    // column, a row that is not there. Saying which is the whole point of it
-    // refusing by name.
+    // The engine refuses a cell that is read-only, such as a bound column,
+    // with a message.
     void this.editing((w) => w.set(row, col, value));
   }
 
@@ -1033,9 +984,8 @@ export class Shell {
   }
 
   /**
-   * editing is one change to the open workspace's log: made, said to have
-   * landed or been refused, and repainted after either way, since kinds may
-   * have changed and so has the log.
+   * editing makes one change to the workspace's log, reports an error if
+   * refused, and repaints either way.
    */
   private async editing(change: (w: Workspace) => Promise<unknown>): Promise<void> {
     const w = this.workspace;
@@ -1049,21 +999,21 @@ export class Shell {
     this.changed(w);
   }
 
-  /** dismiss is Not now: the offer stays gone until it changes. */
+  /** dismiss is Not now: hides the offer until it changes. */
   private dismiss(offer: Offer): void {
     this.dismissed = offerKey(offer);
     this.paintBanner();
   }
 
-  /** history takes the last edit back, or records again the one undo last took back. */
+  /** history undoes the last edit, or redoes the last undone one. */
   private history(which: "undo" | "redo"): Promise<void> {
     return this.editing(async (w) => {
-      // The edit is the showing tab's, and so is the cell it changed: one the
-      // person has since left is not moved to in the other.
+      // The edit is on the active tab. If the tab changes before it lands, the
+      // selection stays.
       const tab = w.active;
       const edit = await (which === "undo" ? w.undo() : w.redo());
-      // One cell came back, so show it. An apply names a whole column and no row,
-      // and the selection stays where it is.
+      // Move to the changed cell. An apply names a column alone, so the
+      // selection stays.
       const on = this.showing();
       if (edit.row !== NO_ROW && on?.workspace === w && w.active === tab) {
         on.grid.moveTo(edit.row, edit.col);
@@ -1071,7 +1021,9 @@ export class Shell {
     });
   }
 
-  /** After an edit lands: kinds may have changed, and so has the log. */
+  /**
+   * After an edit: refresh the grid, since kinds may have changed, and repaint.
+   */
   private changed(w: Workspace): void {
     const on = this.showing();
     if (on?.workspace !== w) return;
@@ -1082,27 +1034,22 @@ export class Shell {
   // ---------------------------------------------------------------- saving
 
   /**
-   * save writes the workspace where it was saved last, and asks where the
-   * first time. One save at a time: a second Ctrl+S while one is in flight,
-   * or at its dialog, joins it rather than writing the same bytes twice or
-   * asking twice.
+   * save writes the workspace to its path, asking for one the first time. One
+   * save at a time: a second joins the one in flight.
    */
   save(): Promise<void> {
     return this.saveTo((w) => (w.path === "" ? undefined : w.path));
   }
 
   /**
-   * saveAs asks where first, then lays the workspace out for that folder.
-   *
-   * That order is the whole reason the dialog and the write are two calls: a
-   * source beside the workspace is pointed at relative to it, so what gets
-   * written depends on where it is going.
+   * saveAs asks where to save, then writes. The bytes depend on the path,
+   * because sources beside the workspace are referenced relative to it.
    */
   saveAs(): Promise<void> {
     return this.saveTo(() => undefined);
   }
 
-  /** saveTo is one save at a time, of the workspace showing, to the path `where` picks for it. */
+  /** saveTo runs one save at a time, to the path `where` picks. */
   private saveTo(where: (w: Workspace) => string | undefined): Promise<void> {
     if (this.saving !== undefined) return this.saving;
     const on = this.showing();
@@ -1112,10 +1059,8 @@ export class Shell {
   }
 
   /**
-   * write is the save itself: the dialog when `path` is not known, the bytes,
-   * the host, the paint. A place the workspace reads a source from is refused
-   * before a byte goes out: the dialog asked about replacing a file, not
-   * about losing a source.
+   * write is the save: the dialog when `path` is undefined, then the bytes
+   * to the host. Saving over a file a source reads from is refused.
    */
   private async write(on: Showing, path: string | undefined): Promise<void> {
     const { workspace: w, grid } = on;
@@ -1142,13 +1087,13 @@ export class Shell {
 
   // ---------------------------------------------------------- command line
 
-  /** What each command from the prompt does. */
+  /** The handlers for commands typed at the prompt. */
   private readonly commands: Handlers<Command> = {
     none: () => {},
     write: () => void this.save(),
     "save-as": () => void this.saveAs(),
     open: (c) => {
-      // Opening closes the workspace without asking, so :e asks first.
+      // :e over unsaved edits asks for :e! first.
       if (!c.force && this.workspace?.dirty === true) this.say(m.unsaved_edits_command(), true);
       else void this.open(true);
     },
@@ -1159,37 +1104,43 @@ export class Shell {
 
   // -------------------------------------------------------------- painting
 
-  /** Rows landed or the index moved: the body and the status bar, nothing else. */
+  /**
+   * Rows landed or the index moved: repaint the grid body and the status bar.
+   */
   private repaint(): void {
     this.grid?.repaint();
     this.paintStatus();
   }
 
   /**
-   * relabel writes the window again in the language the app is in now, with
-   * everything open left open. What is painted is painted again, and what was
-   * written once is written again.
+   * relabel rewrites the window in the current language, leaving everything
+   * open.
    */
   private relabel(): void {
     labelPage();
-    // A menu or a form left open was built in the language before.
+    // An open menu or form was built in the old language.
     this.menu?.close();
     this.formula?.close();
-    // So was what the bar last said, and a sentence is not translated after it is said.
+    // So was the last message.
     this.say("");
     this.panel.relabel();
-    // The header's hints, which the grid draws once for a file.
+    // The header's hints, which the grid draws once per file.
     this.grid?.refresh();
     this.paintAll();
   }
 
-  /** withTab does something to the tab an id names, where the workspace still has it. */
+  /**
+   * withTab runs `act` on the tab with this id, if the workspace still has it.
+   */
   private withTab(id: string, act: (tab: Tab) => void): void {
     const tab = this.tabAt(id);
     if (tab !== undefined) act(tab);
   }
 
-  /** engineOn is an engine over a port, with what it says unasked said in the status bar. */
+  /**
+   * engineOn creates an engine over a port and shows its unasked errors in the
+   * status bar.
+   */
   private engineOn(port: MessagePortLike): Engine {
     const engine = new Engine(messagePort<Reply, Request>(port));
     engine.onError = (heard) => this.say(say(heard), true);
@@ -1197,8 +1148,8 @@ export class Shell {
   }
 
   /**
-   * shown repaints after a tab changed: the grid where it is the one showing,
-   * the sidebar where it is not, and the status bar either way.
+   * shown repaints after a tab changed: the grid if it is the showing tab,
+   * the sidebar otherwise, and the status bar either way.
    */
   private shown(showing: boolean): void {
     if (showing) this.showActive();
@@ -1206,14 +1157,14 @@ export class Shell {
     this.paintStatus();
   }
 
-  /** paintAll draws everything the shell paints: the sidebar, the banner and the status bar. */
+  /** paintAll draws the sidebar, the banner and the status bar. */
   private paintAll(): void {
     this.paintTabs();
     this.paintBanner();
     this.paintStatus();
   }
 
-  /** paintTabs draws the sidebar: the workspaces, and the open one's tabs. */
+  /** paintTabs draws the sidebar and redraws the panel. */
   private paintTabs(): void {
     const act: SidebarActions = {
       open: (path) => void this.openRecent(path),
@@ -1226,17 +1177,19 @@ export class Shell {
     this.workspaces.replaceChildren(
       ...sidebarRows(this.workspace, this.recents.all, act, this.arriving),
     );
-    // The panel lists the tabs too, and whatever changed the sidebar changed them.
+    // The panel lists the tabs too.
     this.panel.draw();
   }
 
-  /** The offer the banner is asking about, or null while it is hidden. */
+  /**
+   * The offer the banner shows, or null when there is none or it was dismissed.
+   */
   private offered(): Offer | null {
     const offer = this.workspace?.offer ?? null;
     return offer === null || this.dismissed === offerKey(offer) ? null : offer;
   }
 
-  /** paintBanner asks the recogniser's question, in transform only. */
+  /** paintBanner draws the banner for the current offer, or hides it. */
   private paintBanner(): void {
     const offer = this.offered();
     if (offer === null) {
@@ -1245,7 +1198,7 @@ export class Shell {
       return;
     }
 
-    // Both hand the keys back to the grid, or a j after the click would go nowhere.
+    // Both give focus back to the grid.
     const apply = (): void => {
       void this.apply(offer);
       this.grid?.focus();
@@ -1265,23 +1218,25 @@ export class Shell {
     });
   }
 
-  /** One line, and the only place the shell talks. An error stays until the
-   * next thing happens, so it cannot be missed by blinking. */
+  /**
+   * say writes the status bar's message line. A message stays until the next
+   * one.
+   */
   private say(text: string, isError = false): void {
-    // Whatever is said next replaces Ctrl+O's warning, and a second Ctrl+O
-    // opens only while the warning is there to be read.
+    // Any message replaces the unsaved-edits warning, so a second Ctrl+O
+    // works only while the warning is on screen.
     this.warned = undefined;
     this.status.say(text, isError);
   }
 }
 
-/** isWorkspace says whether a file is a .uno, which opens as a workspace of its own. */
+/** isWorkspace returns whether a ref is a .uno file. */
 function isWorkspace(ref: SourceRef): boolean {
-  // Several files read as one are a source whatever they are called.
+  // Several files read as one are a source, whatever they are called.
   return !("parts" in ref) && ref.name.toLowerCase().endsWith(".uno");
 }
 
-/** refAt names a file by path the way a dialog would have. */
+/** refAt makes a SourceRef for a path. */
 function refAt(path: string): SourceRef {
   return { name: baseName(path), path };
 }

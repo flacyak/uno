@@ -1,20 +1,11 @@
-// The disk's Lister: what `readdir` and `stat` say about a folder, as a listing.
+// The disk's Lister: a folder's readdir and stats as a listing.
 //
-// It is its own module rather than a second half of store/node.ts because the
-// two do different work with the same syscalls. A handler answers one question
-// about one file -- give me these bytes -- and a lister answers a question about
-// a place: what is in here, in what order, and how much of it fits in a page.
-// The one thing they share is that both are only ever allowed to reach a disk
-// from inside the seam, which is why tests/store/opens.test.ts names this file
-// beside store/node.ts and nowhere else.
+// A listing is a readdir put through four steps: classify each entry, sort,
+// drop what the cursor has already shown, take a page. Each call starts from
+// a fresh readdir.
 //
-// It is written as functions of what they were handed. A listing is a readdir
-// put through four steps in a row -- say what each entry is, order them, drop
-// what the cursor has already shown, take a page -- and every step is a function
-// that reads its input and returns a new value, so any of them can be read, or
-// changed, without knowing what the others do. Nothing here holds state between
-// calls: two `list`s of the same folder are two readdirs and cannot disagree
-// about anything except what the folder actually did in between.
+// Only this file and store/node.ts import node:fs. The guard test in
+// tests/store/opens.test.ts checks that.
 
 import type { Dirent, Stats } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
@@ -25,84 +16,66 @@ import { isRemote } from "./index.ts";
 import type { Entry, Lister, Listing } from "./list.ts";
 import { PAGE, byPageKey, pageKey } from "./list.ts";
 
-// Re-exported because the efficiency suite pages a folder by it.
+// Re-exported for tests that page a folder by it.
 export { PAGE };
 
 /**
- * diskLister browses this machine's disks: one `readdir` for what is there, and
- * a `stat` for each entry of the page a caller actually asked for.
+ * diskLister browses this machine's disks: one readdir per page, and a stat
+ * for each entry on the page.
  *
- * `page` is a parameter because the page size is the lister's own -- `list` is
- * handed a path and a cursor and nothing else -- and a test that has to see a
- * second page should not have to write a thousand files to get one.
+ * `page` is the page size. Tests set it small.
  */
 export function diskLister(page: number = PAGE): Lister {
   return {
     label: "local files",
-    // The same rule localFiles opens by, and for the same reason: a path with a
-    // scheme in front of it belongs to whoever claims that scheme.
+    // Every scheme-free path, the same rule localFiles opens by.
     handles: (path) => !isRemote(path),
     list: (dir, cursor) => listDir(dir, page, cursor),
     stat: statEntry,
   };
 }
 
-/** Row is one directory entry, once it is known what it is. */
+/** Row is one directory entry, classified. */
 interface Row {
   readonly name: string;
   readonly folder: boolean;
-  /** The stat that followed a symlink, kept so the page need not ask twice. */
+  /** The stat that followed a symlink, kept so the page reuses it. */
   readonly stats: Stats | undefined;
 }
 
 /**
- * listDir reads one page of a folder: classify, order, drop, take.
+ * listDir reads one page of a folder: classify, sort, drop, take.
  *
- * Every page costs the whole readdir, and the order is why rather than the
- * paging: folders come first, so the last name in a directory can belong on the
- * first page, and nothing can be handed back until all of them have been seen. A
- * filesystem has no continuation token to hold that place with either. What
- * paging does save is the stats, which is where the time actually goes -- a
- * folder of 200,000 files costs one readdir and the fifty sizes on screen, not
- * 200,000 of them.
+ * Every page costs the whole readdir, since folders sort first and the order
+ * is only known once every entry is seen. Only the entries on the page are
+ * statted.
  *
- * A folder that is not there throws rather than answering empty, which is the
- * opposite of what `nodeStore.list` does with the formula library. A person who
- * has never written a formula has no folder and does not need to hear about it;
- * a person who browsed somewhere that has gone does, because an empty listing
- * would say the folder is there and has nothing in it.
+ * A missing folder throws.
  */
 async function listDir(dir: string, page: number, cursor: string | undefined): Promise<Listing> {
   const found = namesOf(await readdir(dir, { withFileTypes: true, encoding: "buffer" }));
   const rows = (await rowsOf(dir, found)).toSorted(byPageKey).filter(from(cursor));
 
   const entries = await Promise.all(rows.slice(0, page).map(entryOf(dir)));
-  // The first row the page left behind, which is where the next one starts. A
-  // cursor the folder has since outrun leaves nothing to take and nothing to
-  // point at, so it is the last page rather than the first.
+  // The first row after the page is where the next page starts. When the
+  // rows end within the page, this is the last page.
   const after = rows[page];
   return after === undefined ? { entries } : { entries, next: pageKey(after) };
 }
 
-/** Found is one directory entry with its name as a string a path can be made of. */
+/** Found is one directory entry with its name decoded to a string. */
 interface Found {
   readonly name: string;
   readonly entry: Dirent<Buffer>;
 }
 
-/** A decoder that refuses rather than replaces, so a bad byte is an answer. */
+/** A decoder that throws on bytes outside UTF-8. */
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 /**
- * namesOf turns the bytes a directory holds its names as into strings, leaving
- * out any name that is not one.
- *
- * Linux lets a name be any bytes, and asked for strings, node hands back a name
- * whose bad bytes have been replaced -- a string no path reaches, so the stat
- * fails and so would the open. The name is asked for as bytes and read as
- * UTF-8 here instead, so a row is only ever a name an Entry's `path` can carry.
- * A file that is not listed is better than one that cannot be opened, and
- * macOS and Windows never write such a name in the first place.
+ * namesOf decodes each entry's name as UTF-8 and keeps the names that
+ * decode. Node would replace the bad bytes, giving a name that exists only
+ * in the listing.
  */
 function namesOf(found: readonly Dirent<Buffer>[]): Found[] {
   return found.flatMap((entry) => {
@@ -115,14 +88,8 @@ function namesOf(found: readonly Dirent<Buffer>[]): Found[] {
 }
 
 /**
- * rowsOf says what each thing in a directory is, following the links among them
- * first.
- *
- * A symlink is shown as what it points to, so following it belongs to working
- * out what a folder holds and not to reading a page of it: only a stat says
- * whether a link is a folder, and folders come first. The links go together
- * rather than one after another, so a folder of two hundred of them is one round
- * of waiting and not two hundred.
+ * rowsOf classifies each entry. Symlinks are statted first, all at once, so a
+ * link is shown as what it points to.
  */
 async function rowsOf(dir: string, found: readonly Found[]): Promise<Row[]> {
   const links = found.filter((f) => f.entry.isSymbolicLink());
@@ -133,19 +100,11 @@ async function rowsOf(dir: string, found: readonly Found[]): Promise<Row[]> {
 }
 
 /**
- * rowOf is what one directory entry turns into: one row, or none at all.
+ * rowOf turns one directory entry into a row, or none.
  *
- * None is a list of none rather than an absence, so classifying a folder is one
- * flatMap and not a map with a hole to filter out of it afterwards.
- *
- * Sockets, fifos and devices turn into none. Nothing in ingest reads one, and a
- * fifo is worse than useless in a browser: opening it would hang on a writer
- * that may never come, so the safest thing to do with one is not offer it.
- *
- * A link that cannot be followed -- dangling, a loop, a directory this person
- * may not stat -- becomes a file with no size. It is in the folder and `ls`
- * shows it, and a panel that draws a dash for a size it was not given already
- * has somewhere to put it.
+ * Files and directories become rows. Sockets, fifos and devices are dropped.
+ * A symlink becomes what it points to. A dangling one becomes a file with
+ * its size and time left out.
  */
 function rowOf({ name, entry }: Found, linked: Stats | undefined): Row[] {
   if (entry.isSymbolicLink()) {
@@ -159,11 +118,8 @@ function rowOf({ name, entry }: Found, linked: Stats | undefined): Row[] {
 }
 
 /**
- * from is the test for "this page and the ones after it", as a function of the
- * cursor.
- *
- * No cursor keeps everything, so the first page and the rest are the same four
- * steps with nothing branching between them.
+ * from is the filter for the page at `cursor` and the pages after it. An
+ * undefined cursor keeps everything.
  */
 function from(cursor: string | undefined): (row: Row) => boolean {
   if (cursor === undefined) return () => true;
@@ -171,17 +127,9 @@ function from(cursor: string | undefined): (row: Row) => boolean {
 }
 
 /**
- * entryOf fills in the size and the time for one entry of a page, in the folder
- * it was found in.
- *
- * `version` stays absent: a disk has nothing like an ETag, and task 3.3's
- * change test is written to compare sizes where there are no versions. Inventing
- * one out of the mtime would make it compare something it was told it could not
- * have.
- *
- * A directory gets no `bytes`. The size of a directory is the size of the list
- * of names in it, which is a number about the filesystem and not about anything
- * a person browsing is looking for.
+ * entryOf stats one row and builds its Entry: `modified` from the stat, and
+ * `bytes` for a file. A folder gets `modified` alone. `version` is absent on
+ * disk.
  */
 function entryOf(dir: string): (row: Row) => Promise<Entry> {
   return async (row) => {
@@ -198,11 +146,8 @@ function entryOf(dir: string): (row: Row) => Promise<Entry> {
 }
 
 /**
- * statEntry is size and time now, for one path, without reading it.
- *
- * It follows a symlink, so it answers for what the link points to, the way a
- * listing shows it. A path that is not there throws as node wrote it: the
- * message already names the path, and the `code` on it is what callers here test
+ * statEntry is the size and time of one path, from one stat. It follows a
+ * symlink. A missing path throws node's own error, whose `code` callers test
  * for.
  */
 async function statEntry(path: string): Promise<Entry> {
@@ -216,13 +161,7 @@ async function statEntry(path: string): Promise<Entry> {
   };
 }
 
-/**
- * statOrNothing is a stat whose failure is an answer.
- *
- * One entry that cannot be statted -- deleted between the readdir and here, a
- * link with no target, a mount that is not answering -- costs its own size and
- * not the folder it is in.
- */
+/** statOrNothing is a stat that returns undefined on failure. */
 async function statOrNothing(path: string): Promise<Stats | undefined> {
   try {
     return await stat(path);

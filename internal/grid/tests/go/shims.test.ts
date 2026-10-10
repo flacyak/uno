@@ -1,7 +1,5 @@
-// The expectations here were taken from Go, by running the equivalent calls and
-// recording what came back. They are the floor the rest of the port stands on:
-// if one of these drifts, a cell somewhere shows a different value and nothing
-// else complains.
+// Tests for the Go standard library shims. Expected values were recorded from
+// the equivalent Go calls.
 
 import { describe, expect, test } from "vite-plus/test";
 
@@ -37,19 +35,18 @@ describe("runes", () => {
   test("splits code points, not code units", () => {
     expect(runes("aé\u{1F600}")).toEqual(["a", "é", "\u{1F600}"]);
     expect(runeLen("\u{1F600}")).toBe(1);
-    expect("\u{1F600}".length).toBe(2); // the reason the shim exists
+    expect("\u{1F600}".length).toBe(2); // JS length counts code units
   });
 });
 
 describe("compareStrings", () => {
-  // strings.Compare(U+E000, U+1F600) is -1 in Go, because UTF-8 byte
-  // order is code-point order. JavaScript's `<` says the opposite, because a
-  // surrogate pair sorts below U+E000 as code units.
+  // Go compares by UTF-8 bytes, which is code point order. JavaScript's `<`
+  // compares code units, where a surrogate pair sorts below U+E000.
   test("orders by code point, the way UTF-8 bytes do", () => {
     const privateUse = "\ue000";
     const astral = "\u{1F600}";
     expect(compareStrings(privateUse, astral)).toBe(-1);
-    expect(privateUse < astral).toBe(false); // what a naive port would do
+    expect(privateUse < astral).toBe(false); // code unit order
   });
 
   test("agrees with the obvious answer everywhere else", () => {
@@ -70,8 +67,8 @@ describe("compareStrings", () => {
 });
 
 describe("case mapping", () => {
-  // Go uses simple case mapping: one rune in, one rune out. These are the runes
-  // where JavaScript's full mapping changes the length of the string.
+  // Go uses simple case mapping: one rune in, one rune out. JavaScript's full
+  // mapping changes the length for these runes.
   const cases: Array<[string, string, string]> = [
     ["ß", "ß", "ß"], // eszett: JS uppercases it to "SS"
     ["ﬁ", "ﬁ", "ﬁ"], // fi ligature: JS gives "FI"
@@ -104,7 +101,7 @@ describe("case mapping", () => {
 describe("unicode classes", () => {
   test("isLetter is category L, not [a-zA-Z]", () => {
     expect(isLetter("r")).toBe(true);
-    expect(isLetter("é")).toBe(true); // region, accented, is a legal column name
+    expect(isLetter("é")).toBe(true);
     expect(isLetter("5")).toBe(false);
     expect(isLetter("_")).toBe(false);
   });
@@ -118,9 +115,9 @@ describe("unicode classes", () => {
   test("isSpace is White_Space, which JS \\s is not", () => {
     expect(isSpace(" ")).toBe(true);
     expect(isSpace("\t")).toBe(true);
-    expect(isSpace("\u0085")).toBe(true); // NEL: in Go, not in JS \s
+    expect(isSpace("\u0085")).toBe(true); // NEL is White_Space
     expect(isSpace("\u00a0")).toBe(true);
-    expect(isSpace("\ufeff")).toBe(false); // in JS \s, not in Go
+    expect(isSpace("\ufeff")).toBe(false); // BOM is outside White_Space
     expect(isSpace("x")).toBe(false);
   });
 
@@ -128,9 +125,9 @@ describe("unicode classes", () => {
     expect(trimSpace(" x")).toBe("x");
     expect(trimSpace("  a b  ")).toBe("a b");
     expect(trimSpace("y")).toBe("y");
-    expect(trimSpace("\u00a0z\u00a0")).toBe("z"); // NBSP: Go trims it
-    expect(trimSpace("\u0085z\u0085")).toBe("z"); // NEL: Go trims it too
-    expect(trimSpace("\ufeffz\ufeff")).toBe("\ufeffz\ufeff"); // in JS \s, not in Go
+    expect(trimSpace("\u00a0z\u00a0")).toBe("z"); // NBSP is trimmed
+    expect(trimSpace("\u0085z\u0085")).toBe("z"); // NEL is trimmed
+    expect(trimSpace("\ufeffz\ufeff")).toBe("\ufeffz\ufeff"); // BOM is kept
     expect(trimSpace("   ")).toBe("");
     expect(trimSpace("")).toBe("");
     expect(trimSpace(" \u{1F600} a \u{1F600} ")).toBe("\u{1F600} a \u{1F600}");
@@ -138,7 +135,8 @@ describe("unicode classes", () => {
 });
 
 describe("formatFloat", () => {
-  // strconv.FormatFloat(v, 'f', -1, 64): shortest round-trip, never exponential.
+  // Matches strconv.FormatFloat(v, 'f', -1, 64): shortest round-trip form,
+  // always in plain decimal.
   const cases: Array<[number, string]> = [
     [0.22, "0.22"],
     [0.21999999999999997, "0.21999999999999997"],
@@ -164,13 +162,12 @@ describe("formatFloat", () => {
 
   test("keeps the sign of a negative zero, as Go does", () => {
     expect(formatFloat(-0)).toBe("-0");
-    expect((-0).toString()).toBe("0"); // what a naive port would print
+    expect((-0).toString()).toBe("0"); // JS drops the sign
   });
 });
 
 describe("roundSignificant", () => {
-  // This is what turns arithmetic showing its working into an answer, at the
-  // significant digits a computed cell keeps.
+  // Rounds to the significant digits a computed cell keeps.
   const DIGITS = 15;
 
   const cases: Array<[number, string]> = [
@@ -196,7 +193,7 @@ describe("quote", () => {
     ['a"b', '"a\\"b"'],
     ["a\\b", '"a\\\\b"'],
     ["tab\there", '"tab\\there"'],
-    ["é", '"é"'], // printable: Go leaves it literal
+    ["é", '"é"'], // printable runes are left as is
     ["1,204", '"1,204"'],
     ["", '""'],
     ["nl\n", '"nl\\n"'],
@@ -259,9 +256,8 @@ describe("parseFloat", () => {
     expect(goParseFloat("1.2.3")).toBeUndefined();
   });
 
-  // strconv.ParseFloat answers ±Inf with ErrRange for a decimal too large for
-  // a float64, and the core reads an error as "not a number". Too small is 0
-  // and no error.
+  // Matches strconv.ParseFloat: a value too large for a float64 is an error
+  // (undefined here), and a value too small is 0.
   test("refuses a decimal that overflows, as Go does", () => {
     expect(goParseFloat("1e400")).toBeUndefined();
     expect(goParseFloat("-1e400")).toBeUndefined();
@@ -301,15 +297,14 @@ describe("quoteMeta", () => {
 
 describe("replaceAllLiteral", () => {
   test("takes the replacement as text, not as a template", () => {
-    // String.replaceAll would expand these; Go never does.
+    // String.replaceAll would expand $& and $1. Go keeps them as typed.
     expect(replaceAllLiteral(/x/u, "axb", "$&")).toBe("a$&b");
     expect(replaceAllLiteral(/(a)/u, "aa", "$1")).toBe("$1$1");
     expect(replaceAllLiteral(/,/u, "1,204,567", "")).toBe("1204567");
   });
 
-  // Go gives "-" for the first and "#a#b#" for the second: an empty match that
-  // sits where the previous match ended is not replaced again. String.replace
-  // gives "--" and "#a##b#", a second replacement for one run of digits.
+  // An empty match at the position where the previous match ended is skipped,
+  // as in Go. String.replace would give "--" and "#a##b#".
   test("an empty match abutting a previous match is not replaced twice", () => {
     expect(replaceAllLiteral(/a*/u, "aaa", "-")).toBe("-");
     expect(replaceAllLiteral(/\d*/u, "a12b", "#")).toBe("#a#b#");
@@ -326,8 +321,8 @@ describe("findAllIndex", () => {
     ]);
   });
 
-  // Go returns [[0 0] [1 1] [2 3] [4 4]] here: the empty match at 3 is dropped
-  // because it sits where the previous match ended.
+  // The empty match at 3 is dropped because it sits where the previous match
+  // ended.
   test("handles empty matches the way Go does", () => {
     expect(findAllIndex(/x*/u, "abxc")).toEqual([
       [0, 0],
@@ -363,9 +358,8 @@ describe("fmt and hashing", () => {
     expect(rfc3339(new Date(Date.UTC(2026, 8, 9, 12, 0, 0)))).toBe("2026-09-09T12:00:00Z");
   });
 
-  // time.Time{} marshals as year 1, which is not the Unix epoch. A manifest the
-  // Go build wrote with a stamp it never set reads as absent, so the next save
-  // fills it in rather than keeping January 1 of year 1 as the creation date.
+  // Go's zero time.Time marshals as year 1. parseTime returns undefined for it
+  // and for the Unix epoch, and isZeroTime is true for the epoch.
   test("the zero time.Time is year 1 and reads as absent, and so does the epoch", () => {
     expect(isZeroTime(parseTime("2026-09-09T12:00:00Z"))).toBe(false);
     expect(isZeroTime(new Date(0))).toBe(true);

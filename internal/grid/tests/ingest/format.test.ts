@@ -12,7 +12,7 @@ import {
 import type { Encoding } from "../../src/ingest/index.ts";
 import { blobSource } from "../../src/store/index.ts";
 
-/** What ingest/format.ts reads of a file before it knows how long the header is. */
+/** Bytes openFormat reads first, before it knows how long the header is. */
 const PEEK = 64 << 10;
 
 const encoder = new TextEncoder();
@@ -21,9 +21,7 @@ function open(name: string, text: string) {
   return openFormat(name, blobSource(new Blob([text])));
 }
 
-// A file opened through the engine and the same file read whole have to say the
-// same thing about themselves, or the status bar changes when a person switches
-// mode.
+// openFormat and read report the same label and column names for a file.
 describe("openFormat reads the head the way read reads the file", () => {
   const cases: Array<[string, string]> = [
     ["f.csv", "a,b,c\n1,2,3\n"],
@@ -66,7 +64,7 @@ test("the byte order mark is not part of the first column's name", async () => {
   expect(f.dataStart).toBe(encoder.encode(head).length);
 });
 
-// Longer than the first read, so the header has to be read again.
+// A header longer than PEEK is read in full.
 test("a header longer than the first read is still read whole", async () => {
   const names = Array.from({ length: 5000 }, (_, i) => `column number ${i}`);
   const header = names.join(",");
@@ -98,8 +96,8 @@ describe("openFormat names the file in every error", () => {
   }
 });
 
-// A name two columns share is a name no formula can use, so every column gets
-// its own, and the first one keeps what the file called it.
+// headerOf makes duplicate names unique with a _N suffix. The first
+// occurrence keeps its name.
 describe("headerOf names every column once", () => {
   const cases: Array<[string[], string[]]> = [
     [
@@ -160,7 +158,7 @@ describe("openFormat says the delimiter and the encoding it found", () => {
   });
 });
 
-/** é in Windows-1252, one byte that is no UTF-8. */
+/** é in Windows-1252, a single byte that is invalid UTF-8. */
 const E_ACUTE_1252 = 0xe9;
 const LF = 0x0a;
 

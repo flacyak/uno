@@ -1,10 +1,8 @@
-// How long the page waits before doing something a person did not ask for,
-// in one place so what drives the page can wait on the same number.
+// Delays the page uses before acting on its own. Shared here so tests can
+// wait on the same numbers.
 
 /**
- * How long the window keeps the focus before its sources' buckets are asked
- * whether they hold something newer: long enough that alt-tabbing through
- * uno on the way somewhere else asks nothing, short enough that a person
- * coming back sees the mark before they look for it.
+ * How long the window must hold focus before the sources' buckets are asked
+ * for a newer version.
  */
 export const NEWER_AFTER_MS = 400;

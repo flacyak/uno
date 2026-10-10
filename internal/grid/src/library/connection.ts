@@ -1,42 +1,37 @@
-// A connection: one .unof that says where a bucket is and how to sign in to it.
+// A connection: one .unof that says where a bucket is and how to sign in to
+// it.
 //
-// It is shaped like a saved formula on purpose. A connection is shared the way
-// a formula is -- by sending the file -- so it is one small JSON file, it
-// carries what this build does not recognise through to the next save, and it
-// refuses by name what it cannot read rather than guessing.
+// It is shaped like a formula file: one small JSON object, unrecognised keys
+// carried through to the next save, unknown kinds refused by name.
 //
-// What it never carries is a secret. People diff these files, mail them and
-// commit them, so a connection names *how* to sign in -- a profile, a role --
-// and never the keys that do. Anything shaped like a key is refused on the way
-// in and on the way out, so a file that passes here can be sent to anybody.
+// It names how to sign in (a profile, a role) and leaves the keys to the
+// platform. Anything shaped like a key is refused on the way in and on the
+// way out.
 //
-// Nothing here touches a filesystem or a network, for the reason the formula
-// codec touches neither: where the files live is `store`'s business, and
-// signing in is the engine's.
+// It works on text alone.
 
 import { rfc3339 } from "../go/index.ts";
 import { validID } from "./index.ts";
 import { about, extraOf, readUnof, stamp, textOf, timeOf, writeExtra, wrongKind } from "./unof.ts";
 
-/** The kind a connection's file says it is, beside a formula's column and notation. */
+/** The kind a connection's file says it is. */
 export const CONNECTION_KIND = "connection";
 
-/** The kinds of place a connection can name. S3 and the stores that copy its API. */
+/** The kinds of place a connection can name: S3 and stores with its API. */
 export type ConnectionProvider = "s3";
 
 const PROVIDERS: readonly ConnectionProvider[] = ["s3"];
 
 /**
- * Auth is how a connection signs in, and only how.
+ * Auth is how a connection signs in.
  *
- * - `machine`: the AWS chain as the CLI runs it -- the environment, then the
- *   default profile. The desktop and `npx uno` only.
- * - `profile`: one named profile in ~/.aws: keys, SSO, credential_process, or
- *   role_arn with source_profile. The desktop and `npx uno` only.
- * - `role`: a role in the customer's account that trusts uno's, taken on with
- *   the requesting account's external ID. The hosted engine only, and the
- *   external ID is never in the file: it belongs to the account asking.
- * - `public`: an open bucket, read unsigned. Everywhere.
+ * - `machine`: the AWS default chain (the environment, then the default
+ *   profile). The desktop and `npx uno` only.
+ * - `profile`: one named profile in ~/.aws. The desktop and `npx uno` only.
+ * - `role`: a role in the customer's account that trusts uno's, assumed with
+ *   the requesting account's external ID. The hosted engine only. The
+ *   file holds the role ARN alone.
+ * - `public`: an open bucket, read unsigned.
  */
 export type Auth = (
   | { mode: "machine" }
@@ -44,7 +39,7 @@ export type Auth = (
   | { mode: "role"; roleArn: string }
   | { mode: "public" }
 ) & {
-  /** The keys this build did not recognise, carried to the next save. */
+  /** The keys beyond this build's own, carried to the next save. */
   extra?: Map<string, unknown>;
 };
 
@@ -53,13 +48,9 @@ export type AuthMode = Auth["mode"];
 const MODES: readonly AuthMode[] = ["machine", "profile", "role", "public"];
 
 /**
- * Connection is one .unof of kind "connection".
- *
- * `prefix` is where browsing starts and what the connection covers: an object
- * is read through the connection whose bucket it is in and whose prefix its key
- * starts with. It is empty for the whole bucket, and otherwise ends in a slash,
- * because a prefix without one is not a folder and would cover `shop-old/` as
- * well as `shop/`.
+ * Connection is one .unof of kind "connection". `prefix` is where browsing
+ * starts and what the connection covers. It is empty for the whole bucket,
+ * and otherwise ends in a slash.
  */
 export interface Connection {
   format: number;
@@ -68,12 +59,12 @@ export interface Connection {
   provider: ConnectionProvider;
   bucket: string;
   prefix: string;
-  /** Where the bucket is, once somebody has asked it. Absent until then. */
+  /** The bucket's region, once looked up. Absent until then. */
   region?: string;
   auth: Auth;
   created: Date | undefined;
   modified: Date | undefined;
-  /** The keys this build did not recognise, carried to the next save. */
+  /** The keys beyond this build's own, carried to the next save. */
   extra?: Map<string, unknown>;
 }
 
@@ -100,45 +91,36 @@ const AUTH_KEYS: Record<AuthMode, readonly string[]> = {
 };
 
 /**
- * A key's name that says it holds a secret: aws_secret_access_key,
- * secretAccessKey, aws_session_token, password, a private key. Matched on the
- * name with case and separators ignored, so `Secret-Access-Key` is caught the
- * same as `secretAccessKey`.
+ * Key names that hold a secret, matched with case and separators removed:
+ * `Secret-Access-Key` matches the same as `secretAccessKey`.
  */
 const SECRET_NAME = /secret|password|passwd|token|credential|privatekey|accesskey/;
 
 /**
- * An AWS access key id, wherever it sits: AKIA for a user's long-lived key,
- * ASIA for a session's. Caught by its shape, so one pasted under an innocent
- * name -- `"note": "AKIA…"` -- is refused too.
+ * The shape of an AWS access key id (AKIA, ASIA, ABIA or ACCA plus 16
+ * characters), matched inside any string value.
  */
 const ACCESS_KEY_ID = /\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b/;
 
 /**
- * An S3 bucket name as AWS allows one to be made: 3 to 63 lower-case letters,
- * digits, dots and hyphens, starting and ending with a letter or a digit.
- *
- * It is checked because the bucket becomes part of a hostname, and a file
- * somebody sent is what it came out of. A name that could end the host or
- * start a path is a different server to sign a request for.
+ * An S3 bucket name: 3 to 63 lower-case letters, digits, dots and hyphens,
+ * starting and ending with a letter or a digit. Checked because the bucket
+ * becomes part of a hostname.
  */
 const BUCKET = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
 
-/** A region's shape, for the same reason: it is spliced into a hostname. */
+/** A region's shape. Checked because it is spliced into a hostname. */
 const REGION = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 
 /**
- * A role's ARN as IAM writes one: a partition, a 12-digit account, and a name
- * of the characters IAM allows, with a path before it where there is one. It
- * is checked because the file somebody sent is what it came out of, and the
- * ARN is what the hosted engine asks STS to let it be.
+ * A role ARN as IAM writes one: a partition, a 12-digit account, and a name
+ * with an optional path before it.
  */
 const ROLE_ARN = /^arn:aws(?:-[a-z]+)*:iam::\d{12}:role\/[\w+=,.@/-]+$/;
 
 /**
- * secretIn names the first thing in a value that looks like a secret, or
- * answers undefined when there is none. It walks the whole value, because a key
- * nested three objects down is sent along with the file just the same.
+ * secretIn describes the first thing in `value` that looks like a secret, or
+ * returns undefined. It walks nested objects, arrays and Maps.
  */
 export function secretIn(value: unknown, at = ""): string | undefined {
   if (typeof value === "string") {
@@ -167,11 +149,8 @@ export function secretIn(value: unknown, at = ""): string | undefined {
 }
 
 /**
- * parseConnection reads one connection .unof.
- *
- * Like parseFormula, nothing outside the text is consulted: a connection a
- * colleague sent opens on a machine that has never had one. `name` is only
- * used to name the file in an error.
+ * parseConnection reads one connection .unof from its text. `name` is only
+ * used in error messages.
  */
 export function parseConnection(name: string, text: string): Connection {
   const { o, format } = readUnof(name, text);
@@ -185,8 +164,8 @@ export function parseConnection(name: string, text: string): Connection {
     });
   }
 
-  // Before anything else is read out of it, so a file carrying a key is never
-  // half-loaded into something that could be saved again.
+  // Checked before anything else is read, so a file holding a key is refused
+  // whole.
   const secret = secretIn(o);
   if (secret !== undefined) {
     throw new Error(`${name}: ${secret} · a connection names how to sign in and never holds a key`);
@@ -221,7 +200,7 @@ export function parseConnection(name: string, text: string): Connection {
   return c;
 }
 
-/** parseAuth reads the one block that says how to sign in, refusing a mode it does not know. */
+/** parseAuth reads the auth block. Refuses a missing block or an unknown mode. */
 function parseAuth(name: string, raw: unknown): Auth {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${name} does not say how to sign in: it has no auth block`);
@@ -245,7 +224,7 @@ function isMode(v: unknown): v is AuthMode {
   return typeof v === "string" && MODES.includes(v as AuthMode);
 }
 
-/** What each mode reads out of its auth block, besides the mode: a profile and a role each name one thing. */
+/** What each mode reads out of its auth block, besides the mode. */
 const AUTH_READERS: {
   [M in AuthMode]: (o: Record<string, unknown>, name: string) => Extract<Auth, { mode: M }>;
 } = {
@@ -255,7 +234,7 @@ const AUTH_READERS: {
   role: (o, name) => ({ mode: "role", roleArn: named(o, name, "role", "roleArn") }),
 };
 
-/** named is the one field a mode has to name, or the refusal for a block that does not. */
+/** named reads the one required string field of a mode, or throws. */
 function named(o: Record<string, unknown>, name: string, mode: AuthMode, key: string): string {
   const v = o[key];
   if (typeof v !== "string" || v === "") {
@@ -270,10 +249,8 @@ function authKnown(mode: AuthMode): (key: string) => boolean {
 }
 
 /**
- * validConnection checks the values that reach outside the file: the id, which
- * becomes a filename, the bucket, prefix and region, which become a host and
- * a path, and a role's ARN, which is asked of STS. It runs on the way in and
- * on the way out.
+ * validConnection checks the id, bucket, prefix, region and role ARN. It runs
+ * on parse and on format.
  */
 export function validConnection(c: Connection): void {
   validID(c.id, "connection");
@@ -300,24 +277,19 @@ export function validConnection(c: Connection): void {
 }
 
 /**
- * stampConnection sets the times a save records: modified is now, and created
- * is filled in the first time only, so a connection cannot come to claim it was
- * made after it was last changed.
- *
- * It is apart from `formatConnection` so that formatting stays a function of
- * the connection alone, which is what lets a file round-trip byte for byte.
+ * stampConnection sets modified to now and created the first time only. It
+ * is separate from `formatConnection` so formatting is a pure function of
+ * the connection.
  */
 export function stampConnection(c: Connection, now?: Date): Connection {
   return stamp(c, now);
 }
 
 /**
- * formatConnection renders a connection as its .unof, refusing one that holds
- * anything shaped like a secret.
- *
- * The known keys come in the order they are declared and the unrecognised ones
- * after them in name order, inside `auth` as well as around it, so a file read
- * and written again without a change is the same bytes it was.
+ * formatConnection renders a connection as .unof text. Known keys come in
+ * declared order and unrecognised ones after them in name order, inside
+ * `auth` as well as at the top level. Throws if the output holds anything
+ * that looks like a secret.
  */
 export function formatConnection(c: Connection): string {
   validConnection(c);
@@ -342,8 +314,7 @@ export function formatConnection(c: Connection): string {
   if (c.modified !== undefined) out["modified"] = rfc3339(c.modified);
   writeExtra(out, c.extra, isKnown);
 
-  // Checked on what is about to be written rather than on the connection, so
-  // nothing carried through `extra` can slip a key past it.
+  // Checked on the output, so a key carried in `extra` is caught too.
   const secret = secretIn(out);
   if (secret !== undefined) {
     throw new Error(
@@ -354,20 +325,16 @@ export function formatConnection(c: Connection): string {
 }
 
 /**
- * covers says whether an object, or a prefix a listing asks about, in `bucket`
- * is read through `c`: it is in c's bucket, and its key starts with c's prefix.
+ * covers reports whether `key` in `bucket` is read through `c`: same bucket,
+ * and the key starts with c's prefix.
  */
 export function covers(c: Connection, bucket: string, key: string): boolean {
   return c.bucket === bucket && key.startsWith(c.prefix);
 }
 
 /**
- * covering is the connection an address is read through: of the connections
- * that cover it, the one with the longest prefix.
- *
- * Longest, because a narrower connection is the more deliberate one. A bucket
- * connected whole through one profile and its finance/ folder through another
- * reads finance/ with the second, which is the one somebody set up for it.
+ * covering returns the connection with the longest prefix among those that
+ * cover the address, or undefined.
  */
 export function covering(
   connections: readonly Connection[],

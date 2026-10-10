@@ -1,11 +1,8 @@
-// Browsing picks a lister the way opening picks a handler, and refuses by name
-// when nothing claims the path.
+// listWith picks the first lister that claims a path, and refuses by name a
+// path every lister passes on.
 //
-// The listers these drive are stubs that record what they were asked, and stay
-// stubs now that the disk's and the bucket's are real: what is under test is the
-// choosing and the refusal, which is the whole of the module, and a stub is the
-// only way to be sure the lister that did not claim a path was never asked.
-// What a real listing looks like is disk.test.ts and s3list.test.ts.
+// The listers here are stubs that record what they were asked. Real listings
+// are in disk.test.ts and s3list.test.ts.
 
 import { expect, test } from "vite-plus/test";
 
@@ -45,8 +42,7 @@ test("a path is listed by the first lister that claims it", async () => {
   expect(disk.asked, "the lister that did not claim it is never asked").toEqual([]);
 });
 
-// A listing is paged, never whole, so the cursor has to reach the lister
-// unchanged: it is the lister's own token and means nothing here.
+// The cursor reaches the lister unchanged.
 test("the cursor is handed to the lister as it came", async () => {
   const s3 = stub("S3", "s3://");
 
@@ -56,9 +52,7 @@ test("the cursor is handed to the lister as it came", async () => {
   expect(listing.next).toBe("1/opaque+token==");
 });
 
-// The refusal openWith makes, for the same reason: a workspace written on a
-// machine with S3 set up and opened on one without has to say which kind of
-// place it cannot reach, rather than showing an empty folder.
+// The refusal names the path and what this build browses.
 test("a path nothing claims is refused by name", async () => {
   const disk = stub("local files", "/");
 

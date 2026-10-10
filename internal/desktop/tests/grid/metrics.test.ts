@@ -1,6 +1,6 @@
-// The grid's layout arithmetic, pulled out of View so it runs on a plain node
-// with no display: how tall the scroller is, where the scrollbar maps to on a
-// sheet past the cap, which rows the pool draws, and where a jump lands.
+// The grid's layout arithmetic in metrics.ts: the scroller's height, the
+// scrollbar mapping on a sheet past the cap, which rows the pool draws, and
+// where a jump lands.
 
 import { expect, test } from "vite-plus/test";
 
@@ -20,7 +20,7 @@ import {
   visibleRange,
 } from "../../src/renderer/grid/metrics.ts";
 
-/** A row height taken from the stylesheet's default. */
+/** The stylesheet's default row height. */
 const ROW_H = 29;
 
 // -------------------------------------------------------------------- size
@@ -56,16 +56,16 @@ test("a top mapped to the scrollbar and back lands where it started", () => {
 });
 
 test("below the cap the scrollbar's position is the top as it is, not a hair off a row's edge", () => {
-  // 32 rows under a 30px header in a 600px viewport leave 358px of scroll, and
-  // row 7 sits at 203px. 203 / 358 * 358 is 203.00000000000003, which ceil reads
-  // as row 8.
+  // 32 rows under a 30px header in a 600px viewport leave 358px of scroll.
+  // Row 7 is at 203px. 203 / 358 * 358 is 203.00000000000003, which ceil
+  // would read as row 8.
   const vMax = 32 * ROW_H + 30 - 600;
   expect(scrollerToTop(7 * ROW_H, vMax, vMax)).toBe(7 * ROW_H);
   expect(topToScroller(7 * ROW_H, vMax, vMax)).toBe(7 * ROW_H);
 });
 
 test("both directions of the mapping answer 0, not NaN, when the sheet fits without scrolling", () => {
-  // A short sheet has vMax === rMax === 0: nothing to scroll, in either unit.
+  // A short sheet has vMax === rMax === 0.
   expect(scrollerToTop(5, 0, 0)).toBe(0);
   expect(topToScroller(5, 0, 0)).toBe(0);
 });
@@ -75,9 +75,8 @@ test("both directions of the mapping answer 0, not NaN, when the sheet fits with
 test("the first drawn row clamps so the last screenful is full at the very end of the sheet", () => {
   const total = 4812;
   const pool = poolSize(total, 600, ROW_H);
-  // Scrolled arbitrarily far down -- well past the sheet's own height -- the
-  // first row must still leave exactly `pool` rows to draw, ending on the
-  // sheet's last row rather than running off the end.
+  // Scrolled far past the sheet's height, the first row still leaves exactly
+  // `pool` rows to draw, ending on the last row.
   const first = firstRow(total, pool, 999_999_999, ROW_H);
   expect(first).toBe(total - pool);
   expect(first + pool - 1).toBe(total - 1);
@@ -104,8 +103,7 @@ test("scrolling into view moves as little as puts the row wholly on screen", () 
   expect(intoView(15, ROW_H, top, height), "already wholly on screen").toBeUndefined();
 });
 
-// The same question along the row: a selection moved to a column off the side
-// of a wide file brings the column on screen.
+// spanIntoView does the same along the row, for a column off either side.
 test("a column off either side scrolls just far enough to be wholly on screen", () => {
   const scrollLeft = 300;
   const width = 800;
@@ -155,7 +153,7 @@ test("the visible range is the rows wholly on screen", () => {
 });
 
 test("the visible range at the end of the sheet clamps rather than running past the last row", () => {
-  // top + height reaches past row 95's own top, but there is no row past 94.
+  // top + height reaches past row 95's own top, and row 94 is the last.
   const range = visibleRange(2900, ROW_H, 310, 95);
   expect(range.bottom).toBe(94);
   expect(range.top).toBeLessThanOrEqual(range.bottom);

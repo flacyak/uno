@@ -1,5 +1,5 @@
 /* The settings control at the left of the status bar, and the menu it opens
- * upward. Every colour is a token, so each theme dresses it too. */
+ * upward. Every colour is a theme token. */
 
 .settings-toggle {
   display: inline-flex;
@@ -116,8 +116,8 @@
   color: var(--accent);
 }
 
-/* A theme's colours in the mode worn now: its surface, with its accent and
- * its ink as two dots on it. */
+/* A theme's colours in the current mode: its surface, with its accent and
+ * ink as two dots. */
 .settings .chip {
   display: inline-flex;
   flex-shrink: 0;

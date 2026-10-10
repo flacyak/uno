@@ -1,12 +1,6 @@
-// The engine's messages as WebSocket frames.
-//
-// A MessagePort clones what it is handed, so the tests around this one never
-// ask whether a Date is still a Date at the other end. A WebSocket carries text
-// and bytes, and these ask exactly that: every kind of value a message holds
-// comes back as what it was, bytes ride beside the JSON and are not copied into
-// it, and a frame this did not write is refused in a sentence. The last ones
-// run a real engine through the frames, so the claim is about the protocol and
-// not about a list of types somebody remembered to keep up.
+// The engine's messages as WebSocket frames: every kind of value comes back
+// as what it was, bytes ride beside the JSON uncopied, and a bad frame is
+// refused in a sentence. The last tests run a real engine over the frames.
 
 import { expect, test } from "vite-plus/test";
 
@@ -34,7 +28,7 @@ import { blobProvider } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { FIXTURE, bytes, sales } from "./harness.ts";
 
-/** join makes a frame the one value a socket would deliver. */
+/** join turns a frame into the one value a socket would deliver. */
 async function join(frame: Frame): Promise<string | Uint8Array> {
   if (typeof frame === "string") return frame;
   return new Uint8Array(await new Blob(frame).arrayBuffer());
@@ -79,7 +73,7 @@ test("bytes ride beside the JSON, as the pieces they were handed over as", async
   const saved = new Uint8Array([0, 1, 2, 253, 254, 255]);
   const frame = encode({ t: "saved", id: 3, bytes: saved });
   expect(Array.isArray(frame)).toBe(true);
-  // The same array, and not a copy of it: nothing was read to send it.
+  // The same array, by identity.
   expect(frame).toContain(saved);
   expect(await across({ t: "saved", id: 3, bytes: saved })).toEqual({
     t: "saved",
@@ -147,9 +141,9 @@ test("frameBytes weighs a binary frame exactly", () => {
 });
 
 /**
- * A pair of sockets joined back to back, each delivering what the other sends
- * the way a WebSocket would: text as a string, anything else as an ArrayBuffer,
- * later and in order.
+ * A pair of fake sockets joined back to back. Each delivers what the other
+ * sends asynchronously and in order: text as a string, bytes as an
+ * ArrayBuffer.
  */
 function socketPair(): [FakeSocket, FakeSocket] {
   const a = new FakeSocket();
@@ -193,7 +187,7 @@ class FakeSocket implements WebSocketLike {
 
 const LIMIT = 1 << 20;
 
-/** An engine reached through frames, over a disk and dropped files. */
+/** An engine served over the fake sockets, with disk and blob providers. */
 function overSockets(limit = LIMIT): { engine: Engine; client: FakeSocket; far: MessagePortLike } {
   const [client, server] = socketPair();
   const far = socketPort(server, limit);
@@ -202,7 +196,7 @@ function overSockets(limit = LIMIT): { engine: Engine; client: FakeSocket; far: 
   return { engine, client, far };
 }
 
-/** The one source a spreadsheet opens as. */
+/** Opens `ref` and returns its first source. */
 async function opened(engine: Engine, ref: SourceRef): Promise<SourceHandle> {
   const added = await engine.open(ref);
   return added.sources[0]!;
@@ -222,7 +216,7 @@ test("a dropped file crosses as its bytes, and its workspace saves as bytes back
   const { engine, client } = overSockets();
   const source = await opened(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
   expect(source.opened.size).toBe(bytes.byteLength);
-  // The open went as one binary frame, the file a piece of it.
+  // The open went as a binary frame holding the Blob.
   expect(client.sent.some((frame) => frame instanceof Blob)).toBe(true);
 
   const saved = await engine.save({ source: source.id, cells: [], at: "" }, LIMIT);
@@ -251,8 +245,6 @@ test("a socket that closes under the client says so once", async () => {
   await expect.poll(() => said).toEqual(["the connection to the engine closed"]);
 });
 
-// The socket goes while an open is on its way. A promise that never settles
-// leaves the shell waiting on a workspace nobody will send.
 test("a socket that closes with a request out refuses it, and every request after it", async () => {
   const { engine, far } = overSockets();
   const said: string[] = [];

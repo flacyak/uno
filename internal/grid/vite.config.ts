@@ -2,13 +2,11 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   pack: {
-    // One entry per ported Go package, so the Electron main process and the
-    // renderer can each pull only what they need. `exports: true` writes the
-    // subpath map into package.json from these.
-    // store/node is its own entry because it is the one module that imports
-    // node:fs: a worker on a desktop reaches for it, and a browser never should.
-    // store/s3 is its own so that only an engine pays for the signing code,
-    // and store/sts beside it, for the hosted engine that takes on roles.
+    // One entry per package folder, plus three store modules imported on
+    // their own. `exports: true` writes the subpath map into package.json
+    // from these.
+    // store/node is the only module that imports node:fs. store/s3 holds the
+    // request signing code. store/sts holds the role assumption code.
     entry: [
       "src/index.ts",
       "src/*/index.ts",
@@ -23,8 +21,7 @@ export default defineConfig({
     exports: true,
   },
   test: {
-    // Fails a test file that leaves a file open, which Node otherwise reports
-    // as a warning in some later run.
+    // Fails a test file that leaves a file handle open.
     setupFiles: ["tests/handles.ts"],
   },
   lint: {

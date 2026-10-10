@@ -1,23 +1,12 @@
-// Package library reads and writes the .unof files a person's formulas live in,
-// one file per formula.
-//
-// A library could as easily be a single file holding all of them, and should
-// not be. One file per formula makes the shareable unit the same as the
-// editable unit: sending someone a formula is sending a file, "edit" beside a
-// name opens that file, and an autosave on every keystroke rewrites 400 bytes
-// rather than the whole library, so a bad write costs one formula instead of
-// forty.
-//
-// Nothing here touches a filesystem. Parsing and formatting are the whole of
-// it; where the files live is `store`'s business, and debouncing the autosave
-// belongs to whatever owns the editor.
+// Package library parses and formats .unof files, one per formula or
+// connection. It works on text alone.
 
 import { rfc3339, runes } from "../go/index.ts";
 import { CONNECTION_KIND } from "./connection.ts";
 import { about, extraOf, readUnof, stamp, textOf, timeOf, writeExtra, wrongKind } from "./unof.ts";
 
-// A connection is a .unof too, with a codec of its own beside this one. It is
-// re-exported here so that `@uno/grid/library` is every kind of .unof.
+// A connection is a .unof too. Re-exported so `@uno/grid/library` covers every
+// kind of .unof.
 export {
   CONNECTION_KIND,
   covering,
@@ -31,66 +20,38 @@ export {
 export type { Auth, AuthMode, Connection, ConnectionProvider } from "./connection.ts";
 
 /**
- * FORMAT_VERSION is the highest layout this build reads, and the one it writes.
- * A .unof is meant to travel -- it is the whole reason a formula is a file -- so
- * the number is part of the promise made to whoever receives one.
+ * FORMAT_VERSION is the highest layout this build reads, and the one it
+ * writes.
  */
 export const FORMAT_VERSION = 1;
 
-/** The extension both kinds of formula share. They have almost nothing else in
- * common, but they open from the same drawer, so they save the same way. */
+/** The extension every .unof shares. */
 export const EXT = ".unof";
 
-/** Which of the two things wearing the word "formula" this is. */
+/** Kind is which kind of formula a .unof holds. */
 export type Kind = "column" | "notation";
 
-/**
- * Formula is one .unof.
- *
- * What is absent is as decided as what is here. There is no usage history:
- * "recently used" is an ordering that belongs to this person on this machine,
- * and shipping it inside the formula would mean sending your habits along with
- * your arithmetic every time you shared one. There are no paths either, for the
- * reason a .uno has none: a file that only works where it was written is not
- * reusable anywhere.
- */
+/** Formula is one .unof, holding what the file holds. */
 export interface Formula {
   format: number;
   id: string;
   name: string;
   /**
-   * "column" binds arithmetic to a whole column: it reads other columns,
-   * recalculates when they change, and can take part in a cycle. "notation" is
-   * markdown placed in one cell: it reads nothing, depends on nothing, and
-   * never changes again until a person edits it.
+   * "column" binds arithmetic to a whole column: it reads other columns and
+   * recalculates when they change. "notation" is markdown placed in one cell.
    */
   kind: Kind;
-  /**
-   * Arithmetic for a column formula and markdown for a notation one.
-   *
-   * Markdown, because a .unof is meant to be shared and markdown stays legible
-   * to someone reading the file without uno: in a diff, in a chat window, in a
-   * text editor.
-   */
+  /** Arithmetic for a column formula, markdown for a notation one. */
   expr: string;
   /**
-   * The columns the expression reads, by name and resolved on apply, because a
-   * column's position is a fact about one sheet rather than about the formula.
-   *
-   * A notation formula reads nothing, so it carries no refs key at all rather
-   * than an empty list that would imply it could.
+   * The columns the expression reads, by name, resolved on apply. Absent for
+   * a notation formula.
    */
   refs?: string[];
   created: Date | undefined;
   modified: Date | undefined;
 
-  /**
-   * The keys this build did not recognise, carried through to the next save.
-   *
-   * An older uno opening a file written by a newer one must not quietly drop
-   * what it could not read and then write that loss back over the file -- the
-   * same rule `document` keeps for entries it does not know.
-   */
+  /** The keys beyond this build's own, carried through to the next save. */
   extra?: Map<string, unknown>;
 }
 
@@ -99,20 +60,14 @@ const KNOWN_KEYS = new Set(["format", "id", "name", "kind", "expr", "refs", "cre
 const isKnown = (key: string): boolean => KNOWN_KEYS.has(key);
 
 /**
- * maxIDLen is short of the 255 bytes filesystems stop at, leaving room for the
- * extension. The limit is here so the refusal names the id rather than arriving
- * from the kernel as ENAMETOOLONG halfway through an autosave.
+ * MAX_ID_LEN leaves room under the 255-byte filename limit for the extension.
  */
 const MAX_ID_LEN = 200;
 
 /**
- * validID checks the one value in a .unof that can reach outside the directory
- * it was read from.
- *
- * Formulas arrive from other people -- that is the point of making each one a
- * file -- so the id is checked before it is joined to a path, never after, and
- * both separators are refused on every platform because a file written on
- * Windows is expected to open here.
+ * validID checks an id before it becomes a filename. It refuses an empty id,
+ * one over MAX_ID_LEN bytes, one starting with a dot, one holding `/`, `\`
+ * or `:`, and one holding a control character.
  */
 export function validID(id: string, what = "formula"): void {
   if (id === "") throw new Error(`a ${what} with no id has no file to be saved in`);
@@ -123,9 +78,8 @@ export function validID(id: string, what = "formula"): void {
       `${what} id ${JSON.stringify(id)} is ${bytes} bytes, longer than a filename may be`,
     );
   }
-  // A leading dot covers "." and ".." without naming them, hides the file from
-  // the person who owns it, and keeps an id away from the temp files an atomic
-  // write is in the middle of renaming.
+  // A leading dot covers "." and "..", hidden files, and the temp files of an
+  // atomic write.
   if (id.startsWith(".")) {
     throw new Error(`${what} id ${JSON.stringify(id)} may not start with a dot`);
   }
@@ -140,26 +94,20 @@ export function validID(id: string, what = "formula"): void {
   }
 }
 
-/** fileName is the only place an id becomes a path, and `validID` is the only
- * thing standing between the two. A connection's id is checked the same way,
- * and named as one in the refusal. */
+/** fileName is the only place an id becomes a path. It runs `validID` first. */
 export function fileName(id: string, what = "formula"): string {
   validID(id, what);
   return id + EXT;
 }
 
 /**
- * parseFormula reads one .unof.
- *
- * Nothing outside the text is consulted, which is what lets a formula somebody
- * sent you open on a machine that has never had a library at all. `name` is
- * only used to name the file in an error.
+ * parseFormula reads one .unof from its text. `name` is only used in error
+ * messages.
  */
 export function parseFormula(name: string, text: string): Formula {
   const { o, format } = readUnof(name, text);
 
-  // A connection is a .unof too, and one that lands in the formula folder is
-  // refused by name rather than read as an empty column formula.
+  // A connection .unof in the formula folder is refused by name.
   const kind = o["kind"];
   if (kind !== "column" && kind !== "notation") {
     throw wrongKind(name, kind, "formula", {
@@ -187,25 +135,21 @@ export function parseFormula(name: string, text: string): Formula {
   const extra = extraOf(o, isKnown);
   if (extra !== undefined) f.extra = extra;
 
-  // The id is checked on the way in as well as on the way out, so no id that
-  // could name a path is ever handed to a caller in the first place.
+  // The id is checked on the way in as well as on the way out.
   about(name, () => validID(f.id));
   return f;
 }
 
 /**
- * formatFormula renders a .unof, stamping the version and the times.
- *
- * The timestamps are set here rather than taken from the caller: modified is
- * what this save is, and created is filled in only the first time, so a formula
- * cannot come to claim it was written after it was last edited. The stamped
- * formula is returned alongside the text so the caller can keep it.
+ * formatFormula renders a .unof. It stamps the format and the times: modified
+ * is now, and created is set only the first time. Returns the text and the
+ * stamped formula.
  */
 export function formatFormula(f: Formula): { text: string; stamped: Formula } {
   validID(f.id);
   const stamped = stamp(f);
 
-  // The known fields in the order they are declared, then the unrecognised ones.
+  // Known fields in declared order, then the unrecognised ones.
   const out: Record<string, unknown> = {
     format: stamped.format,
     id: stamped.id,
@@ -218,8 +162,6 @@ export function formatFormula(f: Formula): { text: string; stamped: Formula } {
   out["modified"] = stamped.modified === undefined ? undefined : rfc3339(stamped.modified);
   writeExtra(out, stamped.extra, isKnown);
 
-  // A comparison in an expression stays a "<" rather than becoming a "<".
-  // Escaping it would cost exactly the legibility that made markdown the right
-  // thing to store, and someone will read this file in a diff.
+  // The expression is written verbatim: a "<" stays a "<".
   return { text: JSON.stringify(out, undefined, 2) + "\n", stamped };
 }

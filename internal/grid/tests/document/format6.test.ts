@@ -1,10 +1,7 @@
-// Format 6: a source that is several files read as one.
-//
-// `parts` and `header` on a source are the one thing that needs it. A
-// workspace with no such source is written as format 5 wrote it, to the byte,
-// so a build before this one still opens it. What is under test here is the
-// codec: what it writes, that it reads the same thing back, and every way a
-// list of parts that is not quite right is refused before a file is opened.
+// Format 6 tests: a source made of several files read as one, with `parts`
+// and `header` keys. A workspace whose sources are all single files is still
+// written as format 5, byte for byte. Covers what is written, round trips,
+// and the refusals for malformed part lists.
 
 import { strFromU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, test } from "vite-plus/test";
@@ -29,14 +26,14 @@ const CSV_BYTES = encoder.encode(CSV_BODY);
 const CSV_ROWS = 2;
 const CSV_COLS = 3;
 
-/** When every workspace here was first saved, so the manifest's text can be said whole. */
+/** Fixed created time, so the full manifest text can be compared. */
 const CREATED = new Date("2026-09-30T12:00:00Z");
 
-/** Where the workspace is saved, and the folder its parts are in. */
+/** Workspace path, and the bucket folder the parts are in. */
 const AT = "/home/cpa/q4/books.uno";
 const BUCKET_DIR = "s3://acme-exports/shop/2025";
 
-/** The plan's own example: three months of orders in a bucket, read as one. */
+/** A source of three monthly order files in a bucket, read as one. */
 function orders(): HeldParts {
   return {
     id: "shop-orders",
@@ -75,7 +72,7 @@ function orders(): HeldParts {
   };
 }
 
-/** A file the workspace points at, and one it carries: everything format 5 holds. */
+/** One pointed-at file source and one carried file source. */
 function files(): Held[] {
   return [
     {
@@ -116,7 +113,7 @@ function workspace(sources: Held[], at = AT): Document {
   };
 }
 
-/** uno.json as it was written, as text. */
+/** The written uno.json as text. */
 function manifestText(uno: Uint8Array): string {
   return strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!);
 }
@@ -131,7 +128,7 @@ function manifestOf(uno: Uint8Array): WrittenManifest {
   return JSON.parse(manifestText(uno)) as WrittenManifest;
 }
 
-/** The workspace with its manifest changed by `change`, as the bytes of a .uno. */
+/** Writes `doc`, applies `change` to its manifest, and returns the new .uno bytes. */
 function tampered(doc: Document, change: (m: WrittenManifest) => void): Uint8Array {
   const entries = unzipSync(writeDocument(doc));
   const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as WrittenManifest;
@@ -146,8 +143,7 @@ function partsOf(m: WrittenManifest): Array<Record<string, unknown>> {
 }
 
 describe("a workspace with no source of several files", () => {
-  // The task's own sentence. The whole of uno.json is said here, so a key
-  // that moved, or one format 6 added to a file source, fails it.
+  // The full manifest text is compared, so any moved or added key fails.
   test("still writes format 5, to the byte", () => {
     const uno = writeDocument(workspace(files()));
     const m = manifestOf(uno);
@@ -208,8 +204,8 @@ describe("a source of several files", () => {
     expect(PARTS_VERSION).toBe(FORMAT_VERSION);
   });
 
-  // The plan's example of one source, with the two things beside it that the
-  // join measured of each part and a later open is spared measuring again.
+  // Each part is written with its path, bytes and version, plus skip when it
+  // is above zero and unterminated when it is true.
   test("is written as its parts, in order, and whether they have a header row", () => {
     const uno = writeDocument(workspace([orders()]));
     const m = manifestOf(uno);
@@ -270,7 +266,7 @@ describe("a source of several files", () => {
     const doc = workspace([orders(), ...files()]);
     const back = readContainer("books.uno", writeDocument(doc), AT);
     expect(back.sources[0]).toEqual(doc.sources[0]);
-    // The file sources beside it come back as they always did.
+    // The file sources read back as before.
     expect(back.sources.slice(1)).toMatchObject(doc.sources.slice(1));
     expect(back.log).toEqual(doc.log);
     expect(back.active).toBe("shop-orders");
@@ -290,8 +286,8 @@ describe("a source of several files", () => {
     expect(readContainer("books.uno", uno, AT).sources[0]!.header).toBe("none");
   });
 
-  // What most parts do not have is not written, so a folder of exports on a
-  // disk is a list of paths and sizes.
+  // A part at the defaults (undefined version, skip 0, unterminated false)
+  // is written as its path and bytes alone.
   test("writes only a path and a size for a part that is whole, ends in a newline and has no version", () => {
     const source = orders();
     source.connection = undefined;
@@ -309,8 +305,8 @@ describe("a source of several files", () => {
     expect(readContainer("books.uno", uno, AT).sources[0]).toEqual(source);
   });
 
-  // A part's name is what its decoder is picked by, so one the path does not
-  // say is kept.
+  // A part's name is written only when it differs from the last segment of
+  // its path.
   test("keeps a part's name where it is not the last piece of its path", () => {
     const source = orders();
     source.parts[1] = { ...source.parts[1]!, name: "november.tsv" };
@@ -336,7 +332,8 @@ describe("a source of several files", () => {
     ]);
   });
 
-  // Move the folder, and the parts move with it, as a file source does.
+  // Part paths under the workspace folder are stored relative and resolved
+  // against the folder on read.
   test("points at a part beside the workspace relative to it", () => {
     const source = orders();
     source.parts = source.parts.map((part) => ({
@@ -353,8 +350,7 @@ describe("a source of several files", () => {
     );
   });
 
-  // readDocument opens nothing, so a source of parts has no sheet, as a
-  // pointed-at file has none.
+  // readDocument builds sheets only for carried sources.
   test("gets no sheet from readDocument, which opens no file", () => {
     const back = readDocument("books.uno", writeDocument(workspace([orders(), ...files()])), AT);
     expect([...back.sheets!.keys()]).toEqual(["sales"]);
@@ -378,9 +374,8 @@ describe("a source of several files is not written", () => {
   });
 });
 
-// Every row's number depends on every part before it, so a list of parts that
-// is not what a save wrote is refused, saying which part and what is wrong
-// with it, before a single file is opened.
+// readContainer refuses a malformed parts list, naming the part and the
+// problem.
 describe("a source of several files is refused on reading", () => {
   const NOVEMBER =
     "books.uno: shop-orders: part 2 of 3 (s3://acme-exports/shop/2025/orders-2025-11.csv)";
@@ -491,10 +486,7 @@ describe("a source of several files is refused on reading", () => {
   });
 });
 
-// A reader that goes on to read a layout it does not know either fails on
-// something beside the point or drops what it could not read. So the format
-// is the first thing read, and a newer one is refused as a newer one whatever
-// else the file holds.
+// The format number is checked before anything else in the manifest.
 describe("a format newer than this build reads", () => {
   const NEWER = FORMAT_VERSION + 1;
 
@@ -507,8 +499,7 @@ describe("a format newer than this build reads", () => {
     );
   });
 
-  // The next format's sources may be nothing this build would let through,
-  // and the refusal still has to be about the format.
+  // The error is about the format even when the sources are also unreadable.
   test("is refused by name whatever it has done to its sources", () => {
     const uno = tampered(workspace([orders()]), (m) => {
       m.format = NEWER;

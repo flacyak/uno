@@ -1,10 +1,9 @@
-// A connection tried before it is saved: its bucket's region, and a page of its
-// prefix, asked the way it signs in.
+// tryConnection: a connection tried before it is saved. It finds the bucket's
+// region and counts a page of the prefix, signed the way the connection signs
+// in.
 //
-// What is under test is what the connect screen shows. A connection that works
-// comes back with its region filled in and a count of what its prefix holds.
-// One that does not is refused in words that say why -- 403, no such bucket --
-// so the screen can say exactly that and save nothing.
+// A working connection comes back with its region and counts. A failing one
+// is refused with the reason: access denied, or a missing bucket.
 
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -74,7 +73,6 @@ test("the whole bucket, from its root", async () => {
   expect({ folders: tried.folders, files: tried.files }).toEqual({ folders: 1, files: 0 });
 });
 
-// The refusals the screen shows, each in the words of what stopped it.
 test("a 403 says access was denied, and to whom", async () => {
   const wrong = { ...env, AWS_SECRET_ACCESS_KEY: "not it" };
   await expect(tryConnection(draft(), options(wrong))).rejects.toThrow(
@@ -88,8 +86,7 @@ test("a bucket that is not there says so", async () => {
   );
 });
 
-// Through the engine, the way the connect screen asks: nothing is saved by
-// trying, so the engine's connections are the same list afterwards.
+// Through the engine. The connection list stays empty after a try.
 test("the engine tries a connection and keeps nothing", async () => {
   const dir = await mkdtemp(join(tmpdir(), "uno-try-"));
   const kept = connectionsIn(nodeStore(), dir);

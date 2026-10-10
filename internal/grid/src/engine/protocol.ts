@@ -1,12 +1,10 @@
 // The messages between a client and an engine.
 //
-// An engine is a worker that owns one workspace: its sources, and the log over
-// them. Its client -- a renderer, or a test -- never touches the bytes: it names
-// each file once, asks one source for rows by position, and sends it edits. What
-// comes back is ready to draw. What it says to a person comes back as data, a
-// `Said`, for the client to write in the person's language.
-// Everything crosses as plain data, so the same messages run over an Electron
-// MessagePortMain, a Web Worker or a MessageChannel in vitest.
+// An engine is a worker that owns one workspace. A client names files, asks
+// for rows by position, and sends edits. Replies are ready to draw. Text for
+// a person is sent as a `Said`, which the client renders in its own language.
+// Every message is plain data, so it works over an Electron MessagePortMain,
+// a Web Worker, or a MessageChannel.
 
 import type { AuthMode, Connection } from "../library/index.ts";
 import type { Change } from "../pattern/index.ts";
@@ -16,9 +14,8 @@ import type { Entry, FileRef, Listing, SingleRef } from "../store/index.ts";
 import type { Tried, Unconnected } from "../store/s3.ts";
 
 /**
- * SourceRef says where a source's bytes are without holding any of them: a
- * FileRef, one file or several read as one, which the engine opens through
- * whichever of its FileHandlers claims it.
+ * SourceRef says where a source's bytes are: one file, or several read as
+ * one. The engine opens it through whichever FileHandler claims it.
  */
 export type SourceRef = FileRef;
 
@@ -26,18 +23,18 @@ export interface ColumnInfo {
   header: string;
   kind: Kind;
   flagged: boolean;
-  /** The expression a formula computes the column from, when one does. */
+  /** The formula expression bound to the column, if any. */
   binding?: string;
 }
 
-/** How far the index has got, and what a client may ask for because of it. */
+/** How far the index has got. */
 export interface Progress {
   /** Bytes scanned, out of the file's size. */
   done: number;
   total: number;
-  /** Rows a request can be answered for now. */
+  /** Rows that can be requested now. */
   readable: number;
-  /** Rows in the file: exact once complete, projected from the bytes scanned until then. */
+  /** Rows in the file: exact once complete, estimated until then. */
   rows: number;
   complete: boolean;
 }
@@ -45,90 +42,79 @@ export interface Progress {
 /**
  * Link is the file a source points at, and what is wrong with it.
  *
- * A source the workspace carries has no link at all: there is no file to be
- * wrong about. One that points at a file has a link with neither `missing` nor
- * `changed` set while everything is as it was. Several files read as one have
- * no link either while they are open, since a link is one path, so nothing is
- * asked or said about their files changing. Reopened from a .uno and not
- * readable, they have one with an empty path, which says why in `missing`.
+ * A source over one file has a link. It is absent on a carried source and
+ * on an open source over several files. A source reopened from a .uno that
+ * failed to read has a link with an empty path and `missing` set.
  */
 export interface Link {
   /** Where the file is, as this machine names it. */
   path: string;
 
   /**
-   * Which bytes of it were opened, where the place can say: an S3 VersionId,
-   * or an ETag in its quotes. A save writes it down, so the next open can tell
-   * a rewrite from the file the log was made against.
+   * Which version of the file was opened, where the store can say: an S3
+   * VersionId, or an ETag in quotes. Saved so the next open can detect a
+   * rewrite.
    */
   version?: string;
 
   /**
-   * Why there is no grid behind this source: the file was not where the
-   * workspace said, or would not open. The source is still here -- its id, its
-   * edits and its place in the log are kept -- and `relink` gives it a file
-   * again.
+   * Why this source is absent: its file is missing, or failed to open. The
+   * source keeps its id, edits and place in the log, and
+   * `relink` gives it a file again.
    */
   missing?: Said;
 
   /**
-   * The file is there and is a different size than when the workspace was
-   * saved, so the log may be naming rows in data that has moved under it.
-   *
-   * It is said and not acted on. The edits still replay, because refusing to
-   * open a workspace over an appended row would be a worse answer than showing
-   * it and saying so.
+   * The file is there but its size or version differs from when the
+   * workspace was saved. The edits still replay; this is a warning only.
    */
   changed?: Said;
 
   /**
-   * The bucket a source reads that no connection covers, when that is why it
-   * is missing: a .uno somebody sent names a bucket, and nothing was read
-   * from it, because this machine has not made or accepted a connection to it.
-   * The panel offers to connect it with the bucket filled in.
+   * The uncovered bucket this source reads, when that is why it is missing.
+   * The panel offers to connect it.
    */
   connect?: Unconnected;
 }
 
 export interface Opened {
-  /** What the workspace and its log call this source. */
+  /** The source's id in the workspace and its log. */
   source: string;
-  /** The file the rows come from. A .uno names the source it carries. */
+  /** The file name. For a .uno, the name of the source it carries. */
   name: string;
   size: number;
-  /** How the bytes were read, for the status bar. Nothing for a source with no file. */
+  /** How the bytes were read, for the status bar. Set on a source with rows behind it. */
   label?: Said;
   columns: ColumnInfo[];
   progress: Progress;
-  /** This source's part of the log a .uno was saved with, already applied.
-   * Empty for anything else. */
+  /** This source's edits from the .uno it was opened from, already applied.
+   * Empty otherwise. */
   edits: Edit[];
   generation: number;
-  /** The file this source points at, for one that does. */
+  /** The file this source points at, if any. */
   link?: Link;
   /**
-   * The files it reads as one, in the order their rows are read, for a source
-   * that is several: what a client needs to say how many there are, and to
-   * see that the folder they came from has more.
+   * The files a source over several files reads, in the order their rows are
+   * read.
    */
   parts?: PartInfo[];
 }
 
-/** One of the files a source reads as one, as a client is told of it. */
+/** One file of a source that reads several as one. */
 export interface PartInfo {
   name: string;
-  /** Where the file is, or "" for a dropped one, which has no path. */
+  /** Where the file is, or "" for a dropped file. */
   path: string;
 }
 
-/** What an open added to the workspace, in the order it shows them. */
+/** What an open added to the workspace, in display order. */
 export interface Opening {
   opened: Opened[];
   /** The source to show: the one just added, or the one a .uno was left on. */
   showing: string;
 }
 
-/** An edit as a client asks for it. The engine numbers it and fills in `was`. */
+/** An edit as a client sends it. The engine numbers it and fills in `was`. */
 export interface EditRequest {
   op: Op;
   row: number;
@@ -136,7 +122,7 @@ export interface EditRequest {
   now: string;
 }
 
-/** What an edit or an undo leaves behind: the edit, and the columns after it. */
+/** The result of an edit, undo or redo: the edit, and the columns after it. */
 export interface Changed {
   edit: Edit;
   /** Rows built before this number are stale. */
@@ -144,16 +130,16 @@ export interface Changed {
   columns: ColumnInfo[];
 }
 
-/** Where each source's grid was left, and which source was showing: what a save keeps. */
+/** The cursor position of each source and which source was showing. Written by a save. */
 export interface Place {
   /** The source that was showing. */
   source: string;
   cells: Array<{ source: string; row: number; col: number }>;
 
   /**
-   * Where the .uno is going, so a source under the same folder is pointed at
-   * relative to it. Empty where the caller has no path to give, and every
-   * pointer is then absolute.
+   * The path the .uno is saved to. A source under the same folder is pointed
+   * at relative to it. Empty for a caller that has yet to choose a path, in
+   * which case every pointer is absolute.
    */
   at: string;
 }
@@ -161,11 +147,11 @@ export interface Place {
 /** A find: the next row down or up one column whose cell matches. */
 export interface FindRequest {
   col: number;
-  /** The row the search starts beside. It is never a match itself. */
+  /** The row the search starts beside. Matching starts at the next row. */
   from: number;
   /** 1 looks down, -1 up. */
   dir: 1 | -1;
-  /** A cell that does not parse as its column's kind, or one that shows some text. */
+  /** Match a cell that fails to parse as its column's kind, or one whose text contains `text`. */
   match: { t: "unparsed" } | { t: "text"; text: string };
 }
 
@@ -175,18 +161,17 @@ export interface Found {
   /** Rows looked at. */
   searched: number;
   /**
-   * Whether the search reached the end of the file in its direction. Down, it
-   * stops where the index has got to rather than waiting for the rest.
+   * Whether the search reached the end of the file in its direction. A
+   * downward search stops at the readable limit of the index.
    */
   complete: boolean;
 }
 
 /**
- * Offer is the recogniser's question as it stands.
+ * Offer is the recogniser's current proposal for a column.
  *
- * It arrives more than once for a large file. Until `complete`, `affects` counts
- * the cells changed in the first `scanned` rows, which makes it a lower bound a
- * banner can say out loud.
+ * It is sent more than once for a large file. Until `complete`, `affects`
+ * counts the cells changed in the first `scanned` rows.
  */
 export interface Offer {
   /** The source whose column it is. */
@@ -206,28 +191,21 @@ export interface Offer {
 }
 
 /**
- * Peeked is what a file holds, before anything is added: enough of it to
- * decide by, and no more.
- *
- * It is the answer to a selection in the panel, so a 30 GB export and a 30 KB
- * one have to cost the same -- one HEAD and one ranged GET of the front of it
- * -- because a person clicking down a list of objects is asking the same
- * question of each and should not pay by the size of what they land on.
+ * Peeked is a preview of a file: its header and first rows, read from the
+ * front of the file apart from the workspace.
  */
 export interface Peeked {
-  /** How the bytes were read, the sentence an opened source carries too:
-   * "UTF-8 · delimiter ','". */
+  /** How the bytes were read, for example "UTF-8 · delimiter ','". */
   label: Said;
   /** The header row, one string per column. */
   header: string[];
-  /** The rows under it, as many as the peek takes or the bytes it read held. */
+  /** The rows under the header, up to the peek's row limit. */
   rows: string[][];
 }
 
 /**
- * Loaded is what an engine read out of its connections folder: every
- * connection it can sign in through, and a sentence for each file it could
- * not read, since one broken file costs one connection and still wants saying.
+ * Loaded is what an engine read from its connections folder: every
+ * connection, and a message for each file that failed to read.
  */
 export interface Loaded {
   connections: Connection[];
@@ -235,107 +213,83 @@ export interface Loaded {
 }
 
 /**
- * SignIns is how an engine signs in to a bucket, for a person connecting one
- * to choose from: the modes its platform takes on, the AWS profiles its
- * machine has where `profile` is among them, and what a role has to trust
- * where `role` is. Names and ARNs only: nothing that signs crosses the port.
+ * SignIns lists the ways this engine can sign in to a bucket. Only names and
+ * ARNs cross the port; credentials stay on the engine's machine.
  */
 export interface SignIns {
-  /** The modes this engine signs in with, in the order to offer them. */
+  /** The sign-in modes, in the order to offer them. */
   modes: AuthMode[];
-  /** The names of the AWS profiles this engine's machine has. Empty where `profile` is not among the modes. */
+  /** The names of the AWS profiles on this engine's machine. Filled when `profile` is a mode. */
   profiles: string[];
   /**
-   * Whom a role has to trust, and with what external ID, where `role` is
-   * among the modes: the engine's own principal, and the ID that belongs to
-   * the account asking, for the trust policy a person writes in theirs.
+   * What a role's trust policy must name, when `role` is a mode: the
+   * engine's principal and the external ID for the asking account.
    */
   trust?: Trust;
 }
 
-/** Trust is what a role's policy names before the hosted engine can take it on. */
+/** Trust is what a role's trust policy must name for the hosted engine to assume it. */
 export interface Trust {
   /** The ARN the policy lets assume the role: the engine's own. */
   principal: string;
-  /** The external ID the policy's condition asks for. It is the account's, and never in a file. */
+  /** The external ID the policy's condition asks for. */
   externalId: string;
 }
 
 /**
- * The most rows one `rows` request is answered with.
- *
- * A client reads a band of rows around its viewport and never more, so a
- * request for more than this is from something other than the client. It is
- * refused at the port rather than answered, because answering it would build
- * the whole readable part of a file into one reply, and for a large file that
- * is more than the engine has.
+ * The most rows one `rows` request may ask for. A larger request is refused
+ * at the port.
  */
 export const ROWS_AT_MOST = 2000;
 
 export type Request =
   /**
-   * Add a file to the workspace: read its header, begin indexing it. A .uno
-   * opens every source it holds, and only into a workspace holding none.
+   * Add a file to the workspace: read its header and begin indexing. A .uno
+   * opens every source it holds, and only into an empty workspace.
    */
   | { t: "open"; id: number; ref: SourceRef }
-  /** Take a source out of the workspace, and its edits out of the log. */
+  /** Remove a source from the workspace, and its edits from the log. */
   | { t: "remove"; id: number; source: string }
   /**
-   * Point a source at a file: the one whose file has gone, or one whose file
-   * has changed under it. The source keeps its id, its edits and its place in
-   * the log, and the log is replayed over what the file holds now.
+   * Point a source at a different file. The source keeps its id, edits and
+   * place in the log. The log is replayed over the new file.
    */
   | { t: "relink"; id: number; source: string; ref: SourceRef }
   /**
-   * Add files at the end of a source that is several read as one. Its rows
-   * extend, and every row it had keeps its number, so the log is untouched and
-   * each edit stays on the cell it was made to.
+   * Add files at the end of a source that reads several files as one. Every
+   * existing row keeps its number, so the log is unchanged.
    */
   | { t: "append"; id: number; source: string; parts: SingleRef[] }
-  /** Rows by position, with the log applied. Fewer where the index has not reached. */
+  /** Rows by position, with the log applied. Fewer where the index stops short. */
   | { t: "rows"; id: number; source: string; first: number; count: number }
   | { t: "edit"; id: number; source: string; edit: EditRequest }
-  /** The source's last edit, taken back. */
+  /** Take back the source's last edit. */
   | { t: "undo"; id: number; source: string }
-  /** The edit undo last took back from the source, recorded again. */
+  /** Record again the edit that undo last took back. */
   | { t: "redo"; id: number; source: string }
-  /** The next matching row in a column, read from the file rather than any band. */
+  /** The next matching row in a column, searched in the file. */
   | { t: "find"; id: number; source: string; find: FindRequest }
-  /**
-   * One page of a folder or a prefix. It names a path and not a source,
-   * because it is asked before there is one: a panel browsing its way toward
-   * something to open.
-   */
+  /** One page of a folder or prefix listing. Names a path, since it runs ahead of any source. */
   | { t: "list"; id: number; path: string; cursor?: string }
-  /** Size and version of a path now, without reading it: the same way, and for
-   * the same reason. */
+  /** Size and version of a path, from its metadata alone. */
   | { t: "stat"; id: number; path: string }
   /**
-   * What a file holds, without adding it to the workspace: a person picking
-   * one out of a folder of four hundred wants to see it before they commit a
-   * tab to it.
-   *
-   * It names a ref and not a path, because a file about to be added may have
-   * no path: bytes dropped into a page are looked at the same way an object in
-   * a bucket is.
+   * A preview of a file, read apart from the workspace. Names a ref, which
+   * covers a dropped file as well as a path.
    */
   | { t: "peek"; id: number; ref: SourceRef }
-  /**
-   * The connections this engine signs in through, read again from where they
-   * are kept: asked once they have changed, so a connection saved a moment ago
-   * is one the engine uses without being started again.
-   */
+  /** Reload the connections this engine signs in through and return them. */
   | { t: "connections"; id: number }
-  /** How this engine signs in to a bucket, for a person connecting one. */
+  /** How this engine signs in to a bucket. */
   | { t: "signins"; id: number }
   /**
-   * A connection tried before it is saved: where its bucket is, and a page of
-   * its prefix, asked the way it signs in. Nothing is kept by asking.
+   * Try a connection before it is saved: find its bucket's region and list a
+   * page of its prefix. The connection is dropped afterwards.
    */
   | { t: "try"; id: number; connection: Connection }
-  /** Transform allows edits and runs the recogniser, over every source. View allows neither. */
+  /** Transform allows edits and runs the recogniser over every source. View is read-only. */
   | { t: "mode"; transform: boolean }
-  /** The workspace as a .uno, refusing carried sources larger than limit together. */
+  /** Write the workspace as a .uno. Refused if carried sources total more than limit bytes. */
   | { t: "save"; id: number; place: Place; limit: number }
   | { t: "close" };
 
@@ -352,7 +306,7 @@ export type Reply =
       generation: number;
       /** What each cell shows. */
       rows: string[][];
-      /** What each cell stores, where that differs from what it shows. */
+      /** What each cell stores, or null for a row where that matches what it shows. */
       raws: Array<string[] | null>;
     }
   | { t: "changed"; id: number; source: string; changed: Changed }
@@ -360,25 +314,23 @@ export type Reply =
   | { t: "listed"; id: number; listing: Listing }
   | { t: "statted"; id: number; entry: Entry }
   | { t: "peeked"; id: number; peeked: Peeked }
-  /** What a connections request read, and what it could not, one sentence a file. */
+  /** The connections read, and a message for each file that failed to read. */
   | { t: "loaded"; id: number; loaded: Loaded }
-  /** The ways of signing in on offer: modes, profile names and nothing else out of the files they are in, and a role's trust. */
+  /** The sign-in modes, profile names and role trust on offer. */
   | { t: "offered"; id: number; signins: SignIns }
   | { t: "tried"; id: number; tried: Tried }
-  /** Null when the source has nothing to ask. */
+  /** Null when the recogniser finishes with an empty proposal. */
   | { t: "offer"; source: string; generation: number; offer: Offer | null }
   | { t: "saved"; id: number; bytes: Uint8Array }
-  /** Without an id, a failure of an index or a pass behind a source. */
+  /** Unnumbered, a failure of an index or a pass behind a source. */
   | { t: "error"; id?: number; source?: string; said: Said };
 
-/** One end of a connection, whatever the runtime calls it. */
+/** One end of a connection. */
 export interface Port<In, Out> {
   post(msg: Out): void;
   /**
-   * listen hands every message to `fn`, and tells `gone` once when the far end
-   * has gone first -- the process behind it exited, or the socket closed --
-   * so what was waiting on an answer is not left waiting for one that cannot
-   * come. A port that closes itself tells nobody: it knew.
+   * listen hands every message to `fn`. It calls `gone` once when the far
+   * end closes first. A close from this side ends listening in silence.
    */
   listen(fn: (msg: In) => void, gone?: () => void): void;
   close(): void;
@@ -388,7 +340,7 @@ export interface Port<In, Out> {
 export interface MessagePortLike {
   postMessage(msg: unknown): void;
   addEventListener(type: "message", fn: (e: { data: unknown }) => void): void;
-  /** Fired once either end has closed, which is when the other end went. */
+  /** Fired once either end has closed. */
   addEventListener(type: "close", fn: () => void): void;
   start(): void;
   close(): void;

@@ -1,8 +1,5 @@
-// A provider is plugged in whole, and the two lists are derived from it.
-//
-// What is under test is that wiring a provider once wires both capabilities,
-// that a provider with nothing to browse contributes no lister rather than an
-// empty one, and that both refusals come out of the same sentence.
+// Tests for sources(): building the file and browser lists from providers,
+// and the refusal messages for an unclaimed ref or path.
 
 import { dirname } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -14,7 +11,7 @@ import { blobProvider } from "../../src/store/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
 import { FIXTURE, bytes } from "../engine/harness.ts";
 
-/** A stand-in bucket: claims s3://, and lists and stats without a network. */
+/** A stand-in S3 provider that claims s3:// paths and lists and stats in memory. */
 function bucketProvider(): Provider {
   const browse: Lister = {
     label: "S3",
@@ -46,8 +43,7 @@ test("wiring a provider wires both of its capabilities", () => {
   expect(store.browsers.map((l) => l.label)).toEqual(["local files", "S3"]);
 });
 
-// A Blob is a file and nothing around it. A provider with nothing to browse
-// contributes no lister, rather than one that answers with an empty folder.
+// A provider joins the browser list only when it has `browse`.
 test("a provider with nothing to browse contributes no lister", () => {
   const store = sources([blobProvider()]);
 
@@ -55,8 +51,7 @@ test("a provider with nothing to browse contributes no lister", () => {
   expect(store.browsers).toEqual([]);
 });
 
-// One provider, both capabilities, reaching the same file: the fixture is
-// opened by the handler and found by the lister in the folder it sits in.
+// The disk provider opens the fixture and lists it in its folder.
 test("a provider opens and browses the same place", async () => {
   const store = sources([diskProvider()]);
 
@@ -70,8 +65,7 @@ test("a provider opens and browses the same place", async () => {
   expect(listing.entries.map((e) => e.path)).toContain(FIXTURE);
 });
 
-// The one provider that cannot browse, wired on its own: a build that reads
-// dropped bytes and nothing else says so rather than showing an empty folder.
+// With only the blob provider, list() is refused with "browses nothing".
 test("a build whose only provider cannot browse refuses to browse at all", async () => {
   const store = sources([blobProvider()]);
 
@@ -88,8 +82,8 @@ test("the registry lists and stats through the provider that claims the path", a
   expect((await store.stat("s3://acme/exports/a.csv")).bytes).toBe(7);
 });
 
-// Both refusals are one sentence with two words swapped, so neither can drift
-// away from the other again.
+// The open and browse refusals have the same shape and list the provider
+// labels.
 test("opening and browsing refuse the same way", async () => {
   const store = sources([diskProvider(), bucketProvider()]);
 
@@ -101,8 +95,7 @@ test("opening and browsing refuse the same way", async () => {
   );
 });
 
-// The refusal names what the build can reach, and a build that can reach
-// nothing says so instead of trailing off after the verb.
+// With an empty provider list, both refusals say "nothing".
 test("a registry with no providers refuses both ways", async () => {
   const store = sources([]);
 

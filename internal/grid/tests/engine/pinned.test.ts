@@ -1,11 +1,8 @@
-// A saved workspace opens the bytes its log was made against.
-//
-// A bucket with versioning on keeps every version of an object, so a .uno
-// that recorded a VersionId asks for that one by name, and reopens the saved
-// bytes after the object is written over or deleted. A bucket without
-// versioning keeps no copy, so the object is read as it is now, every range
-// pinned to the ETag it was opened at. A VersionId the bucket no longer has
-// opens the object as it is now, and says which version that is.
+// Reopening a .uno that recorded an S3 version. In a versioned bucket the
+// recorded VersionId is requested, so the saved bytes reopen after an
+// overwrite or delete. In a plain bucket the object is read as it is now,
+// pinned to its ETag. A VersionId the bucket has dropped opens the current
+// object and reports its version.
 
 import { readFileSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -25,7 +22,7 @@ import type { Bucket } from "../store/standin.ts";
 import { UNITS } from "../testdata/sales-q3.ts";
 import { bytes, connect, indexed, openOne, sales } from "./harness.ts";
 
-/** What the object is written over with: another export altogether. */
+/** Another file, written over the object. */
 const OTHER = readFileSync(
   fileURLToPath(new URL("../testdata/google-ads-sales.csv", import.meta.url)),
 );
@@ -34,7 +31,7 @@ const KEY = "2025/sales-q3.csv";
 const VERSIONED = `s3://acme-history/${KEY}`;
 const PLAIN = `s3://acme-plain/${KEY}`;
 
-/** What each bucket holds now. A test writes over or deletes through these. */
+/** The objects in each bucket. A test overwrites or deletes through these. */
 const history = new Map<string, Uint8Array>();
 const plain = new Map<string, Uint8Array>();
 
@@ -57,7 +54,7 @@ const providers = () => [
   s3Provider({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint }),
 ];
 
-/** A workspace of the object with one edit, saved, as the file it wrote. */
+/** Opens the object, makes one edit, saves, and returns the .uno's path. */
 async function saved(path: string): Promise<string> {
   const { engine, done } = connect(undefined, providers());
   try {
@@ -87,7 +84,6 @@ function asked(key: string): string[] {
   return b.seen.filter((s) => s.path.endsWith(key)).map((s) => `${s.method} ${s.query ?? ""}`);
 }
 
-// The task's own sentence.
 test("an object overwritten in a versioned bucket still reopens the saved bytes", async () => {
   const file = await saved(VERSIONED);
   const version = versionIdOf(bytes);
@@ -99,12 +95,12 @@ test("an object overwritten in a versioned bucket still reopens the saved bytes"
   try {
     expect(src.opened.link).toEqual({ path: VERSIONED, version });
     expect(src.opened.size).toBe(bytes.length);
-    // The saved bytes, with the edit replayed over them.
+    // The saved bytes, with the edit replayed.
     const rows = (await src.rows(0, 3)).rows;
     expect(rows[0]![UNITS]).toBe(sales.display(0, UNITS));
     expect(rows[1]![UNITS]).toBe("986");
     expect(rows[2]![UNITS]).toBe(sales.display(2, UNITS));
-    // Every request named the version, encoded once, however its id is spelt.
+    // Every request carries the version id, URL-encoded once.
     const q = `versionId=${encodeURIComponent(version)}`;
     const seen = asked(KEY);
     expect(seen.length).toBeGreaterThan(1);
@@ -126,11 +122,8 @@ test("and after it is deleted", async () => {
   }
 });
 
-// Versioning suspended, or the version deleted: the bytes are gone, and the
-// object as it is now is the best there is. It says it is another version,
-// which is what a change test has to go on.
 test("a version the bucket no longer has opens the object as it is now, saying which", async () => {
-  // A workspace saved against a version nobody kept.
+  // A made-up version id.
   const { engine, done } = connect(undefined, providers());
   try {
     const { sources } = await engine.open({
@@ -156,15 +149,14 @@ test("an object in a bucket without versions is read as it is now, pinned to its
   try {
     expect(src.opened.link?.version).toBe(etagOf(OTHER));
     expect(src.opened.size).toBe(OTHER.length);
-    // Nothing to name: S3 keeps no copy of the bytes behind an ETag.
+    // A plain bucket is asked for the object by key alone.
     for (const s of asked(KEY)) expect(s).not.toContain("versionId");
   } finally {
     done();
   }
 });
 
-// What "newer in the bucket" is decided from: stat has to answer in the kind a
-// source records, or every pinned source would look newer than itself.
+// stat reports the same kind of version a source records.
 test("stat names a versioned object by its VersionId, and a plain one by its ETag", async () => {
   const { engine, done } = connect(undefined, providers());
   try {
