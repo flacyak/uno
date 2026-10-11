@@ -23,10 +23,19 @@ import {
 import type { MenuItemConstructorOptions, UtilityProcess, WebContents } from "electron";
 import { join } from "node:path";
 
+import { WORKSPACE_FILTER } from "@document";
+
 import { m } from "@paraglide/messages";
 import { isLocale, setLocale } from "@paraglide/runtime";
 import { filesNamed } from "./argv.ts";
-import { sourceAt, unoPath, writeAtomic, writeConnection } from "./files.ts";
+import {
+  ADD_EXTENSIONS,
+  OPEN_EXTENSIONS,
+  sourceAt,
+  unoPath,
+  writeAtomic,
+  writeConnection,
+} from "./files.ts";
 
 /**
  * This file is bundled to CommonJS, so `__dirname` is defined. Paths are
@@ -343,7 +352,7 @@ function registerFileHandlers(): void {
       title: m.dialog_open(),
       properties: ["openFile"],
       filters: [
-        { name: m.filter_spreadsheets_and_workspaces(), extensions: ["uno", "csv", "tsv"] },
+        { name: m.filter_spreadsheets_and_workspaces(), extensions: [...OPEN_EXTENSIONS] },
         { name: m.filter_all_files(), extensions: ["*"] },
       ],
     });
@@ -358,7 +367,7 @@ function registerFileHandlers(): void {
       title: m.dialog_add_source(),
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: m.filter_spreadsheets(), extensions: ["csv", "tsv"] },
+        { name: m.filter_spreadsheets(), extensions: [...ADD_EXTENSIONS] },
         { name: m.filter_all_files(), extensions: ["*"] },
       ],
     });
@@ -373,7 +382,7 @@ function registerFileHandlers(): void {
     const picked = await dialog.showSaveDialog(over(event), {
       title: m.dialog_save_as(),
       defaultPath: suggestedName,
-      filters: [{ name: m.filter_workspace(), extensions: ["uno"] }],
+      filters: [{ name: m.filter_workspace(), extensions: [WORKSPACE_FILTER] }],
     });
     if (picked.canceled || picked.filePath === undefined) return undefined;
     return unoPath(picked.filePath);
