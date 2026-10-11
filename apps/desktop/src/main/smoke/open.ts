@@ -1,10 +1,24 @@
 /**
  * @fileoverview Checks that the fixture opened: the bridge, the header, the
  * virtualiser, and a window that ignores input from the person at the desktop.
+ * It then checks that a JSON Lines, a gzip and a Parquet file added beside
+ * the fixture are each refused by name.
  */
+
+import { join } from "node:path";
 
 import type { Check, Input } from "./check.ts";
 import { DATE, DOM_ROWS, REP, ROWS, UNITS, counted } from "./fixture.ts";
+
+/** The core's test files. smoke.js names the folder. */
+const TESTDATA = process.env["UNO_SMOKE_TESTDATA"] ?? "";
+
+/** Files this build does not read yet, and what each holds. */
+const UNREAD = [
+  ["events.jsonl", "JSON Lines"],
+  ["sales-q3.csv.gz", "gzip"],
+  ["par1.bin", "Parquet"],
+] as const;
 
 /** A point over a cell in the grid, and a turn of the wheel up it. */
 const OVER_GRID = { x: 400, y: 300 };
@@ -201,6 +215,20 @@ export const OPEN: Check[] = [
       document.querySelectorAll("tbody tr")[2].children[GUTTER + REP].click();
       await frame();
       return text("#status-cell") === "rep · row 3" ? "" : "the selection went back to " + text("#status-cell");
+    `,
+  },
+  {
+    // Added beside the fixture, the way a command line naming several does.
+    name: "a JSON Lines, a gzip and a Parquet file are each refused by name, not read as text",
+    send: ["menu:add-paths", UNREAD.map(([name]) => join(TESTDATA, name))],
+    shot: "not-read",
+    script: `
+      const want = ${JSON.stringify(UNREAD.map(([name, what]) => `${name}: ${what} is not supported yet`))};
+      if (!(await until(() => want.every((w) => text("#status-msg").includes(w))))) {
+        return "the status bar says " + JSON.stringify(text("#status-msg"));
+      }
+      const tabs = document.querySelectorAll(".tab").length;
+      return tabs === 1 ? "" : tabs + " tabs, where the refused files added none";
     `,
   },
 ];

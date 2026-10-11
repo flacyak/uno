@@ -31,9 +31,11 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
-const fixture = join(pkg, "../../core/tests/testdata/sales-q3.csv");
+// The core's test files, which the checks open from.
+const testdata = join(pkg, "../../core/tests/testdata");
+const fixture = join(testdata, "sales-q3.csv");
 // A second export, for the checks that a workspace holds several.
-const second = join(pkg, "../../core/tests/testdata/google-ads-sales.csv");
+const second = join(testdata, "google-ads-sales.csv");
 
 /** The object pasted into the sources panel: the second export, in S3. */
 const KEY = "2025/ads-q3.csv";
@@ -46,7 +48,7 @@ const BESIDE = ["2025/ads-q4.csv", "2025/sales-q3.csv"];
  * fourth that arrives later and is appended. The fourth is the first part's
  * bytes under a name that sorts after the third.
  */
-const PARTS = [1, 2, 3].map((n) => join(pkg, `../../core/tests/testdata/sales-q3-part-${n}.csv`));
+const PARTS = [1, 2, 3].map((n) => join(testdata, `sales-q3-part-${n}.csv`));
 const ARRIVING = new Map([
   ...(await Promise.all(
     PARTS.map(async (path, i) => [`shop/2025/sales-q3-part-${i + 1}.csv`, await readFile(path)]),
@@ -193,6 +195,7 @@ const { code, out } = await drive("smoke", {
     ...DRIVEN_LANGUAGE_ENV,
     UNO_SMOKE: scratch,
     UNO_SMOKE_SOURCE: second,
+    UNO_SMOKE_TESTDATA: testdata,
     // The object's address, for the check that adds it.
     UNO_SMOKE_OBJECT: object,
     UNO_SMOKE_SENT: sent,
