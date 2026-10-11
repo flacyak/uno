@@ -7,10 +7,11 @@
 
 import type { SignIns } from "@uno/grid/engine";
 import type { AuthMode, Connection } from "@uno/grid/library";
-import { validConnection } from "@uno/grid/library";
+import { roleNameOf, validConnection } from "@uno/grid/library";
 import type { Tried } from "@uno/grid/store/s3";
 
 import { m } from "../../paraglide/messages.js";
+import { RoleBlock } from "./role.ts";
 import { Words, el, message, option } from "./util.ts";
 
 /** What the form asks of the shell. */
@@ -135,7 +136,8 @@ const EXAMPLE_ROLE = "arn:aws:iam::123456789012:role/uno-read";
 const UNKNOWN_REGION = "?";
 
 /**
- * triedLine is the message for a successful test: the folder and what it held.
+ * triedLine is the message for a successful test: the folder and what it
+ * held, and for a role connection the role that was assumed to list it.
  */
 export function triedLine(tried: Tried): string {
   const held = {
@@ -143,10 +145,12 @@ export function triedLine(tried: Tried): string {
     files: m.files_count({ count: tried.files }),
   };
   const found = tried.more ? m.connect_found_more(held) : m.connect_found(held);
-  const prefix = tried.connection.prefix;
-  return prefix === ""
-    ? m.connect_listed_bucket({ found })
-    : m.connect_listed_prefix({ prefix, found });
+  const { prefix, auth } = tried.connection;
+  const listed =
+    prefix === "" ? m.connect_listed_bucket({ found }) : m.connect_listed_prefix({ prefix, found });
+  return auth.mode === "role"
+    ? m.connect_assumed({ role: roleNameOf(auth.roleArn), listed })
+    : listed;
 }
 
 /** The form's state. */
@@ -167,9 +171,10 @@ export class ConnectForm {
   /** The role's row, shown while "role" is selected. */
   private readonly roleRow: HTMLElement;
   /**
-   * What the role has to trust, shown under its ARN once the engine has said.
+   * What a person copies to make the role, shown above its ARN while "role"
+   * is selected and the engine has said what the role has to trust.
    */
-  private readonly trust = el("div", "trust");
+  private readonly role: RoleBlock;
   private readonly region = document.createElement("div");
   private readonly result = document.createElement("div");
   private readonly saving = document.createElement("div");
@@ -219,6 +224,7 @@ export class ConnectForm {
     words.attr(this.roleArn, "aria-label", m.connect_role_aria);
     this.roleArn.placeholder = EXAMPLE_ROLE;
     this.roleRow = field(words, m.field_role, this.roleArn);
+    this.role = new RoleBlock();
     this.region.className = "value";
     this.result.className = "result";
     this.result.setAttribute("role", "status");
@@ -237,8 +243,8 @@ export class ConnectForm {
       field(words, m.field_bucket, this.bucket),
       field(words, m.field_prefix, this.prefix),
       field(words, m.field_sign_in, this.signIn),
+      this.role.el,
       this.roleRow,
-      this.trust,
       field(words, m.field_region, this.region),
       this.result,
       buttons,
@@ -269,6 +275,7 @@ export class ConnectForm {
   /** relabel rewrites the form's text in the current language. */
   relabel(): void {
     this.words.write();
+    this.role.relabel();
     this.options(this.offered);
     this.paint();
   }
@@ -444,16 +451,14 @@ export class ConnectForm {
 
   private paint(): void {
     const s = this.status;
-    // The role row shows while "role" is selected. The trust line shows once
-    // the engine has said what the role has to trust.
+    // The role row shows while "role" is selected. The block of what to copy
+    // shows with it once the engine has said what the role has to trust, and
+    // follows the bucket and prefix as they are typed.
     const role = this.signIn.value === "role";
     this.roleRow.hidden = !role;
     const trust = this.offered.trust;
-    this.trust.hidden = !role || trust === undefined;
-    this.trust.textContent =
-      trust === undefined
-        ? ""
-        : m.connect_trust({ principal: trust.principal, externalId: trust.externalId });
+    if (role && trust !== undefined) this.role.show(trust);
+    else this.role.hide();
     this.region.textContent =
       s.t === "tried"
         ? m.connect_region_detected({ region: s.tried.connection.region ?? UNKNOWN_REGION })
