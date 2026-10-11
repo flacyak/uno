@@ -19,13 +19,14 @@ import {
   encodingName,
   openFormat,
   peekFormat,
+  readableHead,
 } from '@ingest';
 import type { Encoding, Format, HeaderMode } from '@ingest';
-import { openWith } from './index.ts';
+import { headed, openWith } from './index.ts';
 import type { ByteSource, FileHandler, SingleRef } from './index.ts';
 // Type only.
 import type { Provider } from '@plugin';
-import { messageOf } from '@said';
+import { Refusal, messageOf } from '@said';
 
 /**
  * Whether the parts have a header row. With "first", the first part's header
@@ -328,6 +329,8 @@ class Parts {
    * only a "none" header allows.
    */
   private first: Promise<Format | undefined> | undefined;
+  /** The first part's head, read as it was measured, until `first` reads it. */
+  private firstHead: Uint8Array | undefined;
   /** The disagreement that refuses the whole source, once found. */
   private refused: DisagreementError | undefined;
   /** Whether `close` has been called, after which every open and read is
@@ -401,6 +404,7 @@ class Parts {
    */
   async close(): Promise<void> {
     this.closed = true;
+    this.firstHead = undefined;
     const opening = this.sources.filter((s) => s !== undefined);
     for (let i = 0; i < this.sources.length; i++) this.sources[i] = undefined;
     const settled = await Promise.allSettled(opening);
@@ -441,9 +445,16 @@ class Parts {
       ) {
         throw new Error('it is not the version this source was saved against');
       }
+      // A part that came bare is detected, and one this build does not read
+      // is refused by name. Its head is read once.
+      const head =
+        was === undefined ? await readableHead(ref.name, source) : undefined;
       const extent: Extent = {
         bytes: source.size,
-        skip: await this.skip(i, source),
+        skip: await this.skip(
+          i,
+          head === undefined ? source : headed(source, head),
+        ),
         unterminated:
           source.size > 0 && (await source.read(source.size - 1, 1))[0] !== LF,
       };
@@ -455,6 +466,7 @@ class Parts {
         throw new Error(`it is not the file this source was made from${sizes}`);
       }
       this.extents[i] = extent;
+      if (i === 0) this.firstHead = head;
       return source;
     } catch (err) {
       await source.close();
@@ -532,10 +544,17 @@ class Parts {
       : peekFormat(name, source, this.header);
   }
 
-  /** How the first part reads, read once. */
+  /** How the first part reads, read once, from its head where it has one. */
   private firstFormat(): Promise<Format | undefined> {
     return (this.first ??= this.source(0)
-      .then((source) => this.format(0, source))
+      .then((source) => {
+        const head = this.firstHead;
+        this.firstHead = undefined;
+        return this.format(
+          0,
+          head === undefined ? source : headed(source, head),
+        );
+      })
       .catch((err: unknown) => {
         this.first = undefined;
         throw this.failed(0, err);
@@ -576,19 +595,31 @@ class Parts {
     return `${partLabel(this.parts, i)}: ${what}`;
   }
 
-  /** failed wraps `err` in a PartError naming part `i`. An error that
-   * already names one is returned as it is. */
+  /** failed wraps `err` in a PartError naming part `i`, or a refusal in a
+   * PartRefusal. An error that already names one is returned as it is. */
   private failed(i: number, err: unknown): Error {
-    if (err instanceof PartError || err instanceof DisagreementError)
+    if (
+      err instanceof PartError ||
+      err instanceof PartRefusal ||
+      err instanceof DisagreementError
+    )
       return err;
     // A closed source is a failure of the whole, passed through as it is.
     if (err instanceof ClosedError) return err;
+    // A refusal stays one, so a client says it in its person's language.
+    if (err instanceof Refusal) {
+      const subject = partLabel(this.parts, i);
+      return new PartRefusal({ t: 'about', subject, why: err.said });
+    }
     return new PartError(this.named(i, messageOf(err)), { cause: err });
   }
 }
 
 /** An error that already names its part. */
 class PartError extends Error {}
+
+/** A refusal that already names its part. */
+class PartRefusal extends Refusal {}
 
 /** The refusal of a read that reaches a source after it was closed. */
 class ClosedError extends Error {
