@@ -1,6 +1,7 @@
 /**
  * @fileoverview A file's stored bytes say whether it is Parquet or
- * compressed before any text is sniffed.
+ * compressed before any text is sniffed, and its name and first line then
+ * say whether it is JSON Lines or delimited text.
  */
 
 import { gzipSync } from 'node:zlib';
@@ -141,7 +142,67 @@ describe('the bytes decide first', () => {
     ]) {
       const file = stored(bytes);
       expect(await detect('q3.csv', file.head)).toEqual(DELIMITED);
+      expect(await detect('q3', file.head)).toEqual(DELIMITED);
       expect(file.tails).toEqual([]);
     }
+    expect(await detected('q3.jsonl', '')).toEqual(unread('JSON Lines'));
+    expect(await detected('q3.json', '')).toEqual(unread('JSON'));
+  });
+});
+
+describe('then the name and the first line decide', () => {
+  const lines = '{"id":1,"name":"Ada"}\n{"id":2,"name":"Ben"}\n';
+
+  test('.jsonl and .ndjson are JSON Lines, whatever the first line holds', async () => {
+    expect(await detected('events.jsonl', lines)).toEqual(unread('JSON Lines'));
+    expect(await detected('events.NDJSON', 'a,b\n')).toEqual(
+      unread('JSON Lines'),
+    );
+    expect(await detected('events.jsonl.gz', lines)).toEqual(
+      unread('JSON Lines'),
+    );
+  });
+
+  test('a .csv or .tsv whose first line is a JSON object stays delimited', async () => {
+    expect(await detected('events.csv', lines)).toEqual(DELIMITED);
+    expect(await detected('events.tsv', lines)).toEqual(DELIMITED);
+  });
+
+  test('a name with no layout extension is JSON Lines on an object first line', async () => {
+    for (const name of ['events', 'events.txt', 'events.gz', 'events.log'])
+      expect(await detected(name, lines), name).toEqual(unread('JSON Lines'));
+    // Past a byte order mark and blank lines.
+    expect(await detected('events', `\uFEFF\n \t\r\n${lines}`)).toEqual(
+      unread('JSON Lines'),
+    );
+    // One object with no newline after it, the whole file.
+    expect(await detected('events', '{"id":1}')).toEqual(unread('JSON Lines'));
+  });
+
+  test('any other first line leaves a layout-less name delimited', async () => {
+    const cases = [
+      // A headerless column of numbers is a complete JSON value each line.
+      '1\n2\n3\n',
+      '[1,2]\n[3,4]\n',
+      '"a"\n"b"\n',
+      // A document over several lines, and two objects on one.
+      '{\n  "id": 1\n}\n',
+      '{"id":1}{"id":2}\n',
+      'date,units\n2026-07-01,1204\n',
+    ];
+    for (const text of cases)
+      expect(await detected('events', text), text).toEqual(DELIMITED);
+  });
+
+  test('a first line the head cuts off is no complete object', async () => {
+    const long = `{"note":"${'x'.repeat(HEAD_BYTES)}"}\n`;
+    expect(await detected('events', long)).toEqual(DELIMITED);
+    expect(await detected('events.json', long)).toEqual(unread('JSON'));
+  });
+
+  test('a .json is JSON Lines on an object first line, and JSON otherwise', async () => {
+    expect(await detected('events.json', lines)).toEqual(unread('JSON Lines'));
+    for (const text of ['[]', '[{"id":1}]', '{\n"id":1\n}', '{"a":1} {"b":2}'])
+      expect(await detected('events.json', text), text).toEqual(unread('JSON'));
   });
 });
