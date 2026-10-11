@@ -34,6 +34,7 @@ export type { Format, HeaderMode, Scanner, Charset } from './format.ts';
 export {
   PARQUET_MAGIC_BYTES,
   detect,
+  opensAsParquet,
   readableHead,
   refuseUnread,
 } from './detect.ts';

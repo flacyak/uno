@@ -1,8 +1,8 @@
 /**
- * @fileoverview A file this build does not read yet, opened fresh on its
- * own, is refused by name: JSON Lines, a gzip-compressed CSV and a Parquet
- * file. A source a workspace already logged edits against is read as it was
- * when they were made.
+ * @fileoverview A file this build does not read yet, opened fresh, is refused
+ * by name: JSON Lines, a gzip-compressed CSV and a Parquet file. Each is
+ * refused when opened alone and when peeked at. A source a workspace already
+ * logged edits against is read as it was when they were made.
  */
 
 import { readFileSync } from 'node:fs';
@@ -59,6 +59,11 @@ describe.each(UNREAD)('%s', (name, what) => {
       const refused = await refusal(engine.open(ref));
       expect(refused.said).toEqual(said);
       expect(refused.message).toBe(`${name}: ${what} is not supported yet`);
+    }));
+
+  test('peeked at is refused by name', () =>
+    withEngine(async (engine) => {
+      expect((await refusal(engine.peek(ref))).said).toEqual(said);
     }));
 });
 

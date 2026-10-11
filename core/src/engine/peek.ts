@@ -3,12 +3,20 @@
  * from the workspace.
  *
  * `readHead` opens the file, reads one range from the front, and closes it.
- * `peekHead` detects the format of those bytes and decodes the rows they
- * hold. It works on bytes already read, so it can be tested on in-memory bytes.
+ * Only a front that opens as Parquet does costs a second read, of the file's
+ * last bytes. `peekHead` detects what those bytes hold, refuses by name what
+ * this build does not read, and decodes the rows they hold. It works on bytes
+ * already read, so it can be tested on in-memory bytes.
  */
 
-import { labelOf, openFormat } from '@ingest';
-import type { HeaderMode } from '@ingest';
+import {
+  PARQUET_MAGIC_BYTES,
+  labelOf,
+  openFormat,
+  opensAsParquet,
+  refuseUnread,
+} from '@ingest';
+import type { HeaderMode, StoredHead } from '@ingest';
 import type { Peeked } from './protocol.ts';
 import { bytesSource, headerModeOf, openWith } from '@store';
 import type { FileHandler, FileRef } from '@store';
@@ -26,6 +34,11 @@ export const PEEK_ROWS = 20;
 export interface Head {
   bytes: Uint8Array;
   size: number;
+  /**
+   * The file's last PARQUET_MAGIC_BYTES, read only where the front opens as
+   * Parquet does, which only they confirm.
+   */
+  tail?: Uint8Array;
 }
 
 /** Optional overrides for the byte and row limits of `peek`. */
@@ -37,7 +50,8 @@ export interface PeekLimits {
 /**
  * readHead opens ref through the first handler that claims it, reads up to
  * `limit` bytes from the front in one call, and closes the file. A short read
- * is taken as the end of the file.
+ * is taken as the end of the file. A front that opens as Parquet does has the
+ * file's tail read too.
  */
 export async function readHead(
   handlers: readonly FileHandler[],
@@ -47,7 +61,10 @@ export async function readHead(
   const file = await openWith(handlers, ref);
   try {
     const bytes = await file.read(0, Math.min(limit, file.size));
-    return { bytes, size: file.size };
+    const tail = opensAsParquet(bytes)
+      ? await file.read(file.size - PARQUET_MAGIC_BYTES, PARQUET_MAGIC_BYTES)
+      : undefined;
+    return { bytes, size: file.size, tail };
   } finally {
     await file.close();
   }
@@ -55,7 +72,7 @@ export async function readHead(
 
 /**
  * peekHead decodes the header and the first rows out of a head already
- * read.
+ * read, once what the file holds is something this build reads.
  *
  * The format is detected over a `bytesSource` of the head's bytes, so
  * `openFormat` stays within them.
@@ -66,6 +83,7 @@ export async function peekHead(
   rows: number = PEEK_ROWS,
   header: HeaderMode = 'first',
 ): Promise<Peeked> {
+  await refuseUnread(name, storedHead(head));
   const format = await openFormat(name, bytesSource(head.bytes), header);
 
   // Whether the head holds the whole file.
@@ -98,6 +116,23 @@ export async function peekHead(
   );
 
   return { label: labelOf(format), header: format.columns, rows: rowsOut };
+}
+
+/**
+ * storedHead is a head as detection reads it. Its tail is the one readHead
+ * read, or its own end where it holds the whole file.
+ */
+function storedHead(head: Head): StoredHead {
+  const whole = head.bytes.length >= head.size;
+  const end = head.tail ?? (whole ? head.bytes : undefined);
+  return {
+    bytes: head.bytes,
+    size: head.size,
+    tail: (length) =>
+      end === undefined || end.length < length
+        ? Promise.reject(new Error('the head was read without its tail'))
+        : Promise.resolve(end.subarray(end.length - length)),
+  };
 }
 
 /** peek reads the front of ref and returns its header and first rows. */
