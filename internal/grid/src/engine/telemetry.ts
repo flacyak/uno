@@ -37,7 +37,10 @@ export const unmeasured: Telemetry = () => undefined;
 
 /** How long a request took from arriving to its reply being posted. */
 export const REQUEST = "uno.engine.request";
-/** How long a source took to index, from open to the last row counted. */
+/**
+ * How long a source took to index, from the open's start to the last row
+ * counted: the time its final Progress reports.
+ */
 export const INDEX = "uno.engine.index";
 /** How many bytes a source that finished indexing holds. */
 export const INDEXED = "uno.engine.indexed";
