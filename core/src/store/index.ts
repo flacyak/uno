@@ -232,6 +232,24 @@ export function bytesSource(bytes: Uint8Array): ByteSource {
   };
 }
 
+/**
+ * headed is `source` with every read that falls inside `head`, its first
+ * bytes already read, answered from memory. A read past it goes to `source`.
+ */
+export function headed(source: ByteSource, head: Uint8Array): ByteSource {
+  return {
+    size: source.size,
+    version: source.version,
+    read: (offset, length) => {
+      const end = Math.min(offset + length, source.size);
+      return end <= head.length
+        ? Promise.resolve(head.subarray(offset, end))
+        : source.read(offset, length);
+    },
+    close: () => source.close(),
+  };
+}
+
 /** What loadLibrary read, and what failed. */
 export interface LibraryLoad {
   formulas: Formula[];
