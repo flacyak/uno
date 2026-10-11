@@ -12,7 +12,7 @@ import { expect, test } from 'vite-plus/test';
 
 import { PEEK_BYTES, PEEK_ROWS, peek, peekHead, readHead } from '@engine/peek';
 import type { Head } from '@engine/peek';
-import { headerOf, readAll } from '@ingest';
+import { PARQUET_MAGIC_BYTES, headerOf, readAll } from '@ingest';
 import { blobFiles } from '@store';
 import type { ByteSource, FileHandler, FileRef } from '@store';
 import { localFiles } from '@store/node';
@@ -191,6 +191,55 @@ test('a ref nothing opens is refused by name', async () => {
     }),
   ).rejects.toThrow(
     's3://acme/exports/q3.csv: nothing here opens it · this build reads local files',
+  );
+});
+
+/** A handler for one file holding `file`, recording its reads and closes. */
+function holding(file: Uint8Array): Watched {
+  const reads: Read[] = [];
+  let closed = 0;
+  const source: ByteSource = {
+    size: file.length,
+    read: (offset, length) => {
+      reads.push({ offset, length });
+      return Promise.resolve(file.subarray(offset, offset + length));
+    },
+    close: () => {
+      closed++;
+      return Promise.resolve();
+    },
+  };
+  return {
+    files: {
+      label: 'a file in memory',
+      handles: () => true,
+      open: () => Promise.resolve(source),
+    },
+    reads,
+    closed: () => closed,
+  };
+}
+
+test('a front that opens as Parquet does has the last 4 bytes read too, and is refused by name', async () => {
+  // Parquet's magic at each end, too far apart for one window to hold both.
+  const parquet = new Uint8Array(2 * PEEK_BYTES);
+  const magic = encoder.encode('PAR1');
+  parquet.set(magic);
+  parquet.set(magic, parquet.length - magic.length);
+  const f = holding(parquet);
+
+  const front = await readHead([f.files], BIG);
+
+  expect(f.reads).toEqual([
+    { offset: 0, length: PEEK_BYTES },
+    {
+      offset: parquet.length - PARQUET_MAGIC_BYTES,
+      length: PARQUET_MAGIC_BYTES,
+    },
+  ]);
+  expect(f.closed()).toBe(1);
+  await expect(peekHead('q3', front)).rejects.toThrow(
+    'q3: Parquet is not supported yet',
   );
 });
 
