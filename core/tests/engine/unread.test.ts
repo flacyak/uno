@@ -3,14 +3,18 @@
  * by name: JSON Lines, a gzip-compressed CSV and a Parquet file. Each is
  * refused when opened alone, when peeked at and as a part of several files.
  * A source a workspace already logged edits against is read as it was when
- * they were made.
+ * they were made, and a file appended to it is detected as a fresh part is.
  */
 
 import { readFileSync } from 'node:fs';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vite-plus/test';
 
 import { newManifest, writeDocument } from '@document';
+import type { HeldPart } from '@document';
 import { Refusal } from '@engine';
 import type { Engine, Said } from '@engine';
 import { read } from '@ingest';
@@ -31,6 +35,9 @@ const UNREAD: ReadonlyArray<readonly [string, Unread]> = [
 
 /** A part beside each fixture that is read: the first third of the export. */
 const PART = 'sales-q3-part-1.csv';
+
+/** The byte that ends a line. */
+const LF = 0x0a;
 
 /** The Refusal `asked` rejects with. Fails if it is anything else. */
 async function refusal(asked: Promise<unknown>): Promise<Refusal> {
@@ -99,15 +106,20 @@ describe('a .jsonl a workspace logged edits against before', () => {
 
   /** A format 6 workspace holding the source as `held`, with the edit. */
   function workspace(
-    held: { path: string; bytes: number } | { raw: Uint8Array },
+    held:
+      | { path: string; bytes: number }
+      | { raw: Uint8Array }
+      | { parts: HeldPart[]; header: 'first' },
   ): Blob {
+    // Each part under a header row holds the rows the one file does.
+    const files = 'parts' in held ? held.parts.length : 1;
     const uno = writeDocument({
       manifest: newManifest(),
       sources: [
         {
           id: 'events',
           name,
-          rows: sheet.rows(),
+          rows: sheet.rows() * files,
           cols: sheet.cols(),
           state: { active: { row: 0, col: 0 } },
           ...held,
@@ -152,5 +164,41 @@ describe('a .jsonl a workspace logged edits against before', () => {
       const uno = workspace({ path, bytes: bytes.length });
       const src = await openOne(engine, { name: 'q3.uno', blob: uno });
       await asLogged(await engine.relink(src, { name, path }));
+    }));
+
+  test('read as one with a copy of itself, refuses a .jsonl appended to it by name', () =>
+    withEngine(async (engine) => {
+      const dir = await mkdtemp(join(tmpdir(), 'uno-unread-'));
+      /** Copy `n` of the file, in its own name. */
+      async function copy(n: number): Promise<{ name: string; path: string }> {
+        const file = `events-${n}.jsonl`;
+        await writeFile(join(dir, file), bytes);
+        return { name: file, path: join(dir, file) };
+      }
+      const [one, two, three] = [await copy(1), await copy(2), await copy(3)];
+      // Measured as delimited text under a header row, as the edits were made.
+      const measured = (
+        file: { name: string; path: string },
+        skip: number,
+      ): HeldPart => ({
+        ...file,
+        bytes: bytes.length,
+        skip,
+        unterminated: bytes.at(-1) !== LF,
+      });
+      const header = bytes.indexOf(LF) + 1;
+      const uno = workspace({
+        parts: [measured(one, 0), measured(two, header)],
+        header: 'first',
+      });
+      const src = await openOne(engine, { name: 'q3.uno', blob: uno });
+      await asLogged(src);
+
+      const refused = await refusal(engine.append(src, [three]));
+      expect(refused.said).toEqual({
+        t: 'about',
+        subject: `${three.name} (part 3 of 3)`,
+        why: { t: 'not-read', name: three.name, what: 'JSON Lines' },
+      });
     }));
 });
