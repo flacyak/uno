@@ -12,8 +12,8 @@ import type { Grid } from "../grid/index.ts";
 import { columnLabel } from "../grid/rows.ts";
 import type { InputStrategy } from "../input/index.ts";
 import type { Lead } from "../keys.ts";
-import { num } from "../locale.ts";
-import type { Mode, Workspace } from "../workspace.ts";
+import { num, seconds } from "../locale.ts";
+import type { Mode, Tab, Workspace } from "../workspace.ts";
 import { must } from "./util.ts";
 
 /** What the bar's switches ask of the shell. */
@@ -37,6 +37,16 @@ function modeWord(mode: Mode): string {
   return mode === "view" ? m.mode_view() : m.mode_transform();
 }
 
+/**
+ * clockText is what the clock reads for a tab: how long its index has taken
+ * while it runs, and once it is complete the time it took with the row count.
+ */
+function clockText(tab: Tab): string {
+  const p = tab.source.progress;
+  const time = seconds(p.elapsedMs);
+  return p.complete ? `${time} · ${m.rows_count({ count: p.rows })}` : time;
+}
+
 export class StatusBar {
   /** The character the open prompt began with. */
   private lead: Lead = ":";
@@ -47,6 +57,7 @@ export class StatusBar {
   private readonly msg = must(document.querySelector<HTMLElement>("#status-msg"));
   private readonly waiting = must(document.querySelector<HTMLElement>("#status-keys"));
   private readonly cmd = must(document.querySelector<HTMLInputElement>("#status-cmd"));
+  private readonly clock = must(document.querySelector<HTMLElement>("#status-clock"));
   private readonly cell = must(document.querySelector<HTMLElement>("#status-cell"));
   private readonly seg = must(document.querySelector<HTMLElement>("#mode-switch"));
   private readonly side = must(document.querySelector<HTMLButtonElement>("#sidebar-toggle"));
@@ -113,6 +124,10 @@ export class StatusBar {
     const editing = grid?.editing() === true ? input.editing : undefined;
     this.mode.textContent = editing ?? (w === undefined ? "" : modeWord(w.mode));
     this.mode.className = w?.mode === "transform" ? "mode t" : "mode";
+
+    // The clock is empty until the tab has a file with rows behind it.
+    const tab = w?.active;
+    this.clock.textContent = tab === undefined || tab.missing ? "" : clockText(tab);
 
     // The cell line is empty until there is a grid and the tab has a file.
     if (w === undefined || grid === undefined || w.active.missing) {
