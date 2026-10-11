@@ -79,7 +79,7 @@ class Absent {
       size,
       columns: [],
       // Marked complete so the grid settles with zero rows.
-      progress: { done: 0, total: size, readable: 0, rows: 0, complete: true },
+      progress: { done: 0, total: size, readable: 0, rows: 0, complete: true, elapsedMs: 0 },
       edits: kept.edits,
       generation: 0,
       link: connect === undefined ? { path, missing: why } : { path, missing: why, connect },
@@ -379,6 +379,7 @@ export class Workspace {
           carried,
           port: this.port,
           tuning: this.tuning,
+          began: performance.now(),
           telemetry: this.telemetry,
         });
       }
@@ -431,6 +432,9 @@ export class Workspace {
     carried: Carried | undefined,
     whole = false,
   ): Promise<View> {
+    // The source's time counts from before its file is opened, so a bucket's
+    // first answer is in it.
+    const began = performance.now();
     const path = "path" in ref ? ref.path : "";
     const source = await this.openSource(ref);
     // versions() opens every part still unread. A part that fails to open
@@ -451,6 +455,7 @@ export class Workspace {
       carried,
       port: this.port,
       tuning: this.tuning,
+      began,
       telemetry: this.telemetry,
       header: headerModeOf(ref),
       parts: "parts" in ref ? ref : undefined,
