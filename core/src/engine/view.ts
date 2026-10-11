@@ -8,7 +8,7 @@
 
 import type { HeldFile, HeldPart, HeldParts } from '@document';
 import { trimSpace } from '@go';
-import { headerOf, labelOf, openFormat } from '@ingest';
+import { headerOf, labelOf, openFormat, readableHead } from '@ingest';
 import type { Format } from '@ingest';
 import { isNumber } from '@num';
 import { MIN_EXAMPLES, Survey, gather } from '@pattern';
@@ -25,7 +25,7 @@ import {
   valueAt,
 } from '@sheet';
 import type { Edit, Written } from '@sheet';
-import { multiOf } from '@store';
+import { headed, multiOf } from '@store';
 import type {
   ByteSource,
   HeaderMode,
@@ -235,7 +235,16 @@ export class View {
 
     let format: Format;
     try {
-      format = await openFormat(name, source, ask.header);
+      // A file opened fresh on its own is detected, and its head read once.
+      // One opened with a log is read as delimited text, as its log was
+      // made, and each part of several files is detected as it is measured.
+      const fresh = carried === undefined && ask.parts === undefined;
+      const head = fresh ? await readableHead(name, source) : undefined;
+      format = await openFormat(
+        name,
+        head === undefined ? source : headed(source, head),
+        ask.header,
+      );
     } catch (err) {
       await source.close();
       if (container === '') throw err;

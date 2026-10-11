@@ -1,7 +1,8 @@
 /**
- * @fileoverview A file this build does not read yet: JSON Lines, a
- * gzip-compressed CSV and a Parquet file. A source a workspace already logged
- * edits against is read as it was when they were made.
+ * @fileoverview A file this build does not read yet, opened fresh on its
+ * own, is refused by name: JSON Lines, a gzip-compressed CSV and a Parquet
+ * file. A source a workspace already logged edits against is read as it was
+ * when they were made.
  */
 
 import { readFileSync } from 'node:fs';
@@ -9,13 +10,34 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vite-plus/test';
 
 import { newManifest, writeDocument } from '@document';
-import type { Engine } from '@engine';
+import { Refusal } from '@engine';
+import type { Engine, Said } from '@engine';
 import { read } from '@ingest';
+import type { Unread } from '@said';
 import { connect, multiProviders, openOne, saidIn } from './harness.ts';
 
 /** A fixture's path in tests/testdata. */
 function testdata(name: string): string {
   return fileURLToPath(new URL(`../testdata/${name}`, import.meta.url));
+}
+
+/** Each fixture, and what it holds that this build does not read. */
+const UNREAD: ReadonlyArray<readonly [string, Unread]> = [
+  ['events.jsonl', 'JSON Lines'],
+  ['sales-q3.csv.gz', 'gzip'],
+  ['par1.bin', 'Parquet'],
+];
+
+/** The Refusal `asked` rejects with. Fails if it is anything else. */
+async function refusal(asked: Promise<unknown>): Promise<Refusal> {
+  const err: unknown = await asked.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  if (!(err instanceof Refusal)) {
+    throw new Error(`expected a Refusal, and got ${String(err)}`);
+  }
+  return err;
 }
 
 /** Runs `use` with an engine that opens files, blobs and parts. */
@@ -27,6 +49,18 @@ async function withEngine(use: (engine: Engine) => Promise<void>) {
     done();
   }
 }
+
+describe.each(UNREAD)('%s', (name, what) => {
+  const said: Said = { t: 'not-read', name, what };
+  const ref = { name, path: testdata(name) };
+
+  test('opened on its own is refused by name', () =>
+    withEngine(async (engine) => {
+      const refused = await refusal(engine.open(ref));
+      expect(refused.said).toEqual(said);
+      expect(refused.message).toBe(`${name}: ${what} is not supported yet`);
+    }));
+});
 
 describe('a .jsonl a workspace logged edits against before', () => {
   const name = 'events.jsonl';
