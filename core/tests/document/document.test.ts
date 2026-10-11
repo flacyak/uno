@@ -19,6 +19,7 @@ import {
   newManifest,
   readContainer,
   readDocument,
+  sourceEntry,
   sourceId,
   writeDocument,
 } from '@document';
@@ -833,5 +834,41 @@ describe("a source's id", () => {
   test('is never empty', () => {
     expect(sourceId('', [])).toBe('source');
     expect(sourceId('¿?.csv', [])).toBe('source');
+  });
+
+  test("drops a compressed file's every extension, and keeps a codec named before .parquet", () => {
+    expect(sourceId('sales.csv.gz', [])).toBe('sales');
+    expect(sourceId('s3://acme-exports/2025/Q3 Ads.TSV.GZ', [])).toBe('q3-ads');
+    expect(sourceId('part-0-c000.snappy.parquet', [])).toBe(
+      'part-0-c000.snappy',
+    );
+  });
+
+  test("is a folder's name for a root that ends in a separator", () => {
+    expect(sourceId('s3://acme-exports/events/', [])).toBe('events');
+    expect(sourceId('C:\\exports\\Events 2025\\', [])).toBe('events-2025');
+  });
+});
+
+describe("a source's entry", () => {
+  test("keeps a compressed file's every extension, under its id or alone", () => {
+    expect(sourceEntry('sales.csv.gz', 'sales')).toBe(
+      'data/source/sales.csv.gz',
+    );
+    expect(sourceEntry('Sales.CSV.GZ')).toBe('data/source.csv.gz');
+    expect(
+      sourceEntry('part-0-c000.snappy.parquet', 'part-0-c000.snappy'),
+    ).toBe('data/source/part-0-c000.snappy.parquet');
+  });
+
+  test('is .csv for a file with no extension', () => {
+    expect(sourceEntry('export', 'export')).toBe('data/source/export.csv');
+    expect(sourceEntry('export')).toBe('data/source.csv');
+  });
+
+  test('of a compressed file carried alone keeps its compound extension', () => {
+    const { doc } = saved('sales.csv.gz');
+    expect(doc.manifest.sources[0]!.id).toBe('sales');
+    expect(doc.manifest.sources[0]!.entry).toBe('data/source.csv.gz');
   });
 });
