@@ -78,6 +78,15 @@ describe('english', () => {
       english({ t: 'size-changed', name: 'ads.csv', now: 2048, was: 1024 }),
     ).toBe('ads.csv is 2.0 KB now and was 1.0 KB when the workspace was saved');
   });
+
+  test('names a format this build does not read in the sentence a .json was refused with', () => {
+    expect(english({ t: 'not-read', name: 'data.json', what: 'JSON' })).toBe(
+      'data.json: JSON is not supported yet',
+    );
+    expect(
+      english({ t: 'not-read', name: 'sales-q3.csv.gz', what: 'gzip' }),
+    ).toBe('sales-q3.csv.gz: gzip is not supported yet');
+  });
 });
 
 describe('a kind from an engine newer than this build', () => {
