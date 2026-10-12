@@ -1,13 +1,14 @@
 /**
  * @fileoverview columnsOf reads a footer's schema, as hyparquet hands it, as
- * the columns a sheet shows, each keyed by an RFC 6901 pointer.
+ * the columns a sheet shows, each keyed by an RFC 6901 pointer: a struct's
+ * fields under dotted names, and a repeated field as one column.
  */
 
 import type { SchemaElement } from 'hyparquet/src/index.js';
 import { expect, test } from 'vite-plus/test';
 
 import { columnsOf } from '@ingest/parquet/values';
-import type { Leaf } from '@ingest/parquet/values';
+import type { Leaf, Primitive, Shape } from '@ingest/parquet/values';
 
 /** The columns of a schema written as hyparquet types one. */
 function leavesOf(schema: SchemaElement[]): Leaf[] {
@@ -36,6 +37,61 @@ test('a top-level field is a column named for it, keyed by a pointer', () => {
       path: ['name'],
       shape: { t: 'primitive', physical: 'BYTE_ARRAY' },
     },
+  ]);
+});
+
+const INT32: Primitive = { t: 'primitive', physical: 'INT32' };
+
+/** A struct of two INT32 fields, x and y. */
+const POINT: Shape = {
+  t: 'struct',
+  fields: new Map([
+    ['x', INT32],
+    ['y', INT32],
+  ]),
+};
+
+test('a struct flattens to dotted names, keyed by pointers', () => {
+  const leaves = leavesOf([
+    { name: 'root', num_children: 1 },
+    { name: 'user', repetition_type: 'OPTIONAL', num_children: 2 },
+    { name: 'name', type: 'BYTE_ARRAY', converted_type: 'UTF8' },
+    { name: 'home', num_children: 1 },
+    { name: 'city', type: 'BYTE_ARRAY', logical_type: { type: 'STRING' } },
+  ]);
+  expect(leaves.map((leaf) => [leaf.column, leaf.path])).toEqual([
+    [{ name: 'user.name', key: '/user/name' }, ['user', 'name']],
+    [
+      { name: 'user.home.city', key: '/user/home/city' },
+      ['user', 'home', 'city'],
+    ],
+  ]);
+});
+
+test("a literal 'a.b' and a struct a holding b are two columns", () => {
+  const leaves = leavesOf([
+    { name: 'root', num_children: 2 },
+    { name: 'a.b', type: 'INT32' },
+    { name: 'a', num_children: 1 },
+    { name: 'b', type: 'INT32' },
+  ]);
+  expect(leaves.map((leaf) => leaf.column)).toEqual([
+    { name: 'a.b', key: '/a.b' },
+    { name: 'a.b_2', key: '/a/b' },
+  ]);
+});
+
+test('a repeated field is one column, a list of its values', () => {
+  const leaves = leavesOf([
+    { name: 'root', num_children: 2 },
+    { name: 'ids', type: 'INT32', repetition_type: 'REPEATED' },
+    { name: 'points', repetition_type: 'REPEATED', num_children: 2 },
+    { name: 'x', type: 'INT32' },
+    { name: 'y', type: 'INT32' },
+  ]);
+  expect(leaves.map((leaf) => [leaf.column.name, leaf.shape])).toEqual([
+    ['ids', { t: 'list', of: INT32 }],
+    ['points', { t: 'list', of: POINT }],
   ]);
 });
 
