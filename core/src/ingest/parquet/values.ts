@@ -26,12 +26,13 @@ export interface Primitive {
 }
 
 /**
- * Shape is the type of a column's values: a primitive, or a list or struct
- * of further shapes, which is written as JSON.
+ * Shape is the type of a column's values: a primitive, or a list, map or
+ * struct of further shapes, which is written as JSON.
  */
 export type Shape =
   | Primitive
   | { readonly t: 'list'; readonly of: Shape }
+  | { readonly t: 'map'; readonly values: Shape }
   | { readonly t: 'struct'; readonly fields: ReadonlyMap<string, Shape> };
 
 /**
@@ -60,6 +61,7 @@ export interface Element {
   readonly type?: Physical;
   readonly repetition_type?: 'REQUIRED' | 'OPTIONAL' | 'REPEATED';
   readonly num_children?: number;
+  readonly converted_type?: string;
 }
 
 /** A schema element with its children. */
@@ -70,8 +72,8 @@ interface Tree {
 
 /**
  * columnsOf reads a footer's schema as the file's columns, in schema order.
- * A struct's fields flatten to dotted names, and a repeated field is one
- * column. A name already taken gets headerOf's suffix.
+ * A struct's fields flatten to dotted names, and a LIST, a MAP or a repeated
+ * field is one column. A name already taken gets headerOf's suffix.
  */
 export function columnsOf(schema: readonly Element[]): Leaf[] {
   const found: Array<Omit<Leaf, 'column'>> = [];
@@ -118,7 +120,31 @@ function pointerOf(path: readonly string[]): string {
 /** Whether a node is a struct, whose fields are columns of their own. */
 function isStruct(node: Tree): boolean {
   return (
-    node.children.length > 0 && node.element.repetition_type !== 'REPEATED'
+    node.children.length > 0 &&
+    node.element.repetition_type !== 'REPEATED' &&
+    !isList(node) &&
+    !isMap(node)
+  );
+}
+
+/** Whether hyparquet reads a group as a LIST, by its own test. */
+function isList({ element, children: [group, ...rest] }: Tree): boolean {
+  return (
+    element.converted_type === 'LIST' &&
+    rest.length === 0 &&
+    group?.element.repetition_type === 'REPEATED' &&
+    group.children.length <= 1
+  );
+}
+
+/** Whether hyparquet reads a group as a MAP, by its own test. */
+function isMap({ element, children: [group, ...rest] }: Tree): boolean {
+  return (
+    element.converted_type === 'MAP' &&
+    rest.length === 0 &&
+    group?.element.repetition_type === 'REPEATED' &&
+    group.children.length === 2 &&
+    group.children.every((c) => c.element.repetition_type !== 'REPEATED')
   );
 }
 
@@ -130,9 +156,19 @@ function shapeOf(node: Tree): Shape {
     : shape;
 }
 
-/** The shape of one value of a node. */
-function valueShapeOf({ element, children }: Tree): Shape {
-  if (children.length === 0) return primitiveOf(element);
+/**
+ * The shape of one value of a node. A LIST's values are its repeated
+ * group's one child, or the group itself where it has none.
+ */
+function valueShapeOf(node: Tree): Shape {
+  const { element, children } = node;
+  const [group] = children;
+  if (group === undefined) return primitiveOf(element);
+  if (isMap(node)) return { t: 'map', values: shapeOf(group.children[1]!) };
+  if (isList(node)) {
+    const [item] = group.children;
+    return { t: 'list', of: item ? shapeOf(item) : valueShapeOf(group) };
+  }
   return {
     t: 'struct',
     fields: new Map(
