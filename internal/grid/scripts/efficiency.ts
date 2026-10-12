@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { ENDPOINT_VARIABLE, Meter, collector } from "../src/engine/telemetry.ts";
+import type { Collector } from "../src/engine/telemetry.ts";
 import { compare, markdown } from "../tests/efficiency/compare.ts";
 import type { Metric } from "../tests/efficiency/record.ts";
 
@@ -27,6 +28,10 @@ const HEAD = fileURLToPath(new URL("../out/efficiency/", import.meta.url));
 const GAUGE = "uno.efficiency";
 /** How long a send may take before it is abandoned. */
 const SEND_TIMEOUT_MS = 10_000;
+/** How many times a send is tried when the collector is busy, down, or unreachable. */
+const TRIES = 3;
+/** The wait before the second try, when the collector names none. It doubles for the third. */
+const BACKOFF_MS = 1_000;
 
 function isMetric(v: unknown): v is Metric {
   if (typeof v !== "object" || v === null) return false;
@@ -76,22 +81,56 @@ async function send(metrics: readonly Metric[], env: NodeJS.ProcessEnv): Promise
     });
   }
 
-  const res = await fetch(to.url, {
-    method: "POST",
-    headers: { ...to.headers, "content-type": "application/json" },
-    body: JSON.stringify(meter.payload()),
-    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-  }).catch((err: unknown) => {
-    // fetch keeps the reason it failed in the cause.
-    const cause = err instanceof Error && err.cause instanceof Error ? err.cause : err;
-    throw new Error(
-      `the collector could not be reached · ${cause instanceof Error ? cause.message : String(cause)}`,
-    );
-  });
+  const res = await post(to, JSON.stringify(meter.payload()));
   if (!res.ok) {
     throw new Error(`the collector answered ${res.status}: ${await res.text()}`);
   }
   return `sent ${metrics.length} metrics to the collector as ${GAUGE}, branch ${branch}`;
+}
+
+/**
+ * Posts the payload. A 429 or 5xx reply, or a failed connection, is tried
+ * again after a wait: a Grafana tenant has a request rate shared by every
+ * sender, and a run that lands in a busy second should not fail for it.
+ */
+async function post(to: Collector, body: string): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    const last = attempt >= TRIES;
+    let res: Response;
+    try {
+      res = await fetch(to.url, {
+        method: "POST",
+        headers: { ...to.headers, "content-type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (!last) {
+        await wait(BACKOFF_MS << (attempt - 1));
+        continue;
+      }
+      // fetch keeps the reason it failed in the cause.
+      const cause = err instanceof Error && err.cause instanceof Error ? err.cause : err;
+      throw new Error(
+        `the collector could not be reached · ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+    }
+    if ((res.status === 429 || res.status >= 500) && !last) {
+      await wait(retryAfterMs(res) ?? BACKOFF_MS << (attempt - 1));
+      continue;
+    }
+    return res;
+  }
+}
+
+/** The wait a reply asks for in its Retry-After header, when it is in seconds. */
+function retryAfterMs(res: Response): number | undefined {
+  const seconds = Number(res.headers.get("retry-after"));
+  return Number.isInteger(seconds) && seconds > 0 ? seconds * 1_000 : undefined;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const { values } = parseArgs({
