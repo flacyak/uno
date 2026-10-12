@@ -11,14 +11,11 @@ import { expect, test } from 'vite-plus/test';
 import { columnsOf } from '@ingest/parquet/values';
 import type { Leaf, Logical, Primitive, Shape } from '@ingest/parquet/values';
 
+import { leafOf } from './texts.ts';
+
 /** The columns of a schema written as hyparquet types one. */
 function leavesOf(schema: SchemaElement[]): Leaf[] {
   return columnsOf(schema);
-}
-
-/** The columns of one top-level field, the elements under it following. */
-function fieldOf(...elements: SchemaElement[]): Leaf[] {
-  return leavesOf([{ name: 'root', num_children: 1 }, ...elements]);
 }
 
 test('a top-level field is a column named for it, keyed by a pointer', () => {
@@ -97,15 +94,17 @@ test('a repeated field is one column, a list of its values', () => {
 });
 
 test('a LIST is one column of its elements, in either layout', () => {
-  const threeLevel = fieldOf(
+  const threeLevel = leavesOf([
+    { name: 'root', num_children: 1 },
     { name: 'ids', converted_type: 'LIST', num_children: 1 },
     { name: 'list', repetition_type: 'REPEATED', num_children: 1 },
     { name: 'element', type: 'INT32' },
-  );
-  const twoLevel = fieldOf(
+  ]);
+  const twoLevel = leavesOf([
+    { name: 'root', num_children: 1 },
     { name: 'ids', converted_type: 'LIST', num_children: 1 },
     { name: 'array', type: 'INT32', repetition_type: 'REPEATED' },
-  );
+  ]);
   const list: Shape = { t: 'list', of: INT32 };
   expect(threeLevel.map((leaf) => [leaf.column.name, leaf.shape])).toEqual([
     ['ids', list],
@@ -200,8 +199,7 @@ test('an annotation says what the stored value means', () => {
     [{ name: 'x', type: 'BYTE_ARRAY', converted_type: 'UTF8' }, undefined],
   ];
   for (const [element, logical] of cases) {
-    const [leaf] = fieldOf(element);
-    expect(leaf!.shape, JSON.stringify(element)).toEqual({
+    expect(leafOf(element).shape, JSON.stringify(element)).toEqual({
       t: 'primitive',
       physical: element.type,
       logical,
@@ -210,12 +208,12 @@ test('an annotation says what the stored value means', () => {
 });
 
 test('the elements of a LIST keep their annotation', () => {
-  const [leaf] = fieldOf(
+  const leaf = leafOf(
     { name: 'prices', converted_type: 'LIST', num_children: 1 },
     { name: 'list', repetition_type: 'REPEATED', num_children: 1 },
     { name: 'element', type: 'INT64', converted_type: 'DECIMAL', scale: 2 },
   );
-  expect(leaf!.shape).toEqual({
+  expect(leaf.shape).toEqual({
     t: 'list',
     of: {
       t: 'primitive',
@@ -226,13 +224,13 @@ test('the elements of a LIST keep their annotation', () => {
 });
 
 test("a pointer escapes '~' and '/' in a name", () => {
-  const [leaf] = fieldOf({ name: 'm~/s', type: 'INT32' });
-  expect(leaf!.column).toEqual({ name: 'm~/s', key: '/m~0~1s' });
+  const leaf = leafOf({ name: 'm~/s', type: 'INT32' });
+  expect(leaf.column).toEqual({ name: 'm~/s', key: '/m~0~1s' });
 });
 
 test('a schema that ends inside a group, or a leaf with no type, is refused', () => {
   expect(() => leavesOf([{ name: 'root', num_children: 2 }])).toThrow(
     'parquet schema ends inside a group',
   );
-  expect(() => fieldOf({ name: 'x' })).toThrow('parquet column x has no type');
+  expect(() => leafOf({ name: 'x' })).toThrow('parquet column x has no type');
 });

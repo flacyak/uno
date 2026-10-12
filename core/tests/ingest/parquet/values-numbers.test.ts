@@ -8,20 +8,7 @@
 import type { SchemaElement } from 'hyparquet/src/index.js';
 import { expect, test } from 'vite-plus/test';
 
-import { columnsOf, textOf } from '@ingest/parquet/values';
-import type { Leaf, ParquetValue } from '@ingest/parquet/values';
-
-/** The one column of a file whose schema holds element alone. */
-function leafOf(element: SchemaElement): Leaf {
-  const [leaf] = columnsOf([{ name: 'root', num_children: 1 }, element]);
-  return leaf!;
-}
-
-/** Each value as textOf writes it in a column of element. */
-function textsOf(element: SchemaElement, values: ParquetValue[]): string[] {
-  const leaf = leafOf(element);
-  return values.map((value) => textOf(leaf, value));
-}
+import { textsOf } from './texts.ts';
 
 const INT64_MAX = 2n ** 63n - 1n;
 const UINT64_MAX = 2n ** 64n - 1n;
