@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "description": "uno's desktop client: an Electron shell over @uno/grid.",
-  "license": "MIT",
   "type": "module",
   "main": "out/main/index.cjs",
   "exports": {
