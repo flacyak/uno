@@ -97,6 +97,28 @@ test('a float32 takes nine digits where eight do not read back', () => {
   expect(text).toBe('0.105660856');
 });
 
+test('a float16 is the shortest text that reads back as it', () => {
+  const element: SchemaElement = {
+    name: 'x',
+    type: 'FIXED_LEN_BYTE_ARRAY',
+    type_length: 2,
+    logical_type: { type: 'FLOAT16' },
+  };
+  // 0.1 as stored, 1 plus the smallest step, the largest finite float16,
+  // which 65500 reads back as, the smallest subnormal, and a value 32 from
+  // its neighbours.
+  const values = [0.0999755859375, 1.0009765625, 65504, 2 ** -24, 33824];
+  expect(textsOf(element, [...values, -Infinity, -0])).toEqual([
+    '0.1',
+    '1.001',
+    '65500',
+    '6e-8',
+    '33820',
+    '-Infinity',
+    '-0',
+  ]);
+});
+
 test('a float that is not finite is written as JavaScript names it', () => {
   const values = [NaN, Infinity, -Infinity];
   expect(textsOf({ name: 'x', type: 'FLOAT' }, values)).toEqual([
