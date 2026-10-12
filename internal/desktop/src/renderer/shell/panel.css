@@ -382,17 +382,63 @@
   color: var(--ink);
 }
 
-/* What a role has to trust: a principal and an external ID to copy into a
- * policy, so the text is selectable. */
-.panel-connect .trust {
-  color: var(--ink-2);
-  line-height: 1.45;
-  overflow-wrap: anywhere;
+/* What a person hands to whoever makes the role: uno's account and their
+ * external ID, each beside a Copy button, and what the role has to allow.
+ * The text is selectable, since a copy the browser refuses is taken by hand. */
+.panel-connect .role {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
   user-select: text;
 }
 
-.panel-connect .trust[hidden] {
+.panel-connect .role[hidden] {
   display: none;
+}
+
+/* A label with its Copy button at the line's end, and the value on the line
+ * under them. */
+.panel-connect .role .row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 3px 8px;
+}
+
+.panel-connect .role .row > span {
+  color: var(--ink-2);
+}
+
+.panel-connect .role .row > button {
+  justify-self: end;
+}
+
+.panel-connect .role .row > .copyable {
+  grid-column: 1 / -1;
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.panel-connect .role .how {
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+/* The actions the role allows, for the person who writes its policy. */
+.panel-connect .role .needs {
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.panel-connect .role button.copy {
+  padding: 1px 7px;
+  font-size: 11px;
 }
 
 /* The test's result: empty until it runs, then the folder's count or the
