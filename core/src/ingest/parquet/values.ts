@@ -215,6 +215,9 @@ const MILLIS_PER_DAY = Number(ticksPerDay('millis'));
 /** The digits of an hour, a minute or a second on a clock. */
 const CLOCK_DIGITS = 2;
 
+/** An integer as String writes one. */
+const INTEGER = /^-?\d+$/;
+
 /** A number as RFC 8259 writes one, which NaN and Infinity are not. */
 const JSON_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
@@ -449,11 +452,44 @@ function jsonOf(shape: Shape | undefined, value: ParquetValue): string {
     const items = shape?.t === 'list' ? shape.of : undefined;
     return `[${value.map((item) => jsonOf(items, item)).join(',')}]`;
   }
-  const members = Object.entries(value).map(
-    ([key, member]) =>
-      `${JSON.stringify(key)}:${jsonOf(memberOf(shape, key), member)}`,
-  );
+  const members = Object.entries(value).map(([key, member]) => {
+    const name = JSON.stringify(nameOf(shape, key));
+    return `${name}:${jsonOf(memberOf(shape, key), member)}`;
+  });
   return `{${members.join(',')}}`;
+}
+
+/**
+ * A member's name: a struct's field name, or a map's key written as its key
+ * column says. hyparquet keys a map's object by String of each stored key,
+ * so the stored key is read back from it. A `key` that String could not
+ * have written for its column is kept as it is.
+ */
+function nameOf(shape: Shape | undefined, key: string): string {
+  if (shape?.t !== 'map' || shape.keys.t !== 'primitive') return key;
+  const stored = storedOf(shape.keys, key);
+  return String(stored) === key ? scalarOf(shape.keys, stored) : key;
+}
+
+/** The stored value of a `primitive` column that String wrote as `key`. */
+function storedOf({ physical, logical }: Primitive, key: string): Scalar {
+  switch (physical) {
+    case 'BOOLEAN':
+      return key === 'true';
+    case 'INT64':
+    case 'INT96':
+      return INTEGER.test(key) ? BigInt(key) : key;
+    case 'BYTE_ARRAY':
+    case 'FIXED_LEN_BYTE_ARRAY':
+      // hyparquet hands a float16 over as a number.
+      if (logical?.t === 'float16') return Number(key);
+      return key === ''
+        ? new Uint8Array()
+        : Uint8Array.from(key.split(','), Number);
+    default:
+      // An INT32, a FLOAT or a DOUBLE.
+      return Number(key);
+  }
 }
 
 /** The shape of a map's values, or of a struct's field named `key`. */
