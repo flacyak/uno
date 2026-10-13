@@ -496,25 +496,18 @@ export function s3Files(opts: S3Options): FileHandler {
     handles: (ref) => 'path' in ref && s3Location(ref.path) !== undefined,
 
     async open(ref) {
-      const loc = objectAt('path' in ref ? ref.path : undefined, ref.name);
+      const file = 'path' in ref ? ref : undefined;
+      const loc = objectAt(file?.path, ref.name);
       const url = s3Url(loc);
-
-      // A VersionId a save recorded is asked for by name. A bucket that has
-      // dropped that version answers 404 or 400, and the object is then read
-      // as it is now.
-      let pinned = 'path' in ref ? versionIdIn(ref.version) : undefined;
-      let head = await send.object(loc, 'HEAD', {}, pinned);
-      if (
-        pinned !== undefined &&
-        (head.status === 404 || head.status === 400)
-      ) {
-        pinned = undefined;
-        head = await send.object(loc, 'HEAD', {});
-      }
-      if (!head.ok) throw await refused(send, loc, head);
+      // Every range is asked for with If-Match on the ETag, so an object
+      // rewritten mid-read answers 412 and the bytes stay from one version.
+      const { size, etag, pinned, version, encoding } = await headOf(
+        send,
+        loc,
+        file?.version,
+      );
       // Only a signed GET can ask for the bytes as stored. An unsigned one
       // would get them undone by fetch, so the object is refused here.
-      const encoding = undoneEncoding(head);
       if (encoding !== undefined && 'unsigned' in (await opts.credentials(loc)))
         throw new Refusal({
           t: 'stored-encoded',
@@ -522,10 +515,6 @@ export function s3Files(opts: S3Options): FileHandler {
           encoding,
           bucket: loc.bucket,
         });
-      const size = sizeOf(head, url);
-      // Every range is asked for with If-Match on this ETag, so an object
-      // rewritten mid-read answers 412 and the bytes stay from one version.
-      const etag = head.headers.get('etag');
 
       /** One range, asked for as the version opened. */
       const range = async (
@@ -539,7 +528,7 @@ export function s3Files(opts: S3Options): FileHandler {
           'GET',
           {
             range: `bytes=${offset}-${end - 1}`,
-            ...(etag === null ? {} : { 'if-match': etag }),
+            ...(etag === undefined ? {} : { 'if-match': etag }),
           },
           pinned,
         );
@@ -558,12 +547,51 @@ export function s3Files(opts: S3Options): FileHandler {
 
       return {
         size,
-        version: versionOf(head.headers),
+        version,
         // Sequential reads request the next few ranges ahead.
         read: readAhead(range, size, opts.ahead),
         close: () => Promise.resolve(),
       };
     },
+  };
+}
+
+/** Known is what an open knows of an object before it reads a range. */
+interface Known {
+  readonly size: number;
+  /** The ETag every range is asked for with If-Match, where there is one. */
+  readonly etag: string | undefined;
+  /** The VersionId every range asks for by name, where one is kept. */
+  readonly pinned: string | undefined;
+  /** The version the open reports. */
+  readonly version: string | undefined;
+  /** The Content-Encoding fetch would undo on an unsigned GET, if any. */
+  readonly encoding: string | undefined;
+}
+
+/**
+ * headOf asks a HEAD for an object's size and version. A VersionId a save
+ * recorded is asked for by name. A bucket that has dropped that version
+ * answers 404 or 400, and the object is then read as it is now.
+ */
+async function headOf(
+  send: S3Requests,
+  loc: S3Location,
+  recorded: string | undefined,
+): Promise<Known> {
+  let pinned = versionIdIn(recorded);
+  let head = await send.object(loc, 'HEAD', {}, pinned);
+  if (pinned !== undefined && (head.status === 404 || head.status === 400)) {
+    pinned = undefined;
+    head = await send.object(loc, 'HEAD', {});
+  }
+  if (!head.ok) throw await refused(send, loc, head);
+  return {
+    size: sizeOf(head, s3Url(loc)),
+    etag: head.headers.get('etag') ?? undefined,
+    pinned,
+    version: versionOf(head.headers),
+    encoding: undoneEncoding(head),
   };
 }
 
