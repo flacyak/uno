@@ -71,14 +71,64 @@ export interface Leaf {
   readonly shape: Shape;
 }
 
-/** Annotation is a schema element's logical type, in hyparquet's fields. */
-export interface Annotation {
-  readonly type: string;
-  readonly scale?: number;
-  readonly unit?: string;
-  readonly isAdjustedToUTC?: boolean;
-  readonly isSigned?: boolean;
-}
+/** A time unit as a schema element's logical type names it. */
+export type AnnotatedUnit = 'MILLIS' | 'MICROS' | 'NANOS';
+
+/**
+ * Annotation is a schema element's logical type, with the members of
+ * hyparquet's LogicalType and the fields read here. A hyparquet that adds a
+ * member fails to compile where its SchemaElement is handed to columnsOf.
+ */
+export type Annotation =
+  | { readonly type: 'DECIMAL'; readonly scale: number }
+  | {
+      readonly type: 'TIME' | 'TIMESTAMP';
+      readonly unit: AnnotatedUnit;
+      readonly isAdjustedToUTC: boolean;
+    }
+  | { readonly type: 'INTEGER'; readonly isSigned: boolean }
+  | {
+      readonly type:
+        | 'STRING'
+        | 'MAP'
+        | 'LIST'
+        | 'ENUM'
+        | 'DATE'
+        | 'INTERVAL'
+        | 'NULL'
+        | 'JSON'
+        | 'BSON'
+        | 'UUID'
+        | 'FLOAT16'
+        | 'VARIANT'
+        | 'GEOMETRY'
+        | 'GEOGRAPHY';
+    };
+
+/** A schema element's converted type, as hyparquet's ConvertedType names it. */
+export type Converted =
+  | 'UTF8'
+  | 'MAP'
+  | 'MAP_KEY_VALUE'
+  | 'LIST'
+  | 'ENUM'
+  | 'DECIMAL'
+  | 'DATE'
+  | 'TIME_MILLIS'
+  | 'TIME_MICROS'
+  | 'TIMESTAMP_MILLIS'
+  | 'TIMESTAMP_MICROS'
+  | 'UINT_8'
+  | 'UINT_16'
+  | 'UINT_32'
+  | 'UINT_64'
+  | 'INT_8'
+  | 'INT_16'
+  | 'INT_32'
+  | 'INT_64'
+  | 'JSON'
+  | 'BSON'
+  | 'INTERVAL';
 
 /**
  * Element is one element of a footer's schema, as hyparquet's SchemaElement
@@ -89,7 +139,7 @@ export interface Element {
   readonly type?: Physical;
   readonly repetition_type?: 'REQUIRED' | 'OPTIONAL' | 'REPEATED';
   readonly num_children?: number;
-  readonly converted_type?: string;
+  readonly converted_type?: Converted;
   readonly scale?: number;
   readonly logical_type?: Annotation;
 }
@@ -188,18 +238,18 @@ const UNSIGNED: Logical = { t: 'unsigned' };
  */
 const INT96_TIMESTAMP: Logical = { t: 'timestamp', unit: 'nanos', utc: false };
 
-/** The time units hyparquet names, as Logical names them. */
-const UNITS: ReadonlyMap<string, TimeUnit> = new Map([
-  ['MILLIS', 'millis'],
-  ['MICROS', 'micros'],
-  ['NANOS', 'nanos'],
-]);
+/** The time units an annotation names, as Logical names them. */
+const UNITS: Readonly<Record<AnnotatedUnit, TimeUnit>> = {
+  MILLIS: 'millis',
+  MICROS: 'micros',
+  NANOS: 'nanos',
+};
 
 /**
  * What a converted type means, on an element with no logical type that says
  * otherwise. The legacy times and timestamps count from UTC.
  */
-const CONVERTED: ReadonlyMap<string, Logical> = new Map<string, Logical>([
+const CONVERTED: ReadonlyMap<Converted, Logical> = new Map<Converted, Logical>([
   ['DATE', { t: 'date' }],
   ['TIMESTAMP_MILLIS', { t: 'timestamp', unit: 'millis', utc: true }],
   ['TIMESTAMP_MICROS', { t: 'timestamp', unit: 'micros', utc: true }],
@@ -333,20 +383,21 @@ function primitiveOf(element: Element): Primitive {
 /** What an element's annotation means, from its logical or converted type. */
 function logicalOf(element: Element): Logical | undefined {
   const { logical_type: annotation, converted_type: converted } = element;
-  const unit = UNITS.get(annotation?.unit ?? '');
-  const utc = annotation?.isAdjustedToUTC === true;
   if (element.type === 'INT96' && converted === undefined) {
     return INT96_TIMESTAMP;
   }
   switch (annotation?.type) {
     case 'DECIMAL':
-      return { t: 'decimal', scale: annotation.scale ?? 0 };
+      return { t: 'decimal', scale: annotation.scale };
     case 'TIMESTAMP':
-      return unit && { t: 'timestamp', unit, utc };
     case 'TIME':
-      return unit && { t: 'time', unit, utc };
+      return {
+        t: annotation.type === 'TIME' ? 'time' : 'timestamp',
+        unit: UNITS[annotation.unit],
+        utc: annotation.isAdjustedToUTC,
+      };
     case 'INTEGER':
-      return annotation.isSigned === false ? UNSIGNED : undefined;
+      return annotation.isSigned ? undefined : UNSIGNED;
     case 'DATE':
       return { t: 'date' };
     case 'UUID':
@@ -354,9 +405,10 @@ function logicalOf(element: Element): Logical | undefined {
     case 'FLOAT16':
       return { t: 'float16' };
     default:
-      return converted === 'DECIMAL'
-        ? { t: 'decimal', scale: element.scale ?? 0 }
-        : CONVERTED.get(converted ?? '');
+      if (converted === 'DECIMAL') {
+        return { t: 'decimal', scale: element.scale ?? 0 };
+      }
+      return converted === undefined ? undefined : CONVERTED.get(converted);
   }
 }
 
