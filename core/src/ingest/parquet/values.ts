@@ -51,7 +51,7 @@ export interface Primitive {
 export type Shape =
   | Primitive
   | { readonly t: 'list'; readonly of: Shape }
-  | { readonly t: 'map'; readonly values: Shape }
+  | { readonly t: 'map'; readonly keys: Shape; readonly values: Shape }
   | { readonly t: 'struct'; readonly fields: ReadonlyMap<string, Shape> };
 
 /**
@@ -355,7 +355,10 @@ function valueShapeOf(node: Tree): Shape {
   const { element, children } = node;
   const [group] = children;
   if (group === undefined) return primitiveOf(element);
-  if (isMap(node)) return { t: 'map', values: shapeOf(group.children[1]!) };
+  if (isMap(node)) {
+    const [key, value] = group.children;
+    return { t: 'map', keys: shapeOf(key!), values: shapeOf(value!) };
+  }
   if (isList(node)) {
     const [item] = group.children;
     return { t: 'list', of: item ? shapeOf(item) : valueShapeOf(group) };

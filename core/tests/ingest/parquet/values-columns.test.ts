@@ -39,6 +39,7 @@ test('a top-level field is a column named for it, keyed by a pointer', () => {
 });
 
 const INT32: Primitive = { t: 'primitive', physical: 'INT32' };
+const BYTES: Primitive = { t: 'primitive', physical: 'BYTE_ARRAY' };
 
 /** A struct of two INT32 fields, x and y. */
 const POINT: Shape = {
@@ -128,7 +129,7 @@ test('a MAP is one column, and a struct inside a LIST stays whole', () => {
     { name: 'y', type: 'INT32' },
   ]);
   expect(leaves.map((leaf) => [leaf.column.name, leaf.shape])).toEqual([
-    ['tags', { t: 'map', values: INT32 }],
+    ['tags', { t: 'map', keys: BYTES, values: INT32 }],
     ['points', { t: 'list', of: POINT }],
   ]);
 });
