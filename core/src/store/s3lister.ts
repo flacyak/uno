@@ -6,10 +6,11 @@
  *
  * Listing uses `delimiter=/`. Keys flat under the prefix come back
  * as Contents and become files. Deeper keys are folded into CommonPrefixes
- * and become folders.
+ * and become folders. A walk sends no delimiter, so every key under the
+ * prefix comes back as Contents.
  */
 
-import type { Entry, Lister, Listing } from './list.ts';
+import type { Entry, Listing, Walker } from './list.ts';
 import { PAGE, byPageKey } from './list.ts';
 import type { S3Options, S3Requests } from './s3.ts';
 import {
@@ -27,16 +28,17 @@ import { readListing, when } from './s3xml.ts';
 import type { KeyEntry, ListResult } from './s3xml.ts';
 
 /**
- * s3Lister browses buckets: one ListObjectsV2 per page, and one HEAD per
- * stat.
+ * s3Lister browses buckets: one ListObjectsV2 per page of a listing or a
+ * walk, and one HEAD per stat.
  */
-export function s3Lister(opts: S3Options): Lister {
+export function s3Lister(opts: S3Options): Walker {
   const send = s3Requests(opts);
   return {
     label: 'S3',
     handles: (path) => s3Prefix(path) !== undefined,
     list: (path, cursor) => listPrefix(send, path, cursor),
     stat: (path) => statObject(send, path),
+    walk: (root, cursor) => walkPrefix(send, root, cursor),
   };
 }
 
@@ -80,6 +82,27 @@ async function listPrefix(
     ...page.prefixes.map((prefix) => folderAt(where.bucket, prefix)),
     ...page.keys.flatMap((key) => fileAt(where.bucket, key, keyName)),
   ].toSorted(byPageKey);
+  return page.next === undefined ? { entries } : { entries, next: page.next };
+}
+
+/**
+ * walkPrefix reads one page of every key under a folder, at any depth, in
+ * the bucket's order. The root is read as a folder, so `s3://b/sales` walks
+ * what `s3://b/sales/` does and leaves `sales-old/` out. Each file is named
+ * by its key under the root.
+ */
+async function walkPrefix(
+  send: S3Requests,
+  root: string,
+  cursor: string | undefined,
+): Promise<Listing> {
+  const { bucket, prefix } = placeOf(root);
+  const folder = prefix === '' || prefix.endsWith('/') ? prefix : `${prefix}/`;
+  const where = { bucket, prefix: folder };
+  const page = await pageAt(send, root, where, cursor, undefined);
+  const entries = page.keys.flatMap((key) =>
+    fileAt(bucket, key, (k) => k.slice(folder.length)),
+  );
   return page.next === undefined ? { entries } : { entries, next: page.next };
 }
 
