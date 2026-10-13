@@ -379,6 +379,8 @@ function numberOf(primitive: Primitive, value: number | bigint): string {
       return floatOf(Number(value), FLOAT16_DIGITS, f16round);
     case 'date':
       return dateOf(Number(value)) ?? String(value);
+    case 'time':
+      return timeOf(BigInt(value), logical.unit, logical.utc);
     case 'timestamp':
       return timestampOf(BigInt(value), logical.unit, logical.utc);
     default:
@@ -398,6 +400,15 @@ function timestampOf(count: bigint, unit: TimeUnit, utc: boolean): string {
   const date = dateOf(Number((count - sinceMidnight) / perDay));
   if (date === undefined) return String(count);
   return `${date}T${clockOf(sinceMidnight, unit)}${utc ? 'Z' : ''}`;
+}
+
+/**
+ * A `count` of `unit` since midnight as a clock, ending in Z where it is
+ * UTC. One outside a day is written as its count, since no clock reads it.
+ */
+function timeOf(count: bigint, unit: TimeUnit, utc: boolean): string {
+  if (count < 0n || count >= ticksPerDay(unit)) return String(count);
+  return `${clockOf(count, unit)}${utc ? 'Z' : ''}`;
 }
 
 /** Days since 1970-01-01 as YYYY-MM-DD, or undefined past what a Date holds. */
