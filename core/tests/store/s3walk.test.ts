@@ -6,6 +6,7 @@
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
 import type { Listing } from '@store';
+import { s3Files } from '@store/s3';
 import { s3Lister } from '@store/s3lister';
 import { HOME_REGION } from './regions.ts';
 import { BUCKET, KEYS, MODIFIED, bucket, etagOf } from './standin.ts';
@@ -23,6 +24,12 @@ const MONTHS = 12;
 /** Digits in a part's number, so parts sort in the order made. */
 const DIGITS = 4;
 
+/**
+ * A partition value holding `%3A`, the escape Hive writes for ':'. The key
+ * holds the three characters as written.
+ */
+const ESCAPED_HOUR = 'hour=2025-09-20 00%3A00%3A00';
+
 /** The key of the dataset's part `i`, in the month it falls in. */
 function partKey(i: number): string {
   const month = (i % MONTHS) + 1;
@@ -31,12 +38,15 @@ function partKey(i: number): string {
 
 /**
  * The bucket every check below walks: a dataset of 2,500 keys over twelve
- * month folders, and the folder markers a console leaves.
+ * month folders, the folder markers a console leaves, a key with an escape in
+ * its folder, and a sibling prefix the walk must leave out.
  */
 function objects(): Map<string, Uint8Array> {
   const all = new Map<string, Uint8Array>([
     ['sales/', new Uint8Array()],
     ['sales/year=2025/', new Uint8Array()],
+    ['sales-old/part-0000.csv', ONE],
+    [`events/${ESCAPED_HOUR}/part-0000.csv`, ONE],
   ]);
   for (let i = 0; i < KEYS_IN_DATASET; i++) all.set(partKey(i), ONE);
   return all;
@@ -107,4 +117,51 @@ test('the folder markers under the root are left out', async () => {
 
   expect(names).not.toContain('');
   expect(names).not.toContain('year=2025/');
+});
+
+test('a root with no slash at its end is a folder, so a sibling prefix is left out', async () => {
+  const bare = await pages(`s3://${BUCKET}/sales`);
+  const names = bare.flatMap((p) => p.entries.map((e) => e.name));
+
+  expect(names).toHaveLength(KEYS_IN_DATASET);
+  expect(names.some((n) => n.includes('sales-old'))).toBe(false);
+  expect(names[0]!.startsWith('year=2025/')).toBe(true);
+});
+
+// Hive escapes ':' as %3A. The key holds those characters, so each '%' is
+// sent as %25 in the query and in the path, and SigV4 signs it the same way.
+test('a key holding %3A is walked, named and opened as written', async () => {
+  const root = `s3://${BUCKET}/events/${ESCAPED_HOUR}/`;
+  b.seen.length = 0;
+  const { entries } = await lister().walk(root);
+
+  expect(entries.map((e) => e.name)).toEqual(['part-0000.csv']);
+  expect(b.seen.at(-1)!.query).toContain('00%253A00%253A00');
+
+  const file = await s3Files({
+    credentials: () => Promise.resolve(KEYS),
+    endpoint: b.endpoint,
+  }).open({ name: entries[0]!.name, path: entries[0]!.path });
+  try {
+    expect(await file.read(0, 1)).toEqual(ONE);
+  } finally {
+    await file.close();
+  }
+  expect(b.seen.at(-1)!.path).toContain('00%253A00%253A00/part-0000.csv');
+});
+
+test('a whole bucket is walked from its root', async () => {
+  const names = (await pages(`s3://${BUCKET}`)).flatMap((p) =>
+    p.entries.map((e) => e.name),
+  );
+
+  expect(names).toContain('sales-old/part-0000.csv');
+  expect(names).toContain(`events/${ESCAPED_HOUR}/part-0000.csv`);
+  expect(names).toHaveLength(KEYS_IN_DATASET + 2);
+});
+
+test('a walk of a missing bucket says so', async () => {
+  await expect(lister().walk('s3://finance-lake/exports/')).rejects.toThrow(
+    's3://finance-lake/exports/: no such bucket',
+  );
 });
