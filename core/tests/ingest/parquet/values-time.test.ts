@@ -87,8 +87,31 @@ test('a local timestamp has no Z, and isDate accepts a UTC one', () => {
   expect(isDate(utc!)).toBe(true);
 });
 
+test('a legacy TIMESTAMP_MILLIS or TIMESTAMP_MICROS counts from UTC', () => {
+  expect(
+    textsOf({ name: 'x', type: 'INT64', converted_type: 'TIMESTAMP_MICROS' }, [
+      1n,
+    ]),
+  ).toEqual(['1970-01-01T00:00:00.000001Z']);
+  expect(
+    textsOf({ name: 'x', type: 'INT64', converted_type: 'TIMESTAMP_MILLIS' }, [
+      1n,
+    ]),
+  ).toEqual(['1970-01-01T00:00:00.001Z']);
+});
+
 test('a timestamp past what a Date holds is its count', () => {
   expect(textsOf(timestamp('MILLIS', true), [INT64_MAX])).toEqual([
     String(INT64_MAX),
+  ]);
+});
+
+test('a nanosecond INT96 keeps nine digits, before 1970 as after it', () => {
+  // hyparquet hands an INT96 over as nanoseconds since 1970.
+  const values = [1234567890123456789n, -1n, 1000000000n];
+  expect(textsOf({ name: 'x', type: 'INT96' }, values)).toEqual([
+    '2009-02-13T23:31:30.123456789',
+    '1969-12-31T23:59:59.999999999',
+    '1970-01-01T00:00:01',
   ]);
 });
