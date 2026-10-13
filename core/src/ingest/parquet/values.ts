@@ -132,6 +132,10 @@ const BYTE_BITS = 8;
 const HEX = 16;
 const HEX_BYTE_DIGITS = 2;
 
+/** The bytes of a UUID, and the hex digits of each group its form dashes. */
+const UUID_BYTES = 16;
+const UUID_GROUP_DIGITS: readonly number[] = [8, 4, 4, 4, 12];
+
 /** The digits of a second's fraction that each time unit counts. */
 const FRACTION_DIGITS: Readonly<Record<TimeUnit, number>> = {
   millis: 3,
@@ -448,10 +452,16 @@ function ticksPerDay(unit: TimeUnit): bigint {
   return SECONDS_PER_DAY * ticksPerSecond(unit);
 }
 
-/** Stored bytes: a decimal's unscaled integer, or else UTF-8 or 0x-hex. */
+/**
+ * Stored bytes: a decimal's unscaled integer, a UUID in canonical form, or
+ * else UTF-8 or 0x-hex.
+ */
 function bytesOf(logical: Logical | undefined, bytes: Uint8Array): string {
   if (logical?.t === 'decimal') {
     return decimalOf(signedOf(bytes), logical.scale);
+  }
+  if (logical?.t === 'uuid') {
+    return bytes.length === UUID_BYTES ? uuidOf(bytes) : `0x${hexOf(bytes)}`;
   }
   try {
     return UTF8.decode(bytes);
@@ -514,6 +524,18 @@ function f16round(x: number): number {
   const up = over > 0.5 || (over === 0.5 && below % 2 === 1);
   const rounded = (up ? below + 1 : below) * step;
   return Math.sign(x) * (rounded > FLOAT16_MAX ? Infinity : rounded);
+}
+
+/** A UUID's bytes as lower-case hex in its five dashed groups. */
+function uuidOf(bytes: Uint8Array): string {
+  const hex = hexOf(bytes);
+  const groups: string[] = [];
+  let start = 0;
+  for (const digits of UUID_GROUP_DIGITS) {
+    groups.push(hex.slice(start, start + digits));
+    start += digits;
+  }
+  return groups.join('-');
 }
 
 /** Bytes as lower-case hex, two digits each. */
