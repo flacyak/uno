@@ -13,6 +13,9 @@ import { textsOf } from './texts.ts';
 
 const encoder = new TextEncoder();
 
+/** The bytes of a UUID. */
+const UUID_BYTES = 16;
+
 /** A three-level LIST named `name`, whose `element` follows. */
 function list(name: string, element: SchemaElement): SchemaElement[] {
   return [
@@ -95,6 +98,46 @@ test('a map writes its values as its value column says', () => {
     '{"a\\"b":18446744073709551615,"cd":null}',
     '{}',
   ]);
+});
+
+test('a map writes its keys as its key column says', () => {
+  const value: SchemaElement = { name: 'value', type: 'INT32' };
+  const uuid = new Uint8Array(UUID_BYTES).fill(0xab);
+  const cases: Array<[SchemaElement, Key[], string]> = [
+    [
+      { name: 'key', type: 'INT32', converted_type: 'DATE' },
+      [19782, -1],
+      '{"2024-02-29":0,"1969-12-31":1}',
+    ],
+    [
+      { name: 'key', type: 'INT32', converted_type: 'DECIMAL', scale: 2 },
+      [100, -5],
+      '{"1.00":0,"-0.05":1}',
+    ],
+    [
+      { name: 'key', type: 'INT64', converted_type: 'TIMESTAMP_MILLIS' },
+      [1n],
+      '{"1970-01-01T00:00:00.001Z":0}',
+    ],
+    [
+      {
+        name: 'key',
+        type: 'FIXED_LEN_BYTE_ARRAY',
+        logical_type: { type: 'UUID' },
+      },
+      [uuid],
+      '{"abababab-abab-abab-abab-abababababab":0}',
+    ],
+    // Keys that String could not have written for the key column.
+    [{ name: 'key', type: 'BYTE_ARRAY' }, ['red'], '{"red":0}'],
+    [{ name: 'key', type: 'INT64' }, ['1.5'], '{"1.5":0}'],
+  ];
+  for (const [key, keys, json] of cases) {
+    const values = keys.map((_, i) => i);
+    expect(textsOf(map('m', key, value), [mapOf(keys, values)])).toEqual([
+      json,
+    ]);
+  }
 });
 
 test('a struct in a list writes each field as its own column would', () => {
