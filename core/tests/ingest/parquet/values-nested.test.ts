@@ -161,6 +161,22 @@ test('a struct in a list writes each field as its own column would', () => {
   ]);
 });
 
+test('a VARIANT writes what hyparquet decodes it to, an object as JSON', () => {
+  const variant: SchemaElement[] = [
+    { name: 'v', num_children: 2, logical_type: { type: 'VARIANT' } },
+    { name: 'metadata', type: 'BYTE_ARRAY', repetition_type: 'REQUIRED' },
+    { name: 'value', type: 'BYTE_ARRAY' },
+  ];
+  const values = [{ a: 1, b: [true, 'x"y'] }, [null, 2n], 'text', 7, null];
+  expect(textsOf(variant, values)).toEqual([
+    '{"a":1,"b":[true,"x\\"y"]}',
+    '[null,2]',
+    'text',
+    '7',
+    '',
+  ]);
+});
+
 test('a list of lists and a repeated field are arrays too', () => {
   const lists: SchemaElement[] = [
     ...list('grid', {
