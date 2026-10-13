@@ -36,13 +36,20 @@ export function partitionOf(relative: string): Partition {
   const keys: string[] = [];
   const values: string[] = [];
   for (const folder of relative.split('/').slice(0, -1)) {
-    const [key, value, ...more] = folder.split('=');
-    if (value === undefined || more.length > 0 || key === '') continue;
-    const decoded = unescaped(value);
-    keys.push(unescaped(key));
-    values.push(decoded === HIVE_NULL ? '' : decoded);
+    const pair = pairOf(folder);
+    if (pair === undefined) continue;
+    const value = unescaped(pair.value);
+    keys.push(unescaped(pair.key));
+    values.push(value === HIVE_NULL ? '' : value);
   }
   return { keys, values };
+}
+
+/** pairOf splits a key=value folder in two, as written. */
+function pairOf(folder: string): { key: string; value: string } | undefined {
+  const [key, value, ...more] = folder.split('=');
+  if (value === undefined || more.length > 0 || key === '') return undefined;
+  return { key, value };
 }
 
 /** unescaped decodes every run of escapes in text. */
