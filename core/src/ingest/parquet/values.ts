@@ -7,7 +7,7 @@
  * are, and the values it reads fit ParquetValue.
  */
 
-import { headerOf } from '../format.ts';
+import { headerOf, pointerTo } from '../format.ts';
 
 /** How a Parquet file stores a value. */
 export type Physical =
@@ -309,9 +309,7 @@ function treeOf(schema: readonly Element[]): Tree {
 
 /** The RFC 6901 pointer to a field path. */
 function pointerOf(path: readonly string[]): string {
-  return path
-    .map((name) => `/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`)
-    .join('');
+  return path.reduce(pointerTo, '');
 }
 
 /** Whether a node is a struct, whose fields are columns of their own. */

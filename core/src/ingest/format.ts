@@ -231,6 +231,14 @@ export function headerOf(record: readonly string[]): string[] {
   });
 }
 
+/**
+ * pointerTo returns the RFC 6901 pointer to member `name` of what `parent`
+ * points to. A '~' in the name is written '~0', and a '/' is written '~1'.
+ */
+export function pointerTo(parent: string, name: string): string {
+  return `${parent}/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+}
+
 /** The extension, lower-cased, including its dot. "" when there is none. */
 export function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.');
