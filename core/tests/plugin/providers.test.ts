@@ -20,6 +20,12 @@ function bucketProvider(): Provider {
     handles: (path) => path.startsWith('s3://'),
     list: (path) => Promise.resolve({ entries: [entry(path + 'a.csv')] }),
     stat: (path) => Promise.resolve(entry(path)),
+    walk: (root) =>
+      Promise.resolve({
+        entries: [
+          { ...entry(root + 'year=2025/a.csv'), name: 'year=2025/a.csv' },
+        ],
+      }),
   };
   return {
     name: 's3',
@@ -81,7 +87,7 @@ test('a build whose only provider cannot browse refuses to browse at all', async
   );
 });
 
-test('the registry lists and stats through the provider that claims the path', async () => {
+test('the registry lists, stats and walks through the provider that claims the path', async () => {
   const store = sources([diskProvider(), bucketProvider()]);
 
   const listing = await store.list('s3://acme/exports/');
@@ -89,6 +95,10 @@ test('the registry lists and stats through the provider that claims the path', a
     's3://acme/exports/a.csv',
   ]);
   expect((await store.stat('s3://acme/exports/a.csv')).bytes).toBe(7);
+  const walked = await store.walk('s3://acme/exports/');
+  expect(walked.entries.map((e) => e.path)).toEqual([
+    's3://acme/exports/year=2025/a.csv',
+  ]);
 });
 
 // The open and browse refusals have the same shape and list the provider
