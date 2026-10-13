@@ -27,8 +27,8 @@ export { PAGE };
 
 /**
  * diskLister browses this machine's disks: one readdir per page, and a stat
- * for each entry on the page. A walk reads every folder under its root and
- * stats each file.
+ * for each entry on the page. A walk's page reads the folders on the path it
+ * starts from and the ones it reaches, and stats each file on it.
  *
  * `page` is the page size. Tests set it small.
  */
@@ -39,7 +39,7 @@ export function diskLister(page: number = PAGE): Walker {
     handles: (path) => !isRemote(path),
     list: (dir, cursor) => listDir(dir, page, cursor),
     stat: statEntry,
-    walk: (root) => walkDir(root),
+    walk: (root, cursor) => walkDir(root, page, cursor),
   };
 }
 
@@ -85,28 +85,51 @@ interface Walked {
   readonly row: Row;
 }
 
-/** Walk is what a walk has found so far. */
+/** Walk is what a walk has found so far, and how many files it wants. */
 interface Walk {
   readonly root: string;
+  readonly wants: number;
   readonly found: Walked[];
 }
 
-/** walkDir reads every file under `root` as one page. */
-async function walkDir(root: string): Promise<Listing> {
-  const walk: Walk = { root, found: [] };
-  await walkFolder(walk, '');
+/**
+ * walkDir reads one page of every file under `root`. The cursor is the path
+ * under the root of the last file the page before held, so the walk reads
+ * the folders on that path again and starts after it.
+ *
+ * It looks one file past the page to know whether a next page starts.
+ */
+async function walkDir(
+  root: string,
+  page: number,
+  cursor: string | undefined,
+): Promise<Listing> {
+  const walk: Walk = { root, wants: page + 1, found: [] };
+  await walkFolder(walk, '', cursor?.split('/') ?? []);
 
   const entries = await Promise.all(
-    walk.found.map(async ({ folder, row }) => ({
+    walk.found.slice(0, page).map(async ({ folder, row }) => ({
       ...(await entryOf(join(root, folder))(row)),
       name: under(folder, row.name),
     })),
   );
-  return { entries };
+  const last = entries.at(-1);
+  return walk.found.length > page && last !== undefined
+    ? { entries, next: last.name }
+    : { entries };
 }
 
-/** walkFolder adds the files under `folder` to the walk, depth-first. */
-async function walkFolder(walk: Walk, folder: string): Promise<void> {
+/**
+ * walkFolder adds the files under `folder` to the walk, depth-first, until it
+ * has as many as it wants. `after` is the rest of the cursor's path from
+ * here: a name before its first segment is passed over, and the one equal to
+ * it is the folder the cursor goes on into, or the cursor's own file.
+ */
+async function walkFolder(
+  walk: Walk,
+  folder: string,
+  after: readonly string[],
+): Promise<void> {
   const dir = join(walk.root, folder);
   const found = namesOf(
     await readdir(dir, { withFileTypes: true, encoding: 'buffer' }),
@@ -114,13 +137,32 @@ async function walkFolder(walk: Walk, folder: string): Promise<void> {
   const rows = (await rowsOf(dir, found)).toSorted((a, b) =>
     byPartPath(a.name, b.name),
   );
+  const [mark, ...deeper] = after;
   for (const row of rows) {
+    if (walk.found.length >= walk.wants) return;
+    const standing = standingOf(row.name, mark);
+    if (standing === 'before') continue;
     if (!row.folder) {
-      walk.found.push({ folder, row });
+      if (standing === 'after') walk.found.push({ folder, row });
       continue;
     }
-    await walkFolder(walk, under(folder, row.name));
+    const next = standing === 'on' ? deeper : [];
+    await walkFolder(walk, under(folder, row.name), next);
   }
+}
+
+/**
+ * standingOf is where a name stands against `mark`, the cursor's name at its
+ * depth: before it, on it, or after it. With no mark, every name is after.
+ */
+function standingOf(
+  name: string,
+  mark: string | undefined,
+): 'before' | 'on' | 'after' {
+  if (mark === undefined) return 'after';
+  const order = byPartPath(name, mark);
+  if (order === 0) return 'on';
+  return order < 0 ? 'before' : 'after';
 }
 
 /** under is a name's path under the root, in `folder` under it. */
