@@ -9,7 +9,11 @@ import { describe, expect, test } from 'vite-plus/test';
 
 import { READ_VERSION, formatFor, writeDocument } from '@document';
 import type { HeldFile, HeldParts, SavedColumn } from '@document';
-import { manifestOf, workspace } from '@core-tests/document/manifest';
+import {
+  manifestOf,
+  manifestText,
+  workspace,
+} from '@core-tests/document/manifest';
 
 /**
  * Columns learned from the rows: a top-level field, a nested field and the
@@ -84,6 +88,50 @@ describe('a source with pinned columns', () => {
     writeDocument(doc);
     expect(doc.manifest.format).toBe(READ_VERSION);
     expect(READ_VERSION).toBe(7);
+  });
+
+  // The full manifest text is compared, so any moved key fails.
+  test('is written with its columns after its shape, each key only where it is set', () => {
+    const uno = writeDocument(workspace([events()]));
+    const m = manifestOf(uno);
+    expect(manifestText(uno)).toBe(`{
+  "format": 7,
+  "generator": "uno 0.2.0",
+  "created": "2026-09-30T12:00:00Z",
+  "modified": "${m.modified}",
+  "sources": [
+    {
+      "id": "events",
+      "name": "events.jsonl",
+      "bytes": 48211904,
+      "path": "exports/events.jsonl",
+      "version": "\\"5e0c2a\\"",
+      "rows": 310455,
+      "cols": 3,
+      "columns": [
+        {
+          "name": "id"
+        },
+        {
+          "name": "user.name",
+          "key": "/user/name"
+        },
+        {
+          "name": "_line",
+          "key": ""
+        }
+      ]
+    }
+  ],
+  "sheet": {
+    "entry": "sheet/state.json"
+  },
+  "edits": {
+    "count": 1,
+    "entry": "edits/log.jsonl"
+  }
+}
+`);
   });
 
   test('of several files read as one keeps its header and pins them after its shape', () => {
