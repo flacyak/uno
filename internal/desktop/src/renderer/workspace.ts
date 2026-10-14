@@ -102,6 +102,16 @@ export class Tab {
     return this.source.opened.size;
   }
 
+  /**
+   * How long the source's index has taken, in milliseconds, by the engine's
+   * clock. Each progress reply moves it; once the index is complete it is the
+   * time the source took, and stays. A source reopened from a .uno has the
+   * time of its reopen.
+   */
+  get elapsedMs(): number {
+    return this.source.progress.elapsedMs;
+  }
+
   /** The file behind this source, if it has one. */
   get link(): Link | undefined {
     return this.source.opened.link;
