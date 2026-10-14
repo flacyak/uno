@@ -187,6 +187,29 @@ test('a path beside a workspace in a bucket keeps its key as written', () => {
   expect(storedPath('s3://lake/q4/c:/a.csv', at)).toBe('s3://lake/q4/c:/a.csv');
 });
 
+// A dataset's root is stored as a source's path is, and keeps the separator
+// it ends in.
+test('a root ending in its separator is written down and read back as a path is', () => {
+  const was = '/home/cpa/q4/books.uno';
+  const now = '/media/stick/q4/books.uno';
+
+  expect(storedPath('s3://lake/orders/', was)).toBe('s3://lake/orders/');
+  expect(resolvedPath(storedPath('s3://lake/orders/', was), now)).toBe(
+    's3://lake/orders/',
+  );
+  expect(storedPath('/home/cpa/q4/lake/orders/', was)).toBe('lake/orders/');
+  expect(resolvedPath('lake/orders/', now)).toBe(
+    '/media/stick/q4/lake/orders/',
+  );
+  expect(storedPath('C:\\books\\q4\\lake\\', 'C:\\books\\q4\\books.uno')).toBe(
+    'lake/',
+  );
+  // A part under a root that moved is found under it.
+  expect(
+    onRoot('year=2024/part-0.parquet', resolvedPath('lake/orders/', now)),
+  ).toBe('/media/stick/q4/lake/orders/year=2024/part-0.parquet');
+});
+
 test('two paths are the same place whichever way their slashes lean', () => {
   expect(samePath('C:\\data\\q4\\sales.csv', 'C:/data/q4/sales.csv')).toBe(
     true,
