@@ -15,11 +15,13 @@ import { diskProvider } from '@store/node';
 import { s3Provider } from '@store/s3';
 import { bytes, connect, openOne } from '@core-tests/engine/harness';
 import { HOME_REGION } from '@core-tests/store/regions';
-import { BUCKET, KEYS, bucket } from '@core-tests/store/standin';
+import { BUCKET, KEYS, bucket, etagOf } from '@core-tests/store/standin';
 import type { Bucket } from '@core-tests/store/standin';
 
 /** Asked is one request the engine sent. */
 export interface Asked {
+  /** HEAD or GET. */
+  method: string;
   /** Where the range starts, or undefined for an unranged request. */
   offset: number | undefined;
   /** How many bytes the range asks for. 0 for an unranged request. */
@@ -40,9 +42,14 @@ const QUIET_ROUNDS = 3;
 const RANGE = /^bytes=(\d+)-(\d+)$/;
 
 function askedOf(init: RequestInit | undefined): Asked {
+  const method = init?.method ?? 'GET';
   const m = RANGE.exec(new Headers(init?.headers).get('range') ?? '');
-  if (m === null) return { offset: undefined, length: 0 };
-  return { offset: Number(m[1]), length: Number(m[2]) - Number(m[1]) + 1 };
+  if (m === null) return { method, offset: undefined, length: 0 };
+  return {
+    method,
+    offset: Number(m[1]),
+    length: Number(m[2]) - Number(m[1]) + 1,
+  };
 }
 
 /** Sorts held reads by offset, lowest first. */
@@ -166,6 +173,8 @@ export interface Remote {
   engine: Engine;
   /** open asks the engine for the object. The caller lets its reads through. */
   open(): Promise<SourceHandle>;
+  /** openListed is `open` with the size and ETag a listing gave. */
+  openListed(): Promise<SourceHandle>;
   close(): Promise<void>;
 }
 
@@ -186,11 +195,18 @@ export async function remote(
     fetch: door.fetch,
   });
   const { engine, done } = connect(tuning, [diskProvider(), s3]);
+  const path = `s3://${BUCKET}/${KEY}`;
   return {
     door,
     engine,
-    open: () =>
-      openOne(engine, { name: 'big.csv', path: `s3://${BUCKET}/${KEY}` }),
+    open: () => openOne(engine, { name: 'big.csv', path }),
+    openListed: () =>
+      openOne(engine, {
+        name: 'big.csv',
+        path,
+        bytes: object.length,
+        version: etagOf(object),
+      }),
     async close() {
       door.release();
       await door.quiet();
