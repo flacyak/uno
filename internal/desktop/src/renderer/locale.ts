@@ -26,6 +26,14 @@ const UNITS = [m.size_kb, m.size_mb, m.size_gb, m.size_tb] as const;
 /** A size below this many of its unit shows one decimal: 3.2 MB, 32 MB. */
 const DECIMAL_BELOW = 10;
 
+/** Formats a number to exactly `digits` decimals in the app's locale. */
+function decimals(n: number, digits: number): string {
+  return new Intl.NumberFormat(getLocale(), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(n);
+}
+
 /** Formats a byte count in the largest unit that keeps it at or above one: 3.2 MB. */
 export function bytes(n: number): string {
   if (n < UNIT_STEP) return m.size_bytes({ count: n });
@@ -35,12 +43,14 @@ export function bytes(n: number): string {
     size /= UNIT_STEP;
     unit++;
   }
-  const digits = size < DECIMAL_BELOW ? 1 : 0;
-  const written = new Intl.NumberFormat(getLocale(), {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(size);
-  return UNITS[unit]!({ size: written });
+  return UNITS[unit]!({ size: decimals(size, size < DECIMAL_BELOW ? 1 : 0) });
+}
+
+const MS_PER_SECOND = 1000;
+
+/** Formats a time in milliseconds as seconds to one decimal, with its unit: 2.4 s. */
+export function seconds(ms: number): string {
+  return m.elapsed_seconds({ seconds: decimals(ms / MS_PER_SECOND, 1) });
 }
 
 /** Joins names as a short list in the app's locale: a, b, c. */
