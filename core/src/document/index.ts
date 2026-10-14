@@ -51,8 +51,10 @@ export {
   baseOf,
   dirOf,
   isAbsolute,
+  onRoot,
   relativeTo,
   samePath,
+  underRoot,
 } from './path.ts';
 export {
   formatFor,
