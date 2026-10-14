@@ -5,7 +5,10 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { walkLine } from '@ingest/json';
+import { DEPTH_LIMIT, walkLine } from '@ingest/json';
+
+/** How deep a line nests that would overflow the stack if walkLine read it. */
+const PAST_THE_STACK = 100_000;
 
 /**
  * walked returns the leaves walkLine reports for `line`, or false when it
@@ -16,6 +19,12 @@ function walked(line: string): Array<[string, string]> | false {
   const read = walkLine(line, (key, text) => leaves.push([key, text]));
   if (!read) expect(leaves, `reported, then refused: ${line}`).toEqual([]);
   return read && leaves;
+}
+
+/** nested returns a line of `depth` objects, each the one member of the last. */
+function nested(depth: number): string {
+  const around = depth - 1;
+  return `${'{"a":'.repeat(around)}{}${'}'.repeat(around)}`;
 }
 
 describe('walkLine', () => {
@@ -56,6 +65,45 @@ describe('walkLine', () => {
       ],
     ],
     ['an empty object has no leaves', '{ }', []],
+    [
+      "a nested object's members are cells named by the path to them",
+      '{"a":{"b":"x","c":{"d":1}},"e":2}',
+      [
+        ['/a/b', 'x'],
+        ['/a/c/d', '1'],
+        ['/e', '2'],
+      ],
+    ],
+    [
+      "a literal 'a.b' and nested a then b are different cells",
+      '{"a.b":"x","a":{"b":"y"}}',
+      [
+        ['/a.b', 'x'],
+        ['/a/b', 'y'],
+      ],
+    ],
+    [
+      'a nested empty object is one cell',
+      '{"a":{ },"b":{"c":{}}}',
+      [
+        ['/a', '{}'],
+        ['/b/c', '{}'],
+      ],
+    ],
+    [
+      "a repeated name's last value replaces the whole of the first",
+      '{"a":{"b":"x"},"c":{"d":"y"},"e":"z","a":{"f":1},"c":2,"e":{"g":3}}',
+      [
+        ['/a/f', '1'],
+        ['/c', '2'],
+        ['/e/g', '3'],
+      ],
+    ],
+    [
+      'the last of a repeated name wins inside a nested object too',
+      '{"a":{"b":"x","b":"y"}}',
+      [['/a/b', 'y']],
+    ],
     [
       'strings are unescaped',
       String.raw`{"s":"q\" b\\ s\/ \b\f\n\r\t"}`,
@@ -118,4 +166,14 @@ describe('walkLine', () => {
     test(`refuses ${name}, reporting nothing`, () =>
       expect(walked(line)).toBe(false));
   }
+
+  test('reads a line nested DEPTH_LIMIT deep', () =>
+    expect(walked(nested(DEPTH_LIMIT))).toEqual([
+      ['/a'.repeat(DEPTH_LIMIT - 1), '{}'],
+    ]));
+
+  test('refuses a line nested deeper, rather than overflow the stack', () => {
+    expect(walked(nested(DEPTH_LIMIT + 1))).toBe(false);
+    expect(walked(nested(PAST_THE_STACK))).toBe(false);
+  });
 });
