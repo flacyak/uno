@@ -33,6 +33,16 @@ export const OPEN: Check[] = [
     },
   },
   {
+    name: "the clock settled on the time the import took, and the row count",
+    run: async (page) => {
+      const rows = counted(ROWS) + " rows";
+      const settled = await page.until([{ selector: "#status-clock", includes: rows }]);
+      const clock = await page.text("#status-clock");
+      // Tenths of a second, then the rows: "0.3 s · 4,812 rows".
+      return settled && /^\d+\.\d s · /.test(clock) ? "" : "the clock says: " + clock;
+    },
+  },
+  {
     // The file is on disk and untouched, so the tab is clean.
     name: "a file just opened has nothing unsaved",
     run: async (page) => ((await page.count(".tab .dirty")) === 0 ? "" : "the tab has a dirty dot"),
