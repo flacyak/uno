@@ -20,6 +20,7 @@ import type { Connection } from "../src/renderer/sources.ts";
 import { Theming } from "../src/renderer/theme.ts";
 import type { Scheme } from "../src/renderer/theme.ts";
 import { Kept } from "./kept.ts";
+import { settle } from "./settle.ts";
 
 const ACME: Connection = {
   id: "acme-exports",
@@ -85,9 +86,7 @@ beforeEach(() => {
 });
 
 const menu = (): HTMLElement => document.querySelector<HTMLElement>(".settings")!;
-const settle = async (): Promise<void> => {
-  for (let i = 0; i < 4; i++) await Promise.resolve();
-};
+
 /** Each section's items as text, keyed by the section's heading. */
 function sections(): Record<string, string[]> {
   const out: Record<string, string[]> = {};

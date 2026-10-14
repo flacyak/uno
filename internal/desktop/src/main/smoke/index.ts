@@ -5,6 +5,7 @@
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import type { BrowserWindow } from "electron";
 
@@ -162,7 +163,7 @@ async function shoot(win: BrowserWindow, name: string): Promise<void> {
   await win.webContents.executeJavaScript(
     "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))",
   );
-  await new Promise((r) => setTimeout(r, COMPOSITED_MS));
+  await sleep(COMPOSITED_MS);
   const image = await win.webContents.capturePage();
   const path = join(dir, `${name}.png`);
   await writeFile(path, image.toPNG());
