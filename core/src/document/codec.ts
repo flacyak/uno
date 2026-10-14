@@ -27,6 +27,7 @@ import type {
   Logged,
   Manifest,
   PartsSource,
+  SavedColumn,
   Source,
   SourcePart,
   State,
@@ -41,6 +42,7 @@ import {
   MANIFEST_ENTRY,
   PARTS_VERSION,
   POINTED_VERSION,
+  READ_VERSION,
   RULE_VERSION,
   SOURCES_VERSION,
   STATE_ENTRY,
@@ -474,8 +476,11 @@ function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
           : sourceEntry(src.name, src.id),
     path: src.path === undefined ? '' : storedPath(src.path, at),
     version: src.path === undefined ? '' : (src.version ?? ''),
+    kind: src.kind,
+    compression: src.compression,
     rows: src.rows,
     cols: src.cols,
+    columns: pinned(src.columns),
   };
 }
 
@@ -497,27 +502,52 @@ function partsSource(src: HeldParts, at: string): PartsSource {
       skip: part.skip,
       unterminated: part.unterminated,
     })),
+    kind: src.kind,
     header: src.header,
     fileColumn: src.fileColumn === true,
     rows: src.rows,
     cols: src.cols,
+    columns: pinned(src.columns),
   };
 }
 
 /**
+ * pinned is what the manifest records of a source's columns: each name, then
+ * its key where one is set. A key of "" is a key, and is kept.
+ */
+function pinned(
+  columns: readonly SavedColumn[] | undefined,
+): SavedColumn[] | undefined {
+  return columns?.map(({ name, key }): SavedColumn => ({ name, key }));
+}
+
+/**
  * formatFor returns the lowest format version that can open this workspace:
- * PARTS_VERSION with a parts source, POINTED_VERSION with a pointed-at
- * source, SOURCES_VERSION with more than one source, and otherwise whatever
- * the log needs.
+ * READ_VERSION with a source that says how it was read, PARTS_VERSION with a
+ * parts source, POINTED_VERSION with a pointed-at source, SOURCES_VERSION
+ * with more than one source, and otherwise whatever the log needs.
  */
 export function formatFor(
   sources: readonly Held[],
   log: readonly Logged[],
 ): number {
+  if (sources.some(saysHowRead)) return READ_VERSION;
   if (sources.some((s) => s.parts !== undefined)) return PARTS_VERSION;
   if (sources.some((s) => s.path !== undefined)) return POINTED_VERSION;
   if (sources.length > 1) return SOURCES_VERSION;
   return versionFor(log.map((l) => l.edit));
+}
+
+/**
+ * saysHowRead is true for a source with a kind, a compression or pinned
+ * columns. Delimited text read as it always was says none of them.
+ */
+function saysHowRead(s: Held): boolean {
+  return (
+    s.kind !== undefined ||
+    s.compression !== undefined ||
+    s.columns !== undefined
+  );
 }
 
 /**
@@ -992,7 +1022,9 @@ function sourceJSON(s: Source): unknown {
     const parts = s.parts.map((p) =>
       omitempty(p, 'name', 'version', 'skip', 'unterminated'),
     );
-    return { ...omitempty(s, 'connection', 'fileColumn'), parts };
+    // A header row is delimited text's, and delimited text has no kind.
+    const header = s.kind === undefined ? s.header : undefined;
+    return { ...omitempty(s, 'connection', 'fileColumn'), parts, header };
   }
   return omitempty(s, 'connection', 'sha256', 'entry', 'path', 'version');
 }
