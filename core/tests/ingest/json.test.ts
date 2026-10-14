@@ -70,6 +70,25 @@ describe('walkLine', () => {
         ['/lone', '\udc00'],
       ],
     ],
+    [
+      'numbers come back as written',
+      '{"big":12345678901234567890,"scale":1.10,"e":-1.5E+10,"zero":-0}',
+      [
+        ['/big', '12345678901234567890'],
+        ['/scale', '1.10'],
+        ['/e', '-1.5E+10'],
+        ['/zero', '-0'],
+      ],
+    ],
+    [
+      'true and false are words, and null is an empty cell',
+      '{"t":true,"f":false,"n":null}',
+      [
+        ['/t', 'true'],
+        ['/f', 'false'],
+        ['/n', ''],
+      ],
+    ],
   ];
 
   for (const [name, line, leaves] of read) {
@@ -83,12 +102,16 @@ describe('walkLine', () => {
     ['a truncated escape', String.raw`{"a":"\u00"}`],
     ['an unknown escape', String.raw`{"a":"\x41"}`],
     ['a bare string', '"x"'],
+    ['a bare number', '12'],
     ['an array', '[{"a":"x"}]'],
     ['two objects', '{} {}'],
     ['a trailing comma', '{"a":"x",}'],
     ['a missing colon', '{"a" "x"}'],
     ['a raw control character in a string', '{"a":"x\ty"}'],
     ['a byte order mark, which JSON.parse refuses too', '\u{feff}{}'],
+    ['a number with a leading zero', '{"a":01}'],
+    ['a number with no digits after its point', '{"a":1.}'],
+    ['a word cut short', '{"a":tru}'],
   ];
 
   for (const [name, line] of refused) {
