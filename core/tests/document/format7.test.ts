@@ -2,12 +2,18 @@
  * @fileoverview Format 7 tests: a source that says how its rows were read,
  * with `kind`, `compression` and pinned `columns` keys. A source that says
  * none of them is written as before, which format6.test.ts holds to the
- * byte. Covers where each key is written and which format it needs.
+ * byte. Covers where each key is written, which format it needs, round
+ * trips, and the refusals for a value this build does not know.
  */
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { READ_VERSION, formatFor, writeDocument } from '@document';
+import {
+  READ_VERSION,
+  formatFor,
+  readContainer,
+  writeDocument,
+} from '@document';
 import type {
   HeldFile,
   HeldParts,
@@ -16,8 +22,10 @@ import type {
   SourceKind,
 } from '@document';
 import {
+  AT,
   manifestOf,
   manifestText,
+  tampered,
   workspace,
 } from '@core-tests/document/manifest';
 
@@ -177,6 +185,40 @@ describe('a source with pinned columns', () => {
     expect(formatFor([plain, events()], [])).toBe(READ_VERSION);
     expect(formatFor([plain, { ...events(), columns: [] }], [])).toBe(
       READ_VERSION,
+    );
+  });
+});
+
+describe('a source with pinned columns reads back', () => {
+  test('as it was held, from one file', () => {
+    const doc = workspace([events()]);
+    const [back] = readContainer('books.uno', writeDocument(doc), AT).sources;
+    expect(back).toEqual(doc.sources[0]);
+    // A key left out stays out, and a key of "" stays "".
+    expect(back!.columns).toStrictEqual(PINNED);
+  });
+
+  test('as it was held, from several files', () => {
+    const doc = workspace([shards(), events()]);
+    const back = readContainer('books.uno', writeDocument(doc), AT);
+    expect(back.sources).toEqual(doc.sources);
+    expect(back.log).toEqual(doc.log);
+  });
+});
+
+// Format 8 keeps a source read in row space, which this build cannot.
+describe('a format 8 file', () => {
+  const ROWS_FORMAT = READ_VERSION + 1;
+
+  test('is refused by name', () => {
+    const uno = tampered(
+      workspace([shards()]),
+      (m) => (m.format = ROWS_FORMAT),
+    );
+    expect(() => readContainer('books.uno', uno, AT)).toThrow(
+      new Error(
+        `books.uno was saved by a newer uno (format ${ROWS_FORMAT}, this build reads ${READ_VERSION}). Update uno to open it`,
+      ),
     );
   });
 });
