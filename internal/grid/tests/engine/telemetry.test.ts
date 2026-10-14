@@ -21,22 +21,28 @@ import type {
   Measurement,
   MessagePortLike,
   Payload,
+  Progress,
   Reply,
   Request,
   SourceHandle,
+  Tuning,
 } from "../../src/engine/index.ts";
 import { sources } from "../../src/plugin/index.ts";
+import type { Provider } from "../../src/plugin/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
-import { FIXTURE, bytes, indexed } from "./harness.ts";
+import { FIXTURE, TINY, bytes, indexed, openOne, slowed } from "./harness.ts";
 
 /** An engine over a real channel, with every measurement kept in `seen`. */
-function measured(): { engine: Engine; seen: Measurement[] } {
+function measured(
+  providers: Provider[] = [diskProvider()],
+  tuning?: Tuning,
+): { engine: Engine; seen: Measurement[] } {
   const seen: Measurement[] = [];
   const { port1, port2 } = new MessageChannel();
   serve(
     messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
-    sources([diskProvider()]),
-    undefined,
+    sources(providers),
+    tuning,
     undefined,
     (m) => seen.push(m),
   );
@@ -102,6 +108,51 @@ test("a request the engine refuses is measured as refused", async () => {
     await expect(engine.open({ name: "gone.csv", path: `${FIXTURE}.gone` })).rejects.toThrow();
     const open = await until(seen, (m) => m.name === REQUEST);
     expect(open.attributes).toEqual({ request: "open", outcome: "refused" });
+  } finally {
+    engine.close();
+  }
+});
+
+/**
+ * Milliseconds the slowed disk waits before each read. Over TINY's chunks the
+ * fixture takes over half a second to index, so several progress replies go
+ * out before the final one.
+ */
+const READ_MS = 10;
+
+test("progress says how long the open has taken, and the final time is the one telemetry reports", async () => {
+  const { engine, seen } = measured([slowed(diskProvider(), READ_MS)], TINY);
+  try {
+    const started = performance.now();
+    const src = await openOne(engine, { name: "sales-q3.csv", path: FIXTURE });
+    const opened = src.opened.progress;
+    expect(opened.complete, "the open returns with the index still running").toBe(false);
+    expect(opened.elapsedMs).toBeGreaterThan(0);
+
+    // Every progress reply after the open, in order.
+    const told: Progress[] = [];
+    await new Promise<void>((resolve) => {
+      src.onProgress = (p) => {
+        told.push(p);
+        if (p.complete) resolve();
+      };
+    });
+    const taken = performance.now() - started;
+
+    expect(told.length).toBeGreaterThanOrEqual(3);
+    let last = opened.elapsedMs;
+    for (const p of told) {
+      expect(p.elapsedMs).toBeGreaterThanOrEqual(last);
+      last = p.elapsedMs;
+    }
+    expect(last).toBeGreaterThan(opened.elapsedMs);
+    expect(last, "the engine's clock runs no faster than the wall's").toBeLessThanOrEqual(taken);
+
+    // The final reply's time is the clock stopped at completion, which is
+    // what the collector is told the index took.
+    const final = told.at(-1)!;
+    const index = await until(seen, (m) => m.name === INDEX);
+    expect(index.value).toBe(final.elapsedMs);
   } finally {
     engine.close();
   }
