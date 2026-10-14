@@ -16,7 +16,12 @@ import {
   writeDocument,
 } from '@document';
 import type { HeldPart, HeldParts } from '@document';
-import { manifestOf, partsOf, workspace } from '@core-tests/document/manifest';
+import {
+  manifestOf,
+  manifestText,
+  partsOf,
+  workspace,
+} from '@core-tests/document/manifest';
 
 /** The bucket prefix the dataset was found under. */
 const ROOT = 's3://lake/orders/';
@@ -64,6 +69,61 @@ describe('a source read in row space', () => {
     writeDocument(doc);
     expect(doc.manifest.format).toBe(ROWS_VERSION);
     expect(ROWS_VERSION).toBe(8);
+  });
+
+  // The full manifest text is compared, so any moved key fails.
+  test('is written with its root and keys before its parts, each part relative to the root', () => {
+    const uno = writeDocument(workspace([orders()]));
+    const m = manifestOf(uno);
+    expect(manifestText(uno)).toBe(`{
+  "format": 8,
+  "generator": "uno 0.2.0",
+  "created": "2026-09-30T12:00:00Z",
+  "modified": "${m.modified}",
+  "sources": [
+    {
+      "id": "orders",
+      "name": "orders",
+      "connection": "lake",
+      "join": "rows",
+      "root": "s3://lake/orders/",
+      "partitions": [
+        "year",
+        "month"
+      ],
+      "parts": [
+        {
+          "path": "year=2024/month=11/part-00000.snappy.parquet",
+          "bytes": 134217728,
+          "version": "\\"9b2cf5\\"",
+          "rows": 1048576
+        },
+        {
+          "path": "year=2024/month=12/part-00000.snappy.parquet",
+          "bytes": 134217728,
+          "version": "\\"9b2cf5\\"",
+          "rows": 998002
+        },
+        {
+          "path": "year=2025/month=1/part-00000.snappy.parquet",
+          "bytes": 134217728,
+          "version": "\\"9b2cf5\\""
+        }
+      ],
+      "header": "first",
+      "rows": 2046578,
+      "cols": 14
+    }
+  ],
+  "sheet": {
+    "entry": "sheet/state.json"
+  },
+  "edits": {
+    "count": 1,
+    "entry": "edits/log.jsonl"
+  }
+}
+`);
   });
 
   // A part with no rows in it is counted, and says so.
