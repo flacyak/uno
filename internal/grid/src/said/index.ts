@@ -111,10 +111,15 @@ export class Refusal extends Error {
   }
 }
 
+/** messageOf returns an error's message, or the text of whatever else was thrown. */
+export function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** saidOf returns a Refusal's Said, or any other error's message as `text`. */
 export function saidOf(err: unknown): Said {
   if (err instanceof Refusal) return err.said;
-  return { t: "text", text: err instanceof Error ? err.message : String(err) };
+  return { t: "text", text: messageOf(err) };
 }
 
 /** Bytes per KB, KB per MB, and so on. */

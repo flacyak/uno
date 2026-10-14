@@ -4,6 +4,8 @@
 //
 // The engine and the S3 provider are the real ones. Only `fetch` is wrapped.
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { Engine } from "../../src/engine/index.ts";
 import type { SourceHandle, Tuning } from "../../src/engine/index.ts";
 import { diskProvider } from "../../src/store/node.ts";
@@ -83,7 +85,7 @@ export class Door {
   async quiet(): Promise<void> {
     for (let rounds = 0; rounds < QUIET_ROUNDS;) {
       const before = this.asked.length;
-      await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
+      await sleep(QUIET_MS);
       rounds = this.out === 0 && this.asked.length === before ? rounds + 1 : 0;
     }
   }

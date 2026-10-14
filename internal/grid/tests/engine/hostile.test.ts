@@ -5,6 +5,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 
@@ -92,9 +93,7 @@ afterEach(() => {
 
 /** settle waits `turns` turns of the event loop. */
 async function settle(turns = 5): Promise<void> {
-  for (let i = 0; i < turns; i++) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  }
+  for (let i = 0; i < turns; i++) await sleep(0);
 }
 
 function withId(replies: Reply[], id: number): Reply[] {
