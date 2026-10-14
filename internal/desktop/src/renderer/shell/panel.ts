@@ -34,6 +34,7 @@ import type {
   Connection,
   Doing,
   Joining,
+  Open,
   Place,
   Section,
   Sources,
@@ -41,7 +42,7 @@ import type {
 } from "../sources.ts";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
-import { Words, el } from "./util.ts";
+import { Words, button, el } from "./util.ts";
 
 /**
  * One row's height in pixels. It is set on the root as `--panel-row-h`, so
@@ -652,18 +653,12 @@ export class Panel {
     this.foot.hidden = doings.length === 0 && buttons.length === 0 && failure === undefined;
     this.foot.replaceChildren(
       ...(failure === undefined ? [] : this.refusal(failure)),
-      ...doings.map((a) => {
-        const button = el("button", a.does === "append" ? "wide" : "", a.label);
-        button.addEventListener("click", () => this.doing(a));
-        return button;
-      }),
+      ...doings.map((a) => button(a.does === "append" ? "wide" : "", a.label, () => this.doing(a))),
       ...(joining === undefined ? [] : [this.choices(joining)]),
-      ...buttons.map((b, i) => {
-        const button = el("button", b.one ? "" : "primary", b.label);
-        // Read the button as it stands when pressed.
-        button.addEventListener("click", () => this.press(this.sources.buttons[i] ?? b));
-        return button;
-      }),
+      // Each button is read as it stands when pressed.
+      ...buttons.map((b, i) =>
+        button(b.one ? "" : "primary", b.label, () => this.press(this.sources.buttons[i] ?? b)),
+      ),
     );
   }
 
@@ -672,8 +667,7 @@ export class Panel {
    * that edits it.
    */
   private refusal(failure: Arriving): HTMLElement[] {
-    const editing = el("button", "primary", m.action_edit_connection());
-    editing.addEventListener("click", () => this.edit());
+    const editing = button("primary", m.action_edit_connection(), () => this.edit());
     return [el("div", "why", `✗ ${failure.failed}`), editing];
   }
 
@@ -730,20 +724,7 @@ export class Panel {
         const state = stateOf(tab);
         if (state !== "fine") cls += ` ${state}`;
         else if (this.sources.grown(tab) !== undefined) cls += " grown";
-        // The hover text: the file's path, or each part's, and what is wrong
-        // with it.
-        title = [
-          tab.link?.path,
-          ...(tab.parts ?? []).map((part) => part.path || part.name),
-          tab.link?.missing === undefined
-            ? tab.newer === undefined
-              ? undefined
-              : m.newer_version()
-            : say(tab.link.missing),
-          tab.link?.changed === undefined ? undefined : say(tab.link.changed),
-        ]
-          .filter((t) => t !== undefined)
-          .join(" · ");
+        title = tabTitle(tab);
       }
       [name, meta] = this.line(row.section, row.line);
     }
@@ -846,4 +827,21 @@ function line(): HTMLElement {
   const row = el("div");
   row.append(el("span"), el("span"));
   return row;
+}
+
+/**
+ * tabTitle is a tab's hover text: the file's path, or each part's, and what
+ * is wrong with it.
+ */
+function tabTitle(tab: Open): string {
+  const parts: Array<string | undefined> = [
+    tab.link?.path,
+    ...(tab.parts ?? []).map((part) => part.path || part.name),
+  ];
+  const missing = tab.link?.missing;
+  if (missing !== undefined) parts.push(say(missing));
+  else if (tab.newer !== undefined) parts.push(m.newer_version());
+  const changed = tab.link?.changed;
+  if (changed !== undefined) parts.push(say(changed));
+  return parts.filter((part) => part !== undefined).join(" · ");
 }

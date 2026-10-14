@@ -91,7 +91,7 @@ process.parentPort.once("message", (e) => {
           // Sign-in modes the connect form offers. Only profile names are
           // returned; the credential files stay in this process.
           signIns: async () => ({
-            modes: ["machine", "profile", "public"],
+            modes: [...auth.modes],
             profiles: await awsProfiles(),
           }),
           test: (c) => tryConnection(c, { sign: (x) => auth.of(x), endpoint: ENDPOINT }),

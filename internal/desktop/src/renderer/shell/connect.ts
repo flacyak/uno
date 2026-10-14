@@ -12,7 +12,7 @@ import type { Tried } from "@uno/grid/store/s3";
 
 import { m } from "../../paraglide/messages.js";
 import { RoleBlock } from "./role.ts";
-import { Words, el, message, option } from "./util.ts";
+import { Words, button, el, message, option } from "./util.ts";
 
 /** What the form asks of the shell. */
 export interface ConnectAsks {
@@ -160,6 +160,20 @@ type Status =
   | { t: "tried"; tried: Tried; draft: string }
   | { t: "refused"; why: string };
 
+/** resultLine is what the line under the form says in each status. */
+function resultLine(s: Status): string {
+  switch (s.t) {
+    case "untried":
+      return "";
+    case "trying":
+      return m.connect_listing();
+    case "tried":
+      return `✓ ${triedLine(s.tried)}`;
+    case "refused":
+      return `✗ ${s.why}`;
+  }
+}
+
 export class ConnectForm {
   readonly el = document.createElement("form");
   /** The form's fixed text, rewritten on relabel. */
@@ -230,9 +244,8 @@ export class ConnectForm {
     this.result.setAttribute("role", "status");
     this.saving.className = "fine";
 
-    const cancel = words.text(el("button", ""), m.action_cancel);
-    cancel.type = "button";
-    cancel.addEventListener("click", () => this.cancel());
+    const cancel = button("", "", () => this.cancel());
+    words.text(cancel, m.action_cancel);
     this.tryButton.type = "button";
     this.tryButton.addEventListener("click", () => void this.test());
     const buttons = el("div", "buttons");
@@ -466,14 +479,7 @@ export class ConnectForm {
     this.region.classList.toggle("found", s.t === "tried");
 
     this.result.className = `result ${s.t}`;
-    this.result.textContent =
-      s.t === "trying"
-        ? m.connect_listing()
-        : s.t === "tried"
-          ? `✓ ${triedLine(s.tried)}`
-          : s.t === "refused"
-            ? `✗ ${s.why}`
-            : "";
+    this.result.textContent = resultLine(s);
     this.tryButton.disabled = s.t === "trying";
     this.saveButton.disabled = s.t === "trying";
 

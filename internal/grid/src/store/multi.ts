@@ -21,6 +21,7 @@ import { openWith } from "./index.ts";
 import type { ByteSource, FileHandler, SingleRef } from "./index.ts";
 // Type only.
 import type { Provider } from "../plugin/index.ts";
+import { messageOf } from "../said/index.ts";
 
 /**
  * Whether the parts have a header row. With "first", the first part's header
@@ -367,10 +368,10 @@ class Parts {
    */
   async close(): Promise<void> {
     this.closed = true;
-    const opening = this.sources.flatMap((s) => (s === undefined ? [] : [s]));
+    const opening = this.sources.filter((s) => s !== undefined);
     for (let i = 0; i < this.sources.length; i++) this.sources[i] = undefined;
     const settled = await Promise.allSettled(opening);
-    await Promise.all(settled.flatMap((o) => (o.status === "fulfilled" ? [o.value.close()] : [])));
+    await Promise.all(settled.filter((o) => o.status === "fulfilled").map((o) => o.value.close()));
   }
 
   /**
@@ -524,8 +525,7 @@ class Parts {
     if (err instanceof PartError || err instanceof DisagreementError) return err;
     // A closed source is a failure of the whole, passed through as it is.
     if (err instanceof ClosedError) return err;
-    const message = err instanceof Error ? err.message : String(err);
-    return new PartError(this.named(i, message), { cause: err });
+    return new PartError(this.named(i, messageOf(err)), { cause: err });
   }
 }
 

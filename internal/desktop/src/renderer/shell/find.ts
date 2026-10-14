@@ -50,14 +50,13 @@ export class Finder {
       return;
     }
     const header = columnLabel(column.header, col);
-    const missing =
-      column.kind === "date"
-        ? dir === 1
-          ? m.find_unparsed_date_below
-          : m.find_unparsed_date_above
-        : dir === 1
-          ? m.find_unparsed_number_below
-          : m.find_unparsed_number_above;
+    const below = dir === 1;
+    let missing: typeof m.find_unparsed_date_below;
+    if (column.kind === "date") {
+      missing = below ? m.find_unparsed_date_below : m.find_unparsed_date_above;
+    } else {
+      missing = below ? m.find_unparsed_number_below : m.find_unparsed_number_above;
+    }
     void this.find({ t: "unparsed" }, dir, () => missing({ row: num(row + 1), column: header }));
   }
 

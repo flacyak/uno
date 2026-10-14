@@ -8,11 +8,12 @@
 // This file is plain logic, so tests run it directly. Late listing and
 // peek responses are dropped by comparing request counters.
 
+import { baseOf } from "@uno/grid/document";
 import type { Link, PartInfo, Peeked, SourceRef } from "@uno/grid/engine";
 import { compareStrings } from "@uno/grid/go";
 import type { Connection as Saved } from "@uno/grid/library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@uno/grid/store";
-import { s3Location, s3Url } from "@uno/grid/store/s3";
+import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "@uno/grid/store/s3";
 
 import { m } from "../paraglide/messages.js";
 import { num } from "./locale.ts";
@@ -176,11 +177,10 @@ export interface Connection {
 
 /** Builds a panel Connection from a saved connection. */
 export function connectionLine(c: Saved): Connection {
-  const path = c.prefix === "" ? `s3://${c.bucket}` : `s3://${c.bucket}/${c.prefix}`;
   const line: Connection = {
     id: c.id,
     name: c.name === "" ? c.id : c.name,
-    path,
+    path: s3PrefixUrl(c),
     kind: c.provider,
   };
   if (c.region !== undefined) line.where = c.region;
@@ -224,7 +224,7 @@ export interface Button {
  * The file extensions a person can pick. Other files are listed only.
  * Grows as ingest adds formats.
  */
-const READS: readonly string[] = [".csv", ".tsv"];
+export const READS: readonly string[] = [".csv", ".tsv"];
 
 /** Case-insensitive substring match. An empty query matches everything. */
 function matches(name: string, query: string): boolean {
@@ -239,7 +239,7 @@ function matches(name: string, query: string): boolean {
 function address(typed: string): SourceRef | undefined {
   const loc = s3Location(typed);
   if (loc === undefined || loc.key.endsWith("/")) return undefined;
-  return { name: loc.key.slice(loc.key.lastIndexOf("/") + 1), path: s3Url(loc) };
+  return { name: keyName(loc.key), path: s3Url(loc) };
 }
 
 /**
@@ -264,7 +264,7 @@ export function trailTo(path: string): Crumb[] | undefined {
   const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   if (cut < 0) return undefined;
   const folder = cut === 0 ? path.slice(0, 1) : path.slice(0, cut);
-  const name = folder.slice(Math.max(folder.lastIndexOf("/"), folder.lastIndexOf("\\")) + 1);
+  const name = baseOf(folder);
   return [{ name: name === "" ? folder : name, path: folder }];
 }
 
@@ -318,7 +318,7 @@ function folderOf(path: string): { path: string; said: string } | undefined {
   const last = trailTo(path)?.at(-1);
   if (last === undefined) return undefined;
   const key = s3Location(path)?.key ?? "";
-  const prefix = key.slice(0, key.lastIndexOf("/") + 1);
+  const prefix = keyFolder(key);
   return { path: last.path, said: prefix === "" ? `${last.name}/` : prefix };
 }
 
@@ -447,8 +447,7 @@ export class Sources {
    */
   get connecting(): Arriving | undefined {
     const trying = this.trying;
-    if (trying === undefined || this.query === "") return trying;
-    return matches(trying.name, this.query) ? trying : undefined;
+    return trying !== undefined && matches(trying.name, this.query) ? trying : undefined;
   }
 
   /** Sets or clears the connection being tried. */

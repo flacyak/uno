@@ -12,6 +12,7 @@ import { OVERSCAN } from "../../src/renderer/grid/metrics.ts";
 import type { Rows } from "../../src/renderer/grid/rows.ts";
 import { View } from "../../src/renderer/grid/view.ts";
 import { m } from "../../src/paraglide/messages.js";
+import { frame } from "../smoke/dom-page.ts";
 
 /** The row height the view falls back to with the stylesheet unloaded. */
 const ROW_H = 29;
@@ -55,13 +56,6 @@ function make(viewport: number): {
   };
   height(viewport);
   return { view, scroller: view.scroller, height };
-}
-
-/** Waits two animation frames, which is how the view schedules its layout. */
-function frame(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
 }
 
 function drawn(scroller: HTMLElement): number {
