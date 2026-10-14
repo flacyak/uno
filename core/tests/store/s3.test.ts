@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
 import { readContainer } from '@document';
 import { Refusal } from '@said';
+import type { SingleRef } from '@store';
 import {
   EMPTY_SHA256,
   encode,
@@ -36,7 +37,7 @@ import {
 import { ROWS, UNITS } from '@core-tests/testdata/sales-q3';
 import { AWKWARD_KEYS, DOT_KEYS } from './awkward.ts';
 import { HOME_REGION, REGION_FORMATS } from './regions.ts';
-import { at, BUCKET, bucket, etagOf, KEYS } from './standin.ts';
+import { at, BUCKET, bucket, etagOf, KEYS, versionIdOf } from './standin.ts';
 import type { Bucket } from './standin.ts';
 
 // ------------------------------------------------------------ signing
@@ -508,6 +509,46 @@ describe('a source in a bucket', () => {
       expect(get.query).toContain('response-content-encoding=identity');
   });
 
+  // A listing gives the size and the ETag, which is all an open needs, and
+  // If-Match on that ETag still pins every range.
+  test('opens an object named with its size and ETag without a HEAD', async () => {
+    b.seen.length = 0;
+    const file = await handler().open(listed('2025/sales-q3.csv', bytes));
+
+    expect(file.size).toBe(bytes.length);
+    expect(file.version).toBe(etagOf(bytes));
+    expect(await file.read(0, 8)).toEqual(bytes.subarray(0, 8));
+    expect(b.seen.filter((r) => r.method === 'HEAD')).toEqual([]);
+  });
+
+  test('refuses by name an object rewritten since its listing', async () => {
+    b.objects.set('2025/listed.csv', bytes);
+    const ref = listed('2025/listed.csv', bytes);
+    b.objects.set('2025/listed.csv', bytes.subarray(10));
+
+    const file = await handler().open(ref);
+    await expect(file.read(0, 4)).rejects.toThrow(
+      `s3://${BUCKET}/2025/listed.csv changed in the bucket since it was opened`,
+    );
+  });
+
+  // A VersionId is asked for by name, and the HEAD says whether the bucket
+  // still keeps it.
+  test('still sends a HEAD for an object named with its size and a VersionId', async () => {
+    b.seen.length = 0;
+    const ref = {
+      ...listed('2025/sales-q3.csv', bytes),
+      version: versionIdOf(bytes),
+    };
+
+    const file = await handler().open(ref);
+
+    expect(file.size).toBe(bytes.length);
+    expect(
+      b.seen.some((r) => r.method === 'HEAD' && r.query?.includes('versionId')),
+    ).toBe(true);
+  });
+
   // The saved path is the URL as it was opened.
   test('saves as the URL it came from, and opens again from it', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'uno-s3-'));
@@ -627,6 +668,24 @@ describe('an object in a public bucket', () => {
     expect(b.seen.map((r) => r.method)).toEqual(['HEAD']);
   });
 
+  // A listing says nothing of a coding, so an unsigned open of an object a
+  // listing named still asks its HEAD before it reads a byte.
+  test('named by a listing is still asked its HEAD, and refused when stored gzipped', async () => {
+    b.seen.length = 0;
+    const path = `s3://${PUBLIC}/${GZIPPED}`;
+    const stored = new Uint8Array(gzipSync(bytes));
+    const opening = anonymous().open({
+      name: '2025.csv.gz',
+      path,
+      version: etagOf(stored),
+      bytes: stored.length,
+    });
+    await expect(opening).rejects.toMatchObject({
+      said: { t: 'stored-encoded', name: path },
+    });
+    expect(b.seen.map((r) => r.method)).toEqual(['HEAD']);
+  });
+
   // An upload often labels text utf-8, a coding fetch does not know.
   test('labelled with a coding fetch leaves alone is read as it is', async () => {
     const path = `s3://${PUBLIC}/${LABELLED}`;
@@ -635,6 +694,11 @@ describe('an object in a public bucket', () => {
     await file.close();
   });
 });
+
+/** listed is a ref to a key as a listing names it, with the size and ETag of `body`. */
+function listed(key: string, body: Uint8Array): SingleRef {
+  return { ...at(key), version: etagOf(body), bytes: body.length };
+}
 
 // ------------------------------------------------------------ awkward keys
 //
