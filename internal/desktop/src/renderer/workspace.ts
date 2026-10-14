@@ -7,6 +7,7 @@
 //
 // This file is plain logic, so tests run it directly.
 
+import { isWorkspace } from "@uno/grid/document";
 import { Band } from "@uno/grid/engine";
 import type {
   Changed,
@@ -28,6 +29,8 @@ import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "../paraglide/messages.js";
 import { bytes } from "./locale.ts";
 import { say } from "./said.ts";
+import { stateOf } from "./sources.ts";
+import type { State } from "./sources.ts";
 
 /**
  * The most bytes a saved .uno may embed for sources it must carry inline.
@@ -47,16 +50,14 @@ export function reloaded(was: Tab, now: Tab): string {
   const after = now.link?.version;
   const sized = was.bytes === now.bytes;
   const moved = { now: bytes(now.bytes), was: bytes(was.bytes) };
-  const versioned = before !== undefined && after !== undefined;
-  const found = !versioned
-    ? sized
-      ? m.reload_same_size()
-      : m.reload_size_moved(moved)
-    : before === after
-      ? m.reload_no_change()
-      : sized
-        ? m.reload_new_version_same_size()
-        : m.reload_new_version_size_moved(moved);
+  let found: string;
+  if (before === undefined || after === undefined) {
+    found = sized ? m.reload_same_size() : m.reload_size_moved(moved);
+  } else if (before === after) {
+    found = m.reload_no_change();
+  } else {
+    found = sized ? m.reload_new_version_same_size() : m.reload_new_version_size_moved(moved);
+  }
   const parts = [m.reloaded_name({ name: now.name }), found];
   if (now.edited > 0) parts.push(m.edits_replayed({ count: now.edited }));
   return parts.join(" · ");
@@ -121,6 +122,11 @@ export class Tab {
   /** Whether the file behind this tab is missing. */
   get missing(): boolean {
     return this.link?.missing !== undefined;
+  }
+
+  /** The state of the file behind this tab. */
+  get state(): State {
+    return stateOf(this);
   }
 
   /** The edit log as of the last save. */
@@ -202,7 +208,7 @@ export class Workspace {
     w.showing = await w.add(ref);
     // The sources it opened with count as saved.
     w.savedSources = w.tabs.map((t) => t.id);
-    if (ref.name.toLowerCase().endsWith(".uno")) w.path = savePath;
+    if (isWorkspace(ref)) w.path = savePath;
     return w;
   }
 
@@ -297,19 +303,12 @@ export class Workspace {
    */
   async askNewer(): Promise<boolean> {
     const remote = this.tabs.filter((t) => t.link?.version !== undefined && !t.missing);
-    const now = await Promise.all(
-      remote.map((t) =>
-        this.engine.stat(t.link!.path).then(
-          (entry) => ({ heard: true, version: entry.version }),
-          () => ({ heard: false, version: undefined }),
-        ),
-      ),
-    );
+    const answers = await Promise.allSettled(remote.map((t) => this.engine.stat(t.link!.path)));
     let moved = false;
     remote.forEach((t, i) => {
-      const answer = now[i]!;
-      if (!answer.heard) return;
-      const newer = answer.version !== t.link!.version ? answer.version : undefined;
+      const answer = answers[i]!;
+      if (answer.status !== "fulfilled") return;
+      const newer = answer.value.version !== t.link!.version ? answer.value.version : undefined;
       if (newer !== t.newer) {
         t.newer = newer;
         moved = true;
@@ -498,8 +497,9 @@ export class Workspace {
     const p = t.source.progress;
 
     // An unconnected or missing file reports only its trouble.
-    if (t.link?.connect !== undefined) return t.trouble ?? "";
-    if (t.missing) return `${t.trouble} · ${m.point_at_file_to_see_rows()}`;
+    const state = t.state;
+    if (state === "unconnected") return t.trouble ?? "";
+    if (state === "missing") return `${t.trouble} · ${m.point_at_file_to_see_rows()}`;
 
     // Until indexing completes, the row count is an estimate and is labelled
     // as one.

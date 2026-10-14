@@ -4,6 +4,8 @@
 // It reads the few elements it needs with regular expressions and ignores
 // the rest. It works on the text of a reply it is handed.
 
+import { parseTime } from "../go/index.ts";
+
 /** One key from a page of a listing. */
 export interface KeyEntry {
   key: string;
@@ -76,9 +78,7 @@ function keyIn(block: string): KeyEntry[] {
  * Undefined for a missing or unreadable stamp.
  */
 export function when(stamp: string | null | undefined): Date | undefined {
-  if (stamp === undefined || stamp === null) return undefined;
-  const at = new Date(stamp.trim());
-  return Number.isNaN(at.getTime()) ? undefined : at;
+  return parseTime(stamp?.trim());
 }
 
 /**

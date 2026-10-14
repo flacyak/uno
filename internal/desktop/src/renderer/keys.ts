@@ -4,6 +4,8 @@
 // carries it out. Motion targets, repeatable changes and command parsing live
 // here. This file is plain logic, so tests run it directly.
 
+import { clamp } from "./grid/metrics.ts";
+
 export type Mode = "view" | "transform";
 
 /** Where the caret starts when the editor opens. */
@@ -336,10 +338,6 @@ export function target(motion: Motion, count: number | undefined, at: Place): Ta
       return cell(wanted, at.col);
     }
   }
-}
-
-function clamp(value: number, max: number): number {
-  return Math.max(0, Math.min(max, value));
 }
 
 /** Half a page, at least one row. */

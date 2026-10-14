@@ -19,6 +19,7 @@ import type {
   Progress,
   Reply,
   Request,
+  RowsPage,
   SignIns,
   SourceRef,
 } from "./protocol.ts";
@@ -34,11 +35,8 @@ interface Waiter<T> {
 }
 
 /** A page of rows as the engine sends it. */
-export interface RowsReply {
+export interface RowsReply extends RowsPage {
   first: number;
-  generation: number;
-  rows: string[][];
-  raws: Array<string[] | null>;
 }
 
 /** What an open added: one handle per source, and which one to show. */
