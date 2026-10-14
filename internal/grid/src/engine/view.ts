@@ -134,6 +134,9 @@ export class View {
   private failed: Error | undefined;
   private readonly abort = new AbortController();
 
+  /** How long the open had taken when the index completed, final from then on. */
+  private took: number | undefined;
+
   private constructor(
     /** The source's id in the workspace and its log. */
     readonly id: string,
@@ -141,6 +144,11 @@ export class View {
     readonly name: string,
     path: string,
     private readonly port: Port<Request, Reply>,
+    /**
+     * When the open began. A Progress's time and the INDEX measurement both
+     * count from here, so the status bar and the collector agree.
+     */
+    private readonly began: number,
   ) {
     this.path = path;
   }
@@ -152,7 +160,8 @@ export class View {
    * `path` is "" for carried bytes. The view owns `source`
    * from here on and closes it if the open fails. `header` says whether the
    * first line names the columns. `parts` is set for a source over several
-   * files.
+   * files. `began` is when the caller started opening the source, before it
+   * opened the file where it did; the time a Progress reports counts from it.
    */
   static async open(
     id: string,
@@ -162,11 +171,12 @@ export class View {
     carried: Carried | undefined,
     port: Port<Request, Reply>,
     tuning: Tuning,
+    began: number,
     telemetry: Telemetry = unmeasured,
     header: HeaderMode = "first",
     parts?: PartsRef,
   ): Promise<View> {
-    const v = new View(id, name, path, port);
+    const v = new View(id, name, path, port, began);
     v.carried = carried?.raw;
     v.parts = parts;
 
@@ -193,7 +203,6 @@ export class View {
     let told = 0;
     let started = false;
     const index = v.index;
-    const began = performance.now();
     // The telemetry attribute for where the bytes came from.
     const place =
       carried?.raw !== undefined
@@ -212,12 +221,14 @@ export class View {
       progress() {
         v.wake();
         if (index.complete) {
+          // The clock stops here, once: the pass reports completion one time.
+          v.took = performance.now() - v.began;
           const attributes = { place };
           telemetry({
             name: INDEX,
             kind: "duration",
             unit: MILLISECONDS,
-            value: performance.now() - began,
+            value: v.took,
             attributes,
           });
           telemetry({ name: INDEXED, kind: "count", unit: BYTES, value: source.size, attributes });
@@ -225,7 +236,7 @@ export class View {
         const now = Date.now();
         if (!index.complete && now - told < PROGRESS_MS) return;
         told = now;
-        port.post({ t: "progress", source: id, progress: progressOf(index) });
+        port.post({ t: "progress", source: id, progress: v.progress() });
       },
     }).catch((err: unknown) => {
       v.fail(err);
@@ -263,7 +274,7 @@ export class View {
         size: source.size,
         label: labelOf(format),
         columns: await v.columns(),
-        progress: progressOf(index),
+        progress: v.progress(),
         edits: carried?.edits ?? [],
         generation: v.generation,
         link: path === "" ? undefined : linkTo(path, source.version),
@@ -273,6 +284,19 @@ export class View {
       await v.close();
       throw err;
     }
+  }
+
+  /** progress is how far the index has got, and how long the open has taken. */
+  private progress(): Progress {
+    const index = this.index;
+    return {
+      done: index.scanned,
+      total: index.size,
+      readable: index.readable(),
+      rows: index.rows(),
+      complete: index.complete,
+      elapsedMs: this.took ?? performance.now() - this.began,
+    };
   }
 
   // ------------------------------------------------------------ reading
@@ -871,16 +895,6 @@ function deepest(edits: readonly Edit[] | undefined): number {
   let row = NO_ROW;
   for (const e of edits ?? []) if (e.row > row) row = e.row;
   return row + 1;
-}
-
-function progressOf(index: RowIndex): Progress {
-  return {
-    done: index.scanned,
-    total: index.size,
-    readable: index.readable(),
-    rows: index.rows(),
-    complete: index.complete,
-  };
 }
 
 /** linkTo builds a Link from a path and an optional version. */

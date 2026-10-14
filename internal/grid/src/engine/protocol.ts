@@ -27,7 +27,7 @@ export interface ColumnInfo {
   binding?: string;
 }
 
-/** How far the index has got. */
+/** How far the index has got, and how long it has taken. */
 export interface Progress {
   /** Bytes scanned, out of the file's size. */
   done: number;
@@ -37,6 +37,11 @@ export interface Progress {
   /** Rows in the file: exact once complete, estimated until then. */
   rows: number;
   complete: boolean;
+  /**
+   * Milliseconds since the open began, by the engine's clock. Final once
+   * complete, when it is the time telemetry reports for the index.
+   */
+  elapsedMs: number;
 }
 
 /**
