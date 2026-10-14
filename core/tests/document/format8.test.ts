@@ -4,8 +4,8 @@
  * Under a root each part's path is stored relative to it. A source that says
  * none of them is written as before, which format6.test.ts and
  * format7.test.ts hold to the byte. Covers what is written, which format it
- * needs, round trips, and the refusals for a part outside its root and a
- * newer format.
+ * needs, round trips after a move, and the refusals for a part outside its
+ * root and a value this build does not know.
  */
 
 import { describe, expect, test } from 'vite-plus/test';
@@ -64,6 +64,22 @@ function orders(): HeldParts {
     rows: 2_046_578,
     cols: 14,
     state: { active: { row: 0, col: 0 } },
+  };
+}
+
+/** A folder beside the workspace that the dataset was copied into. */
+const BESIDE = '/home/cpa/q4/lake/orders/';
+
+/** The dataset as found in the folder beside the workspace. */
+function copied(): HeldParts {
+  const source = orders();
+  return {
+    ...source,
+    root: BESIDE,
+    parts: source.parts.map((p) => ({
+      ...p,
+      path: BESIDE + p.path.slice(ROOT.length),
+    })),
   };
 }
 
@@ -175,14 +191,7 @@ describe('a source read in row space', () => {
   // A root beside the workspace is stored relative to it, as a file source
   // is, and its parts stay relative to the root.
   test('stores a root beside the workspace relative to it', () => {
-    const local = '/home/cpa/q4/lake/orders/';
-    const source = orders();
-    source.root = local;
-    source.parts = source.parts.map((p) => ({
-      ...p,
-      path: local + p.path.slice(ROOT.length),
-    }));
-    const m = manifestOf(writeDocument(workspace([source])));
+    const m = manifestOf(writeDocument(workspace([copied()])));
     expect(m.sources[0]!['root']).toBe('lake/orders/');
     expect(partsOf(m)[0]!['path']).toBe(
       'year=2024/month=11/part-00000.snappy.parquet',
@@ -242,6 +251,45 @@ describe('a source read in row space reads back', () => {
     const back = readContainer('books.uno', writeDocument(doc), AT);
     expect(back.sources).toEqual(doc.sources);
     expect(back.log).toEqual(doc.log);
+  });
+
+  // A bucket root is absolute, so it stays where it was.
+  test('with its bucket root wherever the workspace has moved to', () => {
+    const uno = writeDocument(workspace([orders()]));
+    const [back] = readContainer(
+      'books.uno',
+      uno,
+      '/media/stick/q4/books.uno',
+    ).sources;
+    expect(back!.root).toBe(ROOT);
+    expect(back!.parts!.map((p) => p.path)).toEqual(
+      orders().parts.map((p) => p.path),
+    );
+  });
+
+  // A root beside the workspace moves with it, and its parts with the root.
+  test('with a root beside the workspace moved along with it', () => {
+    const uno = writeDocument(workspace([copied()]));
+    const [back] = readContainer(
+      'books.uno',
+      uno,
+      '/media/stick/q4/books.uno',
+    ).sources;
+    expect(back!.root).toBe('/media/stick/q4/lake/orders/');
+    expect(back!.parts![0]!.path).toBe(
+      '/media/stick/q4/lake/orders/year=2024/month=11/part-00000.snappy.parquet',
+    );
+  });
+
+  // A part read on its own has no bytes before it to skip, whatever the
+  // file says.
+  test("without the byte join's skip and unterminated", () => {
+    const uno = tampered(workspace([orders()]), (m) => {
+      partsOf(m)[1]!['skip'] = 118;
+      partsOf(m)[1]!['unterminated'] = true;
+    });
+    const [back] = readContainer('books.uno', uno, AT).sources;
+    expect(back!.parts![1]).toMatchObject({ skip: 0, unterminated: false });
   });
 });
 
