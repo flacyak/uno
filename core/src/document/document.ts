@@ -61,6 +61,12 @@ export const PARTS_VERSION = 6;
 export const READ_VERSION = 7;
 
 /**
+ * A workspace with a source whose parts are read in row space, each on its
+ * own and laid end to end, or that were found under a root.
+ */
+export const ROWS_VERSION = 8;
+
+/**
  * OneOf is a closed set of values a uno.json field may hold: the guard that
  * checks a value, and every value, in the order a refusal lists them.
  */
@@ -103,6 +109,12 @@ export type SourceCompression = never;
 
 /** The compressions this build reads. */
 export const SOURCE_COMPRESSIONS = closed<SourceCompression>({});
+
+/**
+ * How a parts source's files are laid end to end when not as bytes, as
+ * uno.json spells it. A source with no join has its parts' bytes joined.
+ */
+export type PartsJoin = 'rows';
 
 export const GENERATOR = 'uno 0.2.0';
 
@@ -193,7 +205,7 @@ export interface FileSource extends SourceBase, ReadAs {
  * are a fixed, ordered list: the log names rows by number, so the order
  * decides which row an edit lands on.
  */
-export interface PartsSource extends SourceBase, ReadAs {
+export interface PartsSource extends SourceBase, ReadAs, JoinedAs {
   /** The files, in the order their rows are read. At least one. */
   parts: SourcePart[];
   /**
@@ -220,13 +232,15 @@ export interface PartsSource extends SourceBase, ReadAs {
  *
  * `bytes`, `skip` and `unterminated` are what the join measured at the save.
  * The next open places every part from them alone. A part whose size or
- * `version` has changed since is refused by name.
+ * `version` has changed since is refused by name. `skip` and `unterminated`
+ * are the byte join's, and are written only for parts joined as bytes.
  */
-export interface SourcePart {
+export interface SourcePart extends ReadAlone {
   /** The part's name when it differs from the last piece of its path, and
    * "" otherwise. `ingest` picks a decoder by it. */
   name: string;
-  /** Where the part is, stored the way a file source's path is. */
+  /** Where the part is: relative to the source's root when it has one, and
+   * otherwise stored the way a file source's path is. */
   path: string;
   /** The part's size at the save. */
   bytes: number;
@@ -238,6 +252,36 @@ export interface SourcePart {
   skip: number;
   /** Whether the part's last line is unterminated. The join adds a newline. */
   unterminated: boolean;
+}
+
+/**
+ * JoinedAs is how a parts source's files are laid end to end, and where they
+ * were found. Files picked by hand and joined as bytes record none of it.
+ */
+interface JoinedAs {
+  /** 'rows' when each part is read on its own and its rows are laid after
+   * the last part's. Absent when the parts' bytes are joined. */
+  join?: PartsJoin;
+  /**
+   * The folder or bucket prefix the parts were found under, such as
+   * s3://lake/orders/. Every part is under it, and its path is stored
+   * relative to it. The root itself is stored the way a file source's path
+   * is, and held absolute.
+   */
+  root?: string;
+  /** The Hive keys in each part's path under the root, such as year and
+   * month, in path order. */
+  partitions?: string[];
+}
+
+/**
+ * ReadAlone is what a part read on its own in row space records of itself.
+ */
+interface ReadAlone {
+  /** What the part's bytes are compressed with. Absent for a plain part. */
+  compression?: SourceCompression;
+  /** How many rows the part held, once a pass has counted them. */
+  rows?: number;
 }
 
 /**
@@ -368,7 +412,7 @@ export interface HeldFile extends HeldBase, ReadAs {
  * HeldParts is a source that is several files read as one. Every part is
  * pointed at, so a save writes only its path.
  */
-export interface HeldParts extends HeldBase, ReadAs {
+export interface HeldParts extends HeldBase, ReadAs, JoinedAs {
   /** The files, in the order their rows are read. At least one. */
   parts: HeldPart[];
   /** Whether the parts have a header row. Saved for delimited text only. */
@@ -384,19 +428,22 @@ export interface HeldParts extends HeldBase, ReadAs {
 }
 
 /** HeldPart is one file of a HeldParts source. */
-export interface HeldPart {
+export interface HeldPart extends ReadAlone {
   /** The part's name. `ingest` picks a decoder by it. */
   name: string;
-  /** Where the part is, absolute. */
+  /** Where the part is, absolute, and under the source's root when it has
+   * one. */
   path: string;
   /** The part's size. */
   bytes: number;
   /** Which version of the part the log was made against, where the store
    * can say. */
   version?: string;
-  /** How many bytes at the start of the part the join leaves out. */
+  /** How many bytes at the start of the part the join leaves out. 0 for a
+   * part read in row space. */
   skip: number;
-  /** Whether the part's last line is unterminated. */
+  /** Whether the part's last line is unterminated. False for a part read in
+   * row space. */
   unterminated: boolean;
 }
 
