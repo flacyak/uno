@@ -11,7 +11,7 @@
 import "./arriving.css";
 import "./panel.css";
 
-import type { Peeked, SourceRef } from "@engine";
+import type { SourceRef } from "@engine";
 import type { SingleRef } from "@store";
 
 import { m } from "@paraglide/messages";
@@ -37,6 +37,7 @@ import type {
   Doing,
   Joining,
   Open,
+  Peek,
   Place,
   Section,
   Sources,
@@ -158,7 +159,7 @@ export class Panel {
    * What the peek and the foot were last drawn from, so they are redrawn
    * only when it changes.
    */
-  private drawnPeek: Peeked | "reading" | undefined;
+  private drawnPeek: Peek | undefined;
   private drawnFoot = "";
   /** Text the panel writes once: its head and its filter. */
   private readonly words = new Words();
@@ -628,28 +629,28 @@ export class Panel {
 
   /** paintPeek draws the header and first rows of the picked file. */
   private paintPeek(): void {
-    const s = this.sources;
-    const now = s.peeking ? "reading" : s.peeked;
+    const now = this.sources.peek;
     if (now === this.drawnPeek) return;
     this.drawnPeek = now;
     this.peek.hidden = now === undefined;
     if (now === undefined) return this.peek.replaceChildren();
-    if (now === "reading") {
+    if (now.t === "reading") {
       this.peek.replaceChildren(el("div", "note", m.panel_peeking()));
       return;
     }
 
+    const { peeked } = now;
     const table = document.createElement("table");
     const head = table.createTHead().insertRow();
-    for (const h of now.header) head.append(el("th", "", h));
+    for (const h of peeked.header) head.append(el("th", "", h));
     const body = table.createTBody();
-    for (const row of now.rows) {
+    for (const row of peeked.rows) {
       const tr = body.insertRow();
       for (const cell of row) tr.append(el("td", "", cell));
     }
     const wrap = el("div", "table");
     wrap.append(table);
-    this.peek.replaceChildren(el("div", "note", say(now.label)), wrap);
+    this.peek.replaceChildren(el("div", "note", say(peeked.label)), wrap);
   }
 
   /**
