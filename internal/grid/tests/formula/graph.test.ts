@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from 'vite-plus/test';
 
-import { Graph, parse } from "../../src/formula/index.ts";
+import { Graph, parse } from '../../src/formula/index.ts';
 
 function bind(g: Graph, col: string, src: string): void {
   g.bind(col, parse(src));
@@ -8,7 +8,7 @@ function bind(g: Graph, col: string, src: string): void {
 
 // bind throws on a cycle. The message lists every column in the loop. The
 // graph is left as it was.
-describe("bind refuses a cycle and names the path", () => {
+describe('bind refuses a cycle and names the path', () => {
   const cases: Array<{
     name: string;
     prior?: Array<[string, string]>;
@@ -17,27 +17,27 @@ describe("bind refuses a cycle and names the path", () => {
     want: string;
   }> = [
     {
-      name: "a column that reads itself",
-      col: "margin",
-      src: "margin * 2",
-      want: "margin would depend on itself: margin → margin",
+      name: 'a column that reads itself',
+      col: 'margin',
+      src: 'margin * 2',
+      want: 'margin would depend on itself: margin → margin',
     },
     {
-      name: "two columns that read each other",
-      prior: [["price", "margin + 1"]],
-      col: "margin",
-      src: "price * 2",
-      want: "margin would depend on itself: margin → price → margin",
+      name: 'two columns that read each other',
+      prior: [['price', 'margin + 1']],
+      col: 'margin',
+      src: 'price * 2',
+      want: 'margin would depend on itself: margin → price → margin',
     },
     {
-      name: "a loop of three",
+      name: 'a loop of three',
       prior: [
-        ["a", "b * 2"],
-        ["b", "c * 2"],
+        ['a', 'b * 2'],
+        ['b', 'c * 2'],
       ],
-      col: "c",
-      src: "a * 2",
-      want: "c would depend on itself: c → a → b → c",
+      col: 'c',
+      src: 'a * 2',
+      want: 'c would depend on itself: c → a → b → c',
     },
   ];
 
@@ -55,27 +55,27 @@ describe("bind refuses a cycle and names the path", () => {
 });
 
 // Two columns reading one input and a third reading both is allowed.
-test("a diamond is not a cycle", () => {
+test('a diamond is not a cycle', () => {
   const g = new Graph();
-  bind(g, "left", "base * 2");
-  bind(g, "right", "base + 1");
-  expect(() => bind(g, "total", "left + right")).not.toThrow();
+  bind(g, 'left', 'base * 2');
+  bind(g, 'right', 'base + 1');
+  expect(() => bind(g, 'total', 'left + right')).not.toThrow();
 });
 
 // downstreamOf returns the columns that depend on `col`, in an order where
 // every column comes after the columns it reads.
-describe("downstreamOf orders a recalculation", () => {
+describe('downstreamOf orders a recalculation', () => {
   const g = new Graph();
-  bind(g, "left", "base * 2");
-  bind(g, "right", "base + 1");
-  bind(g, "total", "left + right");
+  bind(g, 'left', 'base * 2');
+  bind(g, 'right', 'base + 1');
+  bind(g, 'total', 'left + right');
 
   const cases: Array<[string, string[]]> = [
-    ["base", ["left", "right", "total"]],
-    ["left", ["total"]],
-    ["right", ["total"]],
-    ["total", []], // a leaf
-    ["region", []], // outside every formula
+    ['base', ['left', 'right', 'total']],
+    ['left', ['total']],
+    ['right', ['total']],
+    ['total', []], // a leaf
+    ['region', []], // outside every formula
   ];
 
   for (const [col, want] of cases) {
@@ -86,36 +86,36 @@ describe("downstreamOf orders a recalculation", () => {
 });
 
 // A chain comes back in dependency order.
-test("downstreamOf follows a chain", () => {
+test('downstreamOf follows a chain', () => {
   const g = new Graph();
-  bind(g, "b", "a * 2");
-  bind(g, "c", "b * 2");
-  bind(g, "d", "c + b");
+  bind(g, 'b', 'a * 2');
+  bind(g, 'c', 'b * 2');
+  bind(g, 'd', 'c + b');
 
-  expect(g.downstreamOf("a")).toEqual(["b", "c", "d"]);
+  expect(g.downstreamOf('a')).toEqual(['b', 'c', 'd']);
 });
 
 // Binding a column again drops the edges from its old expression.
-test("rebinding replaces the old dependencies", () => {
+test('rebinding replaces the old dependencies', () => {
   const g = new Graph();
-  bind(g, "margin", "price * 2");
-  bind(g, "margin", "cost * 2");
+  bind(g, 'margin', 'price * 2');
+  bind(g, 'margin', 'cost * 2');
 
-  expect(g.downstreamOf("price")).toEqual([]);
-  expect(g.downstreamOf("cost")).toEqual(["margin"]);
+  expect(g.downstreamOf('price')).toEqual([]);
+  expect(g.downstreamOf('cost')).toEqual(['margin']);
 });
 
 // unbind removes the column's edges, so a binding that would have cycled
 // through it is accepted.
-test("unbinding leaves no edges to cycle against", () => {
+test('unbinding leaves no edges to cycle against', () => {
   const g = new Graph();
-  bind(g, "margin", "price - cost");
+  bind(g, 'margin', 'price - cost');
 
   // margin reads price, so price reading margin is a cycle.
-  expect(() => bind(g, "price", "margin * 2")).toThrow();
+  expect(() => bind(g, 'price', 'margin * 2')).toThrow();
 
-  g.unbind("margin");
+  g.unbind('margin');
 
-  expect(() => bind(g, "price", "margin * 2")).not.toThrow();
-  expect(g.downstreamOf("cost")).toEqual([]);
+  expect(() => bind(g, 'price', 'margin * 2')).not.toThrow();
+  expect(g.downstreamOf('cost')).toEqual([]);
 });

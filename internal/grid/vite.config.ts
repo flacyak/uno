@@ -1,4 +1,4 @@
-import { defineConfig } from "vite-plus";
+import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
   pack: {
@@ -8,21 +8,21 @@ export default defineConfig({
     // store/node is the only module that imports node:fs. store/s3 holds the
     // request signing code. store/sts holds the role assumption code.
     entry: [
-      "src/index.ts",
-      "src/*/index.ts",
-      "src/store/node.ts",
-      "src/store/s3.ts",
-      "src/store/sts.ts",
+      'src/index.ts',
+      'src/*/index.ts',
+      'src/store/node.ts',
+      'src/store/s3.ts',
+      'src/store/sts.ts',
     ],
     deps: { resolveDepSubpath: true },
     dts: {
-      generator: "tsgo",
+      generator: 'tsgo',
     },
     exports: true,
   },
   test: {
     // Fails a test file that leaves a file handle open.
-    setupFiles: ["tests/handles.ts"],
+    setupFiles: ['tests/handles.ts'],
   },
   lint: {
     options: {
@@ -30,5 +30,5 @@ export default defineConfig({
       typeCheck: true,
     },
   },
-  fmt: {},
+  fmt: { singleQuote: true, printWidth: 80 },
 });

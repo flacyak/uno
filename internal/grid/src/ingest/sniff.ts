@@ -1,8 +1,8 @@
 /** The delimiters to guess between, in tie order: tab, pipe, semicolon, comma. */
-const CANDIDATES = ["\t", "|", ";", ","];
+const CANDIDATES = ['\t', '|', ';', ','];
 
 /** The candidate that is also a decimal mark. */
-const COMMA = ",";
+const COMMA = ',';
 
 /** SNIFF_LINES is how many records are checked for a consistent field count. */
 const SNIFF_LINES = 5;
@@ -47,7 +47,7 @@ function headLines(s: string): string[] {
   for (let i = 0; i < s.length && out.length < SNIFF_LINES; i++) {
     const r = s[i];
     if (r === '"') inQuote = !inQuote;
-    else if (r === "\n" && !inQuote) {
+    else if (r === '\n' && !inQuote) {
       pushLine(out, s.slice(start, i));
       start = i + 1;
     }
@@ -58,8 +58,8 @@ function headLines(s: string): string[] {
 
 /** pushLine keeps a record that holds something, with its CR stripped. */
 function pushLine(out: string[], l: string): void {
-  if (l.endsWith("\r")) l = l.slice(0, -1);
-  if (l !== "") out.push(l);
+  if (l.endsWith('\r')) l = l.slice(0, -1);
+  if (l !== '') out.push(l);
 }
 
 /**
@@ -67,7 +67,11 @@ function pushLine(out: string[], l: string): void {
  * line agreed. Only a separator outside quotes counts. With `decimal`, one
  * between two digits is read as a decimal mark.
  */
-function fieldCount(lines: string[], sep: string, decimal: boolean): [number, boolean] {
+function fieldCount(
+  lines: string[],
+  sep: string,
+  decimal: boolean,
+): [number, boolean] {
   let want = -1;
   for (const l of lines) {
     let n = 1;
@@ -75,7 +79,12 @@ function fieldCount(lines: string[], sep: string, decimal: boolean): [number, bo
     for (let i = 0; i < l.length; i++) {
       const r = l[i];
       if (r === '"') inQuote = !inQuote;
-      else if (r === sep && !inQuote && !(decimal && isDigit(l[i - 1]) && isDigit(l[i + 1]))) n++;
+      else if (
+        r === sep &&
+        !inQuote &&
+        !(decimal && isDigit(l[i - 1]) && isDigit(l[i + 1]))
+      )
+        n++;
     }
     if (want === -1) want = n;
     else if (n !== want) return [0, false];
@@ -83,7 +92,7 @@ function fieldCount(lines: string[], sep: string, decimal: boolean): [number, bo
   return [want, want > 1];
 }
 
-const DIGITS = "0123456789";
+const DIGITS = '0123456789';
 
 function isDigit(r: string | undefined): boolean {
   return r !== undefined && DIGITS.includes(r);
@@ -93,7 +102,7 @@ function isDigit(r: string | undefined): boolean {
  * Encoding is a file's text encoding. "other" covers Windows-1252, Latin-1
  * and the rest.
  */
-export type Encoding = "utf-8" | "utf-16le" | "utf-16be" | "other";
+export type Encoding = 'utf-8' | 'utf-16le' | 'utf-16be' | 'other';
 
 const NUL = 0x00;
 
@@ -115,8 +124,10 @@ const UTF16_UNITS_PER_NUL = 16;
  * "utf-8" when the head decodes as UTF-8, and "other" when decoding fails.
  */
 export function sniffEncoding(head: Uint8Array): Encoding {
-  if (head[0] === UTF16_MARK_LOW && head[1] === UTF16_MARK_HIGH) return "utf-16le";
-  if (head[0] === UTF16_MARK_HIGH && head[1] === UTF16_MARK_LOW) return "utf-16be";
+  if (head[0] === UTF16_MARK_LOW && head[1] === UTF16_MARK_HIGH)
+    return 'utf-16le';
+  if (head[0] === UTF16_MARK_HIGH && head[1] === UTF16_MARK_LOW)
+    return 'utf-16be';
 
   let first = 0;
   let second = 0;
@@ -126,16 +137,19 @@ export function sniffEncoding(head: Uint8Array): Encoding {
     else second++;
   }
   const units = Math.ceil(head.length / UTF16_UNIT_BYTES);
-  if (first + second > 0 && Math.max(first, second) * UTF16_UNITS_PER_NUL >= units) {
-    return second >= first ? "utf-16le" : "utf-16be";
+  if (
+    first + second > 0 &&
+    Math.max(first, second) * UTF16_UNITS_PER_NUL >= units
+  ) {
+    return second >= first ? 'utf-16le' : 'utf-16be';
   }
 
   try {
     // Streaming, so a character cut in half at the end of the head is
     // accepted.
-    new TextDecoder("utf-8", { fatal: true }).decode(head, { stream: true });
-    return "utf-8";
+    new TextDecoder('utf-8', { fatal: true }).decode(head, { stream: true });
+    return 'utf-8';
   } catch {
-    return "other";
+    return 'other';
   }
 }
