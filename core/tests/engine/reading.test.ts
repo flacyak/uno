@@ -1,15 +1,23 @@
 /**
  * @fileoverview A Reading reads a source as the View read it before: a row
- * index reports the bytes it has scanned out of the file's size, and a file
- * opened through openReading is held as itself and read as its spec says.
+ * index reports the bytes it has scanned out of the file's size, a file
+ * opened through openReading is held as itself and read as its spec says,
+ * and every test file is named, started and labelled as openFormat does, or
+ * refused by name where this build does not read it.
  */
 
-import { expect, test } from 'vite-plus/test';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, test } from 'vite-plus/test';
 
-import { RowIndex, TUNING } from '@engine';
+import { Refusal, RowIndex, TUNING } from '@engine';
 import { openReading } from '@engine/reading';
 import type { ReadSpec } from '@engine/reading';
+import { labelOf, openFormat } from '@ingest';
+import type { HeaderMode } from '@ingest';
+import type { Said, Unread } from '@said';
 import { bytesSource } from '@store';
+import type { ByteSource } from '@store';
 import { ROWS, bytes } from '@core-tests/testdata/sales-q3';
 
 test('a row index has indexed the bytes it has scanned, out of the size', () => {
@@ -41,4 +49,81 @@ test('a file is held as itself, read as its spec says and indexed to its end', a
   // The header row is a row of its own.
   expect(reading.index.rows()).toBe(ROWS + 1);
   expect(await reading.runs(0)).toEqual([{ row: 0, part: 0 }]);
+});
+
+const TESTDATA = new URL('../testdata/', import.meta.url);
+
+/** Every file in tests/testdata, whatever it holds. */
+const FILES = readdirSync(TESTDATA, { withFileTypes: true })
+  .filter((entry) => entry.isFile())
+  .map((entry) => entry.name);
+
+/** The test files this build does not read, and what each holds. */
+const UNREAD: ReadonlyMap<string, Unread> = new Map([
+  ['events.jsonl', 'JSON Lines'],
+  ['sales-q3.csv.gz', 'gzip'],
+  ['par1.bin', 'Parquet'],
+]);
+
+/** What a reader made of a file's head, or the message it failed with. */
+type Seen =
+  | { columns: readonly string[]; dataStart: number; label: Said }
+  | { failed: string };
+
+/** What `open` makes of a test file, or how it fails. */
+function seen(name: string, open: (source: ByteSource) => Promise<Seen>) {
+  const path = fileURLToPath(new URL(name, TESTDATA));
+  return open(bytesSource(readFileSync(path))).catch((err: unknown) => ({
+    failed: String(err),
+  }));
+}
+
+/** What openFormat makes of a test file. */
+function formatted(name: string, header: HeaderMode): Promise<Seen> {
+  return seen(name, async (source) => {
+    const format = await openFormat(name, source, header);
+    const { columns, dataStart } = format;
+    return { columns, dataStart, label: labelOf(format) };
+  });
+}
+
+/**
+ * What openReading makes of a test file. Before its pass, the index has
+ * accounted for the bytes ahead of the data.
+ */
+function read(name: string, spec?: ReadSpec): Promise<Seen> {
+  return seen(name, async (source) => {
+    const reading = await openReading({
+      name,
+      source,
+      spec,
+      header: 'first',
+      tuning: TUNING,
+    });
+    return {
+      columns: reading.columns().map((column) => column.name),
+      dataStart: reading.index.indexed().done,
+      label: reading.label,
+    };
+  });
+}
+
+describe.each(FILES)('%s', (name) => {
+  test.each<HeaderMode>(['first', 'none'])(
+    'held to delimited text with header %s, reads as openFormat does',
+    async (header) => {
+      expect(await read(name, { kind: 'delimited', header })).toEqual(
+        await formatted(name, header),
+      );
+    },
+  );
+
+  test('read fresh, reads as openFormat does or is refused by name', async () => {
+    const what = UNREAD.get(name);
+    expect(await read(name)).toEqual(
+      what === undefined
+        ? await formatted(name, 'first')
+        : { failed: String(new Refusal({ t: 'not-read', name, what })) },
+    );
+  });
 });
