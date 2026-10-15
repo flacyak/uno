@@ -4,7 +4,7 @@
  *
  * Run from core/:
  *
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/parallel-fair/memory.ts PATH WIDTH
  *
  * WIDTH 0 runs core's indexPass; any other runs the parallel pass on that

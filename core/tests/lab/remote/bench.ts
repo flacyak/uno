@@ -16,7 +16,7 @@
  * JSON, which is also written to out/lab/remote.json.
  *
  * Run from core/:
- *   node --experimental-transform-types --disable-warning=ExperimentalWarning \
+ *   node --disable-warning=ExperimentalWarning \
  *     --import ../paths.js tests/lab/remote/bench.ts
  * Options: --repeats N (the object is the fixture's rows N times; 400 is
  * 96 MB), --samples N, --pages DIR (where pages are kept; it is emptied).

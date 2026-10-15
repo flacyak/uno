@@ -32,15 +32,7 @@ async function watched(
 ): Promise<Array<{ file: string; way: Way }>> {
   const { stdout } = await run(
     process.execPath,
-    [
-      '--experimental-transform-types',
-      '--no-warnings',
-      '--import',
-      PATHS,
-      `${REACH}run.ts`,
-      root,
-      scenario,
-    ],
+    ['--no-warnings', '--import', PATHS, `${REACH}run.ts`, root, scenario],
     { timeout: RUN_MS },
   );
   return JSON.parse(stdout.trim().split('\n').at(-1)!) as Array<{

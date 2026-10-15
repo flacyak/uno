@@ -5,7 +5,7 @@
  *
  * Run from core/:
  *
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/parallel/bench.ts
  *
  * `--small` runs every section at a small scale, to check the benchmark

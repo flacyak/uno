@@ -10,7 +10,7 @@
  * and index per run, and every checksum checked against RecordScanner's.
  *
  * From core/, alone on a quiet machine:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/scanner/recordbulk.bench.ts [--mb 96] [--samples 7]
  *     [--warmup 2] [--cold]
  *
