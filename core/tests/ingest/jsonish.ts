@@ -1,7 +1,7 @@
 /**
  * @fileoverview Random JSON Lines records for the test that holds walkLine to
  * JSON.parse: objects written with random whitespace, escapes, numbers and
- * repeated names.
+ * repeated names, half of them then broken at random.
  */
 
 import type { Random } from './random.ts';
@@ -16,6 +16,10 @@ const LONGEST_STRING = 6;
 const MOST_DIGITS = 22;
 /** Chance a character a string may hold raw is written as an escape. */
 const ESCAPE_CHANCE = 0.3;
+/** Chance a random line is broken once written. */
+const BREAK_CHANCE = 0.5;
+/** The most times a broken line is broken. */
+const MOST_BREAKS = 3;
 /** The first character a string may hold raw. */
 const FIRST_RAW = 0x20;
 /** The base a \u escape is written in. */
@@ -63,6 +67,30 @@ const BLANKS = ['', '', '', ' ', '\t', '\n', '\r', ' \r\n'];
 const DIGITS = '0123456789'.split('');
 /** The digits a number's whole part starts with when it is not 0. */
 const NONZERO = '123456789'.split('');
+/** Characters a break puts into a line. */
+const BREAKERS = [
+  '{',
+  '}',
+  '[',
+  ']',
+  '"',
+  ':',
+  ',',
+  '\\',
+  '0',
+  '1',
+  '.',
+  'e',
+  '-',
+  'n',
+  'u',
+  ' ',
+  '\t',
+  '\n',
+  '\ufeff',
+  '\0',
+  '\ud83d',
+];
 /** The two-character escape of each character that has one. */
 const SHORT_ESCAPES: ReadonlyMap<string, string> = new Map([
   ['"', '\\"'],
@@ -166,9 +194,29 @@ function array(rand: Random, depth: number): string {
 }
 
 /**
+ * broken returns `line` with a character dropped, put in or replaced, or
+ * with its end cut off, one to MOST_BREAKS times.
+ */
+function broken(rand: Random, line: string): string {
+  let text = line;
+  for (let breaks = 1 + upTo(rand, MOST_BREAKS - 1); breaks > 0; breaks--) {
+    const at = upTo(rand, text.length);
+    const before = text.slice(0, at);
+    text = pick(rand, [
+      () => before + text.slice(at + 1),
+      () => before + pick(rand, BREAKERS) + text.slice(at),
+      () => before + pick(rand, BREAKERS) + text.slice(at + 1),
+      () => before,
+    ])();
+  }
+  return text;
+}
+
+/**
  * jsonish returns a random JSON Lines record: one object, written with
- * random whitespace, escapes and number forms.
+ * random whitespace, escapes and number forms, and broken half the time.
  */
 export function jsonish(rand: Random): string {
-  return spaced(rand, object(rand, 0));
+  const line = spaced(rand, object(rand, 0));
+  return rand() < BREAK_CHANCE ? broken(rand, line) : line;
 }
