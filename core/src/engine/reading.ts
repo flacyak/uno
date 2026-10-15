@@ -6,11 +6,15 @@
  * The View holds one Reading and asks it alone how its rows are read.
  */
 
+import { delimitedRecords, openFormat, readableHead } from '@ingest';
 import type { Column, HeaderMode, RecordFormat } from '@ingest';
 import { Refusal } from '@said';
 import type { Said } from '@said';
+import { headed, multiOf } from '@store';
 import type { ByteSource, MultiSource } from '@store';
-import type { RowIndex } from './rows.ts';
+import { indexPass } from './pass.ts';
+import { Pages, RowIndex } from './rows.ts';
+import type { Tuning } from './rows.ts';
 
 /** Indexed is how much of a source's stored bytes its pass has accounted for. */
 export interface Indexed {
@@ -84,6 +88,79 @@ export interface Reading {
   runs(block: number): Promise<readonly Run[]>;
   /** Closes the stored bytes. */
   close(): Promise<void>;
+}
+
+/** ReadAsk is what openReading is given. */
+export interface ReadAsk {
+  /** The file's name, which detection reads and errors name. */
+  readonly name: string;
+  /** The stored bytes: one file, or several joined as bytes. */
+  readonly source: ByteSource;
+  /** How a log was read. Detection is skipped, and the bytes are read so. */
+  readonly spec?: ReadSpec;
+  /** Whether the first record names the columns, where no spec says. */
+  readonly header: HeaderMode;
+  readonly tuning: Tuning;
+}
+
+/**
+ * openReading reads the head of a source and opens its Reading. A source
+ * with no spec is detected first, its head read once, and one this build
+ * does not read is refused by name.
+ */
+export async function openReading(ask: ReadAsk): Promise<Reading> {
+  const { name, source, spec, tuning } = ask;
+  const head =
+    spec === undefined ? await readableHead(name, source) : undefined;
+  const format = await openFormat(
+    name,
+    head === undefined ? source : headed(source, head),
+    spec?.header ?? ask.header,
+  );
+  return recordReading(name, source, delimitedRecords(format), tuning, {
+    kind: 'delimited',
+    header: format.header,
+  });
+}
+
+/** The one run of every block of a single file. */
+const ONE_FILE: readonly Run[] = [{ row: 0, part: 0 }];
+
+/**
+ * recordReading reads a file of records: the index pass finds where each
+ * block of them starts, and Pages decode a block at a time.
+ */
+function recordReading(
+  name: string,
+  source: ByteSource,
+  records: RecordFormat,
+  tuning: Tuning,
+  spec: ReadSpec,
+): Reading {
+  const index = new RowIndex(records.dataStart, source.size, tuning);
+  const joined = multiOf(source);
+  const format = {
+    dataStart: records.dataStart,
+    scanner: (begin: (offset: number) => void) => records.indexer(begin),
+  };
+  return {
+    label: records.label(),
+    index,
+    pages: new Pages(name, source, records, index, tuning.cacheBytes),
+    behind:
+      joined === undefined
+        ? { t: 'file', stored: source }
+        : { t: 'bytes', joined },
+    columns: () => records.columns(),
+    spec: () => spec,
+    pass: (signal, progress) =>
+      indexPass({ source, format, index, tuning, signal, progress }),
+    runs:
+      joined === undefined
+        ? () => Promise.resolve(ONE_FILE)
+        : partRuns(name, joined, records, index),
+    close: () => source.close(),
+  };
 }
 
 /** Crossing is the runs of a block, found over the byte range it had then. */
