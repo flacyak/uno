@@ -29,6 +29,9 @@ export default defineConfig({
       typeAware: true,
       typeCheck: true,
     },
+    rules: {
+      'default-case': 'error',
+    },
   },
   fmt: { singleQuote: true, printWidth: 80 },
 });
