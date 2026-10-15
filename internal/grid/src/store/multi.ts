@@ -8,6 +8,7 @@
 // a bucket or in memory.
 
 import { concat } from '../go/index.ts';
+import { unreachable } from '../never.ts';
 import {
   UnsupportedEncodingError,
   bomLength,
@@ -705,6 +706,8 @@ function said(differs: Disagreement, first: string): string {
       return `it has ${counted(differs.part)} and ${first} has ${differs.first} · ${renamed(differs.column, first)}`;
     case 'fields':
       return `its first row has ${counted(differs.part)} and ${first}'s has ${differs.first}`;
+    default:
+      return unreachable(differs);
   }
 }
 
