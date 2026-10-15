@@ -13,8 +13,9 @@
 # - is pinned to a share of the CPUs, both threads of a core before the next
 #   core, inside a systemd scope under one slice whose CPU, memory and task
 #   limits all runs share;
-# - gets a temporary directory of its own on disk, as TMPDIR; and
-# - once it ends, or is interrupted, has every process it started stopped,
+# - gets a temporary directory of its own on disk, as TMPDIR;
+# - is stopped at a deadline, even if nothing is left to stop it; and
+# - once it ends, however it ends, has every process it started stopped,
 #   those that moved themselves to a scope of their own included, and its
 #   temporary directory removed.
 #
@@ -24,7 +25,7 @@
 # UNO_BOUNDED_RUN, which is how the run finds it to stop it.
 #
 # Usage:
-#   scripts/bounded.sh -- <command>...
+#   scripts/bounded.sh [--timeout <seconds|Nm|Nh>] -- <command>...
 #
 # Examples:
 #   scripts/bounded.sh -- vp run test
@@ -37,6 +38,7 @@
 #   UNO_BOUNDED_CPUS     logical CPUs all runs share (half the machine's)
 #   UNO_BOUNDED_MEMORY   memory all runs share, as systemd takes it (half)
 #   UNO_BOUNDED_TASKS    processes and threads all runs share (4096)
+#   UNO_BOUNDED_TIMEOUT  seconds one run may take (1800)
 
 set -euo pipefail
 
@@ -44,9 +46,17 @@ readonly STATE="${XDG_CACHE_HOME:-${HOME}/.cache}/uno-bounded"
 readonly SLICE="uno-bounded.slice"
 readonly MARKER="UNO_BOUNDED_RUN"
 readonly TASKS="${UNO_BOUNDED_TASKS:-4096}"
+readonly DEFAULT_TIMEOUT_SECONDS="${UNO_BOUNDED_TIMEOUT:-1800}"
+# How often the guard looks in on its run.
+readonly POLL_SECONDS=2
 # How long a stopped process has between SIGTERM and SIGKILL.
 readonly STOP_SECONDS=10
+# The scope's own deadline is this much past the run's, in case the guard
+# that enforces the run's is gone too.
+readonly BACKSTOP_SECONDS=60
 readonly NICENESS=10
+# coreutils timeout's exit status for a command stopped at its deadline.
+readonly TIMED_OUT_STATUS=124
 
 #######################################
 # Prints a line to stderr, prefixed so it reads apart from the command's.
@@ -111,6 +121,17 @@ half_memory() {
 }
 
 #######################################
+# Prints a duration given as seconds, Nm or Nh, in seconds.
+#######################################
+seconds_of() {
+  case "$1" in
+    *h) echo "$((${1%h} * 3600))" ;;
+    *m) echo "$((${1%m} * 60))" ;;
+    *) echo "$(($1))" ;;
+  esac
+}
+
+#######################################
 # Succeeds when a systemd user manager can take scopes for this user.
 #######################################
 have_systemd() {
@@ -124,7 +145,6 @@ have_systemd() {
 # Prints the pids of every process that carries run $1's marker, wherever
 # its cgroup is now.
 #######################################
-# shellcheck disable=SC2329  # cleanup_run calls it
 marked_pids() {
   local file
   grep -lzx "${MARKER}=$1" /proc/[0-9]*/environ 2>/dev/null \
@@ -136,7 +156,7 @@ marked_pids() {
 
 #######################################
 # Stops everything run $1 started and removes its directory. Safe to call
-# more than once.
+# more than once, and from the guard after the run's own script is gone.
 #######################################
 # shellcheck disable=SC2329  # the EXIT trap calls it
 cleanup_run() {
@@ -163,10 +183,38 @@ cleanup_run() {
 }
 
 #######################################
+# Watches run $1 from outside it: stops it at its deadline $3 (epoch
+# seconds), and cleans up once the script $2 that started it is gone, even
+# if that script was killed before it could.
+#######################################
+guard() {
+  local id="$1" owner="$2" deadline="$3"
+  while kill -0 "${owner}" 2>/dev/null; do
+    if (($(date +%s) >= deadline)) && [[ ! -e "${STATE}/runs/${id}/deadline" ]]; then
+      touch "${STATE}/runs/${id}/deadline"
+      systemctl --user stop "uno-bounded-${id}.scope" >/dev/null 2>&1 || true
+      local -a left
+      mapfile -t left < <(marked_pids "${id}")
+      ((${#left[@]} == 0)) || kill -TERM "${left[@]}" 2>/dev/null || true
+    fi
+    sleep "${POLL_SECONDS}"
+  done
+  [[ -d "${STATE}/runs/${id}" ]] && cleanup_run "${id}"
+}
+
+#######################################
 # Runs a command bounded. See the top of the file.
 #######################################
 run() {
-  [[ "${1:-}" == -- ]] && shift
+  local timeout="${DEFAULT_TIMEOUT_SECONDS}"
+  while (($# > 0)); do
+    case "$1" in
+      --timeout) timeout="$(seconds_of "$2")"; shift ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+    shift
+  done
   if (($# == 0)); then
     say "no command; usage is at the top of $0"
     exit 2
@@ -184,6 +232,9 @@ run() {
   trap 'cleanup_run "${id}"' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
+  setsid bash "${BASH_SOURCE[0]}" __guard "${id}" "$$" \
+    "$(($(date +%s) + timeout))" \
+    </dev/null >/dev/null 2>&1 &
 
   local -a wrap=(env "${MARKER}=${id}" "TMPDIR=${dir}/tmp" nice -n "${NICENESS}")
   [[ -n "${cpus}" ]] && command -v taskset >/dev/null \
@@ -198,17 +249,23 @@ run() {
     systemd-run --user --scope --quiet --slice="${SLICE}" \
       --unit="uno-bounded-${id}.scope" \
       --property="TimeoutStopSec=${STOP_SECONDS}s" \
+      --property="RuntimeMaxSec=$((timeout + BACKSTOP_SECONDS))s" \
       -- "${wrap[@]}" "$@" &
   else
     setsid "${wrap[@]}" "$@" &
   fi
   local status=0
   wait "$!" || status=$?
+  if [[ -e "${dir}/deadline" ]]; then
+    say "stopped at its deadline of ${timeout}s: $*"
+    exit "${TIMED_OUT_STATUS}"
+  fi
   exit "${status}"
 }
 
 main() {
   case "${1:-}" in
+    __guard) shift; guard "$@" ;;
     *) run "$@" ;;
   esac
 }
