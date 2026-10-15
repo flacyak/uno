@@ -287,8 +287,16 @@ const SENTENCES: Sentences<Said> = {
     'this engine cannot try a connection · its platform connects to nothing',
 };
 
+/**
+ * What a kind this build does not have is said as. A hosted page and its
+ * engine are separate builds, so a newer engine can send one.
+ */
+const UNKNOWN_KIND =
+  'this page is older than its engine · reload it to read what it said';
+
 /** english renders a Said as its English sentence. */
 export function english(s: Said): string {
+  if (!Object.hasOwn(SENTENCES, s.t)) return UNKNOWN_KIND;
   // SENTENCES is typed per kind and s is the union; the cast pairs them.
   return (SENTENCES[s.t] as (s: Said) => string)(s);
 }

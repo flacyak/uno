@@ -5,6 +5,8 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
+import { Engine, messagePort } from '@engine';
+import type { MessagePortLike, Reply, Request } from '@engine';
 import { Refusal, english, saidOf } from '@said';
 import type { Said } from '@said';
 import { FIXTURE, connect, openOne } from '@core-tests/engine/harness';
@@ -75,6 +77,47 @@ describe('english', () => {
     expect(
       english({ t: 'size-changed', name: 'ads.csv', now: 2048, was: 1024 }),
     ).toBe('ads.csv is 2.0 KB now and was 1.0 KB when the workspace was saved');
+  });
+});
+
+describe('a kind from an engine newer than this build', () => {
+  // As it crosses the port: a kind this build's Said does not have.
+  const newer = JSON.parse('{"t":"read-sideways","name":"ads.csv"}') as Said;
+  const reload =
+    'this page is older than its engine · reload it to read what it said';
+
+  test('is said as a page to reload, however deep', () => {
+    expect(english(newer)).toBe(reload);
+    expect(english({ t: 'about', subject: 'q4.uno', why: newer })).toBe(
+      `q4.uno: ${reload}`,
+    );
+  });
+
+  test('refuses the request it answers, as a Refusal that says so', async () => {
+    const { port1, port2 } = new MessageChannel();
+    const far = messagePort<Request, Reply>(
+      port1 as unknown as MessagePortLike,
+    );
+    far.listen((request) => {
+      if ('id' in request && request.id !== undefined)
+        far.post({ t: 'error', id: request.id, said: newer });
+    });
+    const engine = new Engine(
+      messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
+    );
+    try {
+      const refused: unknown = await engine
+        .open({ name: 'ads.csv', path: FIXTURE })
+        .then(
+          () => undefined,
+          (err: unknown) => err,
+        );
+      expect(refused).toBeInstanceOf(Refusal);
+      expect(saidOf(refused)).toEqual(newer);
+      expect((refused as Error).message).toBe(reload);
+    } finally {
+      engine.close();
+    }
   });
 });
 
