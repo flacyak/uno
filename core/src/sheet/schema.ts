@@ -57,9 +57,9 @@ export interface Supplied {
 
 export class Schema {
   readonly headers: readonly string[];
-  /** The column the holder of the rows fills in, if any. It is one of
-   * `headers`, so an expression can name it. */
-  readonly supplied?: Supplied;
+  /** The columns the holder of the rows fills in, in the order it hands
+   * their values. Each is one of `headers`, so an expression can name it. */
+  readonly supplied: readonly Supplied[];
 
   /** How many rows an edit may name. The holder of the rows keeps it current. */
   rows: number;
@@ -77,7 +77,11 @@ export class Schema {
   /** Header to index, or -1 for a header more than one column has. */
   private readonly names = new Map<string, number>();
 
-  constructor(headers: readonly string[], rows: number, supplied?: Supplied) {
+  constructor(
+    headers: readonly string[],
+    rows: number,
+    supplied: readonly Supplied[] = [],
+  ) {
     this.headers = headers;
     this.supplied = supplied;
     this.rows = rows;
@@ -89,7 +93,7 @@ export class Schema {
     headers: readonly string[],
     rows: number,
     edits: readonly Edit[],
-    supplied?: Supplied,
+    supplied?: readonly Supplied[],
   ): Schema {
     const s = new Schema(headers, rows, supplied);
     s.replay(edits);
@@ -196,9 +200,10 @@ export class Schema {
       );
     }
     // A supplied column refuses every operation.
-    if (e.col === this.supplied?.col) {
+    const supplied = this.supplied.find((s) => s.col === e.col);
+    if (supplied !== undefined) {
       throw new Error(
-        `edit ${e.seq}: ${this.headers[e.col]} shows ${this.supplied.shows}, so it cannot be changed`,
+        `edit ${e.seq}: ${this.headers[e.col]} shows ${supplied.shows}, so it cannot be changed`,
       );
     }
 
