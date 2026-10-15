@@ -7,7 +7,7 @@
 
 /** lengthNL mirrors Go's: 1 when the line ends with a newline, 0 otherwise. */
 function lengthNL(line: string): number {
-  return line.endsWith("\n") ? 1 : 0;
+  return line.endsWith('\n') ? 1 : 0;
 }
 
 /**
@@ -22,17 +22,17 @@ class Lines {
   next(): string | undefined {
     if (this.i >= this.s.length) return undefined;
 
-    const nl = this.s.indexOf("\n", this.i);
+    const nl = this.s.indexOf('\n', this.i);
     let line: string;
     if (nl < 0) {
       line = this.s.slice(this.i);
       this.i = this.s.length;
       // Go drops a trailing \r before end of file.
-      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (line.endsWith('\r')) line = line.slice(0, -1);
     } else {
       line = this.s.slice(this.i, nl + 1);
       this.i = nl + 1;
-      if (line.endsWith("\r\n")) line = line.slice(0, -2) + "\n";
+      if (line.endsWith('\r\n')) line = line.slice(0, -2) + '\n';
     }
     return line;
   }
@@ -63,7 +63,7 @@ function readRecord(lines: Lines, comma: string): string[] | undefined {
   }
 
   const fields: string[] = [];
-  let buf = "";
+  let buf = '';
 
   parseField: for (;;) {
     if (!line.startsWith('"')) {
@@ -94,11 +94,11 @@ function readRecord(lines: Lines, comma: string): string[] | undefined {
         } else if (line.startsWith(comma)) {
           line = line.slice(comma.length);
           fields.push(buf);
-          buf = "";
+          buf = '';
           continue parseField;
         } else if (lengthNL(line) === line.length) {
           fields.push(buf);
-          buf = "";
+          buf = '';
           break parseField;
         } else {
           // A bare quote inside a quoted field. LazyQuotes keeps it.
@@ -114,7 +114,7 @@ function readRecord(lines: Lines, comma: string): string[] | undefined {
         if (next === undefined) {
           // The file ended inside a quoted field.
           fields.push(buf);
-          buf = "";
+          buf = '';
           break parseField;
         }
         line = next;
@@ -122,7 +122,7 @@ function readRecord(lines: Lines, comma: string): string[] | undefined {
       }
 
       fields.push(buf);
-      buf = "";
+      buf = '';
       break parseField;
     }
   }

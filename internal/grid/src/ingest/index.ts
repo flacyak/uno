@@ -4,13 +4,19 @@
 // `read` takes a whole file and returns a Sheet. `openFormat` reads a file a
 // piece at a time through a ByteSource, for the engine.
 
-import { Sheet } from "../sheet/index.ts";
-import { readAll } from "./csv.ts";
-import { columnNames, decodersFor, describe, extensionOf, headerOf } from "./format.ts";
-import type { Charset, HeaderMode } from "./format.ts";
-import { sniffDelimiter, sniffEncoding } from "./sniff.ts";
+import { Sheet } from '../sheet/index.ts';
+import { readAll } from './csv.ts';
+import {
+  columnNames,
+  decodersFor,
+  describe,
+  extensionOf,
+  headerOf,
+} from './format.ts';
+import type { Charset, HeaderMode } from './format.ts';
+import { sniffDelimiter, sniffEncoding } from './sniff.ts';
 
-export { readAll } from "./csv.ts";
+export { readAll } from './csv.ts';
 export {
   UnsupportedEncodingError,
   columnNames,
@@ -22,11 +28,11 @@ export {
   labelOf,
   openFormat,
   peekFormat,
-} from "./format.ts";
-export type { Format, HeaderMode, Scanner, Charset } from "./format.ts";
-export { RecordScanner, bomLength } from "./scan.ts";
-export { sniffDelimiter, sniffEncoding } from "./sniff.ts";
-export type { Encoding } from "./sniff.ts";
+} from './format.ts';
+export type { Format, HeaderMode, Scanner, Charset } from './format.ts';
+export { RecordScanner, bomLength } from './scan.ts';
+export { sniffDelimiter, sniffEncoding } from './sniff.ts';
+export type { Encoding } from './sniff.ts';
 
 /**
  * read decodes the bytes, picks the delimiter from the extension or by
@@ -36,21 +42,23 @@ export type { Encoding } from "./sniff.ts";
 export function read(
   name: string,
   bytes: Uint8Array | string,
-  header: HeaderMode = "first",
+  header: HeaderMode = 'first',
 ): Sheet {
   const [text, charset] =
-    typeof bytes === "string" ? [stripBOM(bytes), "UTF-8" as const] : decoded(name, bytes);
+    typeof bytes === 'string'
+      ? [stripBOM(bytes), 'UTF-8' as const]
+      : decoded(name, bytes);
 
   const ext = extensionOf(name);
-  if (ext === ".json") throw new Error(`${name}: JSON is not supported yet`);
-  const comma = ext === ".tsv" ? "\t" : sniffDelimiter(text);
+  if (ext === '.json') throw new Error(`${name}: JSON is not supported yet`);
+  const comma = ext === '.tsv' ? '\t' : sniffDelimiter(text);
 
   // Short rows are tolerated.
   const rows = readAll(text, comma);
   if (rows.length === 0) throw new Error(`${name}: file is empty`);
 
   const s =
-    header === "first"
+    header === 'first'
       ? new Sheet(name, headerOf(rows[0]!), rows.slice(1))
       : new Sheet(name, columnNames(rows[0]!.length), rows);
   s.source = describe(comma, header, charset);
@@ -67,7 +75,7 @@ function decoded(name: string, bytes: Uint8Array): [string, Charset] {
 }
 
 /** The byte order mark as a character. */
-const BOM = "\uFEFF";
+const BOM = '\uFEFF';
 
 /** stripBOM strips a leading byte order mark from a string, as the decoder
  * does for bytes. */

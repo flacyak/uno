@@ -7,6 +7,8 @@
 // every byte of a multi-byte UTF-8 character is data. tests/ingest/scan.test.ts
 // checks it against csv.ts over random input.
 
+import { unreachable } from '../never.ts';
+
 const LF = 0x0a;
 const CR = 0x0d;
 const QUOTE = 0x22;
@@ -26,6 +28,16 @@ const QUOTE_SEEN = 5;
 /** Inside a quoted field, past a quote and a CR. */
 const QUOTE_CR = 6;
 
+/** State is where the scanner is between bytes. */
+type State =
+  | typeof LINE
+  | typeof LINE_CR
+  | typeof FIELD
+  | typeof BARE
+  | typeof QUOTED
+  | typeof QUOTE_SEEN
+  | typeof QUOTE_CR;
+
 /**
  * RecordScanner is fed a file's bytes in order, in chunks of any size, and
  * calls `begin` with the offset of every record's first byte. State carries
@@ -33,7 +45,7 @@ const QUOTE_CR = 6;
  * chunk finishes the scan.
  */
 export class RecordScanner {
-  private state = LINE;
+  private state: State = LINE;
   private crAt = 0;
   private readonly sep: number;
 
@@ -42,7 +54,13 @@ export class RecordScanner {
     private readonly begin: (offset: number) => void,
   ) {
     const sep = comma.charCodeAt(0);
-    if (comma.length !== 1 || sep >= 0x80 || sep === QUOTE || sep === LF || sep === CR) {
+    if (
+      comma.length !== 1 ||
+      sep >= 0x80 ||
+      sep === QUOTE ||
+      sep === LF ||
+      sep === CR
+    ) {
       throw new Error(`${JSON.stringify(comma)} cannot separate fields`);
     }
     this.sep = sep;
@@ -136,6 +154,8 @@ export class RecordScanner {
           if (b === LF) s = LINE;
           else s = b === QUOTE ? QUOTE_SEEN : QUOTED;
           break;
+        default:
+          return unreachable(s);
       }
       i++;
     }

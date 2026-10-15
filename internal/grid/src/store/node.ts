@@ -5,24 +5,25 @@
 // target. Only this file and store/disklister.ts import node:fs. The guard
 // test in tests/store/opens.test.ts checks that.
 
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { mkdtemp, open, readdir, rename, rm } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import { promisify } from "node:util";
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { constants } from 'node:fs';
+import { mkdtemp, open, readdir, rename, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 
-import { compareStrings, parseTime } from "../go/index.ts";
-import type { AuthMode, Connection } from "../library/index.ts";
-import { covering } from "../library/index.ts";
-import type { Provider } from "../plugin/index.ts";
-import { diskLister } from "./disklister.ts";
-import type { ByteSource, FileHandler, FileStore } from "./index.ts";
-import { isRemote, readAll } from "./index.ts";
-import type { AwsCredentials, S3Location, Signing } from "./s3.ts";
-import { assumeRole, signInAgain, ssoRoleCredentials } from "./sts.ts";
-import type { Session } from "./sts.ts";
+import { compareStrings, parseTime } from '../go/index.ts';
+import type { AuthMode, Connection } from '../library/index.ts';
+import { covering } from '../library/index.ts';
+import type { Provider } from '../plugin/index.ts';
+import { diskLister } from './disklister.ts';
+import type { ByteSource, FileHandler, FileStore } from './index.ts';
+import { isRemote, readAll } from './index.ts';
+import type { AwsCredentials, S3Location, Signing } from './s3.ts';
+import { assumeRole, signInAgain, ssoRoleCredentials } from './sts.ts';
+import type { Session } from './sts.ts';
+import { unreachable } from '../never.ts';
 
 /**
  * localFiles opens files on this machine's disks by path, for reading. It
@@ -30,18 +31,25 @@ import type { Session } from "./sts.ts";
  */
 export function localFiles(): FileHandler {
   return {
-    label: "local files",
-    handles: (ref) => "path" in ref && !isRemote(ref.path),
+    label: 'local files',
+    handles: (ref) => 'path' in ref && !isRemote(ref.path),
     open: (ref) =>
-      "path" in ref
+      'path' in ref
         ? nodeSource(ref.path)
-        : Promise.reject(new Error(`${ref.name}: local files are opened by path`)),
+        : Promise.reject(
+            new Error(`${ref.name}: local files are opened by path`),
+          ),
   };
 }
 
 /** diskProvider is this machine's disks: localFiles and diskLister. */
 export function diskProvider(): Provider {
-  return { name: "disk", label: "local files", files: localFiles(), browse: diskLister() };
+  return {
+    name: 'disk',
+    label: 'local files',
+    files: localFiles(),
+    browse: diskLister(),
+  };
 }
 
 /**
@@ -57,7 +65,9 @@ export async function nodeSource(path: string): Promise<ByteSource> {
   try {
     const st = await fh.stat();
     if (!st.isFile()) {
-      throw new Error(`${path} is ${st.isDirectory() ? "a folder" : "not a regular file"}`);
+      throw new Error(
+        `${path} is ${st.isDirectory() ? 'a folder' : 'not a regular file'}`,
+      );
     }
     size = st.size;
   } catch (err) {
@@ -96,8 +106,8 @@ export function nodeStore(): FileStore {
      */
     async write(path: string, bytes: Uint8Array): Promise<void> {
       const dir = dirname(path);
-      const scratch = await mkdtemp(join(dir, ".uno-"));
-      const tmp = join(scratch, "part");
+      const scratch = await mkdtemp(join(dir, '.uno-'));
+      const tmp = join(scratch, 'part');
 
       try {
         // 0644: the result is an ordinary user file.
@@ -129,7 +139,7 @@ export function nodeStore(): FileStore {
         const entries = await readdir(dir, { withFileTypes: true });
         return entries.filter((e) => !e.isDirectory()).map((e) => e.name);
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
         throw err;
       }
     },
@@ -142,7 +152,7 @@ const execFileAsync = promisify(execFile);
 const CREDENTIALS_MS = 60_000;
 
 /** The fallback region a request is signed for. */
-const DEFAULT_REGION = "us-east-1";
+const DEFAULT_REGION = 'us-east-1';
 
 type Env = Record<string, string | undefined>;
 
@@ -156,28 +166,37 @@ interface AwsFiles {
 
 /** Reads the AWS files from the paths the environment names, or ~/.aws. */
 async function awsFiles(env: Env): Promise<AwsFiles> {
-  const aws = join(homeOf(env), ".aws");
+  const aws = join(homeOf(env), '.aws');
   return {
-    config: await ini(env["AWS_CONFIG_FILE"] ?? join(aws, "config")),
-    credentials: await ini(env["AWS_SHARED_CREDENTIALS_FILE"] ?? join(aws, "credentials")),
+    config: await ini(env['AWS_CONFIG_FILE'] ?? join(aws, 'config')),
+    credentials: await ini(
+      env['AWS_SHARED_CREDENTIALS_FILE'] ?? join(aws, 'credentials'),
+    ),
   };
 }
 
 /** The config section a profile's settings are in: `default`, or
  * `profile <name>`. */
-function configOf(files: AwsFiles, profile: string): Map<string, string> | undefined {
-  return files.config.get(profile === "default" ? "default" : `profile ${profile}`);
+function configOf(
+  files: AwsFiles,
+  profile: string,
+): Map<string, string> | undefined {
+  return files.config.get(
+    profile === 'default' ? 'default' : `profile ${profile}`,
+  );
 }
 
 /** The region a profile signs for: the environment, then its config, then
  * the default. */
 function regionOf(env: Env, files: AwsFiles, profile: string): string {
-  return envRegion(env) ?? configOf(files, profile)?.get("region") ?? DEFAULT_REGION;
+  return (
+    envRegion(env) ?? configOf(files, profile)?.get('region') ?? DEFAULT_REGION
+  );
 }
 
 /** The region the environment names, or undefined. */
 function envRegion(env: Env): string | undefined {
-  return env["AWS_REGION"] ?? env["AWS_DEFAULT_REGION"];
+  return env['AWS_REGION'] ?? env['AWS_DEFAULT_REGION'];
 }
 
 /**
@@ -185,10 +204,11 @@ function envRegion(env: Env): string | undefined {
  * where there are none. An empty variable counts as none.
  */
 function envKeys(env: Env, region: string): AwsCredentials | undefined {
-  const id = env["AWS_ACCESS_KEY_ID"];
-  const secret = env["AWS_SECRET_ACCESS_KEY"];
-  if (id === undefined || id === "" || secret === undefined || secret === "") return undefined;
-  const sessionToken = env["AWS_SESSION_TOKEN"];
+  const id = env['AWS_ACCESS_KEY_ID'];
+  const secret = env['AWS_SECRET_ACCESS_KEY'];
+  if (id === undefined || id === '' || secret === undefined || secret === '')
+    return undefined;
+  const sessionToken = env['AWS_SESSION_TOKEN'];
   return { accessKeyId: id, secretAccessKey: secret, sessionToken, region };
 }
 
@@ -206,7 +226,7 @@ const EARLY_MS = 5 * 60_000;
 
 /** The home folder the AWS files are under. */
 function homeOf(env: Env): string {
-  return env["HOME"] ?? env["USERPROFILE"] ?? homedir();
+  return env['HOME'] ?? env['USERPROFILE'] ?? homedir();
 }
 
 /**
@@ -233,17 +253,25 @@ async function profileSession(
 
   // A profile with role_arn is the role, whatever else it holds, as for the
   // CLI.
-  const roleArn = fromConfig?.get("role_arn") ?? p?.get("role_arn");
+  const roleArn = fromConfig?.get('role_arn') ?? p?.get('role_arn');
   if (roleArn !== undefined) {
-    const setting = (key: string): string | undefined => fromConfig?.get(key) ?? p?.get(key);
-    return hold(await roleSession(env, files, profile, roleArn, setting, through));
+    const setting = (key: string): string | undefined =>
+      fromConfig?.get(key) ?? p?.get(key);
+    return hold(
+      await roleSession(env, files, profile, roleArn, setting, through),
+    );
   }
 
   const own = profileKeysOnly(env, files, profile);
-  if (own !== undefined) return { creds: { ...own.creds, as }, until: own.until };
-  const command = fromConfig?.get("credential_process");
-  if (command !== undefined) return hold(await processCredentials(profile, command));
-  if (fromConfig?.has("sso_session") === true || fromConfig?.has("sso_start_url") === true) {
+  if (own !== undefined)
+    return { creds: { ...own.creds, as }, until: own.until };
+  const command = fromConfig?.get('credential_process');
+  if (command !== undefined)
+    return hold(await processCredentials(profile, command));
+  if (
+    fromConfig?.has('sso_session') === true ||
+    fromConfig?.has('sso_start_url') === true
+  ) {
     return hold(await ssoSession(env, files, profile, fromConfig));
   }
   return undefined;
@@ -251,7 +279,8 @@ async function profileSession(
   /** hold is a session as this profile's credentials, kept until shortly
    * before it expires, or for good for keys that last. */
   function hold({ expiration, ...keys }: Printed | Session): Held {
-    const until = expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS;
+    const until =
+      expiration === undefined ? Infinity : expiration.getTime() - EARLY_MS;
     return { creds: { ...keys, region, as }, until };
   }
 }
@@ -272,41 +301,52 @@ async function ssoSession(
   profile: string,
   section: Map<string, string>,
 ): Promise<Session> {
-  const named = section.get("sso_session");
-  const portal = named === undefined ? section : files.config.get(`sso-session ${named}`);
+  const named = section.get('sso_session');
+  const portal =
+    named === undefined ? section : files.config.get(`sso-session ${named}`);
   if (portal === undefined) {
     throw new Error(
       `the AWS profile ${profile} names sso-session ${named}, which ~/.aws/config does not have`,
     );
   }
-  const startUrl = portal.get("sso_start_url");
-  const ssoRegion = portal.get("sso_region");
-  const accountId = section.get("sso_account_id");
-  const roleName = section.get("sso_role_name");
+  const startUrl = portal.get('sso_start_url');
+  const ssoRegion = portal.get('sso_region');
+  const accountId = section.get('sso_account_id');
+  const roleName = section.get('sso_role_name');
   const missing = [
-    ["sso_start_url", startUrl],
-    ["sso_region", ssoRegion],
-    ["sso_account_id", accountId],
-    ["sso_role_name", roleName],
+    ['sso_start_url', startUrl],
+    ['sso_region', ssoRegion],
+    ['sso_account_id', accountId],
+    ['sso_role_name', roleName],
   ].find(([, v]) => v === undefined)?.[0];
   if (missing !== undefined) {
-    throw new Error(`the AWS profile ${profile} signs in through SSO and has no ${missing}`);
+    throw new Error(
+      `the AWS profile ${profile} signs in through SSO and has no ${missing}`,
+    );
   }
 
   const cacheKey = named ?? startUrl!;
-  const name = createHash("sha1").update(cacheKey).digest("hex") + ".json";
-  const path = join(homeOf(env), ".aws", "sso", "cache", name);
+  const name = createHash('sha1').update(cacheKey).digest('hex') + '.json';
+  const path = join(homeOf(env), '.aws', 'sso', 'cache', name);
   const text = await readText(path);
-  if (text === undefined) throw new Error(signInAgain(profile, "uno found no SSO sign-in for it"));
+  if (text === undefined)
+    throw new Error(signInAgain(profile, 'uno found no SSO sign-in for it'));
   // A cache file that fails to parse is refused like a missing sign-in.
   const token = cachedToken(text);
   // Older CLIs wrote the time with a UTC suffix, where newer write Z.
-  const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, "Z"));
-  if (typeof token?.accessToken !== "string" || expires === undefined) {
-    throw new Error(signInAgain(profile, "its cached SSO sign-in could not be read"));
+  const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, 'Z'));
+  if (typeof token?.accessToken !== 'string' || expires === undefined) {
+    throw new Error(
+      signInAgain(profile, 'its cached SSO sign-in could not be read'),
+    );
   }
   if (expires.getTime() <= Date.now()) {
-    throw new Error(signInAgain(profile, `its SSO sign-in expired at ${expires.toISOString()}`));
+    throw new Error(
+      signInAgain(
+        profile,
+        `its SSO sign-in expired at ${expires.toISOString()}`,
+      ),
+    );
   }
 
   return ssoRoleCredentials(
@@ -317,7 +357,7 @@ async function ssoSession(
       roleName: roleName!,
       accessToken: token.accessToken,
     },
-    { endpoint: env["AWS_ENDPOINT_URL_SSO"] },
+    { endpoint: env['AWS_ENDPOINT_URL_SSO'] },
   );
 }
 
@@ -329,7 +369,7 @@ function cachedToken(text: string): Record<string, unknown> | undefined {
   } catch {
     return undefined;
   }
-  return typeof parsed === "object" && parsed !== null
+  return typeof parsed === 'object' && parsed !== null
     ? (parsed as Record<string, unknown>)
     : undefined;
 }
@@ -349,7 +389,7 @@ async function roleSession(
   through: readonly string[],
 ): Promise<Session> {
   const chain = [...through, profile];
-  if (setting("mfa_serial") !== undefined) {
+  if (setting('mfa_serial') !== undefined) {
     throw new Error(
       `the AWS profile ${profile} asks for an MFA code to assume ${roleArn}, which uno cannot ask for · ` +
         `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
@@ -357,12 +397,12 @@ async function roleSession(
   }
 
   let source: AwsCredentials;
-  const sourceProfile = setting("source_profile");
-  const credentialSource = setting("credential_source");
+  const sourceProfile = setting('source_profile');
+  const credentialSource = setting('credential_source');
   if (sourceProfile !== undefined) {
     if (chain.includes(sourceProfile)) {
       throw new Error(
-        `the AWS profile ${profile} takes its credentials from a loop · ${[...chain, sourceProfile].join(" → ")}`,
+        `the AWS profile ${profile} takes its credentials from a loop · ${[...chain, sourceProfile].join(' → ')}`,
       );
     }
     // A profile that is its own source means the static keys beside its
@@ -377,7 +417,7 @@ async function roleSession(
       );
     }
     source = held.creds;
-  } else if (credentialSource === "Environment") {
+  } else if (credentialSource === 'Environment') {
     const held = envKeys(env, DEFAULT_REGION);
     if (held === undefined) {
       throw new Error(
@@ -395,28 +435,35 @@ async function roleSession(
     );
   }
 
-  const duration = setting("duration_seconds");
+  const duration = setting('duration_seconds');
   return assumeRole(
     {
       roleArn,
-      sessionName: setting("role_session_name") ?? `uno-${Date.now()}`,
-      externalId: setting("external_id"),
+      sessionName: setting('role_session_name') ?? `uno-${Date.now()}`,
+      externalId: setting('external_id'),
       durationSeconds: duration === undefined ? undefined : Number(duration),
       region: regionOf(env, files, profile),
     },
     source,
-    { endpoint: env["AWS_ENDPOINT_URL_STS"] },
+    { endpoint: env['AWS_ENDPOINT_URL_STS'] },
   );
 }
 
 /** A profile's own static keys, for a role profile that is its own source. */
-function profileKeysOnly(env: Env, files: AwsFiles, profile: string): Held | undefined {
+function profileKeysOnly(
+  env: Env,
+  files: AwsFiles,
+  profile: string,
+): Held | undefined {
   const p = files.credentials.get(profile);
   const fromConfig = configOf(files, profile);
-  const key = p?.get("aws_access_key_id") ?? fromConfig?.get("aws_access_key_id");
-  const secret = p?.get("aws_secret_access_key") ?? fromConfig?.get("aws_secret_access_key");
+  const key =
+    p?.get('aws_access_key_id') ?? fromConfig?.get('aws_access_key_id');
+  const secret =
+    p?.get('aws_secret_access_key') ?? fromConfig?.get('aws_secret_access_key');
   if (key === undefined || secret === undefined) return undefined;
-  const token = p?.get("aws_session_token") ?? fromConfig?.get("aws_session_token");
+  const token =
+    p?.get('aws_session_token') ?? fromConfig?.get('aws_session_token');
   return {
     creds: {
       accessKeyId: key,
@@ -448,14 +495,19 @@ interface Printed {
  * directly, as a program and its arguments. The output must be the CLI's
  * version 1 JSON.
  */
-async function processCredentials(profile: string, command: string): Promise<Printed> {
+async function processCredentials(
+  profile: string,
+  command: string,
+): Promise<Printed> {
   /** fail is an Error about this profile's credential_process. */
   const fail = (why: string): Error =>
     new Error(`the AWS profile ${profile}'s credential_process ${why}`);
   const words = splitCommand(command);
   const [program, ...args] = words;
   if (program === undefined) {
-    throw new Error(`the AWS profile ${profile} has an empty credential_process`);
+    throw new Error(
+      `the AWS profile ${profile} has an empty credential_process`,
+    );
   }
 
   let out: string;
@@ -463,16 +515,20 @@ async function processCredentials(profile: string, command: string): Promise<Pri
     const run = await execFileAsync(program, args, {
       timeout: PROCESS_MS,
       maxBuffer: PROCESS_BYTES,
-      encoding: "utf8",
+      encoding: 'utf8',
       windowsHide: true,
     });
     out = run.stdout;
   } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stderr?: string; killed?: boolean };
+    const e = err as NodeJS.ErrnoException & {
+      stderr?: string;
+      killed?: boolean;
+    };
     let why: string;
-    if (e.code === "ENOENT") why = `there is no program called ${program}`;
-    else if (e.killed === true) why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
-    else why = (e.stderr?.trim().split("\n")[0] ?? "") || e.message;
+    if (e.code === 'ENOENT') why = `there is no program called ${program}`;
+    else if (e.killed === true)
+      why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
+    else why = (e.stderr?.trim().split('\n')[0] ?? '') || e.message;
     throw fail(`failed · ${why}`);
   }
 
@@ -480,21 +536,24 @@ async function processCredentials(profile: string, command: string): Promise<Pri
   try {
     o = JSON.parse(out) as Record<string, unknown>;
   } catch {
-    throw fail("did not print JSON");
+    throw fail('did not print JSON');
   }
-  if (o["Version"] !== 1) {
-    throw fail(`printed version ${JSON.stringify(o["Version"])} · uno reads version 1`);
+  if (o['Version'] !== 1) {
+    throw fail(
+      `printed version ${JSON.stringify(o['Version'])} · uno reads version 1`,
+    );
   }
-  const id = o["AccessKeyId"];
-  const secret = o["SecretAccessKey"];
-  if (typeof id !== "string" || typeof secret !== "string") {
-    throw fail("printed no AccessKeyId and SecretAccessKey");
+  const id = o['AccessKeyId'];
+  const secret = o['SecretAccessKey'];
+  if (typeof id !== 'string' || typeof secret !== 'string') {
+    throw fail('printed no AccessKeyId and SecretAccessKey');
   }
   const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
-  if (typeof o["SessionToken"] === "string") printed.sessionToken = o["SessionToken"];
-  if (typeof o["Expiration"] === "string") {
-    const at = parseTime(o["Expiration"]);
-    if (at === undefined) throw fail("printed an Expiration uno cannot read");
+  if (typeof o['SessionToken'] === 'string')
+    printed.sessionToken = o['SessionToken'];
+  if (typeof o['Expiration'] === 'string') {
+    const at = parseTime(o['Expiration']);
+    if (at === undefined) throw fail('printed an Expiration uno cannot read');
     printed.expiration = at;
   }
   return printed;
@@ -509,29 +568,32 @@ async function processCredentials(profile: string, command: string): Promise<Pri
  */
 export function splitCommand(line: string): string[] {
   const words: string[] = [];
-  let word = "";
+  let word = '';
   let open = false;
   for (let i = 0; i < line.length; i++) {
     const c = line[i]!;
     if (c === "'") {
       const end = line.indexOf("'", i + 1);
-      if (end < 0) throw new Error(`credential_process has a ' with no ' to close it`);
+      if (end < 0)
+        throw new Error(`credential_process has a ' with no ' to close it`);
       word += line.slice(i + 1, end);
       i = end;
       open = true;
     } else if (c === '"') {
       open = true;
       for (i++; i < line.length && line[i] !== '"'; i++) {
-        if (line[i] === "\\" && (line[i + 1] === '"' || line[i + 1] === "\\")) i++;
+        if (line[i] === '\\' && (line[i + 1] === '"' || line[i + 1] === '\\'))
+          i++;
         word += line[i];
       }
-      if (i >= line.length) throw new Error(`credential_process has a " with no " to close it`);
-    } else if (c === "\\" && i + 1 < line.length) {
+      if (i >= line.length)
+        throw new Error(`credential_process has a " with no " to close it`);
+    } else if (c === '\\' && i + 1 < line.length) {
       word += line[++i];
       open = true;
     } else if (/\s/.test(c)) {
       if (open) words.push(word);
-      word = "";
+      word = '';
       open = false;
     } else {
       word += c;
@@ -573,12 +635,16 @@ function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
  * `default`. This is the `machine` way of signing in, and what a request
  * outside every connection signs with.
  */
-export function awsCredentials(env: Env = process.env): () => Promise<AwsCredentials> {
+export function awsCredentials(
+  env: Env = process.env,
+): () => Promise<AwsCredentials> {
   return cached(async () => {
-    const profile = env["AWS_PROFILE"] ?? env["AWS_DEFAULT_PROFILE"] ?? "default";
+    const profile =
+      env['AWS_PROFILE'] ?? env['AWS_DEFAULT_PROFILE'] ?? 'default';
     const files = await awsFiles(env);
     const fromEnv = envKeys(env, regionOf(env, files, profile));
-    if (fromEnv !== undefined) return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
+    if (fromEnv !== undefined)
+      return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
     const held = await profileSession(env, files, profile);
     if (held !== undefined) return held;
     throw new Error(
@@ -599,7 +665,10 @@ export function profileCredentials(
     const files = await awsFiles(env);
     const held = await profileSession(env, files, profile);
     if (held !== undefined) return held;
-    if (!files.credentials.has(profile) && configOf(files, profile) === undefined) {
+    if (
+      !files.credentials.has(profile) &&
+      configOf(files, profile) === undefined
+    ) {
       throw new Error(
         `there is no AWS profile called ${profile} in ~/.aws/config or ~/.aws/credentials`,
       );
@@ -619,12 +688,15 @@ export async function awsProfiles(env: Env = process.env): Promise<string[]> {
   const files = await awsFiles(env);
   const names = new Set<string>();
   for (const section of files.config.keys()) {
-    if (section === "default") names.add(section);
-    else if (section.startsWith("profile ")) names.add(section.slice("profile ".length).trim());
+    if (section === 'default') names.add(section);
+    else if (section.startsWith('profile '))
+      names.add(section.slice('profile '.length).trim());
   }
   for (const section of files.credentials.keys()) names.add(section);
-  const rest = [...names].filter((name) => name !== "default").sort(compareStrings);
-  return names.has("default") ? ["default", ...rest] : rest;
+  const rest = [...names]
+    .filter((name) => name !== 'default')
+    .sort(compareStrings);
+  return names.has('default') ? ['default', ...rest] : rest;
 }
 
 /**
@@ -644,12 +716,20 @@ export interface ConnectionAuth {
 
 /** who names a connection as its signing does: its name, or its id where it has none. */
 function who(c: Connection): string {
-  return c.name === "" ? c.id : c.name;
+  return c.name === '' ? c.id : c.name;
 }
 
 /** signed is `creds` in c's region where it names one, labelled with whose they are. */
-function signed(c: Connection, creds: AwsCredentials, through: string): Signing {
-  return { ...creds, region: c.region ?? creds.region, as: `${who(c)} (${through})` };
+function signed(
+  c: Connection,
+  creds: AwsCredentials,
+  through: string,
+): Signing {
+  return {
+    ...creds,
+    region: c.region ?? creds.region,
+    as: `${who(c)} (${through})`,
+  };
 }
 
 /** unsigned reads without signing in, in c's region where it names one. */
@@ -670,13 +750,13 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const profiles = new Map<string, () => Promise<AwsCredentials>>();
 
   return {
-    modes: ["machine", "profile", "public"],
+    modes: ['machine', 'profile', 'public'],
     machine,
     async of(c) {
       switch (c.auth.mode) {
-        case "machine":
+        case 'machine':
           return signed(c, await machine(), "this machine's AWS credentials");
-        case "profile": {
+        case 'profile': {
           const name = c.auth.profile;
           let read = profiles.get(name);
           if (read === undefined) {
@@ -685,13 +765,15 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
           }
           return signed(c, await read(), `the AWS profile ${name}`);
         }
-        case "public":
+        case 'public':
           return unsigned(c, env);
-        case "role":
+        case 'role':
           throw new Error(
             `${who(c)} signs in with a role, which only uno's hosted engine takes on · ` +
               `on the desktop, connect it with a profile that can assume ${c.auth.roleArn}`,
           );
+        default:
+          return unreachable(c.auth);
       }
     },
   };
@@ -729,18 +811,18 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   const env = opts.env ?? process.env;
   const roles = new Map<string, () => Promise<AwsCredentials>>();
   return {
-    modes: ["role", "public"],
+    modes: ['role', 'public'],
     machine() {
       return Promise.reject(
         new Error(
           "uno's hosted engine reads only the buckets a connection covers · " +
-            "it signs in with a role in your account, not with a machine of its own",
+            'it signs in with a role in your account, not with a machine of its own',
         ),
       );
     },
     async of(c) {
       switch (c.auth.mode) {
-        case "role": {
+        case 'role': {
           const roleArn = c.auth.roleArn;
           let read = roles.get(roleArn);
           if (read === undefined) {
@@ -748,9 +830,14 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
               const source = await opts.base();
               const region = c.region ?? source.region;
               const session = await assumeRole(
-                { roleArn, sessionName: opts.sessionName, externalId: opts.externalId, region },
+                {
+                  roleArn,
+                  sessionName: opts.sessionName,
+                  externalId: opts.externalId,
+                  region,
+                },
                 source,
-                { endpoint: opts.stsEndpoint ?? env["AWS_ENDPOINT_URL_STS"] },
+                { endpoint: opts.stsEndpoint ?? env['AWS_ENDPOINT_URL_STS'] },
               );
               return {
                 creds: { ...session, region },
@@ -759,16 +846,18 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
             });
             roles.set(roleArn, read);
           }
-          return signed(c, await read(), "a role in your account");
+          return signed(c, await read(), 'a role in your account');
         }
-        case "public":
+        case 'public':
           return unsigned(c, env);
-        case "machine":
-        case "profile":
+        case 'machine':
+        case 'profile':
           throw new Error(
             `${who(c)} signs in as a machine of its own, which uno's hosted engine is not · ` +
-              "connect it with a role in your account that uno may assume",
+              'connect it with a role in your account that uno may assume',
           );
+        default:
+          return unreachable(c.auth);
       }
     },
   };
@@ -794,9 +883,11 @@ export function connectionSigning(
 /** readText is a file's text, or undefined for a missing file. */
 async function readText(path: string): Promise<string | undefined> {
   try {
-    return new TextDecoder().decode(await readAll([localFiles()], { name: basename(path), path }));
+    return new TextDecoder().decode(
+      await readAll([localFiles()], { name: basename(path), path }),
+    );
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw err;
   }
 }
@@ -810,14 +901,14 @@ async function ini(path: string): Promise<Map<string, Map<string, string>>> {
   let section: Map<string, string> | undefined;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
-    if (line === "" || line.startsWith("#") || line.startsWith(";")) continue;
+    if (line === '' || line.startsWith('#') || line.startsWith(';')) continue;
     const head = /^\[(.+)\]$/.exec(line);
     if (head !== null) {
       section = new Map();
       out.set(head[1]!.trim(), section);
       continue;
     }
-    const eq = line.indexOf("=");
+    const eq = line.indexOf('=');
     if (section === undefined || eq < 0) continue;
     section.set(line.slice(0, eq).trim(), line.slice(eq + 1).trim());
   }
