@@ -1,12 +1,15 @@
 /**
  * @fileoverview KeyRegistry gives each JSON Lines key a column in the order
- * keys are first seen, and names it once.
+ * keys are first seen, names it once, and stops adding at its limit.
  */
 
 import { describe, expect, test } from 'vite-plus/test';
 
 import { JSON_COLUMNS_LIMIT, KeyRegistry } from '@ingest/keys';
 import type { KeyedColumn } from '@ingest/keys';
+
+/** A limit a test reaches in a few keys. */
+const SMALL_LIMIT = 2;
 
 /**
  * Columns a save pinned, where nested a then b was seen before a literal
@@ -98,5 +101,30 @@ describe('KeyRegistry starts from the pinned columns', () => {
     const keys = registry(JSON_COLUMNS_LIMIT, twice);
     expect(keys.columns()).toEqual(twice);
     expect(keys.place('/b')).toBe(0);
+  });
+});
+
+describe('KeyRegistry adds no key column past its limit', () => {
+  test('place() is undefined past the limit, and known keys still place', () => {
+    const keys = registry(SMALL_LIMIT);
+    expect(keys.place('/a')).toBe(0);
+    expect(keys.place('/b')).toBe(1);
+    expect(keys.place('/c')).toBeUndefined();
+    expect(keys.place('/a')).toBe(0);
+    expect(keys.columns()).toHaveLength(SMALL_LIMIT);
+  });
+
+  test('JSON_COLUMNS_LIMIT keys fit and one more does not', () => {
+    const keys = registry();
+    for (let i = 0; i < JSON_COLUMNS_LIMIT; i++) {
+      expect(keys.place(`/k${i}`)).toBe(i);
+    }
+    expect(keys.place('/past')).toBeUndefined();
+  });
+
+  test('pinned columns past the limit keep their places', () => {
+    const keys = registry(SMALL_LIMIT, PINNED);
+    expect(keys.place('/a.b')).toBe(2);
+    expect(keys.place('/c')).toBeUndefined();
   });
 });
