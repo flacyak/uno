@@ -5,11 +5,11 @@
 // `peekHead` detects the format of those bytes and decodes the rows they
 // hold. It works on bytes already read, so it can be tested on in-memory bytes.
 
-import { labelOf, openFormat } from "../ingest/index.ts";
-import type { HeaderMode } from "../ingest/index.ts";
-import type { Peeked } from "./protocol.ts";
-import { bytesSource, headerModeOf, openWith } from "../store/index.ts";
-import type { FileHandler, FileRef } from "../store/index.ts";
+import { labelOf, openFormat } from '../ingest/index.ts';
+import type { HeaderMode } from '../ingest/index.ts';
+import type { Peeked } from './protocol.ts';
+import { bytesSource, headerModeOf, openWith } from '../store/index.ts';
+import type { FileHandler, FileRef } from '../store/index.ts';
 
 /**
  * How many bytes a peek reads from the front of a file. This is the only
@@ -62,7 +62,7 @@ export async function peekHead(
   name: string,
   head: Head,
   rows: number = PEEK_ROWS,
-  header: HeaderMode = "first",
+  header: HeaderMode = 'first',
 ): Promise<Peeked> {
   const format = await openFormat(name, bytesSource(head.bytes), header);
 
@@ -91,7 +91,9 @@ export async function peekHead(
   // Pad short rows and drop fields past the header's width, so every row is
   // as wide as the header.
   const width = format.columns.length;
-  const rowsOut = records.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ""));
+  const rowsOut = records.map((r) =>
+    Array.from({ length: width }, (_, i) => r[i] ?? ''),
+  );
 
   return { label: labelOf(format), header: format.columns, rows: rowsOut };
 }
@@ -103,5 +105,10 @@ export async function peek(
   limits: PeekLimits = {},
 ): Promise<Peeked> {
   const header = headerModeOf(ref);
-  return peekHead(ref.name, await readHead(handlers, ref, limits.bytes), limits.rows, header);
+  return peekHead(
+    ref.name,
+    await readHead(handlers, ref, limits.bytes),
+    limits.rows,
+    header,
+  );
 }

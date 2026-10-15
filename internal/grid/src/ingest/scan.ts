@@ -42,7 +42,13 @@ export class RecordScanner {
     private readonly begin: (offset: number) => void,
   ) {
     const sep = comma.charCodeAt(0);
-    if (comma.length !== 1 || sep >= 0x80 || sep === QUOTE || sep === LF || sep === CR) {
+    if (
+      comma.length !== 1 ||
+      sep >= 0x80 ||
+      sep === QUOTE ||
+      sep === LF ||
+      sep === CR
+    ) {
       throw new Error(`${JSON.stringify(comma)} cannot separate fields`);
     }
     this.sep = sep;

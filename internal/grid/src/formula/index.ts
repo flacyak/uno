@@ -5,9 +5,9 @@
 // file computes from the text alone. `sheet` depends on this package, and
 // cells reach an expression through `Columns` or `Row`.
 
-export { Formula, text } from "./ast.ts";
-export type { Binary, ColRef, Group, Node, NumLit, Unary } from "./ast.ts";
-export { parse } from "./parse.ts";
+export { Formula, text } from './ast.ts';
+export type { Binary, ColRef, Group, Node, NumLit, Unary } from './ast.ts';
+export { parse } from './parse.ts';
 export {
   DivideByZeroError,
   EmptyFormulaError,
@@ -15,6 +15,6 @@ export {
   UnknownColumnError,
   evaluate,
   evaluateColumn,
-} from "./eval.ts";
-export type { Column, Columns, Row } from "./eval.ts";
-export { Graph } from "./graph.ts";
+} from './eval.ts';
+export type { Column, Columns, Row } from './eval.ts';
+export { Graph } from './graph.ts';

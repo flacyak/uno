@@ -65,7 +65,7 @@ const EDGE_SPACE = /^\p{White_Space}+|\p{White_Space}+$/gu;
 
 /** trimSpace mirrors strings.TrimSpace: trims unicode.IsSpace from both ends. */
 export function trimSpace(s: string): string {
-  return s.replace(EDGE_SPACE, "");
+  return s.replace(EDGE_SPACE, '');
 }
 
 /**
@@ -75,7 +75,7 @@ export function trimSpace(s: string): string {
  * longer than one rune.
  */
 export function toUpper(s: string): string {
-  let out = "";
+  let out = '';
   for (const r of s) {
     const u = r.toUpperCase();
     out += runeLen(u) === 1 ? u : r;
@@ -87,13 +87,13 @@ export function toUpper(s: string): string {
  * U+0130, capital I with dot above. Go lowercases it to a plain "i";
  * JavaScript produces "i" plus a combining dot.
  */
-const DOTTED_CAPITAL_I = "İ";
+const DOTTED_CAPITAL_I = 'İ';
 
 export function toLower(s: string): string {
-  let out = "";
+  let out = '';
   for (const r of s) {
     if (r === DOTTED_CAPITAL_I) {
-      out += "i";
+      out += 'i';
       continue;
     }
     const l = r.toLowerCase();

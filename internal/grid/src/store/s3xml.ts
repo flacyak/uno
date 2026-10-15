@@ -4,7 +4,7 @@
 // It reads the few elements it needs with regular expressions and ignores
 // the rest. It works on the text of a reply it is handed.
 
-import { parseTime } from "../go/index.ts";
+import { parseTime } from '../go/index.ts';
 
 /** One key from a page of a listing. */
 export interface KeyEntry {
@@ -39,15 +39,15 @@ export interface ListResult {
  * out of scope.
  */
 export function readListing(xml: string): ListResult {
-  const next = text(xml, "NextContinuationToken");
+  const next = text(xml, 'NextContinuationToken');
   return {
-    keys: blocks(xml, "Contents").flatMap(keyIn),
-    prefixes: blocks(xml, "CommonPrefixes").flatMap((block) => {
-      const prefix = text(block, "Prefix");
-      return prefix === undefined || prefix === "" ? [] : [prefix];
+    keys: blocks(xml, 'Contents').flatMap(keyIn),
+    prefixes: blocks(xml, 'CommonPrefixes').flatMap((block) => {
+      const prefix = text(block, 'Prefix');
+      return prefix === undefined || prefix === '' ? [] : [prefix];
     }),
-    truncated: text(xml, "IsTruncated")?.trim().toLowerCase() === "true",
-    ...(next === undefined || next === "" ? {} : { next }),
+    truncated: text(xml, 'IsTruncated')?.trim().toLowerCase() === 'true',
+    ...(next === undefined || next === '' ? {} : { next }),
   };
 }
 
@@ -57,18 +57,18 @@ export function readListing(xml: string): ListResult {
  * `bytes`, `modified` and `version` are each set only where readable.
  */
 function keyIn(block: string): KeyEntry[] {
-  const key = text(block, "Key");
-  if (key === undefined || key === "") return [];
+  const key = text(block, 'Key');
+  if (key === undefined || key === '') return [];
 
-  const bytes = Number(text(block, "Size") ?? "NaN");
-  const modified = when(text(block, "LastModified"));
-  const version = text(block, "ETag");
+  const bytes = Number(text(block, 'Size') ?? 'NaN');
+  const modified = when(text(block, 'LastModified'));
+  const version = text(block, 'ETag');
   return [
     {
       key,
       ...(Number.isFinite(bytes) ? { bytes } : {}),
       ...(modified === undefined ? {} : { modified }),
-      ...(version === undefined || version === "" ? {} : { version }),
+      ...(version === undefined || version === '' ? {} : { version }),
     },
   ];
 }
@@ -87,7 +87,7 @@ export function when(stamp: string | null | undefined): Date | undefined {
  */
 function blocks(xml: string, name: string): string[] {
   const found: string[] = [];
-  for (const m of xml.matchAll(element(name, "g"))) found.push(m[1]!);
+  for (const m of xml.matchAll(element(name, 'g'))) found.push(m[1]!);
   return found;
 }
 
@@ -95,7 +95,7 @@ function blocks(xml: string, name: string): string[] {
  * element matches one `<name>…</name>`, with any attributes on the opening
  * tag.
  */
-function element(name: string, flags = ""): RegExp {
+function element(name: string, flags = ''): RegExp {
   return new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, flags);
 }
 
@@ -114,25 +114,28 @@ export function text(xml: string, name: string): string | undefined {
  * ETag's quotes come back as `&quot;`.
  */
 export function entities(s: string): string {
-  return s.replace(/&(#[0-9]+|#x[0-9a-f]+|amp|lt|gt|quot|apos);/gi, (whole, code: string) => {
-    const named = NAMED[code.toLowerCase()];
-    if (named !== undefined) return named;
-    const point =
-      code.startsWith("#x") || code.startsWith("#X")
-        ? Number.parseInt(code.slice(2), 16)
-        : Number.parseInt(code.slice(1), 10);
-    // A code point outside the Unicode range is left as it came.
-    return Number.isFinite(point) && point >= 0 && point <= 0x10ffff
-      ? String.fromCodePoint(point)
-      : whole;
-  });
+  return s.replace(
+    /&(#[0-9]+|#x[0-9a-f]+|amp|lt|gt|quot|apos);/gi,
+    (whole, code: string) => {
+      const named = NAMED[code.toLowerCase()];
+      if (named !== undefined) return named;
+      const point =
+        code.startsWith('#x') || code.startsWith('#X')
+          ? Number.parseInt(code.slice(2), 16)
+          : Number.parseInt(code.slice(1), 10);
+      // A code point outside the Unicode range is left as it came.
+      return Number.isFinite(point) && point >= 0 && point <= 0x10ffff
+        ? String.fromCodePoint(point)
+        : whole;
+    },
+  );
 }
 
 /** The five named entities XML defines. */
 const NAMED: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
+  amp: '&',
+  lt: '<',
+  gt: '>',
   quot: '"',
   apos: "'",
 };

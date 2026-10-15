@@ -5,16 +5,16 @@
 // refuse a cell when it is authored. Rendering happens once at authoring
 // time; the grid draws the result as plain text.
 
-import { formatU, quote, runes } from "../go/index.ts";
-import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from "./tables.ts";
+import { formatU, quote, runes } from '../go/index.ts';
+import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';
 
-export { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from "./tables.ts";
+export { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';
 
 /**
  * FRAC_SLASH renders \frac{a}{b} as a⁄b on one line. It is the only output
  * character defined here; the rest come from the tables.
  */
-const FRAC_SLASH = "⁄";
+const FRAC_SLASH = '⁄';
 
 /**
  * render transliterates the supported subset and always returns text. A
@@ -41,7 +41,7 @@ export function supported(src: string): Error | undefined {
  * first error. One walk serves both `render` and `supported`.
  */
 class Scanner {
-  out = "";
+  out = '';
   err: Error | undefined;
   private i = 0;
 
@@ -50,9 +50,9 @@ class Scanner {
   run(): void {
     while (this.i < this.src.length) {
       const c = this.src[this.i]!;
-      if (c === "\\") this.command();
-      else if (c === "^") this.script(SUPERSCRIPTS, "superscript");
-      else if (c === "_") this.script(SUBSCRIPTS, "subscript");
+      if (c === '\\') this.command();
+      else if (c === '^') this.script(SUPERSCRIPTS, 'superscript');
+      else if (c === '_') this.script(SUBSCRIPTS, 'subscript');
       else {
         this.out += c;
         this.i++;
@@ -67,15 +67,15 @@ class Scanner {
     const name = word(this.src.slice(this.i));
     this.i += name.length;
 
-    if (name === "") {
-      return this.bail("a lone \\ names no symbol", start);
+    if (name === '') {
+      return this.bail('a lone \\ names no symbol', start);
     }
 
-    if (name === "frac") {
+    if (name === 'frac') {
       const num = this.group();
       const den = this.group();
       if (num === undefined || den === undefined) {
-        return this.bail("\\frac needs two {…} groups to draw", start);
+        return this.bail('\\frac needs two {…} groups to draw', start);
       }
       this.out += this.nested(num) + FRAC_SLASH + this.nested(den);
       return;
@@ -120,12 +120,15 @@ class Scanner {
       return this.bail(`${quote(mark)} needs a symbol after it`, start);
     }
 
-    let small = "";
+    let small = '';
     for (let i = 0; i < content.length; i++) {
       const r = content[i]!;
-      if (r === "\\") {
+      if (r === '\\') {
         // \alpha^{\beta}: name the whole command.
-        return this.bail(`\\${word(content.slice(i + 1))} has no ${kind} form to draw`, start);
+        return this.bail(
+          `\\${word(content.slice(i + 1))} has no ${kind} form to draw`,
+          start,
+        );
       }
       const c = table.get(r);
       if (c === undefined) {
@@ -142,12 +145,12 @@ class Scanner {
    * Nesting is counted.
    */
   private group(): string[] | undefined {
-    if (this.i >= this.src.length || this.src[this.i] !== "{") return undefined;
+    if (this.i >= this.src.length || this.src[this.i] !== '{') return undefined;
 
     let depth = 0;
     for (let j = this.i; j < this.src.length; j++) {
-      if (this.src[j] === "{") depth++;
-      else if (this.src[j] === "}") {
+      if (this.src[j] === '{') depth++;
+      else if (this.src[j] === '}') {
         depth--;
         if (depth === 0) {
           const inner = this.src.slice(this.i + 1, j);
@@ -172,7 +175,7 @@ class Scanner {
 
   /** literal copies the source from `start` to the cursor through unrendered. */
   private literal(start: number): void {
-    this.out += this.src.slice(start, this.i).join("");
+    this.out += this.src.slice(start, this.i).join('');
   }
 
   private fail(message: string): void {
@@ -194,5 +197,5 @@ class Scanner {
 function word(rs: string[]): string {
   let n = 0;
   while (n < rs.length && /^[A-Za-z]$/.test(rs[n]!)) n++;
-  return rs.slice(0, n).join("");
+  return rs.slice(0, n).join('');
 }

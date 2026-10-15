@@ -4,8 +4,8 @@
 // store/s3lister.ts. The error for a path every lister declines is built in
 // store/claim.ts.
 
-import { compareStrings } from "../go/index.ts";
-import { BROWSES, claim } from "./claim.ts";
+import { compareStrings } from '../go/index.ts';
+import { BROWSES, claim } from './claim.ts';
 
 /**
  * How many entries one page of a listing holds. Sent to S3 as max-keys, and
@@ -28,7 +28,7 @@ export interface Named {
  * prefixes together in UTF-8 order.
  */
 export function pageKey(named: Named): string {
-  return `${named.folder ? "d" : "f"}:${named.name}`;
+  return `${named.folder ? 'd' : 'f'}:${named.name}`;
 }
 
 /** byPageKey orders entries as their page keys do: folders first, then by name. */
@@ -88,13 +88,19 @@ export async function listWith(
   path: string,
   cursor?: string,
 ): Promise<Listing> {
-  return claim(listers, path, (l) => l.handles(path), BROWSES).list(path, cursor);
+  return claim(listers, path, (l) => l.handles(path), BROWSES).list(
+    path,
+    cursor,
+  );
 }
 
 /**
  * statWith stats a path through the first lister that claims it, with the
  * same error as listWith when none does.
  */
-export async function statWith(listers: readonly Lister[], path: string): Promise<Entry> {
+export async function statWith(
+  listers: readonly Lister[],
+  path: string,
+): Promise<Entry> {
   return claim(listers, path, (l) => l.handles(path), BROWSES).stat(path);
 }

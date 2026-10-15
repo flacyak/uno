@@ -7,7 +7,7 @@
 // part is opened through the handlers given, so a part can be on a disk, in
 // a bucket or in memory.
 
-import { concat } from "../go/index.ts";
+import { concat } from '../go/index.ts';
 import {
   UnsupportedEncodingError,
   bomLength,
@@ -15,13 +15,13 @@ import {
   encodingName,
   openFormat,
   peekFormat,
-} from "../ingest/index.ts";
-import type { Encoding, Format, HeaderMode } from "../ingest/index.ts";
-import { openWith } from "./index.ts";
-import type { ByteSource, FileHandler, SingleRef } from "./index.ts";
+} from '../ingest/index.ts';
+import type { Encoding, Format, HeaderMode } from '../ingest/index.ts';
+import { openWith } from './index.ts';
+import type { ByteSource, FileHandler, SingleRef } from './index.ts';
 // Type only.
-import type { Provider } from "../plugin/index.ts";
-import { messageOf } from "../said/index.ts";
+import type { Provider } from '../plugin/index.ts';
+import { messageOf } from '../said/index.ts';
 
 /**
  * Whether the parts have a header row. With "first", the first part's header
@@ -134,20 +134,20 @@ export interface NamedColumn {
  * differs in several ways, the most specific kind is reported.
  */
 export type Disagreement =
-  | { kind: "encoding"; first: Encoding; part: Encoding }
-  | { kind: "delimiter"; first: string; part: string }
+  | { kind: 'encoding'; first: Encoding; part: Encoding }
+  | { kind: 'delimiter'; first: string; part: string }
   /** Columns in the same places under other names. */
-  | { kind: "renamed"; columns: ColumnDifference[] }
+  | { kind: 'renamed'; columns: ColumnDifference[] }
   /** The same names in another order: every column that is out of place. */
-  | { kind: "reordered"; columns: ColumnDifference[] }
+  | { kind: 'reordered'; columns: ColumnDifference[] }
   /** Columns of the first part this one leaves out, the rest in order. */
-  | { kind: "missing"; columns: NamedColumn[] }
+  | { kind: 'missing'; columns: NamedColumn[] }
   /** Columns this part adds beyond the first, the rest in order. */
-  | { kind: "extra"; columns: NamedColumn[] }
+  | { kind: 'extra'; columns: NamedColumn[] }
   /** Headers of different lengths, and the first column that differs. */
-  | { kind: "columns"; first: number; part: number; column: ColumnDifference }
+  | { kind: 'columns'; first: number; part: number; column: ColumnDifference }
   /** Under a "none" header: first rows with different numbers of fields. */
-  | { kind: "fields"; first: number; part: number };
+  | { kind: 'fields'; first: number; part: number };
 
 /**
  * DisagreementError is thrown when a part reads differently from the first
@@ -198,7 +198,8 @@ export function partMap(extents: readonly Extent[]): PartMap {
   let at = 0;
   extents.forEach((extent, part) => {
     const given = Math.max(0, extent.bytes - extent.skip);
-    const newline = given > 0 && extent.unterminated && part < extents.length - 1;
+    const newline =
+      given > 0 && extent.unterminated && part < extents.length - 1;
     const end = at + given + (newline ? NEWLINE_BYTES : 0);
     spans.push({ part, start: at, end, skip: extent.skip, newline });
     at = end;
@@ -241,7 +242,8 @@ export async function openMulti(
   parts: readonly Part[],
   header: HeaderMode,
 ): Promise<MultiSource> {
-  if (parts.length === 0) throw new Error("a multi-file source needs at least one part");
+  if (parts.length === 0)
+    throw new Error('a multi-file source needs at least one part');
   const opened = new Parts(handlers, parts, header);
   try {
     await opened.measure();
@@ -255,12 +257,20 @@ export async function openMulti(
 
   /** The bytes of one span from `from` up to `to`, both joined offsets inside
    * it. */
-  async function piece(span: Span, from: number, to: number): Promise<Uint8Array> {
+  async function piece(
+    span: Span,
+    from: number,
+    to: number,
+  ): Promise<Uint8Array> {
     const body = span.end - (span.newline ? NEWLINE_BYTES : 0);
     // Only the virtual newline is wanted, and it is made here.
     if (from >= body) return Uint8Array.of(LF);
     const length = Math.min(to, body) - from;
-    const bytes = await opened.read(span.part, span.skip + (from - span.start), length);
+    const bytes = await opened.read(
+      span.part,
+      span.skip + (from - span.start),
+      length,
+    );
     return to > body ? concat([bytes, Uint8Array.of(LF)]) : bytes;
   }
 
@@ -280,10 +290,20 @@ export async function openMulti(
       // Pieces of each span in order. A read inside one part returns that
       // part's bytes as they came.
       const pieces: Uint8Array[] = [];
-      for (let i = first; i < map.spans.length && map.spans[i]!.start < end; i++) {
+      for (
+        let i = first;
+        i < map.spans.length && map.spans[i]!.start < end;
+        i++
+      ) {
         const span = map.spans[i]!;
         if (span.end === span.start) continue;
-        pieces.push(await piece(span, Math.max(start, span.start), Math.min(end, span.end)));
+        pieces.push(
+          await piece(
+            span,
+            Math.max(start, span.start),
+            Math.min(end, span.end),
+          ),
+        );
       }
       return pieces.length === 1 ? pieces[0]! : concat(pieces);
     },
@@ -313,7 +333,11 @@ class Parts {
   private readonly parts: readonly Part[];
   private readonly header: HeaderMode;
 
-  constructor(handlers: readonly FileHandler[], parts: readonly Part[], header: HeaderMode) {
+  constructor(
+    handlers: readonly FileHandler[],
+    parts: readonly Part[],
+    header: HeaderMode,
+  ) {
     this.handlers = handlers;
     this.parts = parts;
     this.header = header;
@@ -323,13 +347,16 @@ class Parts {
 
   /** measure opens every part that came bare. */
   async measure(): Promise<void> {
-    await this.each((i) => (this.extents[i] === undefined ? this.source(i) : undefined));
+    await this.each((i) =>
+      this.extents[i] === undefined ? this.source(i) : undefined,
+    );
   }
 
   /** Every part's extent, once `measure` has been through them. */
   measured(): Extent[] {
     return this.extents.map((extent, i) => {
-      if (extent === undefined) throw new Error(this.named(i, "it has not been measured"));
+      if (extent === undefined)
+        throw new Error(this.named(i, 'it has not been measured'));
       return extent;
     });
   }
@@ -349,7 +376,9 @@ class Parts {
     }
     // A short read would shift every row after it.
     if (bytes.length !== length) {
-      throw new PartError(this.named(i, "it changed since it was opened · open the source again"));
+      throw new PartError(
+        this.named(i, 'it changed since it was opened · open the source again'),
+      );
     }
     return bytes;
   }
@@ -371,7 +400,11 @@ class Parts {
     const opening = this.sources.filter((s) => s !== undefined);
     for (let i = 0; i < this.sources.length; i++) this.sources[i] = undefined;
     const settled = await Promise.allSettled(opening);
-    await Promise.all(settled.filter((o) => o.status === "fulfilled").map((o) => o.value.close()));
+    await Promise.all(
+      settled
+        .filter((o) => o.status === 'fulfilled')
+        .map((o) => o.value.close()),
+    );
   }
 
   /**
@@ -395,18 +428,26 @@ class Parts {
       const was = this.extents[i];
       // Where the part came with an extent and a saved version, and the place
       // reports a different version, the part is refused before it is read.
-      const saved = was !== undefined && "path" in ref ? ref.version : undefined;
-      if (saved !== undefined && source.version !== undefined && source.version !== saved) {
-        throw new Error("it is not the version this source was saved against");
+      const saved =
+        was !== undefined && 'path' in ref ? ref.version : undefined;
+      if (
+        saved !== undefined &&
+        source.version !== undefined &&
+        source.version !== saved
+      ) {
+        throw new Error('it is not the version this source was saved against');
       }
       const extent: Extent = {
         bytes: source.size,
         skip: await this.skip(i, source),
-        unterminated: source.size > 0 && (await source.read(source.size - 1, 1))[0] !== LF,
+        unterminated:
+          source.size > 0 && (await source.read(source.size - 1, 1))[0] !== LF,
       };
       if (was !== undefined && !same(was, extent)) {
         const sizes =
-          was.bytes === extent.bytes ? "" : ` · it is ${extent.bytes} bytes and was ${was.bytes}`;
+          was.bytes === extent.bytes
+            ? ''
+            : ` · it is ${extent.bytes} bytes and was ${was.bytes}`;
         throw new Error(`it is not the file this source was made from${sizes}`);
       }
       this.extents[i] = extent;
@@ -445,14 +486,21 @@ class Parts {
    * formatOrDiffers is `format`, with an unsupported encoding reported as an
    * encoding disagreement against the first part.
    */
-  private async formatOrDiffers(i: number, source: ByteSource): Promise<Format | undefined> {
+  private async formatOrDiffers(
+    i: number,
+    source: ByteSource,
+  ): Promise<Format | undefined> {
     try {
       return await this.format(i, source);
     } catch (err) {
       if (!(err instanceof UnsupportedEncodingError)) throw err;
       const first = await this.firstFormat();
       if (first === undefined) throw err;
-      this.refuse(i, { kind: "encoding", first: first.encoding, part: err.encoding });
+      this.refuse(i, {
+        kind: 'encoding',
+        first: first.encoding,
+        part: err.encoding,
+      });
     }
   }
 
@@ -463,7 +511,8 @@ class Parts {
    */
   private refuse(i: number, differs: Disagreement): never {
     const refusal = new DisagreementError(this.parts, i, differs);
-    if (this.refused === undefined || i < this.refused.part) this.refused = refusal;
+    if (this.refused === undefined || i < this.refused.part)
+      this.refused = refusal;
     throw refusal;
   }
 
@@ -474,7 +523,7 @@ class Parts {
    */
   private format(i: number, source: ByteSource): Promise<Format | undefined> {
     const name = this.parts[i]!.ref.name;
-    return this.header === "first" && i === 0
+    return this.header === 'first' && i === 0
       ? openFormat(name, source)
       : peekFormat(name, source, this.header);
   }
@@ -494,7 +543,9 @@ class Parts {
    * that started. It stops starting new ones after the first failure, and
    * throws the failure of the earliest part that failed.
    */
-  private async each(run: (i: number) => Promise<unknown> | undefined): Promise<void> {
+  private async each(
+    run: (i: number) => Promise<unknown> | undefined,
+  ): Promise<void> {
     let next = 0;
     const failures: Array<{ part: number; reason: unknown }> = [];
     const worker = async (): Promise<void> => {
@@ -508,7 +559,9 @@ class Parts {
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(OPENING, this.parts.length) }, worker));
+    await Promise.all(
+      Array.from({ length: Math.min(OPENING, this.parts.length) }, worker),
+    );
 
     const [first] = failures.toSorted((a, b) => a.part - b.part);
     if (first !== undefined) throw first.reason;
@@ -522,7 +575,8 @@ class Parts {
   /** failed wraps `err` in a PartError naming part `i`. An error that
    * already names one is returned as it is. */
   private failed(i: number, err: unknown): Error {
-    if (err instanceof PartError || err instanceof DisagreementError) return err;
+    if (err instanceof PartError || err instanceof DisagreementError)
+      return err;
     // A closed source is a failure of the whole, passed through as it is.
     if (err instanceof ClosedError) return err;
     return new PartError(this.named(i, messageOf(err)), { cause: err });
@@ -535,7 +589,7 @@ class PartError extends Error {}
 /** The refusal of a read that reaches a source after it was closed. */
 class ClosedError extends Error {
   constructor() {
-    super("the source was closed");
+    super('the source was closed');
   }
 }
 
@@ -544,17 +598,25 @@ class ClosedError extends Error {
  * where they agree. Encoding is checked first, then delimiter, then the
  * header, or under a "none" header, the field count of the first row.
  */
-function disagreement(first: Format, part: Format, header: HeaderMode): Disagreement | undefined {
+function disagreement(
+  first: Format,
+  part: Format,
+  header: HeaderMode,
+): Disagreement | undefined {
   if (first.encoding !== part.encoding) {
-    return { kind: "encoding", first: first.encoding, part: part.encoding };
+    return { kind: 'encoding', first: first.encoding, part: part.encoding };
   }
   if (first.delimiter !== part.delimiter) {
-    return { kind: "delimiter", first: first.delimiter, part: part.delimiter };
+    return { kind: 'delimiter', first: first.delimiter, part: part.delimiter };
   }
-  if (header === "none") {
+  if (header === 'none') {
     return first.columns.length === part.columns.length
       ? undefined
-      : { kind: "fields", first: first.columns.length, part: part.columns.length };
+      : {
+          kind: 'fields',
+          first: first.columns.length,
+          part: part.columns.length,
+        };
   }
   return headerDisagreement(first.columns, part.columns);
 }
@@ -577,19 +639,24 @@ function headerDisagreement(
     // Each header is sorted once. A header can be thousands of columns wide.
     const sorted = part.toSorted();
     const reordered = first.toSorted().every((name, at) => name === sorted[at]);
-    return { kind: reordered ? "reordered" : "renamed", columns: differing };
+    return { kind: reordered ? 'reordered' : 'renamed', columns: differing };
   }
 
   if (part.length < first.length) {
     const missing = without(first, part);
-    if (missing !== undefined) return { kind: "missing", columns: missing };
+    if (missing !== undefined) return { kind: 'missing', columns: missing };
   } else {
     const extra = without(part, first);
-    if (extra !== undefined) return { kind: "extra", columns: extra };
+    if (extra !== undefined) return { kind: 'extra', columns: extra };
   }
   // The shorter header is more than the longer with columns taken out, so
   // one of the columns they both have differs.
-  return { kind: "columns", first: first.length, part: part.length, column: differing[0]! };
+  return {
+    kind: 'columns',
+    first: first.length,
+    part: part.length,
+    column: differing[0]!,
+  };
 }
 
 /**
@@ -597,7 +664,10 @@ function headerDisagreement(
  * `shorter` is `longer` with columns taken out and the rest in order, and
  * undefined where it is anything else.
  */
-function without(longer: readonly string[], shorter: readonly string[]): NamedColumn[] | undefined {
+function without(
+  longer: readonly string[],
+  shorter: readonly string[],
+): NamedColumn[] | undefined {
   const left: NamedColumn[] = [];
   let kept = 0;
   longer.forEach((name, column) => {
@@ -611,27 +681,29 @@ function without(longer: readonly string[], shorter: readonly string[]): NamedCo
  * part's name. */
 function said(differs: Disagreement, first: string): string {
   switch (differs.kind) {
-    case "encoding":
+    case 'encoding':
       return `its text encoding is ${encodingName(differs.part)} and ${first}'s is ${encodingName(differs.first)}`;
-    case "delimiter":
+    case 'delimiter':
       return `it is ${delimiterName(differs.part)}-separated and ${first} is ${delimiterName(differs.first)}-separated`;
-    case "renamed":
+    case 'renamed':
       return listed(differs.columns, (c) => renamed(c, first));
-    case "reordered":
+    case 'reordered':
       return `its columns are in another order than ${first}'s · ${listed(differs.columns, (c) => renamed(c, first))}`;
-    case "missing":
+    case 'missing':
       return listed(
         differs.columns,
-        (c) => `it has no ${quoted(c.name)}, which is column ${c.column + 1} of ${first}`,
+        (c) =>
+          `it has no ${quoted(c.name)}, which is column ${c.column + 1} of ${first}`,
       );
-    case "extra":
+    case 'extra':
       return listed(
         differs.columns,
-        (c) => `its column ${c.column + 1} is ${quoted(c.name)}, which ${first} does not have`,
+        (c) =>
+          `its column ${c.column + 1} is ${quoted(c.name)}, which ${first} does not have`,
       );
-    case "columns":
+    case 'columns':
       return `it has ${counted(differs.part)} and ${first} has ${differs.first} · ${renamed(differs.column, first)}`;
-    case "fields":
+    case 'fields':
       return `its first row has ${counted(differs.part)} and ${first}'s has ${differs.first}`;
   }
 }
@@ -644,12 +716,12 @@ function renamed(c: ColumnDifference, first: string): string {
 function listed<T>(columns: readonly T[], say: (column: T) => string): string {
   const named = columns.slice(0, COLUMNS_NAMED).map(say);
   const rest = columns.length - named.length;
-  if (rest > 0) named.push(`and ${counted(rest, "more ")}`);
-  return named.join(" · ");
+  if (rest > 0) named.push(`and ${counted(rest, 'more ')}`);
+  return named.join(' · ');
 }
 
-function counted(n: number, more = ""): string {
-  return `${n} ${more}${n === 1 ? "column" : "columns"}`;
+function counted(n: number, more = ''): string {
+  return `${n} ${more}${n === 1 ? 'column' : 'columns'}`;
 }
 
 /** partLabel names part `i` for a person: its file, and its place in the
@@ -664,13 +736,17 @@ function quoted(name: string): string {
 }
 
 function same(a: Extent, b: Extent): boolean {
-  return a.bytes === b.bytes && a.skip === b.skip && a.unterminated === b.unterminated;
+  return (
+    a.bytes === b.bytes &&
+    a.skip === b.skip &&
+    a.unterminated === b.unterminated
+  );
 }
 
 // ------------------------------------------------------------ the handler
 
 /** The label for a source of several files, for errors. */
-const LABEL = "several files as one";
+const LABEL = 'several files as one';
 
 /** Every source multiFiles opened, so multiOf can tell one from any other
  * ByteSource. */
@@ -684,17 +760,20 @@ const joined = new WeakMap<ByteSource, MultiSource>();
 export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
   return {
     label: LABEL,
-    handles: (ref) => "parts" in ref,
+    handles: (ref) => 'parts' in ref,
 
     async open(ref) {
-      if (!("parts" in ref)) throw new Error(`${ref.name}: not several files read as one`);
+      if (!('parts' in ref))
+        throw new Error(`${ref.name}: not several files read as one`);
       const { name, parts, header } = ref;
       if (parts.length === 0) {
-        throw new Error(`${name} has no parts · several files read as one needs at least one`);
+        throw new Error(
+          `${name} has no parts · several files read as one needs at least one`,
+        );
       }
       // A ref may have come over a channel or out of a file, so a nested
       // PartsRef is checked for at run time.
-      const nested = parts.findIndex((part) => "parts" in part.ref);
+      const nested = parts.findIndex((part) => 'parts' in part.ref);
       if (nested >= 0) {
         throw new Error(
           `${name}: ${partLabel(parts, nested)} is several files itself · a part is one file`,
@@ -720,5 +799,9 @@ export function multiOf(source: ByteSource): MultiSource | undefined {
  * given: multiFiles over their handlers, for opening only.
  */
 export function multiProvider(providers: readonly Provider[]): Provider {
-  return { name: "multi", label: LABEL, files: multiFiles(providers.map((p) => p.files)) };
+  return {
+    name: 'multi',
+    label: LABEL,
+    files: multiFiles(providers.map((p) => p.files)),
+  };
 }

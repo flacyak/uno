@@ -6,53 +6,66 @@
 // another through an STS role; tries a connection; reads dropped bytes; and
 // saves a workspace and opens it again.
 
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { MessageChannel } from "node:worker_threads";
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { MessageChannel } from 'node:worker_threads';
 
-import { Engine, messagePort, serve } from "../../../src/engine/index.ts";
-import type { MessagePortLike, Reply, Request } from "../../../src/engine/index.ts";
-import type { Connection } from "../../../src/library/index.ts";
-import { sources } from "../../../src/plugin/index.ts";
-import { blobProvider, connectionsIn, saveConnection } from "../../../src/store/index.ts";
+import { Engine, messagePort, serve } from '../../../src/engine/index.ts';
+import type {
+  MessagePortLike,
+  Reply,
+  Request,
+} from '../../../src/engine/index.ts';
+import type { Connection } from '../../../src/library/index.ts';
+import { sources } from '../../../src/plugin/index.ts';
+import {
+  blobProvider,
+  connectionsIn,
+  saveConnection,
+} from '../../../src/store/index.ts';
 import {
   awsProfiles,
   connectionAuth,
   connectionSigning,
   diskProvider,
   nodeStore,
-} from "../../../src/store/node.ts";
-import { s3Provider, tryConnection } from "../../../src/store/s3.ts";
-import { bytes } from "../../testdata/sales-q3.ts";
-import { HOME_REGION } from "../regions.ts";
-import { KEYS, bucket } from "../standin.ts";
-import { sts } from "../stsstandin.ts";
+} from '../../../src/store/node.ts';
+import { s3Provider, tryConnection } from '../../../src/store/s3.ts';
+import { bytes } from '../../testdata/sales-q3.ts';
+import { HOME_REGION } from '../regions.ts';
+import { KEYS, bucket } from '../standin.ts';
+import { sts } from '../stsstandin.ts';
 
-const PROCESS = fileURLToPath(new URL("../../testdata/credential-process.mjs", import.meta.url));
+const PROCESS = fileURLToPath(
+  new URL('../../testdata/credential-process.mjs', import.meta.url),
+);
 
 /**
  * The keys the credential_process fixture prints, and the session STS hands
  * out.
  */
-const PRINTED = { accessKeyId: "AKIDPROCESS", secretAccessKey: "process/secret" };
-const SESSION = {
-  accessKeyId: "ASIDREADER",
-  secretAccessKey: "reader/secret",
-  sessionToken: "reader-token",
+const PRINTED = {
+  accessKeyId: 'AKIDPROCESS',
+  secretAccessKey: 'process/secret',
 };
-const READER = "arn:aws:iam::210987654321:role/uno-read";
+const SESSION = {
+  accessKeyId: 'ASIDREADER',
+  secretAccessKey: 'reader/secret',
+  sessionToken: 'reader-token',
+};
+const READER = 'arn:aws:iam::210987654321:role/uno-read';
 
 function connection(id: string, bucket: string, profile: string): Connection {
   return {
     format: 1,
     id,
     name: id,
-    provider: "s3",
+    provider: 's3',
     bucket,
-    prefix: "",
-    auth: { mode: "profile", profile },
+    prefix: '',
+    auth: { mode: 'profile', profile },
     created: undefined,
     modified: undefined,
   };
@@ -64,39 +77,41 @@ export default async function everything(): Promise<void> {
     new Map([[READER, { callers: [KEYS.accessKeyId], session: SESSION }]]),
   );
   const b = await bucket(undefined, HOME_REGION, undefined, {
-    "acme-vault": {
-      objects: new Map([["q3/ledger.csv", bytes]]),
-      keys: { ...PRINTED, sessionToken: "process-token", region: HOME_REGION },
+    'acme-vault': {
+      objects: new Map([['q3/ledger.csv', bytes]]),
+      keys: { ...PRINTED, sessionToken: 'process-token', region: HOME_REGION },
     },
-    "acme-finance-lake": {
-      objects: new Map([["exports/ledger.csv", bytes]]),
+    'acme-finance-lake': {
+      objects: new Map([['exports/ledger.csv', bytes]]),
       keys: { ...SESSION, region: HOME_REGION },
     },
   });
 
   // A temp home with three profiles: plain keys, credential_process, and a
   // role.
-  const home = await mkdtemp(join(tmpdir(), "uno-reach-"));
-  const runs = join(home, "runs");
-  await writeFile(runs, "");
+  const home = await mkdtemp(join(tmpdir(), 'uno-reach-'));
+  const runs = join(home, 'runs');
+  await writeFile(runs, '');
   const later = new Date(Date.now() + 60 * 60_000).toISOString();
-  const program = [process.execPath, PROCESS, runs, later].map((w) => `"${w}"`).join(" ");
+  const program = [process.execPath, PROCESS, runs, later]
+    .map((w) => `"${w}"`)
+    .join(' ');
   await writeFile(
-    join(home, "config"),
+    join(home, 'config'),
     [
       `[profile finance]\nregion = ${HOME_REGION}\n`,
       `[profile vault]\ncredential_process = ${program}\nregion = ${HOME_REGION}\n`,
       `[profile reader]\nrole_arn = ${READER}\nsource_profile = finance\nregion = ${HOME_REGION}\n`,
-    ].join("\n"),
+    ].join('\n'),
   );
   await writeFile(
-    join(home, "credentials"),
+    join(home, 'credentials'),
     `[finance]\naws_access_key_id = ${KEYS.accessKeyId}\naws_secret_access_key = ${KEYS.secretAccessKey}\n`,
   );
   const env = {
     HOME: home,
-    AWS_CONFIG_FILE: join(home, "config"),
-    AWS_SHARED_CREDENTIALS_FILE: join(home, "credentials"),
+    AWS_CONFIG_FILE: join(home, 'config'),
+    AWS_SHARED_CREDENTIALS_FILE: join(home, 'credentials'),
     AWS_ENDPOINT_URL_STS: role.endpoint,
     AWS_ACCESS_KEY_ID: KEYS.accessKeyId,
     AWS_SECRET_ACCESS_KEY: KEYS.secretAccessKey,
@@ -106,10 +121,18 @@ export default async function everything(): Promise<void> {
   };
 
   const store = nodeStore();
-  const folder = join(home, "connections");
+  const folder = join(home, 'connections');
   await mkdir(folder);
-  await saveConnection(store, folder, connection("vault", "acme-vault", "vault"));
-  await saveConnection(store, folder, connection("lake", "acme-finance-lake", "reader"));
+  await saveConnection(
+    store,
+    folder,
+    connection('vault', 'acme-vault', 'vault'),
+  );
+  await saveConnection(
+    store,
+    folder,
+    connection('lake', 'acme-finance-lake', 'reader'),
+  );
   const kept = connectionsIn(store, folder);
   const auth = connectionAuth(env);
 
@@ -130,18 +153,21 @@ export default async function everything(): Promise<void> {
       {
         connections: kept,
         signIns: async () => ({
-          modes: ["machine", "profile", "public"],
+          modes: ['machine', 'profile', 'public'],
           profiles: await awsProfiles(env),
         }),
-        test: (c) => tryConnection(c, { sign: (x) => auth.of(x), endpoint: b.endpoint }),
+        test: (c) =>
+          tryConnection(c, { sign: (x) => auth.of(x), endpoint: b.endpoint }),
       },
     );
-    return new Engine(messagePort<Reply, Request>(port2 as unknown as MessagePortLike));
+    return new Engine(
+      messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
+    );
   }
 
-  const local = join(home, "sales-q3.csv");
+  const local = join(home, 'sales-q3.csv');
   await writeFile(local, bytes);
-  const uno = join(home, "q3.uno");
+  const uno = join(home, 'q3.uno');
 
   const first = engine();
   try {
@@ -149,23 +175,35 @@ export default async function everything(): Promise<void> {
     await first.signIns();
     await first.list(home);
     await first.stat(local);
-    await first.peek({ name: "sales-q3.csv", path: local });
-    await first.open({ name: "sales-q3.csv", path: local });
-    await first.list("s3://acme-exports/2025/");
-    await first.stat("s3://acme-exports/2025/sales-q3.csv");
-    await first.open({ name: "ads.csv", path: "s3://acme-exports/2025/sales-q3.csv" });
-    await first.open({ name: "vault.csv", path: "s3://acme-vault/q3/ledger.csv" });
-    await first.open({ name: "lake.csv", path: "s3://acme-finance-lake/exports/ledger.csv" });
-    await first.open({ name: "dropped.csv", blob: new Blob([bytes]) });
-    await first.tryConnection(connection("try", "acme-exports", "finance"));
-    await writeFile(uno, await first.save({ source: "sales-q3", cells: [], at: uno }, 1 << 20));
+    await first.peek({ name: 'sales-q3.csv', path: local });
+    await first.open({ name: 'sales-q3.csv', path: local });
+    await first.list('s3://acme-exports/2025/');
+    await first.stat('s3://acme-exports/2025/sales-q3.csv');
+    await first.open({
+      name: 'ads.csv',
+      path: 's3://acme-exports/2025/sales-q3.csv',
+    });
+    await first.open({
+      name: 'vault.csv',
+      path: 's3://acme-vault/q3/ledger.csv',
+    });
+    await first.open({
+      name: 'lake.csv',
+      path: 's3://acme-finance-lake/exports/ledger.csv',
+    });
+    await first.open({ name: 'dropped.csv', blob: new Blob([bytes]) });
+    await first.tryConnection(connection('try', 'acme-exports', 'finance'));
+    await writeFile(
+      uno,
+      await first.save({ source: 'sales-q3', cells: [], at: uno }, 1 << 20),
+    );
   } finally {
     first.close();
   }
 
   const second = engine();
   try {
-    await second.open({ name: "q3.uno", path: uno });
+    await second.open({ name: 'q3.uno', path: uno });
   } finally {
     second.close();
   }
