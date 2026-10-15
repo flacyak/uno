@@ -6,6 +6,8 @@
  * written, so 12345678901234567890 and 1.10 come back as they were.
  */
 
+import { pointerTo } from './format.ts';
+
 /** RFC 8259's number: an optional minus, digits, a fraction, an exponent. */
 const NUMBER = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
 /**
@@ -232,14 +234,6 @@ class Tokens {
     this.at = pattern.lastIndex;
     return true;
   }
-}
-
-/**
- * pointerTo returns the RFC 6901 pointer to member `name` of what `parent`
- * points to. A '~' in the name is written '~0', and a '/' is written '~1'.
- */
-function pointerTo(parent: string, name: string): string {
-  return `${parent}/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`;
 }
 
 /**
