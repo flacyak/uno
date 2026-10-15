@@ -8,6 +8,7 @@
 
 import { Refusal } from '@said';
 import type { ByteSource } from '@store';
+import type { Index, Indexed } from './reading.ts';
 
 export interface Tuning {
   /** Bytes a pass reads at a time. */
@@ -37,7 +38,7 @@ export const TUNING: Tuning = {
  * A block is a run of whole records, so any block can be read and decoded on
  * its own. A row's block is found by binary search over the block starts.
  */
-export class RowIndex {
+export class RowIndex implements Index {
   /** Where the first data record starts. */
   readonly start: number;
   readonly size: number;
@@ -120,6 +121,11 @@ export class RowIndex {
     const end =
       block + 1 < this.blocks ? this.firsts[block + 1]! : this.counted;
     return [this.firsts[block]!, end];
+  }
+
+  /** indexed is the bytes scanned so far, out of the file's size. */
+  indexed(): Indexed {
+    return { done: this.scanned, total: this.size };
   }
 
   /** Returns the byte range of a block, as [start, end). */
