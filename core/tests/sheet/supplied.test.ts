@@ -1,7 +1,7 @@
 /**
- * @fileoverview Tests for a supplied column, such as `_file` when several files
- * are read as one. The schema holds only its position and what it shows;
- * finishRows writes the supplied value into each row.
+ * @fileoverview Tests for supplied columns, such as `_file` when several files
+ * are read as one. The schema holds only each one's position and what it
+ * shows; finishRows writes each row's supplied values into it.
  */
 
 import { describe, expect, test } from 'vite-plus/test';
@@ -35,6 +35,37 @@ function schema(): Schema {
     { col: FILE, shows: 'which file each row came from' },
   ]);
 }
+
+/** Two supplied columns, as a dataset's partition keys are. */
+const STAMP = 2;
+const YEAR = 3;
+const MONTH = 4;
+const PARTITIONED = ['region', 'units', 'stamp', 'year', 'month'];
+const IN_JANUARY = ['2024', '1'];
+const IN_FEBRUARY = ['2024', '2'];
+const PARTITIONS = [IN_JANUARY, IN_JANUARY, IN_FEBRUARY];
+
+/** Each partition column, and what an edit to it is refused with. */
+const PARTITION_REFUSALS: ReadonlyArray<readonly [number, string]> = [
+  [YEAR, 'edit 1: year shows the year in its path, so it cannot be changed'],
+  [MONTH, 'edit 1: month shows the month in its path, so it cannot be changed'],
+];
+
+function partitioned(): Schema {
+  return new Schema(PARTITIONED, SOURCES.length, [
+    { col: YEAR, shows: 'the year in its path' },
+    { col: MONTH, shows: 'the month in its path' },
+  ]);
+}
+
+/** Every operation, with a value and a row it can name. */
+const OPS: Array<[Edit['op'], string, number]> = [
+  [Op.Set, 'c.csv', 0],
+  [Op.Note, 'x^2', 0],
+  [Op.Apply, 'trim', NO_ROW],
+  [Op.Bind, 'units * 2', NO_ROW],
+  [Op.Unbind, '', NO_ROW],
+];
 
 function edit(
   op: Edit['op'],
@@ -79,14 +110,7 @@ describe('a supplied column', () => {
 
   test('refuses every operation on it, and is left as it was', () => {
     const s = schema();
-    const cases: Array<[Edit['op'], string, number]> = [
-      [Op.Set, 'c.csv', 0],
-      [Op.Note, 'x^2', 0],
-      [Op.Apply, 'trim', NO_ROW],
-      [Op.Bind, 'units * 2', NO_ROW],
-      [Op.Unbind, '', NO_ROW],
-    ];
-    for (const [op, now, row] of cases) {
+    for (const [op, now, row] of OPS) {
       expect(() => s.record(edit(op, FILE, now, row)), op).toThrow(REFUSAL);
     }
     expect(s.empty).toBe(true);
@@ -97,5 +121,27 @@ describe('a supplied column', () => {
     expect(finishRows(plain, 0, SOURCES, FILES).map((f) => f.shown)).toEqual(
       SOURCES,
     );
+  });
+});
+
+describe('two supplied columns', () => {
+  test('each refuse every operation, naming what each shows', () => {
+    const s = partitioned();
+    for (const [col, refusal] of PARTITION_REFUSALS) {
+      for (const [op, now, row] of OPS) {
+        expect(() => s.record(edit(op, col, now, row)), op).toThrow(refusal);
+      }
+    }
+    expect(s.empty).toBe(true);
+  });
+
+  test('are each filled in and read by a formula, whatever the source has there', () => {
+    const s = partitioned();
+    s.record(edit(Op.Bind, STAMP, 'year * 100 + month'));
+    expect(finishRows(s, 0, SOURCES, PARTITIONS).map((f) => f.shown)).toEqual([
+      ['West', '4', '202401', '2024', '1'],
+      ['East', '5', '202401', '2024', '1'],
+      ['North', '', '202402', '2024', '2'],
+    ]);
   });
 });
