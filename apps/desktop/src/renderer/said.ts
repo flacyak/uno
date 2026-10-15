@@ -177,8 +177,12 @@ const SAYS: Sentences<Said> = {
   "tries-no-connection": m.refused_tries_no_connection,
 };
 
-/** Returns the message for one Said, in the current locale. */
+/**
+ * Returns the message for one Said, in the current locale. A kind this build
+ * does not have, from a newer engine behind a hosted page, asks for a reload.
+ */
 export function say(s: Said): string {
+  if (!Object.hasOwn(SAYS, s.t)) return m.said_unknown();
   // The cast is needed because the table entry is typed by kind and s is the union.
   return (SAYS[s.t] as (s: Said) => string)(s);
 }
