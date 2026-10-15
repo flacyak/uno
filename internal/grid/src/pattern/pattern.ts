@@ -4,12 +4,16 @@
 // It reads only the edit log. `propose` returns a question;
 // applying the answer is `sheet.apply`.
 
-import { compareStrings, quoteMeta } from "../go/index.ts";
-import type { Program } from "../program/index.ts";
-import { MAX_STEPS, apply as applyProgram, text as programText } from "../program/index.ts";
-import type { Edit, Sheet, Written } from "../sheet/index.ts";
-import { Op, settled } from "../sheet/index.ts";
-import type { Example } from "./induce.ts";
+import { compareStrings, quoteMeta } from '../go/index.ts';
+import type { Program } from '../program/index.ts';
+import {
+  MAX_STEPS,
+  apply as applyProgram,
+  text as programText,
+} from '../program/index.ts';
+import type { Edit, Sheet, Written } from '../sheet/index.ts';
+import { Op, settled } from '../sheet/index.ts';
+import type { Example } from './induce.ts';
 import {
   decoration,
   droppedChars,
@@ -19,8 +23,8 @@ import {
   replaceSrc,
   rewrites,
   unionDeletion,
-} from "./induce.ts";
-import { restructures } from "./restructure.ts";
+} from './induce.ts';
+import { restructures } from './restructure.ts';
 
 /** MIN_EXAMPLES is how many changed cells a column needs for a proposal. */
 export const MIN_EXAMPLES = 3;
@@ -120,7 +124,13 @@ export function snap(s: Sheet | undefined): Snapshot {
       written.push(s.written(row, col));
     }
 
-    cols.push({ col, header: s.columns[col]!.header, values, written, examples: ex });
+    cols.push({
+      col,
+      header: s.columns[col]!.header,
+      values,
+      written,
+      examples: ex,
+    });
   }
   return new Snapshot(cols);
 }
@@ -168,13 +178,18 @@ export class Survey {
    * when there are too few examples, or when every candidate fails to
    * reproduce them.
    */
-  static start(col: number, header: string, examples: Example[]): Survey | undefined {
+  static start(
+    col: number,
+    header: string,
+    examples: Example[],
+  ): Survey | undefined {
     if (examples.length < MIN_EXAMPLES) return undefined;
 
     const readings: Reading[] = [];
     for (const w of WITNESSES) {
       const cands = induce(examples, w.each);
-      if (w.together !== undefined) cands.push(...parseAll(w.together(examples)));
+      if (w.together !== undefined)
+        cands.push(...parseAll(w.together(examples)));
       readings.push(reading(examples, cands));
     }
     // Two-step programs are read last. The ranking prefers fewer steps, so
@@ -196,7 +211,11 @@ export class Survey {
    * where anything was; a cell a program is already settled over is left as
    * it is.
    */
-  add(values: readonly string[], first: number, written: readonly (Written | undefined)[]): void {
+  add(
+    values: readonly string[],
+    first: number,
+    written: readonly (Written | undefined)[],
+  ): void {
     for (let i = 0; i < this.readings.length; i++) {
       const r = this.readings[i]!;
       scan(r, values, first, written);
@@ -240,7 +259,8 @@ export class Survey {
         prog: top.prog,
         affects: top.affects,
         sample: top.sample.slice(),
-        ambiguous: scored.length > 1 && r.classOf[scored[0]!] !== r.classOf[scored[1]!],
+        ambiguous:
+          scored.length > 1 && r.classOf[scored[0]!] !== r.classOf[scored[1]!],
       };
     }
     return undefined;
@@ -261,7 +281,10 @@ interface Witness {
  * The witnesses, tried in order. Rewrites are read first; restructures are
  * used only when every rewrite leaves the column as it is.
  */
-const WITNESSES: Witness[] = [{ each: rewrites, together: unionDeletion }, { each: restructures }];
+const WITNESSES: Witness[] = [
+  { each: rewrites, together: unionDeletion },
+  { each: restructures },
+];
 
 /**
  * compose builds two-step programs: first remove one dropped character (or a
@@ -271,14 +294,17 @@ function compose(ex: Example[]): Program[] {
   const chars = droppedChars(ex);
   if (chars.length === 0 || chars.length > MAX_FIRST_STEPS) return [];
 
-  const firsts: string[] = chars.map((r) => replaceSrc(quoteMeta(r), ""));
+  const firsts: string[] = chars.map((r) => replaceSrc(quoteMeta(r), ''));
   if (chars.length > 1 && decoration(chars)) {
-    firsts.push(replaceSrc("[" + quoteClass(chars) + "]", ""));
+    firsts.push(replaceSrc('[' + quoteClass(chars) + ']', ''));
   }
 
   const out: Program[] = [];
   for (const first of parseAll(firsts)) {
-    const rest: Example[] = ex.map((e) => ({ was: applyProgram(first, e.was), now: e.now }));
+    const rest: Example[] = ex.map((e) => ({
+      was: applyProgram(first, e.was),
+      now: e.now,
+    }));
     for (const w of WITNESSES) {
       for (const second of induce(rest, w.each)) {
         if (first.length + second.length > MAX_STEPS) continue;
@@ -339,11 +365,13 @@ function scan(
     for (let j = 0; j < r.cands.length; j++) {
       const c = r.cands[j]!;
       // A cell the program is already settled over is left as it is.
-      const out = w !== undefined && settled(c.prog, w) ? v : applyProgram(c.prog, v);
+      const out =
+        w !== undefined && settled(c.prog, w) ? v : applyProgram(c.prog, v);
       outs[j] = out;
       if (out === v) continue;
       c.affects++;
-      if (c.sample.length < SAMPLE_SIZE) c.sample.push({ row: first + i, was: v, now: out });
+      if (c.sample.length < SAMPLE_SIZE)
+        c.sample.push({ row: first + i, was: v, now: out });
     }
     if (r.classes.length > 0) split(r, outs);
   }
@@ -354,7 +382,8 @@ function split(r: Reading, outs: readonly string[]): void {
   let differs = false;
   for (const members of r.classes) {
     const lead = outs[members[0]!];
-    for (let m = 1; m < members.length && !differs; m++) differs = outs[members[m]!] !== lead;
+    for (let m = 1; m < members.length && !differs; m++)
+      differs = outs[members[m]!] !== lead;
     if (differs) break;
   }
   if (!differs) return;
@@ -415,7 +444,7 @@ export function gather(log: readonly Edit[]): Map<number, Example[]> {
 
     const c = key(e.row, e.col);
     if (!first.has(c)) {
-      first.set(c, e.was ?? "");
+      first.set(c, e.was ?? '');
       pushTo(order, e.col, c);
     }
     last.set(c, e.now);

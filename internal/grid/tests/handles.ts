@@ -4,12 +4,12 @@
 // the end. The failure message includes the stack from where each leaked
 // handle was opened.
 
-import fs from "node:fs";
-import type { FileHandle } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
-import { setTimeout as sleep } from "node:timers/promises";
+import fs from 'node:fs';
+import type { FileHandle } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { setTimeout as sleep } from 'node:timers/promises';
 
-import { afterAll, beforeAll } from "vite-plus/test";
+import { afterAll, beforeAll } from 'vite-plus/test';
 
 /**
  * How long to wait for late closes after the last test. An engine closes its
@@ -27,7 +27,8 @@ const unclosed = new Map<FileHandle, string>();
 
 const watched: typeof open = async (...args) => {
   // Captured before the await so the caller is still on the stack.
-  const where = new Error(`${String(args[0])} was opened and never closed`).stack ?? "";
+  const where =
+    new Error(`${String(args[0])} was opened and never closed`).stack ?? '';
   const handle = await open(...args);
   unclosed.set(handle, where);
   // Every way of closing a handle (direct call, stream, `await using`) goes
@@ -42,14 +43,22 @@ const watched: typeof open = async (...args) => {
 
 /** Replaces `fs.promises.open` with `fn` for both CJS and ESM importers. */
 function watch(fn: typeof open): void {
-  Object.defineProperty(fs.promises, "open", { value: fn, writable: true, configurable: true });
+  Object.defineProperty(fs.promises, 'open', {
+    value: fn,
+    writable: true,
+    configurable: true,
+  });
   syncBuiltinESMExports();
 }
 
 beforeAll(() => watch(watched));
 
 afterAll(async () => {
-  for (let waited = 0; unclosed.size > 0 && waited < SETTLE_MS; waited += LOOK_MS) {
+  for (
+    let waited = 0;
+    unclosed.size > 0 && waited < SETTLE_MS;
+    waited += LOOK_MS
+  ) {
     await sleep(LOOK_MS);
   }
   watch(open);
@@ -61,7 +70,7 @@ afterAll(async () => {
   await Promise.all(left.map(([handle]) => handle.close()));
   if (left.length > 0) {
     throw new Error(
-      `${left.length} of the files this test file opened were left open\n\n${left.map(([, where]) => where).join("\n\n")}`,
+      `${left.length} of the files this test file opened were left open\n\n${left.map(([, where]) => where).join('\n\n')}`,
     );
   }
 });

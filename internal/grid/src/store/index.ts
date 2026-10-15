@@ -5,8 +5,8 @@
 // browsed through a lister it lists. A kind of place outside both lists is
 // refused by name.
 
-import { compareStrings } from "../go/index.ts";
-import type { Connection, Formula } from "../library/index.ts";
+import { compareStrings } from '../go/index.ts';
+import type { Connection, Formula } from '../library/index.ts';
 import {
   EXT,
   fileName,
@@ -15,22 +15,35 @@ import {
   parseConnection,
   parseFormula,
   stampConnection,
-} from "../library/index.ts";
-import { JOINS, OPENS, claim } from "./claim.ts";
+} from '../library/index.ts';
+import { JOINS, OPENS, claim } from './claim.ts';
 // Type only. The handler that opens parts is re-exported below.
-import type { HeaderMode, Part } from "./multi.ts";
+import type { HeaderMode, Part } from './multi.ts';
 // Type only, so the run-time import graph stays one-way with the plugin
 // package.
-import type { Provider } from "../plugin/index.ts";
+import type { Provider } from '../plugin/index.ts';
 
 // Browsing is its own interface, in store/list.ts.
-export { listWith, statWith } from "./list.ts";
-export type { Entry, Listing, Lister } from "./list.ts";
+export { listWith, statWith } from './list.ts';
+export type { Entry, Listing, Lister } from './list.ts';
 
 // Several files read as one, in store/multi.ts. It opens its parts through
 // openWith.
-export { multiFiles, multiOf, multiProvider, openMulti, partMap } from "./multi.ts";
-export type { Extent, HeaderMode, MultiSource, Part, PartMap, Span } from "./multi.ts";
+export {
+  multiFiles,
+  multiOf,
+  multiProvider,
+  openMulti,
+  partMap,
+} from './multi.ts';
+export type {
+  Extent,
+  HeaderMode,
+  MultiSource,
+  Part,
+  PartMap,
+  Span,
+} from './multi.ts';
 
 /**
  * FileStore is a folder uno keeps its own files in: the formula library and
@@ -109,7 +122,7 @@ export interface PartsRef {
  * ref carries its own header mode. A single file has a header row.
  */
 export function headerModeOf(ref: FileRef): HeaderMode {
-  return "parts" in ref ? ref.header : "first";
+  return 'parts' in ref ? ref.header : 'first';
 }
 
 /**
@@ -147,8 +160,8 @@ export async function openWith(
   handlers: readonly FileHandler[],
   ref: FileRef,
 ): Promise<ByteSource> {
-  const where = "path" in ref ? ref.path : ref.name;
-  const refusal = "parts" in ref ? JOINS : OPENS;
+  const where = 'path' in ref ? ref.path : ref.name;
+  const refusal = 'parts' in ref ? JOINS : OPENS;
   return claim(handlers, where, (h) => h.handles(ref), refusal).open(ref);
 }
 
@@ -156,7 +169,10 @@ export async function openWith(
  * readAll opens a ref and reads all of it. For small files read at once: a
  * formula, a .uno, a config file.
  */
-export async function readAll(handlers: readonly FileHandler[], ref: FileRef): Promise<Uint8Array> {
+export async function readAll(
+  handlers: readonly FileHandler[],
+  ref: FileRef,
+): Promise<Uint8Array> {
   const file = await openWith(handlers, ref);
   try {
     return await file.read(0, file.size);
@@ -171,18 +187,22 @@ export async function readAll(handlers: readonly FileHandler[], ref: FileRef): P
  */
 export function blobFiles(): FileHandler {
   return {
-    label: "dropped files",
-    handles: (ref) => "blob" in ref,
+    label: 'dropped files',
+    handles: (ref) => 'blob' in ref,
     open: (ref) =>
-      "blob" in ref
+      'blob' in ref
         ? Promise.resolve(blobSource(ref.blob))
-        : Promise.reject(new Error(`${"path" in ref ? ref.path : ref.name}: not a dropped file`)),
+        : Promise.reject(
+            new Error(
+              `${'path' in ref ? ref.path : ref.name}: not a dropped file`,
+            ),
+          ),
   };
 }
 
 /** blobProvider is the dropped-file provider: blobFiles, for opening only. */
 export function blobProvider(): Provider {
-  return { name: "blob", label: "dropped files", files: blobFiles() };
+  return { name: 'blob', label: 'dropped files', files: blobFiles() };
 }
 
 /** blobSource reads a Blob: a File a person dropped, or bytes a test holds. */
@@ -203,7 +223,9 @@ export function bytesSource(bytes: Uint8Array): ByteSource {
   return {
     size: bytes.length,
     read: (offset, length) =>
-      Promise.resolve(bytes.subarray(offset, Math.min(offset + length, bytes.length))),
+      Promise.resolve(
+        bytes.subarray(offset, Math.min(offset + length, bytes.length)),
+      ),
     close: () => Promise.resolve(),
   };
 }
@@ -216,7 +238,7 @@ export interface LibraryLoad {
   failed: Error[];
 }
 
-const decoder = new TextDecoder("utf-8");
+const decoder = new TextDecoder('utf-8');
 const encoder = new TextEncoder();
 
 /**
@@ -224,7 +246,10 @@ const encoder = new TextEncoder();
  * fails to parse becomes an entry in `failed` and the rest still load. A
  * missing directory is an empty library.
  */
-export async function loadLibrary(store: FileStore, dir: string): Promise<LibraryLoad> {
+export async function loadLibrary(
+  store: FileStore,
+  dir: string,
+): Promise<LibraryLoad> {
   const { read, failed } = await readEach(store, dir, parseFormula, false);
   const formulas = read.map((r) => r.value);
 
@@ -236,7 +261,11 @@ export async function loadLibrary(store: FileStore, dir: string): Promise<Librar
  * saveFormula writes f to <dir>/<id>.unof through the store's atomic write
  * and returns the stamped copy.
  */
-export async function saveFormula(store: FileStore, dir: string, f: Formula): Promise<Formula> {
+export async function saveFormula(
+  store: FileStore,
+  dir: string,
+  f: Formula,
+): Promise<Formula> {
   const name = fileName(f.id);
   const { text, stamped } = formatFormula(f);
   await store.write(join(dir, name), encoder.encode(text));
@@ -260,7 +289,10 @@ async function readEach<T>(
   for (const entry of sorted ? listed.toSorted(compareStrings) : listed) {
     if (!entry.toLowerCase().endsWith(EXT)) continue;
     try {
-      const bytes = await readAll(store.files, { name: entry, path: join(dir, entry) });
+      const bytes = await readAll(store.files, {
+        name: entry,
+        path: join(dir, entry),
+      });
       read.push({ file: entry, value: parse(entry, decoder.decode(bytes)) });
     } catch (err) {
       failed.push(err as Error);
@@ -285,9 +317,15 @@ export interface ConnectionLoad {
  * the one a save writes. Otherwise the first in name order wins. Every other
  * file with that id becomes an entry in `failed` naming both files.
  */
-export async function loadConnections(store: FileStore, dir: string): Promise<ConnectionLoad> {
+export async function loadConnections(
+  store: FileStore,
+  dir: string,
+): Promise<ConnectionLoad> {
   const loaded = await readEach(store, dir, parseConnection, true);
-  const read = loaded.read.map(({ file, value }) => ({ file, connection: value }));
+  const read = loaded.read.map(({ file, value }) => ({
+    file,
+    connection: value,
+  }));
   const failed = loaded.failed;
 
   // The file a save writes to goes first for its id. The rest keep name order.
@@ -322,7 +360,7 @@ export async function saveConnection(
   dir: string,
   c: Connection,
 ): Promise<Connection> {
-  const name = fileName(c.id, "connection");
+  const name = fileName(c.id, 'connection');
   const stamped = stampConnection(c);
   const text = formatConnection(stamped);
   await store.write(join(dir, name), encoder.encode(text));
@@ -364,6 +402,6 @@ export function connectionsIn(store: FileStore, dir: string): Connections {
 }
 
 function join(dir: string, name: string): string {
-  if (dir === "") return name;
-  return dir.endsWith("/") ? dir + name : dir + "/" + name;
+  if (dir === '') return name;
+  return dir.endsWith('/') ? dir + name : dir + '/' + name;
 }

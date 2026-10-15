@@ -1,12 +1,19 @@
 // Package sheet holds one table per workspace.
 
-export { Sheet } from "./sheet.ts";
-export type { Column } from "./sheet.ts";
-export { Schema } from "./schema.ts";
-export type { Run, Supplied, Written } from "./schema.ts";
-export { ERR_CELL, finish, finishRows, formatValue, settled, valueAt } from "./pipeline.ts";
-export type { Finished } from "./pipeline.ts";
-export { NO_ROW, Op, editEquals } from "./edit.ts";
-export type { Edit } from "./edit.ts";
-export { SAMPLE_ROWS, inferKind, isDate } from "./kind.ts";
-export type { Inferred, Kind } from "./kind.ts";
+export { Sheet } from './sheet.ts';
+export type { Column } from './sheet.ts';
+export { Schema } from './schema.ts';
+export type { Run, Supplied, Written } from './schema.ts';
+export {
+  ERR_CELL,
+  finish,
+  finishRows,
+  formatValue,
+  settled,
+  valueAt,
+} from './pipeline.ts';
+export type { Finished } from './pipeline.ts';
+export { NO_ROW, Op, editEquals } from './edit.ts';
+export type { Edit } from './edit.ts';
+export { SAMPLE_ROWS, inferKind, isDate } from './kind.ts';
+export type { Inferred, Kind } from './kind.ts';

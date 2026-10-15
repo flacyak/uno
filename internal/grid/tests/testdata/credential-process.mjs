@@ -8,25 +8,25 @@
 // newer than this build reads, junk for a plain text prompt in place of JSON,
 // and fail for a program that exits 1 with a reason on stderr.
 
-import { appendFileSync } from "node:fs";
+import { appendFileSync } from 'node:fs';
 
-const [runs, expiration, answer = "keys"] = process.argv.slice(2);
-appendFileSync(runs, "ran\n");
+const [runs, expiration, answer = 'keys'] = process.argv.slice(2);
+appendFileSync(runs, 'ran\n');
 
-if (answer === "fail") {
-  process.stderr.write("vault is sealed\nsecond line nobody needs\n");
+if (answer === 'fail') {
+  process.stderr.write('vault is sealed\nsecond line nobody needs\n');
   process.exit(1);
 }
-if (answer === "junk") {
-  process.stdout.write("Enter your PIN:");
+if (answer === 'junk') {
+  process.stdout.write('Enter your PIN:');
   process.exit(0);
 }
 process.stdout.write(
   JSON.stringify({
-    Version: answer === "v2" ? 2 : 1,
-    AccessKeyId: "AKIDPROCESS",
-    SecretAccessKey: "process/secret",
-    SessionToken: "process-token",
-    ...(expiration === "none" ? {} : { Expiration: expiration }),
+    Version: answer === 'v2' ? 2 : 1,
+    AccessKeyId: 'AKIDPROCESS',
+    SecretAccessKey: 'process/secret',
+    SessionToken: 'process-token',
+    ...(expiration === 'none' ? {} : { Expiration: expiration }),
   }),
 );
