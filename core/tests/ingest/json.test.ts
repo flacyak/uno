@@ -8,7 +8,7 @@ import { describe, expect, test } from 'vite-plus/test';
 
 import { DEPTH_LIMIT, segmentsOf, walkLine } from '@ingest/json';
 import { jsonish } from './jsonish.ts';
-import { random } from './random.ts';
+import { random } from '@core-tests/random';
 
 /** How deep a line nests that would overflow the stack if walkLine read it. */
 const PAST_THE_STACK = 100_000;

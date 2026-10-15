@@ -8,8 +8,8 @@ import { describe, expect, test } from 'vite-plus/test';
 import { readAll } from '@ingest/csv';
 import { RecordScanner } from '@ingest/scan';
 import { piecewise, starts } from './chunks.ts';
-import type { Random } from './random.ts';
-import { random } from './random.ts';
+import type { Random } from '@core-tests/random';
+import { random } from '@core-tests/random';
 
 const encoder = new TextEncoder();
 const whole = new TextDecoder('utf-8');

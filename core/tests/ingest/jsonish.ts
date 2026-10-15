@@ -4,7 +4,7 @@
  * repeated names, half of them then broken at random.
  */
 
-import type { Random } from './random.ts';
+import type { Random } from '@core-tests/random';
 
 /** How deep a random line's values nest below its own object, at most. */
 const DEEPEST = 4;

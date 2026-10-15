@@ -10,8 +10,11 @@ const UINT32_VALUES = 2 ** 32;
 /** The odd constant mulberry32 adds to its state at each step. */
 const STEP = 0x6d2b79f5;
 
+/** A random number generator: numbers in [0, 1). */
+export type Random = () => number;
+
 /** random returns mulberry32 seeded with `seed`: numbers in [0, 1). */
-export function random(seed: number): () => number {
+export function random(seed: number): Random {
   let state = seed;
   return () => {
     state = (state + STEP) | 0;
