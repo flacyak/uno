@@ -26,15 +26,15 @@ const RUN_BEGINS = 4096;
 
 /** RecordBulkScanner is RecordScanner reporting begins in runs. */
 export class RecordBulkScanner implements LabScanner {
+  private readonly many: Many;
+
   state: State = LINE;
   crAt = 0;
   private readonly sep: number;
   private readonly begins = new Float64Array(RUN_BEGINS);
 
-  constructor(
-    comma: string,
-    private readonly many: Many,
-  ) {
+  constructor(comma: string, many: Many) {
+    this.many = many;
     this.sep = separatorByte(comma);
   }
 

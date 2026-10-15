@@ -168,14 +168,14 @@ export function findQuote(
 
 /** SwarScanner finds record starts four bytes at a time. */
 export class SwarScanner implements LabScanner {
+  private readonly begin: Begin;
+
   state: State = LINE;
   crAt = 0;
   private readonly sep: number;
 
-  constructor(
-    comma: string,
-    private readonly begin: Begin,
-  ) {
+  constructor(comma: string, begin: Begin) {
+    this.begin = begin;
     if (!LITTLE_ENDIAN)
       throw new Error('SwarScanner needs a little-endian machine');
     this.sep = separatorByte(comma);

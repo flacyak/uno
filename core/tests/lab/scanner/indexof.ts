@@ -29,14 +29,14 @@ const ABSENT = -1;
 
 /** IndexOfScanner finds record starts with indexOf in its inner loops. */
 export class IndexOfScanner implements LabScanner {
+  private readonly begin: Begin;
+
   state: State = LINE;
   crAt = 0;
   private readonly sep: number;
 
-  constructor(
-    comma: string,
-    private readonly begin: Begin,
-  ) {
+  constructor(comma: string, begin: Begin) {
+    this.begin = begin;
     this.sep = separatorByte(comma);
   }
 
