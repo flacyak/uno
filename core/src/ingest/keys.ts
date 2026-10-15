@@ -12,8 +12,15 @@
 import { suffixed } from './format.ts';
 import { segmentsOf } from './json.ts';
 
-/** How many columns keys may take in one JSON Lines file. */
+/**
+ * How many columns keys may take in one JSON Lines file. A line with a key
+ * past it keeps its whole text in the line column.
+ */
 export const JSON_COLUMNS_LIMIT = 1024;
+/** The name of the column that holds a line that does not lay out in full. */
+export const LINE_COLUMN = '_line';
+/** The line column's key: the pointer to the whole line. */
+export const LINE_KEY = '';
 /** What a column's name puts between its pointer's segments. */
 const SEGMENT_JOIN = '.';
 
@@ -36,7 +43,9 @@ function nameOf(key: string): string {
 
 /**
  * KeyRegistry places each key in a column of its own, in the order keys are
- * first seen, while keys hold fewer columns than its limit.
+ * first seen, while keys hold fewer columns than its limit. The line column
+ * is added the first time it is asked for, and the limit does not hold it
+ * back.
  */
 export class KeyRegistry {
   /** Every column so far, in order. */
@@ -70,13 +79,22 @@ export class KeyRegistry {
   place(key: string): number | undefined {
     const known = this.places.get(key);
     if (known !== undefined) return known;
-    if (this.all.length >= this.limit) return undefined;
+    const keyed = this.all.length - (this.places.has(LINE_KEY) ? 1 : 0);
+    if (keyed >= this.limit) return undefined;
     return this.add({ name: this.unique(nameOf(key)), key });
   }
 
   /** columnOf returns the column for `key` and adds none, for a decode. */
   columnOf(key: string): number | undefined {
     return this.places.get(key);
+  }
+
+  /** line returns the line column, added the first time it is asked for. */
+  line(): number {
+    return (
+      this.places.get(LINE_KEY) ??
+      this.add({ name: this.unique(LINE_COLUMN), key: LINE_KEY })
+    );
   }
 
   /** unique returns `name`, or it with headerOf's suffix when it is taken. */
