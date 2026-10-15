@@ -1,7 +1,7 @@
 /**
  * @fileoverview Random JSON Lines records for the test that holds walkLine to
- * JSON.parse: objects written with random whitespace, numbers and repeated
- * names.
+ * JSON.parse: objects written with random whitespace, escapes, numbers and
+ * repeated names.
  */
 
 import type { Random } from './random.ts';
@@ -14,6 +14,14 @@ const WIDEST = 4;
 const LONGEST_STRING = 6;
 /** The most digits after the first in a run, past where a double is exact. */
 const MOST_DIGITS = 22;
+/** Chance a character a string may hold raw is written as an escape. */
+const ESCAPE_CHANCE = 0.3;
+/** The first character a string may hold raw. */
+const FIRST_RAW = 0x20;
+/** The base a \u escape is written in. */
+const HEX = 16;
+/** How many hex digits a \u escape holds. */
+const HEX_WIDTH = 4;
 
 /** Names a member takes, few enough that a name often repeats. */
 const NAMES = [
@@ -55,6 +63,18 @@ const BLANKS = ['', '', '', ' ', '\t', '\n', '\r', ' \r\n'];
 const DIGITS = '0123456789'.split('');
 /** The digits a number's whole part starts with when it is not 0. */
 const NONZERO = '123456789'.split('');
+/** The two-character escape of each character that has one. */
+const SHORT_ESCAPES: ReadonlyMap<string, string> = new Map([
+  ['"', '\\"'],
+  ['\\', '\\\\'],
+  ['/', '\\/'],
+  ['\b', '\\b'],
+  ['\f', '\\f'],
+  ['\n', '\\n'],
+  ['\r', '\\r'],
+  ['\t', '\\t'],
+]);
+
 /** pick returns one of `from`, each as likely. */
 function pick<T>(rand: Random, from: readonly T[]): T {
   return from[Math.floor(rand() * from.length)]!;
@@ -83,6 +103,24 @@ function number(rand: Random): string {
   return sign + whole + fraction + exponent;
 }
 
+/** escaped returns one UTF-16 unit as a string writes it: raw, or escaped. */
+function escaped(rand: Random, unit: string): string {
+  const raw = unit !== '"' && unit !== '\\' && unit.charCodeAt(0) >= FIRST_RAW;
+  if (raw && rand() >= ESCAPE_CHANCE) return unit;
+  const hex = unit.charCodeAt(0).toString(HEX).padStart(HEX_WIDTH, '0');
+  const long = `\\u${pick(rand, [hex, hex.toUpperCase()])}`;
+  return pick(rand, [long, SHORT_ESCAPES.get(unit) ?? long]);
+}
+
+/**
+ * quoted returns `text` as a string, each UTF-16 unit raw or escaped, so a
+ * pair may be written half raw and half escaped.
+ */
+function quoted(rand: Random, text: string): string {
+  const units = text.split('').map((unit) => escaped(rand, unit));
+  return `"${units.join('')}"`;
+}
+
 /** spaced returns `token` with random whitespace around it. */
 function spaced(rand: Random, token: string): string {
   return pick(rand, BLANKS) + token + pick(rand, BLANKS);
@@ -97,7 +135,7 @@ function content(rand: Random): string {
 /** value returns a random value, nested `depth` levels below the line's. */
 function value(rand: Random, depth: number): string {
   const kinds = [
-    () => JSON.stringify(content(rand)),
+    () => quoted(rand, content(rand)),
     () => number(rand),
     () => pick(rand, ['true', 'false', 'null']),
   ];
@@ -113,7 +151,7 @@ function value(rand: Random, depth: number): string {
 /** object returns a random object, its names drawn from NAMES. */
 function object(rand: Random, depth: number): string {
   const members = Array.from({ length: upTo(rand, WIDEST) }, () => {
-    const name = spaced(rand, JSON.stringify(pick(rand, NAMES)));
+    const name = spaced(rand, quoted(rand, pick(rand, NAMES)));
     return `${name}:${spaced(rand, value(rand, depth))}`;
   });
   return `{${members.join(',') || pick(rand, BLANKS)}}`;
@@ -129,7 +167,7 @@ function array(rand: Random, depth: number): string {
 
 /**
  * jsonish returns a random JSON Lines record: one object, written with
- * random whitespace and number forms.
+ * random whitespace, escapes and number forms.
  */
 export function jsonish(rand: Random): string {
   return spaced(rand, object(rand, 0));
