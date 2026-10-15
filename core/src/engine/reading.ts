@@ -6,9 +6,11 @@
  * The View holds one Reading and asks it alone how its rows are read.
  */
 
-import type { Column, HeaderMode } from '@ingest';
+import type { Column, HeaderMode, RecordFormat } from '@ingest';
+import { Refusal } from '@said';
 import type { Said } from '@said';
 import type { ByteSource, MultiSource } from '@store';
+import type { RowIndex } from './rows.ts';
 
 /** Indexed is how much of a source's stored bytes its pass has accounted for. */
 export interface Indexed {
@@ -82,4 +84,59 @@ export interface Reading {
   runs(block: number): Promise<readonly Run[]>;
   /** Closes the stored bytes. */
   close(): Promise<void>;
+}
+
+/** Crossing is the runs of a block, found over the byte range it had then. */
+interface Crossing {
+  readonly start: number;
+  readonly end: number;
+  readonly runs: readonly Run[];
+}
+
+/**
+ * partRuns returns which part each row of a block came from, for parts
+ * joined as bytes.
+ *
+ * A block inside one part is one run. A block that crosses a part boundary
+ * is re-read up to its last part and scanned for row starts, and the result
+ * is cached for the byte range it was found over.
+ */
+export function partRuns(
+  name: string,
+  joined: MultiSource,
+  records: Pick<RecordFormat, 'scanner'>,
+  index: Pick<RowIndex, 'bytesOf'>,
+): (block: number) => Promise<readonly Run[]> {
+  const { map } = joined;
+  const crossings = new Map<number, Crossing>();
+  return async (block) => {
+    const [start, end] = index.bytesOf(block);
+    const first = map.partAt(start);
+    const last = map.partAt(end - 1);
+    if (first === undefined || last === undefined) {
+      throw new Refusal({ t: 'rows-past-files', name });
+    }
+    if (first === last) return [{ row: 0, part: first }];
+
+    const known = crossings.get(block);
+    if (known !== undefined && known.start === start && known.end === end) {
+      return known.runs;
+    }
+
+    // Rows from the last part's first byte on belong to it, so only the
+    // bytes before it are scanned.
+    const until = map.spans[last]!.start;
+    const runs: Run[] = [];
+    let row = 0;
+    const scanner = records.scanner((offset) => {
+      const part = map.partAt(offset)!;
+      if (runs.at(-1)?.part !== part) runs.push({ row, part });
+      row++;
+    });
+    scanner.push(await joined.read(start, until - start), start);
+    runs.push({ row, part: last });
+
+    crossings.set(block, { start, end, runs });
+    return runs;
+  };
 }
