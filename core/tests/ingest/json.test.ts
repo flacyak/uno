@@ -6,7 +6,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { DEPTH_LIMIT, walkLine } from '@ingest/json';
+import { DEPTH_LIMIT, segmentsOf, walkLine } from '@ingest/json';
 import { jsonish } from './jsonish.ts';
 import { random } from './random.ts';
 
@@ -305,5 +305,23 @@ describe('walkLine', () => {
     }
     expect(read).toBeGreaterThan(SEEDS * LEAST_SHARE);
     expect(SEEDS - read).toBeGreaterThan(SEEDS * LEAST_SHARE);
+  });
+});
+
+describe('segmentsOf', () => {
+  test('reads each pointer walkLine reports back into the names it passes through', () => {
+    const keys: string[] = [];
+    walkLine('{"a/b":{"m~n":"x","~1":{"":"y"}},"c":"z"}', (key) =>
+      keys.push(key),
+    );
+    expect(keys.map(segmentsOf)).toEqual([
+      ['a/b', 'm~n'],
+      ['a/b', '~1', ''],
+      ['c'],
+    ]);
+  });
+
+  test('the pointer to the whole line passes through no names', () => {
+    expect(segmentsOf('')).toEqual([]);
   });
 });
