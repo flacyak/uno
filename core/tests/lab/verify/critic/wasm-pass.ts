@@ -16,7 +16,7 @@
  * or the run throws.
  *
  * Run from core/:
- *   node --experimental-transform-types --disable-warning=ExperimentalWarning \
+ *   node --disable-warning=ExperimentalWarning \
  *     --expose-gc --import ../paths.js tests/lab/verify/critic/wasm-pass.ts \
  *     [--path /home/hech/.cache/uno-lab/sales-q3-50m.csv] [--samples 3] \
  *     [--cache warm|cold] [--check]

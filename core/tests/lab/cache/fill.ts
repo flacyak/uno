@@ -9,7 +9,7 @@
  * of full collections asked for once it got there.
  *
  * Usage, from core/:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/cache/fill.ts <file.csv> <level MB>...
  */
 

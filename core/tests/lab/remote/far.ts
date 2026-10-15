@@ -54,12 +54,7 @@ export async function farBucket(repeats: number): Promise<FarBucket> {
   const data: BucketData = { key: KEY, repeats };
   const worker = new Worker(WORKER, {
     workerData: data,
-    execArgv: [
-      '--experimental-transform-types',
-      '--disable-warning=ExperimentalWarning',
-      '--import',
-      PATHS.href,
-    ],
+    execArgv: ['--disable-warning=ExperimentalWarning', '--import', PATHS.href],
   });
 
   /** next resolves with the worker's next message of kind `t`. */

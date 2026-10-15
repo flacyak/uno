@@ -4,7 +4,7 @@
  * Uses an in-memory sales file and small numbers, times nothing.
  *
  * Usage, from core/:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/cache/stop.ts
  */
 

@@ -75,9 +75,11 @@ describe('sessions', () => {
     const first = await engineSession(reach(), SMALL, jumps);
     const second = await engineSession(reach(), SMALL, jumps);
     expect(first.rows).toBe(ROWS * REPEATS);
+    // Read-ahead goes on sending while the open infers its columns, so where
+    // the open ends and the index begins is down to timing: a cold first
+    // open can answer a few chunks later. The scan as a whole sends the same.
     const cost = (s: typeof first) => ({
-      open: [s.open.requests, s.open.bytes],
-      index: [s.index.requests, s.index.bytes],
+      scan: [s.open.requests + s.index.requests, s.open.bytes + s.index.bytes],
       bands: [s.bands.requests, s.bands.bytes],
     });
     expect(cost(second)).toEqual(cost(first));

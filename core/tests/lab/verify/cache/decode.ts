@@ -5,7 +5,7 @@
  * with the lab's.
  *
  * Usage, from core/:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/cache/decode.ts
  */
 

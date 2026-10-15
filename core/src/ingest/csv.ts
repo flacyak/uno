@@ -17,9 +17,13 @@ function lengthNL(line: string): number {
  * normalised to `\n` as Go's readLine does.
  */
 class Lines {
+  private readonly s: string;
+
   private i = 0;
 
-  constructor(private readonly s: string) {}
+  constructor(s: string) {
+    this.s = s;
+  }
 
   next(): string | undefined {
     if (this.i >= this.s.length) return undefined;

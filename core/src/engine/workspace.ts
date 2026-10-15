@@ -62,17 +62,24 @@ export const WHOLE_LIMIT = 256 << 20;
  * back exactly as it was read.
  */
 class Absent {
+  readonly id: string;
+  readonly name: string;
+  /** What a save writes of it, exactly as the .uno held it. */
+  private readonly kept: Part;
+
   readonly opened: Opened;
 
   constructor(
-    readonly id: string,
-    readonly name: string,
-    /** What a save writes of it, exactly as the .uno held it. */
-    private readonly kept: Part,
+    id: string,
+    name: string,
+    kept: Part,
     why: Said,
     /** The uncovered bucket it reads, when that is why it is absent. */
     connect?: Unconnected,
   ) {
+    this.id = id;
+    this.name = name;
+    this.kept = kept;
     const path = this.path;
     const size = sizeOf(kept);
     this.opened = {
@@ -150,6 +157,19 @@ class Absent {
 type Source = View | Absent;
 
 export class Workspace {
+  /** The handlers this engine can open files through. */
+  private readonly handlers: readonly FileHandler[];
+  private readonly port: Port<Request, Reply>;
+  private readonly tuning: Tuning;
+  /**
+   * Returns which connection an address is read through, or the uncovered
+   * bucket it sits in. Returns undefined for a local address. Undefined on
+   * a platform that keeps only local files.
+   */
+  private readonly meet?: (path: string) => Meeting | undefined;
+  /** Receives how long each source took to index. */
+  private readonly telemetry: Telemetry;
+
   /** Sources in display order, which is the order they were added. */
   private readonly sources = new Map<string, Source>();
 
@@ -171,19 +191,18 @@ export class Workspace {
   private closed = false;
 
   constructor(
-    /** The handlers this engine can open files through. */
-    private readonly handlers: readonly FileHandler[],
-    private readonly port: Port<Request, Reply>,
-    private readonly tuning: Tuning,
-    /**
-     * Returns which connection an address is read through, or the uncovered
-     * bucket it sits in. Returns undefined for a local address. Undefined on
-     * a platform that keeps only local files.
-     */
-    private readonly meet?: (path: string) => Meeting | undefined,
-    /** Receives how long each source took to index. */
-    private readonly telemetry: Telemetry = unmeasured,
-  ) {}
+    handlers: readonly FileHandler[],
+    port: Port<Request, Reply>,
+    tuning: Tuning,
+    meet?: (path: string) => Meeting | undefined,
+    telemetry: Telemetry = unmeasured,
+  ) {
+    this.handlers = handlers;
+    this.port = port;
+    this.tuning = tuning;
+    this.meet = meet;
+    this.telemetry = telemetry;
+  }
 
   /** openSource opens a ref through whichever handler claims it. */
   private openSource(ref: SourceRef): Promise<ByteSource> {
