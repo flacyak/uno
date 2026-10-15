@@ -1,8 +1,9 @@
 /**
- * @fileoverview The row index, and the page cache that reads rows through it.
+ * @fileoverview The row index, the block cache, and the pages that read rows
+ * through both.
  *
  * The index is two arrays of numbers with one entry per block of rows. The
- * page cache keeps decoded blocks up to a byte budget.
+ * block cache keeps decoded blocks up to a budget of what each costs.
  */
 
 import type { Format } from '@ingest';
@@ -136,24 +137,66 @@ function grow(a: Float64Array<ArrayBuffer>): Float64Array<ArrayBuffer> {
 }
 
 /**
+ * BlockCache holds decoded blocks up to a budget, each at the cost it was put
+ * with. The block used least recently is evicted first, and the block just
+ * put is kept even when it alone costs more than the budget.
+ */
+export class BlockCache {
+  /** Oldest use first. */
+  private readonly blocks = new Map<
+    number,
+    { records: string[][]; cost: number }
+  >();
+  private kept = 0;
+  private readonly budget: number;
+
+  constructor(budget: number) {
+    this.budget = budget;
+  }
+
+  /** The summed cost of the blocks held. */
+  get held(): number {
+    return this.kept;
+  }
+
+  /** get returns a held block's records and makes it the newest use. */
+  get(block: number): string[][] | undefined {
+    const hit = this.blocks.get(block);
+    if (hit === undefined) return undefined;
+    // Re-insert so the block becomes the newest entry in the Map.
+    this.blocks.delete(block);
+    this.blocks.set(block, hit);
+    return hit.records;
+  }
+
+  /**
+   * put holds a block's records at `cost`, then evicts the oldest blocks
+   * until the cost held is within the budget.
+   */
+  put(block: number, records: string[][], cost: number): void {
+    this.blocks.set(block, { records, cost });
+    this.kept += cost;
+    for (const [key, entry] of this.blocks) {
+      if (this.kept <= this.budget || key === block) break;
+      this.blocks.delete(key);
+      this.kept -= entry.cost;
+    }
+  }
+}
+
+/**
  * Pages reads rows through an index and caches decoded blocks.
  *
- * The cache is bounded by the source bytes of the blocks it holds. The least
- * recently used block is evicted first.
+ * A block costs the cache its source bytes, so the budget bounds the source
+ * bytes of the blocks it holds.
  */
 export class Pages {
   private readonly name: string;
   private readonly source: ByteSource;
   private readonly format: Format;
   private readonly index: RowIndex;
-  private readonly budget: number;
-
-  private readonly cache = new Map<
-    number,
-    { records: string[][]; bytes: number }
-  >();
+  private readonly cache: BlockCache;
   private readonly loading = new Map<number, Promise<string[][]>>();
-  private kept = 0;
 
   constructor(
     name: string,
@@ -166,12 +209,12 @@ export class Pages {
     this.source = source;
     this.format = format;
     this.index = index;
-    this.budget = budget;
+    this.cache = new BlockCache(budget);
   }
 
   /** Source bytes of the blocks in the cache. */
   get held(): number {
-    return this.kept;
+    return this.cache.held;
   }
 
   /** rows reads up to count rows from first, stopping at the readable limit. */
@@ -195,12 +238,7 @@ export class Pages {
    */
   records(block: number, keep = true): Promise<string[][]> {
     const hit = this.cache.get(block);
-    if (hit !== undefined) {
-      // Re-insert so the block becomes the newest entry in the Map.
-      this.cache.delete(block);
-      this.cache.set(block, hit);
-      return Promise.resolve(hit.records);
-    }
+    if (hit !== undefined) return Promise.resolve(hit);
 
     let pending = this.loading.get(block);
     if (pending !== undefined) return pending;
@@ -208,7 +246,8 @@ export class Pages {
 
     pending = this.decode(block)
       .then((records) => {
-        this.keep(block, records);
+        const [start, end] = this.index.bytesOf(block);
+        this.cache.put(block, records, end - start);
         return records;
       })
       .finally(() => this.loading.delete(block));
@@ -229,16 +268,5 @@ export class Pages {
       throw new Refusal({ t: 'changed-on-disk', name: this.name });
     }
     return records;
-  }
-
-  private keep(block: number, records: string[][]): void {
-    const [start, end] = this.index.bytesOf(block);
-    this.cache.set(block, { records, bytes: end - start });
-    this.kept += end - start;
-    for (const [key, entry] of this.cache) {
-      if (this.kept <= this.budget || key === block) break;
-      this.cache.delete(key);
-      this.kept -= entry.bytes;
-    }
   }
 }
