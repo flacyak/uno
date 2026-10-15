@@ -1,11 +1,14 @@
 /**
  * @fileoverview The block cache on its own: what it holds, what each block
- * costs it, and which block goes first once the budget is passed.
+ * costs it, and which block goes first once the budget is passed. Then pages
+ * reading through it with a decoder of their own.
  */
 
 import { expect, test } from 'vite-plus/test';
 
-import { BlockCache } from '@engine/rows';
+import { BlockCache, Pages, RowIndex } from '@engine/rows';
+import type { Decoder } from '@engine/rows';
+import type { ByteSource } from '@store';
 
 /** A budget that holds three blocks of BLOCK_COST. */
 const BUDGET = 300;
@@ -72,4 +75,45 @@ test('a block put again takes the place of what it held, at its new cost', () =>
   expect(cache.get(0)).toEqual(recordsOf(9));
   expect(heldOf(cache, [0, 1, 2])).toEqual([0, 2]);
   expect(cache.held).toBe(BUDGET);
+});
+
+/** Four one-letter lines, two bytes each. */
+const LINES = new TextEncoder().encode('a\nb\nc\nd\n');
+/** The bytes of one line. */
+const LINE_BYTES = 2;
+/** Rows in the lines, one a line. */
+const ROWS = LINES.length / LINE_BYTES;
+/** Lines in a block. */
+const BLOCK_LINES = 2;
+
+test('pages read rows through any decoder, and charge the cache each block its bytes', async () => {
+  const reads: number[][] = [];
+  const source: Pick<ByteSource, 'read'> = {
+    read: (offset, length) => {
+      reads.push([offset, length]);
+      return Promise.resolve(LINES.subarray(offset, offset + length));
+    },
+  };
+  const lines: Decoder = {
+    decode: (bytes) =>
+      new TextDecoder()
+        .decode(bytes)
+        .split('\n')
+        .filter((line) => line !== '')
+        .map((line) => [line]),
+  };
+  const index = new RowIndex(0, LINES.length, {
+    blockRows: BLOCK_LINES,
+    blockBytes: LINES.length,
+  });
+  for (let at = 0; at < LINES.length; at += LINE_BYTES) index.begin(at);
+  index.complete = true;
+
+  const pages = new Pages('lines.txt', source, lines, index, LINES.length);
+  expect(await pages.rows(0, ROWS)).toEqual([['a'], ['b'], ['c'], ['d']]);
+  expect(reads).toEqual([
+    [0, BLOCK_LINES * LINE_BYTES],
+    [BLOCK_LINES * LINE_BYTES, BLOCK_LINES * LINE_BYTES],
+  ]);
+  expect(pages.held).toBe(LINES.length);
 });
