@@ -1,6 +1,6 @@
 /**
- * @fileoverview One source in a workspace: its format, its index, its edit log,
- * and the pages read through them.
+ * @fileoverview One source in a workspace: the reading of its rows, its edit
+ * log, and the rows read through both.
  *
  * Every row returned has the log applied. An edit is one line folded into
  * the Schema and a new generation number. Every stored row stays as read.
@@ -8,8 +8,8 @@
 
 import type { HeldFile, HeldPart, HeldParts } from '@document';
 import { trimSpace } from '@go';
-import { headerOf, labelOf, openFormat, readableHead } from '@ingest';
-import type { Format } from '@ingest';
+import { headerOf } from '@ingest';
+import type { Column } from '@ingest';
 import { isNumber } from '@num';
 import { MIN_EXAMPLES, Survey, gather } from '@pattern';
 import type { Example } from '@pattern';
@@ -25,9 +25,8 @@ import {
   valueAt,
 } from '@sheet';
 import type { Edit, Written } from '@sheet';
-import { headed, multiOf } from '@store';
+import { multiOf } from '@store';
 import type { ByteSource, HeaderMode, PartsRef, SingleRef } from '@store';
-import { indexPass } from './pass.ts';
 import type {
   Changed,
   ColumnInfo,
@@ -44,9 +43,8 @@ import type {
 } from './protocol.ts';
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
-import { partRuns } from './reading.ts';
-import type { Run } from './reading.ts';
-import { Pages, RowIndex } from './rows.ts';
+import { openReading } from './reading.ts';
+import type { Blocks, Index, Reading } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import {
   BYTES,
@@ -147,11 +145,14 @@ export class View {
   private readonly began: number;
 
   opened!: Opened;
-  pages!: Pages;
+  pages!: Blocks;
   generation = 0;
 
+  /** How the source's rows are found and read. */
+  private reading!: Reading;
+  /** The stored bytes the reading reads. */
   private source!: ByteSource;
-  private index!: RowIndex;
+  private index!: Index;
   private schema!: Schema;
 
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
@@ -166,10 +167,6 @@ export class View {
 
   /** The parts ref a source over several files was opened from. */
   parts: PartsRef | undefined;
-
-  /** Which part each row of a block came from, for a source over several
-   * files read as one. */
-  private runsIn: ((block: number) => Promise<readonly Run[]>) | undefined;
 
   private transform = false;
   private survey: AbortController | undefined;
@@ -202,7 +199,7 @@ export class View {
   }
 
   /**
-   * open detects the format, starts indexing, waits for the sample rows,
+   * open opens the reading, starts indexing, waits for the sample rows,
    * replays any carried edits, and returns the view.
    */
   static async open(ask: OpenAsk): Promise<View> {
@@ -218,18 +215,19 @@ export class View {
     const within = (why: Said): Said =>
       container === '' ? why : { t: 'about', subject: container, why };
 
-    let format: Format;
+    const header = ask.header ?? 'first';
     try {
       // A file opened fresh on its own is detected, and its head read once.
       // One opened with a log is read as delimited text, as its log was
       // made, and each part of several files is detected as it is measured.
       const fresh = carried === undefined && ask.parts === undefined;
-      const head = fresh ? await readableHead(name, source) : undefined;
-      format = await openFormat(
+      v.reading = await openReading({
         name,
-        head === undefined ? source : headed(source, head),
-        ask.header,
-      );
+        source,
+        spec: fresh ? undefined : { kind: 'delimited', header },
+        header,
+        tuning,
+      });
     } catch (err) {
       await source.close();
       if (container === '') throw err;
@@ -239,11 +237,10 @@ export class View {
     }
 
     v.source = source;
-    v.index = new RowIndex(format.dataStart, source.size, tuning);
-    v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
-    v.schema = schemaOf(format, ask.parts);
-    const multi = multiOf(source);
-    if (multi !== undefined) v.runsIn = partRuns(name, multi, format, v.index);
+    const reading = v.reading;
+    v.index = reading.index;
+    v.pages = reading.pages;
+    v.schema = schemaOf(reading.columns(), ask.parts);
 
     // A cancel fails the wait below with its refusal, kept ahead of the
     // close's own, and closes the view, which stops the index.
@@ -263,13 +260,8 @@ export class View {
     let told = 0;
     let started = false;
     const index = v.index;
-    indexPass({
-      source,
-      format,
-      index,
-      tuning,
-      signal: v.abort.signal,
-      progress() {
+    reading
+      .pass(v.abort.signal, () => {
         v.wake();
         if (index.complete) {
           // The clock stops here, once: the pass reports completion one time.
@@ -286,7 +278,7 @@ export class View {
             name: INDEXED,
             kind: 'count',
             unit: BYTES,
-            value: source.size,
+            value: index.indexed().total,
             attributes,
           });
         }
@@ -294,19 +286,19 @@ export class View {
         if (!index.complete && now - told < PROGRESS_MS) return;
         told = now;
         port.post({ t: 'progress', source: id, progress: v.progress() });
-      },
-    }).catch((err: unknown) => {
-      v.fail(err);
-      // Before open returns, the failure is thrown from open instead. After
-      // a close, the abort is the cause and the failure is swallowed.
-      if (started && !v.abort.signal.aborted) {
-        port.post({
-          t: 'error',
-          source: id,
-          said: { t: 'about', subject: name, why: saidOf(err) },
-        });
-      }
-    });
+      })
+      .catch((err: unknown) => {
+        v.fail(err);
+        // Before open returns, the failure is thrown from open instead. After
+        // a close, the abort is the cause and the failure is swallowed.
+        if (started && !v.abort.signal.aborted) {
+          port.post({
+            t: 'error',
+            source: id,
+            said: { t: 'about', subject: name, why: saidOf(err) },
+          });
+        }
+      });
 
     try {
       // Wait until the index covers the sample rows and the deepest row the
@@ -333,7 +325,7 @@ export class View {
         source: id,
         name,
         size: source.size,
-        label: labelOf(format),
+        label: reading.label,
         columns: await v.columns(),
         progress: v.progress(),
         edits: carried?.edits ?? [],
@@ -351,9 +343,10 @@ export class View {
   /** progress is how far the index has got, and how long the open has taken. */
   private progress(): Progress {
     const index = this.index;
+    const { done, total } = index.indexed();
     return {
-      done: index.scanned,
-      total: index.size,
+      done,
+      total,
       readable: index.readable(),
       rows: index.rows(),
       complete: index.complete,
@@ -412,8 +405,8 @@ export class View {
   ): Promise<string[] | undefined> {
     if (this.schema.supplied === undefined) return undefined;
     const ref = this.parts;
-    const runsIn = this.runsIn;
-    if (ref === undefined || runsIn === undefined) {
+    const reading = this.reading;
+    if (ref === undefined || multiOf(this.source) === undefined) {
       throw new Refusal({ t: 'joins-unknown-for-column', name: this.name });
     }
 
@@ -422,7 +415,7 @@ export class View {
     for (let row = first; row < end;) {
       const block = this.index.blockOf(row);
       const [from, to] = this.index.rowsOf(block);
-      const runs = await runsIn(block);
+      const runs = await reading.runs(block);
       for (let run = 0; row < Math.min(to, end); row++) {
         while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
         names.push(ref.parts[runs[run]!.part]?.ref.name ?? '');
@@ -942,10 +935,14 @@ export class View {
  * deduplicated, so an existing `_file` column keeps its name and the added
  * one takes a suffix.
  */
-function schemaOf(format: Format, parts: PartsRef | undefined): Schema {
-  if (parts?.fileColumn !== true) return new Schema(format.columns, 0);
-  return new Schema(headerOf([...format.columns, FILE_COLUMN]), 0, {
-    col: format.columns.length,
+function schemaOf(
+  columns: readonly Column[],
+  parts: PartsRef | undefined,
+): Schema {
+  const names = columns.map((column) => column.name);
+  if (parts?.fileColumn !== true) return new Schema(names, 0);
+  return new Schema(headerOf([...names, FILE_COLUMN]), 0, {
+    col: names.length,
     shows: FILE_SHOWS,
   });
 }

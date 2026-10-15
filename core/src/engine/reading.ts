@@ -178,7 +178,7 @@ interface Crossing {
  * is re-read up to its last part and scanned for row starts, and the result
  * is cached for the byte range it was found over.
  */
-export function partRuns(
+function partRuns(
   name: string,
   joined: MultiSource,
   records: Pick<RecordFormat, 'scanner'>,
