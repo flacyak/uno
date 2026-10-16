@@ -18,6 +18,22 @@ export type Compression = 'gzip' | 'zstd';
 /** Charset is the name of a file's text encoding, as the status bar shows it. */
 export type Charset = 'UTF-8';
 
+/**
+ * Unread is a format or a compression this build names and does not read
+ * yet. A value leaves with the change that reads it.
+ */
+export type Unread =
+  | 'JSON'
+  | 'JSON Lines'
+  | 'Parquet'
+  | 'gzip'
+  | 'zstd'
+  | 'bzip2'
+  | 'xz'
+  | 'snappy'
+  | 'LZ4'
+  | 'zip';
+
 /** The punctuation a description can name, as plurals. */
 export type CharName =
   | 'commas'
