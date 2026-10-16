@@ -229,6 +229,9 @@ class Moved extends Data.TaggedError('Moved')<{
   readonly reply: Response;
 }> {}
 
+/** Address is the URL a request goes to in `region`, signed or not. */
+type Address = (region: string, signed: boolean) => URL;
+
 /**
  * s3Requests makes an S3Requests over `opts`, with its own memory of which
  * region each bucket is in. s3Files and s3Lister each make their own.
@@ -240,14 +243,15 @@ export function s3Requests(opts: S3Options): S3Requests {
 
   /** One signed request, sent once, to the URL `at` gives for `region`. */
   async function send(
-    at: (region: string) => URL,
+    at: Address,
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
     creds: Signing,
     region: string,
   ): Promise<Response> {
-    const url = at(region);
-    if ('unsigned' in creds) return go(url, { method, headers: extra });
+    if ('unsigned' in creds)
+      return go(at(region, false), { method, headers: extra });
+    const url = at(region, true);
     const headers = signV4(
       {
         method,
@@ -270,7 +274,7 @@ export function s3Requests(opts: S3Options): S3Requests {
    */
   function attempt(
     loc: S3Location,
-    at: (region: string) => URL,
+    at: Address,
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
   ): Effect.Effect<Response, NetworkFailure | ServerFailure | Moved> {
@@ -314,7 +318,7 @@ export function s3Requests(opts: S3Options): S3Requests {
    */
   function request(
     loc: S3Location,
-    at: (region: string) => URL,
+    at: Address,
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
   ): Promise<Response> {
@@ -341,7 +345,10 @@ export function s3Requests(opts: S3Options): S3Requests {
     object: (loc, method, extra, version) =>
       request(
         loc,
-        (region) => objectUrl(loc, region, opts.endpoint, version),
+        (region, signed) =>
+          objectUrl(loc, region, opts.endpoint, version, {
+            stored: method === 'GET' && signed,
+          }),
         method,
         extra,
       ),
@@ -762,18 +769,24 @@ function bucketUrl(
   return `https://${bucket}.s3.${region}.amazonaws.com`;
 }
 
-/** The object's address, asking for one version where `version` is a
- * VersionId. */
+/**
+ * The object's address, asking for one version where `version` is a
+ * VersionId. With `stored`, S3 is asked to answer with Content-Encoding
+ * identity, so fetch hands back the bytes as S3 holds them instead of undoing
+ * a gzip the object was stored with. S3 takes that on a signed request only.
+ */
 function objectUrl(
   loc: S3Location,
   region: string,
   endpoint: string | undefined,
-  version?: string,
+  version: string | undefined,
+  { stored }: { stored: boolean },
 ): URL {
   const at = `${bucketUrl(loc.bucket, region, endpoint)}/${encodePath(loc.key)}`;
-  return new URL(
-    version === undefined ? at : `${at}?versionId=${encode(version)}`,
-  );
+  const query: Array<[string, string]> = [];
+  if (version !== undefined) query.push(['versionId', version]);
+  if (stored) query.push(['response-content-encoding', 'identity']);
+  return new URL(query.length === 0 ? at : `${at}?${encodeQuery(query)}`);
 }
 
 /**
