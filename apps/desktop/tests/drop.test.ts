@@ -7,6 +7,8 @@
 
 import { expect, test } from "vite-plus/test";
 
+import type { Listings } from "@renderer/sources";
+import { Sources } from "@renderer/sources";
 import { wireDrop } from "@renderer/shell/drop";
 
 /** A drag event with a dataTransfer whose `types` name what is dragged. */
@@ -84,4 +86,36 @@ test("a drop opens the files, and one uno cannot open is refused by name", () =>
   expect(opened).toHaveLength(1);
   expect(refused).toHaveLength(1);
   expect(refused[0]).toContain("deck.pdf");
+});
+
+/** Listings for a panel that is never browsed. */
+const UNLISTED: Listings = {
+  list: () => Promise.reject(new Error("not listed")),
+  peek: () => Promise.reject(new Error("not peeked")),
+};
+
+test("a drop opens the names the sources panel picks, and refuses the ones it lists only", () => {
+  const panel = new Sources(UNLISTED, () => []);
+  const names = [
+    "q3.csv",
+    "Q3.TSV",
+    "q3.tsv.gz",
+    "logs.tar.gz",
+    "part-0.snappy.parquet",
+    ".csv",
+    "README",
+    "deck.pdf",
+  ];
+  for (const name of names) {
+    const { root, opened } = wired();
+    root.dispatchEvent(drag("drop", ["Files"], [new File([""], name)]));
+    const picked = panel.selectable({ name, path: `/home/jo/exports/${name}`, folder: false });
+    expect(opened.length === 1, name).toBe(picked);
+  }
+});
+
+test("a drop opens a workspace, which the panel does not pick", () => {
+  const { root, opened } = wired();
+  root.dispatchEvent(drag("drop", ["Files"], [new File([""], "Q3.UNO")]));
+  expect(opened).toEqual([["Q3.UNO"]]);
 });
