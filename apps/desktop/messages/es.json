@@ -431,6 +431,9 @@
   "chars_plus_signs": "signos más",
   "chars_brackets": "paréntesis",
   "chars_quotes": "comillas",
+  "kind_delimited": "texto delimitado",
+  "kind_jsonl": "JSON Lines",
+  "kind_parquet": "Parquet",
   "changed_version_same_size": "{name} no es la versión con la que se guardó el espacio de trabajo · tiene el mismo tamaño",
   "changed_version_sizes": "{name} no es la versión con la que se guardó el espacio de trabajo · ahora ocupa {now} y antes {was}",
   "changed_size": "{name} ocupa {now} ahora y ocupaba {was} cuando se guardó el espacio de trabajo",
@@ -514,6 +517,7 @@
       }
     }
   ],
+  "refused_relink_other_kind": "{name} se leyó como {was}, y {file} es {now}",
   "refused_log_lost_edit": "el registro perdió la pista de una edición de {source}",
   "refused_bucket_unconnected": "{container} lee s3://{bucket}/…, que ninguna conexión cubre · conecta {bucket} para leerlo",
   "refused_joins_unknown_for_column": "a {name} lo lee como uno algo que no dice cómo se unen sus archivos, así que no puede mostrar de qué archivo viene cada fila",
