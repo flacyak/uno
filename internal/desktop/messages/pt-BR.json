@@ -183,6 +183,7 @@
   ],
   "unsaved_edits_key_again": "edições não salvas · Ctrl+S primeiro, ou {key} de novo para descartá-las",
   "unsaved_edits_click_again": "edições não salvas · Ctrl+S primeiro, ou clique de novo para descartá-las",
+  "unsaved_edits_open_again": "edições não salvas · Ctrl+S primeiro, ou abra de novo para descartá-las",
   "size_bytes": [
     {
       "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
