@@ -10,21 +10,21 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vite-plus/test';
 
 import { newManifest, writeDocument } from '@document';
 import type { HeldPart } from '@document';
-import { Refusal } from '@engine';
 import type { Engine, Said } from '@engine';
 import { read } from '@ingest';
 import type { Unread } from '@said';
-import { connect, multiProviders, openOne, saidIn } from './harness.ts';
-
-/** A fixture's path in tests/testdata. */
-function testdata(name: string): string {
-  return fileURLToPath(new URL(`../testdata/${name}`, import.meta.url));
-}
+import {
+  connect,
+  multiProviders,
+  openOne,
+  refusal,
+  saidIn,
+  testdata,
+} from './harness.ts';
 
 /** Each fixture, and what it holds that this build does not read. */
 const UNREAD: ReadonlyArray<readonly [string, Unread]> = [
@@ -38,18 +38,6 @@ const PART = 'sales-q3-part-1.csv';
 
 /** The byte that ends a line. */
 const LF = 0x0a;
-
-/** The Refusal `asked` rejects with. Fails if it is anything else. */
-async function refusal(asked: Promise<unknown>): Promise<Refusal> {
-  const err: unknown = await asked.then(
-    () => undefined,
-    (e: unknown) => e,
-  );
-  if (!(err instanceof Refusal)) {
-    throw new Error(`expected a Refusal, and got ${String(err)}`);
-  }
-  return err;
-}
 
 /** Runs `use` with an engine that opens files, blobs and parts. */
 async function withEngine(use: (engine: Engine) => Promise<void>) {
