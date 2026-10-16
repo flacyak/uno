@@ -15,6 +15,7 @@ export {
   SOURCES_VERSION,
   STATE_ENTRY,
   WORKSPACE_EXT,
+  WORKSPACE_FILTER,
   isWorkspace,
   logOf,
   newManifest,
