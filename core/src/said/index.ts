@@ -12,6 +12,9 @@ import { quote } from '@go/strconv';
 import { unreachable } from '@never';
 import type { HeaderMode } from '@store/multi';
 
+/** Compression is a compression uno can read a stored file through. */
+export type Compression = 'gzip' | 'zstd';
+
 /** Charset is the name of a file's text encoding, as the status bar shows it. */
 export type Charset = 'UTF-8';
 
