@@ -38,6 +38,7 @@ export {
   kindOf,
   opensAsParquet,
   readableHead,
+  refuseNotRead,
   refuseUnread,
 } from './detect.ts';
 export type { Detected, Layout, StoredHead } from './detect.ts';
