@@ -131,6 +131,28 @@ export class Schema {
     }
   }
 
+  /**
+   * widen adds a data column for each of `names` after the last data column.
+   * Every supplied column moves right by their count, and no data column
+   * moves, so each logged edit stays on its cell: a supplied column refuses
+   * every edit.
+   */
+  widen(names: readonly string[]): void {
+    const at = this.headerNames.length - this.suppliedCols.length;
+    this.headerNames = [
+      ...this.headerNames.slice(0, at),
+      ...names,
+      ...this.headerNames.slice(at),
+    ];
+    this.suppliedCols = this.suppliedCols.map((s) => ({
+      ...s,
+      col: s.col + names.length,
+    }));
+    this.index();
+    // The computed order is column numbers looked up by name.
+    this.reorder();
+  }
+
   // ------------------------------------------------------------ reading
 
   /** Each column's name, in column order. */
@@ -362,6 +384,7 @@ export class Schema {
   /** index maps each header to its column, or to -1 when more than one
    * column has it. */
   private index(): void {
+    this.names.clear();
     this.headerNames.forEach((h, i) =>
       this.names.set(h, this.names.has(h) ? -1 : i),
     );
