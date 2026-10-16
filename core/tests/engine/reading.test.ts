@@ -3,7 +3,8 @@
  * index reports the bytes it has scanned out of the file's size, a file
  * opened through openReading is held as itself and read as its spec says,
  * and every test file is named, started and labelled as openFormat does, or
- * refused by name where this build does not read it.
+ * refused by name where this build does not read it. A file a relink holds
+ * to delimited text is refused when it holds another kind of rows.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { describe, expect, test } from 'vite-plus/test';
 
 import { Refusal, RowIndex, TUNING } from '@engine';
 import { openReading } from '@engine/reading';
-import type { ReadSpec } from '@engine/reading';
+import type { Expected, ReadSpec } from '@engine/reading';
 import { labelOf, openFormat } from '@ingest';
 import type { HeaderMode } from '@ingest';
 import type { Said, Unread } from '@said';
@@ -76,6 +77,11 @@ function seen(name: string, open: (source: ByteSource) => Promise<Seen>) {
   return open(source).catch((err: unknown) => ({ failed: String(err) }));
 }
 
+/** How a test file that is refused with `said` is seen. */
+function refused(said: Said): Seen {
+  return { failed: String(new Refusal(said)) };
+}
+
 /** What openFormat makes of a test file. */
 function formatted(name: string, header: HeaderMode): Promise<Seen> {
   return seen(name, async (source) => {
@@ -86,15 +92,17 @@ function formatted(name: string, header: HeaderMode): Promise<Seen> {
 }
 
 /**
- * What openReading makes of a test file. Before its pass, the index has
- * accounted for the bytes ahead of the data.
+ * What openReading makes of a test file, read as `spec` says or detected and
+ * held to what a relink `expect`s. Before its pass, the index has accounted
+ * for the bytes ahead of the data.
  */
-function read(name: string, spec?: ReadSpec): Promise<Seen> {
+function read(name: string, spec?: ReadSpec, expect?: Expected): Promise<Seen> {
   return seen(name, async (source) => {
     const reading = await openReading({
       name,
       source,
       spec,
+      expect,
       header: 'first',
       tuning: TUNING,
     });
@@ -121,7 +129,38 @@ describe.each(FILES)('%s', (name) => {
     expect(await read(name)).toEqual(
       what === undefined
         ? await formatted(name, 'first')
-        : { failed: String(new Refusal({ t: 'not-read', name, what })) },
+        : refused({ t: 'not-read', name, what }),
+    );
+  });
+});
+
+describe('a file a relink holds to delimited text', () => {
+  const held: Expected = { name: 'sales.csv', kind: 'delimited' };
+
+  /** The refusal's fields that the source and its log decide. */
+  const RELINK = {
+    t: 'relink-other-kind',
+    name: held.name,
+    was: held.kind,
+  } as const;
+
+  test('is refused as another kind of rows, ahead of what this build does not read', async () => {
+    for (const [file, now] of [
+      ['par1.bin', 'parquet'],
+      ['events.jsonl', 'jsonl'],
+    ] as const) {
+      expect(await read(file, undefined, held)).toEqual(
+        refused({ ...RELINK, file, now }),
+      );
+    }
+  });
+
+  test('reads as a fresh open does, and a compression is refused by name', async () => {
+    const csv = 'sales-q3.csv';
+    expect(await read(csv, undefined, held)).toEqual(await read(csv));
+    const gz = 'sales-q3.csv.gz';
+    expect(await read(gz, undefined, held)).toEqual(
+      refused({ t: 'not-read', name: gz, what: 'gzip' }),
     );
   });
 });
