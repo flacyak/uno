@@ -39,8 +39,10 @@
   color: var(--ink-3);
 }
 
-/* The separator is hidden along with an empty message. */
-.win-status .sep:has(+ #status-msg:empty) {
+/* A separator is hidden along with an empty message, clock or cell. */
+.win-status .sep:has(+ #status-msg:empty),
+.win-status #status-clock:empty + .sep,
+.win-status .sep:has(+ #status-cell:empty) {
   display: none;
 }
 
@@ -94,7 +96,7 @@
 
 .win-status.prompting #status-file,
 .win-status.prompting #status-msg,
-.win-status.prompting .sep {
+.win-status.prompting .sep:has(+ #status-msg) {
   display: none;
 }
 

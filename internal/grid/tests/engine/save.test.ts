@@ -84,6 +84,7 @@ test("a .uno opens with its log applied, and saves back", async () => {
     const src = await openOne(engine, { name: "q3.uno", blob: new Blob([new Uint8Array(uno)]) });
     expect(src.opened.name).toBe("sales-q3.csv");
     expect(src.opened.edits).toHaveLength(2);
+    expect(src.opened.progress.elapsedMs, "the reopen was timed").toBeGreaterThan(0);
     expect(src.opened.columns[UNITS]).toMatchObject({ kind: "num", flagged: false });
     expect((await src.rows(5, 1)).rows[0]![UNITS]).toBe("1101");
 
