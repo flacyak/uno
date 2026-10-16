@@ -6,10 +6,13 @@
  * The bytes decide first. Parquet starts and ends with its magic, and each
  * compression starts with its own. Only then does the name decide between
  * JSON Lines and delimited text. What this build does not read yet comes back
- * named, so it can be refused by name.
+ * named, and `readableHead` refuses it by name as a file is opened.
  */
 
+import { Refusal } from '@said';
 import type { Compression, Unread } from '@said';
+import type { ByteSource } from '@store';
+import { HEAD_BYTES } from './format.ts';
 import { nameParts } from './names.ts';
 import { bomLength } from './scan.ts';
 
@@ -121,6 +124,38 @@ export async function detect(
   if (LINES_EXTENSIONS.includes(extension) || opensWithObject(head))
     return unread('JSON Lines');
   return extension === JSON_EXTENSION ? unread('JSON') : DELIMITED;
+}
+
+/**
+ * refuseUnread detects what a file holds, and refuses it by name where this
+ * build does not read it yet.
+ */
+export async function refuseUnread(
+  name: string,
+  head: StoredHead,
+): Promise<void> {
+  const found = await detect(name, head);
+  if (found.t === 'not-read')
+    throw new Refusal({ t: 'not-read', name, what: found.what });
+}
+
+/**
+ * readableHead reads the first HEAD_BYTES of `source` and returns them,
+ * once what the file holds is something this build reads. Otherwise it
+ * refuses the file by name. A Parquet head is confirmed by a read of the
+ * source's tail.
+ */
+export async function readableHead(
+  name: string,
+  source: ByteSource,
+): Promise<Uint8Array> {
+  const bytes = await source.read(0, Math.min(HEAD_BYTES, source.size));
+  await refuseUnread(name, {
+    bytes,
+    size: source.size,
+    tail: (length) => source.read(source.size - length, length),
+  });
+  return bytes;
 }
 
 function unread(what: Unread): Detected {

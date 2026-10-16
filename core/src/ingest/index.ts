@@ -31,7 +31,12 @@ export {
   peekFormat,
 } from './format.ts';
 export type { Format, HeaderMode, Scanner, Charset } from './format.ts';
-export { PARQUET_MAGIC_BYTES, detect } from './detect.ts';
+export {
+  PARQUET_MAGIC_BYTES,
+  detect,
+  readableHead,
+  refuseUnread,
+} from './detect.ts';
 export type { Detected, Layout, StoredHead } from './detect.ts';
 export {
   DIALOG_EXTENSIONS,

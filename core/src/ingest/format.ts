@@ -15,8 +15,11 @@ import type { Charset, Said } from '@said';
 import { sniffDelimiter, sniffEncoding } from './sniff.ts';
 import type { Encoding } from './sniff.ts';
 
-/** How much of the head is read first, to sniff and to find the header. */
-const PEEK = 64 << 10;
+/**
+ * How much of the head is read first, to detect what the file holds, to sniff
+ * and to find the header.
+ */
+export const HEAD_BYTES = 64 << 10;
 
 export type { Charset } from '@said';
 
@@ -147,7 +150,7 @@ export async function peekFormat(
   const ext = extensionOf(name);
   if (ext === '.json') throw new Error(`${name}: JSON is not supported yet`);
 
-  let want = Math.min(PEEK, src.size);
+  let want = Math.min(HEAD_BYTES, src.size);
   let head = await src.read(0, want);
   const encoding = sniffEncoding(head);
   const decoders = decodersFor(name, encoding);
