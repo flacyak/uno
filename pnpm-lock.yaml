@@ -173,6 +173,9 @@ importers:
       hyparquet:
         specifier: 1.31.5
         version: 1.31.5
+      pako:
+        specifier: 3.0.3
+        version: 3.0.3
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
@@ -1565,6 +1568,9 @@ packages:
   package-manager-detector@1.8.0:
     resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
 
+  pako@3.0.3:
+    resolution: {integrity: sha512-tmrebBBYI5FOw8QICGwJNqE8fotC8R+gwcxOvoFNv+GKehOI6Lc6YBolNcQNnC4v96l1wt7rh102ifD4kVeZAQ==}
+
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
@@ -2746,6 +2752,8 @@ snapshots:
       vite-plus: 0.3.1(@types/node@26.5.0)(happy-dom@20.14.5)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)
 
   package-manager-detector@1.8.0: {}
+
+  pako@3.0.3: {}
 
   pathe@2.0.3: {}
 
