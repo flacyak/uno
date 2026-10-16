@@ -1,13 +1,17 @@
 /**
- * @fileoverview What a file holds, told from its stored bytes before any
- * text is sniffed: Parquet, a compression or delimited text.
+ * @fileoverview What a file holds, told from its stored bytes and its name
+ * before any text is sniffed: Parquet, a compression, JSON Lines or delimited
+ * text.
  *
  * The bytes decide first. Parquet starts and ends with its magic, and each
- * compression starts with its own. What this build does not read yet comes
- * back named, so it can be refused by name.
+ * compression starts with its own. Only then does the name decide between
+ * JSON Lines and delimited text. What this build does not read yet comes back
+ * named, so it can be refused by name.
  */
 
 import type { Compression, Unread } from '@said';
+import { nameParts } from './names.ts';
+import { bomLength } from './scan.ts';
 
 /** How many bytes Parquet's magic takes, at each end of the file. */
 export const PARQUET_MAGIC_BYTES = 4;
@@ -55,6 +59,22 @@ const COMPRESSIONS: ReadonlyArray<
   ['zip', (b) => startsWith(b, ZIP)],
 ];
 
+/** The extensions that name delimited text, whatever the first line holds. */
+const DELIMITED_EXTENSIONS = ['.csv', '.tsv'];
+
+/** The extensions that name JSON Lines. */
+const LINES_EXTENSIONS = ['.jsonl', '.ndjson'];
+
+/** A JSON document's extension. It is JSON Lines when its first line is an object. */
+const JSON_EXTENSION = '.json';
+
+const LF = 0x0a;
+
+/** The bytes a line can hold and still be blank: space, tab and CR. */
+const BLANK = [0x20, 0x09, 0x0d];
+
+const UTF8 = new TextDecoder('utf-8');
+
 /** StoredHead is the front of a file as stored, and a way to its end. */
 export interface StoredHead {
   /** The front of the stored file: one read. */
@@ -82,18 +102,25 @@ export type Detected =
 const DELIMITED: Detected = { t: 'records', layout: 'delimited' };
 
 /**
- * detect says what a file called `name` holds. Parquet comes first,
- * confirmed by the file's last bytes, then each compression, and the rest is
- * delimited text.
+ * detect says what a file holds. Parquet comes first, confirmed by the
+ * file's last bytes, then each compression. Then the name decides: .jsonl
+ * and .ndjson are JSON Lines, and so is a .json or a name with no layout
+ * extension whose first non-blank line is one complete JSON object. Any
+ * other .json is JSON, and the rest is delimited text.
  */
 export async function detect(
-  _name: string,
+  name: string,
   head: StoredHead,
 ): Promise<Detected> {
   if (await isParquet(head)) return unread('Parquet');
   const compressed = COMPRESSIONS.find(([, starts]) => starts(head.bytes));
   if (compressed !== undefined) return unread(compressed[0]);
-  return DELIMITED;
+
+  const { extension } = nameParts(name);
+  if (DELIMITED_EXTENSIONS.includes(extension)) return DELIMITED;
+  if (LINES_EXTENSIONS.includes(extension) || opensWithObject(head))
+    return unread('JSON Lines');
+  return extension === JSON_EXTENSION ? unread('JSON') : DELIMITED;
 }
 
 function unread(what: Unread): Detected {
@@ -118,6 +145,37 @@ function isBzip2(bytes: Uint8Array): boolean {
     (startsWith(bytes, BZIP2_BLOCK, BZIP2_BODY_AT) ||
       startsWith(bytes, BZIP2_END, BZIP2_BODY_AT))
   );
+}
+
+/**
+ * opensWithObject says whether the first line of a head that holds a
+ * non-blank byte is one complete JSON object. A line the head cuts off is not
+ * complete.
+ */
+function opensWithObject(head: StoredHead): boolean {
+  const { bytes } = head;
+  const whole = bytes.length >= head.size;
+  for (let start = bomLength(bytes); start < bytes.length;) {
+    let end = bytes.indexOf(LF, start);
+    if (end < 0) {
+      if (!whole) return false;
+      end = bytes.length;
+    }
+    const line = bytes.subarray(start, end);
+    if (!line.every((b) => BLANK.includes(b))) return isObject(line);
+    start = end + 1;
+  }
+  return false;
+}
+
+/** isObject says whether a line is one JSON object and nothing else. */
+function isObject(line: Uint8Array): boolean {
+  try {
+    const value: unknown = JSON.parse(UTF8.decode(line));
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
 }
 
 /** startsWith says whether `bytes` hold `magic` from `at` on. */
