@@ -16,7 +16,7 @@ import { compareStrings, concat } from '@go';
 import type { Connection } from '@library';
 import { covering } from '@library';
 import type { Provider } from '@plugin';
-import { messageOf } from '@said';
+import { Refusal, messageOf } from '@said';
 import type { FileHandler } from './index.ts';
 import { readAhead } from './ahead.ts';
 import { s3Lister } from './s3lister.ts';
@@ -512,6 +512,16 @@ export function s3Files(opts: S3Options): FileHandler {
         head = await send.object(loc, 'HEAD', {});
       }
       if (!head.ok) throw await refused(send, loc, head);
+      // Only a signed GET can ask for the bytes as stored. An unsigned one
+      // would get them undone by fetch, so the object is refused here.
+      const encoding = undoneEncoding(head);
+      if (encoding !== undefined && 'unsigned' in (await opts.credentials(loc)))
+        throw new Refusal({
+          t: 'stored-encoded',
+          name: url,
+          encoding,
+          bucket: loc.bucket,
+        });
       const size = sizeOf(head, url);
       // Every range is asked for with If-Match on this ETag, so an object
       // rewritten mid-read answers 412 and the bytes stay from one version.
@@ -712,6 +722,27 @@ export function sizeOf(head: Response, url: string): number {
   if (!Number.isFinite(size))
     throw new Error(`${url}: S3 did not say how big it is`);
   return size;
+}
+
+/** The content codings fetch undoes on the way in, whatever the case. */
+const FETCH_UNDOES: ReadonlySet<string> = new Set([
+  'gzip',
+  'x-gzip',
+  'deflate',
+  'br',
+  'zstd',
+]);
+
+/**
+ * undoneEncoding is the Content-Encoding a HEAD names when it lists a coding
+ * fetch undoes, and undefined otherwise. A label fetch does not know, such as
+ * the utf-8 an upload often gives text, leaves the bytes as stored.
+ */
+function undoneEncoding(head: Response): string | undefined {
+  const named = head.headers.get('content-encoding');
+  if (named === null) return undefined;
+  const codings = named.split(',').map((c) => c.trim().toLowerCase());
+  return codings.some((c) => FETCH_UNDOES.has(c)) ? named : undefined;
 }
 
 /** The Error for a refused reply, naming the object and whose credentials
