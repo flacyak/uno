@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { Schema } from '@sheet';
+import { Schema, namesBeside } from '@sheet';
 
 const FILE = 3;
 
@@ -45,6 +45,42 @@ describe('a widened schema', () => {
     s.widen(ARRIVING);
     expect(s.headers).toEqual(['region', 'units', 'double', 'city', 'zip']);
     expect(s.indexOf('zip')).toBe(FILE + 1);
+  });
+
+  test('suffixes a new name a column already has, and keeps every old one', () => {
+    const s = schema();
+    s.widen(['_file', 'units', 'city', 'city', 'units_2']);
+    expect(s.headers).toEqual([
+      ...HEADERS.slice(0, FILE),
+      '_file_2',
+      'units_3',
+      'city',
+      'city_2',
+      'units_2',
+      '_file',
+    ]);
+    s.widen(['_file']);
+    expect(s.headers.at(-2)).toBe('_file_3');
+    expect(s.headers.at(-1)).toBe('_file');
+    expect(s.supplied[0]!.col).toBe(s.headers.length - 1);
+  });
+
+  test('names what arrives by the rule a header row is named by', () => {
+    // A header row is named beside nothing: the first of each name keeps it.
+    expect(namesBeside([], ['a', 'a', 'a_2', 'b', 'a'])).toEqual([
+      'a',
+      'a_3',
+      'a_2',
+      'b',
+      'a_4',
+    ]);
+    // Beside kept columns, every name one of them has takes a suffix.
+    expect(namesBeside(['a', 'a_2'], ['a', 'b', 'a', 'b'])).toEqual([
+      'a_3',
+      'b',
+      'a_4',
+      'b_2',
+    ]);
   });
 
   test('leaves the headers and supplied columns it handed out as they were', () => {

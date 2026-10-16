@@ -135,13 +135,14 @@ export class Schema {
    * widen adds a data column for each of `names` after the last data column.
    * Every supplied column moves right by their count, and no data column
    * moves, so each logged edit stays on its cell: a supplied column refuses
-   * every edit.
+   * every edit. A name a column already has takes a suffix, so no column is
+   * renamed and every formula reads what it read.
    */
   widen(names: readonly string[]): void {
     const at = this.headerNames.length - this.suppliedCols.length;
     this.headerNames = [
       ...this.headerNames.slice(0, at),
-      ...names,
+      ...namesBeside(this.headerNames, names),
       ...this.headerNames.slice(at),
     ];
     this.suppliedCols = this.suppliedCols.map((s) => ({
@@ -399,6 +400,34 @@ export class Schema {
     this.resolve(name);
     return name;
   }
+}
+
+/** The suffix a name's first duplicate takes: _file_2. */
+const FIRST_SUFFIX = 2;
+
+/**
+ * namesBeside names the columns `added` beside the columns `kept`, so no two
+ * share a name. Every name in `kept` stays as it is. A name no column has
+ * yet stays, and any other takes the lowest suffix, from _2, that makes a
+ * name not yet taken. A header row is named beside nothing.
+ */
+export function namesBeside(
+  kept: readonly string[],
+  added: readonly string[],
+): string[] {
+  const taken = new Set([...kept, ...added]);
+  const seen = new Set(kept);
+  return added.map((name) => {
+    if (!seen.has(name)) {
+      seen.add(name);
+      return name;
+    }
+    let n = FIRST_SUFFIX;
+    while (taken.has(`${name}_${n}`)) n++;
+    const unique = `${name}_${n}`;
+    taken.add(unique);
+    return unique;
+  });
 }
 
 /**
