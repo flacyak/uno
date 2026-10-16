@@ -1,11 +1,16 @@
 /**
  * @fileoverview A file's name splits into its stem, its data extension and the
- * compression it claims.
+ * compression it claims, and says whether uno reads it.
  */
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { nameParts } from '@ingest/names';
+import {
+  DIALOG_EXTENSIONS,
+  READ_EXTENSIONS,
+  nameParts,
+  readable,
+} from '@ingest/names';
 
 describe('a name', () => {
   test('peels a compression off its data extension', () => {
@@ -101,5 +106,33 @@ describe('a name', () => {
       extension: '',
       suffix: '',
     });
+  });
+});
+
+describe('a readable name', () => {
+  test('ends in a read extension, in any case', () => {
+    expect(readable('q3.csv')).toBe(true);
+    expect(readable('Q3.TSV')).toBe(true);
+    expect(readable('s3://acme-exports/2025/q3.csv')).toBe(true);
+  });
+
+  test('is not a hidden file, a name with no extension or another format', () => {
+    expect(readable('.csv')).toBe(false);
+    expect(readable('README')).toBe(false);
+    expect(readable('report.pdf')).toBe(false);
+  });
+
+  test('is not an archive, nor under a compression uno does not read', () => {
+    expect(readable('logs.tar.gz')).toBe(false);
+    expect(readable('q3.csv.bz2')).toBe(false);
+    expect(readable('q3.csv.xz')).toBe(false);
+  });
+
+  test('ends in an extension the dialogs list', () => {
+    const listed = DIALOG_EXTENSIONS.map((extension) => `.${extension}`);
+    for (const extension of READ_EXTENSIONS) {
+      expect(readable(`q3${extension}`)).toBe(true);
+      expect(listed).toContain(extension);
+    }
   });
 });

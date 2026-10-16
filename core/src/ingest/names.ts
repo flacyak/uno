@@ -1,8 +1,10 @@
 /**
- * @fileoverview The names of the files uno reads: how a name splits into its
+ * @fileoverview The names of the files uno reads: the extensions it reads,
+ * the compressions it reads them through, and how a name splits into its
  * stem, its extension and its compression.
  *
- * A name says what a file claims to be, and its bytes decide.
+ * This is the one list the desktop's dialogs, drop and panel take what they
+ * open from. A name says what a file claims to be, and its bytes decide.
  */
 
 import type { Compression } from '@said';
@@ -12,6 +14,15 @@ import type { Compression } from '@said';
  * Compression are named so they can be refused by name.
  */
 export type StoredCompression = Compression | 'bzip2' | 'xz' | 'lz4' | 'snappy';
+
+/**
+ * The extensions of the files uno reads, lower-cased with their dot. It grows
+ * as ingest learns formats.
+ */
+export const READ_EXTENSIONS: readonly string[] = ['.csv', '.tsv'];
+
+/** The compressions uno reads a file through. It grows as ingest learns them. */
+export const READ_COMPRESSIONS: readonly Compression[] = [];
 
 /** The compression each extension claims, the extension lower-cased with its dot. */
 const COMPRESSED: ReadonlyMap<string, StoredCompression> = new Map([
@@ -23,6 +34,27 @@ const COMPRESSED: ReadonlyMap<string, StoredCompression> = new Map([
   ['.snappy', 'snappy'],
   ['.sz', 'snappy'],
 ]);
+
+/** isRead says whether uno reads a file through a compression. */
+function isRead(compression: StoredCompression): boolean {
+  return READ_COMPRESSIONS.some((c) => c === compression);
+}
+
+/** withoutDot returns an extension as a dialog filter names it: csv for .csv. */
+function withoutDot(extension: string): string {
+  return extension.replace(/^\./, '');
+}
+
+/**
+ * The last extensions of the names uno reads, for native dialog filters,
+ * which match only the final one: csv, tsv, and each read compression's.
+ */
+export const DIALOG_EXTENSIONS: readonly string[] = [
+  ...READ_EXTENSIONS,
+  ...[...COMPRESSED]
+    .filter(([, c]) => isRead(c))
+    .map(([extension]) => extension),
+].map(withoutDot);
 
 /** NameParts is a file's name split into what it is called and what it claims to hold. */
 export interface NameParts {
@@ -61,6 +93,15 @@ export function nameParts(name: string): NameParts {
   }
   const [stem, extension] = split(rest);
   return { stem, extension, suffix: file.slice(stem.length), compression };
+}
+
+/** readable says whether a name is a read extension, alone or under a read compression. */
+export function readable(name: string): boolean {
+  const { extension, compression } = nameParts(name);
+  return (
+    READ_EXTENSIONS.includes(extension) &&
+    (compression === undefined || isRead(compression))
+  );
 }
 
 /**
