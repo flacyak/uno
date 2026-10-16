@@ -17,9 +17,9 @@
 
 import type { Edit } from '@sheet';
 import type { Sheet } from '@sheet';
-import { extensionOf } from '@ingest';
+import { nameParts } from '@ingest';
 import type { FileRef, HeaderMode } from '@store';
-import { against, baseOf, dirOf, relativeTo } from './path.ts';
+import { against, dirOf, relativeTo } from './path.ts';
 
 /**
  * FORMAT_VERSION is the highest layout this build reads and writes.
@@ -377,11 +377,12 @@ export interface Document {
 /**
  * sourceEntry names a source's zip entry after the file it holds, so a
  * workspace opened from a TSV writes data/source.tsv. With `id` the entry is
- * data/source/<id>.<ext>, and otherwise data/source.<ext>. An extensionless
+ * data/source/<id>.<ext>, and otherwise data/source.<ext>. A compressed file
+ * keeps every extension, as data/source/sales.csv.gz, and an extensionless
  * name gets .csv.
  */
 export function sourceEntry(name: string, id?: string): string {
-  const ext = extensionOf(name);
+  const ext = nameParts(name).suffix.toLowerCase();
   return (
     (id === undefined ? SOURCE_STEM : SOURCE_DIR + id) +
     (ext === '' ? '.csv' : ext)
@@ -407,14 +408,13 @@ const ID_UNSAFE = /[^A-Za-z0-9._-]+/g;
 
 /**
  * sourceId names a source after its file, as the log calls it: google-ads
- * for Google Ads.csv. A name already in `taken` gets a numeric suffix:
- * google-ads_2, then _3, and so on.
+ * for Google Ads.csv, and sales for sales.csv.gz. A folder is named after
+ * itself. A name already in `taken` gets a numeric suffix: google-ads_2, then
+ * _3, and so on.
  */
 export function sourceId(name: string, taken: Iterable<string>): string {
-  const file = baseOf(name);
-  const dot = file.lastIndexOf('.');
-  const stem = (dot > 0 ? file.slice(0, dot) : file)
-    .replace(ID_UNSAFE, '-')
+  const stem = nameParts(name)
+    .stem.replace(ID_UNSAFE, '-')
     .replace(/^[-.]+|-+$/g, '')
     .toLowerCase();
   const base = stem === '' ? 'source' : stem;
