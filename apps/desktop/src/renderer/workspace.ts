@@ -9,7 +9,7 @@
  * This file is plain logic, so tests run it directly.
  */
 
-import { isWorkspace } from "@document";
+import { WORKSPACE_EXT, isWorkspace } from "@document";
 import { Band } from "@engine";
 import type {
   Changed,
@@ -23,6 +23,7 @@ import type {
   SourceHandle,
   SourceRef,
 } from "@engine";
+import { nameParts } from "@ingest";
 import { NO_ROW, Op, editEquals } from "@sheet";
 import type { Edit } from "@sheet";
 import type { Listing, SingleRef } from "@store";
@@ -41,6 +42,15 @@ import type { State } from "./sources.ts";
 export const CARRY_LIMIT = 256 << 20;
 
 export type Mode = "view" | "transform";
+
+/**
+ * Returns the file name a Save As suggests for a workspace whose first source
+ * is `source`: its stem, every extension dropped, plus .uno. orders.csv.gz
+ * suggests orders.uno.
+ */
+export function suggestedName(source: string): string {
+  return `${nameParts(source).stem || m.workspace_file_stem()}${WORKSPACE_EXT}`;
+}
 
 /**
  * Returns the status message after a reload, comparing the old tab with the
@@ -433,8 +443,7 @@ export class Workspace {
 
   /** The file name to suggest in a Save As dialog: the first tab's stem plus .uno. */
   get suggestedFileName(): string {
-    const base = (this.tabs[0]?.name ?? "").replace(/\.[^.]*$/, "");
-    return `${base || m.workspace_file_stem()}.uno`;
+    return suggestedName(this.tabs[0]?.name ?? "");
   }
 
   /** Whether there is unsaved work: an edit, a source added or removed, or
