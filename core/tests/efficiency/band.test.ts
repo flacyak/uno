@@ -18,9 +18,9 @@ const REPEATS = 100;
 const OBJECT = repeated(REPEATS);
 
 /** The most requests one jump may send. */
-const REQUESTS_BUDGET = 6;
+const REQUESTS_BUDGET = 3;
 /** The most bytes one jump may ask for. */
-const BYTES_BUDGET = 310_000;
+const BYTES_BUDGET = 155_000;
 
 let r: Remote | undefined;
 afterEach(async () => {

@@ -96,14 +96,9 @@ describe('sessions', () => {
     const OPEN_REQUESTS = 3;
     expect(keeping.open.requests).toBeLessThanOrEqual(OPEN_REQUESTS);
     expect(keeping.open.bytes).toBeLessThan(SMALL.chunkBytes * 2);
-    // The same blocks are read. Read-ahead may guess other lengths: with no
-    // scan between, the sample rows' read is still among the readers it
-    // remembers, so a band just past it continues that read.
-    const NEAR = 0.01;
+    // The same blocks are read, and nothing ahead of them.
     expect(keeping.bands.requests).toBe(today.bands.requests);
-    expect(
-      Math.abs(keeping.bands.bytes - today.bands.bytes) / today.bands.bytes,
-    ).toBeLessThan(NEAR);
+    expect(keeping.bands.bytes).toBe(today.bands.bytes);
   });
 
   test('with pages kept, a second open is one HEAD and the same rows', async () => {
