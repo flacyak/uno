@@ -1,0 +1,8 @@
+{"id": 1, "at": "2026-07-01T09:14:03Z", "user": {"id": "u-1042", "country": "PT"}, "event": "view", "page": "/pricing", "ms": 412}
+{"id": 2, "at": "2026-07-01T09:14:09Z", "user": {"id": "u-1042", "country": "PT"}, "event": "click", "target": "Start trial, monthly", "ms": 88}
+{"id": 3, "at": "2026-07-01T09:15:41Z", "user": {"id": "u-2210", "country": "BR"}, "event": "view", "page": "/", "ms": 301}
+{"id": 4, "at": "2026-07-01T09:16:02Z", "user": {"id": "u-2210", "country": "BR"}, "event": "search", "query": "export csv", "ms": 145}
+{"id": 5, "at": "2026-07-01T09:17:30Z", "user": {"id": "u-0007", "country": "GB"}, "event": "view", "page": "/docs/s3", "ms": 512}
+{"id": 6, "at": "2026-07-01T09:18:12Z", "user": {"id": "u-0007", "country": "GB"}, "event": "click", "target": "Connect a bucket", "ms": 64}
+{"id": 7, "at": "2026-07-01T09:19:55Z", "user": {"id": "u-3318", "country": "US"}, "event": "view", "page": "/pricing", "ms": 389}
+{"id": 8, "at": "2026-07-01T09:20:47Z", "user": {"id": "u-3318", "country": "US"}, "event": "purchase", "plan": "team", "seats": 12, "ms": 1204}
