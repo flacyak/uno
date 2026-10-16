@@ -1,6 +1,9 @@
 // The main process: one window, the application menu, the file dialogs, and
 // the engine processes that read files for the renderer.
 //
+// uno runs once. A second uno started while this one runs hands its command
+// line over and exits, and the files it named open in this window.
+//
 // The data lives elsewhere. An engine reads a file in a utility process and
 // sends rows straight to the renderer over a message port. Everything else
 // about the data lives in the renderer.
@@ -16,10 +19,11 @@ import {
   utilityProcess,
 } from "electron";
 import type { MenuItemConstructorOptions, UtilityProcess, WebContents } from "electron";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { m } from "../paraglide/messages.js";
 import { isLocale, setLocale } from "../paraglide/runtime.js";
+import { filesNamed } from "./argv.ts";
 import { sourceAt, unoPath, writeAtomic, writeConnection } from "./files.ts";
 
 /**
@@ -69,20 +73,41 @@ function over(event: { sender: WebContents }): BrowserWindow {
   return win;
 }
 
-/**
- * The file paths on the command line, made absolute.
- *
- * Arguments starting with a dash are Electron switches and are dropped. In
- * development argv also carries the "." that told Electron which app to run.
- * Paths are resolved against the working directory here, because a workspace
- * stores absolute paths to its sources.
- */
+/** The file paths on this process's command line, made absolute. */
 function filesFromArgv(): string[] {
-  const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
-  return args.filter((a) => !a.startsWith("-") && a !== ".").map((a) => resolve(a));
+  return filesNamed(process.argv, process.cwd(), app.getAppPath());
 }
 
-function createWindow(): BrowserWindow {
+/**
+ * open sends files named on a command line to the window. One opens as a
+ * workspace of its own; several are added together as one workspace, in
+ * order. A line that names no file sends nothing.
+ */
+function open(win: BrowserWindow, files: string[]): void {
+  if (files.length === 1) win.webContents.send("menu:open-path", files[0]);
+  else if (files.length > 1) win.webContents.send("menu:add-paths", files);
+}
+
+/**
+ * another takes the command line of a second uno, started while this one
+ * holds the single instance lock. The window comes to the front, since the
+ * person who typed the line is looking for it, and takes the files. On
+ * macOS the app can be running with its window closed, and then the line
+ * opens a new one.
+ */
+function another(argv: string[], cwd: string): void {
+  const files = filesNamed(argv, cwd, app.getAppPath());
+  if (current === undefined) {
+    createWindow(files);
+    return;
+  }
+  if (current.isMinimized()) current.restore();
+  current.focus();
+  open(current, files);
+}
+
+/** createWindow makes the window, and sends it `files` once its page has loaded. */
+function createWindow(files: string[]): BrowserWindow {
   const win = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
@@ -122,16 +147,7 @@ function createWindow(): BrowserWindow {
     void win.loadFile(join(here, "../renderer/index.html"));
   }
 
-  // Files named on the command line are sent to the renderer once the page
-  // has loaded. One file opens on its own; several are added together as one
-  // workspace, in order.
-  const argued = filesFromArgv();
-  if (argued.length > 0) {
-    win.webContents.once("did-finish-load", () => {
-      if (argued.length === 1) win.webContents.send("menu:open-path", argued[0]);
-      else win.webContents.send("menu:add-paths", argued);
-    });
-  }
+  win.webContents.once("did-finish-load", () => open(win, files));
 
   // Links open in the system browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -368,13 +384,14 @@ function registerFileHandlers(): void {
   });
 }
 
-void app.whenReady().then(async () => {
-  const win = createWindow();
+/** start opens the window on the files named at launch, once Electron is ready. */
+async function start(): Promise<void> {
+  const win = createWindow(filesFromArgv());
   buildMenu();
   registerFileHandlers();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow([]);
   });
 
   // The smoke test (UNO_SMOKE) and the preview (UNO_PREVIEW) run inside the
@@ -420,7 +437,17 @@ void app.whenReady().then(async () => {
       );
     });
   }
-});
+}
+
+// The lock is held by the first uno on this user data folder. A second one
+// quits here, before it opens a window, and its command line reaches the
+// first as second-instance.
+if (app.requestSingleInstanceLock()) {
+  app.on("second-instance", (_event, argv, cwd) => another(argv, cwd));
+  void app.whenReady().then(start);
+} else {
+  app.quit();
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

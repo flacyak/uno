@@ -13,7 +13,7 @@ import { beforeAll, expect, test } from "vite-plus/test";
 import { m } from "../src/paraglide/messages.js";
 import { RECENTS_KEY } from "../src/renderer/recents.ts";
 import type { Shell } from "../src/renderer/shell/shell.ts";
-import { FIXTURE, bootShell } from "./smoke/dom-harness.ts";
+import { FIXTURE, SECOND, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 
 /** The units column of the fixture, where an edit goes. */
@@ -134,4 +134,16 @@ test("the × over unsaved edits asks first, and a second × goes ahead", async (
   expect(message()).toBe(m.unsaved_edits_key_again({ key: "×" }));
   shell.quit();
   expect(quits).toBe(1);
+});
+
+test("a file named on the command line over unsaved edits asks first, and named again opens", async () => {
+  await edit(8, "9");
+  const open = () => document.querySelector(".ws.open .name")?.textContent;
+  const was = open();
+  await shell.openPath(SECOND);
+  expect(message()).toBe(m.unsaved_edits_open_again());
+  expect(open()).toBe(was);
+  await shell.openPath(SECOND);
+  expect(await until(page, () => open() !== was)).toBe(true);
+  expect(shell.unsaved).toBe(false);
 });
