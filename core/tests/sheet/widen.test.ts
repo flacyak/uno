@@ -7,8 +7,10 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { NO_ROW, Op, Schema, finishRows, namesBeside } from '@sheet';
+import { FILE_SHOWS } from '@said';
+import { Op, Schema, finishRows, namesBeside } from '@sheet';
 import type { Edit } from '@sheet';
+import { FILES, OPS, edit } from './harness.ts';
 
 const REGION = 0;
 const UNITS = 1;
@@ -16,7 +18,6 @@ const DOUBLE = 2;
 const FILE = 3;
 
 const HEADERS = ['region', 'units', 'double', '_file'];
-const FILE_SHOWS = 'which file each row came from';
 
 /** The two columns that arrive, and where _file sits once they have. */
 const ARRIVING = ['city', 'zip'];
@@ -38,33 +39,10 @@ const WIDE = [
   ['North', '6', '', 'Darwin', '0800'],
 ];
 
-/** Each row's supplied values, one array shared by the rows of a file. */
-const IN_A = ['a.csv'];
-const IN_B = ['b.csv'];
-const FILES = [IN_A, IN_A, IN_B];
-
 const ROWS = NARROW.length;
 
 function schema(): Schema {
   return new Schema(HEADERS, ROWS, [{ col: FILE, shows: FILE_SHOWS }]);
-}
-
-/** Every operation, with a value and a row it can name. */
-const OPS: Array<[Edit['op'], string, number]> = [
-  [Op.Set, 'c.csv', 0],
-  [Op.Note, 'x^2', 0],
-  [Op.Apply, 'trim', NO_ROW],
-  [Op.Bind, 'units * 2', NO_ROW],
-  [Op.Unbind, '', NO_ROW],
-];
-
-function edit(
-  op: Edit['op'],
-  col: number,
-  now: string,
-  row: number = NO_ROW,
-): Edit {
-  return { seq: 0, op, row, col, now };
 }
 
 /**
