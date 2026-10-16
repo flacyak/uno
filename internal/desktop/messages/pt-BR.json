@@ -91,6 +91,7 @@
     }
   ],
   "indexing_percent": "indexando {percent}%",
+  "elapsed_seconds": "{seconds} s",
   "offer_cells_at_least": [
     {
       "declarations": [
