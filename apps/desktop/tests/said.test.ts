@@ -86,6 +86,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
     encoding: "gzip",
     bucket: "open-data",
   },
+  "not-read": { t: "not-read", name: "events.jsonl", what: "JSON Lines" },
   "keeps-no-connections": { t: "keeps-no-connections" },
   "offers-no-sign-ins": { t: "offers-no-sign-ins" },
   "tries-no-connection": { t: "tries-no-connection" },

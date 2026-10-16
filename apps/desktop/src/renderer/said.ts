@@ -173,6 +173,7 @@ const SAYS: Sentences<Said> = {
   "changed-on-disk": (s) => m.refused_changed_on_disk({ name: s.name }),
   "stored-encoded": (s) =>
     m.refused_stored_encoded({ name: s.name, encoding: s.encoding, bucket: s.bucket }),
+  "not-read": (s) => m.refused_not_read({ name: s.name, what: s.what }),
 
   "keeps-no-connections": m.refused_keeps_no_connections,
   "offers-no-sign-ins": m.refused_offers_no_sign_ins,
