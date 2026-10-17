@@ -400,6 +400,7 @@
   "read_delimiter_no_header": "{charset} · delimitador '{delimiter}' · sem linha de cabeçalho",
   "read_tabs": "{charset} · separado por tabulações",
   "read_tabs_no_header": "{charset} · separado por tabulações · sem linha de cabeçalho",
+  "read_lines": "{charset} · JSON Lines",
   "said_about": "{subject}: {why}",
   "said_replaying": "ao reaplicar as edições de {name}: {why}",
   "said_unknown": "esta página é mais antiga do que o seu motor · recarregue-a para ler o que disse",

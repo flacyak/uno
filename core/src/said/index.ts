@@ -86,6 +86,7 @@ export type Said =
 
   // How a file was read, for the status bar.
   | { t: 'read'; delimiter: string; header: HeaderMode; charset: Charset }
+  | { t: 'read-lines'; charset: Charset }
 
   // What a program does, for the recogniser's banner.
   | { t: 'program'; steps: StepSaid[] }
@@ -261,6 +262,7 @@ const SENTENCES: Sentences<Said> = {
         : `${s.charset} · delimiter '${s.delimiter}'`;
     return s.header === 'first' ? read : `${read} · no header row`;
   },
+  'read-lines': (s) => `${s.charset} · ${KINDS.jsonl}`,
 
   program: (s) =>
     s.steps.length === 0 ? 'change nothing' : s.steps.map(step).join(', then '),
