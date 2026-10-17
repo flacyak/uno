@@ -169,6 +169,10 @@ test('an annotation says what the stored value means', () => {
     ],
     [{ name: 'x', type: 'INT32', converted_type: 'DATE' }, { t: 'date' }],
     [
+      { name: 'x', type: 'INT96' },
+      { t: 'timestamp', unit: 'nanos', utc: false },
+    ],
+    [
       { name: 'x', type: 'INT64', converted_type: 'UINT_64' },
       { t: 'unsigned' },
     ],
