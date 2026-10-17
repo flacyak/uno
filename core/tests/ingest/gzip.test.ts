@@ -3,18 +3,19 @@
  * decodes against fflate, where it breaks, its heads, and its checkpoints.
  */
 
-import { Gunzip } from 'fflate';
+import { Gunzip, inflateSync } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
   ALONE,
   BrokenStream,
+  WINDOW_BYTES,
   gunzipWhole,
   gzipInflater,
   inflateHead,
 } from '@ingest/gzip';
 import type { Checkpoint, Inflater } from '@ingest/gzip';
-import { concat, differAt, fixture } from './bytes.ts';
+import { concat, differAt, fixture, kind } from './bytes.ts';
 
 /** The gzip fixtures: one of each shape a file comes in. */
 const FIXTURES = [
@@ -34,6 +35,7 @@ const SLICES = [1, SLICE, Number.MAX_SAFE_INTEGER];
 const CRC_BYTES = 4;
 const TRAILER_BYTES = 8;
 const NO_BYTES = new Uint8Array(0);
+const BITS_PER_BYTE = 8;
 /** A span of one byte keeps every block boundary that decodes anything. */
 const EVERY_BOUNDARY = 1;
 
@@ -163,6 +165,25 @@ describe('a gzip head inflates', () => {
   );
 });
 
+/**
+ * The stored bytes from where a block starts, moved down so it starts at bit
+ * 0. Deflate fills each byte from its low bit up. A stored block that starts
+ * part way into a byte is aligned to the byte after, which moving breaks.
+ */
+function fromBlock(
+  stored: Uint8Array,
+  start: Pick<Checkpoint, 'stored' | 'bits'>,
+): Uint8Array {
+  const rest = stored.subarray(start.stored);
+  const moved = new Uint8Array(rest.length);
+  for (let i = 0; i < rest.length; i++) {
+    const high = (rest[i + 1] ?? 0) << (BITS_PER_BYTE - start.bits);
+    // A Uint8Array keeps the low eight bits of what it is given.
+    moved[i] = (rest[i]! >> start.bits) | high;
+  }
+  return moved;
+}
+
 /** Where each BGZF block's deflate data starts, and its decoded offset. */
 function bgzfBlocks(stored: Uint8Array): Omit<Checkpoint, 'window' | 'bits'>[] {
   const BLOCK_SIZE_AT = 16;
@@ -205,5 +226,24 @@ describe('a gzip pass keeps checkpoints', () => {
   test('a span apart, member starts as well', () => {
     const { checkpoints } = pass(fixture('gzip/bgzf.csv.gz'), SLICE);
     expect(checkpoints.map(({ decoded }) => decoded)).toEqual([0]);
+  });
+
+  test('on block boundaries, with the bytes before each as its window', () => {
+    const stored = fixture('gzip/twice.csv.gz');
+    const whole = gunzipWhole(stored);
+    const inflater = gzipInflater(ALONE, EVERY_BOUNDARY);
+    const { checkpoints } = pass(stored, SLICE, inflater);
+    expect(new Set(checkpoints.map(kind))).toEqual(
+      new Set(['a member start', 'a byte', 'even bits', 'odd bits']),
+    );
+    for (const point of checkpoints) {
+      const from = Math.max(0, point.decoded - WINDOW_BYTES);
+      const before = whole.subarray(from, point.decoded);
+      expect(differAt(point.window, before)).toBe(-1);
+      const rest = inflateSync(fromBlock(stored, point), {
+        dictionary: point.window,
+      });
+      expect(differAt(rest, whole.subarray(point.decoded))).toBe(-1);
+    }
   });
 });
