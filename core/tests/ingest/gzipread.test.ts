@@ -11,11 +11,17 @@ import { describe, expect, test } from 'vite-plus/test';
 import {
   ALONE,
   INFLATE_SLICE_BYTES,
+  WINDOW_BYTES,
   gunzipWhole,
   gzipInflater,
   partBudget,
 } from '@ingest/gzip';
-import type { Inflater, InflaterBudget, Stored } from '@ingest/gzip';
+import type {
+  Checkpoint,
+  Inflater,
+  InflaterBudget,
+  Stored,
+} from '@ingest/gzip';
 import { bytesSource } from '@store';
 import { concat, differAt, fixture, kind } from './bytes.ts';
 
@@ -36,6 +42,8 @@ const MOST_READ = 64 << 10;
 const PARTS = 64;
 /** The values a uint32 takes. */
 const UINT32_VALUES = 2 ** 32;
+/** Whole windows in a budget the file fills many times over. */
+const THINNED_WINDOWS = 4;
 const BUDGETS: [string, InflaterBudget][] = [
   ['alone', ALONE],
   ['as one of many parts', partBudget(PARTS)],
@@ -205,5 +213,40 @@ describe('a gzip read carries on from where the last left off', () => {
     await Promise.all(
       offsets.map((offset) => expectRead(inflater, offset, MOST_READ)),
     );
+  });
+});
+
+describe('a gzip read back up the file', () => {
+  /**
+   * Reads to the end of the gap between the first two windowed checkpoints,
+   * then the middle of it, and gives the stored reads the second made.
+   */
+  async function readBack(budget: InflaterBudget): Promise<{
+    reads: StoredRead[];
+    start: Checkpoint;
+  }> {
+    const reads: StoredRead[] = [];
+    const inflater = passed(budget, logged(reads));
+    const [, start, end] = inflater.checkpoints();
+    await expectRead(inflater, end!.decoded - MOST_READ, MOST_READ);
+    reads.length = 0;
+    const middle = Math.floor((start!.decoded + end!.decoded) / 2);
+    await expectRead(inflater, middle, MOST_READ);
+    return { reads, start: start! };
+  }
+
+  test('alone, is from the span it keeps behind its cursor', async () => {
+    expect((await readBack(ALONE)).reads).toEqual([]);
+  });
+
+  test('as one of many parts, resumes, since a part keeps no span', async () => {
+    const { reads, start } = await readBack(partBudget(PARTS));
+    expect(reads[0]!.offset).toBe(start.stored);
+  });
+
+  test('alone, once its checkpoints thin, keeps the span it began with', async () => {
+    const thinned = { ...ALONE, windows: THINNED_WINDOWS * WINDOW_BYTES };
+    const { reads, start } = await readBack(thinned);
+    expect(reads[0]!.offset).toBe(start.stored);
   });
 });
