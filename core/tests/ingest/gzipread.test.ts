@@ -15,7 +15,7 @@ import {
   gzipInflater,
   partBudget,
 } from '@ingest/gzip';
-import type { Inflater, InflaterBudget } from '@ingest/gzip';
+import type { Inflater, InflaterBudget, Stored } from '@ingest/gzip';
 import { bytesSource } from '@store';
 import { concat, differAt, fixture, kind } from './bytes.ts';
 
@@ -76,9 +76,30 @@ const stored = concat([
 ]);
 const whole = gunzipWhole(stored);
 
-/** An inflater that has passed the whole file. */
-function passed(budget: InflaterBudget): Inflater {
-  const inflater = gzipInflater(bytesSource(stored), budget, SPAN);
+/** A read of the stored bytes: where it started, and where it ended. */
+interface StoredRead {
+  readonly offset: number;
+  readonly end: number;
+}
+
+/** The stored bytes as a source that notes every read of it. */
+function logged(reads: StoredRead[]): Stored {
+  const source = bytesSource(stored);
+  return {
+    read: async (offset, length) => {
+      const bytes = await source.read(offset, length);
+      reads.push({ offset, end: offset + bytes.length });
+      return bytes;
+    },
+  };
+}
+
+/** An inflater that has passed the whole file, reading back from `source`. */
+function passed(
+  budget: InflaterBudget,
+  source: Stored = bytesSource(stored),
+): Inflater {
+  const inflater = gzipInflater(source, budget, SPAN);
   for (let at = 0; at < stored.length; at += INFLATE_SLICE_BYTES) {
     inflater.push(stored.subarray(at, at + INFLATE_SLICE_BYTES), () => {});
   }
@@ -146,5 +167,43 @@ describe('a gzip read', () => {
       });
       await expectRead(inflater, Math.floor(reached / 2), MOST_READ);
     }
+  });
+});
+
+describe('a gzip read carries on from where the last left off', () => {
+  test.each(BUDGETS)(
+    '%s, so reads in order never resume',
+    async (_, budget) => {
+      const reads: StoredRead[] = [];
+      const inflater = passed(budget, logged(reads));
+      for (let offset = 0; offset < whole.length; offset += MOST_READ) {
+        await expectRead(inflater, offset, MOST_READ);
+      }
+      expect(reads[0]!.offset).toBe(inflater.checkpoints()[0]!.stored);
+      const starts = reads.slice(1).map(({ offset }) => offset);
+      expect(
+        starts,
+        'each read of the stored bytes where the last ended',
+      ).toEqual(reads.slice(0, -1).map(({ end }) => end));
+    },
+  );
+
+  test('unless a checkpoint is nearer the next read', async () => {
+    const reads: StoredRead[] = [];
+    const inflater = passed(ALONE, logged(reads));
+    const [, near, , far] = inflater.checkpoints();
+    await expectRead(inflater, near!.decoded, MOST_READ);
+    reads.length = 0;
+    await expectRead(inflater, far!.decoded + MOST_READ, MOST_READ);
+    expect(reads[0]!.offset).toBe(far!.stored);
+  });
+
+  test('once at a time, when reads are made together', async () => {
+    const inflater = passed(ALONE);
+    await expectRead(inflater, 0, MOST_READ);
+    const offsets = [1, 2, 3].map((n) => n * MOST_READ);
+    await Promise.all(
+      offsets.map((offset) => expectRead(inflater, offset, MOST_READ)),
+    );
   });
 });
