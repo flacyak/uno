@@ -111,6 +111,17 @@ export type ParquetValue =
 /** The significant digits that write any float32 so it reads back exactly. */
 export const FLOAT32_DIGITS = 9;
 
+/** The significant digits that write any float16 so it reads back exactly. */
+const FLOAT16_DIGITS = 5;
+
+/**
+ * A float16's stored fraction bits, its smallest normal exponent, which a
+ * subnormal's step shares, and its largest finite value.
+ */
+const FLOAT16_FRACTION_BITS = 10;
+const FLOAT16_MIN_EXPONENT = -14;
+const FLOAT16_MAX = 65504;
+
 /** The bits an INT32 and an INT64 hold, read as unsigned where annotated. */
 const INT32_BITS = 32;
 const INT64_BITS = 64;
@@ -337,6 +348,8 @@ function numberOf(primitive: Primitive, value: number | bigint): string {
       const bits = physical === 'INT64' ? INT64_BITS : INT32_BITS;
       return String(BigInt.asUintN(bits, BigInt(value)));
     }
+    case 'float16':
+      return floatOf(Number(value), FLOAT16_DIGITS, f16round);
     default:
       return physical === 'FLOAT'
         ? floatOf(Number(value), FLOAT32_DIGITS, Math.fround)
@@ -390,6 +403,26 @@ function floatOf(
     if (round(Number(text)) === value) return String(Number(text));
   }
   return String(Number(value.toPrecision(digits)));
+}
+
+/**
+ * The float16 nearest `x`, ties to even, as Math.f16round finds it. Node
+ * before 24 has no Math.f16round, and the core's es2023 lib does not declare
+ * it.
+ */
+function f16round(x: number): number {
+  const magnitude = Math.abs(x);
+  if (!Number.isFinite(x) || magnitude === 0) return x;
+  const exponent = Math.max(
+    Math.floor(Math.log2(magnitude)),
+    FLOAT16_MIN_EXPONENT,
+  );
+  const step = 2 ** (exponent - FLOAT16_FRACTION_BITS);
+  const below = Math.floor(magnitude / step);
+  const over = magnitude / step - below;
+  const up = over > 0.5 || (over === 0.5 && below % 2 === 1);
+  const rounded = (up ? below + 1 : below) * step;
+  return Math.sign(x) * (rounded > FLOAT16_MAX ? Infinity : rounded);
 }
 
 /** Bytes as lower-case hex, two digits each. */
