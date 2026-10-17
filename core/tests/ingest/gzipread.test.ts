@@ -125,4 +125,26 @@ describe('a gzip read', () => {
       }
     },
   );
+
+  test('gives fewer bytes only at the end of the stream', async () => {
+    const TAIL = 10;
+    const inflater = passed(ALONE);
+    await expectRead(inflater, whole.length - TAIL, MOST_READ);
+    expect(await inflater.read(whole.length - TAIL, MOST_READ)).toHaveLength(
+      TAIL,
+    );
+    expect(await inflater.read(whole.length, MOST_READ)).toHaveLength(0);
+  });
+
+  test('during the pass, of bytes it has passed', async () => {
+    const inflater = gzipInflater(bytesSource(stored), ALONE, SPAN);
+    let reached = 0;
+    for (let at = 0; at < stored.length; at += INFLATE_SLICE_BYTES) {
+      const slice = stored.subarray(at, at + INFLATE_SLICE_BYTES);
+      inflater.push(slice, (piece, offset) => {
+        reached = offset + piece.length;
+      });
+      await expectRead(inflater, Math.floor(reached / 2), MOST_READ);
+    }
+  });
 });
