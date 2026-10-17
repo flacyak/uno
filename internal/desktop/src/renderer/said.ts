@@ -167,6 +167,7 @@ const SAYS: Sentences<Said> = {
   "nothing-to-redo": m.refused_nothing_to_redo,
   "in-view": m.refused_in_view,
   "file-closed": m.refused_file_closed,
+  cancelled: (s) => m.refused_cancelled({ name: s.name }),
   "changed-on-disk": (s) => m.refused_changed_on_disk({ name: s.name }),
 
   "keeps-no-connections": m.refused_keeps_no_connections,
