@@ -194,6 +194,7 @@
   "action_reload": "Reload",
   "action_repoint": "Re-point",
   "action_remove": "Remove",
+  "action_stop": "Stop",
   "action_edit_connection": "Edit connection",
   "sources_title": "Sources",
   "settings_title": "Settings",
