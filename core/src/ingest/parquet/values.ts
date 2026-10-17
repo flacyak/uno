@@ -1,9 +1,10 @@
 /**
  * @fileoverview Parquet values as the text their writer meant. columnsOf
- * reads a footer's schema as the columns a sheet shows.
+ * reads a footer's schema as the columns a sheet shows, and textOf writes
+ * one value of a column.
  *
  * Nothing here imports hyparquet. Its schema elements fit Element as they
- * are.
+ * are, and the values it reads fit ParquetValue.
  */
 
 import { headerOf } from '../format.ts';
@@ -92,6 +93,22 @@ export interface Element {
   readonly scale?: number;
   readonly logical_type?: Annotation;
 }
+
+/** ParquetValue is one value of a column as hyparquet reads it. */
+export type ParquetValue =
+  | null
+  | undefined
+  | boolean
+  | number
+  | bigint
+  | string;
+
+/** The significant digits that write any float32 so it reads back exactly. */
+export const FLOAT32_DIGITS = 9;
+
+/** The bits an INT32 and an INT64 hold, read as unsigned where annotated. */
+const INT32_BITS = 32;
+const INT64_BITS = 64;
 
 /** A schema element with its children. */
 interface Tree {
@@ -268,4 +285,58 @@ function logicalOf(element: Element): Logical | undefined {
         ? { t: 'decimal', scale: element.scale ?? 0 }
         : CONVERTED.get(converted ?? '');
   }
+}
+
+/**
+ * textOf writes a leaf's value as the text its writer meant. A number is
+ * exact, at its own precision, and a null is an empty cell.
+ */
+export function textOf({ shape }: Leaf, value: ParquetValue): string {
+  return scalarOf(shape.t === 'primitive' ? shape : undefined, value);
+}
+
+/** A value by what its primitive says it means, or as it is with none. */
+function scalarOf(
+  primitive: Primitive | undefined,
+  value: ParquetValue,
+): string {
+  if (value === null || value === undefined) return '';
+  if (primitive && (typeof value === 'number' || typeof value === 'bigint')) {
+    return numberOf(primitive, value);
+  }
+  return String(value);
+}
+
+/** A stored number by what its column says it means. */
+function numberOf(primitive: Primitive, value: number | bigint): string {
+  const { physical, logical } = primitive;
+  // String(-0) is '0', which reads back as +0. Only a float is ever -0.
+  if (Object.is(value, -0)) return '-0';
+  switch (logical?.t) {
+    case 'unsigned': {
+      const bits = physical === 'INT64' ? INT64_BITS : INT32_BITS;
+      return String(BigInt.asUintN(bits, BigInt(value)));
+    }
+    default:
+      return physical === 'FLOAT'
+        ? floatOf(Number(value), FLOAT32_DIGITS, Math.fround)
+        : String(value);
+  }
+}
+
+/**
+ * The shortest text that `round`, a float format's rounding, maps back to
+ * `value`, with at most `digits` significant digits.
+ */
+function floatOf(
+  value: number,
+  digits: number,
+  round: (x: number) => number,
+): string {
+  if (!Number.isFinite(value)) return String(value);
+  for (let precision = 1; precision < digits; precision++) {
+    const text = value.toPrecision(precision);
+    if (round(Number(text)) === value) return String(Number(text));
+  }
+  return String(Number(value.toPrecision(digits)));
 }
