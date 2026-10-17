@@ -6,7 +6,8 @@
  * inflates gzip members one after another and stops at every deflate block
  * boundary. A checkpoint is such a boundary with the 32 KB decoded before it,
  * as Mark Adler's zran keeps, or a member start, which needs no window. A
- * read resumes from one as raw deflate, with the window as its dictionary.
+ * read resumes from one as raw deflate, with the window as its dictionary,
+ * unless the cursor the last read left is nearer.
  */
 
 import {
@@ -139,8 +140,9 @@ export interface Inflater {
   checkpoints(): readonly Checkpoint[];
   /**
    * Up to `length` decoded bytes from `offset`, which push has passed, and
-   * fewer only at the end of the stream. It inflates from the checkpoint
-   * before `offset`. Throws BrokenStream.
+   * fewer only at the end of the stream. It carries on from where the last
+   * read stopped, or resumes from the checkpoint before `offset` when that
+   * is nearer. Throws BrokenStream.
    */
   read(offset: number, length: number): Promise<Uint8Array>;
 }
@@ -375,15 +377,19 @@ export function gzipInflater(
   return new GzipInflater(stored, budget, span);
 }
 
+/** Piece is a decoded piece and the decoded offset it starts at. */
+interface Piece {
+  readonly at: number;
+  readonly bytes: Uint8Array;
+}
+
 /**
  * Cursor inflates from a checkpoint on, reading the stored bytes as it needs
  * them. It holds the piece it inflated last.
  */
 class Cursor {
   /** The piece inflated last, good until the next step. */
-  piece: Uint8Array = NONE;
-  /** The decoded offset the piece starts at. */
-  at: number;
+  private last: Piece;
   private readonly stored: Stored;
   private readonly members: Members;
   /** The stored offset of the next bytes to read. */
@@ -393,7 +399,7 @@ class Cursor {
     this.stored = stored;
     this.members = members;
     this.next = next;
-    this.at = members.decoded;
+    this.last = { at: members.decoded, bytes: NONE };
   }
 
   /** A cursor resumed at `point`. */
@@ -403,8 +409,37 @@ class Cursor {
     return new Cursor(stored, members, point.stored + bytes.length);
   }
 
+  /** The decoded offset of the first byte held. */
+  get from(): number {
+    return this.last.at;
+  }
+
+  /** The decoded offset it has inflated to. */
+  get to(): number {
+    return this.members.decoded;
+  }
+
+  /**
+   * Up to `length` bytes from `offset`, which is at or past `from`, and
+   * fewer only at the end of the stream.
+   */
+  async read(offset: number, length: number): Promise<Uint8Array> {
+    const out = new Uint8Array(length);
+    let got = 0;
+    const copy = ({ at, bytes }: Piece): void => {
+      const skip = offset + got - at;
+      if (got === length || skip >= bytes.length) return;
+      const part = bytes.subarray(skip, skip + length - got);
+      out.set(part, got);
+      got += part.length;
+    };
+    copy(this.last);
+    while (got < length && (await this.step())) copy(this.last);
+    return out.subarray(0, got);
+  }
+
   /** Inflates the next piece. False at the end of the stream. */
-  async step(): Promise<boolean> {
+  private async step(): Promise<boolean> {
     while (this.members.hungry) {
       const bytes = await this.stored.read(this.next, INFLATE_SLICE_BYTES);
       if (bytes.length === 0) {
@@ -414,8 +449,7 @@ class Cursor {
       this.next += bytes.length;
       this.members.feed(bytes);
     }
-    this.at = this.members.decoded;
-    this.piece = this.members.step();
+    this.last = { at: this.members.decoded, bytes: this.members.step() };
     return true;
   }
 }
@@ -432,6 +466,10 @@ class GzipInflater implements Inflater {
    * the first, which a read before any other resumes from.
    */
   private readonly most: number;
+  /** Where the last read left off, which the next carries on from. */
+  private cursor: Cursor | undefined;
+  /** The last read, which the next waits for, since they share the cursor. */
+  private reading: Promise<void> = Promise.resolve();
 
   private readonly stored: Stored;
   /** The decoded bytes between checkpoints, which thinning doubles. */
@@ -467,18 +505,33 @@ class GzipInflater implements Inflater {
     return this.kept;
   }
 
-  async read(offset: number, length: number): Promise<Uint8Array> {
-    const cursor = await Cursor.resume(this.stored, this.before(offset));
-    const out = new Uint8Array(length);
-    let got = 0;
-    while (got < length && (await cursor.step())) {
-      const from = offset + got - cursor.at;
-      if (from >= cursor.piece.length) continue;
-      const part = cursor.piece.subarray(from, from + length - got);
-      out.set(part, got);
-      got += part.length;
+  read(offset: number, length: number): Promise<Uint8Array> {
+    const read = this.reading.then(async () => {
+      const cursor = await this.cursorFor(offset);
+      return cursor.read(offset, length);
+    });
+    this.reading = read.then(
+      () => undefined,
+      () => {
+        // A read that failed may have left its cursor part way through a step.
+        this.cursor = undefined;
+      },
+    );
+    return read;
+  }
+
+  /**
+   * The cursor, which starts again from the checkpoint before `offset` when
+   * `offset` is behind what it holds or that checkpoint is past it.
+   */
+  private async cursorFor(offset: number): Promise<Cursor> {
+    const point = this.before(offset);
+    const cursor = this.cursor;
+    if (cursor && cursor.from <= offset && point.decoded <= cursor.to) {
+      return cursor;
     }
-    return out.subarray(0, got);
+    this.cursor = await Cursor.resume(this.stored, point);
+    return this.cursor;
   }
 
   /** The last checkpoint at or before a decoded offset. */
