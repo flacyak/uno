@@ -115,3 +115,33 @@ test('a nanosecond INT96 keeps nine digits, before 1970 as after it', () => {
     '1970-01-01T00:00:01',
   ]);
 });
+
+test('a TIME is a clock, with Z where it is UTC', () => {
+  expect(
+    textsOf(
+      { name: 'x', type: 'INT32', converted_type: 'TIME_MILLIS' },
+      [45296789, 0],
+    ),
+  ).toEqual(['12:34:56.789Z', '00:00:00Z']);
+  const local: SchemaElement = {
+    name: 'x',
+    type: 'INT64',
+    logical_type: { type: 'TIME', isAdjustedToUTC: false, unit: 'MICROS' },
+  };
+  expect(textsOf(local, [86399999999n, 3600000000n])).toEqual([
+    '23:59:59.999999',
+    '01:00:00',
+  ]);
+});
+
+test('a TIME outside one day is its count', () => {
+  const element: SchemaElement = {
+    name: 'x',
+    type: 'INT64',
+    logical_type: { type: 'TIME', isAdjustedToUTC: true, unit: 'NANOS' },
+  };
+  expect(textsOf(element, [-1n, 86400000000000n])).toEqual([
+    '-1',
+    '86400000000000',
+  ]);
+});
