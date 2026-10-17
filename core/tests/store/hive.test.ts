@@ -1,11 +1,12 @@
 /**
  * @fileoverview partitionOf reads the key=value folders of a path under a
- * dataset's root, decoding escapes the way Hive and pyarrow write them.
+ * dataset's root, decoding escapes the way Hive and pyarrow write them, and
+ * byPartPath orders those paths with whole numbers as numbers.
  */
 
 import { expect, test } from 'vite-plus/test';
 
-import { HIVE_NULL, partitionOf } from '@store/hive';
+import { HIVE_NULL, byPartPath, partitionOf } from '@store/hive';
 
 test('each key=value folder is a key and its value, in path order', () => {
   expect(partitionOf('year=2024/month=09/part-0.parquet')).toEqual({
@@ -58,4 +59,23 @@ test("Hive's null partition reads as empty, as does an empty value", () => {
   const read = partitionOf(`year=${HIVE_NULL}/month=/f.parquet`);
 
   expect(read).toEqual({ keys: ['year', 'month'], values: ['', ''] });
+});
+
+/** sorted is paths in the order byPartPath gives them. */
+function sorted(paths: readonly string[]): string[] {
+  return [...paths].sort(byPartPath);
+}
+
+test('month=9 comes before month=10, inside the year they are under', () => {
+  const paths = [
+    'year=2024/month=10/part-0.parquet',
+    'year=2024/month=9/part-0.parquet',
+    'year=2023/month=12/part-0.parquet',
+  ];
+
+  expect(sorted(paths)).toEqual([
+    'year=2023/month=12/part-0.parquet',
+    'year=2024/month=9/part-0.parquet',
+    'year=2024/month=10/part-0.parquet',
+  ]);
 });
