@@ -4,6 +4,7 @@
  * repeated names, half of them then broken at random.
  */
 
+import { pick, upTo } from '@core-tests/random';
 import type { Random } from '@core-tests/random';
 
 /** How deep a random line's values nest below its own object, at most. */
@@ -102,16 +103,6 @@ const SHORT_ESCAPES: ReadonlyMap<string, string> = new Map([
   ['\r', '\\r'],
   ['\t', '\\t'],
 ]);
-
-/** pick returns one of `from`, each as likely. */
-function pick<T>(rand: Random, from: readonly T[]): T {
-  return from[Math.floor(rand() * from.length)]!;
-}
-
-/** upTo returns a whole number from 0 to `most`. */
-function upTo(rand: Random, most: number): number {
-  return Math.floor(rand() * (most + 1));
-}
 
 /** run returns a run of digits, one or more, `first` drawn from. */
 function run(rand: Random, first: readonly string[]): string {
