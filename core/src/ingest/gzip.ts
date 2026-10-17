@@ -5,7 +5,8 @@
  * All three run pako's low-level zlib API through one class, Members, which
  * inflates gzip members one after another and stops at every deflate block
  * boundary. A checkpoint is such a boundary with the 32 KB decoded before it,
- * as Mark Adler's zran keeps, or a member start, which needs no window.
+ * as Mark Adler's zran keeps, or a member start, which needs no window. A
+ * read resumes from one as raw deflate, with the window as its dictionary.
  */
 
 import {
@@ -20,6 +21,8 @@ import {
   zlibInflateSetDictionary,
 } from 'pako';
 
+import type { ByteSource } from '@store';
+
 /** Decoded bytes between checkpoints, before any thinning. */
 export const CHECKPOINT_SPAN = 16 << 20;
 /** Window bytes a file read alone may hold. */
@@ -28,6 +31,11 @@ export const CHECKPOINT_BUDGET = 32 << 20;
 export const WINDOW_BYTES = 32 << 10;
 /** Decoded spans a file read alone keeps for reads behind its cursor. */
 export const SPANS_KEPT = 1;
+/**
+ * Stored bytes inflated between turns of the event loop: a pass pushes this
+ * many at a time, and a read asks its source for this many.
+ */
+export const INFLATE_SLICE_BYTES = 1 << 20;
 
 /** zlib's window bits for a 32 KB window. */
 const MAX_WINDOW_BITS = 15;
@@ -129,7 +137,16 @@ export interface Inflater {
   end(): number;
   /** The checkpoints kept so far, in decoded order. */
   checkpoints(): readonly Checkpoint[];
+  /**
+   * Up to `length` decoded bytes from `offset`, which push has passed, and
+   * fewer only at the end of the stream. It inflates from the checkpoint
+   * before `offset`. Throws BrokenStream.
+   */
+  read(offset: number, length: number): Promise<Uint8Array>;
 }
+
+/** Stored is where an inflater reads stored bytes back from. */
+export type Stored = Pick<ByteSource, 'read'>;
 
 /** Where a deflate block starts in the stored bytes. */
 type BlockStart = Pick<Checkpoint, 'stored' | 'bits'>;
@@ -348,13 +365,59 @@ export function inflateHead(
 /**
  * gzipInflater inflates a gzip file once. It keeps a checkpoint at the first
  * block boundary, a member start, then at each one at least `span` past the
- * last checkpoint.
+ * last checkpoint. A read inflates again from `stored`.
  */
 export function gzipInflater(
+  stored: Stored,
   budget: InflaterBudget,
   span: number = CHECKPOINT_SPAN,
 ): Inflater {
-  return new GzipInflater(budget, span);
+  return new GzipInflater(stored, budget, span);
+}
+
+/**
+ * Cursor inflates from a checkpoint on, reading the stored bytes as it needs
+ * them. It holds the piece it inflated last.
+ */
+class Cursor {
+  /** The piece inflated last, good until the next step. */
+  piece: Uint8Array = NONE;
+  /** The decoded offset the piece starts at. */
+  at: number;
+  private readonly stored: Stored;
+  private readonly members: Members;
+  /** The stored offset of the next bytes to read. */
+  private next: number;
+
+  private constructor(stored: Stored, members: Members, next: number) {
+    this.stored = stored;
+    this.members = members;
+    this.next = next;
+    this.at = members.decoded;
+  }
+
+  /** A cursor resumed at `point`. */
+  static async resume(stored: Stored, point: Checkpoint): Promise<Cursor> {
+    const bytes = await stored.read(point.stored, INFLATE_SLICE_BYTES);
+    const members = Members.resume(point, bytes);
+    return new Cursor(stored, members, point.stored + bytes.length);
+  }
+
+  /** Inflates the next piece. False at the end of the stream. */
+  async step(): Promise<boolean> {
+    while (this.members.hungry) {
+      const bytes = await this.stored.read(this.next, INFLATE_SLICE_BYTES);
+      if (bytes.length === 0) {
+        this.members.end();
+        return false;
+      }
+      this.next += bytes.length;
+      this.members.feed(bytes);
+    }
+    this.at = this.members.decoded;
+    this.piece = this.members.step();
+    return true;
+  }
 }
 
 /**
@@ -370,10 +433,12 @@ class GzipInflater implements Inflater {
    */
   private readonly most: number;
 
+  private readonly stored: Stored;
   /** The decoded bytes between checkpoints, which thinning doubles. */
   private span: number;
 
-  constructor(budget: InflaterBudget, span: number) {
+  constructor(stored: Stored, budget: InflaterBudget, span: number) {
+    this.stored = stored;
     this.span = span;
     this.most = Math.max(1, Math.floor(budget.windows / WINDOW_BYTES));
   }
@@ -400,6 +465,34 @@ class GzipInflater implements Inflater {
 
   checkpoints(): readonly Checkpoint[] {
     return this.kept;
+  }
+
+  async read(offset: number, length: number): Promise<Uint8Array> {
+    const cursor = await Cursor.resume(this.stored, this.before(offset));
+    const out = new Uint8Array(length);
+    let got = 0;
+    while (got < length && (await cursor.step())) {
+      const from = offset + got - cursor.at;
+      if (from >= cursor.piece.length) continue;
+      const part = cursor.piece.subarray(from, from + length - got);
+      out.set(part, got);
+      got += part.length;
+    }
+    return out.subarray(0, got);
+  }
+
+  /** The last checkpoint at or before a decoded offset. */
+  private before(offset: number): Checkpoint {
+    let low = 0;
+    let high = this.kept.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (this.kept[middle]!.decoded <= offset) low = middle;
+      else high = middle - 1;
+    }
+    const point = this.kept[low];
+    if (point === undefined) throw new RangeError('no checkpoint to read from');
+    return point;
   }
 
   /** Keeps a block boundary a span past the last checkpoint, or the first. */
