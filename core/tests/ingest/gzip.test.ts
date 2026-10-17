@@ -6,7 +6,12 @@
 import { Gunzip } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { BrokenStream, gunzipWhole, inflateHead } from '@ingest/gzip';
+import {
+  BrokenStream,
+  gunzipWhole,
+  gzipInflater,
+  inflateHead,
+} from '@ingest/gzip';
 import { concat, differAt, fixture } from './bytes.ts';
 
 /** The gzip fixtures: one of each shape a file comes in. */
@@ -18,6 +23,10 @@ const FIXTURES = [
   'empty.gz',
 ];
 
+/** Stored bytes pushed at a time: an odd size, and with it one byte and all. */
+const SLICE = 4093;
+const SLICES = [1, SLICE, Number.MAX_SAFE_INTEGER];
+
 /** A gzip trailer: the CRC, then the length. */
 const CRC_BYTES = 4;
 const TRAILER_BYTES = 8;
@@ -27,6 +36,29 @@ function fflate(stored: Uint8Array): Uint8Array {
   const pieces: Uint8Array[] = [];
   new Gunzip((piece) => pieces.push(piece)).push(stored, true);
   return concat(pieces);
+}
+
+/** One pass of a gzip inflater, `slice` stored bytes at a push. */
+function pass(stored: Uint8Array, slice: number): { decoded: Uint8Array } {
+  const inflater = gzipInflater();
+  const pieces: Uint8Array[] = [];
+  const offsets: number[] = [];
+  for (let at = 0; at < stored.length; at += slice) {
+    inflater.push(stored.subarray(at, at + slice), (piece, offset) => {
+      pieces.push(piece.slice());
+      offsets.push(offset);
+    });
+  }
+  const decoded = concat(pieces);
+  let length = 0;
+  const misplaced = pieces.findIndex((piece, i) => {
+    const wrong = offsets[i] !== length;
+    length += piece.length;
+    return wrong;
+  });
+  expect(misplaced, 'the first piece out of place').toBe(-1);
+  expect(inflater.end()).toBe(decoded.length);
+  return { decoded };
 }
 
 /** The stored offset a BrokenStream names, from `run`. */
@@ -45,6 +77,9 @@ describe('a gzip file inflates', () => {
     const stored = fixture(`gzip/${name}`);
     const want = fflate(stored);
     expect(differAt(gunzipWhole(stored), want)).toBe(-1);
+    for (const slice of SLICES) {
+      expect(differAt(pass(stored, slice).decoded, want)).toBe(-1);
+    }
   });
 
   test('the members of a file to the parts they were made from', () => {
@@ -66,6 +101,9 @@ describe('a broken gzip file names the stored byte it breaks at', () => {
   const CUTS = [5, 1000, stored.length - CRC_BYTES];
 
   test.each(CUTS)('cut at %i', (cut) => {
+    const inflater = gzipInflater();
+    inflater.push(stored.subarray(0, cut), () => {});
+    expect(brokenAt(() => inflater.end())).toBe(cut);
     expect(brokenAt(() => gunzipWhole(stored.subarray(0, cut)))).toBe(cut);
   });
 
@@ -73,6 +111,10 @@ describe('a broken gzip file names the stored byte it breaks at', () => {
     const crcAt = stored.length - TRAILER_BYTES;
     const damaged = stored.slice();
     damaged[crcAt]! ^= 1;
+    const inflater = gzipInflater();
+    expect(brokenAt(() => inflater.push(damaged, () => {}))).toBe(
+      crcAt + CRC_BYTES,
+    );
     expect(brokenAt(() => gunzipWhole(damaged))).toBe(crcAt + CRC_BYTES);
   });
 
