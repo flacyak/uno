@@ -28,6 +28,7 @@ import {
   tampered,
   workspace,
 } from '@core-tests/document/manifest';
+import type { WrittenManifest } from '@core-tests/document/manifest';
 
 /**
  * Columns learned from the rows: a top-level field, a nested field and the
@@ -189,6 +190,11 @@ describe('a source with pinned columns', () => {
   });
 });
 
+/** The pinned columns of the first source of a written manifest. */
+function columnsOf(m: WrittenManifest): Array<Record<string, unknown>> {
+  return m.sources[0]!['columns'] as Array<Record<string, unknown>>;
+}
+
 describe('a source with pinned columns reads back', () => {
   test('as it was held, from one file', () => {
     const doc = workspace([events()]);
@@ -203,6 +209,72 @@ describe('a source with pinned columns reads back', () => {
     const back = readContainer('books.uno', writeDocument(doc), AT);
     expect(back.sources).toEqual(doc.sources);
     expect(back.log).toEqual(doc.log);
+  });
+});
+
+// readContainer refuses what this build cannot read, by name, listing what
+// it can.
+describe('a source that says how it was read is refused on reading', () => {
+  const refusals: Array<
+    [what: string, change: (m: WrittenManifest) => void, message: string]
+  > = [
+    [
+      'a kind this build does not know, by name',
+      (m) => (m.sources[0]!['kind'] = 'avro'),
+      'books.uno: events.jsonl: this build does not know kind "avro" · it reads none',
+    ],
+    [
+      'a kind that is not text',
+      (m) => (m.sources[0]!['kind'] = 7),
+      'books.uno: events.jsonl: this build does not know kind 7 · it reads none',
+    ],
+    [
+      'a compression this build does not know, by name',
+      (m) => (m.sources[0]!['compression'] = 'lz4'),
+      'books.uno: events.jsonl: this build does not know compression "lz4" · it reads none',
+    ],
+    [
+      'a kind this build does not know on several files',
+      (m) => (m.sources[1]!['kind'] = 'avro'),
+      'books.uno: shards: this build does not know kind "avro" · it reads none',
+    ],
+    // The kind is read first: only delimited text has to say header.
+    [
+      'a kind this build does not know on several files with no header',
+      (m) => {
+        m.sources[1]!['kind'] = 'avro';
+        delete m.sources[1]!['header'];
+      },
+      'books.uno: shards: this build does not know kind "avro" · it reads none',
+    ],
+    [
+      'columns that are not a list',
+      (m) => (m.sources[0]!['columns'] = 'id,user.name,_line'),
+      'books.uno: events.jsonl: columns is not a list of columns',
+    ],
+    [
+      'a column that is not one',
+      (m) =>
+        (columnsOf(m)[1] = 'user.name' as unknown as Record<string, unknown>),
+      'books.uno: events.jsonl: column 2 of 3 is not a column with a name',
+    ],
+    [
+      'a column with no name',
+      (m) => delete columnsOf(m)[1]!['name'],
+      'books.uno: events.jsonl: column 2 of 3 has no name',
+    ],
+    [
+      'a column whose key is not text',
+      (m) => (columnsOf(m)[1]!['key'] = ['user', 'name']),
+      'books.uno: events.jsonl: column 2 of 3 (user.name): key is not text',
+    ],
+  ];
+
+  test.each(refusals)('with %s', (_what, change, message) => {
+    const uno = tampered(workspace([events(), shards()]), change);
+    expect(() => readContainer('books.uno', uno, AT)).toThrow(
+      new Error(message),
+    );
   });
 });
 
