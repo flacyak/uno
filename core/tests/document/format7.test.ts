@@ -8,7 +8,13 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { READ_VERSION, formatFor, writeDocument } from '@document';
-import type { HeldFile, HeldParts, SavedColumn } from '@document';
+import type {
+  HeldFile,
+  HeldParts,
+  SavedColumn,
+  SourceCompression,
+  SourceKind,
+} from '@document';
 import {
   manifestOf,
   manifestText,
@@ -172,5 +178,70 @@ describe('a source with pinned columns', () => {
     expect(formatFor([plain, { ...events(), columns: [] }], [])).toBe(
       READ_VERSION,
     );
+  });
+});
+
+/**
+ * A kind and a compression no build reads yet, cast in to see where the
+ * writer puts them. Each joins its type in the change that reads it.
+ */
+const KIND = 'jsonl' as SourceKind;
+const COMPRESSION = 'gzip' as SourceCompression;
+
+describe('a source with a kind', () => {
+  // The full manifest text is compared, so any moved key fails.
+  test('of one file is written with its kind and compression after its path, to the byte', () => {
+    const source: HeldFile = {
+      ...events(),
+      kind: KIND,
+      compression: COMPRESSION,
+      columns: undefined,
+    };
+    const uno = writeDocument(workspace([source]));
+    const m = manifestOf(uno);
+    expect(manifestText(uno)).toBe(`{
+  "format": 7,
+  "generator": "uno 0.2.0",
+  "created": "2026-09-30T12:00:00Z",
+  "modified": "${m.modified}",
+  "sources": [
+    {
+      "id": "events",
+      "name": "events.jsonl",
+      "bytes": 48211904,
+      "path": "exports/events.jsonl",
+      "version": "\\"5e0c2a\\"",
+      "kind": "jsonl",
+      "compression": "gzip",
+      "rows": 310455,
+      "cols": 3
+    }
+  ],
+  "sheet": {
+    "entry": "sheet/state.json"
+  },
+  "edits": {
+    "count": 1,
+    "entry": "edits/log.jsonl"
+  }
+}
+`);
+  });
+
+  // Only delimited text, which has no kind, has a header row to say.
+  test('of several files is written with its kind after its parts, and no header', () => {
+    const m = manifestOf(
+      writeDocument(workspace([{ ...shards(), kind: KIND }])),
+    );
+    expect(Object.keys(m.sources[0]!)).toEqual([
+      'id',
+      'name',
+      'parts',
+      'kind',
+      'rows',
+      'cols',
+      'columns',
+    ]);
+    expect(m.sources[0]!['kind']).toBe('jsonl');
   });
 });
