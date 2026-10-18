@@ -34,14 +34,17 @@ export function baseOf(path: string): string {
 /**
  * relativeTo returns where `file` sits under `dir`, with forward slashes. A
  * file in a sibling folder, on another drive or above `dir` gives "". The
- * result is a plain descent from `dir`.
+ * result is a plain descent from `dir`. `dir` may end in its separator, as a
+ * bucket prefix such as s3://lake/orders/ does.
  */
 export function relativeTo(file: string, dir: string): string {
   if (dir === '' || file === '') return '';
-  const head = file.slice(0, dir.length);
-  const sep = file.charAt(dir.length);
-  if (head !== dir || !SEP.test(sep)) return '';
-  const rest = file.slice(dir.length + 1);
+  // Where `dir` ends without its separator, which `file` must have next.
+  const end = endsInSep(dir) ? dir.length - 1 : dir.length;
+  const head = file.slice(0, end);
+  const sep = file.charAt(end);
+  if (head !== dir.slice(0, end) || !SEP.test(sep)) return '';
+  const rest = file.slice(end + 1);
   // A doubled separator leaves `rest` absolute, and `against` would hand it
   // back as a path from the root.
   if (rest === '' || SEP.test(rest.charAt(0))) return '';
@@ -55,7 +58,7 @@ export function relativeTo(file: string, dir: string): string {
  */
 export function against(stored: string, dir: string): string {
   if (stored === '' || dir === '' || isAbsolute(stored)) return stored;
-  return dir + (SEP.test(dir.charAt(dir.length - 1)) ? '' : '/') + stored;
+  return dir + (endsInSep(dir) ? '' : '/') + stored;
 }
 
 /**
@@ -68,4 +71,10 @@ export function samePath(a: string, b: string): boolean {
 
 function lastSep(path: string): number {
   return Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+}
+
+/** endsInSep is true when `path` ends in a separator, as a bucket prefix
+ * does. */
+function endsInSep(path: string): boolean {
+  return SEP.test(path.charAt(path.length - 1));
 }

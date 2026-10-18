@@ -108,6 +108,29 @@ test('a path splits into its folder and its name, either way round', () => {
   ).toBe('');
 });
 
+// A bucket prefix or a picked folder may end in its separator.
+test('a folder written with its separator at the end holds the paths under it', () => {
+  expect(
+    relativeTo(
+      's3://lake/orders/year=2024/part-0.parquet',
+      's3://lake/orders/',
+    ),
+  ).toBe('year=2024/part-0.parquet');
+  expect(relativeTo('/data/lake/part-0.parquet', '/data/lake/')).toBe(
+    'part-0.parquet',
+  );
+  expect(relativeTo('C:\\lake\\year=2024\\a.csv', 'C:\\lake\\')).toBe(
+    'year=2024/a.csv',
+  );
+  expect(relativeTo('/data/a.csv', '/')).toBe('data/a.csv');
+  expect(relativeTo('/data/lake/', '/data/lake/')).toBe('');
+  expect(relativeTo('/data/lake//a.csv', '/data/lake/')).toBe('');
+  expect(relativeTo('/data/lakehouse/a.csv', '/data/lake/')).toBe('');
+  expect(against('year=2024/part-0.parquet', 's3://lake/orders/')).toBe(
+    's3://lake/orders/year=2024/part-0.parquet',
+  );
+});
+
 test('two paths are the same place whichever way their slashes lean', () => {
   expect(samePath('C:\\data\\q4\\sales.csv', 'C:/data/q4/sales.csv')).toBe(
     true,
