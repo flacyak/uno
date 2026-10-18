@@ -399,6 +399,9 @@ describe('a source in a bucket', () => {
     }),
   ];
 
+  const handler = () =>
+    s3Files({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint });
+
   test('opens as a view, read in ranges, and matches the file it is', async () => {
     const { engine, done } = connect(undefined, providers());
     try {
@@ -458,23 +461,15 @@ describe('a source in a bucket', () => {
       `s3://${BUCKET}/2025/sales-q3.csv: access denied`,
     );
 
-    const right = s3Files({
-      credentials: () => Promise.resolve(KEYS),
-      endpoint: b.endpoint,
-    });
-    await expect(right.open(at('2025/gone.csv'))).rejects.toThrow(
+    await expect(handler().open(at('2025/gone.csv'))).rejects.toThrow(
       'no such object in that bucket',
     );
   });
 
   // Each range is asked for with If-Match on the version that was opened.
   test('refuses to read an object rewritten under it', async () => {
-    const s3 = s3Files({
-      credentials: () => Promise.resolve(KEYS),
-      endpoint: b.endpoint,
-    });
     b.objects.set('2025/moving.csv', bytes);
-    const file = await s3.open(at('2025/moving.csv'));
+    const file = await handler().open(at('2025/moving.csv'));
     expect((await file.read(0, 4)).length).toBe(4);
 
     b.objects.set('2025/moving.csv', bytes.subarray(10));
