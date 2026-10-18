@@ -11,10 +11,11 @@ import {
   detect,
   headOf,
   kindOf,
+  linesFormat,
   openFormat,
   refuseNotRead,
 } from '@ingest';
-import type { Column, HeaderMode, RecordFormat } from '@ingest';
+import type { Column, HeaderMode, KeyedColumn, RecordFormat } from '@ingest';
 import { Refusal } from '@said';
 import type { ReadKind, Said } from '@said';
 import { headed, multiOf } from '@store';
@@ -64,11 +65,17 @@ export interface Run {
 }
 
 /** ReadSpec is how a source's rows were read, which a save records. */
-export type ReadSpec = {
-  readonly kind: 'delimited';
-  /** Whether the first record names the columns. */
-  readonly header: HeaderMode;
-};
+export type ReadSpec =
+  | {
+      readonly kind: 'delimited';
+      /** Whether the first record names the columns. */
+      readonly header: HeaderMode;
+    }
+  | {
+      readonly kind: 'jsonl';
+      /** The columns in order, each found by its key wherever it is first seen. */
+      readonly columns: readonly KeyedColumn[];
+    };
 
 /** Behind is what holds a source's stored bytes: one file, or several joined as bytes. */
 export type Behind =
@@ -123,10 +130,19 @@ export interface ReadAsk {
 
 /**
  * openReading reads the head of a source and opens its Reading. A source
- * with no spec is detected first, its head read once.
+ * with no spec is detected first, its head read once. One held to JSON Lines
+ * starts from the columns its spec pins, and learns the rest as it is
+ * indexed.
  */
 export async function openReading(ask: ReadAsk): Promise<Reading> {
   const { name, source, spec, tuning } = ask;
+  if (spec?.kind === 'jsonl') {
+    const lines = linesFormat(name, (await headOf(source)).bytes, spec.columns);
+    return recordReading(name, source, lines, tuning, () => ({
+      kind: 'jsonl',
+      columns: lines.columns(),
+    }));
+  }
   const head = spec === undefined ? await detectedHead(ask) : undefined;
   const format = await openFormat(
     name,

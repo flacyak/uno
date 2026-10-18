@@ -106,6 +106,11 @@ function rowOf(registry: KeyRegistry, line: string): string[] {
   return row;
 }
 
+/** LinesFormat reads JSON Lines, whose every column is found by its key. */
+export interface LinesFormat extends RecordFormat {
+  columns(): readonly KeyedColumn[];
+}
+
 /**
  * linesFormat reads a JSON Lines file named `name` whose head is `head`. Its
  * columns start as `pinned`, and its indexer adds one for each new key while
@@ -117,7 +122,7 @@ export function linesFormat(
   name: string,
   head: Uint8Array,
   pinned: readonly KeyedColumn[],
-): RecordFormat {
+): LinesFormat {
   const { data, charset } = decodersFor(name, sniffEncoding(head));
   const registry = new KeyRegistry(pinned, JSON_COLUMNS_LIMIT);
   return {
