@@ -99,6 +99,11 @@ export type SingleRef =
        * which version that was.
        */
       version?: string;
+      /**
+       * The size a listing gave. With an ETag in quotes as the version, a
+       * bucket's handler opens the file from these two and sends no HEAD.
+       */
+      bytes?: number;
     }
   | { name: string; blob: Blob };
 

@@ -1,6 +1,7 @@
 /**
  * @fileoverview Reading an object out of an S3 bucket a range at a time: HEAD
- * for the size, GET with a Range header for the bytes.
+ * for the size, unless a listing gave it with the ETag, and GET with a Range
+ * header for the bytes.
  *
  * Requests are signed with SigV4 here. Credentials come from a function the
  * caller hands in. `s3Requests` signs, retries and follows a bucket to its
@@ -17,7 +18,7 @@ import type { Connection } from '@library';
 import { covering } from '@library';
 import type { Provider } from '@plugin';
 import { Refusal, messageOf } from '@said';
-import type { FileHandler } from './index.ts';
+import type { FileHandler, SingleRef } from './index.ts';
 import { readAhead } from './ahead.ts';
 import { s3Lister } from './s3lister.ts';
 import { text } from './s3xml.ts';
@@ -501,14 +502,19 @@ export function s3Files(opts: S3Options): FileHandler {
       const url = s3Url(loc);
       // Every range is asked for with If-Match on the ETag, so an object
       // rewritten mid-read answers 412 and the bytes stay from one version.
-      const { size, etag, pinned, version, encoding } = await headOf(
-        send,
-        loc,
-        file?.version,
-      );
+      const unsigned = async (): Promise<boolean> =>
+        'unsigned' in (await opts.credentials(loc));
+      // A listing's size and ETag stand in for the HEAD only on a signed
+      // read, which asks for the bytes as stored. An unsigned read is sent
+      // the HEAD, which says whether fetch would undo a Content-Encoding.
+      const listed = listedAs(file);
+      const { size, etag, pinned, version, encoding } =
+        listed !== undefined && !(await unsigned())
+          ? listed
+          : await headOf(send, loc, file?.version);
       // Only a signed GET can ask for the bytes as stored. An unsigned one
       // would get them undone by fetch, so the object is refused here.
-      if (encoding !== undefined && 'unsigned' in (await opts.credentials(loc)))
+      if (encoding !== undefined && (await unsigned()))
         throw new Refusal({
           t: 'stored-encoded',
           name: url,
@@ -570,6 +576,22 @@ interface Known {
 }
 
 /**
+ * listedAs is what a ref a listing named already says of its object: a size
+ * in whole bytes, and an ETag in quotes, which If-Match takes as it is.
+ * Undefined for a ref without both, which is asked about with a HEAD.
+ */
+function listedAs(
+  ref: Extract<SingleRef, { path: string }> | undefined,
+): Known | undefined {
+  const size = ref?.bytes;
+  const etag = ref?.version;
+  if (size === undefined || !Number.isSafeInteger(size) || size < 0)
+    return undefined;
+  if (etag === undefined || !isStrongETag(etag)) return undefined;
+  return { size, etag, pinned: undefined, version: etag, encoding: undefined };
+}
+
+/**
  * headOf asks a HEAD for an object's size and version. A VersionId a save
  * recorded is asked for by name. A bucket that has dropped that version
  * answers 404 or 400, and the object is then read as it is now.
@@ -611,9 +633,17 @@ export function versionOf(headers: Headers): string | undefined {
  * VersionId. An ETag, quoted or weak `W/`, gives undefined.
  */
 function versionIdIn(version: string | undefined): string | undefined {
-  if (version === undefined || version === '' || version.startsWith('"'))
+  if (version === undefined || version === '' || isStrongETag(version))
     return undefined;
   return version.startsWith('W/') ? undefined : version;
+}
+
+/**
+ * isStrongETag says whether a recorded version is an ETag in quotes, which
+ * If-Match takes as it is.
+ */
+function isStrongETag(version: string): boolean {
+  return version.startsWith('"');
 }
 
 /**
