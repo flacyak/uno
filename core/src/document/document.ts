@@ -55,6 +55,12 @@ export const POINTED_VERSION = 5;
 export const PARTS_VERSION = 6;
 
 /**
+ * A workspace with a source that says how its rows were read: a kind, a
+ * compression or pinned columns.
+ */
+export const READ_VERSION = 7;
+
+/**
  * Every header mode, as uno.json spells it. A mode added to HeaderMode has
  * to be added here.
  */
@@ -67,6 +73,21 @@ export const KNOWN_HEADER_MODES: readonly string[] = Object.keys(HEADER_MODES);
 export function isHeaderMode(v: string): v is HeaderMode {
   return Object.hasOwn(HEADER_MODES, v);
 }
+
+/**
+ * How a source's rows sit in its bytes when they are not delimited text, as
+ * uno.json spells it. A source with no kind is delimited text. None is read
+ * yet: a kind joins here in the change that makes the engine read it, so no
+ * build writes or accepts a kind it cannot read.
+ */
+export type SourceKind = never;
+
+/**
+ * What a file source's bytes were compressed with, as uno.json spells it.
+ * None is read yet: a compression joins here in the change that makes the
+ * engine read it.
+ */
+export type SourceCompression = never;
 
 export const GENERATOR = 'uno 0.2.0';
 
@@ -123,7 +144,7 @@ interface SourceBase {
  * inside the zip. `path` is where the file was at the save, relative to the
  * .uno when the file is under its folder and absolute otherwise.
  */
-export interface FileSource extends SourceBase {
+export interface FileSource extends SourceBase, ReadAs {
   /**
    * The file's size: the entry's length for a carried source, or what the
    * file measured at the save for a pointed-at one. The opener uses it to
@@ -157,10 +178,13 @@ export interface FileSource extends SourceBase {
  * are a fixed, ordered list: the log names rows by number, so the order
  * decides which row an edit lands on.
  */
-export interface PartsSource extends SourceBase {
+export interface PartsSource extends SourceBase, ReadAs {
   /** The files, in the order their rows are read. At least one. */
   parts: SourcePart[];
-  /** Whether the parts have a header row. */
+  /**
+   * Whether the parts have a header row. Written only for delimited text,
+   * the parts with no kind.
+   */
   header: HeaderMode;
   /**
    * Whether a `_file` column shows which part each row came from. The
@@ -169,6 +193,7 @@ export interface PartsSource extends SourceBase {
   fileColumn: boolean;
 
   bytes?: never;
+  compression?: never;
   sha256?: never;
   entry?: never;
   path?: never;
@@ -198,6 +223,37 @@ export interface SourcePart {
   skip: number;
   /** Whether the part's last line is unterminated. The join adds a newline. */
   unterminated: boolean;
+}
+
+/**
+ * ReadAs is how a source's rows were read, as a source records it. Delimited
+ * text read as it always was records none of it.
+ */
+interface ReadAs {
+  /** How the rows sit in the bytes. Absent for delimited text. */
+  kind?: SourceKind;
+  /**
+   * What a file's bytes are compressed with. Absent for a plain file, and
+   * for a source of several files.
+   */
+  compression?: SourceCompression;
+  /**
+   * The data columns at the save, in grid order, for a source that learns
+   * its columns from its rows. A reopen gives each key back its column.
+   */
+  columns?: SavedColumn[];
+}
+
+/**
+ * SavedColumn is one data column as uno.json pins it: the name the grid
+ * shows, and the key its cells are found by in each row, an RFC 6901
+ * pointer. The name never changes once given, so the key always finds the
+ * column its logged edits were made in.
+ */
+export interface SavedColumn {
+  name: string;
+  /** Left out when it is the pointer of a top-level field called `name`. */
+  key?: string;
 }
 
 /** Where the state entry is. */
@@ -276,7 +332,7 @@ interface HeldBase {
  * HeldFile is a source that is one file. Exactly one of `raw` and `path` is
  * set: `raw` means the save copies the file in, `path` means it points at it.
  */
-export interface HeldFile extends HeldBase {
+export interface HeldFile extends HeldBase, ReadAs {
   /** The file's bytes, for a carried source. */
   raw?: Uint8Array;
   /** Where the file is, absolute, for a pointed-at source. */
@@ -297,10 +353,10 @@ export interface HeldFile extends HeldBase {
  * HeldParts is a source that is several files read as one. Every part is
  * pointed at, so a save writes only its path.
  */
-export interface HeldParts extends HeldBase {
+export interface HeldParts extends HeldBase, ReadAs {
   /** The files, in the order their rows are read. At least one. */
   parts: HeldPart[];
-  /** Whether the parts have a header row. */
+  /** Whether the parts have a header row. Saved for delimited text only. */
   header: HeaderMode;
   /** Whether a `_file` column shows which part each row came from. */
   fileColumn?: boolean;
@@ -309,6 +365,7 @@ export interface HeldParts extends HeldBase {
   path?: never;
   bytes?: never;
   version?: never;
+  compression?: never;
 }
 
 /** HeldPart is one file of a HeldParts source. */
