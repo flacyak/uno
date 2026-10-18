@@ -1,6 +1,6 @@
 /**
  * @fileoverview Walking a folder on disk: every file under it at any depth, in
- * path order, against a real temp folder.
+ * path order, paged by the last path a page held, against a real temp folder.
  */
 
 import { readdirSync } from 'node:fs';
@@ -12,6 +12,9 @@ import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 import type { Listing, Walker } from '@store';
 import { diskLister } from '@store/disklister';
 import { byPartPath } from '@store/hive';
+
+/** A page small enough that the tree below takes several. */
+const SMALL_PAGE = 3;
 
 /**
  * The files of the tree every check walks, by path under its root: partition
@@ -46,7 +49,7 @@ afterAll(() => rm(outside, { recursive: true, force: true }));
 /** walked walks `at` to its end, page by page, and returns each page. */
 async function walked(
   at: string,
-  lister: Walker = diskLister(),
+  lister: Walker = diskLister(SMALL_PAGE),
 ): Promise<Listing[]> {
   const pages: Listing[] = [];
   let cursor: string | undefined;
@@ -76,6 +79,21 @@ test('every file under the root comes back in the order byPartPath sorts them', 
   expect(names(pages)).toEqual(filesIn(root).toSorted(byPartPath));
   expect(names(pages).indexOf('year=2024/month=9/part-1.csv')).toBeLessThan(
     names(pages).indexOf('year=2024/month=10/part-0.csv'),
+  );
+});
+
+test('a page holds at most its size, and names the last path it held as the next', async () => {
+  const pages = await walked(root);
+
+  expect(pages.map((p) => p.entries.length)).toEqual([
+    SMALL_PAGE,
+    SMALL_PAGE,
+    SMALL_PAGE,
+  ]);
+  for (const page of pages.slice(0, -1))
+    expect(page.next).toBe(page.entries.at(-1)!.name);
+  expect(pages.at(-1)!.next, 'the last page says it is the last').toBe(
+    undefined,
   );
 });
 
