@@ -27,7 +27,7 @@ import { against, dirOf, relativeTo } from './path.ts';
  * A file declares the lowest version that can read it, so a workspace an
  * older build could replay still opens there.
  */
-export const FORMAT_VERSION = 6;
+export const FORMAT_VERSION = 7;
 
 /** A log of only single-cell edits. */
 export const BASE_VERSION = 1;
@@ -91,12 +91,18 @@ export const HEADER_MODES = closed<HeaderMode>({ first: true, none: true });
  */
 export type SourceKind = never;
 
+/** The kinds this build reads. */
+export const SOURCE_KINDS = closed<SourceKind>({});
+
 /**
  * What a file source's bytes were compressed with, as uno.json spells it.
  * None is read yet: a compression joins here in the change that makes the
  * engine read it.
  */
 export type SourceCompression = never;
+
+/** The compressions this build reads. */
+export const SOURCE_COMPRESSIONS = closed<SourceCompression>({});
 
 export const GENERATOR = 'uno 0.2.0';
 
@@ -192,7 +198,7 @@ export interface PartsSource extends SourceBase, ReadAs {
   parts: SourcePart[];
   /**
    * Whether the parts have a header row. Written only for delimited text,
-   * the parts with no kind.
+   * the parts with no kind, and read as "first" for any other kind.
    */
   header: HeaderMode;
   /**

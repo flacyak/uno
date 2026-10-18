@@ -159,11 +159,11 @@ describe('a workspace with no source of several files', () => {
 });
 
 describe('a source of several files', () => {
-  test('needs format 6, which is the highest this build writes', () => {
+  test('needs format 6, the rung for several files read as one', () => {
     const doc = workspace([orders()]);
     writeDocument(doc);
     expect(doc.manifest.format).toBe(PARTS_VERSION);
-    expect(PARTS_VERSION).toBe(FORMAT_VERSION);
+    expect(PARTS_VERSION).toBe(6);
   });
 
   // Each part is written with its path, bytes and version, plus skip when it
