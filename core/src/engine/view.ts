@@ -548,7 +548,6 @@ export class View {
   private recognise(): void {
     this.survey?.abort();
     this.survey = undefined;
-    const generation = this.generation;
 
     const byCol = this.transform
       ? gather(this.schema.edits())
@@ -559,19 +558,22 @@ export class View {
       .sort((a, b) => a - b);
 
     if (cols.length === 0) {
-      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
+      this.port.post({
+        t: 'offer',
+        source: this.id,
+        generation: this.generation,
+        offer: null,
+      });
       return;
     }
 
     const abort = new AbortController();
     this.survey = abort;
-    this.surveyColumns(cols, byCol, abort.signal, generation).catch(
-      (err: unknown) => {
-        if (!abort.signal.aborted) {
-          this.port.post({ t: 'error', source: this.id, said: saidOf(err) });
-        }
-      },
-    );
+    this.surveyColumns(cols, byCol, abort.signal).catch((err: unknown) => {
+      if (!abort.signal.aborted) {
+        this.port.post({ t: 'error', source: this.id, said: saidOf(err) });
+      }
+    });
   }
 
   /**
@@ -579,12 +581,15 @@ export class View {
    * time, and posts the first proposal one of them supports. Partial offers
    * are posted every PROGRESS_MS. It waits for the index to reach each row
    * before reading it.
+   *
+   * A new edit aborts the survey, so one still running was started over the
+   * log as it stands. An offer is posted at the generation of when it is
+   * posted: a widen moves no data column, so an offer holds across it.
    */
   private async surveyColumns(
     cols: number[],
     byCol: Map<number, Example[]>,
     signal: AbortSignal,
-    generation: number,
   ): Promise<void> {
     const schema = this.schema;
     const index = this.reading.index;
@@ -617,28 +622,34 @@ export class View {
         const now = Date.now();
         if (now - told >= PROGRESS_MS) {
           told = now;
-          this.offer(survey, generation, false);
+          this.offer(survey, false);
         }
         if (now - slice >= SLICE_MS) slice = await turn();
       }
 
       if (signal.aborted) return;
       if (survey.proposal() !== undefined) {
-        this.offer(survey, generation, true);
+        this.offer(survey, true);
         return;
       }
     }
-    if (!signal.aborted)
-      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
+    if (!signal.aborted) {
+      this.port.post({
+        t: 'offer',
+        source: this.id,
+        generation: this.generation,
+        offer: null,
+      });
+    }
   }
 
-  private offer(survey: Survey, generation: number, complete: boolean): void {
+  private offer(survey: Survey, complete: boolean): void {
     const p = survey.proposal();
     if (p === undefined) return;
     this.port.post({
       t: 'offer',
       source: this.id,
-      generation,
+      generation: this.generation,
       offer: {
         source: this.id,
         col: p.col,
