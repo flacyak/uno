@@ -73,13 +73,24 @@ export function sidebarRows(
 
 /**
  * The row for a source that is still opening: its name, dimmed, with a
- * progress bar.
+ * progress bar, and a × that stops the open when it can be stopped.
  */
 function arrivingRow(a: Arriving): HTMLElement {
   const row = el("div", "tab-opening");
   row.title = `${a.name} · ${opening()}`;
   row.setAttribute("aria-busy", "true");
   row.append(el("span", "name", a.name));
+
+  const cancel = a.cancel;
+  if (cancel !== undefined) {
+    const close = el("span", "close", "×");
+    close.title = m.sidebar_stop_opening({ name: a.name });
+    close.addEventListener("click", (e) => {
+      e.stopPropagation(); // keep the click on the ×
+      cancel();
+    });
+    row.append(close);
+  }
   return row;
 }
 

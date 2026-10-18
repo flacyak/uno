@@ -69,6 +69,13 @@ const NO_SIDEBAR = "no-sidebar";
  */
 type Dropping = "open" | "quit" | `path:${string}` | `recent:${string}`;
 
+/** A file being added: its line in the opening list, and what stops its open. */
+interface Coming {
+  readonly ref: SourceRef;
+  readonly line: Arriving;
+  readonly abort: AbortController;
+}
+
 export class Shell {
   /** Called with the input strategy's name whenever it changes. */
   onInput: (name: InputName) => void = () => undefined;
@@ -554,34 +561,54 @@ export class Shell {
       return false;
     }
 
-    // Each is listed as opening until it has opened or been refused.
-    const coming = refs.map((ref): Arriving => ({ name: ref.name }));
-    this.arriving = [...this.arriving, ...coming];
+    // Each is listed as opening until it has opened, been refused, or been
+    // stopped by its ×.
+    const coming = refs.map((ref) => this.coming(ref));
+    this.arriving = [...this.arriving, ...coming.map((c) => c.line)];
     this.paintTabs();
-    const settled = (): void => {
-      const line = coming.shift();
-      this.arriving = this.arriving.filter((a) => a !== line);
-      this.paintTabs();
-    };
     try {
-      return await this.addEach(refs, settled);
+      return await this.addEach(coming);
     } finally {
       // Clear any still listed, as when another open replaced the workspace.
-      while (coming.length > 0) settled();
+      const left = coming.map((c) => c.line).filter((line) => this.arriving.includes(line));
+      if (left.length > 0) this.unlist(...left);
     }
   }
 
   /**
-   * addEach opens the files one after another, calling `settled` after each.
-   * Returns whether every one opened.
+   * coming makes a file's line for the opening list. Its × aborts the open,
+   * takes the line down and says so.
    */
-  private async addEach(refs: SourceRef[], settled: () => void): Promise<boolean> {
-    let rest = refs;
+  private coming(ref: SourceRef): Coming {
+    const abort = new AbortController();
+    const line: Arriving = {
+      name: ref.name,
+      cancel: () => {
+        abort.abort();
+        this.unlist(line);
+        this.say(m.stopped_opening({ name: ref.name }));
+      },
+    };
+    return { ref, line, abort };
+  }
+
+  /** unlist takes lines off the opening list, their opens over. */
+  private unlist(...lines: Arriving[]): void {
+    this.arriving = this.arriving.filter((a) => !lines.includes(a));
+    this.paintTabs();
+  }
+
+  /**
+   * addEach opens the files one after another, taking each off the opening
+   * list as its open is answered. Returns whether every one opened.
+   */
+  private async addEach(coming: Coming[]): Promise<boolean> {
+    let rest = coming;
     if (this.workspace === undefined) {
-      const [first, ...others] = refs;
+      const [first, ...others] = coming;
       if (first === undefined) return false;
-      await this.load(first, "");
-      settled();
+      await this.load(first.ref, "", first.abort.signal);
+      this.unlist(first.line);
       rest = others;
     }
     const w = this.workspace;
@@ -593,30 +620,48 @@ export class Shell {
     }
 
     let shown: Tab | undefined;
+    const added: string[] = [];
     const failed: string[] = [];
-    for (const ref of rest) {
-      try {
-        shown = await w.add(ref);
-      } catch (err) {
-        failed.push(message(err));
+    for (const { ref, line, abort } of rest) {
+      const { signal } = abort;
+      // One stopped before its turn is left unasked.
+      if (!signal.aborted) {
+        try {
+          const tab = await w.add(ref, signal);
+          if (signal.aborted) {
+            // Stopped after the engine had answered: the engine leaves the
+            // source, so it is taken out here. A refused remove is reported,
+            // since the × already said the open was stopped.
+            await w.remove(tab).catch((err: unknown) => {
+              failed.push(message(err));
+            });
+          } else {
+            shown = tab;
+            added.push(ref.name);
+          }
+        } catch (err) {
+          // A stopped open is refused as cancelled, which its × already said.
+          if (!signal.aborted) failed.push(message(err));
+        }
       }
-      settled();
+      this.unlist(line);
     }
     if (this.workspace !== w) return false; // another open replaced it meanwhile
 
     if (shown !== undefined) this.select(shown);
     else this.paintTabs();
     if (failed.length > 0) this.say(failed.join(" · "), true);
-    else this.say(m.added_names({ names: list(rest.map((r) => r.name)) }));
+    else if (added.length > 0) this.say(m.added_names({ names: list(added) }));
     void this.sources.askGrown();
-    return failed.length === 0;
+    return failed.length === 0 && !rest.some((c) => c.abort.signal.aborted);
   }
 
   /**
    * load starts an engine for the file and shows it. A file that fails to
-   * open leaves the open workspace alone, and its engine is closed.
+   * open leaves the open workspace alone, and its engine is closed. Aborting
+   * `signal` stops the open; one that opened anyway is closed, unsaid.
    */
-  private async load(ref: SourceRef, savePath: string): Promise<void> {
+  private async load(ref: SourceRef, savePath: string, signal?: AbortSignal): Promise<void> {
     const open = ++this.opens;
     let engine: Engine | undefined;
 
@@ -637,9 +682,11 @@ export class Shell {
             this.paintBanner();
           }
         },
+        signal,
       );
-      if (open !== this.opens) {
-        w.close(); // a later open finished first
+      // A later open finished first, or this one was stopped as it opened.
+      if (open !== this.opens || signal?.aborted === true) {
+        w.close();
         return;
       }
       opened = w;
@@ -660,7 +707,8 @@ export class Shell {
       this.say("");
     } catch (err) {
       engine?.close();
-      if (open === this.opens) this.say(message(err), true);
+      // A superseded or stopped open fails quietly.
+      if (open === this.opens && signal?.aborted !== true) this.say(message(err), true);
     }
     this.paintAll();
   }
