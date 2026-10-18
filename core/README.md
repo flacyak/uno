@@ -119,7 +119,7 @@ order of reads is the scenario's and not a race.
 | `ahead.test.ts`  | bytes fetched to index an object, alone and beside a reader   |
 | `band.test.ts`   | requests and bytes for one jump of the grid's 2,000 row band  |
 | `open.test.ts`   | requests and bytes an open waits on before it shows rows      |
-| `lister.test.ts` | directory entries read again for each page of a 20,000 folder |
+| `lister.test.ts` | directory entries read again per page of a list and of a walk |
 | `index.test.ts`  | bytes and rows indexed per second, and bytes kept per row     |
 | `find.test.ts`   | what a find to the end of a file costs beside a bound column  |
 | `save.test.ts`   | what a second save of bytes already carried costs             |
