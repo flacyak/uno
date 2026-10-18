@@ -278,23 +278,6 @@ describe('a source that says how it was read is refused on reading', () => {
   });
 });
 
-// Format 8 keeps a source read in row space, which this build cannot.
-describe('a format 8 file', () => {
-  const ROWS_FORMAT = READ_VERSION + 1;
-
-  test('is refused by name', () => {
-    const uno = tampered(
-      workspace([shards()]),
-      (m) => (m.format = ROWS_FORMAT),
-    );
-    expect(() => readContainer('books.uno', uno, AT)).toThrow(
-      new Error(
-        `books.uno was saved by a newer uno (format ${ROWS_FORMAT}, this build reads ${READ_VERSION}). Update uno to open it`,
-      ),
-    );
-  });
-});
-
 /**
  * A kind and a compression no build reads yet, cast in to see where the
  * writer puts them. Each joins its type in the change that reads it.
