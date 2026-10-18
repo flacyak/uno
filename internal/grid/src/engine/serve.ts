@@ -133,9 +133,25 @@ export function serve(
   // that signs in uses them. A load failure here is ignored; it is reported
   // when a client asks for the connections.
   const ready = connections?.load().catch(() => undefined);
+  // The opens in flight by request id, for a cancel to find the one it names.
+  const opening = new Map<number, AbortController>();
 
   const handlers: Handlers = {
-    open: async (m) => ({ t: 'opened', added: await workspace.open(m.ref) }),
+    open: async (m) => {
+      const abort = new AbortController();
+      opening.set(m.id, abort);
+      try {
+        const added = await workspace.open(m.ref, abort.signal);
+        return { t: 'opened', added };
+      } finally {
+        opening.delete(m.id);
+      }
+    },
+    cancel: async (m) => {
+      counted('of', m.of, 0);
+      opening.get(m.of)?.abort();
+      return undefined;
+    },
     remove: async (m) => {
       await workspace.remove(m.source);
       return { t: 'removed' };
