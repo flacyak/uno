@@ -151,9 +151,19 @@ export function sheetRows(
   return out;
 }
 
+/**
+ * padded returns `rows` with "" out to `width` cells, as a short row shows.
+ * A row wider than `width` keeps every cell.
+ */
+export function padded(rows: string[][], width: number): string[][] {
+  return rows.map((row) =>
+    Array.from({ length: Math.max(width, row.length) }, (_, i) => row[i] ?? ''),
+  );
+}
+
 /** Rows padded with "" to the fixture's column count. */
 export function widened(rows: string[][]): string[][] {
-  return rows.map((r) => sales.columns.map((_, col) => r[col] ?? ''));
+  return padded(rows, sales.columns.length);
 }
 
 /** A fixture's path in tests/testdata. */
