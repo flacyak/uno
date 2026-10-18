@@ -8,7 +8,7 @@ import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 import type { Listing } from '@store';
 import { s3Lister } from '@store/s3lister';
 import { HOME_REGION } from './regions.ts';
-import { BUCKET, KEYS, bucket } from './standin.ts';
+import { BUCKET, KEYS, MODIFIED, bucket, etagOf } from './standin.ts';
 import type { Bucket } from './standin.ts';
 
 /** The one-byte body of most objects. */
@@ -87,4 +87,24 @@ test('a walk sends no delimiter, so one request reaches every depth', async () =
   const asked = b.seen.filter((r) => r.query?.includes('list-type') === true);
 
   expect(asked.at(-1)!.query).not.toContain('delimiter');
+});
+
+test("a walked key keeps its size, time and ETag, and its path is the handler's", async () => {
+  const [first] = await pages(`s3://${BUCKET}/sales/`);
+  const entry = first!.entries[0]!;
+
+  expect(entry.bytes).toBe(ONE.length);
+  expect(entry.modified).toEqual(new Date(MODIFIED));
+  expect(entry.version).toBe(etagOf(ONE));
+  expect(entry.path).toBe(`s3://${BUCKET}/sales/${entry.name}`);
+});
+
+// The folder markers would read as files named '' and 'year=2025/'.
+test('the folder markers under the root are left out', async () => {
+  const names = (await pages(`s3://${BUCKET}/sales/`)).flatMap((p) =>
+    p.entries.map((e) => e.name),
+  );
+
+  expect(names).not.toContain('');
+  expect(names).not.toContain('year=2025/');
 });
