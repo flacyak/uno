@@ -29,6 +29,7 @@ export {
   labelOf,
   openFormat,
   peekFormat,
+  pointerTo,
 } from './format.ts';
 export type { Format, HeaderMode, Scanner, Charset } from './format.ts';
 export {
