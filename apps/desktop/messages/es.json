@@ -543,6 +543,7 @@
   "refused_nothing_to_undo": "no hay nada que deshacer",
   "refused_nothing_to_redo": "no hay nada que rehacer",
   "refused_in_view": "el archivo está en modo ver · Ctrl+E para transformar",
+  "refused_columns_moved": "{name} ganó columnas mientras la edición iba en camino, así que no se hizo · vuelve a hacerla",
   "refused_file_closed": "el archivo se cerró",
   "refused_cancelled": "se canceló la apertura de {name}",
   "refused_changed_on_disk": "{name} cambió en el disco después de abrirse",

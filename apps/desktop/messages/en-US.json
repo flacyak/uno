@@ -524,6 +524,7 @@
   "refused_nothing_to_undo": "there is nothing to undo",
   "refused_nothing_to_redo": "there is nothing to redo",
   "refused_in_view": "the file is in view · Ctrl+E to transform",
+  "refused_columns_moved": "{name} gained columns while the edit was on its way, so it was not made · make it again",
   "refused_file_closed": "the file was closed",
   "refused_cancelled": "opening {name} was cancelled",
   "refused_changed_on_disk": "{name} changed on disk after it was opened",

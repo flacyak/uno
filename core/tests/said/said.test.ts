@@ -113,6 +113,12 @@ describe('english', () => {
       }),
     ).toBe('events.jsonl was read as JSON Lines, and q3.csv is delimited text');
   });
+
+  test('says an edit was not made because its source gained columns', () => {
+    expect(english({ t: 'columns-moved', name: 'events.jsonl' })).toBe(
+      'events.jsonl gained columns while the edit was on its way, so it was not made · make it again',
+    );
+  });
 });
 
 describe('a kind from an engine newer than this build', () => {
