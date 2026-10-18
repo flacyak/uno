@@ -3,7 +3,8 @@
  * and refuse by name a path every lister passes on.
  *
  * The listers here are stubs that record what they were asked. Real listings
- * are in disk.test.ts and s3list.test.ts, and real walks in s3walk.test.ts.
+ * are in disk.test.ts and s3list.test.ts, and real walks in diskwalk.test.ts
+ * and s3walk.test.ts.
  */
 
 import { expect, test } from 'vite-plus/test';
