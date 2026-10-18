@@ -23,7 +23,7 @@ import type {
   Lister,
   Listing,
 } from '@store';
-import { listWith, openWith, statWith } from '@store';
+import { listWith, openWith, statWith, walkWith } from '@store';
 
 /**
  * Provider is one kind of place files are: a disk, a bucket, bytes in hand.
@@ -53,6 +53,8 @@ export interface Sources {
   open(ref: FileRef): Promise<ByteSource>;
   list(path: string, cursor?: string): Promise<Listing>;
   stat(path: string): Promise<Entry>;
+  /** One page of every file under a folder or a prefix, at any depth. */
+  walk(root: string, cursor?: string): Promise<Listing>;
 }
 
 /**
@@ -73,5 +75,6 @@ export function sources(providers: readonly Provider[]): Sources {
     list: (path, cursor) => listWith(browsers, path, cursor),
     // stat asks the listers: size and version come from a listing.
     stat: (path) => statWith(browsers, path),
+    walk: (root, cursor) => walkWith(browsers, root, cursor),
   };
 }

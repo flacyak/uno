@@ -26,8 +26,8 @@ import type { HeaderMode, Part } from './multi.ts';
 import type { Provider } from '@plugin';
 
 // Browsing is its own interface, in store/list.ts.
-export { listWith, statWith } from './list.ts';
-export type { Entry, Listing, Lister } from './list.ts';
+export { listWith, statWith, walkWith } from './list.ts';
+export type { Entry, Listing, Lister, Walker } from './list.ts';
 
 // Several files read as one, in store/multi.ts. It opens its parts through
 // openWith.

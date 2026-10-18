@@ -31,6 +31,12 @@ export const JOINS: Refusal = {
 /** Browsing a path through a Lister. */
 export const BROWSES: Refusal = { cannot: 'browses it', can: 'browses' };
 
+/** Walking every file under a folder or a prefix through a Lister. */
+export const WALKS: Refusal = {
+  cannot: 'lists every file under it',
+  can: 'lists folders in',
+};
+
 /**
  * claim returns the first plugin for which `owns` is true. When none is, it
  * throws an error naming `what` and the labels of every plugin given.
