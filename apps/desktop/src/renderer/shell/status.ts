@@ -139,9 +139,9 @@ export class StatusBar {
     const { row, col } = grid.selection();
     const column = w.rows.columns[col];
     const header = column === undefined ? "" : columnLabel(column.header, col);
-    // An empty sheet shows the column only.
-    this.cell.textContent =
-      w.rows.rows() === 0 ? header : `${header} · ${m.status_row({ row: num(row + 1) })}`;
+    const at = w.rows.rows() === 0 ? "" : m.status_row({ row: num(row + 1) });
+    // A sheet with no rows shows the column only, and one with no columns the row only.
+    this.cell.textContent = [header, at].filter((part) => part !== "").join(" · ");
   }
 
   /** switches draws the mode switch and the two column toggles. */
