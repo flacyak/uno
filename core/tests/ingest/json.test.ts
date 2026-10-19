@@ -27,6 +27,12 @@ function nested(depth: number): string {
   return `${'{"a":'.repeat(around)}{}${'}'.repeat(around)}`;
 }
 
+/** arraysIn returns the array of a line nested `depth` deep in arrays. */
+function arraysIn(depth: number): string {
+  const arrays = depth - 1;
+  return `${'['.repeat(arrays)}${']'.repeat(arrays)}`;
+}
+
 describe('walkLine', () => {
   const read: Array<[string, string, Array<[string, string]>]> = [
     [
@@ -100,6 +106,14 @@ describe('walkLine', () => {
       ],
     ],
     [
+      'an array is one cell, minified, with its numbers and escapes as written',
+      String.raw`{"a":[ 1.10 , "\u0041 \n" , { "b" : [ ] , "b" : null } , true ],"e":[ ]}`,
+      [
+        ['/a', String.raw`[1.10,"\u0041 \n",{"b":[],"b":null},true]`],
+        ['/e', '[]'],
+      ],
+    ],
+    [
       'the last of a repeated name wins inside a nested object too',
       '{"a":{"b":"x","b":"y"}}',
       [['/a/b', 'y']],
@@ -160,6 +174,11 @@ describe('walkLine', () => {
     ['a number with a leading zero', '{"a":01}'],
     ['a number with no digits after its point', '{"a":1.}'],
     ['a word cut short', '{"a":tru}'],
+    ['an array cut short', '{"a":[1,2}'],
+    ['a trailing comma in an array', '{"a":[1,]}'],
+    ['a name in an array that is not a string', '{"a":[{1:2}]}'],
+    ['a missing colon in an array', '{"a":[{"b" 1}]}'],
+    ['an unknown escape in an array', String.raw`{"a":["\x41"]}`],
   ];
 
   for (const [name, line] of refused) {
@@ -167,13 +186,18 @@ describe('walkLine', () => {
       expect(walked(line)).toBe(false));
   }
 
-  test('reads a line nested DEPTH_LIMIT deep', () =>
+  test('reads a line nested DEPTH_LIMIT deep', () => {
     expect(walked(nested(DEPTH_LIMIT))).toEqual([
       ['/a'.repeat(DEPTH_LIMIT - 1), '{}'],
-    ]));
+    ]);
+    const arrays = arraysIn(DEPTH_LIMIT);
+    expect(walked(`{"a":${arrays}}`)).toEqual([['/a', arrays]]);
+  });
 
   test('refuses a line nested deeper, rather than overflow the stack', () => {
     expect(walked(nested(DEPTH_LIMIT + 1))).toBe(false);
     expect(walked(nested(PAST_THE_STACK))).toBe(false);
+    expect(walked(`{"a":${arraysIn(DEPTH_LIMIT + 1)}}`)).toBe(false);
+    expect(walked(`{"a":${arraysIn(PAST_THE_STACK)}}`)).toBe(false);
   });
 });
