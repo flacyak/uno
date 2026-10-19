@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The parser for a program's text form. Patterns compile here, so
+ * a damaged log fails at replay with the line that broke it.
+ */
+
 import { Scanner, atoi, isDigit, isLetter, quote, runes, unquote } from '#go';
 import type { Pos, Step } from './steps.ts';
 import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from './steps.ts';

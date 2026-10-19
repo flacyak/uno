@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The bytes of a .uno: `readDocument` and `writeDocument` over
+ * the zip, the entries it holds, and the manifest measured from them.
+ */
+
 import { Zip, deflateSync, unzipSync } from 'fflate';
 import type { ZipInputFile } from 'fflate';
 
