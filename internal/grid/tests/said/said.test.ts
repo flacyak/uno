@@ -3,9 +3,9 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { Refusal, english, saidOf } from '../../src/said/index.ts';
-import type { Said } from '../../src/said/index.ts';
-import { FIXTURE, connect, openOne } from '../engine/harness.ts';
+import { Refusal, english, saidOf } from '#said';
+import type { Said } from '#said';
+import { FIXTURE, connect, openOne } from '#tests/engine/harness';
 
 const MB = 1024 ** 2;
 const GB = 1024 ** 3;

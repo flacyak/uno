@@ -1,7 +1,7 @@
 import { expect, test } from 'vite-plus/test';
 
-import { Sheet } from '../../src/sheet/index.ts';
-import { parse } from '../../src/formula/index.ts';
+import { Sheet } from '#sheet';
+import { parse } from '#formula';
 
 function noted(): Sheet {
   return new Sheet(

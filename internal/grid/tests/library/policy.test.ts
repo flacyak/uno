@@ -10,7 +10,7 @@ import {
   roleNameOf,
   rolePolicies,
   trustPolicy,
-} from '../../src/library/index.ts';
+} from '#library';
 
 const TRUST = {
   principal: 'arn:aws:iam::111122223333:role/uno-engine',

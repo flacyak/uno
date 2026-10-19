@@ -15,10 +15,10 @@ import {
   diskProvider,
   profileCredentials,
   splitCommand,
-} from '../../src/store/node.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { bytes, connect, indexed, openOne } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+} from '#store/node';
+import { s3Provider } from '#store/s3';
+import { bytes, connect, indexed, openOne } from '#tests/engine/harness';
+import { ROWS } from '#tests/testdata/sales-q3';
 import { HOME_REGION } from './regions.ts';
 import { bucket } from './standin.ts';
 import type { Bucket } from './standin.ts';

@@ -7,19 +7,12 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
 
-import {
-  newManifest,
-  readDocument,
-  writeDocument,
-} from '../src/document/index.ts';
-import type { Document } from '../src/document/index.ts';
-import { parse as parseFormula } from '../src/formula/index.ts';
-import { read } from '../src/ingest/index.ts';
-import { snap } from '../src/pattern/index.ts';
-import {
-  describe as describeProgram,
-  text as programText,
-} from '../src/program/index.ts';
+import { newManifest, readDocument, writeDocument } from '#document';
+import type { Document } from '#document';
+import { parse as parseFormula } from '#formula';
+import { read } from '#ingest';
+import { snap } from '#pattern';
+import { describe as describeProgram, text as programText } from '#program';
 import {
   CHANNEL,
   COLS,
