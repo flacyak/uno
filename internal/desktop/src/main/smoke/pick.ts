@@ -1,8 +1,10 @@
-// What a driven run's Open dialog answers.
-//
-// A driven window ignores a dialog (see save.ts). The + at the foot of the
-// sidebar asks for a file to open, so a driven run is told which file in the
-// environment. main uses this in place of the dialog when a run is driven.
+/**
+ * @fileoverview What a driven run's Open dialog answers.
+ *
+ * A driven window ignores a dialog (see save.ts). The + at the foot of the
+ * sidebar asks for a file to open, so a driven run is told which file in the
+ * environment. main uses this in place of the dialog when a run is driven.
+ */
 
 /** The variable a driven run names the file in. */
 export const DRIVEN_OPEN = "UNO_DRIVEN_OPEN";

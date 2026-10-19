@@ -1,7 +1,10 @@
-// Connections kept in a folder, loaded and saved through the store.
-//
-// One broken file costs that connection only, two files with one id are
-// reported, and a refused save leaves the folder as it was.
+/**
+ * @fileoverview Connections kept in a folder, loaded and saved through the
+ * store.
+ *
+ * One broken file costs that connection only, two files with one id are
+ * reported, and a refused save leaves the folder as it was.
+ */
 
 import {
   copyFile,
@@ -17,10 +20,10 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
 
-import { parseConnection } from '../../src/library/index.ts';
-import type { Connection } from '../../src/library/index.ts';
-import { loadConnections, saveConnection } from '../../src/store/index.ts';
-import { nodeStore } from '../../src/store/node.ts';
+import { parseConnection } from '#library';
+import type { Connection } from '#library';
+import { loadConnections, saveConnection } from '#store';
+import { nodeStore } from '#store/node';
 
 const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));
 

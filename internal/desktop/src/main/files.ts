@@ -1,13 +1,15 @@
-// File paths and file writes for the main process.
-//
-// An engine reads a file by path in its own process.
-// Writes go through the node store, which does an atomic temp-file-and-rename
-// write (internal/safefile/write.go).
+/**
+ * @fileoverview File paths and file writes for the main process.
+ *
+ * An engine reads a file by path in its own process.
+ * Writes go through the node store, which does an atomic temp-file-and-rename
+ * write (internal/safefile/write.go).
+ */
 
-import { WORKSPACE_EXT } from "@uno/grid/document";
-import type { SourceRef } from "@uno/grid/engine";
-import { fileName, parseConnection } from "@uno/grid/library";
-import { nodeStore } from "@uno/grid/store/node";
+import { WORKSPACE_EXT } from "#document";
+import type { SourceRef } from "#engine";
+import { fileName, parseConnection } from "#library";
+import { nodeStore } from "#store/node";
 import { mkdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 

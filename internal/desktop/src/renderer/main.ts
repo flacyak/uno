@@ -1,11 +1,13 @@
-// Renderer entry point. Loads the base styles, creates the Shell, and wires
-// the menu bridge to it. The grid module loads with the first file (see
-// shell/shell.ts).
+/**
+ * @fileoverview Renderer entry point. Loads the base styles, creates the Shell,
+ * and wires the menu bridge to it. The grid module loads with the first file
+ * (see shell/shell.ts).
+ */
 
 import "./base.css";
 
-import { m } from "../paraglide/messages.js";
-import type { Locale } from "../paraglide/runtime.js";
+import { m } from "#paraglide/messages";
+import type { Locale } from "#paraglide/runtime";
 import { electronHost } from "./host.ts";
 import type { InputName } from "./input/index.ts";
 import { Shell } from "./shell/shell.ts";

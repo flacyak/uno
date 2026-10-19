@@ -1,14 +1,16 @@
-// Browsing over the protocol: `list`, `stat` and `peek`. These requests stand
-// apart from any source. They go to the listers and handlers the engine was
-// wired with, outside the workspace queue, so they are answered while a save
-// runs.
-//
-// The first half sends raw messages over the channel and checks which reply
-// comes back, with which id, in what order. The second half goes through the
-// Engine client.
-//
-// Every listing browses a temp directory with the testdata fixtures copied
-// into it. The sizes checked are those copies' sizes.
+/**
+ * @fileoverview Browsing over the protocol: `list`, `stat` and `peek`. These
+ * requests stand apart from any source. They go to the listers and handlers the
+ * engine was wired with, outside the workspace queue, so they are answered
+ * while a save runs.
+ *
+ * The first half sends raw messages over the channel and checks which reply
+ * comes back, with which id, in what order. The second half goes through the
+ * Engine client.
+ *
+ * Every listing browses a temp directory with the testdata fixtures copied
+ * into it. The sizes checked are those copies' sizes.
+ */
 
 import { copyFile, mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,18 +18,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
-import { english, messagePort, serve } from '../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../src/engine/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { blobProvider, blobSource } from '../../src/store/index.ts';
-import type { ByteSource, FileRef } from '../../src/store/index.ts';
-import { diskLister } from '../../src/store/disklister.ts';
-import { diskProvider, localFiles } from '../../src/store/node.ts';
+import { english, messagePort, serve } from '#engine';
+import type { MessagePortLike, Reply, Request } from '#engine';
+import { sources } from '#plugin';
+import type { Provider } from '#plugin';
+import { blobProvider, blobSource } from '#store';
+import type { ByteSource, FileRef } from '#store';
+import { diskLister } from '#store/disklister';
+import { diskProvider, localFiles } from '#store/node';
 import { bytes, connect, FIXTURE, openOne } from './harness.ts';
 
 const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));

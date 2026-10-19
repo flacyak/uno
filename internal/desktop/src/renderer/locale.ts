@@ -1,11 +1,13 @@
-// Formats numbers, byte sizes and lists in the app's locale.
-//
-// The app's locale is a separate setting from the operating system's, so
-// every formatter here is built with getLocale().
+/**
+ * @fileoverview Formats numbers, byte sizes and lists in the app's locale.
+ *
+ * The app's locale is a separate setting from the operating system's, so
+ * every formatter here is built with getLocale().
+ */
 
-import { m } from "../paraglide/messages.js";
-import { getLocale } from "../paraglide/runtime.js";
-import type { Locale } from "../paraglide/runtime.js";
+import { m } from "#paraglide/messages";
+import { getLocale } from "#paraglide/runtime";
+import type { Locale } from "#paraglide/runtime";
 
 /** Cached number formatter, rebuilt when the locale changes. */
 let grouping: { locale: Locale; format: Intl.NumberFormat } | undefined;

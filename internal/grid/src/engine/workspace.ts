@@ -1,13 +1,15 @@
-// The workspace an engine owns: its sources, one View each, and the order
-// edits were made across them.
-//
-// Each View holds its own edits. The workspace holds the trail: which source
-// each edit changed, in order. Everything that changes the log runs through
-// one queue.
-//
-// A source from a .uno that fails to open becomes an Absent. It keeps its
-// id, edits, place in the log and path, and `relink` turns it back into a
-// View.
+/**
+ * @fileoverview The workspace an engine owns: its sources, one View each, and
+ * the order edits were made across them.
+ *
+ * Each View holds its own edits. The workspace holds the trail: which source
+ * each edit changed, in order. Everything that changes the log runs through
+ * one queue.
+ *
+ * A source from a .uno that fails to open becomes an Absent. It keeps its
+ * id, edits, place in the log and path, and `relink` turns it back into a
+ * View.
+ */
 
 import {
   isAbsolute,
@@ -18,28 +20,11 @@ import {
   samePath,
   sourceId,
   writeDocument,
-} from '../document/index.ts';
-import type {
-  Document,
-  Held,
-  HeldParts,
-  Logged,
-  State,
-} from '../document/index.ts';
-import type { Edit } from '../sheet/index.ts';
-import {
-  bytesSource,
-  headerModeOf,
-  multiOf,
-  openWith,
-  partMap,
-} from '../store/index.ts';
-import type {
-  ByteSource,
-  FileHandler,
-  PartsRef,
-  SingleRef,
-} from '../store/index.ts';
+} from '#document';
+import type { Document, Held, HeldParts, Logged, State } from '#document';
+import type { Edit } from '#sheet';
+import { bytesSource, headerModeOf, multiOf, openWith, partMap } from '#store';
+import type { ByteSource, FileHandler, PartsRef, SingleRef } from '#store';
 import type {
   Opening,
   Changed,
@@ -55,9 +40,9 @@ import type {
   RowsPage,
   SourceRef,
 } from './protocol.ts';
-import { Refusal, saidOf } from '../said/index.ts';
-import type { Said } from '../said/index.ts';
-import type { Meeting, Unconnected } from '../store/s3.ts';
+import { Refusal, saidOf } from '#said';
+import type { Said } from '#said';
+import type { Meeting, Unconnected } from '#store/s3';
 import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';

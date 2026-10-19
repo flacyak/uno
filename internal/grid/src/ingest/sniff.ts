@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Guessing a file's delimiter from its first lines, rather than
+ * asking.
+ */
+
 /** The delimiters to guess between, in tie order: tab, pipe, semicolon, comma. */
 const CANDIDATES = ['\t', '|', ';', ','];
 

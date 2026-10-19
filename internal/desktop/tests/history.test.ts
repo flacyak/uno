@@ -1,17 +1,19 @@
-// @vitest-environment happy-dom
-//
-// What lands on which tab when the engine answers after Ctrl+Tab. An undo is
-// asked of the tab showing, and the cell it restores is that tab's, so the
-// grid on another tab stays put. Runs over the real shell and engine, so
-// Ctrl+Tab lands between the ask and the answer.
+/**
+ * @fileoverview What lands on which tab when the engine answers after Ctrl+Tab.
+ * An undo is asked of the tab showing, and the cell it restores is that tab's,
+ * so the grid on another tab stays put. Runs over the real shell and engine, so
+ * Ctrl+Tab lands between the ask and the answer.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { dirname, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { ROWS, UNITS, counted } from "../src/main/smoke/fixture.ts";
-import type { KeyModifiers } from "../src/main/smoke/page.ts";
-import { m } from "../src/paraglide/messages.js";
-import { num } from "../src/renderer/locale.ts";
+import { ROWS, UNITS, counted } from "#main/smoke/fixture";
+import type { KeyModifiers } from "#main/smoke/page";
+import { m } from "#paraglide/messages";
+import { num } from "#renderer/locale";
 import { FIXTURE, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 

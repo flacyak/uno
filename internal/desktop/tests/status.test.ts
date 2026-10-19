@@ -1,14 +1,16 @@
-// @vitest-environment happy-dom
-//
-// The status bar's clock: the time the showing tab's source has taken while
-// it indexes, that time with the row count once it is complete, and nothing
-// for a tab with no file behind it or with no workspace open.
+/**
+ * @fileoverview The status bar's clock: the time the showing tab's source has
+ * taken while it indexes, that time with the row count once it is complete, and
+ * nothing for a tab with no file behind it or with no workspace open.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import { strategy } from "../src/renderer/input/index.ts";
-import { StatusBar } from "../src/renderer/shell/status.ts";
-import type { Tab, Workspace } from "../src/renderer/workspace.ts";
+import { strategy } from "#renderer/input";
+import { StatusBar } from "#renderer/shell/status";
+import type { Tab, Workspace } from "#renderer/workspace";
 import { bodyMarkup } from "./markup.ts";
 
 /** The fixture's row count in the plan's example, and a time it took. */

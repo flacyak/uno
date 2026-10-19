@@ -1,14 +1,17 @@
-// Engine timing measurements, and how they are written for an OTLP collector.
-//
-// `serve` calls a Telemetry function with each measurement: how long a
-// request took, how long a source took to index. Sending is left to the
-// platform. A measurement carries timings and request kinds only, so file
-// names, paths and buckets stay on the machine.
-//
-// Meter sums measurements, and `payload` writes the totals as an OTLP
-// metrics request in JSON for a collector's /v1/metrics endpoint.
+/**
+ * @fileoverview Engine timing measurements, and how they are written for an
+ * OTLP collector.
+ *
+ * `serve` calls a Telemetry function with each measurement: how long a
+ * request took, how long a source took to index. Sending is left to the
+ * platform. A measurement carries timings and request kinds only, so file
+ * names, paths and buckets stay on the machine.
+ *
+ * Meter sums measurements, and `payload` writes the totals as an OTLP
+ * metrics request in JSON for a collector's /v1/metrics endpoint.
+ */
 
-import { unreachable } from '../never.ts';
+import { unreachable } from '#never';
 
 /** String attributes attached to a measurement. */
 export type Attributes = Readonly<Record<string, string>>;

@@ -1,11 +1,13 @@
-// Checks that a workspace somebody sent waits for its bucket, and stops
-// waiting once the bucket is connected, even when the object it names is
-// gone: the tab then says what reading it said and offers Reload, and no
-// longer asks for a connection.
-//
-// Opening the workspace closes the one the checks before them built, which
-// has unsaved edits, so the first time it is named the window says so and
-// the second opens it.
+/**
+ * @fileoverview Checks that a workspace somebody sent waits for its bucket, and
+ * stops waiting once the bucket is connected, even when the object it names is
+ * gone: the tab then says what reading it said and offers Reload, and no longer
+ * asks for a connection.
+ *
+ * Opening the workspace closes the one the checks before them built, which
+ * has unsaved edits, so the first time it is named the window says so and
+ * the second opens it.
+ */
 
 import type { Check } from "./check.ts";
 

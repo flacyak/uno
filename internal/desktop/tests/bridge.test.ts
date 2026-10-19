@@ -1,10 +1,12 @@
-// Checks that the IPC channel names in src/preload and src/main agree, by
-// reading the source text. Channel names are plain strings, so a rename on
-// one side only gets past the type checker.
-//
-// Preload's implementation of Bridge is already type-checked. This file
-// covers only the string literals, and whether main registers a handler or
-// a listener for each one.
+/**
+ * @fileoverview Checks that the IPC channel names in src/preload and src/main
+ * agree, by reading the source text. Channel names are plain strings, so a
+ * rename on one side only gets past the type checker.
+ *
+ * Preload's implementation of Bridge is already type-checked. This file
+ * covers only the string literals, and whether main registers a handler or
+ * a listener for each one.
+ */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

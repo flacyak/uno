@@ -1,7 +1,9 @@
-// The engine and a .uno: opening one with its log applied, saving back, and a
-// workspace of several sources. A save points at sources with a path and
-// carries the rest, so most tests are about paths: how they are written,
-// what happens when one stops resolving, and relinking.
+/**
+ * @fileoverview The engine and a .uno: opening one with its log applied, saving
+ * back, and a workspace of several sources. A save points at sources with a
+ * path and carries the rest, so most tests are about paths: how they are
+ * written, what happens when one stops resolving, and relinking.
+ */
 
 import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -18,14 +20,14 @@ import {
   readContainer,
   readDocument,
   writeDocument,
-} from '../../src/document/index.ts';
-import type { Document, Source } from '../../src/document/index.ts';
-import type { SourceHandle } from '../../src/engine/index.ts';
-import { sha256Hex } from '../../src/go/index.ts';
-import { read } from '../../src/ingest/index.ts';
-import { parse as parseProgram } from '../../src/program/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import { COLS, ROWS, UNITS } from '../testdata/sales-q3.ts';
+} from '#document';
+import type { Document, Source } from '#document';
+import type { SourceHandle } from '#engine';
+import { sha256Hex } from '#go';
+import { read } from '#ingest';
+import { parse as parseProgram } from '#program';
+import { Op } from '#sheet';
+import { COLS, ROWS, UNITS } from '#tests/testdata/sales-q3';
 import {
   FIXTURE,
   bytes,

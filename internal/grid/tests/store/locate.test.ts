@@ -1,16 +1,18 @@
-// locate: a connection's bucket region, found with a HeadBucket when the
-// connection is made and kept in it.
-//
-// The stand-in lives in eu-west-1 and the credentials say us-east-1.
+/**
+ * @fileoverview locate: a connection's bucket region, found with a HeadBucket
+ * when the connection is made and kept in it.
+ *
+ * The stand-in lives in eu-west-1 and the credentials say us-east-1.
+ */
 
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vite-plus/test';
 
-import type { Connection } from '../../src/library/index.ts';
-import { formatConnection } from '../../src/library/index.ts';
-import { connectionSigning, diskProvider } from '../../src/store/node.ts';
-import { locate, s3Provider } from '../../src/store/s3.ts';
-import type { S3Options } from '../../src/store/s3.ts';
-import { connect, indexed, openOne } from '../engine/harness.ts';
+import type { Connection } from '#library';
+import { formatConnection } from '#library';
+import { connectionSigning, diskProvider } from '#store/node';
+import { locate, s3Provider } from '#store/s3';
+import type { S3Options } from '#store/s3';
+import { connect, indexed, openOne } from '#tests/engine/harness';
 import { HOME_REGION, REGION_FORMATS, rendered } from './regions.ts';
 import { BUCKET, KEYS, bucket, keysOnly } from './standin.ts';
 import type { Bucket } from './standin.ts';

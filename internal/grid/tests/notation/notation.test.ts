@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The notation subset: what is drawn, the first symbol refused,
+ * and that every table entry is reachable from a source.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
@@ -7,7 +12,7 @@ import {
   SYMBOLS,
   render,
   supported,
-} from '../../src/notation/index.ts';
+} from '#notation';
 
 // Each case checks render and supported together on the same source.
 describe('the subset draws the notation a person types', () => {

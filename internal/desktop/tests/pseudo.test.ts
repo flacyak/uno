@@ -1,9 +1,11 @@
-// The pseudo-locale's patterns: accented, padded, in brackets, with variables
-// and markup in braces left as they are.
+/**
+ * @fileoverview The pseudo-locale's patterns: accented, padded, in brackets,
+ * with variables and markup in braces left as they are.
+ */
 
 import { expect, test } from "vite-plus/test";
 
-import { PSEUDO_CLOSE, PSEUDO_OPEN, pseudo, pseudoMessages } from "../scripts/pseudo.js";
+import { PSEUDO_CLOSE, PSEUDO_OPEN, pseudo, pseudoMessages } from "#scripts/pseudo";
 
 test("every letter wears an accent, between brackets", () => {
   const out = pseudo("Save");

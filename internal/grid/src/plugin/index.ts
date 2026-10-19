@@ -1,16 +1,19 @@
-// Package plugin combines providers into the Sources an engine reads from.
-//
-// `store` defines FileHandler (opens) and Lister (browses). A Provider pairs
-// the two, and the handler list and the lister list are derived from the
-// provider list. This package imports `store`; store imports only
-// `type Provider` from here, which is erased at runtime, so a provider factory
-// lives beside its transport (store/node.ts, store/s3.ts).
-//
-// The guard test in tests/store/opens.test.ts scans this package like every
-// other module under src/. Every read goes through a provider.
-//
-// Each platform lists its providers explicitly; that list is the only
-// registry.
+/**
+ * @fileoverview Package plugin combines providers into the Sources an engine
+ * reads from.
+ *
+ * `store` defines FileHandler (opens) and Lister (browses). A Provider pairs
+ * the two, and the handler list and the lister list are derived from the
+ * provider list. This package imports `store`; store imports only
+ * `type Provider` from here, which is erased at runtime, so a provider factory
+ * lives beside its transport (store/node.ts, store/s3.ts).
+ *
+ * The guard test in tests/store/opens.test.ts scans this package like every
+ * other module under src/. Every read goes through a provider.
+ *
+ * Each platform lists its providers explicitly; that list is the only
+ * registry.
+ */
 
 import type {
   ByteSource,
@@ -19,8 +22,8 @@ import type {
   FileRef,
   Lister,
   Listing,
-} from '../store/index.ts';
-import { listWith, openWith, statWith } from '../store/index.ts';
+} from '#store';
+import { listWith, openWith, statWith } from '#store';
 
 /**
  * Provider is one kind of place files are: a disk, a bucket, bytes in hand.

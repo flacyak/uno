@@ -1,5 +1,7 @@
-// Package pattern induces a transform program from the edits a person made to
-// a column, so the app can offer to apply it to the rest.
+/**
+ * @fileoverview Package pattern induces a transform program from the edits a
+ * person made to a column, so the app can offer to apply it to the rest.
+ */
 
 export {
   MIN_EXAMPLES,

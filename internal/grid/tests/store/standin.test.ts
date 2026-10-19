@@ -1,12 +1,14 @@
-// Tests of the stand-in itself: what standin.ts promises to s3.test.ts and
-// the desktop smoke run.
+/**
+ * @fileoverview Tests of the stand-in itself: what standin.ts promises to
+ * s3.test.ts and the desktop smoke run.
+ */
 
 import { expect, test } from 'vite-plus/test';
 
-import { awsCredentials, diskProvider } from '../../src/store/node.ts';
-import { s3Files, s3Provider } from '../../src/store/s3.ts';
-import { bytes, connect, indexed, openOne, sales } from '../engine/harness.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { awsCredentials, diskProvider } from '#store/node';
+import { s3Files, s3Provider } from '#store/s3';
+import { bytes, connect, indexed, openOne, sales } from '#tests/engine/harness';
+import { ROWS, UNITS } from '#tests/testdata/sales-q3';
 import { HOME_REGION } from './regions.ts';
 import { at, bucket, KEYS, standinEnv } from './standin.ts';
 

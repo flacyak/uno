@@ -1,9 +1,11 @@
-// The Node FileStore, the handler that opens a file on this machine's disks,
-// and the AWS credential chain read from ~/.aws.
-//
-// `write` builds a sibling temp file, fsyncs it and renames it over the
-// target. Only this file and store/disklister.ts import node:fs. The guard
-// test in tests/store/opens.test.ts checks that.
+/**
+ * @fileoverview The Node FileStore, the handler that opens a file on this
+ * machine's disks, and the AWS credential chain read from ~/.aws.
+ *
+ * `write` builds a sibling temp file, fsyncs it and renames it over the
+ * target. Only this file and store/disklister.ts import node:fs. The guard
+ * test in tests/store/opens.test.ts checks that.
+ */
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -13,17 +15,17 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { compareStrings, parseTime } from '../go/index.ts';
-import type { AuthMode, Connection } from '../library/index.ts';
-import { covering } from '../library/index.ts';
-import type { Provider } from '../plugin/index.ts';
+import { compareStrings, parseTime } from '#go';
+import type { AuthMode, Connection } from '#library';
+import { covering } from '#library';
+import type { Provider } from '#plugin';
 import { diskLister } from './disklister.ts';
 import type { ByteSource, FileHandler, FileStore } from './index.ts';
 import { isRemote, readAll } from './index.ts';
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import { assumeRole, signInAgain, ssoRoleCredentials } from './sts.ts';
 import type { Session } from './sts.ts';
-import { unreachable } from '../never.ts';
+import { unreachable } from '#never';
 
 /**
  * localFiles opens files on this machine's disks by path, for reading. It

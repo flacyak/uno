@@ -1,4 +1,9 @@
 /**
+ * @fileoverview The unit of the edit log: one recorded change, the operations
+ * it can be, and NO_ROW for one made to a whole column.
+ */
+
+/**
  * Edit is one recorded change, and one line of the .uno edit log.
  *
  * A sheet keeps every edit in order. Replay rebuilds the sheet from the raw

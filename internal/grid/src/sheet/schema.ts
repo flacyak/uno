@@ -1,21 +1,23 @@
-// The edit log folded into what a row needs to be finished.
-//
-// A Schema holds the facts the log adds up to: which cells were written,
-// which programs run over each column and in what order, and which columns
-// a formula computes. It checks every edit as it is folded.
-//
-// `pipeline.ts` turns a row of source values and a Schema into the row the
-// grid draws. A Sheet does that over rows in memory and the engine over
-// pages of a file.
+/**
+ * @fileoverview The edit log folded into what a row needs to be finished.
+ *
+ * A Schema holds the facts the log adds up to: which cells were written,
+ * which programs run over each column and in what order, and which columns
+ * a formula computes. It checks every edit as it is folded.
+ *
+ * `pipeline.ts` turns a row of source values and a Schema into the row the
+ * grid draws. A Sheet does that over rows in memory and the engine over
+ * pages of a file.
+ */
 
-import type { Formula } from '../formula/index.ts';
-import { Graph, parse as parseFormula } from '../formula/index.ts';
+import type { Formula } from '#formula';
+import { Graph, parse as parseFormula } from '#formula';
 import {
   render as renderNotation,
   supported as notationSupported,
-} from '../notation/index.ts';
-import type { Program } from '../program/index.ts';
-import { parse as parseProgram } from '../program/index.ts';
+} from '#notation';
+import type { Program } from '#program';
+import { parse as parseProgram } from '#program';
 import type { Edit } from './edit.ts';
 import { Op, editEquals } from './edit.ts';
 

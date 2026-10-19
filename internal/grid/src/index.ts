@@ -1,7 +1,10 @@
-// uno's core: sheets, formulas, the transform language and the .uno container.
-//
-// The subpath exports (`@uno/grid/sheet`, `@uno/grid/formula` and so on) are
-// the usual way in. This barrel exports everything.
+/**
+ * @fileoverview uno's core: sheets, formulas, the transform language and the
+ * .uno container.
+ *
+ * The subpath exports (`@uno/grid/sheet`, `@uno/grid/formula` and so on) are
+ * the usual way in. This barrel exports everything.
+ */
 
 export * as go from './go/index.ts';
 export * as num from './num/index.ts';

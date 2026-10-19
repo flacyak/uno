@@ -1,20 +1,22 @@
-// @vitest-environment happy-dom
-//
-// The panel's view over its state: the filter box, the virtual list, the keys
-// that walk it, and the peek and buttons under it. What `Sources` decides is
-// tested in sources.test.ts; this checks that the view asks it and draws what
-// it says.
+/**
+ * @fileoverview The panel's view over its state: the filter box, the virtual
+ * list, the keys that walk it, and the peek and buttons under it. What
+ * `Sources` decides is tested in sources.test.ts; this checks that the view
+ * asks it and draws what it says.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import type { Peeked, SourceRef } from "@uno/grid/engine";
-import type { Entry, Listing } from "@uno/grid/store";
+import type { Peeked, SourceRef } from "#engine";
+import type { Entry, Listing } from "#store";
 
-import type { InputName } from "../src/renderer/input/index.ts";
-import type { ConnectAsks } from "../src/renderer/shell/connect.ts";
-import { Panel, rowAt, rowCount, rowOf, spans } from "../src/renderer/shell/panel.ts";
-import type { Arriving, Connection, Listings, Open } from "../src/renderer/sources.ts";
-import { Sources } from "../src/renderer/sources.ts";
+import type { InputName } from "#renderer/input";
+import type { ConnectAsks } from "#renderer/shell/connect";
+import { Panel, rowAt, rowCount, rowOf, spans } from "#renderer/shell/panel";
+import type { Arriving, Connection, Listings, Open } from "#renderer/sources";
+import { Sources } from "#renderer/sources";
 
 const BUCKET: Connection = { name: "acme-exports", path: "s3://acme-exports", kind: "s3" };
 const DISK: Connection = { name: "~/exports", path: "/home/jo/exports", kind: "disk" };

@@ -1,16 +1,18 @@
-// @vitest-environment happy-dom
-//
-// The words in the page's markup: index.html ships the elements empty, and
-// labelPage writes them in the app's language.
-//
-// Checks that every element gets its words, and that writing them again
-// keeps the elements that have handlers wired to them.
+/**
+ * @fileoverview The words in the page's markup: index.html ships the elements
+ * empty, and labelPage writes them in the app's language.
+ *
+ * Checks that every element gets its words, and that writing them again
+ * keeps the elements that have handlers wired to them.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import { m } from "../src/paraglide/messages.js";
-import { baseLocale } from "../src/paraglide/runtime.js";
-import { labelPage } from "../src/renderer/shell/page.ts";
+import { m } from "#paraglide/messages";
+import { baseLocale } from "#paraglide/runtime";
+import { labelPage } from "#renderer/shell/page";
 import { bodyMarkup } from "./markup.ts";
 
 beforeEach(() => {

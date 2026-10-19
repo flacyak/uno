@@ -1,10 +1,12 @@
-// Checks of the sidebar: the workspaces this run opened, listed with the open
-// one first and its sources under it, moving between them, a formula inserted
-// from a right click, and the × that closes the window asking before it drops
-// anything.
-//
-// They run over the workspace the checks before them saved, reopened and
-// added to, with the colleague's workspace beside it in the list.
+/**
+ * @fileoverview Checks of the sidebar: the workspaces this run opened, listed
+ * with the open one first and its sources under it, moving between them, a
+ * formula inserted from a right click, and the × that closes the window asking
+ * before it drops anything.
+ *
+ * They run over the workspace the checks before them saved, reopened and
+ * added to, with the colleague's workspace beside it in the list.
+ */
 
 import type { Check } from "./check.ts";
 

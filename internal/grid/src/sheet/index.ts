@@ -1,4 +1,6 @@
-// Package sheet holds one table per workspace.
+/**
+ * @fileoverview Package sheet holds one table per workspace.
+ */
 
 export { Sheet } from './sheet.ts';
 export type { Column } from './sheet.ts';

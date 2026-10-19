@@ -1,10 +1,12 @@
-// Checks of the sources panel: the workspace's tabs listed in it, the stand-in
-// bucket browsed, an object peeked at, two added, and one tab re-pointed at
-// another object.
-//
-// They run after sources.ts, over the reopened workspace it leaves: the fixture
-// and the bucket's ads-q3.csv. smoke.js puts ads-q4.csv and sales-q3.csv beside
-// that object.
+/**
+ * @fileoverview Checks of the sources panel: the workspace's tabs listed in it,
+ * the stand-in bucket browsed, an object peeked at, two added, and one tab
+ * re-pointed at another object.
+ *
+ * They run after sources.ts, over the reopened workspace it leaves: the fixture
+ * and the bucket's ads-q3.csv. smoke.js puts ads-q4.csv and sales-q3.csv beside
+ * that object.
+ */
 
 import type { Check } from "./check.ts";
 

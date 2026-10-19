@@ -1,17 +1,19 @@
-// @vitest-environment happy-dom
-//
-// The sidebar's list: the open workspace with its sources under it, then the
-// other workspaces opened on this machine, most recent first, and what each
-// line asks the shell to do.
+/**
+ * @fileoverview The sidebar's list: the open workspace with its sources under
+ * it, then the other workspaces opened on this machine, most recent first, and
+ * what each line asks the shell to do.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { expect, test } from "vite-plus/test";
 
-import { m } from "../src/paraglide/messages.js";
-import { sidebarRows } from "../src/renderer/shell/sidebar.ts";
-import type { SidebarActions } from "../src/renderer/shell/sidebar.ts";
-import { stateOf } from "../src/renderer/sources.ts";
-import type { Arriving } from "../src/renderer/sources.ts";
-import type { Tab, Workspace } from "../src/renderer/workspace.ts";
+import { m } from "#paraglide/messages";
+import { sidebarRows } from "#renderer/shell/sidebar";
+import type { SidebarActions } from "#renderer/shell/sidebar";
+import { stateOf } from "#renderer/sources";
+import type { Arriving } from "#renderer/sources";
+import type { Tab, Workspace } from "#renderer/workspace";
 
 function tab(id: string, name: string, link?: Tab["link"]): Tab {
   return {

@@ -1,22 +1,24 @@
-// The sources panel: the column beside the grid, with its head, a filter box,
-// the three sections of `Sources` drawn as one virtualised list, a peek at
-// the picked file, and the buttons that add what is picked.
-//
-// The list reuses a pool of row elements, as the grid does, and writes text
-// into them as it scrolls. `Sources` owns what each line says and which line
-// has focus. This file draws it and reads keys.
+/**
+ * @fileoverview The sources panel: the column beside the grid, with its head, a
+ * filter box, the three sections of `Sources` drawn as one virtualised list, a
+ * peek at the picked file, and the buttons that add what is picked.
+ *
+ * The list reuses a pool of row elements, as the grid does, and writes text
+ * into them as it scrolls. `Sources` owns what each line says and which line
+ * has focus. This file draws it and reads keys.
+ */
 
 import "./arriving.css";
 import "./panel.css";
 
-import type { Peeked, SourceRef } from "@uno/grid/engine";
-import type { SingleRef } from "@uno/grid/store";
+import type { Peeked, SourceRef } from "#engine";
+import type { SingleRef } from "#store";
 
-import { m } from "../../paraglide/messages.js";
-import { firstRow, fitPool, poolSize } from "../grid/metrics.ts";
-import type { InputName } from "../input/index.ts";
-import { bytes } from "../locale.ts";
-import { say } from "../said.ts";
+import { m } from "#paraglide/messages";
+import { firstRow, fitPool, poolSize } from "#renderer/grid/metrics";
+import type { InputName } from "#renderer/input";
+import { bytes } from "#renderer/locale";
+import { say } from "#renderer/said";
 import {
   SECTIONS,
   connecting,
@@ -27,7 +29,7 @@ import {
   opening,
   stateOf,
   stateWord,
-} from "../sources.ts";
+} from "#renderer/sources";
 import type {
   Arriving,
   Button,
@@ -39,7 +41,7 @@ import type {
   Section,
   Sources,
   TabAction,
-} from "../sources.ts";
+} from "#renderer/sources";
 import { ConnectForm } from "./connect.ts";
 import type { ConnectAsks, Filled } from "./connect.ts";
 import { Words, button, el } from "./util.ts";

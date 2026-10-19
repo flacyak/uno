@@ -1,5 +1,8 @@
-// Checks for the default input: transform, editing, the recogniser's offer, and
-// undo and redo. They pick up where open.ts leaves the window.
+/**
+ * @fileoverview Checks for the default input: transform, editing, the
+ * recogniser's offer, and undo and redo. They pick up where open.ts leaves the
+ * window.
+ */
 
 import type { Check } from "./check.ts";
 import { COMMAS_LEFT, UNITS, counted } from "./fixture.ts";

@@ -1,7 +1,9 @@
-// Package library parses and formats .unof files, one per formula or
-// connection. It works on text alone.
+/**
+ * @fileoverview Package library parses and formats .unof files, one per formula
+ * or connection. It works on text alone.
+ */
 
-import { rfc3339, runes } from '../go/index.ts';
+import { rfc3339, runes } from '#go';
 import { CONNECTION_KIND } from './connection.ts';
 import {
   about,
