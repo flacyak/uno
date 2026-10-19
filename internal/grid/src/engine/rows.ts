@@ -1,7 +1,9 @@
-// The row index, and the page cache that reads rows through it.
-//
-// The index is two arrays of numbers with one entry per block of rows. The
-// page cache keeps decoded blocks up to a byte budget.
+/**
+ * @fileoverview The row index, and the page cache that reads rows through it.
+ *
+ * The index is two arrays of numbers with one entry per block of rows. The
+ * page cache keeps decoded blocks up to a byte budget.
+ */
 
 import type { Format } from '#ingest';
 import { Refusal } from '#said';

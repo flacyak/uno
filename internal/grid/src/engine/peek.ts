@@ -1,9 +1,11 @@
-// Peek: a preview of a file's header and first rows, read apart from the
-// workspace.
-//
-// `readHead` opens the file, reads one range from the front, and closes it.
-// `peekHead` detects the format of those bytes and decodes the rows they
-// hold. It works on bytes already read, so it can be tested on in-memory bytes.
+/**
+ * @fileoverview Peek: a preview of a file's header and first rows, read apart
+ * from the workspace.
+ *
+ * `readHead` opens the file, reads one range from the front, and closes it.
+ * `peekHead` detects the format of those bytes and decodes the rows they
+ * hold. It works on bytes already read, so it can be tested on in-memory bytes.
+ */
 
 import { labelOf, openFormat } from '#ingest';
 import type { HeaderMode } from '#ingest';

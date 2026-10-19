@@ -1,8 +1,10 @@
-// Read-ahead for a reader going through an object in order.
-//
-// Wraps a function that reads one range. When a read continues where an
-// earlier one ended, the next chunks of the same length are requested before
-// they are asked for, so several requests are in flight at once.
+/**
+ * @fileoverview Read-ahead for a reader going through an object in order.
+ *
+ * Wraps a function that reads one range. When a read continues where an
+ * earlier one ended, the next chunks of the same length are requested before
+ * they are asked for, so several requests are in flight at once.
+ */
 
 /** How many chunks a sequential reader has in flight or held at once, the
  * one it is waiting on included. */

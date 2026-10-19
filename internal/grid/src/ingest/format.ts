@@ -1,8 +1,10 @@
-// Format reads a file a piece at a time: it names the columns from the head,
-// finds where records start as bytes go past, and decodes a run of whole
-// records into rows.
-//
-// CSV and TSV are the only formats today.
+/**
+ * @fileoverview Format reads a file a piece at a time: it names the columns
+ * from the head, finds where records start as bytes go past, and decodes a run
+ * of whole records into rows.
+ *
+ * CSV and TSV are the only formats today.
+ */
 
 import { english } from '#said';
 import { unreachable } from '#never';

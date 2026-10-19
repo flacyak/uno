@@ -1,6 +1,8 @@
-// The envelope every .unof shares: a JSON object with a format number, a kind,
-// an id, a name, two times, and any keys a later build wrote. Reading and
-// writing it is here once, for the formula and connection codecs.
+/**
+ * @fileoverview The envelope every .unof shares: a JSON object with a format
+ * number, a kind, an id, a name, two times, and any keys a later build wrote.
+ * Reading and writing it is here once, for the formula and connection codecs.
+ */
 
 import { compareStrings, nowTruncated, parseTime } from '#go';
 import { FORMAT_VERSION } from './index.ts';

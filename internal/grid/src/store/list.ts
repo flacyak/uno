@@ -1,8 +1,11 @@
-// The Lister interface: browsing a folder or a prefix one page at a time.
-//
-// The disk lister is store/disklister.ts and the bucket lister is
-// store/s3lister.ts. The error for a path every lister declines is built in
-// store/claim.ts.
+/**
+ * @fileoverview The Lister interface: browsing a folder or a prefix one page at
+ * a time.
+ *
+ * The disk lister is store/disklister.ts and the bucket lister is
+ * store/s3lister.ts. The error for a path every lister declines is built in
+ * store/claim.ts.
+ */
 
 import { compareStrings } from '#go';
 import { BROWSES, claim } from './claim.ts';

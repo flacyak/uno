@@ -1,10 +1,12 @@
-// What the engine says to a person, as data.
-//
-// A `Said` value names which sentence it is and what goes in it. `english`
-// renders it in English, which is what an Error's message, a log and a test
-// read; a client can render it in another language. A one-off diagnostic
-// travels as `text`, already in English. Adding a kind to `Said`
-// makes the compiler require its sentence here and in every client.
+/**
+ * @fileoverview What the engine says to a person, as data.
+ *
+ * A `Said` value names which sentence it is and what goes in it. `english`
+ * renders it in English, which is what an Error's message, a log and a test
+ * read; a client can render it in another language. A one-off diagnostic
+ * travels as `text`, already in English. Adding a kind to `Said`
+ * makes the compiler require its sentence here and in every client.
+ */
 
 import { quote } from '#go/strconv';
 import { unreachable } from '#never';

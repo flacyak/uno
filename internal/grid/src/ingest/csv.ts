@@ -1,9 +1,11 @@
-// A port of the subset of Go's encoding/csv that uno uses: `LazyQuotes` on,
-// `FieldsPerRecord` off, a configurable separator.
-//
-// The rules are Go's, including: a bare `\r` before end of file is dropped,
-// a `\r\n` inside a quoted field becomes `\n`, and a line holding only its
-// terminator is skipped.
+/**
+ * @fileoverview A port of the subset of Go's encoding/csv that uno uses:
+ * `LazyQuotes` on, `FieldsPerRecord` off, a configurable separator.
+ *
+ * The rules are Go's, including: a bare `\r` before end of file is dropped,
+ * a `\r\n` inside a quoted field becomes `\n`, and a line holding only its
+ * terminator is skipped.
+ */
 
 /** lengthNL mirrors Go's: 1 when the line ends with a newline, 0 otherwise. */
 function lengthNL(line: string): number {

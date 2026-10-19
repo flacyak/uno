@@ -1,9 +1,11 @@
-// Reading an object out of an S3 bucket a range at a time: HEAD for the
-// size, GET with a Range header for the bytes.
-//
-// Requests are signed with SigV4 here. Credentials come from a function the
-// caller hands in. `s3Requests` signs, retries and follows a bucket to its
-// region, and store/s3lister.ts sends its requests through it too.
+/**
+ * @fileoverview Reading an object out of an S3 bucket a range at a time: HEAD
+ * for the size, GET with a Range header for the bytes.
+ *
+ * Requests are signed with SigV4 here. Credentials come from a function the
+ * caller hands in. `s3Requests` signs, retries and follows a bucket to its
+ * region, and store/s3lister.ts sends its requests through it too.
+ */
 
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
