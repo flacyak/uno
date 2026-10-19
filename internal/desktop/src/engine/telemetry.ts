@@ -7,9 +7,9 @@
 // The metrics carry request kinds, durations, storage type, and S3 request
 // counts and byte sizes. File names, paths, buckets and keys stay local.
 
-import { Meter, collector, messageOf } from "@uno/grid/engine";
-import type { Collector } from "@uno/grid/engine";
-import type { Telemetry } from "@uno/grid/engine";
+import { Meter, collector, messageOf } from "#engine";
+import type { Collector } from "#engine";
+import type { Telemetry } from "#engine";
 
 /** Interval between sends. */
 const EXPORT_MS = 10_000;

@@ -5,10 +5,10 @@
 // MessagePort is posted to the window under that id. `saveConnection` stamps
 // and formats the connection, then hands preload the file text.
 
-import { formatConnection, stampConnection } from "@uno/grid/library";
+import { formatConnection, stampConnection } from "#library";
 
-import { m } from "../paraglide/messages.js";
-import type { Bridge, Host } from "../shared/host.ts";
+import { m } from "#paraglide/messages";
+import type { Bridge, Host } from "#shared/host";
 
 export function electronHost(bridge: Bridge): Host {
   let next = 1;

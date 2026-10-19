@@ -4,8 +4,8 @@
 
 import "./base.css";
 
-import { m } from "../paraglide/messages.js";
-import type { Locale } from "../paraglide/runtime.js";
+import { m } from "#paraglide/messages";
+import type { Locale } from "#paraglide/runtime";
 import { electronHost } from "./host.ts";
 import type { InputName } from "./input/index.ts";
 import { Shell } from "./shell/shell.ts";

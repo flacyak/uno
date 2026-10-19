@@ -1,8 +1,8 @@
 // Helpers shared by the shell's files.
 
-import { baseOf, dirOf } from "@uno/grid/document";
+import { baseOf, dirOf } from "#document";
 
-import { said } from "../said.ts";
+import { said } from "#renderer/said";
 
 export function must<T>(value: T | null): T {
   if (value === null) throw new Error("the renderer's markup is missing an element it needs");
@@ -191,7 +191,7 @@ export function settled(ms: number, run: () => Promise<void>): () => void {
 }
 
 /** baseName returns the last part of a path, with either separator. */
-export { baseOf as baseName } from "@uno/grid/document";
+export { baseOf as baseName } from "#document";
 
 /**
  * folderName returns the name of the folder a path is in: "exports" for
