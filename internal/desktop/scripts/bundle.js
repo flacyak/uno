@@ -1,7 +1,9 @@
-// Bundles the Node side of the app: main, preload and the engine.
-//
-// The renderer is built by Vite through `vp build`. These three run under
-// Electron's own module loader and are built here as CommonJS.
+/**
+ * @fileoverview Bundles the Node side of the app: main, preload and the engine.
+ *
+ * The renderer is built by Vite through `vp build`. These three run under
+ * Electron's own module loader and are built here as CommonJS.
+ */
 
 import { build } from "vite";
 

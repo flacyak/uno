@@ -1,8 +1,10 @@
-// The grid: selection, key handling, marks and the cell editor, on top of the
-// virtualised View in view.ts.
-//
-// It draws any `Rows` implementation. Rows still on their way from an engine
-// are drawn as pending.
+/**
+ * @fileoverview The grid: selection, key handling, marks and the cell editor,
+ * on top of the virtualised View in view.ts.
+ *
+ * It draws any `Rows` implementation. Rows still on their way from an engine
+ * are drawn as pending.
+ */
 
 import "./grid.css";
 

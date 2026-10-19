@@ -1,6 +1,8 @@
-// The preload script. Exposes `window.uno` and `window.unoMenu` to the
-// renderer through contextBridge. Context isolation is on, so these are the
-// renderer's only way to reach the main process.
+/**
+ * @fileoverview The preload script. Exposes `window.uno` and `window.unoMenu`
+ * to the renderer through contextBridge. Context isolation is on, so these are
+ * the renderer's only way to reach the main process.
+ */
 
 import type { SourceRef } from "#engine";
 import { contextBridge, ipcRenderer, webUtils } from "electron";

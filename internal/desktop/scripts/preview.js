@@ -1,28 +1,30 @@
-// Records docs/preview.gif.
-//
-// The app films itself (src/main/preview.ts). This script sets the scene,
-// starts the built app on it, then turns the frames it wrote into a GIF.
-//
-// The stories:
-// - `browse` (the README's): finds a workspace's moved export through the
-//   sources panel, then tries the themes in settings.
-// - `sidebar`: moves between workspaces in the sidebar, inserts a formula from
-//   a right click, and opens a new one from the +. Goes to docs/sidebar.gif.
-// - `edit`: fixes three cells of the fixture and applies the offer to fix the
-//   rest.
-// - `refresh`: reopens a workspace whose export in the bucket was rewritten,
-//   sees it rewritten again on focus, and reloads it. Filmed against the
-//   stand-in bucket. Goes to out/refresh.gif.
-// - `opening`: adds an export from a bucket with latency and watches its line
-//   in the sources panel while it opens. Goes to out/opening.gif.
-// - `connecting`: connects that bucket from the panel's form and watches the
-//   connection's line while it is tested and saved. Goes to
-//   out/connecting.gif.
-// - `refused`: the same with the bucket's name mistyped. The line fails and
-//   is chosen to edit the connection. Goes to out/refused.gif.
-//
-// Usage: node scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
-// (after node scripts/build.js)
+/**
+ * @fileoverview Records docs/preview.gif.
+ *
+ * The app films itself (src/main/preview.ts). This script sets the scene,
+ * starts the built app on it, then turns the frames it wrote into a GIF.
+ *
+ * The stories:
+ * - `browse` (the README's): finds a workspace's moved export through the
+ *   sources panel, then tries the themes in settings.
+ * - `sidebar`: moves between workspaces in the sidebar, inserts a formula from
+ *   a right click, and opens a new one from the +. Goes to docs/sidebar.gif.
+ * - `edit`: fixes three cells of the fixture and applies the offer to fix the
+ *   rest.
+ * - `refresh`: reopens a workspace whose export in the bucket was rewritten,
+ *   sees it rewritten again on focus, and reloads it. Filmed against the
+ *   stand-in bucket. Goes to out/refresh.gif.
+ * - `opening`: adds an export from a bucket with latency and watches its line
+ *   in the sources panel while it opens. Goes to out/opening.gif.
+ * - `connecting`: connects that bucket from the panel's form and watches the
+ *   connection's line while it is tested and saved. Goes to
+ *   out/connecting.gif.
+ * - `refused`: the same with the bucket's name mistyped. The line fails and
+ *   is chosen to edit the connection. Goes to out/refused.gif.
+ *
+ * Usage: node scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
+ * (after node scripts/build.js)
+ */
 
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";

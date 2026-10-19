@@ -1,11 +1,13 @@
-// What a check can ask of a running app, whether it is a real Electron window
-// or something standing in for one.
-//
-// Every answer is a plain value: text, a count, a boolean, a `Row`. No
-// `Element` crosses this interface in either direction.
-//
-// A check that needs more than this (real layout, the preload bridge, a
-// person's own input) stays a string. See check.ts.
+/**
+ * @fileoverview What a check can ask of a running app, whether it is a real
+ * Electron window or something standing in for one.
+ *
+ * Every answer is a plain value: text, a count, a boolean, a `Row`. No
+ * `Element` crosses this interface in either direction.
+ *
+ * A check that needs more than this (real layout, the preload bridge, a
+ * person's own input) stays a string. See check.ts.
+ */
 
 /** One row as the grid draws it. */
 export interface Row {

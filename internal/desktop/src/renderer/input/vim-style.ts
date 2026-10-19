@@ -1,8 +1,10 @@
-// Vim-style input.
-//
-// View and transform act as normal mode, with writes refused in view, and
-// the cell editor acts as insert mode. `i` moves one level in and Esc moves
-// one level out.
+/**
+ * @fileoverview Vim-style input.
+ *
+ * View and transform act as normal mode, with writes refused in view, and
+ * the cell editor acts as insert mode. `i` moves one level in and Esc moves
+ * one level out.
+ */
 
 import { m } from "#paraglide/messages";
 import { NAMED_MOTIONS, NONE, done, isCharacter, isLead, move, showing } from "#renderer/keys";

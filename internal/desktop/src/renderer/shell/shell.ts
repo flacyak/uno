@@ -1,10 +1,12 @@
-// The shell: the sidebar, the banner, the grid, the status bar, the panel, and
-// the keys and menus that drive them.
-//
-// It decides when things happen. What they do is in Workspace, Sources and
-// the host, which are testable on their own.
-//
-// The grid is loaded when the first file opens.
+/**
+ * @fileoverview The shell: the sidebar, the banner, the grid, the status bar,
+ * the panel, and the keys and menus that drive them.
+ *
+ * It decides when things happen. What they do is in Workspace, Sources and
+ * the host, which are testable on their own.
+ *
+ * The grid is loaded when the first file opens.
+ */
 
 import { isWorkspace } from "#document";
 import { Engine, messagePort } from "#engine";

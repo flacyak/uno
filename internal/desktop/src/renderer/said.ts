@@ -1,9 +1,11 @@
-// Turns the engine's structured messages (`Said`) into text in the app's
-// locale.
-//
-// The engine sends a kind and its fields. `say` maps each kind to a message.
-// The table is typed over every kind, so a new kind fails to compile here
-// until it has a message. The `text` kind is passed through unchanged.
+/**
+ * @fileoverview Turns the engine's structured messages (`Said`) into text in
+ * the app's locale.
+ *
+ * The engine sends a kind and its fields. `say` maps each kind to a message.
+ * The table is typed over every kind, so a new kind fails to compile here
+ * until it has a message. The `text` kind is passed through unchanged.
+ */
 
 import { Refusal, messageOf } from "#engine";
 import type { CharName, Said, Sought, StepSaid } from "#engine";

@@ -1,4 +1,6 @@
-// Helpers shared by the shell's files.
+/**
+ * @fileoverview Helpers shared by the shell's files.
+ */
 
 import { baseOf, dirOf } from "#document";
 

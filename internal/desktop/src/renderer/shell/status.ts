@@ -1,9 +1,11 @@
-// The status bar: the mode, the file line, the message line, pending keys,
-// and the selected cell. It also holds the prompt for : commands and / and ?
-// searches, which replaces the file line while open.
-//
-// The switches at its ends: the sidebar toggle on the left; the mode switch
-// and the sources panel toggle on the right.
+/**
+ * @fileoverview The status bar: the mode, the file line, the message line,
+ * pending keys, and the selected cell. It also holds the prompt for : commands
+ * and / and ? searches, which replaces the file line while open.
+ *
+ * The switches at its ends: the sidebar toggle on the left; the mode switch
+ * and the sources panel toggle on the right.
+ */
 
 import "./status.css";
 

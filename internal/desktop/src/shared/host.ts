@@ -1,11 +1,13 @@
-// The platform interface the renderer uses: pick files, start an engine,
-// save a workspace or a connection, and quit.
-//
-// Files are passed by reference. `open` returns one (a path or an s3://
-// URL) and the engine reads from it. `save` writes a
-// .uno, which holds the log and source references.
-//
-// The Electron implementation is `preload` plus `renderer/host.ts`.
+/**
+ * @fileoverview The platform interface the renderer uses: pick files, start an
+ * engine, save a workspace or a connection, and quit.
+ *
+ * Files are passed by reference. `open` returns one (a path or an s3://
+ * URL) and the engine reads from it. `save` writes a
+ * .uno, which holds the log and source references.
+ *
+ * The Electron implementation is `preload` plus `renderer/host.ts`.
+ */
 
 import type { MessagePortLike, SourceRef } from "#engine";
 import type { Connection } from "#library";
