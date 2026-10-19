@@ -1,10 +1,12 @@
-// `readHead` and `peekHead`, the two halves of a peek.
-//
-// `readHead` opens a file through a handler, reads its front, and closes it.
-// The checks here count reads and closes.
-//
-// `peekHead` parses a head: it detects the format, names the columns, and
-// returns the whole rows in the window. The heads are strings in this file.
+/**
+ * @fileoverview `readHead` and `peekHead`, the two halves of a peek.
+ *
+ * `readHead` opens a file through a handler, reads its front, and closes it.
+ * The checks here count reads and closes.
+ *
+ * `peekHead` parses a head: it detects the format, names the columns, and
+ * returns the whole rows in the window. The heads are strings in this file.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

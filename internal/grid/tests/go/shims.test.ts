@@ -1,5 +1,7 @@
-// Tests for the Go standard library shims. Expected values were recorded from
-// the equivalent Go calls.
+/**
+ * @fileoverview Tests for the Go standard library shims. Expected values were
+ * recorded from the equivalent Go calls.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 

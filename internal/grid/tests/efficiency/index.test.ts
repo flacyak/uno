@@ -1,7 +1,9 @@
-// Measures the index pass over a 200 MB synthetic CSV: bytes read to sniff,
-// read and scan time, heap kept per row, and the time to answer a window
-// asked for mid-pass. The CSV has quoted commas, quoted newlines, CRLF rows
-// and multi-byte characters. It is written to the temp directory once.
+/**
+ * @fileoverview Measures the index pass over a 200 MB synthetic CSV: bytes read
+ * to sniff, read and scan time, heap kept per row, and the time to answer a
+ * window asked for mid-pass. The CSV has quoted commas, quoted newlines, CRLF
+ * rows and multi-byte characters. It is written to the temp directory once.
+ */
 
 import { closeSync, existsSync, openSync, statSync, writeSync } from 'node:fs';
 import { tmpdir } from 'node:os';

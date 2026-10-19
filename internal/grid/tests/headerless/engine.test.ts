@@ -1,6 +1,8 @@
-// Engine tests for headerless files. Three headerless parts on disk
-// are opened as one source, and what the engine shows is compared cell for
-// cell with sales-q3.csv read the ordinary way.
+/**
+ * @fileoverview Engine tests for headerless files. Three headerless parts on
+ * disk are opened as one source, and what the engine shows is compared cell for
+ * cell with sales-q3.csv read the ordinary way.
+ */
 
 import { rm } from 'node:fs/promises';
 import {

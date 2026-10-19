@@ -1,6 +1,8 @@
-// Parts must agree with the first part. A part that differs is refused with a
-// DisagreementError naming the part and what differs, whether found as the
-// source opens or by the first read that reaches the part.
+/**
+ * @fileoverview Parts must agree with the first part. A part that differs is
+ * refused with a DisagreementError naming the part and what differs, whether
+ * found as the source opens or by the first read that reaches the part.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 

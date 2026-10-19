@@ -1,4 +1,7 @@
-// Compares two runs of the efficiency tests and writes the result as a table.
+/**
+ * @fileoverview Compares two runs of the efficiency tests and writes the result
+ * as a table.
+ */
 
 import type { Metric } from './record.ts';
 

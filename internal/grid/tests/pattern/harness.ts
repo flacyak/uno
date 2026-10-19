@@ -1,4 +1,6 @@
-// Shared helpers for the pattern recogniser tests.
+/**
+ * @fileoverview Shared helpers for the pattern recogniser tests.
+ */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

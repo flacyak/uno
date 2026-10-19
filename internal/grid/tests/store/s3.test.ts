@@ -1,8 +1,10 @@
-// Reading a source out of S3.
-//
-// Signing is checked against AWS's published examples. Everything else runs
-// against standin.ts, which serves the fixture, checks every signature, and
-// answers ranges.
+/**
+ * @fileoverview Reading a source out of S3.
+ *
+ * Signing is checked against AWS's published examples. Everything else runs
+ * against standin.ts, which serves the fixture, checks every signature, and
+ * answers ranges.
+ */
 
 import { createHash, createHmac } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';

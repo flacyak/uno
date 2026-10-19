@@ -1,6 +1,8 @@
-// Edits through the engine: set, apply, bind, undo, redo, refusals, and the
-// offers streamed after fixes. Each is checked against a Sheet given the same
-// log.
+/**
+ * @fileoverview Edits through the engine: set, apply, bind, undo, redo,
+ * refusals, and the offers streamed after fixes. Each is checked against a
+ * Sheet given the same log.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

@@ -1,7 +1,9 @@
-// The engine and a .uno: opening one with its log applied, saving back, and a
-// workspace of several sources. A save points at sources with a path and
-// carries the rest, so most tests are about paths: how they are written,
-// what happens when one stops resolving, and relinking.
+/**
+ * @fileoverview The engine and a .uno: opening one with its log applied, saving
+ * back, and a workspace of several sources. A save points at sources with a
+ * path and carries the rest, so most tests are about paths: how they are
+ * written, what happens when one stops resolving, and relinking.
+ */
 
 import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';

@@ -1,5 +1,8 @@
-// Several files read as one through the engine: a ref of parts opens through
-// the multi provider, and the join is indexed and paged like any file.
+/**
+ * @fileoverview Several files read as one through the engine: a ref of parts
+ * opens through the multi provider, and the join is indexed and paged like any
+ * file.
+ */
 
 import { setImmediate as turn } from 'node:timers/promises';
 

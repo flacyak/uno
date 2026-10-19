@@ -1,6 +1,8 @@
-// Files beyond plain UTF-8 through the engine: a byte order mark,
-// UTF-16, Windows-1252, a stray NUL, and a character cut by a chunk boundary.
-// Every row is compared with what `read` builds from the same bytes.
+/**
+ * @fileoverview Files beyond plain UTF-8 through the engine: a byte order mark,
+ * UTF-16, Windows-1252, a stray NUL, and a character cut by a chunk boundary.
+ * Every row is compared with what `read` builds from the same bytes.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

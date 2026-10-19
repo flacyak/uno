@@ -1,5 +1,7 @@
-// Tests for connection files (.unof): parsing, byte-for-byte round trips,
-// unknown keys, secret detection, and field validation.
+/**
+ * @fileoverview Tests for connection files (.unof): parsing, byte-for-byte
+ * round trips, unknown keys, secret detection, and field validation.
+ */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

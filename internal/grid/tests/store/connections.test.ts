@@ -1,7 +1,10 @@
-// Connections kept in a folder, loaded and saved through the store.
-//
-// One broken file costs that connection only, two files with one id are
-// reported, and a refused save leaves the folder as it was.
+/**
+ * @fileoverview Connections kept in a folder, loaded and saved through the
+ * store.
+ *
+ * One broken file costs that connection only, two files with one id are
+ * reported, and a refused save leaves the folder as it was.
+ */
 
 import {
   copyFile,

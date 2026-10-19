@@ -1,9 +1,11 @@
-// A stand-in for STS, on localhost. It answers AssumeRole only.
-//
-// It signs each request again with the secret of the claimed access key and
-// refuses a mismatch. A role is handed out only to a caller its trust names,
-// with the external ID the trust asks for. Every request is recorded in
-// `seen`.
+/**
+ * @fileoverview A stand-in for STS, on localhost. It answers AssumeRole only.
+ *
+ * It signs each request again with the secret of the claimed access key and
+ * refuses a mismatch. A role is handed out only to a caller its trust names,
+ * with the external ID the trust asks for. Every request is recorded in
+ * `seen`.
+ */
 
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';

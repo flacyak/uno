@@ -1,5 +1,7 @@
-// A headerless source saved to a .uno records header mode "none", and
-// reopening it puts every logged edit on the same row.
+/**
+ * @fileoverview A headerless source saved to a .uno records header mode "none",
+ * and reopening it puts every logged edit on the same row.
+ */
 
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
