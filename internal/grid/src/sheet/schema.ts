@@ -8,14 +8,14 @@
 // grid draws. A Sheet does that over rows in memory and the engine over
 // pages of a file.
 
-import type { Formula } from '../formula/index.ts';
-import { Graph, parse as parseFormula } from '../formula/index.ts';
+import type { Formula } from '#formula';
+import { Graph, parse as parseFormula } from '#formula';
 import {
   render as renderNotation,
   supported as notationSupported,
-} from '../notation/index.ts';
-import type { Program } from '../program/index.ts';
-import { parse as parseProgram } from '../program/index.ts';
+} from '#notation';
+import type { Program } from '#program';
+import { parse as parseProgram } from '#program';
 import type { Edit } from './edit.ts';
 import { Op, editEquals } from './edit.ts';
 

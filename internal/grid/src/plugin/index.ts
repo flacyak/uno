@@ -19,8 +19,8 @@ import type {
   FileRef,
   Lister,
   Listing,
-} from '../store/index.ts';
-import { listWith, openWith, statWith } from '../store/index.ts';
+} from '#store';
+import { listWith, openWith, statWith } from '#store';
 
 /**
  * Provider is one kind of place files are: a disk, a bucket, bytes in hand.

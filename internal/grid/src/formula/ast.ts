@@ -1,7 +1,7 @@
 // The expression tree: a discriminated union of five node kinds.
 
-import { compareStrings } from '../go/index.ts';
-import { unreachable } from '../never.ts';
+import { compareStrings } from '#go';
+import { unreachable } from '#never';
 
 /**
  * NumLit is a number literal. `text` is how it was written and `value` is

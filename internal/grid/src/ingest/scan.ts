@@ -7,7 +7,7 @@
 // every byte of a multi-byte UTF-8 character is data. tests/ingest/scan.test.ts
 // checks it against csv.ts over random input.
 
-import { unreachable } from '../never.ts';
+import { unreachable } from '#never';
 
 const LF = 0x0a;
 const CR = 0x0d;
