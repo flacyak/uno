@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vite-plus/test';
 
-import { read, readAll, sniffDelimiter } from '../../src/ingest/index.ts';
+import { read, readAll, sniffDelimiter } from '#ingest';
 
 /** Bytes the delimiter sniff looks at. */
 const PEEK = 64 << 10;

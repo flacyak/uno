@@ -9,8 +9,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import type { Connection } from '../../src/library/index.ts';
-import { sources } from '../../src/plugin/index.ts';
+import type { Connection } from '#library';
+import { sources } from '#plugin';
 import {
   blobFiles,
   bytesSource,
@@ -20,20 +20,15 @@ import {
   multiProvider,
   openWith,
   saveConnection,
-} from '../../src/store/index.ts';
-import type {
-  FileHandler,
-  FileRef,
-  PartsRef,
-  SingleRef,
-} from '../../src/store/index.ts';
+} from '#store';
+import type { FileHandler, FileRef, PartsRef, SingleRef } from '#store';
 import {
   connectionSigning,
   diskProvider,
   localFiles,
   nodeStore,
-} from '../../src/store/node.ts';
-import { connectionMeeting, s3Provider } from '../../src/store/s3.ts';
+} from '#store/node';
+import { connectionMeeting, s3Provider } from '#store/s3';
 import {
   TINY,
   connect,
@@ -42,14 +37,14 @@ import {
   sales,
   sheetRows,
   widened,
-} from '../engine/harness.ts';
-import { ROWS, bytes } from '../testdata/sales-q3.ts';
+} from '#tests/engine/harness';
+import { ROWS, bytes } from '#tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '#tests/testdata/sales-q3-parts';
 import { HOME_REGION } from './regions.ts';
 import { bucket } from './standin.ts';
 import type { Bucket } from './standin.ts';

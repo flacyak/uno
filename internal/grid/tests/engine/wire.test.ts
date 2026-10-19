@@ -13,7 +13,7 @@ import {
   messagePort,
   serve,
   socketPort,
-} from '../../src/engine/index.ts';
+} from '#engine';
 import type {
   Frame,
   MessagePortLike,
@@ -22,10 +22,10 @@ import type {
   SourceHandle,
   SourceRef,
   WebSocketLike,
-} from '../../src/engine/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import { blobProvider } from '../../src/store/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
+} from '#engine';
+import { sources } from '#plugin';
+import { blobProvider } from '#store';
+import { diskProvider } from '#store/node';
 import { FIXTURE, bytes, sales } from './harness.ts';
 
 /** join turns a frame into the one value a socket would deliver. */

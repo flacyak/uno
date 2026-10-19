@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
-import { readContainer } from '../../src/document/index.ts';
+import { readContainer } from '#document';
 import {
   EMPTY_SHA256,
   encode,
@@ -19,8 +19,8 @@ import {
   s3Provider,
   s3Url,
   signV4,
-} from '../../src/store/s3.ts';
-import { awsCredentials, diskProvider } from '../../src/store/node.ts';
+} from '#store/s3';
+import { awsCredentials, diskProvider } from '#store/node';
 import {
   bytes,
   connect,
@@ -28,8 +28,8 @@ import {
   openOne,
   sales,
   saidIn,
-} from '../engine/harness.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+} from '#tests/engine/harness';
+import { ROWS, UNITS } from '#tests/testdata/sales-q3';
 import { AWKWARD_KEYS, DOT_KEYS } from './awkward.ts';
 import { HOME_REGION, REGION_FORMATS } from './regions.ts';
 import { at, BUCKET, bucket, etagOf, KEYS } from './standin.ts';

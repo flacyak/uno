@@ -16,18 +16,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
-import { english, messagePort, serve } from '../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../src/engine/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { blobProvider, blobSource } from '../../src/store/index.ts';
-import type { ByteSource, FileRef } from '../../src/store/index.ts';
-import { diskLister } from '../../src/store/disklister.ts';
-import { diskProvider, localFiles } from '../../src/store/node.ts';
+import { english, messagePort, serve } from '#engine';
+import type { MessagePortLike, Reply, Request } from '#engine';
+import { sources } from '#plugin';
+import type { Provider } from '#plugin';
+import { blobProvider, blobSource } from '#store';
+import type { ByteSource, FileRef } from '#store';
+import { diskLister } from '#store/disklister';
+import { diskProvider, localFiles } from '#store/node';
 import { bytes, connect, FIXTURE, openOne } from './harness.ts';
 
 const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));

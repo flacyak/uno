@@ -16,32 +16,24 @@ import {
   test,
 } from 'vite-plus/test';
 
-import {
-  PARTS_VERSION,
-  POINTED_VERSION,
-  readContainer,
-} from '../../src/document/index.ts';
-import type { Document, HeldPart } from '../../src/document/index.ts';
-import { english } from '../../src/engine/index.ts';
-import type { Engine, SourceRef } from '../../src/engine/index.ts';
-import type { Connection } from '../../src/library/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { Op } from '../../src/sheet/index.ts';
+import { PARTS_VERSION, POINTED_VERSION, readContainer } from '#document';
+import type { Document, HeldPart } from '#document';
+import { english } from '#engine';
+import type { Engine, SourceRef } from '#engine';
+import type { Connection } from '#library';
+import type { Provider } from '#plugin';
+import { Op } from '#sheet';
 import {
   blobProvider,
   bytesSource,
   connectionsIn,
   multiProvider,
   saveConnection,
-} from '../../src/store/index.ts';
-import type { HeaderMode } from '../../src/store/index.ts';
-import {
-  connectionSigning,
-  diskProvider,
-  nodeStore,
-} from '../../src/store/node.ts';
-import { connectionMeeting, s3Provider } from '../../src/store/s3.ts';
-import { HOME_REGION } from '../store/regions.ts';
+} from '#store';
+import type { HeaderMode } from '#store';
+import { connectionSigning, diskProvider, nodeStore } from '#store/node';
+import { connectionMeeting, s3Provider } from '#store/s3';
+import { HOME_REGION } from '#tests/store/regions';
 import {
   BUCKET,
   KEYS,
@@ -49,16 +41,16 @@ import {
   keysOnly,
   etagOf,
   versionIdOf,
-} from '../store/standin.ts';
-import type { Bucket } from '../store/standin.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+} from '#tests/store/standin';
+import type { Bucket } from '#tests/store/standin';
+import { ROWS, UNITS } from '#tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   PART_ROWS,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '#tests/testdata/sales-q3-parts';
 import {
   connect,
   everyRow,

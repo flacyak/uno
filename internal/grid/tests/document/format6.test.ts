@@ -15,9 +15,9 @@ import {
   readContainer,
   readDocument,
   writeDocument,
-} from '../../src/document/index.ts';
-import type { Document, Held, HeldParts } from '../../src/document/index.ts';
-import { sha256Hex } from '../../src/go/index.ts';
+} from '#document';
+import type { Document, Held, HeldParts } from '#document';
+import { sha256Hex } from '#go';
 
 const encoder = new TextEncoder();
 

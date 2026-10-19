@@ -16,8 +16,8 @@ import { createRequire } from 'node:module';
 import { relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { MODULES } from '../ways.ts';
-import type { Way } from '../ways.ts';
+import { MODULES } from '#tests/store/ways';
+import type { Way } from '#tests/store/ways';
 
 const [root, scenario] = process.argv.slice(2);
 if (root === undefined || scenario === undefined) {
