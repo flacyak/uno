@@ -1,5 +1,7 @@
-// Measures the requests and bytes one jump of the grid costs: a band of
-// BAND_ROWS asked for at once from the middle of an indexed object.
+/**
+ * @fileoverview Measures the requests and bytes one jump of the grid costs: a
+ * band of BAND_ROWS asked for at once from the middle of an indexed object.
+ */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 

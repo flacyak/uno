@@ -1,8 +1,10 @@
-// Reopening a .uno that recorded an S3 version. In a versioned bucket the
-// recorded VersionId is requested, so the saved bytes reopen after an
-// overwrite or delete. In a plain bucket the object is read as it is now,
-// pinned to its ETag. A VersionId the bucket has dropped opens the current
-// object and reports its version.
+/**
+ * @fileoverview Reopening a .uno that recorded an S3 version. In a versioned
+ * bucket the recorded VersionId is requested, so the saved bytes reopen after
+ * an overwrite or delete. In a plain bucket the object is read as it is now,
+ * pinned to its ETag. A VersionId the bucket has dropped opens the current
+ * object and reports its version.
+ */
 
 import { readFileSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';

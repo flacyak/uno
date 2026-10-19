@@ -1,6 +1,9 @@
-// A .uno's S3 sources are matched to the connections that cover them. A source
-// outside every connection opens as missing, keeps its edits, names the bucket
-// to connect, and leaves the bucket alone until a connection is made.
+/**
+ * @fileoverview A .uno's S3 sources are matched to the connections that cover
+ * them. A source outside every connection opens as missing, keeps its edits,
+ * names the bucket to connect, and leaves the bucket alone until a connection
+ * is made.
+ */
 
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

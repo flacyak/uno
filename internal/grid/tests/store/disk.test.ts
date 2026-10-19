@@ -1,5 +1,7 @@
-// The disk lister, against a real temp folder with the testdata fixtures
-// copied into it.
+/**
+ * @fileoverview The disk lister, against a real temp folder with the testdata
+ * fixtures copied into it.
+ */
 
 import { execFileSync } from 'node:child_process';
 import {

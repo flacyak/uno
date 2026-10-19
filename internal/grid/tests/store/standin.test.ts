@@ -1,5 +1,7 @@
-// Tests of the stand-in itself: what standin.ts promises to s3.test.ts and
-// the desktop smoke run.
+/**
+ * @fileoverview Tests of the stand-in itself: what standin.ts promises to
+ * s3.test.ts and the desktop smoke run.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

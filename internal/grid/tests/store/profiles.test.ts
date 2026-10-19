@@ -1,7 +1,10 @@
-// awsProfiles: the profile names the engine offers for signing in.
-//
-// The reply holds names only. It is taken off the engine channel and
-// searched for every secret the ~/.aws files hold.
+/**
+ * @fileoverview awsProfiles: the profile names the engine offers for signing
+ * in.
+ *
+ * The reply holds names only. It is taken off the engine channel and
+ * searched for every secret the ~/.aws files hold.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

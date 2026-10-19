@@ -1,6 +1,8 @@
-// Measures the requests and bytes an open waits on before it answers. Reads
-// are let through one at a time, lowest offset first; what passed by the
-// time the open answered is what it waited on.
+/**
+ * @fileoverview Measures the requests and bytes an open waits on before it
+ * answers. Reads are let through one at a time, lowest offset first; what
+ * passed by the time the open answered is what it waited on.
+ */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 

@@ -1,6 +1,8 @@
-// `engine.connections`: connections are read from a folder on each call, so
-// one saved after the engine started is returned. Dates and unknown keys
-// cross the channel intact.
+/**
+ * @fileoverview `engine.connections`: connections are read from a folder on
+ * each call, so one saved after the engine started is returned. Dates and
+ * unknown keys cross the channel intact.
+ */
 
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

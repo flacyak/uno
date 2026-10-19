@@ -1,5 +1,7 @@
-// What the engine measures, how a Meter writes it as OTLP JSON, and how a
-// collector's address is read from the environment.
+/**
+ * @fileoverview What the engine measures, how a Meter writes it as OTLP JSON,
+ * and how a collector's address is read from the environment.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 

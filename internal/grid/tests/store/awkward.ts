@@ -1,8 +1,10 @@
-// Object keys with characters that need care on the wire.
-//
-// Each key is paired with how it must appear in a signed request path. The
-// stand-in in s3.test.ts and the real bucket in s3.live.test.ts both read
-// this list.
+/**
+ * @fileoverview Object keys with characters that need care on the wire.
+ *
+ * Each key is paired with how it must appear in a signed request path. The
+ * stand-in in s3.test.ts and the real bucket in s3.live.test.ts both read
+ * this list.
+ */
 
 /**
  * Each key and its encoded form on the wire: RFC 3986 unreserved characters
