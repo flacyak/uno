@@ -5,11 +5,11 @@
 // `peekHead` detects the format of those bytes and decodes the rows they
 // hold. It works on bytes already read, so it can be tested on in-memory bytes.
 
-import { labelOf, openFormat } from '../ingest/index.ts';
-import type { HeaderMode } from '../ingest/index.ts';
+import { labelOf, openFormat } from '#ingest';
+import type { HeaderMode } from '#ingest';
 import type { Peeked } from './protocol.ts';
-import { bytesSource, headerModeOf, openWith } from '../store/index.ts';
-import type { FileHandler, FileRef } from '../store/index.ts';
+import { bytesSource, headerModeOf, openWith } from '#store';
+import type { FileHandler, FileRef } from '#store';
 
 /**
  * How many bytes a peek reads from the front of a file. This is the only

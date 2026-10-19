@@ -13,10 +13,10 @@
 // `readDocument` takes bytes and `writeDocument` returns bytes. The engine
 // opens the file a source points at.
 
-import type { Edit } from '../sheet/index.ts';
-import type { Sheet } from '../sheet/index.ts';
-import { extensionOf } from '../ingest/index.ts';
-import type { FileRef, HeaderMode } from '../store/index.ts';
+import type { Edit } from '#sheet';
+import type { Sheet } from '#sheet';
+import { extensionOf } from '#ingest';
+import type { FileRef, HeaderMode } from '#store';
 import { against, baseOf, dirOf, relativeTo } from './path.ts';
 
 /**

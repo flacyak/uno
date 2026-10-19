@@ -1,12 +1,4 @@
-import {
-  Scanner,
-  atoi,
-  isDigit,
-  isLetter,
-  quote,
-  runes,
-  unquote,
-} from '../go/index.ts';
+import { Scanner, atoi, isDigit, isLetter, quote, runes, unquote } from '#go';
 import type { Pos, Step } from './steps.ts';
 import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from './steps.ts';
 import type { Program } from './program.ts';

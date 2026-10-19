@@ -1,5 +1,5 @@
-import { trimSpace } from '../go/index.ts';
-import { isNumber, undress } from '../num/index.ts';
+import { trimSpace } from '#go';
+import { isNumber, undress } from '#num';
 
 /**
  * Kind is what a column looks like. It is inferred at load and lives in

@@ -10,9 +10,9 @@ import {
   toLower,
   toUpper,
   trimSpace,
-} from '../go/index.ts';
-import type { Program } from '../program/index.ts';
-import { parse as parseProgram, quoteRegex } from '../program/index.ts';
+} from '#go';
+import type { Program } from '#program';
+import { parse as parseProgram, quoteRegex } from '#program';
 import type { Run } from './align.ts';
 import { MAX_DIFF, align } from './align.ts';
 
