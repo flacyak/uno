@@ -2,11 +2,11 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { defaultInput } from "../../src/renderer/input/default.ts";
-import { strategy } from "../../src/renderer/input/index.ts";
-import { vimStyle } from "../../src/renderer/input/vim-style.ts";
-import { NOTHING } from "../../src/renderer/keys.ts";
-import type { Action, Mode, Press } from "../../src/renderer/keys.ts";
+import { defaultInput } from "#renderer/input/default";
+import { strategy } from "#renderer/input";
+import { vimStyle } from "#renderer/input/vim-style";
+import { NOTHING } from "#renderer/keys";
+import type { Action, Mode, Press } from "#renderer/keys";
 
 const LOCKED = defaultInput.locked;
 

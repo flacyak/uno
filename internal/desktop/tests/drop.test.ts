@@ -5,7 +5,7 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { wireDrop } from "../src/renderer/shell/drop.ts";
+import { wireDrop } from "#renderer/shell/drop";
 
 /** A drag event with a dataTransfer whose `types` name what is dragged. */
 function drag(
