@@ -2,14 +2,15 @@
  * @fileoverview A source whose columns grow while it is indexed. A workspace
  * says a file was read as JSON Lines, and the file first holds a key at row
  * 50,000, read through TINY blocks. Rows and edits keep their cells, _file
- * moves right and still refuses every edit, and a client hands the columns
- * it is told to its handle.
+ * moves right and still refuses every edit, no rows reach a client over a
+ * key its columns lack, and a client hands the columns it is told to its
+ * handle.
  */
 
 import { expect, test } from 'vite-plus/test';
 
 import { FILE_COLUMN } from '@engine';
-import type { ColumnInfo, SourceHandle } from '@engine';
+import type { ColumnInfo, RowsReply, SourceHandle } from '@engine';
 import { Op } from '@sheet';
 import { indexed, padded } from './harness.ts';
 import {
@@ -17,6 +18,7 @@ import {
   LATE,
   LATE_KEY,
   NAME,
+  PAST_LATE,
   cellsAt,
   withHeld,
   workspace,
@@ -36,6 +38,8 @@ const EARLY = 3;
 const NEAR = LATE - 1_000;
 /** What an edit writes. */
 const EDITED = 'edited';
+/** Rows requests a client keeps in flight while the file is indexed. */
+const IN_FLIGHT = 4;
 /** What a fold says of an edit to _file. */
 const FILE_REFUSED = /_file shows which file each row came from/;
 
@@ -69,6 +73,23 @@ function headersOf(columns: readonly ColumnInfo[]): string[] {
 /** expected returns `count` rows from `first` as the file holds them. */
 function expected(first: number, count: number): string[][] {
   return Array.from({ length: count }, (_, i) => cellsAt(first + i));
+}
+
+/**
+ * hammer keeps IN_FLIGHT requests for the rows around LATE in flight until
+ * the source is indexed, and adds every page they read to `pages`.
+ */
+async function hammer(
+  src: SourceHandle,
+  pages: RowsReply[] = [],
+): Promise<RowsReply[]> {
+  const ask = async (): Promise<void> => {
+    while (!src.progress.complete) {
+      pages.push(await src.rows(LATE - WINDOW, 2 * WINDOW));
+    }
+  };
+  await Promise.all(Array.from({ length: IN_FLIGHT }, ask));
+  return pages;
 }
 
 test('rows read before and after the widen keep their cells', () =>
@@ -152,6 +173,46 @@ test('_file moves right past the new column, and still refuses every edit', () =
     await src.edit({ ...file, col: 1 });
     expect((await src.rows(0, 1)).rows).toEqual([['0', EDITED, NAME]]);
   }));
+
+test.each<Layout>(['file', 'part'])(
+  'no rows of a %s reach a client over a key its columns lack',
+  (layout) =>
+    heldAs(
+      layout,
+      async ({ src, release, told }) => {
+        // The index has read row LATE whole, and holds there.
+        const pages = [await src.rows(LATE - WINDOW, 2 * WINDOW)];
+        release();
+        await hammer(src, pages);
+        expect(told.size, 'the late key widened the source once').toBe(2);
+
+        let late = 0;
+        for (const page of pages) {
+          const columns = told.get(page.generation);
+          expect(columns, `told at ${page.generation}`).toBeDefined();
+          const headers = headersOf(columns ?? []);
+          page.rows.forEach((row, i) => {
+            const at = page.first + i;
+            expect(row.length).toBeLessThanOrEqual(headers.length);
+            if (at >= LATE) {
+              late++;
+              expect(row[headers.indexOf(LATE_KEY)], `row ${at}`).toBe(
+                `l${at}`,
+              );
+            }
+            if (layout === 'part') {
+              expect(row[headers.indexOf(FILE_COLUMN)], `row ${at}`).toBe(NAME);
+            }
+          });
+        }
+        expect(
+          late,
+          'the page read while held has rows past LATE',
+        ).toBeGreaterThan(WINDOW / 2);
+      },
+      PAST_LATE,
+    ),
+);
 
 // ------------------------------------------------------------ the client alone
 
