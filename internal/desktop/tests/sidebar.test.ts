@@ -1,8 +1,10 @@
-// @vitest-environment happy-dom
-//
-// The sidebar's list: the open workspace with its sources under it, then the
-// other workspaces opened on this machine, most recent first, and what each
-// line asks the shell to do.
+/**
+ * @fileoverview The sidebar's list: the open workspace with its sources under
+ * it, then the other workspaces opened on this machine, most recent first, and
+ * what each line asks the shell to do.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { expect, test } from "vite-plus/test";
 

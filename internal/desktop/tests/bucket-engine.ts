@@ -1,5 +1,8 @@
-// An engine over a MessageChannel that reads the disk and a stand-in S3
-// bucket. Renderer tests use it to open a workspace whose sources are in S3.
+/**
+ * @fileoverview An engine over a MessageChannel that reads the disk and a
+ * stand-in S3 bucket. Renderer tests use it to open a workspace whose sources
+ * are in S3.
+ */
 
 import { Engine, messagePort, serve } from "#engine";
 import type { MessagePortLike, Reply, Request } from "#engine";

@@ -1,11 +1,13 @@
-// @vitest-environment happy-dom
-//
-// The connect form in the panel: its fields, the sign-in modes the engine
-// offers, Test (which lists the folder), and Save.
-//
-// A failed test shows the engine's error and stops there. A save tests
-// first, keeps the connection the test returned with its region, and the
-// panel browses it.
+/**
+ * @fileoverview The connect form in the panel: its fields, the sign-in modes
+ * the engine offers, Test (which lists the folder), and Save.
+ *
+ * A failed test shows the engine's error and stops there. A save tests
+ * first, keeps the connection the test returned with its region, and the
+ * panel browses it.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 

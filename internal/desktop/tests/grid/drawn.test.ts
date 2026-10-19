@@ -1,8 +1,10 @@
-// @vitest-environment happy-dom
-//
-// What the grid and the status bar draw for a file with a header and no
-// rows, and for a header the file left blank. Runs over the real shell and
-// engine.
+/**
+ * @fileoverview What the grid and the status bar draw for a file with a header
+ * and no rows, and for a header the file left blank. Runs over the real shell
+ * and engine.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

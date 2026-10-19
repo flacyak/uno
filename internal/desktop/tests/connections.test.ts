@@ -1,8 +1,10 @@
-// Connections on the desktop: main writes one into the connections folder,
-// and the panel draws a line for each.
-//
-// The text main writes comes from the page, which is untrusted, so most
-// tests here check what main refuses to write.
+/**
+ * @fileoverview Connections on the desktop: main writes one into the
+ * connections folder, and the panel draws a line for each.
+ *
+ * The text main writes comes from the page, which is untrusted, so most
+ * tests here check what main refuses to write.
+ */
 
 import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";

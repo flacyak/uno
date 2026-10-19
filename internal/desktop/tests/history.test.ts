@@ -1,9 +1,11 @@
-// @vitest-environment happy-dom
-//
-// What lands on which tab when the engine answers after Ctrl+Tab. An undo is
-// asked of the tab showing, and the cell it restores is that tab's, so the
-// grid on another tab stays put. Runs over the real shell and engine, so
-// Ctrl+Tab lands between the ask and the answer.
+/**
+ * @fileoverview What lands on which tab when the engine answers after Ctrl+Tab.
+ * An undo is asked of the tab showing, and the cell it restores is that tab's,
+ * so the grid on another tab stays put. Runs over the real shell and engine, so
+ * Ctrl+Tab lands between the ask and the answer.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { dirname, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";

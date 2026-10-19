@@ -1,9 +1,11 @@
-// @vitest-environment happy-dom
-//
-// Changing the language redraws the window. Runs over the real shell and
-// engine: the edit, the selection, the scroll, the mark, and the undo history
-// survive the change, the counts are grouped the new language's way, and two
-// changes in a row leave one of everything.
+/**
+ * @fileoverview Changing the language redraws the window. Runs over the real
+ * shell and engine: the edit, the selection, the scroll, the mark, and the undo
+ * history survive the change, the counts are grouped the new language's way,
+ * and two changes in a row leave one of everything.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
