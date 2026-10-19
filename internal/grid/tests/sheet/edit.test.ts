@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The edit log on a sheet: set, apply, replay, and a log that
+ * does not fit.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import { NO_ROW, Op, Sheet } from '#sheet';
