@@ -1,9 +1,11 @@
-// @vitest-environment happy-dom
-//
-// The panel's view over its state: the filter box, the virtual list, the keys
-// that walk it, and the peek and buttons under it. What `Sources` decides is
-// tested in sources.test.ts; this checks that the view asks it and draws what
-// it says.
+/**
+ * @fileoverview The panel's view over its state: the filter box, the virtual
+ * list, the keys that walk it, and the peek and buttons under it. What
+ * `Sources` decides is tested in sources.test.ts; this checks that the view
+ * asks it and draws what it says.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 

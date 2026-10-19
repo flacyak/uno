@@ -1,5 +1,7 @@
-// The pseudo-locale's patterns: accented, padded, in brackets, with variables
-// and markup in braces left as they are.
+/**
+ * @fileoverview The pseudo-locale's patterns: accented, padded, in brackets,
+ * with variables and markup in braces left as they are.
+ */
 
 import { expect, test } from "vite-plus/test";
 
