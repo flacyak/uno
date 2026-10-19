@@ -1,18 +1,21 @@
-// What a peek costs in requests: one HEAD and one ranged GET of PEEK_BYTES,
-// against a stand-in S3 bucket and, where present, a 2.5 GB file on disk.
+/**
+ * @fileoverview What a peek costs in requests: one HEAD and one ranged GET of
+ * PEEK_BYTES, against a stand-in S3 bucket and, where present, a 2.5 GB file on
+ * disk.
+ */
 
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
-import { PEEK_BYTES, peek } from '../../src/engine/peek.ts';
-import { localFiles } from '../../src/store/node.ts';
-import { s3Files } from '../../src/store/s3.ts';
-import { HOME_REGION } from '../store/regions.ts';
-import { KEYS, at, bucket } from '../store/standin.ts';
-import type { Bucket } from '../store/standin.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import { PEEK_BYTES, peek } from '#engine/peek';
+import { localFiles } from '#store/node';
+import { s3Files } from '#store/s3';
+import { HOME_REGION } from '#tests/store/regions';
+import { KEYS, at, bucket } from '#tests/store/standin';
+import type { Bucket } from '#tests/store/standin';
+import { bytes } from '#tests/testdata/sales-q3';
 import { saidIn } from './harness.ts';
 
 /** The fixture's six columns. */

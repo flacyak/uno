@@ -1,4 +1,6 @@
-// Timestamps in Go's formats.
+/**
+ * @fileoverview Timestamps in Go's formats.
+ */
 
 /** time.Now().UTC().Truncate(time.Second). */
 export function nowTruncated(): Date {

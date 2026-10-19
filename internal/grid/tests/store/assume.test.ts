@@ -1,8 +1,10 @@
-// STS AssumeRole: the call itself, and the profiles that make it.
-//
-// The stand-in STS checks the signature and the external ID. The profiles
-// cover role_arn with source_profile, a chain of roles, and
-// credential_source = Environment.
+/**
+ * @fileoverview STS AssumeRole: the call itself, and the profiles that make it.
+ *
+ * The stand-in STS checks the signature and the external ID. The profiles
+ * cover role_arn with source_profile, a chain of roles, and
+ * credential_source = Environment.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,11 +22,11 @@ import {
   connectionSigning,
   diskProvider,
   profileCredentials,
-} from '../../src/store/node.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { assumeRole } from '../../src/store/sts.ts';
-import { bytes, connect, indexed, openOne } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+} from '#store/node';
+import { s3Provider } from '#store/s3';
+import { assumeRole } from '#store/sts';
+import { bytes, connect, indexed, openOne } from '#tests/engine/harness';
+import { ROWS } from '#tests/testdata/sales-q3';
 import { HOME_REGION } from './regions.ts';
 import { bucket } from './standin.ts';
 import type { Bucket } from './standin.ts';

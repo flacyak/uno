@@ -1,21 +1,23 @@
-// Edits through the engine: set, apply, bind, undo, redo, refusals, and the
-// offers streamed after fixes. Each is checked against a Sheet given the same
-// log.
+/**
+ * @fileoverview Edits through the engine: set, apply, bind, undo, redo,
+ * refusals, and the offers streamed after fixes. Each is checked against a
+ * Sheet given the same log.
+ */
 
 import { expect, test } from 'vite-plus/test';
 
-import type { Offer } from '../../src/engine/index.ts';
-import { read } from '../../src/ingest/index.ts';
-import { snap } from '../../src/pattern/index.ts';
-import { text as programText } from '../../src/program/index.ts';
-import { NO_ROW, Op } from '../../src/sheet/index.ts';
+import type { Offer } from '#engine';
+import { read } from '#ingest';
+import { snap } from '#pattern';
+import { text as programText } from '#program';
+import { NO_ROW, Op } from '#sheet';
 import {
   CHANNEL,
   COMMAS_LEFT,
   REGION,
   ROWS,
   UNITS,
-} from '../testdata/sales-q3.ts';
+} from '#tests/testdata/sales-q3';
 import {
   SCREEN,
   TINY,

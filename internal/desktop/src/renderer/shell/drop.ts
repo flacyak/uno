@@ -1,12 +1,14 @@
-// File drop handling. The whole window is the drop target. The empty state
-// element is highlighted while files are dragged over the window.
+/**
+ * @fileoverview File drop handling. The whole window is the drop target. The
+ * empty state element is highlighted while files are dragged over the window.
+ */
 
 import "./empty.css";
 
-import { WORKSPACE_EXT } from "@uno/grid/document";
+import { WORKSPACE_EXT } from "#document";
 
-import { m } from "../../paraglide/messages.js";
-import { READS } from "../sources.ts";
+import { m } from "#paraglide/messages";
+import { READS } from "#renderer/sources";
 
 /** The file extensions a drop may open: a workspace, or what the panel reads. */
 const OPENABLE = [WORKSPACE_EXT, ...READS];

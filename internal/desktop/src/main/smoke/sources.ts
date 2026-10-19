@@ -1,9 +1,12 @@
-// Checks that a workspace holds more than one source: a second export added
-// beside the first, a tab for each, moving between them, and taking one out.
-// Then the same for an object in a bucket: pasted into the sources panel the
-// + menu opens, drawn, saved as an `s3://` pointer and read back from one.
-//
-// They run over the fixture the checks before them left edited.
+/**
+ * @fileoverview Checks that a workspace holds more than one source: a second
+ * export added beside the first, a tab for each, moving between them, and
+ * taking one out. Then the same for an object in a bucket: pasted into the
+ * sources panel the + menu opens, drawn, saved as an `s3://` pointer and read
+ * back from one.
+ *
+ * They run over the fixture the checks before them left edited.
+ */
 
 import { join } from "node:path";
 

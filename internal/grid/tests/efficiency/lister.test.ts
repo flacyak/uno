@@ -1,6 +1,8 @@
-// Measures what a page after the first costs when listing a folder of 20,000
-// files: directory entries read again, and wall-clock time. Only the entry
-// count is held to a budget.
+/**
+ * @fileoverview Measures what a page after the first costs when listing a
+ * folder of 20,000 files: directory entries read again, and wall-clock time.
+ * Only the entry count is held to a budget.
+ */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type * as FsPromises from 'node:fs/promises';
@@ -8,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test, vi } from 'vite-plus/test';
 
-import { PAGE, diskLister } from '../../src/store/disklister.ts';
+import { PAGE, diskLister } from '#store/disklister';
 import { record } from './record.ts';
 
 /** Directory entries returned by every readdir so far. */

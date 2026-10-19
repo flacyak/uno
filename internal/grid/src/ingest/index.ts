@@ -1,10 +1,12 @@
-// Package ingest turns bytes into rows. It is the only module that knows about
-// delimiters, encodings and header rows.
-//
-// `read` takes a whole file and returns a Sheet. `openFormat` reads a file a
-// piece at a time through a ByteSource, for the engine.
+/**
+ * @fileoverview Package ingest turns bytes into rows. It is the only module
+ * that knows about delimiters, encodings and header rows.
+ *
+ * `read` takes a whole file and returns a Sheet. `openFormat` reads a file a
+ * piece at a time through a ByteSource, for the engine.
+ */
 
-import { Sheet } from '../sheet/index.ts';
+import { Sheet } from '#sheet';
 import { readAll } from './csv.ts';
 import {
   columnNames,

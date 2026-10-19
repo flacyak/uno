@@ -1,6 +1,9 @@
-// The IAM documents generated for a role connection: the trust policy names
-// the principal and the external ID, the permission policy is scoped to the
-// bucket and prefix, and both are JSON a policy editor takes as they are.
+/**
+ * @fileoverview The IAM documents generated for a role connection: the trust
+ * policy names the principal and the external ID, the permission policy is
+ * scoped to the bucket and prefix, and both are JSON a policy editor takes as
+ * they are.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 
@@ -10,7 +13,7 @@ import {
   roleNameOf,
   rolePolicies,
   trustPolicy,
-} from '../../src/library/index.ts';
+} from '#library';
 
 const TRUST = {
   principal: 'arn:aws:iam::111122223333:role/uno-engine',

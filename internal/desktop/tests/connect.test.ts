@@ -1,24 +1,26 @@
-// @vitest-environment happy-dom
-//
-// The connect form in the panel: its fields, the sign-in modes the engine
-// offers, Test (which lists the folder), and Save.
-//
-// A failed test shows the engine's error and stops there. A save tests
-// first, keeps the connection the test returned with its region, and the
-// panel browses it.
+/**
+ * @fileoverview The connect form in the panel: its fields, the sign-in modes
+ * the engine offers, Test (which lists the folder), and Save.
+ *
+ * A failed test shows the engine's error and stops there. A save tests
+ * first, keeps the connection the test returned with its region, and the
+ * panel browses it.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import type { Peeked, Said, SignIns, SourceRef } from "@uno/grid/engine";
-import type { Connection } from "@uno/grid/library";
-import type { Listing } from "@uno/grid/store";
-import type { Tried } from "@uno/grid/store/s3";
+import type { Peeked, Said, SignIns, SourceRef } from "#engine";
+import type { Connection } from "#library";
+import type { Listing } from "#store";
+import type { Tried } from "#store/s3";
 
-import type { ConnectAsks } from "../src/renderer/shell/connect.ts";
-import { draftOf, folderOf, triedLine } from "../src/renderer/shell/connect.ts";
-import { Panel } from "../src/renderer/shell/panel.ts";
-import type { Listings } from "../src/renderer/sources.ts";
-import { Sources, stateOf } from "../src/renderer/sources.ts";
+import type { ConnectAsks } from "#renderer/shell/connect";
+import { draftOf, folderOf, triedLine } from "#renderer/shell/connect";
+import { Panel } from "#renderer/shell/panel";
+import type { Listings } from "#renderer/sources";
+import { Sources, stateOf } from "#renderer/sources";
 import { settle } from "./settle.ts";
 
 const REGION = "eu-west-1";

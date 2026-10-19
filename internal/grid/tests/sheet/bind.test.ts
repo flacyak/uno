@@ -1,13 +1,18 @@
+/**
+ * @fileoverview Binding a formula to a column: filled from one line, recomputed
+ * on an edit, a cycle refused, and a row the expression cannot read.
+ */
+
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { read } from '../../src/ingest/index.ts';
+import { read } from '#ingest';
 
-import { ERR_CELL, Sheet } from '../../src/sheet/index.ts';
-import { parse } from '../../src/formula/index.ts';
-import { parse as parseProgram } from '../../src/program/index.ts';
+import { ERR_CELL, Sheet } from '#sheet';
+import { parse } from '#formula';
+import { parse as parseProgram } from '#program';
 
 const REGION = 0;
 const PRICE = 1;

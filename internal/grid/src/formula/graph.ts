@@ -1,4 +1,9 @@
-import { compareStrings } from '../go/index.ts';
+/**
+ * @fileoverview The dependency graph of the bound columns: a node per column,
+ * the order a recalculation runs in, and the cycle check at bind time.
+ */
+
+import { compareStrings } from '#go';
 import type { Formula } from './ast.ts';
 
 /**

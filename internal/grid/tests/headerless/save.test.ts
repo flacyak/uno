@@ -1,14 +1,16 @@
-// A headerless source saved to a .uno records header mode "none", and
-// reopening it puts every logged edit on the same row.
+/**
+ * @fileoverview A headerless source saved to a .uno records header mode "none",
+ * and reopening it puts every logged edit on the same row.
+ */
 
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, expect, test } from 'vite-plus/test';
 
-import { PARTS_VERSION, readContainer } from '../../src/document/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
-import { PART_ROWS } from '../testdata/sales-q3-parts.ts';
+import { PARTS_VERSION, readContainer } from '#document';
+import { Op } from '#sheet';
+import { ROWS, UNITS } from '#tests/testdata/sales-q3';
+import { PART_ROWS } from '#tests/testdata/sales-q3-parts';
 import {
   connect,
   everyRow,
@@ -16,7 +18,7 @@ import {
   openOne,
   sales,
   TINY,
-} from '../engine/harness.ts';
+} from '#tests/engine/harness';
 import {
   COLUMNS,
   NAMES,

@@ -1,18 +1,21 @@
-// @vitest-environment happy-dom
-//
-// The view over a plain DOM: what sits between the browser's scroller and the
-// arithmetic in metrics.ts. happy-dom skips layout, so the scroller is
-// told its height, and a resize is the observer's callback fired by hand.
+/**
+ * @fileoverview The view over a plain DOM: what sits between the browser's
+ * scroller and the arithmetic in metrics.ts. happy-dom skips layout, so the
+ * scroller is told its height, and a resize is the observer's callback fired by
+ * hand.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import type { Kind } from "@uno/grid/sheet";
+import type { Kind } from "#sheet";
 
-import { OVERSCAN } from "../../src/renderer/grid/metrics.ts";
-import type { Rows } from "../../src/renderer/grid/rows.ts";
-import { View } from "../../src/renderer/grid/view.ts";
-import { m } from "../../src/paraglide/messages.js";
-import { frame } from "../smoke/dom-page.ts";
+import { OVERSCAN } from "#renderer/grid/metrics";
+import type { Rows } from "#renderer/grid/rows";
+import { View } from "#renderer/grid/view";
+import { m } from "#paraglide/messages";
+import { frame } from "#tests/smoke/dom-page";
 
 /** The row height the view falls back to with the stylesheet unloaded. */
 const ROW_H = 29;

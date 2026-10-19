@@ -1,11 +1,13 @@
-// Types shared by the grid, the shell and the workspace: the data the grid
-// draws, the events it raises, and column labels. Importing it leaves the
-// grid itself unloaded.
+/**
+ * @fileoverview Types shared by the grid, the shell and the workspace: the data
+ * the grid draws, the events it raises, and column labels. Importing it leaves
+ * the grid itself unloaded.
+ */
 
-import type { Kind } from "@uno/grid/sheet";
+import type { Kind } from "#sheet";
 
-import { m } from "../../paraglide/messages.js";
-import type { Action, Mode } from "../keys.ts";
+import { m } from "#paraglide/messages";
+import type { Action, Mode } from "#renderer/keys";
 
 /** Returns a column's display name. A blank header is named by its 1-based
  * position. */

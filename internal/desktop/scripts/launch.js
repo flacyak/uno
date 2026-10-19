@@ -1,8 +1,10 @@
-// Starts a real Electron and runs it to the end.
-//
-// dev, smoke and preview share these: whether there is a display, the
-// environment the child gets, driving it while answering what it asks, and
-// the verdict read from what it printed.
+/**
+ * @fileoverview Starts a real Electron and runs it to the end.
+ *
+ * dev, smoke and preview share these: whether there is a display, the
+ * environment the child gets, driving it while answering what it asks, and
+ * the verdict read from what it printed.
+ */
 
 import { spawn } from "node:child_process";
 

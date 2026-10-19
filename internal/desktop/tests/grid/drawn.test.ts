@@ -1,8 +1,10 @@
-// @vitest-environment happy-dom
-//
-// What the grid and the status bar draw for a file with a header and no
-// rows, and for a header the file left blank. Runs over the real shell and
-// engine.
+/**
+ * @fileoverview What the grid and the status bar draw for a file with a header
+ * and no rows, and for a header the file left blank. Runs over the real shell
+ * and engine.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,11 +12,11 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 
-import { num } from "../../src/renderer/locale.ts";
-import type { Shell } from "../../src/renderer/shell/shell.ts";
-import { m } from "../../src/paraglide/messages.js";
-import { bootShell } from "../smoke/dom-harness.ts";
-import { domPage } from "../smoke/dom-page.ts";
+import { num } from "#renderer/locale";
+import type { Shell } from "#renderer/shell/shell";
+import { m } from "#paraglide/messages";
+import { bootShell } from "#tests/smoke/dom-harness";
+import { domPage } from "#tests/smoke/dom-page";
 
 const page = domPage();
 let shell: Shell;

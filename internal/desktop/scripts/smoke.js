@@ -1,15 +1,17 @@
-// Runs the built app on the real fixture and checks what the window shows.
-// The checks are in src/main/smoke/.
-//
-// Main, preload, the renderer bundle and the fixture are all real. Only the
-// bucket is a stand-in: an S3 server started here on a port of its own, and
-// pointed at with the same variables the AWS CLI reads. The app opens objects
-// in it with the real store, over the wire, with a real signature.
-//
-// Usage: node scripts/smoke.js   (after node scripts/build.js)
+/**
+ * @fileoverview Runs the built app on the real fixture and checks what the
+ * window shows. The checks are in src/main/smoke/.
+ *
+ * Main, preload, the renderer bundle and the fixture are all real. Only the
+ * bucket is a stand-in: an S3 server started here on a port of its own, and
+ * pointed at with the same variables the AWS CLI reads. The app opens objects
+ * in it with the real store, over the wire, with a real signature.
+ *
+ * Usage: node scripts/smoke.js   (after node scripts/build.js)
+ */
 
-import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
-import { parseConnection } from "@uno/grid/library";
+import { newManifest, readContainer, writeDocument } from "#document";
+import { parseConnection } from "#library";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

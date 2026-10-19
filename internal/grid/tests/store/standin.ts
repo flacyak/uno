@@ -1,20 +1,22 @@
-// A stand-in for S3, on localhost.
-//
-// It checks every request's signature the way S3 does, answers HEAD and
-// ranged GET, lists a prefix the way ListObjectsV2 does, redirects a request
-// signed for the wrong region, and serves objects out of a Map. Every test
-// but s3.live.test.ts runs against it. The desktop smoke run starts the same
-// server.
+/**
+ * @fileoverview A stand-in for S3, on localhost.
+ *
+ * It checks every request's signature the way S3 does, answers HEAD and
+ * ranged GET, lists a prefix the way ListObjectsV2 does, redirects a request
+ * signed for the wrong region, and serves objects out of a Map. Every test
+ * but s3.live.test.ts runs against it. The desktop smoke run starts the same
+ * server.
+ */
 
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { compareStrings } from '../../src/go/index.ts';
-import { signV4 } from '../../src/store/s3.ts';
-import type { AwsCredentials } from '../../src/store/s3.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import { compareStrings } from '#go';
+import { signV4 } from '#store/s3';
+import type { AwsCredentials } from '#store/s3';
+import { bytes } from '#tests/testdata/sales-q3';
 import { HOME_REGION, rendered } from './regions.ts';
 import type { Misdirect } from './regions.ts';
 

@@ -1,5 +1,7 @@
-// Tests for connection files (.unof): parsing, byte-for-byte round trips,
-// unknown keys, secret detection, and field validation.
+/**
+ * @fileoverview Tests for connection files (.unof): parsing, byte-for-byte
+ * round trips, unknown keys, secret detection, and field validation.
+ */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,8 +14,8 @@ import {
   formatConnection,
   parseConnection,
   stampConnection,
-} from '../../src/library/index.ts';
-import type { Connection } from '../../src/library/index.ts';
+} from '#library';
+import type { Connection } from '#library';
 
 function fixture(id: string): string {
   return readFileSync(

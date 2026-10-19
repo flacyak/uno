@@ -1,4 +1,6 @@
-// Ports of fmt verbs.
+/**
+ * @fileoverview Ports of fmt verbs.
+ */
 
 /** formatU mirrors fmt's `%U` verb: "U+221A". */
 export function formatU(r: string): string {

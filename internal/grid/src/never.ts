@@ -1,4 +1,9 @@
 /**
+ * @fileoverview unreachable: the default of a switch that handles every member
+ * of a union.
+ */
+
+/**
  * unreachable is the default of a switch that handles every member of a
  * union. The compiler lets a value reach it only once nothing is left, so a
  * member added to the union is a type error at every switch missing a case

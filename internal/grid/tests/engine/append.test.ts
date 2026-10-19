@@ -1,29 +1,27 @@
-// `engine.append`: adding parts to the end of a source of several files read
-// as one. The rows extend, the log is unchanged, and every edit stays on its
-// cell, in the open source and in a save of it.
+/**
+ * @fileoverview `engine.append`: adding parts to the end of a source of several
+ * files read as one. The rows extend, the log is unchanged, and every edit
+ * stays on its cell, in the open source and in a save of it.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
-import { readContainer } from '../../src/document/index.ts';
-import { FILE_COLUMN } from '../../src/engine/index.ts';
-import type {
-  Engine,
-  SourceHandle,
-  SourceRef,
-} from '../../src/engine/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import type { SingleRef } from '../../src/store/index.ts';
-import { COLS, ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { readContainer } from '#document';
+import { FILE_COLUMN } from '#engine';
+import type { Engine, SourceHandle, SourceRef } from '#engine';
+import { Op } from '#sheet';
+import type { SingleRef } from '#store';
+import { COLS, ROWS, UNITS } from '#tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   PART_ROWS,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '#tests/testdata/sales-q3-parts';
 import {
   connect,
   everyRow,

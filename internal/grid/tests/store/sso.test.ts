@@ -1,9 +1,11 @@
-// SSO profiles: the token `aws sso login` cached is traded at the portal for
-// a role's keys, which sign requests to a bucket.
-//
-// Both config layouts are read. An expired, missing, unreadable or refused
-// token is an error naming the command that fixes it. The portal is asked
-// only with a token that looks good on disk.
+/**
+ * @fileoverview SSO profiles: the token `aws sso login` cached is traded at the
+ * portal for a role's keys, which sign requests to a bucket.
+ *
+ * Both config layouts are read. An expired, missing, unreadable or refused
+ * token is an error naming the command that fixes it. The portal is asked
+ * only with a token that looks good on disk.
+ */
 
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -18,15 +20,11 @@ import {
   test,
 } from 'vite-plus/test';
 
-import {
-  awsCredentials,
-  diskProvider,
-  profileCredentials,
-} from '../../src/store/node.ts';
-import { connectionSigning } from '../../src/store/node.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { bytes, connect, indexed, openOne } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { awsCredentials, diskProvider, profileCredentials } from '#store/node';
+import { connectionSigning } from '#store/node';
+import { s3Provider } from '#store/s3';
+import { bytes, connect, indexed, openOne } from '#tests/engine/harness';
+import { ROWS } from '#tests/testdata/sales-q3';
 import { portal } from './portal.ts';
 import type { Grant, Portal } from './portal.ts';
 import { HOME_REGION } from './regions.ts';

@@ -1,23 +1,25 @@
-// The settings control at the bottom left, and the menu it opens upward: the
-// connections, the theme, the appearance, the input strategy, and the
-// language.
-//
-// Choosing a theme or appearance applies it at once. Choosing a language
-// rewrites the whole window, this menu included, and everything stays open.
-//
-// The menu is appended to document.body, because the status bar is redrawn
-// on every edit and would remove an open menu.
+/**
+ * @fileoverview The settings control at the bottom left, and the menu it opens
+ * upward: the connections, the theme, the appearance, the input strategy, and
+ * the language.
+ *
+ * Choosing a theme or appearance applies it at once. Choosing a language
+ * rewrites the whole window, this menu included, and everything stays open.
+ *
+ * The menu is appended to document.body, because the status bar is redrawn
+ * on every edit and would remove an open menu.
+ */
 
 import "./settings.css";
 
-import { m } from "../../paraglide/messages.js";
-import { INPUTS, inputLabel } from "../input/index.ts";
-import type { InputName } from "../input/index.ts";
-import { SYSTEM, languageName } from "../language.ts";
-import type { Language, LanguageChoice } from "../language.ts";
-import type { Connection } from "../sources.ts";
-import { APPEARANCES, THEMES } from "../theme.ts";
-import type { Appearance, Theming } from "../theme.ts";
+import { m } from "#paraglide/messages";
+import { INPUTS, inputLabel } from "#renderer/input";
+import type { InputName } from "#renderer/input";
+import { SYSTEM, languageName } from "#renderer/language";
+import type { Language, LanguageChoice } from "#renderer/language";
+import type { Connection } from "#renderer/sources";
+import { APPEARANCES, THEMES } from "#renderer/theme";
+import type { Appearance, Theming } from "#renderer/theme";
 import { button, el, tabStep, walk } from "./util.ts";
 
 /** What the menu asks of the shell. */
