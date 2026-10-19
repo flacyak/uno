@@ -1,10 +1,12 @@
-// The messages between a client and an engine.
-//
-// An engine is a worker that owns one workspace. A client names files, asks
-// for rows by position, and sends edits. Replies are ready to draw. Text for
-// a person is sent as a `Said`, which the client renders in its own language.
-// Every message is plain data, so it works over an Electron MessagePortMain,
-// a Web Worker, or a MessageChannel.
+/**
+ * @fileoverview The messages between a client and an engine.
+ *
+ * An engine is a worker that owns one workspace. A client names files, asks
+ * for rows by position, and sends edits. Replies are ready to draw. Text for
+ * a person is sent as a `Said`, which the client renders in its own language.
+ * Every message is plain data, so it works over an Electron MessagePortMain,
+ * a Web Worker, or a MessageChannel.
+ */
 
 import type { AuthMode, Connection, RoleTrust } from '#library';
 import type { Change } from '#pattern';

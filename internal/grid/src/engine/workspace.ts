@@ -1,13 +1,15 @@
-// The workspace an engine owns: its sources, one View each, and the order
-// edits were made across them.
-//
-// Each View holds its own edits. The workspace holds the trail: which source
-// each edit changed, in order. Everything that changes the log runs through
-// one queue.
-//
-// A source from a .uno that fails to open becomes an Absent. It keeps its
-// id, edits, place in the log and path, and `relink` turns it back into a
-// View.
+/**
+ * @fileoverview The workspace an engine owns: its sources, one View each, and
+ * the order edits were made across them.
+ *
+ * Each View holds its own edits. The workspace holds the trail: which source
+ * each edit changed, in order. Everything that changes the log runs through
+ * one queue.
+ *
+ * A source from a .uno that fails to open becomes an Absent. It keeps its
+ * id, edits, place in the log and path, and `relink` turns it back into a
+ * View.
+ */
 
 import {
   isAbsolute,

@@ -1,9 +1,11 @@
-// Exchanging one credential for another over the network: the SSO portal's
-// GetRoleCredentials, and STS's AssumeRole.
-//
-// This module and store/s3.ts are the only ones allowed to reach a network.
-// The guard test in tests/store/opens.test.ts checks that. Every file read
-// is in store/node.ts, which reads ~/.aws and passes the token or role in.
+/**
+ * @fileoverview Exchanging one credential for another over the network: the SSO
+ * portal's GetRoleCredentials, and STS's AssumeRole.
+ *
+ * This module and store/s3.ts are the only ones allowed to reach a network.
+ * The guard test in tests/store/opens.test.ts checks that. Every file read
+ * is in store/node.ts, which reads ~/.aws and passes the token or role in.
+ */
 
 import { parseTime } from '#go';
 import { encodeQuery, signV4 } from './s3.ts';

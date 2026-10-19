@@ -1,7 +1,9 @@
-// Passes: work that reads a whole file one chunk at a time.
-//
-// A pass reads a chunk, does its work, reports progress, and stops when its
-// signal is aborted. PassContext is what every pass is handed.
+/**
+ * @fileoverview Passes: work that reads a whole file one chunk at a time.
+ *
+ * A pass reads a chunk, does its work, reports progress, and stops when its
+ * signal is aborted. PassContext is what every pass is handed.
+ */
 
 import type { Format } from '#ingest';
 import type { ByteSource } from '#store';

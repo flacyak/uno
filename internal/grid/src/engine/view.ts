@@ -1,8 +1,10 @@
-// One source in a workspace: its format, its index, its edit log, and the
-// pages read through them.
-//
-// Every row returned has the log applied. An edit is one line folded into
-// the Schema and a new generation number. Every stored row stays as read.
+/**
+ * @fileoverview One source in a workspace: its format, its index, its edit log,
+ * and the pages read through them.
+ *
+ * Every row returned has the log applied. An edit is one line folded into
+ * the Schema and a new generation number. Every stored row stays as read.
+ */
 
 import type { HeldFile, HeldPart, HeldParts } from '#document';
 import { trimSpace } from '#go';

@@ -1,8 +1,10 @@
-// Package pattern induces a transform program from the edits a person made to
-// a column, so the app can offer to apply it to the rest.
-//
-// It reads only the edit log. `propose` returns a question;
-// applying the answer is `sheet.apply`.
+/**
+ * @fileoverview Package pattern induces a transform program from the edits a
+ * person made to a column, so the app can offer to apply it to the rest.
+ *
+ * It reads only the edit log. `propose` returns a question;
+ * applying the answer is `sheet.apply`.
+ */
 
 import { compareStrings, quoteMeta } from '#go';
 import type { Program } from '#program';

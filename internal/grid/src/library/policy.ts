@@ -1,11 +1,13 @@
-// The two IAM documents a person writes into their own account so uno's
-// hosted engine may read one bucket: the role's trust policy and its
-// permission policy.
-//
-// They are generated here, from the trust the engine reports and the bucket
-// and prefix the person typed, so a person who has never seen an IAM policy
-// connects a bucket from the copied JSON alone. The documents are text, and
-// nothing here reaches a network or a file.
+/**
+ * @fileoverview The two IAM documents a person writes into their own account so
+ * uno's hosted engine may read one bucket: the role's trust policy and its
+ * permission policy.
+ *
+ * They are generated here, from the trust the engine reports and the bucket
+ * and prefix the person typed, so a person who has never seen an IAM policy
+ * connects a bucket from the copied JSON alone. The documents are text, and
+ * nothing here reaches a network or a file.
+ */
 
 /** What the role's trust policy names: the engine's principal and the tenant's external ID. */
 export interface RoleTrust {

@@ -1,8 +1,10 @@
-// The client side of the engine protocol.
-//
-// Engine wraps the protocol in promises and hands out one SourceHandle per
-// source. Band holds the rows around the viewport and answers the grid
-// synchronously. A row still in flight is reported as such.
+/**
+ * @fileoverview The client side of the engine protocol.
+ *
+ * Engine wraps the protocol in promises and hands out one SourceHandle per
+ * source. Band holds the rows around the viewport and answers the grid
+ * synchronously. A row still in flight is reported as such.
+ */
 
 import type {
   Changed,

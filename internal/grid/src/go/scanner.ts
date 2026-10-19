@@ -1,6 +1,8 @@
-// A cursor over an array of runes, shared by the hand-written parsers. It
-// skips space, accepts one rune, expects one, and reports where it was when
-// the expected rune is missing.
+/**
+ * @fileoverview A cursor over an array of runes, shared by the hand-written
+ * parsers. It skips space, accepts one rune, expects one, and reports where it
+ * was when the expected rune is missing.
+ */
 
 import { quote } from './strconv.ts';
 import { isSpace } from './strings.ts';

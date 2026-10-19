@@ -1,16 +1,18 @@
-// Prints the metrics the efficiency tests measured, and sends them to a
-// collector.
-//
-//   node scripts/efficiency.ts [--base <folder>] [--out <file>]
-//
-// Reads out/efficiency/*.json, written by `vp test tests/efficiency`, and
-// prints a markdown table of every metric. --base names a folder of the same
-// files from another branch; the table then shows each metric beside its
-// value there. --out also writes the table to that file.
-//
-// When OTEL_EXPORTER_OTLP_ENDPOINT is set, the metrics are also sent there as
-// the gauge uno.efficiency, one series per metric, labelled with the branch.
-// OTEL_EXPORTER_OTLP_HEADERS is sent with the request.
+/**
+ * @fileoverview Prints the metrics the efficiency tests measured, and sends
+ * them to a collector.
+ *
+ *   node scripts/efficiency.ts [--base <folder>] [--out <file>]
+ *
+ * Reads out/efficiency/*.json, written by `vp test tests/efficiency`, and
+ * prints a markdown table of every metric. --base names a folder of the same
+ * files from another branch; the table then shows each metric beside its
+ * value there. --out also writes the table to that file.
+ *
+ * When OTEL_EXPORTER_OTLP_ENDPOINT is set, the metrics are also sent there as
+ * the gauge uno.efficiency, one series per metric, labelled with the branch.
+ * OTEL_EXPORTER_OTLP_HEADERS is sent with the request.
+ */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
