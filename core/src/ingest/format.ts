@@ -211,6 +211,19 @@ function findDataStart(
   return records === 0 ? -1 : head.length;
 }
 
+/** The suffix a name's first duplicate takes: product_cost_2. */
+const FIRST_SUFFIX = 2;
+
+/**
+ * suffixed returns `name` with the lowest suffix, from _2, that makes a name
+ * `taken` does not hold.
+ */
+export function suffixed(name: string, taken: ReadonlySet<string>): string {
+  let n = FIRST_SUFFIX;
+  while (taken.has(`${name}_${n}`)) n++;
+  return `${name}_${n}`;
+}
+
 /**
  * headerOf makes every column name unique. The first keeps its name; each
  * later duplicate takes the lowest free suffix: product_cost_2, then _3.
@@ -223,9 +236,7 @@ export function headerOf(record: readonly string[]): string[] {
       seen.add(name);
       return name;
     }
-    let n = 2;
-    while (taken.has(`${name}_${n}`)) n++;
-    const unique = `${name}_${n}`;
+    const unique = suffixed(name, taken);
     taken.add(unique);
     return unique;
   });
