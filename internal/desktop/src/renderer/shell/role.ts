@@ -11,10 +11,10 @@
 // the web page both draw it through the renderer, and each engine decides
 // whether it appears by what it offers in `SignIns`.
 
-import type { Trust } from "@uno/grid/engine";
-import { accountOf } from "@uno/grid/library";
+import type { Trust } from "#engine";
+import { accountOf } from "#library";
 
-import { m } from "../../paraglide/messages.js";
+import { m } from "#paraglide/messages";
 import { Words, el } from "./util.ts";
 
 /** How long a copy button says it copied before it offers to copy again. */

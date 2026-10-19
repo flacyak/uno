@@ -2,10 +2,10 @@
 // draws, the events it raises, and column labels. Importing it leaves the
 // grid itself unloaded.
 
-import type { Kind } from "@uno/grid/sheet";
+import type { Kind } from "#sheet";
 
-import { m } from "../../paraglide/messages.js";
-import type { Action, Mode } from "../keys.ts";
+import { m } from "#paraglide/messages";
+import type { Action, Mode } from "#renderer/keys";
 
 /** Returns a column's display name. A blank header is named by its 1-based
  * position. */
