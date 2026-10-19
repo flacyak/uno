@@ -9,16 +9,16 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import { PSEUDO_LOCALE, PSEUDO_OPEN } from "../scripts/pseudo.js";
-import { m } from "../src/paraglide/messages.js";
-import { baseLocale } from "../src/paraglide/runtime.js";
-import { Settings } from "../src/renderer/shell/settings.ts";
-import type { InputName } from "../src/renderer/input/index.ts";
-import { LANGUAGE_KEY, Language, languageName, offered } from "../src/renderer/language.ts";
-import type { SettingsAsks } from "../src/renderer/shell/settings.ts";
-import type { Connection } from "../src/renderer/sources.ts";
-import { Theming } from "../src/renderer/theme.ts";
-import type { Scheme } from "../src/renderer/theme.ts";
+import { PSEUDO_LOCALE, PSEUDO_OPEN } from "#scripts/pseudo";
+import { m } from "#paraglide/messages";
+import { baseLocale } from "#paraglide/runtime";
+import { Settings } from "#renderer/shell/settings";
+import type { InputName } from "#renderer/input";
+import { LANGUAGE_KEY, Language, languageName, offered } from "#renderer/language";
+import type { SettingsAsks } from "#renderer/shell/settings";
+import type { Connection } from "#renderer/sources";
+import { Theming } from "#renderer/theme";
+import type { Scheme } from "#renderer/theme";
 import { Kept } from "./kept.ts";
 import { settle } from "./settle.ts";
 

@@ -15,8 +15,8 @@ import {
   THEME_KEY,
   Theming,
   tokensOf,
-} from "../src/renderer/theme.ts";
-import type { Mode, Palette, Scheme } from "../src/renderer/theme.ts";
+} from "#renderer/theme";
+import type { Mode, Palette, Scheme } from "#renderer/theme";
 import { Kept } from "./kept.ts";
 
 /** A Scheme in whichever mode the test sets, which notifies listeners on change. */
