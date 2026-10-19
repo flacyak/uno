@@ -1,6 +1,8 @@
-// Types shared by the grid, the shell and the workspace: the data the grid
-// draws, the events it raises, and column labels. Importing it leaves the
-// grid itself unloaded.
+/**
+ * @fileoverview Types shared by the grid, the shell and the workspace: the data
+ * the grid draws, the events it raises, and column labels. Importing it leaves
+ * the grid itself unloaded.
+ */
 
 import type { Kind } from "#sheet";
 

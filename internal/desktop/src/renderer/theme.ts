@@ -1,16 +1,18 @@
-// The colour themes and the one the page is using.
-//
-// Four themes, each with a light and a dark palette, from T3 Themes
-// (t3themes.com, github.com/SunkenInTime/t3-themes), credited to their
-// authors below. Each is stored already mapped onto uno's tokens:
-//
-// - The theme's three grounds are assigned to surface, paper and sunken by
-//   lightness, lightest to surface.
-// - text, textMuted, border and accent map to ink, ink-3, rule and accent.
-// - The remaining tokens are mixed from those in `tokensOf`. The warning
-//   amber is the same under every theme.
-//
-// The chosen theme and appearance are kept in local storage.
+/**
+ * @fileoverview The colour themes and the one the page is using.
+ *
+ * Four themes, each with a light and a dark palette, from T3 Themes
+ * (t3themes.com, github.com/SunkenInTime/t3-themes), credited to their
+ * authors below. Each is stored already mapped onto uno's tokens:
+ *
+ * - The theme's three grounds are assigned to surface, paper and sunken by
+ *   lightness, lightest to surface.
+ * - text, textMuted, border and accent map to ink, ink-3, rule and accent.
+ * - The remaining tokens are mixed from those in `tokensOf`. The warning
+ *   amber is the same under every theme.
+ *
+ * The chosen theme and appearance are kept in local storage.
+ */
 
 /** The seven colours a palette defines. The other tokens are mixed from these. */
 export interface Palette {

@@ -1,8 +1,11 @@
-// The formula form: picks a column of the active source and the expression it
-// is computed from. It opens from the right-click menu on a workspace.
-//
-// The engine parses the expression. A refusal is shown in the form, which
-// stays open.
+/**
+ * @fileoverview The formula form: picks a column of the active source and the
+ * expression it is computed from. It opens from the right-click menu on a
+ * workspace.
+ *
+ * The engine parses the expression. A refusal is shown in the form, which
+ * stays open.
+ */
 
 import "./formula.css";
 

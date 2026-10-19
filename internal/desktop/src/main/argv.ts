@@ -1,9 +1,11 @@
-// The file paths on a command line.
-//
-// The same line reaches main twice over: as this process's argv at launch,
-// and as the argv of a second uno that was started while this one runs.
-// Chromium passes the second's on with its switches moved to the front, so
-// nothing here depends on where an argument is.
+/**
+ * @fileoverview The file paths on a command line.
+ *
+ * The same line reaches main twice over: as this process's argv at launch,
+ * and as the argv of a second uno that was started while this one runs.
+ * Chromium passes the second's on with its switches moved to the front, so
+ * nothing here depends on where an argument is.
+ */
 
 import { resolve } from "node:path";
 
