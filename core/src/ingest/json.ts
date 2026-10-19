@@ -93,6 +93,26 @@ class Tokens {
     return name !== undefined && this.eat(':') ? name : undefined;
   }
 
+  /**
+   * list reads a list nested `depth` levels inside the line's own object:
+   * `open`, the items `item` reads, separated by commas, and `close`. It says
+   * whether the whole list read, and refuses one nested deeper than
+   * DEPTH_LIMIT allows.
+   */
+  list(
+    open: string,
+    close: string,
+    depth: number,
+    item: () => boolean,
+  ): boolean {
+    if (depth === DEPTH_LIMIT || !this.eat(open)) return false;
+    if (this.eat(close)) return true;
+    do {
+      if (!item()) return false;
+    } while (this.eat(','));
+    return this.eat(close);
+  }
+
   /** cell reads a value other than an object and returns its cell. */
   cell(): string | undefined {
     return this.scalar();
@@ -174,18 +194,17 @@ function pointerTo(parent: string, name: string): string {
  * object, or nests too deep.
  */
 function membersOf(tokens: Tokens, depth: number): Members | undefined {
-  if (depth === DEPTH_LIMIT || !tokens.eat('{')) return undefined;
   const members: Members = new Map();
-  if (tokens.eat('}')) return members;
-  do {
+  const read = tokens.list('{', '}', depth, () => {
     const name = tokens.name();
-    if (name === undefined) return undefined;
+    if (name === undefined) return false;
     const member =
       tokens.peek() === '{' ? membersOf(tokens, depth + 1) : tokens.cell();
-    if (member === undefined) return undefined;
+    if (member === undefined) return false;
     members.set(name, member);
-  } while (tokens.eat(','));
-  return tokens.eat('}') ? members : undefined;
+    return true;
+  });
+  return read ? members : undefined;
 }
 
 /**
