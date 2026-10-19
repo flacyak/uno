@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reading a whole file: the delimiter sniffed from the bytes,
+ * ragged rows padded, CRLF, and Go's csv rules.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import { read, readAll, sniffDelimiter } from '#ingest';

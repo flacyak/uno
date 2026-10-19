@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The .uno container: a round trip, its entries, the manifest,
+ * and what a damaged or newer file does.
+ */
+
 import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The .unof files the Go build wrote open in this one, and
+ * round-trip.
+ */
+
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
