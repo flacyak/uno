@@ -129,9 +129,11 @@ export function readContainer(
   );
   const sources: Held[] = m.sources.map((src) => {
     const state = states.get(src.id) ?? { active: { row: 0, col: 0 } };
-    return src.parts === undefined
-      ? heldFile(name, entries, src, state, at)
-      : heldParts(src, state, at);
+    if (src.parts === undefined) return heldFile(name, entries, src, state, at);
+    const held = heldParts(src, state, at);
+    // A parts source that opens is one that saves again.
+    blamed(name, () => checkParts(held));
+    return held;
   });
 
   return {
@@ -436,13 +438,15 @@ function checkLog(d: Document): void {
 }
 
 /**
- * checkParts refuses an empty parts source, or one with a part whose path
- * is "" or is not under the source's root.
+ * checkParts refuses an empty parts source, a root of "", a part whose path
+ * is "" or is not under the source's root, and partition keys that
+ * checkPartitions refuses.
  */
 function checkParts(src: HeldParts): void {
   if (src.parts.length === 0)
     throw new Error(`${src.name} has no parts to point at`);
   const { root } = src;
+  if (root === '') throw new Error(`${src.name} has a root with no path`);
   src.parts.forEach((part, i) => {
     const which = `${src.name}: ${part.name} (part ${i + 1} of ${src.parts.length})`;
     if (part.path === '') throw new Error(`${which} has no path to point at`);
@@ -451,6 +455,32 @@ function checkParts(src: HeldParts): void {
         `${which} is at ${part.path}, which is not under ${root}`,
       );
     }
+  });
+  checkPartitions(src);
+}
+
+/**
+ * checkPartitions refuses partition keys with no root to read their values
+ * from, and a key that is "" or is named twice.
+ */
+function checkPartitions(src: HeldParts): void {
+  const keys = src.partitions;
+  if (keys === undefined) return;
+  if (src.root === undefined) {
+    throw new Error(
+      `${src.name} is partitioned and has no root to read its keys from`,
+    );
+  }
+  const seen = new Set<string>();
+  keys.forEach((key, i) => {
+    if (key === '') {
+      throw new Error(
+        `${src.name}: partition key ${i + 1} of ${keys.length} has no name`,
+      );
+    }
+    if (seen.has(key))
+      throw new Error(`${src.name} is partitioned by ${key} twice`);
+    seen.add(key);
   });
 }
 

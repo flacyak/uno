@@ -5,8 +5,8 @@
  * none of them is written as before, which format6.test.ts and
  * format7.test.ts hold to the byte. Covers what is written, which format it
  * needs, round trips at scale and after a move, files from older formats,
- * and the refusals for a part outside its root and a value this build does
- * not know.
+ * and the refusals for a part outside its root, partition keys that are not
+ * one name each, and a value this build does not know.
  */
 
 import { strToU8, unzipSync, zipSync } from 'fflate';
@@ -248,6 +248,38 @@ describe('a source read in row space is not written', () => {
     };
     expect(() => writeDocument(workspace([source]))).toThrow(
       'which is not under s3://lake/orders/',
+    );
+  });
+
+  test('partitioned by one key twice, named', () => {
+    const source: HeldParts = {
+      ...orders(),
+      partitions: ['year', 'month', 'year'],
+    };
+    expect(() => writeDocument(workspace([source]))).toThrow(
+      new Error('orders is partitioned by year twice'),
+    );
+  });
+
+  test('partitioned by a key with no name', () => {
+    const source: HeldParts = { ...orders(), partitions: ['year', ''] };
+    expect(() => writeDocument(workspace([source]))).toThrow(
+      new Error('orders: partition key 2 of 2 has no name'),
+    );
+  });
+
+  test('with a root that has no path', () => {
+    const source: HeldParts = { ...orders(), root: '' };
+    expect(() => writeDocument(workspace([source]))).toThrow(
+      new Error('orders has a root with no path'),
+    );
+  });
+
+  // A part's key values are read from its path under the root.
+  test('partitioned with no root', () => {
+    const source: HeldParts = { ...orders(), root: undefined };
+    expect(() => writeDocument(workspace([source]))).toThrow(
+      new Error('orders is partitioned and has no root to read its keys from'),
     );
   });
 });
@@ -516,6 +548,33 @@ describe('a source read in row space is refused on reading', () => {
       'a part compressed in a way this build does not know, by name',
       (m) => (partsOf(m)[1]!['compression'] = 'bzip2'),
       `${DECEMBER}: this build does not know compression "bzip2" · it reads none`,
+    ],
+    // What a save refuses, an open refuses too. A part's path is always
+    // joined onto its root, so only '..' can take it out.
+    [
+      'a part outside its root, named',
+      (m) => (partsOf(m)[1]!['path'] = '../returns/part-00000.parquet'),
+      'books.uno: orders: part-00000.parquet (part 2 of 3) is at s3://lake/orders/../returns/part-00000.parquet, which is not under s3://lake/orders/',
+    ],
+    [
+      'a root that has no path',
+      (m) => (m.sources[0]!['root'] = ''),
+      'books.uno: orders has a root with no path',
+    ],
+    [
+      'partitioned by one key twice, named',
+      (m) => (m.sources[0]!['partitions'] = ['month', 'month']),
+      'books.uno: orders is partitioned by month twice',
+    ],
+    [
+      'partitioned by a key with no name',
+      (m) => (m.sources[0]!['partitions'] = ['']),
+      'books.uno: orders: partition key 1 of 1 has no name',
+    ],
+    [
+      'partitioned with no root',
+      (m) => delete m.sources[0]!['root'],
+      'books.uno: orders is partitioned and has no root to read its keys from',
     ],
   ];
 
