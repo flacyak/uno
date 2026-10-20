@@ -387,7 +387,7 @@ export function soughtChars(src: string): Sought | undefined {
       // a set, and is refused.
       i++;
       if (i >= rs.length || !']\\^-'.includes(rs[i])) return undefined;
-      r = rs[i]!;
+      r = rs[i];
     } else if (r === '^' && i === 0) {
       return undefined; // a negated class
     }

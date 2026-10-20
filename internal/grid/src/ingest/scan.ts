@@ -111,7 +111,7 @@ export class RecordScanner {
           let c = b;
           while (c !== LF && c !== QUOTE) {
             if (++j === end) break;
-            c = chunk[j]!;
+            c = chunk[j];
           }
           if (j === end) {
             s = j === i ? s : chunk[j - 1] === sep ? FIELD : BARE;

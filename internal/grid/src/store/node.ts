@@ -309,23 +309,21 @@ async function ssoSession(
       `the AWS profile ${profile} names sso-session ${named}, which ~/.aws/config does not have`,
     );
   }
-  const startUrl = portal.get('sso_start_url');
-  const ssoRegion = portal.get('sso_region');
-  const accountId = section.get('sso_account_id');
-  const roleName = section.get('sso_role_name');
-  const missing = [
-    ['sso_start_url', startUrl],
-    ['sso_region', ssoRegion],
-    ['sso_account_id', accountId],
-    ['sso_role_name', roleName],
-  ].find(([, v]) => v === undefined)?.[0];
-  if (missing !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} signs in through SSO and has no ${missing}`,
-    );
-  }
+  const setting = (from: Map<string, string>, key: string): string => {
+    const value = from.get(key);
+    if (value === undefined) {
+      throw new Error(
+        `the AWS profile ${profile} signs in through SSO and has no ${key}`,
+      );
+    }
+    return value;
+  };
+  const startUrl = setting(portal, 'sso_start_url');
+  const ssoRegion = setting(portal, 'sso_region');
+  const accountId = setting(section, 'sso_account_id');
+  const roleName = setting(section, 'sso_role_name');
 
-  const cacheKey = named ?? startUrl!;
+  const cacheKey = named ?? startUrl;
   const name = createHash('sha1').update(cacheKey).digest('hex') + '.json';
   const path = join(homeOf(env), '.aws', 'sso', 'cache', name);
   const text = await readText(path);
@@ -352,9 +350,9 @@ async function ssoSession(
   return ssoRoleCredentials(
     {
       profile,
-      region: ssoRegion!,
-      accountId: accountId!,
-      roleName: roleName!,
+      region: ssoRegion,
+      accountId,
+      roleName,
       accessToken: token.accessToken,
     },
     { endpoint: env['AWS_ENDPOINT_URL_SSO'] },

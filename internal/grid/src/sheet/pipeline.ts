@@ -40,6 +40,12 @@ export interface Finished {
   shown: readonly string[];
 }
 
+/** A Finished whose arrays finishCells built, so a formula may write into `shown`. */
+interface Built {
+  raw: string[];
+  shown: string[];
+}
+
 /**
  * valueAt returns what one cell stores: the last value written into it, or
  * else its source value, with every program recorded on the column after
@@ -140,7 +146,7 @@ export function finishRows(
   // A formula reads what a cell shows. Bound columns are computed in
   // dependency order, so a column that reads another bound column reads what
   // that column computed.
-  const shown = out.map((f) => f.shown as string[]);
+  const shown = out.map((f) => f.shown);
   const columns: Columns = {
     column(name) {
       const c = schema.indexOf(name);
@@ -148,11 +154,11 @@ export function finishRows(
     },
   };
   for (const c of order) {
-    const { values, errors } = evaluateColumn(
-      schema.formula(c)!,
-      shown.length,
-      columns,
-    );
+    const formula = schema.formula(c);
+    if (formula === undefined) {
+      throw new Error(`column ${c + 1} is computed and has no formula`);
+    }
+    const { values, errors } = evaluateColumn(formula, shown.length, columns);
     for (let i = 0; i < shown.length; i++) {
       shown[i][c] = errors[i] === undefined ? formatValue(values[i]) : ERR_CELL;
     }
@@ -174,7 +180,7 @@ function finishCells(
   source: readonly string[],
   computed: boolean,
   supplied: string,
-): Finished {
+): Built {
   const width = schema.headers.length;
   const written = schema.writtenIn(row);
   const fill = schema.supplied?.col;
@@ -197,8 +203,8 @@ function finishCells(
   if (!computed && !notes) return { raw, shown: raw };
 
   const shown = raw.slice();
-  if (notes) {
-    for (const [c, w] of written!)
+  if (written !== undefined) {
+    for (const [c, w] of written)
       if (w.rendered !== undefined) shown[c] = w.rendered;
   }
   return { raw, shown };

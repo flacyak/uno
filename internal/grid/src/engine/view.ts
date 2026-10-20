@@ -434,7 +434,10 @@ export class View {
     const runs: Run[] = [];
     let row = 0;
     const scanner = this.format.scanner((offset) => {
-      const part = map.partAt(offset)!;
+      const part = map.partAt(offset);
+      if (part === undefined) {
+        throw new Error(`a record starts at ${offset}, past every part`);
+      }
       if (runs.at(-1)?.part !== part) runs.push({ row, part });
       row++;
     });

@@ -328,7 +328,10 @@ function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
     if (failed !== undefined) break;
     // zip.add sets file.ondata. The deflated bytes go in through it in one
     // piece.
-    file.ondata!(null, entry.bytes, true);
+    if (file.ondata === undefined) {
+      throw new Error(`${name}: zip.add set no ondata`);
+    }
+    file.ondata(null, entry.bytes, true);
   }
   zip.end();
   if (failed !== undefined) throw failed;
