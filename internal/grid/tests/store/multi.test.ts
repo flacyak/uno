@@ -2,19 +2,24 @@
 // from any offset and length, with each part opened only when a read needs
 // it, and a map from every byte to its part.
 
-import { afterAll, beforeAll, expect, test } from "vite-plus/test";
+import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import { blobFiles, bytesSource } from "../../src/store/index.ts";
-import type { FileHandler, FileRef, SingleRef } from "../../src/store/index.ts";
-import { openMulti, partMap } from "../../src/store/multi.ts";
-import type { Extent, HeaderMode, Part } from "../../src/store/multi.ts";
-import { localFiles } from "../../src/store/node.ts";
-import { s3Files } from "../../src/store/s3.ts";
-import { bytes } from "../testdata/sales-q3.ts";
-import { PARTS, PART_FIXTURES, PART_NAMES, partBytes } from "../testdata/sales-q3-parts.ts";
-import { HOME_REGION } from "./regions.ts";
-import { KEYS, at, bucket, etagOf } from "./standin.ts";
-import type { Bucket } from "./standin.ts";
+import { blobFiles, bytesSource } from '../../src/store/index.ts';
+import type { FileHandler, FileRef, SingleRef } from '../../src/store/index.ts';
+import { openMulti, partMap } from '../../src/store/multi.ts';
+import type { Extent, HeaderMode, Part } from '../../src/store/multi.ts';
+import { localFiles } from '../../src/store/node.ts';
+import { s3Files } from '../../src/store/s3.ts';
+import { bytes } from '../testdata/sales-q3.ts';
+import {
+  PARTS,
+  PART_FIXTURES,
+  PART_NAMES,
+  partBytes,
+} from '../testdata/sales-q3-parts.ts';
+import { HOME_REGION } from './regions.ts';
+import { KEYS, at, bucket, etagOf } from './standin.ts';
+import type { Bucket } from './standin.ts';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -27,7 +32,7 @@ const BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
 const HEADER_BYTES = partBytes[0]!.indexOf(LF) + 1;
 
 /** The path prefix of a file held in memory. */
-const MEMORY = "memory://";
+const MEMORY = 'memory://';
 
 /** A handler over files held in memory, which remembers what was asked of it. */
 function memory(files: ReadonlyMap<string, Uint8Array>): {
@@ -45,11 +50,12 @@ function memory(files: ReadonlyMap<string, Uint8Array>): {
   const refs: FileRef[] = [];
   const reads: Array<{ name: string; offset: number; length: number }> = [];
   const handler: FileHandler = {
-    label: "memory",
-    handles: (ref) => "path" in ref && ref.path.startsWith(MEMORY),
+    label: 'memory',
+    handles: (ref) => 'path' in ref && ref.path.startsWith(MEMORY),
     open(ref) {
       const held = files.get(ref.name);
-      if (held === undefined) return Promise.reject(new Error(`${ref.name}: no such file`));
+      if (held === undefined)
+        return Promise.reject(new Error(`${ref.name}: no such file`));
       opened.push(ref.name);
       refs.push(ref);
       const source = bytesSource(held);
@@ -80,16 +86,26 @@ function fixtureFiles(): Map<string, Uint8Array> {
 }
 
 /** Files of text, named a.csv, b.csv and on, and the parts that point at them. */
-function texts(...contents: string[]): { files: Map<string, Uint8Array>; parts: Part[] } {
-  const names = contents.map((_, i) => `${String.fromCharCode("a".charCodeAt(0) + i)}.csv`);
+function texts(...contents: string[]): {
+  files: Map<string, Uint8Array>;
+  parts: Part[];
+} {
+  const names = contents.map(
+    (_, i) => `${String.fromCharCode('a'.charCodeAt(0) + i)}.csv`,
+  );
   return {
-    files: new Map(names.map((name, i) => [name, encoder.encode(contents[i]!)])),
+    files: new Map(
+      names.map((name, i) => [name, encoder.encode(contents[i]!)]),
+    ),
     parts: names.map((name) => ({ ref: inMemory(name) })),
   };
 }
 
 /** The parts read as one, decoded as text. */
-async function joined(header: HeaderMode, ...contents: string[]): Promise<string> {
+async function joined(
+  header: HeaderMode,
+  ...contents: string[]
+): Promise<string> {
   const { files, parts } = texts(...contents);
   const source = await openMulti([memory(files).handler], parts, header);
   return decoder.decode(await source.read(0, source.size));
@@ -98,7 +114,11 @@ async function joined(header: HeaderMode, ...contents: string[]): Promise<string
 /** The fixture's parts with the extents an earlier open measured. */
 async function measuredParts(): Promise<Part[]> {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const source = await openMulti([memory(fixtureFiles()).handler], parts, "first");
+  const source = await openMulti(
+    [memory(fixtureFiles()).handler],
+    parts,
+    'first',
+  );
   return parts.map((part, i) => ({ ...part, extent: source.extents[i]! }));
 }
 
@@ -114,20 +134,28 @@ function seeded(seed: number): () => number {
   };
 }
 
-test("sales-q3.csv split into three parts reads back identical to the whole", async () => {
-  const parts = PART_FIXTURES.map((path, i) => ({ ref: { name: PART_NAMES[i]!, path } }));
-  const source = await openMulti([localFiles()], parts, "first");
+test('sales-q3.csv split into three parts reads back identical to the whole', async () => {
+  const parts = PART_FIXTURES.map((path, i) => ({
+    ref: { name: PART_NAMES[i]!, path },
+  }));
+  const source = await openMulti([localFiles()], parts, 'first');
   try {
     expect(source.size).toBe(bytes.length);
-    expect(Buffer.from(await source.read(0, source.size)).equals(Buffer.from(bytes))).toBe(true);
+    expect(
+      Buffer.from(await source.read(0, source.size)).equals(Buffer.from(bytes)),
+    ).toBe(true);
   } finally {
     await source.close();
   }
 });
 
-test("a read is the same bytes of the whole, wherever it starts and however long it is", async () => {
+test('a read is the same bytes of the whole, wherever it starts and however long it is', async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const source = await openMulti([memory(fixtureFiles()).handler], parts, "first");
+  const source = await openMulti(
+    [memory(fixtureFiles()).handler],
+    parts,
+    'first',
+  );
   const random = seeded(3);
   const LONGEST = 100_000;
   const READS = 400;
@@ -143,9 +171,13 @@ test("a read is the same bytes of the whole, wherever it starts and however long
   }
 });
 
-test("a read across a boundary takes up in the next part where the last one left off", async () => {
+test('a read across a boundary takes up in the next part where the last one left off', async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const source = await openMulti([memory(fixtureFiles()).handler], parts, "first");
+  const source = await openMulti(
+    [memory(fixtureFiles()).handler],
+    parts,
+    'first',
+  );
   const text = (offset: number, length: number): string =>
     decoder.decode(bytes.subarray(offset, offset + length));
   const AROUND = 40;
@@ -165,24 +197,34 @@ test("a read across a boundary takes up in the next part where the last one left
   expect(decoder.decode(await source.read(second!.start - AROUND, over))).toBe(
     text(second!.start - AROUND, over),
   );
-  expect((await source.read(source.size - AROUND, 2 * AROUND)).length).toBe(AROUND);
+  expect((await source.read(source.size - AROUND, 2 * AROUND)).length).toBe(
+    AROUND,
+  );
   expect((await source.read(source.size, AROUND)).length).toBe(0);
 });
 
 // Front to back in chunks that straddle part boundaries.
-test("read front to back in chunks, the join is the whole", async () => {
+test('read front to back in chunks, the join is the whole', async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const source = await openMulti([memory(fixtureFiles()).handler], parts, "first");
+  const source = await openMulti(
+    [memory(fixtureFiles()).handler],
+    parts,
+    'first',
+  );
   const CHUNK = 4099;
   const chunks: Uint8Array[] = [];
   for (let offset = 0; offset < source.size; offset += CHUNK) {
-    chunks.push(await source.read(offset, Math.min(CHUNK, source.size - offset)));
+    chunks.push(
+      await source.read(offset, Math.min(CHUNK, source.size - offset)),
+    );
   }
   expect(Buffer.concat(chunks).equals(Buffer.from(bytes))).toBe(true);
 });
 
-test("a part that does not end in a newline is given one before the next part", async () => {
-  expect(await joined("first", "a,b\n1,2", "a,b\n3,4", "a,b\n5,6\n")).toBe("a,b\n1,2\n3,4\n5,6\n");
+test('a part that does not end in a newline is given one before the next part', async () => {
+  expect(await joined('first', 'a,b\n1,2', 'a,b\n3,4', 'a,b\n5,6\n')).toBe(
+    'a,b\n1,2\n3,4\n5,6\n',
+  );
 
   // Part two with its final CRLF cut off reads back with an LF there, so the
   // whole differs from the fixture by that one CR.
@@ -192,9 +234,13 @@ test("a part that does not end in a newline is given one before the next part", 
   const source = await openMulti(
     [memory(files).handler],
     PART_NAMES.map((name) => ({ ref: inMemory(name) })),
-    "first",
+    'first',
   );
-  expect(source.extents.map((e) => e.unterminated)).toEqual([false, true, false]);
+  expect(source.extents.map((e) => e.unterminated)).toEqual([
+    false,
+    true,
+    false,
+  ]);
   expect(source.map.spans.map((s) => s.newline)).toEqual([false, true, false]);
   // Where part two's last row ends in the whole file, after its CRLF.
   const boundary = source.map.spans[1]!.end + 1;
@@ -203,19 +249,23 @@ test("a part that does not end in a newline is given one before the next part", 
     Uint8Array.of(LF),
     bytes.subarray(boundary),
   ]);
-  expect(Buffer.from(await source.read(0, source.size)).equals(expected)).toBe(true);
+  expect(Buffer.from(await source.read(0, source.size)).equals(expected)).toBe(
+    true,
+  );
 });
 
-test("the last part is left to end the way it ends", async () => {
-  expect(await joined("first", "a,b\n1,2\n", "a,b\n3,4")).toBe("a,b\n1,2\n3,4");
+test('the last part is left to end the way it ends', async () => {
+  expect(await joined('first', 'a,b\n1,2\n', 'a,b\n3,4')).toBe('a,b\n1,2\n3,4');
   // Until a part is added after it.
-  expect(await joined("first", "a,b\n1,2\n", "a,b\n3,4", "a,b\n5,6")).toBe("a,b\n1,2\n3,4\n5,6");
+  expect(await joined('first', 'a,b\n1,2\n', 'a,b\n3,4', 'a,b\n5,6')).toBe(
+    'a,b\n1,2\n3,4\n5,6',
+  );
 });
 
-test("a read of a virtual newline alone, or with what is either side of it, is right", async () => {
-  const { files, parts } = texts("a,b\n1,2", "a,b\n3,4\n");
-  const source = await openMulti([memory(files).handler], parts, "first");
-  const whole = "a,b\n1,2\n3,4\n";
+test('a read of a virtual newline alone, or with what is either side of it, is right', async () => {
+  const { files, parts } = texts('a,b\n1,2', 'a,b\n3,4\n');
+  const source = await openMulti([memory(files).handler], parts, 'first');
+  const whole = 'a,b\n1,2\n3,4\n';
   for (let offset = 0; offset < whole.length; offset++) {
     for (let length = 1; offset + length <= whole.length; length++) {
       expect(
@@ -226,72 +276,97 @@ test("a read of a virtual newline alone, or with what is either side of it, is r
   }
 });
 
-test("a header that is all a part holds is left out, and the part gives no rows", async () => {
-  expect(await joined("first", "a,b\n1,2\n", "a,b\n", "a,b\n3,4\n")).toBe("a,b\n1,2\n3,4\n");
-  expect(await joined("first", "a,b\n1,2\n", "a,b", "a,b\n3,4\n")).toBe("a,b\n1,2\n3,4\n");
-  expect(await joined("first", "a,b\n1,2\n", "", "a,b\n3,4\n")).toBe("a,b\n1,2\n3,4\n");
+test('a header that is all a part holds is left out, and the part gives no rows', async () => {
+  expect(await joined('first', 'a,b\n1,2\n', 'a,b\n', 'a,b\n3,4\n')).toBe(
+    'a,b\n1,2\n3,4\n',
+  );
+  expect(await joined('first', 'a,b\n1,2\n', 'a,b', 'a,b\n3,4\n')).toBe(
+    'a,b\n1,2\n3,4\n',
+  );
+  expect(await joined('first', 'a,b\n1,2\n', '', 'a,b\n3,4\n')).toBe(
+    'a,b\n1,2\n3,4\n',
+  );
   // A first part that is only the header still ends its line.
-  expect(await joined("first", "a,b", "a,b\n1,2\n")).toBe("a,b\n1,2\n");
+  expect(await joined('first', 'a,b', 'a,b\n1,2\n')).toBe('a,b\n1,2\n');
 });
 
 // A part that is empty, only newlines, or only a byte order mark gives no
 // rows.
-test("a later part with no record in it gives no rows, whatever its bytes are", async () => {
-  expect(await joined("first", "a,b\n1,2\n", "\n\n", "a,b\n3,4\n")).toBe("a,b\n1,2\n\n\n3,4\n");
-  expect(await joined("first", "a,b\n1,2\n", "\r", "a,b\n3,4\n")).toBe("a,b\n1,2\n\r\n3,4\n");
-  const { files, parts } = texts("a,b\n1,2\n", "", "a,b\n3,4\n");
-  files.set("b.csv", Uint8Array.of(...BOM, ...encoder.encode("\n")));
-  const source = await openMulti([memory(files).handler], parts, "first");
+test('a later part with no record in it gives no rows, whatever its bytes are', async () => {
+  expect(await joined('first', 'a,b\n1,2\n', '\n\n', 'a,b\n3,4\n')).toBe(
+    'a,b\n1,2\n\n\n3,4\n',
+  );
+  expect(await joined('first', 'a,b\n1,2\n', '\r', 'a,b\n3,4\n')).toBe(
+    'a,b\n1,2\n\r\n3,4\n',
+  );
+  const { files, parts } = texts('a,b\n1,2\n', '', 'a,b\n3,4\n');
+  files.set('b.csv', Uint8Array.of(...BOM, ...encoder.encode('\n')));
+  const source = await openMulti([memory(files).handler], parts, 'first');
   expect(source.extents[1]).toEqual({
     bytes: BOM.length + 1,
     skip: BOM.length,
     unterminated: false,
   });
-  expect(decoder.decode(await source.read(0, source.size))).toBe("a,b\n1,2\n\n3,4\n");
+  expect(decoder.decode(await source.read(0, source.size))).toBe(
+    'a,b\n1,2\n\n3,4\n',
+  );
   // The first part must have a header.
-  await expect(joined("first", "\n\n", "a,b\n3,4\n")).rejects.toThrow(
-    "a.csv (part 1 of 2): a.csv: file is empty",
+  await expect(joined('first', '\n\n', 'a,b\n3,4\n')).rejects.toThrow(
+    'a.csv (part 1 of 2): a.csv: file is empty',
   );
 });
 
-test("a repeated header is the same header however it is written", async () => {
-  expect(await joined("first", "a,b\r\n1,2\r\n", '"a","b"\n3,4\n')).toBe("a,b\r\n1,2\r\n3,4\n");
+test('a repeated header is the same header however it is written', async () => {
+  expect(await joined('first', 'a,b\r\n1,2\r\n', '"a","b"\n3,4\n')).toBe(
+    'a,b\r\n1,2\r\n3,4\n',
+  );
   // A byte order mark in front of a later part's header goes with the header.
-  const { files, parts } = texts("a,b\n1,2\n", "a,b\n3,4\n");
-  files.set("b.csv", Uint8Array.of(...BOM, ...files.get("b.csv")!));
-  const source = await openMulti([memory(files).handler], parts, "first");
-  expect(decoder.decode(await source.read(0, source.size))).toBe("a,b\n1,2\n3,4\n");
+  const { files, parts } = texts('a,b\n1,2\n', 'a,b\n3,4\n');
+  files.set('b.csv', Uint8Array.of(...BOM, ...files.get('b.csv')!));
+  const source = await openMulti([memory(files).handler], parts, 'first');
+  expect(decoder.decode(await source.read(0, source.size))).toBe(
+    'a,b\n1,2\n3,4\n',
+  );
 });
 
-test("with no header row, nothing is skipped", async () => {
-  expect(await joined("none", "1,2\n3,4\n", "1,2\n5,6", "7,8\n")).toBe("1,2\n3,4\n1,2\n5,6\n7,8\n");
+test('with no header row, nothing is skipped', async () => {
+  expect(await joined('none', '1,2\n3,4\n', '1,2\n5,6', '7,8\n')).toBe(
+    '1,2\n3,4\n1,2\n5,6\n7,8\n',
+  );
 
   // The fixture's parts read that way keep all three of their headers.
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const source = await openMulti([memory(fixtureFiles()).handler], parts, "none");
-  expect(source.extents.map((e) => e.skip)).toEqual([0, 0, 0]);
-  expect(Buffer.from(await source.read(0, source.size)).equals(Buffer.concat(partBytes))).toBe(
-    true,
+  const source = await openMulti(
+    [memory(fixtureFiles()).handler],
+    parts,
+    'none',
   );
-});
-
-// A later part's byte order mark is skipped.
-test("with no header row, a later part's byte order mark is still left out", async () => {
-  const { files, parts } = texts("1,2\n", "3,4\n");
-  for (const [name, held] of files) files.set(name, Uint8Array.of(...BOM, ...held));
-  const source = await openMulti([memory(files).handler], parts, "none");
-  expect(source.extents.map((e) => e.skip)).toEqual([0, BOM.length]);
+  expect(source.extents.map((e) => e.skip)).toEqual([0, 0, 0]);
   expect(
     Buffer.from(await source.read(0, source.size)).equals(
-      Buffer.from(Uint8Array.of(...BOM, ...encoder.encode("1,2\n3,4\n"))),
+      Buffer.concat(partBytes),
     ),
   ).toBe(true);
 });
 
-test("a part is opened when the source opens only where nothing says its extent", async () => {
+// A later part's byte order mark is skipped.
+test("with no header row, a later part's byte order mark is still left out", async () => {
+  const { files, parts } = texts('1,2\n', '3,4\n');
+  for (const [name, held] of files)
+    files.set(name, Uint8Array.of(...BOM, ...held));
+  const source = await openMulti([memory(files).handler], parts, 'none');
+  expect(source.extents.map((e) => e.skip)).toEqual([0, BOM.length]);
+  expect(
+    Buffer.from(await source.read(0, source.size)).equals(
+      Buffer.from(Uint8Array.of(...BOM, ...encoder.encode('1,2\n3,4\n'))),
+    ),
+  ).toBe(true);
+});
+
+test('a part is opened when the source opens only where nothing says its extent', async () => {
   const m = memory(fixtureFiles());
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const source = await openMulti([m.handler], parts, "first");
+  const source = await openMulti([m.handler], parts, 'first');
   expect(m.opened.toSorted()).toEqual([...PART_NAMES]);
   // And once: every read after is of a part already open.
   await source.read(0, source.size);
@@ -299,34 +374,41 @@ test("a part is opened when the source opens only where nothing says its extent"
   expect(m.opened).toHaveLength(PARTS);
 });
 
-test("a part with its extent is not opened until a read needs it", async () => {
+test('a part with its extent is not opened until a read needs it', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
-  const source = await openMulti([m.handler], parts, "first");
-  expect(m.opened, "opening the source opens no part").toEqual([]);
+  const source = await openMulti([m.handler], parts, 'first');
+  expect(m.opened, 'opening the source opens no part').toEqual([]);
   expect(source.size).toBe(bytes.length);
 
   const [first, second, third] = source.map.spans;
   await source.read(first!.start, HEADER_BYTES);
   expect(m.opened).toEqual([PART_NAMES[0]]);
   await source.read(first!.end - 1, 1);
-  expect(m.opened, "up to the last byte of the first part").toEqual([PART_NAMES[0]]);
+  expect(m.opened, 'up to the last byte of the first part').toEqual([
+    PART_NAMES[0],
+  ]);
 
   await source.read(third!.start, HEADER_BYTES);
-  expect(m.opened, "the third, and never the second").toEqual([PART_NAMES[0], PART_NAMES[2]]);
+  expect(m.opened, 'the third, and never the second').toEqual([
+    PART_NAMES[0],
+    PART_NAMES[2],
+  ]);
 
   await source.read(second!.end - 1, 2);
   expect(m.opened).toEqual([PART_NAMES[0], PART_NAMES[2], PART_NAMES[1]]);
-  expect(Buffer.from(await source.read(0, source.size)).equals(Buffer.from(bytes))).toBe(true);
-  expect(m.opened, "each part once").toHaveLength(PARTS);
+  expect(
+    Buffer.from(await source.read(0, source.size)).equals(Buffer.from(bytes)),
+  ).toBe(true);
+  expect(m.opened, 'each part once').toHaveLength(PARTS);
 });
 
 // A later part is checked against the first part's header, so the first
 // part is opened with it.
-test("a later part read first is opened with the first part, and no other", async () => {
+test('a later part read first is opened with the first part, and no other', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
-  const source = await openMulti([m.handler], parts, "first");
+  const source = await openMulti([m.handler], parts, 'first');
   const third = source.map.spans[2]!;
   const read = await source.read(third.start, HEADER_BYTES);
   expect(decoder.decode(read)).toBe(
@@ -337,18 +419,22 @@ test("a later part read first is opened with the first part, and no other", asyn
 
 // With header mode none, a later part is still checked against the first
 // part's delimiter, encoding and column count.
-test("with no header row, a later part read first is opened with the first part too", async () => {
+test('with no header row, a later part read first is opened with the first part too', async () => {
   const m = memory(fixtureFiles());
   const unmeasured = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const { extents } = await openMulti([memory(fixtureFiles()).handler], unmeasured, "none");
+  const { extents } = await openMulti(
+    [memory(fixtureFiles()).handler],
+    unmeasured,
+    'none',
+  );
   const parts = unmeasured.map((part, i) => ({ ...part, extent: extents[i]! }));
-  const source = await openMulti([m.handler], parts, "none");
+  const source = await openMulti([m.handler], parts, 'none');
   await source.read(source.map.spans[1]!.start, HEADER_BYTES);
   expect(m.opened.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[1]]);
 });
 
-test("a virtual newline is read without opening the part it ends", async () => {
-  const { files, parts } = texts("1,2", "3,4\n");
+test('a virtual newline is read without opening the part it ends', async () => {
+  const { files, parts } = texts('1,2', '3,4\n');
   const extents: Extent[] = [
     { bytes: 3, skip: 0, unterminated: true },
     { bytes: 4, skip: 0, unterminated: false },
@@ -357,15 +443,19 @@ test("a virtual newline is read without opening the part it ends", async () => {
   const source = await openMulti(
     [m.handler],
     parts.map((part, i) => ({ ...part, extent: extents[i]! })),
-    "none",
+    'none',
   );
-  expect(decoder.decode(await source.read(3, 1))).toBe("\n");
+  expect(decoder.decode(await source.read(3, 1))).toBe('\n');
   expect(m.opened).toEqual([]);
 });
 
-test("the map says which part every byte came from, at every boundary", async () => {
+test('the map says which part every byte came from, at every boundary', async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const { map, size } = await openMulti([memory(fixtureFiles()).handler], parts, "first");
+  const { map, size } = await openMulti(
+    [memory(fixtureFiles()).handler],
+    parts,
+    'first',
+  );
 
   expect(map.size).toBe(size);
   expect(map.spans.map((s) => s.part)).toEqual([0, 1, 2]);
@@ -381,8 +471,12 @@ test("the map says which part every byte came from, at every boundary", async ()
     expect(map.partAt(span.start), `the first byte of part ${i}`).toBe(i);
     expect(map.partAt(span.end - 1), `the last byte of part ${i}`).toBe(i);
     if (i > 0) {
-      expect(span.start, "each starts where the last one ended").toBe(map.spans[i - 1]!.end);
-      expect(map.partAt(span.start - 1), `the byte before part ${i}`).toBe(i - 1);
+      expect(span.start, 'each starts where the last one ended').toBe(
+        map.spans[i - 1]!.end,
+      );
+      expect(map.partAt(span.start - 1), `the byte before part ${i}`).toBe(
+        i - 1,
+      );
     }
   }
   expect(map.partAt(-1)).toBeUndefined();
@@ -391,11 +485,19 @@ test("the map says which part every byte came from, at every boundary", async ()
 });
 
 // A row is in the part its first byte is in.
-test("the map puts every row of the fixture in the part that holds it", async () => {
+test('the map puts every row of the fixture in the part that holds it', async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const { map } = await openMulti([memory(fixtureFiles()).handler], parts, "first");
+  const { map } = await openMulti(
+    [memory(fixtureFiles()).handler],
+    parts,
+    'first',
+  );
   const counts = Array.from({ length: PARTS }, () => 0);
-  for (let at = HEADER_BYTES; at < bytes.length; at = bytes.indexOf(LF, at) + 1) {
+  for (
+    let at = HEADER_BYTES;
+    at < bytes.length;
+    at = bytes.indexOf(LF, at) + 1
+  ) {
     const part = map.partAt(at)!;
     counts[part]!++;
     // The row is in that part's own bytes, at the offset the span says.
@@ -403,11 +505,12 @@ test("the map puts every row of the fixture in the part that holds it", async ()
     const within = span.skip + (at - span.start);
     expect(partBytes[part]![within]).toBe(bytes[at]);
   }
-  const rows = (held: Uint8Array): number => held.filter((b) => b === LF).length - 1;
+  const rows = (held: Uint8Array): number =>
+    held.filter((b) => b === LF).length - 1;
   expect(counts).toEqual(partBytes.map(rows));
 });
 
-test("the map lays out a virtual newline, and a part that gives nothing", () => {
+test('the map lays out a virtual newline, and a part that gives nothing', () => {
   const map = partMap([
     { bytes: 10, skip: 0, unterminated: true },
     { bytes: 4, skip: 4, unterminated: true },
@@ -432,53 +535,68 @@ test("the map lays out a virtual newline, and a part that gives nothing", () => 
 });
 
 test("a part whose header is not the first part's is refused by name", async () => {
-  const { files, parts } = texts("a,b\n1,2\n", "a,b\n3,4\n", "a,c\n5,6\n");
+  const { files, parts } = texts('a,b\n1,2\n', 'a,b\n3,4\n', 'a,c\n5,6\n');
   const m = memory(files);
-  await expect(openMulti([m.handler], parts, "first")).rejects.toThrow(
+  await expect(openMulti([m.handler], parts, 'first')).rejects.toThrow(
     'c.csv (part 3 of 3): column 2 is "c" where a.csv has "b"',
   );
-  expect(m.closed.toSorted(), "and what it opened is closed").toEqual(m.opened.toSorted());
+  expect(m.closed.toSorted(), 'and what it opened is closed').toEqual(
+    m.opened.toSorted(),
+  );
 });
 
-test("a part that cannot be opened is named", async () => {
-  const { files, parts } = texts("a,b\n1,2\n", "a,b\n3,4\n");
-  files.delete("b.csv");
+test('a part that cannot be opened is named', async () => {
+  const { files, parts } = texts('a,b\n1,2\n', 'a,b\n3,4\n');
+  files.delete('b.csv');
   const m = memory(files);
-  await expect(openMulti([m.handler], parts, "first")).rejects.toThrow(
-    "b.csv (part 2 of 2): b.csv: no such file",
+  await expect(openMulti([m.handler], parts, 'first')).rejects.toThrow(
+    'b.csv (part 2 of 2): b.csv: no such file',
   );
   expect(m.closed).toEqual(m.opened);
   // A part outside every handler is refused, naming the part.
   await expect(
-    openMulti([m.handler], [parts[0]!, { ref: { name: "c.csv", path: "/tmp/c.csv" } }], "first"),
+    openMulti(
+      [m.handler],
+      [parts[0]!, { ref: { name: 'c.csv', path: '/tmp/c.csv' } }],
+      'first',
+    ),
   ).rejects.toThrow(/^c\.csv \(part 2 of 2\): /);
-  await expect(openMulti([m.handler], [], "first")).rejects.toThrow("at least one part");
+  await expect(openMulti([m.handler], [], 'first')).rejects.toThrow(
+    'at least one part',
+  );
 });
 
-test("a part that is not what its extent says is refused when a read reaches it", async () => {
+test('a part that is not what its extent says is refused when a read reaches it', async () => {
   const parts = await measuredParts();
   const files = fixtureFiles();
-  const longer = Uint8Array.of(...partBytes[1]!, ...encoder.encode("2026-09-30,West\r\n"));
+  const longer = Uint8Array.of(
+    ...partBytes[1]!,
+    ...encoder.encode('2026-09-30,West\r\n'),
+  );
   files.set(PART_NAMES[1]!, longer);
   const m = memory(files);
-  const source = await openMulti([m.handler], parts, "first");
+  const source = await openMulti([m.handler], parts, 'first');
   const [first, second] = source.map.spans;
-  expect((await source.read(first!.start, HEADER_BYTES)).length).toBe(HEADER_BYTES);
+  expect((await source.read(first!.start, HEADER_BYTES)).length).toBe(
+    HEADER_BYTES,
+  );
   await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(
     `${PART_NAMES[1]} (part 2 of 3): it is not the file this source was made from · it is ${longer.length} bytes and was ${partBytes[1]!.length}`,
   );
-  expect(m.closed, "and it is not left open").toEqual([PART_NAMES[1]]);
+  expect(m.closed, 'and it is not left open').toEqual([PART_NAMES[1]]);
 
   // Restored, it reads: a failed open is retried.
   files.set(PART_NAMES[1]!, partBytes[1]!);
-  expect((await source.read(second!.start, HEADER_BYTES)).length).toBe(HEADER_BYTES);
+  expect((await source.read(second!.start, HEADER_BYTES)).length).toBe(
+    HEADER_BYTES,
+  );
 });
 
-test("a part that comes up short under a read is named", async () => {
+test('a part that comes up short under a read is named', async () => {
   const held = new Map(fixtureFiles());
   const SHORT = 100;
   const handler: FileHandler = {
-    label: "memory",
+    label: 'memory',
     handles: () => true,
     open(ref) {
       const source = bytesSource(held.get(ref.name)!);
@@ -489,58 +607,70 @@ test("a part that comes up short under a read is named", async () => {
         read: (offset, length) =>
           source.read(
             offset,
-            cut && offset + length < source.size ? Math.min(length, SHORT) : length,
+            cut && offset + length < source.size
+              ? Math.min(length, SHORT)
+              : length,
           ),
       });
     },
   };
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
-  const source = await openMulti([handler], parts, "none");
-  await expect(source.read(source.map.spans[2]!.start, 2 * SHORT)).rejects.toThrow(
+  const source = await openMulti([handler], parts, 'none');
+  await expect(
+    source.read(source.map.spans[2]!.start, 2 * SHORT),
+  ).rejects.toThrow(
     `${PART_NAMES[2]} (part 3 of 3): it changed since it was opened`,
   );
 });
 
-test("each part is asked for as its ref says, version and all, and says its own", async () => {
+test('each part is asked for as its ref says, version and all, and says its own', async () => {
   const m = memory(fixtureFiles());
   const parts: Part[] = PART_NAMES.map((name, i) => ({
     ref: { ...inMemory(name), version: `saved-${i}` },
   }));
-  const source = await openMulti([m.handler], parts, "first");
-  expect(m.refs.toSorted((a, b) => a.name.localeCompare(b.name))).toEqual(parts.map((p) => p.ref));
+  const source = await openMulti([m.handler], parts, 'first');
+  expect(m.refs.toSorted((a, b) => a.name.localeCompare(b.name))).toEqual(
+    parts.map((p) => p.ref),
+  );
   expect(source.version).toBeUndefined();
-  expect(await source.versions()).toEqual(PART_NAMES.map((name) => `"${name}"`));
+  expect(await source.versions()).toEqual(
+    PART_NAMES.map((name) => `"${name}"`),
+  );
 });
 
-test("closing closes each part that was opened, and no other", async () => {
+test('closing closes each part that was opened, and no other', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
-  const source = await openMulti([m.handler], parts, "first");
+  const source = await openMulti([m.handler], parts, 'first');
   await source.read(source.map.spans[2]!.start, HEADER_BYTES);
   await source.close();
   expect(m.closed.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[2]]);
 });
 
 /** What a read of a source that was closed is refused with. */
-const CLOSED = "the source was closed";
+const CLOSED = 'the source was closed';
 
 // A read after close is refused, with every part left closed.
-test("a read after close is refused, and opens nothing", async () => {
+test('a read after close is refused, and opens nothing', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
-  const source = await openMulti([m.handler], parts, "first");
+  const source = await openMulti([m.handler], parts, 'first');
   const [first, second, third] = source.map.spans;
   await source.read(first!.start, HEADER_BYTES);
   await source.close();
 
   // A part that was open, one that stayed closed, and a read across all three.
   await expect(source.read(first!.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
-  await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
+  await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(
+    CLOSED,
+  );
   await expect(source.read(0, source.size)).rejects.toThrow(CLOSED);
   await expect(source.versions()).rejects.toThrow(CLOSED);
   expect(third!.end).toBe(source.size);
-  expect(m.opened, "nothing is opened for a read that is refused").toEqual([PART_NAMES[0]]);
-  expect(m.closed, "and nothing is left open").toEqual([PART_NAMES[0]]);
+  expect(m.opened, 'nothing is opened for a read that is refused').toEqual([
+    PART_NAMES[0],
+  ]);
+  expect(m.closed, 'and nothing is left open').toEqual([PART_NAMES[0]]);
 
   // A second close leaves things as they are.
   await source.close();
@@ -581,11 +711,11 @@ function slow(inner: FileHandler): {
   };
 }
 
-test("a part whose open is in flight when the source closes is closed when it lands", async () => {
+test('a part whose open is in flight when the source closes is closed when it lands', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
   const held = slow(m.handler);
-  const source = await openMulti([held.handler], parts, "first");
+  const source = await openMulti([held.handler], parts, 'first');
   const reading = source.read(source.map.spans[0]!.start, HEADER_BYTES);
   await held.asked;
 
@@ -594,16 +724,18 @@ test("a part whose open is in flight when the source closes is closed when it la
   await expect(reading).rejects.toThrow(CLOSED);
   await closing;
   expect(m.opened).toEqual([PART_NAMES[0]]);
-  expect(m.closed, "the open that landed after the close").toEqual([PART_NAMES[0]]);
+  expect(m.closed, 'the open that landed after the close').toEqual([
+    PART_NAMES[0],
+  ]);
 });
 
 // Opening a later part also opens the first part for its header. After the
 // close, the first part stays closed.
-test("a later part landing after the close does not open the first part behind it", async () => {
+test('a later part landing after the close does not open the first part behind it', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
   const held = slow(m.handler);
-  const source = await openMulti([held.handler], parts, "first");
+  const source = await openMulti([held.handler], parts, 'first');
   const reading = source.read(source.map.spans[1]!.start, HEADER_BYTES);
   await held.asked;
 
@@ -627,32 +759,43 @@ afterAll(() => b.close());
 function mixed(): { handlers: FileHandler[]; parts: Part[] } {
   return {
     handlers: [
-      s3Files({ credentials: () => Promise.resolve(KEYS), endpoint: b.endpoint }),
+      s3Files({
+        credentials: () => Promise.resolve(KEYS),
+        endpoint: b.endpoint,
+      }),
       localFiles(),
       blobFiles(),
     ],
     parts: [
       { ref: { name: PART_NAMES[0]!, path: PART_FIXTURES[0]! } },
       { ref: at(KEY) },
-      { ref: { name: PART_NAMES[2]!, blob: new Blob([partBytes[2]!.slice()]) } },
+      {
+        ref: { name: PART_NAMES[2]!, blob: new Blob([partBytes[2]!.slice()]) },
+      },
     ],
   };
 }
 
-test("a file on disk, an object in a bucket and dropped bytes read as one", async () => {
+test('a file on disk, an object in a bucket and dropped bytes read as one', async () => {
   const { handlers, parts } = mixed();
-  const source = await openMulti(handlers, parts, "first");
+  const source = await openMulti(handlers, parts, 'first');
   try {
-    expect(Buffer.from(await source.read(0, source.size)).equals(Buffer.from(bytes))).toBe(true);
-    expect(await source.versions()).toEqual([undefined, etagOf(partBytes[1]!), undefined]);
+    expect(
+      Buffer.from(await source.read(0, source.size)).equals(Buffer.from(bytes)),
+    ).toBe(true);
+    expect(await source.versions()).toEqual([
+      undefined,
+      etagOf(partBytes[1]!),
+      undefined,
+    ]);
   } finally {
     await source.close();
   }
 });
 
-test("an object written over while it is being read is an error that names the part", async () => {
+test('an object written over while it is being read is an error that names the part', async () => {
   const { handlers, parts } = mixed();
-  const source = await openMulti(handlers, parts, "first");
+  const source = await openMulti(handlers, parts, 'first');
   try {
     const [first, second] = source.map.spans;
     // Same size, different bytes: only the version shows the change.
@@ -664,7 +807,9 @@ test("an object written over while it is being read is an error that names the p
       `${PART_NAMES[1]} (part 2 of 3): ${at(KEY).path} changed in the bucket since it was opened · open it again`,
     );
     // The parts around it still read.
-    expect((await source.read(first!.start, HEADER_BYTES)).length).toBe(HEADER_BYTES);
+    expect((await source.read(first!.start, HEADER_BYTES)).length).toBe(
+      HEADER_BYTES,
+    );
   } finally {
     b.objects.set(KEY, partBytes[1]!);
     await source.close();

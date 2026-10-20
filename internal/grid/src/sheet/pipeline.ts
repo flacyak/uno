@@ -4,18 +4,18 @@
 // order and each call starts fresh. A formula is computed a column at a time
 // over the block of rows being finished.
 
-import { formatFloat, roundSignificant } from "../go/index.ts";
-import type { Columns } from "../formula/index.ts";
-import { evaluateColumn } from "../formula/index.ts";
-import { apply as applyProgram } from "../program/index.ts";
-import type { Program } from "../program/index.ts";
-import type { Schema, Written } from "./schema.ts";
+import { formatFloat, roundSignificant } from '../go/index.ts';
+import type { Columns } from '../formula/index.ts';
+import { evaluateColumn } from '../formula/index.ts';
+import { apply as applyProgram } from '../program/index.ts';
+import type { Program } from '../program/index.ts';
+import type { Schema, Written } from './schema.ts';
 
 /**
  * ERR_CELL is what a bound column shows where its expression failed on a
  * row. The reason is shown in the editor.
  */
-export const ERR_CELL = "#ERR";
+export const ERR_CELL = '#ERR';
 
 /**
  * SHOWN_DIGITS is how many significant digits a computed cell keeps: the
@@ -65,7 +65,7 @@ function stored(
 
   if (w === undefined) {
     // A short row ends before this column, so the cell is "" as it stands.
-    if (col >= source.length) return "";
+    if (col >= source.length) return '';
     let v = source[col]!;
     if (runs !== undefined) for (const r of runs) v = applyProgram(r.prog, v);
     return v;
@@ -73,7 +73,8 @@ function stored(
 
   let v = w.now;
   if (runs !== undefined) {
-    for (const r of runs) if (r.seq > w.seq && !settled(r.prog, w)) v = applyProgram(r.prog, v);
+    for (const r of runs)
+      if (r.seq > w.seq && !settled(r.prog, w)) v = applyProgram(r.prog, v);
   }
   return v;
 }
@@ -83,14 +84,21 @@ function stored(
  * written gives what was written. Such a cell is one the program was learned
  * from, so an apply leaves it alone and the recogniser skips it.
  */
-export function settled(prog: Program, w: Pick<Written, "was" | "now">): boolean {
+export function settled(
+  prog: Program,
+  w: Pick<Written, 'was' | 'now'>,
+): boolean {
   return w.was !== undefined && applyProgram(prog, w.was) === w.now;
 }
 
 /**
  * finish applies the log to one source row.
  */
-export function finish(schema: Schema, row: number, source: readonly string[]): Finished {
+export function finish(
+  schema: Schema,
+  row: number,
+  source: readonly string[],
+): Finished {
   return finishRows(schema, row, [source])[0]!;
 }
 
@@ -119,7 +127,13 @@ export function finishRows(
 
   const order = schema.computedColumns();
   const out = sources.map((source, i) =>
-    finishCells(schema, first + i, source, order.length > 0, supplied?.[i] ?? ""),
+    finishCells(
+      schema,
+      first + i,
+      source,
+      order.length > 0,
+      supplied?.[i] ?? '',
+    ),
   );
   if (order.length === 0 || out.length === 0) return out;
 
@@ -134,9 +148,14 @@ export function finishRows(
     },
   };
   for (const c of order) {
-    const { values, errors } = evaluateColumn(schema.formula(c)!, shown.length, columns);
+    const { values, errors } = evaluateColumn(
+      schema.formula(c)!,
+      shown.length,
+      columns,
+    );
     for (let i = 0; i < shown.length; i++) {
-      shown[i]![c] = errors[i] === undefined ? formatValue(values[i]!) : ERR_CELL;
+      shown[i]![c] =
+        errors[i] === undefined ? formatValue(values[i]!) : ERR_CELL;
     }
   }
   return out;
@@ -162,7 +181,9 @@ function finishCells(
   const fill = schema.supplied?.col;
   const raw: string[] = [];
   for (let c = 0; c < width; c++) {
-    raw.push(c === fill ? supplied : stored(schema, c, written?.get(c), source));
+    raw.push(
+      c === fill ? supplied : stored(schema, c, written?.get(c), source),
+    );
   }
 
   let notes = false;
@@ -178,7 +199,8 @@ function finishCells(
 
   const shown = raw.slice();
   if (notes) {
-    for (const [c, w] of written!) if (w.rendered !== undefined) shown[c] = w.rendered;
+    for (const [c, w] of written!)
+      if (w.rendered !== undefined) shown[c] = w.rendered;
   }
   return { raw, shown };
 }

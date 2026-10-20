@@ -4,16 +4,16 @@
 //
 // The engine and the S3 provider are the real ones. Only `fetch` is wrapped.
 
-import { setTimeout as sleep } from "node:timers/promises";
+import { setTimeout as sleep } from 'node:timers/promises';
 
-import { Engine } from "../../src/engine/index.ts";
-import type { SourceHandle, Tuning } from "../../src/engine/index.ts";
-import { diskProvider } from "../../src/store/node.ts";
-import { s3Provider } from "../../src/store/s3.ts";
-import { bytes, connect, openOne } from "../engine/harness.ts";
-import { HOME_REGION } from "../store/regions.ts";
-import { BUCKET, KEYS, bucket } from "../store/standin.ts";
-import type { Bucket } from "../store/standin.ts";
+import { Engine } from '../../src/engine/index.ts';
+import type { SourceHandle, Tuning } from '../../src/engine/index.ts';
+import { diskProvider } from '../../src/store/node.ts';
+import { s3Provider } from '../../src/store/s3.ts';
+import { bytes, connect, openOne } from '../engine/harness.ts';
+import { HOME_REGION } from '../store/regions.ts';
+import { BUCKET, KEYS, bucket } from '../store/standin.ts';
+import type { Bucket } from '../store/standin.ts';
 
 /** Asked is one request the engine sent. */
 export interface Asked {
@@ -37,7 +37,7 @@ const QUIET_ROUNDS = 3;
 const RANGE = /^bytes=(\d+)-(\d+)$/;
 
 function askedOf(init: RequestInit | undefined): Asked {
-  const m = RANGE.exec(new Headers(init?.headers).get("range") ?? "");
+  const m = RANGE.exec(new Headers(init?.headers).get('range') ?? '');
   if (m === null) return { offset: undefined, length: 0 };
   return { offset: Number(m[1]), length: Number(m[2]) - Number(m[1]) + 1 };
 }
@@ -107,7 +107,10 @@ export class Door {
    * during waits for `work`, calling `step` each time the engine goes quiet
    * before `work` has settled. Throws on a quiet with the hold empty.
    */
-  async during<T>(work: Promise<T>, step: () => void = () => this.letAll()): Promise<T> {
+  async during<T>(
+    work: Promise<T>,
+    step: () => void = () => this.letAll(),
+  ): Promise<T> {
     let settled = false;
     const done = work.finally(() => {
       settled = true;
@@ -118,7 +121,7 @@ export class Door {
       await this.quiet();
       if (settled) return done;
       if (this.held.length === 0)
-        throw new Error("the engine is waiting on nothing the bucket holds");
+        throw new Error('the engine is waiting on nothing the bucket holds');
       step();
     }
   }
@@ -130,9 +133,15 @@ export class Door {
   }
 
   /** Requests in `of` from index `from` on, and the bytes their ranges cover. */
-  since(from: number, of: readonly Asked[] = this.asked): { requests: number; bytes: number } {
+  since(
+    from: number,
+    of: readonly Asked[] = this.asked,
+  ): { requests: number; bytes: number } {
     const sent = of.slice(from);
-    return { requests: sent.length, bytes: sent.reduce((sum, a) => sum + a.length, 0) };
+    return {
+      requests: sent.length,
+      bytes: sent.reduce((sum, a) => sum + a.length, 0),
+    };
   }
 }
 
@@ -146,7 +155,7 @@ export function repeated(repeats: number): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-const KEY = "2025/big.csv";
+const KEY = '2025/big.csv';
 
 /** Remote is one object in a stand-in bucket, an engine, and the Door between. */
 export interface Remote {
@@ -158,8 +167,15 @@ export interface Remote {
 }
 
 /** remote serves `object` from the stand-in bucket to an engine tuned by `tuning`. */
-export async function remote(object: Uint8Array, tuning: Tuning): Promise<Remote> {
-  const b: Bucket = await bucket(undefined, HOME_REGION, new Map([[KEY, object]]));
+export async function remote(
+  object: Uint8Array,
+  tuning: Tuning,
+): Promise<Remote> {
+  const b: Bucket = await bucket(
+    undefined,
+    HOME_REGION,
+    new Map([[KEY, object]]),
+  );
   const door = new Door();
   const s3 = s3Provider({
     credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
@@ -170,7 +186,8 @@ export async function remote(object: Uint8Array, tuning: Tuning): Promise<Remote
   return {
     door,
     engine,
-    open: () => openOne(engine, { name: "big.csv", path: `s3://${BUCKET}/${KEY}` }),
+    open: () =>
+      openOne(engine, { name: 'big.csv', path: `s3://${BUCKET}/${KEY}` }),
     async close() {
       door.release();
       await door.quiet();

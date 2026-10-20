@@ -27,31 +27,31 @@ export interface Edit {
  */
 export const Op = {
   /** Sets one cell. */
-  Set: "set",
+  Set: 'set',
 
   /**
    * Runs a program over a whole column. Leaves `was` undefined.
    */
-  Apply: "apply",
+  Apply: 'apply',
 
   /**
    * Puts notation in one cell: markdown is stored, the rendered symbols are
    * shown. It stands alone, outside the dependency graph.
    */
-  Note: "note",
+  Note: 'note',
 
   /**
    * Binds a formula to a column. The column then shows what the expression
    * computes in place of its stored values. It is logged so it can be
    * undone.
    */
-  Bind: "bind",
+  Bind: 'bind',
 
   /**
    * Takes the formula off a column. The column shows its stored values
    * again. `was` carries the expression removed.
    */
-  Unbind: "unbind",
+  Unbind: 'unbind',
 } as const;
 
 export type Op = (typeof Op)[keyof typeof Op];
@@ -68,7 +68,7 @@ export function editEquals(a: Edit, b: Edit): boolean {
     a.op === b.op &&
     a.row === b.row &&
     a.col === b.col &&
-    (a.was ?? "") === (b.was ?? "") &&
+    (a.was ?? '') === (b.was ?? '') &&
     a.now === b.now
   );
 }

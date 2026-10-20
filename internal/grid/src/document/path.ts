@@ -7,7 +7,7 @@
 //
 // This runs in the browser too, so it uses string operations only.
 
-import { isRemote } from "../store/index.ts";
+import { isRemote } from '../store/index.ts';
 
 /** Matches either separator. A .uno written on Windows opens on Linux. */
 const SEP = /[/\\]/;
@@ -21,7 +21,7 @@ export function isAbsolute(path: string): boolean {
 /** dirOf returns the folder part of a path, or "" for a bare name. */
 export function dirOf(path: string): string {
   const cut = lastSep(path);
-  return cut < 0 ? "" : path.slice(0, cut);
+  return cut < 0 ? '' : path.slice(0, cut);
 }
 
 /** baseOf returns the file name part of a path. */
@@ -35,12 +35,12 @@ export function baseOf(path: string): string {
  * result is a plain descent from `dir`.
  */
 export function relativeTo(file: string, dir: string): string {
-  if (dir === "" || file === "") return "";
+  if (dir === '' || file === '') return '';
   const head = file.slice(0, dir.length);
   const sep = file.charAt(dir.length);
-  if (head !== dir || !SEP.test(sep)) return "";
+  if (head !== dir || !SEP.test(sep)) return '';
   const rest = file.slice(dir.length + 1);
-  return rest === "" ? "" : rest.replace(/\\/g, "/");
+  return rest === '' ? '' : rest.replace(/\\/g, '/');
 }
 
 /**
@@ -49,8 +49,8 @@ export function relativeTo(file: string, dir: string): string {
  * is returned unchanged.
  */
 export function against(stored: string, dir: string): string {
-  if (stored === "" || dir === "" || isAbsolute(stored)) return stored;
-  return dir + (SEP.test(dir.charAt(dir.length - 1)) ? "" : "/") + stored;
+  if (stored === '' || dir === '' || isAbsolute(stored)) return stored;
+  return dir + (SEP.test(dir.charAt(dir.length - 1)) ? '' : '/') + stored;
 }
 
 /**
@@ -58,9 +58,9 @@ export function against(stored: string, dir: string): string {
  * separators alike. Case, dot segments and symlinks compare as written.
  */
 export function samePath(a: string, b: string): boolean {
-  return a.replace(/\\/g, "/") === b.replace(/\\/g, "/");
+  return a.replace(/\\/g, '/') === b.replace(/\\/g, '/');
 }
 
 function lastSep(path: string): number {
-  return Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
 }

@@ -3,10 +3,10 @@
 // with the original CRLF line endings. Joined with the second and third
 // headers removed, they equal the whole file byte for byte.
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-import { ROWS } from "./sales-q3.ts";
+import { ROWS } from './sales-q3.ts';
 
 /** How many parts the file is cut into. */
 export const PARTS = 3;

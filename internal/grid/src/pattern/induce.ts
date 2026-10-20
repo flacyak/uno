@@ -10,11 +10,11 @@ import {
   toLower,
   toUpper,
   trimSpace,
-} from "../go/index.ts";
-import type { Program } from "../program/index.ts";
-import { parse as parseProgram, quoteRegex } from "../program/index.ts";
-import type { Run } from "./align.ts";
-import { MAX_DIFF, align } from "./align.ts";
+} from '../go/index.ts';
+import type { Program } from '../program/index.ts';
+import { parse as parseProgram, quoteRegex } from '../program/index.ts';
+import type { Run } from './align.ts';
+import { MAX_DIFF, align } from './align.ts';
 
 /** One demonstrated change: what a cell held before and after the person
  * edited it. */
@@ -31,7 +31,10 @@ export const MAX_PER_EXAMPLE = 256;
  * keeps only the candidates every example shares. Returns them parsed, in
  * sorted order. Adding an example can only shrink the result.
  */
-export function induce(ex: Example[], witness: (was: string, now: string) => string[]): Program[] {
+export function induce(
+  ex: Example[],
+  witness: (was: string, now: string) => string[],
+): Program[] {
   if (ex.length === 0) return [];
 
   let keep = dedup(witness(ex[0]!.was, ex[0]!.now));
@@ -71,7 +74,9 @@ export function parseAll(srcs: string[]): Program[] {
  */
 function dedup(input: string[]): string[] {
   const out = [...new Set(input)];
-  return out.length > MAX_PER_EXAMPLE ? out.sort(compareStrings).slice(0, MAX_PER_EXAMPLE) : out;
+  return out.length > MAX_PER_EXAMPLE
+    ? out.sort(compareStrings).slice(0, MAX_PER_EXAMPLE)
+    : out;
 }
 
 /**
@@ -83,8 +88,8 @@ export function rewrites(was: string, now: string): string[] {
 
   const out: string[] = [];
   if (equalFold(was, now)) {
-    if (now === toUpper(was)) out.push("upper()");
-    if (now === toLower(was)) out.push("lower()");
+    if (now === toUpper(was)) out.push('upper()');
+    if (now === toLower(was)) out.push('lower()');
   }
 
   const a = runes(was);
@@ -133,18 +138,18 @@ function deletions(a: string[], dels: Run[]): string[] {
   const chars = [...dropped].sort(compareStrings);
 
   if (texts.size === 1) {
-    for (const t of texts) out.push(replaceSrc(quoteMeta(t), ""));
+    for (const t of texts) out.push(replaceSrc(quoteMeta(t), ''));
   }
 
   if (decoration(chars)) {
-    const cls = "[" + quoteClass(chars) + "]";
-    out.push(replaceSrc(cls, ""));
-    if (suffix) out.push(replaceSrc(cls + "+$", ""));
-    if (prefix) out.push(replaceSrc("^" + cls + "+", ""));
+    const cls = '[' + quoteClass(chars) + ']';
+    out.push(replaceSrc(cls, ''));
+    if (suffix) out.push(replaceSrc(cls + '+$', ''));
+    if (prefix) out.push(replaceSrc('^' + cls + '+', ''));
   }
 
   // Space removed at both ends is trim's case: each anchor wants one end.
-  if (spaces && edges) out.push("trim()");
+  if (spaces && edges) out.push('trim()');
   return out;
 }
 
@@ -163,9 +168,9 @@ function substitutions(dels: Run[], ins: Run[]): string[] {
   const out = [replaceSrc(quoteMeta(d.text), i.text)];
 
   const chars = [...new Set(runes(d.text))].sort(compareStrings);
-  out.push(replaceSrc("[" + quoteClass(chars) + "]+", i.text));
+  out.push(replaceSrc('[' + quoteClass(chars) + ']+', i.text));
 
-  if (trimSpace(d.text) === "") out.push(replaceSrc("\\s+", i.text));
+  if (trimSpace(d.text) === '') out.push(replaceSrc('\\s+', i.text));
   return out;
 }
 
@@ -200,7 +205,7 @@ export function unionDeletion(ex: Example[]): string[] {
   }
   const chars = droppedChars(ex);
   if (chars.length === 0 || !decoration(chars)) return [];
-  return [replaceSrc("[" + quoteClass(chars) + "]", "")];
+  return [replaceSrc('[' + quoteClass(chars) + ']', '')];
 }
 
 /**
@@ -212,14 +217,14 @@ export function decoration(chars: readonly string[]): boolean {
 }
 
 export function replaceSrc(re: string, lit: string): string {
-  return "replace(" + quoteRegex(re) + ", " + quote(lit) + ")";
+  return 'replace(' + quoteRegex(re) + ', ' + quote(lit) + ')';
 }
 
 /** quoteClass escapes `]`, `\`, `^` and `-` for use inside a character class. */
 export function quoteClass(rs: string[]): string {
-  let out = "";
+  let out = '';
   for (const r of rs) {
-    if ("]\\^-".includes(r)) out += "\\";
+    if (']\\^-'.includes(r)) out += '\\';
     out += r;
   }
   return out;

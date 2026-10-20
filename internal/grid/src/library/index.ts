@@ -1,9 +1,18 @@
 // Package library parses and formats .unof files, one per formula or
 // connection. It works on text alone.
 
-import { rfc3339, runes } from "../go/index.ts";
-import { CONNECTION_KIND } from "./connection.ts";
-import { about, extraOf, readUnof, stamp, textOf, timeOf, writeExtra, wrongKind } from "./unof.ts";
+import { rfc3339, runes } from '../go/index.ts';
+import { CONNECTION_KIND } from './connection.ts';
+import {
+  about,
+  extraOf,
+  readUnof,
+  stamp,
+  textOf,
+  timeOf,
+  writeExtra,
+  wrongKind,
+} from './unof.ts';
 
 // A connection is a .unof too. Re-exported so `@uno/grid/library` covers every
 // kind of .unof.
@@ -16,12 +25,23 @@ export {
   secretIn,
   stampConnection,
   validConnection,
-} from "./connection.ts";
-export type { Auth, AuthMode, Connection, ConnectionProvider } from "./connection.ts";
+} from './connection.ts';
+export type {
+  Auth,
+  AuthMode,
+  Connection,
+  ConnectionProvider,
+} from './connection.ts';
 
 // The IAM documents a role connection asks the bucket's owner to write.
-export { accountOf, permissionPolicy, roleNameOf, rolePolicies, trustPolicy } from "./policy.ts";
-export type { RolePolicies, RolePolicyAsk, RoleTrust } from "./policy.ts";
+export {
+  accountOf,
+  permissionPolicy,
+  roleNameOf,
+  rolePolicies,
+  trustPolicy,
+} from './policy.ts';
+export type { RolePolicies, RolePolicyAsk, RoleTrust } from './policy.ts';
 
 /**
  * FORMAT_VERSION is the highest layout this build reads, and the one it
@@ -30,10 +50,10 @@ export type { RolePolicies, RolePolicyAsk, RoleTrust } from "./policy.ts";
 export const FORMAT_VERSION = 1;
 
 /** The extension every .unof shares. */
-export const EXT = ".unof";
+export const EXT = '.unof';
 
 /** Kind is which kind of formula a .unof holds. */
-export type Kind = "column" | "notation";
+export type Kind = 'column' | 'notation';
 
 /** Formula is one .unof, holding what the file holds. */
 export interface Formula {
@@ -60,7 +80,16 @@ export interface Formula {
 }
 
 /** The keys this build owns. Anything else in the file goes into `extra`. */
-const KNOWN_KEYS = new Set(["format", "id", "name", "kind", "expr", "refs", "created", "modified"]);
+const KNOWN_KEYS = new Set([
+  'format',
+  'id',
+  'name',
+  'kind',
+  'expr',
+  'refs',
+  'created',
+  'modified',
+]);
 const isKnown = (key: string): boolean => KNOWN_KEYS.has(key);
 
 /**
@@ -73,8 +102,9 @@ const MAX_ID_LEN = 200;
  * one over MAX_ID_LEN bytes, one starting with a dot, one holding `/`, `\`
  * or `:`, and one holding a control character.
  */
-export function validID(id: string, what = "formula"): void {
-  if (id === "") throw new Error(`a ${what} with no id has no file to be saved in`);
+export function validID(id: string, what = 'formula'): void {
+  if (id === '')
+    throw new Error(`a ${what} with no id has no file to be saved in`);
 
   const bytes = new TextEncoder().encode(id).length;
   if (bytes > MAX_ID_LEN) {
@@ -84,22 +114,26 @@ export function validID(id: string, what = "formula"): void {
   }
   // A leading dot covers "." and "..", hidden files, and the temp files of an
   // atomic write.
-  if (id.startsWith(".")) {
-    throw new Error(`${what} id ${JSON.stringify(id)} may not start with a dot`);
+  if (id.startsWith('.')) {
+    throw new Error(
+      `${what} id ${JSON.stringify(id)} may not start with a dot`,
+    );
   }
   for (const r of runes(id)) {
-    if (r === "/" || r === "\\" || r === ":") {
+    if (r === '/' || r === '\\' || r === ':') {
       throw new Error(`${what} id ${JSON.stringify(id)} may not name a path`);
     }
     const cp = r.codePointAt(0)!;
     if (cp < 0x20 || cp === 0x7f) {
-      throw new Error(`${what} id ${JSON.stringify(id)} contains a control character`);
+      throw new Error(
+        `${what} id ${JSON.stringify(id)} contains a control character`,
+      );
     }
   }
 }
 
 /** fileName is the only place an id becomes a path. It runs `validID` first. */
-export function fileName(id: string, what = "formula"): string {
+export function fileName(id: string, what = 'formula'): string {
   validID(id, what);
   return id + EXT;
 }
@@ -112,28 +146,28 @@ export function parseFormula(name: string, text: string): Formula {
   const { o, format } = readUnof(name, text);
 
   // A connection .unof in the formula folder is refused by name.
-  const kind = o["kind"];
-  if (kind !== "column" && kind !== "notation") {
-    throw wrongKind(name, kind, "formula", {
+  const kind = o['kind'];
+  if (kind !== 'column' && kind !== 'notation') {
+    throw wrongKind(name, kind, 'formula', {
       kinds: [CONNECTION_KIND],
-      is: "a connection",
-      dir: "connections/",
+      is: 'a connection',
+      dir: 'connections/',
     });
   }
 
   const f: Formula = {
     format,
-    id: textOf(o, "id"),
-    name: textOf(o, "name"),
+    id: textOf(o, 'id'),
+    name: textOf(o, 'name'),
     kind,
-    expr: textOf(o, "expr"),
-    created: timeOf(o, "created"),
-    modified: timeOf(o, "modified"),
+    expr: textOf(o, 'expr'),
+    created: timeOf(o, 'created'),
+    modified: timeOf(o, 'modified'),
   };
 
-  const refs = o["refs"];
+  const refs = o['refs'];
   if (Array.isArray(refs)) {
-    const named = refs.filter((r): r is string => typeof r === "string");
+    const named = refs.filter((r): r is string => typeof r === 'string');
     if (named.length > 0) f.refs = named;
   }
   const extra = extraOf(o, isKnown);
@@ -161,11 +195,14 @@ export function formatFormula(f: Formula): { text: string; stamped: Formula } {
     kind: stamped.kind,
     expr: stamped.expr,
   };
-  if (stamped.refs !== undefined && stamped.refs.length > 0) out["refs"] = stamped.refs;
-  out["created"] = stamped.created === undefined ? undefined : rfc3339(stamped.created);
-  out["modified"] = stamped.modified === undefined ? undefined : rfc3339(stamped.modified);
+  if (stamped.refs !== undefined && stamped.refs.length > 0)
+    out['refs'] = stamped.refs;
+  out['created'] =
+    stamped.created === undefined ? undefined : rfc3339(stamped.created);
+  out['modified'] =
+    stamped.modified === undefined ? undefined : rfc3339(stamped.modified);
   writeExtra(out, stamped.extra, isKnown);
 
   // The expression is written verbatim: a "<" stays a "<".
-  return { text: JSON.stringify(out, undefined, 2) + "\n", stamped };
+  return { text: JSON.stringify(out, undefined, 2) + '\n', stamped };
 }
