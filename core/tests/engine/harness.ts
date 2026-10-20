@@ -5,8 +5,9 @@
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
-import { Engine, english, messagePort, serve } from '@engine';
+import { Engine, Refusal, english, messagePort, serve } from '@engine';
 import type {
   MessagePortLike,
   Reply,
@@ -153,6 +154,23 @@ export function sheetRows(
 /** Rows padded with "" to the fixture's column count. */
 export function widened(rows: string[][]): string[][] {
   return rows.map((r) => sales.columns.map((_, col) => r[col] ?? ''));
+}
+
+/** A fixture's path in tests/testdata. */
+export function testdata(name: string): string {
+  return fileURLToPath(new URL(`../testdata/${name}`, import.meta.url));
+}
+
+/** The Refusal `asked` rejects with. Fails if it is anything else. */
+export async function refusal(asked: Promise<unknown>): Promise<Refusal> {
+  const err: unknown = await asked.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  if (!(err instanceof Refusal)) {
+    throw new Error(`expected a Refusal, and got ${String(err)}`);
+  }
+  return err;
 }
 
 /** `said` in English, or undefined for an undefined `said`. */

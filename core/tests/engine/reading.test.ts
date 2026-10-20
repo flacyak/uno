@@ -7,7 +7,6 @@
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vite-plus/test';
 
 import { Refusal, RowIndex, TUNING } from '@engine';
@@ -19,6 +18,7 @@ import type { Said, Unread } from '@said';
 import { bytesSource } from '@store';
 import type { ByteSource } from '@store';
 import { ROWS, bytes } from '@core-tests/testdata/sales-q3';
+import { testdata } from './harness.ts';
 
 test('a row index has indexed the bytes it has scanned, out of the size', () => {
   const index = new RowIndex(10, 1010, { blockRows: 2, blockBytes: 1 << 20 });
@@ -72,10 +72,8 @@ type Seen =
 
 /** What `open` makes of a test file, or how it fails. */
 function seen(name: string, open: (source: ByteSource) => Promise<Seen>) {
-  const path = fileURLToPath(new URL(name, TESTDATA));
-  return open(bytesSource(readFileSync(path))).catch((err: unknown) => ({
-    failed: String(err),
-  }));
+  const source = bytesSource(readFileSync(testdata(name)));
+  return open(source).catch((err: unknown) => ({ failed: String(err) }));
 }
 
 /** What openFormat makes of a test file. */
