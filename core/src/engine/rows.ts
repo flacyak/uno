@@ -6,7 +6,6 @@
  * block cache keeps decoded blocks up to a budget of what each costs.
  */
 
-import type { Format } from '@ingest';
 import { Refusal } from '@said';
 import type { ByteSource } from '@store';
 
@@ -189,6 +188,12 @@ export class BlockCache {
   }
 }
 
+/** Decoder turns the bytes of one block into its records. */
+export interface Decoder {
+  /** The records in bytes that begin and end on a record boundary. */
+  decode(bytes: Uint8Array): string[][];
+}
+
 /**
  * Pages reads rows through an index and caches decoded blocks.
  *
@@ -197,22 +202,22 @@ export class BlockCache {
  */
 export class Pages {
   private readonly name: string;
-  private readonly source: ByteSource;
-  private readonly format: Format;
+  private readonly source: Pick<ByteSource, 'read'>;
+  private readonly decoder: Decoder;
   private readonly index: RowIndex;
   private readonly cache: BlockCache;
   private readonly loading = new Map<number, Promise<string[][]>>();
 
   constructor(
     name: string,
-    source: ByteSource,
-    format: Format,
+    source: Pick<ByteSource, 'read'>,
+    decoder: Decoder,
     index: RowIndex,
     budget: number,
   ) {
     this.name = name;
     this.source = source;
-    this.format = format;
+    this.decoder = decoder;
     this.index = index;
     this.cache = new BlockCache(budget);
   }
@@ -263,7 +268,7 @@ export class Pages {
   private async decode(block: number): Promise<string[][]> {
     const [start, end] = this.index.bytesOf(block);
     const [from, to] = this.index.rowsOf(block);
-    const records = this.format.decode(
+    const records = this.decoder.decode(
       await this.source.read(start, end - start),
     );
 
