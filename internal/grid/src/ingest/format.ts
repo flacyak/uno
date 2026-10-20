@@ -5,6 +5,7 @@
 // CSV and TSV are the only formats today.
 
 import { english } from '../said/index.ts';
+import { unreachable } from '../never.ts';
 import type { ByteSource } from '../store/index.ts';
 import { readAll } from './csv.ts';
 import { RecordScanner, bomLength } from './scan.ts';
@@ -70,6 +71,8 @@ export function decodersFor(name: string, encoding: Encoding): Decoders {
     case 'utf-16le':
     case 'utf-16be':
       throw new UnsupportedEncodingError(name, encoding);
+    default:
+      return unreachable(encoding);
   }
 }
 

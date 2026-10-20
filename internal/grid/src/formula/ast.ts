@@ -1,6 +1,7 @@
 // The expression tree: a discriminated union of five node kinds.
 
 import { compareStrings } from '../go/index.ts';
+import { unreachable } from '../never.ts';
 
 /**
  * NumLit is a number literal. `text` is how it was written and `value` is
@@ -68,6 +69,8 @@ export function text(n: Node): string {
       return '-' + text(n.operand);
     case 'group':
       return '(' + text(n.inner) + ')';
+    default:
+      return unreachable(n);
   }
 }
 
@@ -88,6 +91,8 @@ function collectRefs(n: Node, into: Set<string>): void {
     case 'group':
       collectRefs(n.inner, into);
       return;
+    default:
+      return unreachable(n);
   }
 }
 
