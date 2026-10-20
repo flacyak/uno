@@ -9,11 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { PARQUET_MAGIC_BYTES, detect } from '@ingest/detect';
+import { PARQUET_MAGIC_BYTES, detect, kindOf } from '@ingest/detect';
 import type { Detected, StoredHead } from '@ingest/detect';
 import { sniffEncoding } from '@ingest/sniff';
-import type { Unread } from '@said';
+import type { ReadKind, Unread } from '@said';
 import { random } from '@core-tests/random';
+
+/** The fixtures' folder, ending in its separator. */
+const testdata = fileURLToPath(new URL('../testdata/', import.meta.url));
 
 /** How much of a file a head holds here: as much as a peek reads. */
 const HEAD_BYTES = 64 << 10;
@@ -210,8 +213,26 @@ describe('then the name and the first line decide', () => {
   });
 });
 
+describe('what a file is detected as names the kind of rows it holds', () => {
+  test('read or not yet, and none behind a compression or for a JSON document', async () => {
+    const kinds: ReadonlyArray<readonly [string, ReadKind | undefined]> = [
+      ['sales-q3.csv', 'delimited'],
+      ['events.jsonl', 'jsonl'],
+      ['par1.bin', 'parquet'],
+      ['sales-q3.csv.gz', undefined],
+    ];
+    for (const [name, kind] of kinds) {
+      const bytes = new Uint8Array(readFileSync(testdata + name));
+      expect(kindOf(await detected(name, bytes)), name).toBe(kind);
+    }
+    expect(kindOf(await detected('data.json', '[]'))).toBeUndefined();
+    // As detect says them once this build reads them.
+    expect(kindOf({ t: 'records', layout: 'lines' })).toBe('jsonl');
+    expect(kindOf({ t: 'parquet' })).toBe('parquet');
+  });
+});
+
 describe('delimited text stays delimited text', () => {
-  const testdata = fileURLToPath(new URL('../testdata/', import.meta.url));
   const fixtures = readdirSync(testdata).filter((name) =>
     /\.(csv|tsv)$/.test(name),
   );
