@@ -25,7 +25,6 @@ import {
   valueAt,
 } from '@sheet';
 import type { Edit, Written } from '@sheet';
-import { multiOf } from '@store';
 import type { ByteSource, HeaderMode, PartsRef, SingleRef } from '@store';
 import type {
   Changed,
@@ -147,10 +146,8 @@ export class View {
   opened!: Opened;
   generation = 0;
 
-  /** How the source's rows are found and read. */
+  /** How the source's rows are found and read, and what holds its bytes. */
   private reading!: Reading;
-  /** The stored bytes the reading reads. */
-  private source!: ByteSource;
   private schema!: Schema;
 
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
@@ -234,7 +231,6 @@ export class View {
       );
     }
 
-    v.source = source;
     const reading = v.reading;
     v.schema = schemaOf(reading.columns(), ask.parts);
 
@@ -320,13 +316,13 @@ export class View {
       v.opened = {
         source: id,
         name,
-        size: source.size,
+        size: v.bytes.size,
         label: reading.label,
         columns: await v.columns(),
         progress: v.progress(),
         edits: carried?.edits ?? [],
         generation: v.generation,
-        link: path === '' ? undefined : linkTo(path, source.version),
+        link: path === '' ? undefined : linkTo(path, v.bytes.version),
       };
       return v;
     } catch (err) {
@@ -402,7 +398,7 @@ export class View {
     if (this.schema.supplied === undefined) return undefined;
     const ref = this.parts;
     const reading = this.reading;
-    if (ref === undefined || multiOf(this.source) === undefined) {
+    if (ref === undefined || reading.behind.t !== 'bytes') {
       throw new Refusal({ t: 'joins-unknown-for-column', name: this.name });
     }
 
@@ -744,15 +740,21 @@ export class View {
 
   // ------------------------------------------------------------ saving
 
+  /** The stored bytes behind the reading: one file, or several as one. */
+  private get bytes(): ByteSource {
+    const { behind } = this.reading;
+    return behind.t === 'file' ? behind.stored : behind.joined;
+  }
+
   /** The size of the carried bytes, or of the source. */
   get size(): number {
-    return this.carried?.length ?? this.source.size;
+    return this.carried?.length ?? this.bytes.size;
   }
 
   /** The version the source was read at, where the store reports one.
    * Undefined for a carried source and a source over several files. */
   get version(): string | undefined {
-    return this.path === '' ? undefined : this.source.version;
+    return this.path === '' ? undefined : this.bytes.version;
   }
 
   /** Bytes a save would copy into the container: the size for a carried
@@ -785,8 +787,7 @@ export class View {
       }
       if (this.path === '') {
         await this.until(() => this.reading.index.complete);
-        const raw =
-          this.carried ?? (await this.source.read(0, this.source.size));
+        const raw = this.carried ?? (await this.bytes.read(0, this.bytes.size));
         return { raw, bytes: this.size, version: this.version, ...this.kept() };
       }
       return {
@@ -817,8 +818,8 @@ export class View {
     ref: PartsRef,
   ): Promise<{ parts: HeldPart[]; header: HeaderMode; fileColumn?: boolean }> {
     const count = ref.parts.length;
-    const multi = multiOf(this.source);
-    if (multi === undefined) {
+    const { behind } = this.reading;
+    if (behind.t !== 'bytes') {
       throw new Refusal({
         t: 'joins-unknown-for-save',
         name: this.name,
@@ -841,6 +842,7 @@ export class View {
 
     // versions() opens any part still unread. If that fails, the parts keep
     // the versions they were opened by.
+    const multi = behind.joined;
     const versions = await multi
       .versions()
       .catch(() => files.map((file) => file.version));
@@ -871,7 +873,8 @@ export class View {
   extended(files: readonly SingleRef[]): PartsRef | undefined {
     const ref = this.parts;
     if (ref === undefined) return undefined;
-    const extents = multiOf(this.source)?.extents;
+    const { behind } = this.reading;
+    const extents = behind.t === 'bytes' ? behind.joined.extents : undefined;
     return {
       ...ref,
       parts: [
@@ -898,7 +901,7 @@ export class View {
     this.survey?.abort();
     this.finding?.abort();
     this.fail(new Refusal({ t: 'file-closed' }));
-    await this.source.close();
+    await this.reading.close();
   }
 
   /** until resolves once `ready` returns true, or rejects if the index fails first. */
