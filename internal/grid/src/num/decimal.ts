@@ -1,16 +1,15 @@
 // Decimal text in and out: the forms a number is read from and written to.
 
 /**
- * formatFloat mirrors `strconv.FormatFloat(v, 'f', -1, 64)`: the shortest
- * decimal that reads back as the same float64, in plain notation.
- * `Number.prototype.toString` switches to exponential above 1e21
- * and below 1e-6.
+ * formatFloat is the shortest decimal that reads back as the same float64,
+ * in plain notation. `Number.prototype.toString` switches to exponential
+ * above 1e21 and below 1e-6.
  */
 export function formatFloat(v: number): string {
   if (Number.isNaN(v)) return 'NaN';
   if (v === Infinity) return '+Inf';
   if (v === -Infinity) return '-Inf';
-  // Go prints the sign of a negative zero; JavaScript drops it.
+  // A negative zero keeps its sign; JavaScript's toString drops it.
   if (Object.is(v, -0)) return '-0';
 
   const s = v.toString();
@@ -41,34 +40,31 @@ export function formatFloat(v: number): string {
 }
 
 /**
- * roundSignificant mirrors `strconv.FormatFloat(v, 'g', n, 64)` followed by
- * a parse: keeps n significant digits. Turns 0.21999999999999997 into 0.22.
+ * roundSignificant keeps n significant digits. Turns 0.21999999999999997
+ * into 0.22.
  */
 export function roundSignificant(v: number, digits: number): number {
   if (!Number.isFinite(v)) return v;
   return Number(v.toPrecision(digits));
 }
 
-// The decimal forms `strconv.ParseFloat` accepts. Hexadecimal and infinity
+// The decimal forms a number is read from. Hexadecimal and infinity
 // spellings are refused.
 const DECIMAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 /**
- * parseFloat mirrors `strconv.ParseFloat(v, 64)` for decimal input only.
- * Returns undefined for anything else, including "", "0x10" and " 12 ",
- * which `Number()` would accept.
+ * parseFloat reads a decimal. Returns undefined for anything else, including
+ * "", "0x10" and " 12 ", which `Number()` would accept.
  */
 export function parseFloat(v: string): number | undefined {
   if (!DECIMAL.test(v)) return undefined;
   const n = Number(v);
-  // Go returns ErrRange for a decimal too large for a float64. Here that is
-  // undefined: 1e400 overflows a float64.
+  // A decimal too large for a float64 is undefined: 1e400 overflows it.
   return Number.isFinite(n) ? n : undefined;
 }
 
 /**
- * atoi mirrors `strconv.Atoi`: a whole decimal integer. Returns undefined
- * for anything else.
+ * atoi reads a whole decimal integer. Returns undefined for anything else.
  */
 export function atoi(s: string): number | undefined {
   if (!/^[+-]?\d+$/.test(s)) return undefined;

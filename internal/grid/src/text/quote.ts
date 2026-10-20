@@ -2,11 +2,11 @@
 
 import { codePoint, runes } from './runes.ts';
 
-// strconv.IsPrint: categories L, M, N, P and S, plus the ASCII space. `quote`
+// Printable: categories L, M, N, P and S, plus the ASCII space. `quote`
 // leaves these unescaped.
 const PRINTABLE = /[\p{L}\p{M}\p{N}\p{P}\p{S}]/u;
 
-const BEL = '\u0007'; // Go spells this \a
+const BEL = '\u0007'; // spelled \a, as C does
 
 const SHORT_ESCAPES = new Map<string, string>([
   [BEL, '\\a'],
@@ -21,8 +21,9 @@ const SHORT_ESCAPES = new Map<string, string>([
 ]);
 
 /**
- * quote mirrors `strconv.Quote`. `JSON.stringify` escapes a different set and
- * spells the escapes differently.
+ * quote wraps `s` in double quotes, escaping what is not printable with the
+ * short escapes above or \x, \u and \U. `JSON.stringify` escapes a different
+ * set and spells the escapes differently.
  */
 export function quote(s: string): string {
   let out = '"';
@@ -60,8 +61,8 @@ const UNESCAPE = new Map<string, string>([
 const HEX_WIDTHS: Record<string, number> = { x: 2, u: 4, U: 8 };
 
 /**
- * unquote mirrors `strconv.Unquote` for a double-quoted literal. Throws
- * "invalid syntax" on bad input.
+ * unquote reads a double-quoted literal as `quote` writes it, octal escapes
+ * included. Throws "invalid syntax" on bad input.
  */
 export function unquote(s: string): string {
   const r = runes(s);
@@ -96,7 +97,7 @@ export function unquote(s: string): string {
       }
       const cp = parseInt(hex, 16);
       if (cp > 0x10ffff) throw new Error('invalid syntax');
-      // \x names a byte in Go, the others name a code point.
+      // \x names a byte, the others name a code point.
       out += k === 'x' ? String.fromCharCode(cp) : String.fromCodePoint(cp);
       i += width;
       continue;
