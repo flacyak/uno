@@ -2,7 +2,8 @@
 // skips space, accepts one rune, expects one, and reports where it was when
 // the expected rune is missing.
 
-import { isSpace, quote } from '../text/index.ts';
+import { quote } from './quote.ts';
+import { isSpace } from './runes.ts';
 
 export class Scanner {
   i = 0;

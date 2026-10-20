@@ -1,6 +1,5 @@
 import { parseFloat as parseDecimal } from '../num/index.ts';
-import { isDigit, isLetter, quote, runes } from '../text/index.ts';
-import { Scanner } from '../go/index.ts';
+import { Scanner, isDigit, isLetter, quote, runes } from '../text/index.ts';
 import type { Binary, Node } from './ast.ts';
 import { Formula } from './ast.ts';
 
