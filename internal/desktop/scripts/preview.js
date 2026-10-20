@@ -22,7 +22,7 @@
  * - `refused`: the same with the bucket's name mistyped. The line fails and
  *   is chosen to edit the connection. Goes to out/refused.gif.
  *
- * Usage: node scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
+ * Usage: node --import ../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
  * (after node scripts/build.js)
  */
 
@@ -118,10 +118,10 @@ async function freshDir(name) {
  * beside the disk's, for an export in a bucket.
  */
 async function savedWorkspace(uno, ref, edits, cell, more = []) {
-  const { Engine, messagePort, serve } = await import("#engine");
-  const { sources } = await import("#plugin");
-  const { Op } = await import("#sheet");
-  const { diskProvider } = await import("#store/node");
+  const { Engine, messagePort, serve } = await import("@uno/grid/engine");
+  const { sources } = await import("@uno/grid/plugin");
+  const { Op } = await import("@uno/grid/sheet");
+  const { diskProvider } = await import("@uno/grid/store/node");
 
   const { port1, port2 } = new MessageChannel();
   serve(messagePort(port1), sources([diskProvider(), ...more]));
@@ -213,9 +213,9 @@ const REFRESH_KEY = "2025/ads-q3.csv";
  * bucket, and this machine's connection to it.
  */
 async function stageRefresh() {
-  const { s3Provider } = await import("#store/s3");
-  const { BUCKET, KEYS, bucket } = await import("../../grid/tests/store/standin.ts");
-  const { HOME_REGION } = await import("../../grid/tests/store/regions.ts");
+  const { s3Provider } = await import("@uno/grid/store/s3");
+  const { BUCKET, KEYS, bucket } = await import("@grid-tests/store/standin");
+  const { HOME_REGION } = await import("@grid-tests/store/regions");
 
   const standin = await bucket(
     undefined,
@@ -248,8 +248,8 @@ const OPENING_KEYS = ["2025/ads-q3.csv", "2025/ads-q4.csv", "2025/orders-q3.csv"
  * `connected` false the connection is left out, for the connecting story.
  */
 async function stageOpening(connected) {
-  const { BUCKET, bucket } = await import("../../grid/tests/store/standin.ts");
-  const { HOME_REGION } = await import("../../grid/tests/store/regions.ts");
+  const { BUCKET, bucket } = await import("@grid-tests/store/standin");
+  const { HOME_REGION } = await import("@grid-tests/store/regions");
 
   const ads = await readFile(join(testdata, "google-ads-sales.csv"));
   const standin = await bucket(
@@ -288,9 +288,9 @@ await rm(data, { recursive: true, force: true });
 // in place of the machine's own, and the stand-in's address and keys.
 let aws = {};
 if (remote !== undefined) {
-  const { saveConnection } = await import("#store");
-  const { nodeStore } = await import("#store/node");
-  const { standinEnv } = await import("../../grid/tests/store/standin.ts");
+  const { saveConnection } = await import("@uno/grid/store");
+  const { nodeStore } = await import("@uno/grid/store/node");
+  const { standinEnv } = await import("@grid-tests/store/standin");
   await mkdir(join(data, "connections"), { recursive: true });
   if (remote.connection !== undefined) {
     await saveConnection(nodeStore(), join(data, "connections"), remote.connection);

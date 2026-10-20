@@ -20,11 +20,11 @@ import {
   test,
 } from 'vite-plus/test';
 
-import { awsCredentials, diskProvider, profileCredentials } from '#store/node';
-import { connectionSigning } from '#store/node';
-import { s3Provider } from '#store/s3';
-import { bytes, connect, indexed, openOne } from '#tests/engine/harness';
-import { ROWS } from '#tests/testdata/sales-q3';
+import { awsCredentials, diskProvider, profileCredentials } from '@store/node';
+import { connectionSigning } from '@store/node';
+import { s3Provider } from '@store/s3';
+import { bytes, connect, indexed, openOne } from '@grid-tests/engine/harness';
+import { ROWS } from '@grid-tests/testdata/sales-q3';
 import { portal } from './portal.ts';
 import type { Grant, Portal } from './portal.ts';
 import { HOME_REGION } from './regions.ts';

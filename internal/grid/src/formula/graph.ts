@@ -3,7 +3,7 @@
  * the order a recalculation runs in, and the cycle check at bind time.
  */
 
-import { compareStrings } from '#go';
+import { compareStrings } from '@go';
 import type { Formula } from './ast.ts';
 
 /**

@@ -11,8 +11,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import type { Connection } from '#library';
-import { sources } from '#plugin';
+import type { Connection } from '@library';
+import { sources } from '@plugin';
 import {
   blobFiles,
   bytesSource,
@@ -22,15 +22,15 @@ import {
   multiProvider,
   openWith,
   saveConnection,
-} from '#store';
-import type { FileHandler, FileRef, PartsRef, SingleRef } from '#store';
+} from '@store';
+import type { FileHandler, FileRef, PartsRef, SingleRef } from '@store';
 import {
   connectionSigning,
   diskProvider,
   localFiles,
   nodeStore,
-} from '#store/node';
-import { connectionMeeting, s3Provider } from '#store/s3';
+} from '@store/node';
+import { connectionMeeting, s3Provider } from '@store/s3';
 import {
   TINY,
   connect,
@@ -39,14 +39,14 @@ import {
   sales,
   sheetRows,
   widened,
-} from '#tests/engine/harness';
-import { ROWS, bytes } from '#tests/testdata/sales-q3';
+} from '@grid-tests/engine/harness';
+import { ROWS, bytes } from '@grid-tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '#tests/testdata/sales-q3-parts';
+} from '@grid-tests/testdata/sales-q3-parts';
 import { HOME_REGION } from './regions.ts';
 import { bucket } from './standin.ts';
 import type { Bucket } from './standin.ts';

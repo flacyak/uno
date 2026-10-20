@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { read } from '#ingest';
-import { Sheet } from '#sheet';
-import { parse } from '#formula';
+import { read } from '@ingest';
+import { Sheet } from '@sheet';
+import { parse } from '@formula';
 
 test('raw tolerates ragged and out-of-range', () => {
   // The second row is short. raw returns "" for any missing or out-of-range cell.

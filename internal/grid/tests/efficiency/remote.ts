@@ -9,14 +9,14 @@
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { Engine } from '#engine';
-import type { SourceHandle, Tuning } from '#engine';
-import { diskProvider } from '#store/node';
-import { s3Provider } from '#store/s3';
-import { bytes, connect, openOne } from '#tests/engine/harness';
-import { HOME_REGION } from '#tests/store/regions';
-import { BUCKET, KEYS, bucket } from '#tests/store/standin';
-import type { Bucket } from '#tests/store/standin';
+import { Engine } from '@engine';
+import type { SourceHandle, Tuning } from '@engine';
+import { diskProvider } from '@store/node';
+import { s3Provider } from '@store/s3';
+import { bytes, connect, openOne } from '@grid-tests/engine/harness';
+import { HOME_REGION } from '@grid-tests/store/regions';
+import { BUCKET, KEYS, bucket } from '@grid-tests/store/standin';
+import type { Bucket } from '@grid-tests/store/standin';
 
 /** Asked is one request the engine sent. */
 export interface Asked {

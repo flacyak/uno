@@ -6,19 +6,19 @@
 
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import { blobFiles, bytesSource } from '#store';
-import type { FileHandler, FileRef, SingleRef } from '#store';
-import { openMulti, partMap } from '#store/multi';
-import type { Extent, HeaderMode, Part } from '#store/multi';
-import { localFiles } from '#store/node';
-import { s3Files } from '#store/s3';
-import { bytes } from '#tests/testdata/sales-q3';
+import { blobFiles, bytesSource } from '@store';
+import type { FileHandler, FileRef, SingleRef } from '@store';
+import { openMulti, partMap } from '@store/multi';
+import type { Extent, HeaderMode, Part } from '@store/multi';
+import { localFiles } from '@store/node';
+import { s3Files } from '@store/s3';
+import { bytes } from '@grid-tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '#tests/testdata/sales-q3-parts';
+} from '@grid-tests/testdata/sales-q3-parts';
 import { HOME_REGION } from './regions.ts';
 import { KEYS, at, bucket, etagOf } from './standin.ts';
 import type { Bucket } from './standin.ts';

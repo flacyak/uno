@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { Graph, parse } from '#formula';
+import { Graph, parse } from '@formula';
 
 function bind(g: Graph, col: string, src: string): void {
   g.bind(col, parse(src));

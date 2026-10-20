@@ -8,11 +8,11 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { read } from '#ingest';
+import { read } from '@ingest';
 
-import { ERR_CELL, Sheet } from '#sheet';
-import { parse } from '#formula';
-import { parse as parseProgram } from '#program';
+import { ERR_CELL, Sheet } from '@sheet';
+import { parse } from '@formula';
+import { parse as parseProgram } from '@program';
 
 const REGION = 0;
 const PRICE = 1;

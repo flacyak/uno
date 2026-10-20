@@ -10,8 +10,8 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { signV4 } from '#store/s3';
-import type { AwsCredentials } from '#store/s3';
+import { signV4 } from '@store/s3';
+import type { AwsCredentials } from '@store/s3';
 import { amzDate } from './standin.ts';
 
 /**

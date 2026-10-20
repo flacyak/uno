@@ -23,8 +23,8 @@ import {
 import type { MenuItemConstructorOptions, UtilityProcess, WebContents } from "electron";
 import { join } from "node:path";
 
-import { m } from "#paraglide/messages";
-import { isLocale, setLocale } from "#paraglide/runtime";
+import { m } from "@paraglide/messages";
+import { isLocale, setLocale } from "@paraglide/runtime";
 import { filesNamed } from "./argv.ts";
 import { sourceAt, unoPath, writeAtomic, writeConnection } from "./files.ts";
 

@@ -15,10 +15,10 @@
 
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import type { Check } from "#main/smoke/check";
-import { DEFAULT_INPUT } from "#main/smoke/default";
-import { OPEN } from "#main/smoke/open";
-import type { Page } from "#main/smoke/page";
+import type { Check } from "@main/smoke/check";
+import { DEFAULT_INPUT } from "@main/smoke/default";
+import { OPEN } from "@main/smoke/open";
+import type { Page } from "@main/smoke/page";
 import { bootShell } from "./dom-harness.ts";
 import { domPage } from "./dom-page.ts";
 
