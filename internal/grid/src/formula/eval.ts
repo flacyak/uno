@@ -1,4 +1,5 @@
 import { quote } from '../go/index.ts';
+import { unreachable } from '../never.ts';
 import { parse as parseNumber } from '../num/index.ts';
 import type { Formula, Node } from './ast.ts';
 import { text } from './ast.ts';
@@ -139,7 +140,11 @@ function evalNode(
           }
           return left;
         }
+        default:
+          return unreachable(n.op);
       }
     }
+    default:
+      return unreachable(n);
   }
 }

@@ -8,6 +8,8 @@
 // Meter sums measurements, and `payload` writes the totals as an OTLP
 // metrics request in JSON for a collector's /v1/metrics endpoint.
 
+import { unreachable } from '../never.ts';
+
 /** String attributes attached to a measurement. */
 export type Attributes = Readonly<Record<string, string>>;
 
@@ -158,6 +160,8 @@ function begin(kind: Kind): Total {
       return { kind, sum: 0 };
     case 'level':
       return { kind, value: 0 };
+    default:
+      return unreachable(kind);
   }
 }
 
@@ -176,6 +180,8 @@ function add(total: Total, value: number): void {
     case 'level':
       total.value = value;
       return;
+    default:
+      return unreachable(total);
   }
 }
 
@@ -282,6 +288,8 @@ function empty(kind: Kind): Data {
       };
     case 'level':
       return { gauge: { dataPoints: [] } };
+    default:
+      return unreachable(kind);
   }
 }
 
