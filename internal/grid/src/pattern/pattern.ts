@@ -333,11 +333,11 @@ function reading(ex: Example[], cands: Program[]): Reading {
   }
   kept.sort(bySize);
 
-  const top = kept.slice(0, MAX_RANKED).map((prog) => ({
+  const top = kept.slice(0, MAX_RANKED).map((prog): Candidate => ({
     prog,
     text: programText(prog),
     affects: 0,
-    sample: [] as Change[],
+    sample: [],
   }));
   return {
     cands: top,

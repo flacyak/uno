@@ -15,6 +15,7 @@ import { promisify } from 'node:util';
 
 import { compareStrings, parseTime } from '../go/index.ts';
 import { isRecord } from '../guards.ts';
+import { messageOf } from '../said/index.ts';
 import type { AuthMode, Connection } from '../library/index.ts';
 import { covering } from '../library/index.ts';
 import type { Provider } from '../plugin/index.ts';
@@ -25,6 +26,13 @@ import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import { assumeRole, signInAgain, ssoRoleCredentials } from './sts.ts';
 import type { Session } from './sts.ts';
 import { unreachable } from '../never.ts';
+
+/** errnoOf is the code of an error Node raised for a system call: 'ENOENT'. */
+function errnoOf(err: unknown): string | undefined {
+  return err instanceof Error && 'code' in err && typeof err.code === 'string'
+    ? err.code
+    : undefined;
+}
 
 /**
  * localFiles opens files on this machine's disks by path, for reading. It
@@ -140,7 +148,7 @@ export function nodeStore(): FileStore {
         const entries = await readdir(dir, { withFileTypes: true });
         return entries.filter((e) => !e.isDirectory()).map((e) => e.name);
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        if (errnoOf(err) === 'ENOENT') return [];
         throw err;
       }
     },
@@ -517,15 +525,19 @@ async function processCredentials(
     });
     out = run.stdout;
   } catch (err) {
-    const e = err as NodeJS.ErrnoException & {
-      stderr?: string;
-      killed?: boolean;
-    };
+    // execFile's error carries the process's stderr and whether it was killed.
+    const killed =
+      err instanceof Error && 'killed' in err && err.killed === true;
+    const stderr =
+      err instanceof Error && 'stderr' in err && typeof err.stderr === 'string'
+        ? err.stderr
+        : '';
     let why: string;
-    if (e.code === 'ENOENT') why = `there is no program called ${program}`;
-    else if (e.killed === true)
+    if (errnoOf(err) === 'ENOENT')
+      why = `there is no program called ${program}`;
+    else if (killed)
       why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
-    else why = (e.stderr?.trim().split('\n')[0] ?? '') || e.message;
+    else why = (stderr.trim().split('\n')[0] ?? '') || messageOf(err);
     throw fail(`failed · ${why}`);
   }
 
@@ -885,7 +897,7 @@ async function readText(path: string): Promise<string | undefined> {
       await readAll([localFiles()], { name: basename(path), path }),
     );
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    if (errnoOf(err) === 'ENOENT') return undefined;
     throw err;
   }
 }

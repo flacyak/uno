@@ -347,6 +347,8 @@ export class View {
     const rows: string[][] = [];
     const raws: Array<string[] | null> = [];
     for (const f of finishRows(schema, first, source, files)) {
+      // finishRows hands over rows it built or was given, and the reply type
+      // wants them mutable. Nothing writes into them.
       rows.push(f.shown as string[]);
       raws.push(f.shown === f.raw ? null : (f.raw as string[]));
     }

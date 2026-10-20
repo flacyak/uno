@@ -128,6 +128,7 @@ export function decode(frame: string | Uint8Array): unknown {
 
 function parse(text: string): Json {
   try {
+    // JSON.parse gives any. What JSON parses to is a Json by definition.
     return JSON.parse(text) as Json;
   } catch {
     throw new Error('a frame that is not JSON');

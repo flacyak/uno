@@ -23,10 +23,16 @@ export function parse(src: string): Formula {
  * precedence is 1 for + and -, 2 for * and /, and 0 for anything else. 0
  * ends the expression loop.
  */
-function precedence(r: string): number {
-  if (r === '+' || r === '-') return 1;
-  if (r === '*' || r === '/') return 2;
-  return 0;
+/** The binary operators, each with its precedence. */
+const PRECEDENCE: Readonly<Record<Binary['op'], number>> = {
+  '+': 1,
+  '-': 1,
+  '*': 2,
+  '/': 2,
+};
+
+function isOperator(r: string): r is Binary['op'] {
+  return Object.hasOwn(PRECEDENCE, r);
 }
 
 function isIdentStart(r: string): boolean {
@@ -58,12 +64,13 @@ class Parser extends Scanner {
       if (this.i >= this.s.length) return left;
 
       const op = this.s[this.i];
-      const prec = precedence(op);
-      if (prec === 0 || prec < min) return left;
+      if (!isOperator(op)) return left;
+      const prec = PRECEDENCE[op];
+      if (prec < min) return left;
 
       this.i++;
       const right = this.expr(prec + 1);
-      left = { kind: 'binary', op: op as Binary['op'], left, right };
+      left = { kind: 'binary', op, left, right };
     }
   }
 

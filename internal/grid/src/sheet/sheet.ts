@@ -60,9 +60,9 @@ export class Sheet {
   ) {
     this.rowData = rows;
     this.schema = new Schema(header, rows.length);
-    this.columns = header.map((h) => ({
+    this.columns = header.map((h): Column => ({
       header: h,
-      kind: 'text' as Kind,
+      kind: 'text',
       flagged: false,
     }));
     this.infer();

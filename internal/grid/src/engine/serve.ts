@@ -73,6 +73,7 @@ function fieldOf(msg: unknown, key: string): unknown {
  */
 function requestOf(msg: unknown, handled: Handlers): Request | undefined {
   const t = fieldOf(msg, 't');
+  // The cast vouches for `t` alone. Each handler checks the fields it reads.
   return typeof t === 'string' && Object.hasOwn(handled, t)
     ? (msg as Request)
     : undefined;

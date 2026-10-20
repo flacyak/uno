@@ -350,6 +350,7 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
   return {
     post: (msg) => p.postMessage(msg),
     listen: (fn, gone) => {
+      // What the other end posts is an In. serve checks a request's fields.
       p.addEventListener('message', (e) => fn(e.data as In));
       if (gone !== undefined) p.addEventListener('close', gone);
       p.start();

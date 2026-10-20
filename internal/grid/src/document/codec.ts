@@ -1001,6 +1001,7 @@ function omitempty<T extends object>(
   const kept = Object.entries(o).filter(
     ([k, v]) => !empty.has(k) || Boolean(v),
   );
+  // fromEntries forgets the key type. The entries are o's own, less some.
   return Object.fromEntries(kept) as Partial<T>;
 }
 

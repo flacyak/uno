@@ -191,6 +191,7 @@ const STEPS: Sentences<StepSaid> = {
 };
 
 function step(s: StepSaid): string {
+  // STEPS is typed per kind and s is the union; the cast pairs them.
   return (STEPS[s.t] as (s: StepSaid) => string)(s);
 }
 
