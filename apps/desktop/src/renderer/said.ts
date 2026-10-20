@@ -8,7 +8,7 @@
  */
 
 import { Refusal, messageOf } from "@engine";
-import type { CharName, Said, Sought, StepSaid } from "@engine";
+import type { CharName, ReadKind, Said, Sought, StepSaid } from "@engine";
 import { quote } from "@go";
 import type { Sentences } from "@said";
 
@@ -45,6 +45,13 @@ const CHARS: Record<CharName, () => string> = {
 function charName(name: CharName): string {
   return CHARS[name]();
 }
+
+/** The message function for what each kind of rows is called. Called at use so the current locale applies. */
+const KINDS: Record<ReadKind, () => string> = {
+  delimited: m.kind_delimited,
+  jsonl: m.kind_jsonl,
+  parquet: m.kind_parquet,
+};
 
 /**
  * Wraps text in the locale's quotation marks, with invisible characters
@@ -150,6 +157,13 @@ const SAYS: Sentences<Said> = {
     m.refused_point_several_at_one({ name: s.name, count: s.count, file: s.file }),
   "point-several-at-other": (s) =>
     m.refused_point_several_at_other({ name: s.name, count: s.count, given: num(s.given) }),
+  "relink-other-kind": (s) =>
+    m.refused_relink_other_kind({
+      name: s.name,
+      file: s.file,
+      was: KINDS[s.was](),
+      now: KINDS[s.now](),
+    }),
   "log-lost-edit": (s) => m.refused_log_lost_edit({ source: s.source }),
   "bucket-unconnected": (s) =>
     m.refused_bucket_unconnected({ container: s.container, bucket: s.bucket }),
