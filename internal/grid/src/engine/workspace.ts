@@ -610,25 +610,20 @@ export class Workspace {
       if (sources.length === 0) throw new Refusal({ t: 'no-file-open' });
       this.refuseOver(sources, limit);
 
-      const parts = new Map(
-        await Promise.all(
-          sources.map(
-            async (source) => [source.id, await source.part()] as const,
-          ),
-        ),
-      );
+      // Every source's part is read at once. Each sits at its source's index.
+      const parts = await Promise.all(sources.map((source) => source.part()));
+      const byId = new Map(sources.map((source, i) => [source.id, parts[i]]));
 
       const cells = new Map(
         place.cells.map((c) => [c.source, { row: c.row, col: c.col }]),
       );
-      const held = sources.map((source): Held => {
-        const part = parts.get(source.id)!;
+      const held = sources.map((source, i): Held => {
         const kept = this.states.get(source.id);
         const state: State = {
           ...kept,
           active: cells.get(source.id) ?? kept?.active ?? { row: 0, col: 0 },
         };
-        return { ...part, id: source.id, name: source.name, state };
+        return { ...parts[i], id: source.id, name: source.name, state };
       });
       this.refuseWhere(held, place.at);
 
@@ -636,7 +631,7 @@ export class Workspace {
         manifest: { ...newManifest(), created: this.created },
         sources: held,
         active: this.sources.has(place.source) ? place.source : sources[0].id,
-        log: interleave(this.trail, parts),
+        log: interleave(this.trail, byId),
         extra: this.extra,
         at: place.at,
       };

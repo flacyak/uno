@@ -335,7 +335,7 @@ export class Schema {
   }
 
   private reorder(): void {
-    this.computed = this.graph.order().map((name) => this.names.get(name)!);
+    this.computed = this.graph.order().map((name) => this.resolve(name));
   }
 
   private uniqueHeader(col: number): string {

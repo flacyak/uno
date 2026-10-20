@@ -425,40 +425,32 @@ function bySize(a: Program, b: Program): number {
  * examples.
  */
 export function gather(log: readonly Edit[]): Map<number, Example[]> {
-  const first = new Map<string, string>();
-  const last = new Map<string, string>();
-  const order = new Map<number, string[]>();
-
-  const key = (row: number, col: number): string => `${row}:${col}`;
+  // Each column's edited cells by row, in the order they were first edited.
+  const byCol = new Map<number, Map<number, Example>>();
 
   for (const e of log) {
     if (e.op === Op.Apply) {
-      for (const c of order.get(e.col) ?? []) {
-        first.delete(c);
-        last.delete(c);
-      }
-      order.delete(e.col);
+      byCol.delete(e.col);
       continue;
     }
     if (e.op !== Op.Set) continue;
 
-    const c = key(e.row, e.col);
-    if (!first.has(c)) {
-      first.set(c, e.was ?? '');
-      pushTo(order, e.col, c);
+    let cells = byCol.get(e.col);
+    if (cells === undefined) {
+      cells = new Map();
+      byCol.set(e.col, cells);
     }
-    last.set(c, e.now);
+    const cell = cells.get(e.row);
+    if (cell === undefined) cells.set(e.row, { was: e.was ?? '', now: e.now });
+    else cell.now = e.now;
   }
 
   const out = new Map<number, Example[]>();
-  for (const [col, cells] of order) {
-    for (const c of cells) {
-      const was = first.get(c)!;
-      const now = last.get(c)!;
+  for (const [col, cells] of byCol) {
+    for (const cell of cells.values()) {
       // A value typed and then typed back counts as unchanged.
-      if (was === now) continue;
-
-      pushTo(out, col, { was, now });
+      if (cell.was === cell.now) continue;
+      pushTo(out, col, cell);
     }
   }
   return out;

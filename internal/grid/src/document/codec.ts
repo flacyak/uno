@@ -243,9 +243,10 @@ export function writeDocument(d: Document): Uint8Array {
   // Extra entries go back in, in name order, so a saved file keeps the same
   // layout between saves.
   const named = new Set(entries.map((e) => e.name));
-  for (const key of [...d.extra.keys()].sort(compareStrings)) {
+  const extra = [...d.extra].sort(([a], [b]) => compareStrings(a, b));
+  for (const [key, bytes] of extra) {
     if (named.has(key)) continue;
-    entries.push({ name: key, bytes: d.extra.get(key)! });
+    entries.push({ name: key, bytes });
   }
 
   const out = pack(entries, mtime);

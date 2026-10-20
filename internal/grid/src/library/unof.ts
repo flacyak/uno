@@ -101,8 +101,10 @@ export function writeExtra(
   extra: ReadonlyMap<string, unknown> | undefined,
   known: (key: string) => boolean,
 ): void {
-  for (const key of [...(extra?.keys() ?? [])].sort(compareStrings)) {
-    if (!known(key)) out[key] = extra!.get(key);
+  if (extra === undefined) return;
+  const sorted = [...extra].sort(([a], [b]) => compareStrings(a, b));
+  for (const [key, value] of sorted) {
+    if (!known(key)) out[key] = value;
   }
 }
 

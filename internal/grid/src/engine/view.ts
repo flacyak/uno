@@ -565,19 +565,20 @@ export class View {
     const byCol = this.transform
       ? gather(this.schema.edits())
       : new Map<number, Example[]>();
-    const cols = [...byCol]
-      .filter(([, examples]) => examples.length >= MIN_EXAMPLES)
-      .map(([col]) => col)
-      .sort((a, b) => a - b);
+    const surveyed = new Map(
+      [...byCol]
+        .filter(([, examples]) => examples.length >= MIN_EXAMPLES)
+        .sort(([a], [b]) => a - b),
+    );
 
-    if (cols.length === 0) {
+    if (surveyed.size === 0) {
       this.port.post({ t: 'offer', source: this.id, generation, offer: null });
       return;
     }
 
     const abort = new AbortController();
     this.survey = abort;
-    this.surveyColumns(cols, byCol, abort.signal, generation).catch(
+    this.surveyColumns(surveyed, abort.signal, generation).catch(
       (err: unknown) => {
         if (!abort.signal.aborted) {
           this.port.post({ t: 'error', source: this.id, said: saidOf(err) });
@@ -593,7 +594,6 @@ export class View {
    * before reading it.
    */
   private async surveyColumns(
-    cols: number[],
     byCol: Map<number, Example[]>,
     signal: AbortSignal,
     generation: number,
@@ -601,8 +601,8 @@ export class View {
     const schema = this.schema;
     const index = this.index;
 
-    for (const col of cols) {
-      const survey = Survey.start(col, schema.headers[col], byCol.get(col)!);
+    for (const [col, examples] of byCol) {
+      const survey = Survey.start(col, schema.headers[col], examples);
       if (survey === undefined) continue;
 
       let told = Date.now();

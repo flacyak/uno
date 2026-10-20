@@ -76,7 +76,9 @@ export function readAhead(
       return;
     }
     let at = stream.next;
-    while (held.has(at)) at += held.get(at)!.length;
+    for (let run = held.get(at); run !== undefined; run = held.get(at)) {
+      at += run.length;
+    }
     while (held.size < ahead - 1 && at < size) {
       const length = Math.min(stream.length, size - at);
       const bytes = read(at, length);
