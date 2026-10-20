@@ -182,6 +182,19 @@ export async function refuseUnread(
 }
 
 /**
+ * headOf reads the front of a stored file as detection reads it: its first
+ * HEAD_BYTES in one read, and its last bytes only when detection asks.
+ */
+export async function headOf(source: ByteSource): Promise<StoredHead> {
+  const bytes = await source.read(0, Math.min(HEAD_BYTES, source.size));
+  return {
+    bytes,
+    size: source.size,
+    tail: (length) => source.read(source.size - length, length),
+  };
+}
+
+/**
  * readableHead reads the first HEAD_BYTES of `source` and returns them,
  * once what the file holds is something this build reads. Otherwise it
  * refuses the file by name. A Parquet head is confirmed by a read of the
@@ -191,13 +204,9 @@ export async function readableHead(
   name: string,
   source: ByteSource,
 ): Promise<Uint8Array> {
-  const bytes = await source.read(0, Math.min(HEAD_BYTES, source.size));
-  await refuseUnread(name, {
-    bytes,
-    size: source.size,
-    tail: (length) => source.read(source.size - length, length),
-  });
-  return bytes;
+  const head = await headOf(source);
+  await refuseUnread(name, head);
+  return head.bytes;
 }
 
 function unread(what: Unread): Detected {
