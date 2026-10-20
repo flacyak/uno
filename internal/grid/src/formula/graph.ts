@@ -1,4 +1,4 @@
-import { compareStrings } from '../go/index.ts';
+import { compareStrings } from '../text/index.ts';
 import type { Formula } from './ast.ts';
 
 /**

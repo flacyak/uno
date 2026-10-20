@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { compareStrings } from '../../src/go/index.ts';
+import { compareStrings } from '../../src/text/index.ts';
 import { signV4 } from '../../src/store/s3.ts';
 import type { AwsCredentials } from '../../src/store/s3.ts';
 import { bytes } from '../testdata/sales_q3.ts';

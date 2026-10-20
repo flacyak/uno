@@ -4,13 +4,12 @@ import {
   isDigit,
   isLetter,
   isSpace,
-  quote,
-  quoteMeta,
   runes,
   toLower,
   toUpper,
   trimSpace,
-} from '../go/index.ts';
+} from '../text/index.ts';
+import { quote, quoteMeta } from '../go/index.ts';
 import type { Program } from '../program/index.ts';
 import { parse as parseProgram, quoteRegex } from '../program/index.ts';
 import type { Run } from './align.ts';

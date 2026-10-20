@@ -4,7 +4,8 @@
 // It reads only the edit log. `propose` returns a question;
 // applying the answer is `sheet.apply`.
 
-import { compareStrings, quoteMeta } from '../go/index.ts';
+import { compareStrings } from '../text/index.ts';
+import { quoteMeta } from '../go/index.ts';
 import type { Program } from '../program/index.ts';
 import {
   MAX_STEPS,

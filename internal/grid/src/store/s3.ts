@@ -9,7 +9,8 @@ import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
-import { compareStrings, concat } from '../go/index.ts';
+import { compareStrings } from '../text/index.ts';
+import { concat } from '../go/index.ts';
 import type { Connection } from '../library/index.ts';
 import { covering } from '../library/index.ts';
 import type { Provider } from '../plugin/index.ts';

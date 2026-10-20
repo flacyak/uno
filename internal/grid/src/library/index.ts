@@ -1,7 +1,8 @@
 // Package library parses and formats .unof files, one per formula or
 // connection. It works on text alone.
 
-import { codePoint, rfc3339, runes } from '../go/index.ts';
+import { codePoint, runes } from '../text/index.ts';
+import { rfc3339 } from '../go/index.ts';
 import { CONNECTION_KIND } from './connection.ts';
 import {
   about,

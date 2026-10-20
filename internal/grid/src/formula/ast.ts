@@ -1,6 +1,6 @@
 // The expression tree: a discriminated union of five node kinds.
 
-import { compareStrings } from '../go/index.ts';
+import { compareStrings } from '../text/index.ts';
 import { unreachable } from '../never.ts';
 
 /**

@@ -5,7 +5,8 @@
 // refuse a cell when it is authored. Rendering happens once at authoring
 // time; the grid draws the result as plain text.
 
-import { formatU, quote, runes } from '../go/index.ts';
+import { runes } from '../text/index.ts';
+import { formatU, quote } from '../go/index.ts';
 import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';
 
 export { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';

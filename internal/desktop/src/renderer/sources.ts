@@ -10,7 +10,7 @@
 
 import { baseOf } from "@uno/grid/document";
 import type { Link, PartInfo, Peeked, SourceRef } from "@uno/grid/engine";
-import { compareStrings } from "@uno/grid/go";
+import { compareStrings } from "@uno/grid/text";
 import type { Connection as Saved } from "@uno/grid/library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@uno/grid/store";
 import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "@uno/grid/store/s3";

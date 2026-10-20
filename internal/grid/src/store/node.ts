@@ -13,7 +13,8 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { compareStrings, parseTime } from '../go/index.ts';
+import { compareStrings } from '../text/index.ts';
+import { parseTime } from '../go/index.ts';
 import { isRecord } from '../guards.ts';
 import { messageOf } from '../said/index.ts';
 import type { AuthMode, Connection } from '../library/index.ts';

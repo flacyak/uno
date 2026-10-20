@@ -1,4 +1,4 @@
-import { trimSpace } from '../go/index.ts';
+import { trimSpace } from '../text/index.ts';
 import { isNumber, undress } from '../num/index.ts';
 
 /**

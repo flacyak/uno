@@ -30,6 +30,7 @@
     "./store/node": "./dist/store/node.mjs",
     "./store/s3": "./dist/store/s3.mjs",
     "./store/sts": "./dist/store/sts.mjs",
+    "./text": "./dist/text/index.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {

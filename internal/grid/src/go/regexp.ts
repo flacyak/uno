@@ -4,7 +4,12 @@
 // three places this file covers: what a replacement string means, what unit a
 // match index is in, and which characters are escaped.
 
-import { MAX_BMP, SURROGATE_PAIR_UNITS, codePoint, runes } from './strings.ts';
+import {
+  MAX_BMP,
+  SURROGATE_PAIR_UNITS,
+  codePoint,
+  runes,
+} from '../text/index.ts';
 
 /**
  * META is the set of characters `regexp.QuoteMeta` escapes. `literalOf` in

@@ -5,7 +5,7 @@
 // browsed through a lister it lists. A kind of place outside both lists is
 // refused by name.
 
-import { compareStrings } from '../go/index.ts';
+import { compareStrings } from '../text/index.ts';
 import type { Connection, Formula } from '../library/index.ts';
 import {
   EXT,

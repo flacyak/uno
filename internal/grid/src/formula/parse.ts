@@ -1,11 +1,5 @@
-import {
-  Scanner,
-  isDigit,
-  isLetter,
-  parseFloat as parseDecimal,
-  quote,
-  runes,
-} from '../go/index.ts';
+import { isDigit, isLetter, runes } from '../text/index.ts';
+import { Scanner, parseFloat as parseDecimal, quote } from '../go/index.ts';
 import type { Binary, Node } from './ast.ts';
 import { Formula } from './ast.ts';
 

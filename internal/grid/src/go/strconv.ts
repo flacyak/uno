@@ -1,6 +1,6 @@
 // Ports of Go's strconv package.
 
-import { codePoint, runes } from './strings.ts';
+import { codePoint, runes } from '../text/index.ts';
 
 /**
  * formatFloat mirrors `strconv.FormatFloat(v, 'f', -1, 64)`: the shortest

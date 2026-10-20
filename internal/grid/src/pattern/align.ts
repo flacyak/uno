@@ -1,4 +1,4 @@
-import { runes } from '../go/index.ts';
+import { runes } from '../text/index.ts';
 
 /** MAX_DIFF is the longest value `align` will diff, in code points. */
 export const MAX_DIFF = 128;

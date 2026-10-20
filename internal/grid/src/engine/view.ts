@@ -4,8 +4,8 @@
 // Every row returned has the log applied. An edit is one line folded into
 // the Schema and a new generation number. Every stored row stays as read.
 
+import { trimSpace } from '../text/index.ts';
 import type { HeldFile, HeldPart, HeldParts } from '../document/index.ts';
-import { trimSpace } from '../go/index.ts';
 import { headerOf, labelOf, openFormat } from '../ingest/index.ts';
 import type { Format } from '../ingest/index.ts';
 import { isNumber } from '../num/index.ts';

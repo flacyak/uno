@@ -1,8 +1,8 @@
 import { Zip, deflateSync, unzipSync } from 'fflate';
 import type { ZipInputFile } from 'fflate';
 
+import { compareStrings } from '../text/index.ts';
 import {
-  compareStrings,
   concat,
   nowTruncated,
   parseTime,

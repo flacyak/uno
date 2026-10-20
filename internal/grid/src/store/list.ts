@@ -4,7 +4,7 @@
 // store/s3lister.ts. The error for a path every lister declines is built in
 // store/claim.ts.
 
-import { compareStrings } from '../go/index.ts';
+import { compareStrings } from '../text/index.ts';
 import { BROWSES, claim } from './claim.ts';
 
 /**
