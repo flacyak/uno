@@ -192,7 +192,11 @@ interface AwsFiles {
   credentials: Map<string, Map<string, string>>;
 }
 
-/** Reads the AWS files from the paths the environment names, or ~/.aws. */
+/**
+ * Reads the AWS files from the paths the environment names, or ~/.aws.
+ * @param env the environment, for the paths and the home folder
+ * @return both files, as sections of keys
+ */
 async function awsFiles(env: Env): Promise<AwsFiles> {
   const aws = join(homeOf(env), '.aws');
   return {
@@ -203,8 +207,13 @@ async function awsFiles(env: Env): Promise<AwsFiles> {
   };
 }
 
-/** The config section a profile's settings are in: `default`, or
- * `profile <name>`. */
+/**
+ * The config section a profile's settings are in: `default`, or
+ * `profile <name>`.
+ * @param files the AWS files
+ * @param profile the profile's name
+ * @return its config section, or undefined
+ */
 function configOf(
   files: AwsFiles,
   profile: string,
@@ -214,15 +223,25 @@ function configOf(
   );
 }
 
-/** The region a profile signs for: the environment, then its config, then
- * the default. */
+/**
+ * The region a profile signs for: the environment, then its config, then
+ * the default.
+ * @param env the environment
+ * @param files the AWS files
+ * @param profile the profile's name
+ * @return the region
+ */
 function regionOf(env: Env, files: AwsFiles, profile: string): string {
   return (
     envRegion(env) ?? configOf(files, profile)?.get('region') ?? DEFAULT_REGION
   );
 }
 
-/** The region the environment names, or undefined. */
+/**
+ * The region the environment names, or undefined.
+ * @param env the environment
+ * @return the region, or undefined
+ */
 function envRegion(env: Env): string | undefined {
   return env['AWS_REGION'] ?? env['AWS_DEFAULT_REGION'];
 }
@@ -230,6 +249,9 @@ function envRegion(env: Env): string | undefined {
 /**
  * envKeys is the keys in the environment, signing for `region`, or undefined
  * where there are none. An empty variable counts as none.
+ * @param env the environment
+ * @param region the region the keys sign for
+ * @return the keys, or undefined
  */
 function envKeys(env: Env, region: string): AwsCredentials | undefined {
   const id = env['AWS_ACCESS_KEY_ID'];
@@ -252,7 +274,11 @@ interface Held {
  */
 const EARLY_MS = 5 * 60_000;
 
-/** The home folder the AWS files are under. */
+/**
+ * The home folder the AWS files are under.
+ * @param env the environment
+ * @return the home folder
+ */
 function homeOf(env: Env): string {
   return env['HOME'] ?? env['USERPROFILE'] ?? homedir();
 }
@@ -267,6 +293,11 @@ function homeOf(env: Env): string {
  * again after a minute. A credential_process is run and its output read. An
  * SSO profile trades its cached token for keys. Expiring keys are reused
  * until shortly before they expire.
+ * @param env the environment
+ * @param files the AWS files
+ * @param profile the profile to sign in as
+ * @param through the profiles already on a role chain, so a loop is refused
+ * @return the session, or undefined where the profile offers no way in
  */
 async function profileSession(
   env: Env,
@@ -310,6 +341,10 @@ async function profileSession(
 /**
  * held is a session kept until shortly before it expires, or for good for
  * keys that last, signing for `region`. `as` names whose it is.
+ * @param session the keys, with when they expire
+ * @param region the region they sign for
+ * @param as whose they are, for an error
+ * @return the credentials, kept until shortly before they expire
  */
 function held(
   { expiration, ...keys }: Printed | Session,
@@ -328,6 +363,9 @@ function held(
  * hostSession is the end of the chain, where the AWS SDKs look last: a web
  * identity token the environment names, the endpoint beside a container,
  * then the instance metadata service. Undefined where the host offers none.
+ * @param env the environment
+ * @param region the region the session signs for
+ * @return the host's session, or undefined
  */
 async function hostSession(
   env: Env,
@@ -361,6 +399,10 @@ interface WebIdentityFile {
  * webIdentitySession reads the token in the file and trades it at STS for
  * the role. `named` is who names the file, for an error: the AWS profile
  * x, or the environment.
+ * @param env the environment, for the STS endpoint
+ * @param ask the role, the token's file and the session
+ * @param named who names the file, for an error
+ * @return the role's session
  */
 async function webIdentitySession(
   env: Env,
@@ -389,6 +431,8 @@ async function webIdentitySession(
  * containerSession asks the endpoint the environment names beside a
  * container: a path on the ECS host, or a full URL. Undefined off a
  * container. The endpoint's token comes from a file where one is named.
+ * @param env the environment
+ * @return the task's session, or undefined off a container
  */
 async function containerSession(env: Env): Promise<Session | undefined> {
   const relative = envVar(env, 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI');
@@ -415,6 +459,8 @@ async function containerSession(env: Env): Promise<Session | undefined> {
  * instanceSession asks the instance metadata service, at the endpoint the
  * environment names or the one its mode picks, unless the environment turns
  * it off. Undefined where no role answers.
+ * @param env the environment
+ * @return the instance's session, or undefined
  */
 function instanceSession(env: Env): Promise<Session | undefined> {
   if (env['AWS_EC2_METADATA_DISABLED']?.toLowerCase() === 'true')
@@ -427,7 +473,12 @@ function instanceSession(env: Env): Promise<Session | undefined> {
   return instanceCredentials(endpoint);
 }
 
-/** The environment's value for `name`, where it is set and not empty. */
+/**
+ * The environment's value for `name`, where it is set and not empty.
+ * @param env the environment
+ * @param name the variable
+ * @return its value, or undefined
+ */
 function envVar(env: Env, name: string): string | undefined {
   const value = env[name];
   return value === undefined || value === '' ? undefined : value;
@@ -442,6 +493,11 @@ function envVar(env: Env, name: string): string | undefined {
  * name, or sso_start_url and sso_region in the profile itself, cached under
  * the SHA-1 of the URL. A missing or expired token is refused with the
  * command that fixes it, before the portal is asked.
+ * @param env the environment
+ * @param files the AWS files
+ * @param profile the profile's name
+ * @param section the profile's config section
+ * @return the role's session
  */
 async function ssoSession(
   env: Env,
@@ -509,7 +565,11 @@ async function ssoSession(
   );
 }
 
-/** The JSON object a cache file holds, or undefined. */
+/**
+ * The JSON object a cache file holds, or undefined.
+ * @param text the file's text
+ * @return the object, or undefined
+ */
 function cachedToken(text: string): Record<string, unknown> | undefined {
   let parsed: unknown;
   try {
@@ -527,6 +587,13 @@ function cachedToken(text: string): Record<string, unknown> | undefined {
  * source_profile, which may be any kind of profile, including another role.
  * A chain that comes back to a profile already on it is refused naming the
  * loop. mfa_serial is refused, since a code needs a prompt the engine lacks.
+ * @param env the environment
+ * @param files the AWS files
+ * @param profile the profile naming the role
+ * @param roleArn the role
+ * @param setting reads a key from the profile's sections
+ * @param through the profiles already on the chain
+ * @return the role's session
  */
 async function roleSession(
   env: Env,
@@ -629,7 +696,13 @@ async function roleSession(
   );
 }
 
-/** A profile's own static keys, for a role profile that is its own source. */
+/**
+ * A profile's own static keys, for a role profile that is its own source.
+ * @param env the environment
+ * @param files the AWS files
+ * @param profile the profile's name
+ * @return the keys, or undefined
+ */
 function profileKeysOnly(
   env: Env,
   files: AwsFiles,
@@ -674,6 +747,9 @@ interface Printed {
  * it prints. The command is split into words the way a shell would and run
  * directly, as a program and its arguments. The output must be the CLI's
  * version 1 JSON.
+ * @param profile the profile, for errors
+ * @param command the credential_process line
+ * @return the keys printed
  */
 async function processCredentials(
   profile: string,
@@ -745,6 +821,8 @@ async function processCredentials(
  * quotes keep everything but a backslash before a quote or a backslash, and
  * a backslash outside quotes keeps the next character. Every other character
  * is plain text: a `$`, a `*` and a semicolon are each part of a word.
+ * @param line the command line
+ * @return its words
  */
 export function splitCommand(line: string): string[] {
   const words: string[] = [];
@@ -788,6 +866,8 @@ export function splitCommand(line: string): string[] {
  * cached reuses what `read` returned until its `until` time passes. Calls
  * that land while a read is in flight share it. A read that fails rejects
  * every waiting call and is dropped, so the next call reads again.
+ * @param read reads credentials and says when to read again
+ * @return a function answering the kept credentials
  */
 function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
   let kept: Held | undefined;
@@ -814,6 +894,8 @@ function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
  * first, then the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or
  * `default`, then the host the process runs on. This is the `machine` way
  * of signing in, and what a request outside every connection signs with.
+ * @param env the environment, process.env by default
+ * @return a function answering the credentials, reading again as they age
  */
 export function awsCredentials(
   env: Env = process.env,
@@ -840,6 +922,9 @@ export function awsCredentials(
 /**
  * profileCredentials signs in as one named profile, ignoring AWS_PROFILE and
  * any keys in the environment.
+ * @param profile the profile to sign in as
+ * @param env the environment, process.env by default
+ * @return a function answering the credentials, reading again as they age
  */
 export function profileCredentials(
   profile: string,
@@ -867,6 +952,8 @@ export function profileCredentials(
  * awsProfiles names the profiles on this machine: every `[profile <name>]`
  * or `[default]` section of ~/.aws/config and every section of
  * ~/.aws/credentials. `default` comes first, then the rest in name order.
+ * @param env the environment, process.env by default
+ * @return the profile names
  */
 export async function awsProfiles(env: Env = process.env): Promise<string[]> {
   const files = await awsFiles(env);
@@ -898,12 +985,22 @@ export interface ConnectionAuth {
   readonly modes: readonly AuthMode[];
 }
 
-/** who names a connection as its signing does: its name, or its id where it has none. */
+/**
+ * who names a connection as its signing does: its name, or its id where it has none.
+ * @param c the connection
+ * @return its name
+ */
 function who(c: Connection): string {
   return c.name === '' ? c.id : c.name;
 }
 
-/** signed is `creds` in c's region where it names one, labelled with whose they are. */
+/**
+ * signed is `creds` in c's region where it names one, labelled with whose they are.
+ * @param c the connection
+ * @param creds the credentials
+ * @param through whose they are, for an error
+ * @return the signing
+ */
 function signed(
   c: Connection,
   creds: AwsCredentials,
@@ -916,7 +1013,12 @@ function signed(
   };
 }
 
-/** unsigned reads without signing in, in c's region where it names one. */
+/**
+ * unsigned reads without signing in, in c's region where it names one.
+ * @param c the connection
+ * @param env the environment, for the region
+ * @return the signing
+ */
 function unsigned(c: Connection, env: Env): Signing {
   return {
     unsigned: true,
@@ -928,6 +1030,8 @@ function unsigned(c: Connection, env: Env): Signing {
 /**
  * connectionAuth is the desktop's ways of signing in: `machine`, `profile`
  * and `public`. `role` is refused. It is the hosted engine's.
+ * @param env the environment, process.env by default
+ * @return the ways of signing in
  */
 export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const machine = awsCredentials(env);
@@ -990,6 +1094,8 @@ export interface HostedOptions {
  * process is one workspace's, so no session is ever shared across tenants. `machine` and
  * `profile` are refused, and `machine()` rejects, so only an address a
  * connection covers is read.
+ * @param opts what the engine signs in with
+ * @return the ways of signing in
  */
 export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   const env = opts.env ?? process.env;
@@ -1052,6 +1158,10 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
  * location, or with the machine's chain where none does. `connections` is
  * called on every request, so a connection saved while the engine runs is
  * used by the next request.
+ * @param connections the connections saved, read on every request
+ * @param env the environment, process.env by default
+ * @param auth the ways of signing in, the desktop's by default
+ * @return the signer for a location
  */
 export function connectionSigning(
   connections: () => readonly Connection[],
@@ -1064,7 +1174,11 @@ export function connectionSigning(
   };
 }
 
-/** readText is a file's text, or undefined for a missing file. */
+/**
+ * readText is a file's text, or undefined for a missing file.
+ * @param path the file
+ * @return its text, or undefined
+ */
 async function readText(path: string): Promise<string | undefined> {
   try {
     return new TextDecoder().decode(
@@ -1076,8 +1190,12 @@ async function readText(path: string): Promise<string | undefined> {
   }
 }
 
-/** ini reads an AWS-style ini file into sections of keys. A missing file is
- * empty. */
+/**
+ * ini reads an AWS-style ini file into sections of keys. A missing file is
+ * empty.
+ * @param path the file
+ * @return its sections of keys
+ */
 async function ini(path: string): Promise<Map<string, Map<string, string>>> {
   const out = new Map<string, Map<string, string>>();
   const text = await readText(path);
