@@ -130,6 +130,10 @@ mfa_serial = arn:aws:iam::210987654321:mfa/ana
 [profile from-metadata]
 role_arn = ${READER}
 credential_source = Ec2InstanceMetadata
+
+[profile from-elsewhere]
+role_arn = ${READER}
+credential_source = Container
 `;
 
 async function machine(extra: Record<string, string | undefined> = {}) {
@@ -386,11 +390,25 @@ describe('what a role profile cannot do is said by name', () => {
     );
   });
 
-  test('a credential_source uno does not reach', async () => {
+  // The instance metadata service is covered in host.test.ts. Here, it is
+  // turned off, so there is no instance to take the source from.
+  test('an instance with no metadata service to ask', async () => {
     await expect(
-      profileCredentials('from-metadata', await machine())(),
+      profileCredentials(
+        'from-metadata',
+        await machine({ AWS_EC2_METADATA_DISABLED: 'true' }),
+      )(),
     ).rejects.toThrow(
-      'the AWS profile from-metadata takes its credentials from Ec2InstanceMetadata, which uno does not reach · use source_profile or Environment',
+      'the AWS profile from-metadata takes its credentials from the instance it runs on, and no instance metadata service with a role answered',
+    );
+  });
+
+  test('a credential_source uno does not know', async () => {
+    await expect(
+      profileCredentials('from-elsewhere', await machine())(),
+    ).rejects.toThrow(
+      'the AWS profile from-elsewhere takes its credentials from Container, which uno does not know · ' +
+        'use source_profile, or a credential_source of Environment, Ec2InstanceMetadata or EcsContainer',
     );
   });
 });
