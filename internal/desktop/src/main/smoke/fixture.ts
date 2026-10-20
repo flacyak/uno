@@ -6,7 +6,7 @@
  * string sees them under the same names.
  */
 
-import { baseLocale } from "#paraglide/runtime";
+import { baseLocale } from "@paraglide/runtime";
 
 /** The locale the smoke runs the app in, and so the one its counts are written in. */
 export const LOCALE = baseLocale;

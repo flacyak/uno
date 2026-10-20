@@ -10,7 +10,7 @@
  * `getBoundingClientRect()` are zero until faked. See dom-harness.ts.
  */
 
-import type { KeyModifiers, Page, Row, Wait } from "#main/smoke/page";
+import type { KeyModifiers, Page, Row, Wait } from "@main/smoke/page";
 
 /**
  * The longest a wait lasts. electron-page.ts counts 150 frames. happy-dom's

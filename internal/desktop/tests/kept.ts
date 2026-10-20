@@ -2,7 +2,7 @@
  * @fileoverview A stand-in for localStorage, backed by a Map.
  */
 
-import type { Keeps } from "#renderer/theme";
+import type { Keeps } from "@renderer/theme";
 
 export class Kept implements Keeps {
   readonly map = new Map<string, string>();

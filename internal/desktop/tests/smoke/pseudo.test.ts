@@ -14,9 +14,9 @@
 
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "#scripts/pseudo";
-import { m } from "#paraglide/messages";
-import type { Shell } from "#renderer/shell/shell";
+import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
+import { m } from "@paraglide/messages";
+import type { Shell } from "@renderer/shell/shell";
 import { bootShell } from "./dom-harness.ts";
 import { frame } from "./dom-page.ts";
 
