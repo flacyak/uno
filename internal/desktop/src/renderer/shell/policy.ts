@@ -1,18 +1,20 @@
 /**
- * @fileoverview What a person hands to whoever makes the role uno's hosted
- * engine assumes: uno's account and their external ID, and the two policy
- * documents the role is made with, each beside a Copy button.
+ * @fileoverview The IAM documents a connection asks for, each beside a Copy
+ * button: the permission policy the keys that sign in need, and for the
+ * hosted engine's role sign-in, uno's account, the external ID and the trust
+ * policy the role is made with.
  *
- * The role is made where the bucket is managed, by the team or the system
- * that owns it, so the form gives what to pass on and edits none of it. The
- * documents are written by `trustPolicy` and `permissionPolicy` in @uno/grid,
- * and the permission policy follows the bucket and prefix as they are typed,
- * so what is copied is what the connection will ask for.
+ * The documents are written by `trustPolicy` and `permissionPolicy` in
+ * @uno/grid, and the permission policy follows the bucket and prefix as they
+ * are typed, so what is copied is what the connection will ask for. The form
+ * edits none of it: a policy is attached where the bucket is managed, by the
+ * team or the system that owns it.
  *
- * It is a block of its own, mounted by the connect form while a role is the
- * sign-in and an engine has said what the role has to trust. The desktop and
- * the web page both draw it through the renderer, and each engine decides
- * whether it appears by what it offers in `SignIns`.
+ * It is a block of its own, mounted by the connect form. With a role as the
+ * sign-in it shows once the engine has said what the role has to trust. With
+ * a profile or the machine's keys it shows the permission policy alone, once
+ * a bucket is named. The desktop and the web page both draw it through the
+ * renderer.
  */
 
 import type { Trust } from "@engine";
@@ -36,40 +38,55 @@ function writeClipboard(text: string): Promise<void> {
   return navigator.clipboard.writeText(text);
 }
 
-export class RoleBlock {
-  readonly el = el("div", "role");
+export class PolicyBlock {
+  readonly el = el("div", "policy");
   private readonly words = new Words();
   private readonly account = el("code", "copyable");
   private readonly externalId = el("code", "copyable");
   private readonly trust = el("pre", "copyable document");
   private readonly permission = el("pre", "copyable document");
+  /** The rows a role sign-in alone has: the account, the external ID and the trust policy. */
+  private readonly roleRows: HTMLElement[];
   /** The permission policy's row, which waits for a bucket to be named. */
   private readonly permissionRow: HTMLElement;
+  /** Whether the block is drawn for a role, which the note under the rows follows. */
+  private forRole = false;
 
   constructor(private readonly copy: (text: string) => Promise<void> = writeClipboard) {
     const block = this.el;
     block.hidden = true;
-    this.permissionRow = this.row(m.role_permission_policy, this.permission);
-    block.append(
+    this.roleRows = [
       this.row(m.role_account, this.account),
       this.row(m.role_external_id, this.externalId),
       this.row(m.role_trust_policy, this.trust),
+    ];
+    this.permissionRow = this.row(m.role_permission_policy, this.permission);
+    block.append(
+      ...this.roleRows,
       this.permissionRow,
-      this.words.text(el("div", "how"), m.role_how),
+      this.words.text(el("div", "how"), () => (this.forRole ? m.role_how() : m.policy_keys_how())),
     );
   }
 
-  /** show draws the block for `trust`, with the permission policy for `place`. */
-  show(trust: Trust, place: Place): void {
-    // The account alone when the ARN has one, as the console asks for it, and
-    // the whole principal otherwise.
-    this.account.textContent = accountOf(trust.principal) ?? trust.principal;
-    this.externalId.textContent = trust.externalId;
-    this.trust.textContent = trustPolicy(trust);
+  /**
+   * show draws the block for `place`: the permission policy, and with
+   * `trust` the role's account, external ID and trust policy before it.
+   */
+  show(place: Place, trust?: Trust): void {
+    this.forRole = trust !== undefined;
+    for (const row of this.roleRows) row.hidden = trust === undefined;
+    if (trust !== undefined) {
+      // The account alone when the ARN has one, as the console asks for it,
+      // and the whole principal otherwise.
+      this.account.textContent = accountOf(trust.principal) ?? trust.principal;
+      this.externalId.textContent = trust.externalId;
+      this.trust.textContent = trustPolicy(trust);
+    }
     // The permission policy names the bucket, so there is none to copy
     // before one is typed.
     this.permissionRow.hidden = place.bucket === "";
     this.permission.textContent = permissionPolicy(place);
+    this.words.write();
     this.el.hidden = false;
   }
 
