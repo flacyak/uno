@@ -122,7 +122,7 @@ export function entities(s: string): string {
       const point =
         code.startsWith('#x') || code.startsWith('#X')
           ? Number.parseInt(code.slice(2), 16)
-          : Number.parseInt(code.slice(1), 10);
+          : Number(code.slice(1));
       // A code point outside the Unicode range is left as it came.
       return Number.isFinite(point) && point >= 0 && point <= 0x10ffff
         ? String.fromCodePoint(point)
