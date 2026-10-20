@@ -7,7 +7,7 @@
 // part is opened through the handlers given, so a part can be on a disk, in
 // a bucket or in memory.
 
-import { concat } from '../go/index.ts';
+import { concat } from './bytes.ts';
 import { unreachable } from '../never.ts';
 import {
   UnsupportedEncodingError,

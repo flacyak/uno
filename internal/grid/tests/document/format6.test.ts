@@ -14,10 +14,10 @@ import {
   newManifest,
   readContainer,
   readDocument,
+  sha256Hex,
   writeDocument,
 } from '../../src/document/index.ts';
 import type { Document, Held, HeldParts } from '../../src/document/index.ts';
-import { sha256Hex } from '../../src/go/index.ts';
 
 const encoder = new TextEncoder();
 

@@ -17,11 +17,11 @@ import {
   newManifest,
   readContainer,
   readDocument,
+  sha256Hex,
   writeDocument,
 } from '../../src/document/index.ts';
 import type { Document, Source } from '../../src/document/index.ts';
 import type { SourceHandle } from '../../src/engine/index.ts';
-import { sha256Hex } from '../../src/go/index.ts';
 import { read } from '../../src/ingest/index.ts';
 import { parse as parseProgram } from '../../src/program/index.ts';
 import { Op } from '../../src/sheet/index.ts';

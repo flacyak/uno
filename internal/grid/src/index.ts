@@ -3,7 +3,6 @@
 // The subpath exports (`@uno/grid/sheet`, `@uno/grid/formula` and so on) are
 // the usual way in. This barrel exports everything.
 
-export * as go from './go/index.ts';
 export * as num from './num/index.ts';
 export * as notation from './notation/index.ts';
 export * as formula from './formula/index.ts';

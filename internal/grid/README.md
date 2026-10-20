@@ -8,6 +8,7 @@ codebase.
 
 | module     | what it owns                                             |
 | ---------- | -------------------------------------------------------- |
+| `text`     | code points, their order, classes and case, and quoting  |
 | `num`      | what a cell is worth                                     |
 | `notation` | markdown in, symbols out                                 |
 | `formula`  | parse, evaluate, the column dependency graph             |
@@ -138,6 +139,6 @@ whose they are.
 ```bash
 vp install   # dependencies
 vp check     # format, lint, type check
-vp test      # the ported Go suite
+vp test      # the tests
 vp pack      # build dist/, with declarations
 ```

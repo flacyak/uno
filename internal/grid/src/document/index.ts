@@ -1,5 +1,6 @@
 // Package document reads and writes the .uno container.
 
+export { sha256Hex } from './hash.ts';
 export {
   BASE_VERSION,
   FORMAT_VERSION,

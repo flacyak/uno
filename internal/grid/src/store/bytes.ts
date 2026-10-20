@@ -1,8 +1,7 @@
-// Ports of Go's bytes package.
+// Joining byte arrays.
 
 /**
- * concat mirrors `bytes.Join(pieces, nil)`: one array holding every piece in
- * order.
+ * concat is one array holding every piece in order.
  */
 export function concat(pieces: readonly Uint8Array[]): Uint8Array {
   const out = new Uint8Array(pieces.reduce((n, p) => n + p.length, 0));

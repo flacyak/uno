@@ -5,11 +5,12 @@
 // refuse a cell when it is authored. Rendering happens once at authoring
 // time; the grid draws the result as plain text.
 
+import { formatU } from './unicode.ts';
 import { quote, runes } from '../text/index.ts';
-import { formatU } from '../go/index.ts';
 import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';
 
 export { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';
+export { formatU } from './unicode.ts';
 
 /**
  * FRAC_SLASH renders \frac{a}{b} as a⁄b on one line. It is the only output

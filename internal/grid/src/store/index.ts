@@ -24,6 +24,7 @@ import type { HeaderMode, Part } from './multi.ts';
 import type { Provider } from '../plugin/index.ts';
 
 // Browsing is its own interface, in store/list.ts.
+export { concat } from './bytes.ts';
 export { listWith, statWith } from './list.ts';
 export type { Entry, Listing, Lister } from './list.ts';
 

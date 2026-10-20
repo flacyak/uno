@@ -16,7 +16,6 @@
     "./document": "./dist/document/index.mjs",
     "./engine": "./dist/engine/index.mjs",
     "./formula": "./dist/formula/index.mjs",
-    "./go": "./dist/go/index.mjs",
     "./ingest": "./dist/ingest/index.mjs",
     "./library": "./dist/library/index.mjs",
     "./notation": "./dist/notation/index.mjs",
