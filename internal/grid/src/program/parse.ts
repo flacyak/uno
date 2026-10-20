@@ -1,5 +1,6 @@
-import { isDigit, isLetter, runes } from '../text/index.ts';
-import { Scanner, atoi, quote, unquote } from '../go/index.ts';
+import { atoi } from '../num/index.ts';
+import { isDigit, isLetter, quote, runes, unquote } from '../text/index.ts';
+import { Scanner } from '../go/index.ts';
 import { messageOf } from '../said/index.ts';
 import type { Pos, Step } from './steps.ts';
 import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from './steps.ts';

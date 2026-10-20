@@ -3,3 +3,4 @@
 // text reads, sorts and compares the same on every platform.
 
 export * from './runes.ts';
+export * from './quote.ts';

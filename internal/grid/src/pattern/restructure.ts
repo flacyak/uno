@@ -1,5 +1,5 @@
-import { runes } from '../text/index.ts';
-import { indexOfRunes, quote, quoteMeta } from '../go/index.ts';
+import { quote, runes } from '../text/index.ts';
+import { indexOfRunes, quoteMeta } from '../go/index.ts';
 import { MAX_PARTS, quoteRegex } from '../program/index.ts';
 import { MAX_DIFF } from './align.ts';
 import { MAX_PER_EXAMPLE } from './induce.ts';

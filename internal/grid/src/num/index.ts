@@ -3,8 +3,10 @@
 // It is shared by `sheet` and `formula`. It works on one string at a time:
 // a string goes in and a number or undefined comes out.
 
+import { parseFloat as parseDecimal } from './decimal.ts';
 import { trimSpace } from '../text/index.ts';
-import { parseFloat as parseDecimal } from '../go/index.ts';
+
+export * from './decimal.ts';
 
 /**
  * DECORATION is the characters stripped from a value before it is read as a

@@ -1,14 +1,13 @@
 // The steps a program is built from, as a discriminated union so the compiler
 // checks that `runStep` covers all of them.
 
-import { runes, toLower, toUpper, trimSpace } from '../text/index.ts';
+import { atoi } from '../num/index.ts';
+import { quote, runes, toLower, toUpper, trimSpace } from '../text/index.ts';
 import {
-  atoi,
   compile,
   findAllIndex,
   indexOfRunes,
   isMeta,
-  quote,
   quoteMeta,
   replaceAllLiteral,
 } from '../go/index.ts';

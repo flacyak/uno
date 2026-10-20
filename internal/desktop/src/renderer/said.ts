@@ -7,7 +7,7 @@
 
 import { Refusal, messageOf } from "@uno/grid/engine";
 import type { CharName, Said, Sought, StepSaid } from "@uno/grid/engine";
-import { quote } from "@uno/grid/go";
+import { quote } from "@uno/grid/text";
 import type { Sentences } from "@uno/grid/said";
 
 import { m } from "../paraglide/messages.js";

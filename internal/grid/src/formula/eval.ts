@@ -1,4 +1,4 @@
-import { quote } from '../go/index.ts';
+import { quote } from '../text/index.ts';
 import { unreachable } from '../never.ts';
 import { parse as parseNumber } from '../num/index.ts';
 import type { Formula, Node } from './ast.ts';

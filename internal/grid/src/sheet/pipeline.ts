@@ -4,7 +4,7 @@
 // order and each call starts fresh. A formula is computed a column at a time
 // over the block of rows being finished.
 
-import { formatFloat, roundSignificant } from '../go/index.ts';
+import { formatFloat, roundSignificant } from '../num/index.ts';
 import type { Columns } from '../formula/index.ts';
 import { evaluateColumn } from '../formula/index.ts';
 import { apply as applyProgram } from '../program/index.ts';

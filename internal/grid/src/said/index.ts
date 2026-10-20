@@ -6,7 +6,7 @@
 // travels as `text`, already in English. Adding a kind to `Said`
 // makes the compiler require its sentence here and in every client.
 
-import { quote } from '../go/strconv.ts';
+import { quote } from '../text/index.ts';
 import { unreachable } from '../never.ts';
 import type { HeaderMode } from '../store/multi.ts';
 
