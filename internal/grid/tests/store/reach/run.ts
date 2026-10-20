@@ -113,6 +113,9 @@ function watch(
   return watched;
 }
 
+// The CommonJS module objects are what the ESM builtins are synced from, so a
+// function wrapped on one, then syncBuiltinESMExports, reaches every importer.
+// An `import` gives a frozen namespace, which nothing can wrap.
 const require = createRequire(import.meta.url);
 for (const [name, way] of WAY_OF) {
   const mod = require(name) as Record<string, unknown>;
