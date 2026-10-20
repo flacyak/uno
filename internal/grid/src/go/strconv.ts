@@ -1,6 +1,6 @@
 // Ports of Go's strconv package.
 
-import { runes } from './strings.ts';
+import { codePoint, runes } from './strings.ts';
 
 /**
  * formatFloat mirrors `strconv.FormatFloat(v, 'f', -1, 64)`: the shortest
@@ -85,7 +85,7 @@ export function quote(s: string): string {
       out += r;
       continue;
     }
-    const cp = r.codePointAt(0)!;
+    const cp = codePoint(r);
     if (cp < 0x100) out += '\\x' + cp.toString(16).padStart(2, '0');
     else if (cp < 0x10000) out += '\\u' + cp.toString(16).padStart(4, '0');
     else out += '\\U' + cp.toString(16).padStart(8, '0');

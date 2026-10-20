@@ -72,7 +72,7 @@ export class Scanner {
     try {
       return grammar();
     } catch (err) {
-      return this.refuse(src, (err as Error).message);
+      return this.refuse(src, err instanceof Error ? err.message : String(err));
     }
   }
 }

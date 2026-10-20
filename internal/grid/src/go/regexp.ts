@@ -4,7 +4,7 @@
 // three places this file covers: what a replacement string means, what unit a
 // match index is in, and which characters are escaped.
 
-import { MAX_BMP, SURROGATE_PAIR_UNITS, runes } from './strings.ts';
+import { MAX_BMP, SURROGATE_PAIR_UNITS, codePoint, runes } from './strings.ts';
 
 /**
  * META is the set of characters `regexp.QuoteMeta` escapes. `literalOf` in
@@ -76,7 +76,7 @@ export function findAllIndex(re: RegExp, s: string): Array<[number, number]> {
   const cp: number[] = [];
   let n = 0;
   for (let i = 0; i < s.length;) {
-    const r = String.fromCodePoint(s.codePointAt(i)!);
+    const r = String.fromCodePoint(codePoint(s, i));
     for (let k = 0; k < r.length; k++) cp[i + k] = n;
     i += r.length;
     n++;

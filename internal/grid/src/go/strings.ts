@@ -17,6 +17,19 @@ export function runeLen(s: string): number {
 }
 
 /**
+ * codePoint is the code point at code-unit offset `at` of `s`, like
+ * `utf8.DecodeRuneInString`. It throws past the end of `s`, where
+ * `codePointAt` answers undefined.
+ */
+export function codePoint(s: string, at = 0): number {
+  const cp = s.codePointAt(at);
+  if (cp === undefined) {
+    throw new RangeError(`no code point at ${at} of ${JSON.stringify(s)}`);
+  }
+  return cp;
+}
+
+/**
  * compareStrings orders by code point, as `strings.Compare` and `sort.Strings`
  * do. JavaScript's default comparison uses UTF-16 code units, which order
  * differently above the BMP.
@@ -27,8 +40,8 @@ export function compareStrings(a: string, b: string): number {
   // Walked in place; a sort calls this once per comparison.
   const n = Math.min(a.length, b.length);
   for (let i = 0; i < n;) {
-    const c = a.codePointAt(i)!;
-    const d = b.codePointAt(i)!;
+    const c = codePoint(a, i);
+    const d = codePoint(b, i);
     if (c !== d) return c < d ? -1 : 1;
     i += c > MAX_BMP ? SURROGATE_PAIR_UNITS : 1;
   }
