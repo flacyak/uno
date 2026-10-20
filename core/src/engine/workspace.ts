@@ -22,6 +22,7 @@ import {
   writeDocument,
 } from '@document';
 import type { Document, Held, HeldParts, Logged, State } from '@document';
+import { unreachable } from '@never';
 import type { Edit } from '@sheet';
 import {
   bytesSource,
@@ -50,6 +51,7 @@ import type {
 import { Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import type { Meeting, Unconnected } from '@store/s3';
+import type { ReadSpec } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
@@ -164,7 +166,7 @@ class Absent {
 type Source = View | Absent;
 
 /** What Workspace.view opens a ref with, besides the ref. */
-type ViewAsk = Pick<OpenAsk, 'carried' | 'signal'> & {
+type ViewAsk = Pick<OpenAsk, 'carried' | 'read' | 'signal'> & {
   /** Opens every part of several files first, so a missing part fails here
    * by name. */
   whole?: boolean;
@@ -439,16 +441,17 @@ export class Workspace {
       );
     }
     const carried: Carried = { container, raw: src.raw, edits };
+    const read = readOf(src);
     try {
       let view: View;
       if (src.parts !== undefined) {
-        view = await this.view(src.id, joinedFrom(src), { carried });
+        view = await this.view(src.id, joinedFrom(src), { carried, read });
       } else if (src.raw === undefined) {
         // By path, pinned to the saved version where there is one.
         view = await this.view(
           src.id,
           fileAt(src.name, src.path ?? '', src.version),
-          { carried },
+          { carried, read },
         );
       } else {
         view = await View.open({
@@ -458,6 +461,7 @@ export class Workspace {
           stored: { t: 'source', source: bytesSource(src.raw) },
           origin: 'carried',
           carried,
+          read,
           port: this.port,
           tuning: this.tuning,
           began: performance.now(),
@@ -541,6 +545,7 @@ export class Workspace {
       stored: { t: 'source', source },
       origin: originOf(ref),
       carried,
+      read: ask.read,
       port: this.port,
       tuning: this.tuning,
       began,
@@ -775,6 +780,18 @@ export class Workspace {
     this.queue = run.catch(() => undefined);
     return run;
   }
+}
+
+/**
+ * readOf returns how a .uno source's rows were read when its log was made. A
+ * source that names no kind is delimited text, in every format, so no log
+ * moves under a detector that would read its file another way.
+ */
+function readOf(src: Pick<Held, 'kind' | 'header'>): ReadSpec {
+  if (src.kind === undefined) {
+    return { kind: 'delimited', header: src.header ?? 'first' };
+  }
+  return unreachable(src.kind);
 }
 
 /** pathsOf returns every address a .uno source reads from. A carried source has none. */
