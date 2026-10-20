@@ -38,6 +38,7 @@ import { SETTINGS } from "./settings.ts";
 import { SIDEBAR } from "./sidebar.ts";
 import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
+import { WIDEN } from "./widen.ts";
 
 /**
  * How long the first rows get to arrive from the engine, and how often the
@@ -63,6 +64,7 @@ const CHECKS: Check[] = [
   ...MULTI,
   ...SIDEBAR,
   ...AGAIN,
+  ...WIDEN,
 ];
 
 /**
