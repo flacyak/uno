@@ -8,6 +8,15 @@ export type { Program } from './program.ts';
 export { apply, describe, described, text } from './program.ts';
 export { parse } from './parse.ts';
 export {
+  META,
+  compile,
+  findAllIndex,
+  indexOfRunes,
+  isMeta,
+  quoteMeta,
+  replaceAllLiteral,
+} from './regexp.ts';
+export {
   MAX_PARTS,
   MAX_STEPS,
   literalOf,

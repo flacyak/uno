@@ -1,6 +1,5 @@
 // Ports of Go standard library functions whose JavaScript equivalents behave
 // differently. See resource/ts-translate.html.
-export * from './regexp.ts';
 export * from './fmt.ts';
 export * from './hash.ts';
 export * from './time.ts';

@@ -1,8 +1,6 @@
 // The steps a program is built from, as a discriminated union so the compiler
 // checks that `runStep` covers all of them.
 
-import { atoi } from '../num/index.ts';
-import { quote, runes, toLower, toUpper, trimSpace } from '../text/index.ts';
 import {
   compile,
   findAllIndex,
@@ -10,7 +8,9 @@ import {
   isMeta,
   quoteMeta,
   replaceAllLiteral,
-} from '../go/index.ts';
+} from './regexp.ts';
+import { atoi } from '../num/index.ts';
+import { quote, runes, toLower, toUpper, trimSpace } from '../text/index.ts';
 import { unreachable } from '../never.ts';
 import { english, englishSought, messageOf } from '../said/index.ts';
 import type { CharName, Sought, StepSaid } from '../said/index.ts';

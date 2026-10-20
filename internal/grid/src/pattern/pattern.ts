@@ -5,11 +5,11 @@
 // applying the answer is `sheet.apply`.
 
 import { compareStrings } from '../text/index.ts';
-import { quoteMeta } from '../go/index.ts';
 import type { Program } from '../program/index.ts';
 import {
   MAX_STEPS,
   apply as applyProgram,
+  quoteMeta,
   text as programText,
 } from '../program/index.ts';
 import type { Edit, Sheet, Written } from '../sheet/index.ts';
