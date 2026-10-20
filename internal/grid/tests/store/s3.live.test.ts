@@ -42,7 +42,7 @@ import {
   sheetRows,
   widened,
 } from '../engine/harness.ts';
-import { LAST_ROW, ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { LAST_ROW, ROWS, UNITS } from '../testdata/sales_q3.ts';
 import { AWKWARD_KEYS } from './awkward.ts';
 
 const URLS = (process.env['UNO_S3_LIVE'] ?? '')

@@ -6,7 +6,7 @@ import { afterEach, expect, test } from 'vite-plus/test';
 import { BAND_ROWS } from '../../src/engine/client.ts';
 import { TUNING } from '../../src/engine/index.ts';
 import { indexed } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { ROWS } from '../testdata/sales_q3.ts';
 import { record } from './record.ts';
 import { remote, repeated } from './remote.ts';
 import type { Remote } from './remote.ts';

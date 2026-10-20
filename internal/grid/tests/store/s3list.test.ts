@@ -7,7 +7,7 @@ import type { Entry } from '../../src/store/index.ts';
 import { s3Files, s3Provider } from '../../src/store/s3.ts';
 import { s3Lister, s3Prefix } from '../../src/store/s3lister.ts';
 import { readListing } from '../../src/store/s3xml.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import { bytes } from '../testdata/sales_q3.ts';
 import { AWKWARD_KEYS, DOT_KEYS } from './awkward.ts';
 import { HOME_REGION } from './regions.ts';
 import { BUCKET, KEYS, MODIFIED, bucket, etagOf } from './standin.ts';

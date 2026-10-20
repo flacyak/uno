@@ -26,7 +26,7 @@ import {
   COMMAS_LEFT,
   ROWS,
   UNITS,
-} from './testdata/sales-q3.ts';
+} from './testdata/sales_q3.ts';
 
 function salesBytes(): Uint8Array {
   return new Uint8Array(

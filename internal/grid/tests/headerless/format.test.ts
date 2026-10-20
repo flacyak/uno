@@ -10,7 +10,7 @@ import {
   read,
 } from '../../src/ingest/index.ts';
 import { bytesSource } from '../../src/store/index.ts';
-import { COLS, ROWS, bytes as wholeBytes } from '../testdata/sales-q3.ts';
+import { COLS, ROWS, bytes as wholeBytes } from '../testdata/sales_q3.ts';
 import { BOM, COLUMNS, allRows, marked } from './parts.ts';
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);

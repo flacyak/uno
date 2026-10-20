@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { ROWS } from './sales-q3.ts';
+import { ROWS } from './sales_q3.ts';
 
 /** How many parts the file is cut into. */
 export const PARTS = 3;

@@ -20,9 +20,9 @@ import type { Sheet } from '../../src/sheet/index.ts';
 import { blobProvider, multiProvider } from '../../src/store/index.ts';
 import type { Connections } from '../../src/store/index.ts';
 import { diskProvider } from '../../src/store/node.ts';
-import { bytes, FIXTURE } from '../testdata/sales-q3.ts';
+import { bytes, FIXTURE } from '../testdata/sales_q3.ts';
 
-// Re-exported from testdata/sales-q3.ts.
+// Re-exported from testdata/sales_q3.ts.
 export { bytes, FIXTURE };
 export const sales = read('sales-q3.csv', bytes);
 

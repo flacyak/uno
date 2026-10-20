@@ -51,14 +51,14 @@ import {
   versionIdOf,
 } from '../store/standin.ts';
 import type { Bucket } from '../store/standin.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { ROWS, UNITS } from '../testdata/sales_q3.ts';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   PART_ROWS,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '../testdata/sales_q3_parts.ts';
 import {
   connect,
   everyRow,

@@ -7,8 +7,8 @@ import { afterAll, expect, test } from 'vite-plus/test';
 
 import { PARTS_VERSION, readContainer } from '../../src/document/index.ts';
 import { Op } from '../../src/sheet/index.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
-import { PART_ROWS } from '../testdata/sales-q3-parts.ts';
+import { ROWS, UNITS } from '../testdata/sales_q3.ts';
+import { PART_ROWS } from '../testdata/sales_q3_parts.ts';
 import {
   connect,
   everyRow,

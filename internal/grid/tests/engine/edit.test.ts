@@ -15,7 +15,7 @@ import {
   REGION,
   ROWS,
   UNITS,
-} from '../testdata/sales-q3.ts';
+} from '../testdata/sales_q3.ts';
 import {
   SCREEN,
   TINY,

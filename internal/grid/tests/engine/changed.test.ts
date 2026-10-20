@@ -15,7 +15,7 @@ import { s3Provider } from '../../src/store/s3.ts';
 import { HOME_REGION } from '../store/regions.ts';
 import { KEYS, bucket } from '../store/standin.ts';
 import type { Bucket } from '../store/standin.ts';
-import { UNITS } from '../testdata/sales-q3.ts';
+import { UNITS } from '../testdata/sales_q3.ts';
 import { bytes, connect, indexed, openOne, saidIn } from './harness.ts';
 
 const KEY = '2025/sales-q3.csv';

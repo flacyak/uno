@@ -29,7 +29,7 @@ import {
   nodeStore,
 } from '../../../src/store/node.ts';
 import { s3Provider, tryConnection } from '../../../src/store/s3.ts';
-import { bytes } from '../../testdata/sales-q3.ts';
+import { bytes } from '../../testdata/sales_q3.ts';
 import { HOME_REGION } from '../regions.ts';
 import { KEYS, bucket } from '../standin.ts';
 import { sts } from '../stsstandin.ts';

@@ -24,7 +24,7 @@ import {
 import { s3Provider } from '../../src/store/s3.ts';
 import { assumeRole } from '../../src/store/sts.ts';
 import { bytes, connect, indexed, openOne } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { ROWS } from '../testdata/sales_q3.ts';
 import { HOME_REGION } from './regions.ts';
 import { bucket } from './standin.ts';
 import type { Bucket } from './standin.ts';

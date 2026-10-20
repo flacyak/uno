@@ -9,7 +9,7 @@ import {
   writeDocument,
 } from '../../src/document/index.ts';
 import type { Document } from '../../src/document/index.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import { bytes } from '../testdata/sales_q3.ts';
 import { record } from './record.ts';
 
 /** 24 MB. */

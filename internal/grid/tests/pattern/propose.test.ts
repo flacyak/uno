@@ -17,7 +17,7 @@ import {
   text,
 } from '../../src/program/index.ts';
 import { Sheet } from '../../src/sheet/index.ts';
-import { COMMAS_LEFT, UNITS } from '../testdata/sales-q3.ts';
+import { COMMAS_LEFT, UNITS } from '../testdata/sales_q3.ts';
 import { oneCol, propose, sales } from './harness.ts';
 
 test('three fixed cells propose the rest', () => {

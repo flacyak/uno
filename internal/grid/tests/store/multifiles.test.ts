@@ -43,13 +43,13 @@ import {
   sheetRows,
   widened,
 } from '../engine/harness.ts';
-import { ROWS, bytes } from '../testdata/sales-q3.ts';
+import { ROWS, bytes } from '../testdata/sales_q3.ts';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '../testdata/sales_q3_parts.ts';
 import { HOME_REGION } from './regions.ts';
 import { bucket } from './standin.ts';
 import type { Bucket } from './standin.ts';

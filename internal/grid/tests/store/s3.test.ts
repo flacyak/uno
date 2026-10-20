@@ -29,7 +29,7 @@ import {
   sales,
   saidIn,
 } from '../engine/harness.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { ROWS, UNITS } from '../testdata/sales_q3.ts';
 import { AWKWARD_KEYS, DOT_KEYS } from './awkward.ts';
 import { HOME_REGION, REGION_FORMATS } from './regions.ts';
 import { at, BUCKET, bucket, etagOf, KEYS } from './standin.ts';

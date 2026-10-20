@@ -23,14 +23,14 @@ import type {
 } from '../../src/engine/index.ts';
 import { Op } from '../../src/sheet/index.ts';
 import type { HeaderMode } from '../../src/store/index.ts';
-import { COLS, REGION, ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { COLS, REGION, ROWS, UNITS } from '../testdata/sales_q3.ts';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   PART_ROWS,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '../testdata/sales_q3_parts.ts';
 import { NAMES as ROWS_ONLY_NAMES, rowsOnly } from '../headerless/parts.ts';
 import {
   connect,

@@ -26,7 +26,7 @@ import {
 import { connectionSigning } from '../../src/store/node.ts';
 import { s3Provider } from '../../src/store/s3.ts';
 import { bytes, connect, indexed, openOne } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { ROWS } from '../testdata/sales_q3.ts';
 import { portal } from './portal.ts';
 import type { Grant, Portal } from './portal.ts';
 import { HOME_REGION } from './regions.ts';

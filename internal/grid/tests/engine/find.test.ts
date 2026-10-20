@@ -13,7 +13,7 @@ import {
   LAST_ROW,
   REGION,
   UNITS,
-} from '../testdata/sales-q3.ts';
+} from '../testdata/sales_q3.ts';
 import { FIXTURE, connect, indexed, openOne, sales } from './harness.ts';
 
 // Column index of rep in date,region,rep,channel,units,revenue.

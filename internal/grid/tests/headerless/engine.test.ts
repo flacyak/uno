@@ -14,8 +14,8 @@ import {
 
 import type { Engine } from '../../src/engine/index.ts';
 import { Op } from '../../src/sheet/index.ts';
-import { COLS, REGION, ROWS, UNITS } from '../testdata/sales-q3.ts';
-import { PART_ROWS } from '../testdata/sales-q3-parts.ts';
+import { COLS, REGION, ROWS, UNITS } from '../testdata/sales_q3.ts';
+import { PART_ROWS } from '../testdata/sales_q3_parts.ts';
 import {
   FIXTURE,
   TINY,

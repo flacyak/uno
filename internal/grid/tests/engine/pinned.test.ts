@@ -19,7 +19,7 @@ import { s3Provider } from '../../src/store/s3.ts';
 import { HOME_REGION } from '../store/regions.ts';
 import { KEYS, bucket, etagOf, versionIdOf } from '../store/standin.ts';
 import type { Bucket } from '../store/standin.ts';
-import { UNITS } from '../testdata/sales-q3.ts';
+import { UNITS } from '../testdata/sales_q3.ts';
 import { bytes, connect, indexed, openOne, sales } from './harness.ts';
 
 /** Another file, written over the object. */

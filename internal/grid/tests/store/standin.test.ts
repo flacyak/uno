@@ -6,7 +6,7 @@ import { expect, test } from 'vite-plus/test';
 import { awsCredentials, diskProvider } from '../../src/store/node.ts';
 import { s3Files, s3Provider } from '../../src/store/s3.ts';
 import { bytes, connect, indexed, openOne, sales } from '../engine/harness.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { ROWS, UNITS } from '../testdata/sales_q3.ts';
 import { HOME_REGION } from './regions.ts';
 import { at, bucket, KEYS, standinEnv } from './standin.ts';
 

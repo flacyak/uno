@@ -31,7 +31,7 @@ import {
   REVENUE,
   ROWS,
   UNITS,
-} from '../testdata/sales-q3.ts';
+} from '../testdata/sales_q3.ts';
 import {
   FIXTURE,
   SCREEN,

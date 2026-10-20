@@ -10,13 +10,13 @@ import type { SourceRef } from '../../src/engine/index.ts';
 import type { Provider } from '../../src/plugin/index.ts';
 import { blobProvider, multiProvider } from '../../src/store/index.ts';
 import { diskProvider } from '../../src/store/node.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { ROWS } from '../testdata/sales_q3.ts';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '../testdata/sales_q3_parts.ts';
 import {
   FIXTURE,
   TINY,

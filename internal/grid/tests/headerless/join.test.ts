@@ -12,8 +12,8 @@ import type { ByteSource } from '../../src/store/index.ts';
 import { DisagreementError, openMulti } from '../../src/store/multi.ts';
 import type { MultiSource, Part } from '../../src/store/multi.ts';
 import { localFiles } from '../../src/store/node.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
-import { PART_ROWS } from '../testdata/sales-q3-parts.ts';
+import { ROWS } from '../testdata/sales_q3.ts';
+import { PART_ROWS } from '../testdata/sales_q3_parts.ts';
 import {
   BOM,
   COLUMNS,

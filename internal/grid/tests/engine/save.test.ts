@@ -25,7 +25,7 @@ import { sha256Hex } from '../../src/go/index.ts';
 import { read } from '../../src/ingest/index.ts';
 import { parse as parseProgram } from '../../src/program/index.ts';
 import { Op } from '../../src/sheet/index.ts';
-import { COLS, ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { COLS, ROWS, UNITS } from '../testdata/sales_q3.ts';
 import {
   FIXTURE,
   bytes,

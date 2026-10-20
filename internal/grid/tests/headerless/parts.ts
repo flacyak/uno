@@ -11,8 +11,8 @@ import type { HeaderMode } from '../../src/ingest/index.ts';
 import type { Provider } from '../../src/plugin/index.ts';
 import { blobProvider, multiProvider } from '../../src/store/index.ts';
 import { diskProvider } from '../../src/store/node.ts';
-import { COLS } from '../testdata/sales-q3.ts';
-import { PARTS, partBytes } from '../testdata/sales-q3-parts.ts';
+import { COLS } from '../testdata/sales_q3.ts';
+import { PARTS, partBytes } from '../testdata/sales_q3_parts.ts';
 
 const LF = 0x0a;
 

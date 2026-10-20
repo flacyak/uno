@@ -20,7 +20,7 @@ import {
 import { connectionMeeting, s3Provider } from '../../src/store/s3.ts';
 import { BUCKET, bucket, etagOf, keysOnly } from '../store/standin.ts';
 import type { Bucket } from '../store/standin.ts';
-import { ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { ROWS, UNITS } from '../testdata/sales_q3.ts';
 import { FIXTURE, connect, indexed, openOne } from './harness.ts';
 
 let b: Bucket;

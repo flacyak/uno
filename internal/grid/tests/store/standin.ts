@@ -14,7 +14,7 @@ import type { AddressInfo } from 'node:net';
 import { compareStrings } from '../../src/go/index.ts';
 import { signV4 } from '../../src/store/s3.ts';
 import type { AwsCredentials } from '../../src/store/s3.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import { bytes } from '../testdata/sales_q3.ts';
 import { HOME_REGION, rendered } from './regions.ts';
 import type { Misdirect } from './regions.ts';
 

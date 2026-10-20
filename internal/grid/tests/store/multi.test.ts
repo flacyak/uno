@@ -10,13 +10,13 @@ import { openMulti, partMap } from '../../src/store/multi.ts';
 import type { Extent, HeaderMode, Part } from '../../src/store/multi.ts';
 import { localFiles } from '../../src/store/node.ts';
 import { s3Files } from '../../src/store/s3.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import { bytes } from '../testdata/sales_q3.ts';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '../testdata/sales_q3_parts.ts';
 import { HOME_REGION } from './regions.ts';
 import { KEYS, at, bucket, etagOf } from './standin.ts';
 import type { Bucket } from './standin.ts';

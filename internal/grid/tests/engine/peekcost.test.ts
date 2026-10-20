@@ -12,7 +12,7 @@ import { s3Files } from '../../src/store/s3.ts';
 import { HOME_REGION } from '../store/regions.ts';
 import { KEYS, at, bucket } from '../store/standin.ts';
 import type { Bucket } from '../store/standin.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import { bytes } from '../testdata/sales_q3.ts';
 import { saidIn } from './harness.ts';
 
 /** The fixture's six columns. */
