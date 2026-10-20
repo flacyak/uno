@@ -6,9 +6,9 @@
  * one level out.
  */
 
-import { m } from "#paraglide/messages";
-import { NAMED_MOTIONS, NONE, done, isCharacter, isLead, move, showing } from "#renderer/keys";
-import type { Action, Caret, Mode, Motion, Pending, Press, Step } from "#renderer/keys";
+import { m } from "@paraglide/messages";
+import { NAMED_MOTIONS, NONE, done, isCharacter, isLead, move, showing } from "@renderer/keys";
+import type { Action, Caret, Mode, Motion, Pending, Press, Step } from "@renderer/keys";
 import type { EditorKey, InputStrategy } from "./strategy.ts";
 
 /** Maximum digits in a count prefix. Further digits are dropped. */

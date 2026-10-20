@@ -5,8 +5,8 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { changeOf, command, isJump, replay, target } from "#renderer/keys";
-import type { Place } from "#renderer/keys";
+import { changeOf, command, isJump, replay, target } from "@renderer/keys";
+import type { Place } from "@renderer/keys";
 
 // ----------------------------------------------------------------- repeat
 

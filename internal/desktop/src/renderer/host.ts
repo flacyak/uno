@@ -7,10 +7,10 @@
  * and formats the connection, then hands preload the file text.
  */
 
-import { formatConnection, stampConnection } from "#library";
+import { formatConnection, stampConnection } from "@library";
 
-import { m } from "#paraglide/messages";
-import type { Bridge, Host } from "#shared/host";
+import { m } from "@paraglide/messages";
+import type { Bridge, Host } from "@shared/host";
 
 export function electronHost(bridge: Bridge): Host {
   let next = 1;
