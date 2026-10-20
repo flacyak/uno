@@ -7,14 +7,14 @@
 // Only this file and store/node.ts import node:fs. The guard test in
 // tests/store/opens.test.ts checks that.
 
-import type { Dirent, Stats } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import type { Dirent, Stats } from 'node:fs';
+import { readdir, stat } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 
-import { compareStrings } from "../go/index.ts";
-import { isRemote } from "./index.ts";
-import type { Entry, Lister, Listing } from "./list.ts";
-import { PAGE, byPageKey, pageKey } from "./list.ts";
+import { compareStrings } from '../go/index.ts';
+import { isRemote } from './index.ts';
+import type { Entry, Lister, Listing } from './list.ts';
+import { PAGE, byPageKey, pageKey } from './list.ts';
 
 // Re-exported for tests that page a folder by it.
 export { PAGE };
@@ -27,7 +27,7 @@ export { PAGE };
  */
 export function diskLister(page: number = PAGE): Lister {
   return {
-    label: "local files",
+    label: 'local files',
     // Every scheme-free path, the same rule localFiles opens by.
     handles: (path) => !isRemote(path),
     list: (dir, cursor) => listDir(dir, page, cursor),
@@ -52,9 +52,17 @@ interface Row {
  *
  * A missing folder throws.
  */
-async function listDir(dir: string, page: number, cursor: string | undefined): Promise<Listing> {
-  const found = namesOf(await readdir(dir, { withFileTypes: true, encoding: "buffer" }));
-  const rows = (await rowsOf(dir, found)).toSorted(byPageKey).filter(from(cursor));
+async function listDir(
+  dir: string,
+  page: number,
+  cursor: string | undefined,
+): Promise<Listing> {
+  const found = namesOf(
+    await readdir(dir, { withFileTypes: true, encoding: 'buffer' }),
+  );
+  const rows = (await rowsOf(dir, found))
+    .toSorted(byPageKey)
+    .filter(from(cursor));
 
   const entries = await Promise.all(rows.slice(0, page).map(entryOf(dir)));
   // The first row after the page is where the next page starts. When the
@@ -70,7 +78,7 @@ interface Found {
 }
 
 /** A decoder that throws on bytes outside UTF-8. */
-const utf8 = new TextDecoder("utf-8", { fatal: true });
+const utf8 = new TextDecoder('utf-8', { fatal: true });
 
 /**
  * namesOf decodes each entry's name as UTF-8 and keeps the names that
@@ -93,7 +101,9 @@ function namesOf(found: readonly Dirent<Buffer>[]): Found[] {
  */
 async function rowsOf(dir: string, found: readonly Found[]): Promise<Row[]> {
   const links = found.filter((f) => f.entry.isSymbolicLink());
-  const followed = await Promise.all(links.map((f) => statOrNothing(join(dir, f.name))));
+  const followed = await Promise.all(
+    links.map((f) => statOrNothing(join(dir, f.name))),
+  );
   const pointsAt = new Map(links.map((f, i) => [f.name, followed[i]]));
 
   return found.flatMap((f) => rowOf(f, pointsAt.get(f.name)));
@@ -108,7 +118,8 @@ async function rowsOf(dir: string, found: readonly Found[]): Promise<Row[]> {
  */
 function rowOf({ name, entry }: Found, linked: Stats | undefined): Row[] {
   if (entry.isSymbolicLink()) {
-    if (linked === undefined) return [{ name, folder: false, stats: undefined }];
+    if (linked === undefined)
+      return [{ name, folder: false, stats: undefined }];
     if (!linked.isDirectory() && !linked.isFile()) return [];
     return [{ name, folder: linked.isDirectory(), stats: linked }];
   }

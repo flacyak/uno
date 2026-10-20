@@ -1,11 +1,11 @@
-import { trimSpace } from "../go/index.ts";
-import { isNumber, undress } from "../num/index.ts";
+import { trimSpace } from '../go/index.ts';
+import { isNumber, undress } from '../num/index.ts';
 
 /**
  * Kind is what a column looks like. It is inferred at load and lives in
  * memory only.
  */
-export type Kind = "text" | "num" | "date";
+export type Kind = 'text' | 'num' | 'date';
 
 /**
  * SAMPLE_ROWS is how many rows from the top of a column are read to infer
@@ -36,7 +36,7 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
 
   for (let i = 0; i < rows && i < SAMPLE_ROWS; i++) {
     const v = trimSpace(at(i));
-    if (v === "") continue; // a blank or a short row is skipped
+    if (v === '') continue; // a blank or a short row is skipped
     seen++;
 
     if (isDate(v)) dates++;
@@ -44,11 +44,11 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
     else if (isNumber(undress(v))) formatted++;
   }
 
-  if (seen === 0) return { kind: "text", flagged: false };
-  if (dates === seen) return { kind: "date", flagged: false };
-  if (nums === seen) return { kind: "num", flagged: false };
-  if (nums + formatted === seen) return { kind: "text", flagged: true };
-  return { kind: "text", flagged: false };
+  if (seen === 0) return { kind: 'text', flagged: false };
+  if (dates === seen) return { kind: 'date', flagged: false };
+  if (nums === seen) return { kind: 'num', flagged: false };
+  if (nums + formatted === seen) return { kind: 'text', flagged: true };
+  return { kind: 'text', flagged: false };
 }
 
 // The layouts a date can be written in: year first with one separator, year
@@ -65,23 +65,23 @@ const RFC3339 =
 // A month is its full name or its three-letter form, plus "sept".
 const MONTHS = new Map<string, number>();
 [
-  "january",
-  "february",
-  "march",
-  "april",
-  "may",
-  "june",
-  "july",
-  "august",
-  "september",
-  "october",
-  "november",
-  "december",
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
 ].forEach((name, i) => {
   MONTHS.set(name, i + 1);
   MONTHS.set(name.slice(0, 3), i + 1);
 });
-MONTHS.set("sept", 9);
+MONTHS.set('sept', 9);
 
 function month(name: string): number {
   return MONTHS.get(name.toLowerCase()) ?? 0;

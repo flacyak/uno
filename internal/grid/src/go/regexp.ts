@@ -4,13 +4,13 @@
 // three places this file covers: what a replacement string means, what unit a
 // match index is in, and which characters are escaped.
 
-import { MAX_BMP, SURROGATE_PAIR_UNITS, runes } from "./strings.ts";
+import { MAX_BMP, SURROGATE_PAIR_UNITS, runes } from './strings.ts';
 
 /**
  * META is the set of characters `regexp.QuoteMeta` escapes. `literalOf` in
  * program/steps.ts inverts it character for character, so the two must match.
  */
-export const META = "\\.+*?()|[]{}^$";
+export const META = '\\.+*?()|[]{}^$';
 
 export function isMeta(c: string): boolean {
   return META.includes(c);
@@ -18,8 +18,8 @@ export function isMeta(c: string): boolean {
 
 /** quoteMeta mirrors regexp.QuoteMeta. */
 export function quoteMeta(s: string): string {
-  let out = "";
-  for (const r of s) out += isMeta(r) ? "\\" + r : r;
+  let out = '';
+  for (const r of s) out += isMeta(r) ? '\\' + r : r;
   return out;
 }
 
@@ -28,12 +28,12 @@ export function quoteMeta(s: string): string {
  * `u` flag is always added, so the pattern matches code points and an empty
  * match advances by a whole character.
  */
-export function compile(src: string, flags = ""): RegExp {
-  return new RegExp(src, flags.includes("u") ? flags : flags + "u");
+export function compile(src: string, flags = ''): RegExp {
+  return new RegExp(src, flags.includes('u') ? flags : flags + 'u');
 }
 
 function globalize(re: RegExp): RegExp {
-  return re.flags.includes("g") ? re : new RegExp(re.source, re.flags + "g");
+  return re.flags.includes('g') ? re : new RegExp(re.source, re.flags + 'g');
 }
 
 /**
@@ -45,9 +45,9 @@ export function replaceAllLiteral(re: RegExp, s: string, lit: string): string {
   let prevEnd = -1;
   return s.replace(globalize(re), (m: string, ...rest: unknown[]) => {
     const start = matchOffset(rest);
-    const abutting = m === "" && start === prevEnd;
+    const abutting = m === '' && start === prevEnd;
     prevEnd = start + m.length;
-    return abutting ? "" : lit;
+    return abutting ? '' : lit;
   });
 }
 
@@ -57,8 +57,9 @@ export function replaceAllLiteral(re: RegExp, s: string, lit: string): string {
  * subject string and named groups follow it.
  */
 function matchOffset(rest: readonly unknown[]): number {
-  const at = rest.find((a): a is number => typeof a === "number");
-  if (at === undefined) throw new Error("a replacer was called without an offset");
+  const at = rest.find((a): a is number => typeof a === 'number');
+  if (at === undefined)
+    throw new Error('a replacer was called without an offset');
   return at;
 }
 

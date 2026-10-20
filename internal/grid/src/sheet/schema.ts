@@ -8,13 +8,16 @@
 // grid draws. A Sheet does that over rows in memory and the engine over
 // pages of a file.
 
-import type { Formula } from "../formula/index.ts";
-import { Graph, parse as parseFormula } from "../formula/index.ts";
-import { render as renderNotation, supported as notationSupported } from "../notation/index.ts";
-import type { Program } from "../program/index.ts";
-import { parse as parseProgram } from "../program/index.ts";
-import type { Edit } from "./edit.ts";
-import { Op, editEquals } from "./edit.ts";
+import type { Formula } from '../formula/index.ts';
+import { Graph, parse as parseFormula } from '../formula/index.ts';
+import {
+  render as renderNotation,
+  supported as notationSupported,
+} from '../notation/index.ts';
+import type { Program } from '../program/index.ts';
+import { parse as parseProgram } from '../program/index.ts';
+import type { Edit } from './edit.ts';
+import { Op, editEquals } from './edit.ts';
 
 /** The last thing written into one cell. */
 export interface Written {
@@ -149,8 +152,10 @@ export class Schema {
    */
   resolve(name: string): number {
     const i = this.names.get(name);
-    if (i === undefined) throw new Error(`no column is called ${JSON.stringify(name)}`);
-    if (i < 0) throw new Error(`more than one column is called ${JSON.stringify(name)}`);
+    if (i === undefined)
+      throw new Error(`no column is called ${JSON.stringify(name)}`);
+    if (i < 0)
+      throw new Error(`more than one column is called ${JSON.stringify(name)}`);
     return i;
   }
 
@@ -171,7 +176,10 @@ export class Schema {
   }
 
   logEquals(other: readonly Edit[]): boolean {
-    return this.log.length === other.length && this.log.every((e, i) => editEquals(e, other[i]!));
+    return (
+      this.log.length === other.length &&
+      this.log.every((e, i) => editEquals(e, other[i]!))
+    );
   }
 
   // ------------------------------------------------------------ folding
@@ -193,23 +201,31 @@ export class Schema {
 
     switch (e.op) {
       case Op.Set:
-        this.refuseBound(e, "typed into");
+        this.refuseBound(e, 'typed into');
         this.refuseRow(e);
-        this.write(e.row, e.col, { seq: e.seq, now: e.now, was: this.firstWas(e) });
+        this.write(e.row, e.col, {
+          seq: e.seq,
+          now: e.now,
+          was: this.firstWas(e),
+        });
         return;
 
       case Op.Note: {
-        this.refuseBound(e, "hold notation");
+        this.refuseBound(e, 'hold notation');
         // Unsupported notation is refused here, when it is written.
         const bad = notationSupported(e.now);
         if (bad !== undefined) throw new Error(`edit ${e.seq}: ${bad.message}`);
         this.refuseRow(e);
-        this.write(e.row, e.col, { seq: e.seq, now: e.now, rendered: renderNotation(e.now) });
+        this.write(e.row, e.col, {
+          seq: e.seq,
+          now: e.now,
+          rendered: renderNotation(e.now),
+        });
         return;
       }
 
       case Op.Apply: {
-        this.refuseBound(e, "rewritten by a program");
+        this.refuseBound(e, 'rewritten by a program');
         // The Edit holds the program's text. A program that fails to parse
         // is refused before anything changes.
         const prog = atEdit(e, () => parseProgram(e.now));
@@ -228,7 +244,9 @@ export class Schema {
         return;
 
       default:
-        throw new Error(`edit ${e.seq}: unknown operation ${JSON.stringify(e.op)}`);
+        throw new Error(
+          `edit ${e.seq}: unknown operation ${JSON.stringify(e.op)}`,
+        );
     }
   }
 
@@ -247,7 +265,9 @@ export class Schema {
   /** refuseRow throws when the row is outside the sheet. */
   private refuseRow(e: Edit): void {
     if (e.row < 0 || e.row >= this.rows) {
-      throw new Error(`edit ${e.seq}: row ${e.row} is outside the ${this.rows} rows of this sheet`);
+      throw new Error(
+        `edit ${e.seq}: row ${e.row} is outside the ${this.rows} rows of this sheet`,
+      );
     }
   }
 
@@ -262,7 +282,7 @@ export class Schema {
     const runs = this.runs.get(e.col);
     const applied = runs === undefined ? 0 : runs[runs.length - 1]!.seq;
     if (w?.was !== undefined && w.seq > applied) return w.was;
-    return e.was ?? "";
+    return e.was ?? '';
   }
 
   private write(row: number, col: number, w: Written): void {
@@ -302,7 +322,9 @@ export class Schema {
 
   private unbindColumn(e: Edit): void {
     if (!this.bound.has(e.col)) {
-      throw new Error(`edit ${e.seq}: no formula is bound to ${this.headers[e.col]}`);
+      throw new Error(
+        `edit ${e.seq}: no formula is bound to ${this.headers[e.col]}`,
+      );
     }
 
     const name = atEdit(e, () => this.uniqueHeader(e.col));

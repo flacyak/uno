@@ -29,7 +29,7 @@ export interface RolePolicies {
 }
 
 /** The policy language version every document names. */
-const POLICY_VERSION = "2012-10-17";
+const POLICY_VERSION = '2012-10-17';
 
 /**
  * A policy document, as JSON with two-space indent, the way the console's
@@ -37,7 +37,11 @@ const POLICY_VERSION = "2012-10-17";
  * a file, so it ends with its closing brace and no newline.
  */
 function document(statements: Record<string, unknown>[]): string {
-  return JSON.stringify({ Version: POLICY_VERSION, Statement: statements }, undefined, 2);
+  return JSON.stringify(
+    { Version: POLICY_VERSION, Statement: statements },
+    undefined,
+    2,
+  );
 }
 
 /**
@@ -49,10 +53,10 @@ function document(statements: Record<string, unknown>[]): string {
 export function trustPolicy(trust: RoleTrust): string {
   return document([
     {
-      Effect: "Allow",
+      Effect: 'Allow',
       Principal: { AWS: trust.principal },
-      Action: "sts:AssumeRole",
-      Condition: { StringEquals: { "sts:ExternalId": trust.externalId } },
+      Action: 'sts:AssumeRole',
+      Condition: { StringEquals: { 'sts:ExternalId': trust.externalId } },
     },
   ]);
 }
@@ -66,21 +70,23 @@ export function trustPolicy(trust: RoleTrust): string {
  * still answers that refusal with the bucket's region, which is all the
  * engine reads from it.
  */
-export function permissionPolicy(ask: Pick<RolePolicyAsk, "bucket" | "prefix">): string {
+export function permissionPolicy(
+  ask: Pick<RolePolicyAsk, 'bucket' | 'prefix'>,
+): string {
   const bucket = `arn:aws:s3:::${ask.bucket}`;
   const list: Record<string, unknown> = {
-    Effect: "Allow",
-    Action: "s3:ListBucket",
+    Effect: 'Allow',
+    Action: 's3:ListBucket',
     Resource: bucket,
   };
-  if (ask.prefix !== "") {
-    list["Condition"] = { StringLike: { "s3:prefix": [`${ask.prefix}*`] } };
+  if (ask.prefix !== '') {
+    list['Condition'] = { StringLike: { 's3:prefix': [`${ask.prefix}*`] } };
   }
   return document([
     list,
     {
-      Effect: "Allow",
-      Action: ["s3:GetObject", "s3:GetObjectVersion"],
+      Effect: 'Allow',
+      Action: ['s3:GetObject', 's3:GetObjectVersion'],
       Resource: `${bucket}/${ask.prefix}*`,
     },
   ]);
@@ -109,8 +115,8 @@ export function accountOf(arn: string): string | undefined {
  * is returned as it is.
  */
 export function roleNameOf(roleArn: string): string {
-  const at = roleArn.indexOf(":role/");
+  const at = roleArn.indexOf(':role/');
   if (at < 0) return roleArn;
-  const path = roleArn.slice(at + ":role/".length);
-  return path.slice(path.lastIndexOf("/") + 1);
+  const path = roleArn.slice(at + ':role/'.length);
+  return path.slice(path.lastIndexOf('/') + 1);
 }

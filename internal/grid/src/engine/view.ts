@@ -4,14 +4,17 @@
 // Every row returned has the log applied. An edit is one line folded into
 // the Schema and a new generation number. Every stored row stays as read.
 
-import type { HeldFile, HeldPart, HeldParts } from "../document/index.ts";
-import { trimSpace } from "../go/index.ts";
-import { headerOf, labelOf, openFormat } from "../ingest/index.ts";
-import type { Format } from "../ingest/index.ts";
-import { isNumber } from "../num/index.ts";
-import { MIN_EXAMPLES, Survey, gather } from "../pattern/index.ts";
-import type { Example } from "../pattern/index.ts";
-import { described as describedProgram, text as programText } from "../program/index.ts";
+import type { HeldFile, HeldPart, HeldParts } from '../document/index.ts';
+import { trimSpace } from '../go/index.ts';
+import { headerOf, labelOf, openFormat } from '../ingest/index.ts';
+import type { Format } from '../ingest/index.ts';
+import { isNumber } from '../num/index.ts';
+import { MIN_EXAMPLES, Survey, gather } from '../pattern/index.ts';
+import type { Example } from '../pattern/index.ts';
+import {
+  described as describedProgram,
+  text as programText,
+} from '../program/index.ts';
 import {
   NO_ROW,
   Op,
@@ -21,11 +24,17 @@ import {
   inferKind,
   isDate,
   valueAt,
-} from "../sheet/index.ts";
-import type { Edit, Written } from "../sheet/index.ts";
-import { isRemote, multiOf } from "../store/index.ts";
-import type { ByteSource, HeaderMode, PartMap, PartsRef, SingleRef } from "../store/index.ts";
-import { indexPass } from "./pass.ts";
+} from '../sheet/index.ts';
+import type { Edit, Written } from '../sheet/index.ts';
+import { isRemote, multiOf } from '../store/index.ts';
+import type {
+  ByteSource,
+  HeaderMode,
+  PartMap,
+  PartsRef,
+  SingleRef,
+} from '../store/index.ts';
+import { indexPass } from './pass.ts';
 import type {
   Changed,
   ColumnInfo,
@@ -39,13 +48,19 @@ import type {
   Reply,
   Request,
   RowsPage,
-} from "./protocol.ts";
-import { FILE_SHOWS, Refusal, saidOf } from "../said/index.ts";
-import type { Said } from "../said/index.ts";
-import { Pages, RowIndex } from "./rows.ts";
-import type { Tuning } from "./rows.ts";
-import { BYTES, INDEX, INDEXED, MILLISECONDS, unmeasured } from "./telemetry.ts";
-import type { Telemetry } from "./telemetry.ts";
+} from './protocol.ts';
+import { FILE_SHOWS, Refusal, saidOf } from '../said/index.ts';
+import type { Said } from '../said/index.ts';
+import { Pages, RowIndex } from './rows.ts';
+import type { Tuning } from './rows.ts';
+import {
+  BYTES,
+  INDEX,
+  INDEXED,
+  MILLISECONDS,
+  unmeasured,
+} from './telemetry.ts';
+import type { Telemetry } from './telemetry.ts';
 
 /** Minimum milliseconds between progress messages. */
 const PROGRESS_MS = 100;
@@ -57,7 +72,7 @@ const SLICE_MS = 8;
  * The header of the column that names each row's file, in a source over
  * several files that asked for one.
  */
-export const FILE_COLUMN = "_file";
+export const FILE_COLUMN = '_file';
 
 type Waiter = () => boolean;
 
@@ -95,8 +110,10 @@ export interface Carried {
  * id, name and state, which the workspace adds. `parts` is present for a
  * source over several files.
  */
-export type Part = (Omit<HeldFile, Unsaved> | Omit<HeldParts, Unsaved>) & { edits: Edit[] };
-type Unsaved = "id" | "name" | "state";
+export type Part = (Omit<HeldFile, Unsaved> | Omit<HeldParts, Unsaved>) & {
+  edits: Edit[];
+};
+type Unsaved = 'id' | 'name' | 'state';
 
 /** What View.open is given. */
 export interface OpenAsk {
@@ -191,17 +208,19 @@ export class View {
     v.parts = ask.parts;
 
     // Errors for a source from a .uno name the .uno as well.
-    const container = carried === undefined ? "" : carried.container;
+    const container = carried === undefined ? '' : carried.container;
     const within = (why: Said): Said =>
-      container === "" ? why : { t: "about", subject: container, why };
+      container === '' ? why : { t: 'about', subject: container, why };
 
     let format: Format;
     try {
       format = await openFormat(name, source, ask.header);
     } catch (err) {
       await source.close();
-      if (container === "") throw err;
-      throw new Refusal(within({ t: "about", subject: name, why: saidOf(err) }));
+      if (container === '') throw err;
+      throw new Refusal(
+        within({ t: 'about', subject: name, why: saidOf(err) }),
+      );
     }
 
     v.source = source;
@@ -215,9 +234,9 @@ export class View {
     const index = v.index;
     // The telemetry attribute for where the bytes came from.
     let place: string;
-    if (carried?.raw !== undefined) place = "carried";
-    else if (path === "") place = "joined";
-    else place = isRemote(path) ? "bucket" : "disk";
+    if (carried?.raw !== undefined) place = 'carried';
+    else if (path === '') place = 'joined';
+    else place = isRemote(path) ? 'bucket' : 'disk';
     indexPass({
       source,
       format,
@@ -232,17 +251,23 @@ export class View {
           const attributes = { place };
           telemetry({
             name: INDEX,
-            kind: "duration",
+            kind: 'duration',
             unit: MILLISECONDS,
             value: v.took,
             attributes,
           });
-          telemetry({ name: INDEXED, kind: "count", unit: BYTES, value: source.size, attributes });
+          telemetry({
+            name: INDEXED,
+            kind: 'count',
+            unit: BYTES,
+            value: source.size,
+            attributes,
+          });
         }
         const now = Date.now();
         if (!index.complete && now - told < PROGRESS_MS) return;
         told = now;
-        port.post({ t: "progress", source: id, progress: v.progress() });
+        port.post({ t: 'progress', source: id, progress: v.progress() });
       },
     }).catch((err: unknown) => {
       v.fail(err);
@@ -250,9 +275,9 @@ export class View {
       // a close, the abort is the cause and the failure is swallowed.
       if (started && !v.abort.signal.aborted) {
         port.post({
-          t: "error",
+          t: 'error',
           source: id,
-          said: { t: "about", subject: name, why: saidOf(err) },
+          said: { t: 'about', subject: name, why: saidOf(err) },
         });
       }
     });
@@ -262,7 +287,9 @@ export class View {
       // carried edits name. Carried bytes wait for the whole index.
       const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
       const whole = carried?.raw !== undefined;
-      await v.until(() => index.complete || (!whole && index.readable() >= want));
+      await v.until(
+        () => index.complete || (!whole && index.readable() >= want),
+      );
       started = true;
 
       if (carried !== undefined) {
@@ -270,7 +297,7 @@ export class View {
         try {
           v.schema.replay(carried.edits);
         } catch (err) {
-          throw new Refusal(within({ t: "replaying", name, why: saidOf(err) }));
+          throw new Refusal(within({ t: 'replaying', name, why: saidOf(err) }));
         }
       }
 
@@ -283,7 +310,7 @@ export class View {
         progress: v.progress(),
         edits: carried?.edits ?? [],
         generation: v.generation,
-        link: path === "" ? undefined : linkTo(path, source.version),
+        link: path === '' ? undefined : linkTo(path, source.version),
       };
       return v;
     } catch (err) {
@@ -314,7 +341,8 @@ export class View {
     const schema = this.schema;
     const generation = this.generation;
 
-    if (schema.empty && files === undefined) return { generation, rows: source, raws: [] };
+    if (schema.empty && files === undefined)
+      return { generation, rows: source, raws: [] };
 
     const rows: string[][] = [];
     const raws: Array<string[] | null> = [];
@@ -333,9 +361,14 @@ export class View {
     const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
 
     return schema.headers.map((header, col) => {
-      const { kind, flagged } = inferKind(shown.length, (row) => shown[row]![col] ?? "");
+      const { kind, flagged } = inferKind(
+        shown.length,
+        (row) => shown[row]![col] ?? '',
+      );
       const binding = schema.binding(col);
-      return binding === undefined ? { header, kind, flagged } : { header, kind, flagged, binding };
+      return binding === undefined
+        ? { header, kind, flagged }
+        : { header, kind, flagged, binding };
     });
   }
 
@@ -344,12 +377,15 @@ export class View {
    * the name of the part holding the row's first byte. Undefined for a
    * source that lacks the column.
    */
-  private async files(first: number, count: number): Promise<string[] | undefined> {
+  private async files(
+    first: number,
+    count: number,
+  ): Promise<string[] | undefined> {
     if (this.schema.supplied === undefined) return undefined;
     const ref = this.parts;
     const multi = multiOf(this.source);
     if (ref === undefined || multi === undefined) {
-      throw new Refusal({ t: "joins-unknown-for-column", name: this.name });
+      throw new Refusal({ t: 'joins-unknown-for-column', name: this.name });
     }
 
     const names: string[] = [];
@@ -360,7 +396,7 @@ export class View {
       const runs = await this.runsIn(block, multi.map);
       for (let run = 0; row < Math.min(to, end); row++) {
         while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
-        names.push(ref.parts[runs[run]!.part]?.ref.name ?? "");
+        names.push(ref.parts[runs[run]!.part]?.ref.name ?? '');
       }
     }
     return names;
@@ -378,12 +414,17 @@ export class View {
     const first = map.partAt(start);
     const last = map.partAt(end - 1);
     if (first === undefined || last === undefined) {
-      throw new Refusal({ t: "rows-past-files", name: this.name });
+      throw new Refusal({ t: 'rows-past-files', name: this.name });
     }
     if (first === last) return [{ row: 0, part: first }];
 
     const known = this.crossings.get(block);
-    if (known !== undefined && known.map === map && known.start === start && known.end === end) {
+    if (
+      known !== undefined &&
+      known.map === map &&
+      known.start === start &&
+      known.end === end
+    ) {
       return known.runs;
     }
 
@@ -428,7 +469,7 @@ export class View {
       this.refuseInView();
       const edits = this.schema.edits();
       const last = edits.pop();
-      if (last === undefined) throw new Refusal({ t: "nothing-to-undo" });
+      if (last === undefined) throw new Refusal({ t: 'nothing-to-undo' });
       const was = this.schema;
       this.schema = Schema.of(was.headers, was.rows, edits, was.supplied);
       this.undone.push(last);
@@ -443,7 +484,7 @@ export class View {
     return this.serially(async () => {
       this.refuseInView();
       const e = this.undone.pop();
-      if (e === undefined) throw new Refusal({ t: "nothing-to-redo" });
+      if (e === undefined) throw new Refusal({ t: 'nothing-to-redo' });
 
       this.schema.rows = this.index.readable();
       try {
@@ -492,12 +533,16 @@ export class View {
   private async changed(e: Edit): Promise<Changed> {
     this.generation++;
     this.recognise();
-    return { edit: e, generation: this.generation, columns: await this.columns() };
+    return {
+      edit: e,
+      generation: this.generation,
+      columns: await this.columns(),
+    };
   }
 
   /** refuseInView throws while the view is in view mode. */
   private refuseInView(): void {
-    if (!this.transform) throw new Refusal({ t: "in-view" });
+    if (!this.transform) throw new Refusal({ t: 'in-view' });
   }
 
   private serially<T>(fn: () => Promise<T>): Promise<T> {
@@ -517,24 +562,28 @@ export class View {
     this.survey = undefined;
     const generation = this.generation;
 
-    const byCol = this.transform ? gather(this.schema.edits()) : new Map<number, Example[]>();
+    const byCol = this.transform
+      ? gather(this.schema.edits())
+      : new Map<number, Example[]>();
     const cols = [...byCol]
       .filter(([, examples]) => examples.length >= MIN_EXAMPLES)
       .map(([col]) => col)
       .sort((a, b) => a - b);
 
     if (cols.length === 0) {
-      this.port.post({ t: "offer", source: this.id, generation, offer: null });
+      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
       return;
     }
 
     const abort = new AbortController();
     this.survey = abort;
-    this.surveyColumns(cols, byCol, abort.signal, generation).catch((err: unknown) => {
-      if (!abort.signal.aborted) {
-        this.port.post({ t: "error", source: this.id, said: saidOf(err) });
-      }
-    });
+    this.surveyColumns(cols, byCol, abort.signal, generation).catch(
+      (err: unknown) => {
+        if (!abort.signal.aborted) {
+          this.port.post({ t: 'error', source: this.id, said: saidOf(err) });
+        }
+      },
+    );
   }
 
   /**
@@ -591,14 +640,15 @@ export class View {
         return;
       }
     }
-    if (!signal.aborted) this.port.post({ t: "offer", source: this.id, generation, offer: null });
+    if (!signal.aborted)
+      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
   }
 
   private offer(survey: Survey, generation: number, complete: boolean): void {
     const p = survey.proposal();
     if (p === undefined) return;
     this.port.post({
-      t: "offer",
+      t: 'offer',
       source: this.id,
       generation,
       offer: {
@@ -630,11 +680,14 @@ export class View {
     this.finding = abort;
 
     const matches = await this.matcher(req);
-    if (matches === undefined) return { row: null, searched: 0, complete: true };
+    if (matches === undefined)
+      return { row: null, searched: 0, complete: true };
 
     const index = this.index;
     const down = req.dir === 1;
-    let row = down ? Math.max(0, req.from + 1) : Math.min(index.readable(), req.from) - 1;
+    let row = down
+      ? Math.max(0, req.from + 1)
+      : Math.min(index.readable(), req.from) - 1;
     let searched = 0;
     let slice = Date.now();
 
@@ -673,13 +726,15 @@ export class View {
     const schema = this.schema;
     if (schema.formula(col) !== undefined) {
       const finished = finishRows(schema, from, records, files);
-      return (row) => finished[row - from]!.shown[col] ?? "";
+      return (row) => finished[row - from]!.shown[col] ?? '';
     }
     if (schema.supplied?.col === col) {
-      return (row) => schema.writtenIn(row)?.get(col)?.rendered ?? files?.[row - from] ?? "";
+      return (row) =>
+        schema.writtenIn(row)?.get(col)?.rendered ?? files?.[row - from] ?? '';
     }
     return (row) =>
-      schema.writtenIn(row)?.get(col)?.rendered ?? valueAt(schema, row, col, records[row - from]!);
+      schema.writtenIn(row)?.get(col)?.rendered ??
+      valueAt(schema, row, col, records[row - from]!);
   }
 
   /**
@@ -689,24 +744,26 @@ export class View {
    * An "unparsed" match tests a date column with isDate and a numeric or
    * flagged column with isNumber. A blank cell is skipped.
    */
-  private async matcher(req: FindRequest): Promise<((shown: string) => boolean) | undefined> {
-    if (req.match.t === "text") {
+  private async matcher(
+    req: FindRequest,
+  ): Promise<((shown: string) => boolean) | undefined> {
+    if (req.match.t === 'text') {
       const text = req.match.text;
-      return text === "" ? undefined : (shown) => shown.includes(text);
+      return text === '' ? undefined : (shown) => shown.includes(text);
     }
 
     const column = (await this.columns())[req.col];
     if (column === undefined) return undefined;
     const parses =
-      column.kind === "date"
+      column.kind === 'date'
         ? isDate
-        : column.kind === "num" || column.flagged
+        : column.kind === 'num' || column.flagged
           ? isNumber
           : undefined;
     if (parses === undefined) return undefined;
     return (shown) => {
       const v = trimSpace(shown);
-      return v !== "" && !parses(v);
+      return v !== '' && !parses(v);
     };
   }
 
@@ -720,13 +777,13 @@ export class View {
   /** The version the source was read at, where the store reports one.
    * Undefined for a carried source and a source over several files. */
   get version(): string | undefined {
-    return this.path === "" ? undefined : this.source.version;
+    return this.path === '' ? undefined : this.source.version;
   }
 
   /** Bytes a save would copy into the container: the size for a carried
    * source, otherwise 0. */
   get carries(): number {
-    return this.path === "" && this.parts === undefined ? this.size : 0;
+    return this.path === '' && this.parts === undefined ? this.size : 0;
   }
 
   /** The current edit log. */
@@ -745,11 +802,16 @@ export class View {
   part(): Promise<Part> {
     return this.serially(async () => {
       if (this.parts !== undefined) {
-        return { ...(await this.joined(this.parts)), connection: this.connection, ...this.kept() };
+        return {
+          ...(await this.joined(this.parts)),
+          connection: this.connection,
+          ...this.kept(),
+        };
       }
-      if (this.path === "") {
+      if (this.path === '') {
         await this.until(() => this.index.complete);
-        const raw = this.carried ?? (await this.source.read(0, this.source.size));
+        const raw =
+          this.carried ?? (await this.source.read(0, this.source.size));
         return { raw, bytes: this.size, version: this.version, ...this.kept() };
       }
       return {
@@ -763,7 +825,7 @@ export class View {
   }
 
   /** kept returns the edits and the row and column counts they were made over. */
-  private kept(): Pick<Part, "edits" | "rows" | "cols"> {
+  private kept(): Pick<Part, 'edits' | 'rows' | 'cols'> {
     return {
       edits: this.schema.edits(),
       rows: this.index.readable(),
@@ -782,13 +844,17 @@ export class View {
     const count = ref.parts.length;
     const multi = multiOf(this.source);
     if (multi === undefined) {
-      throw new Refusal({ t: "joins-unknown-for-save", name: this.name, count });
+      throw new Refusal({
+        t: 'joins-unknown-for-save',
+        name: this.name,
+        count,
+      });
     }
 
     const files = ref.parts.map(({ ref: file }, i) => {
-      if (!("path" in file)) {
+      if (!('path' in file)) {
         throw new Refusal({
-          t: "part-has-no-path",
+          t: 'part-has-no-path',
           name: this.name,
           file: file.name,
           part: i + 1,
@@ -800,7 +866,9 @@ export class View {
 
     // versions() opens any part still unread. If that fails, the parts keep
     // the versions they were opened by.
-    const versions = await multi.versions().catch(() => files.map((file) => file.version));
+    const versions = await multi
+      .versions()
+      .catch(() => files.map((file) => file.version));
 
     return {
       parts: files.map((file, i) => {
@@ -847,7 +915,7 @@ export class View {
     this.abort.abort();
     this.survey?.abort();
     this.finding?.abort();
-    this.fail(new Refusal({ t: "file-closed" }));
+    this.fail(new Refusal({ t: 'file-closed' }));
     await this.source.close();
   }
 
