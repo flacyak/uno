@@ -81,6 +81,14 @@ export class Schema {
      * their values. Each is one of `headers`, so an expression can name it. */
     supplied: readonly Supplied[] = [],
   ) {
+    // The supplied columns come last, so data columns can be added before
+    // them without moving a column an edit can name.
+    const first = headers.length - supplied.length;
+    if (supplied.some(({ col }, nth) => col !== first + nth)) {
+      throw new Error(
+        `the supplied columns are not the last ${supplied.length} of the ${headers.length} columns, in order`,
+      );
+    }
     this.rows = rows;
     this.headerNames = headers;
     this.suppliedCols = supplied;
