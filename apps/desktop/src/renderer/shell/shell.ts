@@ -691,6 +691,11 @@ export class Shell {
               this.paintBanner();
             }
           },
+          widened: (tab) => {
+            // Redrawn in the same turn, so a key read after the columns arrive
+            // aims at the columns drawn.
+            if (opened !== undefined && opened.active === tab) this.changed(opened);
+          },
         },
         signal,
       );
@@ -1102,7 +1107,8 @@ export class Shell {
   }
 
   /**
-   * After an edit: refresh the grid, since kinds may have changed, and repaint.
+   * After an edit, or columns found as a file is indexed: refresh the grid,
+   * since kinds or columns may have changed, and repaint.
    */
   private changed(w: Workspace): void {
     const on = this.showing();

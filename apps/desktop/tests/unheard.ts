@@ -9,4 +9,5 @@ import type { WorkspaceEvents } from "@renderer/workspace";
 export const UNHEARD: WorkspaceEvents = {
   changed: () => {},
   offered: () => {},
+  widened: () => {},
 };
