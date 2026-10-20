@@ -8,18 +8,18 @@ import { setImmediate as turn } from 'node:timers/promises';
 
 import { expect, test } from 'vite-plus/test';
 
-import { english } from '#engine';
-import type { SourceRef } from '#engine';
-import type { Provider } from '#plugin';
-import { blobProvider, multiProvider } from '#store';
-import { diskProvider } from '#store/node';
-import { ROWS } from '#tests/testdata/sales-q3';
+import { english } from '@engine';
+import type { SourceRef } from '@engine';
+import type { Provider } from '@plugin';
+import { blobProvider, multiProvider } from '@store';
+import { diskProvider } from '@store/node';
+import { ROWS } from '@grid-tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '#tests/testdata/sales-q3-parts';
+} from '@grid-tests/testdata/sales-q3-parts';
 import {
   FIXTURE,
   TINY,

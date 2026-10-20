@@ -8,10 +8,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { expect, test } from 'vite-plus/test';
 
-import { Refusal, english, saidOf } from '#engine';
-import type { Provider } from '#plugin';
-import { diskProvider } from '#store/node';
-import { ROWS } from '#tests/testdata/sales-q3';
+import { Refusal, english, saidOf } from '@engine';
+import type { Provider } from '@plugin';
+import { diskProvider } from '@store/node';
+import { ROWS } from '@grid-tests/testdata/sales-q3';
 import { FIXTURE, TINY, connect, indexed, slowed } from './harness.ts';
 
 /** Milliseconds added before every read, so an open sits in its wait for the sample rows. */

@@ -20,14 +20,14 @@ import {
   readContainer,
   readDocument,
   writeDocument,
-} from '#document';
-import type { Document, Source } from '#document';
-import type { SourceHandle } from '#engine';
-import { sha256Hex } from '#go';
-import { read } from '#ingest';
-import { parse as parseProgram } from '#program';
-import { Op } from '#sheet';
-import { COLS, ROWS, UNITS } from '#tests/testdata/sales-q3';
+} from '@document';
+import type { Document, Source } from '@document';
+import type { SourceHandle } from '@engine';
+import { sha256Hex } from '@go';
+import { read } from '@ingest';
+import { parse as parseProgram } from '@program';
+import { Op } from '@sheet';
+import { COLS, ROWS, UNITS } from '@grid-tests/testdata/sales-q3';
 import {
   FIXTURE,
   bytes,

@@ -18,24 +18,24 @@ import {
   test,
 } from 'vite-plus/test';
 
-import { PARTS_VERSION, POINTED_VERSION, readContainer } from '#document';
-import type { Document, HeldPart } from '#document';
-import { english } from '#engine';
-import type { Engine, SourceRef } from '#engine';
-import type { Connection } from '#library';
-import type { Provider } from '#plugin';
-import { Op } from '#sheet';
+import { PARTS_VERSION, POINTED_VERSION, readContainer } from '@document';
+import type { Document, HeldPart } from '@document';
+import { english } from '@engine';
+import type { Engine, SourceRef } from '@engine';
+import type { Connection } from '@library';
+import type { Provider } from '@plugin';
+import { Op } from '@sheet';
 import {
   blobProvider,
   bytesSource,
   connectionsIn,
   multiProvider,
   saveConnection,
-} from '#store';
-import type { HeaderMode } from '#store';
-import { connectionSigning, diskProvider, nodeStore } from '#store/node';
-import { connectionMeeting, s3Provider } from '#store/s3';
-import { HOME_REGION } from '#tests/store/regions';
+} from '@store';
+import type { HeaderMode } from '@store';
+import { connectionSigning, diskProvider, nodeStore } from '@store/node';
+import { connectionMeeting, s3Provider } from '@store/s3';
+import { HOME_REGION } from '@grid-tests/store/regions';
 import {
   BUCKET,
   KEYS,
@@ -43,16 +43,16 @@ import {
   keysOnly,
   etagOf,
   versionIdOf,
-} from '#tests/store/standin';
-import type { Bucket } from '#tests/store/standin';
-import { ROWS, UNITS } from '#tests/testdata/sales-q3';
+} from '@grid-tests/store/standin';
+import type { Bucket } from '@grid-tests/store/standin';
+import { ROWS, UNITS } from '@grid-tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   PART_ROWS,
   partBytes,
-} from '#tests/testdata/sales-q3-parts';
+} from '@grid-tests/testdata/sales-q3-parts';
 import {
   connect,
   everyRow,

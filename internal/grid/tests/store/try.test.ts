@@ -12,11 +12,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import type { Connection } from '#library';
-import { connectionsIn } from '#store';
-import { connectionAuth, diskProvider, nodeStore } from '#store/node';
-import { tryConnection } from '#store/s3';
-import { bytes, connect } from '#tests/engine/harness';
+import type { Connection } from '@library';
+import { connectionsIn } from '@store';
+import { connectionAuth, diskProvider, nodeStore } from '@store/node';
+import { tryConnection } from '@store/s3';
+import { bytes, connect } from '@grid-tests/engine/harness';
 import { HOME_REGION } from './regions.ts';
 import { BUCKET, bucket, keysOnly } from './standin.ts';
 import type { Bucket } from './standin.ts';

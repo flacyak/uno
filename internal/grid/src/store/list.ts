@@ -7,7 +7,7 @@
  * store/claim.ts.
  */
 
-import { compareStrings } from '#go';
+import { compareStrings } from '@go';
 import { BROWSES, claim } from './claim.ts';
 
 /**

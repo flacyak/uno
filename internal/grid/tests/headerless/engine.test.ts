@@ -14,10 +14,10 @@ import {
   test,
 } from 'vite-plus/test';
 
-import type { Engine } from '#engine';
-import { Op } from '#sheet';
-import { COLS, REGION, ROWS, UNITS } from '#tests/testdata/sales-q3';
-import { PART_ROWS } from '#tests/testdata/sales-q3-parts';
+import type { Engine } from '@engine';
+import { Op } from '@sheet';
+import { COLS, REGION, ROWS, UNITS } from '@grid-tests/testdata/sales-q3';
+import { PART_ROWS } from '@grid-tests/testdata/sales-q3-parts';
 import {
   FIXTURE,
   TINY,
@@ -28,7 +28,7 @@ import {
   saidIn,
   sales,
   widened,
-} from '#tests/engine/harness';
+} from '@grid-tests/engine/harness';
 import {
   COLUMNS,
   NAMES,

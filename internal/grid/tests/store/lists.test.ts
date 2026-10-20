@@ -8,8 +8,8 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import type { Entry, Lister, Listing } from '#store';
-import { listWith } from '#store';
+import type { Entry, Lister, Listing } from '@store';
+import { listWith } from '@store';
 
 /** A lister that claims paths starting with `prefix` and lists what it was handed. */
 function stub(

@@ -6,10 +6,10 @@
  * same over a file, with the same Schema and the same pipeline.
  */
 
-import type { Formula } from '#formula';
-import { evaluate } from '#formula';
-import type { Program } from '#program';
-import { text as programText } from '#program';
+import type { Formula } from '@formula';
+import { evaluate } from '@formula';
+import type { Program } from '@program';
+import { text as programText } from '@program';
 import type { Edit } from './edit.ts';
 import { NO_ROW, Op } from './edit.ts';
 import type { Kind } from './kind.ts';

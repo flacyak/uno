@@ -9,13 +9,13 @@ import { stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
-import { PEEK_BYTES, peek } from '#engine/peek';
-import { localFiles } from '#store/node';
-import { s3Files } from '#store/s3';
-import { HOME_REGION } from '#tests/store/regions';
-import { KEYS, at, bucket } from '#tests/store/standin';
-import type { Bucket } from '#tests/store/standin';
-import { bytes } from '#tests/testdata/sales-q3';
+import { PEEK_BYTES, peek } from '@engine/peek';
+import { localFiles } from '@store/node';
+import { s3Files } from '@store/s3';
+import { HOME_REGION } from '@grid-tests/store/regions';
+import { KEYS, at, bucket } from '@grid-tests/store/standin';
+import type { Bucket } from '@grid-tests/store/standin';
+import { bytes } from '@grid-tests/testdata/sales-q3';
 import { saidIn } from './harness.ts';
 
 /** The fixture's six columns. */

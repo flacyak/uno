@@ -14,23 +14,23 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MessageChannel } from 'node:worker_threads';
 
-import { Engine, messagePort, serve } from '#engine';
-import type { MessagePortLike, Reply, Request } from '#engine';
-import type { Connection } from '#library';
-import { sources } from '#plugin';
-import { blobProvider, connectionsIn, saveConnection } from '#store';
+import { Engine, messagePort, serve } from '@engine';
+import type { MessagePortLike, Reply, Request } from '@engine';
+import type { Connection } from '@library';
+import { sources } from '@plugin';
+import { blobProvider, connectionsIn, saveConnection } from '@store';
 import {
   awsProfiles,
   connectionAuth,
   connectionSigning,
   diskProvider,
   nodeStore,
-} from '#store/node';
-import { s3Provider, tryConnection } from '#store/s3';
-import { bytes } from '#tests/testdata/sales-q3';
-import { HOME_REGION } from '#tests/store/regions';
-import { KEYS, bucket } from '#tests/store/standin';
-import { sts } from '#tests/store/stsstandin';
+} from '@store/node';
+import { s3Provider, tryConnection } from '@store/s3';
+import { bytes } from '@grid-tests/testdata/sales-q3';
+import { HOME_REGION } from '@grid-tests/store/regions';
+import { KEYS, bucket } from '@grid-tests/store/standin';
+import { sts } from '@grid-tests/store/stsstandin';
 
 const PROCESS = fileURLToPath(
   new URL('../../testdata/credential-process.mjs', import.meta.url),
