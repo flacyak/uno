@@ -26,13 +26,7 @@ import {
 } from '@sheet';
 import type { Edit, Written } from '@sheet';
 import { headed, multiOf } from '@store';
-import type {
-  ByteSource,
-  HeaderMode,
-  PartMap,
-  PartsRef,
-  SingleRef,
-} from '@store';
+import type { ByteSource, HeaderMode, PartsRef, SingleRef } from '@store';
 import { indexPass } from './pass.ts';
 import type {
   Changed,
@@ -50,6 +44,8 @@ import type {
 } from './protocol.ts';
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
+import { partRuns } from './reading.ts';
+import type { Run } from './reading.ts';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
 import {
@@ -74,25 +70,6 @@ const SLICE_MS = 8;
 export const FILE_COLUMN = '_file';
 
 type Waiter = () => boolean;
-
-/** Run is a run of a block's rows that came from one part. */
-interface Run {
-  /** The first row of the run, counting from 0 at the block's first. */
-  row: number;
-  /** Which part, counting from 0. */
-  part: number;
-}
-
-/**
- * Crossing caches the runs of a block that holds rows from more than one
- * part. It is valid for the map and byte range it was computed from.
- */
-interface Crossing {
-  map: PartMap;
-  start: number;
-  end: number;
-  runs: Run[];
-}
 
 /** A source's edits and, for a carried source, its bytes, as read from a
  * .uno. */
@@ -167,7 +144,6 @@ export class View {
   generation = 0;
 
   private source!: ByteSource;
-  private format!: Format;
   private index!: RowIndex;
   private schema!: Schema;
 
@@ -184,8 +160,9 @@ export class View {
   /** The parts ref a source over several files was opened from. */
   parts: PartsRef | undefined;
 
-  /** Cached runs for blocks that hold rows from more than one part. */
-  private readonly crossings = new Map<number, Crossing>();
+  /** Which part each row of a block came from, for a source over several
+   * files read as one. */
+  private runsIn: ((block: number) => Promise<readonly Run[]>) | undefined;
 
   private transform = false;
   private survey: AbortController | undefined;
@@ -254,10 +231,11 @@ export class View {
     }
 
     v.source = source;
-    v.format = format;
     v.index = new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.schema = schemaOf(format, ask.parts);
+    const multi = multiOf(source);
+    if (multi !== undefined) v.runsIn = partRuns(name, multi, format, v.index);
 
     // A cancel fails the wait below with its refusal, kept ahead of the
     // close's own, and closes the view, which stops the index.
@@ -426,8 +404,8 @@ export class View {
   ): Promise<string[] | undefined> {
     if (this.schema.supplied === undefined) return undefined;
     const ref = this.parts;
-    const multi = multiOf(this.source);
-    if (ref === undefined || multi === undefined) {
+    const runsIn = this.runsIn;
+    if (ref === undefined || runsIn === undefined) {
       throw new Refusal({ t: 'joins-unknown-for-column', name: this.name });
     }
 
@@ -436,56 +414,13 @@ export class View {
     for (let row = first; row < end;) {
       const block = this.index.blockOf(row);
       const [from, to] = this.index.rowsOf(block);
-      const runs = await this.runsIn(block, multi.map);
+      const runs = await runsIn(block);
       for (let run = 0; row < Math.min(to, end); row++) {
         while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
         names.push(ref.parts[runs[run]!.part]?.ref.name ?? '');
       }
     }
     return names;
-  }
-
-  /**
-   * runsIn returns which part each row of a block came from, as runs.
-   *
-   * A block inside one part is one run. A block that crosses a part boundary
-   * is re-read up to its last part and scanned for row starts, and the
-   * result is cached.
-   */
-  private async runsIn(block: number, map: PartMap): Promise<Run[]> {
-    const [start, end] = this.index.bytesOf(block);
-    const first = map.partAt(start);
-    const last = map.partAt(end - 1);
-    if (first === undefined || last === undefined) {
-      throw new Refusal({ t: 'rows-past-files', name: this.name });
-    }
-    if (first === last) return [{ row: 0, part: first }];
-
-    const known = this.crossings.get(block);
-    if (
-      known !== undefined &&
-      known.map === map &&
-      known.start === start &&
-      known.end === end
-    ) {
-      return known.runs;
-    }
-
-    // Rows from the last part's first byte on belong to it, so only the
-    // bytes before it are scanned.
-    const until = map.spans[last]!.start;
-    const runs: Run[] = [];
-    let row = 0;
-    const scanner = this.format.scanner((offset) => {
-      const part = map.partAt(offset)!;
-      if (runs.at(-1)?.part !== part) runs.push({ row, part });
-      row++;
-    });
-    scanner.push(await this.source.read(start, until - start), start);
-    runs.push({ row, part: last });
-
-    this.crossings.set(block, { map, start, end, runs });
-    return runs;
   }
 
   // ------------------------------------------------------------ changing
