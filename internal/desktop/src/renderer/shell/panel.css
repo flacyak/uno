@@ -385,7 +385,7 @@
 /* What a person hands to whoever makes the role: uno's account and their
  * external ID, each beside a Copy button, and what the role has to allow.
  * The text is selectable, since a copy the browser refuses is taken by hand. */
-.panel-connect .role {
+.panel-connect .policy {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -395,48 +395,58 @@
   user-select: text;
 }
 
-.panel-connect .role[hidden] {
+.panel-connect .policy[hidden] {
   display: none;
 }
 
 /* A label with its Copy button at the line's end, and the value on the line
  * under them. */
-.panel-connect .role .row {
+.panel-connect .policy .row {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 3px 8px;
 }
 
-.panel-connect .role .row > span {
+.panel-connect .policy .row > span {
   color: var(--ink-2);
 }
 
-.panel-connect .role .row > button {
+.panel-connect .policy .row > button {
   justify-self: end;
 }
 
-.panel-connect .role .row > .copyable {
+.panel-connect .policy .row > .copyable {
   grid-column: 1 / -1;
   font-family: var(--mono);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
 
-.panel-connect .role .how {
+.panel-connect .policy .how {
   color: var(--ink-2);
   line-height: 1.45;
 }
 
-/* The actions the role allows, for the person who writes its policy. */
-.panel-connect .role .needs {
-  color: var(--ink-3);
-  font-size: 11px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
+.panel-connect .policy .row[hidden] {
+  display: none;
 }
 
-.panel-connect .role button.copy {
+/* A policy document, as the console's editor shows one. The box scrolls,
+ * since the permission policy runs to twenty lines and the panel is narrow,
+ * and a long ARN wraps rather than widening it. */
+.panel-connect .policy .row > .document {
+  margin: 0;
+  max-height: 11em;
+  padding: 4px 6px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  background: var(--sunken);
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.panel-connect .policy button.copy {
   padding: 1px 7px;
   font-size: 11px;
 }
