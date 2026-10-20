@@ -311,6 +311,8 @@ describe('credentials', () => {
     return {
       AWS_SHARED_CREDENTIALS_FILE: join(dir, 'credentials'),
       AWS_CONFIG_FILE: join(dir, 'config'),
+      // The end of the chain is reached without a probe of the network.
+      AWS_EC2_METADATA_DISABLED: 'true',
     };
   }
 
