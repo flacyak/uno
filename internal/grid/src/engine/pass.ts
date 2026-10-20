@@ -5,8 +5,8 @@
  * signal is aborted. PassContext is what every pass is handed.
  */
 
-import type { Format } from '#ingest';
-import type { ByteSource } from '#store';
+import type { Format } from '@ingest';
+import type { ByteSource } from '@store';
 import type { RowIndex, Tuning } from './rows.ts';
 
 export interface PassContext {

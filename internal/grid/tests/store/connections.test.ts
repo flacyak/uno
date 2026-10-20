@@ -20,10 +20,10 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
 
-import { parseConnection } from '#library';
-import type { Connection } from '#library';
-import { loadConnections, saveConnection } from '#store';
-import { nodeStore } from '#store/node';
+import { parseConnection } from '@library';
+import type { Connection } from '@library';
+import { loadConnections, saveConnection } from '@store';
+import { nodeStore } from '@store/node';
 
 const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));
 

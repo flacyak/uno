@@ -11,7 +11,7 @@
  * metrics request in JSON for a collector's /v1/metrics endpoint.
  */
 
-import { unreachable } from '#never';
+import { unreachable } from '@never';
 
 /** String attributes attached to a measurement. */
 export type Attributes = Readonly<Record<string, string>>;

@@ -84,7 +84,7 @@ jobs:
           OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.GRAFANA_OTLP_ENDPOINT }}
           OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.GRAFANA_OTLP_HEADERS }}
         run: |
-          node scripts/efficiency.ts \
+          node --import ../paths.js scripts/efficiency.ts \
             --base "$RUNNER_TEMP/base/internal/grid/out/efficiency" \
             --out "$RUNNER_TEMP/efficiency.md"
           cat "$RUNNER_TEMP/efficiency.md" >> "$GITHUB_STEP_SUMMARY"

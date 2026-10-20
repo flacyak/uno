@@ -15,9 +15,9 @@ import {
   toLower,
   toUpper,
   trimSpace,
-} from '#go';
-import type { Program } from '#program';
-import { parse as parseProgram, quoteRegex } from '#program';
+} from '@go';
+import type { Program } from '@program';
+import { parse as parseProgram, quoteRegex } from '@program';
 import type { Run } from './align.ts';
 import { MAX_DIFF, align } from './align.ts';
 

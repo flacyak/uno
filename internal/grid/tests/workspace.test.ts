@@ -9,12 +9,12 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
 
-import { newManifest, readDocument, writeDocument } from '#document';
-import type { Document } from '#document';
-import { parse as parseFormula } from '#formula';
-import { read } from '#ingest';
-import { snap } from '#pattern';
-import { describe as describeProgram, text as programText } from '#program';
+import { newManifest, readDocument, writeDocument } from '@document';
+import type { Document } from '@document';
+import { parse as parseFormula } from '@formula';
+import { read } from '@ingest';
+import { snap } from '@pattern';
+import { describe as describeProgram, text as programText } from '@program';
 import {
   CHANNEL,
   COLS,

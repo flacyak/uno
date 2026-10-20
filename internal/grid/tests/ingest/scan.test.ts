@@ -5,8 +5,8 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { readAll } from '#ingest/csv';
-import { RecordScanner, bomLength } from '#ingest/scan';
+import { readAll } from '@ingest/csv';
+import { RecordScanner, bomLength } from '@ingest/scan';
 
 const encoder = new TextEncoder();
 const whole = new TextDecoder('utf-8');

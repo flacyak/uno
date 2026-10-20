@@ -6,9 +6,9 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { newManifest, readContainer, writeDocument } from '#document';
-import type { Document } from '#document';
-import { bytes } from '#tests/testdata/sales-q3';
+import { newManifest, readContainer, writeDocument } from '@document';
+import type { Document } from '@document';
+import { bytes } from '@grid-tests/testdata/sales-q3';
 import { record } from './record.ts';
 
 /** 24 MB. */

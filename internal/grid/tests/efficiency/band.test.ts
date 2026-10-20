@@ -5,10 +5,10 @@
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { BAND_ROWS } from '#engine/client';
-import { TUNING } from '#engine';
-import { indexed } from '#tests/engine/harness';
-import { ROWS } from '#tests/testdata/sales-q3';
+import { BAND_ROWS } from '@engine/client';
+import { TUNING } from '@engine';
+import { indexed } from '@grid-tests/engine/harness';
+import { ROWS } from '@grid-tests/testdata/sales-q3';
 import { record } from './record.ts';
 import { remote, repeated } from './remote.ts';
 import type { Remote } from './remote.ts';

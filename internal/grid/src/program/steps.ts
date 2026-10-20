@@ -16,10 +16,10 @@ import {
   toLower,
   toUpper,
   trimSpace,
-} from '#go';
-import { unreachable } from '#never';
-import { english, englishSought } from '#said';
-import type { CharName, Sought, StepSaid } from '#said';
+} from '@go';
+import { unreachable } from '@never';
+import { english, englishSought } from '@said';
+import type { CharName, Sought, StepSaid } from '@said';
 
 /**
  * MAX_STEPS is the most steps a pipeline may have. The limit keeps a proposal
