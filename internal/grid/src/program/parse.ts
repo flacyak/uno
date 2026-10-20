@@ -7,6 +7,7 @@ import {
   runes,
   unquote,
 } from '../go/index.ts';
+import { messageOf } from '../said/index.ts';
 import type { Pos, Step } from './steps.ts';
 import { MAX_PARTS, MAX_STEPS, compilePattern, newReplace } from './steps.ts';
 import type { Program } from './program.ts';
@@ -210,7 +211,7 @@ class Parser extends Scanner {
           v = unquote(this.s.slice(this.i, j + 1).join(''));
         } catch (err) {
           throw new Error(
-            `string at character ${this.i + 1}: ${(err as Error).message}`,
+            `string at character ${this.i + 1}: ${messageOf(err)}`,
           );
         }
         this.i = j + 1;

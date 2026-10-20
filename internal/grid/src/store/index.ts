@@ -295,7 +295,7 @@ async function readEach<T>(
       });
       read.push({ file: entry, value: parse(entry, decoder.decode(bytes)) });
     } catch (err) {
-      failed.push(err as Error);
+      failed.push(err instanceof Error ? err : new Error(String(err)));
     }
   }
   return { read, failed };

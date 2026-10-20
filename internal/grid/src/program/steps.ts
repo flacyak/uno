@@ -16,7 +16,7 @@ import {
   trimSpace,
 } from '../go/index.ts';
 import { unreachable } from '../never.ts';
-import { english, englishSought } from '../said/index.ts';
+import { english, englishSought, messageOf } from '../said/index.ts';
 import type { CharName, Sought, StepSaid } from '../said/index.ts';
 
 /**
@@ -266,7 +266,7 @@ export function compilePattern(src: string): RegExp {
   try {
     return compile(src, EVERY_OCCURRENCE);
   } catch (err) {
-    throw new Error(`pattern /${src}/: ${(err as Error).message}`);
+    throw new Error(`pattern /${src}/: ${messageOf(err)}`);
   }
 }
 

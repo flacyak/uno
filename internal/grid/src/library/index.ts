@@ -1,7 +1,7 @@
 // Package library parses and formats .unof files, one per formula or
 // connection. It works on text alone.
 
-import { rfc3339, runes } from '../go/index.ts';
+import { codePoint, rfc3339, runes } from '../go/index.ts';
 import { CONNECTION_KIND } from './connection.ts';
 import {
   about,
@@ -123,7 +123,7 @@ export function validID(id: string, what = 'formula'): void {
     if (r === '/' || r === '\\' || r === ':') {
       throw new Error(`${what} id ${JSON.stringify(id)} may not name a path`);
     }
-    const cp = r.codePointAt(0)!;
+    const cp = codePoint(r);
     if (cp < 0x20 || cp === 0x7f) {
       throw new Error(
         `${what} id ${JSON.stringify(id)} contains a control character`,

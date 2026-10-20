@@ -3,6 +3,7 @@
 // writing it is here once, for the formula and connection codecs.
 
 import { compareStrings, nowTruncated, parseTime } from '../go/index.ts';
+import { messageOf } from '../said/index.ts';
 import { FORMAT_VERSION } from './index.ts';
 
 /** The object a .unof holds, and the format it says it was saved as. */
@@ -21,9 +22,7 @@ export function readUnof(name: string, text: string): Envelope {
   try {
     raw = JSON.parse(text);
   } catch (err) {
-    throw new Error(
-      `${name} is not a readable .unof file: ${(err as Error).message}`,
-    );
+    throw new Error(`${name} is not a readable .unof file: ${messageOf(err)}`);
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new Error(`${name} is not a readable .unof file: not an object`);
@@ -127,6 +126,6 @@ export function about<T>(name: string, check: () => T): T {
   try {
     return check();
   } catch (err) {
-    throw new Error(`${name}: ${(err as Error).message}`);
+    throw new Error(`${name}: ${messageOf(err)}`);
   }
 }

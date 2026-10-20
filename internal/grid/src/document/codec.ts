@@ -9,6 +9,7 @@ import {
   rfc3339,
   sha256Hex,
 } from '../go/index.ts';
+import { messageOf } from '../said/index.ts';
 import { read as ingestRead } from '../ingest/index.ts';
 import { Op } from '../sheet/index.ts';
 import type { Edit, Sheet } from '../sheet/index.ts';
@@ -560,7 +561,7 @@ function blamed<T>(about: string, read: () => T): T {
   try {
     return read();
   } catch (err) {
-    throw new Error(`${about}: ${(err as Error).message}`);
+    throw new Error(`${about}: ${messageOf(err)}`);
   }
 }
 
@@ -593,7 +594,7 @@ function readLog(
       raw = JSON.parse(line);
     } catch (err) {
       if (i === lines.length - 1) break; // a truncated final line is dropped
-      throw new Error(`${where}: ${(err as Error).message}`);
+      throw new Error(`${where}: ${messageOf(err)}`);
     }
 
     const named = asString(asRecord(raw)['source']);

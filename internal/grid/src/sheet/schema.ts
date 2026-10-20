@@ -10,6 +10,7 @@
 
 import type { Formula } from '../formula/index.ts';
 import { Graph, parse as parseFormula } from '../formula/index.ts';
+import { messageOf } from '../said/index.ts';
 import {
   render as renderNotation,
   supported as notationSupported,
@@ -352,6 +353,6 @@ function atEdit<T>(e: Edit, step: () => T): T {
   try {
     return step();
   } catch (err) {
-    throw new Error(`edit ${e.seq}: ${(err as Error).message}`);
+    throw new Error(`edit ${e.seq}: ${messageOf(err)}`);
   }
 }
