@@ -1,8 +1,9 @@
-// Ports of Go's regexp package.
+// JavaScript's RegExp, answering as the patterns a program stores expect.
 //
-// RE2 and JavaScript agree on what the induced patterns match. They differ in
-// three places this file covers: what a replacement string means, what unit a
-// match index is in, and which characters are escaped.
+// A program's patterns were defined under RE2, and the two engines agree on
+// what they match. They differ in three places this file covers: what a
+// replacement string means, what unit a match index is in, and which
+// characters are escaped.
 
 import {
   MAX_BMP,
@@ -12,7 +13,7 @@ import {
 } from '../text/index.ts';
 
 /**
- * META is the set of characters `regexp.QuoteMeta` escapes. `literalOf` in
+ * META is the set of characters `quoteMeta` escapes. `literalOf` in
  * program/steps.ts inverts it character for character, so the two must match.
  */
 export const META = '\\.+*?()|[]{}^$';
@@ -21,7 +22,7 @@ export function isMeta(c: string): boolean {
   return META.includes(c);
 }
 
-/** quoteMeta mirrors regexp.QuoteMeta. */
+/** quoteMeta escapes every character of META in `s`, so it matches itself. */
 export function quoteMeta(s: string): string {
   let out = '';
   for (const r of s) out += isMeta(r) ? '\\' + r : r;
@@ -29,9 +30,9 @@ export function quoteMeta(s: string): string {
 }
 
 /**
- * compile mirrors `regexp.Compile`, throwing where Go returns an error. The
- * `u` flag is always added, so the pattern matches code points and an empty
- * match advances by a whole character.
+ * compile builds a RegExp from a program's pattern, throwing for a bad one.
+ * The `u` flag is always added, so the pattern matches code points and an
+ * empty match advances by a whole character.
  */
 export function compile(src: string, flags = ''): RegExp {
   return new RegExp(src, flags.includes('u') ? flags : flags + 'u');
@@ -42,9 +43,9 @@ function globalize(re: RegExp): RegExp {
 }
 
 /**
- * replaceAllLiteral mirrors `Regexp.ReplaceAllLiteralString`: replaces every
- * match with `lit` as plain text, with no `$1` expansion. An empty match that
- * starts where the previous match ended is skipped, as in Go.
+ * replaceAllLiteral replaces every match with `lit` as plain text, with no
+ * `$1` expansion. An empty match that starts where the previous match ended
+ * is skipped, as RE2 skips it.
  */
 export function replaceAllLiteral(re: RegExp, s: string, lit: string): string {
   let prevEnd = -1;
@@ -69,9 +70,9 @@ function matchOffset(rest: readonly unknown[]): number {
 }
 
 /**
- * findAllIndex mirrors `Regexp.FindAllStringIndex(s, -1)`, with offsets in
- * code points where Go gives bytes. An empty match right after a previous
- * match is dropped, and the scan advances one character past an empty match.
+ * findAllIndex is every match of `re` in `s` as [start, end), with offsets
+ * in code points. An empty match right after a previous match is dropped,
+ * and the scan advances one character past an empty match.
  */
 export function findAllIndex(re: RegExp, s: string): Array<[number, number]> {
   const g = globalize(re);
@@ -104,7 +105,7 @@ export function findAllIndex(re: RegExp, s: string): Array<[number, number]> {
     }
 
     if (empty) {
-      // exec stays put on an empty match; Go advances one rune.
+      // exec stays put on an empty match; the scan advances one rune.
       const here = s.codePointAt(start) ?? 0;
       const next = here > MAX_BMP ? start + SURROGATE_PAIR_UNITS : start + 1;
       if (next > s.length) break;
@@ -114,7 +115,7 @@ export function findAllIndex(re: RegExp, s: string): Array<[number, number]> {
   return out;
 }
 
-/** indexOfRunes mirrors strings.Index, in code-point offsets. -1 when absent. */
+/** indexOfRunes is where `needle` first sits in `haystack`, in code points. -1 when absent. */
 export function indexOfRunes(haystack: string, needle: string): number {
   const at = haystack.indexOf(needle);
   if (at < 0) return -1;
