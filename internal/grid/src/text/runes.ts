@@ -1,9 +1,10 @@
-// Ports of Go's string functions whose JavaScript equivalents give a different
-// answer.
+// Text one code point at a time: splitting, counting, ordering, classing and
+// casing it. JavaScript's own string methods work in UTF-16 code units, locale
+// rules and full case mappings, which give another answer outside ASCII.
 
 /**
- * runes splits a string into code points, like a Go `[]rune`. Parsers index
- * runes and report positions as 1-based rune offsets.
+ * runes splits a string into its code points. Parsers index runes and report
+ * positions as 1-based rune offsets.
  */
 export function runes(s: string): string[] {
   return Array.from(s);
@@ -17,9 +18,8 @@ export function runeLen(s: string): number {
 }
 
 /**
- * codePoint is the code point at code-unit offset `at` of `s`, like
- * `utf8.DecodeRuneInString`. It throws past the end of `s`, where
- * `codePointAt` answers undefined.
+ * codePoint is the code point at code-unit offset `at` of `s`. It throws past
+ * the end of `s`, where `codePointAt` answers undefined.
  */
 export function codePoint(s: string, at = 0): number {
   const cp = s.codePointAt(at);
@@ -30,8 +30,8 @@ export function codePoint(s: string, at = 0): number {
 }
 
 /**
- * compareStrings orders by code point, as `strings.Compare` and `sort.Strings`
- * do. JavaScript's default comparison uses UTF-16 code units, which order
+ * compareStrings orders by code point, which is UTF-8 byte order too.
+ * JavaScript's default comparison uses UTF-16 code units, which order
  * differently above the BMP.
  */
 export function compareStrings(a: string, b: string): number {
@@ -53,12 +53,12 @@ export function compareStrings(a: string, b: string): number {
 export const MAX_BMP = 0xffff;
 export const SURROGATE_PAIR_UNITS = 2;
 
-// unicode.IsLetter is category L and unicode.IsDigit is category Nd.
+// A letter is Unicode category L and a digit is category Nd.
 const LETTER = /\p{L}/u;
 const DIGIT = /\p{Nd}/u;
 
-// unicode.IsSpace is the Unicode White_Space property. JavaScript's `\s`
-// leaves out U+0085 and adds U+FEFF.
+// Space is the Unicode White_Space property. JavaScript's `\s` leaves out
+// U+0085 and adds U+FEFF.
 const SPACE = /\p{White_Space}/u;
 
 export function isLetter(r: string): boolean {
@@ -76,16 +76,16 @@ export function isSpace(r: string): boolean {
 // Leading and trailing White_Space, in one pattern.
 const EDGE_SPACE = /^\p{White_Space}+|\p{White_Space}+$/gu;
 
-/** trimSpace mirrors strings.TrimSpace: trims unicode.IsSpace from both ends. */
+/** trimSpace trims White_Space from both ends. */
 export function trimSpace(s: string): string {
   return s.replace(EDGE_SPACE, '');
 }
 
 /**
- * toUpper and toLower mirror Go's simple case mapping: one rune in, one rune
- * out. JavaScript's full mapping can grow a string (eszett to "SS"). Each
- * rune takes the full mapping, and keeps the original where that mapping is
- * longer than one rune.
+ * toUpper and toLower use the simple case mapping: one rune in, one rune out,
+ * so a position in the text survives a change of case. JavaScript's full
+ * mapping can grow a string (eszett to "SS"). Each rune takes the full
+ * mapping, and keeps the original where that mapping is longer than one rune.
  */
 export function toUpper(s: string): string {
   let out = '';
@@ -97,8 +97,8 @@ export function toUpper(s: string): string {
 }
 
 /**
- * U+0130, capital I with dot above. Go lowercases it to a plain "i";
- * JavaScript produces "i" plus a combining dot.
+ * U+0130, capital I with dot above. The simple mapping lowercases it to a
+ * plain "i"; JavaScript produces "i" plus a combining dot.
  */
 const DOTTED_CAPITAL_I = 'İ';
 
@@ -115,7 +115,7 @@ export function toLower(s: string): string {
   return out;
 }
 
-/** equalFold mirrors strings.EqualFold, using the simple mappings above. */
+/** equalFold compares regardless of case, using the simple mappings above. */
 export function equalFold(a: string, b: string): boolean {
   return toLower(a) === toLower(b);
 }
