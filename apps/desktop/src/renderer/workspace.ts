@@ -10,9 +10,10 @@
  */
 
 import { WORKSPACE_EXT, isWorkspace } from "@document";
-import { Band } from "@engine";
+import { Band, movedTo } from "@engine";
 import type {
   Changed,
+  ColumnInfo,
   EditRequest,
   Engine,
   FindRequest,
@@ -159,6 +160,15 @@ export class Tab {
     const a = this.edits;
     const b = this.savedEdits;
     return a.length !== b.length || !a.every((e, i) => editEquals(e, b[i]!));
+  }
+
+  /**
+   * Takes the columns the source found as it was indexed. They go in before
+   * the columns it supplies, so the saved cell moves with its column.
+   */
+  widened(columns: readonly ColumnInfo[]): void {
+    const inserted = this.band.widen(columns);
+    this.cell = { ...this.cell, col: movedTo(this.cell.col, inserted) };
   }
 
   /**
