@@ -3,6 +3,7 @@
 // A platform's entry file builds a Port from its runtime, lists its file
 // providers, and calls `serve`.
 
+import { isRecord } from '../guards.ts';
 import { ROWS_AT_MOST } from './protocol.ts';
 import type { Port, Reply, Request, SignIns } from './protocol.ts';
 import { Refusal, saidOf } from '../said/index.ts';
@@ -63,9 +64,7 @@ type Handlers = {
 
 /** fieldOf returns one field of a message, or undefined for a primitive or a missing field. */
 function fieldOf(msg: unknown, key: string): unknown {
-  if (typeof msg !== 'object' || msg === null || !(key in msg))
-    return undefined;
-  return (msg as Record<string, unknown>)[key];
+  return isRecord(msg) ? msg[key] : undefined;
 }
 
 /**

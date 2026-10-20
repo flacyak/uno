@@ -14,6 +14,7 @@ import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { compareStrings, parseTime } from '../go/index.ts';
+import { isRecord } from '../guards.ts';
 import type { AuthMode, Connection } from '../library/index.ts';
 import { covering } from '../library/index.ts';
 import type { Provider } from '../plugin/index.ts';
@@ -367,9 +368,7 @@ function cachedToken(text: string): Record<string, unknown> | undefined {
   } catch {
     return undefined;
   }
-  return typeof parsed === 'object' && parsed !== null
-    ? (parsed as Record<string, unknown>)
-    : undefined;
+  return isRecord(parsed) ? parsed : undefined;
 }
 
 /**
@@ -530,12 +529,13 @@ async function processCredentials(
     throw fail(`failed · ${why}`);
   }
 
-  let o: Record<string, unknown>;
+  let o: unknown;
   try {
-    o = JSON.parse(out) as Record<string, unknown>;
+    o = JSON.parse(out);
   } catch {
     throw fail('did not print JSON');
   }
+  if (!isRecord(o)) throw fail('did not print a JSON object');
   if (o['Version'] !== 1) {
     throw fail(
       `printed version ${JSON.stringify(o['Version'])} · uno reads version 1`,

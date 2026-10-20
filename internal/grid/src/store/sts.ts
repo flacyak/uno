@@ -6,6 +6,7 @@
 // is in store/node.ts, which reads ~/.aws and passes the token or role in.
 
 import { parseTime } from '../go/index.ts';
+import { isRecord } from '../guards.ts';
 import { encodeQuery, signV4 } from './s3.ts';
 import type { AwsCredentials } from './s3.ts';
 import { text } from './s3xml.ts';
@@ -71,10 +72,9 @@ export async function ssoRoleCredentials(
       `the AWS profile ${ask.profile}: the SSO portal answered ${res.status}`,
     );
   }
-  const body = (await res.json()) as {
-    roleCredentials?: Record<string, unknown>;
-  };
-  const r = body.roleCredentials;
+  const body: unknown = await res.json();
+  const given = isRecord(body) ? body['roleCredentials'] : undefined;
+  const r = isRecord(given) ? given : undefined;
   const id = r?.['accessKeyId'];
   const secret = r?.['secretAccessKey'];
   const token = r?.['sessionToken'];

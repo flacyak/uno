@@ -11,6 +11,7 @@
 // It works on text alone.
 
 import { rfc3339 } from '../go/index.ts';
+import { isOneOf, isRecord } from '../guards.ts';
 import { validID } from './index.ts';
 import {
   about,
@@ -184,10 +185,7 @@ export function parseConnection(name: string, text: string): Connection {
   }
 
   const provider = o['provider'];
-  if (
-    typeof provider !== 'string' ||
-    !PROVIDERS.includes(provider as ConnectionProvider)
-  ) {
+  if (!isOneOf(PROVIDERS, provider)) {
     throw new Error(
       provider === undefined
         ? `${name} names no provider`
@@ -199,7 +197,7 @@ export function parseConnection(name: string, text: string): Connection {
     format,
     id: textOf(o, 'id'),
     name: textOf(o, 'name'),
-    provider: provider as ConnectionProvider,
+    provider,
     bucket: textOf(o, 'bucket'),
     prefix: textOf(o, 'prefix'),
     auth: parseAuth(name, o['auth']),
@@ -216,13 +214,12 @@ export function parseConnection(name: string, text: string): Connection {
 }
 
 /** parseAuth reads the auth block. Refuses a missing block or an unknown mode. */
-function parseAuth(name: string, raw: unknown): Auth {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+function parseAuth(name: string, o: unknown): Auth {
+  if (!isRecord(o)) {
     throw new Error(
       `${name} does not say how to sign in: it has no auth block`,
     );
   }
-  const o = raw as Record<string, unknown>;
   const mode = o['mode'];
   if (!isMode(mode)) {
     throw new Error(
@@ -238,7 +235,7 @@ function parseAuth(name: string, raw: unknown): Auth {
 }
 
 function isMode(v: unknown): v is AuthMode {
-  return typeof v === 'string' && MODES.includes(v as AuthMode);
+  return isOneOf(MODES, v);
 }
 
 /** What each mode reads out of its auth block, besides the mode. */

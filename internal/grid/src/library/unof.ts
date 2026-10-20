@@ -3,6 +3,7 @@
 // writing it is here once, for the formula and connection codecs.
 
 import { compareStrings, nowTruncated, parseTime } from '../go/index.ts';
+import { isRecord } from '../guards.ts';
 import { messageOf } from '../said/index.ts';
 import { FORMAT_VERSION } from './index.ts';
 
@@ -24,10 +25,10 @@ export function readUnof(name: string, text: string): Envelope {
   } catch (err) {
     throw new Error(`${name} is not a readable .unof file: ${messageOf(err)}`);
   }
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     throw new Error(`${name} is not a readable .unof file: not an object`);
   }
-  const o = raw as Record<string, unknown>;
+  const o: Record<string, unknown> = raw;
   const format = typeof o['format'] === 'number' ? o['format'] : 0;
   if (format > FORMAT_VERSION) {
     throw new Error(

@@ -9,6 +9,7 @@ import {
   rfc3339,
   sha256Hex,
 } from '../go/index.ts';
+import { isOneOf, isRecord } from '../guards.ts';
 import { messageOf } from '../said/index.ts';
 import { read as ingestRead } from '../ingest/index.ts';
 import { Op } from '../sheet/index.ts';
@@ -646,9 +647,7 @@ function readExtra(
 // ------------------------------------------------------------- shaping
 
 function asRecord(v: unknown): Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-    ? (v as Record<string, unknown>)
-    : {};
+  return isRecord(v) ? v : {};
 }
 
 function asNumber(v: unknown): number {
@@ -917,7 +916,7 @@ function parseSheetState(o: Record<string, unknown>): State {
 
 /**
  * parseEdit reads one log line. `where` names the line in an error. `seq`,
- * `row` and `col` must be whole numbers. The sheet checks the operation and
+ * `row` and `col` must be whole numbers and `op` an operation. The sheet
  * bounds the row and column.
  */
 function parseEdit(where: string, v: unknown): Edit {
@@ -926,9 +925,13 @@ function parseEdit(where: string, v: unknown): Edit {
     if (!Number.isInteger(o[key]))
       throw new Error(`${where}: ${key} is not a whole number`);
   }
+  const op = asString(o['op']);
+  if (!isOneOf(Object.values(Op), op)) {
+    throw new Error(`${where}: ${JSON.stringify(op)} is not an operation`);
+  }
   const e: Edit = {
     seq: asNumber(o['seq']),
-    op: asString(o['op']) as Op,
+    op,
     row: asNumber(o['row']),
     col: asNumber(o['col']),
     now: asString(o['now']),
