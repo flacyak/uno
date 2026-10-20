@@ -5,7 +5,7 @@
 // The guard test in tests/store/opens.test.ts checks that. Every file read
 // is in store/node.ts, which reads ~/.aws and passes the token or role in.
 
-import { parseTime } from '../go/index.ts';
+import { parseTime } from '../library/index.ts';
 import { isRecord } from '../guards.ts';
 import { encodeQuery, signV4 } from './s3.ts';
 import type { AwsCredentials } from './s3.ts';

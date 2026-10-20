@@ -1,8 +1,8 @@
 // Package library parses and formats .unof files, one per formula or
 // connection. It works on text alone.
 
+import { rfc3339 } from './time.ts';
 import { codePoint, runes } from '../text/index.ts';
-import { rfc3339 } from '../go/index.ts';
 import { CONNECTION_KIND } from './connection.ts';
 import {
   about,
@@ -14,6 +14,9 @@ import {
   writeExtra,
   wrongKind,
 } from './unof.ts';
+
+// Timestamps as a .unof and a .uno write them.
+export { isZeroTime, nowTruncated, parseTime, rfc3339 } from './time.ts';
 
 // A connection is a .unof too. Re-exported so `@uno/grid/library` covers every
 // kind of .unof.

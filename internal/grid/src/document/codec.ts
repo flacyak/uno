@@ -1,14 +1,9 @@
 import { Zip, deflateSync, unzipSync } from 'fflate';
 import type { ZipInputFile } from 'fflate';
 
+import { nowTruncated, parseTime, rfc3339 } from '../library/index.ts';
 import { compareStrings } from '../text/index.ts';
-import {
-  concat,
-  nowTruncated,
-  parseTime,
-  rfc3339,
-  sha256Hex,
-} from '../go/index.ts';
+import { concat, sha256Hex } from '../go/index.ts';
 import { isOneOf, isRecord } from '../guards.ts';
 import { messageOf } from '../said/index.ts';
 import { read as ingestRead } from '../ingest/index.ts';

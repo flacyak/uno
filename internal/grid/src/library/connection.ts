@@ -10,7 +10,7 @@
 //
 // It works on text alone.
 
-import { rfc3339 } from '../go/index.ts';
+import { rfc3339 } from './time.ts';
 import { isOneOf, isRecord } from '../guards.ts';
 import { validID } from './index.ts';
 import {

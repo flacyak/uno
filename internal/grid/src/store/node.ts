@@ -14,11 +14,10 @@ import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { compareStrings } from '../text/index.ts';
-import { parseTime } from '../go/index.ts';
 import { isRecord } from '../guards.ts';
 import { messageOf } from '../said/index.ts';
 import type { AuthMode, Connection } from '../library/index.ts';
-import { covering } from '../library/index.ts';
+import { covering, parseTime } from '../library/index.ts';
 import type { Provider } from '../plugin/index.ts';
 import { diskLister } from './disklister.ts';
 import type { ByteSource, FileHandler, FileStore } from './index.ts';

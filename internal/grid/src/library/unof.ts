@@ -2,8 +2,8 @@
 // an id, a name, two times, and any keys a later build wrote. Reading and
 // writing it is here once, for the formula and connection codecs.
 
+import { nowTruncated, parseTime } from './time.ts';
 import { compareStrings } from '../text/index.ts';
-import { nowTruncated, parseTime } from '../go/index.ts';
 import { isRecord } from '../guards.ts';
 import { messageOf } from '../said/index.ts';
 import { FORMAT_VERSION } from './index.ts';
