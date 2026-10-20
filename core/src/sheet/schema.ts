@@ -56,11 +56,6 @@ export interface Supplied {
 }
 
 export class Schema {
-  readonly headers: readonly string[];
-  /** The columns the holder of the rows fills in, in the order it hands
-   * their values. Each is one of `headers`, so an expression can name it. */
-  readonly supplied: readonly Supplied[];
-
   /** How many rows an edit may name. The holder of the rows keeps it current. */
   rows: number;
 
@@ -76,16 +71,20 @@ export class Schema {
   private computed: number[] = [];
   /** Header to index, or -1 for a header more than one column has. */
   private readonly names = new Map<string, number>();
+  private headerNames: readonly string[];
+  private suppliedCols: readonly Supplied[];
 
   constructor(
     headers: readonly string[],
     rows: number,
+    /** The columns the holder of the rows fills in, in the order it hands
+     * their values. Each is one of `headers`, so an expression can name it. */
     supplied: readonly Supplied[] = [],
   ) {
-    this.headers = headers;
-    this.supplied = supplied;
     this.rows = rows;
-    headers.forEach((h, i) => this.names.set(h, this.names.has(h) ? -1 : i));
+    this.headerNames = headers;
+    this.suppliedCols = supplied;
+    this.index();
   }
 
   /** of builds a Schema from a saved log. */
@@ -125,6 +124,17 @@ export class Schema {
   }
 
   // ------------------------------------------------------------ reading
+
+  /** Each column's name, in column order. */
+  get headers(): readonly string[] {
+    return this.headerNames;
+  }
+
+  /** The columns the holder of the rows fills in, in the order it hands
+   * their values. */
+  get supplied(): readonly Supplied[] {
+    return this.suppliedCols;
+  }
 
   /** True when the log is empty. */
   get empty(): boolean {
@@ -339,6 +349,14 @@ export class Schema {
     this.bound.delete(e.col);
     this.graph.unbind(name);
     this.reorder();
+  }
+
+  /** index maps each header to its column, or to -1 when more than one
+   * column has it. */
+  private index(): void {
+    this.headerNames.forEach((h, i) =>
+      this.names.set(h, this.names.has(h) ? -1 : i),
+    );
   }
 
   private reorder(): void {
