@@ -68,14 +68,14 @@ const PAGE = 500;
 const ON_DISK: PartsRef = {
   name: NAME,
   parts: PART_FIXTURES.map((path, i) => ({
-    ref: { name: PART_NAMES[i]!, path },
+    ref: { name: PART_NAMES[i], path },
   })),
   header: 'first',
 };
 
 /** A handler over the fixture's parts held in memory, which remembers every ref it opened. */
 function memory(): { handler: FileHandler; refs: FileRef[] } {
-  const held = new Map(PART_NAMES.map((name, i) => [name, partBytes[i]!]));
+  const held = new Map(PART_NAMES.map((name, i) => [name, partBytes[i]]));
   const refs: FileRef[] = [];
   const handler: FileHandler = {
     label: 'memory',
@@ -146,7 +146,7 @@ test("multiOf hands back the map, the extents and each part's version", async ()
   }
 
   // A single-file source's multi is undefined.
-  const one = await openWith([m.handler], inMemory(PART_NAMES[0]!));
+  const one = await openWith([m.handler], inMemory(PART_NAMES[0]));
   expect(multiOf(one)).toBeUndefined();
 });
 
@@ -167,7 +167,7 @@ test('a ref carrying extents and versions opens without touching a part', async 
     ...fresh,
     parts: fresh.parts.map((part, i) => ({
       ref: { ...inMemory(part.ref.name), version: versions[i] },
-      extent: measured.extents[i]!,
+      extent: measured.extents[i],
     })),
   };
   await measured.close();
@@ -180,7 +180,7 @@ test('a ref carrying extents and versions opens without touching a part', async 
     expect(source.size).toBe(bytes.length);
     expect(again.refs).toEqual([]);
 
-    const last = multiOf(source)!.map.spans[PARTS - 1]!;
+    const last = multiOf(source)!.map.spans[PARTS - 1];
     expect(
       same(
         await source.read(last.start, last.end - last.start),
@@ -191,7 +191,7 @@ test('a ref carrying extents and versions opens without touching a part', async 
     // their recorded versions. The middle part stayed closed.
     expect(again.refs.toSorted((x, y) => x.name.localeCompare(y.name))).toEqual(
       [0, PARTS - 1].map((i) => ({
-        ...inMemory(PART_NAMES[i]!),
+        ...inMemory(PART_NAMES[i]),
         version: versions[i],
       })),
     );
@@ -217,8 +217,8 @@ test('a build that does not list multiFiles refuses a ref of parts by name', asy
 
 test('a part no handler under it claims is refused, naming the part', async () => {
   const blob: SingleRef = {
-    name: PART_NAMES[1]!,
-    blob: new Blob([partBytes[1]!.slice()]),
+    name: PART_NAMES[1],
+    blob: new Blob([partBytes[1].slice()]),
   };
   const ref: PartsRef = {
     ...ON_DISK,
@@ -285,11 +285,11 @@ let aws: string;
 beforeAll(async () => {
   b = await bucket(undefined, HOME_REGION, undefined, {
     [FINANCE_BUCKET]: {
-      objects: new Map([[PART_NAMES[1]!, partBytes[1]!]]),
+      objects: new Map([[PART_NAMES[1], partBytes[1]]]),
       keys: FINANCE,
     },
     [MARKETING_BUCKET]: {
-      objects: new Map([[PART_NAMES[2]!, partBytes[2]!]]),
+      objects: new Map([[PART_NAMES[2], partBytes[2]]]),
       keys: MARKETING,
     },
   });
@@ -325,16 +325,16 @@ function connection(
 const ACROSS: PartsRef = {
   name: NAME,
   parts: [
-    { ref: { name: PART_NAMES[0]!, path: PART_FIXTURES[0]! } },
+    { ref: { name: PART_NAMES[0], path: PART_FIXTURES[0] } },
     {
       ref: {
-        name: PART_NAMES[1]!,
+        name: PART_NAMES[1],
         path: `s3://${FINANCE_BUCKET}/${PART_NAMES[1]}`,
       },
     },
     {
       ref: {
-        name: PART_NAMES[2]!,
+        name: PART_NAMES[2],
         path: `s3://${MARKETING_BUCKET}/${PART_NAMES[2]}`,
       },
     },

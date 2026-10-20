@@ -46,7 +46,7 @@ const ROOMY = 1 << 20;
 const THREE: SourceRef = {
   name: NAME,
   parts: PART_FIXTURES.map((path, i) => ({
-    ref: { name: PART_NAMES[i]!, path },
+    ref: { name: PART_NAMES[i], path },
   })),
   header: 'first',
 };
@@ -82,8 +82,8 @@ test('a part on disk and parts dropped in open as one source', async () => {
       name: NAME,
       parts: PART_NAMES.map((name, i) =>
         i === 0
-          ? { ref: { name, path: PART_FIXTURES[i]! } }
-          : { ref: { name, blob: new Blob([partBytes[i]!.slice()]) } },
+          ? { ref: { name, path: PART_FIXTURES[i] } }
+          : { ref: { name, blob: new Blob([partBytes[i].slice()]) } },
       ),
       header: 'first',
     });
@@ -117,7 +117,7 @@ test('a part in a kind of place the engine does not read is refused, naming the 
   const { engine, done } = connect(TINY, [...single, multiProvider(single)]);
   try {
     const parts = THREE.parts.with(1, {
-      ref: { name: PART_NAMES[1]!, path: 's3://acme/part.csv' },
+      ref: { name: PART_NAMES[1], path: 's3://acme/part.csv' },
     });
     await expect(engine.open({ ...THREE, parts })).rejects.toThrow(
       `${PART_NAMES[1]} (part 2 of ${PARTS}): s3://acme/part.csv: nothing here opens it · this build reads local files`,

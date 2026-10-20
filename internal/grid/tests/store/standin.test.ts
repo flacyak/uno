@@ -76,9 +76,7 @@ test('reads an object out of the bucket that environment names', async () => {
     const src = await openOne(engine, at('2025/sales-q3.csv'));
     await indexed(src);
     expect(src.progress.rows).toBe(ROWS);
-    expect((await src.rows(100, 1)).rows[0]![UNITS]).toBe(
-      sales.raw(100, UNITS),
-    );
+    expect((await src.rows(100, 1)).rows[0][UNITS]).toBe(sales.raw(100, UNITS));
     // Every request was signed for the environment's region and went
     // straight through.
     expect(b.seen[0]).toMatchObject({ method: 'HEAD' });

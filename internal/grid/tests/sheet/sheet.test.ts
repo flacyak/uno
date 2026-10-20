@@ -89,9 +89,9 @@ describe('inferKind', () => {
   ];
 
   for (const [col, kind, flagged] of cases) {
-    test(s.columns[col]!.header, () => {
-      expect(s.columns[col]!.kind).toBe(kind);
-      expect(s.columns[col]!.flagged).toBe(flagged);
+    test(s.columns[col].header, () => {
+      expect(s.columns[col].kind).toBe(kind);
+      expect(s.columns[col].flagged).toBe(flagged);
     });
   }
 });
@@ -117,9 +117,9 @@ describe('inferKind flags the other decorations', () => {
   ];
 
   for (const [col, kind, flagged] of cases) {
-    test(s.columns[col]!.header, () => {
-      expect(s.columns[col]!.kind).toBe(kind);
-      expect(s.columns[col]!.flagged).toBe(flagged);
+    test(s.columns[col].header, () => {
+      expect(s.columns[col].kind).toBe(kind);
+      expect(s.columns[col].flagged).toBe(flagged);
     });
   }
 });
@@ -139,16 +139,16 @@ test('inferKind reads accounting negatives as numbers', () => {
       ['amount'],
       values.map((v) => [v]),
     );
-    expect(s.columns[0]!.kind, name).toBe(kind);
-    expect(s.columns[0]!.flagged, name).toBe(flagged);
+    expect(s.columns[0].kind, name).toBe(kind);
+    expect(s.columns[0].flagged, name).toBe(flagged);
   }
 });
 
 // A column mixing numbers with a word like N/A is text and stays unflagged.
 test('inferKind does not flag genuinely mixed columns', () => {
   const s = new Sheet('t.csv', ['units'], [['12'], ['34'], ['56'], ['N/A']]);
-  expect(s.columns[0]!.kind).toBe('text');
-  expect(s.columns[0]!.flagged).toBe(false);
+  expect(s.columns[0].kind).toBe('text');
+  expect(s.columns[0].flagged).toBe(false);
 });
 
 // Date detection accepts only the listed layouts.
@@ -194,14 +194,14 @@ describe('isDate is the written layouts and not whatever Date can parse', () => 
   for (const v of dates) {
     test(`${v} is a date`, () => {
       const s = new Sheet('t.csv', ['d'], [[v]]);
-      expect(s.columns[0]!.kind).toBe('date');
+      expect(s.columns[0].kind).toBe('date');
     });
   }
 
   for (const v of notDates) {
     test(`${v} is not`, () => {
       const s = new Sheet('t.csv', ['d'], [[v]]);
-      expect(s.columns[0]!.kind).not.toBe('date');
+      expect(s.columns[0].kind).not.toBe('date');
     });
   }
 });
@@ -215,5 +215,5 @@ test('a column of mixed date layouts is a date column', () => {
   const s = read('google-ads-sales.csv', readFileSync(path));
   const col = s.columns.findIndex((c) => c.header === 'Ad_Date');
   expect(col).toBeGreaterThanOrEqual(0);
-  expect(s.columns[col]!.kind).toBe('date');
+  expect(s.columns[col].kind).toBe('date');
 });

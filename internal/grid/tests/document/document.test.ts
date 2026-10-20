@@ -74,7 +74,7 @@ function oneSource(
 /** The single sheet of a one-source document. */
 function only(doc: Document): Sheet {
   const [sheet] = doc.sheets!.values();
-  return sheet!;
+  return sheet;
 }
 
 test('a round trip rebuilds the workspace', () => {
@@ -87,9 +87,9 @@ test('a round trip rebuilds the workspace', () => {
   expect(only(back).rows()).toBe(ROWS);
   expect(only(back).cols()).toBe(COLS);
   expect(only(back).raw(0, UNITS), 'the edit was not replayed').toBe('1204');
-  expect(back.sources[0]!.state.active).toEqual(ACTIVE);
-  expect(back.sources[0]!.raw, 'the source went in byte for byte').toEqual(
-    doc.sources[0]!.raw,
+  expect(back.sources[0].state.active).toEqual(ACTIVE);
+  expect(back.sources[0].raw, 'the source went in byte for byte').toEqual(
+    doc.sources[0].raw,
   );
   expect(only(back).logEquals(doc.log.map((l) => l.edit))).toBe(true);
 });
@@ -101,13 +101,13 @@ test('the container holds four named entries', () => {
   expect(entries).toEqual(
     [
       MANIFEST_ENTRY,
-      doc.manifest.sources[0]!.entry!,
+      doc.manifest.sources[0].entry!,
       STATE_ENTRY,
       LOG_ENTRY,
     ].sort(),
   );
   // The source entry keeps the extension of the file it holds.
-  expect(doc.manifest.sources[0]!.entry).toBe('data/source.tsv');
+  expect(doc.manifest.sources[0].entry).toBe('data/source.tsv');
 });
 
 // The manifest's sizes, hash and counts are measured from the written bytes.
@@ -118,18 +118,18 @@ test('the manifest is measured from the bytes', () => {
 
   const m = doc.manifest;
   expect(m.generator).toBe('uno 0.2.0');
-  expect(m.sources[0]!.bytes).toBe(encoder.encode(CSV_BODY).length);
-  expect(m.sources[0]!.sha256).toMatch(/^[0-9a-f]{64}$/);
+  expect(m.sources[0].bytes).toBe(encoder.encode(CSV_BODY).length);
+  expect(m.sources[0].sha256).toMatch(/^[0-9a-f]{64}$/);
   expect(m.edits.count).toBe(1);
-  expect(m.sources[0]!.rows).toBe(ROWS);
-  expect(m.sources[0]!.cols).toBe(COLS);
+  expect(m.sources[0].rows).toBe(ROWS);
+  expect(m.sources[0].cols).toBe(COLS);
 
   // The written manifest holds the same hash as the returned one.
   const written = JSON.parse(
-    strFromU8(unzipSync(bytes)[MANIFEST_ENTRY]!),
+    strFromU8(unzipSync(bytes)[MANIFEST_ENTRY]),
   ) as Record<string, unknown>;
   expect((written['source'] as Record<string, unknown>)['sha256']).toBe(
-    m.sources[0]!.sha256,
+    m.sources[0].sha256,
   );
 });
 
@@ -148,7 +148,7 @@ test('a newer format is refused by name', () => {
   const { bytes } = saved('sales.csv');
   const entries = unzipSync(bytes);
 
-  const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as Record<
+  const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY])) as Record<
     string,
     unknown
   >;
@@ -176,7 +176,7 @@ test('an unknown entry survives a round trip', () => {
   expect(back.extra.get('future/thing.json')).toBeDefined();
 
   const again = unzipSync(writeDocument(back));
-  expect(strFromU8(again['future/thing.json']!)).toBe('{"kept":true}');
+  expect(strFromU8(again['future/thing.json'])).toBe('{"kept":true}');
 });
 
 // A log whose last line is incomplete replays its complete lines.
@@ -187,7 +187,7 @@ test('a truncated log replays its complete lines', () => {
   });
 
   const entries = unzipSync(bytes);
-  const log = strFromU8(entries[LOG_ENTRY]!);
+  const log = strFromU8(entries[LOG_ENTRY]);
   const cut = log.indexOf('\n') + 1;
   const torn = 12; // bytes of the second line to keep
   entries[LOG_ENTRY] = encoder.encode(
@@ -207,8 +207,8 @@ test('a log damaged in the middle fails the open', () => {
   });
 
   const entries = unzipSync(bytes);
-  const lines = strFromU8(entries[LOG_ENTRY]!).split('\n');
-  entries[LOG_ENTRY] = encoder.encode(['{not json', lines[1]!, ''].join('\n'));
+  const lines = strFromU8(entries[LOG_ENTRY]).split('\n');
+  entries[LOG_ENTRY] = encoder.encode(['{not json', lines[1], ''].join('\n'));
 
   expect(() => readDocument('sales.csv', zipSync(entries))).toThrow();
 });
@@ -325,7 +325,7 @@ test('a column op round-trips', () => {
   const back = readDocument('sales.csv', bytes);
   expect(only(back).raw(0, UNITS)).toBe('1204');
   expect(only(back).raw(2, UNITS)).toBe('1455');
-  expect(only(back).columns[UNITS]!.kind).toBe('num');
+  expect(only(back).columns[UNITS].kind).toBe('num');
 });
 
 // A bind entry replays by recomputing the column from its expression.
@@ -350,7 +350,7 @@ test('a bound file computes with no library to resolve', () => {
   });
 
   const entries = unzipSync(bytes);
-  const state = JSON.parse(strFromU8(entries[STATE_ENTRY]!)) as Record<
+  const state = JSON.parse(strFromU8(entries[STATE_ENTRY])) as Record<
     string,
     unknown
   >;
@@ -373,7 +373,7 @@ test('a library reference round-trips when there is one', () => {
   });
 
   const back = readDocument('sales.csv', writeDocument(doc));
-  expect(back.sources[0]!.state.columnFormulas).toEqual([
+  expect(back.sources[0].state.columnFormulas).toEqual([
     { col: REGION, ref: 'double-units' },
   ]);
 });
@@ -394,7 +394,7 @@ function twoSources(): { bytes: Uint8Array; doc: Document } {
   const ads = ingestRead('Google Ads.tsv', ADS_BODY);
   const log: Document['log'] = [];
   const logged = (source: string, sh: Sheet): void => {
-    log.push({ source, edit: sh.edits()[sh.edits().length - 1]! });
+    log.push({ source, edit: sh.edits()[sh.edits().length - 1] });
   };
 
   sales.set(0, UNITS, '1204');
@@ -452,11 +452,11 @@ describe('a workspace of several sources', () => {
       '$8.00',
     );
 
-    expect(back.sources[1]!.raw, 'the source went in byte for byte').toEqual(
+    expect(back.sources[1].raw, 'the source went in byte for byte').toEqual(
       encoder.encode(ADS_BODY),
     );
-    expect(back.sources[0]!.state.active).toEqual(ACTIVE);
-    expect(back.sources[1]!.state.active).toEqual({ row: 1, col: COST });
+    expect(back.sources[0].state.active).toEqual(ACTIVE);
+    expect(back.sources[1].state.active).toEqual({ row: 1, col: COST });
   });
 
   test('needs format 4, and gives each source an entry of its own', () => {
@@ -474,9 +474,10 @@ describe('a workspace of several sources', () => {
       ].sort(),
     );
 
-    const m = JSON.parse(
-      strFromU8(unzipSync(bytes)[MANIFEST_ENTRY]!),
-    ) as Record<string, unknown>;
+    const m = JSON.parse(strFromU8(unzipSync(bytes)[MANIFEST_ENTRY])) as Record<
+      string,
+      unknown
+    >;
     expect(m['source'], 'the one-source key is not written').toBeUndefined();
     expect(
       (m['sources'] as Array<Record<string, unknown>>).map((s) => s['name']),
@@ -486,7 +487,7 @@ describe('a workspace of several sources', () => {
   // The log keeps the interleaved order across sources.
   test('the log keeps the order the edits were made in, and names each source', () => {
     const { bytes } = twoSources();
-    const lines = strFromU8(unzipSync(bytes)[LOG_ENTRY]!)
+    const lines = strFromU8(unzipSync(bytes)[LOG_ENTRY])
       .trim()
       .split('\n')
       .map((l) => JSON.parse(l) as Record<string, unknown>);
@@ -505,7 +506,7 @@ describe('a workspace of several sources', () => {
 
   test('a line naming a source the file does not hold is refused by name', () => {
     const entries = unzipSync(twoSources().bytes);
-    const log = strFromU8(entries[LOG_ENTRY]!).replace(
+    const log = strFromU8(entries[LOG_ENTRY]).replace(
       '"google-ads"',
       '"tiktok"',
     );
@@ -544,7 +545,7 @@ describe('a workspace of several sources', () => {
 
   test('a log naming a source that is not there is not written', () => {
     const { doc } = twoSources();
-    doc.log.push({ source: 'tiktok', edit: doc.log[0]!.edit });
+    doc.log.push({ source: 'tiktok', edit: doc.log[0].edit });
     expect(() => writeDocument(doc)).toThrow(
       'names tiktok, which is not a source here',
     );
@@ -600,14 +601,14 @@ describe('a workspace that points at its sources', () => {
     );
 
     const [ledger, sales] = doc.manifest.sources;
-    expect(ledger!.path).toBe('exports/ledger.csv');
-    expect(ledger!.entry).toBe('');
-    expect(ledger!.bytes, 'what the file measured at the save').toBe(
+    expect(ledger.path).toBe('exports/ledger.csv');
+    expect(ledger.entry).toBe('');
+    expect(ledger.bytes, 'what the file measured at the save').toBe(
       3_300_000_000,
     );
-    expect(sales!.entry).toBe('data/source/sales.csv');
-    expect(sales!.path).toBe('');
-    expect(sales!.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(sales.entry).toBe('data/source/sales.csv');
+    expect(sales.path).toBe('');
+    expect(sales.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
   // A pointed-at source is written with a path key; a carried source is
@@ -617,11 +618,11 @@ describe('a workspace that points at its sources', () => {
       strFromU8(
         unzipSync(writeDocument(mixed('/home/cpa/q4/books.uno')))[
           MANIFEST_ENTRY
-        ]!,
+        ],
       ),
     ) as { sources: Array<Record<string, unknown>> };
 
-    expect(Object.keys(written.sources[0]!)).toEqual([
+    expect(Object.keys(written.sources[0])).toEqual([
       'id',
       'name',
       'bytes',
@@ -629,7 +630,7 @@ describe('a workspace that points at its sources', () => {
       'rows',
       'cols',
     ]);
-    expect(Object.keys(written.sources[1]!)).toEqual([
+    expect(Object.keys(written.sources[1])).toEqual([
       'id',
       'name',
       'bytes',
@@ -644,13 +645,13 @@ describe('a workspace that points at its sources', () => {
     const bytes = writeDocument(mixed('/home/cpa/q4/books.uno'));
     const back = readContainer('books.uno', bytes, '/media/stick/q4/books.uno');
 
-    expect(back.sources[0]!.path).toBe('/media/stick/q4/exports/ledger.csv');
+    expect(back.sources[0].path).toBe('/media/stick/q4/exports/ledger.csv');
     expect(
-      back.sources[0]!.raw,
+      back.sources[0].raw,
       'nothing to read: it was never copied in',
     ).toBeUndefined();
-    expect(back.sources[1]!.raw).toEqual(encoder.encode(CSV_BODY));
-    expect(back.sources[1]!.path).toBeUndefined();
+    expect(back.sources[1].raw).toEqual(encoder.encode(CSV_BODY));
+    expect(back.sources[1].path).toBeUndefined();
   });
 
   // readDocument builds sheets for carried sources only. Pointed-at sources
@@ -668,13 +669,13 @@ describe('a workspace that points at its sources', () => {
 
   test('refuses a source that is both, or neither', () => {
     const both = mixed('');
-    both.sources[0]!.raw = encoder.encode(CSV_BODY);
+    both.sources[0].raw = encoder.encode(CSV_BODY);
     expect(() => writeDocument(both)).toThrow(
       'ledger.csv is both carried and pointed at',
     );
 
     const neither = mixed('');
-    delete neither.sources[0]!.path;
+    delete neither.sources[0].path;
     expect(() => writeDocument(neither)).toThrow(
       'ledger.csv has neither bytes to carry nor a path to point at',
     );
@@ -683,10 +684,10 @@ describe('a workspace that points at its sources', () => {
   test('refuses to read a source with no entry and no path', () => {
     const bytes = writeDocument(mixed(''));
     const entries = unzipSync(bytes);
-    const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as {
+    const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY])) as {
       sources: Array<Record<string, unknown>>;
     };
-    delete m.sources[0]!['path'];
+    delete m.sources[0]['path'];
     entries[MANIFEST_ENTRY] = encoder.encode(JSON.stringify(m));
 
     expect(() => readContainer('books.uno', zipSync(entries))).toThrow(
@@ -738,7 +739,7 @@ describe("a source's version and connection", () => {
     format: number;
     sources: Array<Record<string, unknown>>;
   } {
-    return JSON.parse(strFromU8(unzipSync(bytes)[MANIFEST_ENTRY]!)) as {
+    return JSON.parse(strFromU8(unzipSync(bytes)[MANIFEST_ENTRY])) as {
       format: number;
       sources: Array<Record<string, unknown>>;
     };
@@ -746,17 +747,17 @@ describe("a source's version and connection", () => {
 
   test('round-trip on a pointed-at source, and stay off a carried one', () => {
     const back = readContainer('q4.uno', writeDocument(pinned()));
-    expect(back.sources[0]!.version).toBe(ETAG);
-    expect(back.sources[0]!.connection).toBe('acme-exports');
-    expect(back.sources[1]!.version).toBeUndefined();
-    expect(back.sources[1]!.connection).toBeUndefined();
+    expect(back.sources[0].version).toBe(ETAG);
+    expect(back.sources[0].connection).toBe('acme-exports');
+    expect(back.sources[1].version).toBeUndefined();
+    expect(back.sources[1].connection).toBeUndefined();
   });
 
   test('do not move the format, and sit beside what they describe', () => {
     const m = manifestOf(writeDocument(pinned()));
     expect(m.format).toBe(POINTED_VERSION);
     // connection is written after name, and version after path.
-    expect(Object.keys(m.sources[0]!)).toEqual([
+    expect(Object.keys(m.sources[0])).toEqual([
       'id',
       'name',
       'connection',
@@ -766,7 +767,7 @@ describe("a source's version and connection", () => {
       'rows',
       'cols',
     ]);
-    expect(Object.keys(m.sources[1]!)).toEqual([
+    expect(Object.keys(m.sources[1])).toEqual([
       'id',
       'name',
       'bytes',
@@ -796,7 +797,7 @@ describe("a source's version and connection", () => {
     const without = (d: Document): unknown =>
       d.sources.map(({ version: _v, connection: _c, ...rest }) => rest);
     expect(without(bare)).toEqual(without(full));
-    expect(bare.sources[0]!.version).toBeUndefined();
+    expect(bare.sources[0].version).toBeUndefined();
     expect(bare.log).toEqual(full.log);
     expect(bare.active).toBe(full.active);
   });

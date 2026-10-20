@@ -139,7 +139,7 @@ test('the stand-in bucket sees zero requests before the person accepts', async (
     expect(back.opened.edits).toHaveLength(1);
     expect(
       (await back.rows(1, 1)).raws[0]?.[UNITS] ??
-        (await back.rows(1, 1)).rows[0]![UNITS],
+        (await back.rows(1, 1)).rows[0][UNITS],
     ).toBe('986');
   } finally {
     done();
@@ -293,7 +293,7 @@ test('a source waiting for its bucket saves the version and connection it was op
     await writeFile(
       file,
       await had.engine.save(
-        { source: sources[0]!.id, cells: [], at: file },
+        { source: sources[0].id, cells: [], at: file },
         1 << 20,
       ),
     );

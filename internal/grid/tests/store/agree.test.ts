@@ -166,10 +166,10 @@ async function refusals(
   const lazily = held(changed);
   const parts = lazily.parts.map((part, i) => ({
     ...part,
-    extent: before.extents[i]!,
+    extent: before.extents[i],
   }));
   const source = await openMulti([memory(lazily.files).handler], parts, header);
-  const span = source.map.spans[at]!;
+  const span = source.map.spans[at];
   const lazy = await refusal(() =>
     source.read(span.start, span.end - span.start),
   );
@@ -453,9 +453,7 @@ test('a byte order mark is not a different encoding, on the first part or a late
   ]) {
     const source = await open('first', contents);
     expect(
-      decoder.decode(
-        await source.read(source.map.spans[1]!.start, source.size),
-      ),
+      decoder.decode(await source.read(source.map.spans[1].start, source.size)),
     ).toMatch(/^\d,\d\n$/);
   }
   const none = await open('none', [
@@ -522,7 +520,7 @@ test('the first part that does not agree is the one refused, in the order of the
   );
   expect(second.partName).toBe('b.csv');
   const third = await refusal(() =>
-    openMulti(one, [parts[0]!, parts[2]!], 'first'),
+    openMulti(one, [parts[0], parts[2]], 'first'),
   );
   expect(third.message).toBe(
     'c.csv (part 2 of 2): it is semicolon-separated and a.csv is comma-separated',
@@ -532,29 +530,29 @@ test('the first part that does not agree is the one refused, in the order of the
 test('a part found not to agree by a read refuses every read of the source after it', async () => {
   const was = ['a,b\n1,2\n', 'a,b\n3,4\n', 'a,b\n5,6\n'];
   const before = await open('first', was);
-  const { files, parts } = held([was[0]!, 'a,c\n3,4\n', was[2]!]);
+  const { files, parts } = held([was[0], 'a,c\n3,4\n', was[2]]);
   const m = memory(files);
   const source = await openMulti(
     [m.handler],
-    parts.map((part, i) => ({ ...part, extent: before.extents[i]! })),
+    parts.map((part, i) => ({ ...part, extent: before.extents[i] })),
     'first',
   );
   expect(m.opened, 'nothing is opened, so nothing is refused yet').toEqual([]);
 
   const [first, second, third] = source.map.spans;
   // Before a read reaches the part, the first part reads.
-  expect(decoder.decode(await source.read(first!.start, first!.end))).toBe(
+  expect(decoder.decode(await source.read(first.start, first.end))).toBe(
     was[0],
   );
 
-  const found = await refusal(() => source.read(second!.start, 1));
+  const found = await refusal(() => source.read(second.start, 1));
   expect(found.message).toBe(
     'b.csv (part 2 of 3): column 2 is "c" where a.csv has "b"',
   );
 
   // After that, every read is refused with the same error.
-  expect(await refusal(() => source.read(first!.start, 1))).toBe(found);
-  expect(await refusal(() => source.read(third!.start, 1))).toBe(found);
+  expect(await refusal(() => source.read(first.start, 1))).toBe(found);
+  expect(await refusal(() => source.read(third.start, 1))).toBe(found);
   expect(m.opened, 'the part past it was never opened').toEqual([
     'a.csv',
     'b.csv',

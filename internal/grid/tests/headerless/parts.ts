@@ -55,7 +55,7 @@ export async function onDisk(
 ): Promise<{ dir: string; paths: string[] }> {
   const dir = await mkdtemp(join(tmpdir(), 'uno-headerless-'));
   const paths = NAMES.slice(0, files.length).map((name) => join(dir, name));
-  await Promise.all(paths.map((path, i) => writeFile(path, files[i]!)));
+  await Promise.all(paths.map((path, i) => writeFile(path, files[i])));
   return { dir, paths };
 }
 
@@ -66,7 +66,7 @@ export function asOne(
 ): SourceRef {
   return {
     name: SOURCE,
-    parts: paths.map((path, i) => ({ ref: { name: NAMES[i]!, path } })),
+    parts: paths.map((path, i) => ({ ref: { name: NAMES[i], path } })),
     header,
   };
 }

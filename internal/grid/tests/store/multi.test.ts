@@ -29,7 +29,7 @@ const CRLF_BYTES = 2;
 const BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
 
 /** The header line every part of the fixture opens with, its CRLF included. */
-const HEADER_BYTES = partBytes[0]!.indexOf(LF) + 1;
+const HEADER_BYTES = partBytes[0].indexOf(LF) + 1;
 
 /** The path prefix of a file held in memory. */
 const MEMORY = 'memory://';
@@ -82,7 +82,7 @@ function inMemory(name: string): SingleRef {
 
 /** The fixture's three parts, held in memory. */
 function fixtureFiles(): Map<string, Uint8Array> {
-  return new Map(PART_NAMES.map((name, i) => [name, partBytes[i]!]));
+  return new Map(PART_NAMES.map((name, i) => [name, partBytes[i]]));
 }
 
 /** Files of text, named a.csv, b.csv and on, and the parts that point at them. */
@@ -94,9 +94,7 @@ function texts(...contents: string[]): {
     (_, i) => `${String.fromCharCode('a'.charCodeAt(0) + i)}.csv`,
   );
   return {
-    files: new Map(
-      names.map((name, i) => [name, encoder.encode(contents[i]!)]),
-    ),
+    files: new Map(names.map((name, i) => [name, encoder.encode(contents[i])])),
     parts: names.map((name) => ({ ref: inMemory(name) })),
   };
 }
@@ -119,7 +117,7 @@ async function measuredParts(): Promise<Part[]> {
     parts,
     'first',
   );
-  return parts.map((part, i) => ({ ...part, extent: source.extents[i]! }));
+  return parts.map((part, i) => ({ ...part, extent: source.extents[i] }));
 }
 
 /** A deterministic generator of numbers in [0, 1). */
@@ -136,7 +134,7 @@ function seeded(seed: number): () => number {
 
 test('sales-q3.csv split into three parts reads back identical to the whole', async () => {
   const parts = PART_FIXTURES.map((path, i) => ({
-    ref: { name: PART_NAMES[i]!, path },
+    ref: { name: PART_NAMES[i], path },
   }));
   const source = await openMulti([localFiles()], parts, 'first');
   try {
@@ -193,9 +191,9 @@ test('a read across a boundary takes up in the next part where the last one left
   }
   // One read over both boundaries, and one that asks for more than there is.
   const [, second, third] = source.map.spans;
-  const over = third!.start - second!.start + 2 * AROUND;
-  expect(decoder.decode(await source.read(second!.start - AROUND, over))).toBe(
-    text(second!.start - AROUND, over),
+  const over = third.start - second.start + 2 * AROUND;
+  expect(decoder.decode(await source.read(second.start - AROUND, over))).toBe(
+    text(second.start - AROUND, over),
   );
   expect((await source.read(source.size - AROUND, 2 * AROUND)).length).toBe(
     AROUND,
@@ -229,8 +227,8 @@ test('a part that does not end in a newline is given one before the next part', 
   // Part two with its final CRLF cut off reads back with an LF there, so the
   // whole differs from the fixture by that one CR.
   const files = fixtureFiles();
-  const cut = partBytes[1]!.subarray(0, partBytes[1]!.length - CRLF_BYTES);
-  files.set(PART_NAMES[1]!, cut);
+  const cut = partBytes[1].subarray(0, partBytes[1].length - CRLF_BYTES);
+  files.set(PART_NAMES[1], cut);
   const source = await openMulti(
     [memory(files).handler],
     PART_NAMES.map((name) => ({ ref: inMemory(name) })),
@@ -243,7 +241,7 @@ test('a part that does not end in a newline is given one before the next part', 
   ]);
   expect(source.map.spans.map((s) => s.newline)).toEqual([false, true, false]);
   // Where part two's last row ends in the whole file, after its CRLF.
-  const boundary = source.map.spans[1]!.end + 1;
+  const boundary = source.map.spans[1].end + 1;
   const expected = Buffer.concat([
     bytes.subarray(0, boundary - CRLF_BYTES),
     Uint8Array.of(LF),
@@ -382,20 +380,20 @@ test('a part with its extent is not opened until a read needs it', async () => {
   expect(source.size).toBe(bytes.length);
 
   const [first, second, third] = source.map.spans;
-  await source.read(first!.start, HEADER_BYTES);
+  await source.read(first.start, HEADER_BYTES);
   expect(m.opened).toEqual([PART_NAMES[0]]);
-  await source.read(first!.end - 1, 1);
+  await source.read(first.end - 1, 1);
   expect(m.opened, 'up to the last byte of the first part').toEqual([
     PART_NAMES[0],
   ]);
 
-  await source.read(third!.start, HEADER_BYTES);
+  await source.read(third.start, HEADER_BYTES);
   expect(m.opened, 'the third, and never the second').toEqual([
     PART_NAMES[0],
     PART_NAMES[2],
   ]);
 
-  await source.read(second!.end - 1, 2);
+  await source.read(second.end - 1, 2);
   expect(m.opened).toEqual([PART_NAMES[0], PART_NAMES[2], PART_NAMES[1]]);
   expect(
     Buffer.from(await source.read(0, source.size)).equals(Buffer.from(bytes)),
@@ -409,7 +407,7 @@ test('a later part read first is opened with the first part, and no other', asyn
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
   const source = await openMulti([m.handler], parts, 'first');
-  const third = source.map.spans[2]!;
+  const third = source.map.spans[2];
   const read = await source.read(third.start, HEADER_BYTES);
   expect(decoder.decode(read)).toBe(
     decoder.decode(bytes.subarray(third.start, third.start + HEADER_BYTES)),
@@ -427,9 +425,9 @@ test('with no header row, a later part read first is opened with the first part 
     unmeasured,
     'none',
   );
-  const parts = unmeasured.map((part, i) => ({ ...part, extent: extents[i]! }));
+  const parts = unmeasured.map((part, i) => ({ ...part, extent: extents[i] }));
   const source = await openMulti([m.handler], parts, 'none');
-  await source.read(source.map.spans[1]!.start, HEADER_BYTES);
+  await source.read(source.map.spans[1].start, HEADER_BYTES);
   expect(m.opened.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[1]]);
 });
 
@@ -442,7 +440,7 @@ test('a virtual newline is read without opening the part it ends', async () => {
   const m = memory(files);
   const source = await openMulti(
     [m.handler],
-    parts.map((part, i) => ({ ...part, extent: extents[i]! })),
+    parts.map((part, i) => ({ ...part, extent: extents[i] })),
     'none',
   );
   expect(decoder.decode(await source.read(3, 1))).toBe('\n');
@@ -464,7 +462,7 @@ test('the map says which part every byte came from, at every boundary', async ()
   expect(map.spans.map((s) => s.end - s.start)).toEqual(
     partBytes.map((held, i) => held.length - (i === 0 ? 0 : HEADER_BYTES)),
   );
-  expect(map.spans[0]!.start).toBe(0);
+  expect(map.spans[0].start).toBe(0);
   expect(map.spans.at(-1)!.end).toBe(size);
 
   for (const [i, span] of map.spans.entries()) {
@@ -472,7 +470,7 @@ test('the map says which part every byte came from, at every boundary', async ()
     expect(map.partAt(span.end - 1), `the last byte of part ${i}`).toBe(i);
     if (i > 0) {
       expect(span.start, 'each starts where the last one ended').toBe(
-        map.spans[i - 1]!.end,
+        map.spans[i - 1].end,
       );
       expect(map.partAt(span.start - 1), `the byte before part ${i}`).toBe(
         i - 1,
@@ -499,11 +497,11 @@ test('the map puts every row of the fixture in the part that holds it', async ()
     at = bytes.indexOf(LF, at) + 1
   ) {
     const part = map.partAt(at)!;
-    counts[part]!++;
+    counts[part]++;
     // The row is in that part's own bytes, at the offset the span says.
-    const span = map.spans[part]!;
+    const span = map.spans[part];
     const within = span.skip + (at - span.start);
-    expect(partBytes[part]![within]).toBe(bytes[at]);
+    expect(partBytes[part][within]).toBe(bytes[at]);
   }
   const rows = (held: Uint8Array): number =>
     held.filter((b) => b === LF).length - 1;
@@ -557,7 +555,7 @@ test('a part that cannot be opened is named', async () => {
   await expect(
     openMulti(
       [m.handler],
-      [parts[0]!, { ref: { name: 'c.csv', path: '/tmp/c.csv' } }],
+      [parts[0], { ref: { name: 'c.csv', path: '/tmp/c.csv' } }],
       'first',
     ),
   ).rejects.toThrow(/^c\.csv \(part 2 of 2\): /);
@@ -570,24 +568,24 @@ test('a part that is not what its extent says is refused when a read reaches it'
   const parts = await measuredParts();
   const files = fixtureFiles();
   const longer = Uint8Array.of(
-    ...partBytes[1]!,
+    ...partBytes[1],
     ...encoder.encode('2026-09-30,West\r\n'),
   );
-  files.set(PART_NAMES[1]!, longer);
+  files.set(PART_NAMES[1], longer);
   const m = memory(files);
   const source = await openMulti([m.handler], parts, 'first');
   const [first, second] = source.map.spans;
-  expect((await source.read(first!.start, HEADER_BYTES)).length).toBe(
+  expect((await source.read(first.start, HEADER_BYTES)).length).toBe(
     HEADER_BYTES,
   );
-  await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(
-    `${PART_NAMES[1]} (part 2 of 3): it is not the file this source was made from · it is ${longer.length} bytes and was ${partBytes[1]!.length}`,
+  await expect(source.read(second.start, HEADER_BYTES)).rejects.toThrow(
+    `${PART_NAMES[1]} (part 2 of 3): it is not the file this source was made from · it is ${longer.length} bytes and was ${partBytes[1].length}`,
   );
   expect(m.closed, 'and it is not left open').toEqual([PART_NAMES[1]]);
 
   // Restored, it reads: a failed open is retried.
-  files.set(PART_NAMES[1]!, partBytes[1]!);
-  expect((await source.read(second!.start, HEADER_BYTES)).length).toBe(
+  files.set(PART_NAMES[1], partBytes[1]);
+  expect((await source.read(second.start, HEADER_BYTES)).length).toBe(
     HEADER_BYTES,
   );
 });
@@ -617,7 +615,7 @@ test('a part that comes up short under a read is named', async () => {
   const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
   const source = await openMulti([handler], parts, 'none');
   await expect(
-    source.read(source.map.spans[2]!.start, 2 * SHORT),
+    source.read(source.map.spans[2].start, 2 * SHORT),
   ).rejects.toThrow(
     `${PART_NAMES[2]} (part 3 of 3): it changed since it was opened`,
   );
@@ -642,7 +640,7 @@ test('closing closes each part that was opened, and no other', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());
   const source = await openMulti([m.handler], parts, 'first');
-  await source.read(source.map.spans[2]!.start, HEADER_BYTES);
+  await source.read(source.map.spans[2].start, HEADER_BYTES);
   await source.close();
   expect(m.closed.toSorted()).toEqual([PART_NAMES[0], PART_NAMES[2]]);
 });
@@ -656,17 +654,15 @@ test('a read after close is refused, and opens nothing', async () => {
   const m = memory(fixtureFiles());
   const source = await openMulti([m.handler], parts, 'first');
   const [first, second, third] = source.map.spans;
-  await source.read(first!.start, HEADER_BYTES);
+  await source.read(first.start, HEADER_BYTES);
   await source.close();
 
   // A part that was open, one that stayed closed, and a read across all three.
-  await expect(source.read(first!.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
-  await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(
-    CLOSED,
-  );
+  await expect(source.read(first.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
+  await expect(source.read(second.start, HEADER_BYTES)).rejects.toThrow(CLOSED);
   await expect(source.read(0, source.size)).rejects.toThrow(CLOSED);
   await expect(source.versions()).rejects.toThrow(CLOSED);
-  expect(third!.end).toBe(source.size);
+  expect(third.end).toBe(source.size);
   expect(m.opened, 'nothing is opened for a read that is refused').toEqual([
     PART_NAMES[0],
   ]);
@@ -716,7 +712,7 @@ test('a part whose open is in flight when the source closes is closed when it la
   const m = memory(fixtureFiles());
   const held = slow(m.handler);
   const source = await openMulti([held.handler], parts, 'first');
-  const reading = source.read(source.map.spans[0]!.start, HEADER_BYTES);
+  const reading = source.read(source.map.spans[0].start, HEADER_BYTES);
   await held.asked;
 
   const closing = source.close();
@@ -736,7 +732,7 @@ test('a later part landing after the close does not open the first part behind i
   const m = memory(fixtureFiles());
   const held = slow(m.handler);
   const source = await openMulti([held.handler], parts, 'first');
-  const reading = source.read(source.map.spans[1]!.start, HEADER_BYTES);
+  const reading = source.read(source.map.spans[1].start, HEADER_BYTES);
   await held.asked;
 
   const closing = source.close();
@@ -752,7 +748,7 @@ test('a later part landing after the close does not open the first part behind i
 const KEY = `2025/${PART_NAMES[1]}`;
 let b: Bucket;
 beforeAll(async () => {
-  b = await bucket(undefined, HOME_REGION, new Map([[KEY, partBytes[1]!]]));
+  b = await bucket(undefined, HOME_REGION, new Map([[KEY, partBytes[1]]]));
 });
 afterAll(() => b.close());
 
@@ -767,10 +763,10 @@ function mixed(): { handlers: FileHandler[]; parts: Part[] } {
       blobFiles(),
     ],
     parts: [
-      { ref: { name: PART_NAMES[0]!, path: PART_FIXTURES[0]! } },
+      { ref: { name: PART_NAMES[0], path: PART_FIXTURES[0] } },
       { ref: at(KEY) },
       {
-        ref: { name: PART_NAMES[2]!, blob: new Blob([partBytes[2]!.slice()]) },
+        ref: { name: PART_NAMES[2], blob: new Blob([partBytes[2].slice()]) },
       },
     ],
   };
@@ -785,7 +781,7 @@ test('a file on disk, an object in a bucket and dropped bytes read as one', asyn
     ).toBe(true);
     expect(await source.versions()).toEqual([
       undefined,
-      etagOf(partBytes[1]!),
+      etagOf(partBytes[1]),
       undefined,
     ]);
   } finally {
@@ -801,17 +797,17 @@ test('an object written over while it is being read is an error that names the p
     // Same size, different bytes: only the version shows the change.
     b.objects.set(
       KEY,
-      partBytes[1]!.map((byte) => (byte === LF ? LF : byte ^ 1)),
+      partBytes[1].map((byte) => (byte === LF ? LF : byte ^ 1)),
     );
-    await expect(source.read(second!.start, HEADER_BYTES)).rejects.toThrow(
+    await expect(source.read(second.start, HEADER_BYTES)).rejects.toThrow(
       `${PART_NAMES[1]} (part 2 of 3): ${at(KEY).path} changed in the bucket since it was opened · open it again`,
     );
     // The parts around it still read.
-    expect((await source.read(first!.start, HEADER_BYTES)).length).toBe(
+    expect((await source.read(first.start, HEADER_BYTES)).length).toBe(
       HEADER_BYTES,
     );
   } finally {
-    b.objects.set(KEY, partBytes[1]!);
+    b.objects.set(KEY, partBytes[1]);
     await source.close();
   }
 });

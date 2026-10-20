@@ -100,7 +100,7 @@ describe('evaluateColumn computes every row as one row would', () => {
   };
   const src = { column: (name: string) => cols[name] };
   const at = (i: number) =>
-    row(Object.fromEntries(Object.entries(cols).map(([k, v]) => [k, v[i]!])));
+    row(Object.fromEntries(Object.entries(cols).map(([k, v]) => [k, v[i]])));
 
   const exprs = [
     'price - cost',

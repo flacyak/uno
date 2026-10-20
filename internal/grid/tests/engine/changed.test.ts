@@ -52,7 +52,7 @@ function sameSizeRewrite(): Uint8Array {
   const out = bytes.slice();
   const body = out.indexOf(0x0a) + 1;
   const at = out.findIndex((c, i) => i > body && c >= 0x30 && c <= 0x39);
-  out[at] = out[at] === 0x39 ? 0x30 : out[at]! + 1;
+  out[at] = out[at] === 0x39 ? 0x30 : out[at] + 1;
   return out;
 }
 
@@ -80,7 +80,7 @@ async function reopened(
 ): Promise<{ src: SourceHandle; done: () => void }> {
   const { engine, done } = connect(undefined, providers());
   const { sources } = await engine.open({ name: 'q3.uno', path: file });
-  return { src: sources[0]!, done };
+  return { src: sources[0], done };
 }
 
 test('a same-size rewrite is reported as changed', async () => {
@@ -96,7 +96,7 @@ test('a same-size rewrite is reported as changed', async () => {
     );
     // The rows still open, with the edit replayed.
     await indexed(src);
-    expect((await src.rows(1, 1)).rows[0]![UNITS]).toBe('986');
+    expect((await src.rows(1, 1)).rows[0][UNITS]).toBe('986');
   } finally {
     done();
   }

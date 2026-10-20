@@ -21,7 +21,6 @@ import {
 } from '../../src/engine/index.ts';
 import type {
   Measurement,
-  MessagePortLike,
   Payload,
   Progress,
   Reply,
@@ -42,16 +41,14 @@ function measured(
   const seen: Measurement[] = [];
   const { port1, port2 } = new MessageChannel();
   serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
+    messagePort<Request, Reply>(port1),
     sources(providers),
     tuning,
     undefined,
     (m) => seen.push(m),
   );
   return {
-    engine: new Engine(
-      messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
-    ),
+    engine: new Engine(messagePort<Reply, Request>(port2)),
     seen,
   };
 }
@@ -75,7 +72,7 @@ test('an engine says how long each request and each index took, and nothing abou
       name: 'sales-q3.csv',
       path: FIXTURE,
     });
-    const src: SourceHandle = opened[0]!;
+    const src: SourceHandle = opened[0];
     await indexed(src);
     await src.rows(0, 10);
 
@@ -228,13 +225,13 @@ test('a meter adds measurements up into one OTLP request', () => {
   now = LATER;
 
   const payload = meter.payload();
-  const resource = payload.resourceMetrics[0]!;
+  const resource = payload.resourceMetrics[0];
   expect(resource.resource.attributes).toEqual([
     { key: 'service.name', value: { stringValue: 'uno-engine' } },
     { key: 'service.version', value: { stringValue: '1.2.3' } },
   ]);
 
-  const [request, indexed, level] = resource.scopeMetrics[0]!.metrics;
+  const [request, indexed, level] = resource.scopeMetrics[0].metrics;
   const times = {
     startTimeUnixNano: `${BEGAN}000000`,
     timeUnixNano: `${LATER}000000`,
@@ -301,15 +298,15 @@ test('the JSON a collector reads has every 64-bit integer in a string and every 
 
   // The JSON text is what is checked.
   const sent = JSON.parse(JSON.stringify(meter.payload())) as Payload;
-  const [histogram, sum] = sent.resourceMetrics[0]!.scopeMetrics[0]!.metrics;
-  if (!('histogram' in histogram!) || !('sum' in sum!))
+  const [histogram, sum] = sent.resourceMetrics[0].scopeMetrics[0].metrics;
+  if (!('histogram' in histogram) || !('sum' in sum))
     throw new Error('the metrics are not in the order they were recorded');
 
   expect(histogram.histogram.aggregationTemporality).toBe(2);
   expect(sum.sum.aggregationTemporality).toBe(2);
   expect(sum.sum.isMonotonic).toBe(true);
 
-  const bucket = histogram.histogram.dataPoints[0]!;
+  const bucket = histogram.histogram.dataPoints[0];
   expect(typeof bucket.startTimeUnixNano).toBe('string');
   expect(typeof bucket.timeUnixNano).toBe('string');
   expect(bucket.timeUnixNano).toMatch(/^[0-9]+$/);
@@ -323,16 +320,16 @@ test('the JSON a collector reads has every 64-bit integer in a string and every 
     { key: 'request', value: { stringValue: 'rows' } },
   ]);
 
-  const total = sum.sum.dataPoints[0]!;
+  const total = sum.sum.dataPoints[0];
   expect(typeof total.asDouble).toBe('number');
   expect('asInt' in total).toBe(false);
   expect(total.attributes).toEqual([
     { key: 'place', value: { stringValue: 'disk' } },
   ]);
-  expect(sent.resourceMetrics[0]!.resource.attributes).toEqual([
+  expect(sent.resourceMetrics[0].resource.attributes).toEqual([
     { key: 'service.name', value: { stringValue: 'uno-engine' } },
   ]);
-  expect(sent.resourceMetrics[0]!.scopeMetrics[0]!.scope).toEqual({
+  expect(sent.resourceMetrics[0].scopeMetrics[0].scope).toEqual({
     name: '@uno/grid',
   });
 });

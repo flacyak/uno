@@ -76,8 +76,8 @@ test('headerless files save as having no header row, and reopen with every edit 
     rows: ROWS,
   });
   expect(
-    doc.sources[0]!.parts!.map((part) => [part.name, part.bytes, part.skip]),
-  ).toEqual(NAMES.map((name, i) => [name, rowsOnly[i]!.length, 0]));
+    doc.sources[0].parts!.map((part) => [part.name, part.bytes, part.skip]),
+  ).toEqual(NAMES.map((name, i) => [name, rowsOnly[i].length, 0]));
 
   // Reopen from the saved file.
   const second = connect(TINY, providers());
@@ -89,11 +89,11 @@ test('headerless files save as having no header row, and reopen with every edit 
     expect(await everyRow(src)).toEqual(rows);
 
     for (const e of EDITS) {
-      expect((await src.rows(e.row, 1)).rows[0]![UNITS], `row ${e.row}`).toBe(
+      expect((await src.rows(e.row, 1)).rows[0][UNITS], `row ${e.row}`).toBe(
         e.now,
       );
       // The row below is unchanged.
-      expect((await src.rows(e.row + 1, 1)).rows[0]![UNITS]).toBe(
+      expect((await src.rows(e.row + 1, 1)).rows[0][UNITS]).toBe(
         sales.raw(e.row + 1, UNITS),
       );
     }

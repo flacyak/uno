@@ -46,9 +46,9 @@ test('a workspace survives being built, saved and reopened', () => {
   expect(s.source).toBe("UTF-8 · delimiter ','");
 
   // 2. The units column has comma-separated numbers, so it reads as flagged text.
-  expect(s.columns[UNITS]!.header).toBe('units');
-  expect(s.columns[UNITS]!.kind).toBe('text');
-  expect(s.columns[UNITS]!.flagged).toBe(true);
+  expect(s.columns[UNITS].header).toBe('units');
+  expect(s.columns[UNITS].kind).toBe('text');
+  expect(s.columns[UNITS].flagged).toBe(true);
 
   // 3. After three hand edits, the pattern recogniser proposes a rule for the rest.
   s.set(0, UNITS, '1204');
@@ -64,8 +64,8 @@ test('a workspace survives being built, saved and reopened', () => {
   // 4. Applying the rule adds one log entry, changes 3,149 cells, and the
   //    column stops being flagged.
   s.apply(p!.col, p!.prog);
-  expect(s.columns[UNITS]!.kind).toBe('num');
-  expect(s.columns[UNITS]!.flagged).toBe(false);
+  expect(s.columns[UNITS].kind).toBe('num');
+  expect(s.columns[UNITS].flagged).toBe(false);
   expect(s.editCount(), 'three edits and one rule').toBe(4);
 
   // 5. Bind a formula over the fixed column. Row 0 has revenue 48160.00 and
@@ -98,7 +98,7 @@ test('a workspace survives being built, saved and reopened', () => {
   };
   const bytes = writeDocument(doc);
   expect(doc.manifest.edits.count).toBe(5);
-  expect(doc.manifest.sources[0]!.bytes).toBe(raw.length);
+  expect(doc.manifest.sources[0].bytes).toBe(raw.length);
 
   // 7. Read it back. The rule is replayed and the bound column is recomputed
   //    from its expression.
@@ -106,11 +106,11 @@ test('a workspace survives being built, saved and reopened', () => {
   const sheet = back.sheets!.get('sales-q3')!;
   expect(sheet.rows()).toBe(ROWS);
   expect(sheet.raw(0, UNITS)).toBe('1204');
-  expect(sheet.columns[UNITS]!.kind).toBe('num');
+  expect(sheet.columns[UNITS].kind).toBe('num');
   expect(sheet.binding(CHANNEL)).toBe('revenue / units');
   expect(sheet.display(0, CHANNEL)).toBe(unitPrice);
-  expect(back.sources[0]!.state.active).toEqual({ row: 0, col: UNITS });
-  expect(back.sources[0]!.state.columnFormulas).toEqual([
+  expect(back.sources[0].state.active).toEqual({ row: 0, col: UNITS });
+  expect(back.sources[0].state.columnFormulas).toEqual([
     { col: CHANNEL, ref: 'unit-price' },
   ]);
 

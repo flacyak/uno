@@ -63,7 +63,7 @@ test('a page after the first reads little of the folder again', async () => {
   }
 
   const entries = (read.entries - before) / LATER_PAGES;
-  const median = took.toSorted((a, b) => a - b)[LATER_PAGES >> 1]!;
+  const median = took.toSorted((a, b) => a - b)[LATER_PAGES >> 1];
   record('lister', [
     {
       name: 'folder of 20,000: entries read per later page',

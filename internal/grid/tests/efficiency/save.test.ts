@@ -61,7 +61,7 @@ test('a save of bytes already saved does not deflate them again', () => {
   const doc = workspace(raw);
   const first = timed(() => writeDocument(doc));
   // The same bytes in a new array, as a Blob read again would give.
-  doc.sources[0]!.raw = new Uint8Array(raw);
+  doc.sources[0].raw = new Uint8Array(raw);
   const again = timed(() => writeDocument(doc));
 
   record('save', [
@@ -72,10 +72,10 @@ test('a save of bytes already saved does not deflate them again', () => {
 
   const back = readContainer('test.uno', again.out);
   expect(
-    same(back.sources[0]!.raw!, raw),
+    same(back.sources[0].raw!, raw),
     'the source went in byte for byte',
   ).toBe(true);
-  expect(back.manifest.sources[0]!.sha256).toBe(
-    readContainer('test.uno', first.out).manifest.sources[0]!.sha256,
+  expect(back.manifest.sources[0].sha256).toBe(
+    readContainer('test.uno', first.out).manifest.sources[0].sha256,
   );
 }, 60_000);

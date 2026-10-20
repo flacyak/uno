@@ -54,17 +54,15 @@ test('edits does not alias the log', () => {
 // The column kind and flag are re-inferred as each edit lands.
 test('fixing the last bad value clears the flag', () => {
   const s = fixture();
-  expect(s.columns[UNITS]!.kind).toBe('text');
-  expect(s.columns[UNITS]!.flagged).toBe(true);
+  expect(s.columns[UNITS].kind).toBe('text');
+  expect(s.columns[UNITS].flagged).toBe(true);
 
   s.set(0, UNITS, '1204');
   s.set(2, UNITS, '1455');
 
-  expect(s.columns[UNITS]!.kind).toBe('num');
-  expect(s.columns[UNITS]!.flagged).toBe(false);
-  expect(s.columns[UNITS]!.header, 're-inferring lost the header').toBe(
-    'units',
-  );
+  expect(s.columns[UNITS].kind).toBe('num');
+  expect(s.columns[UNITS].flagged).toBe(false);
+  expect(s.columns[UNITS].header, 're-inferring lost the header').toBe('units');
 });
 
 // Setting a cell past the end of a short row pads the row with empty cells.
@@ -92,7 +90,7 @@ test('replay rebuilds and keeps the log', () => {
   expect(s.editCount()).toBe(2);
 
   s.set(1, UNITS, '986');
-  expect(s.edits()[2]!.seq, 'seq carries on after a replay').toBe(3);
+  expect(s.edits()[2].seq, 'seq carries on after a replay').toBe(3);
 });
 
 // replay throws on an edit that names a cell outside the sheet, or an
@@ -138,12 +136,12 @@ test('apply writes one operation for a whole column', () => {
 // apply re-infers the column kind and flag when it lands.
 test('applying a program renames the column', () => {
   const s = fixture();
-  expect(s.columns[UNITS]!.flagged).toBe(true);
+  expect(s.columns[UNITS].flagged).toBe(true);
 
   s.apply(UNITS, parseProgram('replace(/,/, "")'));
 
-  expect(s.columns[UNITS]!.kind).toBe('num');
-  expect(s.columns[UNITS]!.flagged).toBe(false);
+  expect(s.columns[UNITS].kind).toBe('num');
+  expect(s.columns[UNITS].flagged).toBe(false);
 });
 
 // apply skips rows shorter than the column and keeps their length.
@@ -173,8 +171,8 @@ test('replay rebuilds an applied column', () => {
   for (let row = 0; row < s.rows(); row++) {
     expect(rebuilt.raw(row, UNITS), `row ${row}`).toBe(s.raw(row, UNITS));
   }
-  expect(rebuilt.columns[UNITS]!.kind).toBe('num');
-  expect(rebuilt.columns[UNITS]!.flagged).toBe(false);
+  expect(rebuilt.columns[UNITS].kind).toBe('num');
+  expect(rebuilt.columns[UNITS].flagged).toBe(false);
 });
 
 // apply leaves a cell alone when running the program on its original value

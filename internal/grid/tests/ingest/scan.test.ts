@@ -29,7 +29,7 @@ function piecewise(
   every: number,
 ): string[][] {
   const cuts = [0];
-  for (let i = every; i < begins.length; i += every) cuts.push(begins[i]!);
+  for (let i = every; i < begins.length; i += every) cuts.push(begins[i]);
   cuts.push(bytes.length);
 
   const rows: string[][] = [];

@@ -168,7 +168,7 @@ export async function bucket(
     const range = req.headers['range'];
     // The path is taken from req.url as sent. `new URL` would collapse a `.`
     // or `..` segment in a key.
-    const raw = req.url!.split('?')[0]!;
+    const raw = req.url!.split('?')[0];
     const url = new URL(req.url!, `http://${req.headers.host}`);
     const auth = req.headers['authorization'] ?? '';
     const region = /Credential=[^/]+\/\d{8}\/([^/]+)\//.exec(auth)?.[1];
@@ -183,12 +183,12 @@ export async function bucket(
     });
     const [, name, ...rest] = raw.split('/');
     const held = buckets.get(name ?? '');
-    if (held !== undefined) remember(name!, held);
+    if (held !== undefined) remember(name, held);
 
     // An unsigned request is answered only by a public bucket.
     if (auth === '') {
       if (held?.public === true) {
-        serve(held, name!, rest, url, req, res);
+        serve(held, name, rest, url, req, res);
         return;
       }
       res.writeHead(403).end();
@@ -246,7 +246,7 @@ export async function bucket(
       res.writeHead(404).end();
       return;
     }
-    serve(held, name!, rest, url, req, res);
+    serve(held, name, rest, url, req, res);
   }
 
   /** serve answers a request the bucket has let in. */

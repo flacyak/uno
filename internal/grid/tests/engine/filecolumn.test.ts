@@ -110,7 +110,7 @@ function asOne(
   header: HeaderMode = 'first',
   fileColumn: Asked = true,
 ): SourceRef {
-  const parts = paths.map((path, i) => ({ ref: { name: names[i]!, path } }));
+  const parts = paths.map((path, i) => ({ ref: { name: names[i], path } }));
   return fileColumn === 'unsaid'
     ? { name: NAME, parts, header }
     : { name: NAME, parts, header, fileColumn };
@@ -124,7 +124,7 @@ async function onDisk(
   const dir = await mkdtemp(join(tmpdir(), 'uno-filecolumn-'));
   dirs.push(dir);
   const paths = names.map((name) => join(dir, name));
-  await Promise.all(paths.map((path, i) => writeFile(path, files[i]!)));
+  await Promise.all(paths.map((path, i) => writeFile(path, files[i])));
   return paths;
 }
 
@@ -133,12 +133,12 @@ async function fileOf(
   src: SourceHandle,
   row: number,
 ): Promise<string | undefined> {
-  return (await src.rows(row, 1)).rows[0]![FILE];
+  return (await src.rows(row, 1)).rows[0][FILE];
 }
 
 /** The name of the part holding `row`. */
 function partOf(row: number, names: readonly string[] = PART_NAMES): string {
-  return names[Math.floor(row / PART_ROWS)]!;
+  return names[Math.floor(row / PART_ROWS)];
 }
 
 /**
@@ -215,19 +215,14 @@ describe.each(TUNINGS)('the _file column, over %s', (_, tuning) => {
 
   test('passes over a part that gives no rows, and one of two rows', async () => {
     // A header-only part, and a two-row part cut short of its final newline.
-    const header = partBytes[0]!.subarray(0, partBytes[0]!.indexOf(LF) + 1);
-    const second = partBytes[1]!;
+    const header = partBytes[0].subarray(0, partBytes[0].indexOf(LF) + 1);
+    const second = partBytes[1];
     let end = header.length;
     for (let row = 0; row < 2; row++) end = second.indexOf(LF, end) + 1;
     const two = second.subarray(0, end - CRLF_BYTES);
 
-    const names = [
-      PART_NAMES[0]!,
-      'two-rows.csv',
-      'no-rows.csv',
-      PART_NAMES[2]!,
-    ];
-    const files = [partBytes[0]!, two, header, partBytes[2]!];
+    const names = [PART_NAMES[0], 'two-rows.csv', 'no-rows.csv', PART_NAMES[2]];
+    const files = [partBytes[0], two, header, partBytes[2]];
     const src = await openOne(
       engine(tuning),
       asOne(await onDisk(files, names), names),
@@ -245,8 +240,8 @@ describe.each(TUNINGS)('the _file column, over %s', (_, tuning) => {
   });
 
   test('passes over a part of blank lines, and one that is a byte order mark alone', async () => {
-    const names = [PART_NAMES[0]!, 'blank.csv', 'marked.csv', PART_NAMES[2]!];
-    const files = [partBytes[0]!, encoder.encode('\n\n'), BOM, partBytes[2]!];
+    const names = [PART_NAMES[0], 'blank.csv', 'marked.csv', PART_NAMES[2]];
+    const files = [partBytes[0], encoder.encode('\n\n'), BOM, partBytes[2]];
     const src = await openOne(
       engine(tuning),
       asOne(await onDisk(files, names), names),
@@ -279,9 +274,9 @@ describe('a source with a _file column', () => {
 
     // The other cells are unchanged.
     const rows = await everyRow(src);
-    for (const row of [0, BOUNDARIES[0]! - 1, BOUNDARIES[0]!, ROWS - 1]) {
+    for (const row of [0, BOUNDARIES[0] - 1, BOUNDARIES[0], ROWS - 1]) {
       expect(rows[row], `row ${row}`).toHaveLength(COLS + 1);
-      expect(rows[row]!.slice(0, COLS)).toEqual(
+      expect(rows[row].slice(0, COLS)).toEqual(
         Array.from({ length: COLS }, (_, col) => sales.raw(row, col)),
       );
     }
@@ -295,16 +290,16 @@ describe('a source with a _file column', () => {
       col: FILE,
       from: 0,
       dir: 1,
-      match: { t: 'text', text: PART_NAMES[1]! },
+      match: { t: 'text', text: PART_NAMES[1] },
     });
     expect(down.row).toBe(second);
     const up = await src.find({
       col: FILE,
       from: ROWS - 1,
       dir: -1,
-      match: { t: 'text', text: PART_NAMES[1]! },
+      match: { t: 'text', text: PART_NAMES[1] },
     });
-    expect(up.row).toBe(third! - 1);
+    expect(up.row).toBe(third - 1);
   });
 
   test('refuses every edit to it in words, and takes edits beside it', async () => {
@@ -317,19 +312,19 @@ describe('a source with a _file column', () => {
     const [boundary] = BOUNDARIES;
     for (const op of [Op.Set, Op.Note, Op.Apply, Op.Bind]) {
       await expect(
-        src.edit({ op, row: boundary!, col: FILE, now: 'x' }),
+        src.edit({ op, row: boundary, col: FILE, now: 'x' }),
         op,
       ).rejects.toThrow(refusal);
     }
-    expect(await fileOf(src, boundary!)).toBe(PART_NAMES[1]);
+    expect(await fileOf(src, boundary)).toBe(PART_NAMES[1]);
 
     // Edits either side of the boundary, in a column the files have.
-    for (const row of [boundary! - 1, boundary!]) {
+    for (const row of [boundary - 1, boundary]) {
       await src.edit({ op: Op.Set, row, col: UNITS, now: '7' });
       const [shown] = (await src.rows(row, 1)).rows;
-      expect(shown![UNITS]).toBe('7');
-      expect(shown![FILE]).toBe(partOf(row));
-      expect(shown![REGION]).toBe(sales.raw(row, REGION));
+      expect(shown[UNITS]).toBe('7');
+      expect(shown[FILE]).toBe(partOf(row));
+      expect(shown[REGION]).toBe(sales.raw(row, REGION));
     }
     // The column is unchanged at every row.
     await expectParts(src, PART_NAMES);
@@ -352,18 +347,18 @@ describe('a source that did not ask for a _file column', () => {
 describe('a save of a source with a _file column', () => {
   /** The manifest entry of a .uno, as text. */
   function manifestOf(uno: Uint8Array): string {
-    return strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!);
+    return strFromU8(unzipSync(uno)[MANIFEST_ENTRY]);
   }
 
   /** Copies the parts to a folder, opens them, edits one cell, and saves there. */
   async function saved(fileColumn: Asked) {
     const paths = await onDisk(partBytes, PART_NAMES);
-    const file = join(paths[0]!, '..', UNO);
+    const file = join(paths[0], '..', UNO);
     const e = engine();
     const src = await openOne(e, asOne(paths, PART_NAMES, 'first', fileColumn));
     await indexed(src);
     e.mode(true);
-    await src.edit({ op: Op.Set, row: BOUNDARIES[0]!, col: UNITS, now: '77' });
+    await src.edit({ op: Op.Set, row: BOUNDARIES[0], col: UNITS, now: '77' });
     const rows = await everyRow(src);
     await writeFile(
       file,
@@ -407,7 +402,7 @@ describe('a save of a source with a _file column', () => {
   // a relink the column is still there.
   test('keeps it through a part going missing and the source being pointed at it again', async () => {
     const { file, paths, rows } = await saved(true);
-    const gone = paths[1]!;
+    const gone = paths[1];
     const bytes = await readFile(gone);
     await rm(gone);
 
@@ -432,7 +427,7 @@ describe('a save of a source with a _file column', () => {
       const { file, uno } = await saved(fileColumn);
       expect(manifestOf(uno)).not.toContain('fileColumn');
       expect(
-        readContainer(UNO, uno, file).sources[0]!.fileColumn,
+        readContainer(UNO, uno, file).sources[0].fileColumn,
       ).toBeUndefined();
 
       const src = await openOne(engine(), { name: UNO, path: file });

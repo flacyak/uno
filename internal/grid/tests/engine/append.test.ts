@@ -67,7 +67,7 @@ const LATER = { row: ROWS - 1, now: '12' };
 
 /** Part `i` of the fixture as a ref to its file on disk. */
 function part(i: number): SingleRef {
-  return { name: PART_NAMES[i]!, path: PART_FIXTURES[i]! };
+  return { name: PART_NAMES[i], path: PART_FIXTURES[i] };
 }
 
 /** The parts the source is opened with, as one ref. */
@@ -86,7 +86,7 @@ function expected(
   rows = ROWS,
 ): string[][] {
   const all = sheetRows(sales, 0, rows, 'raw');
-  for (const e of edits) all[e.row]![UNITS] = e.now;
+  for (const e of edits) all[e.row][UNITS] = e.now;
   return all;
 }
 
@@ -171,8 +171,8 @@ test('a part appended extends the rows and leaves every edit on its cell', async
     // Earlier rows and edits are unchanged. The third part's rows follow.
     expect(widened(await everyRow(src))).toEqual(expected(EDITS));
     for (const e of EDITS) {
-      expect((await src.rows(e.row, 1)).rows[0]![UNITS]).toBe(e.now);
-      expect((await src.rows(e.row + 1, 1)).rows[0]![UNITS]).toBe(
+      expect((await src.rows(e.row, 1)).rows[0][UNITS]).toBe(e.now);
+      expect((await src.rows(e.row + 1, 1)).rows[0][UNITS]).toBe(
         sales.raw(e.row + 1, UNITS),
       );
     }
@@ -214,13 +214,11 @@ test('a save after an append records the longer list of parts, and reopens the s
       ROOMY,
     );
     const doc = readContainer(UNO, again, file);
-    expect(
-      doc.sources[0]!.parts!.map((p) => [p.name, p.path, p.bytes]),
-    ).toEqual(
+    expect(doc.sources[0].parts!.map((p) => [p.name, p.path, p.bytes])).toEqual(
       PART_NAMES.map((name, i) => [
         name,
         PART_FIXTURES[i],
-        partBytes[i]!.length,
+        partBytes[i].length,
       ]),
     );
     expect(doc.sources[0]).toMatchObject({
@@ -263,7 +261,7 @@ test("an append leaves the log where it was among the workspace's sources", asyn
       row: last.row,
       now: last.now,
     });
-    expect((await src.rows(last.row, 1)).rows[0]![UNITS]).toBe(
+    expect((await src.rows(last.row, 1)).rows[0][UNITS]).toBe(
       sales.raw(last.row, UNITS),
     );
     expect(widened(await everyRow(src))).toEqual(expected(EDITS.slice(0, -1)));
@@ -296,21 +294,21 @@ test('an append to a source that is one file is refused', async () => {
 
 /** The third part with its units column renamed to qty. */
 function renamed(): Uint8Array {
-  const text = new TextDecoder().decode(partBytes[OPENED]!);
+  const text = new TextDecoder().decode(partBytes[OPENED]);
   return new TextEncoder().encode(text.replace('units', 'qty'));
 }
 
 // An appended part must have the first part's header.
 test('a part that does not agree is refused naming it and the column, and the source is as it was', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'uno-append-'));
-  const other = join(dir, PART_NAMES[OPENED]!);
+  const other = join(dir, PART_NAMES[OPENED]);
   await writeFile(other, renamed());
 
   const { engine, done } = connect(TINY, multiProviders());
   try {
     const src = await edited(engine);
     await expect(
-      engine.append(src, [{ name: PART_NAMES[OPENED]!, path: other }]),
+      engine.append(src, [{ name: PART_NAMES[OPENED], path: other }]),
     ).rejects.toThrow(
       `${PART_NAMES[OPENED]} (part ${PARTS} of ${PARTS}): column ${UNITS + 1} is "qty" where ${PART_NAMES[0]} has "units"`,
     );
@@ -322,7 +320,7 @@ test('a part that does not agree is refused naming it and the column, and the so
       UNO,
       await engine.save({ source: src.id, cells: [], at: '' }, ROOMY),
     );
-    expect(doc.sources[0]!.parts).toHaveLength(OPENED);
+    expect(doc.sources[0].parts).toHaveLength(OPENED);
     expect(doc.log).toHaveLength(EDITS.length + 1);
 
     // A matching part is still accepted afterwards.

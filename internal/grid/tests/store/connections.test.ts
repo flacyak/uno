@@ -68,7 +68,7 @@ test('one broken file costs one connection, and the rest load', async () => {
     'broken.unof',
     'unit-margin.unof',
   ]);
-  expect(failed[1]!.message).toContain('it belongs in formulas/');
+  expect(failed[1].message).toContain('it belongs in formulas/');
 });
 
 test('they come back in id order, whatever the files are called', async () => {
@@ -136,7 +136,7 @@ test('a save stamps the times, and a second save keeps when it was created', asy
   });
   expect(second.created).toEqual(first.created);
   const { connections } = await loadConnections(store, dir);
-  expect(connections[0]!.name).toBe('ACME, renamed');
+  expect(connections[0].name).toBe('ACME, renamed');
 });
 
 // The secret is refused before anything is written.

@@ -82,7 +82,7 @@ async function reopened(
 ): Promise<{ src: SourceHandle; done: () => void }> {
   const { engine, done } = connect(undefined, providers());
   const { sources } = await engine.open({ name: 'q3.uno', path: file });
-  const src = sources[0]!;
+  const src = sources[0];
   await indexed(src);
   return { src, done };
 }
@@ -97,7 +97,7 @@ function asked(key: string): string[] {
 test('an object overwritten in a versioned bucket still reopens the saved bytes', async () => {
   const file = await saved(VERSIONED);
   const version = versionIdOf(bytes);
-  expect(readContainer('q3.uno', readFileSync(file)).sources[0]!.version).toBe(
+  expect(readContainer('q3.uno', readFileSync(file)).sources[0].version).toBe(
     version,
   );
 
@@ -109,9 +109,9 @@ test('an object overwritten in a versioned bucket still reopens the saved bytes'
     expect(src.opened.size).toBe(bytes.length);
     // The saved bytes, with the edit replayed.
     const rows = (await src.rows(0, 3)).rows;
-    expect(rows[0]![UNITS]).toBe(sales.display(0, UNITS));
-    expect(rows[1]![UNITS]).toBe('986');
-    expect(rows[2]![UNITS]).toBe(sales.display(2, UNITS));
+    expect(rows[0][UNITS]).toBe(sales.display(0, UNITS));
+    expect(rows[1][UNITS]).toBe('986');
+    expect(rows[2][UNITS]).toBe(sales.display(2, UNITS));
     // Every request carries the version id, URL-encoded once.
     const q = `versionId=${encodeURIComponent(version)}`;
     const seen = asked(KEY);
@@ -128,7 +128,7 @@ test('and after it is deleted', async () => {
   const { src, done } = await reopened(file);
   try {
     expect(src.opened.link?.missing).toBeUndefined();
-    expect((await src.rows(1, 1)).rows[0]![UNITS]).toBe('986');
+    expect((await src.rows(1, 1)).rows[0][UNITS]).toBe('986');
   } finally {
     done();
   }
@@ -143,7 +143,7 @@ test('a version the bucket no longer has opens the object as it is now, saying w
       path: VERSIONED,
       version: 'never+kept/this=',
     });
-    const src = sources[0]!;
+    const src = sources[0];
     await indexed(src);
     expect(src.opened.link).toEqual({
       path: VERSIONED,
@@ -156,7 +156,7 @@ test('a version the bucket no longer has opens the object as it is now, saying w
 
 test('an object in a bucket without versions is read as it is now, pinned to its ETag', async () => {
   const file = await saved(PLAIN);
-  expect(readContainer('q3.uno', readFileSync(file)).sources[0]!.version).toBe(
+  expect(readContainer('q3.uno', readFileSync(file)).sources[0].version).toBe(
     etagOf(bytes),
   );
 

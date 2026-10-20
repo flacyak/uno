@@ -9,11 +9,7 @@ import { join } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
 import { messagePort, serve } from '../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../src/engine/index.ts';
+import type { Reply, Request } from '../../src/engine/index.ts';
 import { sources } from '../../src/plugin/index.ts';
 import { connectionsIn } from '../../src/store/index.ts';
 import { awsProfiles, diskProvider, nodeStore } from '../../src/store/node.ts';
@@ -96,7 +92,7 @@ test("the engine's reply holds names only, and no key reaches it", async () => {
   const dir = await mkdtemp(join(tmpdir(), 'uno-profiles-connections-'));
   const { port1, port2 } = new MessageChannel();
   serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
+    messagePort<Request, Reply>(port1),
     sources([diskProvider()]),
     undefined,
     {
@@ -107,9 +103,7 @@ test("the engine's reply holds names only, and no key reaches it", async () => {
       }),
     },
   );
-  const client = messagePort<Reply, Request>(
-    port2 as unknown as MessagePortLike,
-  );
+  const client = messagePort<Reply, Request>(port2);
   try {
     const reply = await new Promise<Reply>((resolve) => {
       client.listen(resolve);

@@ -57,7 +57,7 @@ function at(source: SourceHandle, row: number, col: number, uno = '') {
 /** The one sheet a one-source workspace replays into. */
 function only(doc: Document) {
   const [sheet] = doc.sheets!.values();
-  return sheet!;
+  return sheet;
 }
 
 /** The manifest's sources. */
@@ -107,7 +107,7 @@ test('a .uno opens with its log applied, and saves back', async () => {
       kind: 'num',
       flagged: false,
     });
-    expect((await src.rows(5, 1)).rows[0]![UNITS]).toBe('1101');
+    expect((await src.rows(5, 1)).rows[0][UNITS]).toBe('1101');
 
     engine.mode(true);
     await src.edit({ op: Op.Set, row: 1, col: UNITS, now: '986' });
@@ -118,10 +118,10 @@ test('a .uno opens with its log applied, and saves back', async () => {
 
     expect(back.log).toHaveLength(3);
     expect(
-      back.sources[0]!.raw,
+      back.sources[0].raw,
       'bytes with no file behind them stay carried',
     ).toEqual(bytes);
-    expect(back.sources[0]!.state.active).toEqual({ row: 1, col: UNITS });
+    expect(back.sources[0].state.active).toEqual({ row: 1, col: UNITS });
     expect(only(back).raw(1, UNITS)).toBe('986');
     expect(only(back).raw(5, UNITS)).toBe('1101');
   } finally {
@@ -139,18 +139,18 @@ test('a source opened from a path is pointed at, not copied', async () => {
     // Under a limit far smaller than the source.
     expect(uno.length).toBeLessThan(CRAMPED);
     const [s] = listed(uno);
-    expect(s!.path).toBe(FIXTURE);
-    expect(s!.entry, 'nothing was copied in').toBe('');
-    expect(s!.sha256, 'and nothing was hashed to say so').toBe('');
-    expect(s!.bytes).toBe(bytes.length);
-    expect(s!.rows).toBe(ROWS);
+    expect(s.path).toBe(FIXTURE);
+    expect(s.entry, 'nothing was copied in').toBe('');
+    expect(s.sha256, 'and nothing was hashed to say so').toBe('');
+    expect(s.bytes).toBe(bytes.length);
+    expect(s.rows).toBe(ROWS);
     expect(Object.keys(unzipSync(uno)).sort()).toEqual(
       [MANIFEST_ENTRY, STATE_ENTRY, LOG_ENTRY].sort(),
     );
 
     const back = readContainer('sales-q3.uno', uno);
     expect(back.manifest.format).toBe(POINTED_VERSION);
-    expect(back.sources[0]!.raw).toBeUndefined();
+    expect(back.sources[0].raw).toBeUndefined();
   } finally {
     done();
   }
@@ -177,7 +177,7 @@ test('a source beside the workspace is pointed at relative to it, and survives t
   } finally {
     first.done();
   }
-  expect(listed(uno)[0]!.path).toBe('sales-q3.csv');
+  expect(listed(uno)[0].path).toBe('sales-q3.csv');
 
   // Both files moved to another folder and opened from there.
   await writeFile(join(there, 'q3.uno'), uno);
@@ -192,7 +192,7 @@ test('a source beside the workspace is pointed at relative to it, and survives t
     });
     expect(src.opened.link).toEqual({ path: join(there, 'sales-q3.csv') });
     expect(src.opened.edits).toHaveLength(1);
-    expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe('1204');
+    expect((await src.rows(0, 1)).rows[0][UNITS]).toBe('1204');
   } finally {
     second.done();
   }
@@ -321,7 +321,7 @@ test('pointing a source at a file again replays its edits over it', async () => 
       at(back, 0, COST, join(dir, 'ads.uno')),
       ROOMY,
     );
-    expect(listed(again)[0]!.path).toBe('elsewhere.csv');
+    expect(listed(again)[0].path).toBe('elsewhere.csv');
   } finally {
     second.done();
   }
@@ -422,7 +422,7 @@ test('sources added to one workspace save and reopen together', async () => {
     'Google Ads.csv',
   ]);
   expect(back.active).toBe('google-ads');
-  expect(back.sources[1]!.state.active).toEqual({ row: 0, col: COST });
+  expect(back.sources[1].state.active).toEqual({ row: 0, col: COST });
   // One path is absolute. The one beside the .uno is relative.
   expect(back.manifest.sources.map((s) => s.path)).toEqual([
     FIXTURE,
@@ -430,7 +430,7 @@ test('sources added to one workspace save and reopen together', async () => {
   ]);
 
   // The redone edit is at the end of the log.
-  const lines = strFromU8(unzipSync(uno)[LOG_ENTRY]!).trim().split('\n');
+  const lines = strFromU8(unzipSync(uno)[LOG_ENTRY]).trim().split('\n');
   expect(
     lines.map((l) => (JSON.parse(l) as { source: string }).source),
   ).toEqual(['sales-q3', 'sales-q3', 'google-ads']);
@@ -444,8 +444,8 @@ test('sources added to one workspace save and reopen together', async () => {
     });
     expect(sources.map((s) => s.id)).toEqual(['sales-q3', 'google-ads']);
     expect(showing).toBe('google-ads');
-    expect(sources[1]!.opened.edits).toHaveLength(1);
-    expect((await sources[0]!.rows(2, 1)).rows[0]![UNITS]).toBe('1455');
+    expect(sources[1].opened.edits).toHaveLength(1);
+    expect((await sources[0].rows(2, 1)).rows[0][UNITS]).toBe('1455');
   } finally {
     second.done();
   }
@@ -544,7 +544,7 @@ test('a carried source that will not open keeps its bytes through a save', async
   // Swap in the broken entry and update the manifest's size and hash to match.
   const entries = unzipSync(uno);
   entries['data/source.csv'] = broken;
-  const manifest = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as {
+  const manifest = JSON.parse(strFromU8(entries[MANIFEST_ENTRY])) as {
     source: { bytes: number; sha256: string };
   };
   manifest.source.bytes = broken.length;
@@ -555,7 +555,7 @@ test('a carried source that will not open keeps its bytes through a save', async
   try {
     const src = await openOne(engine, {
       name: 'q3.uno',
-      blob: new Blob([zipSync(entries) as Uint8Array<ArrayBuffer>]),
+      blob: new Blob([zipSync(entries)]),
     });
     expect(src.opened.link?.missing).toBeDefined();
 
@@ -563,7 +563,7 @@ test('a carried source that will not open keeps its bytes through a save', async
       'q3.uno',
       await engine.save(at(src, 0, 0), ROOMY),
     );
-    expect(back.sources[0]!.raw, 'the bytes went back in as they were').toEqual(
+    expect(back.sources[0].raw, 'the bytes went back in as they were').toEqual(
       broken,
     );
   } finally {

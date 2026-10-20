@@ -44,8 +44,8 @@ test('a saved formula reads back out of the directory', async () => {
   const { formulas, failed } = await loadLibrary(store, dir);
   expect(failed).toEqual([]);
   expect(formulas).toHaveLength(1);
-  expect(formulas[0]!.id).toBe('unit-margin');
-  expect(formulas[0]!.expr).toBe('(price - cost) / price');
+  expect(formulas[0].id).toBe('unit-margin');
+  expect(formulas[0].expr).toBe('(price - cost) / price');
 });
 
 test('the library comes back in id order', async () => {
@@ -71,7 +71,7 @@ test('one unreadable file costs one formula and not the library', async () => {
   const { formulas, failed } = await loadLibrary(store, dir);
   expect(formulas.map((f) => f.id)).toEqual(['also-good', 'good']);
   expect(failed).toHaveLength(1);
-  expect(failed[0]!.message, 'the failure should name the file').toContain(
+  expect(failed[0].message, 'the failure should name the file').toContain(
     'broken.unof',
   );
 });
@@ -89,10 +89,10 @@ test('a connection in the formula folder is a failure, not a formula', async () 
   const { formulas, failed } = await loadLibrary(store, dir);
   expect(formulas.map((f) => f.id)).toEqual(['good']);
   expect(failed).toHaveLength(1);
-  expect(failed[0]!.message, 'the failure should name the file').toContain(
+  expect(failed[0].message, 'the failure should name the file').toContain(
     'acme-exports.unof',
   );
-  expect(failed[0]!.message, 'the failure should name the kind').toContain(
+  expect(failed[0].message, 'the failure should name the kind').toContain(
     '"connection"',
   );
 });
@@ -161,5 +161,5 @@ test("formulas are read through the store's handlers, and nothing else", async (
 
   const { formulas, failed } = await loadLibrary({ ...store, files: [] }, dir);
   expect(formulas).toEqual([]);
-  expect(failed[0]!.message).toContain('f.unof: nothing here opens it');
+  expect(failed[0].message).toContain('f.unof: nothing here opens it');
 });

@@ -37,7 +37,7 @@ test('a connection saved after the engine started is one it answers with', async
     const { connections } = await engine.connections();
     expect(connections).toEqual([saved]);
     // A Date crosses the channel as a Date.
-    expect(connections[0]!.modified).toBeInstanceOf(Date);
+    expect(connections[0].modified).toBeInstanceOf(Date);
   } finally {
     done();
   }
@@ -58,7 +58,7 @@ test('the keys this build does not know cross the channel with the rest', async 
   );
   try {
     const { connections } = await engine.connections();
-    expect(connections[0]!.extra).toEqual(new Map([['ttl', 900]]));
+    expect(connections[0].extra).toEqual(new Map([['ttl', 900]]));
   } finally {
     done();
   }

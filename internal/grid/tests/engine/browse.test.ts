@@ -17,11 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
 import { english, messagePort, serve } from '../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../src/engine/index.ts';
+import type { Reply, Request } from '../../src/engine/index.ts';
 import { sources } from '../../src/plugin/index.ts';
 import type { Provider } from '../../src/plugin/index.ts';
 import { blobProvider, blobSource } from '../../src/store/index.ts';
@@ -80,13 +76,8 @@ interface Wire {
 
 function wire(providers: Provider[]): Wire {
   const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
-    sources(providers),
-  );
-  const client = messagePort<Reply, Request>(
-    port2 as unknown as MessagePortLike,
-  );
+  serve(messagePort<Request, Reply>(port1), sources(providers));
+  const client = messagePort<Reply, Request>(port2);
 
   const seen: Reply[] = [];
   const waiting = new Map<number, (msg: Reply) => void>();

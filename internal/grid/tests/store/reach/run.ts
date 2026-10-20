@@ -31,7 +31,7 @@ const uses = new Set<string>();
 function under(at: string | undefined): string | undefined {
   if (at === undefined || at.startsWith('node:')) return undefined;
   const path = at.startsWith('file:') ? fileURLToPath(at) : at;
-  const rel = relative(root!, path);
+  const rel = relative(root, path);
   if (rel === '' || rel.startsWith('..') || rel.startsWith(sep))
     return undefined;
   return rel.split(sep).join('/');
@@ -73,11 +73,11 @@ registerHooks({
 
 // process.getBuiltinModule hands a module out past the resolve hook.
 const getBuiltin = process.getBuiltinModule.bind(process);
-process.getBuiltinModule = ((id: string) => {
+process.getBuiltinModule = (id: string) => {
   const way = WAY_OF.get(id.replace(/^node:/, ''));
   if (way !== undefined) use(caller(), way);
   return getBuiltin(id);
-}) as typeof process.getBuiltinModule;
+};
 
 // Every lower-case function of the watched modules is wrapped. Constructors
 // are left alone.

@@ -118,8 +118,8 @@ test('a scan with the grid drawing in the middle of it asks for every chunk once
   for (let at = 0; at < SIZE; at += CHUNK) {
     await read(at, CHUNK);
     if (at === 2 * CHUNK || at === 5 * CHUNK) {
-      await read(blocks[drawn++]!, 30);
-      await read(blocks[drawn++]!, 30);
+      await read(blocks[drawn++], 30);
+      await read(blocks[drawn++], 30);
     }
   }
   expect(

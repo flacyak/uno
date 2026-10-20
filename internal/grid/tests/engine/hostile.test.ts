@@ -197,7 +197,7 @@ test('rows asked with a count that is not a count are refused or answered empty'
   await answered(p);
   const opened = withId(p.replies, 1);
   expect(opened.map((r) => r.t)).toEqual(['opened']);
-  const source = opened[0]!.t === 'opened' ? opened[0]!.added.showing : '';
+  const source = opened[0].t === 'opened' ? opened[0].added.showing : '';
   p.send({ t: 'mode', transform: true });
   const bad: unknown[] = [
     { t: 'rows', id: 2, source, first: -1, count: 10 },
@@ -336,7 +336,7 @@ test('a peek at what is not a table is refused or answered, and reads a bounded 
       `request ${id}: ${JSON.stringify(got.map((r) => r.t))}`,
     ).toBe(1);
   }
-  const whole = withId(p.replies, 6)[0]!;
+  const whole = withId(p.replies, 6)[0];
   expect(whole.t).toBe('peeked');
 });
 
@@ -355,7 +355,7 @@ test('a rows or edit request with a number that is not whole is refused, not rea
   const p = probe();
   p.send({ t: 'open', id: 1, ref: { name: 'sales-q3.csv', path: FIXTURE } });
   await answered(p);
-  const opened = withId(p.replies, 1)[0]!;
+  const opened = withId(p.replies, 1)[0];
   const source = opened.t === 'opened' ? opened.added.showing : '';
   // A string `first` is refused ahead of any arithmetic with `count`.
   p.send({ t: 'rows', id: 2, source, first: '9', count: 2000 });
@@ -408,7 +408,7 @@ test('rows asked for more than a band are refused, so no reply holds a file whol
   const p = probe();
   p.send({ t: 'open', id: 1, ref: { name: 'sales-q3.csv', path: FIXTURE } });
   await answered(p);
-  const opened = withId(p.replies, 1)[0]!;
+  const opened = withId(p.replies, 1)[0];
   const source = opened.t === 'opened' ? opened.added.showing : '';
   p.send({ t: 'rows', id: 2, source, first: 0, count: ROWS_AT_MOST });
   p.send({ t: 'rows', id: 3, source, first: 0, count: ROWS_AT_MOST + 1 });
@@ -417,7 +417,7 @@ test('rows asked for more than a band are refused, so no reply holds a file whol
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
-  const band = withId(p.replies, 2)[0]!;
+  const band = withId(p.replies, 2)[0];
   expect(band.t === 'rows' && band.rows.length).toBe(ROWS_AT_MOST);
   for (const id of [3, 4, 5]) {
     expect(

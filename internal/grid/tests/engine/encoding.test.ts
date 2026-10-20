@@ -55,7 +55,7 @@ async function allRows(src: SourceHandle): Promise<string[][]> {
 async function open(name: string, bytes: Uint8Array<ArrayBuffer>) {
   const { engine, done } = connect(TINY);
   const { sources } = await engine.open({ name, blob: new Blob([bytes]) });
-  return { src: sources[0]!, done };
+  return { src: sources[0], done };
 }
 
 test('a UTF-8 byte order mark is not in the header, and not in the first row either', async () => {
@@ -92,7 +92,7 @@ test('a character the index pass cuts in half is whole in its cell', async () =>
     const rows = await allRows(src);
     expect(rows.length).toBe(400);
     expect(rows).toEqual(sheetRows(sheet, 0, 400, 'raw'));
-    expect(rows.every((r) => !r[1]!.includes('�'))).toBe(true);
+    expect(rows.every((r) => !r[1].includes('�'))).toBe(true);
   } finally {
     done();
   }

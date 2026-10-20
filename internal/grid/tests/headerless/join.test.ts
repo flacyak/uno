@@ -39,7 +39,7 @@ afterAll(() =>
 async function parts(files: readonly Uint8Array[]): Promise<Part[]> {
   const { dir, paths } = await onDisk(files);
   dirs.push(dir);
-  return paths.map((path, i) => ({ ref: { name: NAMES[i]!, path } }));
+  return paths.map((path, i) => ({ ref: { name: NAMES[i], path } }));
 }
 
 /** Opens `files` as one headerless source, runs `fn` on it, and closes it. */
@@ -87,7 +87,7 @@ describe('headerless parts joined', () => {
       // The first row of each part maps back to that part.
       for (let part = 0; part < three.length; part++) {
         expect(
-          src.map.partAt(starts[part * PART_ROWS]!),
+          src.map.partAt(starts[part * PART_ROWS]),
           `part ${part + 1}`,
         ).toBe(part);
       }

@@ -49,8 +49,8 @@ test('a cell the badge calls numeric computes, however it is padded', () => {
       ['East', '\u00a040.00', '30.00\r', ''],
     ],
   );
-  expect(s.columns[PRICE]!.kind).toBe('num');
-  expect(s.columns[COST]!.kind).toBe('num');
+  expect(s.columns[PRICE].kind).toBe('num');
+  expect(s.columns[COST].kind).toBe('num');
 
   s.bind(MARGIN, parse('(price - cost) / price'));
   expect([0, 1].map((row) => s.display(row, MARGIN))).toEqual(['0.22', '0.25']);
@@ -242,7 +242,7 @@ test('a binding can be undone', () => {
 test('a bound column is named for what it computes', () => {
   const s = sales();
   s.bind(MARGIN, parse('price - cost'));
-  expect(s.columns[MARGIN]!.kind).toBe('num');
+  expect(s.columns[MARGIN].kind).toBe('num');
 });
 
 // Unbinding shows the stored values again and re-infers the column kind.
@@ -258,7 +258,7 @@ test('removing a formula gives a column its own values back', () => {
   ).toEqual(['West', 'East', 'North']);
   expect(s.binding(REGION)).toBeUndefined();
   expect(
-    s.columns[REGION]!.kind,
+    s.columns[REGION].kind,
     're-inferred from the values that came back',
   ).toBe('text');
 });

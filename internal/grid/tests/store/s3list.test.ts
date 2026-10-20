@@ -60,8 +60,8 @@ test('the prefix the bucket echoes back is not a folder in the listing', () => {
 test('an ETag comes back with its quotes and a key with its ampersand', () => {
   const page = readListing(PAGE_XML);
 
-  expect(page.keys[0]!.version).toBe('"9b2cf5"');
-  expect(page.keys[0]!.key).toBe('shop/a&b.csv');
+  expect(page.keys[0].version).toBe('"9b2cf5"');
+  expect(page.keys[0].key).toBe('shop/a&b.csv');
 });
 
 test('a numeric escape is undone too', () => {
@@ -69,7 +69,7 @@ test('a numeric escape is undone too', () => {
     `<ListBucketResult><Contents><Key>a&#39;b&#x2F;c.csv</Key><Size>1</Size></Contents></ListBucketResult>`,
   );
 
-  expect(page.keys[0]!.key).toBe("a'b/c.csv");
+  expect(page.keys[0].key).toBe("a'b/c.csv");
 });
 
 test('a truncated page carries where the next one starts', () => {
@@ -301,7 +301,7 @@ describe('browsing a bucket', () => {
     b.seen.length = 0;
     const second = await s3.list(`s3://${BUCKET}/big/`, first.next);
 
-    expect(second.entries[0]!.name).toBe('key-1000.csv');
+    expect(second.entries[0].name).toBe('key-1000.csv');
     // `+`, `/` and `=` in the token are sent percent-encoded.
     const asked = b.seen.at(-1)!.query!;
     expect(asked).toContain('continuation-token=');
@@ -324,7 +324,7 @@ describe('browsing a bucket', () => {
 
     expect(named(entries).toSorted()).toEqual(
       AWKWARD_KEYS.map(([key]) =>
-        key.includes('/') ? key.split('/')[0]! : key,
+        key.includes('/') ? key.split('/')[0] : key,
       ).toSorted(),
     );
     expect(named(entries.filter((e) => e.folder))).toEqual([
@@ -393,7 +393,7 @@ describe('browsing a bucket', () => {
 
   // A URL would collapse the segment before signing, so the key is refused.
   test('a key no URL can ask for is refused the same way by opening and by stat', async () => {
-    const [key] = DOT_KEYS[0]!;
+    const [key] = DOT_KEYS[0];
     const path = `s3://${BUCKET}/dots/${key}`;
     const said = 'uno cannot address a key with a .. segment in it';
 

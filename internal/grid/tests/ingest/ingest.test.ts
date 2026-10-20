@@ -120,7 +120,7 @@ test('read strips a byte order mark from a string as from bytes', () => {
   const body = '\uFEFFname,role\nAda,lead\n';
   const asString = read('f.csv', body);
   const asBytes = read('f.csv', new TextEncoder().encode(body));
-  expect(asString.columns[0]!.header).toBe('name');
+  expect(asString.columns[0].header).toBe('name');
   expect(asString.columns.map((c) => c.header)).toEqual(
     asBytes.columns.map((c) => c.header),
   );

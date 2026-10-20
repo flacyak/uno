@@ -128,7 +128,7 @@ test('proposes a date separator', () => {
   expect(text(p!.prog)).toBe('replace(/[\\/]+/, "-")');
 
   s.apply(p!.col, p!.prog);
-  expect(s.columns[0]!.kind).toBe('date');
+  expect(s.columns[0].kind).toBe('date');
 });
 
 // Only two of the three examples hold a comma, and the proposal still

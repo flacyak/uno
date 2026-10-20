@@ -31,6 +31,7 @@ export default defineConfig({
     },
     rules: {
       'default-case': 'error',
+      'typescript/no-unnecessary-type-assertion': 'error',
     },
   },
   fmt: { singleQuote: true, printWidth: 80 },

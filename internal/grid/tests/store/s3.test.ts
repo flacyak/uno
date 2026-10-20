@@ -492,7 +492,7 @@ describe('a source in a bucket', () => {
     } finally {
       first.done();
     }
-    expect(readContainer('q3.uno', uno).manifest.sources[0]!.path).toBe(url);
+    expect(readContainer('q3.uno', uno).manifest.sources[0].path).toBe(url);
     await writeFile(join(dir, 'q3.uno'), uno);
 
     const second = connect(undefined, providers());
@@ -502,7 +502,7 @@ describe('a source in a bucket', () => {
         path: join(dir, 'q3.uno'),
       });
       expect(src.opened.link).toEqual({ path: url, version: etagOf(bytes) });
-      expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe('1204');
+      expect((await src.rows(0, 1)).rows[0][UNITS]).toBe('1204');
     } finally {
       second.done();
     }
@@ -674,7 +674,7 @@ describe('a bucket that is somewhere else', () => {
 
   // The region is remembered, so the second object costs one request.
   test('remembers it, so the next object in the bucket goes straight there', async () => {
-    const b = await bucket(REGION_FORMATS[0]!.reply);
+    const b = await bucket(REGION_FORMATS[0].reply);
     try {
       b.objects.set('2025/other.csv', bytes);
       const s3 = where(b);
@@ -690,7 +690,7 @@ describe('a bucket that is somewhere else', () => {
   // A HEAD reply carries headers only, so the region is read from a one-byte
   // GET probe.
   test('asks a way that can carry the answer, since a HEAD cannot', async () => {
-    const b = await bucket(REGION_FORMATS[0]!.reply);
+    const b = await bucket(REGION_FORMATS[0].reply);
     try {
       await where(b).open(at('2025/sales-q3.csv'));
       const probe = b.seen.find(

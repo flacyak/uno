@@ -42,7 +42,7 @@ function head(text: string, limit = PEEK_BYTES): Head {
 
 /** The fixture's records, to compare a peek with. */
 const records = readAll(new TextDecoder().decode(bytes), ',');
-const HEADER = headerOf(records[0]!);
+const HEADER = headerOf(records[0]);
 const FIRST_ROWS = records
   .slice(1, PEEK_ROWS + 1)
   .map((r) => HEADER.map((_, i) => r[i] ?? ''));

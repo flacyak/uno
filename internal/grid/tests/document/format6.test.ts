@@ -102,10 +102,10 @@ function workspace(sources: Held[], at = AT): Document {
   return {
     manifest: { ...newManifest(), created: CREATED },
     sources,
-    active: sources[0]!.id,
+    active: sources[0].id,
     log: [
       {
-        source: sources[0]!.id,
+        source: sources[0].id,
         edit: { seq: 1, op: 'set', row: 3, col: 1, was: 'West', now: 'west' },
       },
     ],
@@ -116,7 +116,7 @@ function workspace(sources: Held[], at = AT): Document {
 
 /** The written uno.json as text. */
 function manifestText(uno: Uint8Array): string {
-  return strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!);
+  return strFromU8(unzipSync(uno)[MANIFEST_ENTRY]);
 }
 
 interface WrittenManifest {
@@ -135,7 +135,7 @@ function tampered(
   change: (m: WrittenManifest) => void,
 ): Uint8Array {
   const entries = unzipSync(writeDocument(doc));
-  const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as WrittenManifest;
+  const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY])) as WrittenManifest;
   change(m);
   entries[MANIFEST_ENTRY] = encoder.encode(JSON.stringify(m));
   return zipSync(entries);
@@ -143,7 +143,7 @@ function tampered(
 
 /** The parts of the first source of a written manifest. */
 function partsOf(m: WrittenManifest): Array<Record<string, unknown>> {
-  return m.sources[0]!['parts'] as Array<Record<string, unknown>>;
+  return m.sources[0]['parts'] as Array<Record<string, unknown>>;
 }
 
 describe('a workspace with no source of several files', () => {
@@ -288,8 +288,8 @@ describe('a source of several files', () => {
   test('with no header row says so, and reads back the same', () => {
     const doc = workspace([{ ...orders(), header: 'none' }]);
     const uno = writeDocument(doc);
-    expect(manifestOf(uno).sources[0]!['header']).toBe('none');
-    expect(readContainer('books.uno', uno, AT).sources[0]!.header).toBe('none');
+    expect(manifestOf(uno).sources[0]['header']).toBe('none');
+    expect(readContainer('books.uno', uno, AT).sources[0].header).toBe('none');
   });
 
   // A part at the defaults (undefined version, skip 0, unterminated false)
@@ -306,7 +306,7 @@ describe('a source of several files', () => {
     }));
     const uno = writeDocument(workspace([source]));
     const m = manifestOf(uno);
-    expect(Object.keys(m.sources[0]!)).toEqual([
+    expect(Object.keys(m.sources[0])).toEqual([
       'id',
       'name',
       'parts',
@@ -323,14 +323,14 @@ describe('a source of several files', () => {
   // its path.
   test("keeps a part's name where it is not the last piece of its path", () => {
     const source = orders();
-    source.parts[1] = { ...source.parts[1]!, name: 'november.tsv' };
+    source.parts[1] = { ...source.parts[1], name: 'november.tsv' };
     const uno = writeDocument(workspace([source]));
     expect(partsOf(manifestOf(uno)).map((part) => part['name'])).toEqual([
       undefined,
       'november.tsv',
       undefined,
     ]);
-    expect(Object.keys(partsOf(manifestOf(uno))[1]!)).toEqual([
+    expect(Object.keys(partsOf(manifestOf(uno))[1])).toEqual([
       'name',
       'path',
       'bytes',
@@ -339,7 +339,7 @@ describe('a source of several files', () => {
       'unterminated',
     ]);
     const [back] = readContainer('books.uno', uno, AT).sources;
-    expect(back!.parts!.map((part) => part.name)).toEqual([
+    expect(back.parts!.map((part) => part.name)).toEqual([
       'orders-2025-10.csv',
       'november.tsv',
       'orders-2025-12.csv',
@@ -363,7 +363,7 @@ describe('a source of several files', () => {
       uno,
       '/media/stick/q4/books.uno',
     ).sources;
-    expect(back!.parts!.map((part) => part.path)).toEqual(
+    expect(back.parts!.map((part) => part.path)).toEqual(
       source.parts.map((part) => `/media/stick/q4/exports/${part.name}`),
     );
   });
@@ -393,7 +393,7 @@ describe('a source of several files is not written', () => {
 
   test('with a part there is no path to', () => {
     const source = orders();
-    source.parts[1] = { ...source.parts[1]!, path: '' };
+    source.parts[1] = { ...source.parts[1], path: '' };
     expect(() => writeDocument(workspace([source]))).toThrow(
       'shop-orders: orders-2025-11.csv (part 2 of 3) has no path to point at',
     );
@@ -411,12 +411,12 @@ describe('a source of several files is refused on reading', () => {
   > = [
     [
       'parts that are not a list',
-      (m) => (m.sources[0]!['parts'] = 'orders-2025-10.csv'),
+      (m) => (m.sources[0]['parts'] = 'orders-2025-10.csv'),
       'books.uno: shop-orders: parts is not a list of files',
     ],
     [
       'an empty list of parts',
-      (m) => (m.sources[0]!['parts'] = []),
+      (m) => (m.sources[0]['parts'] = []),
       'books.uno: shop-orders has no parts · several files read as one need at least one',
     ],
     [
@@ -430,77 +430,77 @@ describe('a source of several files is refused on reading', () => {
     ],
     [
       'a part with no path',
-      (m) => delete partsOf(m)[1]!['path'],
+      (m) => delete partsOf(m)[1]['path'],
       'books.uno: shop-orders: part 2 of 3 has no path',
     ],
     [
       'a part with an empty path',
-      (m) => (partsOf(m)[2]!['path'] = ''),
+      (m) => (partsOf(m)[2]['path'] = ''),
       'books.uno: shop-orders: part 3 of 3 has no path',
     ],
     [
       'a part with no bytes',
-      (m) => delete partsOf(m)[1]!['bytes'],
+      (m) => delete partsOf(m)[1]['bytes'],
       `${NOVEMBER} does not say how many bytes it is`,
     ],
     [
       'a part whose bytes are not a count',
-      (m) => (partsOf(m)[1]!['bytes'] = '2254857830'),
+      (m) => (partsOf(m)[1]['bytes'] = '2254857830'),
       `${NOVEMBER} does not say how many bytes it is`,
     ],
     [
       'a part of fewer than no bytes',
-      (m) => (partsOf(m)[1]!['bytes'] = -1),
+      (m) => (partsOf(m)[1]['bytes'] = -1),
       `${NOVEMBER} does not say how many bytes it is`,
     ],
     [
       'a part whose name is not text',
-      (m) => (partsOf(m)[1]!['name'] = 11),
+      (m) => (partsOf(m)[1]['name'] = 11),
       `${NOVEMBER}: name is not text`,
     ],
     [
       'a part whose version is not text',
-      (m) => (partsOf(m)[1]!['version'] = 41),
+      (m) => (partsOf(m)[1]['version'] = 41),
       `${NOVEMBER}: version is not text`,
     ],
     [
       'a part whose skip is not a count of bytes',
-      (m) => (partsOf(m)[1]!['skip'] = 1.5),
+      (m) => (partsOf(m)[1]['skip'] = 1.5),
       `${NOVEMBER}: skip is not a number of bytes`,
     ],
     [
       'a part whose unterminated is not a yes or a no',
-      (m) => (partsOf(m)[1]!['unterminated'] = 'yes'),
+      (m) => (partsOf(m)[1]['unterminated'] = 'yes'),
       `${NOVEMBER}: unterminated is neither true nor false`,
     ],
     [
       'no header mode',
-      (m) => delete m.sources[0]!['header'],
+      (m) => delete m.sources[0]['header'],
       'books.uno: shop-orders has parts and no header · it has to say whether they have a header row, as one of "first", "none"',
     ],
     [
       'a header mode this build does not know, by name',
-      (m) => (m.sources[0]!['header'] = 'every'),
+      (m) => (m.sources[0]['header'] = 'every'),
       'books.uno: shop-orders: this build does not know header "every" · it reads "first", "none"',
     ],
     [
       'a header mode that is not text',
-      (m) => (m.sources[0]!['header'] = true),
+      (m) => (m.sources[0]['header'] = true),
       'books.uno: shop-orders: this build does not know header true · it reads "first", "none"',
     ],
     [
       'a _file column that is not a yes or a no',
-      (m) => (m.sources[0]!['fileColumn'] = 'yes'),
+      (m) => (m.sources[0]['fileColumn'] = 'yes'),
       'books.uno: shop-orders: fileColumn is neither true nor false',
     ],
     [
       'a path of its own beside its parts',
-      (m) => (m.sources[0]!['path'] = 's3://acme-exports/shop/2025/orders.csv'),
+      (m) => (m.sources[0]['path'] = 's3://acme-exports/shop/2025/orders.csv'),
       'books.uno: shop-orders has both a path and parts · a source is one file or several read as one',
     ],
     [
       'an entry of its own beside its parts',
-      (m) => (m.sources[0]!['entry'] = 'data/source/shop-orders.csv'),
+      (m) => (m.sources[0]['entry'] = 'data/source/shop-orders.csv'),
       'books.uno: shop-orders has both an entry and parts · a source is one file or several read as one',
     ],
   ];
@@ -515,7 +515,7 @@ describe('a source of several files is refused on reading', () => {
   test('and a file source is still held to an entry or a path', () => {
     const uno = tampered(
       workspace([orders(), ...files()]),
-      (m) => delete m.sources[1]!['path'],
+      (m) => delete m.sources[1]['path'],
     );
     expect(() => readContainer('books.uno', uno, AT)).toThrow(
       'books.uno: ledger.csv has no entry in this file and no path to the original',

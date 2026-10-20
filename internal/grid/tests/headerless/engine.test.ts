@@ -123,11 +123,11 @@ describe('three headerless files opened as one', () => {
     await indexed(src);
     e.mode(true);
 
-    for (const row of [FIRST_ROWS[0]!, FIRST_ROWS[2]!]) {
+    for (const row of [FIRST_ROWS[0], FIRST_ROWS[2]]) {
       await src.edit({ op: Op.Set, row, col: UNITS, now: '7' });
-      expect((await src.rows(row, 1)).rows[0]![UNITS]).toBe('7');
+      expect((await src.rows(row, 1)).rows[0][UNITS]).toBe('7');
       // The next row is unchanged.
-      expect((await src.rows(row + 1, 1)).rows[0]![UNITS]).toBe(
+      expect((await src.rows(row + 1, 1)).rows[0][UNITS]).toBe(
         sales.raw(row + 1, UNITS),
       );
     }

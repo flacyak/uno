@@ -17,11 +17,7 @@ import {
   messagePort,
   serve,
 } from '../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../src/engine/index.ts';
+import type { Reply, Request } from '../../src/engine/index.ts';
 import { openFormat } from '../../src/ingest/index.ts';
 import { isNumber } from '../../src/num/index.ts';
 import { NO_ROW, Op } from '../../src/sheet/index.ts';
@@ -385,13 +381,8 @@ test('an engine closed with opens waiting their turn opens none of them', async 
 // opens reject, and onError hears it once.
 test('an engine whose port goes with a request out refuses it, and says so once', async () => {
   const { port1, port2 } = new MessageChannel();
-  serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
-    sources([diskProvider()]),
-  );
-  const engine = new Engine(
-    messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
-  );
+  serve(messagePort<Request, Reply>(port1), sources([diskProvider()]));
+  const engine = new Engine(messagePort<Reply, Request>(port2));
   const said: string[] = [];
   engine.onError = (heard) => said.push(english(heard));
 

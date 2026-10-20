@@ -167,9 +167,7 @@ describe.skipIf(URLS.length === 0)('a source in a real bucket', () => {
 
         // The .uno holds where the object is and the edit, and is smaller than
         // the object.
-        expect(readContainer('q3.uno', uno).manifest.sources[0]!.path).toBe(
-          url,
-        );
+        expect(readContainer('q3.uno', uno).manifest.sources[0].path).toBe(url);
         expect(uno.length).toBeLessThan(bytes.length);
         await writeFile(join(dir, 'q3.uno'), uno);
 
@@ -180,7 +178,7 @@ describe.skipIf(URLS.length === 0)('a source in a real bucket', () => {
             path: join(dir, 'q3.uno'),
           });
           expect(src.opened.link).toEqual({ path: url });
-          expect((await src.rows(LAST_ROW, 1)).rows[0]![UNITS]).toBe('1204');
+          expect((await src.rows(LAST_ROW, 1)).rows[0][UNITS]).toBe('1204');
         } finally {
           b.done();
         }
@@ -321,7 +319,7 @@ describe.skipIf(PREFIX === '')('awkward keys in a real bucket', () => {
   test(
     'one of them indexes and reads its last rows like any other source',
     async () => {
-      const key = AWKWARD_KEYS[0]![0];
+      const key = AWKWARD_KEYS[0][0];
       const url = `${PREFIX.replace(/\/+$/, '')}/${key}`;
       const { engine, done } = connect(undefined, [
         diskProvider(),

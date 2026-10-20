@@ -22,7 +22,7 @@ import { oneCol, propose, sales } from './harness.ts';
 
 test('three fixed cells propose the rest', () => {
   const s = sales();
-  expect(s.columns[UNITS]!.flagged, 'the warning badge should start on').toBe(
+  expect(s.columns[UNITS].flagged, 'the warning badge should start on').toBe(
     true,
   );
 
@@ -57,8 +57,8 @@ test('applying a proposal settles the column', () => {
   expect(p).toBeDefined();
   s.apply(p!.col, p!.prog);
 
-  expect(s.columns[UNITS]!.kind).toBe('num');
-  expect(s.columns[UNITS]!.flagged).toBe(false);
+  expect(s.columns[UNITS].kind).toBe('num');
+  expect(s.columns[UNITS].flagged).toBe(false);
   expect(
     propose(s),
     'a second proposal after the column was fixed',

@@ -13,11 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { MessageChannel } from 'node:worker_threads';
 
 import { Engine, messagePort, serve } from '../../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../../src/engine/index.ts';
+import type { Reply, Request } from '../../../src/engine/index.ts';
 import type { Connection } from '../../../src/library/index.ts';
 import { sources } from '../../../src/plugin/index.ts';
 import {
@@ -140,7 +136,7 @@ export default async function everything(): Promise<void> {
   function engine(): Engine {
     const { port1, port2 } = new MessageChannel();
     serve(
-      messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
+      messagePort<Request, Reply>(port1),
       sources([
         diskProvider(),
         blobProvider(),
@@ -160,9 +156,7 @@ export default async function everything(): Promise<void> {
           tryConnection(c, { sign: (x) => auth.of(x), endpoint: b.endpoint }),
       },
     );
-    return new Engine(
-      messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
-    );
+    return new Engine(messagePort<Reply, Request>(port2));
   }
 
   const local = join(home, 'sales-q3.csv');

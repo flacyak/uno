@@ -74,10 +74,10 @@ describe('the permission policy', () => {
     const [list, get] = read(
       permissionPolicy({ bucket: 'acme-exports', prefix: 'shop/2025/' }),
     ).Statement;
-    expect(list!.Condition).toEqual({
+    expect(list.Condition).toEqual({
       StringLike: { 's3:prefix': ['shop/2025/*'] },
     });
-    expect(get!.Resource).toBe('arn:aws:s3:::acme-exports/shop/2025/*');
+    expect(get.Resource).toBe('arn:aws:s3:::acme-exports/shop/2025/*');
   });
 
   test('the whole bucket has no listing condition', () => {
@@ -89,7 +89,7 @@ describe('the permission policy', () => {
       Action: 's3:ListBucket',
       Resource: 'arn:aws:s3:::open-data',
     });
-    expect(get!.Resource).toBe('arn:aws:s3:::open-data/*');
+    expect(get.Resource).toBe('arn:aws:s3:::open-data/*');
   });
 });
 

@@ -46,7 +46,7 @@ test('an edit shows in the next rows, and undo takes it back', async () => {
       was: '1,204',
       now: '1204',
     });
-    expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe('1204');
+    expect((await src.rows(0, 1)).rows[0][UNITS]).toBe('1204');
 
     // An apply covers the whole column, including the last rows.
     const apply = await src.edit({
@@ -67,9 +67,9 @@ test('an edit shows in the next rows, and undo takes it back', async () => {
       kind: 'text',
       flagged: true,
     });
-    expect((await src.rows(5, 1)).rows[0]![UNITS]).toBe('1,101');
+    expect((await src.rows(5, 1)).rows[0][UNITS]).toBe('1,101');
     expect(
-      (await src.rows(0, 1)).rows[0]![UNITS],
+      (await src.rows(0, 1)).rows[0][UNITS],
       'undo took back one edit',
     ).toBe('1204');
   } finally {
@@ -98,7 +98,7 @@ test('redo records again what undo took back, until a new edit', async () => {
     });
     await src.undo();
     await src.undo();
-    expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe('1,204');
+    expect((await src.rows(0, 1)).rows[0][UNITS]).toBe('1,204');
 
     // Redo is oldest first.
     const set = await src.redo();
@@ -113,7 +113,7 @@ test('redo records again what undo took back, until a new edit', async () => {
     const apply = await src.redo();
     expect(apply.edit).toMatchObject({ seq: 2, op: 'apply' });
     expect(apply.columns[UNITS]).toMatchObject({ kind: 'num', flagged: false });
-    expect((await src.rows(5, 1)).rows[0]![UNITS]).toBe('1101');
+    expect((await src.rows(5, 1)).rows[0][UNITS]).toBe('1101');
 
     // A new edit clears the redo stack.
     await src.undo();

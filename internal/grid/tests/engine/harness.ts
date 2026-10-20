@@ -5,7 +5,6 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { Engine, english, messagePort, serve } from '../../src/engine/index.ts';
 import type {
-  MessagePortLike,
   Reply,
   Request,
   Said,
@@ -49,7 +48,7 @@ export function connect(
 ): { engine: Engine; done: () => void } {
   const { port1, port2 } = new MessageChannel();
   serve(
-    messagePort<Request, Reply>(port1 as unknown as MessagePortLike),
+    messagePort<Request, Reply>(port1),
     sources(providers),
     tuning,
     // A bare Connections is wrapped as a Connecting holding only it.
@@ -57,9 +56,7 @@ export function connect(
       ? connecting
       : { connections: connecting },
   );
-  const engine = new Engine(
-    messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
-  );
+  const engine = new Engine(messagePort<Reply, Request>(port2));
   return {
     engine,
     // Only the client's end is closed. Its close request is delivered to the
@@ -121,7 +118,7 @@ export async function openOne(
   const { sources } = await engine.open(ref);
   if (sources.length !== 1)
     throw new Error(`${ref.name} opened ${sources.length} sources`);
-  return sources[0]!;
+  return sources[0];
 }
 
 export function indexed(source: SourceHandle): Promise<void> {

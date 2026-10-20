@@ -103,9 +103,9 @@ test('a Blob crosses with its bytes and its type, and several keep their order',
     parts: Array<{ name: string; blob: Blob }>;
   };
   expect(back.parts.map((p) => p.name)).toEqual(['one.csv', 'two.csv']);
-  expect(back.parts[0]!.blob.type).toBe('text/csv');
-  expect(await back.parts[0]!.blob.text()).toBe('a,b\n1,2\n');
-  expect(await back.parts[1]!.blob.text()).toBe('c\n3\n');
+  expect(back.parts[0].blob.type).toBe('text/csv');
+  expect(await back.parts[0].blob.text()).toBe('a,b\n1,2\n');
+  expect(await back.parts[1].blob.text()).toBe('c\n3\n');
 });
 
 test("an object of somebody's own that uses the tag as a key is still theirs", async () => {
@@ -240,7 +240,7 @@ function overSockets(limit = LIMIT): {
 /** Opens `ref` and returns its first source. */
 async function opened(engine: Engine, ref: SourceRef): Promise<SourceHandle> {
   const added = await engine.open(ref);
-  return added.sources[0]!;
+  return added.sources[0];
 }
 
 test('an engine behind a socket opens a file by path and serves its rows', async () => {

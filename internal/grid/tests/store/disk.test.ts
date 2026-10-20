@@ -106,7 +106,7 @@ test('the cursor names where the next page starts', async () => {
   expect(first.next).toBe('d:reports');
 
   const second = await disk.list(dir, first.next);
-  expect(second.entries[0]!.name).toBe('reports');
+  expect(second.entries[0].name).toBe('reports');
 });
 
 // A cursor past every entry gives an empty page.

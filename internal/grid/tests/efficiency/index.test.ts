@@ -69,14 +69,14 @@ const WINDOW_WAIT_FRACTION = 0.1;
 /** rows yields the file's rows, the same on every machine. */
 function* rows(): Generator<string> {
   for (let i = 0; ; i++) {
-    const customer = CUSTOMERS[i % CUSTOMERS.length]!;
+    const customer = CUSTOMERS[i % CUSTOMERS.length];
     const note =
       i % NEWLINE_EVERY === 0
         ? '"first line\nsecond line, with a comma"'
         : i % WIDE_EVERY === 0
           ? 'naïve café'
           : 'plain';
-    const city = CITIES[i % CITIES.length]!;
+    const city = CITIES[i % CITIES.length];
     const end = i % CRLF_EVERY === 0 ? '\r\n' : '\n';
     yield `${i},${customer},${note},${(i * 37) % 100000}.${i % 100},${city}${end}`;
   }
@@ -253,7 +253,7 @@ test('the index pass scans bytes at disk speed and keeps little per row', async 
   const passMs = performance.now() - began;
 
   expect(reply.rows.length).toBe(SCREEN);
-  expect(reply.rows[0]![1]).toBe('Okafor, Ada');
+  expect(reply.rows[0][1]).toBe('Okafor, Ada');
   expect(completeBeforeAnswer).toBe(false);
   expect(handle.progress.rows).toBe(expected);
   metrics.push(
