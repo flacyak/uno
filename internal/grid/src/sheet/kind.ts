@@ -112,8 +112,8 @@ const DATE_SHAPES: ReadonlyArray<[RegExp, (m: RegExpExecArray) => boolean]> = [
       isRealDate(Number(m[4]), Number(m[3]), Number(m[1])) ||
       isRealDate(Number(m[4]), Number(m[1]), Number(m[3])),
   ],
-  [NAME_FIRST, (m) => isRealDate(Number(m[3]), month(m[1]!), Number(m[2]))],
-  [DAY_FIRST, (m) => isRealDate(Number(m[4]), month(m[3]!), Number(m[1]))],
+  [NAME_FIRST, (m) => isRealDate(Number(m[3]), month(m[1]), Number(m[2]))],
+  [DAY_FIRST, (m) => isRealDate(Number(m[4]), month(m[3]), Number(m[1]))],
   [
     RFC3339,
     (m) =>

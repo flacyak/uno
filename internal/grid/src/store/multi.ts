@@ -165,8 +165,8 @@ export class DisagreementError extends Error {
   readonly differs: Disagreement;
 
   constructor(parts: readonly Part[], part: number, differs: Disagreement) {
-    const name = parts[part]!.ref.name;
-    const first = parts[0]!.ref.name;
+    const name = parts[part].ref.name;
+    const first = parts[0].ref.name;
     super(`${partLabel(parts, part)}: ${said(differs, first)}`);
     this.part = part;
     this.partName = name;
@@ -219,7 +219,7 @@ export function partMap(extents: readonly Extent[]): PartMap {
       let high = spans.length - 1;
       while (low < high) {
         const mid = Math.ceil((low + high) / 2);
-        if (spans[mid]!.start <= offset) low = mid;
+        if (spans[mid].start <= offset) low = mid;
         else high = mid - 1;
       }
       return low;
@@ -293,10 +293,10 @@ export async function openMulti(
       const pieces: Uint8Array[] = [];
       for (
         let i = first;
-        i < map.spans.length && map.spans[i]!.start < end;
+        i < map.spans.length && map.spans[i].start < end;
         i++
       ) {
-        const span = map.spans[i]!;
+        const span = map.spans[i];
         if (span.end === span.start) continue;
         pieces.push(
           await piece(
@@ -306,7 +306,7 @@ export async function openMulti(
           ),
         );
       }
-      return pieces.length === 1 ? pieces[0]! : concat(pieces);
+      return pieces.length === 1 ? pieces[0] : concat(pieces);
     },
   };
 }
@@ -423,7 +423,7 @@ class Parts {
   /** open opens part `i`, measures it, and checks it against the extent it
    * came with. */
   private async open(i: number): Promise<ByteSource> {
-    const ref = this.parts[i]!.ref;
+    const ref = this.parts[i].ref;
     const source = await openWith(this.handlers, ref);
     try {
       const was = this.extents[i];
@@ -523,7 +523,7 @@ class Parts {
    * on an empty file. Every other part is read with peekFormat.
    */
   private format(i: number, source: ByteSource): Promise<Format | undefined> {
-    const name = this.parts[i]!.ref.name;
+    const name = this.parts[i].ref.name;
     return this.header === 'first' && i === 0
       ? openFormat(name, source)
       : peekFormat(name, source, this.header);
@@ -631,7 +631,7 @@ function headerDisagreement(
   const differing: ColumnDifference[] = [];
   for (let column = 0; column < shared; column++) {
     if (first[column] !== part[column]) {
-      differing.push({ column, first: first[column]!, part: part[column]! });
+      differing.push({ column, first: first[column], part: part[column] });
     }
   }
 
@@ -656,7 +656,7 @@ function headerDisagreement(
     kind: 'columns',
     first: first.length,
     part: part.length,
-    column: differing[0]!,
+    column: differing[0],
   };
 }
 
@@ -730,7 +730,7 @@ function counted(n: number, more = ''): string {
 /** partLabel names part `i` for a person: its file, and its place in the
  * list. */
 function partLabel(parts: readonly Part[], i: number): string {
-  return `${parts[i]!.ref.name} (part ${i + 1} of ${parts.length})`;
+  return `${parts[i].ref.name} (part ${i + 1} of ${parts.length})`;
 }
 
 /** A name in quotes, so a space at its end or a tab inside it can be seen. */

@@ -174,7 +174,7 @@ export async function peekFormat(
   const first = readAll(
     decoders.head.decode(head.subarray(0, second)),
     comma,
-  )[0]!;
+  )[0];
   return {
     label: describe(comma, header, decoders.charset),
     delimiter: comma,

@@ -79,7 +79,7 @@ export interface S3Location {
  */
 export function s3Location(url: string): S3Location | undefined {
   const s3 = /^s3:\/\/([^/]+)\/(.+)$/i.exec(url.trim());
-  if (s3 !== null) return { bucket: s3[1]!, key: s3[2]! };
+  if (s3 !== null) return { bucket: s3[1], key: s3[2] };
 
   let u: URL;
   try {
@@ -789,7 +789,7 @@ export function signV4(
     req.url.pathname === '' ? '/' : req.url.pathname,
     canonicalQuery(req.url),
     names
-      .map((n) => `${n}:${headers[n]!.trim().replace(/\s+/g, ' ')}\n`)
+      .map((n) => `${n}:${headers[n].trim().replace(/\s+/g, ' ')}\n`)
       .join(''),
     signed,
     headers['x-amz-content-sha256'] ?? EMPTY_SHA256,

@@ -94,7 +94,7 @@ export function findAllIndex(re: RegExp, s: string): Array<[number, number]> {
     const empty = end === start;
 
     if (!(empty && start === prevEnd)) {
-      out.push([cp[start]!, cp[end]!]);
+      out.push([cp[start], cp[end]]);
       prevEnd = end;
     }
 

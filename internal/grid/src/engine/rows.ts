@@ -60,8 +60,8 @@ export class RowIndex {
     const b = this.blocks;
     if (
       b === 0 ||
-      this.counted - this.firsts[b - 1]! >= this.tuning.blockRows ||
-      offset - this.offsets[b - 1]! >= this.tuning.blockBytes
+      this.counted - this.firsts[b - 1] >= this.tuning.blockRows ||
+      offset - this.offsets[b - 1] >= this.tuning.blockBytes
     ) {
       if (b === this.firsts.length) {
         this.firsts = grow(this.firsts);
@@ -80,7 +80,7 @@ export class RowIndex {
    */
   readable(): number {
     if (this.complete) return this.counted;
-    return this.blocks === 0 ? 0 : this.firsts[this.blocks - 1]!;
+    return this.blocks === 0 ? 0 : this.firsts[this.blocks - 1];
   }
 
   /** rows returns the row count once complete, or an estimate from the bytes scanned so far. */
@@ -100,7 +100,7 @@ export class RowIndex {
     let hi = this.blocks - 1;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
-      if (this.firsts[mid]! <= row) lo = mid;
+      if (this.firsts[mid] <= row) lo = mid;
       else hi = mid - 1;
     }
     return lo;
@@ -108,15 +108,14 @@ export class RowIndex {
 
   /** Returns the row range of a block, as [first, end). */
   rowsOf(block: number): [number, number] {
-    const end =
-      block + 1 < this.blocks ? this.firsts[block + 1]! : this.counted;
-    return [this.firsts[block]!, end];
+    const end = block + 1 < this.blocks ? this.firsts[block + 1] : this.counted;
+    return [this.firsts[block], end];
   }
 
   /** Returns the byte range of a block, as [start, end). */
   bytesOf(block: number): [number, number] {
-    const end = block + 1 < this.blocks ? this.offsets[block + 1]! : this.size;
-    return [this.offsets[block]!, end];
+    const end = block + 1 < this.blocks ? this.offsets[block + 1] : this.size;
+    return [this.offsets[block], end];
   }
 }
 
@@ -163,7 +162,7 @@ export class Pages {
       const [from] = this.index.rowsOf(block);
       const records = await this.records(block);
       for (let i = row - from; i < records.length && row < end; i++, row++)
-        out.push(records[i]!);
+        out.push(records[i]);
     }
     return out;
   }

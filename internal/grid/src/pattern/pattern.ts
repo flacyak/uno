@@ -126,7 +126,7 @@ export function snap(s: Sheet | undefined): Snapshot {
 
     cols.push({
       col,
-      header: s.columns[col]!.header,
+      header: s.columns[col].header,
       values,
       written,
       examples: ex,
@@ -217,7 +217,7 @@ export class Survey {
     written: readonly (Written | undefined)[],
   ): void {
     for (let i = 0; i < this.readings.length; i++) {
-      const r = this.readings[i]!;
+      const r = this.readings[i];
       scan(r, values, first, written);
 
       // A reading with a candidate that changes a cell outranks every later
@@ -243,8 +243,8 @@ export class Survey {
       // Fewest steps, then fewest cells changed, then text order. The
       // narrowest program that still explains every example wins.
       scored.sort((a, b) => {
-        const A = r.cands[a]!;
-        const B = r.cands[b]!;
+        const A = r.cands[a];
+        const B = r.cands[b];
         const d = A.prog.length - B.prog.length;
         if (d !== 0) return d;
         const n = A.affects - B.affects;
@@ -252,7 +252,7 @@ export class Survey {
         return compareStrings(A.text, B.text);
       });
 
-      const top = r.cands[scored[0]!]!;
+      const top = r.cands[scored[0]];
       return {
         col: this.col,
         header: this.header,
@@ -260,7 +260,7 @@ export class Survey {
         affects: top.affects,
         sample: top.sample.slice(),
         ambiguous:
-          scored.length > 1 && r.classOf[scored[0]!] !== r.classOf[scored[1]!],
+          scored.length > 1 && r.classOf[scored[0]] !== r.classOf[scored[1]],
       };
     }
     return undefined;
@@ -360,10 +360,10 @@ function scan(
   const outs: string[] = [];
 
   for (let i = 0; i < values.length; i++) {
-    const v = values[i]!;
+    const v = values[i];
     const w = written[i];
     for (let j = 0; j < r.cands.length; j++) {
-      const c = r.cands[j]!;
+      const c = r.cands[j];
       // A cell the program is already settled over is left as it is.
       const out =
         w !== undefined && settled(c.prog, w) ? v : applyProgram(c.prog, v);
@@ -381,9 +381,9 @@ function scan(
 function split(r: Reading, outs: readonly string[]): void {
   let differs = false;
   for (const members of r.classes) {
-    const lead = outs[members[0]!];
+    const lead = outs[members[0]];
     for (let m = 1; m < members.length && !differs; m++)
-      differs = outs[members[m]!] !== lead;
+      differs = outs[members[m]] !== lead;
     if (differs) break;
   }
   if (!differs) return;
@@ -391,7 +391,7 @@ function split(r: Reading, outs: readonly string[]): void {
   const next: number[][] = [];
   for (const members of r.classes) {
     const byOut = new Map<string, number[]>();
-    for (const m of members) pushTo(byOut, outs[m]!, m);
+    for (const m of members) pushTo(byOut, outs[m], m);
     if (byOut.size === 1) {
       next.push(members);
       continue;

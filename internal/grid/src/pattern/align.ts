@@ -31,10 +31,10 @@ export function align(a: string[], b: string[]): Alignment | undefined {
 
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {
-      lcs[i]![j] =
+      lcs[i][j] =
         a[i] === b[j]
-          ? lcs[i + 1]![j + 1]! + 1
-          : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+          ? lcs[i + 1][j + 1] + 1
+          : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
     }
   }
 
@@ -65,14 +65,14 @@ export function align(a: string[], b: string[]): Alignment | undefined {
       j++;
     } else if (
       j === b.length ||
-      (i < a.length && lcs[i + 1]![j]! >= lcs[i]![j + 1]!)
+      (i < a.length && lcs[i + 1][j] >= lcs[i][j + 1])
     ) {
       if (d.length === 0) dAt = i;
-      d += a[i]!;
+      d += a[i];
       i++;
     } else {
       if (n.length === 0) nAt = j;
-      n += b[j]!;
+      n += b[j];
       j++;
     }
   }

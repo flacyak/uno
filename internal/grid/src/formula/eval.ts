@@ -68,7 +68,7 @@ export function evaluate(f: Formula, row: Row): number {
     },
   });
   if (errors[0] !== undefined) throw errors[0];
-  return values[0]!;
+  return values[0];
 }
 
 function evalNode(
@@ -107,7 +107,7 @@ function evalNode(
 
     case 'unary': {
       const out = evalNode(n.operand, count, src, errors);
-      for (let i = 0; i < count; i++) out[i] = -out[i]!;
+      for (let i = 0; i < count; i++) out[i] = -out[i];
       return out;
     }
 
@@ -118,13 +118,13 @@ function evalNode(
       const right = evalNode(n.right, count, src, errors);
       switch (n.op) {
         case '+':
-          for (let i = 0; i < count; i++) left[i] = left[i]! + right[i]!;
+          for (let i = 0; i < count; i++) left[i] = left[i] + right[i];
           return left;
         case '-':
-          for (let i = 0; i < count; i++) left[i] = left[i]! - right[i]!;
+          for (let i = 0; i < count; i++) left[i] = left[i] - right[i];
           return left;
         case '*':
-          for (let i = 0; i < count; i++) left[i] = left[i]! * right[i]!;
+          for (let i = 0; i < count; i++) left[i] = left[i] * right[i];
           return left;
         case '/': {
           // A zero divisor is an error. The error names the divisor
@@ -136,7 +136,7 @@ function evalNode(
               err ??= new DivideByZeroError(`${text(n.right)}: divide by zero`);
               errors[i] = err;
             }
-            left[i] = left[i]! / right[i]!;
+            left[i] = left[i] / right[i];
           }
           return left;
         }

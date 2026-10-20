@@ -49,7 +49,7 @@ class Scanner {
 
   run(): void {
     while (this.i < this.src.length) {
-      const c = this.src[this.i]!;
+      const c = this.src[this.i];
       if (c === '\\') this.command();
       else if (c === '^') this.script(SUPERSCRIPTS, 'superscript');
       else if (c === '_') this.script(SUBSCRIPTS, 'subscript');
@@ -108,7 +108,7 @@ class Scanner {
    */
   private script(table: Map<string, string>, kind: string): void {
     const start = this.i;
-    const mark = this.src[this.i]!;
+    const mark = this.src[this.i];
     this.i++; // the ^ or the _
 
     let content = this.group();
@@ -122,7 +122,7 @@ class Scanner {
 
     let small = '';
     for (let i = 0; i < content.length; i++) {
-      const r = content[i]!;
+      const r = content[i];
       if (r === '\\') {
         // \alpha^{\beta}: name the whole command.
         return this.bail(
@@ -196,6 +196,6 @@ class Scanner {
 /** word reads a command name: ASCII letters only. */
 function word(rs: string[]): string {
   let n = 0;
-  while (n < rs.length && /^[A-Za-z]$/.test(rs[n]!)) n++;
+  while (n < rs.length && /^[A-Za-z]$/.test(rs[n])) n++;
   return rs.slice(0, n).join('');
 }

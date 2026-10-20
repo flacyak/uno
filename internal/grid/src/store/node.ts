@@ -571,7 +571,7 @@ export function splitCommand(line: string): string[] {
   let word = '';
   let open = false;
   for (let i = 0; i < line.length; i++) {
-    const c = line[i]!;
+    const c = line[i];
     if (c === "'") {
       const end = line.indexOf("'", i + 1);
       if (end < 0)
@@ -905,7 +905,7 @@ async function ini(path: string): Promise<Map<string, Map<string, string>>> {
     const head = /^\[(.+)\]$/.exec(line);
     if (head !== null) {
       section = new Map();
-      out.set(head[1]!.trim(), section);
+      out.set(head[1].trim(), section);
       continue;
     }
     const eq = line.indexOf('=');

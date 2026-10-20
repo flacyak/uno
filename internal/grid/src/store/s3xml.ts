@@ -87,7 +87,7 @@ export function when(stamp: string | null | undefined): Date | undefined {
  */
 function blocks(xml: string, name: string): string[] {
   const found: string[] = [];
-  for (const m of xml.matchAll(element(name, 'g'))) found.push(m[1]!);
+  for (const m of xml.matchAll(element(name, 'g'))) found.push(m[1]);
   return found;
 }
 
@@ -105,7 +105,7 @@ function element(name: string, flags = ''): RegExp {
  */
 export function text(xml: string, name: string): string | undefined {
   const one = element(name).exec(xml);
-  return one === null ? undefined : entities(one[1]!);
+  return one === null ? undefined : entities(one[1]);
 }
 
 /**

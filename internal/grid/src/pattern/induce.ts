@@ -37,7 +37,7 @@ export function induce(
 ): Program[] {
   if (ex.length === 0) return [];
 
-  let keep = dedup(witness(ex[0]!.was, ex[0]!.now));
+  let keep = dedup(witness(ex[0].was, ex[0].now));
   for (const e of ex.slice(1)) {
     keep = intersect(keep, dedup(witness(e.was, e.now)));
     if (keep.length === 0) return [];
@@ -160,8 +160,8 @@ function deletions(a: string[], dels: Run[]): string[] {
  * when it is all whitespace.
  */
 function substitutions(dels: Run[], ins: Run[]): string[] {
-  const d = dels[0]!;
-  const i = ins[0]!;
+  const d = dels[0];
+  const i = ins[0];
   for (const r of dels.slice(1)) if (r.text !== d.text) return [];
   for (const r of ins.slice(1)) if (r.text !== i.text) return [];
 

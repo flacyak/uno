@@ -226,7 +226,7 @@ export function writeDocument(d: Document): Uint8Array {
     },
   ];
   d.sources.forEach((src, i) => {
-    const { entry: named, sha256 } = m.sources[i]!;
+    const { entry: named, sha256 } = m.sources[i];
     if (src.raw !== undefined && named !== undefined) {
       entries.push({ name: named, bytes: src.raw, key: sha256 });
     }
@@ -358,7 +358,7 @@ const CRC32_TABLE = ((): Int32Array => {
 function crc32(bytes: Uint8Array): number {
   let c = -1;
   for (let i = 0; i < bytes.length; i++) {
-    c = CRC32_TABLE[(c ^ bytes[i]!) & BYTE_MASK]! ^ (c >>> BITS_PER_BYTE);
+    c = CRC32_TABLE[(c ^ bytes[i]) & BYTE_MASK] ^ (c >>> BITS_PER_BYTE);
   }
   return ~c >>> 0;
 }
@@ -579,12 +579,12 @@ function readLog(
   const lines = decoder.decode(readEntry(name, entries, entry)).split('\n');
   const ids = new Set(m.sources.map((s) => s.id));
   // A log written before format 4 had only one source, so its lines omit it.
-  const only = m.sources.length === 1 ? m.sources[0]!.id : undefined;
+  const only = m.sources.length === 1 ? m.sources[0].id : undefined;
 
   const log: Logged[] = [];
   const counted = new Map<string, number>();
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
+    const line = lines[i];
     if (line.trim() === '') continue;
     const where = `${name}: ${entry} line ${i + 1}`;
 
@@ -873,7 +873,7 @@ function parseState(
   m: Manifest,
 ): { active: string; states: Map<string, State> } {
   const o = asRecord(v);
-  const first = m.sources[0]!.id;
+  const first = m.sources[0].id;
   const states = new Map<string, State>();
 
   const sheets = o['sheets'];
@@ -952,7 +952,7 @@ function manifestJSON(m: Manifest): unknown {
 
   if (m.format < SOURCES_VERSION) {
     // This layout holds one carried file.
-    const s = m.sources[0]!;
+    const s = m.sources[0];
     return {
       ...head,
       source: {
@@ -997,7 +997,7 @@ function omitempty<T extends object>(
 }
 
 function stateJSON(d: Document, single: boolean): unknown {
-  if (single) return sheetStateJSON(d.sources[0]!.state);
+  if (single) return sheetStateJSON(d.sources[0].state);
   return {
     source: d.active,
     sheets: d.sources.map((s) => ({

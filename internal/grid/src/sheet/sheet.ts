@@ -181,7 +181,7 @@ export class Sheet {
     }
     const was = this.binding(col);
     if (was === undefined) {
-      throw new Error(`no formula is bound to ${this.columns[col]!.header}`);
+      throw new Error(`no formula is bound to ${this.columns[col].header}`);
     }
     this.record({ seq: 0, op: Op.Unbind, row: NO_ROW, col, was, now: '' });
   }
@@ -284,7 +284,7 @@ export class Sheet {
     const { kind, flagged } = inferKind(this.rowData.length, (row) =>
       this.display(row, col),
     );
-    const c = this.columns[col]!;
+    const c = this.columns[col];
     c.kind = kind;
     c.flagged = flagged;
   }

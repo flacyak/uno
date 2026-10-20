@@ -363,7 +363,7 @@ export class View {
     return schema.headers.map((header, col) => {
       const { kind, flagged } = inferKind(
         shown.length,
-        (row) => shown[row]![col] ?? '',
+        (row) => shown[row][col] ?? '',
       );
       const binding = schema.binding(col);
       return binding === undefined
@@ -395,8 +395,8 @@ export class View {
       const [from, to] = this.index.rowsOf(block);
       const runs = await this.runsIn(block, multi.map);
       for (let run = 0; row < Math.min(to, end); row++) {
-        while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
-        names.push(ref.parts[runs[run]!.part]?.ref.name ?? '');
+        while (run + 1 < runs.length && runs[run + 1].row <= row - from) run++;
+        names.push(ref.parts[runs[run].part]?.ref.name ?? '');
       }
     }
     return names;
@@ -430,7 +430,7 @@ export class View {
 
     // Rows from the last part's first byte on belong to it, so only the
     // bytes before it are scanned.
-    const until = map.spans[last]!.start;
+    const until = map.spans[last].start;
     const runs: Run[] = [];
     let row = 0;
     const scanner = this.format.scanner((offset) => {
@@ -602,7 +602,7 @@ export class View {
     const index = this.index;
 
     for (const col of cols) {
-      const survey = Survey.start(col, schema.headers[col]!, byCol.get(col)!);
+      const survey = Survey.start(col, schema.headers[col], byCol.get(col)!);
       if (survey === undefined) continue;
 
       let told = Date.now();
@@ -620,7 +620,7 @@ export class View {
         const values: string[] = [];
         const written: Array<Written | undefined> = [];
         for (let r = row; r < end; r++) {
-          values.push(valueAt(schema, r, col, records[r - from]!));
+          values.push(valueAt(schema, r, col, records[r - from]));
           written.push(schema.writtenIn(r)?.get(col));
         }
         survey.add(values, row, written);
@@ -726,7 +726,7 @@ export class View {
     const schema = this.schema;
     if (schema.formula(col) !== undefined) {
       const finished = finishRows(schema, from, records, files);
-      return (row) => finished[row - from]!.shown[col] ?? '';
+      return (row) => finished[row - from].shown[col] ?? '';
     }
     if (schema.supplied?.col === col) {
       return (row) =>
@@ -734,7 +734,7 @@ export class View {
     }
     return (row) =>
       schema.writtenIn(row)?.get(col)?.rendered ??
-      valueAt(schema, row, col, records[row - from]!);
+      valueAt(schema, row, col, records[row - from]);
   }
 
   /**
@@ -872,7 +872,7 @@ export class View {
 
     return {
       parts: files.map((file, i) => {
-        const extent = multi.extents[i]!;
+        const extent = multi.extents[i];
         return {
           name: file.name,
           path: file.path,

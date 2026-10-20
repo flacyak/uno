@@ -120,7 +120,7 @@ export function unquote(s: string): string {
 
   let out = '';
   for (let i = 1; i < r.length - 1; i++) {
-    const c = r[i]!;
+    const c = r[i];
     if (c === '"') throw new Error('invalid syntax');
     if (c !== '\\') {
       out += c;
@@ -129,7 +129,7 @@ export function unquote(s: string): string {
 
     i++;
     if (i >= r.length - 1) throw new Error('invalid syntax');
-    const k = r[i]!;
+    const k = r[i];
 
     const simple = UNESCAPE.get(k);
     if (simple !== undefined) {

@@ -75,7 +75,7 @@ function resolvePos(p: Pos, v: string, r: string[]): number | undefined {
       const m = findAllIndex(p.re, v);
       const i = p.k < 0 ? m.length + p.k : p.k - 1;
       if (i < 0 || i >= m.length) return undefined;
-      const at = m[i]!;
+      const at = m[i];
       return p.atEnd ? at[1] : at[0];
     }
     default:
@@ -284,9 +284,9 @@ export function quoteRegex(src: string): string {
   let out = '/';
   const r = runes(src);
   for (let i = 0; i < r.length; i++) {
-    const c = r[i]!;
+    const c = r[i];
     if (c === '\\' && i + 1 < r.length) {
-      const next = r[i + 1]!;
+      const next = r[i + 1];
       out += next === '/' ? '\\/' : '\\' + next;
       i++;
     } else if (c === '/') {
@@ -335,11 +335,11 @@ export function literalOf(src: string): string | undefined {
   let out = '';
   const r = runes(src);
   for (let i = 0; i < r.length; i++) {
-    const c = r[i]!;
+    const c = r[i];
     if (c === '\\') {
       i++;
-      if (i >= r.length || !isMeta(r[i]!)) return undefined;
-      out += r[i]!;
+      if (i >= r.length || !isMeta(r[i])) return undefined;
+      out += r[i];
     } else if (isMeta(c)) {
       return undefined;
     } else {
@@ -381,12 +381,12 @@ export function soughtChars(src: string): Sought | undefined {
   const seen = new Set<CharName>();
   const rs = runes(body);
   for (let i = 0; i < rs.length; i++) {
-    let r = rs[i]!;
+    let r = rs[i];
     if (r === '\\') {
       // A class escapes these four characters. Any other escape (\d, \s) is
       // a set, and is refused.
       i++;
-      if (i >= rs.length || !']\\^-'.includes(rs[i]!)) return undefined;
+      if (i >= rs.length || !']\\^-'.includes(rs[i])) return undefined;
       r = rs[i]!;
     } else if (r === '^' && i === 0) {
       return undefined; // a negated class

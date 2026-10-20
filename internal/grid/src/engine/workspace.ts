@@ -635,7 +635,7 @@ export class Workspace {
       const doc: Document = {
         manifest: { ...newManifest(), created: this.created },
         sources: held,
-        active: this.sources.has(place.source) ? place.source : sources[0]!.id,
+        active: this.sources.has(place.source) ? place.source : sources[0].id,
         log: interleave(this.trail, parts),
         extra: this.extra,
         at: place.at,
@@ -656,7 +656,7 @@ export class Workspace {
     const total = carried.reduce((sum, s) => sum + s.carries, 0);
     if (total <= limit) return;
     if (carried.length === 1) {
-      const s = carried[0]!;
+      const s = carried[0];
       throw new Refusal({
         t: 'carried-too-large',
         name: s.name,
@@ -824,7 +824,7 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
     ...made,
     name: ref.name,
     parts: ref.parts.map((part, i) => {
-      const { ref: file, extent } = made.parts[i]!;
+      const { ref: file, extent } = made.parts[i];
       const stayed =
         'path' in part.ref && 'path' in file && part.ref.path === file.path;
       const now = stayed ? file : part.ref;

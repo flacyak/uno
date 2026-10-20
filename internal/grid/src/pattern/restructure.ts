@@ -46,7 +46,7 @@ export function restructures(was: string, now: string): string[] {
   const out: string[] = [];
   for (const c of cross(sets)) {
     // A lone slice is a step of its own.
-    out.push(c.length === 1 ? c[0]! : 'concat(' + c.join(', ') + ')');
+    out.push(c.length === 1 ? c[0] : 'concat(' + c.join(', ') + ')');
   }
   return out;
 }
@@ -79,7 +79,7 @@ function decompose(a: string[], b: string[]): Piece[] | undefined {
   for (let i = 0; i < b.length;) {
     const [at, n] = longestQuote(a, b.slice(i));
     if (n < MIN_PIECE) {
-      lit += b[i]!;
+      lit += b[i];
       i++;
       continue;
     }
@@ -132,7 +132,7 @@ function sliceSrcs(a: string[], from: number, to: number): string[] {
  * counted from the front, and counted from the back.
  */
 function boundary(a: string[], at: number, side: string): string[] {
-  const target = a[at]!;
+  const target = a[at];
   // Through quoteRegex, so a `/` is escaped.
   const c = quoteRegex(quoteMeta(target));
 

@@ -178,7 +178,7 @@ export class Schema {
   logEquals(other: readonly Edit[]): boolean {
     return (
       this.log.length === other.length &&
-      this.log.every((e, i) => editEquals(e, other[i]!))
+      this.log.every((e, i) => editEquals(e, other[i]))
     );
   }
 
@@ -280,7 +280,7 @@ export class Schema {
   private firstWas(e: Edit): string {
     const w = this.written.get(e.row)?.get(e.col);
     const runs = this.runs.get(e.col);
-    const applied = runs === undefined ? 0 : runs[runs.length - 1]!.seq;
+    const applied = runs === undefined ? 0 : runs[runs.length - 1].seq;
     if (w?.was !== undefined && w.seq > applied) return w.was;
     return e.was ?? '';
   }
@@ -338,7 +338,7 @@ export class Schema {
   }
 
   private uniqueHeader(col: number): string {
-    const name = this.headers[col]!;
+    const name = this.headers[col];
     this.resolve(name);
     return name;
   }

@@ -216,7 +216,7 @@ function read(json: Json, attached: readonly Uint8Array[]): unknown {
           if (!Array.isArray(pair) || pair.length !== 2) {
             throw new Error('a map entry that is not a key and a value');
           }
-          return [read(pair[0]!, attached), read(pair[1]!, attached)];
+          return [read(pair[0], attached), read(pair[1], attached)];
         }),
       );
     }

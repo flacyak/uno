@@ -78,7 +78,7 @@ export class RecordScanner {
     let i = 0;
 
     while (i < end) {
-      const b = chunk[i]!;
+      const b = chunk[i];
       switch (s) {
         case LINE:
           if (b === LF) break;

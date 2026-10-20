@@ -48,7 +48,7 @@ class Parser extends Scanner {
   private ident(): string {
     this.space();
     const start = this.i;
-    while (this.i < this.s.length && isLetter(this.s[this.i]!)) this.i++;
+    while (this.i < this.s.length && isLetter(this.s[this.i])) this.i++;
     return this.s.slice(start, this.i).join('');
   }
 
@@ -65,7 +65,7 @@ class Parser extends Scanner {
     // Own keys only: "constructor" is letters, and a prototype key.
     if (!Object.hasOwn(ARGS, name))
       throw new Error(`unknown step ${quote(name)} at character ${at}`);
-    const st = ARGS[name]!(this);
+    const st = ARGS[name](this);
     this.expect(')');
     return st;
   }
@@ -125,7 +125,7 @@ class Parser extends Scanner {
     this.space();
     if (
       this.i < this.s.length &&
-      (this.s[this.i] === '-' || isDigit(this.s[this.i]!))
+      (this.s[this.i] === '-' || isDigit(this.s[this.i]))
     ) {
       return { kind: 'idx', k: this.intArg() };
     }
@@ -174,9 +174,9 @@ class Parser extends Scanner {
 
     let out = '';
     while (this.i < this.s.length) {
-      const c = this.s[this.i]!;
+      const c = this.s[this.i];
       if (c === '\\' && this.i + 1 < this.s.length) {
-        out += this.s[this.i + 1] === '/' ? '/' : '\\' + this.s[this.i + 1]!;
+        out += this.s[this.i + 1] === '/' ? '/' : '\\' + this.s[this.i + 1];
         this.i += 2;
       } else if (c === '/') {
         this.i++;
@@ -224,7 +224,7 @@ class Parser extends Scanner {
     this.space();
     const start = this.i;
     if (this.i < this.s.length && this.s[this.i] === '-') this.i++;
-    while (this.i < this.s.length && isDigit(this.s[this.i]!)) this.i++;
+    while (this.i < this.s.length && isDigit(this.s[this.i])) this.i++;
 
     const n = atoi(this.s.slice(start, this.i).join(''));
     if (n === undefined) {

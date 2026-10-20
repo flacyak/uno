@@ -57,7 +57,7 @@ class Parser extends Scanner {
       this.space();
       if (this.i >= this.s.length) return left;
 
-      const op = this.s[this.i]!;
+      const op = this.s[this.i];
       const prec = precedence(op);
       if (prec === 0 || prec < min) return left;
 
@@ -100,16 +100,16 @@ class Parser extends Scanner {
    */
   private number(): Node {
     const start = this.i;
-    while (this.i < this.s.length && isDigit(this.s[this.i]!)) this.i++;
+    while (this.i < this.s.length && isDigit(this.s[this.i])) this.i++;
 
     if (this.i < this.s.length && this.s[this.i] === '.') {
       this.i++;
-      if (this.i >= this.s.length || !isDigit(this.s[this.i]!)) {
+      if (this.i >= this.s.length || !isDigit(this.s[this.i])) {
         throw new Error(
           `expected a digit after the full stop at character ${this.i + 1}, ${this.here()}`,
         );
       }
-      while (this.i < this.s.length && isDigit(this.s[this.i]!)) this.i++;
+      while (this.i < this.s.length && isDigit(this.s[this.i])) this.i++;
     }
 
     const text = this.s.slice(start, this.i).join('');
@@ -128,7 +128,7 @@ class Parser extends Scanner {
    */
   private ident(): string {
     const start = this.i;
-    while (this.i < this.s.length && isIdentRune(this.s[this.i]!)) this.i++;
+    while (this.i < this.s.length && isIdentRune(this.s[this.i])) this.i++;
     return this.s.slice(start, this.i).join('');
   }
 }

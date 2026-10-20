@@ -59,8 +59,8 @@ export function read(
 
   const s =
     header === 'first'
-      ? new Sheet(name, headerOf(rows[0]!), rows.slice(1))
-      : new Sheet(name, columnNames(rows[0]!.length), rows);
+      ? new Sheet(name, headerOf(rows[0]), rows.slice(1))
+      : new Sheet(name, columnNames(rows[0].length), rows);
   s.source = describe(comma, header, charset);
   return s;
 }

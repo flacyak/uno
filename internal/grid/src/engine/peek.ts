@@ -81,10 +81,10 @@ export async function peekHead(
     // off, so it is dropped. Every row returned is a whole one.
     const stop =
       starts.length > rows
-        ? starts[rows]! // the extra start bounds the last wanted row
+        ? starts[rows] // the extra start bounds the last wanted row
         : whole
           ? head.bytes.length
-          : starts[starts.length - 1]!; // drop the cut-off record
+          : starts[starts.length - 1]; // drop the cut-off record
     records = format.decode(head.bytes.subarray(starts[0], stop));
   }
 

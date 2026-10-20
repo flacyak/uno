@@ -66,7 +66,7 @@ function stored(
   if (w === undefined) {
     // A short row ends before this column, so the cell is "" as it stands.
     if (col >= source.length) return '';
-    let v = source[col]!;
+    let v = source[col];
     if (runs !== undefined) for (const r of runs) v = applyProgram(r.prog, v);
     return v;
   }
@@ -99,7 +99,7 @@ export function finish(
   row: number,
   source: readonly string[],
 ): Finished {
-  return finishRows(schema, row, [source])[0]!;
+  return finishRows(schema, row, [source])[0];
 }
 
 /**
@@ -144,7 +144,7 @@ export function finishRows(
   const columns: Columns = {
     column(name) {
       const c = schema.indexOf(name);
-      return c === undefined ? undefined : shown.map((row) => row[c]!);
+      return c === undefined ? undefined : shown.map((row) => row[c]);
     },
   };
   for (const c of order) {
@@ -154,8 +154,7 @@ export function finishRows(
       columns,
     );
     for (let i = 0; i < shown.length; i++) {
-      shown[i]![c] =
-        errors[i] === undefined ? formatValue(values[i]!) : ERR_CELL;
+      shown[i][c] = errors[i] === undefined ? formatValue(values[i]) : ERR_CELL;
     }
   }
   return out;

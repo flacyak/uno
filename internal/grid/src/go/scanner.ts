@@ -19,7 +19,7 @@ export class Scanner {
   }
 
   space(): void {
-    while (this.i < this.s.length && isSpace(this.s[this.i]!)) this.i++;
+    while (this.i < this.s.length && isSpace(this.s[this.i])) this.i++;
   }
 
   accept(r: string): boolean {
@@ -57,7 +57,7 @@ export class Scanner {
     if (this.i < this.s.length) {
       this.refuse(
         src,
-        `unexpected ${quote(this.s[this.i]!)} at character ${this.i + 1}`,
+        `unexpected ${quote(this.s[this.i])} at character ${this.i + 1}`,
       );
     }
     return out;

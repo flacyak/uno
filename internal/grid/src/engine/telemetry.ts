@@ -169,7 +169,7 @@ function add(total: Total, value: number): void {
   switch (total.kind) {
     case 'duration': {
       const over = DURATION_BOUNDS.findIndex((bound) => value <= bound);
-      total.buckets[over === -1 ? DURATION_BOUNDS.length : over]!++;
+      total.buckets[over === -1 ? DURATION_BOUNDS.length : over]++;
       total.count++;
       total.sum += value;
       return;
@@ -379,7 +379,7 @@ function setOf(
     const value = pasted(variable, env[variable]);
     if (value !== '') return { variable, value };
   }
-  return { variable: variables[0]!, value: '' };
+  return { variable: variables[0], value: '' };
 }
 
 /**
