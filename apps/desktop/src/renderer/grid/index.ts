@@ -8,6 +8,7 @@
 
 import "./grid.css";
 
+import { insertedIn, movedTo } from "@engine";
 import { m } from "@paraglide/messages";
 import type { InputStrategy } from "@renderer/input/strategy";
 import { NOTHING, changeOf, isJump, replay, showing, target } from "@renderer/keys";
@@ -17,7 +18,7 @@ import type { Action, Caret, Change, Motion, Pending } from "@renderer/keys";
 import { num } from "@renderer/locale";
 import { clamp } from "./metrics.ts";
 import { columnLabel } from "./rows.ts";
-import type { Cell, GridEvents, Rows, ShellAction } from "./rows.ts";
+import type { Cell, Column, GridEvents, Rows, ShellAction } from "./rows.ts";
 
 /** Actions the grid carries out itself. */
 type GridAction = Exclude<Action, ShellAction>;
@@ -31,6 +32,8 @@ interface Marks {
   readonly named: Map<string, Cell>;
   /** Where the last jump started, for ''. */
   before: Cell | undefined;
+  /** The columns the cells are numbered among. */
+  columns: readonly Column[];
 }
 
 export class Grid {
@@ -92,6 +95,8 @@ export class Grid {
       this.selRow = 0;
       this.selCol = 0;
     }
+    // A source shown again may have found columns while it was hidden.
+    if (source !== undefined) caughtUp(this.marks, source.columns);
     this.view.show(source, keep);
   }
 
@@ -112,8 +117,17 @@ export class Grid {
     return marks;
   }
 
-  /** Redraws the header and the visible rows. */
+  /**
+   * Redraws the header and the visible rows. Columns a source found since it
+   * was drawn go in before the ones it supplies, so the selection and each
+   * mark on one of those move with it and stay on their cell.
+   */
   refresh(): void {
+    const source = this.source;
+    if (source !== undefined) {
+      this.selCol = movedTo(this.selCol, insertedIn(this.view.drawn, source.columns));
+      caughtUp(this.marks, source.columns);
+    }
     this.view.refresh();
   }
 
@@ -414,5 +428,18 @@ export class Grid {
 }
 
 function noMarks(): Marks {
-  return { named: new Map(), before: undefined };
+  return { named: new Map(), before: undefined, columns: [] };
+}
+
+/**
+ * caughtUp moves each of `marks` past the columns its source found since
+ * they were numbered, which go in before the ones it supplies, and numbers
+ * them among `columns` from here on.
+ */
+function caughtUp(marks: Marks, columns: readonly Column[]): void {
+  const inserted = insertedIn(marks.columns, columns);
+  const moved = ({ row, col }: Cell): Cell => ({ row, col: movedTo(col, inserted) });
+  for (const [name, cell] of marks.named) marks.named.set(name, moved(cell));
+  if (marks.before !== undefined) marks.before = moved(marks.before);
+  marks.columns = columns;
 }
