@@ -1,7 +1,7 @@
-import { quote } from "../go/index.ts";
-import { parse as parseNumber } from "../num/index.ts";
-import type { Formula, Node } from "./ast.ts";
-import { text } from "./ast.ts";
+import { quote } from '../go/index.ts';
+import { parse as parseNumber } from '../num/index.ts';
+import type { Formula, Node } from './ast.ts';
+import { text } from './ast.ts';
 
 /**
  * Row is one row of cells, read by column name. `value` returns the cell as
@@ -48,7 +48,7 @@ export interface Columns {
 export function evaluateColumn(f: Formula, n: number, src: Columns): Column {
   const errors: (Error | undefined)[] = Array.from({ length: n });
   if (f.root === undefined) {
-    const err = new EmptyFormulaError("the formula is empty");
+    const err = new EmptyFormulaError('the formula is empty');
     for (let i = 0; i < n; i++) errors[i] = err;
     return { values: new Float64Array(n), errors };
   }
@@ -77,10 +77,10 @@ function evalNode(
   errors: (Error | undefined)[],
 ): Float64Array {
   switch (n.kind) {
-    case "num":
+    case 'num':
       return new Float64Array(count).fill(n.value);
 
-    case "col": {
+    case 'col': {
       const out = new Float64Array(count);
       const cells = src.column(n.name);
       if (cells === undefined) {
@@ -90,40 +90,42 @@ function evalNode(
       }
       for (let i = 0; i < count; i++) {
         if (errors[i] !== undefined) continue;
-        const raw = cells[i] ?? "";
+        const raw = cells[i] ?? '';
         const v = parseNumber(raw);
         if (v === undefined) {
-          errors[i] = new NotNumberError(`${n.name} = ${quote(raw)}: not a number`);
+          errors[i] = new NotNumberError(
+            `${n.name} = ${quote(raw)}: not a number`,
+          );
         } else out[i] = v;
       }
       return out;
     }
 
-    case "group":
+    case 'group':
       return evalNode(n.inner, count, src, errors);
 
-    case "unary": {
+    case 'unary': {
       const out = evalNode(n.operand, count, src, errors);
       for (let i = 0; i < count; i++) out[i] = -out[i]!;
       return out;
     }
 
-    case "binary": {
+    case 'binary': {
       // Both operands are fresh arrays, so the result is written over the
       // left one.
       const left = evalNode(n.left, count, src, errors);
       const right = evalNode(n.right, count, src, errors);
       switch (n.op) {
-        case "+":
+        case '+':
           for (let i = 0; i < count; i++) left[i] = left[i]! + right[i]!;
           return left;
-        case "-":
+        case '-':
           for (let i = 0; i < count; i++) left[i] = left[i]! - right[i]!;
           return left;
-        case "*":
+        case '*':
           for (let i = 0; i < count; i++) left[i] = left[i]! * right[i]!;
           return left;
-        case "/": {
+        case '/': {
           // A zero divisor is an error. The error names the divisor
           // expression, and one Error object is shared by every failing row
           // in the block. A row that already failed keeps its first error.

@@ -18,13 +18,16 @@ export interface Refusal {
 }
 
 /** Opening a ref through a FileHandler. */
-export const OPENS: Refusal = { cannot: "opens it", can: "reads" };
+export const OPENS: Refusal = { cannot: 'opens it', can: 'reads' };
 
 /** Opening a ref of several files as one. */
-export const JOINS: Refusal = { cannot: "opens several files as one", can: "reads" };
+export const JOINS: Refusal = {
+  cannot: 'opens several files as one',
+  can: 'reads',
+};
 
 /** Browsing a path through a Lister. */
-export const BROWSES: Refusal = { cannot: "browses it", can: "browses" };
+export const BROWSES: Refusal = { cannot: 'browses it', can: 'browses' };
 
 /**
  * claim returns the first plugin for which `owns` is true. When none is, it
@@ -40,8 +43,8 @@ export function claim<T extends Named>(
   if (found !== undefined) return found;
 
   // An empty plugin list reads as "nothing".
-  const kinds = plugins.map((p) => p.label).join(", ");
+  const kinds = plugins.map((p) => p.label).join(', ');
   throw new Error(
-    `${what}: nothing here ${refusal.cannot} · this build ${refusal.can} ${kinds === "" ? "nothing" : kinds}`,
+    `${what}: nothing here ${refusal.cannot} · this build ${refusal.can} ${kinds === '' ? 'nothing' : kinds}`,
   );
 }

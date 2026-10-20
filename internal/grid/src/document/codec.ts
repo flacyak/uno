@@ -1,5 +1,5 @@
-import { Zip, deflateSync, unzipSync } from "fflate";
-import type { ZipInputFile } from "fflate";
+import { Zip, deflateSync, unzipSync } from 'fflate';
+import type { ZipInputFile } from 'fflate';
 
 import {
   compareStrings,
@@ -8,10 +8,10 @@ import {
   parseTime,
   rfc3339,
   sha256Hex,
-} from "../go/index.ts";
-import { read as ingestRead } from "../ingest/index.ts";
-import { Op } from "../sheet/index.ts";
-import type { Edit, Sheet } from "../sheet/index.ts";
+} from '../go/index.ts';
+import { read as ingestRead } from '../ingest/index.ts';
+import { Op } from '../sheet/index.ts';
+import type { Edit, Sheet } from '../sheet/index.ts';
 import type {
   Document,
   FileSource,
@@ -25,7 +25,7 @@ import type {
   Source,
   SourcePart,
   State,
-} from "./document.ts";
+} from './document.ts';
 import {
   BASE_VERSION,
   FORMAT_VERSION,
@@ -45,10 +45,10 @@ import {
   sourceEntry,
   sourceId,
   storedPath,
-} from "./document.ts";
-import { baseOf } from "./path.ts";
+} from './document.ts';
+import { baseOf } from './path.ts';
 
-const decoder = new TextDecoder("utf-8");
+const decoder = new TextDecoder('utf-8');
 const encoder = new TextEncoder();
 
 /**
@@ -56,7 +56,11 @@ const encoder = new TextEncoder();
  * source whose bytes the file carries. The engine opens each pointed-at
  * source. `name` is used only in error messages.
  */
-export function readDocument(name: string, bytes: Uint8Array, at = ""): Document {
+export function readDocument(
+  name: string,
+  bytes: Uint8Array,
+  at = '',
+): Document {
   const doc = readContainer(name, bytes, at);
 
   // Each carried source is read the way a dropped file is, then its log is
@@ -65,8 +69,12 @@ export function readDocument(name: string, bytes: Uint8Array, at = ""): Document
   for (const src of doc.sources) {
     const raw = src.raw;
     if (raw === undefined) continue;
-    const sheet = blamed(`${name}: embedded ${src.name}`, () => ingestRead(src.name, raw));
-    blamed(`${name}: replaying edits to ${src.name}`, () => sheet.replay(logOf(doc.log, src.id)));
+    const sheet = blamed(`${name}: embedded ${src.name}`, () =>
+      ingestRead(src.name, raw),
+    );
+    blamed(`${name}: replaying edits to ${src.name}`, () =>
+      sheet.replay(logOf(doc.log, src.id)),
+    );
     sheets.set(src.id, sheet);
   }
   return { ...doc, sheets };
@@ -80,14 +88,20 @@ export function readDocument(name: string, bytes: Uint8Array, at = ""): Document
  * `at` is where the .uno is. Relative pointers are resolved from it. With
  * `at` empty, a relative pointer is returned as written.
  */
-export function readContainer(name: string, bytes: Uint8Array, at = ""): Document {
-  const entries = blamed(`${name} is not a readable .uno file`, () => unzipSync(bytes));
+export function readContainer(
+  name: string,
+  bytes: Uint8Array,
+  at = '',
+): Document {
+  const entries = blamed(`${name} is not a readable .uno file`, () =>
+    unzipSync(bytes),
+  );
 
   const manifest = readJSON(name, entries, MANIFEST_ENTRY);
 
   // The format is checked before anything else is parsed, so a newer file is
   // refused as a newer file.
-  const format = asNumber(asRecord(manifest)["format"]);
+  const format = asNumber(asRecord(manifest)['format']);
   if (format > FORMAT_VERSION) {
     throw new Error(
       `${name} was saved by a newer uno (format ${format}, this build reads ${FORMAT_VERSION}). Update uno to open it`,
@@ -96,7 +110,10 @@ export function readContainer(name: string, bytes: Uint8Array, at = ""): Documen
   const m = parseManifest(name, manifest);
 
   const log = readLog(name, entries, m);
-  const { active, states } = parseState(readJSON(name, entries, m.sheet.entry), m);
+  const { active, states } = parseState(
+    readJSON(name, entries, m.sheet.entry),
+    m,
+  );
   const sources: Held[] = m.sources.map((src) => {
     const state = states.get(src.id) ?? { active: { row: 0, col: 0 } };
     return src.parts === undefined
@@ -104,7 +121,14 @@ export function readContainer(name: string, bytes: Uint8Array, at = ""): Documen
       : heldParts(src, state, at);
   });
 
-  return { manifest: m, sources, active, log, extra: readExtra(entries, m), at };
+  return {
+    manifest: m,
+    sources,
+    active,
+    log,
+    extra: readExtra(entries, m),
+    at,
+  };
 }
 
 /** heldFile builds the in-memory form of one file source: its carried bytes,
@@ -119,11 +143,11 @@ function heldFile(
   return {
     id: src.id,
     name: src.name,
-    raw: src.entry === "" ? undefined : carriedBytes(name, entries, src),
-    path: src.path === "" ? undefined : resolvedPath(src.path, at),
+    raw: src.entry === '' ? undefined : carriedBytes(name, entries, src),
+    path: src.path === '' ? undefined : resolvedPath(src.path, at),
     bytes: src.bytes,
-    version: src.version === "" ? undefined : src.version,
-    connection: src.connection === "" ? undefined : src.connection,
+    version: src.version === '' ? undefined : src.version,
+    connection: src.connection === '' ? undefined : src.connection,
     rows: src.rows,
     cols: src.cols,
     state,
@@ -141,7 +165,7 @@ function carriedBytes(
   src: FileSource,
 ): Uint8Array {
   const raw = readEntry(name, entries, src.entry);
-  if (src.sha256 !== "" && sha256Hex(raw) !== src.sha256) {
+  if (src.sha256 !== '' && sha256Hex(raw) !== src.sha256) {
     throw new Error(
       `${name}: ${src.entry} is not the ${src.name} the manifest describes: its sha256 does not match, so the file is damaged`,
     );
@@ -155,14 +179,14 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
   return {
     id: src.id,
     name: src.name,
-    connection: src.connection === "" ? undefined : src.connection,
+    connection: src.connection === '' ? undefined : src.connection,
     parts: src.parts.map((part): HeldPart => {
       const path = resolvedPath(part.path, at);
       return {
-        name: part.name === "" ? baseOf(path) : part.name,
+        name: part.name === '' ? baseOf(path) : part.name,
         path,
         bytes: part.bytes,
-        version: part.version === "" ? undefined : part.version,
+        version: part.version === '' ? undefined : part.version,
         skip: part.skip,
         unterminated: part.unterminated,
       };
@@ -186,7 +210,8 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
  * keeps the first save's `created` and callers can report what was written.
  */
 export function writeDocument(d: Document): Uint8Array {
-  if (d.sources.length === 0) throw new Error("a workspace with no sources has nothing to save");
+  if (d.sources.length === 0)
+    throw new Error('a workspace with no sources has nothing to save');
   checkLog(d);
   const m = manifestFor(d);
   const single = m.format < SOURCES_VERSION;
@@ -195,7 +220,10 @@ export function writeDocument(d: Document): Uint8Array {
   const mtime = m.modified ?? new Date();
 
   const entries: Entry[] = [
-    { name: MANIFEST_ENTRY, bytes: encoder.encode(formatJSON(manifestJSON(m))) },
+    {
+      name: MANIFEST_ENTRY,
+      bytes: encoder.encode(formatJSON(manifestJSON(m))),
+    },
   ];
   d.sources.forEach((src, i) => {
     const { entry: named, sha256 } = m.sources[i]!;
@@ -204,7 +232,10 @@ export function writeDocument(d: Document): Uint8Array {
     }
   });
   entries.push(
-    { name: STATE_ENTRY, bytes: encoder.encode(formatJSON(stateJSON(d, single))) },
+    {
+      name: STATE_ENTRY,
+      bytes: encoder.encode(formatJSON(stateJSON(d, single))),
+    },
     { name: LOG_ENTRY, bytes: encoder.encode(formatLog(d.log, single)) },
   );
 
@@ -281,7 +312,8 @@ function pack(entries: readonly Entry[], mtime: Date): Uint8Array {
 
   const kept = new Map<string, Deflated>();
   for (const { name, bytes, key } of entries) {
-    const entry = (key === undefined ? undefined : deflated.get(key)) ?? squeeze(bytes);
+    const entry =
+      (key === undefined ? undefined : deflated.get(key)) ?? squeeze(bytes);
     if (key !== undefined) kept.set(key, entry);
     const file: ZipInputFile = {
       filename: name,
@@ -338,8 +370,10 @@ function crc32(bytes: Uint8Array): number {
 function checkLog(d: Document): void {
   const ids = new Set<string>();
   for (const src of d.sources) {
-    if (src.id === "") throw new Error(`${src.name} has no id to log its edits under`);
-    if (ids.has(src.id)) throw new Error(`two sources are both called ${src.id}`);
+    if (src.id === '')
+      throw new Error(`${src.name} has no id to log its edits under`);
+    if (ids.has(src.id))
+      throw new Error(`two sources are both called ${src.id}`);
     if (src.parts !== undefined) {
       checkParts(src);
     } else if ((src.raw === undefined) === (src.path === undefined)) {
@@ -354,9 +388,12 @@ function checkLog(d: Document): void {
   }
   for (const l of d.log) {
     if (!ids.has(l.source))
-      throw new Error(`edit ${l.edit.seq} names ${l.source}, which is not a source here`);
+      throw new Error(
+        `edit ${l.edit.seq} names ${l.source}, which is not a source here`,
+      );
   }
-  if (!ids.has(d.active)) throw new Error(`the active source ${d.active} is not a source here`);
+  if (!ids.has(d.active))
+    throw new Error(`the active source ${d.active} is not a source here`);
 }
 
 /**
@@ -364,9 +401,10 @@ function checkLog(d: Document): void {
  * is "".
  */
 function checkParts(src: HeldParts): void {
-  if (src.parts.length === 0) throw new Error(`${src.name} has no parts to point at`);
+  if (src.parts.length === 0)
+    throw new Error(`${src.name} has no parts to point at`);
   src.parts.forEach((part, i) => {
-    if (part.path === "") {
+    if (part.path === '') {
       throw new Error(
         `${src.name}: ${part.name} (part ${i + 1} of ${src.parts.length}) has no path to point at`,
       );
@@ -393,7 +431,9 @@ function manifestFor(d: Document): Manifest {
     modified,
     created: d.manifest.created ?? modified,
     sources: d.sources.map((src) =>
-      src.parts === undefined ? fileSource(src, single, d.at) : partsSource(src, d.at),
+      src.parts === undefined
+        ? fileSource(src, single, d.at)
+        : partsSource(src, d.at),
     ),
     sheet: { entry: STATE_ENTRY },
     edits: { count: d.log.length, entry: LOG_ENTRY },
@@ -409,13 +449,17 @@ function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
     id: src.id,
     name: src.name,
     // Connection and version apply to a pointed-at file only.
-    connection: src.path === undefined ? "" : (src.connection ?? ""),
+    connection: src.path === undefined ? '' : (src.connection ?? ''),
     bytes: src.raw?.length ?? src.bytes ?? 0,
-    sha256: src.raw === undefined ? "" : sha256Hex(src.raw),
+    sha256: src.raw === undefined ? '' : sha256Hex(src.raw),
     entry:
-      src.raw === undefined ? "" : single ? sourceEntry(src.name) : sourceEntry(src.name, src.id),
-    path: src.path === undefined ? "" : storedPath(src.path, at),
-    version: src.path === undefined ? "" : (src.version ?? ""),
+      src.raw === undefined
+        ? ''
+        : single
+          ? sourceEntry(src.name)
+          : sourceEntry(src.name, src.id),
+    path: src.path === undefined ? '' : storedPath(src.path, at),
+    version: src.path === undefined ? '' : (src.version ?? ''),
     rows: src.rows,
     cols: src.cols,
   };
@@ -429,13 +473,13 @@ function partsSource(src: HeldParts, at: string): PartsSource {
   return {
     id: src.id,
     name: src.name,
-    connection: src.connection ?? "",
+    connection: src.connection ?? '',
     parts: src.parts.map((part): SourcePart => ({
       // The name is written only when the path's last piece differs from it.
-      name: part.name === baseOf(part.path) ? "" : part.name,
+      name: part.name === baseOf(part.path) ? '' : part.name,
       path: storedPath(part.path, at),
       bytes: part.bytes,
-      version: part.version ?? "",
+      version: part.version ?? '',
       skip: part.skip,
       unterminated: part.unterminated,
     })),
@@ -452,7 +496,10 @@ function partsSource(src: HeldParts, at: string): PartsSource {
  * source, SOURCES_VERSION with more than one source, and otherwise whatever
  * the log needs.
  */
-export function formatFor(sources: readonly Held[], log: readonly Logged[]): number {
+export function formatFor(
+  sources: readonly Held[],
+  log: readonly Logged[],
+): number {
   if (sources.some((s) => s.parts !== undefined)) return PARTS_VERSION;
   if (sources.some((s) => s.path !== undefined)) return POINTED_VERSION;
   if (sources.length > 1) return SOURCES_VERSION;
@@ -478,18 +525,31 @@ export function versionFor(edits: readonly Edit[]): number {
 
 // -------------------------------------------------------------- reading
 
-function readEntry(name: string, entries: Record<string, Uint8Array>, entry: string): Uint8Array {
-  if (entry === "") {
-    throw new Error(`${name}: the manifest names no entry for this part of the file`);
+function readEntry(
+  name: string,
+  entries: Record<string, Uint8Array>,
+  entry: string,
+): Uint8Array {
+  if (entry === '') {
+    throw new Error(
+      `${name}: the manifest names no entry for this part of the file`,
+    );
   }
   const b = entries[entry];
-  if (b === undefined) throw new Error(`${name}: ${entry}: no such entry in this file`);
+  if (b === undefined)
+    throw new Error(`${name}: ${entry}: no such entry in this file`);
   return b;
 }
 
-function readJSON(name: string, entries: Record<string, Uint8Array>, entry: string): unknown {
+function readJSON(
+  name: string,
+  entries: Record<string, Uint8Array>,
+  entry: string,
+): unknown {
   const b = readEntry(name, entries, entry);
-  return blamed(`${name}: ${entry}`, (): unknown => JSON.parse(decoder.decode(b)));
+  return blamed(`${name}: ${entry}`, (): unknown =>
+    JSON.parse(decoder.decode(b)),
+  );
 }
 
 /**
@@ -510,9 +570,13 @@ function blamed<T>(about: string, read: () => T): T {
  * a source outside the manifest, or an edit numbered out of turn: each
  * source's edits must be numbered 1, 2, 3 in order.
  */
-function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest): Logged[] {
+function readLog(
+  name: string,
+  entries: Record<string, Uint8Array>,
+  m: Manifest,
+): Logged[] {
   const entry = m.edits.entry;
-  const lines = decoder.decode(readEntry(name, entries, entry)).split("\n");
+  const lines = decoder.decode(readEntry(name, entries, entry)).split('\n');
   const ids = new Set(m.sources.map((s) => s.id));
   // A log written before format 4 had only one source, so its lines omit it.
   const only = m.sources.length === 1 ? m.sources[0]!.id : undefined;
@@ -521,7 +585,7 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
   const counted = new Map<string, number>();
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (line.trim() === "") continue;
+    if (line.trim() === '') continue;
     const where = `${name}: ${entry} line ${i + 1}`;
 
     let raw: unknown;
@@ -532,11 +596,11 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
       throw new Error(`${where}: ${(err as Error).message}`);
     }
 
-    const named = asString(asRecord(raw)["source"]);
-    const source = named === "" ? only : named;
+    const named = asString(asRecord(raw)['source']);
+    const source = named === '' ? only : named;
     if (source === undefined || !ids.has(source)) {
       throw new Error(
-        named === ""
+        named === ''
           ? `${where} does not say which source it changed`
           : `${where} changes ${named}, which is not a source in this file`,
       );
@@ -558,13 +622,17 @@ function readLog(name: string, entries: Record<string, Uint8Array>, m: Manifest)
  * readExtra collects the entries beyond those the manifest names, so the
  * next save writes them back.
  */
-function readExtra(entries: Record<string, Uint8Array>, m: Manifest): Map<string, Uint8Array> {
+function readExtra(
+  entries: Record<string, Uint8Array>,
+  m: Manifest,
+): Map<string, Uint8Array> {
   const known = new Set([MANIFEST_ENTRY, m.sheet.entry, m.edits.entry]);
-  for (const s of m.sources) if (s.entry !== undefined && s.entry !== "") known.add(s.entry);
+  for (const s of m.sources)
+    if (s.entry !== undefined && s.entry !== '') known.add(s.entry);
 
   const extra = new Map<string, Uint8Array>();
   for (const [key, bytes] of Object.entries(entries)) {
-    if (known.has(key) || key.endsWith("/")) continue;
+    if (known.has(key) || key.endsWith('/')) continue;
     extra.set(key, bytes);
   }
   return extra;
@@ -573,28 +641,30 @@ function readExtra(entries: Record<string, Uint8Array>, m: Manifest): Map<string
 // ------------------------------------------------------------- shaping
 
 function asRecord(v: unknown): Record<string, unknown> {
-  return typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {};
+  return typeof v === 'object' && v !== null
+    ? (v as Record<string, unknown>)
+    : {};
 }
 
 function asNumber(v: unknown): number {
-  return typeof v === "number" ? v : 0;
+  return typeof v === 'number' ? v : 0;
 }
 
 function asString(v: unknown): string {
-  return typeof v === "string" ? v : "";
+  return typeof v === 'string' ? v : '';
 }
 
 /** Whether a value is a byte count: a whole number of zero or more. */
 function isByteCount(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0;
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
 }
 
 function isText(v: unknown): v is string {
-  return typeof v === "string";
+  return typeof v === 'string';
 }
 
 function isFlag(v: unknown): v is boolean {
-  return typeof v === "boolean";
+  return typeof v === 'boolean';
 }
 
 /** A guard over a field's value, with the wording a refusal uses when it fails. */
@@ -603,9 +673,12 @@ interface Expects<T> {
   not: string;
 }
 
-const TEXT: Expects<string> = { is: isText, not: "is not text" };
-const FLAG: Expects<boolean> = { is: isFlag, not: "is neither true nor false" };
-const BYTE_COUNT: Expects<number> = { is: isByteCount, not: "is not a number of bytes" };
+const TEXT: Expects<string> = { is: isText, not: 'is not text' };
+const FLAG: Expects<boolean> = { is: isFlag, not: 'is neither true nor false' };
+const BYTE_COUNT: Expects<number> = {
+  is: isByteCount,
+  not: 'is not a number of bytes',
+};
 
 /**
  * optional reads a field a record may leave out: undefined when absent, the
@@ -619,7 +692,8 @@ function optional<T>(
   where: string,
 ): T | undefined {
   const v = o[key];
-  if (v !== undefined && !expects.is(v)) throw new Error(`${where}: ${key} ${expects.not}`);
+  if (v !== undefined && !expects.is(v))
+    throw new Error(`${where}: ${key} ${expects.not}`);
   return v;
 }
 
@@ -630,53 +704,59 @@ function optional<T>(
  */
 function parseManifest(name: string, v: unknown): Manifest {
   const o = asRecord(v);
-  const sheet = asRecord(o["sheet"]);
-  const edits = asRecord(o["edits"]);
+  const sheet = asRecord(o['sheet']);
+  const edits = asRecord(o['edits']);
 
-  const listed = o["sources"];
+  const listed = o['sources'];
   let sources: Source[];
   if (Array.isArray(listed)) {
     sources = listed.map((raw) => parseSource(name, asRecord(raw)));
   } else {
-    const s = asRecord(o["source"]);
-    const sourceName = asString(s["name"]);
+    const s = asRecord(o['source']);
+    const sourceName = asString(s['name']);
     sources = [
       {
         id: sourceId(sourceName, []),
         name: sourceName,
-        bytes: asNumber(s["bytes"]),
-        sha256: asString(s["sha256"]),
-        entry: asString(s["entry"]),
-        path: "",
-        version: "",
-        connection: "",
-        rows: asNumber(sheet["rows"]),
-        cols: asNumber(sheet["cols"]),
+        bytes: asNumber(s['bytes']),
+        sha256: asString(s['sha256']),
+        entry: asString(s['entry']),
+        path: '',
+        version: '',
+        connection: '',
+        rows: asNumber(sheet['rows']),
+        cols: asNumber(sheet['cols']),
       },
     ];
   }
 
-  if (sources.length === 0) throw new Error(`${name}: the manifest names no source file`);
+  if (sources.length === 0)
+    throw new Error(`${name}: the manifest names no source file`);
   const ids = new Set<string>();
   for (const s of sources) {
-    if (s.name === "") throw new Error(`${name}: the manifest names no source file`);
-    if (s.id === "") throw new Error(`${name}: ${s.name} has no id in the manifest`);
-    if (ids.has(s.id)) throw new Error(`${name}: two sources are both called ${s.id}`);
+    if (s.name === '')
+      throw new Error(`${name}: the manifest names no source file`);
+    if (s.id === '')
+      throw new Error(`${name}: ${s.name} has no id in the manifest`);
+    if (ids.has(s.id))
+      throw new Error(`${name}: two sources are both called ${s.id}`);
     // A file source needs an entry or a path.
-    if (s.parts === undefined && s.entry === "" && s.path === "") {
-      throw new Error(`${name}: ${s.name} has no entry in this file and no path to the original`);
+    if (s.parts === undefined && s.entry === '' && s.path === '') {
+      throw new Error(
+        `${name}: ${s.name} has no entry in this file and no path to the original`,
+      );
     }
     ids.add(s.id);
   }
 
   return {
-    format: asNumber(o["format"]),
-    generator: asString(o["generator"]),
-    created: parseTime(asString(o["created"])),
-    modified: parseTime(asString(o["modified"])),
+    format: asNumber(o['format']),
+    generator: asString(o['generator']),
+    created: parseTime(asString(o['created'])),
+    modified: parseTime(asString(o['modified'])),
     sources,
-    sheet: { entry: asString(sheet["entry"]) },
-    edits: { count: asNumber(edits["count"]), entry: asString(edits["entry"]) },
+    sheet: { entry: asString(sheet['entry']) },
+    edits: { count: asNumber(edits['count']), entry: asString(edits['entry']) },
   };
 }
 
@@ -688,58 +768,64 @@ function parseManifest(name: string, v: unknown): Manifest {
  */
 function parseSource(name: string, s: Record<string, unknown>): Source {
   const base = {
-    id: asString(s["id"]),
-    name: asString(s["name"]),
-    connection: asString(s["connection"]),
-    rows: asNumber(s["rows"]),
-    cols: asNumber(s["cols"]),
+    id: asString(s['id']),
+    name: asString(s['name']),
+    connection: asString(s['connection']),
+    rows: asNumber(s['rows']),
+    cols: asNumber(s['cols']),
   };
-  if (s["parts"] === undefined) {
+  if (s['parts'] === undefined) {
     return {
       ...base,
-      bytes: asNumber(s["bytes"]),
-      sha256: asString(s["sha256"]),
-      entry: asString(s["entry"]),
-      path: asString(s["path"]),
-      version: asString(s["version"]),
+      bytes: asNumber(s['bytes']),
+      sha256: asString(s['sha256']),
+      entry: asString(s['entry']),
+      path: asString(s['path']),
+      version: asString(s['version']),
     };
   }
 
-  if (base.name === "") throw new Error(`${name}: the manifest names no source file`);
+  if (base.name === '')
+    throw new Error(`${name}: the manifest names no source file`);
   const source = `${name}: ${base.name}`;
 
   // A source has exactly one of a path, an entry or parts.
-  let one = "";
-  if (asString(s["path"]) !== "") one = "a path";
-  else if (asString(s["entry"]) !== "") one = "an entry";
-  if (one !== "") {
+  let one = '';
+  if (asString(s['path']) !== '') one = 'a path';
+  else if (asString(s['entry']) !== '') one = 'an entry';
+  if (one !== '') {
     throw new Error(
       `${source} has both ${one} and parts · a source is one file or several read as one`,
     );
   }
 
-  const listed = s["parts"];
-  if (!Array.isArray(listed)) throw new Error(`${source}: parts is not a list of files`);
+  const listed = s['parts'];
+  if (!Array.isArray(listed))
+    throw new Error(`${source}: parts is not a list of files`);
   if (listed.length === 0) {
-    throw new Error(`${source} has no parts · several files read as one need at least one`);
+    throw new Error(
+      `${source} has no parts · several files read as one need at least one`,
+    );
   }
   const parts = listed.map((raw, i) =>
     parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw),
   );
 
-  const known = KNOWN_HEADER_MODES.map((mode) => JSON.stringify(mode)).join(", ");
-  const header = s["header"];
+  const known = KNOWN_HEADER_MODES.map((mode) => JSON.stringify(mode)).join(
+    ', ',
+  );
+  const header = s['header'];
   if (header === undefined) {
     throw new Error(
       `${source} has parts and no header · it has to say whether they have a header row, as one of ${known}`,
     );
   }
-  if (typeof header !== "string" || !isHeaderMode(header)) {
+  if (typeof header !== 'string' || !isHeaderMode(header)) {
     throw new Error(
       `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
     );
   }
-  const fileColumn = optional(s, "fileColumn", FLAG, source);
+  const fileColumn = optional(s, 'fileColumn', FLAG, source);
   return { ...base, parts, header, fileColumn: fileColumn ?? false };
 }
 
@@ -748,28 +834,30 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
  * known. `skip` and `unterminated` default to 0 and false when missing.
  */
 function parsePart(which: string, raw: unknown): SourcePart {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new Error(`${which} is not a file with a path and bytes`);
   }
   const p = asRecord(raw);
 
-  const path = p["path"];
-  if (typeof path !== "string" || path === "") throw new Error(`${which} has no path`);
+  const path = p['path'];
+  if (typeof path !== 'string' || path === '')
+    throw new Error(`${which} has no path`);
   const part = `${which} (${path})`;
 
-  const bytes = p["bytes"];
-  if (!isByteCount(bytes)) throw new Error(`${part} does not say how many bytes it is`);
+  const bytes = p['bytes'];
+  if (!isByteCount(bytes))
+    throw new Error(`${part} does not say how many bytes it is`);
 
-  const partName = optional(p, "name", TEXT, part);
-  const version = optional(p, "version", TEXT, part);
-  const skip = optional(p, "skip", BYTE_COUNT, part);
-  const unterminated = optional(p, "unterminated", FLAG, part);
+  const partName = optional(p, 'name', TEXT, part);
+  const version = optional(p, 'version', TEXT, part);
+  const skip = optional(p, 'skip', BYTE_COUNT, part);
+  const unterminated = optional(p, 'unterminated', FLAG, part);
 
   return {
-    name: partName ?? "",
+    name: partName ?? '',
     path,
     bytes,
-    version: version ?? "",
+    version: version ?? '',
     skip: skip ?? 0,
     unterminated: unterminated ?? false,
   };
@@ -780,12 +868,15 @@ function parsePart(which: string, raw: unknown): SourcePart {
  * grid's state. From format 4 it names the active source and holds one
  * state per source.
  */
-function parseState(v: unknown, m: Manifest): { active: string; states: Map<string, State> } {
+function parseState(
+  v: unknown,
+  m: Manifest,
+): { active: string; states: Map<string, State> } {
   const o = asRecord(v);
   const first = m.sources[0]!.id;
   const states = new Map<string, State>();
 
-  const sheets = o["sheets"];
+  const sheets = o['sheets'];
   if (!Array.isArray(sheets)) {
     states.set(first, parseSheetState(o));
     return { active: first, states };
@@ -793,21 +884,26 @@ function parseState(v: unknown, m: Manifest): { active: string; states: Map<stri
 
   for (const raw of sheets) {
     const s = asRecord(raw);
-    states.set(asString(s["source"]), parseSheetState(s));
+    states.set(asString(s['source']), parseSheetState(s));
   }
-  const named = asString(o["source"]);
-  return { active: m.sources.some((s) => s.id === named) ? named : first, states };
+  const named = asString(o['source']);
+  return {
+    active: m.sources.some((s) => s.id === named) ? named : first,
+    states,
+  };
 }
 
 function parseSheetState(o: Record<string, unknown>): State {
-  const active = asRecord(o["active"]);
-  const state: State = { active: { row: asNumber(active["row"]), col: asNumber(active["col"]) } };
+  const active = asRecord(o['active']);
+  const state: State = {
+    active: { row: asNumber(active['row']), col: asNumber(active['col']) },
+  };
 
-  const refs = o["columnFormulas"];
+  const refs = o['columnFormulas'];
   if (Array.isArray(refs)) {
     const out = refs.map((r) => {
       const e = asRecord(r);
-      return { col: asNumber(e["col"]), ref: asString(e["ref"]) };
+      return { col: asNumber(e['col']), ref: asString(e['ref']) };
     });
     if (out.length > 0) state.columnFormulas = out;
   }
@@ -821,18 +917,19 @@ function parseSheetState(o: Record<string, unknown>): State {
  */
 function parseEdit(where: string, v: unknown): Edit {
   const o = asRecord(v);
-  for (const key of ["seq", "row", "col"] as const) {
-    if (!Number.isInteger(o[key])) throw new Error(`${where}: ${key} is not a whole number`);
+  for (const key of ['seq', 'row', 'col'] as const) {
+    if (!Number.isInteger(o[key]))
+      throw new Error(`${where}: ${key} is not a whole number`);
   }
   const e: Edit = {
-    seq: asNumber(o["seq"]),
-    op: asString(o["op"]) as Op,
-    row: asNumber(o["row"]),
-    col: asNumber(o["col"]),
-    now: asString(o["now"]),
+    seq: asNumber(o['seq']),
+    op: asString(o['op']) as Op,
+    row: asNumber(o['row']),
+    col: asNumber(o['col']),
+    now: asString(o['now']),
   };
-  const was = o["was"];
-  if (typeof was === "string" && was !== "") e.was = was;
+  const was = o['was'];
+  if (typeof was === 'string' && was !== '') e.was = was;
   return e;
 }
 
@@ -858,7 +955,12 @@ function manifestJSON(m: Manifest): unknown {
     const s = m.sources[0]!;
     return {
       ...head,
-      source: { name: s.name, bytes: s.bytes, sha256: s.sha256, entry: s.entry },
+      source: {
+        name: s.name,
+        bytes: s.bytes,
+        sha256: s.sha256,
+        entry: s.entry,
+      },
       sheet: { rows: s.rows, cols: s.cols, entry: m.sheet.entry },
       edits,
     };
@@ -873,17 +975,24 @@ function manifestJSON(m: Manifest): unknown {
  */
 function sourceJSON(s: Source): unknown {
   if (s.parts !== undefined) {
-    const parts = s.parts.map((p) => omitempty(p, "name", "version", "skip", "unterminated"));
-    return { ...omitempty(s, "connection", "fileColumn"), parts };
+    const parts = s.parts.map((p) =>
+      omitempty(p, 'name', 'version', 'skip', 'unterminated'),
+    );
+    return { ...omitempty(s, 'connection', 'fileColumn'), parts };
   }
-  return omitempty(s, "connection", "sha256", "entry", "path", "version");
+  return omitempty(s, 'connection', 'sha256', 'entry', 'path', 'version');
 }
 
 /** omitempty returns `o` with each of `keys` dropped where its value is "",
  * 0 or false. */
-function omitempty<T extends object>(o: T, ...keys: Array<keyof T>): Partial<T> {
+function omitempty<T extends object>(
+  o: T,
+  ...keys: Array<keyof T>
+): Partial<T> {
   const empty = new Set<PropertyKey>(keys);
-  const kept = Object.entries(o).filter(([k, v]) => !empty.has(k) || Boolean(v));
+  const kept = Object.entries(o).filter(
+    ([k, v]) => !empty.has(k) || Boolean(v),
+  );
   return Object.fromEntries(kept) as Partial<T>;
 }
 
@@ -891,16 +1000,24 @@ function stateJSON(d: Document, single: boolean): unknown {
   if (single) return sheetStateJSON(d.sources[0]!.state);
   return {
     source: d.active,
-    sheets: d.sources.map((s) => ({ source: s.id, ...sheetStateJSON(s.state) })),
+    sheets: d.sources.map((s) => ({
+      source: s.id,
+      ...sheetStateJSON(s.state),
+    })),
   };
 }
 
-function sheetStateJSON(s: State): { active: State["active"]; columnFormulas?: unknown } {
+function sheetStateJSON(s: State): {
+  active: State['active'];
+  columnFormulas?: unknown;
+} {
   return {
     active: s.active,
     // Written only when a column is bound.
     columnFormulas:
-      s.columnFormulas !== undefined && s.columnFormulas.length > 0 ? s.columnFormulas : undefined,
+      s.columnFormulas !== undefined && s.columnFormulas.length > 0
+        ? s.columnFormulas
+        : undefined,
   };
 }
 
@@ -912,14 +1029,14 @@ function editJSON(l: Logged, single: boolean): unknown {
     op: e.op,
     row: e.row,
     col: e.col,
-    was: e.was !== undefined && e.was !== "" ? e.was : undefined,
+    was: e.was !== undefined && e.was !== '' ? e.was : undefined,
     now: e.now,
   };
 }
 
 /** formatJSON indents with two spaces and ends with a newline. */
 function formatJSON(v: unknown): string {
-  return JSON.stringify(v, undefined, 2) + "\n";
+  return JSON.stringify(v, undefined, 2) + '\n';
 }
 
 /**
@@ -927,5 +1044,5 @@ function formatJSON(v: unknown): string {
  * replays up to its last complete line.
  */
 function formatLog(log: readonly Logged[], single: boolean): string {
-  return log.map((l) => JSON.stringify(editJSON(l, single)) + "\n").join("");
+  return log.map((l) => JSON.stringify(editJSON(l, single)) + '\n').join('');
 }

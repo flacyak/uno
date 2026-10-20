@@ -6,12 +6,12 @@
 // Every message is plain data, so it works over an Electron MessagePortMain,
 // a Web Worker, or a MessageChannel.
 
-import type { AuthMode, Connection, RoleTrust } from "../library/index.ts";
-import type { Change } from "../pattern/index.ts";
-import type { Said } from "../said/index.ts";
-import type { Edit, Kind, Op } from "../sheet/index.ts";
-import type { Entry, FileRef, Listing, SingleRef } from "../store/index.ts";
-import type { Tried, Unconnected } from "../store/s3.ts";
+import type { AuthMode, Connection, RoleTrust } from '../library/index.ts';
+import type { Change } from '../pattern/index.ts';
+import type { Said } from '../said/index.ts';
+import type { Edit, Kind, Op } from '../sheet/index.ts';
+import type { Entry, FileRef, Listing, SingleRef } from '../store/index.ts';
+import type { Tried, Unconnected } from '../store/s3.ts';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -157,7 +157,7 @@ export interface FindRequest {
   /** 1 looks down, -1 up. */
   dir: 1 | -1;
   /** Match a cell that fails to parse as its column's kind, or one whose text contains `text`. */
-  match: { t: "unparsed" } | { t: "text"; text: string };
+  match: { t: 'unparsed' } | { t: 'text'; text: string };
 }
 
 export interface Found {
@@ -247,51 +247,51 @@ export type Request =
    * Add a file to the workspace: read its header and begin indexing. A .uno
    * opens every source it holds, and only into an empty workspace.
    */
-  | { t: "open"; id: number; ref: SourceRef }
+  | { t: 'open'; id: number; ref: SourceRef }
   /** Remove a source from the workspace, and its edits from the log. */
-  | { t: "remove"; id: number; source: string }
+  | { t: 'remove'; id: number; source: string }
   /**
    * Point a source at a different file. The source keeps its id, edits and
    * place in the log. The log is replayed over the new file.
    */
-  | { t: "relink"; id: number; source: string; ref: SourceRef }
+  | { t: 'relink'; id: number; source: string; ref: SourceRef }
   /**
    * Add files at the end of a source that reads several files as one. Every
    * existing row keeps its number, so the log is unchanged.
    */
-  | { t: "append"; id: number; source: string; parts: SingleRef[] }
+  | { t: 'append'; id: number; source: string; parts: SingleRef[] }
   /** Rows by position, with the log applied. Fewer where the index stops short. */
-  | { t: "rows"; id: number; source: string; first: number; count: number }
-  | { t: "edit"; id: number; source: string; edit: EditRequest }
+  | { t: 'rows'; id: number; source: string; first: number; count: number }
+  | { t: 'edit'; id: number; source: string; edit: EditRequest }
   /** Take back the source's last edit. */
-  | { t: "undo"; id: number; source: string }
+  | { t: 'undo'; id: number; source: string }
   /** Record again the edit that undo last took back. */
-  | { t: "redo"; id: number; source: string }
+  | { t: 'redo'; id: number; source: string }
   /** The next matching row in a column, searched in the file. */
-  | { t: "find"; id: number; source: string; find: FindRequest }
+  | { t: 'find'; id: number; source: string; find: FindRequest }
   /** One page of a folder or prefix listing. Names a path, since it runs ahead of any source. */
-  | { t: "list"; id: number; path: string; cursor?: string }
+  | { t: 'list'; id: number; path: string; cursor?: string }
   /** Size and version of a path, from its metadata alone. */
-  | { t: "stat"; id: number; path: string }
+  | { t: 'stat'; id: number; path: string }
   /**
    * A preview of a file, read apart from the workspace. Names a ref, which
    * covers a dropped file as well as a path.
    */
-  | { t: "peek"; id: number; ref: SourceRef }
+  | { t: 'peek'; id: number; ref: SourceRef }
   /** Reload the connections this engine signs in through and return them. */
-  | { t: "connections"; id: number }
+  | { t: 'connections'; id: number }
   /** How this engine signs in to a bucket. */
-  | { t: "signins"; id: number }
+  | { t: 'signins'; id: number }
   /**
    * Try a connection before it is saved: find its bucket's region and list a
    * page of its prefix. The connection is dropped afterwards.
    */
-  | { t: "try"; id: number; connection: Connection }
+  | { t: 'try'; id: number; connection: Connection }
   /** Transform allows edits and runs the recogniser over every source. View is read-only. */
-  | { t: "mode"; transform: boolean }
+  | { t: 'mode'; transform: boolean }
   /** Write the workspace as a .uno. Refused if carried sources total more than limit bytes. */
-  | { t: "save"; id: number; place: Place; limit: number }
-  | { t: "close" };
+  | { t: 'save'; id: number; place: Place; limit: number }
+  | { t: 'close' };
 
 /** RowsPage is a page of rows with the log applied, tagged with the generation they were built at. */
 export interface RowsPage {
@@ -303,27 +303,27 @@ export interface RowsPage {
 }
 
 export type Reply =
-  | { t: "opened"; id: number; added: Opening }
-  | { t: "removed"; id: number }
-  | { t: "relinked"; id: number; opened: Opened }
-  | { t: "appended"; id: number; opened: Opened }
-  | { t: "progress"; source: string; progress: Progress }
-  | ({ t: "rows"; id: number; first: number } & RowsPage)
-  | { t: "changed"; id: number; source: string; changed: Changed }
-  | { t: "found"; id: number; found: Found }
-  | { t: "listed"; id: number; listing: Listing }
-  | { t: "statted"; id: number; entry: Entry }
-  | { t: "peeked"; id: number; peeked: Peeked }
+  | { t: 'opened'; id: number; added: Opening }
+  | { t: 'removed'; id: number }
+  | { t: 'relinked'; id: number; opened: Opened }
+  | { t: 'appended'; id: number; opened: Opened }
+  | { t: 'progress'; source: string; progress: Progress }
+  | ({ t: 'rows'; id: number; first: number } & RowsPage)
+  | { t: 'changed'; id: number; source: string; changed: Changed }
+  | { t: 'found'; id: number; found: Found }
+  | { t: 'listed'; id: number; listing: Listing }
+  | { t: 'statted'; id: number; entry: Entry }
+  | { t: 'peeked'; id: number; peeked: Peeked }
   /** The connections read, and a message for each file that failed to read. */
-  | { t: "loaded"; id: number; loaded: Loaded }
+  | { t: 'loaded'; id: number; loaded: Loaded }
   /** The sign-in modes, profile names and role trust on offer. */
-  | { t: "offered"; id: number; signins: SignIns }
-  | { t: "tried"; id: number; tried: Tried }
+  | { t: 'offered'; id: number; signins: SignIns }
+  | { t: 'tried'; id: number; tried: Tried }
   /** Null when the recogniser finishes with an empty proposal. */
-  | { t: "offer"; source: string; generation: number; offer: Offer | null }
-  | { t: "saved"; id: number; bytes: Uint8Array }
+  | { t: 'offer'; source: string; generation: number; offer: Offer | null }
+  | { t: 'saved'; id: number; bytes: Uint8Array }
   /** Unnumbered, a failure of an index or a pass behind a source. */
-  | { t: "error"; id?: number; source?: string; said: Said };
+  | { t: 'error'; id?: number; source?: string; said: Said };
 
 /** One end of a connection. */
 export interface Port<In, Out> {
@@ -339,9 +339,9 @@ export interface Port<In, Out> {
 /** The part of a web MessagePort this uses. Node's MessagePort has it too. */
 export interface MessagePortLike {
   postMessage(msg: unknown): void;
-  addEventListener(type: "message", fn: (e: { data: unknown }) => void): void;
+  addEventListener(type: 'message', fn: (e: { data: unknown }) => void): void;
   /** Fired once either end has closed. */
-  addEventListener(type: "close", fn: () => void): void;
+  addEventListener(type: 'close', fn: () => void): void;
   start(): void;
   close(): void;
 }
@@ -350,12 +350,12 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
   return {
     post: (msg) => p.postMessage(msg),
     listen: (fn, gone) => {
-      p.addEventListener("message", (e) => fn(e.data as In));
-      if (gone !== undefined) p.addEventListener("close", gone);
+      p.addEventListener('message', (e) => fn(e.data as In));
+      if (gone !== undefined) p.addEventListener('close', gone);
       p.start();
     },
     close: () => p.close(),
   };
 }
 
-export { formatBytes, messageOf } from "../said/index.ts";
+export { formatBytes, messageOf } from '../said/index.ts';

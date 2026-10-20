@@ -12,8 +12,15 @@
 // Each platform lists its providers explicitly; that list is the only
 // registry.
 
-import type { ByteSource, Entry, FileHandler, FileRef, Lister, Listing } from "../store/index.ts";
-import { listWith, openWith, statWith } from "../store/index.ts";
+import type {
+  ByteSource,
+  Entry,
+  FileHandler,
+  FileRef,
+  Lister,
+  Listing,
+} from '../store/index.ts';
+import { listWith, openWith, statWith } from '../store/index.ts';
 
 /**
  * Provider is one kind of place files are: a disk, a bucket, bytes in hand.
@@ -51,7 +58,9 @@ export interface Sources {
  */
 export function sources(providers: readonly Provider[]): Sources {
   const files = providers.map((p) => p.files);
-  const browsers = providers.map((p) => p.browse).filter((b) => b !== undefined);
+  const browsers = providers
+    .map((p) => p.browse)
+    .filter((b) => b !== undefined);
 
   return {
     providers,

@@ -1,5 +1,5 @@
-import { compareStrings } from "../go/index.ts";
-import type { Formula } from "./ast.ts";
+import { compareStrings } from '../go/index.ts';
+import type { Formula } from './ast.ts';
 
 /**
  * Graph is the dependency graph of the bound columns: one node per column,
@@ -17,7 +17,7 @@ export class Graph {
     const deps = f.refs();
     const path = this.wouldCycle(col, deps);
     if (path !== undefined) {
-      throw new Error(`${col} would depend on itself: ${path.join(" → ")}`);
+      throw new Error(`${col} would depend on itself: ${path.join(' → ')}`);
     }
     this.deps.set(col, deps);
   }
@@ -74,7 +74,10 @@ export class Graph {
    * The start set is sorted so the order is stable. The walk ends because
    * bind refuses cycles.
    */
-  private postOrder(from: Iterable<string>, kept: (col: string) => boolean): string[] {
+  private postOrder(
+    from: Iterable<string>,
+    kept: (col: string) => boolean,
+  ): string[] {
     const out: string[] = [];
     const done = new Set<string>();
     const emit = (c: string): void => {
