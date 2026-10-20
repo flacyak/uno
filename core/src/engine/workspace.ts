@@ -54,7 +54,7 @@ import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { View } from './view.ts';
-import type { Carried, Origin, Part } from './view.ts';
+import type { Carried, OpenAsk, Origin, Part } from './view.ts';
 
 /**
  * The largest .uno file read whole. It bounds the container file itself.
@@ -163,6 +163,13 @@ class Absent {
 /** A source in the workspace: a View over its rows, or an Absent. */
 type Source = View | Absent;
 
+/** What Workspace.view opens a ref with, besides the ref. */
+type ViewAsk = Pick<OpenAsk, 'carried' | 'signal'> & {
+  /** Opens every part of several files first, so a missing part fails here
+   * by name. */
+  whole?: boolean;
+};
+
 export class Workspace {
   /** The handlers this engine can open files through. */
   private readonly handlers: readonly FileHandler[];
@@ -231,7 +238,7 @@ export class Workspace {
       // never lists one as opening.
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
-      const view = await this.view(id, ref, undefined, false, signal);
+      const view = await this.view(id, ref, { signal });
       return { opened: [this.keep(view)], showing: id };
     });
   }
@@ -273,7 +280,7 @@ export class Workspace {
       const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, carried, 'parts' in to);
+        view = await this.view(id, to, { carried, whole: 'parts' in to });
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -345,7 +352,9 @@ export class Workspace {
           });
       });
 
-      const view = await this.view(id, ref, { container: '', edits: was.log });
+      const view = await this.view(id, ref, {
+        carried: { container: '', edits: was.log },
+      });
 
       // Swapped only after the new view is open, so a failed append leaves
       // the old source in place.
@@ -433,13 +442,13 @@ export class Workspace {
     try {
       let view: View;
       if (src.parts !== undefined) {
-        view = await this.view(src.id, joinedFrom(src), carried);
+        view = await this.view(src.id, joinedFrom(src), { carried });
       } else if (src.raw === undefined) {
         // By path, pinned to the saved version where there is one.
         view = await this.view(
           src.id,
           fileAt(src.name, src.path ?? '', src.version),
-          carried,
+          { carried },
         );
       } else {
         view = await View.open({
@@ -498,16 +507,13 @@ export class Workspace {
     return ids.size === 1 ? id : undefined;
   }
 
-  /** view opens a ref as a View. With `whole`, every part of a source over
-   * several files is opened first, so a missing part fails here by name.
-   * Aborting `signal` cancels the open. */
+  /** view opens a ref as a View. */
   private async view(
     id: string,
     ref: SourceRef,
-    carried: Carried | undefined,
-    whole = false,
-    signal?: AbortSignal,
+    ask: ViewAsk = {},
   ): Promise<View> {
+    const { carried, whole, signal } = ask;
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
