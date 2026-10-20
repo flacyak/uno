@@ -7,9 +7,9 @@
 // as Contents and become files. Deeper keys are folded into CommonPrefixes
 // and become folders.
 
-import type { Entry, Lister, Listing } from "./list.ts";
-import { PAGE, byPageKey } from "./list.ts";
-import type { S3Options, S3Requests } from "./s3.ts";
+import type { Entry, Lister, Listing } from './list.ts';
+import { PAGE, byPageKey } from './list.ts';
+import type { S3Options, S3Requests } from './s3.ts';
 import {
   answered,
   keyName,
@@ -20,9 +20,9 @@ import {
   s3Url,
   sizeOf,
   versionOf,
-} from "./s3.ts";
-import { readListing, when } from "./s3xml.ts";
-import type { KeyEntry } from "./s3xml.ts";
+} from './s3.ts';
+import { readListing, when } from './s3xml.ts';
+import type { KeyEntry } from './s3xml.ts';
 
 /**
  * s3Lister browses buckets: one ListObjectsV2 per page, and one HEAD per
@@ -31,7 +31,7 @@ import type { KeyEntry } from "./s3xml.ts";
 export function s3Lister(opts: S3Options): Lister {
   const send = s3Requests(opts);
   return {
-    label: "S3",
+    label: 'S3',
     handles: (path) => s3Prefix(path) !== undefined,
     list: (path, cursor) => listPrefix(send, path, cursor),
     stat: (path) => statObject(send, path),
@@ -52,10 +52,12 @@ export interface S3Prefix {
  */
 export function s3Prefix(path: string): S3Prefix | undefined {
   const root = /^s3:\/\/([^/]+)\/?$/i.exec(path.trim());
-  if (root !== null) return { bucket: root[1]!, prefix: "" };
+  if (root !== null) return { bucket: root[1]!, prefix: '' };
 
   const loc = s3Location(path);
-  return loc === undefined ? undefined : { bucket: loc.bucket, prefix: loc.key };
+  return loc === undefined
+    ? undefined
+    : { bucket: loc.bucket, prefix: loc.key };
 }
 
 /**
@@ -74,11 +76,11 @@ async function listPrefix(
   if (where === undefined) throw new Error(`${path}: not a place in S3`);
 
   const res = await send.bucket(where.bucket, {
-    "list-type": "2",
-    delimiter: "/",
-    "max-keys": String(PAGE),
-    ...(where.prefix === "" ? {} : { prefix: where.prefix }),
-    ...(cursor === undefined ? {} : { "continuation-token": cursor }),
+    'list-type': '2',
+    delimiter: '/',
+    'max-keys': String(PAGE),
+    ...(where.prefix === '' ? {} : { prefix: where.prefix }),
+    ...(cursor === undefined ? {} : { 'continuation-token': cursor }),
   });
   if (!res.ok) {
     const who = await send.who({ bucket: where.bucket, key: where.prefix });
@@ -107,7 +109,7 @@ async function listPrefix(
  */
 function folderAt(bucket: string, prefix: string): Entry {
   return {
-    name: keyName(prefix.endsWith("/") ? prefix.slice(0, -1) : prefix),
+    name: keyName(prefix.endsWith('/') ? prefix.slice(0, -1) : prefix),
     path: s3Url({ bucket, key: prefix }),
     folder: true,
   };
@@ -120,10 +122,17 @@ function folderAt(bucket: string, prefix: string): Entry {
  * slash. `version` is the ETag from the listing.
  */
 function fileAt(bucket: string, prefix: string, key: KeyEntry): Entry[] {
-  if (key.key === prefix || key.key.endsWith("/")) return [];
+  if (key.key === prefix || key.key.endsWith('/')) return [];
   // Only the fields keyIn could read are present, so they carry over as is.
   const { key: k, ...facts } = key;
-  return [{ name: keyName(k), path: s3Url({ bucket, key: k }), folder: false, ...facts }];
+  return [
+    {
+      name: keyName(k),
+      path: s3Url({ bucket, key: k }),
+      folder: false,
+      ...facts,
+    },
+  ];
 }
 
 /**
@@ -133,21 +142,21 @@ function fileAt(bucket: string, prefix: string, key: KeyEntry): Entry[] {
 async function statObject(send: S3Requests, path: string): Promise<Entry> {
   const loc = objectAt(path, path);
   const url = s3Url(loc);
-  const head = await send.object(loc, "HEAD", {});
+  const head = await send.object(loc, 'HEAD', {});
   if (!head.ok) throw await refused(send, loc, head);
   const bytes = sizeOf(head, url);
 
   // Read the same way the handler reads it at open: the VersionId where the
   // bucket keeps versions, the ETag otherwise, so the two compare equal.
   const version = versionOf(head.headers);
-  const modified = when(head.headers.get("last-modified"));
+  const modified = when(head.headers.get('last-modified'));
   return {
     name: keyName(loc.key),
     path: url,
     folder: false,
     bytes,
     ...(modified === undefined ? {} : { modified }),
-    ...(version === undefined || version === "" ? {} : { version }),
+    ...(version === undefined || version === '' ? {} : { version }),
   };
 }
 
@@ -159,6 +168,6 @@ async function statObject(send: S3Requests, path: string): Promise<Entry> {
 function cannotList(status: number, who: string): string {
   return answered(status, {
     403: `access denied · ${who} cannot list that bucket (s3:ListBucket)`,
-    404: "no such bucket",
+    404: 'no such bucket',
   });
 }

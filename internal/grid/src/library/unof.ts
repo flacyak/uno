@@ -2,8 +2,8 @@
 // an id, a name, two times, and any keys a later build wrote. Reading and
 // writing it is here once, for the formula and connection codecs.
 
-import { compareStrings, nowTruncated, parseTime } from "../go/index.ts";
-import { FORMAT_VERSION } from "./index.ts";
+import { compareStrings, nowTruncated, parseTime } from '../go/index.ts';
+import { FORMAT_VERSION } from './index.ts';
 
 /** The object a .unof holds, and the format it says it was saved as. */
 export interface Envelope {
@@ -21,13 +21,15 @@ export function readUnof(name: string, text: string): Envelope {
   try {
     raw = JSON.parse(text);
   } catch (err) {
-    throw new Error(`${name} is not a readable .unof file: ${(err as Error).message}`);
+    throw new Error(
+      `${name} is not a readable .unof file: ${(err as Error).message}`,
+    );
   }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new Error(`${name} is not a readable .unof file: not an object`);
   }
   const o = raw as Record<string, unknown>;
-  const format = typeof o["format"] === "number" ? o["format"] : 0;
+  const format = typeof o['format'] === 'number' ? o['format'] : 0;
   if (format > FORMAT_VERSION) {
     throw new Error(
       `${name} was saved by a newer uno (format ${format}, this build reads ${FORMAT_VERSION}). Update uno to open it`,
@@ -47,12 +49,13 @@ export function wrongKind(
   want: string,
   other: { kinds: readonly string[]; is: string; dir: string },
 ): Error {
-  if (typeof kind === "string" && other.kinds.includes(kind)) {
+  if (typeof kind === 'string' && other.kinds.includes(kind)) {
     return new Error(
       `${name} is ${other.is} ("kind": ${JSON.stringify(kind)}), not a ${want} · it belongs in ${other.dir}`,
     );
   }
-  if (kind === undefined) return new Error(`${name} is not a ${want}: it has no kind`);
+  if (kind === undefined)
+    return new Error(`${name} is not a ${want}: it has no kind`);
   return new Error(
     `${name} is not a ${want}: this build does not know kind ${JSON.stringify(kind)}`,
   );
@@ -61,15 +64,18 @@ export function wrongKind(
 /** textOf returns a field as text, or "" when absent. */
 export function textOf(o: Record<string, unknown>, key: string): string {
   const v = o[key];
-  return typeof v === "string" ? v : "";
+  return typeof v === 'string' ? v : '';
 }
 
 /**
  * timeOf returns a field as a Date, or undefined when absent.
  */
-export function timeOf(o: Record<string, unknown>, key: string): Date | undefined {
+export function timeOf(
+  o: Record<string, unknown>,
+  key: string,
+): Date | undefined {
   const v = o[key];
-  return parseTime(typeof v === "string" ? v : undefined);
+  return parseTime(typeof v === 'string' ? v : undefined);
 }
 
 /**
@@ -105,11 +111,15 @@ export function writeExtra(
  * stamp sets format to FORMAT_VERSION, modified to `now`, and created to
  * `now` when it was unset.
  */
-export function stamp<T extends { format: number; created?: Date; modified?: Date }>(
-  x: T,
-  now: Date = nowTruncated(),
-): T {
-  return { ...x, format: FORMAT_VERSION, modified: now, created: x.created ?? now };
+export function stamp<
+  T extends { format: number; created?: Date; modified?: Date },
+>(x: T, now: Date = nowTruncated()): T {
+  return {
+    ...x,
+    format: FORMAT_VERSION,
+    modified: now,
+    created: x.created ?? now,
+  };
 }
 
 /** about runs `check` and rethrows any error with `name` prefixed. */

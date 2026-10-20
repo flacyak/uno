@@ -1,4 +1,4 @@
-import { runes } from "../go/index.ts";
+import { runes } from '../go/index.ts';
 
 /** MAX_DIFF is the longest value `align` will diff, in code points. */
 export const MAX_DIFF = 128;
@@ -26,30 +26,33 @@ export function align(a: string[], b: string[]): Alignment | undefined {
   // lcs[i][j] is the LCS length of a[i:] and b[j:], so the reconstruction
   // below walks forwards.
   const lcs: number[][] = [];
-  for (let i = 0; i <= a.length; i++) lcs.push(Array.from({ length: b.length + 1 }, () => 0));
+  for (let i = 0; i <= a.length; i++)
+    lcs.push(Array.from({ length: b.length + 1 }, () => 0));
 
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {
       lcs[i]![j] =
-        a[i] === b[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+        a[i] === b[j]
+          ? lcs[i + 1]![j + 1]! + 1
+          : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
     }
   }
 
   const dels: Run[] = [];
   const ins: Run[] = [];
-  let d = "";
-  let n = "";
+  let d = '';
+  let n = '';
   let dAt = 0;
   let nAt = 0;
 
   const flush = (): void => {
     if (d.length > 0) {
       dels.push({ text: d, at: dAt });
-      d = "";
+      d = '';
     }
     if (n.length > 0) {
       ins.push({ text: n, at: nAt });
-      n = "";
+      n = '';
     }
   };
 
@@ -60,7 +63,10 @@ export function align(a: string[], b: string[]): Alignment | undefined {
       flush();
       i++;
       j++;
-    } else if (j === b.length || (i < a.length && lcs[i + 1]![j]! >= lcs[i]![j + 1]!)) {
+    } else if (
+      j === b.length ||
+      (i < a.length && lcs[i + 1]![j]! >= lcs[i]![j + 1]!)
+    ) {
       if (d.length === 0) dAt = i;
       d += a[i]!;
       i++;

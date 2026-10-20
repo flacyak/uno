@@ -2,19 +2,19 @@
 // an unknown kind, fields of the wrong type. For each: the handler returns,
 // every rejection is caught, and a request with a usable id gets one reply.
 
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
-import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test } from 'vite-plus/test';
 
-import { BAND_ROWS, ROWS_AT_MOST, serve } from "../../src/engine/index.ts";
-import type { Port, Reply, Request } from "../../src/engine/index.ts";
-import { sources } from "../../src/plugin/index.ts";
-import { blobProvider } from "../../src/store/index.ts";
-import { diskProvider } from "../../src/store/node.ts";
-import { FIXTURE, TINY, connect } from "./harness.ts";
+import { BAND_ROWS, ROWS_AT_MOST, serve } from '../../src/engine/index.ts';
+import type { Port, Reply, Request } from '../../src/engine/index.ts';
+import { sources } from '../../src/plugin/index.ts';
+import { blobProvider } from '../../src/store/index.ts';
+import { diskProvider } from '../../src/store/node.ts';
+import { FIXTURE, TINY, connect } from './harness.ts';
 
 /** An engine served on a port the test drives directly. */
 interface Probe {
@@ -57,8 +57,11 @@ function probe(): Probe {
 
 /** A message's id, if it is a number. */
 function idOf(msg: unknown): number | undefined {
-  if (typeof msg !== "object" || msg === null || !("id" in msg)) return undefined;
-  return typeof msg.id === "number" && !Number.isNaN(msg.id) ? msg.id : undefined;
+  if (typeof msg !== 'object' || msg === null || !('id' in msg))
+    return undefined;
+  return typeof msg.id === 'number' && !Number.isNaN(msg.id)
+    ? msg.id
+    : undefined;
 }
 
 /** The most turns `answered` waits for replies. */
@@ -84,11 +87,11 @@ const onUnhandled = (reason: unknown): void => {
 
 beforeEach(() => {
   unhandled = [];
-  process.on("unhandledRejection", onUnhandled);
+  process.on('unhandledRejection', onUnhandled);
 });
 
 afterEach(() => {
-  process.off("unhandledRejection", onUnhandled);
+  process.off('unhandledRejection', onUnhandled);
 });
 
 /** settle waits `turns` turns of the event loop. */
@@ -97,12 +100,20 @@ async function settle(turns = 5): Promise<void> {
 }
 
 function withId(replies: Reply[], id: number): Reply[] {
-  return replies.filter((r) => "id" in r && r.id === id);
+  return replies.filter((r) => 'id' in r && r.id === id);
 }
 
-const NOT_OBJECTS: unknown[] = [null, undefined, 42, "open", [], () => {}, true];
+const NOT_OBJECTS: unknown[] = [
+  null,
+  undefined,
+  42,
+  'open',
+  [],
+  () => {},
+  true,
+];
 
-test("a message that is not an object is answered or ignored, never thrown on", async () => {
+test('a message that is not an object is answered or ignored, never thrown on', async () => {
   const p = probe();
   for (const msg of NOT_OBJECTS) p.send(msg);
   await settle();
@@ -110,48 +121,48 @@ test("a message that is not an object is answered or ignored, never thrown on", 
   expect(unhandled).toEqual([]);
 });
 
-test("an object with no kind, or a kind that does not exist, is refused by id", async () => {
+test('an object with no kind, or a kind that does not exist, is refused by id', async () => {
   const p = probe();
   p.send({});
   p.send({ id: 1 });
-  p.send({ t: "explode", id: 2 });
+  p.send({ t: 'explode', id: 2 });
   p.send({ t: 3, id: 3 });
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   for (const id of [1, 2, 3]) {
     const got = withId(p.replies, id);
-    expect(got.map((r) => r.t)).toEqual(["error"]);
+    expect(got.map((r) => r.t)).toEqual(['error']);
   }
 });
 
-test("a request of a known kind with its fields wrong is refused, once, by id", async () => {
+test('a request of a known kind with its fields wrong is refused, once, by id', async () => {
   const p = probe();
   const bad: unknown[] = [
-    { t: "open", id: 10 },
-    { t: "open", id: 11, ref: null },
-    { t: "open", id: 12, ref: { name: "x.csv", path: { nested: true } } },
-    { t: "open", id: 13, ref: 7 },
-    { t: "rows", id: 14, source: "nope", first: 0, count: 10 },
-    { t: "rows", id: 15 },
-    { t: "edit", id: 16, source: "nope" },
-    { t: "find", id: 17, source: "nope" },
-    { t: "list", id: 18, path: { a: 1 } },
-    { t: "stat", id: 19, path: 42 },
-    { t: "stat", id: 20 },
-    { t: "peek", id: 21 },
-    { t: "peek", id: 22, ref: "sales-q3.csv" },
-    { t: "peek", id: 23, ref: { name: "x", path: "/definitely/not/here.csv" } },
-    { t: "connections", id: 24 },
-    { t: "signins", id: 25 },
-    { t: "try", id: 26, connection: null },
-    { t: "save", id: 27 },
-    { t: "save", id: 28, place: null, limit: 0 },
-    { t: "relink", id: 29 },
-    { t: "append", id: 30, source: "nope", parts: "x" },
-    { t: "undo", id: 31 },
-    { t: "redo", id: 32, source: 5 },
-    { t: "remove", id: 33, source: ["a"] },
+    { t: 'open', id: 10 },
+    { t: 'open', id: 11, ref: null },
+    { t: 'open', id: 12, ref: { name: 'x.csv', path: { nested: true } } },
+    { t: 'open', id: 13, ref: 7 },
+    { t: 'rows', id: 14, source: 'nope', first: 0, count: 10 },
+    { t: 'rows', id: 15 },
+    { t: 'edit', id: 16, source: 'nope' },
+    { t: 'find', id: 17, source: 'nope' },
+    { t: 'list', id: 18, path: { a: 1 } },
+    { t: 'stat', id: 19, path: 42 },
+    { t: 'stat', id: 20 },
+    { t: 'peek', id: 21 },
+    { t: 'peek', id: 22, ref: 'sales-q3.csv' },
+    { t: 'peek', id: 23, ref: { name: 'x', path: '/definitely/not/here.csv' } },
+    { t: 'connections', id: 24 },
+    { t: 'signins', id: 25 },
+    { t: 'try', id: 26, connection: null },
+    { t: 'save', id: 27 },
+    { t: 'save', id: 28, place: null, limit: 0 },
+    { t: 'relink', id: 29 },
+    { t: 'append', id: 30, source: 'nope', parts: 'x' },
+    { t: 'undo', id: 31 },
+    { t: 'redo', id: 32, source: 5 },
+    { t: 'remove', id: 33, source: ['a'] },
   ];
   for (const msg of bad) p.send(msg);
   await answered(p);
@@ -162,77 +173,107 @@ test("a request of a known kind with its fields wrong is refused, once, by id", 
     expect(
       got.map((r) => r.t),
       `request ${id}`,
-    ).toEqual(["error"]);
+    ).toEqual(['error']);
   }
 });
 
-test("an id that is not a number still gets a reply it can be matched by, and never a throw", async () => {
+test('an id that is not a number still gets a reply it can be matched by, and never a throw', async () => {
   const p = probe();
-  p.send({ t: "stat", id: "seven", path: FIXTURE });
-  p.send({ t: "stat", id: -1, path: FIXTURE });
-  p.send({ t: "stat", id: 0, path: FIXTURE });
-  p.send({ t: "stat", id: 2 ** 53, path: FIXTURE });
-  p.send({ t: "stat", id: Number.NaN, path: FIXTURE });
-  p.send({ t: "stat", id: null, path: FIXTURE });
+  p.send({ t: 'stat', id: 'seven', path: FIXTURE });
+  p.send({ t: 'stat', id: -1, path: FIXTURE });
+  p.send({ t: 'stat', id: 0, path: FIXTURE });
+  p.send({ t: 'stat', id: 2 ** 53, path: FIXTURE });
+  p.send({ t: 'stat', id: Number.NaN, path: FIXTURE });
+  p.send({ t: 'stat', id: null, path: FIXTURE });
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   expect(p.replies.length).toBe(6);
 });
 
-test("rows asked with a count that is not a count are refused or answered empty", async () => {
+test('rows asked with a count that is not a count are refused or answered empty', async () => {
   const p = probe();
-  p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
+  p.send({ t: 'open', id: 1, ref: { name: 'sales-q3.csv', path: FIXTURE } });
   await answered(p);
   const opened = withId(p.replies, 1);
-  expect(opened.map((r) => r.t)).toEqual(["opened"]);
-  const source = opened[0]!.t === "opened" ? opened[0]!.added.showing : "";
-  p.send({ t: "mode", transform: true });
+  expect(opened.map((r) => r.t)).toEqual(['opened']);
+  const source = opened[0]!.t === 'opened' ? opened[0]!.added.showing : '';
+  p.send({ t: 'mode', transform: true });
   const bad: unknown[] = [
-    { t: "rows", id: 2, source, first: -1, count: 10 },
-    { t: "rows", id: 3, source, first: 0, count: 1e12 },
-    { t: "rows", id: 4, source, first: 0, count: Number.NaN },
-    { t: "rows", id: 5, source, first: "0", count: "10" },
-    { t: "rows", id: 6, source, first: 1e15, count: 10 },
-    { t: "rows", id: 7, source, first: 0, count: -5 },
-    { t: "rows", id: 8, source, first: 0.5, count: 2.5 },
+    { t: 'rows', id: 2, source, first: -1, count: 10 },
+    { t: 'rows', id: 3, source, first: 0, count: 1e12 },
+    { t: 'rows', id: 4, source, first: 0, count: Number.NaN },
+    { t: 'rows', id: 5, source, first: '0', count: '10' },
+    { t: 'rows', id: 6, source, first: 1e15, count: 10 },
+    { t: 'rows', id: 7, source, first: 0, count: -5 },
+    { t: 'rows', id: 8, source, first: 0.5, count: 2.5 },
     {
-      t: "find",
+      t: 'find',
       id: 9,
       source,
-      find: { col: 999, from: 0, dir: 1, match: { t: "text", text: "a" } },
+      find: { col: 999, from: 0, dir: 1, match: { t: 'text', text: 'a' } },
     },
     {
-      t: "find",
+      t: 'find',
       id: 10,
       source,
-      find: { col: -1, from: 0, dir: 1, match: { t: "text", text: "a" } },
+      find: { col: -1, from: 0, dir: 1, match: { t: 'text', text: 'a' } },
     },
-    { t: "find", id: 11, source, find: { col: 0, from: 0, dir: 1, match: { t: "regex" } } },
     {
-      t: "find",
+      t: 'find',
+      id: 11,
+      source,
+      find: { col: 0, from: 0, dir: 1, match: { t: 'regex' } },
+    },
+    {
+      t: 'find',
       id: 12,
       source,
-      find: { col: 0, from: Number.NaN, dir: 1, match: { t: "unparsed" } },
+      find: { col: 0, from: Number.NaN, dir: 1, match: { t: 'unparsed' } },
     },
-    { t: "find", id: 13, source, find: null },
+    { t: 'find', id: 13, source, find: null },
     {
-      t: "find",
+      t: 'find',
       id: 14,
       source,
-      find: { col: 0, from: 0, dir: 3, match: { t: "text", text: "a" } },
+      find: { col: 0, from: 0, dir: 3, match: { t: 'text', text: 'a' } },
     },
-    { t: "edit", id: 15, source, edit: { op: "set", row: 1e9, col: 0, now: "x" } },
-    { t: "edit", id: 16, source, edit: { op: "set", row: 0, col: 999, now: "x" } },
-    { t: "edit", id: 17, source, edit: { op: "bind", row: 0, col: 0, now: "=nope + 1" } },
-    { t: "edit", id: 18, source, edit: null },
-    { t: "edit", id: 19, source, edit: { op: "nonsense", row: 0, col: 0, now: "x" } },
-    { t: "save", id: 20, place: { source, cells: null, at: "" }, limit: 1e9 },
-    { t: "save", id: 21, place: { source, cells: [], at: "" }, limit: "big" },
-    { t: "remove", id: 22, source },
-    { t: "relink", id: 23, source, ref: { name: "gone.csv", path: "/no/such/file.csv" } },
     {
-      t: "append",
+      t: 'edit',
+      id: 15,
+      source,
+      edit: { op: 'set', row: 1e9, col: 0, now: 'x' },
+    },
+    {
+      t: 'edit',
+      id: 16,
+      source,
+      edit: { op: 'set', row: 0, col: 999, now: 'x' },
+    },
+    {
+      t: 'edit',
+      id: 17,
+      source,
+      edit: { op: 'bind', row: 0, col: 0, now: '=nope + 1' },
+    },
+    { t: 'edit', id: 18, source, edit: null },
+    {
+      t: 'edit',
+      id: 19,
+      source,
+      edit: { op: 'nonsense', row: 0, col: 0, now: 'x' },
+    },
+    { t: 'save', id: 20, place: { source, cells: null, at: '' }, limit: 1e9 },
+    { t: 'save', id: 21, place: { source, cells: [], at: '' }, limit: 'big' },
+    { t: 'remove', id: 22, source },
+    {
+      t: 'relink',
+      id: 23,
+      source,
+      ref: { name: 'gone.csv', path: '/no/such/file.csv' },
+    },
+    {
+      t: 'append',
       id: 24,
       source,
       parts: Array.from({ length: 10_000 }, (_, i) => ({
@@ -240,7 +281,7 @@ test("rows asked with a count that is not a count are refused or answered empty"
         path: `/no/p${i}.csv`,
       })),
     },
-    { t: "rows", id: 25, source, first: 0, count: 3 },
+    { t: 'rows', id: 25, source, first: 0, count: 3 },
   ];
   for (const msg of bad) p.send(msg);
   await answered(p);
@@ -248,31 +289,41 @@ test("rows asked with a count that is not a count are refused or answered empty"
   expect(unhandled).toEqual([]);
   for (let id = 2; id <= 25; id++) {
     const got = withId(p.replies, id);
-    expect(got.length, `request ${id}: ${JSON.stringify(got.map((r) => r.t))}`).toBe(1);
+    expect(
+      got.length,
+      `request ${id}: ${JSON.stringify(got.map((r) => r.t))}`,
+    ).toBe(1);
   }
-  p.send({ t: "close" });
+  p.send({ t: 'close' });
   await answered(p);
 });
 
-test("a peek at what is not a table is refused or answered, and reads a bounded front", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "uno-engine-hostile-"));
-  const empty = join(dir, "empty.csv");
-  const one = join(dir, "one.csv");
-  const binary = join(dir, "binary.csv");
-  await writeFile(empty, "");
-  await writeFile(one, "a");
-  await writeFile(binary, new Uint8Array(Array.from({ length: 4096 }, (_, i) => i % 256)));
+test('a peek at what is not a table is refused or answered, and reads a bounded front', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'uno-engine-hostile-'));
+  const empty = join(dir, 'empty.csv');
+  const one = join(dir, 'one.csv');
+  const binary = join(dir, 'binary.csv');
+  await writeFile(empty, '');
+  await writeFile(one, 'a');
+  await writeFile(
+    binary,
+    new Uint8Array(Array.from({ length: 4096 }, (_, i) => i % 256)),
+  );
   const p = probe();
   const odd: unknown[] = [
-    { t: "peek", id: 1, ref: { name: "empty.csv", path: empty } },
-    { t: "peek", id: 2, ref: { name: "one.csv", path: one } },
-    { t: "peek", id: 3, ref: { name: "binary.csv", path: binary } },
-    { t: "peek", id: 4, ref: { name: "dir", path: dir } },
-    { t: "peek", id: 5, ref: { name: "nul.csv", path: `${dir}/a\0b.csv` } },
-    { t: "peek", id: 6, ref: { name: "sales-q3.csv", path: FIXTURE } },
-    { t: "peek", id: 7, ref: { name: "sales-q3.csv", blob: new Blob([new Uint8Array(1 << 20)]) } },
-    { t: "peek", id: 8, ref: { name: "parts", parts: [], header: "first" } },
-    { t: "peek", id: 9, ref: { name: "parts", parts: null, header: "first" } },
+    { t: 'peek', id: 1, ref: { name: 'empty.csv', path: empty } },
+    { t: 'peek', id: 2, ref: { name: 'one.csv', path: one } },
+    { t: 'peek', id: 3, ref: { name: 'binary.csv', path: binary } },
+    { t: 'peek', id: 4, ref: { name: 'dir', path: dir } },
+    { t: 'peek', id: 5, ref: { name: 'nul.csv', path: `${dir}/a\0b.csv` } },
+    { t: 'peek', id: 6, ref: { name: 'sales-q3.csv', path: FIXTURE } },
+    {
+      t: 'peek',
+      id: 7,
+      ref: { name: 'sales-q3.csv', blob: new Blob([new Uint8Array(1 << 20)]) },
+    },
+    { t: 'peek', id: 8, ref: { name: 'parts', parts: [], header: 'first' } },
+    { t: 'peek', id: 9, ref: { name: 'parts', parts: null, header: 'first' } },
   ];
   for (const msg of odd) p.send(msg);
   await answered(p);
@@ -280,15 +331,18 @@ test("a peek at what is not a table is refused or answered, and reads a bounded 
   expect(unhandled).toEqual([]);
   for (let id = 1; id <= 9; id++) {
     const got = withId(p.replies, id);
-    expect(got.length, `request ${id}: ${JSON.stringify(got.map((r) => r.t))}`).toBe(1);
+    expect(
+      got.length,
+      `request ${id}: ${JSON.stringify(got.map((r) => r.t))}`,
+    ).toBe(1);
   }
   const whole = withId(p.replies, 6)[0]!;
-  expect(whole.t).toBe("peeked");
+  expect(whole.t).toBe('peeked');
 });
 
-test("replies land by id, so a fast answer overtaking a slow one settles the right promise", async () => {
+test('replies land by id, so a fast answer overtaking a slow one settles the right promise', async () => {
   const { engine, done } = connect(TINY);
-  const slow = engine.open({ name: "sales-q3.csv", path: FIXTURE });
+  const slow = engine.open({ name: 'sales-q3.csv', path: FIXTURE });
   const fast = engine.stat(FIXTURE);
   const entry = await fast;
   expect(entry.bytes).toBeGreaterThan(0);
@@ -297,20 +351,35 @@ test("replies land by id, so a fast answer overtaking a slow one settles the rig
   done();
 });
 
-test("a rows or edit request with a number that is not whole is refused, not read as one", async () => {
+test('a rows or edit request with a number that is not whole is refused, not read as one', async () => {
   const p = probe();
-  p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
+  p.send({ t: 'open', id: 1, ref: { name: 'sales-q3.csv', path: FIXTURE } });
   await answered(p);
   const opened = withId(p.replies, 1)[0]!;
-  const source = opened.t === "opened" ? opened.added.showing : "";
+  const source = opened.t === 'opened' ? opened.added.showing : '';
   // A string `first` is refused ahead of any arithmetic with `count`.
-  p.send({ t: "rows", id: 2, source, first: "9", count: 2000 });
-  p.send({ t: "rows", id: 3, source, first: -5, count: 10 });
-  p.send({ t: "rows", id: 4, source, first: 1.5, count: 10 });
+  p.send({ t: 'rows', id: 2, source, first: '9', count: 2000 });
+  p.send({ t: 'rows', id: 3, source, first: -5, count: 10 });
+  p.send({ t: 'rows', id: 4, source, first: 1.5, count: 10 });
   // A string `row` is refused.
-  p.send({ t: "edit", id: 5, source, edit: { op: "set", row: "3", col: 0, now: "x" } });
-  p.send({ t: "edit", id: 6, source, edit: { op: "set", row: 3, col: "0", now: "x" } });
-  p.send({ t: "edit", id: 7, source, edit: { op: "set", row: -2, col: 0, now: "x" } });
+  p.send({
+    t: 'edit',
+    id: 5,
+    source,
+    edit: { op: 'set', row: '3', col: 0, now: 'x' },
+  });
+  p.send({
+    t: 'edit',
+    id: 6,
+    source,
+    edit: { op: 'set', row: 3, col: '0', now: 'x' },
+  });
+  p.send({
+    t: 'edit',
+    id: 7,
+    source,
+    edit: { op: 'set', row: -2, col: 0, now: 'x' },
+  });
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
@@ -318,56 +387,61 @@ test("a rows or edit request with a number that is not whole is refused, not rea
     expect(
       withId(p.replies, id).map((r) => r.t),
       `request ${id}`,
-    ).toEqual(["error"]);
+    ).toEqual(['error']);
   }
   // A whole-number row is accepted once in transform mode.
-  p.send({ t: "mode", transform: true });
-  p.send({ t: "edit", id: 8, source, edit: { op: "set", row: 3, col: 0, now: "x" } });
+  p.send({ t: 'mode', transform: true });
+  p.send({
+    t: 'edit',
+    id: 8,
+    source,
+    edit: { op: 'set', row: 3, col: 0, now: 'x' },
+  });
   await answered(p);
-  expect(withId(p.replies, 8).map((r) => r.t)).toEqual(["changed"]);
-  p.send({ t: "close" });
+  expect(withId(p.replies, 8).map((r) => r.t)).toEqual(['changed']);
+  p.send({ t: 'close' });
   await answered(p);
 });
 
-test("rows asked for more than a band are refused, so no reply holds a file whole", async () => {
+test('rows asked for more than a band are refused, so no reply holds a file whole', async () => {
   expect(BAND_ROWS).toBeLessThanOrEqual(ROWS_AT_MOST);
   const p = probe();
-  p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
+  p.send({ t: 'open', id: 1, ref: { name: 'sales-q3.csv', path: FIXTURE } });
   await answered(p);
   const opened = withId(p.replies, 1)[0]!;
-  const source = opened.t === "opened" ? opened.added.showing : "";
-  p.send({ t: "rows", id: 2, source, first: 0, count: ROWS_AT_MOST });
-  p.send({ t: "rows", id: 3, source, first: 0, count: ROWS_AT_MOST + 1 });
-  p.send({ t: "rows", id: 4, source, first: 0, count: 1e12 });
-  p.send({ t: "rows", id: 5, source, first: 0, count: "2" });
+  const source = opened.t === 'opened' ? opened.added.showing : '';
+  p.send({ t: 'rows', id: 2, source, first: 0, count: ROWS_AT_MOST });
+  p.send({ t: 'rows', id: 3, source, first: 0, count: ROWS_AT_MOST + 1 });
+  p.send({ t: 'rows', id: 4, source, first: 0, count: 1e12 });
+  p.send({ t: 'rows', id: 5, source, first: 0, count: '2' });
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
   const band = withId(p.replies, 2)[0]!;
-  expect(band.t === "rows" && band.rows.length).toBe(ROWS_AT_MOST);
+  expect(band.t === 'rows' && band.rows.length).toBe(ROWS_AT_MOST);
   for (const id of [3, 4, 5]) {
     expect(
       withId(p.replies, id).map((r) => r.t),
       `request ${id}`,
-    ).toEqual(["error"]);
+    ).toEqual(['error']);
   }
-  p.send({ t: "close" });
+  p.send({ t: 'close' });
   await answered(p);
 });
 
-test("requests after a close are refused by id, and a second close is quiet", async () => {
+test('requests after a close are refused by id, and a second close is quiet', async () => {
   const p = probe();
-  p.send({ t: "close" });
-  p.send({ t: "close" });
-  p.send({ t: "open", id: 1, ref: { name: "sales-q3.csv", path: FIXTURE } });
-  p.send({ t: "rows", id: 2, source: "sales-q3", first: 0, count: 10 });
-  p.send({ t: "stat", id: 3, path: FIXTURE });
-  p.send({ t: "mode", transform: "yes" });
-  p.send({ t: "mode" });
+  p.send({ t: 'close' });
+  p.send({ t: 'close' });
+  p.send({ t: 'open', id: 1, ref: { name: 'sales-q3.csv', path: FIXTURE } });
+  p.send({ t: 'rows', id: 2, source: 'sales-q3', first: 0, count: 10 });
+  p.send({ t: 'stat', id: 3, path: FIXTURE });
+  p.send({ t: 'mode', transform: 'yes' });
+  p.send({ t: 'mode' });
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
-  expect(withId(p.replies, 1).map((r) => r.t)).toEqual(["error"]);
-  expect(withId(p.replies, 2).map((r) => r.t)).toEqual(["error"]);
+  expect(withId(p.replies, 1).map((r) => r.t)).toEqual(['error']);
+  expect(withId(p.replies, 2).map((r) => r.t)).toEqual(['error']);
   expect(withId(p.replies, 3).length).toBe(1);
 });

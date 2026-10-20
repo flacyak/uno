@@ -3,9 +3,9 @@
 // The index is two arrays of numbers with one entry per block of rows. The
 // page cache keeps decoded blocks up to a byte budget.
 
-import type { Format } from "../ingest/index.ts";
-import { Refusal } from "../said/index.ts";
-import type { ByteSource } from "../store/index.ts";
+import type { Format } from '../ingest/index.ts';
+import { Refusal } from '../said/index.ts';
+import type { ByteSource } from '../store/index.ts';
 
 export interface Tuning {
   /** Bytes a pass reads at a time. */
@@ -50,7 +50,7 @@ export class RowIndex {
     /** Where the first data record starts. */
     readonly start: number,
     readonly size: number,
-    private readonly tuning: Pick<Tuning, "blockRows" | "blockBytes">,
+    private readonly tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>,
   ) {
     this.scanned = start;
   }
@@ -88,7 +88,10 @@ export class RowIndex {
     if (this.complete) return this.counted;
     const read = this.scanned - this.start;
     if (read <= 0 || this.counted === 0) return this.counted;
-    return Math.max(this.counted, Math.round((this.counted / read) * (this.size - this.start)));
+    return Math.max(
+      this.counted,
+      Math.round((this.counted / read) * (this.size - this.start)),
+    );
   }
 
   /** Returns the block holding a readable row. */
@@ -105,7 +108,8 @@ export class RowIndex {
 
   /** Returns the row range of a block, as [first, end). */
   rowsOf(block: number): [number, number] {
-    const end = block + 1 < this.blocks ? this.firsts[block + 1]! : this.counted;
+    const end =
+      block + 1 < this.blocks ? this.firsts[block + 1]! : this.counted;
     return [this.firsts[block]!, end];
   }
 
@@ -129,7 +133,10 @@ function grow(a: Float64Array<ArrayBuffer>): Float64Array<ArrayBuffer> {
  * recently used block is evicted first.
  */
 export class Pages {
-  private readonly cache = new Map<number, { records: string[][]; bytes: number }>();
+  private readonly cache = new Map<
+    number,
+    { records: string[][]; bytes: number }
+  >();
   private readonly loading = new Map<number, Promise<string[][]>>();
   private kept = 0;
 
@@ -155,7 +162,8 @@ export class Pages {
       const block = this.index.blockOf(row);
       const [from] = this.index.rowsOf(block);
       const records = await this.records(block);
-      for (let i = row - from; i < records.length && row < end; i++, row++) out.push(records[i]!);
+      for (let i = row - from; i < records.length && row < end; i++, row++)
+        out.push(records[i]!);
     }
     return out;
   }
@@ -190,12 +198,14 @@ export class Pages {
   private async decode(block: number): Promise<string[][]> {
     const [start, end] = this.index.bytesOf(block);
     const [from, to] = this.index.rowsOf(block);
-    const records = this.format.decode(await this.source.read(start, end - start));
+    const records = this.format.decode(
+      await this.source.read(start, end - start),
+    );
 
     // A block with a different row count than the index recorded means the
     // file was rewritten while open.
     if (records.length !== to - from) {
-      throw new Refusal({ t: "changed-on-disk", name: this.name });
+      throw new Refusal({ t: 'changed-on-disk', name: this.name });
     }
     return records;
   }

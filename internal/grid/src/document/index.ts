@@ -20,7 +20,7 @@ export {
   sourceEntry,
   sourceId,
   storedPath,
-} from "./document.ts";
+} from './document.ts';
 export type {
   Cell,
   ColumnFormula,
@@ -38,6 +38,19 @@ export type {
   Source,
   SourcePart,
   State,
-} from "./document.ts";
-export { against, baseOf, dirOf, isAbsolute, relativeTo, samePath } from "./path.ts";
-export { formatFor, readContainer, readDocument, versionFor, writeDocument } from "./codec.ts";
+} from './document.ts';
+export {
+  against,
+  baseOf,
+  dirOf,
+  isAbsolute,
+  relativeTo,
+  samePath,
+} from './path.ts';
+export {
+  formatFor,
+  readContainer,
+  readDocument,
+  versionFor,
+  writeDocument,
+} from './codec.ts';

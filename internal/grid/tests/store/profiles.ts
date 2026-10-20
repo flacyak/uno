@@ -1,21 +1,21 @@
 // Two AWS profiles, finance and marketing, each holding the keys to one
 // bucket. Used by signing.test.ts and multifiles.test.ts.
 
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import type { AwsCredentials } from "../../src/store/s3.ts";
-import { HOME_REGION } from "./regions.ts";
+import type { AwsCredentials } from '../../src/store/s3.ts';
+import { HOME_REGION } from './regions.ts';
 
 export const FINANCE: AwsCredentials = {
-  accessKeyId: "AKIDFINANCE",
-  secretAccessKey: "finance/secret",
+  accessKeyId: 'AKIDFINANCE',
+  secretAccessKey: 'finance/secret',
   region: HOME_REGION,
 };
 export const MARKETING: AwsCredentials = {
-  accessKeyId: "AKIDMARKETING",
-  secretAccessKey: "marketing/secret",
+  accessKeyId: 'AKIDMARKETING',
+  secretAccessKey: 'marketing/secret',
   region: HOME_REGION,
 };
 
@@ -24,21 +24,21 @@ export const MARKETING: AwsCredentials = {
  * finance and marketing profiles, and a config file holding `config`. It
  * returns the folder path, for `profilesEnv`.
  */
-export async function twoProfiles(config = ""): Promise<string> {
-  const aws = await mkdtemp(join(tmpdir(), "uno-profiles-aws-"));
+export async function twoProfiles(config = ''): Promise<string> {
+  const aws = await mkdtemp(join(tmpdir(), 'uno-profiles-aws-'));
   await writeFile(
-    join(aws, "credentials"),
+    join(aws, 'credentials'),
     [
-      "[finance]",
+      '[finance]',
       `aws_access_key_id = ${FINANCE.accessKeyId}`,
       `aws_secret_access_key = ${FINANCE.secretAccessKey}`,
-      "[marketing]",
+      '[marketing]',
       `aws_access_key_id = ${MARKETING.accessKeyId}`,
       `aws_secret_access_key = ${MARKETING.secretAccessKey}`,
-      "",
-    ].join("\n"),
+      '',
+    ].join('\n'),
   );
-  await writeFile(join(aws, "config"), config);
+  await writeFile(join(aws, 'config'), config);
   return aws;
 }
 
@@ -53,8 +53,8 @@ export function profilesEnv(
 ): Record<string, string | undefined> {
   return {
     HOME: aws,
-    AWS_CONFIG_FILE: join(aws, "config"),
-    AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
+    AWS_CONFIG_FILE: join(aws, 'config'),
+    AWS_SHARED_CREDENTIALS_FILE: join(aws, 'credentials'),
     AWS_REGION: HOME_REGION,
     AWS_PROFILE: undefined,
     AWS_DEFAULT_PROFILE: undefined,

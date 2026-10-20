@@ -2,7 +2,7 @@
 // as what it was, bytes ride beside the JSON uncopied, and a bad frame is
 // refused in a sentence. The last tests run a real engine over the frames.
 
-import { expect, test } from "vite-plus/test";
+import { expect, test } from 'vite-plus/test';
 
 import {
   Engine,
@@ -13,7 +13,7 @@ import {
   messagePort,
   serve,
   socketPort,
-} from "../../src/engine/index.ts";
+} from '../../src/engine/index.ts';
 import type {
   Frame,
   MessagePortLike,
@@ -22,15 +22,15 @@ import type {
   SourceHandle,
   SourceRef,
   WebSocketLike,
-} from "../../src/engine/index.ts";
-import { sources } from "../../src/plugin/index.ts";
-import { blobProvider } from "../../src/store/index.ts";
-import { diskProvider } from "../../src/store/node.ts";
-import { FIXTURE, bytes, sales } from "./harness.ts";
+} from '../../src/engine/index.ts';
+import { sources } from '../../src/plugin/index.ts';
+import { blobProvider } from '../../src/store/index.ts';
+import { diskProvider } from '../../src/store/node.ts';
+import { FIXTURE, bytes, sales } from './harness.ts';
 
 /** join turns a frame into the one value a socket would deliver. */
 async function join(frame: Frame): Promise<string | Uint8Array> {
-  if (typeof frame === "string") return frame;
+  if (typeof frame === 'string') return frame;
   return new Uint8Array(await new Blob(frame).arrayBuffer());
 }
 
@@ -38,18 +38,24 @@ async function across(message: unknown): Promise<unknown> {
   return decode(await join(encode(message)));
 }
 
-test("plain data is one text frame, and reads back equal", async () => {
-  const message = { t: "rows", id: 7, first: 0, rows: [["a", "1"]], raws: [null] };
+test('plain data is one text frame, and reads back equal', async () => {
+  const message = {
+    t: 'rows',
+    id: 7,
+    first: 0,
+    rows: [['a', '1']],
+    raws: [null],
+  };
   const frame = encode(message);
-  expect(typeof frame).toBe("string");
+  expect(typeof frame).toBe('string');
   expect(await across(message)).toEqual(message);
 });
 
-test("a Date, a Map and the numbers JSON has no word for come back as themselves", async () => {
+test('a Date, a Map and the numbers JSON has no word for come back as themselves', async () => {
   const message = {
-    modified: new Date("2026-03-04T05:06:07.008Z"),
+    modified: new Date('2026-03-04T05:06:07.008Z'),
     never: new Date(Number.NaN),
-    extra: new Map<string, unknown>([["tags", ["a", new Date(0)]]]),
+    extra: new Map<string, unknown>([['tags', ['a', new Date(0)]]]),
     ratio: Number.NaN,
     most: Number.POSITIVE_INFINITY,
     least: Number.NEGATIVE_INFINITY,
@@ -65,78 +71,100 @@ test("a Date, a Map and the numbers JSON has no word for come back as themselves
   expect(back.holes).toEqual([undefined, null]);
 });
 
-test("an undefined field is an absent one", async () => {
+test('an undefined field is an absent one', async () => {
   expect(await across({ a: 1, b: undefined })).toEqual({ a: 1 });
 });
 
-test("bytes ride beside the JSON, as the pieces they were handed over as", async () => {
+test('bytes ride beside the JSON, as the pieces they were handed over as', async () => {
   const saved = new Uint8Array([0, 1, 2, 253, 254, 255]);
-  const frame = encode({ t: "saved", id: 3, bytes: saved });
+  const frame = encode({ t: 'saved', id: 3, bytes: saved });
   expect(Array.isArray(frame)).toBe(true);
   // The same array, by identity.
   expect(frame).toContain(saved);
-  expect(await across({ t: "saved", id: 3, bytes: saved })).toEqual({
-    t: "saved",
+  expect(await across({ t: 'saved', id: 3, bytes: saved })).toEqual({
+    t: 'saved',
     id: 3,
     bytes: saved,
   });
 });
 
-test("a Blob crosses with its bytes and its type, and several keep their order", async () => {
-  const first = new Blob(["a,b\n1,2\n"], { type: "text/csv" });
-  const second = new Blob(["c\n3\n"]);
+test('a Blob crosses with its bytes and its type, and several keep their order', async () => {
+  const first = new Blob(['a,b\n1,2\n'], { type: 'text/csv' });
+  const second = new Blob(['c\n3\n']);
   const frame = encode({
     parts: [
-      { name: "one.csv", blob: first },
-      { name: "two.csv", blob: second },
+      { name: 'one.csv', blob: first },
+      { name: 'two.csv', blob: second },
     ],
   });
   expect(frame).toContain(first);
 
-  const back = decode(await join(frame)) as { parts: Array<{ name: string; blob: Blob }> };
-  expect(back.parts.map((p) => p.name)).toEqual(["one.csv", "two.csv"]);
-  expect(back.parts[0]!.blob.type).toBe("text/csv");
-  expect(await back.parts[0]!.blob.text()).toBe("a,b\n1,2\n");
-  expect(await back.parts[1]!.blob.text()).toBe("c\n3\n");
+  const back = decode(await join(frame)) as {
+    parts: Array<{ name: string; blob: Blob }>;
+  };
+  expect(back.parts.map((p) => p.name)).toEqual(['one.csv', 'two.csv']);
+  expect(back.parts[0]!.blob.type).toBe('text/csv');
+  expect(await back.parts[0]!.blob.text()).toBe('a,b\n1,2\n');
+  expect(await back.parts[1]!.blob.text()).toBe('c\n3\n');
 });
 
 test("an object of somebody's own that uses the tag as a key is still theirs", async () => {
-  const extra = new Map<string, unknown>([["note", { $: "date", v: 0 }]]);
-  expect(await across({ extra, plain: { $: "bytes", i: 0 } })).toEqual({
+  const extra = new Map<string, unknown>([['note', { $: 'date', v: 0 }]]);
+  expect(await across({ extra, plain: { $: 'bytes', i: 0 } })).toEqual({
     extra,
-    plain: { $: "bytes", i: 0 },
+    plain: { $: 'bytes', i: 0 },
   });
 });
 
-test("a key called __proto__ is a key, and reaches no prototype", () => {
-  const back = decode('{"__proto__":{"polluted":true}}') as Record<string, unknown>;
+test('a key called __proto__ is a key, and reaches no prototype', () => {
+  const back = decode('{"__proto__":{"polluted":true}}') as Record<
+    string,
+    unknown
+  >;
   expect(Object.getPrototypeOf(back)).toBe(Object.prototype);
-  expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
-  expect(Object.keys(back)).toEqual(["__proto__"]);
+  expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+  expect(Object.keys(back)).toEqual(['__proto__']);
 });
 
-test("what cannot be written down is refused at the sender, by name", () => {
+test('what cannot be written down is refused at the sender, by name', () => {
   class Sheet {}
-  expect(() => encode({ sheet: new Sheet() })).toThrow("a Sheet cannot cross to an engine");
-  expect(() => encode({ fn: () => 1 })).toThrow("a function cannot cross to an engine");
+  expect(() => encode({ sheet: new Sheet() })).toThrow(
+    'a Sheet cannot cross to an engine',
+  );
+  expect(() => encode({ fn: () => 1 })).toThrow(
+    'a function cannot cross to an engine',
+  );
 });
 
-test("a frame this did not write is refused in a sentence", async () => {
-  expect(() => decode("{not json")).toThrow("a frame that is not JSON");
+test('a frame this did not write is refused in a sentence', async () => {
+  expect(() => decode('{not json')).toThrow('a frame that is not JSON');
   expect(() => decode('{"$":"sheet"}')).toThrow('written down as "sheet"');
-  expect(() => decode('{"$":"bytes","i":0}')).toThrow("naming bytes its frame does not hold");
-  expect(() => decode(new Uint8Array([0, 0]))).toThrow("too short to hold a message");
-  expect(() => decode(new Uint8Array([0, 0, 0, 9, 123]))).toThrow("shorter than its own header");
+  expect(() => decode('{"$":"bytes","i":0}')).toThrow(
+    'naming bytes its frame does not hold',
+  );
+  expect(() => decode(new Uint8Array([0, 0]))).toThrow(
+    'too short to hold a message',
+  );
+  expect(() => decode(new Uint8Array([0, 0, 0, 9, 123]))).toThrow(
+    'shorter than its own header',
+  );
 
-  const whole = (await join(encode({ bytes: new Uint8Array(8) }))) as Uint8Array;
-  expect(() => decode(whole.subarray(0, whole.length - 1))).toThrow("do not add up");
+  const whole = (await join(
+    encode({ bytes: new Uint8Array(8) }),
+  )) as Uint8Array;
+  expect(() => decode(whole.subarray(0, whole.length - 1))).toThrow(
+    'do not add up',
+  );
 });
 
-test("frameBytes weighs a binary frame exactly", () => {
+test('frameBytes weighs a binary frame exactly', () => {
   const frame = encode({ blob: new Blob([new Uint8Array(1000)]) });
   const pieces = frame as Array<Uint8Array | Blob>;
   expect(frameBytes(frame)).toBe(
-    pieces.reduce((n, p) => n + (p instanceof Uint8Array ? p.byteLength : p.size), 0),
+    pieces.reduce(
+      (n, p) => n + (p instanceof Uint8Array ? p.byteLength : p.size),
+      0,
+    ),
   );
 });
 
@@ -154,7 +182,7 @@ function socketPair(): [FakeSocket, FakeSocket] {
 }
 
 class FakeSocket implements WebSocketLike {
-  binaryType = "blob";
+  binaryType = 'blob';
   peer: FakeSocket | undefined;
   sent: Array<string | Blob> = [];
   private queue: Promise<void> = Promise.resolve();
@@ -165,7 +193,8 @@ class FakeSocket implements WebSocketLike {
     this.sent.push(data);
     const peer = this.peer;
     this.queue = this.queue.then(async () => {
-      const delivered = typeof data === "string" ? data : await data.arrayBuffer();
+      const delivered =
+        typeof data === 'string' ? data : await data.arrayBuffer();
       for (const fn of peer?.messages ?? []) fn({ data: delivered });
     });
   }
@@ -177,10 +206,13 @@ class FakeSocket implements WebSocketLike {
     });
   }
 
-  addEventListener(type: "message", fn: (e: { data: unknown }) => void): void;
-  addEventListener(type: "close", fn: () => void): void;
-  addEventListener(type: "message" | "close", fn: (e: { data: unknown }) => void): void {
-    if (type === "message") this.messages.push(fn);
+  addEventListener(type: 'message', fn: (e: { data: unknown }) => void): void;
+  addEventListener(type: 'close', fn: () => void): void;
+  addEventListener(
+    type: 'message' | 'close',
+    fn: (e: { data: unknown }) => void,
+  ): void {
+    if (type === 'message') this.messages.push(fn);
     else this.closes.push(() => fn({ data: undefined }));
   }
 }
@@ -188,11 +220,20 @@ class FakeSocket implements WebSocketLike {
 const LIMIT = 1 << 20;
 
 /** An engine served over the fake sockets, with disk and blob providers. */
-function overSockets(limit = LIMIT): { engine: Engine; client: FakeSocket; far: MessagePortLike } {
+function overSockets(limit = LIMIT): {
+  engine: Engine;
+  client: FakeSocket;
+  far: MessagePortLike;
+} {
   const [client, server] = socketPair();
   const far = socketPort(server, limit);
-  serve(messagePort<Request, Reply>(far), sources([diskProvider(), blobProvider()]));
-  const engine = new Engine(messagePort<Reply, Request>(socketPort(client, limit)));
+  serve(
+    messagePort<Request, Reply>(far),
+    sources([diskProvider(), blobProvider()]),
+  );
+  const engine = new Engine(
+    messagePort<Reply, Request>(socketPort(client, limit)),
+  );
   return { engine, client, far };
 }
 
@@ -202,58 +243,71 @@ async function opened(engine: Engine, ref: SourceRef): Promise<SourceHandle> {
   return added.sources[0]!;
 }
 
-test("an engine behind a socket opens a file by path and serves its rows", async () => {
+test('an engine behind a socket opens a file by path and serves its rows', async () => {
   const { engine } = overSockets();
-  const source = await opened(engine, { name: "sales-q3.csv", path: FIXTURE });
-  expect(source.opened.columns.map((c) => c.header)).toEqual(sales.columns.map((c) => c.header));
+  const source = await opened(engine, { name: 'sales-q3.csv', path: FIXTURE });
+  expect(source.opened.columns.map((c) => c.header)).toEqual(
+    sales.columns.map((c) => c.header),
+  );
 
   const { rows } = await source.rows(0, 3);
   expect(rows).toHaveLength(3);
   engine.close();
 });
 
-test("a dropped file crosses as its bytes, and its workspace saves as bytes back", async () => {
+test('a dropped file crosses as its bytes, and its workspace saves as bytes back', async () => {
   const { engine, client } = overSockets();
-  const source = await opened(engine, { name: "sales-q3.csv", blob: new Blob([bytes]) });
+  const source = await opened(engine, {
+    name: 'sales-q3.csv',
+    blob: new Blob([bytes]),
+  });
   expect(source.opened.size).toBe(bytes.byteLength);
   // The open went as a binary frame holding the Blob.
   expect(client.sent.some((frame) => frame instanceof Blob)).toBe(true);
 
-  const saved = await engine.save({ source: source.id, cells: [], at: "" }, LIMIT);
+  const saved = await engine.save(
+    { source: source.id, cells: [], at: '' },
+    LIMIT,
+  );
   expect(saved).toBeInstanceOf(Uint8Array);
   // A .uno is a zip.
   expect([...saved.subarray(0, 2)]).toEqual([0x50, 0x4b]);
   engine.close();
 });
 
-test("a message over the limit is refused where it is sent, and the engine stays up", async () => {
+test('a message over the limit is refused where it is sent, and the engine stays up', async () => {
   const small = 4096;
   const { engine } = overSockets(small);
-  await expect(engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) })).rejects.toThrow(
-    "this engine takes in one message",
-  );
-  const source = await opened(engine, { name: "sales-q3.csv", path: FIXTURE });
+  await expect(
+    engine.open({ name: 'sales-q3.csv', blob: new Blob([bytes]) }),
+  ).rejects.toThrow('this engine takes in one message');
+  const source = await opened(engine, { name: 'sales-q3.csv', path: FIXTURE });
   expect(source.opened.columns.length).toBeGreaterThan(0);
   engine.close();
 });
 
-test("a socket that closes under the client says so once", async () => {
+test('a socket that closes under the client says so once', async () => {
   const { engine, far } = overSockets();
   const said: string[] = [];
   engine.onError = (heard) => said.push(english(heard));
   far.close();
-  await expect.poll(() => said).toEqual(["the connection to the engine closed"]);
+  await expect
+    .poll(() => said)
+    .toEqual(['the connection to the engine closed']);
 });
 
-test("a socket that closes with a request out refuses it, and every request after it", async () => {
+test('a socket that closes with a request out refuses it, and every request after it', async () => {
   const { engine, far } = overSockets();
   const said: string[] = [];
   engine.onError = (heard) => said.push(english(heard));
-  const opening = engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) });
+  const opening = engine.open({
+    name: 'sales-q3.csv',
+    blob: new Blob([bytes]),
+  });
   far.close();
-  await expect(opening).rejects.toThrow("the connection to the engine closed");
-  await expect(engine.open({ name: "sales-q3.csv", blob: new Blob([bytes]) })).rejects.toThrow(
-    "the connection to the engine closed",
-  );
-  expect(said).toEqual(["the connection to the engine closed"]);
+  await expect(opening).rejects.toThrow('the connection to the engine closed');
+  await expect(
+    engine.open({ name: 'sales-q3.csv', blob: new Blob([bytes]) }),
+  ).rejects.toThrow('the connection to the engine closed');
+  expect(said).toEqual(['the connection to the engine closed']);
 });

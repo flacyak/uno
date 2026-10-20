@@ -1,13 +1,13 @@
 // The expression tree: a discriminated union of five node kinds.
 
-import { compareStrings } from "../go/index.ts";
+import { compareStrings } from '../go/index.ts';
 
 /**
  * NumLit is a number literal. `text` is how it was written and `value` is
  * what it parsed to.
  */
 export interface NumLit {
-  readonly kind: "num";
+  readonly kind: 'num';
   readonly text: string;
   readonly value: number;
 }
@@ -18,7 +18,7 @@ export interface NumLit {
  * underscore.
  */
 export interface ColRef {
-  readonly kind: "col";
+  readonly kind: 'col';
   readonly name: string;
 }
 
@@ -27,8 +27,8 @@ export interface ColRef {
  * already applied. Written brackets are a Group.
  */
 export interface Binary {
-  readonly kind: "binary";
-  readonly op: "+" | "-" | "*" | "/";
+  readonly kind: 'binary';
+  readonly op: '+' | '-' | '*' | '/';
   readonly left: Node;
   readonly right: Node;
 }
@@ -37,7 +37,7 @@ export interface Binary {
  * Unary is a leading minus, the only prefix operator.
  */
 export interface Unary {
-  readonly kind: "unary";
+  readonly kind: 'unary';
   readonly operand: Node;
 }
 
@@ -46,7 +46,7 @@ export interface Unary {
  * renders them back.
  */
 export interface Group {
-  readonly kind: "group";
+  readonly kind: 'group';
   readonly inner: Node;
 }
 
@@ -58,34 +58,34 @@ export type Node = NumLit | ColRef | Binary | Unary | Group;
  */
 export function text(n: Node): string {
   switch (n.kind) {
-    case "num":
+    case 'num':
       return n.text;
-    case "col":
+    case 'col':
       return n.name;
-    case "binary":
-      return text(n.left) + " " + n.op + " " + text(n.right);
-    case "unary":
-      return "-" + text(n.operand);
-    case "group":
-      return "(" + text(n.inner) + ")";
+    case 'binary':
+      return text(n.left) + ' ' + n.op + ' ' + text(n.right);
+    case 'unary':
+      return '-' + text(n.operand);
+    case 'group':
+      return '(' + text(n.inner) + ')';
   }
 }
 
 function collectRefs(n: Node, into: Set<string>): void {
   switch (n.kind) {
-    case "num":
+    case 'num':
       return;
-    case "col":
+    case 'col':
       into.add(n.name);
       return;
-    case "binary":
+    case 'binary':
       collectRefs(n.left, into);
       collectRefs(n.right, into);
       return;
-    case "unary":
+    case 'unary':
       collectRefs(n.operand, into);
       return;
-    case "group":
+    case 'group':
       collectRefs(n.inner, into);
       return;
   }
@@ -100,7 +100,7 @@ export class Formula {
 
   /** The text form. "" when the root is undefined. */
   toString(): string {
-    return this.root === undefined ? "" : text(this.root);
+    return this.root === undefined ? '' : text(this.root);
   }
 
   /**

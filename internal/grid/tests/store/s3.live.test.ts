@@ -25,23 +25,33 @@
 //
 // The dot-segment keys are tested only against the stand-in.
 
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, test } from "vite-plus/test";
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, test } from 'vite-plus/test';
 
-import { readContainer } from "../../src/document/index.ts";
-import { awsCredentials, diskProvider } from "../../src/store/node.ts";
-import { s3Files, s3Location, s3Provider } from "../../src/store/s3.ts";
-import { bytes, connect, indexed, openOne, sales, sheetRows, widened } from "../engine/harness.ts";
-import { LAST_ROW, ROWS, UNITS } from "../testdata/sales-q3.ts";
-import { AWKWARD_KEYS } from "./awkward.ts";
+import { readContainer } from '../../src/document/index.ts';
+import { awsCredentials, diskProvider } from '../../src/store/node.ts';
+import { s3Files, s3Location, s3Provider } from '../../src/store/s3.ts';
+import {
+  bytes,
+  connect,
+  indexed,
+  openOne,
+  sales,
+  sheetRows,
+  widened,
+} from '../engine/harness.ts';
+import { LAST_ROW, ROWS, UNITS } from '../testdata/sales-q3.ts';
+import { AWKWARD_KEYS } from './awkward.ts';
 
-const URLS = (process.env["UNO_S3_LIVE"] ?? "").split(/[\s,]+/).filter((u) => u !== "");
+const URLS = (process.env['UNO_S3_LIVE'] ?? '')
+  .split(/[\s,]+/)
+  .filter((u) => u !== '');
 /** An s3:// prefix holding a copy of the fixture under each awkward key. */
-const PREFIX = (process.env["UNO_S3_LIVE_KEYS"] ?? "").trim();
+const PREFIX = (process.env['UNO_S3_LIVE_KEYS'] ?? '').trim();
 /** One copy of the fixture, in a bucket outside the credentials' own region. */
-const ELSEWHERE = (process.env["UNO_S3_LIVE_ELSEWHERE"] ?? "").trim();
+const ELSEWHERE = (process.env['UNO_S3_LIVE_ELSEWHERE'] ?? '').trim();
 
 /** A real round trip is slower than localhost. */
 const TIMEOUT = 120_000;
@@ -73,15 +83,15 @@ function watched(seen: Exchange[], strip = false): typeof fetch {
     const res = await fetch(input, init);
     const refused = res.status === 301 || res.status === 400;
     seen.push({
-      method: init?.method ?? "GET",
-      range: headers["range"],
+      method: init?.method ?? 'GET',
+      range: headers['range'],
       status: res.status,
-      region: res.headers.get("x-amz-bucket-region") ?? undefined,
+      region: res.headers.get('x-amz-bucket-region') ?? undefined,
       body: refused ? await refusalText(res) : undefined,
     });
     if (!strip) return res;
     const kept = new Headers(res.headers);
-    kept.delete("x-amz-bucket-region");
+    kept.delete('x-amz-bucket-region');
     return new Response(res.body, {
       status: res.status,
       statusText: res.statusText,
@@ -100,10 +110,10 @@ async function refusalText(res: Response): Promise<string> {
 /** The three shapes s3.ts reads a region out of a refusal's XML. */
 const REGION_IN_BODY = /<Region>|expecting '|<Endpoint>/i;
 
-describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
+describe.skipIf(URLS.length === 0)('a source in a real bucket', () => {
   for (const url of URLS) {
     const loc = s3Location(url);
-    const name = loc?.key.slice(loc.key.lastIndexOf("/") + 1) ?? url;
+    const name = loc?.key.slice(loc.key.lastIndexOf('/') + 1) ?? url;
 
     /** Providers with the machine's credentials, and every request they send. */
     function providers() {
@@ -119,7 +129,7 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
       `${url}: opens, indexes, reads its last rows, and saves as a pointer`,
       async () => {
         expect(loc, `${url} is not an s3:// URL`).toBeDefined();
-        const dir = await mkdtemp(join(tmpdir(), "uno-s3-live-"));
+        const dir = await mkdtemp(join(tmpdir(), 'uno-s3-live-'));
 
         const first = providers();
         const a = connect(undefined, first.wired);
@@ -128,22 +138,27 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
           const src = await openOne(a.engine, { name, path: url });
           expect(src.opened.link).toEqual({ path: url });
           await indexed(src);
-          expect(src.progress.rows, `${url} should be a copy of testdata/sales-q3.csv`).toBe(ROWS);
+          expect(
+            src.progress.rows,
+            `${url} should be a copy of testdata/sales-q3.csv`,
+          ).toBe(ROWS);
 
           // The end of the object is where a range off by one byte shows.
           const { rows } = await src.rows(LAST_ROW - 4, 10);
-          expect(widened(rows)).toEqual(sheetRows(sales, LAST_ROW - 4, 10, "raw"));
+          expect(widened(rows)).toEqual(
+            sheetRows(sales, LAST_ROW - 4, 10, 'raw'),
+          );
 
           // S3 was asked for its size and for ranges only.
-          const gets = first.seen.filter((r) => r.method === "GET");
-          expect(first.seen.some((r) => r.method === "HEAD")).toBe(true);
+          const gets = first.seen.filter((r) => r.method === 'GET');
+          expect(first.seen.some((r) => r.method === 'HEAD')).toBe(true);
           expect(gets.length).toBeGreaterThan(0);
           expect(gets.every((r) => r.range !== undefined)).toBe(true);
 
           a.engine.mode(true);
-          await src.edit({ op: "set", row: LAST_ROW, col: UNITS, now: "1204" });
+          await src.edit({ op: 'set', row: LAST_ROW, col: UNITS, now: '1204' });
           uno = await a.engine.save(
-            { source: src.id, cells: [], at: join(dir, "q3.uno") },
+            { source: src.id, cells: [], at: join(dir, 'q3.uno') },
             1 << 20,
           );
         } finally {
@@ -152,15 +167,20 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
 
         // The .uno holds where the object is and the edit, and is smaller than
         // the object.
-        expect(readContainer("q3.uno", uno).manifest.sources[0]!.path).toBe(url);
+        expect(readContainer('q3.uno', uno).manifest.sources[0]!.path).toBe(
+          url,
+        );
         expect(uno.length).toBeLessThan(bytes.length);
-        await writeFile(join(dir, "q3.uno"), uno);
+        await writeFile(join(dir, 'q3.uno'), uno);
 
         const b = connect(undefined, providers().wired);
         try {
-          const src = await openOne(b.engine, { name: "q3.uno", path: join(dir, "q3.uno") });
+          const src = await openOne(b.engine, {
+            name: 'q3.uno',
+            path: join(dir, 'q3.uno'),
+          });
           expect(src.opened.link).toEqual({ path: url });
-          expect((await src.rows(LAST_ROW, 1)).rows[0]![UNITS]).toBe("1204");
+          expect((await src.rows(LAST_ROW, 1)).rows[0]![UNITS]).toBe('1204');
         } finally {
           b.done();
         }
@@ -172,12 +192,12 @@ describe.skipIf(URLS.length === 0)("a source in a real bucket", () => {
 
 // This block reads the refusal S3 sends for a bucket in another region and
 // reports which channel, header or body, carried the region.
-describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
+describe.skipIf(ELSEWHERE === '')('a bucket in another region', () => {
   const loc = s3Location(ELSEWHERE);
-  const name = loc?.key.slice(loc.key.lastIndexOf("/") + 1) ?? ELSEWHERE;
+  const name = loc?.key.slice(loc.key.lastIndexOf('/') + 1) ?? ELSEWHERE;
 
   test(
-    "opens, reads its last rows, and says which channel carried the region",
+    'opens, reads its last rows, and says which channel carried the region',
     async () => {
       expect(loc, `${ELSEWHERE} is not an s3:// URL`).toBeDefined();
       const seen: Exchange[] = [];
@@ -188,11 +208,14 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
       try {
         const src = await openOne(engine, { name, path: ELSEWHERE });
         await indexed(src);
-        expect(src.progress.rows, `${ELSEWHERE} should be a copy of testdata/sales-q3.csv`).toBe(
-          ROWS,
-        );
+        expect(
+          src.progress.rows,
+          `${ELSEWHERE} should be a copy of testdata/sales-q3.csv`,
+        ).toBe(ROWS);
         const { rows } = await src.rows(LAST_ROW - 4, 10);
-        expect(widened(rows)).toEqual(sheetRows(sales, LAST_ROW - 4, 10, "raw"));
+        expect(widened(rows)).toEqual(
+          sheetRows(sales, LAST_ROW - 4, 10, 'raw'),
+        );
       } finally {
         done();
       }
@@ -207,27 +230,42 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
       ).toBeGreaterThan(0);
 
       const header = refusals.some((r) => r.region !== undefined);
-      const body = refusals.some((r) => r.body !== undefined && REGION_IN_BODY.test(r.body));
+      const body = refusals.some(
+        (r) => r.body !== undefined && REGION_IN_BODY.test(r.body),
+      );
       const channel =
-        header && body ? "both" : header ? "the header" : body ? "the body" : "neither";
+        header && body
+          ? 'both'
+          : header
+            ? 'the header'
+            : body
+              ? 'the body'
+              : 'neither';
       console.log(`${ELSEWHERE}: S3 named the region in ${channel}`);
-      expect(header || body, `S3 refused, and named the region in ${channel}`).toBe(true);
+      expect(
+        header || body,
+        `S3 refused, and named the region in ${channel}`,
+      ).toBe(true);
     },
     TIMEOUT,
   );
 
   // Only the header is stripped. The 400 and its body come from AWS.
   test(
-    "opens on the body alone when the header never arrives",
+    'opens on the body alone when the header never arrives',
     async () => {
       expect(loc, `${ELSEWHERE} is not an s3:// URL`).toBeDefined();
       const seen: Exchange[] = [];
-      const s3 = s3Files({ credentials: awsCredentials(), fetch: watched(seen, true) });
+      const s3 = s3Files({
+        credentials: awsCredentials(),
+        fetch: watched(seen, true),
+      });
       const file = await s3.open({ name, path: ELSEWHERE });
       try {
-        expect(file.size, `${ELSEWHERE} should be a copy of testdata/sales-q3.csv`).toBe(
-          bytes.length,
-        );
+        expect(
+          file.size,
+          `${ELSEWHERE} should be a copy of testdata/sales-q3.csv`,
+        ).toBe(bytes.length);
         expect(await file.read(0, 512)).toEqual(bytes.subarray(0, 512));
       } finally {
         await file.close();
@@ -235,8 +273,13 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
 
       // A HEAD carries headers only, so uno must have sent a GET probe to read
       // the XML.
-      const probe = seen.find((r) => r.method === "GET" && r.range === "bytes=0-0");
-      expect(probe, "the region came from somewhere a body could reach").toBeDefined();
+      const probe = seen.find(
+        (r) => r.method === 'GET' && r.range === 'bytes=0-0',
+      );
+      expect(
+        probe,
+        'the region came from somewhere a body could reach',
+      ).toBeDefined();
     },
     TIMEOUT,
   );
@@ -245,13 +288,13 @@ describe.skipIf(ELSEWHERE === "")("a bucket in another region", () => {
 // Each awkward key against real S3: a HEAD and two ranges. A matching size
 // and both ends of the fixture mean the signature was accepted and the right
 // object was read.
-describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
+describe.skipIf(PREFIX === '')('awkward keys in a real bucket', () => {
   const s3 = () => s3Files({ credentials: awsCredentials() });
   /** Enough of each end to be sure, and short enough to be two small requests. */
   const EDGE = 512;
 
   for (const [key] of AWKWARD_KEYS) {
-    const url = `${PREFIX.replace(/\/+$/, "")}/${key}`;
+    const url = `${PREFIX.replace(/\/+$/, '')}/${key}`;
 
     test(
       `${key}: opens, and both ends are the fixture`,
@@ -259,7 +302,10 @@ describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
         expect(s3Location(url), `${url} is not an s3:// URL`).toBeDefined();
         const file = await s3().open({ name: key, path: url });
         try {
-          expect(file.size, `${url} should be a copy of testdata/sales-q3.csv`).toBe(bytes.length);
+          expect(
+            file.size,
+            `${url} should be a copy of testdata/sales-q3.csv`,
+          ).toBe(bytes.length);
           expect(await file.read(0, EDGE)).toEqual(bytes.subarray(0, EDGE));
           const tail = bytes.length - EDGE;
           expect(await file.read(tail, EDGE)).toEqual(bytes.subarray(tail));
@@ -273,10 +319,10 @@ describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
 
   // One awkward key indexed and read to the end, like the plain one above.
   test(
-    "one of them indexes and reads its last rows like any other source",
+    'one of them indexes and reads its last rows like any other source',
     async () => {
       const key = AWKWARD_KEYS[0]![0];
-      const url = `${PREFIX.replace(/\/+$/, "")}/${key}`;
+      const url = `${PREFIX.replace(/\/+$/, '')}/${key}`;
       const { engine, done } = connect(undefined, [
         diskProvider(),
         s3Provider({ credentials: awsCredentials() }),
@@ -287,7 +333,9 @@ describe.skipIf(PREFIX === "")("awkward keys in a real bucket", () => {
         await indexed(src);
         expect(src.progress.rows).toBe(ROWS);
         const { rows } = await src.rows(LAST_ROW - 4, 10);
-        expect(widened(rows)).toEqual(sheetRows(sales, LAST_ROW - 4, 10, "raw"));
+        expect(widened(rows)).toEqual(
+          sheetRows(sales, LAST_ROW - 4, 10, 'raw'),
+        );
       } finally {
         done();
       }

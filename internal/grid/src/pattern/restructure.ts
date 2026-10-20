@@ -1,7 +1,7 @@
-import { indexOfRunes, quote, quoteMeta, runes } from "../go/index.ts";
-import { MAX_PARTS, quoteRegex } from "../program/index.ts";
-import { MAX_DIFF } from "./align.ts";
-import { MAX_PER_EXAMPLE } from "./induce.ts";
+import { indexOfRunes, quote, quoteMeta, runes } from '../go/index.ts';
+import { MAX_PARTS, quoteRegex } from '../program/index.ts';
+import { MAX_DIFF } from './align.ts';
+import { MAX_PER_EXAMPLE } from './induce.ts';
 
 /**
  * MIN_PIECE is the shortest run of the old value taken as a slice. Shorter
@@ -17,10 +17,17 @@ const MIN_PIECE = 2;
 export function restructures(was: string, now: string): string[] {
   const a = runes(was);
   const b = runes(now);
-  if (a.length > MAX_DIFF || b.length > MAX_DIFF || was === now || b.length === 0) return [];
+  if (
+    a.length > MAX_DIFF ||
+    b.length > MAX_DIFF ||
+    was === now ||
+    b.length === 0
+  )
+    return [];
 
   const parts = decompose(a, b);
-  if (parts === undefined || parts.length === 0 || parts.length > MAX_PARTS) return [];
+  if (parts === undefined || parts.length === 0 || parts.length > MAX_PARTS)
+    return [];
 
   // A decomposition must hold a slice. Constants alone would set the column
   // to one value.
@@ -39,7 +46,7 @@ export function restructures(was: string, now: string): string[] {
   const out: string[] = [];
   for (const c of cross(sets)) {
     // A lone slice is a step of its own.
-    out.push(c.length === 1 ? c[0]! : "concat(" + c.join(", ") + ")");
+    out.push(c.length === 1 ? c[0]! : 'concat(' + c.join(', ') + ')');
   }
   return out;
 }
@@ -60,12 +67,12 @@ interface Piece {
  */
 function decompose(a: string[], b: string[]): Piece[] | undefined {
   const parts: Piece[] = [];
-  let lit = "";
+  let lit = '';
 
   const flush = (): void => {
     if (lit.length > 0) {
       parts.push({ lit, from: 0, to: 0, isSlice: false });
-      lit = "";
+      lit = '';
     }
   };
 
@@ -77,7 +84,7 @@ function decompose(a: string[], b: string[]): Piece[] | undefined {
       continue;
     }
     flush();
-    parts.push({ lit: "", from: at, to: at + n, isSlice: true });
+    parts.push({ lit: '', from: at, to: at + n, isSlice: true });
     i += n;
     if (parts.length > MAX_PARTS) return undefined;
   }
@@ -89,7 +96,7 @@ function decompose(a: string[], b: string[]): Piece[] | undefined {
 function longestQuote(a: string[], rest: string[]): [number, number] {
   const limit = Math.min(rest.length, a.length);
   for (let n = limit; n >= MIN_PIECE; n--) {
-    const i = indexOfRunes(a.join(""), rest.slice(0, n).join(""));
+    const i = indexOfRunes(a.join(''), rest.slice(0, n).join(''));
     if (i >= 0) return [i, n];
   }
   return [0, 0];
@@ -103,19 +110,19 @@ function longestQuote(a: string[], rest: string[]): [number, number] {
 function sliceSrcs(a: string[], from: number, to: number): string[] {
   const froms = [String(from)];
   if (from > 0) {
-    froms.push(String(from - a.length), ...boundary(a, from - 1, "end"));
+    froms.push(String(from - a.length), ...boundary(a, from - 1, 'end'));
   }
 
   const tos: string[] = [];
   if (to === a.length) {
-    tos.push("len");
+    tos.push('len');
   } else {
-    tos.push(String(to), String(to - a.length), ...boundary(a, to, "start"));
+    tos.push(String(to), String(to - a.length), ...boundary(a, to, 'start'));
   }
 
   const out: string[] = [];
   for (const f of froms) {
-    for (const t of tos) out.push("slice(" + f + ", " + t + ")");
+    for (const t of tos) out.push('slice(' + f + ', ' + t + ')');
   }
   return out;
 }
@@ -135,8 +142,8 @@ function boundary(a: string[], at: number, side: string): string[] {
   for (const r of a.slice(at + 1)) if (r === target) total++;
 
   return [
-    side + "(" + c + ", " + String(k) + ")",
-    side + "(" + c + ", " + String(k - total - 1) + ")",
+    side + '(' + c + ', ' + String(k) + ')',
+    side + '(' + c + ', ' + String(k - total - 1) + ')',
   ];
 }
 
