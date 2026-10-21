@@ -28,6 +28,8 @@ const GZIP_WRAPPER = 16;
 const GZIP_WINDOW_BITS = MAX_WINDOW_BITS + GZIP_WRAPPER;
 /** Decoded bytes inflated past the window before the buffer slides. */
 const PIECE_BYTES = 256 << 10;
+/** The piece of a step that read padding alone. */
+const NONE = new Uint8Array(0);
 
 /**
  * BrokenStream is thrown for a compressed stream that is damaged or cut
@@ -46,6 +48,7 @@ export class BrokenStream extends Error {
 /**
  * Members inflates gzip members one after another. Each step is one call to
  * zlib, which stops at a block boundary, a full buffer or the input's end.
+ * Zero bytes after a member are padding.
  */
 class Members {
   private readonly z = new ZStream();
@@ -87,6 +90,11 @@ class Members {
   step(): Uint8Array {
     const z = this.z;
     if (this.ended) {
+      while (z.avail_in > 0 && z.input[z.next_in] === 0) {
+        z.next_in++;
+        z.avail_in--;
+      }
+      if (z.avail_in === 0) return NONE;
       zlibInflateReset(z);
       this.ended = false;
     }

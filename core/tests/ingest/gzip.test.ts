@@ -52,6 +52,12 @@ describe('a gzip file inflates', () => {
     const decoded = gunzipWhole(fixture('gzip/members.csv.gz'));
     expect(differAt(decoded, concat(parts))).toBe(-1);
   });
+
+  test('past zero bytes after a member, which are padding', () => {
+    const stored = fixture('gzip/members.csv.gz');
+    const padded = concat([stored, new Uint8Array(3)]);
+    expect(differAt(gunzipWhole(padded), gunzipWhole(stored))).toBe(-1);
+  });
 });
 
 describe('a broken gzip file names the stored byte it breaks at', () => {
