@@ -7,7 +7,7 @@
  * pointed at with the same variables the AWS CLI reads. The app opens objects
  * in it with the real store, over the wire, with a real signature.
  *
- * Usage: node --import ../paths.js scripts/smoke.js   (after node scripts/build.js)
+ * Usage: node --import ../../paths.js scripts/smoke.js   (after node scripts/build.js)
  */
 
 import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
@@ -31,9 +31,9 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
-const fixture = join(pkg, "../grid/tests/testdata/sales-q3.csv");
+const fixture = join(pkg, "../../grid/tests/testdata/sales-q3.csv");
 // A second export, for the checks that a workspace holds several.
-const second = join(pkg, "../grid/tests/testdata/google-ads-sales.csv");
+const second = join(pkg, "../../grid/tests/testdata/google-ads-sales.csv");
 
 /** The object pasted into the sources panel: the second export, in S3. */
 const KEY = "2025/ads-q3.csv";
@@ -46,7 +46,7 @@ const BESIDE = ["2025/ads-q4.csv", "2025/sales-q3.csv"];
  * fourth that arrives later and is appended. The fourth is the first part's
  * bytes under a name that sorts after the third.
  */
-const PARTS = [1, 2, 3].map((n) => join(pkg, `../grid/tests/testdata/sales-q3-part-${n}.csv`));
+const PARTS = [1, 2, 3].map((n) => join(pkg, `../../grid/tests/testdata/sales-q3-part-${n}.csv`));
 const ARRIVING = new Map([
   ...(await Promise.all(
     PARTS.map(async (path, i) => [`shop/2025/sales-q3-part-${i + 1}.csv`, await readFile(path)]),

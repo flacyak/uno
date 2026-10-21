@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "vp run --filter @uno/desktop dev",
     "start": "vp run --filter @uno/desktop start",
-    "build": "vp run --filter './internal/*' build",
-    "test": "vp run --filter './internal/*' test",
-    "check": "vp run --filter './internal/*' check",
+    "build": "vp run --filter '@uno/*' build",
+    "test": "vp run --filter '@uno/*' test",
+    "check": "vp run --filter '@uno/*' check",
     "smoke": "vp run --filter @uno/desktop smoke",
     "preview": "vp run --filter @uno/desktop preview"
   },

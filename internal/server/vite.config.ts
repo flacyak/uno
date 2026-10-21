@@ -11,7 +11,7 @@ export default defineConfig({
     dts: false,
   },
   test: {
-    setupFiles: ["../grid/tests/handles.ts"],
+    setupFiles: ["../../grid/tests/handles.ts"],
   },
   lint: {
     options: {
