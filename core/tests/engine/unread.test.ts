@@ -3,7 +3,10 @@
  * by name: JSON Lines, a gzip-compressed CSV and a Parquet file. Each is
  * refused when opened alone, when peeked at and as a part of several files.
  * A source a workspace already logged edits against is read as it was when
- * they were made, and a file appended to it is detected as a fresh part is.
+ * they were made, and so again when relinked to that file. Relinked to a
+ * copy of it, it is refused, since a file it was not read from is read the
+ * way it is detected now. A file appended to it is detected as a fresh part
+ * is.
  */
 
 import { readFileSync } from 'node:fs';
@@ -147,11 +150,29 @@ describe('a .jsonl a workspace logged edits against before', () => {
       await asLogged(await openOne(engine, { name: 'q3.uno', blob: uno }));
     }));
 
-  test('relinked, is read as its edits were made', () =>
+  test('relinked to the file it was read from, is read as its edits were made', () =>
     withEngine(async (engine) => {
       const uno = workspace({ path, bytes: bytes.length });
       const src = await openOne(engine, { name: 'q3.uno', blob: uno });
       await asLogged(await engine.relink(src, { name, path }));
+    }));
+
+  test('relinked to a copy of that file, is refused as JSON Lines, and left as it was', () =>
+    withEngine(async (engine) => {
+      const uno = workspace({ path, bytes: bytes.length });
+      const src = await openOne(engine, { name: 'q3.uno', blob: uno });
+      const dir = await mkdtemp(join(tmpdir(), 'uno-unread-'));
+      const copy = join(dir, name);
+      await writeFile(copy, bytes);
+      const refused = await refusal(engine.relink(src, { name, path: copy }));
+      expect(refused.said).toEqual({
+        t: 'relink-other-kind',
+        name,
+        file: name,
+        was: 'delimited',
+        now: 'jsonl',
+      });
+      await asLogged(src);
     }));
 
   test('read as one with a copy of itself, refuses a .jsonl appended to it by name', () =>
