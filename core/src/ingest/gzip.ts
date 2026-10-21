@@ -1,10 +1,10 @@
 /**
  * @fileoverview Inflates gzip: a whole file, a head up to a limit, or one
- * pass through a file pushed a slice at a time.
+ * pass through a file that keeps checkpoints a later read resumes from.
  *
  * All three run pako's low-level zlib API through one class, Members, which
  * inflates gzip members one after another and stops at every deflate block
- * boundary.
+ * boundary. A checkpoint is a member start, which needs no window.
  */
 
 import {
@@ -27,9 +27,16 @@ const MAX_WINDOW_BITS = 15;
 const GZIP_WRAPPER = 16;
 /** Window bits that have zlib read a gzip wrapper. */
 const GZIP_WINDOW_BITS = MAX_WINDOW_BITS + GZIP_WRAPPER;
+/** The data_type flag of an inflate that stopped at a block boundary. */
+const BLOCK_BOUNDARY = 0x80;
+/** The data_type flag of a member whose last block has been read. */
+const LAST_BLOCK = 0x40;
+/** The data_type bits that count the unused bits of the last byte read. */
+const UNUSED_BITS = 0x07;
+const BITS_PER_BYTE = 8;
 /** Decoded bytes inflated past the window before the buffer slides. */
 const PIECE_BYTES = 256 << 10;
-/** The piece of a step that read padding alone. */
+/** No bytes: the piece of a step that read padding alone, an empty window. */
 const NONE = new Uint8Array(0);
 
 /**
@@ -46,7 +53,22 @@ export class BrokenStream extends Error {
   }
 }
 
-/** Inflater inflates a compressed file once, from the start. */
+/** Checkpoint is a place a read can resume inflating from. */
+export interface Checkpoint {
+  /** The stored byte the next deflate block starts in. */
+  readonly stored: number;
+  /** The bits of that byte already used, 0 to 7. */
+  readonly bits: number;
+  /** The decoded offset it resumes at. */
+  readonly decoded: number;
+  /** The decoded bytes before it in its member, up to WINDOW_BYTES. */
+  readonly window: Uint8Array;
+}
+
+/**
+ * Inflater inflates a compressed file once, from the start, and keeps the
+ * checkpoints a read resumes from.
+ */
 export interface Inflater {
   /**
    * Feeds the next stored bytes, from 0 in order. `out` gets each decoded
@@ -62,7 +84,12 @@ export interface Inflater {
    * a stream cut short.
    */
   end(): number;
+  /** The checkpoints kept so far, in decoded order. */
+  checkpoints(): readonly Checkpoint[];
 }
+
+/** Where a deflate block starts in the stored bytes. */
+type BlockStart = Pick<Checkpoint, 'stored' | 'bits'>;
 
 /**
  * Members inflates gzip members one after another. Each step is one call to
@@ -77,6 +104,8 @@ class Members {
   private base = 0;
   /** Decoded bytes so far. */
   decoded = 0;
+  /** The decoded offset the current member starts at. */
+  member = 0;
   /** The last member has ended, and no other has begun. */
   ended = false;
 
@@ -116,6 +145,7 @@ class Members {
       if (z.avail_in === 0) return NONE;
       zlibInflateReset(z);
       this.ended = false;
+      this.member = this.decoded;
     }
     if (z.avail_out === 0) {
       this.buffer.copyWithin(0, PIECE_BYTES);
@@ -130,6 +160,30 @@ class Members {
     this.ended = status === Z_STREAM_END;
     this.decoded += z.next_out - from;
     return this.buffer.subarray(from, z.next_out);
+  }
+
+  /**
+   * Where the next block starts, when the last step stopped at a boundary
+   * before its member's last block.
+   */
+  boundary(): BlockStart | undefined {
+    const type = this.z.data_type;
+    if (
+      this.ended ||
+      (type & (BLOCK_BOUNDARY | LAST_BLOCK)) !== BLOCK_BOUNDARY
+    ) {
+      return undefined;
+    }
+    const unused = type & UNUSED_BITS;
+    if (unused === 0) return { stored: this.at, bits: 0 };
+    return { stored: this.at - 1, bits: BITS_PER_BYTE - unused };
+  }
+
+  /** A copy of this member's decoded bytes so far, up to WINDOW_BYTES. */
+  window(): Uint8Array {
+    const length = Math.min(WINDOW_BYTES, this.decoded - this.member);
+    if (length === 0) return NONE;
+    return this.buffer.slice(this.z.next_out - length, this.z.next_out);
   }
 
   /** Throws BrokenStream unless the stored bytes ended with a member. */
@@ -184,7 +238,7 @@ export function inflateHead(
   };
 }
 
-/** gzipInflater inflates a gzip file once, a slice at a time. */
+/** gzipInflater inflates a gzip file once and keeps every member start. */
 export function gzipInflater(): Inflater {
   return new GzipInflater();
 }
@@ -192,6 +246,7 @@ export function gzipInflater(): Inflater {
 /** GzipInflater is one pass through a gzip file. */
 class GzipInflater implements Inflater {
   private readonly members = new Members();
+  private readonly kept: Checkpoint[] = [];
 
   push(
     stored: Uint8Array,
@@ -203,11 +258,28 @@ class GzipInflater implements Inflater {
       const at = members.decoded;
       const piece = members.step();
       if (piece.length > 0) out(piece, at);
+      const start = members.boundary();
+      if (start !== undefined) this.reached(start);
     }
   }
 
   end(): number {
     this.members.end();
     return this.members.decoded;
+  }
+
+  checkpoints(): readonly Checkpoint[] {
+    return this.kept;
+  }
+
+  /**
+   * Keeps a block boundary that starts a member. It replaces a last
+   * checkpoint at the same decoded offset.
+   */
+  private reached(start: BlockStart): void {
+    const { decoded, member } = this.members;
+    if (decoded !== member) return;
+    if (this.kept.at(-1)?.decoded === decoded) this.kept.pop();
+    this.kept.push({ ...start, decoded, window: this.members.window() });
   }
 }
