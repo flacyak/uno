@@ -24,7 +24,7 @@ const read = (name: string) => readFileSync(join(SCRIPTS, name), "utf8");
 const MAIN = readFileSync(join(SRC, "main/index.ts"), "utf8");
 const HANDLERS = MAIN.slice(
   MAIN.indexOf("function registerFileHandlers"),
-  MAIN.indexOf("void app.whenReady"),
+  MAIN.indexOf("async function start"),
 );
 const DRIVEN = MAIN.slice(MAIN.indexOf('const smoke = process.env["UNO_SMOKE"]'));
 

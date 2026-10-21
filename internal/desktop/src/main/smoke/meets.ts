@@ -3,7 +3,9 @@
 // gone: the tab then says what reading it said and offers Reload, and no
 // longer asks for a connection.
 //
-// Opening the workspace closes the one the checks before them built.
+// Opening the workspace closes the one the checks before them built, which
+// has unsaved edits, so the first time it is named the window says so and
+// the second opens it.
 
 import type { Check } from "./check.ts";
 
@@ -17,7 +19,16 @@ const LINE = `
 
 export const MEETS: Check[] = [
   {
-    name: "a workspace somebody sent waits for its bucket to be connected",
+    name: "a workspace somebody sent, named over unsaved edits, waits to be named again",
+    send: ["menu:open-path", SENT],
+    script: `
+      const want = "unsaved edits · Ctrl+S first, or open it again to drop them";
+      if (!(await until(() => text("#status-msg") === want))) return "the status bar says " + JSON.stringify(text("#status-msg"));
+      return text("#status-file").startsWith("gone.uno") ? "the sent workspace opened over the unsaved one" : "";
+    `,
+  },
+  {
+    name: "named again, it opens and waits for its bucket to be connected",
     send: ["menu:open-path", SENT],
     script: `
       const want = "gone.uno reads s3://open-data/…, which no connection covers · connect open-data to read it";
