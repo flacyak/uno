@@ -11,10 +11,10 @@ leaves the machine.
 There is a hosted version too: the same renderer in a browser, over an engine
 on a server, which signs in to a bucket with a role in your account rather than
 with any key of its own. It is a repository of its own, checked out as
-`internal/www/` here and ignored by this one. What it needs of uno is public in this
+`apps/www/` here and ignored by this one. What it needs of uno is public in this
 repository: the engine's messages as WebSocket frames, the engine saying how it
 signs in, and the renderer, the `Host` interface and the page's markup that
-[`internal/desktop`](internal/desktop) exports.
+[`apps/desktop`](apps/desktop) exports.
 
 ## Developing
 
@@ -23,7 +23,7 @@ Every command runs from the repo root. `vp run` with no task lists them.
 ```bash
 vp install        # install the workspace
 vp run dev        # the desktop app, reloading
-vp run build      # @uno/grid, then the desktop app
+vp run build      # @uno/core, then the desktop app
 vp run check      # format, lint, type check
 vp run test       # every package's suite
 vp run smoke      # build, then drive the real desktop app and assert

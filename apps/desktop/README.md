@@ -1,0 +1,477 @@
+# @uno/desktop
+
+uno's desktop client: an Electron shell over [`@uno/core`](../../core).
+
+It holds no spreadsheet logic. Opening a file is `@uno/core/engine`, changing a
+cell is `sheet.set`, saving is `writeDocument`. This package is the window, the
+sidebar, the grid that draws rows, and the file operations a web page cannot do
+for itself.
+
+## The shape of it
+
+```
+src/
+  main/       the Electron main process: one window, its keys, dialogs, engines
+  preload/    the only bridge to the renderer
+  engine/     the utility process that owns one open workspace
+  renderer/   the app: sidebar, virtualized grid, sources panel, status bar
+  shared/     the Host interface both Electron and a web build implement
+  paraglide/  the app's text as typed functions, compiled from messages/
+messages/     the app's text, one JSON file a language
+```
+
+The seam is `src/shared/host.ts`. Everything above it is a plain web page
+running the pure core, which is what makes a web build the same renderer with
+a different `host` behind it. `package.json` exports `src/renderer`,
+`src/shared`, `scripts` and `index.html` for that build to import as they are.
+That build, and the server it talks to, are a repository of their own, checked
+out as `hosted/` beside this package and ignored here.
+
+## The window
+
+![uno moving between the workspaces in its sidebar, putting a formula into one from a right click, closing and opening the sidebar, making a new workspace from the + at its foot, and pointing at the round × that closes the window](../../docs/sidebar.gif)
+
+The page is the whole window.
+There is no title bar and no menu bar over it.
+
+The sidebar on the left lists the workspaces opened on this machine, most recent first.
+A workspace joins the list when its `.uno` is opened or saved, and the list is kept between launches.
+Clicking one opens it in place of the one open now, and over unsaved edits the first click says so and the second opens.
+The open workspace is first, with its sources under it, a tab each.
+One that has never been saved is named for its first source and says `not saved`.
+
+The `+ New workspace` at the foot of the sidebar asks for a file, as Ctrl+O does.
+A spreadsheet opens as a new workspace, and Ctrl+S keeps it as a `.uno`.
+
+A right click on a workspace offers `Insert formula…`.
+On a workspace that is not open it offers `Open` and `Remove from list` too, and on the open one `Add source…`, `Save` and `Save as…`.
+The formula form opens on the column the grid has selected, in the source showing.
+A formula is arithmetic over the row's other columns by name, such as `revenue / units`.
+The column stops storing values of its own and shows what the expression computes, and its header wears `fx` with the expression on hover.
+Inserting one switches to transform, since it changes the file, and it is one edit that Ctrl+Z takes back.
+An expression the engine cannot read is refused in the form, in the engine's words, and the form stays open on what was typed.
+
+The three columns, the sidebar, the sheet and the sources panel, each begin with a head one row high.
+Together they make one line across the top of the window, and the round `×` at its right end closes the window.
+Over unsaved edits the first `×` says so and the second closes.
+The heads and the empty middle of the status bar are where the window is dragged from.
+
+The status bar holds the window's switches.
+The one at its left closes the sidebar so the grid has the width, as Ctrl+B does under the default keys, and the choice is kept.
+Under Vim-style Ctrl+B pages up, and the switch is how the sidebar closes.
+At its right are View / Transform and the switch for the sources panel, which Ctrl+Shift+B opens too.
+
+The menu still exists, for its keys: Ctrl+O, Ctrl+S, Ctrl+Q and the rest are accelerators on its items.
+Its bar is hidden on Windows and Linux, and macOS shows it at the top of the screen as it does for every app.
+
+## Opening a file
+
+A file opens in view. Main starts a utility process for it and hands the
+renderer one end of a MessagePort. The engine reads the file by path, a chunk at
+a time, and sends rows straight to the renderer, so neither main nor the
+renderer ever holds the file. The status bar shows `≈` rows and how far the
+index has got until it reaches the end.
+
+uno runs once.
+`uno q4.csv` typed while a window is open hands the file to that window, which comes to the front and opens it as a new workspace, and the second uno exits.
+Several files on one line are added together as one workspace, as they are at launch.
+Typed with no file, it brings the window to the front.
+
+Ctrl+E switches to transform, which unlocks editing and turns the recogniser
+on, and back again. It loads nothing. The engine keeps the edit log and applies it to each row as it
+reads the row, so an edit reaches the screen as soon as the next band does,
+anywhere in the file. After three fixes in one column, a banner offers the rest,
+and its count grows while the engine surveys the file. Apply is one edit, and
+Ctrl+Z takes it back.
+
+Saving writes down where each source is rather than copying it in, so a
+workspace of a 30 GB ledger and four 2 GB exports is a few kilobytes and saves
+instantly. A source under the workspace's own folder is pointed at relative to
+it, so the folder can be copied somewhere else whole. The 256 MB ceiling is what
+is left over: bytes with no file behind them, which the container has to carry
+or lose, and on the desktop there are none. A `.uno` opens through the engine
+too, with its log replayed.
+
+What a `.uno` gives up for this is travelling on its own. Sending somebody the
+file without the data it points at gets them the tabs, the edits and the log,
+and no rows.
+
+## Settings
+
+The gear at the left of the status bar opens settings upward from the corner.
+It lists every top-level source -- the connections the panel browses from --
+and choosing one opens the panel browsing it, beside `+ Connect a bucket`.
+Below them are four themes, Paper Ember, Tokyo Night, Sakura and Catppuccin
+Frappé, taken with their authors' credit from [T3 Themes](https://t3themes.com),
+and an appearance of System, Light or Dark, since each theme has both. A theme
+is worn the moment it is chosen, and the choice is kept on this machine for the
+next launch. Then Keys, which picks how the grid reads them: Default or
+Vim-style. Paper Ember is worn until another is chosen. `src/renderer/theme.ts`
+has how each theme's colours map onto uno's.
+
+Last is Language: System, and then every language uno has messages for, each under the name it calls itself.
+System follows the first of the system's languages uno has, and is what a new install does.
+A language is spoken the moment it is chosen.
+The whole window is written again in it with everything open left open, and the choice is kept on this machine.
+`src/renderer/language.ts` has the choice, and `shell/page.ts` and each part's `relabel` write the words again.
+
+## Sources in S3
+
+The `+ add source` under the open workspace's tabs offers a file or the sources panel, where an S3 URL is pasted. An S3 URL is
+`s3://bucket/key` or the https address the console shows, and the object opens
+as a view the same way a file on disk does: a HEAD for its size, then ranged
+GETs as the index and the grid need them. Nothing is downloaded whole, and a
+workspace saves the `s3://` URL rather than a copy. Indexing reads the object
+front to back, and every chunk is a round trip, so the next three are asked for
+while it scans the one in hand: four in flight at most, which is also all it
+ever holds, 32 MB at the 8 MB chunks indexing reads. The grid's own reads for
+the rows on screen go straight through beside them.
+
+Beside the URL, a save writes down which bytes were read -- the object's
+VersionId where its bucket keeps versions, and its ETag otherwise -- and the id
+of the connection it was read through, as a hint. Both are optional keys on a
+source in `uno.json`, so the format stays 5 and a build before them opens the
+file as it always did. An ETag keeps its quotes, which is how the two are told
+apart.
+
+The engine process reads the object. A connection that covers it, by bucket
+and the longest prefix its key starts with, says how to sign in: `machine`,
+a named `profile`, or `public`, which reads an open bucket without signing at
+all. A `role` connection is for uno's hosted engine and is refused by name on
+the desktop. Two connections on two profiles read two buckets in one
+workspace, each signed as its own profile. Where no connection covers an
+object, it is read with whatever AWS credentials this machine already has: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (plus
+`AWS_SESSION_TOKEN`), or the `AWS_PROFILE` (or `default`) keys in
+`~/.aws/credentials`. The region comes from `AWS_REGION` or the profile's config,
+and a bucket somewhere else says so once and is followed. uno stores no keys,
+and none reach the renderer. An SSO profile signs in with the token the last
+`aws sso login` cached: uno trades it at the SSO portal for the role's keys and
+reuses them until shortly before they expire. uno never signs in for anybody, so
+an expired or missing sign-in says to run `aws sso login --profile <name>`. A
+profile with a `credential_process` runs that program, split into words the way
+a shell would but run without one, and reads the version 1 JSON it prints; the
+keys are reused until shortly before they expire, and the program is run again
+only then. A profile with `role_arn` takes on that role through STS with the
+credentials of its `source_profile`, which can be keys, a program, an SSO sign-in
+or another role, or with the environment's keys when `credential_source` is
+`Environment`. The profile's `external_id` and `role_session_name` are sent as
+they are. `mfa_serial` is refused by name, since the engine has nobody to ask for
+a code.
+`AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` points it at MinIO or another
+S3-compatible store.
+
+Every range is asked for as the version of the object that was opened, so an
+export rewritten in the bucket mid-read is an error that says so, never half
+of one file and half of another.
+
+A workspace opens the bytes its log was made against where the bucket can
+still hand them over. A bucket with versioning on keeps every version, so the
+VersionId a save recorded is asked for by name, and the saved bytes come back
+after the object has been written over or deleted. A bucket without versioning
+keeps no copy, so the object is read as it is now. So is one whose recorded
+version the bucket no longer has, and it says which version it opened instead.
+
+Coming back to the window asks each object's bucket, one HEAD each, which
+version it holds now. A tab reading another one -- written over while it was
+open, or pinned to the version a save recorded -- wears the `!` mark and says
+`newer in bucket` on its panel line, where Reload reads the newer one. The ask
+waits until the window has kept the focus for a moment, so alt-tabbing through
+uno on the way somewhere else asks nothing, and a bucket that cannot be reached
+leaves every tab as it was.
+
+Reload is pointing a tab at the same URL again, asking for no version, so it
+reads what the bucket holds now: the newer version a mark said was there, or
+the newest after one a save pinned. The log replays over it and the tab takes
+its version, and the status bar says what Reload found -- a new version and
+how its size moved, or no change in the bucket -- and how many edits replayed.
+The next save records the new version.
+
+## Connections
+
+A connection is a bucket, a folder in it, and how to sign in, kept as one
+`.unof` file in the `connections/` folder under the app's data directory
+(`~/.config/uno/connections` on Linux). It never holds a key, so a connection
+can be sent to a colleague the way a formula is. The panel's Connections section
+lists every connection the engine loaded, and choosing one browses its folder.
+
+`+ Connect a bucket`, the last line of the section, opens the connect screen in
+the list's place: a bucket, a prefix, and a profile from the list the engine
+reads out of `~/.aws` (names only), or this machine's own setup, or public. Test
+finds the bucket's region with one HeadBucket and lists the prefix, and Save
+tests first when what is on screen has not been tested. A test that fails says
+why in the engine's own words -- a 403, no such bucket, an expired SSO sign-in --
+and saves nothing, so every connection in the folder is one that worked. The
+saved connection keeps the region the test found, and the panel browses it.
+
+Save gives the list its place back while the connection is tested and written:
+it is listed after the others, dimmed and saying `connecting…`, with the same
+bar along the bottom of its line that a source has while it opens. Kept, the
+line is the connection's and its folder is browsed. Refused, the bar shakes and
+drains and the line stays, dimmed and saying `failed`, with why under the list.
+Enter on it, or `Edit connection`, brings the form back as it was left, and
+saving it tries the connection again. Cancel there gives it up.
+
+A `.uno` travels, and whoever opens one did not choose the buckets it names.
+So each S3 source in it is matched, when it opens, to the connection covering
+its bucket and folder, read the way the S3 handler reads an address. One no
+connection covers opens missing and not a single request reaches its bucket:
+its tab says `not connected`, the status bar names the bucket, and its line
+offers `Connect <bucket>` in place of Reload, which would have read it with this
+machine's credentials, and `c` on the line is Connect as `r` is Reload. The
+tab's `!` opens the connect screen with the bucket and the object's folder
+filled in, the narrowest connection that reads it, which can be widened to the
+whole bucket by clearing the prefix. Once the connection is saved the tab
+reads, its edits replayed. An object that has gone
+from the bucket since stops waiting all the same: the tab is missing, says what
+reading it said, and offers Reload and Re-point like any other.
+
+Main writes a connection atomically, after reading the text back as a
+connection, so the page cannot put a key or a mismatched id in the folder. The
+engine reads the folder when it starts and again whenever the renderer says it
+changed, which is how a connection saved from the panel is used at once without a
+restart. A file that will not read costs that connection only, and is said once
+in the status bar. Before any file is open, the panel browses through a spare
+engine that holds no workspace, and closes it once a workspace brings its own.
+
+Every file uno reads goes through a `FileHandler` from `@uno/core/store`:
+sources, `.uno` files, formulas in the library, and the `~/.aws` config. There
+are three handlers. `localFiles` (in `store/node`) reads paths on disk,
+`s3Files` (in `store/s3`) reads objects in a bucket, and `blobFiles` reads
+dropped bytes that have no path. Each one only reads the refs it recognises.
+The desktop engine lists `localFiles` and `s3Files`, so a Blob that reaches it is
+refused by name. A test in each package fails if anything outside a handler
+starts reading files on its own.
+
+## When a source's file moves
+
+A source whose file is not where the workspace left it still opens: it keeps its
+id, its edits and its place in the log, and the tab wears a `!` that says what
+went wrong. Clicking the `!` asks where the file is now, and the edits replay
+over it. A file that is not the one the log was made against gets the same mark
+and its rows anyway, because only the person looking at them can say whether it
+is still the right file, and the status bar says what changed. An object whose
+save recorded a version is changed when its version is not that one, which
+catches an export regenerated at the same size. A file with no version, such as
+one on a disk, is changed when its size is not what the save measured.
+
+A file that cannot take the log -- one a quarter the size, whose last rows the
+log names -- is refused, and the source is left as it was. A wrong pick costs
+nothing.
+
+## A workspace of several sources
+
+A workspace holds as many sources as the work needs, each in a tab of its own.
+Ctrl+Shift+O adds one or more beside the file already open, and so does the `+ add source` under the tabs in the sidebar.
+Dropping files on the window adds them too, and `uno ads.csv shop.csv bank.csv` opens all three as one workspace.
+A `.uno` is a workspace of its own, so it opens rather than being added.
+
+A source that was asked for is listed from that moment, dimmed, in the sidebar under the workspace's sources and in the sources panel under its tabs, where it says `opening…`.
+A bar along the bottom of its line fills and starts again until the source has opened, and then the line is its tab's.
+An object in a bucket a long way off is the one that waits long enough to see it.
+
+One engine serves every source in the workspace, and the log is one list in the order the edits were made, with each line naming the source it changed.
+Each tab edits, undoes and redoes its own source, and View / Transform switches all of them together.
+A tab's dot says its source has edits, or was added, since the last save.
+The × on a tab takes its source and its edits out of the workspace, and asks once more first when there are edits to lose.
+The last source has no ×.
+
+Ctrl+PageDown and Ctrl+PageUp, or Ctrl+Tab and Ctrl+Shift+Tab, move between tabs, and each tab goes back to the cell it was left on.
+A workspace of one carried source saves in the layout every earlier uno reads, a second source moves it to format 4, and pointing at a file moves it to format 5.
+
+Opening a file closes the one open now. Over unsaved edits, Ctrl+O says so
+first, and a second Ctrl+O while that is still on screen opens anyway, as `:e!`
+does.
+
+## Several files as one source
+
+Several files picked in the sources panel with Space are added as a tab each by `Add 3`, or as one tab by `Add as one`.
+One tab reads them end to end in the order they are listed, as one table, and is named for what their names share.
+Beside `Add as one` are its two choices: `header row`, ticked unless the files have none, and `_file column`, which says which file each row came from.
+Files that do not read the way the first does are refused, naming the file and the column, and stay picked.
+
+A tab of several files reads the files it was made from, and never whatever is in the folder now, because its edits name rows by number.
+When the folder gains files that sort after the tab's last, its line in the panel says `1 new file`, and the line offers `1 new file in shop/2025/ · append`, which `a` takes too.
+Appending adds them at the end, so every edit stays on the cell it was made to.
+The folder is asked when the panel opens and when the window gets the focus back.
+
+## Keys
+
+How the grid reads keys is an input strategy, picked under Keys in settings and
+kept between launches. There are two, and Default is the one a new install gets.
+
+**Default** is a spreadsheet's keys. The arrows, Tab, PgUp, PgDn, Home and End
+move, and Shift+Tab moves left. Enter, F2 or a double click open the editor on
+the value, and typing over a cell replaces it. In the editor Enter keeps the
+typing and Esc throws it away, and Tab keeps it and moves on to the next cell,
+Shift+Tab to the one before.
+Ctrl+C copies what the cell stores, Ctrl+Z takes back the last edit and selects
+the cell it changed, and Ctrl+R records it again, until the next edit.
+
+**Vim-style** reads keys the way vim does. View is a normal mode that cannot
+write, transform is one that can, and the cell editor is insert mode. `i` moves
+one level in and Esc one level back out.
+
+`i` in view switches to transform and stops there. In transform, `i`, `a`, `s`
+and Enter open the editor with the caret at the start, at the end, on nothing
+and on the whole value. `a` in view does both at once. Esc in the editor keeps
+what was typed, as Enter does, and Tab keeps it and moves on to the next cell,
+Shift+Tab to the one before. Letters are commands, so typing over a cell
+starts with `s`. `u` takes back the last edit, as Ctrl+Z does, and selects the
+cell it changed. Ctrl+r records it again, until the next edit, and no longer
+reloads the window.
+
+Moving is the same in both modes and writes nothing: `h` `j` `k` `l`, `w` and
+`b` through cells in reading order, `0` `^` `$` across the row, `gg` and `G` to
+the first and last row, `H` `M` `L` to the top, middle and bottom row on screen,
+Ctrl+d, u, f and b by half and whole pages, so Ctrl+b is a page up here and
+the sidebar closes from the status bar. Each takes a count, which waits in
+the status bar until the motion arrives, and `{n}G` goes to row n. `zt` `zz`
+`zb` scroll the selected row to the top, middle or bottom and leave it selected.
+`m{a-z}` marks a cell in the tab it was made on, for as long as the workspace
+is open, `'{a-z}` goes back to it, and `''` returns to where the last jump left
+from.
+
+Changing is transform's. `x` clears a cell and `p` sets it to what `yy` copied.
+`yy` works in view too, since copying changes nothing, and copies what the cell
+stores to the system clipboard as well. Each change is one set in the log, so a
+count before one is dropped: `3x` would record a set per cell.
+
+`.` makes the last insert, `x` or `p` again on the selected cell. An insert
+opened with `a` that only added to the end repeats as that text appended, one
+opened with `i` that only added to the start repeats as a prepend, and anything
+else repeats as the whole value. It is what makes three fixes cheap: on a column
+where 12 should read 12.00, `a` `.00` Esc `j` `.` `j` `.` fixes three cells and
+brings the recogniser's offer for the rest. `ga` is Apply on that banner, from
+any cell, and `gx` is Not now.
+
+`:` opens a command line in the status bar, in either mode. `:w` saves as Ctrl+S
+does, `:sav` is Save As, `:e` opens a file but refuses over unsaved edits unless
+it is `:e!`, `:sources` opens the sources panel, and `:{n}` goes to row n.
+There is no `:q`; closing is the window's job.
+
+`gt` and `gT` go to the next and previous source's tab, `{n}gt` to the nth.
+
+`]f` and `[f` go to the next and previous cell in the column that does not parse
+as its badge says, which is the work uno is for: `]f` `.` `]f` `.` `]f` `.` `ga`.
+The band holds a few screens of rows, so the engine reads the file for them and
+they reach any row. While a file is still indexing they search what has been
+indexed and say how much that was. `/` and `?` search down and up the column
+for text a cell shows, the same way, and `n` and `N` search again in the same
+direction or the other. While a file is still indexing, `G` stops at the last row the engine
+can read and says how far it has got. The arrows, Tab, PgUp, PgDn, Home and End
+work as before.
+
+The keys are read by an input strategy in `src/renderer/input/`, and what they
+mean is carried out through `src/renderer/keys.ts`. Neither touches the DOM, and
+both are tested without a window.
+
+## The text
+
+Every sentence the app says is in `messages/en.json`, in [inlang's message format](https://inlang.com/m/reootnfj/plugin-inlang-messageFormat).
+[Paraglide](https://paraglidejs.com) compiles each one to a typed function in `src/paraglide`, which is generated and not committed.
+
+```ts
+import { m } from "../../paraglide/messages.js";
+
+this.say(m.saved_path({ path }));
+```
+
+A key that is not there, or a parameter left out, fails `vp run check`.
+The Vite plugin compiles the messages for the dev server, the renderer build and the tests.
+`scripts/messages.js` holds the compiler's options and compiles them for the Electron bundles and the check.
+The plugin that reads the JSON is loaded from `node_modules`, so a build fetches nothing.
+
+uno speaks American English, British English, Spanish, Brazilian Portuguese and European Portuguese.
+A language is one file: `messages/es.json` holds every message `messages/en-US.json` does, in Spanish.
+Adding another is copying the English file to the new locale's name, translating it, and adding the locale to `project.inlang/settings.json`.
+Settings lists it from there under the name it calls itself.
+
+A new install follows the system.
+The first of the system's languages uno has is the one it starts in: the language and region exactly, or failing that the same language in the first region listed, which is the one most of its speakers are in.
+So en-AU reads American English, pt reads Brazilian Portuguese, and es-MX reads Spanish.
+A system that prefers none of them gets American English.
+The two English files say the same today, and differ only where someone edits one.
+
+`messages/en-XA.json` is the pseudo-locale, written from the English by `scripts/pseudo.js` before every compile and not committed.
+Every letter in it wears an accent, every message is a third longer, and each sits in `⟦ ⟧`.
+On screen, text with no accents never went through a message, and text with a bracket missing was cut short by a layout that only fitted the English.
+
+`tests/smoke/pseudo.test.ts` starts the real shell over the real engine, changes the language to the pseudo-locale, and fails on any plain letters left in the window.
+What it finds is a sentence written into the code, or one written once and not written again when the language changed.
+
+What the engine says arrives as data, a `Said` from `@uno/core/said`, and `src/renderer/said.ts` writes each kind through a message.
+`tests/said.test.ts` says a sample of every kind both ways, and the desktop's English has to be the engine's.
+A diagnostic the engine has given no kind yet arrives as text and is shown as it was written, in English.
+
+`tests/messages.test.ts` holds each language's file to the English one: the same messages, the same inputs, and a form for every plural the language has.
+
+## Running it
+
+```bash
+vp install               # from the repo root, the workspace root
+vp run dev               # vite dev server + electron, reloading
+vp run build             # out/main, out/preload, out/renderer
+vp run smoke             # build, then drive the real app and assert
+vp test                  # the keys, without a window
+vp run check             # compile the messages, then format, lint, type check
+```
+
+`vp run dev` prints the Electron pid. Stop it by that pid; there is usually
+something else on the machine called electron.
+
+The dev server's URL reaches Electron through `UNO_RENDERER_URL` at run time and
+is never compiled in - a localhost address baked into a bundle is one that ships,
+and the installed app then tries to reach a dev server that is not running.
+
+## The grid
+
+A 4,812-row export is about forty elements in the DOM. The scroller's inner
+height is the whole sheet; the table inside holds only the rows that fit, moved
+into place with one transform per frame. Every cell reads `display(row, col)`
+from a sheet or a band, and both are array reads. Recalculation happens when an
+edit lands, never when a cell is drawn. The gutter numbers rows grouped the way
+the status bar counts them, and a column whose header is blank is named
+`column N` by its place, in the grid and wherever the status bar names it.
+
+Past 15 million pixels of rows, about 517,000, the scroller's height is capped
+and the scrollbar maps onto the rows by proportion. The wheel and the keys still
+move by rows, so a step is one row at row 50,000,000.
+
+## Testing
+
+`vp run smoke` builds the app, starts it on the real 4,812-row fixture, and asks
+the live DOM what it shows: that the file opened, that the delimiter was sniffed,
+that `units` is badged as numeric data in a costume, that scrolling to row 4,812
+still leaves under 120 rows in the DOM, that a key that writes changes nothing
+in view, that after Ctrl+E typing into a cell records an edit, that three fixes
+bring the banner's offer, that Apply rewrites the column as one edit, that
+Ctrl+Z takes it back, and that `i`, `a`, `s` and Esc move between view,
+transform and insert with Esc keeping what was typed. It writes a screenshot to
+`out/smoke/window.png`.
+
+The window it drives ignores the desktop. Keys, clicks and the wheel from the
+window system never reach the page, and the page keeps the focus when someone
+switches to another window. Keep working while it runs. Two of the checks send
+input down the window system's path, once dropped and once let through. The
+menu's accelerators are the main process's, so one of those still lands. `vp run preview` runs in the same
+mode, and `src/main/driven.ts` has the details.
+
+The run starts Electron with a `--user-data-dir` of its own under `out/smoke/`,
+emptied first, so the connection it saves never lands among yours and a file a
+previous run left behind is not taken as evidence. `vp run preview` does the
+same under `out/preview-data/`, since the GIF it films is published and the
+theme its story tries must not become the one your own uno opens in.
+
+The run is in English whatever the machine it runs on prefers, since its checks read what the window says.
+`scripts/launch.js` pins it, with a switch where a switch decides and `LANGUAGE` on Linux, where Chromium reads the environment first.
+One check chooses Español in settings and reads the window in Spanish, then goes back.
+
+It needs a display. On a headless machine, run it under Xvfb. Started from a
+tool that is itself an Electron app, unset `ELECTRON_RUN_AS_NODE` first, or
+Electron starts as plain Node and main finds no `app`.
+
+The assertions live in `src/main/smoke/`, which is test code inside the app -
+a smell worth naming. It is there because a virtualiser, a preload bridge and an
+IPC round trip cannot be checked anywhere but inside a real Electron, and the
+alternative was a browser-automation dependency larger than the app it tests. It
+is reached only when `UNO_SMOKE` is set, and nothing in the app calls it.
