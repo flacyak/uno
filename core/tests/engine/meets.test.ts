@@ -10,8 +10,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 
-import { readContainer } from '@document';
+import {
+  READ_VERSION,
+  newManifest,
+  readContainer,
+  writeDocument,
+} from '@document';
 import type { SourceHandle } from '@engine';
+import { read } from '@ingest';
 import type { Connection } from '@library';
 import { Op } from '@sheet';
 import { connectionsIn, saveConnection } from '@store';
@@ -20,7 +26,7 @@ import { connectionMeeting, s3Provider } from '@store/s3';
 import { BUCKET, bucket, etagOf, keysOnly } from '@core-tests/store/standin';
 import type { Bucket } from '@core-tests/store/standin';
 import { ROWS, UNITS } from '@core-tests/testdata/sales-q3';
-import { FIXTURE, connect, indexed, openOne } from './harness.ts';
+import { FIXTURE, connect, indexed, openOne, testdata } from './harness.ts';
 
 let b: Bucket;
 beforeAll(async () => {
@@ -315,5 +321,61 @@ test('a source waiting for its bucket saves the version and connection it was op
     expect(pick(again).connection).toBe(EXPORTS.id);
   } finally {
     done();
+  }
+});
+
+// A build from before a .uno said how a source was read split a .jsonl at
+// commas, and the log was made over that. Once its bucket is connected, the
+// object is read as it would be had the bucket been connected at the open.
+test('a .jsonl object a workspace logged edits against before reads as they were made once its bucket is connected', async () => {
+  const name = 'events.jsonl';
+  const key = `2025/${name}`;
+  const object = `s3://${BUCKET}/${key}`;
+  const lines = new Uint8Array(await readFile(testdata(name)));
+  const sheet = read(name, lines);
+  const edited = { row: 2, col: 1, now: 'edited' };
+  sheet.set(edited.row, edited.col, edited.now);
+  const uno = writeDocument({
+    manifest: newManifest(),
+    sources: [
+      {
+        id: 'events',
+        name,
+        path: object,
+        bytes: lines.length,
+        rows: sheet.rows(),
+        cols: sheet.cols(),
+        state: { active: { row: 0, col: 0 } },
+      },
+    ],
+    active: 'events',
+    log: sheet.edits().map((edit) => ({ source: 'events', edit })),
+    extra: new Map(),
+    at: '',
+  });
+  expect(readContainer(name, uno).manifest.format).toBeLessThan(READ_VERSION);
+  const file = join(
+    await mkdtemp(join(tmpdir(), 'uno-meets-lines-')),
+    'q3.uno',
+  );
+  await writeFile(file, uno);
+
+  b.objects.set(key, lines);
+  const { engine, done, store, dir } = await desktop();
+  try {
+    const waiting = await openOne(engine, { name: 'q3.uno', path: file });
+    expect(waiting.opened.link?.connect).toBeDefined();
+
+    await saveConnection(store, dir, EXPORTS);
+    await engine.connections();
+    const back = await engine.relink(waiting, { name, path: object });
+    expect(back.opened.link?.missing).toBeUndefined();
+    expect(back.opened.label?.t).toBe('read');
+    expect(back.opened.edits).toHaveLength(1);
+    const { rows } = await back.rows(edited.row, 1);
+    expect(rows[0]![edited.col]).toBe(edited.now);
+  } finally {
+    done();
+    b.objects.delete(key);
   }
 });
