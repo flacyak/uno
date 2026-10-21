@@ -15,7 +15,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { newManifest, writeDocument } from '@document';
+import {
+  READ_VERSION,
+  newManifest,
+  readContainer,
+  writeDocument,
+} from '@document';
 import type { HeldPart } from '@document';
 import type { Engine, Said } from '@engine';
 import { read } from '@ingest';
@@ -95,7 +100,11 @@ describe('a .jsonl a workspace logged edits against before', () => {
   const EDITED = { row: 2, col: 1, now: 'edited' };
   sheet.set(EDITED.row, EDITED.col, EDITED.now);
 
-  /** A format 6 workspace holding the source as `held`, with the edit. */
+  /**
+   * A workspace holding the source as `held`, with the edit, in a format from
+   * before a .uno could say how a source was read: 1 carried, 5 pointed at
+   * and 6 for parts.
+   */
   function workspace(
     held:
       | { path: string; bytes: number }
@@ -121,6 +130,7 @@ describe('a .jsonl a workspace logged edits against before', () => {
       extra: new Map(),
       at: '',
     });
+    expect(readContainer(name, uno).manifest.format).toBeLessThan(READ_VERSION);
     return new Blob([new Uint8Array(uno)]);
   }
 
@@ -131,6 +141,7 @@ describe('a .jsonl a workspace logged edits against before', () => {
     expect(saidIn(src.opened.link?.missing)).toBeUndefined();
     expect(saidIn(src.opened.link?.changed)).toBeUndefined();
     expect(src.opened.edits).toHaveLength(1);
+    expect(src.opened.label?.t).toBe('read');
     expect(src.opened.columns.map((c) => c.header)).toEqual(
       sheet.columns.map((c) => c.header),
     );
