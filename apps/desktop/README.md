@@ -1,8 +1,8 @@
 # @uno/desktop
 
-uno's desktop client: an Electron shell over [`@uno/grid`](../../grid).
+uno's desktop client: an Electron shell over [`@uno/core`](../../core).
 
-It holds no spreadsheet logic. Opening a file is `@uno/grid/engine`, changing a
+It holds no spreadsheet logic. Opening a file is `@uno/core/engine`, changing a
 cell is `sheet.set`, saving is `writeDocument`. This package is the window, the
 sidebar, the grid that draws rows, and the file operations a web page cannot do
 for itself.
@@ -233,7 +233,7 @@ restart. A file that will not read costs that connection only, and is said once
 in the status bar. Before any file is open, the panel browses through a spare
 engine that holds no workspace, and closes it once a workspace brings its own.
 
-Every file uno reads goes through a `FileHandler` from `@uno/grid/store`:
+Every file uno reads goes through a `FileHandler` from `@uno/core/store`:
 sources, `.uno` files, formulas in the library, and the `~/.aws` config. There
 are three handlers. `localFiles` (in `store/node`) reads paths on disk,
 `s3Files` (in `store/s3`) reads objects in a bucket, and `blobFiles` reads
@@ -399,7 +399,7 @@ On screen, text with no accents never went through a message, and text with a br
 `tests/smoke/pseudo.test.ts` starts the real shell over the real engine, changes the language to the pseudo-locale, and fails on any plain letters left in the window.
 What it finds is a sentence written into the code, or one written once and not written again when the language changed.
 
-What the engine says arrives as data, a `Said` from `@uno/grid/said`, and `src/renderer/said.ts` writes each kind through a message.
+What the engine says arrives as data, a `Said` from `@uno/core/said`, and `src/renderer/said.ts` writes each kind through a message.
 `tests/said.test.ts` says a sample of every kind both ways, and the desktop's English has to be the engine's.
 A diagnostic the engine has given no kind yet arrives as text and is shown as it was written, in English.
 

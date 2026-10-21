@@ -2,7 +2,7 @@
   "name": "@uno/desktop",
   "version": "0.0.0",
   "private": true,
-  "description": "uno's desktop client: an Electron shell over @uno/grid.",
+  "description": "uno's desktop client: an Electron shell over @uno/core.",
   "type": "module",
   "main": "out/main/index.cjs",
   "exports": {
@@ -21,7 +21,7 @@
     "check": "node scripts/messages.js && vp check"
   },
   "dependencies": {
-    "@uno/grid": "workspace:*"
+    "@uno/core": "workspace:*"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.25.4",

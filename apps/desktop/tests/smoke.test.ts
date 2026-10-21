@@ -168,7 +168,7 @@ test("smoke opens the app directory, not the main bundle, and on fixtures that e
   expect(read("launch.js")).toMatch(/spawn\(electron,\s*args/);
   for (const fixture of ["sales-q3.csv", "google-ads-sales.csv"]) {
     expect(() =>
-      readFileSync(join(SCRIPTS, "../../../grid/tests/testdata", fixture)),
+      readFileSync(join(SCRIPTS, "../../../core/tests/testdata", fixture)),
     ).not.toThrow();
   }
 });
@@ -194,7 +194,7 @@ test("a hung app is killed by pid, on a deadline", () => {
 
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {
   const src = read("smoke.js");
-  expect(src).toMatch(/from\s+"@grid-tests\/store\/standin"/);
+  expect(src).toMatch(/from\s+"@core-tests\/store\/standin"/);
   // Seeded with a real export, under a key like one in a real bucket.
   expect(src).toContain("2025/ads-q3.csv");
   expect(src).toMatch(/await bucket\(/);
@@ -288,9 +288,9 @@ test("no address and no port is baked into anything that ships", () => {
   // store/metadata.ts names the loopback hosts a container endpoint the
   // environment gives may be reached on over plain http. That is a check on
   // an address, not an address of its own, so the file is let through.
-  const CHECKS_ONE = "../../../grid/src/store/metadata.ts";
+  const CHECKS_ONE = "../../../core/src/store/metadata.ts";
   const named: string[] = [];
-  for (const root of [SRC, join(SRC, "../../../grid/src")]) {
+  for (const root of [SRC, join(SRC, "../../../core/src")]) {
     for (const file of sources(root)) {
       if (relative(SRC, file) === CHECKS_ONE) continue;
       if (ADDRESS.test(code(readFileSync(file, "utf8")))) named.push(relative(SRC, file));

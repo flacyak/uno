@@ -1,7 +1,7 @@
 /**
  * @fileoverview Sends the engine's metrics to an OTLP collector.
  *
- * @uno/grid's Meter aggregates the measurements. This file posts them on a
+ * @uno/core's Meter aggregates the measurements. This file posts them on a
  * timer. Sending starts when OTEL_EXPORTER_OTLP_ENDPOINT or
  * OTEL_EXPORTER_OTLP_METRICS_ENDPOINT is set.
  *

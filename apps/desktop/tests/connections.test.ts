@@ -18,7 +18,7 @@ import { writeConnection } from "@main/files";
 import { connectionLine } from "@renderer/sources";
 
 const ACME = fileURLToPath(
-  new URL("../../../grid/tests/testdata/acme-exports.unof", import.meta.url),
+  new URL("../../../core/tests/testdata/acme-exports.unof", import.meta.url),
 );
 
 /** A path for a connections folder. The first write creates it. */

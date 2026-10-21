@@ -2,7 +2,7 @@
  * @fileoverview Entry point of the engine utility process in Electron. One
  * process serves one workspace.
  *
- * `serve` from @uno/grid does the work. This file wires it to the runtime:
+ * `serve` from @uno/core does the work. This file wires it to the runtime:
  * the MessagePort arrives on parentPort, and the providers are local disk
  * files, S3 objects, and several of either read as one. Every file arrives
  * as a path.

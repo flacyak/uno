@@ -3,7 +3,7 @@
 uno reports two kinds of numbers to Grafana.
 
 - **Efficiency metrics** come from CI.
-  `grid/tests/efficiency` counts what a change costs in requests, bytes and directory entries read.
+  `core/tests/efficiency` counts what a change costs in requests, bytes and directory entries read.
   The `efficiency` workflow sends them on every pull request and every push to main.
 - **Engine metrics** come from a running uno.
   The engine measures how long each request took to answer, how long each source took to index, and what it asked S3 for.
@@ -43,7 +43,7 @@ The container keeps nothing when it stops.
 Send the efficiency metrics to it:
 
 ```bash
-cd grid
+cd core
 vp test tests/efficiency
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import ../paths.js scripts/efficiency.ts
 ```
@@ -75,4 +75,4 @@ A pull request from a fork is not handed secrets, so it is measured and reported
 The workflow measures the pull request and the branch it is going into on the same runner.
 It writes a table of each metric beside what it was into the job summary, and keeps one comment on the pull request up to date with it.
 The counts are exact, so any difference is something the change did.
-A change that breaks a budget in `grid/tests/efficiency` fails the job, and the table still says by how much.
+A change that breaks a budget in `core/tests/efficiency` fails the job, and the table still says by how much.
