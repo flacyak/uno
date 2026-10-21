@@ -44,7 +44,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
-const root = resolve(pkg, "../..");
+const root = resolve(pkg, "../../..");
 const testdata = join(pkg, "../../grid/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 
