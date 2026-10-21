@@ -4,8 +4,9 @@
  * key at row 50,000. Saved while its index is held just past the key, with
  * an edit in that key's column, the .uno is format 7 and pins each column
  * by name and key. Reopened, the edit is on its cell before the index
- * reaches the key, and the key takes its pinned column when it does. A CSV
- * saves as it always has, saying nothing of how it was read.
+ * reaches the key, and the key takes its pinned column when it does. A late
+ * key named _file keeps the name it showed beside the _file the source
+ * supplies. A CSV saves as it always has, saying nothing of how it was read.
  */
 
 import { expect, test } from 'vite-plus/test';
@@ -19,6 +20,7 @@ import {
 import type { Logged } from '@document';
 import { FILE_COLUMN } from '@engine';
 import type { SourceHandle, SourceRef } from '@engine';
+import { pointerTo } from '@ingest';
 import { Op } from '@sheet';
 import { manifestOf } from '@core-tests/document/manifest';
 import { COLS, ROWS, UNITS, bytes } from '@core-tests/testdata/sales-q3';
@@ -58,6 +60,9 @@ const EDITED = 'edited';
 /** The carried bytes a save allows: none, since the file is pointed at. */
 const NOTHING_CARRIED = 0;
 
+/** What a late key named _file shows as, beside the _file a source supplies. */
+const SUFFIXED_FILE = `${FILE_COLUMN}_2`;
+
 /** Each layout's headers once the late key is known. */
 const HEADERS: Record<Layout, readonly string[]> = {
   file: [ID_KEY, LATE_KEY],
@@ -79,24 +84,35 @@ function headersOf(src: SourceHandle): string[] {
 
 /**
  * savedMidPass opens the file as `layout` and holds its index just past the
- * late key. It makes an edit in the late key's column at row EARLY and
- * saves while the index is still held.
+ * late key, where the source shows `headers`. It makes an edit in the late
+ * key's column at row EARLY and saves while the index is still held.
  */
-function savedMidPass(file: OnDisk, layout: Layout): Promise<Uint8Array> {
+function savedMidPass(
+  file: OnDisk,
+  layout: Layout,
+  headers = HEADERS[layout],
+): Promise<Uint8Array> {
   const blob = workspace(file, layout);
-  return withHeld(blob, file.late + PAST_LATE, async ({ engine, src }) => {
-    engine.mode(true);
-    await src.edit({
-      op: Op.Set,
-      row: EARLY,
-      col: LATE_COL,
-      now: EDITED,
-      width: HEADERS[layout].length,
-    });
-    expect(src.progress.complete, 'the index is still held').toBe(false);
-    const cells = [{ source: SOURCE, row: EARLY, col: LATE_COL }];
-    return engine.save({ source: SOURCE, cells, at: '' }, NOTHING_CARRIED);
-  });
+  return withHeld(
+    blob,
+    file.late + PAST_LATE,
+    async ({ engine, src, told }) => {
+      engine.mode(true);
+      await src.edit({
+        op: Op.Set,
+        row: EARLY,
+        col: LATE_COL,
+        now: EDITED,
+        width: headers.length,
+      });
+      // The edit's answer comes after every reply posted before it.
+      const last = [...told.values()].at(-1) ?? [];
+      expect(last.map((column) => column.header)).toEqual(headers);
+      expect(src.progress.complete, 'the index is still held').toBe(false);
+      const cells = [{ source: SOURCE, row: EARLY, col: LATE_COL }];
+      return engine.save({ source: SOURCE, cells, at: '' }, NOTHING_CARRIED);
+    },
+  );
 }
 
 test.each<Layout>(['file', 'part'])(
@@ -139,6 +155,28 @@ test.each<Layout>(['file', 'part'])(
     });
   },
 );
+
+test('a late key named _file keeps the name it showed beside the _file the source supplies, saved and reopened', async () => {
+  const file = await written(FILE_COLUMN);
+  // The supplied _file held the name first, so the key's column took a suffix.
+  const headers = [ID_KEY, SUFFIXED_FILE, FILE_COLUMN];
+  const uno = await savedMidPass(file, 'part', headers);
+  expect(readContainer('q3.uno', uno).manifest.sources[0]!.columns).toEqual([
+    { name: ID_KEY },
+    { name: SUFFIXED_FILE, key: pointerTo('', FILE_COLUMN) },
+  ]);
+
+  const blob = new Blob([new Uint8Array(uno)]);
+  await withHeld(blob, file.late, async ({ src, release, told }) => {
+    expect(headersOf(src)).toEqual(headers);
+    const edited = [String(EARLY), EDITED, NAME];
+    expect((await src.rows(EARLY, 1)).rows).toEqual([edited]);
+    release();
+    await indexed(src);
+    expect(told.size, 'the key took its pinned column').toBe(1);
+    expect((await src.rows(LATE, 1)).rows).toEqual([[...cellsAt(LATE), NAME]]);
+  });
+});
 
 /** The byte that ends a line. */
 const LF = 0x0a;
