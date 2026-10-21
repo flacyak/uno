@@ -176,7 +176,14 @@ export async function refuseUnread(
   name: string,
   head: StoredHead,
 ): Promise<void> {
-  const found = await detect(name, head);
+  refuseNotRead(name, await detect(name, head));
+}
+
+/**
+ * refuseNotRead refuses a file by name where this build does not read what
+ * it holds.
+ */
+export function refuseNotRead(name: string, found: Detected): void {
   if (found.t === 'not-read')
     throw new Refusal({ t: 'not-read', name, what: found.what });
 }
