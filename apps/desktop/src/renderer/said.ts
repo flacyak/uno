@@ -10,7 +10,7 @@
 import { Refusal, messageOf } from "@engine";
 import type { CharName, ReadKind, Said, Sought, StepSaid } from "@engine";
 import { quote } from "@go";
-import type { Sentences } from "@said";
+import type { ParquetFeature, Sentences } from "@said";
 
 import { m } from "@paraglide/messages";
 import { getLocale } from "@paraglide/runtime";
@@ -51,6 +51,18 @@ const KINDS: Record<ReadKind, () => string> = {
   delimited: m.kind_delimited,
   jsonl: m.kind_jsonl,
   parquet: m.kind_parquet,
+};
+
+/** The message function for each Parquet feature uno does not read yet. Called at use so the current locale applies. */
+const FEATURES: Record<ParquetFeature, () => string> = {
+  encryption: m.parquet_feature_encryption,
+  brotli: m.parquet_feature_brotli,
+  lz4: m.parquet_feature_lz4,
+  lzo: m.parquet_feature_lzo,
+  interval: m.parquet_feature_interval,
+  bson: m.parquet_feature_bson,
+  variant: m.parquet_feature_variant,
+  "external-columns": m.parquet_feature_external_columns,
 };
 
 /**
@@ -191,6 +203,8 @@ const SAYS: Sentences<Said> = {
     m.refused_stored_encoded({ name: s.name, encoding: s.encoding, bucket: s.bucket }),
   "not-read": (s) => m.refused_not_read({ name: s.name, what: s.what }),
   "parquet-broken": (s) => m.refused_parquet_broken({ name: s.name }),
+  "parquet-unsupported": (s) =>
+    m.refused_parquet_unsupported({ name: s.name, feature: FEATURES[s.feature]() }),
 
   "keeps-no-connections": m.refused_keeps_no_connections,
   "offers-no-sign-ins": m.refused_offers_no_sign_ins,

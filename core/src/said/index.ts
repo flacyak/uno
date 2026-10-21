@@ -43,6 +43,20 @@ export type Unread =
 /** A table format, whose log says which of its files hold live rows. */
 export type TableFormat = 'Delta Lake' | 'Iceberg' | 'Hudi';
 
+/**
+ * ParquetFeature is what a Parquet file can use that uno does not read yet:
+ * encryption, a page codec, a column type, or columns kept in other files.
+ */
+export type ParquetFeature =
+  | 'encryption'
+  | 'brotli'
+  | 'lz4'
+  | 'lzo'
+  | 'interval'
+  | 'bson'
+  | 'variant'
+  | 'external-columns';
+
 /** The punctuation a description can name, as plurals. */
 export type CharName =
   | 'commas'
@@ -149,6 +163,7 @@ export type Said =
   | { t: 'stored-encoded'; name: string; encoding: string; bucket: string }
   | { t: 'not-read'; name: string; what: Unread }
   | { t: 'parquet-broken'; name: string }
+  | { t: 'parquet-unsupported'; name: string; feature: ParquetFeature }
 
   // What an engine refuses because its platform left out the means.
   | { t: 'keeps-no-connections' }
@@ -251,6 +266,18 @@ const KINDS: Record<ReadKind, string> = {
   parquet: 'Parquet',
 };
 
+/** What each Parquet feature uno does not read yet is called in a sentence. */
+const FEATURES: Record<ParquetFeature, string> = {
+  encryption: 'encrypted Parquet',
+  brotli: 'Parquet compressed with Brotli',
+  lz4: 'Parquet compressed with LZ4',
+  lzo: 'Parquet compressed with LZO',
+  interval: 'the Parquet INTERVAL type',
+  bson: 'the Parquet BSON type',
+  variant: 'the Parquet VARIANT type',
+  'external-columns': 'Parquet with columns kept in other files',
+};
+
 const SENTENCES: Sentences<Said> = {
   text: (s) => s.text,
   about: (s) => `${s.subject}: ${english(s.why)}`,
@@ -334,6 +361,8 @@ const SENTENCES: Sentences<Said> = {
     `${s.name} was stored with Content-Encoding ${s.encoding}, and uno reads such an object only when it signs in · connect ${s.bucket} with a sign-in to read it`,
   'not-read': (s) => `${s.name}: ${s.what} is not supported yet`,
   'parquet-broken': (s) => `${s.name}: its Parquet footer or pages are damaged`,
+  'parquet-unsupported': (s) =>
+    `${s.name}: ${FEATURES[s.feature]} is not supported yet`,
 
   'keeps-no-connections': () =>
     'this engine keeps no connections · its platform gave it nowhere to read them from',

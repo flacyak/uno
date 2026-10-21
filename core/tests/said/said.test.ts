@@ -125,6 +125,19 @@ describe('english', () => {
       'sales-q3.parquet: its Parquet footer or pages are damaged',
     );
   });
+
+  test('names what a Parquet file uses that this build does not read', () => {
+    expect(
+      english({
+        t: 'parquet-unsupported',
+        name: 'events.parquet',
+        feature: 'variant',
+      }),
+    ).toBe('events.parquet: the Parquet VARIANT type is not supported yet');
+    expect(
+      english({ t: 'parquet-unsupported', name: 'q3.parquet', feature: 'lz4' }),
+    ).toBe('q3.parquet: Parquet compressed with LZ4 is not supported yet');
+  });
 });
 
 describe('a kind from an engine newer than this build', () => {
