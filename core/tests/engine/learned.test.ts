@@ -4,16 +4,27 @@
  * key at row 50,000. Saved while its index is held just past the key, with
  * an edit in that key's column, the .uno is format 7 and pins each column
  * by name and key. Reopened, the edit is on its cell before the index
- * reaches the key, and the key takes its pinned column when it does.
+ * reaches the key, and the key takes its pinned column when it does. A CSV
+ * saves as it always has, saying nothing of how it was read.
  */
 
 import { expect, test } from 'vite-plus/test';
 
-import { READ_VERSION, readContainer } from '@document';
+import { POINTED_VERSION, READ_VERSION, readContainer } from '@document';
+import type { Logged } from '@document';
 import { FILE_COLUMN } from '@engine';
-import type { SourceHandle } from '@engine';
+import type { SourceHandle, SourceRef } from '@engine';
 import { Op } from '@sheet';
-import { indexed } from './harness.ts';
+import { manifestOf } from '@core-tests/document/manifest';
+import { COLS, ROWS, UNITS, bytes } from '@core-tests/testdata/sales-q3';
+import {
+  FIXTURE,
+  connect,
+  indexed,
+  multiProviders,
+  openOne,
+  sales,
+} from './harness.ts';
 import {
   ID_KEY,
   LATE,
@@ -116,5 +127,63 @@ test.each<Layout>(['file', 'part'])(
       ]);
       expect((await src.rows(EARLY, 1)).rows).toEqual(edited);
     });
+  },
+);
+
+/** The id a CSV source of the sales fixture takes. */
+const SALES = 'sales-q3';
+
+/** Delimited is a CSV source, and what its save has always written of it. */
+interface Delimited {
+  readonly ref: SourceRef;
+  /** The format its .uno needs. */
+  readonly format: number;
+  /** The source as uno.json writes it, its keys in the order written. */
+  readonly source: Record<string, unknown>;
+}
+
+/** A CSV on its own, as a save wrote it before. */
+const DELIMITED: Record<string, Delimited> = {
+  'one file': {
+    ref: { name: 'sales-q3.csv', path: FIXTURE },
+    format: POINTED_VERSION,
+    source: {
+      id: SALES,
+      name: 'sales-q3.csv',
+      bytes: bytes.length,
+      path: FIXTURE,
+      rows: ROWS,
+      cols: COLS,
+    },
+  },
+};
+
+test.each(Object.keys(DELIMITED))(
+  'a CSV in %s saves as it always has, saying nothing of how it was read',
+  async (held) => {
+    const { ref, format, source } = DELIMITED[held]!;
+    const { engine, done } = connect(undefined, multiProviders());
+    try {
+      const src = await openOne(engine, ref);
+      engine.mode(true);
+      const edit = { op: Op.Set, row: 0, col: UNITS, now: EDITED };
+      await src.edit(edit);
+      const cells = [{ source: src.id, row: 0, col: UNITS }];
+      const uno = await engine.save(
+        { source: src.id, cells, at: '' },
+        NOTHING_CARRIED,
+      );
+      const manifest = manifestOf(uno);
+      expect(manifest.format).toBe(format);
+      // Compared as text, so the order uno.json writes keys in is held too.
+      expect(JSON.stringify(manifest.sources[0])).toBe(JSON.stringify(source));
+      const logged: Logged = {
+        source: SALES,
+        edit: { seq: 1, ...edit, was: sales.raw(0, UNITS) },
+      };
+      expect(readContainer('q3.uno', uno).log).toStrictEqual([logged]);
+    } finally {
+      done();
+    }
   },
 );
