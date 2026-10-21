@@ -315,13 +315,28 @@ function withoutDecimal(element: SchemaElement): SchemaElement {
 }
 
 /**
- * The value of a top-level leaf in an assembled row. A field of a struct is
- * not read, and is null.
+ * The value at a leaf's field path in an assembled row. A struct on the way
+ * that is null makes the value null.
  */
 function valueAt(row: Assembled, path: readonly string[]): ParquetValue {
+  let value: unknown = row;
+  for (const field of path) {
+    if (!isStruct(value)) return null;
+    value = value[field];
+  }
   // With PARSERS and no DECIMAL annotation, hyparquet assembles only the
   // values ParquetValue names.
-  return path.length === 1 ? (row[path[0]!] as ParquetValue) : null;
+  return value as ParquetValue;
+}
+
+/** Whether a value is a struct's object, rather than a list or a stored value. */
+function isStruct(value: unknown): value is Assembled {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Uint8Array)
+  );
 }
 
 /** What the footer says of each row group, in file order. */

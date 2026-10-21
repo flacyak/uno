@@ -89,3 +89,21 @@ test('a range of a row group with offset indexes reads only the pages that hold 
   expect(bytesAsked(reads, before)).toBeLessThan(whole / 2);
   await expectRanges(table, rangesOf(table.rows, [[0, table.rows]]));
 });
+
+test('a field of a struct reads as a column of its own, and empty where its struct is null', async () => {
+  const name = 'nonnullable.impala.parquet';
+  const impala = await opened(name, testdata(`parquet/${name}`));
+  const [row] = await impala.read(0, 1);
+  const cell = (key: string): string | undefined =>
+    row?.[impala.columns.findIndex((column) => column.key === key)];
+  expect(cell('/nested_Struct/a')).toBe('-1');
+  expect(cell('/nested_Struct/c/D')).toBe('[[{"e":-1,"f":"nonnullable"}]]');
+
+  const nulls = await opened(
+    'nulls.parquet',
+    testdata('parquet/nulls.snappy.parquet'),
+  );
+  expect(await nulls.read(0, nulls.rows)).toEqual(
+    Array.from({ length: nulls.rows }, () => ['']),
+  );
+});
