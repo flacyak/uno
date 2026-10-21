@@ -21,16 +21,23 @@ import { bomLength } from './scan.ts';
 /** How many bytes Parquet's magic takes, at each end of the file. */
 export const PARQUET_MAGIC_BYTES = 4;
 
-/** How many bytes the footer's length takes, before the closing magic. */
-const FOOTER_LENGTH_BYTES = 4;
+/** How many bytes a Parquet footer's length takes, before the closing magic. */
+export const PARQUET_FOOTER_LENGTH_BYTES = 4;
 
 /** The fewest bytes a Parquet file takes: its magics around a footer length. */
-const PARQUET_MIN_BYTES = 2 * PARQUET_MAGIC_BYTES + FOOTER_LENGTH_BYTES;
+export const PARQUET_MIN_BYTES =
+  2 * PARQUET_MAGIC_BYTES + PARQUET_FOOTER_LENGTH_BYTES;
 
-/** 'PAR1', and 'PARE' for a file whose footer is encrypted. */
-const PARQUET_MAGICS = [
-  [0x50, 0x41, 0x52, 0x31],
-  [0x50, 0x41, 0x52, 0x45],
+/**
+ * ParquetMagic is the magic at each end of a Parquet file: PAR1, or PARE
+ * where its footer is encrypted.
+ */
+export type ParquetMagic = 'PAR1' | 'PARE';
+
+/** Each Parquet magic's bytes. */
+const PARQUET_MAGICS: ReadonlyArray<readonly [ParquetMagic, number[]]> = [
+  ['PAR1', [0x50, 0x41, 0x52, 0x31]],
+  ['PARE', [0x50, 0x41, 0x52, 0x45]],
 ];
 
 /** 'BZh', then a block size digit from '1' to '9'. */
@@ -166,7 +173,15 @@ export function kindOf(found: Detected): ReadKind | undefined {
  * the file's last bytes confirm. Only such a head needs its tail read.
  */
 export function opensAsParquet(bytes: Uint8Array): boolean {
-  return PARQUET_MAGICS.some((magic) => startsWith(bytes, magic));
+  return parquetMagicAt(bytes, 0) !== undefined;
+}
+
+/** parquetMagicAt returns the Parquet magic `bytes` hold from `at`, if any. */
+export function parquetMagicAt(
+  bytes: Uint8Array,
+  at: number,
+): ParquetMagic | undefined {
+  return PARQUET_MAGICS.find(([, magic]) => startsWith(bytes, magic, at))?.[0];
 }
 
 /**
@@ -223,9 +238,9 @@ function unread(what: Unread): Detected {
 
 /** isParquet says whether a file starts and ends with the same Parquet magic. */
 async function isParquet(head: StoredHead): Promise<boolean> {
-  const magic = PARQUET_MAGICS.find((m) => startsWith(head.bytes, m));
+  const magic = parquetMagicAt(head.bytes, 0);
   if (magic === undefined || head.size < PARQUET_MIN_BYTES) return false;
-  return startsWith(await head.tail(PARQUET_MAGIC_BYTES), magic);
+  return parquetMagicAt(await head.tail(PARQUET_MAGIC_BYTES), 0) === magic;
 }
 
 /** isBzip2 says whether bytes start a bzip2 stream: 'BZh', a digit, a block. */
