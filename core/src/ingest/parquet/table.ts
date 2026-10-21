@@ -1,15 +1,17 @@
 /**
  * @fileoverview A Parquet file as a table of text: its footer, read once when
- * it opens, says its columns, its row groups and the codecs of its pages.
+ * it opens, says its columns, its row groups and the codecs of its pages,
+ * and its rows are read through hyparquet as the text their writer meant.
  *
  * A file that uses what uno does not read yet is refused by name as
  * parquet-unsupported, and one whose footer does not decode as
  * parquet-broken.
  */
 
-import { parquetMetadata } from 'hyparquet/src/index.js';
+import { parquetMetadata, parquetRead } from 'hyparquet/src/index.js';
 import type {
   FileMetaData,
+  ParquetParsers,
   RowGroup,
   SchemaElement,
 } from 'hyparquet/src/index.js';
@@ -25,10 +27,11 @@ import {
   PARQUET_MIN_BYTES,
   parquetMagicAt,
 } from '../detect.ts';
+import { asyncBufferOf } from './buffer.ts';
 import type { ChunkCache } from './buffer.ts';
-import { CODECS, codecOf } from './codecs.ts';
-import { columnsOf } from './values.ts';
-import type { Column, Leaf } from './values.ts';
+import { CODECS, COMPRESSORS, codecOf } from './codecs.ts';
+import { columnsOf, stringFromBytes, textOf } from './values.ts';
+import type { Column, Leaf, ParquetValue } from './values.ts';
 
 /**
  * The last bytes of a file read for its footer, which hold most footers
@@ -38,6 +41,25 @@ export const PARQUET_TAIL_BYTES = 64 << 10;
 
 /** What follows a footer: its length, a little-endian uint32, then the magic. */
 const FOOTER_END_BYTES = PARQUET_FOOTER_LENGTH_BYTES + PARQUET_MAGIC_BYTES;
+
+/**
+ * The parsers hyparquet is handed. Each hands a value over as it is stored,
+ * so textOf writes it at its own precision, and a string comes as its text.
+ */
+const PARSERS: ParquetParsers = {
+  timestampFromMilliseconds: stored,
+  timestampFromMicroseconds: stored,
+  timestampFromNanoseconds: stored,
+  dateFromDays: stored,
+  stringFromBytes,
+  jsonFromBytes: stored,
+  geometryFromBytes: stored,
+  geographyFromBytes: stored,
+  uuidFromBytes: stored,
+};
+
+/** A row as hyparquet assembles it, keyed by top-level field. */
+type Assembled = Readonly<Record<string, unknown>>;
 
 /** Table is a Parquet file whose footer has been read. */
 export interface Table {
@@ -57,6 +79,8 @@ export interface Table {
   bytesPerRow(start: number, end: number): number;
   /** Whether every row group under rows [start, end) has offset indexes. */
   paged(start: number, end: number): boolean;
+  /** Rows [start, end) of the file, each cell as textOf writes it. */
+  read(start: number, end: number): Promise<string[][]>;
 }
 
 /** What the footer says of one row group. */
@@ -83,7 +107,7 @@ export async function openTable(
   const metadata = await footerOf(name, file, chunks);
   const codecs = codecsOf(name, metadata.row_groups);
   refuseTypes(name, metadata.schema);
-  return new ParquetTable(name, metadata, codecs);
+  return new ParquetTable(name, file, chunks, metadata, codecs);
 }
 
 /**
@@ -127,6 +151,7 @@ async function footerOf(
   const heldStart = file.size - held.length;
   try {
     return parquetMetadata(held.subarray(start - heldStart), {
+      parsers: PARSERS,
       geoparquet: false,
     });
   } catch {
@@ -189,20 +214,30 @@ class ParquetTable implements Table {
   readonly groups: number;
   readonly codecs: readonly ParquetCodec[];
   private readonly spans: readonly Group[];
+  private readonly leaves: readonly Leaf[];
+  /** The footer as hyparquet is handed it. */
+  private readonly plain: FileMetaData;
+
+  private readonly file: ByteSource;
+  private readonly chunks: ChunkCache;
 
   constructor(
     name: string,
+    file: ByteSource,
+    chunks: ChunkCache,
     metadata: FileMetaData,
     codecs: readonly ParquetCodec[],
   ) {
+    this.file = file;
+    this.chunks = chunks;
     this.codecs = codecs;
-    let leaves: Leaf[];
     try {
-      leaves = columnsOf(metadata.schema);
+      this.leaves = columnsOf(metadata.schema);
     } catch {
       throw new Refusal({ t: 'parquet-broken', name });
     }
-    this.columns = leaves.map((leaf) => leaf.column);
+    this.plain = withoutDecimals(metadata);
+    this.columns = this.leaves.map((leaf) => leaf.column);
     this.spans = groupsOf(metadata.row_groups);
     this.groups = this.spans.length;
     const last = this.spans.at(-1);
@@ -226,6 +261,67 @@ class ParquetTable implements Table {
         span.rows > 0 && span.start < end && start < span.start + span.rows,
     );
   }
+
+  async read(start: number, end: number): Promise<string[][]> {
+    if (end <= start) return [];
+    const rows = await this.assembled(start, end);
+    return rows.map((row) =>
+      this.leaves.map((leaf) => textOf(leaf, valueAt(row, leaf.path))),
+    );
+  }
+
+  /**
+   * Rows [start, end) as hyparquet assembles them. Only the pages that hold
+   * them are read where a row group has offset indexes.
+   */
+  private async assembled(start: number, end: number): Promise<Assembled[]> {
+    let rows: Assembled[] = [];
+    await parquetRead({
+      file: asyncBufferOf(this.file, this.chunks),
+      metadata: this.plain,
+      rowStart: start,
+      rowEnd: end,
+      rowFormat: 'object',
+      useOffsetIndex: true,
+      parsers: PARSERS,
+      utf8: false,
+      compressors: COMPRESSORS,
+      onComplete: (read: Assembled[]) => {
+        rows = read;
+      },
+    });
+    return rows;
+  }
+}
+
+/**
+ * `metadata` as hyparquet is handed it, with no DECIMAL annotation, so a
+ * decimal comes over as its unscaled integer for textOf to write exactly.
+ */
+function withoutDecimals(metadata: FileMetaData): FileMetaData {
+  return { ...metadata, schema: metadata.schema.map(withoutDecimal) };
+}
+
+/** `element` without its DECIMAL annotation, where it has one. */
+function withoutDecimal(element: SchemaElement): SchemaElement {
+  const decimal =
+    element.converted_type === 'DECIMAL' ||
+    element.logical_type?.type === 'DECIMAL';
+  if (!decimal) return element;
+  const plain = { ...element };
+  delete plain.converted_type;
+  delete plain.logical_type;
+  return plain;
+}
+
+/**
+ * The value of a top-level leaf in an assembled row. A field of a struct is
+ * not read, and is null.
+ */
+function valueAt(row: Assembled, path: readonly string[]): ParquetValue {
+  // With PARSERS and no DECIMAL annotation, hyparquet assembles only the
+  // values ParquetValue names.
+  return path.length === 1 ? (row[path[0]!] as ParquetValue) : null;
 }
 
 /** What the footer says of each row group, in file order. */
@@ -247,4 +343,9 @@ function groupsOf(groups: readonly RowGroup[]): Group[] {
     start += rows;
     return span;
   });
+}
+
+/** A value as it is stored. */
+function stored<T>(value: T): T {
+  return value;
 }
