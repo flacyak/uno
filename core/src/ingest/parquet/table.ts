@@ -8,11 +8,15 @@
  */
 
 import { parquetMetadata } from 'hyparquet/src/index.js';
-import type { FileMetaData, RowGroup } from 'hyparquet/src/index.js';
+import type {
+  FileMetaData,
+  RowGroup,
+  SchemaElement,
+} from 'hyparquet/src/index.js';
 
 import { concat } from '@go';
 import { Refusal } from '@said';
-import type { ParquetCodec } from '@said';
+import type { ParquetCodec, ParquetFeature } from '@said';
 import type { ByteSource } from '@store';
 
 import {
@@ -60,6 +64,7 @@ export async function openTable(
 ): Promise<Table> {
   const metadata = await footerOf(name, file, chunks);
   const codecs = codecsOf(name, metadata.row_groups);
+  refuseTypes(name, metadata.schema);
   return new ParquetTable(name, metadata, codecs);
 }
 
@@ -130,6 +135,33 @@ function codecsOf(name: string, groups: readonly RowGroup[]): ParquetCodec[] {
     found.add(codecOf(name, chunk.meta_data?.codec));
   }
   return CODECS.filter((codec) => found.has(codec));
+}
+
+/** Refuses a column of a type uno does not read yet. */
+function refuseTypes(name: string, schema: readonly SchemaElement[]): void {
+  for (const element of schema) {
+    const feature = typeFeatureOf(element);
+    if (feature !== undefined) {
+      throw new Refusal({ t: 'parquet-unsupported', name, feature });
+    }
+  }
+}
+
+/**
+ * The type uno does not read yet that an element is annotated with. A
+ * VARIANT is one: hyparquet decodes its decimals as floats and its dates
+ * and timestamps as bare counts, and a cell written wrong is worse than a
+ * file refused by name.
+ */
+function typeFeatureOf({
+  converted_type: converted,
+  logical_type: logical,
+}: SchemaElement): ParquetFeature | undefined {
+  if (converted === 'INTERVAL' || logical?.type === 'INTERVAL') {
+    return 'interval';
+  }
+  if (converted === 'BSON' || logical?.type === 'BSON') return 'bson';
+  return logical?.type === 'VARIANT' ? 'variant' : undefined;
 }
 
 /** ParquetTable is a Table over the footer it was opened with. */
