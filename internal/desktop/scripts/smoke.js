@@ -10,6 +10,7 @@
 
 import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
 import { parseConnection } from "@uno/grid/library";
+import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -137,13 +138,42 @@ console.log(`smoke: stand-in S3 at ${standin.endpoint}, holding ${object}`);
 let shutting;
 const shut = () => (shutting ??= standin.close());
 
+/** How long a second uno gets to find the first and exit. */
+const AGAIN_MS = 15_000;
+
+/**
+ * again starts a second uno on the same user data folder, on `path` if one
+ * is given, and resolves to whether it exited cleanly: it found the first
+ * holding the lock, handed its line over and quit. One still running at
+ * AGAIN_MS opened a window of its own, and is killed.
+ *
+ * @param {string | undefined} path
+ * @returns {Promise<boolean>}
+ */
+function again(path) {
+  const child = spawn(
+    electron,
+    [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, ...(path === undefined ? [] : [path])],
+    { stdio: ["ignore", "inherit", "inherit"], env: electronEnv(process.env, DRIVEN_LANGUAGE_ENV) },
+  );
+  return new Promise((resolve) => {
+    const late = setTimeout(() => child.kill("SIGKILL"), AGAIN_MS);
+    child.on("close", (code) => {
+      clearTimeout(late);
+      resolve(code === 0);
+    });
+  });
+}
+
 /**
  * answer handles what a check asks of this script: `rewrite <key>` rewrites
- * the object at <key> with one digit changed, and `put <key> ...` puts the
- * objects held in ARRIVING for those keys into the bucket.
+ * the object at <key> with one digit changed, `put <key> ...` puts the
+ * objects held in ARRIVING for those keys into the bucket, and
+ * `again [<path>]` starts a second uno and waits for it to exit.
  */
 function answer(what) {
   const [verb, ...keys] = what.split(" ");
+  if (verb === "again" && keys.length <= 1) return again(keys[0]);
   if (verb === "put" && keys.length > 0 && keys.every((k) => ARRIVING.has(k))) {
     for (const k of keys) standin.objects.set(k, ARRIVING.get(k));
     return true;
