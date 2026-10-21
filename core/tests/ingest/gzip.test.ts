@@ -7,6 +7,7 @@ import { Gunzip } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
+  ALONE,
   BrokenStream,
   gunzipWhole,
   gzipInflater,
@@ -46,7 +47,7 @@ function fflate(stored: Uint8Array): Uint8Array {
 function pass(
   stored: Uint8Array,
   slice: number,
-  inflater: Inflater = gzipInflater(),
+  inflater: Inflater = gzipInflater(ALONE),
 ): { decoded: Uint8Array; checkpoints: readonly Checkpoint[] } {
   const pieces: Uint8Array[] = [];
   const offsets: number[] = [];
@@ -108,7 +109,7 @@ describe('a broken gzip file names the stored byte it breaks at', () => {
   const CUTS = [5, 1000, stored.length - CRC_BYTES];
 
   test.each(CUTS)('cut at %i', (cut) => {
-    const inflater = gzipInflater();
+    const inflater = gzipInflater(ALONE);
     inflater.push(stored.subarray(0, cut), () => {});
     expect(brokenAt(() => inflater.end())).toBe(cut);
     expect(brokenAt(() => gunzipWhole(stored.subarray(0, cut)))).toBe(cut);
@@ -118,7 +119,7 @@ describe('a broken gzip file names the stored byte it breaks at', () => {
     const crcAt = stored.length - TRAILER_BYTES;
     const damaged = stored.slice();
     damaged[crcAt]! ^= 1;
-    const inflater = gzipInflater();
+    const inflater = gzipInflater(ALONE);
     expect(brokenAt(() => inflater.push(damaged, () => {}))).toBe(
       crcAt + CRC_BYTES,
     );
@@ -181,7 +182,7 @@ function bgzfBlocks(stored: Uint8Array): Omit<Checkpoint, 'window' | 'bits'>[] {
 describe('a gzip pass keeps checkpoints', () => {
   /** The member starts a pass that keeps every block boundary keeps. */
   function memberStarts(stored: Uint8Array): Checkpoint[] {
-    const inflater = gzipInflater(EVERY_BOUNDARY);
+    const inflater = gzipInflater(ALONE, EVERY_BOUNDARY);
     const { checkpoints } = pass(stored, SLICE, inflater);
     return checkpoints.filter(({ window }) => window.length === 0);
   }
