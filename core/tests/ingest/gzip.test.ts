@@ -1,6 +1,6 @@
 /**
  * @fileoverview The gzip inflater over the fixtures in testdata/gzip: what it
- * decodes against fflate, where it breaks, and its heads.
+ * decodes against fflate, where it breaks, its heads, and its checkpoints.
  */
 
 import { Gunzip } from 'fflate';
@@ -12,6 +12,7 @@ import {
   gzipInflater,
   inflateHead,
 } from '@ingest/gzip';
+import type { Checkpoint } from '@ingest/gzip';
 import { concat, differAt, fixture } from './bytes.ts';
 
 /** The gzip fixtures: one of each shape a file comes in. */
@@ -30,6 +31,7 @@ const SLICES = [1, SLICE, Number.MAX_SAFE_INTEGER];
 /** A gzip trailer: the CRC, then the length. */
 const CRC_BYTES = 4;
 const TRAILER_BYTES = 8;
+const NO_BYTES = new Uint8Array(0);
 
 /** What fflate's streaming gunzip makes of every member. */
 function fflate(stored: Uint8Array): Uint8Array {
@@ -39,7 +41,10 @@ function fflate(stored: Uint8Array): Uint8Array {
 }
 
 /** One pass of a gzip inflater, `slice` stored bytes at a push. */
-function pass(stored: Uint8Array, slice: number): { decoded: Uint8Array } {
+function pass(
+  stored: Uint8Array,
+  slice: number,
+): { decoded: Uint8Array; checkpoints: readonly Checkpoint[] } {
   const inflater = gzipInflater();
   const pieces: Uint8Array[] = [];
   const offsets: number[] = [];
@@ -58,7 +63,7 @@ function pass(stored: Uint8Array, slice: number): { decoded: Uint8Array } {
   });
   expect(misplaced, 'the first piece out of place').toBe(-1);
   expect(inflater.end()).toBe(decoded.length);
-  return { decoded };
+  return { decoded, checkpoints: inflater.checkpoints() };
 }
 
 /** The stored offset a BrokenStream names, from `run`. */
@@ -152,4 +157,38 @@ describe('a gzip head inflates', () => {
       expect(differAt(head.bytes, whole)).toBe(-1);
     },
   );
+});
+
+/** Where each BGZF block's deflate data starts, and its decoded offset. */
+function bgzfBlocks(stored: Uint8Array): Omit<Checkpoint, 'window' | 'bits'>[] {
+  const BLOCK_SIZE_AT = 16;
+  const HEADER_BYTES = 18;
+  const LENGTH_BYTES = 4;
+  const view = new DataView(stored.buffer, stored.byteOffset);
+  const blocks: Omit<Checkpoint, 'window' | 'bits'>[] = [];
+  let decoded = 0;
+  for (let at = 0; at < stored.length;) {
+    blocks.push({ stored: at + HEADER_BYTES, decoded });
+    // BSIZE, the block's size less one.
+    at += view.getUint16(at + BLOCK_SIZE_AT, true) + 1;
+    decoded += view.getUint32(at - LENGTH_BYTES, true);
+  }
+  return blocks;
+}
+
+describe('a gzip pass keeps checkpoints', () => {
+  test('at every member start, with no window', () => {
+    const bgzf = fixture('gzip/bgzf.csv.gz');
+    const { checkpoints } = pass(bgzf, SLICE);
+    expect(checkpoints).toEqual(
+      bgzfBlocks(bgzf).map((at) => ({ ...at, bits: 0, window: NO_BYTES })),
+    );
+    const parts = [1, 2].map((n) => fixture(`sales-q3-part-${n}.csv`).length);
+    const members = pass(fixture('gzip/members.csv.gz'), SLICE);
+    expect(members.checkpoints.map((point) => point.decoded)).toEqual([
+      0,
+      parts[0],
+      parts[0]! + parts[1]!,
+    ]);
+  });
 });
