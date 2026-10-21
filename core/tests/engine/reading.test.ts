@@ -52,6 +52,24 @@ test('a file is held as itself, read as its spec says and indexed to its end', a
   expect(await reading.runs(0)).toEqual([{ row: 0, part: 0 }]);
 });
 
+test('held to delimited text, a file is split by its last extension, as when its log was made', async () => {
+  // A spec holds no delimiter, so a reopen splits by the name as every build
+  // before it did: q3.tsv.gz is not named a TSV, and a hidden .tsv is.
+  const text = new TextEncoder().encode('a,b,c\n1,2,3\n');
+  const columns = async (name: string): Promise<string[]> => {
+    const reading = await openReading({
+      name,
+      source: bytesSource(text),
+      spec: { kind: 'delimited', header: 'first' },
+      header: 'first',
+      tuning: TUNING,
+    });
+    return reading.columns().map((column) => column.name);
+  };
+  expect(await columns('q3.tsv.gz')).toEqual(['a', 'b', 'c']);
+  expect(await columns('.tsv')).toEqual(['a,b,c']);
+});
+
 const TESTDATA = new URL('../testdata/', import.meta.url);
 
 /** Every file in tests/testdata, whatever it holds. */
