@@ -10,13 +10,23 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { POINTED_VERSION, READ_VERSION, readContainer } from '@document';
+import {
+  PARTS_VERSION,
+  POINTED_VERSION,
+  READ_VERSION,
+  readContainer,
+} from '@document';
 import type { Logged } from '@document';
 import { FILE_COLUMN } from '@engine';
 import type { SourceHandle, SourceRef } from '@engine';
 import { Op } from '@sheet';
 import { manifestOf } from '@core-tests/document/manifest';
 import { COLS, ROWS, UNITS, bytes } from '@core-tests/testdata/sales-q3';
+import {
+  PART_FIXTURES,
+  PART_NAMES,
+  partBytes,
+} from '@core-tests/testdata/sales-q3-parts';
 import {
   FIXTURE,
   connect,
@@ -130,6 +140,8 @@ test.each<Layout>(['file', 'part'])(
   },
 );
 
+/** The byte that ends a line. */
+const LF = 0x0a;
 /** The id a CSV source of the sales fixture takes. */
 const SALES = 'sales-q3';
 
@@ -142,7 +154,12 @@ interface Delimited {
   readonly source: Record<string, unknown>;
 }
 
-/** A CSV on its own, as a save wrote it before. */
+/** headerBytes returns the length of a part's header line, which a later part skips. */
+function headerBytes(part: Uint8Array): number {
+  return part.indexOf(LF) + 1;
+}
+
+/** A CSV on its own, and the same rows as three parts, as a save wrote them before. */
 const DELIMITED: Record<string, Delimited> = {
   'one file': {
     ref: { name: 'sales-q3.csv', path: FIXTURE },
@@ -152,6 +169,27 @@ const DELIMITED: Record<string, Delimited> = {
       name: 'sales-q3.csv',
       bytes: bytes.length,
       path: FIXTURE,
+      rows: ROWS,
+      cols: COLS,
+    },
+  },
+  'three parts': {
+    ref: {
+      name: SALES,
+      parts: PART_FIXTURES.map((path, i) => ({
+        ref: { name: PART_NAMES[i]!, path },
+      })),
+      header: 'first',
+    },
+    format: PARTS_VERSION,
+    source: {
+      id: SALES,
+      name: SALES,
+      parts: partBytes.map((part, i) => {
+        const bytes = { path: PART_FIXTURES[i]!, bytes: part.length };
+        return i === 0 ? bytes : { ...bytes, skip: headerBytes(part) };
+      }),
+      header: 'first',
       rows: ROWS,
       cols: COLS,
     },
