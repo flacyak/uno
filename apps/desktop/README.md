@@ -24,8 +24,8 @@ The seam is `src/shared/host.ts`. Everything above it is a plain web page
 running the pure core, which is what makes a web build the same renderer with
 a different `host` behind it. `package.json` exports `src/renderer`,
 `src/shared`, `scripts` and `index.html` for that build to import as they are.
-That build, and the server it talks to, are a repository of their own, checked
-out as `apps/www/` beside this package and ignored here.
+That build, and the server it talks to, are a repository of their own, the
+submodule at `apps/www/`.
 
 ## The window
 
