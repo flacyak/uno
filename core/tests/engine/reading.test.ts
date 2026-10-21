@@ -4,15 +4,16 @@
  * opened through openReading is held as itself and read as its spec says,
  * and every test file is named, started and labelled as openFormat does, or
  * refused by name where this build does not read it. A file held to JSON
- * Lines learns its columns as it is indexed. A file a relink holds to
- * delimited text is refused when it holds another kind of rows.
+ * Lines learns its columns as it is indexed, and a save records them so a
+ * reopen reads the same spec back. A file a relink holds to delimited text
+ * is refused when it holds another kind of rows.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, test } from 'vite-plus/test';
 
 import { Refusal, RowIndex, TUNING } from '@engine';
-import { openReading } from '@engine/reading';
+import { openReading, readOf, savedOf } from '@engine/reading';
 import type { Expected, ReadSpec } from '@engine/reading';
 import { labelOf, openFormat } from '@ingest';
 import type { HeaderMode } from '@ingest';
@@ -118,6 +119,36 @@ test('a file held to JSON Lines starts from its pinned columns and learns the re
     '',
     '',
   ]);
+});
+
+test('a save records each column a file held to JSON Lines found, and a reopen reads the same spec back', () => {
+  const delimited: ReadSpec = { kind: 'delimited', header: 'first' };
+  expect(savedOf(delimited), 'delimited text records nothing').toEqual({});
+  expect(readOf(savedOf(delimited))).toEqual(delimited);
+
+  const jsonl: ReadSpec = {
+    kind: 'jsonl',
+    columns: [
+      { name: 'id', key: '/id' },
+      { name: 'a/b', key: '/a~1b' },
+      { name: 'user.name', key: '/user/name' },
+      { name: 'user.name_2', key: '/user.name' },
+      { name: '_line', key: '' },
+    ],
+  };
+  // A key is left out where it is the pointer of a top-level field of the
+  // column's name, and kept otherwise, "" included.
+  expect(savedOf(jsonl)).toStrictEqual({
+    kind: 'jsonl',
+    columns: [
+      { name: 'id' },
+      { name: 'a/b' },
+      { name: 'user.name', key: '/user/name' },
+      { name: 'user.name_2', key: '/user.name' },
+      { name: '_line', key: '' },
+    ],
+  });
+  expect(readOf(savedOf(jsonl))).toEqual(jsonl);
 });
 
 const TESTDATA = new URL('../testdata/', import.meta.url);
