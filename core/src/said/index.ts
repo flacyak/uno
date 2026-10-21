@@ -43,6 +43,9 @@ export type Unread =
 /** A table format, whose log says which of its files hold live rows. */
 export type TableFormat = 'Delta Lake' | 'Iceberg' | 'Hudi';
 
+/** ParquetCodec is a codec uno reads a Parquet file's pages through. */
+export type ParquetCodec = 'uncompressed' | 'snappy' | 'gzip' | 'zstd';
+
 /**
  * ParquetFeature is what a Parquet file can use that uno does not read yet:
  * encryption, a page codec, a column type, or columns kept in other files.
