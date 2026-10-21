@@ -73,6 +73,13 @@ async function footerOf(
   const tailStart = Math.max(file.size - PARQUET_TAIL_BYTES, 0);
   const tail = new Uint8Array(await chunks.slice(file, tailStart, file.size));
   const end = parquetMagicAt(tail, tail.length - PARQUET_MAGIC_BYTES);
+  if (end === 'PARE') {
+    throw new Refusal({
+      t: 'parquet-unsupported',
+      name,
+      feature: 'encryption',
+    });
+  }
   if (end !== 'PAR1') throw broken;
   const length = new DataView(tail.buffer, tail.byteOffset).getUint32(
     tail.length - FOOTER_END_BYTES,
