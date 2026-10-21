@@ -6,8 +6,6 @@ out/
 .eslintcache
 resource/
 
-# the server and the web page, a repository of their own checked out here
-apps/www/
 
 # screenshot artefacts from `go test -tags screenshot ./internal/uitest/`
 .screenshots/
