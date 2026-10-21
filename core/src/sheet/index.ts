@@ -4,7 +4,7 @@
 
 export { Sheet } from './sheet.ts';
 export type { Column } from './sheet.ts';
-export { Schema, namesBeside } from './schema.ts';
+export { Schema, namesBeside, suffixed } from './schema.ts';
 export type { Run, Supplied, Written } from './schema.ts';
 export {
   ERR_CELL,
