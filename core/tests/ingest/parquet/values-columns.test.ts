@@ -33,7 +33,11 @@ test('a top-level field is a column named for it, keyed by a pointer', () => {
     {
       column: { name: 'name', key: '/name' },
       path: ['name'],
-      shape: { t: 'primitive', physical: 'BYTE_ARRAY' },
+      shape: {
+        t: 'primitive',
+        physical: 'BYTE_ARRAY',
+        logical: { t: 'string' },
+      },
     },
   ]);
 });
@@ -221,7 +225,15 @@ test('an annotation says what the stored value means', () => {
       },
       { t: 'float16' },
     ],
-    [{ name: 'x', type: 'BYTE_ARRAY', converted_type: 'UTF8' }, undefined],
+    [
+      { name: 'x', type: 'BYTE_ARRAY', converted_type: 'UTF8' },
+      { t: 'string' },
+    ],
+    [
+      { name: 'x', type: 'BYTE_ARRAY', logical_type: { type: 'STRING' } },
+      { t: 'string' },
+    ],
+    [{ name: 'x', type: 'BYTE_ARRAY', converted_type: 'JSON' }, undefined],
   ];
   for (const [element, logical] of cases) {
     expect(leafOf(element).shape, JSON.stringify(element)).toEqual({
