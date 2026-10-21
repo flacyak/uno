@@ -1,12 +1,12 @@
 /**
  * @fileoverview The gzip inflater over the fixtures in testdata/gzip: what it
- * decodes against fflate, and where it breaks.
+ * decodes against fflate, where it breaks, and its heads.
  */
 
 import { Gunzip } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { BrokenStream, gunzipWhole } from '@ingest/gzip';
+import { BrokenStream, gunzipWhole, inflateHead } from '@ingest/gzip';
 import { concat, differAt, fixture } from './bytes.ts';
 
 /** The gzip fixtures: one of each shape a file comes in. */
@@ -80,4 +80,34 @@ describe('a broken gzip file names the stored byte it breaks at', () => {
     const trailed = concat([stored, new Uint8Array([1, 2])]);
     expect(brokenAt(() => gunzipWhole(trailed))).toBeGreaterThan(stored.length);
   });
+});
+
+describe('a gzip head inflates', () => {
+  const csv = fixture('sales-q3.csv');
+  const stored = fixture('gzip/sales-q3.csv.gz');
+  const LIMIT = 100_000;
+  const CUT = 8 << 10;
+
+  test('to a prefix of the file when its stored bytes are cut', () => {
+    const head = inflateHead(stored.subarray(0, CUT), LIMIT);
+    expect(head.ended).toBe(false);
+    expect(head.bytes.length).toBeGreaterThan(CUT);
+    expect(differAt(head.bytes, csv.subarray(0, head.bytes.length))).toBe(-1);
+  });
+
+  test('up to its limit, across members', () => {
+    const head = inflateHead(fixture('gzip/bgzf.csv.gz'), LIMIT);
+    expect(head.ended).toBe(false);
+    expect(differAt(head.bytes, csv.subarray(0, LIMIT))).toBe(-1);
+  });
+
+  test.each(['sales-q3.csv.gz', 'members.csv.gz', 'empty.gz'])(
+    'whole from %s when it fits the limit exactly',
+    (name) => {
+      const whole = gunzipWhole(fixture(`gzip/${name}`));
+      const head = inflateHead(fixture(`gzip/${name}`), whole.length);
+      expect(head.ended).toBe(true);
+      expect(differAt(head.bytes, whole)).toBe(-1);
+    },
+  );
 });

@@ -1,7 +1,7 @@
 /**
- * @fileoverview Inflates gzip, every member of a file in turn.
+ * @fileoverview Inflates gzip: a whole file, or a head up to a limit.
  *
- * It runs pako's low-level zlib API through one class, Members, which
+ * Both run pako's low-level zlib API through one class, Members, which
  * inflates gzip members one after another and stops at every deflate block
  * boundary.
  */
@@ -142,4 +142,25 @@ export function gunzipWhole(stored: Uint8Array): Uint8Array {
   while (!members.hungry) pieces.push(members.step().slice());
   members.end();
   return joined(pieces, members.decoded);
+}
+
+/**
+ * inflateHead inflates the front of a gzip file up to `limit` decoded bytes.
+ * The stored bytes may be cut anywhere. `ended` is true when they held whole
+ * members and decoded within the limit. Throws BrokenStream for damage.
+ */
+export function inflateHead(
+  stored: Uint8Array,
+  limit: number,
+): { readonly bytes: Uint8Array; readonly ended: boolean } {
+  const members = new Members();
+  const pieces: Uint8Array[] = [];
+  members.feed(stored);
+  while (!members.hungry && members.decoded <= limit) {
+    pieces.push(members.step().slice());
+  }
+  return {
+    bytes: joined(pieces, Math.min(members.decoded, limit)),
+    ended: members.hungry && members.ended && members.decoded <= limit,
+  };
 }
