@@ -67,7 +67,7 @@ const NO_SIDEBAR = "no-sidebar";
  * An action that would close the workspace and drop its edits: Ctrl+O, the
  * window's ×, or a workspace picked from the sidebar.
  */
-type Dropping = "open" | "quit" | `recent:${string}`;
+type Dropping = "open" | "quit" | `path:${string}` | `recent:${string}`;
 
 export class Shell {
   /** Called with the input strategy's name whenever it changes. */
@@ -351,6 +351,7 @@ export class Shell {
     let warning: string;
     if (what === "open") warning = m.unsaved_edits_key_again({ key: "Ctrl+O" });
     else if (what === "quit") warning = m.unsaved_edits_key_again({ key: "×" });
+    else if (what.startsWith("path:")) warning = m.unsaved_edits_open_again();
     else warning = m.unsaved_edits_click_again();
     this.say(warning, true);
     this.warned = what;
@@ -375,8 +376,10 @@ export class Shell {
 
   /**
    * openPath opens a file by path: from the command line or the file manager.
+   * Over unsaved edits the first warns, and the same file named again opens.
    */
   async openPath(path: string): Promise<void> {
+    if (!this.drops(`path:${path}`)) return;
     await this.load(refAt(path), path);
   }
 
