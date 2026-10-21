@@ -8,6 +8,8 @@
  * - stored.gz is two parts around a slab of noise, in blocks of about a
  *   thousand symbols. The noise is kept in stored blocks, and the text's
  *   blocks start part way into a byte, at odd bits as well as even ones.
+ * - twice.csv.gz is sales-q3.csv twice, in blocks of the same size and no
+ *   stored one, so no block after the first is aligned to a byte on purpose.
  * - members.csv.gz is the three parts of sales-q3.csv as members of their
  *   own, with an empty member after the first.
  * - bgzf.csv.gz is sales-q3.csv in BGZF blocks, ending in the empty block
@@ -96,6 +98,9 @@ const files = {
     Buffer.concat([parts[0], noise('noise', NOISE_BYTES), parts[1]]),
     { memLevel: SMALL_BLOCKS },
   ),
+  'twice.csv.gz': gzipSync(Buffer.concat([csv, csv]), {
+    memLevel: SMALL_BLOCKS,
+  }),
   'members.csv.gz': Buffer.concat([
     gzipSync(parts[0]),
     empty,

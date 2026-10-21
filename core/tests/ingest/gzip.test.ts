@@ -20,6 +20,7 @@ import { concat, differAt, fixture } from './bytes.ts';
 const FIXTURES = [
   'sales-q3.csv.gz',
   'stored.gz',
+  'twice.csv.gz',
   'members.csv.gz',
   'bgzf.csv.gz',
   'empty.gz',
