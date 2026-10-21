@@ -148,6 +148,7 @@ export type Said =
   | { t: 'changed-on-disk'; name: string }
   | { t: 'stored-encoded'; name: string; encoding: string; bucket: string }
   | { t: 'not-read'; name: string; what: Unread }
+  | { t: 'parquet-broken'; name: string }
 
   // What an engine refuses because its platform left out the means.
   | { t: 'keeps-no-connections' }
@@ -332,6 +333,7 @@ const SENTENCES: Sentences<Said> = {
   'stored-encoded': (s) =>
     `${s.name} was stored with Content-Encoding ${s.encoding}, and uno reads such an object only when it signs in · connect ${s.bucket} with a sign-in to read it`,
   'not-read': (s) => `${s.name}: ${s.what} is not supported yet`,
+  'parquet-broken': (s) => `${s.name}: its Parquet footer or pages are damaged`,
 
   'keeps-no-connections': () =>
     'this engine keeps no connections · its platform gave it nowhere to read them from',
