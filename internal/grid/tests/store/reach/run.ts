@@ -1,23 +1,25 @@
-// Runs a scenario under plain Node with every way out of the core watched,
-// and prints which module under <root> took which way.
-//
-// reaches.test.ts starts it as its own process. It installs a resolve hook,
-// wraps process.getBuiltinModule, wraps every function of the watched Node
-// modules, and wraps fetch, WebSocket, XMLHttpRequest, EventSource and
-// Blob.prototype.arrayBuffer. Node's own type stripping runs the .ts source,
-// so a use is attributed to the .ts file that made it.
-//
-// Usage: node --experimental-transform-types run.ts <root> <scenario>
-// <root> is the folder uses are attributed under, and <scenario> a module
-// whose default export is run.
+/**
+ * @fileoverview Runs a scenario under plain Node with every way out of the core
+ * watched, and prints which module under <root> took which way.
+ *
+ * reaches.test.ts starts it as its own process. It installs a resolve hook,
+ * wraps process.getBuiltinModule, wraps every function of the watched Node
+ * modules, and wraps fetch, WebSocket, XMLHttpRequest, EventSource and
+ * Blob.prototype.arrayBuffer. Node's own type stripping runs the .ts source,
+ * so a use is attributed to the .ts file that made it.
+ *
+ * Usage: node --experimental-transform-types run.ts <root> <scenario>
+ * <root> is the folder uses are attributed under, and <scenario> a module
+ * whose default export is run.
+ */
 
 import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import { createRequire } from 'node:module';
 import { relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { MODULES } from '../ways.ts';
-import type { Way } from '../ways.ts';
+import { MODULES } from '#tests/store/ways';
+import type { Way } from '#tests/store/ways';
 
 const [root, scenario] = process.argv.slice(2);
 if (root === undefined || scenario === undefined) {

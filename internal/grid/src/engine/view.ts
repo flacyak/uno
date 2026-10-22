@@ -1,20 +1,19 @@
-// One source in a workspace: its format, its index, its edit log, and the
-// pages read through them.
-//
-// Every row returned has the log applied. An edit is one line folded into
-// the Schema and a new generation number. Every stored row stays as read.
+/**
+ * @fileoverview One source in a workspace: its format, its index, its edit log,
+ * and the pages read through them.
+ *
+ * Every row returned has the log applied. An edit is one line folded into
+ * the Schema and a new generation number. Every stored row stays as read.
+ */
 
-import type { HeldFile, HeldPart, HeldParts } from '../document/index.ts';
-import { trimSpace } from '../go/index.ts';
-import { headerOf, labelOf, openFormat } from '../ingest/index.ts';
-import type { Format } from '../ingest/index.ts';
-import { isNumber } from '../num/index.ts';
-import { MIN_EXAMPLES, Survey, gather } from '../pattern/index.ts';
-import type { Example } from '../pattern/index.ts';
-import {
-  described as describedProgram,
-  text as programText,
-} from '../program/index.ts';
+import type { HeldFile, HeldPart, HeldParts } from '#document';
+import { trimSpace } from '#go';
+import { headerOf, labelOf, openFormat } from '#ingest';
+import type { Format } from '#ingest';
+import { isNumber } from '#num';
+import { MIN_EXAMPLES, Survey, gather } from '#pattern';
+import type { Example } from '#pattern';
+import { described as describedProgram, text as programText } from '#program';
 import {
   NO_ROW,
   Op,
@@ -24,16 +23,16 @@ import {
   inferKind,
   isDate,
   valueAt,
-} from '../sheet/index.ts';
-import type { Edit, Written } from '../sheet/index.ts';
-import { isRemote, multiOf } from '../store/index.ts';
+} from '#sheet';
+import type { Edit, Written } from '#sheet';
+import { isRemote, multiOf } from '#store';
 import type {
   ByteSource,
   HeaderMode,
   PartMap,
   PartsRef,
   SingleRef,
-} from '../store/index.ts';
+} from '#store';
 import { indexPass } from './pass.ts';
 import type {
   Changed,
@@ -49,8 +48,8 @@ import type {
   Request,
   RowsPage,
 } from './protocol.ts';
-import { FILE_SHOWS, Refusal, saidOf } from '../said/index.ts';
-import type { Said } from '../said/index.ts';
+import { FILE_SHOWS, Refusal, saidOf } from '#said';
+import type { Said } from '#said';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
 import {

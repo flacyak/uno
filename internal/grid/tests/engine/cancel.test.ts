@@ -1,15 +1,17 @@
-// Cancelling an open: one cancelled while it waits for its sample rows is
-// refused, stops reading and leaves nothing behind; one already answered is
-// left alone; one given an aborted signal never reaches the engine.
+/**
+ * @fileoverview Cancelling an open: one cancelled while it waits for its sample
+ * rows is refused, stops reading and leaves nothing behind; one already
+ * answered is left alone; one given an aborted signal never reaches the engine.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { expect, test } from 'vite-plus/test';
 
-import { Refusal, english, saidOf } from '../../src/engine/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { Refusal, english, saidOf } from '#engine';
+import type { Provider } from '#plugin';
+import { diskProvider } from '#store/node';
+import { ROWS } from '#tests/testdata/sales-q3';
 import { FIXTURE, TINY, connect, indexed, slowed } from './harness.ts';
 
 /** Milliseconds added before every read, so an open sits in its wait for the sample rows. */

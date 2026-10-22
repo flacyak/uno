@@ -1,7 +1,10 @@
-// connectionSigning: each request signed by the connection covering it.
-//
-// Which connection covers an address, what each auth mode sends, and that a
-// connection saved while the engine runs is used by its next request.
+/**
+ * @fileoverview connectionSigning: each request signed by the connection
+ * covering it.
+ *
+ * Which connection covers an address, what each auth mode sends, and that a
+ * connection saved while the engine runs is used by its next request.
+ */
 
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -15,17 +18,13 @@ import {
   test,
 } from 'vite-plus/test';
 
-import type { Connection } from '../../src/library/index.ts';
-import { connectionsIn, saveConnection } from '../../src/store/index.ts';
-import {
-  connectionSigning,
-  diskProvider,
-  nodeStore,
-} from '../../src/store/node.ts';
-import type { AwsCredentials } from '../../src/store/s3.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { bytes, connect, indexed, openOne } from '../engine/harness.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import type { Connection } from '#library';
+import { connectionsIn, saveConnection } from '#store';
+import { connectionSigning, diskProvider, nodeStore } from '#store/node';
+import type { AwsCredentials } from '#store/s3';
+import { s3Provider } from '#store/s3';
+import { bytes, connect, indexed, openOne } from '#tests/engine/harness';
+import { ROWS } from '#tests/testdata/sales-q3';
 import { HOME_REGION } from './regions.ts';
 import { KEYS, bucket } from './standin.ts';
 import type { Bucket } from './standin.ts';

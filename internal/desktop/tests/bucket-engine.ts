@@ -1,11 +1,14 @@
-// An engine over a MessageChannel that reads the disk and a stand-in S3
-// bucket. Renderer tests use it to open a workspace whose sources are in S3.
+/**
+ * @fileoverview An engine over a MessageChannel that reads the disk and a
+ * stand-in S3 bucket. Renderer tests use it to open a workspace whose sources
+ * are in S3.
+ */
 
-import { Engine, messagePort, serve } from "@uno/grid/engine";
-import type { MessagePortLike, Reply, Request } from "@uno/grid/engine";
-import { sources } from "@uno/grid/plugin";
-import { diskProvider } from "@uno/grid/store/node";
-import { s3Provider } from "@uno/grid/store/s3";
+import { Engine, messagePort, serve } from "#engine";
+import type { MessagePortLike, Reply, Request } from "#engine";
+import { sources } from "#plugin";
+import { diskProvider } from "#store/node";
+import { s3Provider } from "#store/s3";
 
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
 import { KEYS } from "../../grid/tests/store/standin.ts";

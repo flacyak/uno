@@ -1,8 +1,10 @@
-// Setup file, listed in vite.config.ts, that runs around every test file.
-// It wraps `open` from node:fs/promises to track every FileHandle opened
-// during the test file, and fails the file if any handle is still open at
-// the end. The failure message includes the stack from where each leaked
-// handle was opened.
+/**
+ * @fileoverview Setup file, listed in vite.config.ts, that runs around every
+ * test file. It wraps `open` from node:fs/promises to track every FileHandle
+ * opened during the test file, and fails the file if any handle is still open
+ * at the end. The failure message includes the stack from where each leaked
+ * handle was opened.
+ */
 
 import fs from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';

@@ -1,18 +1,20 @@
-// Package pattern induces a transform program from the edits a person made to
-// a column, so the app can offer to apply it to the rest.
-//
-// It reads only the edit log. `propose` returns a question;
-// applying the answer is `sheet.apply`.
+/**
+ * @fileoverview Package pattern induces a transform program from the edits a
+ * person made to a column, so the app can offer to apply it to the rest.
+ *
+ * It reads only the edit log. `propose` returns a question;
+ * applying the answer is `sheet.apply`.
+ */
 
-import { compareStrings, quoteMeta } from '../go/index.ts';
-import type { Program } from '../program/index.ts';
+import { compareStrings, quoteMeta } from '#go';
+import type { Program } from '#program';
 import {
   MAX_STEPS,
   apply as applyProgram,
   text as programText,
-} from '../program/index.ts';
-import type { Edit, Sheet, Written } from '../sheet/index.ts';
-import { Op, settled } from '../sheet/index.ts';
+} from '#program';
+import type { Edit, Sheet, Written } from '#sheet';
+import { Op, settled } from '#sheet';
 import type { Example } from './induce.ts';
 import {
   decoration,

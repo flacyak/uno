@@ -1,8 +1,10 @@
-// A pop-up menu appended to document.body: the + menu beside a workspace's
-// sources, and the right-click menu on a workspace in the sidebar.
-//
-// It is appended to the body because the sidebar is redrawn on every edit
-// and would remove an open menu.
+/**
+ * @fileoverview A pop-up menu appended to document.body: the + menu beside a
+ * workspace's sources, and the right-click menu on a workspace in the sidebar.
+ *
+ * It is appended to the body because the sidebar is redrawn on every edit
+ * and would remove an open menu.
+ */
 
 import "./menu.css";
 

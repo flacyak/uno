@@ -1,13 +1,15 @@
-// Finds where records start, working on raw bytes.
-//
-// It follows the same rules as csv.ts: a line holding only its terminator is
-// skipped, a quote opens a quoted field only as the field's first byte,
-// and inside one a quote followed by anything but a quote, the separator or
-// the end of the line is data. The bytes it reacts to are all ASCII, so a
-// every byte of a multi-byte UTF-8 character is data. tests/ingest/scan.test.ts
-// checks it against csv.ts over random input.
+/**
+ * @fileoverview Finds where records start, working on raw bytes.
+ *
+ * It follows the same rules as csv.ts: a line holding only its terminator is
+ * skipped, a quote opens a quoted field only as the field's first byte,
+ * and inside one a quote followed by anything but a quote, the separator or
+ * the end of the line is data. The bytes it reacts to are all ASCII, so a
+ * every byte of a multi-byte UTF-8 character is data. tests/ingest/scan.test.ts
+ * checks it against csv.ts over random input.
+ */
 
-import { unreachable } from '../never.ts';
+import { unreachable } from '#never';
 
 const LF = 0x0a;
 const CR = 0x0d;

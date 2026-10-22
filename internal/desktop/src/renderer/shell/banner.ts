@@ -1,13 +1,15 @@
-// The banner for an offer: what it would change, how many cells, and the
-// Apply and Not now buttons.
+/**
+ * @fileoverview The banner for an offer: what it would change, how many cells,
+ * and the Apply and Not now buttons.
+ */
 
 import "./banner.css";
 
-import type { Offer } from "@uno/grid/engine";
+import type { Offer } from "#engine";
 
-import { m } from "../../paraglide/messages.js";
-import { num } from "../locale.ts";
-import { say } from "../said.ts";
+import { m } from "#paraglide/messages";
+import { num } from "#renderer/locale";
+import { say } from "#renderer/said";
 import { button, el } from "./util.ts";
 
 /** offerKey identifies an offer by its source, column and program. */

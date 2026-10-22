@@ -1,4 +1,6 @@
-// Ports of Go's bytes package.
+/**
+ * @fileoverview Ports of Go's bytes package.
+ */
 
 /**
  * concat mirrors `bytes.Join(pieces, nil)`: one array holding every piece in

@@ -1,5 +1,7 @@
-// The notation subset: three tables, and NO_GLYPH, the symbols the font
-// refuses.
+/**
+ * @fileoverview The notation subset: three tables, and NO_GLYPH, the symbols
+ * the font refuses.
+ */
 
 /** SUPERSCRIPTS is what ^ can raise. Digits are complete; letters are
  * complete except q, which Unicode leaves out. */

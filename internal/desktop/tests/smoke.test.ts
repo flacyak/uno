@@ -1,19 +1,21 @@
-// The smoke run's launcher and setup, checked headless.
-//
-// scripts/smoke.js checks the shell from inside a started app. These tests
-// cover the start itself: the environment the child gets, whether there is a
-// display, and what a finished run amounts to.
-//
-// The run itself is `vp run smoke`, on a desktop session.
+/**
+ * @fileoverview The smoke run's launcher and setup, checked headless.
+ *
+ * scripts/smoke.js checks the shell from inside a started app. These tests
+ * cover the start itself: the environment the child gets, whether there is a
+ * display, and what a finished run amounts to.
+ *
+ * The run itself is `vp run smoke`, on a desktop session.
+ */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
-import { displayMissing, electronEnv, verdict } from "../scripts/launch.js";
-import { DRIVEN_OPEN, openPathFor } from "../src/main/smoke/pick.ts";
-import { savePathFor } from "../src/main/smoke/save.ts";
+import { displayMissing, electronEnv, verdict } from "#scripts/launch";
+import { DRIVEN_OPEN, openPathFor } from "#main/smoke/pick";
+import { savePathFor } from "#main/smoke/save";
 
 const SCRIPTS = fileURLToPath(new URL("../scripts", import.meta.url));
 const SRC = fileURLToPath(new URL("../src", import.meta.url));

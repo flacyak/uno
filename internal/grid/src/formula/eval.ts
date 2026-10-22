@@ -1,6 +1,11 @@
-import { quote } from '../go/index.ts';
-import { unreachable } from '../never.ts';
-import { parse as parseNumber } from '../num/index.ts';
+/**
+ * @fileoverview Evaluating an expression: `Row`, the ways a cell can fail,
+ * `evaluate` for one row and `evaluateColumn` for a block of them.
+ */
+
+import { quote } from '#go';
+import { unreachable } from '#never';
+import { parse as parseNumber } from '#num';
 import type { Formula, Node } from './ast.ts';
 import { text } from './ast.ts';
 

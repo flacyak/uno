@@ -1,9 +1,12 @@
-// Shared helpers for the engine tests: a client and `serve` joined by a real
-// MessageChannel, the fixture, and row comparisons against a Sheet.
+/**
+ * @fileoverview Shared helpers for the engine tests: a client and `serve`
+ * joined by a real MessageChannel, the fixture, and row comparisons against a
+ * Sheet.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { Engine, english, messagePort, serve } from '../../src/engine/index.ts';
+import { Engine, english, messagePort, serve } from '#engine';
 import type {
   MessagePortLike,
   Reply,
@@ -12,16 +15,16 @@ import type {
   SourceHandle,
   SourceRef,
   Tuning,
-} from '../../src/engine/index.ts';
-import type { Connecting } from '../../src/engine/index.ts';
-import { read } from '../../src/ingest/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import type { Sheet } from '../../src/sheet/index.ts';
-import { blobProvider, multiProvider } from '../../src/store/index.ts';
-import type { Connections } from '../../src/store/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { bytes, FIXTURE } from '../testdata/sales-q3.ts';
+} from '#engine';
+import type { Connecting } from '#engine';
+import { read } from '#ingest';
+import { sources } from '#plugin';
+import type { Provider } from '#plugin';
+import type { Sheet } from '#sheet';
+import { blobProvider, multiProvider } from '#store';
+import type { Connections } from '#store';
+import { diskProvider } from '#store/node';
+import { bytes, FIXTURE } from '#tests/testdata/sales-q3';
 
 // Re-exported from testdata/sales-q3.ts.
 export { bytes, FIXTURE };

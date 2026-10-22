@@ -1,22 +1,25 @@
-// Several files read as one through the engine: a ref of parts opens through
-// the multi provider, and the join is indexed and paged like any file.
+/**
+ * @fileoverview Several files read as one through the engine: a ref of parts
+ * opens through the multi provider, and the join is indexed and paged like any
+ * file.
+ */
 
 import { setImmediate as turn } from 'node:timers/promises';
 
 import { expect, test } from 'vite-plus/test';
 
-import { english } from '../../src/engine/index.ts';
-import type { SourceRef } from '../../src/engine/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { blobProvider, multiProvider } from '../../src/store/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
+import { english } from '#engine';
+import type { SourceRef } from '#engine';
+import type { Provider } from '#plugin';
+import { blobProvider, multiProvider } from '#store';
+import { diskProvider } from '#store/node';
+import { ROWS } from '#tests/testdata/sales-q3';
 import {
   PARTS,
   PART_FIXTURES,
   PART_NAMES,
   partBytes,
-} from '../testdata/sales-q3-parts.ts';
+} from '#tests/testdata/sales-q3-parts';
 import {
   FIXTURE,
   TINY,

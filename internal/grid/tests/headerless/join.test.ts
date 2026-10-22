@@ -1,19 +1,20 @@
-// openMulti tests with header mode "none". Every part is read from its first
-// line. The
-// join still drops a later part's byte order mark, adds a missing final
-// newline, and refuses parts whose first row or delimiter differs from the
-// first part's.
+/**
+ * @fileoverview openMulti tests with header mode "none". Every part is read
+ * from its first line. The join still drops a later part's byte order mark,
+ * adds a missing final newline, and refuses parts whose first row or delimiter
+ * differs from the first part's.
+ */
 
 import { rm } from 'node:fs/promises';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
-import { openFormat } from '../../src/ingest/index.ts';
-import type { ByteSource } from '../../src/store/index.ts';
-import { DisagreementError, openMulti } from '../../src/store/multi.ts';
-import type { MultiSource, Part } from '../../src/store/multi.ts';
-import { localFiles } from '../../src/store/node.ts';
-import { ROWS } from '../testdata/sales-q3.ts';
-import { PART_ROWS } from '../testdata/sales-q3-parts.ts';
+import { openFormat } from '#ingest';
+import type { ByteSource } from '#store';
+import { DisagreementError, openMulti } from '#store/multi';
+import type { MultiSource, Part } from '#store/multi';
+import { localFiles } from '#store/node';
+import { ROWS } from '#tests/testdata/sales-q3';
+import { PART_ROWS } from '#tests/testdata/sales-q3-parts';
 import {
   BOM,
   COLUMNS,

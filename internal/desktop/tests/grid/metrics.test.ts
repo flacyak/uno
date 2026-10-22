@@ -1,6 +1,8 @@
-// The grid's layout arithmetic in metrics.ts: the scroller's height, the
-// scrollbar mapping on a sheet past the cap, which rows the pool draws, and
-// where a jump lands.
+/**
+ * @fileoverview The grid's layout arithmetic in metrics.ts: the scroller's
+ * height, the scrollbar mapping on a sheet past the cap, which rows the pool
+ * draws, and where a jump lands.
+ */
 
 import { expect, test } from "vite-plus/test";
 
@@ -18,7 +20,7 @@ import {
   tableOffset,
   topToScroller,
   visibleRange,
-} from "../../src/renderer/grid/metrics.ts";
+} from "#renderer/grid/metrics";
 
 /** The stylesheet's default row height. */
 const ROW_H = 29;

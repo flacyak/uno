@@ -1,15 +1,17 @@
-// Checks that a source in a bucket knows when it is out of date: a workspace
-// whose export was rewritten since it was saved opens saying so, one rewritten
-// while it is open is marked when the window gets the focus back, and Reload
-// reads the newer one with the edits replayed over it.
-//
-// They run after meets.ts, with acme-exports/2025/ connected, so the saved
-// workspace opens its object at once. smoke.js rewrites the object when a
-// check asks it to.
+/**
+ * @fileoverview Checks that a source in a bucket knows when it is out of date:
+ * a workspace whose export was rewritten since it was saved opens saying so,
+ * one rewritten while it is open is marked when the window gets the focus back,
+ * and Reload reads the newer one with the edits replayed over it.
+ *
+ * They run after meets.ts, with acme-exports/2025/ connected, so the saved
+ * workspace opens its object at once. smoke.js rewrites the object when a
+ * check asks it to.
+ */
 
 import { join } from "node:path";
 
-import { NEWER_AFTER_MS } from "../../renderer/timing.ts";
+import { NEWER_AFTER_MS } from "#renderer/timing";
 import type { Check } from "./check.ts";
 
 /** The workspace sources.ts saved, with the object in it. */

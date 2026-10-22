@@ -1,22 +1,25 @@
-// The replies a bucket sends when a request is signed for the wrong region.
-//
-// Some carry the region in the `x-amz-bucket-region` header. Others carry it
-// only in the XML body. Half the rows are bodies that must be refused,
-// since a region read out of a body becomes a hostname to sign for.
-//
-// Every reply here was written by hand from documentation and memory. Each
-// is still waiting on a capture from a real server. s3.test.ts serves each
-// row from the stand-in, so the suite proves the parser agrees with this
-// file. Each row records that in `from`.
-//
-// To replace a row with a real reply, run the live test against a bucket
-// outside the credentials' region with refusal bodies recorded, paste the
-// reply in as a new row marked captured, and keep the reconstruction beside
-// it.
-//
-// `$REGION` stands for the stand-in's home region and is filled in when the
-// reply is served. A region written out in full is one the reply names
-// wrongly on purpose.
+/**
+ * @fileoverview The replies a bucket sends when a request is signed for the
+ * wrong region.
+ *
+ * Some carry the region in the `x-amz-bucket-region` header. Others carry it
+ * only in the XML body. Half the rows are bodies that must be refused,
+ * since a region read out of a body becomes a hostname to sign for.
+ *
+ * Every reply here was written by hand from documentation and memory. Each
+ * is still waiting on a capture from a real server. s3.test.ts serves each
+ * row from the stand-in, so the suite proves the parser agrees with this
+ * file. Each row records that in `from`.
+ *
+ * To replace a row with a real reply, run the live test against a bucket
+ * outside the credentials' region with refusal bodies recorded, paste the
+ * reply in as a new row marked captured, and keep the reconstruction beside
+ * it.
+ *
+ * `$REGION` stands for the stand-in's home region and is filled in when the
+ * reply is served. A region written out in full is one the reply names
+ * wrongly on purpose.
+ */
 
 /** One reply, as it comes off the wire. */
 export interface Misdirect {

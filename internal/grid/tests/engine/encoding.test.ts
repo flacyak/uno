@@ -1,13 +1,15 @@
-// Files beyond plain UTF-8 through the engine: a byte order mark,
-// UTF-16, Windows-1252, a stray NUL, and a character cut by a chunk boundary.
-// Every row is compared with what `read` builds from the same bytes.
+/**
+ * @fileoverview Files beyond plain UTF-8 through the engine: a byte order mark,
+ * UTF-16, Windows-1252, a stray NUL, and a character cut by a chunk boundary.
+ * Every row is compared with what `read` builds from the same bytes.
+ */
 
 import { expect, test } from 'vite-plus/test';
 
-import { Refusal } from '../../src/engine/index.ts';
-import type { SourceHandle } from '../../src/engine/index.ts';
-import { openFormat, read, sniffEncoding } from '../../src/ingest/index.ts';
-import { blobSource } from '../../src/store/index.ts';
+import { Refusal } from '#engine';
+import type { SourceHandle } from '#engine';
+import { openFormat, read, sniffEncoding } from '#ingest';
+import { blobSource } from '#store';
 import { TINY, connect, indexed, saidIn, sheetRows } from './harness.ts';
 
 const encoder = new TextEncoder();

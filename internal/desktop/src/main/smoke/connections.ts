@@ -1,12 +1,14 @@
-// Checks that connect a bucket from the sources panel: the form in the list's
-// place, a test that fails and leaves the folder empty, one that works and
-// detects the region, and the whole bucket saved as a second connection
-// beside the folder one, listed and browsed in the same run.
-//
-// They run after panel.ts, with the panel open over the stand-in bucket. The
-// run has its own --user-data-dir and AWS files (smoke.js), so the connections
-// folder starts empty and the one profile on offer is `finance`. smoke.js
-// reads the saved files back afterwards.
+/**
+ * @fileoverview Checks that connect a bucket from the sources panel: the form
+ * in the list's place, a test that fails and leaves the folder empty, one that
+ * works and detects the region, and the whole bucket saved as a second
+ * connection beside the folder one, listed and browsed in the same run.
+ *
+ * They run after panel.ts, with the panel open over the stand-in bucket. The
+ * run has its own --user-data-dir and AWS files (smoke.js), so the connections
+ * folder starts empty and the one profile on offer is `finance`. smoke.js
+ * reads the saved files back afterwards.
+ */
 
 import type { Check } from "./check.ts";
 

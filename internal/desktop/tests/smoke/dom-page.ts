@@ -1,14 +1,16 @@
-// Page over a plain DOM: happy-dom's document, driven directly.
-//
-// electron-page.ts sends each question as a string across
-// `webContents.executeJavaScript`. Here the backend and the page share one
-// realm, so each method does in TypeScript what the matching string in
-// electron-page.ts does: same selectors, same DOM reads, same key dispatch.
-//
-// happy-dom skips layout, so `clientHeight`, `offsetHeight` and
-// `getBoundingClientRect()` are zero until faked. See dom-harness.ts.
+/**
+ * @fileoverview Page over a plain DOM: happy-dom's document, driven directly.
+ *
+ * electron-page.ts sends each question as a string across
+ * `webContents.executeJavaScript`. Here the backend and the page share one
+ * realm, so each method does in TypeScript what the matching string in
+ * electron-page.ts does: same selectors, same DOM reads, same key dispatch.
+ *
+ * happy-dom skips layout, so `clientHeight`, `offsetHeight` and
+ * `getBoundingClientRect()` are zero until faked. See dom-harness.ts.
+ */
 
-import type { KeyModifiers, Page, Row, Wait } from "../../src/main/smoke/page.ts";
+import type { KeyModifiers, Page, Row, Wait } from "#main/smoke/page";
 
 /**
  * The longest a wait lasts. electron-page.ts counts 150 frames. happy-dom's
