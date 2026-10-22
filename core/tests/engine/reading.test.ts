@@ -3,8 +3,9 @@
  * index reports the bytes it has scanned out of the file's size, a file
  * opened through openReading is held as itself and read as its spec says,
  * and every test file is named, started and labelled as openFormat does, or
- * refused by name where this build does not read it. A file a relink holds
- * to delimited text is refused when it holds another kind of rows.
+ * refused by name where this build does not read it. A file held to JSON
+ * Lines learns its columns as it is indexed. A file a relink holds to
+ * delimited text is refused when it holds another kind of rows.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -68,6 +69,55 @@ test('held to delimited text, a file is split by its last extension, as when its
   };
   expect(await columns('q3.tsv.gz')).toEqual(['a', 'b', 'c']);
   expect(await columns('.tsv')).toEqual(['a,b,c']);
+});
+
+test('a file held to JSON Lines starts from its pinned columns and learns the rest as it is indexed', async () => {
+  const name = 'events.jsonl';
+  /** The events the file holds, one per line. */
+  const events = 8;
+  const pinned = [{ name: 'event', key: '/event' }];
+  const reading = await openReading({
+    name,
+    source: bytesSource(readFileSync(testdata(name))),
+    spec: { kind: 'jsonl', columns: pinned },
+    header: 'first',
+    tuning: TUNING,
+  });
+  expect(reading.label).toEqual({ t: 'read-lines', charset: 'UTF-8' });
+  expect(reading.columns()).toEqual(pinned);
+
+  await reading.pass(new AbortController().signal, () => undefined);
+  const columns = reading.columns();
+  expect(columns.map((column) => column.name)).toEqual([
+    'event',
+    'id',
+    'at',
+    'user.id',
+    'user.country',
+    'page',
+    'ms',
+    'target',
+    'query',
+    'plan',
+    'seats',
+  ]);
+  expect(reading.spec()).toEqual({ kind: 'jsonl', columns });
+  expect(reading.index.rows()).toBe(events);
+  const [first] = await reading.pages.rows(0, 1);
+  expect(first).toEqual([
+    'view',
+    '1',
+    '2026-07-01T09:14:03Z',
+    'u-1042',
+    'PT',
+    '/pricing',
+    '412',
+    // No target, query, plan or seats.
+    '',
+    '',
+    '',
+    '',
+  ]);
 });
 
 const TESTDATA = new URL('../testdata/', import.meta.url);
