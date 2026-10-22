@@ -1,7 +1,7 @@
 /**
  * @fileoverview A Parquet file read by the engine: held to Parquet it reads
- * as its CSV twin does, its blocks planned from its row count and complete
- * from the start. A block of a paged row group
+ * as its CSV twin does, each pinned column found by its key, its blocks
+ * planned from its row count and complete from the start. A block of a paged row group
  * reads alone, and one of an unpaged group with its window, once while the
  * rows are scrolled, and the cache holds them within its budget as text.
  */
@@ -39,6 +39,8 @@ const LAST_BLOCK = 4;
 /** The sales fixture's name and path on disk. */
 const SALES_NAME = 'sales-q3.snappy.parquet';
 const SALES_PATH = testdata(SALES_NAME);
+/** Where a test's expected row takes an empty cell. */
+const ABSENT = -1;
 
 test('a planned index has every row readable at once, in blocks of blockRows', () => {
   const { rows, size, blockRows } = PLAN;
@@ -347,4 +349,36 @@ test('held to Parquet, several files joined as bytes are refused by name', async
   } finally {
     await source.close();
   }
+});
+
+test('held to Parquet with pinned columns, each key finds its column, a lost key reads empty and the rest follow named beside them', async () => {
+  // A name pinned to another key takes its name from the file's column.
+  const pinned = [
+    { name: 'revenue', key: '/revenue' },
+    { name: 'units', key: '/units' },
+    { name: 'gone', key: '/gone' },
+    { name: 'region', key: '/rep' },
+  ];
+  const reading = await openReading({
+    name: 'sales-q3.snappy.parquet',
+    source: bytesSource(SALES),
+    spec: { kind: 'parquet', columns: pinned },
+    header: 'first',
+    tuning: TINY,
+  });
+  const columns = [
+    ...pinned,
+    { name: 'date', key: '/date' },
+    { name: 'region_2', key: '/region' },
+    { name: 'channel', key: '/channel' },
+  ];
+  expect(reading.columns()).toEqual(columns);
+  expect(reading.spec()).toEqual({ kind: 'parquet', columns });
+  const [date, region, rep, channel, units, revenue] = [0, 1, 2, 3, 4, 5];
+  const want = salesRows().map((row) =>
+    [revenue, units, ABSENT, rep, date, region, channel].map((i) =>
+      i === ABSENT ? '' : row[i]!,
+    ),
+  );
+  expect(await reading.pages.rows(0, ROWS)).toEqual(want);
 });

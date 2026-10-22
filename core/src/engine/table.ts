@@ -12,8 +12,9 @@
  * last window took per row.
  */
 
-import type { Table } from '@ingest';
+import type { KeyedColumn, Table } from '@ingest';
 import { Refusal } from '@said';
+import { namesBeside } from '@sheet';
 import type { ByteSource } from '@store';
 import type { Blocks, Index, Indexed, Reading } from './reading.ts';
 import { BlockCache, ONE_FILE, rowsThrough } from './rows.ts';
@@ -34,23 +35,42 @@ export const MAX_WINDOW_BLOCKS = 16;
  */
 const CELL_END_BYTES = 1;
 
+/** Where a pinned column the file no longer has finds its cells: nowhere. */
+const ABSENT = -1;
+
 /**
  * tableReading reads a Parquet file through its Table, whose footer was
- * read as it opened. Its index is complete from the start, so its pass only
- * says so.
+ * read as it opened. Its columns are those `pinned` in their order, each
+ * found by its key, then the file's others in its order, so a reordered
+ * schema leaves every logged edit on its cell. A pinned key the file no
+ * longer has is a column of empty cells. Its index is complete from the
+ * start, so its pass only says so.
  */
 export function tableReading(
   name: string,
   file: ByteSource,
   table: Table,
   tuning: Tuning,
+  pinned: readonly KeyedColumn[],
 ): Reading {
   const index = new PlannedIndex(table.rows, file.size, tuning.blockRows);
-  const { columns, codecs, groups } = table;
+  const columns = laidOut(pinned, table.columns);
+  const at = new Map(table.columns.map(({ key }, i) => [key, i]));
+  const from = columns.map(({ key }) => at.get(key) ?? ABSENT);
+  const read = async (start: number, end: number): Promise<string[][]> => {
+    const rows = await table.read(start, end);
+    return rows.map((row) => from.map((i) => (i === ABSENT ? '' : row[i]!)));
+  };
+  const rows: TableRows = {
+    read,
+    paged: table.paged.bind(table),
+    bytesPerRow: table.bytesPerRow.bind(table),
+  };
+  const { codecs, groups } = table;
   return {
     label: { t: 'read-parquet', codecs: [...codecs], groups },
     index,
-    pages: new TablePages(name, table, index, tuning.cacheBytes),
+    pages: new TablePages(name, rows, index, tuning.cacheBytes),
     behind: { t: 'file', stored: file },
     columns: () => columns,
     spec: () => ({ kind: 'parquet', columns }),
@@ -61,6 +81,23 @@ export function tableReading(
     runs: () => Promise.resolve(ONE_FILE),
     close: () => file.close(),
   };
+}
+
+/**
+ * laidOut returns `pinned`, then each of `found` that none of them has the
+ * key of, named beside them by the column suffix rule.
+ */
+function laidOut(
+  pinned: readonly KeyedColumn[],
+  found: readonly KeyedColumn[],
+): KeyedColumn[] {
+  const keys = new Set(pinned.map(({ key }) => key));
+  const added = found.filter(({ key }) => !keys.has(key));
+  const names = namesBeside(
+    pinned.map(({ name }) => name),
+    added.map(({ name }) => name),
+  );
+  return [...pinned, ...added.map(({ key }, i) => ({ name: names[i]!, key }))];
 }
 
 /**
