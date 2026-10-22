@@ -6,7 +6,7 @@
 // They run with the run's own --user-data-dir, so the theme chosen here
 // stays with the run.
 
-import { THEMES } from "../../renderer/theme.ts";
+import { THEMES } from "#renderer/theme";
 import type { Check } from "./check.ts";
 import { LOCALE } from "./fixture.ts";
 

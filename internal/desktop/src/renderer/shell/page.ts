@@ -3,9 +3,9 @@
 // text. The text is written here when the shell starts and again when the
 // language changes, along with the document's lang and dir.
 
-import { m } from "../../paraglide/messages.js";
-import { getLocale, getTextDirection } from "../../paraglide/runtime.js";
-import type { MessagePart } from "../../paraglide/runtime.js";
+import { m } from "#paraglide/messages";
+import { getLocale, getTextDirection } from "#paraglide/runtime";
+import type { MessagePart } from "#paraglide/runtime";
 import { found, must } from "./util.ts";
 
 /** labelPage writes the page's static text in the current language. */

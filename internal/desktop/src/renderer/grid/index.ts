@@ -6,13 +6,13 @@
 
 import "./grid.css";
 
-import { m } from "../../paraglide/messages.js";
-import type { InputStrategy } from "../input/strategy.ts";
-import { NOTHING, changeOf, isJump, replay, showing, target } from "../keys.ts";
-import { dispatch, el } from "../shell/util.ts";
-import type { Handlers } from "../shell/util.ts";
-import type { Action, Caret, Change, Motion, Pending } from "../keys.ts";
-import { num } from "../locale.ts";
+import { m } from "#paraglide/messages";
+import type { InputStrategy } from "#renderer/input/strategy";
+import { NOTHING, changeOf, isJump, replay, showing, target } from "#renderer/keys";
+import { dispatch, el } from "#renderer/shell/util";
+import type { Handlers } from "#renderer/shell/util";
+import type { Action, Caret, Change, Motion, Pending } from "#renderer/keys";
+import { num } from "#renderer/locale";
 import { clamp } from "./metrics.ts";
 import { columnLabel } from "./rows.ts";
 import type { Cell, GridEvents, Rows, ShellAction } from "./rows.ts";

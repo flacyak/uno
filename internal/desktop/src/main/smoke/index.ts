@@ -9,8 +9,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { BrowserWindow } from "electron";
 
-import { ask } from "../ask.ts";
-import { through } from "../driven.ts";
+import { ask } from "#main/ask";
+import { through } from "#main/driven";
 import { AGAIN } from "./again.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";

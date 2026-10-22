@@ -9,18 +9,18 @@
 // AWS credentials and the saved connections are read in this process. The
 // renderer only sends s3:// URLs and receives rows.
 
-import { TUNING, serve } from "@uno/grid/engine";
-import type { Reply, Request } from "@uno/grid/engine";
-import { sources } from "@uno/grid/plugin";
-import { connectionsIn, multiProvider } from "@uno/grid/store";
+import { TUNING, serve } from "#engine";
+import type { Reply, Request } from "#engine";
+import { sources } from "#plugin";
+import { connectionsIn, multiProvider } from "#store";
 import {
   awsProfiles,
   connectionAuth,
   connectionSigning,
   diskProvider,
   nodeStore,
-} from "@uno/grid/store/node";
-import { connectionMeeting, s3Provider, tryConnection } from "@uno/grid/store/s3";
+} from "#store/node";
+import { connectionMeeting, s3Provider, tryConnection } from "#store/s3";
 
 import { exporting } from "./telemetry.ts";
 

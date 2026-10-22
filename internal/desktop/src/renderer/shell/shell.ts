@@ -6,39 +6,39 @@
 //
 // The grid is loaded when the first file opens.
 
-import { isWorkspace } from "@uno/grid/document";
-import { Engine, messagePort } from "@uno/grid/engine";
-import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@uno/grid/engine";
-import { NO_ROW } from "@uno/grid/sheet";
+import { isWorkspace } from "#document";
+import { Engine, messagePort } from "#engine";
+import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "#engine";
+import { NO_ROW } from "#sheet";
 
-import { covers } from "@uno/grid/library";
-import type { Connection } from "@uno/grid/library";
-import type { SingleRef } from "@uno/grid/store";
-import { s3Location } from "@uno/grid/store/s3";
+import { covers } from "#library";
+import type { Connection } from "#library";
+import type { SingleRef } from "#store";
+import { s3Location } from "#store/s3";
 
-import { m } from "../../paraglide/messages.js";
-import { columnLabel } from "../grid/rows.ts";
-import type { ShellAction } from "../grid/rows.ts";
-import type { Host } from "../../shared/host.ts";
-import type { Grid, GridEvents } from "../grid/index.ts";
-import { strategy } from "../input/index.ts";
-import type { InputName, InputStrategy } from "../input/index.ts";
-import { command } from "../keys.ts";
-import { Language, offered } from "../language.ts";
-import type { Command } from "../keys.ts";
-import { list, num } from "../locale.ts";
-import { Recents } from "../recents.ts";
-import { say } from "../said.ts";
-import { Sources, connectionLine } from "../sources.ts";
-import type { Arriving } from "../sources.ts";
-import { NEWER_AFTER_MS } from "../timing.ts";
-import { Workspace, reloaded } from "../workspace.ts";
-import type { Tab } from "../workspace.ts";
+import { m } from "#paraglide/messages";
+import { columnLabel } from "#renderer/grid/rows";
+import type { ShellAction } from "#renderer/grid/rows";
+import type { Host } from "#shared/host";
+import type { Grid, GridEvents } from "#renderer/grid";
+import { strategy } from "#renderer/input";
+import type { InputName, InputStrategy } from "#renderer/input";
+import { command } from "#renderer/keys";
+import { Language, offered } from "#renderer/language";
+import type { Command } from "#renderer/keys";
+import { list, num } from "#renderer/locale";
+import { Recents } from "#renderer/recents";
+import { say } from "#renderer/said";
+import { Sources, connectionLine } from "#renderer/sources";
+import type { Arriving } from "#renderer/sources";
+import { NEWER_AFTER_MS } from "#renderer/timing";
+import { Workspace, reloaded } from "#renderer/workspace";
+import type { Tab } from "#renderer/workspace";
 import { bannerParts, offerKey } from "./banner.ts";
 import { wireDrop } from "./drop.ts";
 import { Finder } from "./find.ts";
 import type { Showing } from "./find.ts";
-import { Theming } from "../theme.ts";
+import { Theming } from "#renderer/theme";
 import { FormulaForm } from "./formula.ts";
 import { PopMenu, below } from "./menu.ts";
 import { labelPage } from "./page.ts";
@@ -717,7 +717,7 @@ export class Shell {
    * loadGrid imports the grid and its stylesheet the first time a file opens.
    */
   private loadGrid(): Promise<Grid> {
-    this.gridLoading ??= import("../grid/index.ts").then(
+    this.gridLoading ??= import("#renderer/grid").then(
       ({ Grid }) => {
         this.grid = new Grid(this.content, this.gridEvents(), this.input);
         return this.grid;
