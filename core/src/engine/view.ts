@@ -74,6 +74,9 @@ interface Sample {
   supplied: (readonly string[])[] | undefined;
 }
 
+/** What a column blank in every sample row is inferred as. */
+const BLANK = inferKind(0, () => '');
+
 /** A source's edits and, for a carried source, its bytes, as read from a
  * .uno. */
 export interface Carried {
@@ -161,6 +164,11 @@ export class View {
   /** How the source's rows are found and read, and what holds its bytes. */
   private reading!: Reading;
   private schema!: Schema;
+  /**
+   * The columns as last worked out, which a widen extends. Set first in the
+   * turn the open's answer is built.
+   */
+  private lastColumns: ColumnInfo[] | undefined;
 
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
   private carried: Uint8Array | undefined;
@@ -269,6 +277,7 @@ export class View {
     const index = reading.index;
     reading
       .pass(v.abort.signal, () => {
+        v.widen();
         v.wake();
         if (index.complete) {
           // The clock stops here, once: the pass reports completion one time.
@@ -328,12 +337,15 @@ export class View {
         }
       }
 
+      // The columns are worked out in the turn the answer is built, so a
+      // widen after it extends what the answer says.
+      const sample = await v.sample();
       v.opened = {
         source: id,
         name,
         size: v.bytes.size,
         label: reading.label,
-        columns: await v.columns(),
+        columns: v.columnsOf(sample),
         progress: v.progress(),
         edits: carried?.edits ?? [],
         generation: v.generation,
@@ -393,11 +405,14 @@ export class View {
     return { rows, supplied: await this.suppliedFor(0, rows.length) };
   }
 
-  /** columnsOf infers each column's kind from `sample`, with the log applied. */
+  /**
+   * columnsOf infers each column's kind from `sample`, with the log applied
+   * as it stands, and keeps them as the last columns.
+   */
   private columnsOf({ rows, supplied }: Sample): ColumnInfo[] {
     const schema = this.schema;
     const shown = finishRows(schema, 0, rows, supplied).map((f) => f.shown);
-    return schema.headers.map((header, col) => {
+    this.lastColumns = schema.headers.map((header, col) => {
       const { kind, flagged } = inferKind(
         shown.length,
         (row) => shown[row]![col] ?? '',
@@ -406,6 +421,43 @@ export class View {
       return binding === undefined
         ? { header, kind, flagged }
         : { header, kind, flagged, binding };
+    });
+    return this.lastColumns;
+  }
+
+  /**
+   * widen gives the schema a data column, before the supplied ones, for
+   * each column the reading has found since the schema last grew. The pass
+   * calls it in the turn it finds them, so no block decoded over a new
+   * column meets a schema without it. Rows built before are stale, so the
+   * generation moves on.
+   *
+   * Once the open's answer is built, it is kept saying every column, and
+   * every client is told by a widened reply. The open waits for the sample
+   * rows to be indexed, so a column found after it is blank in each.
+   */
+  private widen(): void {
+    const schema = this.schema;
+    const had = schema.headers.length - schema.supplied.length;
+    const found = this.reading.columns();
+    if (found.length <= had) return;
+    schema.widen(found.slice(had).map((column) => column.name));
+    this.generation++;
+
+    const last = this.lastColumns;
+    if (last === undefined) return;
+    const added = schema.headers
+      .slice(had, found.length)
+      .map((header): ColumnInfo => ({ header, ...BLANK }));
+    const columns = [...last.slice(0, had), ...added, ...last.slice(had)];
+    this.lastColumns = columns;
+    this.opened.columns = columns;
+    this.opened.generation = this.generation;
+    this.port.post({
+      t: 'widened',
+      source: this.id,
+      generation: this.generation,
+      columns,
     });
   }
 
