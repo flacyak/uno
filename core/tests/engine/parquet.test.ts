@@ -488,3 +488,33 @@ test('a schema reordered since the save keeps each column, and each logged edit,
     want[EDITED_ROW]![col] = EDITED;
     expect(await everyRow(src)).toEqual(want);
   }));
+
+test('several files joined as bytes that say they were read as Parquet are refused by name', () =>
+  withEngine(async (engine) => {
+    const sheet = new Sheet('sales', [], []);
+    const part = {
+      name: SALES_NAME,
+      path: SALES_PATH,
+      bytes: SALES.length,
+      skip: 0,
+      unterminated: false,
+    };
+    const source: Held = {
+      id: 'sales',
+      name: 'sales',
+      parts: [part, part],
+      header: 'first',
+      kind: 'parquet',
+      rows: 0,
+      cols: 0,
+      state: { active: { row: 0, col: 0 } },
+    };
+    const src = await openOne(engine, {
+      name: 'q3.uno',
+      blob: workspace(source, sheet),
+    });
+    // A refusal from a .uno is said about its source, which this one names.
+    expect(saidIn(src.opened.link?.missing)).toBe(
+      'q3.uno: sales: sales: reading several Parquet files as one is not supported yet',
+    );
+  }));
