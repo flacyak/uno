@@ -1,11 +1,19 @@
 /**
  * @fileoverview The Parquet files the Parquet tests open, the rows the sales
- * fixture holds, and sources over them that log each read.
+ * fixture holds, files written for a test, and sources over them that log
+ * each read.
  */
 
 import { readFileSync } from 'node:fs';
 
+import { parquetMetadata } from 'hyparquet/src/index.js';
+import { ByteWriter, ParquetWriter } from 'hyparquet-writer';
+
 import { readAll } from '@ingest/csv';
+import {
+  PARQUET_FOOTER_LENGTH_BYTES,
+  PARQUET_MAGIC_BYTES,
+} from '@ingest/detect';
 import { CHUNK_CACHE_BYTES, chunkCache } from '@ingest/parquet/buffer';
 import { openTable } from '@ingest/parquet/table';
 import type { Table } from '@ingest/parquet/table';
@@ -49,4 +57,32 @@ export function logged(bytes: Uint8Array): {
 /** `bytes` opened as a table called `name`. */
 export function opened(name: string, bytes: Uint8Array): Promise<Table> {
   return openTable(name, bytesSource(bytes), chunkCache(CHUNK_CACHE_BYTES));
+}
+
+/**
+ * `bytes` with the page indexes left out of its footer, so a read finds
+ * no pages but by walking each column chunk from its start.
+ */
+export function withoutPageIndexes(bytes: Uint8Array): Uint8Array {
+  const metadata = parquetMetadata(bytes.slice().buffer);
+  const footer = PARQUET_FOOTER_LENGTH_BYTES + PARQUET_MAGIC_BYTES;
+  const footerStart = bytes.length - footer - metadata.metadata_length;
+  const writer = new ByteWriter();
+  // The writer starts the file with its magic, and the rest follows as it was.
+  const parquet = new ParquetWriter({ writer, schema: metadata.schema });
+  writer.appendBytes(bytes.subarray(PARQUET_MAGIC_BYTES, footerStart));
+  parquet.num_rows = metadata.num_rows;
+  parquet.row_groups = metadata.row_groups.map((group) => ({
+    ...group,
+    columns: group.columns.map((chunk) => {
+      const plain = { ...chunk };
+      delete plain.offset_index_offset;
+      delete plain.offset_index_length;
+      delete plain.column_index_offset;
+      delete plain.column_index_length;
+      return plain;
+    }),
+  }));
+  parquet.finish();
+  return new Uint8Array(writer.getBuffer());
 }
