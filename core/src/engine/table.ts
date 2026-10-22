@@ -97,6 +97,11 @@ export class TablePages implements Blocks {
   private readonly cache: BlockCache;
   /** Windows being read to keep, by each block they hold. */
   private readonly loading = new Map<number, Promise<Window>>();
+  /**
+   * The last window read to keep nothing, so a scan down the rows decodes
+   * each window once and leaves the cache as it is.
+   */
+  private passing: Window | undefined;
 
   constructor(
     name: string,
@@ -126,10 +131,11 @@ export class TablePages implements Blocks {
 
   /**
    * records reads one block's rows, with the blocks of its window. With
-   * `keep = false` they are decoded and the cache is left as it is.
+   * `keep = false` they are decoded and the cache is left as it is, and the
+   * window is held aside for the next block until another replaces it.
    */
   async records(block: number, keep = true): Promise<string[][]> {
-    const hit = this.cache.get(block);
+    const hit = this.cache.get(block) ?? blockIn(this.passing, block);
     if (hit !== undefined) return hit;
     const window = await (this.loading.get(block) ?? this.load(block, keep));
     return window.blocks[block - window.first]!;
@@ -138,7 +144,9 @@ export class TablePages implements Blocks {
   /** load decodes the window holding `block`, and with `keep` caches it. */
   private load(block: number, keep: boolean): Promise<Window> {
     const [first, end] = this.windowOf(block);
-    if (!keep) return this.decode(first, end);
+    if (!keep) {
+      return this.decode(first, end).then((window) => (this.passing = window));
+    }
     const pending = this.decode(first, end)
       .then((window) => {
         window.blocks.forEach((rows, i) => {
@@ -204,6 +212,14 @@ export class TablePages implements Blocks {
     }
     return { first, blocks };
   }
+}
+
+/** blockIn returns `block`'s rows where `window` holds them. */
+function blockIn(
+  window: Window | undefined,
+  block: number,
+): string[][] | undefined {
+  return window === undefined ? undefined : window.blocks[block - window.first];
 }
 
 /**
