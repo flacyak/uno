@@ -10,6 +10,7 @@ import { m } from "../src/paraglide/messages.js";
 import { sidebarRows } from "../src/renderer/shell/sidebar.ts";
 import type { SidebarActions } from "../src/renderer/shell/sidebar.ts";
 import { stateOf } from "../src/renderer/sources.ts";
+import type { Arriving } from "../src/renderer/sources.ts";
 import type { Tab, Workspace } from "../src/renderer/workspace.ts";
 
 function tab(id: string, name: string, link?: Tab["link"]): Tab {
@@ -44,6 +45,7 @@ function workspace(path: string, tabs: Tab[], dirty = false): Workspace {
 function list(
   w: Workspace | undefined,
   recents: readonly string[] = [],
+  arriving: readonly Arriving[] = [],
 ): { els: HTMLElement[]; asked: string[] } {
   const asked: string[] = [];
   const act: SidebarActions = {
@@ -54,7 +56,7 @@ function list(
     add: () => asked.push("add"),
     repoint: (t) => asked.push(`repoint ${t.id}`),
   };
-  return { els: sidebarRows(w, recents, act), asked };
+  return { els: sidebarRows(w, recents, act, arriving), asked };
 }
 
 /** A workspace of one source. */
@@ -89,6 +91,27 @@ test("a source still opening is listed after the sources, dimmed, with nothing o
   expect(coming.title).toBe("ads-q3.csv · opening…");
   expect(coming.querySelector(".close, .dirty, .trouble")).toBeNull();
   coming.click();
+  expect(asked).toEqual([]);
+});
+
+test("the × on a source still opening stops it, and asks nothing of the shell", () => {
+  const w = workspace("/work/q3-close.uno", [tab("a", "sales-q3.csv")]);
+  let stopped = 0;
+  const cancel = (): void => {
+    stopped++;
+  };
+  const { els, asked } = list(w, [], [{ name: "ads-q3.csv", cancel }]);
+
+  const coming = els[2]!;
+  expect(names(els)[2]).toBe("tab-opening:ads-q3.csv");
+  const close = coming.querySelector<HTMLElement>(".close")!;
+  expect(close.textContent).toBe("×");
+  expect(close.title).toBe("Stop opening ads-q3.csv");
+  close.click();
+  expect(stopped).toBe(1);
+  // The row itself still does nothing.
+  coming.click();
+  expect(stopped).toBe(1);
   expect(asked).toEqual([]);
 });
 

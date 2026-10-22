@@ -76,6 +76,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "nothing-to-redo": { t: "nothing-to-redo" },
   "in-view": { t: "in-view" },
   "file-closed": { t: "file-closed" },
+  cancelled: { t: "cancelled", name: "ads.csv" },
   "changed-on-disk": { t: "changed-on-disk", name: "ads.csv" },
   "keeps-no-connections": { t: "keeps-no-connections" },
   "offers-no-sign-ins": { t: "offers-no-sign-ins" },
