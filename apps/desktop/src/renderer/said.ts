@@ -112,6 +112,7 @@ const SAYS: Sentences<Said> = {
     const read = { charset: s.charset, delimiter: s.delimiter };
     return headed ? m.read_delimiter(read) : m.read_delimiter_no_header(read);
   },
+  "read-lines": (s) => m.read_lines({ charset: s.charset }),
 
   program: (s) => {
     const [first, ...rest] = s.steps.map(step);

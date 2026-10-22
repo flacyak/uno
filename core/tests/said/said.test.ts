@@ -26,6 +26,9 @@ describe('english', () => {
     expect(
       english({ t: 'read', delimiter: '\t', header: 'none', charset: 'UTF-8' }),
     ).toBe('UTF-8 · tab-separated · no header row');
+    expect(english({ t: 'read-lines', charset: 'UTF-8' })).toBe(
+      'UTF-8 · JSON Lines',
+    );
     expect(
       english({
         t: 'workspace-too-large',
