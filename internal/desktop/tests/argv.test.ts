@@ -3,7 +3,7 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { filesNamed } from "../src/main/argv.ts";
+import { filesNamed } from "#main/argv";
 
 const CWD = "/home/ana/exports";
 /** The app path of the packaged app, which is never on the line. */

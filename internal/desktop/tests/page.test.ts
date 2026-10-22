@@ -8,9 +8,9 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import { m } from "../src/paraglide/messages.js";
-import { baseLocale } from "../src/paraglide/runtime.js";
-import { labelPage } from "../src/renderer/shell/page.ts";
+import { m } from "#paraglide/messages";
+import { baseLocale } from "#paraglide/runtime";
+import { labelPage } from "#renderer/shell/page";
 import { bodyMarkup } from "./markup.ts";
 
 beforeEach(() => {

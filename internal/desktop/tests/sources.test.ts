@@ -4,11 +4,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
-import type { Peeked, SourceRef } from "@uno/grid/engine";
-import type { Entry, Listing } from "@uno/grid/store";
+import type { Peeked, SourceRef } from "#engine";
+import type { Entry, Listing } from "#store";
 
-import type { Arriving, Connection, Listings, Open } from "../src/renderer/sources.ts";
-import { Sources, joinedName, stateOf, trailTo } from "../src/renderer/sources.ts";
+import type { Arriving, Connection, Listings, Open } from "#renderer/sources";
+import { Sources, joinedName, stateOf, trailTo } from "#renderer/sources";
 
 const ACME: Connection = {
   name: "acme-exports",
