@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Notation cells: stored as source, shown as symbols, and kept
+ * apart from bound columns.
+ */
+
 import { expect, test } from 'vite-plus/test';
 
 import { Sheet } from '#sheet';
