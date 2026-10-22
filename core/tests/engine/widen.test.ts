@@ -1,12 +1,14 @@
 /**
  * @fileoverview A source whose columns grow while it is indexed. A workspace
  * says a file was read as JSON Lines, and the file first holds a key at row
- * 50,000, read through TINY blocks. Rows and edits keep their cells, and a
- * client hands the columns it is told to its handle.
+ * 50,000, read through TINY blocks. Rows and edits keep their cells, _file
+ * moves right and still refuses every edit, and a client hands the columns
+ * it is told to its handle.
  */
 
 import { expect, test } from 'vite-plus/test';
 
+import { FILE_COLUMN } from '@engine';
 import type { ColumnInfo, SourceHandle } from '@engine';
 import { Op } from '@sheet';
 import { indexed, padded } from './harness.ts';
@@ -14,6 +16,7 @@ import {
   ID_KEY,
   LATE,
   LATE_KEY,
+  NAME,
   cellsAt,
   withHeld,
   workspace,
@@ -33,6 +36,8 @@ const EARLY = 3;
 const NEAR = LATE - 1_000;
 /** What an edit writes. */
 const EDITED = 'edited';
+/** What a fold says of an edit to _file. */
+const FILE_REFUSED = /_file shows which file each row came from/;
 
 const FILE = written();
 
@@ -126,6 +131,29 @@ test('an edit made before the widen stays on its cell, and one after lands on th
     expect((await src.rows(LATE + 1, 1)).rows).toEqual([cellsAt(LATE + 1)]);
     expect((await src.rows(EARLY, 1)).rows).toEqual([[EDITED, '']]);
   }));
+
+test('_file moves right past the new column, and still refuses every edit', () =>
+  heldAs('part', async ({ engine, src, release }) => {
+    expect(headersOf(src.opened.columns)).toEqual([ID_KEY, FILE_COLUMN]);
+    expect((await src.rows(0, 1)).rows).toEqual([['0', NAME]]);
+    engine.mode(true);
+    const file = { op: Op.Set, row: 0, now: EDITED };
+    await expect(src.edit({ ...file, col: 1 })).rejects.toThrow(FILE_REFUSED);
+
+    const told = nextColumns(src);
+    release();
+    const [columns] = await told;
+    expect(headersOf(columns)).toEqual([ID_KEY, LATE_KEY, FILE_COLUMN]);
+    await indexed(src);
+
+    expect((await src.rows(0, 1)).rows).toEqual([['0', '', NAME]]);
+    expect((await src.rows(LATE, 1)).rows).toEqual([[...cellsAt(LATE), NAME]]);
+    await expect(src.edit({ ...file, col: 2 })).rejects.toThrow(FILE_REFUSED);
+    await src.edit({ ...file, col: 1 });
+    expect((await src.rows(0, 1)).rows).toEqual([['0', EDITED, NAME]]);
+  }));
+
+// ------------------------------------------------------------ the client alone
 
 test('a client hands the columns a source found to its handle, and drops ones older than it holds', async () => {
   const wide = columnsOf('id', 'late', 'later');
