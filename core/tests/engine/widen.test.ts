@@ -1,13 +1,14 @@
 /**
  * @fileoverview A source whose columns grow while it is indexed. A workspace
  * says a file was read as JSON Lines, and the file first holds a key at row
- * 50,000, read through TINY blocks. Rows keep their cells, and a client
- * hands the columns it is told to its handle.
+ * 50,000, read through TINY blocks. Rows and edits keep their cells, and a
+ * client hands the columns it is told to its handle.
  */
 
 import { expect, test } from 'vite-plus/test';
 
 import type { ColumnInfo, SourceHandle } from '@engine';
+import { Op } from '@sheet';
 import { indexed, padded } from './harness.ts';
 import {
   ID_KEY,
@@ -23,11 +24,15 @@ import { SCRIPTED_SOURCE, columnsOf, scriptedEngine } from './scripted.ts';
 
 /** Rows a test reads at a time. */
 const WINDOW = 10;
+/** A row read before the late key is met. */
+const EARLY = 3;
 /**
  * A row near LATE the index reaches before it is held: a TINY chunk holds
  * fewer lines than this.
  */
 const NEAR = LATE - 1_000;
+/** What an edit writes. */
+const EDITED = 'edited';
 
 const FILE = written();
 
@@ -83,6 +88,43 @@ test('rows read before and after the widen keep their cells', () =>
     expect(padded(after.rows, columns.length)).toEqual(
       expected(across, WINDOW),
     );
+  }));
+
+test('an edit made before the widen stays on its cell, and one after lands on the new column', () =>
+  heldAs('file', async ({ engine, src, release }) => {
+    engine.mode(true);
+    const early = await src.edit({
+      op: Op.Set,
+      row: EARLY,
+      col: 0,
+      now: EDITED,
+    });
+    expect(headersOf(early.columns)).toEqual([ID_KEY]);
+    const told = nextColumns(src);
+    release();
+    await told;
+    await indexed(src);
+
+    expect((await src.rows(EARLY, 1)).rows).toEqual([[EDITED, '']]);
+    const late = await src.edit({
+      op: Op.Set,
+      row: LATE + 1,
+      col: 1,
+      now: EDITED,
+    });
+    expect(headersOf(late.columns)).toEqual([ID_KEY, LATE_KEY]);
+    expect((await src.rows(LATE, 2)).rows).toEqual([
+      cellsAt(LATE),
+      [String(LATE + 1), EDITED],
+    ]);
+
+    const undone = await src.undo();
+    expect(headersOf(undone.columns), 'undo keeps the new column').toEqual([
+      ID_KEY,
+      LATE_KEY,
+    ]);
+    expect((await src.rows(LATE + 1, 1)).rows).toEqual([cellsAt(LATE + 1)]);
+    expect((await src.rows(EARLY, 1)).rows).toEqual([[EDITED, '']]);
   }));
 
 test('a client hands the columns a source found to its handle, and drops ones older than it holds', async () => {
