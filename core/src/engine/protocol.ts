@@ -315,6 +315,17 @@ export type Reply =
   | { t: 'relinked'; id: number; opened: Opened }
   | { t: 'appended'; id: number; opened: Opened }
   | { t: 'progress'; source: string; progress: Progress }
+  /**
+   * Unnumbered, every column of a source that found columns as it was
+   * indexed. Rows built before `generation` are stale. A client that knows no
+   * such reply finds no request it answers, and draws the columns it had.
+   */
+  | {
+      t: 'widened';
+      source: string;
+      generation: number;
+      columns: ColumnInfo[];
+    }
   | ({ t: 'rows'; id: number; first: number } & RowsPage)
   | { t: 'changed'; id: number; source: string; changed: Changed }
   | { t: 'found'; id: number; found: Found }
