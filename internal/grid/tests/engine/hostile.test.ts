@@ -12,11 +12,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { afterEach, beforeEach, expect, test } from 'vite-plus/test';
 
-import { BAND_ROWS, ROWS_AT_MOST, serve } from '#engine';
-import type { Port, Reply, Request } from '#engine';
-import { sources } from '#plugin';
-import { blobProvider } from '#store';
-import { diskProvider } from '#store/node';
+import { BAND_ROWS, ROWS_AT_MOST, serve } from '@engine';
+import type { Port, Reply, Request } from '@engine';
+import { sources } from '@plugin';
+import { blobProvider } from '@store';
+import { diskProvider } from '@store/node';
 import { FIXTURE, TINY, connect } from './harness.ts';
 
 /** An engine served on a port the test drives directly. */

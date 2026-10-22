@@ -4,8 +4,8 @@
  * way round.
  */
 
-import { indexOfRunes, quote, quoteMeta, runes } from '#go';
-import { MAX_PARTS, quoteRegex } from '#program';
+import { indexOfRunes, quote, quoteMeta, runes } from '@go';
+import { MAX_PARTS, quoteRegex } from '@program';
 import { MAX_DIFF } from './align.ts';
 import { MAX_PER_EXAMPLE } from './induce.ts';
 

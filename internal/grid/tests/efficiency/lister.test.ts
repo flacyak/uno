@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test, vi } from 'vite-plus/test';
 
-import { PAGE, diskLister } from '#store/disklister';
+import { PAGE, diskLister } from '@store/disklister';
 import { record } from './record.ts';
 
 /** Directory entries returned by every readdir so far. */

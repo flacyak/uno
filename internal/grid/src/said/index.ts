@@ -8,9 +8,9 @@
  * makes the compiler require its sentence here and in every client.
  */
 
-import { quote } from '#go/strconv';
-import { unreachable } from '#never';
-import type { HeaderMode } from '#store/multi';
+import { quote } from '@go/strconv';
+import { unreachable } from '@never';
+import type { HeaderMode } from '@store/multi';
 
 /** Charset is the name of a file's text encoding, as the status bar shows it. */
 export type Charset = 'UTF-8' | 'Windows-1252';

@@ -18,22 +18,22 @@ import {
   indexPass,
   messagePort,
   serve,
-} from '#engine';
-import type { MessagePortLike, Reply, Request } from '#engine';
-import { openFormat } from '#ingest';
-import { isNumber } from '#num';
-import { NO_ROW, Op } from '#sheet';
-import type { Provider } from '#plugin';
-import { sources } from '#plugin';
-import { blobSource } from '#store';
-import { diskProvider } from '#store/node';
+} from '@engine';
+import type { MessagePortLike, Reply, Request } from '@engine';
+import { openFormat } from '@ingest';
+import { isNumber } from '@num';
+import { NO_ROW, Op } from '@sheet';
+import type { Provider } from '@plugin';
+import { sources } from '@plugin';
+import { blobSource } from '@store';
+import { diskProvider } from '@store/node';
 import {
   LAST_ROW,
   REGION,
   REVENUE,
   ROWS,
   UNITS,
-} from '#tests/testdata/sales-q3';
+} from '@grid-tests/testdata/sales-q3';
 import {
   FIXTURE,
   SCREEN,

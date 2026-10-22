@@ -13,7 +13,7 @@ import type { Dirent, Stats } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
-import { compareStrings } from '#go';
+import { compareStrings } from '@go';
 import { isRemote } from './index.ts';
 import type { Entry, Lister, Listing } from './list.ts';
 import { PAGE, byPageKey, pageKey } from './list.ts';

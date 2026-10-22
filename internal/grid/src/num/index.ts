@@ -5,7 +5,7 @@
  * a string goes in and a number or undefined comes out.
  */
 
-import { parseFloat as parseDecimal, trimSpace } from '#go';
+import { parseFloat as parseDecimal, trimSpace } from '@go';
 
 /**
  * DECORATION is the characters stripped from a value before it is read as a
