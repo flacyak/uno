@@ -400,8 +400,28 @@ test('a rows or edit request with a number that is not whole is refused, not rea
     source,
     edit: { op: 'set', row: 3, col: 0, now: 'x' },
   });
+  // A width that is not a whole number is refused, even where it would not
+  // be compared.
+  p.send({
+    t: 'edit',
+    id: 9,
+    source,
+    edit: { op: 'set', row: 3, col: 0, now: 'x', width: '7' },
+  });
+  p.send({
+    t: 'edit',
+    id: 10,
+    source,
+    edit: { op: 'set', row: 3, col: 0, now: 'x', width: 1.5 },
+  });
   await answered(p);
   expect(withId(p.replies, 8).map((r) => r.t)).toEqual(['changed']);
+  for (const id of [9, 10]) {
+    expect(
+      withId(p.replies, id).map((r) => r.t),
+      `request ${id}`,
+    ).toEqual(['error']);
+  }
   p.send({ t: 'close' });
   await answered(p);
 });
