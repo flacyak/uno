@@ -22,7 +22,13 @@ const counted = {
 const [s0, e0] = layout.index.bytesOf(0);
 const [s1, e1] = layout.index.bytesOf(1);
 // Room for blocks 0 and 1, and no more.
-const pages = new Pages('sales.csv', counted, layout.format, layout.index, e0 - s0 + (e1 - s1));
+const pages = new Pages(
+  'sales.csv',
+  counted,
+  layout.format,
+  layout.index,
+  e0 - s0 + (e1 - s1),
+);
 
 for (let b = 0; b < layout.blocks; b++) await pages.records(b, false);
 const afterFindOverAll = { held: pages.held, reads };

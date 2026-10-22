@@ -58,19 +58,19 @@ The default is `balanced`.
 Main plans from two facts, `C = os.availableParallelism()` and `M = os.totalmem()`.
 Every number below is a named constant in `shared/resources.ts`.
 
-| level    | scan workers (machine wide) | page cache, source bytes (machine wide) |
-| -------- | --------------------------- | --------------------------------------- |
-| light    | 0, the engine thread scans as today | 32 MB, today's `TUNING.cacheBytes` |
-| balanced | `min(BALANCED_MOST = 4, floor(C / 4))` | `clamp(M / 256, 32 MB, 128 MB)` |
-| full     | `min(FULL_MOST = 8, max(0, C - KEPT_CORES = 2))` | `clamp(M / 64, 32 MB, 512 MB)` |
+| level    | scan workers (machine wide)                      | page cache, source bytes (machine wide) |
+| -------- | ------------------------------------------------ | --------------------------------------- |
+| light    | 0, the engine thread scans as today              | 32 MB, today's `TUNING.cacheBytes`      |
+| balanced | `min(BALANCED_MOST = 4, floor(C / 4))`           | `clamp(M / 256, 32 MB, 128 MB)`         |
+| full     | `min(FULL_MOST = 8, max(0, C - KEPT_CORES = 2))` | `clamp(M / 64, 32 MB, 512 MB)`          |
 
-| machine            | light     | balanced   | full       |
-| ------------------ | --------- | ---------- | ---------- |
-| 2 cores, 4 GB      | 0 · 32 MB | 0 · 32 MB  | 0 · 64 MB  |
-| 4 cores, 8 GB      | 0 · 32 MB | 1 · 32 MB  | 2 · 128 MB |
-| 8 cores, 16 GB     | 0 · 32 MB | 2 · 64 MB  | 6 · 256 MB |
-| 16 threads, 32 GB  | 0 · 32 MB | 4 · 128 MB | 8 · 512 MB |
-| 64 cores, 256 GB   | 0 · 32 MB | 4 · 128 MB | 8 · 512 MB |
+| machine           | light     | balanced   | full       |
+| ----------------- | --------- | ---------- | ---------- |
+| 2 cores, 4 GB     | 0 · 32 MB | 0 · 32 MB  | 0 · 64 MB  |
+| 4 cores, 8 GB     | 0 · 32 MB | 1 · 32 MB  | 2 · 128 MB |
+| 8 cores, 16 GB    | 0 · 32 MB | 2 · 64 MB  | 6 · 256 MB |
+| 16 threads, 32 GB | 0 · 32 MB | 4 · 128 MB | 8 · 512 MB |
+| 64 cores, 256 GB  | 0 · 32 MB | 4 · 128 MB | 8 · 512 MB |
 
 The caps 4 and 8 are placeholders.
 The curve from `core/tests/lab/parallel` read cold from the 2.5 GB fixture on the NVMe decides them.
@@ -191,7 +191,9 @@ Core holds what core uses and nothing about machines.
 /** The part of Tuning a host may change while the engine runs. */
 export type LiveTuning = Pick<Tuning, 'cacheBytes'>;
 /** One byte budget shared by every Pages of a workspace. */
-export class PageBudget { /* resize(bytes) evicts at once */ }
+export class PageBudget {
+  /* resize(bytes) evicts at once */
+}
 
 // core/src/engine/serve.ts
 export interface Seams {
@@ -206,7 +208,11 @@ export interface Serving {
   /** A smaller page budget evicts at once. */
   tune(t: LiveTuning): void;
 }
-export function serve(port: Port<Request, Reply>, sources: Sources, seams?: Seams): Serving;
+export function serve(
+  port: Port<Request, Reply>,
+  sources: Sources,
+  seams?: Seams,
+): Serving;
 
 // core/src/engine/tasks.ts
 /** Work a pool runs off the engine's thread, as pure functions over plain data. */
@@ -261,8 +267,7 @@ export interface EngineLimits {
 
 /** Main to engine, over parentPort. The start message carries the port. */
 export type EngineMessage =
-  | { t: 'start'; limits: EngineLimits }
-  | { t: 'tune'; limits: EngineLimits };
+  { t: 'start'; limits: EngineLimits } | { t: 'tune'; limits: EngineLimits };
 
 /** What the settings menu shows. Plain data, so it crosses contextBridge whole. */
 export interface ResourcesView {
@@ -276,7 +281,11 @@ export interface ResourcesView {
 /** Reads anything into a Resources, field by field, defaults where a field is wrong. */
 export function parseResources(raw: unknown): Resources;
 /** Limits for one of `workspaces` workspace engines. */
-export function plan(chosen: Resources, machine: Machine, workspaces: number): EngineLimits;
+export function plan(
+  chosen: Resources,
+  machine: Machine,
+  workspaces: number,
+): EngineLimits;
 export const BROWSE_LIMITS: EngineLimits; // 0 workers, the floor cache
 export function engineMessageOf(raw: unknown): EngineMessage | undefined;
 ```
@@ -391,20 +400,20 @@ en-GB matches en-US for all of them, since none uses a spelling that differs.
 pt-BR and pt-PT match unless noted.
 The pseudo-locale writes itself from en-US.
 
-| key | en-US | es | pt-BR / pt-PT |
-| --- | --- | --- | --- |
-| `settings_machine` | This machine | Este equipo | Este computador |
-| `uses_light` | Light | Ligero | Leve |
-| `uses_balanced` | Balanced | Equilibrado | Equilibrado |
-| `uses_full` | Full | Máximo | Máximo |
-| `machine_plan` | Up to {cores} of {total} cores · about {memory} for rows | Hasta {cores} de {total} núcleos · unos {memory} para filas | Até {cores} de {total} núcleos · cerca de {memory} para linhas |
-| `machine_easing` | On battery, using less | Con batería, usa menos | Na bateria, usa menos |
-| `machine_battery` | Ease off on battery | Usar menos con batería | Usar menos na bateria |
-| `machine_keep_indexes` | Keep indexes between opens | Guardar índices entre aperturas | Guardar índices entre aberturas |
-| `machine_clear_indexes` | Clear kept indexes | Borrar índices guardados | Apagar índices guardados |
-| `machine_nothing_kept` | nothing kept | nada guardado | nada guardado |
-| `indexes_cleared` | cleared {size} of kept indexes | borrados {size} de índices guardados | apagados {size} de índices guardados |
-| `machine_background` | Index in the background when plugged in | Indexar en segundo plano con corriente | Indexar em segundo plano na tomada / ligado à corrente |
+| key                     | en-US                                                    | es                                                          | pt-BR / pt-PT                                                  |
+| ----------------------- | -------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| `settings_machine`      | This machine                                             | Este equipo                                                 | Este computador                                                |
+| `uses_light`            | Light                                                    | Ligero                                                      | Leve                                                           |
+| `uses_balanced`         | Balanced                                                 | Equilibrado                                                 | Equilibrado                                                    |
+| `uses_full`             | Full                                                     | Máximo                                                      | Máximo                                                         |
+| `machine_plan`          | Up to {cores} of {total} cores · about {memory} for rows | Hasta {cores} de {total} núcleos · unos {memory} para filas | Até {cores} de {total} núcleos · cerca de {memory} para linhas |
+| `machine_easing`        | On battery, using less                                   | Con batería, usa menos                                      | Na bateria, usa menos                                          |
+| `machine_battery`       | Ease off on battery                                      | Usar menos con batería                                      | Usar menos na bateria                                          |
+| `machine_keep_indexes`  | Keep indexes between opens                               | Guardar índices entre aperturas                             | Guardar índices entre aberturas                                |
+| `machine_clear_indexes` | Clear kept indexes                                       | Borrar índices guardados                                    | Apagar índices guardados                                       |
+| `machine_nothing_kept`  | nothing kept                                             | nada guardado                                               | nada guardado                                                  |
+| `indexes_cleared`       | cleared {size} of kept indexes                           | borrados {size} de índices guardados                        | apagados {size} de índices guardados                           |
+| `machine_background`    | Index in the background when plugged in                  | Indexar en segundo plano con corriente                      | Indexar em segundo plano na tomada / ligado à corrente         |
 
 `machine_plan` has plural variants on `total`, because a one core machine reads "of 1 core", and es and pt have `one`, `many` and `other`.
 `{cores}` and `{total}` go through `num()`, and `{memory}` and `{size}` go through `bytes()`, so es and pt get comma decimals.
@@ -416,30 +425,30 @@ Stack A is core and stays pure.
 Stack B is the desktop and needs A.
 Stack C is background indexing and needs both.
 
-| # | title | files | lines |
-| --- | --- | --- | --- |
-| A1 | refactor: serve takes its seams in one object | `core/src/engine/serve.ts`, `core/tests/engine/harness.ts`, the seven other core test call sites of `serve`, `apps/desktop/src/engine/index.ts`, `apps/desktop/tests/bucket-engine.ts`, `apps/desktop/tests/smoke/dom-harness.ts` | 85 |
-| A2 | feat: a workspace's sources share one page budget | `core/src/engine/rows.ts`, `workspace.ts`, `view.ts`, `core/tests/engine/budget.test.ts` | 90 |
-| A3 | feat: Serving.tune changes the page budget while the engine runs | `serve.ts`, `workspace.ts`, `rows.ts`, `budget.test.ts` | 50 |
-| A4 | feat: a Pool seam and the pure tasks it runs | `core/src/engine/tasks.ts`, `core/src/engine/index.ts`, `core/tests/engine/tasks.test.ts` | 70 |
-| A5 | feat: the index pass scans through the pool it is given | `pass.ts`, `view.ts`, `workspace.ts`, `core/tests/engine/pool.test.ts` | 100 |
-| A6 | test: a thread is its own way out of the core | `core/tests/store/ways.ts`, `opens.test.ts`, `reach/everything.ts`, `core/README.md` | 45 |
-| A7 | test(efficiency): the heap a cached block costs per source byte | `core/tests/efficiency/pages.test.ts`, `rows.ts`, `core/README.md` | 70 |
-| A8 | feat: the indexes folder says what it holds and can be emptied | `core/src/store/node.ts`, `core/tests/store/indexes.test.ts` | 60 |
-| B1 | feat(desktop): the resources a person chooses, read from anything | `apps/desktop/src/shared/resources.ts`, `apps/desktop/tests/resources.test.ts` | 80 |
-| B2 | feat(desktop): an engine's limits, planned from the choice and the machine | `shared/resources.ts`, `tests/resources.test.ts` | 95 |
-| B3 | feat(desktop): the renderer says what an engine is for | `shared/host.ts`, `preload/index.ts`, `renderer/host.ts`, `shell/shell.ts`, `main/index.ts`, `tests/smoke/dom-harness.ts` | 40 |
-| B4 | feat(desktop): main keeps the choice under user data and shows it | `main/resources.ts`, `main/index.ts`, `shared/host.ts`, `preload/index.ts`, `renderer/host.ts`, `tests/smoke/dom-harness.ts` | 95 |
-| B5 | feat(desktop): an engine starts with its limits and is tuned as they change | `shared/resources.ts`, `main/resources.ts`, `main/index.ts`, `engine/index.ts`, `tests/engine-message.test.ts` | 95 |
-| B6 | feat(desktop): the engine scans on worker threads | `engine/pool.ts`, `engine/worker.ts`, `engine/index.ts`, `scripts/bundle.js`, `tests/pool.test.ts` | 100 |
-| B7 | feat(desktop): words for this machine, in five languages | `messages/en-US.json`, `en-GB.json`, `es.json`, `pt-BR.json`, `pt-PT.json` | 60 |
-| B8 | feat(desktop): settings say how much of this machine uno uses | `shell/machine.ts`, `shell/settings.ts`, `settings.css`, `shell/shell.ts`, `tests/settings.test.ts` | 100 |
-| B9 | feat(desktop): engines ease off on battery | `main/resources.ts`, `shell/machine.ts`, `tests/resources.test.ts`, `tests/settings.test.ts` | 70 |
-| B10 | feat(desktop): kept indexes can be turned off and cleared from settings | `main/resources.ts`, `main/index.ts`, `shared/host.ts`, `preload/index.ts`, `renderer/host.ts`, `shell/machine.ts`, `shell/shell.ts`, `tests/settings.test.ts` | 95 |
-| B11 | test(smoke): what settings choose for this machine reaches the engine | `main/smoke/machine.ts`, `main/smoke/index.ts`, `main/smoke/settings.ts` | 90 |
-| C1 | feat: Serving.finish runs every pass to its end, then closes | `serve.ts`, `workspace.ts`, `view.ts`, `core/tests/engine/finish.test.ts` | 80 |
-| C2 | feat(desktop): a closed workspace finishes its index while plugged in | `engine/index.ts`, `main/resources.ts`, `shared/resources.ts`, `shell/machine.ts`, `messages/*.json`, tests | 100 |
-| C3 | test(smoke): a workspace closed part way is whole when it opens again | `main/smoke/machine.ts` | 50 |
+| #   | title                                                                       | files                                                                                                                                                                                                                             | lines |
+| --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| A1  | refactor: serve takes its seams in one object                               | `core/src/engine/serve.ts`, `core/tests/engine/harness.ts`, the seven other core test call sites of `serve`, `apps/desktop/src/engine/index.ts`, `apps/desktop/tests/bucket-engine.ts`, `apps/desktop/tests/smoke/dom-harness.ts` | 85    |
+| A2  | feat: a workspace's sources share one page budget                           | `core/src/engine/rows.ts`, `workspace.ts`, `view.ts`, `core/tests/engine/budget.test.ts`                                                                                                                                          | 90    |
+| A3  | feat: Serving.tune changes the page budget while the engine runs            | `serve.ts`, `workspace.ts`, `rows.ts`, `budget.test.ts`                                                                                                                                                                           | 50    |
+| A4  | feat: a Pool seam and the pure tasks it runs                                | `core/src/engine/tasks.ts`, `core/src/engine/index.ts`, `core/tests/engine/tasks.test.ts`                                                                                                                                         | 70    |
+| A5  | feat: the index pass scans through the pool it is given                     | `pass.ts`, `view.ts`, `workspace.ts`, `core/tests/engine/pool.test.ts`                                                                                                                                                            | 100   |
+| A6  | test: a thread is its own way out of the core                               | `core/tests/store/ways.ts`, `opens.test.ts`, `reach/everything.ts`, `core/README.md`                                                                                                                                              | 45    |
+| A7  | test(efficiency): the heap a cached block costs per source byte             | `core/tests/efficiency/pages.test.ts`, `rows.ts`, `core/README.md`                                                                                                                                                                | 70    |
+| A8  | feat: the indexes folder says what it holds and can be emptied              | `core/src/store/node.ts`, `core/tests/store/indexes.test.ts`                                                                                                                                                                      | 60    |
+| B1  | feat(desktop): the resources a person chooses, read from anything           | `apps/desktop/src/shared/resources.ts`, `apps/desktop/tests/resources.test.ts`                                                                                                                                                    | 80    |
+| B2  | feat(desktop): an engine's limits, planned from the choice and the machine  | `shared/resources.ts`, `tests/resources.test.ts`                                                                                                                                                                                  | 95    |
+| B3  | feat(desktop): the renderer says what an engine is for                      | `shared/host.ts`, `preload/index.ts`, `renderer/host.ts`, `shell/shell.ts`, `main/index.ts`, `tests/smoke/dom-harness.ts`                                                                                                         | 40    |
+| B4  | feat(desktop): main keeps the choice under user data and shows it           | `main/resources.ts`, `main/index.ts`, `shared/host.ts`, `preload/index.ts`, `renderer/host.ts`, `tests/smoke/dom-harness.ts`                                                                                                      | 95    |
+| B5  | feat(desktop): an engine starts with its limits and is tuned as they change | `shared/resources.ts`, `main/resources.ts`, `main/index.ts`, `engine/index.ts`, `tests/engine-message.test.ts`                                                                                                                    | 95    |
+| B6  | feat(desktop): the engine scans on worker threads                           | `engine/pool.ts`, `engine/worker.ts`, `engine/index.ts`, `scripts/bundle.js`, `tests/pool.test.ts`                                                                                                                                | 100   |
+| B7  | feat(desktop): words for this machine, in five languages                    | `messages/en-US.json`, `en-GB.json`, `es.json`, `pt-BR.json`, `pt-PT.json`                                                                                                                                                        | 60    |
+| B8  | feat(desktop): settings say how much of this machine uno uses               | `shell/machine.ts`, `shell/settings.ts`, `settings.css`, `shell/shell.ts`, `tests/settings.test.ts`                                                                                                                               | 100   |
+| B9  | feat(desktop): engines ease off on battery                                  | `main/resources.ts`, `shell/machine.ts`, `tests/resources.test.ts`, `tests/settings.test.ts`                                                                                                                                      | 70    |
+| B10 | feat(desktop): kept indexes can be turned off and cleared from settings     | `main/resources.ts`, `main/index.ts`, `shared/host.ts`, `preload/index.ts`, `renderer/host.ts`, `shell/machine.ts`, `shell/shell.ts`, `tests/settings.test.ts`                                                                    | 95    |
+| B11 | test(smoke): what settings choose for this machine reaches the engine       | `main/smoke/machine.ts`, `main/smoke/index.ts`, `main/smoke/settings.ts`                                                                                                                                                          | 90    |
+| C1  | feat: Serving.finish runs every pass to its end, then closes                | `serve.ts`, `workspace.ts`, `view.ts`, `core/tests/engine/finish.test.ts`                                                                                                                                                         | 80    |
+| C2  | feat(desktop): a closed workspace finishes its index while plugged in       | `engine/index.ts`, `main/resources.ts`, `shared/resources.ts`, `shell/machine.ts`, `messages/*.json`, tests                                                                                                                       | 100   |
+| C3  | test(smoke): a workspace closed part way is whole when it opens again       | `main/smoke/machine.ts`                                                                                                                                                                                                           | 50    |
 
 B8 is the tightest.
 If it runs over, the section's segment and note go first and the toggles join B9 and B10.

@@ -14,6 +14,8 @@ const COPIES: Record<string, (rec: string[]) => string[]> = {
   asDecoded: (rec) => rec,
   slice: (rec) => rec.slice(),
   newArray: (rec) => {
+    // The preallocated array is the variant measured here.
+    // eslint-disable-next-line unicorn/no-new-array
     const a = new Array<string>(rec.length);
     for (let j = 0; j < rec.length; j++) a[j] = rec[j]!;
     return a;
@@ -32,9 +34,7 @@ async function weigh(copy: (rec: string[]) => string[]): Promise<number> {
   for (let b = 0; b < layout.blocks; b++) {
     const [start, end] = layout.index.bytesOf(b);
     const records = layout.format.decode(await source.read(start, end - start));
-    const kept = new Array<string[]>(records.length);
-    for (let i = 0; i < records.length; i++) kept[i] = copy(records[i]!);
-    blocks.push(kept);
+    blocks.push(records.map((rec) => copy(rec)));
   }
   gc();
   const used = heapUsed() - before;
@@ -49,4 +49,6 @@ for (let pass = 0; pass < 2; pass++) {
     out[`${how}${pass}`] = await weigh(copy);
   }
 }
-process.stdout.write(`${JSON.stringify({ pc: (process.config.variables as Record<string, unknown>)['v8_enable_pointer_compression'], heapPerSourceByte: out })}\n`);
+process.stdout.write(
+  `${JSON.stringify({ pc: (process.config.variables as Record<string, unknown>)['v8_enable_pointer_compression'], heapPerSourceByte: out })}\n`,
+);

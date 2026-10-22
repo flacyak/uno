@@ -87,7 +87,8 @@ const total = chunks.reduce((n, c) => n + c.length, 0);
 for (const chunk of chunks) {
   const a = layout.format.decode(chunk);
   const b = byIndex(UTF8.decode(chunk));
-  if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error('parsers differ');
+  if (JSON.stringify(a) !== JSON.stringify(b))
+    throw new Error('parsers differ');
 }
 
 const results: Record<string, number[]> = { readAll: [], byIndex: [] };

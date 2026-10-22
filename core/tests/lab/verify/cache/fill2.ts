@@ -16,6 +16,7 @@
 
 import { basename } from 'node:path';
 import { PerformanceObserver, constants } from 'node:perf_hooks';
+import type { PerformanceNodeEntry } from 'node:perf_hooks';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import v8 from 'node:v8';
 
@@ -64,7 +65,9 @@ try {
   );
   const observer = new PerformanceObserver((list) => {
     for (const e of list.getEntries()) {
-      const d = e.detail as { kind: number; flags: number };
+      // A 'gc' entry is a PerformanceNodeEntry, which carries the collection's detail.
+      const d: { kind: number; flags: number } = (e as PerformanceNodeEntry)
+        .detail;
       pauses.push({
         ms: e.duration,
         kind: KINDS[d.kind] ?? String(d.kind),
