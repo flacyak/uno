@@ -1,9 +1,11 @@
-// Package notation turns the markdown a math cell stores into the text it
-// shows: x^2 in, x² out.
-//
-// `supported` names the first symbol outside the subset, so the editor can
-// refuse a cell when it is authored. Rendering happens once at authoring
-// time; the grid draws the result as plain text.
+/**
+ * @fileoverview Package notation turns the markdown a math cell stores into the
+ * text it shows: x^2 in, x² out.
+ *
+ * `supported` names the first symbol outside the subset, so the editor can
+ * refuse a cell when it is authored. Rendering happens once at authoring
+ * time; the grid draws the result as plain text.
+ */
 
 import { formatU, quote, runes } from '#go';
 import { NO_GLYPH, SUBSCRIPTS, SUPERSCRIPTS, SYMBOLS } from './tables.ts';

@@ -1,8 +1,10 @@
-// Package sheet holds one table per workspace.
-//
-// A Sheet is a table in memory: its source rows, a Schema folded from the
-// log, and rows finished from both as they are read. The engine does the
-// same over a file, with the same Schema and the same pipeline.
+/**
+ * @fileoverview Package sheet holds one table per workspace.
+ *
+ * A Sheet is a table in memory: its source rows, a Schema folded from the
+ * log, and rows finished from both as they are read. The engine does the
+ * same over a file, with the same Schema and the same pipeline.
+ */
 
 import type { Formula } from '#formula';
 import { evaluate } from '#formula';

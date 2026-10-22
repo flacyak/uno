@@ -1,15 +1,17 @@
-// Encoding of engine messages as web socket frames.
-//
-// A message made of JSON values is one text frame of JSON. A message holding
-// Uint8Array or Blob values is one binary frame: a 4-byte length, a JSON
-// envelope, then the bytes in order. One message is one frame, so each
-// frame is decoded on its own.
-//
-// Dates, Maps, undefined, and non-finite numbers are tagged in the JSON so
-// they round-trip. Bytes ride beside the JSON, so a browser can send a
-// dropped file as a Blob and leave the socket to read it.
-//
-// This file is encoding only, so both a page and a Node process import it.
+/**
+ * @fileoverview Encoding of engine messages as web socket frames.
+ *
+ * A message made of JSON values is one text frame of JSON. A message holding
+ * Uint8Array or Blob values is one binary frame: a 4-byte length, a JSON
+ * envelope, then the bytes in order. One message is one frame, so each
+ * frame is decoded on its own.
+ *
+ * Dates, Maps, undefined, and non-finite numbers are tagged in the JSON so
+ * they round-trip. Bytes ride beside the JSON, so a browser can send a
+ * dropped file as a Blob and leave the socket to read it.
+ *
+ * This file is encoding only, so both a page and a Node process import it.
+ */
 
 import { formatBytes, messageOf } from './protocol.ts';
 import type { MessagePortLike, Reply } from './protocol.ts';
