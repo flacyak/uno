@@ -1,11 +1,13 @@
-// The desktop's message for each kind of thing the engine says.
-//
-// The engine has its own English for every kind, used in its errors and logs.
-// The desktop's English is in the message file. A sample of every kind, said
-// both ways, must match.
-//
-// SAMPLES is keyed by kind and typed to need every kind. A new kind fails to
-// compile here until it has a sample, as `say` does until it has a message.
+/**
+ * @fileoverview The desktop's message for each kind of thing the engine says.
+ *
+ * The engine has its own English for every kind, used in its errors and logs.
+ * The desktop's English is in the message file. A sample of every kind, said
+ * both ways, must match.
+ *
+ * SAMPLES is keyed by kind and typed to need every kind. A new kind fails to
+ * compile here until it has a sample, as `say` does until it has a message.
+ */
 
 import { beforeEach, describe, expect, test } from "vite-plus/test";
 

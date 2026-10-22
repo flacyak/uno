@@ -1,10 +1,12 @@
-// @vitest-environment happy-dom
-//
-// The words in the page's markup: index.html ships the elements empty, and
-// labelPage writes them in the app's language.
-//
-// Checks that every element gets its words, and that writing them again
-// keeps the elements that have handlers wired to them.
+/**
+ * @fileoverview The words in the page's markup: index.html ships the elements
+ * empty, and labelPage writes them in the app's language.
+ *
+ * Checks that every element gets its words, and that writing them again
+ * keeps the elements that have handlers wired to them.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 

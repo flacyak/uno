@@ -1,4 +1,7 @@
-// The panel's state (Sources), as plain data: its three sections and browsing.
+/**
+ * @fileoverview The panel's state (Sources), as plain data: its three sections
+ * and browsing.
+ */
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

@@ -1,10 +1,12 @@
-// The smoke run's launcher and setup, checked headless.
-//
-// scripts/smoke.js checks the shell from inside a started app. These tests
-// cover the start itself: the environment the child gets, whether there is a
-// display, and what a finished run amounts to.
-//
-// The run itself is `vp run smoke`, on a desktop session.
+/**
+ * @fileoverview The smoke run's launcher and setup, checked headless.
+ *
+ * scripts/smoke.js checks the shell from inside a started app. These tests
+ * cover the start itself: the environment the child gets, whether there is a
+ * display, and what a finished run amounts to.
+ *
+ * The run itself is `vp run smoke`, on a desktop session.
+ */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";

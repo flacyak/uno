@@ -1,14 +1,16 @@
-// Boots the real shell over a real in-process engine on a happy-dom document,
-// in plain Node, headless.
-//
-// This file provides three things: the DOM skeleton from index.html, the real
-// engine over a Node MessageChannel, and the layout numbers happy-dom leaves
-// at zero.
-//
-// The channel is Node's MessageChannel from node:worker_threads. happy-dom's
-// MessagePort is an empty stub. `serve` is the same
-// function src/engine/index.ts uses, and the disk provider reads the real
-// fixture.
+/**
+ * @fileoverview Boots the real shell over a real in-process engine on a
+ * happy-dom document, in plain Node, headless.
+ *
+ * This file provides three things: the DOM skeleton from index.html, the real
+ * engine over a Node MessageChannel, and the layout numbers happy-dom leaves
+ * at zero.
+ *
+ * The channel is Node's MessageChannel from node:worker_threads. happy-dom's
+ * MessagePort is an empty stub. `serve` is the same
+ * function src/engine/index.ts uses, and the disk provider reads the real
+ * fixture.
+ */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";

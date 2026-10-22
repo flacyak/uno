@@ -1,5 +1,7 @@
-// The app's language: the choice kept, the system's languages matched to the
-// ones the app has, and who hears of a change.
+/**
+ * @fileoverview The app's language: the choice kept, the system's languages
+ * matched to the ones the app has, and who hears of a change.
+ */
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
