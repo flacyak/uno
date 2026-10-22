@@ -218,9 +218,10 @@ export class View {
 
     const header = ask.header ?? 'first';
     try {
-      // A source from a .uno is read as its log was made. Several files are
-      // read as delimited text, each part detected as it is measured. A
-      // file on its own is detected, and its head read once.
+      // A source from a .uno, relinked or appended to is read as its log
+      // was made. Several files opened anew are read as delimited text, each
+      // part detected as it is measured. A file on its own is detected, and
+      // its head read once.
       v.reading = await openReading({
         name,
         source,

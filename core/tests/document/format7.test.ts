@@ -51,8 +51,8 @@ const PINNED = [
 ];
 
 /**
- * A pointed-at file whose columns were learned from its rows. No kind is
- * known to this build, so it says how it was read by its columns alone.
+ * A pointed-at file whose columns were learned from its rows, which says
+ * how it was read by its columns alone.
  */
 function events(): HeldFile {
   return {
@@ -221,12 +221,12 @@ describe('a source that says how it was read is refused on reading', () => {
     [
       'a kind this build does not know, by name',
       (m) => (m.sources[0]!['kind'] = 'avro'),
-      'books.uno: events.jsonl: this build does not know kind "avro" · it reads none',
+      'books.uno: events.jsonl: this build does not know kind "avro" · it reads "jsonl"',
     ],
     [
       'a kind that is not text',
       (m) => (m.sources[0]!['kind'] = 7),
-      'books.uno: events.jsonl: this build does not know kind 7 · it reads none',
+      'books.uno: events.jsonl: this build does not know kind 7 · it reads "jsonl"',
     ],
     [
       'a compression this build does not know, by name',
@@ -236,7 +236,7 @@ describe('a source that says how it was read is refused on reading', () => {
     [
       'a kind this build does not know on several files',
       (m) => (m.sources[1]!['kind'] = 'avro'),
-      'books.uno: shards: this build does not know kind "avro" · it reads none',
+      'books.uno: shards: this build does not know kind "avro" · it reads "jsonl"',
     ],
     // The kind is read first: only delimited text has to say header.
     [
@@ -245,7 +245,7 @@ describe('a source that says how it was read is refused on reading', () => {
         m.sources[1]!['kind'] = 'avro';
         delete m.sources[1]!['header'];
       },
-      'books.uno: shards: this build does not know kind "avro" · it reads none',
+      'books.uno: shards: this build does not know kind "avro" · it reads "jsonl"',
     ],
     [
       'columns that are not a list',
@@ -278,11 +278,12 @@ describe('a source that says how it was read is refused on reading', () => {
   });
 });
 
+/** JSON Lines, the kind a source says it was read as. */
+const KIND: SourceKind = 'jsonl';
 /**
- * A kind and a compression no build reads yet, cast in to see where the
- * writer puts them. Each joins its type in the change that reads it.
+ * A compression no build reads yet, cast in to see where the writer puts
+ * it. It joins its type in the change that reads it.
  */
-const KIND = 'jsonl' as SourceKind;
 const COMPRESSION = 'gzip' as SourceCompression;
 
 describe('a source with a kind', () => {
@@ -340,5 +341,12 @@ describe('a source with a kind', () => {
       'columns',
     ]);
     expect(m.sources[0]!['kind']).toBe('jsonl');
+  });
+
+  test('of JSON Lines reads back as it was held, with its pinned columns', () => {
+    const doc = workspace([{ ...events(), kind: KIND }]);
+    const [back] = readContainer('books.uno', writeDocument(doc), AT).sources;
+    expect(back).toEqual(doc.sources[0]);
+    expect(back!.kind).toBe('jsonl');
   });
 });
