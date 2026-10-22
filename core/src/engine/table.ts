@@ -7,7 +7,8 @@
  * that hold it. Without them hyparquet walks a row group's pages from its
  * start, and one page holds the rows of many blocks, so a block decodes with
  * the blocks around it, a window at a time, and every block of the window is
- * kept.
+ * kept. A window holds as many blocks as DECODE_WINDOW_BYTES allows, counted
+ * at the heaviest of its row groups' uncompressed bytes.
  */
 
 import type { Table } from '@ingest';
@@ -155,18 +156,36 @@ export class TablePages implements Blocks {
   /**
    * windowOf returns the blocks [first, end) read with `block`: it alone
    * where its row groups are paged, and otherwise the aligned window of as
-   * many as DECODE_WINDOW_BYTES of its row group holds, up to
-   * MAX_WINDOW_BLOCKS.
+   * many as fit in DECODE_WINDOW_BYTES, up to MAX_WINDOW_BLOCKS.
    */
   private windowOf(block: number): [number, number] {
     const [start, end] = this.index.rowsOf(block);
     if (this.table.paged(start, end)) return [block, block + 1];
-    const blockBytes =
-      this.table.bytesPerRow(start, end) * this.index.blockRows;
-    const fits = Math.floor(DECODE_WINDOW_BYTES / blockBytes);
-    const size = Math.max(1, Math.min(fits, MAX_WINDOW_BLOCKS));
-    const first = block - (block % size);
-    return [first, Math.min(first + size, this.index.blocks)];
+    // A smaller window can leave out a heavier row group, so each size is
+    // measured over the rows it covers until they fit.
+    for (let size = MAX_WINDOW_BLOCKS; ;) {
+      const first = block - (block % size);
+      const window: [number, number] = [
+        first,
+        Math.min(first + size, this.index.blocks),
+      ];
+      const fits = this.fitting(window);
+      if (fits >= size) return window;
+      size = fits;
+    }
+  }
+
+  /**
+   * How many blocks of the rows of blocks [first, end) fit in
+   * DECODE_WINDOW_BYTES, at least one. A row counts as the most
+   * uncompressed bytes per row of the row groups under them.
+   */
+  private fitting([first, end]: readonly [number, number]): number {
+    const [start] = this.index.rowsOf(first);
+    const [, stop] = this.index.rowsOf(end - 1);
+    const perRow = this.table.bytesPerRow(start, stop);
+    const blockBytes = perRow * this.index.blockRows;
+    return Math.max(1, Math.floor(DECODE_WINDOW_BYTES / blockBytes));
   }
 
   /** decode reads blocks [first, end) in one read of the table. */
