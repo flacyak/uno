@@ -18,6 +18,7 @@ import { MessageChannel } from "node:worker_threads";
 import { messagePort, serve } from "@uno/grid/engine";
 import type { MessagePortLike, Reply, Request } from "@uno/grid/engine";
 import { sources } from "@uno/grid/plugin";
+import type { Provider } from "@uno/grid/plugin";
 import { connectionsIn, saveConnection } from "@uno/grid/store";
 import { diskProvider, nodeStore } from "@uno/grid/store/node";
 
@@ -70,8 +71,13 @@ function fakeLayout(): void {
  * index.ts does. Returns the shell.
  *
  * `over` replaces what the host answers, for a test that saves or quits.
+ * `providers` replaces what the engine reads through, for a test that holds
+ * a read back.
  */
-export async function bootShell(over: Partial<Host> = {}): Promise<Shell> {
+export async function bootShell(
+  over: Partial<Host> = {},
+  providers: readonly Provider[] = [diskProvider()],
+): Promise<Shell> {
   document.body.innerHTML = bodyMarkup();
   fakeLayout();
 
@@ -86,7 +92,7 @@ export async function bootShell(over: Partial<Host> = {}): Promise<Shell> {
     const { port1, port2 } = new MessageChannel();
     serve(
       messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
-      sources([diskProvider()]),
+      sources(providers),
       undefined,
       {
         connections: connectionsIn(nodeStore(), kept),
