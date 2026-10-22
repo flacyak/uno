@@ -1,6 +1,7 @@
 /**
  * @fileoverview A Parquet file read by the engine: its blocks are planned
- * from its row count, complete from the start, and read a block at a time.
+ * from its row count, complete from the start, and read through a cache that
+ * holds them within its budget as text.
  */
 
 import { expect, test } from 'vite-plus/test';
@@ -59,15 +60,25 @@ function planned(): { rows: TableRows; reads: Reads } {
   return { rows, reads };
 }
 
-/** Pages over `table` of `count` rows, in `tuning`'s blocks. */
+/** Pages over `table` of `count` rows, through `tuning`'s blocks and cache. */
 function pagesOver(
   table: TableRows,
   count: number,
   tuning = TUNING,
 ): { pages: TablePages; index: PlannedIndex } {
   const index = new PlannedIndex(count, PLAN.size, tuning.blockRows);
-  const pages = new TablePages('t.parquet', table, index);
+  const pages = new TablePages('t.parquet', table, index, tuning.cacheBytes);
   return { pages, index };
+}
+
+/** The byte that ends each cell as delimited text. */
+const CELL_END_BYTES = 1;
+
+/** The bytes `rows` would take as delimited text, as the cache counts them. */
+function asText(rows: readonly string[][]): number {
+  return rows
+    .flat()
+    .reduce((sum, cell) => sum + cell.length + CELL_END_BYTES, 0);
 }
 
 /** The sales fixture's table. */
@@ -89,4 +100,28 @@ test('the sales fixture reads as sales-q3.csv does', async () => {
   const want = salesRows();
   const { pages } = pagesOver(await sales(), want.length, TINY);
   expect(await pages.rows(0, want.length)).toEqual(want);
+});
+
+test('the cache holds blocks at the bytes they take as text, within its budget', async () => {
+  const want = salesRows();
+  const roomy = { ...TINY, cacheBytes: TUNING.cacheBytes };
+  const whole = pagesOver(await sales(), want.length, roomy).pages;
+  await whole.rows(0, want.length);
+  expect(whole.held).toBe(asText(want));
+
+  const { pages, index } = pagesOver(await sales(), want.length, TINY);
+  for (let block = 0; block < index.blocks; block++) {
+    await pages.records(block);
+    expect(pages.held).toBeGreaterThan(0);
+    expect(pages.held).toBeLessThanOrEqual(TINY.cacheBytes);
+  }
+});
+
+test('a block read to keep nothing leaves the cache as it is', async () => {
+  const want = salesRows();
+  const { pages } = pagesOver(await sales(), want.length, TINY);
+  expect(await pages.records(1, false)).toEqual(
+    want.slice(TINY.blockRows, 2 * TINY.blockRows),
+  );
+  expect(pages.held).toBe(0);
 });
