@@ -1,9 +1,11 @@
-// The store: FileHandler for opening files, Lister for browsing places, and
-// FileStore for the folders uno writes its own files to.
-//
-// Every file is opened through a handler a platform lists, and every place is
-// browsed through a lister it lists. A kind of place outside both lists is
-// refused by name.
+/**
+ * @fileoverview The store: FileHandler for opening files, Lister for browsing
+ * places, and FileStore for the folders uno writes its own files to.
+ *
+ * Every file is opened through a handler a platform lists, and every place is
+ * browsed through a lister it lists. A kind of place outside both lists is
+ * refused by name.
+ */
 
 import { compareStrings } from '#go';
 import type { Connection, Formula } from '#library';

@@ -1,8 +1,10 @@
-// Finishing a row: its source values with the log applied.
-//
-// Every operation in the log reads one row, so rows can be finished in any
-// order and each call starts fresh. A formula is computed a column at a time
-// over the block of rows being finished.
+/**
+ * @fileoverview Finishing a row: its source values with the log applied.
+ *
+ * Every operation in the log reads one row, so rows can be finished in any
+ * order and each call starts fresh. A formula is computed a column at a time
+ * over the block of rows being finished.
+ */
 
 import { formatFloat, roundSignificant } from '#go';
 import type { Columns } from '#formula';

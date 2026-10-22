@@ -1,5 +1,7 @@
-// The steps a program is built from, as a discriminated union so the compiler
-// checks that `runStep` covers all of them.
+/**
+ * @fileoverview The steps a program is built from, as a discriminated union so
+ * the compiler checks that `runStep` covers all of them.
+ */
 
 import {
   atoi,

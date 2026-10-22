@@ -1,8 +1,10 @@
-// Package engine indexes files chunk by chunk and serves rows by position
-// with the edit log applied.
-//
-// A worker owns one workspace: its sources and the log over them. A client
-// holds a band of rows around the viewport and asks the worker for more.
+/**
+ * @fileoverview Package engine indexes files chunk by chunk and serves rows by
+ * position with the edit log applied.
+ *
+ * A worker owns one workspace: its sources and the log over them. A client
+ * holds a band of rows around the viewport and asks the worker for more.
+ */
 
 export { BAND_ROWS, Band, Engine, SourceHandle } from './client.ts';
 export type { Added, Pending, RowsReply } from './client.ts';

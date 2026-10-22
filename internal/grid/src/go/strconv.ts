@@ -1,4 +1,6 @@
-// Ports of Go's strconv package.
+/**
+ * @fileoverview Ports of Go's strconv package.
+ */
 
 import { runes } from './strings.ts';
 

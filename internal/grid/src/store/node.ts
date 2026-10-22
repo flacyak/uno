@@ -1,9 +1,11 @@
-// The Node FileStore, the handler that opens a file on this machine's disks,
-// and the AWS credential chain read from ~/.aws.
-//
-// `write` builds a sibling temp file, fsyncs it and renames it over the
-// target. Only this file and store/disklister.ts import node:fs. The guard
-// test in tests/store/opens.test.ts checks that.
+/**
+ * @fileoverview The Node FileStore, the handler that opens a file on this
+ * machine's disks, and the AWS credential chain read from ~/.aws.
+ *
+ * `write` builds a sibling temp file, fsyncs it and renames it over the
+ * target. Only this file and store/disklister.ts import node:fs. The guard
+ * test in tests/store/opens.test.ts checks that.
+ */
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';

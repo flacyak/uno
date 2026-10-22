@@ -1,11 +1,14 @@
-// Several files read as one: the ByteSource of a multi-file source.
-//
-// The parts are joined end to end. The first part is included whole. Each
-// later part is included from its first data row, so its header is skipped.
-// A part whose last byte is something other than a newline gets a virtual
-// one, so its last row and the next part's first stay separate rows. Each
-// part is opened through the handlers given, so a part can be on a disk, in
-// a bucket or in memory.
+/**
+ * @fileoverview Several files read as one: the ByteSource of a multi-file
+ * source.
+ *
+ * The parts are joined end to end. The first part is included whole. Each
+ * later part is included from its first data row, so its header is skipped.
+ * A part whose last byte is something other than a newline gets a virtual
+ * one, so its last row and the next part's first stay separate rows. Each
+ * part is opened through the handlers given, so a part can be on a disk, in
+ * a bucket or in memory.
+ */
 
 import { concat } from '#go';
 import { unreachable } from '#never';
