@@ -7,7 +7,7 @@
  */
 
 import { parquetMetadata } from 'hyparquet/src/index.js';
-import { expect, test } from 'vite-plus/test';
+import { expect, test, vi } from 'vite-plus/test';
 
 import { chunkCache } from '@ingest/parquet/buffer';
 import { openTable } from '@ingest/parquet/table';
@@ -22,10 +22,13 @@ import { COLS, REGION, ROWS } from '@core-tests/testdata/sales-q3';
 import { SALES_GROUP_ROWS } from '../../../scripts/fixtures.ts';
 import {
   SALES,
+  UNPAGED_STRINGS,
   logged,
   opened,
   salesRows,
   testdata,
+  unpaged,
+  unpagedRow,
   withoutPageIndexes,
 } from './tables.ts';
 
@@ -191,6 +194,9 @@ test('a failed read of a page is passed on as it failed', async () => {
   await expect(table.read(0, 1)).rejects.toBe(failure);
 });
 
+/** The rows of a generated row group with no page index. */
+const UNPAGED_ROWS = 10_000;
+
 /** Every row of `table`, read `size` rows at a time. */
 async function inWindows(table: Table, size: number): Promise<string[][]> {
   const rows: string[][] = [];
@@ -199,6 +205,30 @@ async function inWindows(table: Table, size: number): Promise<string[][]> {
   }
   return rows;
 }
+
+/** What `read` returns, and how many strings it decodes from their bytes. */
+async function decoding<T>(
+  read: () => Promise<T>,
+): Promise<{ result: T; decodes: number }> {
+  const decode = vi.spyOn(TextDecoder.prototype, 'decode');
+  try {
+    const result = await read();
+    return { result, decodes: decode.mock.calls.length };
+  } finally {
+    decode.mockRestore();
+  }
+}
+
+test('a row group with no page index, read a window at a time, decodes each stored string once', async () => {
+  // Each of its column chunks is one page, which hyparquet decodes whole.
+  const table = await opened('unpaged.parquet', unpaged(UNPAGED_ROWS));
+  const window = UNPAGED_ROWS / 10;
+  const { result, decodes } = await decoding(() => inWindows(table, window));
+  expect(result).toEqual(
+    Array.from({ length: UNPAGED_ROWS }, (_, i) => unpagedRow(i)),
+  );
+  expect(decodes).toBe(UNPAGED_STRINGS * UNPAGED_ROWS);
+});
 
 test('the windows of a row group with no page index read its chunks once, whatever the chunk cache holds', async () => {
   const name = 'int32_with_null_pages.parquet';
