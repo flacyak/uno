@@ -20,7 +20,13 @@ import {
   openTable,
   refuseNotRead,
 } from '@ingest';
-import type { Column, HeaderMode, KeyedColumn, RecordFormat } from '@ingest';
+import type {
+  Column,
+  Detected,
+  HeaderMode,
+  KeyedColumn,
+  RecordFormat,
+} from '@ingest';
 import { unreachable } from '@never';
 import { Refusal } from '@said';
 import type { ReadKind, Said } from '@said';
@@ -200,47 +206,54 @@ export interface ReadAsk {
 
 /**
  * openReading reads the head of a source and opens its Reading. A source
- * with no spec is detected first, its head read once. One held to JSON Lines
- * starts from the columns its spec pins, and learns the rest as it is
- * indexed. One held to Parquet reads its footer, through a cache of the
- * chunks it reads that the View keeps, and finds each pinned column by its
- * key.
+ * with no spec is detected first, its head read once: JSON Lines starts from
+ * no columns and learns them as it is indexed, and the rest is delimited
+ * text. One held to JSON Lines starts from the columns its spec pins. One
+ * held to Parquet reads its footer, through a cache of the chunks it reads
+ * that the View keeps, and finds each pinned column by its key.
  */
 export async function openReading(ask: ReadAsk): Promise<Reading> {
   const { name, source, spec, tuning } = ask;
-  if (spec?.kind === 'jsonl') {
-    const lines = linesFormat(name, (await headOf(source)).bytes, spec.columns);
-    return recordReading(name, source, lines, tuning, () => ({
-      kind: 'jsonl',
-      columns: lines.columns(),
-    }));
+  if (spec === undefined) {
+    const { head } = await detectedHead(ask);
+    return delimitedReading(name, headed(source, head), ask.header, tuning);
   }
-  if (spec?.kind === 'parquet') {
-    // Each Parquet file's footer describes its own bytes alone.
-    if (multiOf(source) !== undefined) {
-      throw new Refusal({
-        t: 'parquet-unsupported',
+  switch (spec.kind) {
+    case 'delimited':
+      return delimitedReading(name, source, spec.header, tuning);
+    case 'jsonl':
+      return linesReading(
         name,
-        feature: 'several-files',
-      });
+        source,
+        (await headOf(source)).bytes,
+        spec.columns,
+        tuning,
+      );
+    case 'parquet': {
+      // Each Parquet file's footer describes its own bytes alone.
+      if (multiOf(source) !== undefined) {
+        throw new Refusal({
+          t: 'parquet-unsupported',
+          name,
+          feature: 'several-files',
+        });
+      }
+      const table = await openTable(
+        name,
+        source,
+        chunkCache(CHUNK_CACHE_BYTES),
+      );
+      return tableReading(name, source, table, tuning, spec.columns);
     }
-    const table = await openTable(name, source, chunkCache(CHUNK_CACHE_BYTES));
-    return tableReading(name, source, table, tuning, spec.columns);
+    default:
+      return unreachable(spec);
   }
-  const head = spec === undefined ? await detectedHead(ask) : undefined;
-  const format = await openFormat(
-    name,
-    head === undefined ? source : headed(source, head),
-    spec?.header ?? ask.header,
-  );
-  const delimited: ReadSpec = { kind: 'delimited', header: format.header };
-  return recordReading(
-    name,
-    source,
-    delimitedRecords(format),
-    tuning,
-    () => delimited,
-  );
+}
+
+/** DetectedHead is a source's head, and what detection made of it. */
+interface DetectedHead {
+  readonly head: Uint8Array;
+  readonly found: Detected;
 }
 
 /**
@@ -248,7 +261,7 @@ export async function openReading(ask: ReadAsk): Promise<Reading> {
  * another kind of rows than a relink expects is refused as one, ahead of a
  * file this build does not read, which is refused by name.
  */
-async function detectedHead(ask: ReadAsk): Promise<Uint8Array> {
+async function detectedHead(ask: ReadAsk): Promise<DetectedHead> {
   const { name, expect } = ask;
   const head = await headOf(ask.source);
   const found = await detect(name, head);
@@ -263,7 +276,46 @@ async function detectedHead(ask: ReadAsk): Promise<Uint8Array> {
     });
   }
   refuseNotRead(name, found);
-  return head.bytes;
+  return { head: head.bytes, found };
+}
+
+/**
+ * delimitedReading reads delimited text, its encoding and delimiter sniffed
+ * from the head of `source`.
+ */
+async function delimitedReading(
+  name: string,
+  source: ByteSource,
+  header: HeaderMode,
+  tuning: Tuning,
+): Promise<Reading> {
+  const format = await openFormat(name, source, header);
+  const delimited: ReadSpec = { kind: 'delimited', header: format.header };
+  return recordReading(
+    name,
+    source,
+    delimitedRecords(format),
+    tuning,
+    () => delimited,
+  );
+}
+
+/**
+ * linesReading reads JSON Lines from `head` on, starting from the columns
+ * `pinned` and learning the rest as the file is indexed.
+ */
+function linesReading(
+  name: string,
+  source: ByteSource,
+  head: Uint8Array,
+  pinned: readonly KeyedColumn[],
+  tuning: Tuning,
+): Reading {
+  const lines = linesFormat(name, head, pinned);
+  return recordReading(name, source, lines, tuning, () => ({
+    kind: 'jsonl',
+    columns: lines.columns(),
+  }));
 }
 
 /**
