@@ -192,7 +192,8 @@ export class Workspace {
   ) {}
 
   /**
-   * Opens a file through the engine and returns the workspace.
+   * Opens a file through the engine and returns the workspace. Aborting
+   * `signal` cancels the open while it is in flight.
    *
    * `savePath` becomes `path` only when the file is a .uno. A dropped .uno
    * passes "" so its first save prompts for a path.
@@ -203,9 +204,10 @@ export class Workspace {
     savePath: string,
     changed: () => void,
     offered: (tab: Tab) => void,
+    signal?: AbortSignal,
   ): Promise<Workspace> {
     const w = new Workspace(engine, changed, offered);
-    w.showing = await w.add(ref);
+    w.showing = await w.add(ref, signal);
     // The sources it opened with count as saved.
     w.savedSources = w.tabs.map((t) => t.id);
     if (isWorkspace(ref)) w.path = savePath;
@@ -215,10 +217,10 @@ export class Workspace {
   /**
    * Opens a ref and adds its sources as tabs. Returns the tab to show: the
    * one the engine names, or the first added. The caller decides whether to
-   * show it.
+   * show it. Aborting `signal` cancels the open while it is in flight.
    */
-  async add(ref: SourceRef): Promise<Tab> {
-    const { sources, showing } = await this.engine.open(ref);
+  async add(ref: SourceRef, signal?: AbortSignal): Promise<Tab> {
+    const { sources, showing } = await this.engine.open(ref, signal);
     const added = sources.map((s) => this.tab(s));
     this.tabs.push(...added);
     return added.find((t) => t.id === showing) ?? added[0]!;

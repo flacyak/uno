@@ -233,6 +233,7 @@
   "workspace_not_a_source": "{name} is a workspace of its own · open it rather than adding it",
   "added_names": "added {names}",
   "removed_name": "removed {name}",
+  "stopped_opening": "stopped opening {name}",
   "appended_to": "appended {files} to {name}",
   "indexing_g_again": "indexing {percent}% · G again when it finishes",
   "row_not_indexed": "row {row} is not indexed yet",
