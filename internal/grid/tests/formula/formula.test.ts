@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The text form of an expression: round trips, normalised
+ * spacing, the columns it reads, and what parse refuses.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import { Formula, parse } from '#formula';

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Evaluating expressions over rows: what is computed, which
+ * column a failure names, and a column computed as one row would be.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import {

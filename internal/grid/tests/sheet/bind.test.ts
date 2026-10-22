@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Binding a formula to a column: filled from one line, recomputed
+ * on an edit, a cycle refused, and a row the expression cannot read.
+ */
+
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 

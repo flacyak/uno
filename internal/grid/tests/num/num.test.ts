@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The number a spreadsheet cell holds: what isNumber rejects,
+ * what undress takes off, and what parse reads.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import { isNumber, parse, undress } from '#num';
