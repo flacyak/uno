@@ -336,6 +336,7 @@
   "sidebar_open_line_hint": "click to open its line in the sources panel",
   "sidebar_point_hint": "click to point it at a file in the sources panel",
   "sidebar_remove_source": "Remove {name} from the workspace",
+  "sidebar_stop_opening": "Stop opening {name}",
   "workspaces_title": "Workspaces",
   "new_workspace": "New workspace",
   "empty_title": "Drop a spreadsheet",

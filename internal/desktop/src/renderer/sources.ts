@@ -57,6 +57,11 @@ export interface Open {
 export interface Arriving {
   readonly name: string;
   /**
+   * Stops the open. Set on a source whose open can be stopped; the sidebar
+   * shows a × that calls it.
+   */
+  readonly cancel?: () => void;
+  /**
    * The refusal message for a connection that failed. Its line stays, and
    * choosing it reopens the connection form.
    */
