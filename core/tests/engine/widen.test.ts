@@ -1,16 +1,33 @@
 /**
  * @fileoverview A source whose columns grow while it is indexed. A workspace
  * says a file was read as JSON Lines, and the file first holds a key at row
- * 50,000, read through TINY blocks. A client is told every column once the
- * index meets the key, and hands the columns it is told to its handle.
+ * 50,000, read through TINY blocks. Rows keep their cells, and a client
+ * hands the columns it is told to its handle.
  */
 
 import { expect, test } from 'vite-plus/test';
 
 import type { ColumnInfo, SourceHandle } from '@engine';
-import { ID_KEY, LATE_KEY, withHeld, workspace, written } from './late.ts';
+import { indexed, padded } from './harness.ts';
+import {
+  ID_KEY,
+  LATE,
+  LATE_KEY,
+  cellsAt,
+  withHeld,
+  workspace,
+  written,
+} from './late.ts';
 import type { Layout, Open } from './late.ts';
 import { SCRIPTED_SOURCE, columnsOf, scriptedEngine } from './scripted.ts';
+
+/** Rows a test reads at a time. */
+const WINDOW = 10;
+/**
+ * A row near LATE the index reaches before it is held: a TINY chunk holds
+ * fewer lines than this.
+ */
+const NEAR = LATE - 1_000;
 
 const FILE = written();
 
@@ -39,14 +56,33 @@ function headersOf(columns: readonly ColumnInfo[]): string[] {
   return columns.map((column) => column.header);
 }
 
-test('a client is told every column once the index meets a new key', () =>
+/** expected returns `count` rows from `first` as the file holds them. */
+function expected(first: number, count: number): string[][] {
+  return Array.from({ length: count }, (_, i) => cellsAt(first + i));
+}
+
+test('rows read before and after the widen keep their cells', () =>
   heldAs('file', async ({ src, release }) => {
     expect(headersOf(src.opened.columns)).toEqual([ID_KEY]);
+    const before = [await src.rows(0, WINDOW), await src.rows(NEAR, WINDOW)];
     const told = nextColumns(src);
     release();
     const [columns, generation] = await told;
     expect(headersOf(columns)).toEqual([ID_KEY, LATE_KEY]);
     expect(generation).toBeGreaterThan(src.opened.generation);
+    await indexed(src);
+
+    for (const page of before) {
+      const want = expected(page.first, WINDOW);
+      expect(padded(page.rows, 1)).toEqual(want.map(([id]) => [id]));
+      const again = await src.rows(page.first, WINDOW);
+      expect(padded(again.rows, columns.length)).toEqual(want);
+    }
+    const across = LATE - WINDOW / 2;
+    const after = await src.rows(across, WINDOW);
+    expect(padded(after.rows, columns.length)).toEqual(
+      expected(across, WINDOW),
+    );
   }));
 
 test('a client hands the columns a source found to its handle, and drops ones older than it holds', async () => {
