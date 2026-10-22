@@ -1,5 +1,7 @@
-// The finder on its own: what it says, where it moves the grid, and
-// which answers it drops.
+/**
+ * @fileoverview The finder on its own: what it says, where it moves the grid,
+ * and which answers it drops.
+ */
 
 import { afterEach, expect, test, vi } from "vite-plus/test";
 

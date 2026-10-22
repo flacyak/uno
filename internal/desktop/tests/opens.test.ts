@@ -1,7 +1,9 @@
-// The desktop leaves every file read to the engine.
-//
-// Main writes saves and screenshots, and asks dialogs for paths. Every read
-// happens in the engine, through the providers src/engine/index.ts lists.
+/**
+ * @fileoverview The desktop leaves every file read to the engine.
+ *
+ * Main writes saves and screenshots, and asks dialogs for paths. Every read
+ * happens in the engine, through the providers src/engine/index.ts lists.
+ */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";

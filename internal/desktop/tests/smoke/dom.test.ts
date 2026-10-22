@@ -1,15 +1,17 @@
-// @vitest-environment happy-dom
-//
-// The `run` checks from open.ts and default.ts, driven by the DOM shim in
-// plain Node, headless. See dom-harness.ts and dom-page.ts.
-//
-// The checks are order-dependent, so they run in list order against one
-// shell and one page, as runSmoke in index.ts runs them. `beforeAll` boots
-// the shell once.
-//
-// Only checks with `run` are read. One with `script` needs real layout or the
-// real preload bridge, and one with `input` needs a real event reaching a
-// driven window. See check.ts.
+/**
+ * @fileoverview The `run` checks from open.ts and default.ts, driven by the DOM
+ * shim in plain Node, headless. See dom-harness.ts and dom-page.ts.
+ *
+ * The checks are order-dependent, so they run in list order against one
+ * shell and one page, as runSmoke in index.ts runs them. `beforeAll` boots
+ * the shell once.
+ *
+ * Only checks with `run` are read. One with `script` needs real layout or the
+ * real preload bridge, and one with `input` needs a real event reaching a
+ * driven window. See check.ts.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeAll, expect, test } from "vite-plus/test";
 

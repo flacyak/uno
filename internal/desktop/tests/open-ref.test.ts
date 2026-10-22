@@ -1,8 +1,10 @@
-// @vitest-environment happy-dom
-//
-// Opening a file the platform already holds a reference to, with no dialog:
-// what the web page does with a workspace the server kept. Runs over the real
-// shell and engine.
+/**
+ * @fileoverview Opening a file the platform already holds a reference to, with
+ * no dialog: what the web page does with a workspace the server kept. Runs over
+ * the real shell and engine.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";

@@ -1,8 +1,10 @@
-// @vitest-environment happy-dom
-//
-// The grid over a plain DOM, driven as the shell drives it: rows shown, keys
-// pressed on the host, and what the selection, the marks, and the editor do.
-// happy-dom skips layout, so the scroller is told its height.
+/**
+ * @fileoverview The grid over a plain DOM, driven as the shell drives it: rows
+ * shown, keys pressed on the host, and what the selection, the marks, and the
+ * editor do. happy-dom skips layout, so the scroller is told its height.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { expect, test } from "vite-plus/test";
 

@@ -1,4 +1,6 @@
-// A stand-in for localStorage, backed by a Map.
+/**
+ * @fileoverview A stand-in for localStorage, backed by a Map.
+ */
 
 import type { Keeps } from "#renderer/theme";
 

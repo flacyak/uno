@@ -1,9 +1,11 @@
-// @vitest-environment happy-dom
-//
-// The block a role connection shows: uno's account and the external ID to
-// hand to whoever makes the role, each with a Copy button, and what the role
-// has to allow. Tested on its own, with no form around it, the way the web
-// page and the desktop both mount it.
+/**
+ * @fileoverview The block a role connection shows: uno's account and the
+ * external ID to hand to whoever makes the role, each with a Copy button, and
+ * what the role has to allow. Tested on its own, with no form around it, the
+ * way the web page and the desktop both mount it.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeEach, expect, test, vi } from "vite-plus/test";
 

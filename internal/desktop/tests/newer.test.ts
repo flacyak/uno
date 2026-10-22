@@ -1,8 +1,10 @@
-// Newer in the bucket, and Reload. askNewer sends one HEAD per tab reading an
-// object, and marks a tab whose object has a new version. Reload reads the
-// newer version.
-//
-// Runs over the real engine and the stand-in bucket.
+/**
+ * @fileoverview Newer in the bucket, and Reload. askNewer sends one HEAD per
+ * tab reading an object, and marks a tab whose object has a new version. Reload
+ * reads the newer version.
+ *
+ * Runs over the real engine and the stand-in bucket.
+ */
 
 import { writeFile } from "node:fs/promises";
 import { mkdtemp, rm } from "node:fs/promises";

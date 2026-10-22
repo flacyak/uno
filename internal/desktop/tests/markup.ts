@@ -1,5 +1,7 @@
-// The body markup of the app's index.html, for tests that need the real
-// document.
+/**
+ * @fileoverview The body markup of the app's index.html, for tests that need
+ * the real document.
+ */
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

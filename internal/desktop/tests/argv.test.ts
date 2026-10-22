@@ -1,5 +1,7 @@
-// The file paths read off a command line, for the first uno and for one
-// started while it runs.
+/**
+ * @fileoverview The file paths read off a command line, for the first uno and
+ * for one started while it runs.
+ */
 
 import { expect, test } from "vite-plus/test";
 

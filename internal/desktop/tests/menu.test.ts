@@ -1,7 +1,9 @@
-// @vitest-environment happy-dom
-//
-// The pop-up menu: what it offers, that choosing closes it first, and how it
-// closes.
+/**
+ * @fileoverview The pop-up menu: what it offers, that choosing closes it first,
+ * and how it closes.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { expect, test } from "vite-plus/test";
 
