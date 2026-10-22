@@ -13,9 +13,9 @@ import {
   peekFormat,
   read,
   sniffEncoding,
-} from '#ingest';
-import type { Encoding } from '#ingest';
-import { blobSource } from '#store';
+} from '@ingest';
+import type { Encoding } from '@ingest';
+import { blobSource } from '@store';
 
 /** Bytes openFormat reads first, before it knows how long the header is. */
 const PEEK = 64 << 10;

@@ -7,16 +7,16 @@
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { TUNING } from '#engine';
-import type { Engine, Found, SourceHandle } from '#engine';
-import { NO_ROW, Op } from '#sheet';
+import { TUNING } from '@engine';
+import type { Engine, Found, SourceHandle } from '@engine';
+import { NO_ROW, Op } from '@sheet';
 import {
   CHANNEL,
   COLS,
   LAST_ROW,
   REGION,
   UNITS,
-} from '#tests/testdata/sales-q3';
+} from '@grid-tests/testdata/sales-q3';
 import { FIXTURE, connect, indexed, openOne, sales } from './harness.ts';
 
 // Column index of rep in date,region,rep,channel,units,revenue.

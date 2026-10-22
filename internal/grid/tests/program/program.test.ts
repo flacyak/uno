@@ -17,7 +17,7 @@ import {
   newReplace,
   parse,
   text,
-} from '#program';
+} from '@program';
 
 // parse then text gives back the same source.
 describe('the text form round-trips', () => {

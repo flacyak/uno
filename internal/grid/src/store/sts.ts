@@ -7,7 +7,7 @@
  * is in store/node.ts, which reads ~/.aws and passes the token or role in.
  */
 
-import { parseTime } from '#go';
+import { parseTime } from '@go';
 import { encodeQuery, signV4 } from './s3.ts';
 import type { AwsCredentials } from './s3.ts';
 import { text } from './s3xml.ts';

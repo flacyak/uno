@@ -7,11 +7,11 @@
  * hold. It works on bytes already read, so it can be tested on in-memory bytes.
  */
 
-import { labelOf, openFormat } from '#ingest';
-import type { HeaderMode } from '#ingest';
+import { labelOf, openFormat } from '@ingest';
+import type { HeaderMode } from '@ingest';
 import type { Peeked } from './protocol.ts';
-import { bytesSource, headerModeOf, openWith } from '#store';
-import type { FileHandler, FileRef } from '#store';
+import { bytesSource, headerModeOf, openWith } from '@store';
+import type { FileHandler, FileRef } from '@store';
 
 /**
  * How many bytes a peek reads from the front of a file. This is the only

@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { settled } from "#renderer/shell/util";
+import { settled } from "@renderer/shell/util";
 
 const MS = 400;
 

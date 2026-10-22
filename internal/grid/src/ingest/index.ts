@@ -6,7 +6,7 @@
  * piece at a time through a ByteSource, for the engine.
  */
 
-import { Sheet } from '#sheet';
+import { Sheet } from '@sheet';
 import { readAll } from './csv.ts';
 import {
   columnNames,

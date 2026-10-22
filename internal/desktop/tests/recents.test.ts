@@ -5,7 +5,7 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { RECENTS_KEY, RECENTS_MAX, Recents } from "#renderer/recents";
+import { RECENTS_KEY, RECENTS_MAX, Recents } from "@renderer/recents";
 import { Kept } from "./kept.ts";
 
 test("a workspace opened goes to the top, and is listed once", () => {

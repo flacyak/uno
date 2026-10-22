@@ -12,14 +12,14 @@
 
 import "./settings.css";
 
-import { m } from "#paraglide/messages";
-import { INPUTS, inputLabel } from "#renderer/input";
-import type { InputName } from "#renderer/input";
-import { SYSTEM, languageName } from "#renderer/language";
-import type { Language, LanguageChoice } from "#renderer/language";
-import type { Connection } from "#renderer/sources";
-import { APPEARANCES, THEMES } from "#renderer/theme";
-import type { Appearance, Theming } from "#renderer/theme";
+import { m } from "@paraglide/messages";
+import { INPUTS, inputLabel } from "@renderer/input";
+import type { InputName } from "@renderer/input";
+import { SYSTEM, languageName } from "@renderer/language";
+import type { Language, LanguageChoice } from "@renderer/language";
+import type { Connection } from "@renderer/sources";
+import { APPEARANCES, THEMES } from "@renderer/theme";
+import type { Appearance, Theming } from "@renderer/theme";
 import { button, el, tabStep, walk } from "./util.ts";
 
 /** What the menu asks of the shell. */

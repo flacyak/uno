@@ -18,14 +18,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
-import { english, messagePort, serve } from '#engine';
-import type { MessagePortLike, Reply, Request } from '#engine';
-import { sources } from '#plugin';
-import type { Provider } from '#plugin';
-import { blobProvider, blobSource } from '#store';
-import type { ByteSource, FileRef } from '#store';
-import { diskLister } from '#store/disklister';
-import { diskProvider, localFiles } from '#store/node';
+import { english, messagePort, serve } from '@engine';
+import type { MessagePortLike, Reply, Request } from '@engine';
+import { sources } from '@plugin';
+import type { Provider } from '@plugin';
+import { blobProvider, blobSource } from '@store';
+import type { ByteSource, FileRef } from '@store';
+import { diskLister } from '@store/disklister';
+import { diskProvider, localFiles } from '@store/node';
 import { bytes, connect, FIXTURE, openOne } from './harness.ts';
 
 const TESTDATA = fileURLToPath(new URL('../testdata/', import.meta.url));

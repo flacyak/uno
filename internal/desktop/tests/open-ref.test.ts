@@ -9,7 +9,7 @@
 import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import type { Shell } from "#renderer/shell/shell";
+import type { Shell } from "@renderer/shell/shell";
 import { FIXTURE, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 

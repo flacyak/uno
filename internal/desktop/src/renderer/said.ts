@@ -7,13 +7,13 @@
  * until it has a message. The `text` kind is passed through unchanged.
  */
 
-import { Refusal, messageOf } from "#engine";
-import type { CharName, Said, Sought, StepSaid } from "#engine";
-import { quote } from "#go";
-import type { Sentences } from "#said";
+import { Refusal, messageOf } from "@engine";
+import type { CharName, Said, Sought, StepSaid } from "@engine";
+import { quote } from "@go";
+import type { Sentences } from "@said";
 
-import { m } from "#paraglide/messages";
-import { getLocale } from "#paraglide/runtime";
+import { m } from "@paraglide/messages";
+import { getLocale } from "@paraglide/runtime";
 import { bytes, num } from "./locale.ts";
 
 /** Returns an error's message. A Refusal is translated into the app's locale. */

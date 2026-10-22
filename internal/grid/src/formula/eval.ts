@@ -3,9 +3,9 @@
  * `evaluate` for one row and `evaluateColumn` for a block of them.
  */
 
-import { quote } from '#go';
-import { unreachable } from '#never';
-import { parse as parseNumber } from '#num';
+import { quote } from '@go';
+import { unreachable } from '@never';
+import { parse as parseNumber } from '@num';
 import type { Formula, Node } from './ast.ts';
 import { text } from './ast.ts';
 
