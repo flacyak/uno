@@ -220,7 +220,8 @@ async function decoding<T>(
 }
 
 test('a row group with no page index, read a window at a time, decodes each stored string once', async () => {
-  // Each of its column chunks is one page, which hyparquet decodes whole.
+  // Each of its column chunks is one page, which hyparquet decodes whole,
+  // and its list a nested field, which it decodes to the end of the chunk.
   const table = await opened('unpaged.parquet', unpaged(UNPAGED_ROWS));
   const window = UNPAGED_ROWS / 10;
   const { result, decodes } = await decoding(() => inWindows(table, window));

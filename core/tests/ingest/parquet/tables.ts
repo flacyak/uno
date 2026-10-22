@@ -1,5 +1,5 @@
 /**
- * @fileoverview The Parquet files the Parquet tests open, the rows the sales
+ * @fileoverview The Parquet files the table tests open, the rows the sales
  * fixture holds, files written for a test, and sources over them that log
  * each read.
  */
@@ -64,28 +64,42 @@ export function opened(name: string, bytes: Uint8Array): Promise<Table> {
 }
 
 /**
- * A row of `unpaged(rows)`: its number, and a name made from it, as textOf
- * writes them.
+ * A row of `unpaged(rows)`: its number, a name made from it, and a list of
+ * two tags, as textOf writes them.
  */
 export function unpagedRow(i: number): string[] {
-  return [String(i), `n${i}`];
+  return [String(i), `n${i}`, JSON.stringify([`a${i}`, `b${i}`])];
 }
 
 /** How many strings each row of `unpaged(rows)` stores. */
-export const UNPAGED_STRINGS = 1;
+export const UNPAGED_STRINGS = 3;
 
 /**
  * A file of `rows` rows in one row group with no page index, each column
- * chunk one page: a number, and a string that differs on every row.
+ * chunk one page: a number, a flat string and a list of strings, every
+ * string different.
  */
 export function unpaged(rows: number): Uint8Array {
   const numbers = Array.from({ length: rows }, (_, i) => i);
   const buffer = parquetWriteBuffer({
     schema: [
-      { name: 'root', num_children: 2 },
+      { name: 'root', num_children: 3 },
       { name: 'id', type: 'INT32', repetition_type: 'REQUIRED' },
       {
         name: 'name',
+        type: 'BYTE_ARRAY',
+        converted_type: 'UTF8',
+        repetition_type: 'REQUIRED',
+      },
+      {
+        name: 'tags',
+        converted_type: 'LIST',
+        repetition_type: 'REQUIRED',
+        num_children: 1,
+      },
+      { name: 'list', repetition_type: 'REPEATED', num_children: 1 },
+      {
+        name: 'element',
         type: 'BYTE_ARRAY',
         converted_type: 'UTF8',
         repetition_type: 'REQUIRED',
@@ -94,6 +108,7 @@ export function unpaged(rows: number): Uint8Array {
     columnData: [
       { name: 'id', data: numbers },
       { name: 'name', data: numbers.map((i) => `n${i}`) },
+      { name: 'tags', data: numbers.map((i) => [`a${i}`, `b${i}`]) },
     ],
     rowGroupSize: rows,
   });
