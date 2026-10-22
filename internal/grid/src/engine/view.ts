@@ -138,6 +138,8 @@ export interface OpenAsk {
   header?: HeaderMode;
   /** Set for a source over several files. */
   parts?: PartsRef;
+  /** Aborted to cancel the open while it still waits for its sample rows. */
+  signal?: AbortSignal;
 }
 
 export class View {
@@ -176,6 +178,8 @@ export class View {
   private waiters: Waiter[] = [];
   private failed: Error | undefined;
   private readonly abort = new AbortController();
+  /** The close under way or done. A later close returns it. */
+  private closing: Promise<void> | undefined;
 
   /** How long the open had taken when the index completed, final from then on. */
   private took: number | undefined;
@@ -228,6 +232,21 @@ export class View {
     v.index = new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.schema = schemaOf(format, ask.parts);
+
+    // A cancel fails the wait below with its refusal, kept ahead of the
+    // close's own, and closes the view, which stops the index.
+    const signal = ask.signal;
+    const cancelled = (): void => {
+      v.fail(new Refusal({ t: 'cancelled', name }));
+      // A close that fails is reported by the open's own catch, which closes
+      // again and awaits it, so the listener's call must not surface it as
+      // an unhandled rejection.
+      v.close().catch(() => undefined);
+    };
+    // The file open and the format sniff take no signal, so an abort during
+    // them takes effect here, once they return.
+    if (signal?.aborted) cancelled();
+    else signal?.addEventListener('abort', cancelled, { once: true });
 
     let told = 0;
     let started = false;
@@ -290,6 +309,8 @@ export class View {
       await v.until(
         () => index.complete || (!whole && index.readable() >= want),
       );
+      // From here the open is answered, so a cancel is left unheard.
+      signal?.removeEventListener('abort', cancelled);
       started = true;
 
       if (carried !== undefined) {
@@ -314,6 +335,7 @@ export class View {
       };
       return v;
     } catch (err) {
+      signal?.removeEventListener('abort', cancelled);
       await v.close();
       throw err;
     }
@@ -911,7 +933,14 @@ export class View {
 
   // ------------------------------------------------------------ lifetime
 
-  async close(): Promise<void> {
+  /** close stops the passes and closes the source. A second close returns
+   * the first. */
+  close(): Promise<void> {
+    this.closing ??= this.shut();
+    return this.closing;
+  }
+
+  private async shut(): Promise<void> {
     this.abort.abort();
     this.survey?.abort();
     this.finding?.abort();
