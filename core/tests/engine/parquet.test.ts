@@ -1,13 +1,15 @@
 /**
- * @fileoverview A Parquet file read by the engine: its blocks are planned
- * from its row count, complete from the start. A block of a paged row group
+ * @fileoverview A Parquet file read by the engine: held to Parquet it reads
+ * as its CSV twin does, its blocks planned from its row count and complete
+ * from the start. A block of a paged row group
  * reads alone, and one of an unpaged group with its window, once while the
  * rows are scrolled, and the cache holds them within its budget as text.
  */
 
 import { expect, test, vi } from 'vite-plus/test';
 
-import { TUNING } from '@engine';
+import { TUNING, english } from '@engine';
+import { openReading } from '@engine/reading';
 import {
   DECODE_WINDOW_BYTES,
   MAX_WINDOW_BLOCKS,
@@ -16,6 +18,7 @@ import {
 } from '@engine/table';
 import type { TableRows } from '@engine/table';
 import type { Table } from '@ingest';
+import { bytesSource } from '@store';
 import {
   SALES,
   UNPAGED_STRINGS,
@@ -24,6 +27,7 @@ import {
   unpaged,
   unpagedRow,
 } from '@core-tests/ingest/parquet/tables';
+import { ROWS } from '@core-tests/testdata/sales-q3';
 import { SCREEN, TINY } from './harness.ts';
 
 /** A planned file's rows and stored bytes, and the rows in its blocks. */
@@ -274,4 +278,36 @@ test('a scan that keeps nothing decodes every window once, and leaves the cache 
   expect(scanned).toEqual(want);
   expect(reads).toHaveLength(Math.ceil(index.blocks / MAX_WINDOW_BLOCKS));
   expect(pages.held).toBe(0);
+});
+
+test('held to Parquet, the sales fixture reads as sales-q3.csv does, complete at open with its exact rows', async () => {
+  const source = bytesSource(SALES);
+  const reading = await openReading({
+    name: 'sales-q3.snappy.parquet',
+    source,
+    spec: { kind: 'parquet', columns: [] },
+    header: 'first',
+    tuning: TINY,
+  });
+  expect(english(reading.label)).toBe('Parquet · snappy · 5 row groups');
+  expect(reading.behind).toEqual({ t: 'file', stored: source });
+  const names = ['date', 'region', 'rep', 'channel', 'units', 'revenue'];
+  const columns = names.map((name) => ({ name, key: `/${name}` }));
+  expect(reading.columns()).toEqual(columns);
+  expect(reading.spec()).toEqual({ kind: 'parquet', columns });
+
+  const { index } = reading;
+  expect([index.complete, index.readable(), index.rows()]).toEqual([
+    true,
+    ROWS,
+    ROWS,
+  ]);
+  expect(index.indexed()).toEqual({ done: source.size, total: source.size });
+  let told = 0;
+  await reading.pass(new AbortController().signal, () => told++);
+  expect(told).toBe(1);
+  expect(await reading.pages.rows(0, ROWS)).toEqual(salesRows());
+  expect(await reading.runs(index.blockOf(ROWS - 1))).toEqual([
+    { row: 0, part: 0 },
+  ]);
 });
