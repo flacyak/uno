@@ -12,7 +12,7 @@ import {
   SYMBOLS,
   render,
   supported,
-} from '#notation';
+} from '@notation';
 
 // Each case checks render and supported together on the same source.
 describe('the subset draws the notation a person types', () => {

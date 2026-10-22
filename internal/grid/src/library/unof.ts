@@ -4,7 +4,7 @@
  * Reading and writing it is here once, for the formula and connection codecs.
  */
 
-import { compareStrings, nowTruncated, parseTime } from '#go';
+import { compareStrings, nowTruncated, parseTime } from '@go';
 import { FORMAT_VERSION } from './index.ts';
 
 /** The object a .unof holds, and the format it says it was saved as. */

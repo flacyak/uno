@@ -5,9 +5,9 @@
  * page cache keeps decoded blocks up to a byte budget.
  */
 
-import type { Format } from '#ingest';
-import { Refusal } from '#said';
-import type { ByteSource } from '#store';
+import type { Format } from '@ingest';
+import { Refusal } from '@said';
+import type { ByteSource } from '@store';
 
 export interface Tuning {
   /** Bytes a pass reads at a time. */

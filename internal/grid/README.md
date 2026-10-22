@@ -114,7 +114,7 @@ Each also writes its numbers to `out/efficiency/<file>.json` as a list of
 
 ```bash
 vp test tests/efficiency                       # these files alone
-node scripts/efficiency.ts                     # their numbers as a table
+node --import ../paths.js scripts/efficiency.ts   # their numbers as a table
 ```
 
 `scripts/efficiency.ts` also sets the numbers beside a base's with `--base`,

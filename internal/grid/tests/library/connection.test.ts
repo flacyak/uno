@@ -14,8 +14,8 @@ import {
   formatConnection,
   parseConnection,
   stampConnection,
-} from '#library';
-import type { Connection } from '#library';
+} from '@library';
+import type { Connection } from '@library';
 
 function fixture(id: string): string {
   return readFileSync(

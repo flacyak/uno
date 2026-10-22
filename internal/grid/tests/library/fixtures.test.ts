@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { parse as parseFormulaExpr } from '#formula';
-import { formatFormula, parseFormula } from '#library';
-import { supported } from '#notation';
+import { parse as parseFormulaExpr } from '@formula';
+import { formatFormula, parseFormula } from '@library';
+import { supported } from '@notation';
 
 /** Reads a .unof fixture written by the Go build. */
 function fixture(id: string): string {

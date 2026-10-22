@@ -5,8 +5,8 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { FORMAT_VERSION, formatFormula, parseFormula, validID } from '#library';
-import type { Formula } from '#library';
+import { FORMAT_VERSION, formatFormula, parseFormula, validID } from '@library';
+import type { Formula } from '@library';
 
 function column(
   id: string,
