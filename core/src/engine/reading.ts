@@ -215,7 +215,10 @@ export interface ReadAsk {
 export async function openReading(ask: ReadAsk): Promise<Reading> {
   const { name, source, spec, tuning } = ask;
   if (spec === undefined) {
-    const { head } = await detectedHead(ask);
+    const { head, found } = await detectedHead(ask);
+    if (found.t === 'records' && found.layout === 'lines') {
+      return linesReading(name, source, head, [], tuning);
+    }
     return delimitedReading(name, headed(source, head), ask.header, tuning);
   }
   switch (spec.kind) {

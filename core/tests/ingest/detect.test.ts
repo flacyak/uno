@@ -47,6 +47,8 @@ function detected(name: string, file: Uint8Array | string): Promise<Detected> {
 }
 
 const DELIMITED: Detected = { t: 'records', layout: 'delimited' };
+/** JSON Lines, read one object per line. */
+const LINES: Detected = { t: 'records', layout: 'lines' };
 
 function unread(what: Unread): Detected {
   return { t: 'not-read', what };
@@ -151,7 +153,7 @@ describe('the bytes decide first', () => {
       expect(await detect('q3', file.head)).toEqual(DELIMITED);
       expect(file.tails).toEqual([]);
     }
-    expect(await detected('q3.jsonl', '')).toEqual(unread('JSON Lines'));
+    expect(await detected('q3.jsonl', '')).toEqual(LINES);
     expect(await detected('q3.json', '')).toEqual(unread('JSON'));
   });
 });
@@ -160,13 +162,9 @@ describe('then the name and the first line decide', () => {
   const lines = '{"id":1,"name":"Ada"}\n{"id":2,"name":"Ben"}\n';
 
   test('.jsonl and .ndjson are JSON Lines, whatever the first line holds', async () => {
-    expect(await detected('events.jsonl', lines)).toEqual(unread('JSON Lines'));
-    expect(await detected('events.NDJSON', 'a,b\n')).toEqual(
-      unread('JSON Lines'),
-    );
-    expect(await detected('events.jsonl.gz', lines)).toEqual(
-      unread('JSON Lines'),
-    );
+    expect(await detected('events.jsonl', lines)).toEqual(LINES);
+    expect(await detected('events.NDJSON', 'a,b\n')).toEqual(LINES);
+    expect(await detected('events.jsonl.gz', lines)).toEqual(LINES);
   });
 
   test('a .csv or .tsv whose first line is a JSON object stays delimited', async () => {
@@ -176,13 +174,11 @@ describe('then the name and the first line decide', () => {
 
   test('a name with no layout extension is JSON Lines on an object first line', async () => {
     for (const name of ['events', 'events.txt', 'events.gz', 'events.log'])
-      expect(await detected(name, lines), name).toEqual(unread('JSON Lines'));
+      expect(await detected(name, lines), name).toEqual(LINES);
     // Past a byte order mark and blank lines.
-    expect(await detected('events', `\uFEFF\n \t\r\n${lines}`)).toEqual(
-      unread('JSON Lines'),
-    );
+    expect(await detected('events', `\uFEFF\n \t\r\n${lines}`)).toEqual(LINES);
     // One object with no newline after it, the whole file.
-    expect(await detected('events', '{"id":1}')).toEqual(unread('JSON Lines'));
+    expect(await detected('events', '{"id":1}')).toEqual(LINES);
   });
 
   test('any other first line leaves a layout-less name delimited', async () => {
@@ -207,7 +203,7 @@ describe('then the name and the first line decide', () => {
   });
 
   test('a .json is JSON Lines on an object first line, and JSON otherwise', async () => {
-    expect(await detected('events.json', lines)).toEqual(unread('JSON Lines'));
+    expect(await detected('events.json', lines)).toEqual(LINES);
     for (const text of ['[]', '[{"id":1}]', '{\n"id":1\n}', '{"a":1} {"b":2}'])
       expect(await detected('events.json', text), text).toEqual(unread('JSON'));
   });
