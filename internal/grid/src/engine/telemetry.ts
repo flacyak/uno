@@ -8,7 +8,7 @@
 // Meter sums measurements, and `payload` writes the totals as an OTLP
 // metrics request in JSON for a collector's /v1/metrics endpoint.
 
-import { unreachable } from '../never.ts';
+import { unreachable } from '#never';
 
 /** String attributes attached to a measurement. */
 export type Attributes = Readonly<Record<string, string>>;

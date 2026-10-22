@@ -3,9 +3,9 @@
 // The index is two arrays of numbers with one entry per block of rows. The
 // page cache keeps decoded blocks up to a byte budget.
 
-import type { Format } from '../ingest/index.ts';
-import { Refusal } from '../said/index.ts';
-import type { ByteSource } from '../store/index.ts';
+import type { Format } from '#ingest';
+import { Refusal } from '#said';
+import type { ByteSource } from '#store';
 
 export interface Tuning {
   /** Bytes a pass reads at a time. */

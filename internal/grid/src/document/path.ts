@@ -7,7 +7,7 @@
 //
 // This runs in the browser too, so it uses string operations only.
 
-import { isRemote } from '../store/index.ts';
+import { isRemote } from '#store';
 
 /** Matches either separator. A .uno written on Windows opens on Linux. */
 const SEP = /[/\\]/;
