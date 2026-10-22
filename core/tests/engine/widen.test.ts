@@ -9,7 +9,7 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { FILE_COLUMN } from '@engine';
+import { FILE_COLUMN, insertedIn, movedTo } from '@engine';
 import type { ColumnInfo, Reply, RowsReply, Said, SourceHandle } from '@engine';
 import { Op } from '@sheet';
 import {
@@ -308,4 +308,16 @@ test('a client hands the columns a source found to its handle, and drops ones ol
   } finally {
     engine.close();
   }
+});
+
+test('a column a client drew moves right past the columns found before it, and a place past them all stays', () => {
+  const found = insertedIn([], columnsOf(ID_KEY, LATE_KEY));
+  expect(found).toEqual({ at: 0, count: 2, had: 0 });
+  expect(movedTo(0, found), 'a selection in a grid of no columns').toBe(0);
+
+  const late = insertedIn(
+    columnsOf(ID_KEY, FILE_COLUMN),
+    columnsOf(ID_KEY, LATE_KEY, FILE_COLUMN),
+  );
+  expect([0, 1, 2].map((col) => movedTo(col, late))).toEqual([0, 2, 2]);
 });
