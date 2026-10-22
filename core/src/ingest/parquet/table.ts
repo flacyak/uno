@@ -44,6 +44,15 @@ export const PARQUET_TAIL_BYTES = 64 << 10;
 const FOOTER_END_BYTES = PARQUET_FOOTER_LENGTH_BYTES + PARQUET_MAGIC_BYTES;
 
 /**
+ * What hyparquet is told an INT96 is, so it hands each over as its stored
+ * bytes rather than as the timestamp it reads them as.
+ */
+const INT96_AS = 'FIXED_LEN_BYTE_ARRAY';
+
+/** The bytes an INT96 takes. */
+const INT96_BYTES = 12;
+
+/**
  * The parsers hyparquet is handed. Each hands a value over as it is stored,
  * so textOf writes it at its own precision, and a string comes as its text.
  */
@@ -222,7 +231,7 @@ class ParquetTable implements Table {
   readonly codecs: readonly ParquetCodec[];
   private readonly spans: readonly Group[];
   private readonly leaves: readonly Leaf[];
-  /** The footer as hyparquet is handed it. */
+  /** The footer as hyparquet is handed it, from plainOf. */
   private readonly plain: FileMetaData;
 
   private readonly name: string;
@@ -245,7 +254,7 @@ class ParquetTable implements Table {
     } catch {
       throw new Refusal({ t: 'parquet-broken', name });
     }
-    this.plain = withoutDecimals(metadata);
+    this.plain = plainOf(metadata);
     this.columns = this.leaves.map((leaf) => leaf.column);
     this.spans = groupsOf(metadata.row_groups);
     this.groups = this.spans.length;
@@ -323,15 +332,31 @@ class ParquetTable implements Table {
 }
 
 /**
- * `metadata` as hyparquet is handed it, with no DECIMAL annotation, so a
- * decimal comes over as its unscaled integer for textOf to write exactly.
+ * `metadata` as hyparquet is handed it. A decimal has no DECIMAL
+ * annotation, so it comes over as its unscaled integer, and an INT96 is
+ * twelve fixed bytes, so it comes over as stored, for textOf to write each
+ * exactly.
  */
-function withoutDecimals(metadata: FileMetaData): FileMetaData {
-  return { ...metadata, schema: metadata.schema.map(withoutDecimal) };
+function plainOf(metadata: FileMetaData): FileMetaData {
+  return {
+    ...metadata,
+    schema: metadata.schema.map(plainElement),
+    row_groups: metadata.row_groups.map((group) => ({
+      ...group,
+      columns: group.columns.map((chunk) =>
+        chunk.meta_data?.type === 'INT96'
+          ? { ...chunk, meta_data: { ...chunk.meta_data, type: INT96_AS } }
+          : chunk,
+      ),
+    })),
+  };
 }
 
-/** `element` without its DECIMAL annotation, where it has one. */
-function withoutDecimal(element: SchemaElement): SchemaElement {
+/** `element` without its DECIMAL annotation, and an INT96 as its bytes. */
+function plainElement(element: SchemaElement): SchemaElement {
+  if (element.type === 'INT96') {
+    return { ...element, type: INT96_AS, type_length: INT96_BYTES };
+  }
   const decimal =
     element.converted_type === 'DECIMAL' ||
     element.logical_type?.type === 'DECIMAL';
