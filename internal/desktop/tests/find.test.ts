@@ -5,12 +5,12 @@
 
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import type { FindRequest, Found } from "#engine";
+import type { FindRequest, Found } from "@engine";
 
-import type { Grid } from "#renderer/grid";
-import { Finder } from "#renderer/shell/find";
-import type { Showing } from "#renderer/shell/find";
-import type { Tab, Workspace } from "#renderer/workspace";
+import type { Grid } from "@renderer/grid";
+import { Finder } from "@renderer/shell/find";
+import type { Showing } from "@renderer/shell/find";
+import type { Tab, Workspace } from "@renderer/workspace";
 
 /** A tab with only a name. The finder compares tabs by identity. */
 function tab(name: string): Tab {

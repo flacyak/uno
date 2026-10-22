@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 
-import { unoPath, writeAtomic } from "#main/files";
+import { unoPath, writeAtomic } from "@main/files";
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 

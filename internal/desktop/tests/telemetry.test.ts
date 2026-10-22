@@ -5,7 +5,7 @@
 
 import { expect, test, vi } from "vite-plus/test";
 
-import { exporting } from "#engine/telemetry";
+import { exporting } from "@desktop-engine/telemetry";
 
 const ENDPOINT = "https://otlp.example.test/otlp";
 const ENV = {

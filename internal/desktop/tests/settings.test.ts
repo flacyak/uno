@@ -11,16 +11,16 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import { PSEUDO_LOCALE, PSEUDO_OPEN } from "#scripts/pseudo";
-import { m } from "#paraglide/messages";
-import { baseLocale } from "#paraglide/runtime";
-import { Settings } from "#renderer/shell/settings";
-import type { InputName } from "#renderer/input";
-import { LANGUAGE_KEY, Language, languageName, offered } from "#renderer/language";
-import type { SettingsAsks } from "#renderer/shell/settings";
-import type { Connection } from "#renderer/sources";
-import { Theming } from "#renderer/theme";
-import type { Scheme } from "#renderer/theme";
+import { PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
+import { m } from "@paraglide/messages";
+import { baseLocale } from "@paraglide/runtime";
+import { Settings } from "@renderer/shell/settings";
+import type { InputName } from "@renderer/input";
+import { LANGUAGE_KEY, Language, languageName, offered } from "@renderer/language";
+import type { SettingsAsks } from "@renderer/shell/settings";
+import type { Connection } from "@renderer/sources";
+import { Theming } from "@renderer/theme";
+import type { Scheme } from "@renderer/theme";
 import { Kept } from "./kept.ts";
 import { settle } from "./settle.ts";
 

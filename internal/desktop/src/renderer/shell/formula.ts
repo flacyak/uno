@@ -9,9 +9,9 @@
 
 import "./formula.css";
 
-import { m } from "#paraglide/messages";
-import { clamp } from "#renderer/grid/metrics";
-import { columnLabel } from "#renderer/grid/rows";
+import { m } from "@paraglide/messages";
+import { clamp } from "@renderer/grid/metrics";
+import { columnLabel } from "@renderer/grid/rows";
 import type { MenuPlace } from "./menu.ts";
 import { button, clickAway, el, hang, message, option, walk } from "./util.ts";
 

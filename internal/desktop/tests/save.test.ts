@@ -12,9 +12,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { m } from "#paraglide/messages";
-import { RECENTS_KEY } from "#renderer/recents";
-import type { Shell } from "#renderer/shell/shell";
+import { m } from "@paraglide/messages";
+import { RECENTS_KEY } from "@renderer/recents";
+import type { Shell } from "@renderer/shell/shell";
 import { FIXTURE, SECOND, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 

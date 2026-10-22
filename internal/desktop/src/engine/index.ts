@@ -11,18 +11,18 @@
  * renderer only sends s3:// URLs and receives rows.
  */
 
-import { TUNING, serve } from "#engine";
-import type { Reply, Request } from "#engine";
-import { sources } from "#plugin";
-import { connectionsIn, multiProvider } from "#store";
+import { TUNING, serve } from "@engine";
+import type { Reply, Request } from "@engine";
+import { sources } from "@plugin";
+import { connectionsIn, multiProvider } from "@store";
 import {
   awsProfiles,
   connectionAuth,
   connectionSigning,
   diskProvider,
   nodeStore,
-} from "#store/node";
-import { connectionMeeting, s3Provider, tryConnection } from "#store/s3";
+} from "@store/node";
+import { connectionMeeting, s3Provider, tryConnection } from "@store/s3";
 
 import { exporting } from "./telemetry.ts";
 

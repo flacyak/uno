@@ -6,10 +6,10 @@
  * write (internal/safefile/write.go).
  */
 
-import { WORKSPACE_EXT } from "#document";
-import type { SourceRef } from "#engine";
-import { fileName, parseConnection } from "#library";
-import { nodeStore } from "#store/node";
+import { WORKSPACE_EXT } from "@document";
+import type { SourceRef } from "@engine";
+import { fileName, parseConnection } from "@library";
+import { nodeStore } from "@store/node";
 import { mkdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 
