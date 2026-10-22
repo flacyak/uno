@@ -248,6 +248,11 @@ export type Request =
    * opens every source it holds, and only into an empty workspace.
    */
   | { t: 'open'; id: number; ref: SourceRef }
+  /**
+   * Stop an open still in flight, named by the open's request id. The open
+   * is refused as cancelled. An open already answered is left alone.
+   */
+  | { t: 'cancel'; of: number }
   /** Remove a source from the workspace, and its edits from the log. */
   | { t: 'remove'; id: number; source: string }
   /**
