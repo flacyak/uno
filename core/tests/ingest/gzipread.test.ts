@@ -6,6 +6,7 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
+import { Deflate, Z_SYNC_FLUSH } from 'pako';
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
@@ -23,6 +24,7 @@ import type {
   Stored,
 } from '@ingest/gzip';
 import { bytesSource } from '@store';
+import { fastest } from '@core-tests/performance/time';
 import { concat, differAt, fixture, kind } from './bytes.ts';
 
 /** Rows of text on each side of the noise. */
@@ -44,6 +46,15 @@ const PARTS = 64;
 const UINT32_VALUES = 2 ** 32;
 /** Whole windows in a budget the file fills many times over. */
 const THINNED_WINDOWS = 4;
+/**
+ * Rows flushed one at a time, as a log writer does. Each is a block of its
+ * own, and a span of SPAN holds tens of thousands of them.
+ */
+const FLUSHED_ROWS = 50_000;
+/** Timed runs of a read, the quickest kept. */
+const SAMPLES = 3;
+/** How many times slower keeping a span may make reading in order. */
+const SLOWER_AT_MOST = 3;
 const BUDGETS: [string, InflaterBudget][] = [
   ['alone', ALONE],
   ['as one of many parts', partBudget(PARTS)],
@@ -248,5 +259,34 @@ describe('a gzip read back up the file', () => {
     const thinned = { ...ALONE, windows: THINNED_WINDOWS * WINDOW_BYTES };
     const { reads, start } = await readBack(thinned);
     expect(reads[0]!.offset).toBe(start.stored);
+  });
+});
+
+describe('a gzip read in order of a file flushed after every row', () => {
+  /** Reads the whole file in order with `budget`, once it has passed it. */
+  async function passAndRead(
+    flushed: Uint8Array,
+    budget: InflaterBudget,
+  ): Promise<void> {
+    const inflater = gzipInflater(bytesSource(flushed), budget, SPAN);
+    inflater.push(flushed, () => {});
+    const size = inflater.end();
+    for (let offset = 0; offset < size; offset += MOST_READ) {
+      await inflater.read(offset, MOST_READ);
+    }
+  }
+
+  test('alone, takes about as long as when it keeps no span', async () => {
+    const deflate = new Deflate({ gzip: true });
+    for (let n = 0; n < FLUSHED_ROWS; n++) {
+      deflate.push(rows(n, 1), Z_SYNC_FLUSH);
+    }
+    deflate.push(new Uint8Array(0), true);
+    const flushed = deflate.result;
+    const alone = await fastest(SAMPLES, () => passAndRead(flushed, ALONE));
+    const part = await fastest(SAMPLES, () =>
+      passAndRead(flushed, partBudget(PARTS)),
+    );
+    expect(alone).toBeLessThan(SLOWER_AT_MOST * part);
   });
 });
