@@ -8,10 +8,13 @@
  * 1. rule.ts's verdict matches the PR's on edge cases and on random values.
  * 2. Every pair in out/lab/method.json, run through the PR's compare() and
  *    markdown(), gives the counts method.json reports.
+ *
+ * The branch and method.json are only here after a local lab run, so the
+ * tests that read them are skipped where either is absent, as in CI.
  */
 
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vite-plus/test';
@@ -25,6 +28,12 @@ const HERE = fileURLToPath(new URL('./', import.meta.url));
 const METHOD_JSON = fileURLToPath(
   new URL('../../../../out/lab/method.json', import.meta.url),
 );
+/** The PR branch's compare.ts, as git names it. */
+const PR_COMPARE =
+  'origin/t3/performance-workflow:internal/grid/tests/efficiency/compare.ts';
+/** Whether the PR branch has been fetched into this clone. */
+const PR_FETCHED =
+  spawnSync('git', ['cat-file', '-e', PR_COMPARE], { cwd: HERE }).status === 0;
 
 /** The call the PR's table prints for one metric. */
 function prCall(
@@ -49,17 +58,16 @@ function prCall(
   throw new Error(`unknown change "${change}"`);
 }
 
-test('pr-compare.ts is the PR branch file, unchanged', () => {
-  const pr = execFileSync(
-    'git',
-    [
-      'show',
-      'origin/t3/performance-workflow:internal/grid/tests/efficiency/compare.ts',
-    ],
-    { cwd: HERE, encoding: 'utf8' },
-  );
-  expect(readFileSync(`${HERE}pr-compare.ts`, 'utf8')).toBe(pr);
-});
+test.skipIf(!PR_FETCHED)(
+  'pr-compare.ts is the PR branch file, unchanged',
+  () => {
+    const pr = execFileSync('git', ['show', PR_COMPARE], {
+      cwd: HERE,
+      encoding: 'utf8',
+    });
+    expect(readFileSync(`${HERE}pr-compare.ts`, 'utf8')).toBe(pr);
+  },
+);
 
 const UNITS = ['ms', 'x', 'bytes', 'requests', 'MS', 'ms '];
 const EDGE = [
@@ -150,42 +158,47 @@ interface MethodJson {
   runs: RunRecord[];
 }
 
-test('method.json counts match the PR code run on its own raw runs', () => {
-  const data = JSON.parse(readFileSync(METHOD_JSON, 'utf8')) as MethodJson;
-  // Timings are named ": ms"; everything else in method.json is a count.
-  const unitOf = (name: string): Unit => (name.endsWith(': ms') ? 'ms' : 'x');
-  for (const [armName, arm] of Object.entries(data.arms)) {
-    const runs = data.runs.filter((r) => r.arm === armName);
-    expect(runs).toHaveLength(2 * data.pairs);
-    const calls: Record<string, Record<string, number>> = {};
-    let tables = 0;
-    for (let pair = 0; pair < data.pairs; pair++) {
-      const side = (role: string) => {
-        const found = runs.filter((r) => r.role === role && r.pair === pair);
-        expect(found).toHaveLength(1);
-        return Object.entries(found[0]!.values).map(([name, value]) => ({
-          name,
-          unit: unitOf(name),
-          value,
-        }));
-      };
-      const head = side('head');
-      const base = side('base');
-      const changes = compare(base, head);
-      let claimed = false;
-      for (const c of changes) {
-        const call = prCall(c.unit, c.base, c.head);
-        calls[c.name] ??= {};
-        calls[c.name]![call] = (calls[c.name]![call] ?? 0) + 1;
-        if (call === 'better' || call === 'worse') claimed = true;
+test.skipIf(!existsSync(METHOD_JSON))(
+  'method.json counts match the PR code run on its own raw runs',
+  () => {
+    const data = JSON.parse(readFileSync(METHOD_JSON, 'utf8')) as MethodJson;
+    // Timings are named ": ms"; everything else in method.json is a count.
+    const unitOf = (name: string): Unit => (name.endsWith(': ms') ? 'ms' : 'x');
+    for (const [armName, arm] of Object.entries(data.arms)) {
+      const runs = data.runs.filter((r) => r.arm === armName);
+      expect(runs).toHaveLength(2 * data.pairs);
+      const calls: Record<string, Record<string, number>> = {};
+      let tables = 0;
+      for (let pair = 0; pair < data.pairs; pair++) {
+        const side = (role: string) => {
+          const found = runs.filter((r) => r.role === role && r.pair === pair);
+          expect(found).toHaveLength(1);
+          return Object.entries(found[0]!.values).map(([name, value]) => ({
+            name,
+            unit: unitOf(name),
+            value,
+          }));
+        };
+        const head = side('head');
+        const base = side('base');
+        const changes = compare(base, head);
+        let claimed = false;
+        for (const c of changes) {
+          const call = prCall(c.unit, c.base, c.head);
+          calls[c.name] ??= {};
+          calls[c.name]![call] = (calls[c.name]![call] ?? 0) + 1;
+          if (call === 'better' || call === 'worse') claimed = true;
+        }
+        if (claimed) tables++;
       }
-      if (claimed) tables++;
-    }
-    expect(tables, armName).toBe(arm.tablesWithAClaim);
-    for (const [name, judged] of Object.entries(arm.metrics)) {
-      for (const [call, n] of Object.entries(judged.calls)) {
-        expect(calls[name]?.[call] ?? 0, `${armName} ${name} ${call}`).toBe(n);
+      expect(tables, armName).toBe(arm.tablesWithAClaim);
+      for (const [name, judged] of Object.entries(arm.metrics)) {
+        for (const [call, n] of Object.entries(judged.calls)) {
+          expect(calls[name]?.[call] ?? 0, `${armName} ${name} ${call}`).toBe(
+            n,
+          );
+        }
       }
     }
-  }
-});
+  },
+);
