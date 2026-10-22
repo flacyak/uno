@@ -5,7 +5,7 @@
  * rows are scrolled, and the cache holds them within its budget as text.
  */
 
-import { expect, test } from 'vite-plus/test';
+import { expect, test, vi } from 'vite-plus/test';
 
 import { TUNING } from '@engine';
 import {
@@ -16,8 +16,15 @@ import {
 } from '@engine/table';
 import type { TableRows } from '@engine/table';
 import type { Table } from '@ingest';
-import { SALES, opened, salesRows } from '@core-tests/ingest/parquet/tables';
-import { TINY } from './harness.ts';
+import {
+  SALES,
+  UNPAGED_STRINGS,
+  opened,
+  salesRows,
+  unpaged,
+  unpagedRow,
+} from '@core-tests/ingest/parquet/tables';
+import { SCREEN, TINY } from './harness.ts';
 
 /** A planned file's rows and stored bytes, and the rows in its blocks. */
 const PLAN = { rows: 30, size: 4096, blockRows: 7 };
@@ -172,6 +179,44 @@ test('the sales fixture reads as sales-q3.csv does, every window once', async ()
   const { pages, index } = pagesOver(rows, want.length, TINY);
   expect(await pages.rows(0, want.length)).toEqual(want);
   expect(reads).toHaveLength(Math.ceil(index.blocks / MAX_WINDOW_BLOCKS));
+});
+
+/** The rows of a generated row group with no page index. */
+const LONG_ROWS = 200_000;
+
+test('a 200,000-row group with no page index decodes one window per MAX_WINDOW_BLOCKS blocks, and each string once, as it scrolls', async () => {
+  const table = await opened('long.parquet', unpaged(LONG_ROWS));
+  expect([table.groups, table.paged(0, LONG_ROWS)]).toEqual([1, false]);
+  const span = MAX_WINDOW_BLOCKS * TUNING.blockRows;
+  // Its rows are small enough for a window of MAX_WINDOW_BLOCKS.
+  expect(table.bytesPerRow(0, LONG_ROWS) * span).toBeLessThan(
+    DECODE_WINDOW_BYTES,
+  );
+
+  const { rows, reads } = counted(table);
+  const { pages } = pagesOver(rows, LONG_ROWS);
+  const windows = Array.from(
+    { length: Math.ceil(LONG_ROWS / span) },
+    (_, w) => [w * span, Math.min((w + 1) * span, LONG_ROWS)],
+  );
+  const decode = vi.spyOn(TextDecoder.prototype, 'decode');
+  try {
+    for (let first = 0; first < LONG_ROWS; first += SCREEN) {
+      const screen = await pages.rows(first, SCREEN);
+      expect(screen[0]).toEqual(unpagedRow(first));
+    }
+    expect(reads).toEqual(windows);
+    // Each column chunk is one page, which hyparquet decodes whole for any
+    // window, but each string is decoded once.
+    expect(decode).toHaveBeenCalledTimes(UNPAGED_STRINGS * LONG_ROWS);
+  } finally {
+    decode.mockRestore();
+  }
+  // Back up the rows, every block comes from the cache.
+  for (let first = LONG_ROWS - SCREEN; first >= 0; first -= SCREEN) {
+    await pages.rows(first, SCREEN);
+  }
+  expect(reads).toEqual(windows);
 });
 
 test('the cache holds blocks at the bytes they take as text, within its budget', async () => {
