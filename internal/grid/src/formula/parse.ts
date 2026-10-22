@@ -1,3 +1,8 @@
+/**
+ * @fileoverview The parser for an expression's text form. Everything an
+ * expression can be wrong about is decided here, before a single row is read.
+ */
+
 import {
   Scanner,
   isDigit,

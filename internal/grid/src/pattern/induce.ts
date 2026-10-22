@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Inducing programs from examples: the rewrites one edit could
+ * be, and what survives the intersection across every edit the person made.
+ */
+
 import {
   compareStrings,
   equalFold,

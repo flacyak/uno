@@ -1,3 +1,8 @@
+/**
+ * @fileoverview A longest-common-subsequence diff between two cell values, as
+ * runs of what was removed and what was added.
+ */
+
 import { runes } from '#go';
 
 /** MAX_DIFF is the longest value `align` will diff, in code points. */

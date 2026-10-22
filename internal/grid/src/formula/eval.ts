@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Evaluating an expression: `Row`, the ways a cell can fail,
+ * `evaluate` for one row and `evaluateColumn` for a block of them.
+ */
+
 import { quote } from '#go';
 import { unreachable } from '#never';
 import { parse as parseNumber } from '#num';
