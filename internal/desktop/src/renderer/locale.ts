@@ -1,7 +1,9 @@
-// Formats numbers, byte sizes and lists in the app's locale.
-//
-// The app's locale is a separate setting from the operating system's, so
-// every formatter here is built with getLocale().
+/**
+ * @fileoverview Formats numbers, byte sizes and lists in the app's locale.
+ *
+ * The app's locale is a separate setting from the operating system's, so
+ * every formatter here is built with getLocale().
+ */
 
 import { m } from "#paraglide/messages";
 import { getLocale } from "#paraglide/runtime";

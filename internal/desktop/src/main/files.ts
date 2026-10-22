@@ -1,8 +1,10 @@
-// File paths and file writes for the main process.
-//
-// An engine reads a file by path in its own process.
-// Writes go through the node store, which does an atomic temp-file-and-rename
-// write (internal/safefile/write.go).
+/**
+ * @fileoverview File paths and file writes for the main process.
+ *
+ * An engine reads a file by path in its own process.
+ * Writes go through the node store, which does an atomic temp-file-and-rename
+ * write (internal/safefile/write.go).
+ */
 
 import { WORKSPACE_EXT } from "#document";
 import type { SourceRef } from "#engine";

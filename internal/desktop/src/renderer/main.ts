@@ -1,6 +1,8 @@
-// Renderer entry point. Loads the base styles, creates the Shell, and wires
-// the menu bridge to it. The grid module loads with the first file (see
-// shell/shell.ts).
+/**
+ * @fileoverview Renderer entry point. Loads the base styles, creates the Shell,
+ * and wires the menu bridge to it. The grid module loads with the first file
+ * (see shell/shell.ts).
+ */
 
 import "./base.css";
 

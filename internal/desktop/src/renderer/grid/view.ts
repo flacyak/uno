@@ -1,10 +1,13 @@
-// The view: a virtualised table that holds only the rows on screen.
-//
-// A pool of about forty row elements is reused as the view scrolls. Each
-// frame calls `display` once per visible cell, so `display` must be cheap.
-//
-// Rows are virtualised and columns are drawn in full: every pooled row holds
-// a cell per column. A frame writes only the cells whose text changed.
+/**
+ * @fileoverview The view: a virtualised table that holds only the rows on
+ * screen.
+ *
+ * A pool of about forty row elements is reused as the view scrolls. Each
+ * frame calls `display` once per visible cell, so `display` must be cheap.
+ *
+ * Rows are virtualised and columns are drawn in full: every pooled row holds
+ * a cell per column. A frame writes only the cells whose text changed.
+ */
 
 import type { Kind } from "#sheet";
 

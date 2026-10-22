@@ -1,6 +1,8 @@
-// An input strategy maps key presses to grid actions. The grid and its cell
-// editor ask the strategy what a key means and carry out the answer.
-// Strategies are pure functions of mode, pending keys and the press.
+/**
+ * @fileoverview An input strategy maps key presses to grid actions. The grid
+ * and its cell editor ask the strategy what a key means and carry out the
+ * answer. Strategies are pure functions of mode, pending keys and the press.
+ */
 
 import type { Mode, Pending, Press, Step } from "#renderer/keys";
 

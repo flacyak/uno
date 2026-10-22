@@ -1,5 +1,7 @@
-// The banner for an offer: what it would change, how many cells, and the
-// Apply and Not now buttons.
+/**
+ * @fileoverview The banner for an offer: what it would change, how many cells,
+ * and the Apply and Not now buttons.
+ */
 
 import "./banner.css";
 

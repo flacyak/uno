@@ -1,13 +1,15 @@
-// Entry point of the engine utility process in Electron. One process serves
-// one workspace.
-//
-// `serve` from @uno/grid does the work. This file wires it to the runtime:
-// the MessagePort arrives on parentPort, and the providers are local disk
-// files, S3 objects, and several of either read as one. Every file arrives
-// as a path.
-//
-// AWS credentials and the saved connections are read in this process. The
-// renderer only sends s3:// URLs and receives rows.
+/**
+ * @fileoverview Entry point of the engine utility process in Electron. One
+ * process serves one workspace.
+ *
+ * `serve` from @uno/grid does the work. This file wires it to the runtime:
+ * the MessagePort arrives on parentPort, and the providers are local disk
+ * files, S3 objects, and several of either read as one. Every file arrives
+ * as a path.
+ *
+ * AWS credentials and the saved connections are read in this process. The
+ * renderer only sends s3:// URLs and receives rows.
+ */
 
 import { TUNING, serve } from "#engine";
 import type { Reply, Request } from "#engine";

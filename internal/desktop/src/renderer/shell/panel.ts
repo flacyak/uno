@@ -1,10 +1,12 @@
-// The sources panel: the column beside the grid, with its head, a filter box,
-// the three sections of `Sources` drawn as one virtualised list, a peek at
-// the picked file, and the buttons that add what is picked.
-//
-// The list reuses a pool of row elements, as the grid does, and writes text
-// into them as it scrolls. `Sources` owns what each line says and which line
-// has focus. This file draws it and reads keys.
+/**
+ * @fileoverview The sources panel: the column beside the grid, with its head, a
+ * filter box, the three sections of `Sources` drawn as one virtualised list, a
+ * peek at the picked file, and the buttons that add what is picked.
+ *
+ * The list reuses a pool of row elements, as the grid does, and writes text
+ * into them as it scrolls. `Sources` owns what each line says and which line
+ * has focus. This file draws it and reads keys.
+ */
 
 import "./arriving.css";
 import "./panel.css";

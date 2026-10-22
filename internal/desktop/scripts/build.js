@@ -1,5 +1,7 @@
-// Production build: the messages, the renderer, then main, preload and the
-// engine.
+/**
+ * @fileoverview Production build: the messages, the renderer, then main,
+ * preload and the engine.
+ */
 import { build } from "vite";
 import { bundleElectron } from "./bundle.js";
 import { compileMessages } from "./messages.js";
