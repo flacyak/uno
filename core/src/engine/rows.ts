@@ -194,6 +194,29 @@ export class BlockCache {
   }
 }
 
+/**
+ * rowsThrough reads up to `count` rows from `first` a block at a time,
+ * through `records`, stopping at the index's readable limit.
+ */
+export async function rowsThrough(
+  index: Pick<Index, 'readable' | 'blockOf' | 'rowsOf'>,
+  records: (block: number) => Promise<string[][]>,
+  first: number,
+  count: number,
+): Promise<string[][]> {
+  const end = Math.min(first + count, index.readable());
+  const out: string[][] = [];
+
+  for (let row = Math.max(0, first); row < end;) {
+    const block = index.blockOf(row);
+    const [from] = index.rowsOf(block);
+    const rows = await records(block);
+    for (let i = row - from; i < rows.length && row < end; i++, row++)
+      out.push(rows[i]!);
+  }
+  return out;
+}
+
 /** Decoder turns the bytes of one block into its records. */
 export interface Decoder {
   /** The records in bytes that begin and end on a record boundary. */
@@ -234,18 +257,13 @@ export class Pages {
   }
 
   /** rows reads up to count rows from first, stopping at the readable limit. */
-  async rows(first: number, count: number): Promise<string[][]> {
-    const end = Math.min(first + count, this.index.readable());
-    const out: string[][] = [];
-
-    for (let row = Math.max(0, first); row < end;) {
-      const block = this.index.blockOf(row);
-      const [from] = this.index.rowsOf(block);
-      const records = await this.records(block);
-      for (let i = row - from; i < records.length && row < end; i++, row++)
-        out.push(records[i]!);
-    }
-    return out;
+  rows(first: number, count: number): Promise<string[][]> {
+    return rowsThrough(
+      this.index,
+      (block) => this.records(block),
+      first,
+      count,
+    );
   }
 
   /**
