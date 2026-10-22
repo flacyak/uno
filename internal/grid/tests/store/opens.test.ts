@@ -1,10 +1,12 @@
-// A text guard: every file uno reads goes through a FileHandler, every place
-// it browses through a Lister, and the one program it runs is a profile's
-// credential_process.
-//
-// It reads the source under src/, matches each module's text against the
-// rules below, and holds the uses to the places in ways.ts. reaches.test.ts
-// is the same guard with the core running.
+/**
+ * @fileoverview A text guard: every file uno reads goes through a FileHandler,
+ * every place it browses through a Lister, and the one program it runs is a
+ * profile's credential_process.
+ *
+ * It reads the source under src/, matches each module's text against the
+ * rules below, and holds the uses to the places in ways.ts. reaches.test.ts
+ * is the same guard with the core running.
+ */
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';

@@ -1,8 +1,10 @@
-// listWith picks the first lister that claims a path, and refuses by name a
-// path every lister passes on.
-//
-// The listers here are stubs that record what they were asked. Real listings
-// are in disk.test.ts and s3list.test.ts.
+/**
+ * @fileoverview listWith picks the first lister that claims a path, and refuses
+ * by name a path every lister passes on.
+ *
+ * The listers here are stubs that record what they were asked. Real listings
+ * are in disk.test.ts and s3list.test.ts.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

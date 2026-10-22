@@ -1,5 +1,7 @@
-// Tests for Said values: their English text, Refusal errors, and crossing the
-// engine port as data.
+/**
+ * @fileoverview Tests for Said values: their English text, Refusal errors, and
+ * crossing the engine port as data.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 

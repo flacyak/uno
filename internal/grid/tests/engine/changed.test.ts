@@ -1,6 +1,8 @@
-// A reopened source reports when its file differs from the one the save
-// recorded.
-// The version is compared where the save recorded one, and the size otherwise.
+/**
+ * @fileoverview A reopened source reports when its file differs from the one
+ * the save recorded. The version is compared where the save recorded one, and
+ * the size otherwise.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

@@ -1,5 +1,7 @@
-// Fixtures and helpers for the headerless tests: the three parts of
-// sales-q3.csv with the header line removed from each.
+/**
+ * @fileoverview Fixtures and helpers for the headerless tests: the three parts
+ * of sales-q3.csv with the header line removed from each.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

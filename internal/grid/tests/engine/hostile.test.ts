@@ -1,6 +1,9 @@
-// Malformed messages at the engine's port: a bare value in place of an object,
-// an unknown kind, fields of the wrong type. For each: the handler returns,
-// every rejection is caught, and a request with a usable id gets one reply.
+/**
+ * @fileoverview Malformed messages at the engine's port: a bare value in place
+ * of an object, an unknown kind, fields of the wrong type. For each: the
+ * handler returns, every rejection is caught, and a request with a usable id
+ * gets one reply.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

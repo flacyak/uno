@@ -1,7 +1,9 @@
-// The `_file` column of several files read as one: an extra column, asked for
-// in the ref, whose cell names the part a row came from. The cell is computed
-// from the row's byte offset, so the checks focus on the rows either side of
-// each part boundary.
+/**
+ * @fileoverview The `_file` column of several files read as one: an extra
+ * column, asked for in the ref, whose cell names the part a row came from. The
+ * cell is computed from the row's byte offset, so the checks focus on the rows
+ * either side of each part boundary.
+ */
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
