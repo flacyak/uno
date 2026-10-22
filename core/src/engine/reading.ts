@@ -133,10 +133,14 @@ export async function openReading(ask: ReadAsk): Promise<Reading> {
     head === undefined ? source : headed(source, head),
     spec?.header ?? ask.header,
   );
-  return recordReading(name, source, delimitedRecords(format), tuning, {
-    kind: 'delimited',
-    header: format.header,
-  });
+  const delimited: ReadSpec = { kind: 'delimited', header: format.header };
+  return recordReading(
+    name,
+    source,
+    delimitedRecords(format),
+    tuning,
+    () => delimited,
+  );
 }
 
 /**
@@ -167,14 +171,15 @@ const ONE_FILE: readonly Run[] = [{ row: 0, part: 0 }];
 
 /**
  * recordReading reads a file of records: the index pass finds where each
- * block of them starts, and Pages decode a block at a time.
+ * block of them starts, and Pages decode a block at a time. `spec` says how
+ * they are read as of when it is called.
  */
 function recordReading(
   name: string,
   source: ByteSource,
   records: RecordFormat,
   tuning: Tuning,
-  spec: ReadSpec,
+  spec: () => ReadSpec,
 ): Reading {
   const index = new RowIndex(records.dataStart, source.size, tuning);
   const joined = multiOf(source);
@@ -191,7 +196,7 @@ function recordReading(
         ? { t: 'file', stored: source }
         : { t: 'bytes', joined },
     columns: () => records.columns(),
-    spec: () => spec,
+    spec,
     pass: (signal, progress) =>
       indexPass({ source, format, index, tuning, signal, progress }),
     runs:
