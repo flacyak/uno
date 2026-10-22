@@ -3,16 +3,22 @@
  * says a file was read as JSON Lines, and the file first holds a key at row
  * 50,000, read through TINY blocks. Rows and edits keep their cells, _file
  * moves right and still refuses every edit, no rows reach a client over a
- * key its columns lack, and a client hands the columns it is told to its
- * handle.
+ * key its columns lack, and a client that knows no widened reply ignores it.
  */
 
 import { expect, test } from 'vite-plus/test';
 
 import { FILE_COLUMN } from '@engine';
-import type { ColumnInfo, RowsReply, SourceHandle } from '@engine';
+import type { ColumnInfo, Reply, RowsReply, Said, SourceHandle } from '@engine';
 import { Op } from '@sheet';
-import { indexed, padded } from './harness.ts';
+import {
+  TINY,
+  connect,
+  indexed,
+  multiProviders,
+  openOne,
+  padded,
+} from './harness.ts';
 import {
   ID_KEY,
   LATE,
@@ -213,6 +219,32 @@ test.each<Layout>(['file', 'part'])(
       PAST_LATE,
     ),
 );
+
+test('a client that knows no widened reply finds no request it answers, and a handle with no handler reads on', async () => {
+  const file = await FILE;
+  const replies: Reply[] = [];
+  const { engine, done } = connect(TINY, multiProviders(), undefined, (reply) =>
+    replies.push(reply),
+  );
+  const errors: Said[] = [];
+  engine.onError = (said) => errors.push(said);
+  try {
+    const blob = workspace(file, 'file');
+    const src = await openOne(engine, { name: 'q3.uno', blob });
+    await hammer(src);
+
+    const widened = replies.filter((reply) => reply.t === 'widened');
+    expect(widened).toHaveLength(1);
+    expect(
+      widened[0],
+      'an old client settles a reply by its id',
+    ).not.toHaveProperty('id');
+    expect(errors).toEqual([]);
+    expect((await src.rows(LATE, 1)).rows).toEqual([cellsAt(LATE)]);
+  } finally {
+    done();
+  }
+});
 
 // ------------------------------------------------------------ the client alone
 
