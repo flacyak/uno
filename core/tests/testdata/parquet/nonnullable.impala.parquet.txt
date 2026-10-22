@@ -1,0 +1,12 @@
+{"rows":1,"groups":1,"codecs":["uncompressed"],"paged":false}
+["ID","/ID"]
+["Int_Array","/Int_Array"]
+["int_array_array","/int_array_array"]
+["Int_Map","/Int_Map"]
+["int_map_array","/int_map_array"]
+["nested_Struct.a","/nested_Struct/a"]
+["nested_Struct.B","/nested_Struct/B"]
+["nested_Struct.c.D","/nested_Struct/c/D"]
+["nested_Struct.G","/nested_Struct/G"]
+
+["8","[-1]","[[-1,-2],[]]","{\"k1\":-1}","[{},{\"k1\":1},{},{}]","-1","[-1]","[[{\"e\":-1,\"f\":\"nonnullable\"}]]","{}"]

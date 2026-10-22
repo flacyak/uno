@@ -6,6 +6,9 @@ The repository has no NOTICE file at that commit.
 
 `shredded_variant/case-001.parquet` comes from the repository's `shredded_variant` folder, and every other file from its `data` folder.
 
+Each file that uno reads has its text beside it, `<file>.txt`: what its footer says, its columns, and every row as uno writes it.
+`tests/ingest/parquet/testing.test.ts` holds each file to its text, so an upgrade of hyparquet that reads any value differently fails there.
+
 ## What each file covers
 
 | file                                                 | what it covers                                         |
@@ -25,7 +28,7 @@ The repository has no NOTICE file at that commit.
 | `int32_decimal.parquet`                              | a decimal stored as an INT32                           |
 | `int32_with_null_pages.parquet`                      | 1,000 rows over many pages, with an offset index       |
 | `int64_decimal.parquet`                              | a decimal stored as an INT64                           |
-| `int96_from_spark.parquet`                           | INT96 timestamps past what a Date holds                |
+| `int96_from_spark.parquet`                           | INT96 timestamps from Spark, one in the year 290000    |
 | `map_no_value.parquet`                               | maps with and without values, and a list               |
 | `nested_lists.snappy.parquet`                        | lists three deep                                       |
 | `nested_maps.snappy.parquet`                         | maps keyed by strings, holding maps                    |
@@ -33,7 +36,7 @@ The repository has no NOTICE file at that commit.
 | `null_list.parquet`                                  | an empty list                                          |
 | `nulls.snappy.parquet`                               | a struct whose field is always null                    |
 | `repeated_no_annotation.parquet`                     | a repeated group with no LIST annotation               |
-| `single_nan.parquet`                                 | a double that is NaN                                   |
+| `single_nan.parquet`                                 | a double that is null                                  |
 | `unknown-logical-type.parquet`                       | an annotation newer than hyparquet                     |
 | `large_string_map.brotli.parquet`                    | Brotli pages, refused                                  |
 | `lz4_raw_compressed.parquet`                         | LZ4 pages, refused                                     |
