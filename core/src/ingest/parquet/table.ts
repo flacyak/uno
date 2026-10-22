@@ -10,6 +10,7 @@
 
 import { parquetMetadata, parquetRead } from 'hyparquet/src/index.js';
 import type {
+  AsyncBuffer,
   FileMetaData,
   ParquetParsers,
   RowGroup,
@@ -79,7 +80,11 @@ export interface Table {
   bytesPerRow(start: number, end: number): number;
   /** Whether every row group under rows [start, end) has offset indexes. */
   paged(start: number, end: number): boolean;
-  /** Rows [start, end) of the file, each cell as textOf writes it. */
+  /**
+   * Rows [start, end) of the file, each cell as textOf writes it. A failed
+   * read of the file is passed on as it failed, and a page that does not
+   * decode is refused as parquet-broken.
+   */
   read(start: number, end: number): Promise<string[][]>;
 }
 
@@ -218,6 +223,7 @@ class ParquetTable implements Table {
   /** The footer as hyparquet is handed it. */
   private readonly plain: FileMetaData;
 
+  private readonly name: string;
   private readonly file: ByteSource;
   private readonly chunks: ChunkCache;
 
@@ -228,6 +234,7 @@ class ParquetTable implements Table {
     metadata: FileMetaData,
     codecs: readonly ParquetCodec[],
   ) {
+    this.name = name;
     this.file = file;
     this.chunks = chunks;
     this.codecs = codecs;
@@ -276,20 +283,25 @@ class ParquetTable implements Table {
    */
   private async assembled(start: number, end: number): Promise<Assembled[]> {
     let rows: Assembled[] = [];
-    await parquetRead({
-      file: asyncBufferOf(this.file, this.chunks),
-      metadata: this.plain,
-      rowStart: start,
-      rowEnd: end,
-      rowFormat: 'object',
-      useOffsetIndex: true,
-      parsers: PARSERS,
-      utf8: false,
-      compressors: COMPRESSORS,
-      onComplete: (read: Assembled[]) => {
-        rows = read;
-      },
-    });
+    try {
+      await parquetRead({
+        file: passing(asyncBufferOf(this.file, this.chunks)),
+        metadata: this.plain,
+        rowStart: start,
+        rowEnd: end,
+        rowFormat: 'object',
+        useOffsetIndex: true,
+        parsers: PARSERS,
+        utf8: false,
+        compressors: COMPRESSORS,
+        onComplete: (read: Assembled[]) => {
+          rows = read;
+        },
+      });
+    } catch (err) {
+      if (err instanceof ReadFailed) throw err.reason;
+      throw new Refusal({ t: 'parquet-broken', name: this.name });
+    }
     return rows;
   }
 }
@@ -337,6 +349,30 @@ function isStruct(value: unknown): value is Assembled {
     !Array.isArray(value) &&
     !(value instanceof Uint8Array)
   );
+}
+
+/** A read of the file that failed, carried through hyparquet as it failed. */
+class ReadFailed extends Error {
+  readonly reason: unknown;
+
+  constructor(reason: unknown) {
+    super('a read of a Parquet file failed');
+    this.reason = reason;
+  }
+}
+
+/** `buffer`, with a failed read carried through hyparquet as ReadFailed. */
+function passing(buffer: AsyncBuffer): AsyncBuffer {
+  return {
+    byteLength: buffer.byteLength,
+    slice: async (start, end) => {
+      try {
+        return await buffer.slice(start, end);
+      } catch (reason) {
+        throw new ReadFailed(reason);
+      }
+    },
+  };
 }
 
 /** What the footer says of each row group, in file order. */
