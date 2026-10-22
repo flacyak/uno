@@ -5,7 +5,7 @@ import {
   parseFloat as parseDecimal,
   quote,
   runes,
-} from '../go/index.ts';
+} from '#go';
 import type { Binary, Node } from './ast.ts';
 import { Formula } from './ast.ts';
 

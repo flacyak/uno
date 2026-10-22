@@ -8,10 +8,10 @@ import {
   parseTime,
   rfc3339,
   sha256Hex,
-} from '../go/index.ts';
-import { read as ingestRead } from '../ingest/index.ts';
-import { Op } from '../sheet/index.ts';
-import type { Edit, Sheet } from '../sheet/index.ts';
+} from '#go';
+import { read as ingestRead } from '#ingest';
+import { Op } from '#sheet';
+import type { Edit, Sheet } from '#sheet';
 import type {
   Document,
   FileSource,
