@@ -97,4 +97,27 @@ describe('a JSON Lines file reads as one row per line', () => {
       ['', '2', '{"a":2,"z":3}'],
     ]);
   });
+
+  test('a decode adds no column', () => {
+    const { format } = indexed('', WHOLE, PINNED);
+    expect(format.decode(encoder.encode('{"a":2,"z":3}\n[]\n'))).toEqual([
+      ['', '2'],
+      ['', ''],
+    ]);
+    expect(format.columns()).toEqual(PINNED);
+  });
+
+  test('is labelled with its encoding and JSON Lines', () => {
+    expect(indexed('{}').format.label()).toEqual({
+      t: 'read-lines',
+      charset: 'UTF-8',
+    });
+  });
+
+  test('a UTF-16 file is refused by name', () => {
+    const utf16 = Uint8Array.of(0xff, 0xfe, 0x7b, 0x00, 0x7d, 0x00);
+    expect(() => linesFormat('events.jsonl', utf16, [])).toThrow(
+      'events.jsonl: UTF-16 little-endian is not supported yet',
+    );
+  });
 });
