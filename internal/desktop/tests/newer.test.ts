@@ -13,10 +13,10 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vite-plus/test";
 import { HOME_REGION } from "../../grid/tests/store/regions.ts";
 import { bucket, etagOf } from "../../grid/tests/store/standin.ts";
 import type { Bucket } from "../../grid/tests/store/standin.ts";
-import { m } from "../src/paraglide/messages.js";
+import { m } from "#paraglide/messages";
 import { bucketEngine } from "./bucket-engine.ts";
-import { stateOf, stateWord } from "../src/renderer/sources.ts";
-import { Workspace, reloaded } from "../src/renderer/workspace.ts";
+import { stateOf, stateWord } from "#renderer/sources";
+import { Workspace, reloaded } from "#renderer/workspace";
 
 const ADS = "Ad_Date,Cost\n2024-11-16,$12.50\n2024-11-17,$8.00\n";
 /** The same export with one figure changed, at the same size. */

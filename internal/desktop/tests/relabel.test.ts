@@ -10,11 +10,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { ROWS } from "../src/main/smoke/fixture.ts";
-import { m } from "../src/paraglide/messages.js";
-import { getLocale } from "../src/paraglide/runtime.js";
-import { num } from "../src/renderer/locale.ts";
-import type { Shell } from "../src/renderer/shell/shell.ts";
+import { ROWS } from "#main/smoke/fixture";
+import { m } from "#paraglide/messages";
+import { getLocale } from "#paraglide/runtime";
+import { num } from "#renderer/locale";
+import type { Shell } from "#renderer/shell/shell";
 import { bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 

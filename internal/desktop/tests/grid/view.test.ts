@@ -6,13 +6,13 @@
 
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import type { Kind } from "@uno/grid/sheet";
+import type { Kind } from "#sheet";
 
-import { OVERSCAN } from "../../src/renderer/grid/metrics.ts";
-import type { Rows } from "../../src/renderer/grid/rows.ts";
-import { View } from "../../src/renderer/grid/view.ts";
-import { m } from "../../src/paraglide/messages.js";
-import { frame } from "../smoke/dom-page.ts";
+import { OVERSCAN } from "#renderer/grid/metrics";
+import type { Rows } from "#renderer/grid/rows";
+import { View } from "#renderer/grid/view";
+import { m } from "#paraglide/messages";
+import { frame } from "#tests/smoke/dom-page";
 
 /** The row height the view falls back to with the stylesheet unloaded. */
 const ROW_H = 29;

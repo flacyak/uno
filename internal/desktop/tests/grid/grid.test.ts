@@ -6,14 +6,14 @@
 
 import { expect, test } from "vite-plus/test";
 
-import type { Kind } from "@uno/grid/sheet";
+import type { Kind } from "#sheet";
 
-import { Grid } from "../../src/renderer/grid/index.ts";
-import type { GridEvents, Rows } from "../../src/renderer/grid/rows.ts";
-import { defaultInput } from "../../src/renderer/input/default.ts";
-import type { InputStrategy } from "../../src/renderer/input/strategy.ts";
-import { vimStyle } from "../../src/renderer/input/vim-style.ts";
-import { m } from "../../src/paraglide/messages.js";
+import { Grid } from "#renderer/grid";
+import type { GridEvents, Rows } from "#renderer/grid/rows";
+import { defaultInput } from "#renderer/input/default";
+import type { InputStrategy } from "#renderer/input/strategy";
+import { vimStyle } from "#renderer/input/vim-style";
+import { m } from "#paraglide/messages";
 
 /** The header height the grid is told, since happy-dom skips layout. */
 const HEAD_H = 30;

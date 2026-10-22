@@ -6,8 +6,8 @@
 
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { ROWS, counted } from "../src/main/smoke/fixture.ts";
-import type { Shell } from "../src/renderer/shell/shell.ts";
+import { ROWS, counted } from "#main/smoke/fixture";
+import type { Shell } from "#renderer/shell/shell";
 import { bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 
