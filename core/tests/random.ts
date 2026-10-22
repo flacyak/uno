@@ -24,3 +24,13 @@ export function random(seed: number): Random {
     return ((t ^ (t >>> 14)) >>> 0) / UINT32_VALUES;
   };
 }
+
+/** pick returns one of `from`, each as likely. */
+export function pick<T>(rand: Random, from: readonly T[]): T {
+  return from[Math.floor(rand() * from.length)]!;
+}
+
+/** upTo returns a whole number from 0 to `most`. */
+export function upTo(rand: Random, most: number): number {
+  return Math.floor(rand() * (most + 1));
+}
