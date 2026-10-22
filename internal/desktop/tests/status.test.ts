@@ -8,9 +8,9 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import { strategy } from "#renderer/input";
-import { StatusBar } from "#renderer/shell/status";
-import type { Tab, Workspace } from "#renderer/workspace";
+import { strategy } from "@renderer/input";
+import { StatusBar } from "@renderer/shell/status";
+import type { Tab, Workspace } from "@renderer/workspace";
 import { bodyMarkup } from "./markup.ts";
 
 /** The fixture's row count in the plan's example, and a time it took. */

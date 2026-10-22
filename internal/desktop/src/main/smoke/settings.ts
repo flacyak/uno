@@ -8,7 +8,7 @@
  * stays with the run.
  */
 
-import { THEMES } from "#renderer/theme";
+import { THEMES } from "@renderer/theme";
 import type { Check } from "./check.ts";
 import { LOCALE } from "./fixture.ts";
 

@@ -11,12 +11,12 @@
 
 import { beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { Refusal, english } from "#engine";
-import type { Said } from "#engine";
+import { Refusal, english } from "@engine";
+import type { Said } from "@engine";
 
-import { PSEUDO_LOCALE, PSEUDO_OPEN } from "#scripts/pseudo";
-import { baseLocale, setLocale } from "#paraglide/runtime";
-import { said, say } from "#renderer/said";
+import { PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
+import { baseLocale, setLocale } from "@paraglide/runtime";
+import { said, say } from "@renderer/said";
 
 const KB = 1024;
 const MB = KB * KB;

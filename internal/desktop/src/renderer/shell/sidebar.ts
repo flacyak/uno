@@ -7,10 +7,10 @@
 import "./arriving.css";
 import "./sidebar.css";
 
-import { m } from "#paraglide/messages";
-import { opening } from "#renderer/sources";
-import type { Arriving } from "#renderer/sources";
-import type { Tab, Workspace } from "#renderer/workspace";
+import { m } from "@paraglide/messages";
+import { opening } from "@renderer/sources";
+import type { Arriving } from "@renderer/sources";
+import type { Tab, Workspace } from "@renderer/workspace";
 import type { MenuPlace } from "./menu.ts";
 import { baseName, el, folderName } from "./util.ts";
 

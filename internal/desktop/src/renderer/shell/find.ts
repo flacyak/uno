@@ -6,13 +6,13 @@
  * beyond what the grid has loaded.
  */
 
-import type { FindRequest } from "#engine";
+import type { FindRequest } from "@engine";
 
-import { m } from "#paraglide/messages";
-import { columnLabel } from "#renderer/grid/rows";
-import type { Grid } from "#renderer/grid";
-import { num } from "#renderer/locale";
-import type { Workspace } from "#renderer/workspace";
+import { m } from "@paraglide/messages";
+import { columnLabel } from "@renderer/grid/rows";
+import type { Grid } from "@renderer/grid";
+import { num } from "@renderer/locale";
+import type { Workspace } from "@renderer/workspace";
 import { message } from "./util.ts";
 
 /** How long a find may take before the status bar says "searching". */

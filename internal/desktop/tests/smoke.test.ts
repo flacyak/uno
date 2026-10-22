@@ -13,9 +13,9 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
-import { displayMissing, electronEnv, verdict } from "#scripts/launch";
-import { DRIVEN_OPEN, openPathFor } from "#main/smoke/pick";
-import { savePathFor } from "#main/smoke/save";
+import { displayMissing, electronEnv, verdict } from "@scripts/launch";
+import { DRIVEN_OPEN, openPathFor } from "@main/smoke/pick";
+import { savePathFor } from "@main/smoke/save";
 
 const SCRIPTS = fileURLToPath(new URL("../scripts", import.meta.url));
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
@@ -192,7 +192,7 @@ test("a hung app is killed by pid, on a deadline", () => {
 
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {
   const src = read("smoke.js");
-  expect(src).toMatch(/from\s+"\.\.\/\.\.\/grid\/tests\/store\/standin\.ts"/);
+  expect(src).toMatch(/from\s+"@grid-tests\/store\/standin"/);
   // Seeded with a real export, under a key like one in a real bucket.
   expect(src).toContain("2025/ads-q3.csv");
   expect(src).toMatch(/await bucket\(/);
