@@ -127,6 +127,12 @@ export interface EditRequest {
   row: number;
   col: number;
   now: string;
+  /**
+   * How many columns the client drew when it aimed the edit. While a source
+   * supplies columns, an edit aimed at another count is refused, since the
+   * column it names may have moved. A client that sends none is not checked.
+   */
+  width?: number;
 }
 
 /** The result of an edit, undo or redo: the edit, and the columns after it. */

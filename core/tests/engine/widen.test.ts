@@ -2,7 +2,8 @@
  * @fileoverview A source whose columns grow while it is indexed. A workspace
  * says a file was read as JSON Lines, and the file first holds a key at row
  * 50,000, read through TINY blocks. Rows and edits keep their cells, _file
- * moves right and still refuses every edit, no rows reach a client over a
+ * moves right and still refuses every edit, an edit aimed at the columns
+ * from before is refused once _file has moved, no rows reach a client over a
  * key its columns lack, and a client that knows no widened reply ignores it.
  */
 
@@ -18,6 +19,7 @@ import {
   multiProviders,
   openOne,
   padded,
+  refusal,
 } from './harness.ts';
 import {
   ID_KEY,
@@ -25,6 +27,7 @@ import {
   LATE_KEY,
   NAME,
   PAST_LATE,
+  SOURCE,
   cellsAt,
   withHeld,
   workspace,
@@ -157,6 +160,17 @@ test('an edit made before the widen stays on its cell, and one after lands on th
     ]);
     expect((await src.rows(LATE + 1, 1)).rows).toEqual([cellsAt(LATE + 1)]);
     expect((await src.rows(EARLY, 1)).rows).toEqual([[EDITED, '']]);
+
+    // Aimed at the one column drawn before the widen, an edit still lands:
+    // with no supplied column, no column moved.
+    await src.edit({
+      op: Op.Set,
+      row: EARLY + 1,
+      col: 0,
+      now: EDITED,
+      width: 1,
+    });
+    expect((await src.rows(EARLY + 1, 1)).rows).toEqual([[EDITED, '']]);
   }));
 
 test('_file moves right past the new column, and still refuses every edit', () =>
@@ -165,7 +179,9 @@ test('_file moves right past the new column, and still refuses every edit', () =
     expect((await src.rows(0, 1)).rows).toEqual([['0', NAME]]);
     engine.mode(true);
     const file = { op: Op.Set, row: 0, now: EDITED };
-    await expect(src.edit({ ...file, col: 1 })).rejects.toThrow(FILE_REFUSED);
+    await expect(src.edit({ ...file, col: 1, width: 2 })).rejects.toThrow(
+      FILE_REFUSED,
+    );
 
     const told = nextColumns(src);
     release();
@@ -175,8 +191,28 @@ test('_file moves right past the new column, and still refuses every edit', () =
 
     expect((await src.rows(0, 1)).rows).toEqual([['0', '', NAME]]);
     expect((await src.rows(LATE, 1)).rows).toEqual([[...cellsAt(LATE), NAME]]);
-    await expect(src.edit({ ...file, col: 2 })).rejects.toThrow(FILE_REFUSED);
-    await src.edit({ ...file, col: 1 });
+    await expect(src.edit({ ...file, col: 2, width: 3 })).rejects.toThrow(
+      FILE_REFUSED,
+    );
+    await src.edit({ ...file, col: 1, width: 3 });
+    expect((await src.rows(0, 1)).rows).toEqual([['0', EDITED, NAME]]);
+  }));
+
+test('an edit aimed at the columns drawn before _file moved is refused, and the log is left as it was', () =>
+  heldAs('part', async ({ engine, src, release }) => {
+    engine.mode(true);
+    // Drawn as id and _file, so column 1 was _file.
+    const stale = { op: Op.Set, row: 0, col: 1, now: EDITED, width: 2 };
+    const told = nextColumns(src);
+    release();
+    await told;
+
+    const refused = await refusal(src.edit(stale));
+    expect(refused.said).toEqual({ t: 'columns-moved', name: SOURCE });
+    await expect(src.undo()).rejects.toThrow('there is nothing to undo');
+    expect((await src.rows(0, 1)).rows).toEqual([['0', '', NAME]]);
+    // Aimed at the columns it was told, the same edit lands.
+    await src.edit({ ...stale, width: 3 });
     expect((await src.rows(0, 1)).rows).toEqual([['0', EDITED, NAME]]);
   }));
 
