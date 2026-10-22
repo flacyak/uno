@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vite-plus/test';
 
-import { Graph, parse } from '../../src/formula/index.ts';
+import { Graph, parse } from '#formula';
 
 function bind(g: Graph, col: string, src: string): void {
   g.bind(col, parse(src));

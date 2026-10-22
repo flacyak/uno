@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vite-plus/test';
 
-import { readAll } from '../../src/ingest/csv.ts';
-import { RecordScanner, bomLength } from '../../src/ingest/scan.ts';
+import { readAll } from '#ingest/csv';
+import { RecordScanner, bomLength } from '#ingest/scan';
 
 const encoder = new TextEncoder();
 const whole = new TextDecoder('utf-8');

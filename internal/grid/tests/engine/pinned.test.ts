@@ -11,15 +11,15 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vite-plus/test';
 
-import { readContainer } from '../../src/document/index.ts';
-import type { SourceHandle } from '../../src/engine/index.ts';
-import { Op } from '../../src/sheet/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
-import { s3Provider } from '../../src/store/s3.ts';
-import { HOME_REGION } from '../store/regions.ts';
-import { KEYS, bucket, etagOf, versionIdOf } from '../store/standin.ts';
-import type { Bucket } from '../store/standin.ts';
-import { UNITS } from '../testdata/sales-q3.ts';
+import { readContainer } from '#document';
+import type { SourceHandle } from '#engine';
+import { Op } from '#sheet';
+import { diskProvider } from '#store/node';
+import { s3Provider } from '#store/s3';
+import { HOME_REGION } from '#tests/store/regions';
+import { KEYS, bucket, etagOf, versionIdOf } from '#tests/store/standin';
+import type { Bucket } from '#tests/store/standin';
+import { UNITS } from '#tests/testdata/sales-q3';
 import { bytes, connect, indexed, openOne, sales } from './harness.ts';
 
 /** Another file, written over the object. */

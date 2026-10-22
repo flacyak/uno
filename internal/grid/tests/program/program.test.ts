@@ -11,7 +11,7 @@ import {
   newReplace,
   parse,
   text,
-} from '../../src/program/index.ts';
+} from '#program';
 
 // parse then text gives back the same source.
 describe('the text form round-trips', () => {
