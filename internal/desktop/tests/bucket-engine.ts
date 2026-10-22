@@ -4,15 +4,15 @@
  * are in S3.
  */
 
-import { Engine, messagePort, serve } from "#engine";
-import type { MessagePortLike, Reply, Request } from "#engine";
-import { sources } from "#plugin";
-import { diskProvider } from "#store/node";
-import { s3Provider } from "#store/s3";
+import { Engine, messagePort, serve } from "@engine";
+import type { MessagePortLike, Reply, Request } from "@engine";
+import { sources } from "@plugin";
+import { diskProvider } from "@store/node";
+import { s3Provider } from "@store/s3";
 
-import { HOME_REGION } from "../../grid/tests/store/regions.ts";
-import { KEYS } from "../../grid/tests/store/standin.ts";
-import type { Bucket } from "../../grid/tests/store/standin.ts";
+import { HOME_REGION } from "@grid-tests/store/regions";
+import { KEYS } from "@grid-tests/store/standin";
+import type { Bucket } from "@grid-tests/store/standin";
 
 export function bucketEngine(b: Bucket): Engine {
   const { port1, port2 } = new MessageChannel();

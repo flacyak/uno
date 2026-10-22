@@ -6,9 +6,9 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { AHEAD, REMEMBERED, readAhead } from '#store/ahead';
-import type { ReadRange } from '#store/ahead';
-import { TUNING } from '#engine';
+import { AHEAD, REMEMBERED, readAhead } from '@store/ahead';
+import type { ReadRange } from '@store/ahead';
+import { TUNING } from '@engine';
 
 const CHUNK = 100;
 const SIZE = 10 * CHUNK;

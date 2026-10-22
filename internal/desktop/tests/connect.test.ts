@@ -11,16 +11,16 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import type { Peeked, Said, SignIns, SourceRef } from "#engine";
-import type { Connection } from "#library";
-import type { Listing } from "#store";
-import type { Tried } from "#store/s3";
+import type { Peeked, Said, SignIns, SourceRef } from "@engine";
+import type { Connection } from "@library";
+import type { Listing } from "@store";
+import type { Tried } from "@store/s3";
 
-import type { ConnectAsks } from "#renderer/shell/connect";
-import { draftOf, folderOf, triedLine } from "#renderer/shell/connect";
-import { Panel } from "#renderer/shell/panel";
-import type { Listings } from "#renderer/sources";
-import { Sources, stateOf } from "#renderer/sources";
+import type { ConnectAsks } from "@renderer/shell/connect";
+import { draftOf, folderOf, triedLine } from "@renderer/shell/connect";
+import { Panel } from "@renderer/shell/panel";
+import type { Listings } from "@renderer/sources";
+import { Sources, stateOf } from "@renderer/sources";
 import { settle } from "./settle.ts";
 
 const REGION = "eu-west-1";

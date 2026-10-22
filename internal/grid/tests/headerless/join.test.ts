@@ -8,13 +8,13 @@
 import { rm } from 'node:fs/promises';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
-import { openFormat } from '#ingest';
-import type { ByteSource } from '#store';
-import { DisagreementError, openMulti } from '#store/multi';
-import type { MultiSource, Part } from '#store/multi';
-import { localFiles } from '#store/node';
-import { ROWS } from '#tests/testdata/sales-q3';
-import { PART_ROWS } from '#tests/testdata/sales-q3-parts';
+import { openFormat } from '@ingest';
+import type { ByteSource } from '@store';
+import { DisagreementError, openMulti } from '@store/multi';
+import type { MultiSource, Part } from '@store/multi';
+import { localFiles } from '@store/node';
+import { ROWS } from '@grid-tests/testdata/sales-q3';
+import { PART_ROWS } from '@grid-tests/testdata/sales-q3-parts';
 import {
   BOM,
   COLUMNS,

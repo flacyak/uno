@@ -4,10 +4,10 @@
  * the grid itself unloaded.
  */
 
-import type { Kind } from "#sheet";
+import type { Kind } from "@sheet";
 
-import { m } from "#paraglide/messages";
-import type { Action, Mode } from "#renderer/keys";
+import { m } from "@paraglide/messages";
+import type { Action, Mode } from "@renderer/keys";
 
 /** Returns a column's display name. A blank header is named by its 1-based
  * position. */

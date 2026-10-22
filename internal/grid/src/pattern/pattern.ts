@@ -6,15 +6,15 @@
  * applying the answer is `sheet.apply`.
  */
 
-import { compareStrings, quoteMeta } from '#go';
-import type { Program } from '#program';
+import { compareStrings, quoteMeta } from '@go';
+import type { Program } from '@program';
 import {
   MAX_STEPS,
   apply as applyProgram,
   text as programText,
-} from '#program';
-import type { Edit, Sheet, Written } from '#sheet';
-import { Op, settled } from '#sheet';
+} from '@program';
+import type { Edit, Sheet, Written } from '@sheet';
+import { Op, settled } from '@sheet';
 import type { Example } from './induce.ts';
 import {
   decoration,

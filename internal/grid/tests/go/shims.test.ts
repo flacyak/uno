@@ -31,7 +31,7 @@ import {
   toUpper,
   trimSpace,
   unquote,
-} from '#go';
+} from '@go';
 
 describe('runes', () => {
   test('splits code points, not code units', () => {

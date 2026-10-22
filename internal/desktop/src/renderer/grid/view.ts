@@ -9,10 +9,10 @@
  * a cell per column. A frame writes only the cells whose text changed.
  */
 
-import type { Kind } from "#sheet";
+import type { Kind } from "@sheet";
 
-import { m } from "#paraglide/messages";
-import { num } from "#renderer/locale";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import {
   clampTop,
   firstRow,
@@ -28,7 +28,7 @@ import {
   topToScroller,
   visibleRange,
 } from "./metrics.ts";
-import { el } from "#renderer/shell/util";
+import { el } from "@renderer/shell/util";
 import { columnLabel, unnamed } from "./rows.ts";
 import type { Cell, Rows } from "./rows.ts";
 

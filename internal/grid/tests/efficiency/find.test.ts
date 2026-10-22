@@ -6,11 +6,11 @@
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { TUNING } from '#engine';
-import type { Engine, Found, SourceHandle } from '#engine';
-import { NO_ROW, Op } from '#sheet';
-import { connect, indexed, openOne } from '#tests/engine/harness';
-import { CHANNEL, REGION } from '#tests/testdata/sales-q3';
+import { TUNING } from '@engine';
+import type { Engine, Found, SourceHandle } from '@engine';
+import { NO_ROW, Op } from '@sheet';
+import { connect, indexed, openOne } from '@grid-tests/engine/harness';
+import { CHANNEL, REGION } from '@grid-tests/testdata/sales-q3';
 import { record } from './record.ts';
 import { repeated } from './remote.ts';
 

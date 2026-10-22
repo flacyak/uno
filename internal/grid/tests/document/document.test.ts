@@ -21,12 +21,12 @@ import {
   readDocument,
   sourceId,
   writeDocument,
-} from '#document';
-import type { Document, State } from '#document';
-import { parse as parseFormula } from '#formula';
-import { read as ingestRead } from '#ingest';
-import { parse as parseProgram } from '#program';
-import type { Sheet } from '#sheet';
+} from '@document';
+import type { Document, State } from '@document';
+import { parse as parseFormula } from '@formula';
+import { read as ingestRead } from '@ingest';
+import { parse as parseProgram } from '@program';
+import type { Sheet } from '@sheet';
 
 const CSV_BODY =
   'date,region,units\n2026-07-01,West,"1,204"\n2026-07-01,East,987\n2026-07-02,North,"1,455"\n';
