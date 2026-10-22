@@ -1,4 +1,6 @@
-// The shape of a smoke check. See index.ts.
+/**
+ * @fileoverview The shape of a smoke check. See index.ts.
+ */
 
 import type { BrowserWindow } from "electron";
 

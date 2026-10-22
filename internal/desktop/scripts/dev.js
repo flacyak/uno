@@ -1,7 +1,10 @@
-// `vp run dev`: a Vite dev server for the renderer, and Electron pointed at it.
-//
-// The dev server's URL is passed to Electron in UNO_RENDERER_URL, and lives
-// only in that environment.
+/**
+ * @fileoverview `vp run dev`: a Vite dev server for the renderer, and Electron
+ * pointed at it.
+ *
+ * The dev server's URL is passed to Electron in UNO_RENDERER_URL, and lives
+ * only in that environment.
+ */
 
 import { spawn } from "node:child_process";
 import { createServer } from "vite";

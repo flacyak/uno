@@ -1,12 +1,14 @@
-// The scripted preview: the app plays one short story in its own window while
-// the same process captures frames of the window.
-//
-// Frames are the window's client area, captured with capturePage. The script
-// and the camera share one clock. The frames and a manifest of their timings
-// are written to the UNO_PREVIEW directory for scripts/preview.js to encode.
-//
-// Runs only when UNO_PREVIEW names a directory. src/main/index.ts is its one
-// caller.
+/**
+ * @fileoverview The scripted preview: the app plays one short story in its own
+ * window while the same process captures frames of the window.
+ *
+ * Frames are the window's client area, captured with capturePage. The script
+ * and the camera share one clock. The frames and a manifest of their timings
+ * are written to the UNO_PREVIEW directory for scripts/preview.js to encode.
+ *
+ * Runs only when UNO_PREVIEW names a directory. src/main/index.ts is its one
+ * caller.
+ */
 
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";

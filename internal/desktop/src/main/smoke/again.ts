@@ -1,12 +1,14 @@
-// Checks that uno runs once: a second uno started on a file while this
-// window is open hands the file over and exits, and the window opens it.
-//
-// The second uno is a real one, started by smoke.js on the same user data
-// folder when a check asks. Over unsaved edits the window says so first,
-// and the file named again opens.
-//
-// They run over the workspace sidebar.ts leaves open, and put an edit in
-// it first.
+/**
+ * @fileoverview Checks that uno runs once: a second uno started on a file while
+ * this window is open hands the file over and exits, and the window opens it.
+ *
+ * The second uno is a real one, started by smoke.js on the same user data
+ * folder when a check asks. Over unsaved edits the window says so first,
+ * and the file named again opens.
+ *
+ * They run over the workspace sidebar.ts leaves open, and put an edit in
+ * it first.
+ */
 
 import type { Check } from "./check.ts";
 import { UNITS } from "./fixture.ts";

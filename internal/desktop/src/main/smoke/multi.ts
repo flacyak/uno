@@ -1,11 +1,13 @@
-// Checks that several objects are one tab: three picked in a folder of the
-// stand-in bucket and added as one, read end to end as one table, and a
-// fourth that lands in the folder afterwards, offered on the tab's line and
-// appended to it.
-//
-// They run over the workspace refresh.ts leaves open, and reach the folder
-// through the whole-bucket connection connections.ts saved. The objects are
-// put in the bucket when a check asks smoke.js to.
+/**
+ * @fileoverview Checks that several objects are one tab: three picked in a
+ * folder of the stand-in bucket and added as one, read end to end as one table,
+ * and a fourth that lands in the folder afterwards, offered on the tab's line
+ * and appended to it.
+ *
+ * They run over the workspace refresh.ts leaves open, and reach the folder
+ * through the whole-bucket connection connections.ts saved. The objects are
+ * put in the bucket when a check asks smoke.js to.
+ */
 
 import type { Check } from "./check.ts";
 import { ROWS, counted } from "./fixture.ts";
