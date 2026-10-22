@@ -1,6 +1,8 @@
-// openMulti: the three parts of sales-q3.csv read back as the whole file,
-// from any offset and length, with each part opened only when a read needs
-// it, and a map from every byte to its part.
+/**
+ * @fileoverview openMulti: the three parts of sales-q3.csv read back as the
+ * whole file, from any offset and length, with each part opened only when a
+ * read needs it, and a map from every byte to its part.
+ */
 
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 

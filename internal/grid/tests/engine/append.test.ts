@@ -1,6 +1,8 @@
-// `engine.append`: adding parts to the end of a source of several files read
-// as one. The rows extend, the log is unchanged, and every edit stays on its
-// cell, in the open source and in a save of it.
+/**
+ * @fileoverview `engine.append`: adding parts to the end of a source of several
+ * files read as one. The rows extend, the log is unchanged, and every edit
+ * stays on its cell, in the open source and in a save of it.
+ */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

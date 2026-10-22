@@ -1,6 +1,8 @@
-// Cancelling an open: one cancelled while it waits for its sample rows is
-// refused, stops reading and leaves nothing behind; one already answered is
-// left alone; one given an aborted signal never reaches the engine.
+/**
+ * @fileoverview Cancelling an open: one cancelled while it waits for its sample
+ * rows is refused, stops reading and leaves nothing behind; one already
+ * answered is left alone; one given an aborted signal never reaches the engine.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 

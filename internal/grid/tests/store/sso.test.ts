@@ -1,9 +1,11 @@
-// SSO profiles: the token `aws sso login` cached is traded at the portal for
-// a role's keys, which sign requests to a bucket.
-//
-// Both config layouts are read. An expired, missing, unreadable or refused
-// token is an error naming the command that fixes it. The portal is asked
-// only with a token that looks good on disk.
+/**
+ * @fileoverview SSO profiles: the token `aws sso login` cached is traded at the
+ * portal for a role's keys, which sign requests to a bucket.
+ *
+ * Both config layouts are read. An expired, missing, unreadable or refused
+ * token is an error naming the command that fixes it. The portal is asked
+ * only with a token that looks good on disk.
+ */
 
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';

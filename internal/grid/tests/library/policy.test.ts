@@ -1,6 +1,9 @@
-// The IAM documents generated for a role connection: the trust policy names
-// the principal and the external ID, the permission policy is scoped to the
-// bucket and prefix, and both are JSON a policy editor takes as they are.
+/**
+ * @fileoverview The IAM documents generated for a role connection: the trust
+ * policy names the principal and the external ID, the permission policy is
+ * scoped to the bucket and prefix, and both are JSON a policy editor takes as
+ * they are.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 

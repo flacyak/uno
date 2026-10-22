@@ -1,5 +1,7 @@
-// Tests for which edits count as evidence for a proposal, and when propose
-// returns undefined.
+/**
+ * @fileoverview Tests for which edits count as evidence for a proposal, and
+ * when propose returns undefined.
+ */
 
 import { expect, test } from 'vite-plus/test';
 

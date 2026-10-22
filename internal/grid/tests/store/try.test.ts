@@ -1,9 +1,11 @@
-// tryConnection: a connection tried before it is saved. It finds the bucket's
-// region and counts a page of the prefix, signed the way the connection signs
-// in.
-//
-// A working connection comes back with its region and counts. A failing one
-// is refused with the reason: access denied, or a missing bucket.
+/**
+ * @fileoverview tryConnection: a connection tried before it is saved. It finds
+ * the bucket's region and counts a page of the prefix, signed the way the
+ * connection signs in.
+ *
+ * A working connection comes back with its region and counts. A failing one
+ * is refused with the reason: access denied, or a missing bucket.
+ */
 
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

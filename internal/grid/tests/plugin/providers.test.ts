@@ -1,5 +1,7 @@
-// Tests for sources(): building the file and browser lists from providers,
-// and the refusal messages for an unclaimed ref or path.
+/**
+ * @fileoverview Tests for sources(): building the file and browser lists from
+ * providers, and the refusal messages for an unclaimed ref or path.
+ */
 
 import { dirname } from 'node:path';
 import { expect, test } from 'vite-plus/test';

@@ -1,6 +1,8 @@
-// Read-ahead end to end: an object indexed through the engine from a bucket
-// that adds 50 ms to every request, once one chunk at a time and once with
-// AHEAD chunks in flight.
+/**
+ * @fileoverview Read-ahead end to end: an object indexed through the engine
+ * from a bucket that adds 50 ms to every request, once one chunk at a time and
+ * once with AHEAD chunks in flight.
+ */
 
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
 

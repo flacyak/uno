@@ -1,5 +1,7 @@
-// Reading through the engine: the fixture by path and by Blob, the Band a
-// client holds, RowIndex, Pages, failed opens, and closing mid-open.
+/**
+ * @fileoverview Reading through the engine: the fixture by path and by Blob,
+ * the Band a client holds, RowIndex, Pages, failed opens, and closing mid-open.
+ */
 
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

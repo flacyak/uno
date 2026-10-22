@@ -1,8 +1,10 @@
-// The ways out of the core (the disk, the network, a program) and the src/
-// modules allowed to take each one.
-//
-// opens.test.ts checks the source text against this list. reaches.test.ts
-// runs the core and checks what it reached against the same list.
+/**
+ * @fileoverview The ways out of the core (the disk, the network, a program) and
+ * the src/ modules allowed to take each one.
+ *
+ * opens.test.ts checks the source text against this list. reaches.test.ts
+ * runs the core and checks what it reached against the same list.
+ */
 
 export type Way =
   | 'the disk'

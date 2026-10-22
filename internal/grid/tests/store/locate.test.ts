@@ -1,7 +1,9 @@
-// locate: a connection's bucket region, found with a HeadBucket when the
-// connection is made and kept in it.
-//
-// The stand-in lives in eu-west-1 and the credentials say us-east-1.
+/**
+ * @fileoverview locate: a connection's bucket region, found with a HeadBucket
+ * when the connection is made and kept in it.
+ *
+ * The stand-in lives in eu-west-1 and the credentials say us-east-1.
+ */
 
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vite-plus/test';
 

@@ -1,5 +1,8 @@
-// Shared helpers for the engine tests: a client and `serve` joined by a real
-// MessageChannel, the fixture, and row comparisons against a Sheet.
+/**
+ * @fileoverview Shared helpers for the engine tests: a client and `serve`
+ * joined by a real MessageChannel, the fixture, and row comparisons against a
+ * Sheet.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 

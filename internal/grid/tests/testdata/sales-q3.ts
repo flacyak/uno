@@ -1,4 +1,6 @@
-// Facts about sales-q3.csv, for the tests that read it.
+/**
+ * @fileoverview Facts about sales-q3.csv, for the tests that read it.
+ */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

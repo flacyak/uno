@@ -1,6 +1,8 @@
-// End-to-end test of the core modules together on sales-q3.csv: open a file,
-// edit a few cells, accept the proposed rule, bind a column formula, save a
-// workspace document, and read it back.
+/**
+ * @fileoverview End-to-end test of the core modules together on sales-q3.csv:
+ * open a file, edit a few cells, accept the proposed rule, bind a column
+ * formula, save a workspace document, and read it back.
+ */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

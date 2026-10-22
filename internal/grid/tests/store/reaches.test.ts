@@ -1,8 +1,10 @@
-// The guard of opens.test.ts, with the core running.
-//
-// reach/run.ts runs a scenario in its own process with every way out watched
-// and prints which module took which way. The uses are held to the places in
-// ways.ts.
+/**
+ * @fileoverview The guard of opens.test.ts, with the core running.
+ *
+ * reach/run.ts runs a scenario in its own process with every way out watched
+ * and prints which module took which way. The uses are held to the places in
+ * ways.ts.
+ */
 
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';

@@ -1,8 +1,9 @@
-// openMulti tests with header mode "none". Every part is read from its first
-// line. The
-// join still drops a later part's byte order mark, adds a missing final
-// newline, and refuses parts whose first row or delimiter differs from the
-// first part's.
+/**
+ * @fileoverview openMulti tests with header mode "none". Every part is read
+ * from its first line. The join still drops a later part's byte order mark,
+ * adds a missing final newline, and refuses parts whose first row or delimiter
+ * differs from the first part's.
+ */
 
 import { rm } from 'node:fs/promises';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';

@@ -1,5 +1,8 @@
-// What a peek costs in requests: one HEAD and one ranged GET of PEEK_BYTES,
-// against a stand-in S3 bucket and, where present, a 2.5 GB file on disk.
+/**
+ * @fileoverview What a peek costs in requests: one HEAD and one ranged GET of
+ * PEEK_BYTES, against a stand-in S3 bucket and, where present, a 2.5 GB file on
+ * disk.
+ */
 
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
