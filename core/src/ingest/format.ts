@@ -78,6 +78,12 @@ export function decodersFor(name: string, encoding: Encoding): Decoders {
 
 export interface Scanner {
   push(chunk: Uint8Array, base: number): void;
+  /**
+   * end is called once the last chunk has been pushed. A scanner that learns
+   * from each whole record learns the last one here, which may end with no
+   * line break.
+   */
+  end?(): void;
 }
 
 /**
