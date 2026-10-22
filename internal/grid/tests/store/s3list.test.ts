@@ -3,11 +3,11 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
-import type { Entry } from '../../src/store/index.ts';
-import { s3Files, s3Provider } from '../../src/store/s3.ts';
-import { s3Lister, s3Prefix } from '../../src/store/s3lister.ts';
-import { readListing } from '../../src/store/s3xml.ts';
-import { bytes } from '../testdata/sales-q3.ts';
+import type { Entry } from '#store';
+import { s3Files, s3Provider } from '#store/s3';
+import { s3Lister, s3Prefix } from '#store/s3lister';
+import { readListing } from '#store/s3xml';
+import { bytes } from '#tests/testdata/sales-q3';
 import { AWKWARD_KEYS, DOT_KEYS } from './awkward.ts';
 import { HOME_REGION } from './regions.ts';
 import { BUCKET, KEYS, MODIFIED, bucket, etagOf } from './standin.ts';

@@ -30,9 +30,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { readContainer } from '../../src/document/index.ts';
-import { awsCredentials, diskProvider } from '../../src/store/node.ts';
-import { s3Files, s3Location, s3Provider } from '../../src/store/s3.ts';
+import { readContainer } from '#document';
+import { awsCredentials, diskProvider } from '#store/node';
+import { s3Files, s3Location, s3Provider } from '#store/s3';
 import {
   bytes,
   connect,
@@ -41,8 +41,8 @@ import {
   sales,
   sheetRows,
   widened,
-} from '../engine/harness.ts';
-import { LAST_ROW, ROWS, UNITS } from '../testdata/sales-q3.ts';
+} from '#tests/engine/harness';
+import { LAST_ROW, ROWS, UNITS } from '#tests/testdata/sales-q3';
 import { AWKWARD_KEYS } from './awkward.ts';
 
 const URLS = (process.env['UNO_S3_LIVE'] ?? '')

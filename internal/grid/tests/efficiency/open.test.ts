@@ -4,7 +4,7 @@
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { TUNING } from '../../src/engine/index.ts';
+import { TUNING } from '#engine';
 import { record } from './record.ts';
 import { remote, repeated } from './remote.ts';
 import type { Remote } from './remote.ts';

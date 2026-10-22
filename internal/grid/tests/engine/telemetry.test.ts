@@ -18,7 +18,7 @@ import {
   messagePort,
   otlpHeaders,
   serve,
-} from '../../src/engine/index.ts';
+} from '#engine';
 import type {
   Measurement,
   MessagePortLike,
@@ -28,10 +28,10 @@ import type {
   Request,
   SourceHandle,
   Tuning,
-} from '../../src/engine/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
+} from '#engine';
+import { sources } from '#plugin';
+import type { Provider } from '#plugin';
+import { diskProvider } from '#store/node';
 import { FIXTURE, TINY, bytes, indexed, openOne, slowed } from './harness.ts';
 
 /** An engine over a real channel, with every measurement kept in `seen`. */

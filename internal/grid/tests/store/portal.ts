@@ -7,7 +7,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import type { AwsCredentials } from '../../src/store/s3.ts';
+import type { AwsCredentials } from '#store/s3';
 
 /** The keys one token is granted: one role in one account, with an expiry. */
 export interface Grant {
