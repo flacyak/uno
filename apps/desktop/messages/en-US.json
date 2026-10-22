@@ -554,6 +554,7 @@
   "parquet_feature_bson": "the Parquet BSON type",
   "parquet_feature_variant": "the Parquet VARIANT type",
   "parquet_feature_external_columns": "Parquet with columns kept in other files",
+  "parquet_feature_several_files": "reading several Parquet files as one",
   "refused_keeps_no_connections": "this engine keeps no connections · its platform gave it nowhere to read them from",
   "refused_offers_no_sign_ins": "this engine has no way of signing in to offer · its platform connects to nothing",
   "refused_tries_no_connection": "this engine cannot try a connection · its platform connects to nothing"

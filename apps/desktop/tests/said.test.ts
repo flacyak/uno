@@ -173,6 +173,7 @@ test("every Parquet feature is said as the engine says it", () => {
     bson: true,
     variant: true,
     "external-columns": true,
+    "several-files": true,
   };
   for (const feature of Object.keys(features) as ParquetFeature[]) {
     const shape: Said = { t: "parquet-unsupported", name: "q3.parquet", feature };

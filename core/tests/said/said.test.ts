@@ -149,6 +149,13 @@ describe('english', () => {
     expect(
       english({ t: 'parquet-unsupported', name: 'q3.parquet', feature: 'lz4' }),
     ).toBe('q3.parquet: Parquet compressed with LZ4 is not supported yet');
+    expect(
+      english({
+        t: 'parquet-unsupported',
+        name: 'sales',
+        feature: 'several-files',
+      }),
+    ).toBe('sales: reading several Parquet files as one is not supported yet');
   });
 });
 
