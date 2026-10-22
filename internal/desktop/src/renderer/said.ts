@@ -5,13 +5,13 @@
 // The table is typed over every kind, so a new kind fails to compile here
 // until it has a message. The `text` kind is passed through unchanged.
 
-import { Refusal, messageOf } from "@uno/grid/engine";
-import type { CharName, Said, Sought, StepSaid } from "@uno/grid/engine";
-import { quote } from "@uno/grid/go";
-import type { Sentences } from "@uno/grid/said";
+import { Refusal, messageOf } from "#engine";
+import type { CharName, Said, Sought, StepSaid } from "#engine";
+import { quote } from "#go";
+import type { Sentences } from "#said";
 
-import { m } from "../paraglide/messages.js";
-import { getLocale } from "../paraglide/runtime.js";
+import { m } from "#paraglide/messages";
+import { getLocale } from "#paraglide/runtime";
 import { bytes, num } from "./locale.ts";
 
 /** Returns an error's message. A Refusal is translated into the app's locale. */

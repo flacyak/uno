@@ -8,8 +8,8 @@
 //
 // Usage: node scripts/smoke.js   (after node scripts/build.js)
 
-import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
-import { parseConnection } from "@uno/grid/library";
+import { newManifest, readContainer, writeDocument } from "#document";
+import { parseConnection } from "#library";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

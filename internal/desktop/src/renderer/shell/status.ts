@@ -7,13 +7,13 @@
 
 import "./status.css";
 
-import { m } from "../../paraglide/messages.js";
-import type { Grid } from "../grid/index.ts";
-import { columnLabel } from "../grid/rows.ts";
-import type { InputStrategy } from "../input/index.ts";
-import type { Lead } from "../keys.ts";
-import { num, seconds } from "../locale.ts";
-import type { Mode, Tab, Workspace } from "../workspace.ts";
+import { m } from "#paraglide/messages";
+import type { Grid } from "#renderer/grid";
+import { columnLabel } from "#renderer/grid/rows";
+import type { InputStrategy } from "#renderer/input";
+import type { Lead } from "#renderer/keys";
+import { num, seconds } from "#renderer/locale";
+import type { Mode, Tab, Workspace } from "#renderer/workspace";
 import { must } from "./util.ts";
 
 /** What the bar's switches ask of the shell. */

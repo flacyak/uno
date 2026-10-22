@@ -4,16 +4,9 @@
 // The choice is kept in local storage and defaults to following the
 // system.
 
-import {
-  baseLocale,
-  getLocale,
-  isLocale,
-  locales,
-  setLocale,
-  toLocale,
-} from "../paraglide/runtime.js";
-import type { Locale } from "../paraglide/runtime.js";
-import { PSEUDO_LOCALE } from "../../scripts/pseudo.js";
+import { baseLocale, getLocale, isLocale, locales, setLocale, toLocale } from "#paraglide/runtime";
+import type { Locale } from "#paraglide/runtime";
+import { PSEUDO_LOCALE } from "#scripts/pseudo";
 import type { Keeps } from "./theme.ts";
 
 /** Storage key for the chosen language. */
