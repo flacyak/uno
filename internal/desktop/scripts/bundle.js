@@ -17,6 +17,9 @@ export async function bundleElectron(opts = {}) {
   ]) {
     await build({
       configFile: false,
+      // The alias map in ../tsconfig.paths.json; there is no config file to
+      // read it from here.
+      resolve: { tsconfigPaths: true },
       logLevel: "warn",
       build: {
         outDir: `out/${name}`,
