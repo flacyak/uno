@@ -3,13 +3,14 @@
  * says a file was read as JSON Lines, and the file first holds a key at row
  * 50,000, read through TINY blocks. Rows and edits keep their cells, _file
  * moves right and still refuses every edit, an edit aimed at the columns
- * from before is refused once _file has moved, no rows reach a client over a
- * key its columns lack, and a client that knows no widened reply ignores it.
+ * from before is refused once _file has moved, a band's held rows keep each
+ * cell under its column, no rows reach a client over a key its columns lack,
+ * and a client that knows no widened reply ignores it.
  */
 
 import { expect, test } from 'vite-plus/test';
 
-import { FILE_COLUMN, insertedIn, movedTo } from '@engine';
+import { Band, FILE_COLUMN, insertedIn, movedTo } from '@engine';
 import type { ColumnInfo, Reply, RowsReply, Said, SourceHandle } from '@engine';
 import { Op } from '@sheet';
 import {
@@ -214,6 +215,39 @@ test('an edit aimed at the columns drawn before _file moved is refused, and the 
     // Aimed at the columns it was told, the same edit lands.
     await src.edit({ ...stale, width: 3 });
     expect((await src.rows(0, 1)).rows).toEqual([['0', EDITED, NAME]]);
+  }));
+
+test('a band keeps each held cell and typed value under its column as _file moves right', () =>
+  heldAs('part', async ({ src, release }) => {
+    let landed = (): void => {};
+    const band = new Band(src, () => landed());
+    const arrived = new Promise<void>((resolve) => (landed = resolve));
+    band.view(0, WINDOW);
+    await arrived;
+    const typed = band.write(EARLY, 0, EDITED);
+    const onFile = band.write(EARLY + 1, 1, EDITED);
+
+    const told = nextColumns(src);
+    release();
+    const [columns] = await told;
+    band.widen(columns);
+
+    expect(headersOf(band.columns)).toEqual([ID_KEY, LATE_KEY, FILE_COLUMN]);
+    const held = (row: number): string[] =>
+      columns.map((_, col) => band.display(row, col));
+    expect(held(0), 'the new column is blank until read again').toEqual([
+      '0',
+      '',
+      NAME,
+    ]);
+    expect(held(EARLY)).toEqual([EDITED, '', NAME]);
+    expect(held(EARLY + 1)).toEqual([String(EARLY + 1), '', EDITED]);
+    band.restore(onFile);
+    expect(
+      held(EARLY + 1),
+      'a refused value goes back where _file went',
+    ).toEqual([String(EARLY + 1), '', NAME]);
+    band.settle(typed);
   }));
 
 test.each<Layout>(['file', 'part'])(
