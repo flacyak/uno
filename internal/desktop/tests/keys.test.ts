@@ -1,10 +1,12 @@
-// What keys mean in either strategy: where each motion lands, what . repeats,
-// and what the command line reads.
+/**
+ * @fileoverview What keys mean in either strategy: where each motion lands,
+ * what . repeats, and what the command line reads.
+ */
 
 import { expect, test } from "vite-plus/test";
 
-import { changeOf, command, isJump, replay, target } from "../src/renderer/keys.ts";
-import type { Place } from "../src/renderer/keys.ts";
+import { changeOf, command, isJump, replay, target } from "#renderer/keys";
+import type { Place } from "#renderer/keys";
 
 // ----------------------------------------------------------------- repeat
 

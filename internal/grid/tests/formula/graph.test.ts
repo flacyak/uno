@@ -1,6 +1,11 @@
+/**
+ * @fileoverview The dependency graph: a cycle refused at bind time with its
+ * path named, and the order a recalculation runs in.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
-import { Graph, parse } from '../../src/formula/index.ts';
+import { Graph, parse } from '#formula';
 
 function bind(g: Graph, col: string, src: string): void {
   g.bind(col, parse(src));

@@ -1,11 +1,14 @@
-// @vitest-environment happy-dom
-//
-// The formula form: what it opens on, and how Esc and Tab behave in it.
+/**
+ * @fileoverview The formula form: what it opens on, and how Esc and Tab behave
+ * in it.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { expect, test } from "vite-plus/test";
 
-import { m } from "../src/paraglide/messages.js";
-import { FormulaForm } from "../src/renderer/shell/formula.ts";
+import { m } from "#paraglide/messages";
+import { FormulaForm } from "#renderer/shell/formula";
 
 function form(): { asked: string[]; box: HTMLFormElement } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;

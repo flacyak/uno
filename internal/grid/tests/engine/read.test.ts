@@ -1,5 +1,7 @@
-// Reading through the engine: the fixture by path and by Blob, the Band a
-// client holds, RowIndex, Pages, failed opens, and closing mid-open.
+/**
+ * @fileoverview Reading through the engine: the fixture by path and by Blob,
+ * the Band a client holds, RowIndex, Pages, failed opens, and closing mid-open.
+ */
 
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,26 +18,22 @@ import {
   indexPass,
   messagePort,
   serve,
-} from '../../src/engine/index.ts';
-import type {
-  MessagePortLike,
-  Reply,
-  Request,
-} from '../../src/engine/index.ts';
-import { openFormat } from '../../src/ingest/index.ts';
-import { isNumber } from '../../src/num/index.ts';
-import { NO_ROW, Op } from '../../src/sheet/index.ts';
-import type { Provider } from '../../src/plugin/index.ts';
-import { sources } from '../../src/plugin/index.ts';
-import { blobSource } from '../../src/store/index.ts';
-import { diskProvider } from '../../src/store/node.ts';
+} from '#engine';
+import type { MessagePortLike, Reply, Request } from '#engine';
+import { openFormat } from '#ingest';
+import { isNumber } from '#num';
+import { NO_ROW, Op } from '#sheet';
+import type { Provider } from '#plugin';
+import { sources } from '#plugin';
+import { blobSource } from '#store';
+import { diskProvider } from '#store/node';
 import {
   LAST_ROW,
   REGION,
   REVENUE,
   ROWS,
   UNITS,
-} from '../testdata/sales-q3.ts';
+} from '#tests/testdata/sales-q3';
 import {
   FIXTURE,
   SCREEN,

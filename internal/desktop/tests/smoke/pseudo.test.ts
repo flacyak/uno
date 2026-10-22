@@ -1,20 +1,22 @@
-// @vitest-environment happy-dom
-//
-// The real shell over the real engine in the pseudo-locale: every word on
-// screen must come through a message.
-//
-// A pseudo-message is accented and in brackets. After the language changes
-// to it, any plain letters left in the window are hard-coded English, or a
-// label left as drawn before the change.
-//
-// Text from the file, and names that are the same in every language, are
-// excluded below.
+/**
+ * @fileoverview The real shell over the real engine in the pseudo-locale: every
+ * word on screen must come through a message.
+ *
+ * A pseudo-message is accented and in brackets. After the language changes
+ * to it, any plain letters left in the window are hard-coded English, or a
+ * label left as drawn before the change.
+ *
+ * Text from the file, and names that are the same in every language, are
+ * excluded below.
+ *
+ * @vitest-environment happy-dom
+ */
 
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "../../scripts/pseudo.js";
-import { m } from "../../src/paraglide/messages.js";
-import type { Shell } from "../../src/renderer/shell/shell.ts";
+import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "#scripts/pseudo";
+import { m } from "#paraglide/messages";
+import type { Shell } from "#renderer/shell/shell";
 import { bootShell } from "./dom-harness.ts";
 import { frame } from "./dom-page.ts";
 

@@ -1,16 +1,13 @@
-// Ingest tests for files read with header mode "none": the columns are
-// numbered and the first line is a data row.
+/**
+ * @fileoverview Ingest tests for files read with header mode "none": the
+ * columns are numbered and the first line is a data row.
+ */
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import {
-  columnNames,
-  openFormat,
-  peekFormat,
-  read,
-} from '../../src/ingest/index.ts';
-import { bytesSource } from '../../src/store/index.ts';
-import { COLS, ROWS, bytes as wholeBytes } from '../testdata/sales-q3.ts';
+import { columnNames, openFormat, peekFormat, read } from '#ingest';
+import { bytesSource } from '#store';
+import { COLS, ROWS, bytes as wholeBytes } from '#tests/testdata/sales-q3';
 import { BOM, COLUMNS, allRows, marked } from './parts.ts';
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);

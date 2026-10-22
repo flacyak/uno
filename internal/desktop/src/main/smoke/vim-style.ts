@@ -1,5 +1,8 @@
-// Checks for vim-style input, then the checks that close the run. They pick up
-// where default.ts leaves the window, and the last one hands it back to default.
+/**
+ * @fileoverview Checks for vim-style input, then the checks that close the run.
+ * They pick up where default.ts leaves the window, and the last one hands it
+ * back to default.
+ */
 
 import type { Check } from "./check.ts";
 

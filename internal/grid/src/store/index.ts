@@ -1,12 +1,14 @@
-// The store: FileHandler for opening files, Lister for browsing places, and
-// FileStore for the folders uno writes its own files to.
-//
-// Every file is opened through a handler a platform lists, and every place is
-// browsed through a lister it lists. A kind of place outside both lists is
-// refused by name.
+/**
+ * @fileoverview The store: FileHandler for opening files, Lister for browsing
+ * places, and FileStore for the folders uno writes its own files to.
+ *
+ * Every file is opened through a handler a platform lists, and every place is
+ * browsed through a lister it lists. A kind of place outside both lists is
+ * refused by name.
+ */
 
-import { compareStrings } from '../go/index.ts';
-import type { Connection, Formula } from '../library/index.ts';
+import { compareStrings } from '#go';
+import type { Connection, Formula } from '#library';
 import {
   EXT,
   fileName,
@@ -15,13 +17,13 @@ import {
   parseConnection,
   parseFormula,
   stampConnection,
-} from '../library/index.ts';
+} from '#library';
 import { JOINS, OPENS, claim } from './claim.ts';
 // Type only. The handler that opens parts is re-exported below.
 import type { HeaderMode, Part } from './multi.ts';
 // Type only, so the run-time import graph stays one-way with the plugin
 // package.
-import type { Provider } from '../plugin/index.ts';
+import type { Provider } from '#plugin';
 
 // Browsing is its own interface, in store/list.ts.
 export { listWith, statWith } from './list.ts';

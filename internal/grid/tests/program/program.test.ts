@@ -1,3 +1,9 @@
+/**
+ * @fileoverview The transform language: round trips of the text form, apply,
+ * what parse refuses, and a pipeline that changes nothing when a step does not
+ * fit.
+ */
+
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
@@ -11,7 +17,7 @@ import {
   newReplace,
   parse,
   text,
-} from '../../src/program/index.ts';
+} from '#program';
 
 // parse then text gives back the same source.
 describe('the text form round-trips', () => {

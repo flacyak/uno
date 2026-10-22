@@ -1,20 +1,17 @@
-// Parts must agree with the first part. A part that differs is refused with a
-// DisagreementError naming the part and what differs, whether found as the
-// source opens or by the first read that reaches the part.
+/**
+ * @fileoverview Parts must agree with the first part. A part that differs is
+ * refused with a DisagreementError naming the part and what differs, whether
+ * found as the source opens or by the first read that reaches the part.
+ */
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { bytesSource } from '../../src/store/index.ts';
-import type { FileHandler, SingleRef } from '../../src/store/index.ts';
-import { DisagreementError, openMulti } from '../../src/store/multi.ts';
-import type {
-  Disagreement,
-  HeaderMode,
-  MultiSource,
-  Part,
-} from '../../src/store/multi.ts';
+import { bytesSource } from '#store';
+import type { FileHandler, SingleRef } from '#store';
+import { DisagreementError, openMulti } from '#store/multi';
+import type { Disagreement, HeaderMode, MultiSource, Part } from '#store/multi';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

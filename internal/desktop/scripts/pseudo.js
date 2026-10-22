@@ -1,8 +1,10 @@
-// The pseudo-locale: English with every letter accented, about a third
-// longer, and in brackets.
-//
-// Text on screen in plain letters came from outside the messages. Text with
-// a bracket missing was cut short by the layout. The locale tag is en-XA.
+/**
+ * @fileoverview The pseudo-locale: English with every letter accented, about a
+ * third longer, and in brackets.
+ *
+ * Text on screen in plain letters came from outside the messages. Text with
+ * a bracket missing was cut short by the layout. The locale tag is en-XA.
+ */
 
 /** The locale the pseudo-messages are compiled as. */
 export const PSEUDO_LOCALE = "en-XA";

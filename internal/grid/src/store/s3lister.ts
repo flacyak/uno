@@ -1,11 +1,13 @@
-// A bucket's Lister: one ListObjectsV2 page as a listing.
-//
-// Every request goes through `s3Requests` in store/s3.ts, which signs,
-// retries and follows a bucket to its region.
-//
-// Listing uses `delimiter=/`. Keys flat under the prefix come back
-// as Contents and become files. Deeper keys are folded into CommonPrefixes
-// and become folders.
+/**
+ * @fileoverview A bucket's Lister: one ListObjectsV2 page as a listing.
+ *
+ * Every request goes through `s3Requests` in store/s3.ts, which signs,
+ * retries and follows a bucket to its region.
+ *
+ * Listing uses `delimiter=/`. Keys flat under the prefix come back
+ * as Contents and become files. Deeper keys are folded into CommonPrefixes
+ * and become folders.
+ */
 
 import type { Entry, Lister, Listing } from './list.ts';
 import { PAGE, byPageKey } from './list.ts';

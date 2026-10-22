@@ -1,5 +1,7 @@
-// Checks that the fixture opened: the bridge, the header, the virtualiser, and a
-// window that ignores input from the person at the desktop.
+/**
+ * @fileoverview Checks that the fixture opened: the bridge, the header, the
+ * virtualiser, and a window that ignores input from the person at the desktop.
+ */
 
 import type { Check, Input } from "./check.ts";
 import { DATE, DOM_ROWS, REP, ROWS, UNITS, counted } from "./fixture.ts";

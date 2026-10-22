@@ -1,17 +1,19 @@
-// The messages between a client and an engine.
-//
-// An engine is a worker that owns one workspace. A client names files, asks
-// for rows by position, and sends edits. Replies are ready to draw. Text for
-// a person is sent as a `Said`, which the client renders in its own language.
-// Every message is plain data, so it works over an Electron MessagePortMain,
-// a Web Worker, or a MessageChannel.
+/**
+ * @fileoverview The messages between a client and an engine.
+ *
+ * An engine is a worker that owns one workspace. A client names files, asks
+ * for rows by position, and sends edits. Replies are ready to draw. Text for
+ * a person is sent as a `Said`, which the client renders in its own language.
+ * Every message is plain data, so it works over an Electron MessagePortMain,
+ * a Web Worker, or a MessageChannel.
+ */
 
-import type { AuthMode, Connection, RoleTrust } from '../library/index.ts';
-import type { Change } from '../pattern/index.ts';
-import type { Said } from '../said/index.ts';
-import type { Edit, Kind, Op } from '../sheet/index.ts';
-import type { Entry, FileRef, Listing, SingleRef } from '../store/index.ts';
-import type { Tried, Unconnected } from '../store/s3.ts';
+import type { AuthMode, Connection, RoleTrust } from '#library';
+import type { Change } from '#pattern';
+import type { Said } from '#said';
+import type { Edit, Kind, Op } from '#sheet';
+import type { Entry, FileRef, Listing, SingleRef } from '#store';
+import type { Tried, Unconnected } from '#store/s3';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -363,4 +365,4 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
   };
 }
 
-export { formatBytes, messageOf } from '../said/index.ts';
+export { formatBytes, messageOf } from '#said';

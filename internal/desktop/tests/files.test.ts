@@ -1,15 +1,17 @@
-// Main writing a workspace file.
-//
-// A failed write leaves the existing file as it was, and removes its
-// scratch file. unoPath adds the .uno extension when a Save As path lacks
-// it.
+/**
+ * @fileoverview Main writing a workspace file.
+ *
+ * A failed write leaves the existing file as it was, and removes its
+ * scratch file. unoPath adds the .uno extension when a Save As path lacks
+ * it.
+ */
 
 import { mkdtemp, mkdir, readFile, readdir, stat, chmod, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 
-import { unoPath, writeAtomic } from "../src/main/files.ts";
+import { unoPath, writeAtomic } from "#main/files";
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 

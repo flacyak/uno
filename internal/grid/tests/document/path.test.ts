@@ -1,6 +1,8 @@
-// Tests for how a .uno stores and resolves source paths: relative when the
-// file is under the workspace's folder, absolute otherwise. Windows and POSIX
-// paths are both handled.
+/**
+ * @fileoverview Tests for how a .uno stores and resolves source paths: relative
+ * when the file is under the workspace's folder, absolute otherwise. Windows
+ * and POSIX paths are both handled.
+ */
 
 import { expect, test } from 'vite-plus/test';
 
@@ -13,7 +15,7 @@ import {
   resolvedPath,
   samePath,
   storedPath,
-} from '../../src/document/index.ts';
+} from '#document';
 
 test("a path under the workspace's folder is written down relative to it", () => {
   expect(storedPath('/home/cpa/q4/sales.csv', '/home/cpa/q4/books.uno')).toBe(

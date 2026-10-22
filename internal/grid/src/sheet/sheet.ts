@@ -1,13 +1,15 @@
-// Package sheet holds one table per workspace.
-//
-// A Sheet is a table in memory: its source rows, a Schema folded from the
-// log, and rows finished from both as they are read. The engine does the
-// same over a file, with the same Schema and the same pipeline.
+/**
+ * @fileoverview Package sheet holds one table per workspace.
+ *
+ * A Sheet is a table in memory: its source rows, a Schema folded from the
+ * log, and rows finished from both as they are read. The engine does the
+ * same over a file, with the same Schema and the same pipeline.
+ */
 
-import type { Formula } from '../formula/index.ts';
-import { evaluate } from '../formula/index.ts';
-import type { Program } from '../program/index.ts';
-import { text as programText } from '../program/index.ts';
+import type { Formula } from '#formula';
+import { evaluate } from '#formula';
+import type { Program } from '#program';
+import { text as programText } from '#program';
 import type { Edit } from './edit.ts';
 import { NO_ROW, Op } from './edit.ts';
 import type { Kind } from './kind.ts';

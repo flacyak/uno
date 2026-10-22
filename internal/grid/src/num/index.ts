@@ -1,9 +1,11 @@
-// Package num reads the number a spreadsheet cell holds.
-//
-// It is shared by `sheet` and `formula`. It works on one string at a time:
-// a string goes in and a number or undefined comes out.
+/**
+ * @fileoverview Package num reads the number a spreadsheet cell holds.
+ *
+ * It is shared by `sheet` and `formula`. It works on one string at a time:
+ * a string goes in and a number or undefined comes out.
+ */
 
-import { parseFloat as parseDecimal, trimSpace } from '../go/index.ts';
+import { parseFloat as parseDecimal, trimSpace } from '#go';
 
 /**
  * DECORATION is the characters stripped from a value before it is read as a

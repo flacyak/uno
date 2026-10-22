@@ -1,14 +1,16 @@
-// One open workspace: its engine, its tabs, which tab is showing, and its
-// save state.
-//
-// Each tab wraps a source handle and the Band of rows the engine sends for
-// it. The files and the edit log live in the engine. Transform mode unlocks
-// editing and turns the recogniser on. An edit is one message to the engine.
-//
-// This file is plain logic, so tests run it directly.
+/**
+ * @fileoverview One open workspace: its engine, its tabs, which tab is showing,
+ * and its save state.
+ *
+ * Each tab wraps a source handle and the Band of rows the engine sends for
+ * it. The files and the edit log live in the engine. Transform mode unlocks
+ * editing and turns the recogniser on. An edit is one message to the engine.
+ *
+ * This file is plain logic, so tests run it directly.
+ */
 
-import { isWorkspace } from "@uno/grid/document";
-import { Band } from "@uno/grid/engine";
+import { isWorkspace } from "#document";
+import { Band } from "#engine";
 import type {
   Changed,
   Engine,
@@ -20,13 +22,13 @@ import type {
   Peeked,
   SourceHandle,
   SourceRef,
-} from "@uno/grid/engine";
-import { NO_ROW, Op, editEquals } from "@uno/grid/sheet";
-import type { Edit } from "@uno/grid/sheet";
-import type { Listing, SingleRef } from "@uno/grid/store";
+} from "#engine";
+import { NO_ROW, Op, editEquals } from "#sheet";
+import type { Edit } from "#sheet";
+import type { Listing, SingleRef } from "#store";
 
 import type { Cell, Rows } from "./grid/rows.ts";
-import { m } from "../paraglide/messages.js";
+import { m } from "#paraglide/messages";
 import { bytes } from "./locale.ts";
 import { say } from "./said.ts";
 import { stateOf } from "./sources.ts";

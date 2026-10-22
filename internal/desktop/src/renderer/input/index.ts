@@ -1,7 +1,9 @@
-// Registry of input strategies, keyed by the name the Edit menu and the
-// saved setting use.
+/**
+ * @fileoverview Registry of input strategies, keyed by the name the Edit menu
+ * and the saved setting use.
+ */
 
-import { m } from "../../paraglide/messages.js";
+import { m } from "#paraglide/messages";
 import { defaultInput } from "./default.ts";
 import type { InputStrategy } from "./strategy.ts";
 import type { InputName } from "./strategy.ts";
