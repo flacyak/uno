@@ -1,12 +1,13 @@
 /**
  * @fileoverview What a person hands to whoever makes the role uno's hosted
- * engine assumes: uno's account and their external ID, with what the role has
- * to allow.
+ * engine assumes: uno's account and their external ID, and the two policy
+ * documents the role is made with, each beside a Copy button.
  *
  * The role is made where the bucket is managed, by the team or the system
- * that owns it, so the form gives the two values to pass on and says what the
- * role needs, and edits nothing of the policies. The documents themselves are
- * written by `rolePolicies` in @uno/grid for whoever provisions the role.
+ * that owns it, so the form gives what to pass on and edits none of it. The
+ * documents are written by `trustPolicy` and `permissionPolicy` in @uno/grid,
+ * and the permission policy follows the bucket and prefix as they are typed,
+ * so what is copied is what the connection will ask for.
  *
  * It is a block of its own, mounted by the connect form while a role is the
  * sign-in and an engine has said what the role has to trust. The desktop and
@@ -15,10 +16,17 @@
  */
 
 import type { Trust } from "@engine";
-import { accountOf } from "@library";
+import { accountOf, permissionPolicy, trustPolicy } from "@library";
 
 import { m } from "@paraglide/messages";
 import { Words, el } from "./util.ts";
+
+/** The bucket and folder the permission policy is written for, as the form reads them. */
+export interface Place {
+  bucket: string;
+  /** "" for the whole bucket, and otherwise ending in a slash. */
+  prefix: string;
+}
 
 /** How long a copy button says it copied before it offers to copy again. */
 const COPIED_MS = 1500;
@@ -33,24 +41,35 @@ export class RoleBlock {
   private readonly words = new Words();
   private readonly account = el("code", "copyable");
   private readonly externalId = el("code", "copyable");
+  private readonly trust = el("pre", "copyable document");
+  private readonly permission = el("pre", "copyable document");
+  /** The permission policy's row, which waits for a bucket to be named. */
+  private readonly permissionRow: HTMLElement;
 
   constructor(private readonly copy: (text: string) => Promise<void> = writeClipboard) {
     const block = this.el;
     block.hidden = true;
+    this.permissionRow = this.row(m.role_permission_policy, this.permission);
     block.append(
       this.row(m.role_account, this.account),
       this.row(m.role_external_id, this.externalId),
+      this.row(m.role_trust_policy, this.trust),
+      this.permissionRow,
       this.words.text(el("div", "how"), m.role_how),
-      this.words.text(el("div", "needs"), m.role_needs),
     );
   }
 
-  /** show draws the block for `trust`. */
-  show(trust: Trust): void {
+  /** show draws the block for `trust`, with the permission policy for `place`. */
+  show(trust: Trust, place: Place): void {
     // The account alone when the ARN has one, as the console asks for it, and
     // the whole principal otherwise.
     this.account.textContent = accountOf(trust.principal) ?? trust.principal;
     this.externalId.textContent = trust.externalId;
+    this.trust.textContent = trustPolicy(trust);
+    // The permission policy names the bucket, so there is none to copy
+    // before one is typed.
+    this.permissionRow.hidden = place.bucket === "";
+    this.permission.textContent = permissionPolicy(place);
     this.el.hidden = false;
   }
 

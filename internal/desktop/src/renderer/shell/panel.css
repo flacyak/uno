@@ -428,12 +428,22 @@
   line-height: 1.45;
 }
 
-/* The actions the role allows, for the person who writes its policy. */
-.panel-connect .role .needs {
-  color: var(--ink-3);
-  font-size: 11px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
+.panel-connect .role .row[hidden] {
+  display: none;
+}
+
+/* A policy document, as the console's editor shows one. The box scrolls,
+ * since the permission policy runs to twenty lines and the panel is narrow,
+ * and a long ARN wraps rather than widening it. */
+.panel-connect .role .row > .document {
+  margin: 0;
+  max-height: 11em;
+  padding: 4px 6px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  background: var(--sunken);
+  border-radius: 3px;
+  line-height: 1.4;
 }
 
 .panel-connect .role button.copy {

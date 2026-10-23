@@ -472,8 +472,12 @@ export class ConnectForm {
     const role = this.signIn.value === "role";
     this.roleRow.hidden = !role;
     const trust = this.offered.trust;
-    if (role && trust !== undefined) this.role.show(trust);
-    else this.role.hide();
+    if (role && trust !== undefined) {
+      this.role.show(trust, {
+        bucket: this.bucket.value.trim(),
+        prefix: folderOf(this.prefix.value),
+      });
+    } else this.role.hide();
     this.region.textContent =
       s.t === "tried"
         ? m.connect_region_detected({ region: s.tried.connection.region ?? UNKNOWN_REGION })
