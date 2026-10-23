@@ -3,7 +3,7 @@
  * as a table.
  */
 
-import type { Metric } from './record.ts';
+import type { Kind, Metric } from './record.ts';
 
 /** Change is one metric as it was and as it is. Either side can be missing. */
 export interface Change {
@@ -40,6 +40,11 @@ export function compare(
 
 /** The unit of wall-clock metrics, which vary by machine. */
 const CLOCK = 'ms';
+/**
+ * The fraction a wall-clock number moves between two runs on one runner
+ * with nothing changed. A change under it is reported as noise.
+ */
+const NOISE = 0.05;
 /** Fraction digits shown for a number with a fractional part. */
 const DIGITS = 2;
 const PERCENT = 100;
@@ -51,30 +56,44 @@ function shown(value: number | undefined): string {
     : value.toLocaleString('en-US', { maximumFractionDigits: DIGITS });
 }
 
-/** One word for a change, plus a percentage. Smaller is better. */
+/**
+ * One word for a change, plus a percentage. Smaller is better. A wall-clock
+ * change too small to tell from the runner's own variation is noise.
+ */
 function verdict(c: Change): string {
   if (c.base === undefined) return 'new';
   if (c.head === undefined) return 'gone';
   if (c.head === c.base) return 'same';
+  const fraction = c.base === 0 ? undefined : (c.head - c.base) / c.base;
   const by =
-    c.base === 0
+    fraction === undefined
       ? ''
-      : ` ${Math.abs(((c.head - c.base) / c.base) * PERCENT).toFixed(1)}%`;
-  const noisy = c.unit === CLOCK ? ' (wall clock)' : '';
-  return `${c.head < c.base ? 'better' : 'worse'}${by}${noisy}`;
+      : ` ${(Math.abs(fraction) * PERCENT).toFixed(1)}%`;
+  if (c.unit !== CLOCK) return `${c.head < c.base ? 'better' : 'worse'}${by}`;
+  if (fraction !== undefined && Math.abs(fraction) < NOISE)
+    return `within noise${by} (wall clock)`;
+  return `${c.head < c.base ? 'better' : 'worse'}${by} (wall clock)`;
 }
 
-/** markdown renders the changes as a Markdown table. */
+/** The heading and the lead sentence of each kind's table. */
+const WORDING: Record<Kind, { title: string; does: string }> = {
+  efficiency: { title: 'Efficiency', does: 'costs' },
+  performance: { title: 'Performance', does: 'takes' },
+};
+
+/** markdown renders the changes as a Markdown table under the kind's heading. */
 export function markdown(
   changes: readonly Change[],
   baseline: boolean,
+  kind: Kind = 'efficiency',
 ): string {
+  const { title, does } = WORDING[kind];
   const lines = [
-    '### Efficiency',
+    `### ${title}`,
     '',
     baseline
-      ? 'What this change costs, beside the branch it is going into. Smaller is better.'
-      : 'What this change costs. The branch it is going into has no efficiency tests to compare with.',
+      ? `What this change ${does}, beside the branch it is going into. Smaller is better.`
+      : `What this change ${does}. The branch it is going into has no ${kind} tests to compare with.`,
     '',
     '| Metric | Unit | Base | Head | Change |',
     '| --- | --- | ---: | ---: | --- |',

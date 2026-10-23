@@ -114,14 +114,38 @@ Each also writes its numbers to `out/efficiency/<file>.json` as a list of
 
 ```bash
 vp test tests/efficiency                       # these files alone
-node --import ../paths.js scripts/efficiency.ts   # their numbers as a table
+node --import ../paths.js scripts/report.ts --kind efficiency   # their numbers as a table
 ```
 
-`scripts/efficiency.ts` also sets the numbers beside a base's with `--base`,
+`scripts/report.ts` also sets the numbers beside a base's with `--base`,
 and sends them to a collector where `OTEL_EXPORTER_OTLP_ENDPOINT` or
 `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` names one.
 The `efficiency` workflow does both on every pull request.
 `observability/README.md` at the root of the repository has the rest.
+
+## Performance
+
+`tests/performance` times what a person waits on, in milliseconds that move
+with the machine. Each number is the quickest of several runs, which is the
+run the machine interrupted least.
+
+| file            | what it times                                                 |
+| --------------- | ------------------------------------------------------------- |
+| `scan.test.ts`  | the record scanner alone over 96 MB held in memory            |
+| `index.test.ts` | the engine indexing 96 MB on disk, and a page read deep in it |
+
+Nothing here holds a budget: a wall-clock number is read beside another from
+the same machine or not at all. Each file writes its numbers to
+`out/performance/<file>.json`, the same shape as the efficiency numbers.
+
+```bash
+vp test tests/performance                                     # these files alone
+node --import ../paths.js scripts/report.ts --kind performance   # their numbers as a table
+```
+
+The `performance` workflow measures a pull request and its base on one
+runner, reports the two side by side, and sends the numbers to a collector
+as `uno.performance`. A change under five percent reads as noise.
 
 ## Telemetry
 

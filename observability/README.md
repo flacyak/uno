@@ -1,15 +1,18 @@
 # Observability
 
-uno reports two kinds of numbers to Grafana.
+uno reports three kinds of numbers to Grafana.
 
 - **Efficiency metrics** come from CI.
   `internal/grid/tests/efficiency` counts what a change costs in requests, bytes and directory entries read.
   The `efficiency` workflow sends them on every pull request and every push to main.
+- **Performance metrics** come from CI too.
+  `internal/grid/tests/performance` times what a change takes: the scanner over 96 MB, the engine indexing it from disk, a page read after.
+  The `performance` workflow sends them the same way, and its table reads a change under five percent as noise.
 - **Engine metrics** come from a running uno.
   The engine measures how long each request took to answer, how long each source took to index, and what it asked S3 for.
 
-Both are sent as OpenTelemetry metrics over OTLP/HTTP, which Grafana Cloud and the local stack here both accept.
-`dashboards/uno.json` plots both.
+All three are sent as OpenTelemetry metrics over OTLP/HTTP, which Grafana Cloud and the local stack here both accept.
+`dashboards/uno.json` plots them.
 
 ## What is sent, and when
 
@@ -25,6 +28,7 @@ It carries no file name, path, bucket or key, and tests in both packages hold it
 | Metric in Grafana                        | What it is                                               | Labels                      |
 | ---------------------------------------- | -------------------------------------------------------- | --------------------------- |
 | `uno_efficiency`                         | one efficiency test's number, as measured in CI          | `metric`, `unit`, `branch`  |
+| `uno_performance`                        | one performance test's milliseconds, as timed in CI      | `metric`, `unit`, `branch`  |
 | `uno_engine_request_milliseconds_bucket` | time from a request arriving to its answer being posted  | `request`, `outcome`        |
 | `uno_engine_index_milliseconds_bucket`   | time from a source being opened to its last row counted  | `place`                     |
 | `uno_engine_indexed_bytes_total`         | bytes of the sources that finished indexing              | `place`                     |
@@ -40,12 +44,13 @@ docker compose -f observability/docker-compose.yml up
 Grafana is at http://localhost:3000 and the dashboard is named `uno`.
 The container keeps nothing when it stops.
 
-Send the efficiency metrics to it:
+Send the efficiency and performance metrics to it:
 
 ```bash
 cd internal/grid
-vp test tests/efficiency
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import ../paths.js scripts/efficiency.ts
+vp test tests/efficiency tests/performance
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import ../paths.js scripts/report.ts --kind efficiency
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import ../paths.js scripts/report.ts --kind performance
 ```
 
 Run the desktop app against it:

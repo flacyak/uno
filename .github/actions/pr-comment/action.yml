@@ -1,0 +1,39 @@
+name: One comment per report
+description: >-
+  Posts a file as a pull request comment that starts with a marker, editing
+  the comment with that marker if one exists. Two workflows that each keep
+  one comment on a pull request stay out of each other's way this way, which
+  `gh pr comment --edit-last` does not: it edits whichever comment the token
+  wrote last.
+
+inputs:
+  marker:
+    description: An HTML comment that opens the body, such as <!-- uno performance -->
+    required: true
+  body-file:
+    description: The file holding the comment's Markdown
+    required: true
+  token:
+    description: A token that may comment on the pull request
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        MARKER: ${{ inputs.marker }}
+        BODY_FILE: ${{ inputs.body-file }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        body="$(printf '%s\n\n' "$MARKER"; cat "$BODY_FILE")"
+        id="$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+          | jq -r --arg marker "$MARKER" \
+            'map(select(.body | startswith($marker))) | first | .id // empty')"
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+        else
+          gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" > /dev/null
+        fi

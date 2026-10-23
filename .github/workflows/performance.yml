@@ -1,0 +1,104 @@
+name: performance
+
+# What a change takes in time, measured on every pull request and on every
+# push to main.
+#
+# internal/grid/tests/performance times what a person waits on: the record
+# scanner over 96 MB in memory, the engine indexing 96 MB on disk, and a page
+# of rows read deep in the file afterwards. Each is the quickest of several
+# runs, which is the run the machine interrupted least.
+#
+# Wall clock moves with the runner, so the base is measured in the same job
+# on the same runner, and a change under five percent reads as noise. Nothing
+# here fails a pull request: the table is for the person reading it.
+#
+# A pull request gets a table of each metric beside what it is on the base,
+# in the job summary and in one comment that is kept up to date. Every run
+# also sends the metrics to Grafana, where the dashboard in observability/
+# plots them over time: main is the line, and each pull request is a branch
+# of its own beside it.
+#
+# Sending needs two repository secrets, GRAFANA_OTLP_ENDPOINT and
+# GRAFANA_OTLP_HEADERS, which observability/README.md says how to get. Without
+# them, and on a pull request from a fork, which is not handed secrets, the
+# job still measures and reports and sends nothing.
+
+# Every pull request, whatever its base: a stacked pull request is measured
+# against the branch under it, which is the change it carries.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One run per branch: a push on top of a run still going replaces it.
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  performance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The same install the test job does: nothing here starts Electron, so
+      # its binary is not fetched, and the cache is read and never written.
+      - uses: voidzero-dev/setup-vp@v1.19.0
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        with:
+          version-file: pnpm-workspace.yaml
+          cache: true
+          cache-save: false
+          run-install: true
+
+      - name: Measure
+        id: measure
+        working-directory: internal/grid
+        run: vp test tests/performance
+
+      # The base is measured with its own tests, in a checkout of its own, so
+      # the two sets of numbers come from the same runner. A base from before
+      # these tests existed has nothing to measure, and the table says so.
+      - name: Measure the base
+        if: always() && github.event_name == 'pull_request'
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/base"
+          if [ -d internal/grid/tests/performance ]; then
+            vp install
+            cd internal/grid
+            vp test tests/performance || true
+          fi
+
+      - name: Report
+        if: always() && steps.measure.outcome != 'skipped'
+        working-directory: internal/grid
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.GRAFANA_OTLP_ENDPOINT }}
+          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.GRAFANA_OTLP_HEADERS }}
+        run: |
+          node --import ../paths.js scripts/report.ts --kind performance \
+            --base "$RUNNER_TEMP/base/internal/grid/out/performance" \
+            --out "$RUNNER_TEMP/performance.md"
+          cat "$RUNNER_TEMP/performance.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment, edited in place on every push. A pull request from a fork
+      # is run with a token that cannot comment, and has the job summary.
+      - name: Comment on the pull request
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: ./.github/actions/pr-comment
+        with:
+          marker: "<!-- uno performance -->"
+          body-file: ${{ runner.temp }}/performance.md
+          token: ${{ github.token }}

@@ -84,7 +84,7 @@ jobs:
           OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.GRAFANA_OTLP_ENDPOINT }}
           OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.GRAFANA_OTLP_HEADERS }}
         run: |
-          node --import ../paths.js scripts/efficiency.ts \
+          node --import ../paths.js scripts/report.ts --kind efficiency \
             --base "$RUNNER_TEMP/base/internal/grid/out/efficiency" \
             --out "$RUNNER_TEMP/efficiency.md"
           cat "$RUNNER_TEMP/efficiency.md" >> "$GITHUB_STEP_SUMMARY"
@@ -95,7 +95,8 @@ jobs:
         if: >-
           always() && github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: gh pr comment "$PR" --body-file "$RUNNER_TEMP/efficiency.md" --edit-last --create-if-none
+        uses: ./.github/actions/pr-comment
+        with:
+          marker: "<!-- uno efficiency -->"
+          body-file: ${{ runner.temp }}/efficiency.md
+          token: ${{ github.token }}
