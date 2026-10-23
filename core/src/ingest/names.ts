@@ -19,6 +19,12 @@ export type StoredCompression = Compression | 'bzip2' | 'xz' | 'lz4' | 'snappy';
 export const LINES_EXTENSIONS: readonly string[] = ['.jsonl', '.ndjson'];
 
 /**
+ * A JSON document's extension, which Spark and BigQuery give JSON Lines too.
+ * One is read when its first line is one object, and refused otherwise.
+ */
+const JSON_EXTENSION = '.json';
+
+/**
  * The extensions of the files uno reads, lower-cased with their dot. It grows
  * as ingest learns formats.
  */
@@ -26,6 +32,7 @@ export const READ_EXTENSIONS: readonly string[] = [
   '.csv',
   '.tsv',
   ...LINES_EXTENSIONS,
+  JSON_EXTENSION,
 ];
 
 /** The compressions uno reads a file through. It grows as ingest learns them. */
