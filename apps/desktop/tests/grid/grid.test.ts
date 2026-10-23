@@ -1,7 +1,8 @@
 /**
  * @fileoverview The grid over a plain DOM, driven as the shell drives it: rows
  * shown, keys pressed on the host, and what the selection, the marks, and the
- * editor do. happy-dom skips layout, so the scroller is told its height.
+ * editor do, the first two as a source finds columns. happy-dom skips layout,
+ * so the scroller is told its height.
  *
  * @vitest-environment happy-dom
  */
@@ -11,7 +12,7 @@ import { expect, test } from "vite-plus/test";
 import type { Kind } from "@sheet";
 
 import { Grid } from "@renderer/grid";
-import type { GridEvents, Rows } from "@renderer/grid/rows";
+import type { Column, GridEvents, Rows } from "@renderer/grid/rows";
 import { defaultInput } from "@renderer/input/default";
 import type { InputStrategy } from "@renderer/input/strategy";
 import { vimStyle } from "@renderer/input/vim-style";
@@ -31,6 +32,35 @@ function sheet(total: number, cols = 3): Rows {
     display: (row, col) => `${row},${col}`,
     raw: (row, col) => `${row},${col}`,
     binding: () => undefined,
+  };
+}
+
+/** Filed is a sheet whose last column is supplied, as _file is, and the columns it finds. */
+interface Filed {
+  readonly rows: Rows;
+  /** Puts a column in before the supplied one, as a file found as it is indexed does. */
+  find(header: string): void;
+}
+
+/** filed returns a sheet of `total` rows over an id and a supplied _file. */
+function filed(total: number): Filed {
+  const columnOf = (header: string): Column => ({ header, kind: "text", flagged: false });
+  let columns = ["id", "_file"].map(columnOf);
+  const rows: Rows = {
+    get columns() {
+      return columns;
+    },
+    rows: () => total,
+    cols: () => columns.length,
+    display: (row, col) => `${row},${col}`,
+    raw: (row, col) => `${row},${col}`,
+    binding: () => undefined,
+  };
+  return {
+    rows,
+    find: (header) => {
+      columns = [...columns.slice(0, -1), columnOf(header), ...columns.slice(-1)];
+    },
   };
 }
 
@@ -116,6 +146,37 @@ test("a mark is its own tab's: it waits through a tab switch, and is not set on 
   press("'");
   press("'");
   expect(grid.selection(), "'' back from the jump").toEqual({ row: 0, col: 0 });
+});
+
+test("the selection and each mark move right with _file as its source finds columns, shown or not", () => {
+  const { grid, press } = make(vimStyle);
+  const file = filed(40);
+  const FILE = 1;
+  grid.show(file.rows, false);
+  grid.moveTo(7, FILE);
+  press("m");
+  press("a");
+  grid.moveTo(2, FILE);
+  press("'");
+  press("a");
+
+  file.find("late");
+  grid.refresh();
+  expect(grid.selection(), "the selection on _file").toEqual({ row: 7, col: FILE + 1 });
+  press("'");
+  press("'");
+  expect(grid.selection(), "'' back to where the jump left _file").toEqual({
+    row: 2,
+    col: FILE + 1,
+  });
+
+  // Found while another tab shows, a column moves the marks once the tab is back.
+  grid.show(sheet(40), false);
+  file.find("later");
+  grid.show(file.rows, false);
+  press("'");
+  press("a");
+  expect(grid.selection(), "'a on the tab that found it").toEqual({ row: 7, col: FILE + 2 });
 });
 
 // ----------------------------------------------------------------- editor

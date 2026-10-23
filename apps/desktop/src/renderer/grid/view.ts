@@ -110,6 +110,11 @@ export class View {
     this.refresh();
   }
 
+  /** The columns the header shows, as it was last drawn. */
+  get drawn(): readonly Column[] {
+    return this.drawnColumns;
+  }
+
   /**
    * Redraws the header and the visible rows. A source that found columns
    * since the header was drawn has its rows built again, a cell for each.
