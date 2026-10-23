@@ -23,9 +23,10 @@ name: performance
 # them, and on a pull request from a fork, which is not handed secrets, the
 # job still measures and reports and sends nothing.
 
+# Every pull request, whatever its base: a stacked pull request is measured
+# against the branch under it, which is the change it carries.
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
