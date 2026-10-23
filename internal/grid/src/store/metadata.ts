@@ -46,6 +46,9 @@ export interface HostOptions {
  * token request away is asked the v1 way. Undefined where nothing of the
  * kind answers, or the instance has no role, so the chain goes on to say
  * there are no credentials.
+ * @param endpoint where the service is
+ * @param opts how requests go out
+ * @return the role's session, or undefined where nothing answers or no role is attached
  */
 export async function instanceCredentials(
   endpoint: string,
@@ -96,6 +99,10 @@ export async function instanceCredentials(
  * the task's role. `authorization` is the token the endpoint checks, where
  * it checks one. Plain http is allowed only to this host, so the token is
  * sent nowhere else.
+ * @param url the endpoint
+ * @param authorization the token it checks, if any
+ * @param opts how requests go out
+ * @return the task's session
  */
 export async function containerCredentials(
   url: string,
@@ -138,6 +145,9 @@ export async function containerCredentials(
  * sessionIn reads the JSON both endpoints answer with: AccessKeyId,
  * SecretAccessKey, Token and Expiration. IMDS adds a Code, which says
  * Success for keys it could hand out.
+ * @param body the JSON answered
+ * @param who the endpoint, for an error
+ * @return the session the body holds
  */
 function sessionIn(body: string, who: string): Session {
   let o: Record<string, unknown>;
