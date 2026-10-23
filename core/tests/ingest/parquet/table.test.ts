@@ -1,13 +1,14 @@
 /**
  * @fileoverview A Parquet table reads its footer from one read of the file's
- * tail, or two where the footer is longer, and says what the file holds. A
- * file that uses what uno does not read yet is refused by name, and one
- * whose footer is damaged as parquet-broken.
+ * tail, or two where the footer is longer, checks its magic at both ends,
+ * and says what the file holds. A file that uses what uno does not read yet
+ * is refused by name, and one whose footer is damaged as parquet-broken.
  */
 
 import { parquetWriteBuffer } from 'hyparquet-writer';
 import { expect, test } from 'vite-plus/test';
 
+import { PARQUET_MAGIC_BYTES } from '@ingest/detect';
 import { CHUNK_CACHE_BYTES, chunkCache } from '@ingest/parquet/buffer';
 import { PARQUET_TAIL_BYTES, openTable } from '@ingest/parquet/table';
 import { Refusal } from '@said';
@@ -77,8 +78,9 @@ test('a footer in the tail says the columns, rows and groups from one read', asy
   expect(reads).toEqual([[0, SALES.length]]);
 });
 
-test('a footer over 64 KB takes exactly two reads, the second of the rest of it', async () => {
-  const wide = new Uint8Array(
+/** A file whose footer is longer than PARQUET_TAIL_BYTES. */
+function wide(): Uint8Array {
+  return new Uint8Array(
     parquetWriteBuffer({
       columnData: Array.from({ length: WIDE_COLUMNS }, (_, i) => ({
         name: `c${i}`,
@@ -88,16 +90,30 @@ test('a footer over 64 KB takes exactly two reads, the second of the rest of it'
       })),
     }),
   );
-  const start = footerStart(wide);
-  const tailStart = wide.length - PARQUET_TAIL_BYTES;
-  expect(wide.length - start).toBeGreaterThan(PARQUET_TAIL_BYTES);
-  const { source, reads } = logged(wide);
+}
+
+test('a footer over 64 KB takes one more read, of the rest of it, and the head is read beside the tail', async () => {
+  const bytes = wide();
+  const start = footerStart(bytes);
+  const tailStart = bytes.length - PARQUET_TAIL_BYTES;
+  expect(bytes.length - start).toBeGreaterThan(PARQUET_TAIL_BYTES);
+  const { source, reads } = logged(bytes);
   const table = await openTable('wide.parquet', source, chunkCache(0));
   expect(table.columns).toHaveLength(WIDE_COLUMNS);
   expect(reads).toEqual([
     [tailStart, PARQUET_TAIL_BYTES],
+    [0, PARQUET_MAGIC_BYTES],
     [start, tailStart - start],
   ]);
+});
+
+test('a file longer than the tail with no magic at its head is refused as parquet-broken', async () => {
+  const headless = wide();
+  headless.fill(0, 0, PARQUET_MAGIC_BYTES);
+  expect(await refusalOf('wide.parquet', headless)).toEqual({
+    t: 'parquet-broken',
+    name: 'wide.parquet',
+  });
 });
 
 test('a truncated or damaged footer is refused as parquet-broken', async () => {
