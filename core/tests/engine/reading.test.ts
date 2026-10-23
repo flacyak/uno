@@ -163,6 +163,7 @@ const UNREAD: ReadonlyMap<string, Unread> = new Map([
   ['events.jsonl', 'JSON Lines'],
   ['sales-q3.csv.gz', 'gzip'],
   ['par1.bin', 'Parquet'],
+  ['sales-q3.snappy.parquet', 'Parquet'],
 ]);
 
 /** What a reader made of a file's head, or the message it failed with. */
