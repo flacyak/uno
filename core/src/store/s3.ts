@@ -10,11 +10,13 @@
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { Data, Effect } from 'effect';
 
 import { compareStrings, concat } from '@go';
 import type { Connection } from '@library';
 import { covering } from '@library';
 import type { Provider } from '@plugin';
+import { messageOf } from '@said';
 import type { FileHandler } from './index.ts';
 import { readAhead } from './ahead.ts';
 import { s3Lister } from './s3lister.ts';
@@ -199,6 +201,33 @@ export interface S3Requests {
 }
 
 /**
+ * NetworkFailure is a send that fetch itself threw on, so S3 never answered.
+ * `message` is the fetch error's own, and a caller reads what it read before.
+ */
+class NetworkFailure extends Data.TaggedError('NetworkFailure')<{
+  readonly cause: unknown;
+  readonly message: string;
+}> {}
+
+/**
+ * ServerFailure is a reply of 500 or more. It is sent again, and after the
+ * last try the reply is handed back as it is, so it carries no sentence.
+ */
+class ServerFailure extends Data.TaggedError('ServerFailure')<{
+  readonly reply: Response;
+}> {}
+
+/**
+ * Moved is a 301 or 400 naming another region for the bucket. The region is
+ * remembered before it is raised, so the next send goes there. A move past
+ * the last one allowed hands back the reply as it is.
+ */
+class Moved extends Data.TaggedError('Moved')<{
+  readonly region: string;
+  readonly reply: Response;
+}> {}
+
+/**
  * s3Requests makes an S3Requests over `opts`, with its own memory of which
  * region each bucket is in. s3Files and s3Lister each make their own.
  */
@@ -232,9 +261,51 @@ export function s3Requests(opts: S3Options): S3Requests {
   }
 
   /**
-   * request is `send` with retries for network and 5xx failures, and one move
-   * to the region the bucket says it is in. `at` takes the region, since the
-   * retry after a move goes to a different host and needs a new signature.
+   * attempt asks for the credentials and sends once. It fails as a
+   * NetworkFailure where fetch threw, as a Moved where a 301 or 400 names
+   * another region, which it remembers first, and as a ServerFailure for a
+   * 5xx. Every other reply is the answer.
+   */
+  function attempt(
+    loc: S3Location,
+    at: (region: string) => URL,
+    method: 'HEAD' | 'GET',
+    extra: Record<string, string>,
+  ): Effect.Effect<Response, NetworkFailure | ServerFailure | Moved> {
+    return Effect.gen(function* () {
+      // What `credentials` throws is the caller's own, so it goes through as
+      // a defect: never retried, and rejected as it is.
+      const creds = yield* Effect.promise(() => opts.credentials(loc));
+      const region = regions.get(loc.bucket) ?? creds.region;
+      const res = yield* Effect.tryPromise({
+        try: () => send(at, method, extra, creds, region),
+        catch: (cause) =>
+          new NetworkFailure({ cause, message: messageOf(cause) }),
+      });
+
+      // A 301 or 400 may say the bucket is in another region.
+      if (res.status === 301 || res.status === 400) {
+        const moved = yield* Effect.promise(() =>
+          whereItWent(res, () =>
+            // A HEAD reply is headers only. When the region is only in the
+            // body, a one-byte GET is sent to get it.
+            send(at, 'GET', { range: 'bytes=0-0' }, creds, region),
+          ),
+        );
+        if (moved !== undefined && moved !== region) {
+          regions.set(loc.bucket, moved);
+          return yield* new Moved({ region: moved, reply: res });
+        }
+      }
+      if (res.status >= 500) return yield* new ServerFailure({ reply: res });
+      return res;
+    });
+  }
+
+  /**
+   * request is `attempt` with retries for network and 5xx failures, and one
+   * move to the region the bucket says it is in. `at` takes the region, since
+   * the retry after a move goes to a different host and needs a new signature.
    */
   async function request(
     loc: S3Location,
@@ -242,40 +313,24 @@ export function s3Requests(opts: S3Options): S3Requests {
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
   ): Promise<Response> {
-    const bucket = loc.bucket;
     let moves = 0;
-    for (let attempt = 1; ; attempt++) {
-      const creds = await opts.credentials(loc);
-      const region = regions.get(bucket) ?? creds.region;
-
-      let res: Response;
+    for (let tries = 1; ; tries++) {
       try {
-        res = await send(at, method, extra, creds, region);
-      } catch (err) {
-        if (attempt >= TRIES) throw err;
-        await wait(BACKOFF_MS << (attempt - 1));
-        continue;
-      }
-
-      // A 301 or 400 may say the bucket is in another region. It is followed
-      // once, and the region is remembered.
-      if ((res.status === 301 || res.status === 400) && moves < MOVES) {
-        const moved = await whereItWent(res, () =>
-          // A HEAD reply is headers only. When the region is only in the
-          // body, a one-byte GET is sent to get it.
-          send(at, 'GET', { range: 'bytes=0-0' }, creds, region),
-        );
-        if (moved !== undefined && moved !== region) {
+        return await Effect.runPromise(attempt(loc, at, method, extra));
+      } catch (failure) {
+        if (failure instanceof Moved) {
+          if (moves >= MOVES) return failure.reply;
           moves++;
-          regions.set(bucket, moved);
-          continue;
+        } else if (failure instanceof ServerFailure) {
+          if (tries >= TRIES) return failure.reply;
+          await wait(BACKOFF_MS << (tries - 1));
+        } else if (failure instanceof NetworkFailure) {
+          if (tries >= TRIES) throw failure;
+          await wait(BACKOFF_MS << (tries - 1));
+        } else {
+          throw failure;
         }
       }
-      if (res.status >= 500 && attempt < TRIES) {
-        await wait(BACKOFF_MS << (attempt - 1));
-        continue;
-      }
-      return res;
     }
   }
 
