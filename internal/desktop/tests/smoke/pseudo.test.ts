@@ -31,6 +31,8 @@ const NOT_THE_APPS = [
   ".panel-peek table",
   ".formula select",
   "[data-language][lang]",
+  // A policy document, which is JSON the same in every language.
+  ".policy .document",
 ];
 
 /**
