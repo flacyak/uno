@@ -420,11 +420,12 @@ export class Workspace {
           carried,
         );
       } else {
+        const bytes = bytesSource(src.raw);
         view = await View.open({
           id: src.id,
           name: src.name,
           path: '',
-          source: bytesSource(src.raw),
+          source: () => Promise.resolve(bytes),
           carried,
           port: this.port,
           tuning: this.tuning,
@@ -489,27 +490,11 @@ export class Workspace {
     // first answer is in it.
     const began = performance.now();
     const path = 'path' in ref ? ref.path : '';
-    const source = await this.openSource(ref);
-    // A cancel that arrived while the file was opening is answered here.
-    if (signal?.aborted) {
-      await source.close();
-      throw new Refusal({ t: 'cancelled', name: ref.name });
-    }
-    // versions() opens every part still unread. A part that fails to open
-    // closes the source and is the error.
-    if (whole) {
-      await multiOf(source)
-        ?.versions()
-        .catch(async (err: unknown) => {
-          await source.close();
-          throw err;
-        });
-    }
     const view = await View.open({
       id,
       name: ref.name,
       path,
-      source,
+      source: () => this.sourceOf(ref, whole),
       carried,
       port: this.port,
       tuning: this.tuning,
@@ -527,6 +512,26 @@ export class Workspace {
       }));
     }
     return view;
+  }
+
+  /**
+   * sourceOf opens a ref's bytes. With `whole`, every part of a source over
+   * several files is opened as well, so a missing part fails here by name,
+   * and the bytes are closed again when one does.
+   */
+  private async sourceOf(ref: SourceRef, whole: boolean): Promise<ByteSource> {
+    const source = await this.openSource(ref);
+    // versions() opens every part still unread. A part that fails to open
+    // closes the source and is the error.
+    if (whole) {
+      await multiOf(source)
+        ?.versions()
+        .catch(async (err: unknown) => {
+          await source.close();
+          throw err;
+        });
+    }
+    return source;
   }
 
   private keep(source: Source): Opened {

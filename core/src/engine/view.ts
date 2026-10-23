@@ -124,8 +124,11 @@ export interface OpenAsk {
   name: string;
   /** Where the bytes are, or "" for carried bytes. */
   path: string;
-  /** The bytes. The view owns the source from here on and closes it if the open fails. */
-  source: ByteSource;
+  /**
+   * Opens the bytes. The view owns them from the moment they are open, and
+   * closes them if the open fails.
+   */
+  source: () => Promise<ByteSource>;
   port: Port<Request, Reply>;
   tuning: Tuning;
   /**
@@ -208,11 +211,15 @@ export class View {
    * replays any carried edits, and returns the view.
    */
   static async open(ask: OpenAsk): Promise<View> {
-    const { id, name, path, source, port, tuning, carried, began } = ask;
+    const { id, name, path, port, tuning, carried, began } = ask;
     const telemetry = ask.telemetry ?? unmeasured;
     const v = new View(id, name, path, port, began);
     v.carried = carried?.raw;
     v.parts = ask.parts;
+    // The bytes are the view's from here: every failure of the open closes
+    // the view, and the view closes them.
+    const source = await ask.source();
+    v.source = source;
 
     // Errors for a source from a .uno name the .uno as well.
     const container = carried === undefined ? '' : carried.container;
@@ -223,14 +230,13 @@ export class View {
     try {
       format = await openFormat(name, source, ask.header);
     } catch (err) {
-      await source.close();
+      await v.close();
       if (container === '') throw err;
       throw new Refusal(
         within({ t: 'about', subject: name, why: saidOf(err) }),
       );
     }
 
-    v.source = source;
     v.format = format;
     v.index = new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
