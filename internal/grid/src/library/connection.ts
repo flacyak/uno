@@ -37,7 +37,8 @@ const PROVIDERS: readonly ConnectionProvider[] = ['s3'];
  * Auth is how a connection signs in.
  *
  * - `machine`: the AWS default chain (the environment, then the default
- *   profile). The desktop and `npx uno` only.
+ *   profile, then the role attached to the host). The desktop and `npx uno`
+ *   only.
  * - `profile`: one named profile in ~/.aws. The desktop and `npx uno` only.
  * - `role`: a role in the customer's account that trusts uno's, assumed with
  *   the requesting account's external ID. The hosted engine only. The
