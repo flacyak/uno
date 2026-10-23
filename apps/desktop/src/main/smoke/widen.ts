@@ -3,7 +3,8 @@
  * indexed: a JSON Lines file whose late events hold a key the first ones
  * lack opens with the keys its first lines hold, the late key arrives as a
  * column with its badge while the selection stays on its cell, the late
- * events show it, and an edit in it lands.
+ * events show it, an edit in it lands, and the workspace saved and opened
+ * again has the late key's column and the edit on its cell.
  *
  * The file is reached through the workspace smoke.js wrote, which says it
  * was read as JSON Lines. They run over the workspace again.ts leaves open,
@@ -144,6 +145,40 @@ export const WIDEN: Check[] = [
       await press("Enter");
       if (!(await until(() => text("#status-file").includes("1 edit")))) return "the status bar says " + JSON.stringify(text("#status-file"));
       return sel()?.textContent === ${JSON.stringify(EDITED)} ? "" : "the cell shows " + JSON.stringify(sel()?.textContent);
+    `,
+  },
+  {
+    name: "the workspace saves over the one it was opened from",
+    send: ["menu:save"],
+    script: `
+      if (!(await arrives(() => text("#status-msg").startsWith("saved ")))) {
+        return "saving says " + JSON.stringify(text("#status-msg"));
+      }
+      const path = text("#status-msg").slice("saved ".length);
+      return path === ${JSON.stringify(WORKSPACE)} ? "" : "saved to " + JSON.stringify(path);
+    `,
+  },
+  {
+    name: "the saved workspace opens again as JSON Lines, with the late key's column and the edit on its cell",
+    send: ["menu:open-path", WORKSPACE],
+    shot: "widen-reopened",
+    script: `
+      ${HEADER}
+      ${END}
+      // A load that works clears the status line the save left.
+      if (!(await arrives(() => text("#status-msg") === ""))) return "reopening says " + JSON.stringify(text("#status-msg"));
+      const opened = () => text("#status-file").includes("JSON Lines") && text("#status-file").includes("1 edit");
+      if (!(await arrives(opened))) return "the status bar says " + JSON.stringify(text("#status-file"));
+      if (shown(headers()) !== ${JSON.stringify(JSON.stringify(AFTER))}) return "the header is " + shown(headers());
+
+      // The edit is on the last event, in the late key's column.
+      scroller.scrollTop = scroller.scrollHeight;
+      const cell = () => last()?.children[GUTTER + ${BEFORE.length}]?.textContent;
+      if (!(await arrives(() => cell() === ${JSON.stringify(EDITED)}))) {
+        return "the last row drawn is " + JSON.stringify(last()?.children[0].textContent) + ", its " + ${JSON.stringify(LATE_KEY)} + " " + JSON.stringify(cell());
+      }
+      if (last().children[0].textContent !== counted(${EVENTS})) return "the last row drawn is " + last().children[0].textContent;
+      return atEnd();
     `,
   },
 ];
