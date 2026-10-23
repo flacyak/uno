@@ -20,6 +20,7 @@ import {
 } from '@library';
 import { JOINS, OPENS, claim } from './claim.ts';
 // Type only. The handler that opens parts is re-exported below.
+import type { Layout } from '@ingest';
 import type { HeaderMode, Part } from './multi.ts';
 // Type only, so the run-time import graph stays one-way with the plugin
 // package.
@@ -122,6 +123,13 @@ export interface PartsRef {
   header: HeaderMode;
   /** Whether a `_file` column shows which part each row came from. */
   fileColumn?: boolean;
+  /**
+   * How the parts' records sit in their text, where the source was read
+   * before: its log was made over delimited text or JSON Lines, and its parts
+   * are read so again. Absent on a fresh open, which detects what the first
+   * part holds and holds every other part to it.
+   */
+  layout?: Layout;
 }
 
 /**
