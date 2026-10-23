@@ -557,6 +557,13 @@ export class Workspace {
     return opened;
   }
 
+  /** announce lets the source under `id` be heard. serve calls it after the
+   * answer naming the source, so the client hears only from one it knows. */
+  announce(id: string): void {
+    const source = this.sources.get(id);
+    if (source instanceof View) source.announce();
+  }
+
   /** drop removes and closes every source. */
   private async drop(): Promise<void> {
     const sources = [...this.sources.values()];
