@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  # Build, typecheck, and the 117 tests across grid + desktop -- all
+  # Build, typecheck, and the 117 tests across core + desktop -- all
   # display-free, including a happy-dom harness that boots the real renderer
   # over the real engine. None of it needs a display, Xvfb, root, or
   # Electron's 283 MB runtime binary: the desktop build marks electron
@@ -47,7 +47,7 @@ jobs:
 
       # The same root scripts anyone runs locally; see package.json.
       #
-      # @uno/grid's exports point at dist/, which is not committed, so the
+      # @uno/core's exports point at dist/, which is not committed, so the
       # desktop package has nothing to type check or bundle against until the
       # build has run.
       - name: Build
@@ -81,7 +81,7 @@ jobs:
           run-install: true
 
       # Jobs run on separate, fresh runners, so none of the `test` job's build
-      # output carries over here. @uno/grid's exports point at dist/, which is
+      # output carries over here. @uno/core's exports point at dist/, which is
       # not committed, so the desktop package has nothing to bundle against
       # until this runs.
       - name: Build
@@ -101,5 +101,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: smoke-window
-          path: internal/desktop/out/smoke/window.png
+          path: apps/desktop/out/smoke/window.png
           if-no-files-found: ignore
