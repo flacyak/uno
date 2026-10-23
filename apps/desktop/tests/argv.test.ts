@@ -11,7 +11,7 @@ const CWD = "/home/ana/exports";
 /** The app path of the packaged app, which is never on the line. */
 const PACKAGED = "/opt/uno/resources/app.asar";
 /** The app in development, started as `electron .` from its own folder. */
-const DEV = "/home/ana/uno/internal/desktop";
+const DEV = "/home/ana/uno/apps/desktop";
 
 test("a packaged uno takes every argument after the executable", () => {
   const argv = ["/usr/bin/uno", "q3.csv", "/data/q4.csv"];
