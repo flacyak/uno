@@ -22,8 +22,9 @@ export type Way =
 export const PLACES: Record<Way, readonly string[]> = {
   // The local file handler, the store's write, and the disk lister.
   'the disk': ['store/node.ts', 'store/disklister.ts'],
-  // The S3 handler and lister, and the SSO portal and STS exchanges.
-  fetch: ['store/s3.ts', 'store/sts.ts'],
+  // The S3 handler and lister, the SSO portal and STS exchanges, and the
+  // instance and container endpoints.
+  fetch: ['store/s3.ts', 'store/sts.ts', 'store/metadata.ts'],
   // A profile's credential_process.
   'a program': ['store/node.ts'],
   // The blob handler.
