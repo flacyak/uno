@@ -240,18 +240,20 @@ export class Workspace {
 
   /**
    * Removes a source from the engine and the tab list. The engine refuses to
-   * remove the last source.
+   * remove the last source. The tab is found by id, since a relink or append
+   * answered first may have replaced `tab`.
    *
    * Returns true if the removed tab was the one showing. In that case the
    * next tab (or the last) is now showing and the grid must redraw.
    */
   async remove(tab: Tab): Promise<boolean> {
     await this.engine.remove(tab.source);
-    const i = this.tabs.indexOf(tab);
+    const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return false;
+    const was = this.tabs[i]!;
     this.tabs.splice(i, 1);
     this.relinked.delete(tab.id);
-    if (this.showing !== tab) return false;
+    if (this.showing !== was) return false;
     this.showing = this.tabs[Math.min(i, this.tabs.length - 1)]!;
     return true;
   }
@@ -274,18 +276,21 @@ export class Workspace {
   }
 
   /**
-   * Replaces `tab` with a new tab for `source` at the same position, with the
-   * same selected cell and saved log. `pointed` decides whether the new tab
-   * is marked relinked.
+   * Replaces the tab for `tab`'s source with a new tab for `source` at the
+   * same position, with the same selected cell and saved log. `pointed`
+   * decides whether the new tab is marked relinked. The tab is found by id,
+   * since a relink or append answered first may have replaced `tab`, and
+   * only the newest handle hears the engine.
    */
   private replace(tab: Tab, source: SourceHandle, pointed: (fresh: Tab) => boolean): Tab {
-    const i = this.tabs.indexOf(tab);
+    const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return tab;
-    const fresh = this.tab(source, tab.savedLog);
-    fresh.cell = tab.cell;
+    const was = this.tabs[i]!;
+    const fresh = this.tab(source, was.savedLog);
+    fresh.cell = was.cell;
     this.tabs[i] = fresh;
     if (pointed(fresh)) this.relinked.add(fresh.id);
-    if (this.showing === tab) this.showing = fresh;
+    if (this.showing === was) this.showing = fresh;
     return fresh;
   }
 
