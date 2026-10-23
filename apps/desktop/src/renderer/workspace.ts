@@ -13,6 +13,7 @@ import { WORKSPACE_EXT, isWorkspace } from "@document";
 import { Band } from "@engine";
 import type {
   Changed,
+  EditRequest,
   Engine,
   FindRequest,
   Found,
@@ -158,6 +159,14 @@ export class Tab {
     const a = this.edits;
     const b = this.savedEdits;
     return a.length !== b.length || !a.every((e, i) => editEquals(e, b[i]!));
+  }
+
+  /**
+   * Sends an edit with the column count the band draws, so the engine can
+   * refuse one aimed at a column that has moved since, and takes the change.
+   */
+  async edit(req: Omit<EditRequest, "width">): Promise<void> {
+    this.landed(await this.source.edit({ ...req, width: this.band.cols() }));
   }
 
   landed(changed: Changed): void {
@@ -389,7 +398,7 @@ export class Workspace {
     const t = this.showing;
     const pending = t.band.write(row, col, value);
     try {
-      t.landed(await t.source.edit({ op: Op.Set, row, col, now: value }));
+      await t.edit({ op: Op.Set, row, col, now: value });
     } catch (err) {
       t.band.restore(pending);
       throw err;
@@ -402,9 +411,7 @@ export class Workspace {
     const t = this.tabs.find((tab) => tab.id === offer.source);
     if (t === undefined) throw new Error(m.offer_source_gone());
     t.offer = null;
-    t.landed(
-      await t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
-    );
+    await t.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program });
   }
 
   /**
@@ -413,7 +420,7 @@ export class Workspace {
    * unknown column.
    */
   async bind(tab: Tab, col: number, expr: string): Promise<void> {
-    tab.landed(await tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }));
+    await tab.edit({ op: Op.Bind, row: NO_ROW, col, now: expr });
   }
 
   /** Undoes the showing tab's last edit and returns that edit. */
