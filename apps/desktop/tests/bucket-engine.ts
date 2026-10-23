@@ -10,9 +10,9 @@ import { sources } from "@plugin";
 import { diskProvider } from "@store/node";
 import { s3Provider } from "@store/s3";
 
-import { HOME_REGION } from "@grid-tests/store/regions";
-import { KEYS } from "@grid-tests/store/standin";
-import type { Bucket } from "@grid-tests/store/standin";
+import { HOME_REGION } from "@core-tests/store/regions";
+import { KEYS } from "@core-tests/store/standin";
+import type { Bucket } from "@core-tests/store/standin";
 
 export function bucketEngine(b: Bucket): Engine {
   const { port1, port2 } = new MessageChannel();

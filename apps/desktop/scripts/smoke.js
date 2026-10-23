@@ -10,15 +10,15 @@
  * Usage: node --import ../../paths.js scripts/smoke.js   (after node scripts/build.js)
  */
 
-import { newManifest, readContainer, writeDocument } from "@uno/grid/document";
-import { parseConnection } from "@uno/grid/library";
+import { newManifest, readContainer, writeDocument } from "@uno/core/document";
+import { parseConnection } from "@uno/core/library";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { HOME_REGION } from "@grid-tests/store/regions";
-import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@grid-tests/store/standin";
+import { HOME_REGION } from "@core-tests/store/regions";
+import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@core-tests/store/standin";
 import {
   DRIVEN_LANGUAGE_ENV,
   DRIVEN_LANGUAGE_SWITCH,
@@ -31,9 +31,9 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
-const fixture = join(pkg, "../../grid/tests/testdata/sales-q3.csv");
+const fixture = join(pkg, "../../core/tests/testdata/sales-q3.csv");
 // A second export, for the checks that a workspace holds several.
-const second = join(pkg, "../../grid/tests/testdata/google-ads-sales.csv");
+const second = join(pkg, "../../core/tests/testdata/google-ads-sales.csv");
 
 /** The object pasted into the sources panel: the second export, in S3. */
 const KEY = "2025/ads-q3.csv";
@@ -46,7 +46,7 @@ const BESIDE = ["2025/ads-q4.csv", "2025/sales-q3.csv"];
  * fourth that arrives later and is appended. The fourth is the first part's
  * bytes under a name that sorts after the third.
  */
-const PARTS = [1, 2, 3].map((n) => join(pkg, `../../grid/tests/testdata/sales-q3-part-${n}.csv`));
+const PARTS = [1, 2, 3].map((n) => join(pkg, `../../core/tests/testdata/sales-q3-part-${n}.csv`));
 const ARRIVING = new Map([
   ...(await Promise.all(
     PARTS.map(async (path, i) => [`shop/2025/sales-q3-part-${i + 1}.csv`, await readFile(path)]),
