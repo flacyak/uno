@@ -8,9 +8,9 @@ import { afterEach, expect, test } from 'vite-plus/test';
 import { BAND_ROWS } from '@engine/client';
 import { TUNING } from '@engine';
 import { indexed } from '@grid-tests/engine/harness';
-import { ROWS } from '@grid-tests/testdata/sales-q3';
+import { ROWS, repeated } from '@grid-tests/testdata/sales-q3';
 import { record } from './record.ts';
-import { remote, repeated } from './remote.ts';
+import { remote } from './remote.ts';
 import type { Remote } from './remote.ts';
 
 /** 24 MB and 481,200 rows: three chunks at the default chunk size. */
