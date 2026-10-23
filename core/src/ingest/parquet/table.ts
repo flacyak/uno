@@ -6,6 +6,7 @@
 import { parquetMetadata } from 'hyparquet/src/index.js';
 import type { FileMetaData } from 'hyparquet/src/index.js';
 
+import { concat } from '@go';
 import type { ByteSource } from '@store';
 
 import { PARQUET_FOOTER_LENGTH_BYTES, PARQUET_MAGIC_BYTES } from '../detect.ts';
@@ -13,7 +14,10 @@ import type { ChunkCache } from './buffer.ts';
 import { columnsOf } from './values.ts';
 import type { Column } from './values.ts';
 
-/** The last bytes of a file read for its footer, which hold most footers whole. */
+/**
+ * The last bytes of a file read for its footer, which hold most footers
+ * whole. A longer footer takes one more read, of the rest of it.
+ */
 export const PARQUET_TAIL_BYTES = 64 << 10;
 
 /** What follows a footer: its length, a little-endian uint32, then the magic. */
@@ -43,7 +47,10 @@ export async function openTable(
   return new ParquetTable(await footerOf(file, chunks));
 }
 
-/** The footer of `file`, from one read of its last PARQUET_TAIL_BYTES. */
+/**
+ * The footer of `file`, from one read of its last PARQUET_TAIL_BYTES and one
+ * more of the rest of a longer footer.
+ */
 async function footerOf(
   file: ByteSource,
   chunks: ChunkCache,
@@ -54,8 +61,14 @@ async function footerOf(
     tail.length - FOOTER_END_BYTES,
     true,
   );
-  const start = tail.length - FOOTER_END_BYTES - length;
-  return parquetMetadata(tail.subarray(start), { geoparquet: false });
+  const start = file.size - FOOTER_END_BYTES - length;
+  const rest =
+    start < tailStart ? await file.read(start, tailStart - start) : undefined;
+  const held = rest === undefined ? tail : concat([rest, tail]);
+  const heldStart = file.size - held.length;
+  return parquetMetadata(held.subarray(start - heldStart), {
+    geoparquet: false,
+  });
 }
 
 /** ParquetTable is a Table over the footer it was opened with. */
