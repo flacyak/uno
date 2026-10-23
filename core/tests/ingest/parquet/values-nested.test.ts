@@ -7,6 +7,7 @@
 import type { SchemaElement } from 'hyparquet/src/index.js';
 import { expect, test } from 'vite-plus/test';
 
+import { stringFromBytes } from '@ingest/parquet/values';
 import type { ParquetValue } from '@ingest/parquet/values';
 
 import { textsOf } from './texts.ts';
@@ -15,6 +16,9 @@ const encoder = new TextEncoder();
 
 /** The bytes of a UUID. */
 const UUID_BYTES = 16;
+
+/** A byte that is never UTF-8. */
+const BAD_UTF8 = new Uint8Array([0xff]);
 
 /** A three-level LIST named `name`, whose `element` follows. */
 function list(name: string, element: SchemaElement): SchemaElement[] {
@@ -69,7 +73,10 @@ function map(
   ];
 }
 
-/** A MAP key as hyparquet reads one with identity parsers. */
+/**
+ * A MAP key as hyparquet reads one with identity parsers, and a string as
+ * stringFromBytes hands it over.
+ */
 type Key = boolean | number | bigint | string | Uint8Array;
 
 /**
@@ -90,10 +97,7 @@ test('a map writes its values as its value column says', () => {
     { name: 'key', type: 'BYTE_ARRAY', converted_type: 'UTF8' },
     { name: 'value', type: 'INT64', converted_type: 'UINT_64' },
   );
-  const counts = mapOf(
-    [encoder.encode('a"b'), encoder.encode('cd')],
-    [-1n, null],
-  );
+  const counts = mapOf(['a"b', 'cd'], [-1n, null]);
   expect(textsOf(elements, [counts, mapOf([], [])])).toEqual([
     '{"a\\"b":18446744073709551615,"cd":null}',
     '{}',
@@ -138,6 +142,19 @@ test('a map writes its keys as its key column says', () => {
       json,
     ]);
   }
+});
+
+test('a map keyed by strings writes each key as its text, however it reads', () => {
+  const elements = map(
+    'm',
+    { name: 'key', type: 'BYTE_ARRAY', logical_type: { type: 'STRING' } },
+    { name: 'value', type: 'INT32' },
+  );
+  // Bytes that are not UTF-8 come over as their 0x-hex, as a value does.
+  const keys = ['1', '65,66', '255,0,0', '', stringFromBytes(BAD_UTF8)!];
+  expect(textsOf(elements, [mapOf(keys, [0, 1, 2, 3, 4])])).toEqual([
+    '{"1":0,"65,66":1,"255,0,0":2,"":3,"0xff":4}',
+  ]);
 });
 
 test('a struct in a list writes each field as its own column would', () => {
