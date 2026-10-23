@@ -3,7 +3,7 @@
  * as a table.
  */
 
-import type { Metric } from './record.ts';
+import type { Kind, Metric } from './record.ts';
 
 /** Change is one metric as it was and as it is. Either side can be missing. */
 export interface Change {
@@ -64,17 +64,25 @@ function verdict(c: Change): string {
   return `${c.head < c.base ? 'better' : 'worse'}${by}${noisy}`;
 }
 
-/** markdown renders the changes as a Markdown table. */
+/** The heading and the lead sentence of each kind's table. */
+const WORDING: Record<Kind, { title: string; does: string }> = {
+  efficiency: { title: 'Efficiency', does: 'costs' },
+  performance: { title: 'Performance', does: 'takes' },
+};
+
+/** markdown renders the changes as a Markdown table under the kind's heading. */
 export function markdown(
   changes: readonly Change[],
   baseline: boolean,
+  kind: Kind = 'efficiency',
 ): string {
+  const { title, does } = WORDING[kind];
   const lines = [
-    '### Efficiency',
+    `### ${title}`,
     '',
     baseline
-      ? 'What this change costs, beside the branch it is going into. Smaller is better.'
-      : 'What this change costs. The branch it is going into has no efficiency tests to compare with.',
+      ? `What this change ${does}, beside the branch it is going into. Smaller is better.`
+      : `What this change ${does}. The branch it is going into has no ${kind} tests to compare with.`,
     '',
     '| Metric | Unit | Base | Head | Change |',
     '| --- | --- | ---: | ---: | --- |',

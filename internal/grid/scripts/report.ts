@@ -1,33 +1,29 @@
 /**
- * @fileoverview Prints the metrics the efficiency tests measured, and sends
- * them to a collector.
+ * @fileoverview Prints the metrics a suite measured, and sends them to a
+ * collector.
  *
- *   node --import ../paths.js scripts/efficiency.ts [--base <folder>] [--out <file>]
+ *   node --import ../paths.js scripts/report.ts --kind <kind> [--base <folder>] [--out <file>]
  *
- * Reads out/efficiency/*.json, written by `vp test tests/efficiency`, and
- * prints a markdown table of every metric. --base names a folder of the same
- * files from another branch; the table then shows each metric beside its
- * value there. --out also writes the table to that file.
+ * The kind is `efficiency` or `performance`. Reads out/<kind>/*.json, written
+ * by `vp test tests/<kind>`, and prints a markdown table of every metric.
+ * --base names a folder of the same files from another branch; the table
+ * then shows each metric beside its value there. --out also writes the table
+ * to that file.
  *
  * When OTEL_EXPORTER_OTLP_ENDPOINT is set, the metrics are also sent there as
- * the gauge uno.efficiency, one series per metric, labelled with the branch.
+ * the gauge uno.<kind>, one series per metric, labelled with the branch.
  * OTEL_EXPORTER_OTLP_HEADERS is sent with the request.
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { ENDPOINT_VARIABLE, Meter, collector } from '@engine/telemetry';
 import type { Collector } from '@engine/telemetry';
 import { compare, markdown } from '@grid-tests/efficiency/compare';
-import type { Metric } from '@grid-tests/efficiency/record';
-
-const HEAD = fileURLToPath(new URL('../out/efficiency/', import.meta.url));
-
-/** The gauge every metric is sent as. The metric's name is a label on it. */
-const GAUGE = 'uno.efficiency';
+import { KINDS, outFolder } from '@grid-tests/efficiency/record';
+import type { Kind, Metric } from '@grid-tests/efficiency/record';
 /** How long a send may take before it is abandoned. */
 const SEND_TIMEOUT_MS = 10_000;
 /** How many times a send is tried when the collector is busy, down, or unreachable. */
@@ -64,11 +60,16 @@ function metricsIn(folder: string): Metric[] {
     });
 }
 
-/** Sends the metrics to the collector named in the environment, if any. */
+/**
+ * Sends the metrics to the collector named in the environment, if any. Each
+ * kind is one gauge, uno.<kind>, and the metric's name is a label on it.
+ */
 async function send(
+  kind: Kind,
   metrics: readonly Metric[],
   env: NodeJS.ProcessEnv,
 ): Promise<string> {
+  const gauge = `uno.${kind}`;
   const to = collector(env);
   if (to === undefined) {
     return `${ENDPOINT_VARIABLE} is not set, so nothing was sent to a collector`;
@@ -77,10 +78,10 @@ async function send(
   // GitHub sets GITHUB_HEAD_REF on a pull request and GITHUB_REF_NAME on a
   // push.
   const branch = env['GITHUB_HEAD_REF'] || env['GITHUB_REF_NAME'] || 'local';
-  const meter = new Meter({ service: 'uno-efficiency' });
+  const meter = new Meter({ service: `uno-${kind}` });
   for (const m of metrics) {
     meter.record({
-      name: GAUGE,
+      name: gauge,
       kind: 'level',
       unit: '',
       value: m.value,
@@ -94,7 +95,7 @@ async function send(
       `the collector answered ${res.status}: ${await res.text()}`,
     );
   }
-  return `sent ${metrics.length} metrics to the collector as ${GAUGE}, branch ${branch}`;
+  return `sent ${metrics.length} metrics to the collector as ${gauge}, branch ${branch}`;
 }
 
 /**
@@ -144,25 +145,34 @@ function wait(ms: number): Promise<void> {
 }
 
 const { values } = parseArgs({
-  options: { base: { type: 'string' }, out: { type: 'string' } },
+  options: {
+    kind: { type: 'string' },
+    base: { type: 'string' },
+    out: { type: 'string' },
+  },
 });
 
-const head = metricsIn(HEAD);
+const kind = KINDS.find((k) => k === values.kind);
+if (kind === undefined) {
+  throw new Error(`--kind names one of ${KINDS.join(', ')}`);
+}
+const folder = outFolder(kind);
+const head = metricsIn(folder);
 if (head.length === 0) {
   throw new Error(
-    `${HEAD} holds no metrics · run \`vp test tests/efficiency\` first`,
+    `${folder} holds no metrics · run \`vp test tests/${kind}\` first`,
   );
 }
 const base = values.base === undefined ? [] : metricsIn(values.base);
 
-const table = markdown(compare(base, head), base.length > 0);
+const table = markdown(compare(base, head), base.length > 0, kind);
 if (values.out !== undefined) writeFileSync(values.out, table);
 console.log(table);
 
 // The table is printed before the send, so a send that fails still leaves the
 // report. In GitHub Actions the failure is printed as an error annotation.
 try {
-  console.log(await send(head, process.env));
+  console.log(await send(kind, head, process.env));
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   console.error(

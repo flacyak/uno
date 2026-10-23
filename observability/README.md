@@ -45,7 +45,7 @@ Send the efficiency metrics to it:
 ```bash
 cd internal/grid
 vp test tests/efficiency
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import ../paths.js scripts/efficiency.ts
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import ../paths.js scripts/report.ts --kind efficiency
 ```
 
 Run the desktop app against it:

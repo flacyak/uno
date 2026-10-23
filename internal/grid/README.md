@@ -114,10 +114,10 @@ Each also writes its numbers to `out/efficiency/<file>.json` as a list of
 
 ```bash
 vp test tests/efficiency                       # these files alone
-node --import ../paths.js scripts/efficiency.ts   # their numbers as a table
+node --import ../paths.js scripts/report.ts --kind efficiency   # their numbers as a table
 ```
 
-`scripts/efficiency.ts` also sets the numbers beside a base's with `--base`,
+`scripts/report.ts` also sets the numbers beside a base's with `--base`,
 and sends them to a collector where `OTEL_EXPORTER_OTLP_ENDPOINT` or
 `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` names one.
 The `efficiency` workflow does both on every pull request.
