@@ -5,6 +5,9 @@
 
 import { readFileSync } from 'node:fs';
 
+import { CHUNK_CACHE_BYTES, chunkCache } from '@ingest/parquet/buffer';
+import { openTable } from '@ingest/parquet/table';
+import type { Table } from '@ingest/parquet/table';
 import { bytesSource } from '@store';
 import type { ByteSource } from '@store';
 
@@ -31,4 +34,9 @@ export function logged(bytes: Uint8Array): {
   };
   const close = (): Promise<void> => inner.close();
   return { reads, source: { size: inner.size, read, close } };
+}
+
+/** `bytes` opened as a table called `name`. */
+export function opened(name: string, bytes: Uint8Array): Promise<Table> {
+  return openTable(name, bytesSource(bytes), chunkCache(CHUNK_CACHE_BYTES));
 }

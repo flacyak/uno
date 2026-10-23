@@ -1,6 +1,7 @@
 /**
  * @fileoverview A Parquet table reads its footer from one read of the file's
- * tail, or two where the footer is longer, and says what the file holds.
+ * tail, or two where the footer is longer, and says what the file holds. A
+ * file whose footer is damaged is refused as parquet-broken.
  */
 
 import { parquetWriteBuffer } from 'hyparquet-writer';
@@ -8,11 +9,13 @@ import { expect, test } from 'vite-plus/test';
 
 import { CHUNK_CACHE_BYTES, chunkCache } from '@ingest/parquet/buffer';
 import { PARQUET_TAIL_BYTES, openTable } from '@ingest/parquet/table';
+import { Refusal } from '@said';
+import type { Said } from '@said';
 import type { ByteSource } from '@store';
 import { ROWS } from '@core-tests/testdata/sales-q3';
 
 import { SALES_GROUP_ROWS } from '../../../scripts/fixtures.ts';
-import { SALES, logged } from './tables.ts';
+import { SALES, logged, opened } from './tables.ts';
 
 /** The columns of a file wider than its footer's tail. */
 const WIDE_COLUMNS = 2_000;
@@ -25,6 +28,20 @@ function footerStart(bytes: Uint8Array): number {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
   const length = view.getUint32(bytes.length - FOOTER_END_BYTES, true);
   return bytes.length - FOOTER_END_BYTES - length;
+}
+
+/** What opening `bytes` refused, as the Said of its Refusal. */
+async function refusalOf(
+  name: string,
+  bytes: Uint8Array,
+): Promise<Said | undefined> {
+  try {
+    await opened(name, bytes);
+  } catch (err) {
+    if (err instanceof Refusal) return err.said;
+    throw err;
+  }
+  return undefined;
 }
 
 test('a footer in the tail says the columns, rows and groups from one read', async () => {
@@ -67,6 +84,35 @@ test('a footer over 64 KB takes exactly two reads, the second of the rest of it'
     [tailStart, PARQUET_TAIL_BYTES],
     [start, tailStart - start],
   ]);
+});
+
+test('a truncated or damaged footer is refused as parquet-broken', async () => {
+  const name = 'sales-q3.snappy.parquet';
+  const start = footerStart(SALES);
+  const zeroed = SALES.slice();
+  zeroed.fill(0, start, SALES.length - FOOTER_END_BYTES);
+  const headless = SALES.slice();
+  headless[0] = 0;
+  const longer = SALES.slice();
+  new DataView(longer.buffer).setUint32(
+    longer.length - FOOTER_END_BYTES,
+    longer.length,
+    true,
+  );
+  const damaged: Array<[string, Uint8Array]> = [
+    ['cut short', SALES.subarray(0, SALES.length - 1)],
+    ['cut inside its footer', SALES.subarray(0, start + 1)],
+    ['too short to hold a footer', SALES.subarray(0, FOOTER_END_BYTES)],
+    ['a footer longer than the file', longer],
+    ['a footer of zeros', zeroed],
+    ['no magic at its head', headless],
+  ];
+  for (const [what, bytes] of damaged) {
+    expect(await refusalOf(name, bytes), what).toEqual({
+      t: 'parquet-broken',
+      name,
+    });
+  }
 });
 
 test('a failed read of the file is passed on as it failed', async () => {
