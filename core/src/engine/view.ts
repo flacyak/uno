@@ -309,8 +309,8 @@ export class View {
       // carried edits name. Carried bytes wait for the whole index.
       const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
       const whole = carried?.raw !== undefined;
-      await v.until(
-        () => index.complete || (!whole && index.readable() >= want),
+      await Effect.runPromise(
+        v.until(() => index.complete || (!whole && index.readable() >= want)),
       );
       // From here the open is answered, so a cancel is left unheard.
       signal?.removeEventListener('abort', cancelled);
@@ -632,7 +632,9 @@ export class View {
       let told = Date.now();
       let slice = Date.now();
       for (let row = 0; ;) {
-        await this.until(() => index.complete || index.readable() > row);
+        await Effect.runPromise(
+          this.until(() => index.complete || index.readable() > row),
+        );
         if (signal.aborted) return;
         if (row >= index.readable()) break;
 
@@ -833,7 +835,7 @@ export class View {
         };
       }
       if (this.path === '') {
-        await this.until(() => this.index.complete);
+        await Effect.runPromise(this.until(() => this.index.complete));
         const raw =
           this.carried ?? (await this.source.read(0, this.source.size));
         return { raw, bytes: this.size, version: this.version, ...this.kept() };
@@ -950,16 +952,30 @@ export class View {
     await this.source.close();
   }
 
-  /** until resolves once `ready` returns true, or rejects if the index fails first. */
-  private until(ready: () => boolean): Promise<void> {
-    if (this.failed !== undefined) return Promise.reject(this.failed);
-    if (ready()) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      this.waiters.push(() => {
-        if (this.failed !== undefined) reject(this.failed);
-        else if (ready()) resolve();
-        else return false;
+  /**
+   * until completes once `ready` returns true, or fails with the index's
+   * failure if it fails first. It resumes in a microtask, as a Promise would:
+   * the index pass that woke it has asked for its next chunk by then, so a
+   * read the waiter goes on to make follows the pass's. Interrupting it,
+   * which is what a cancel does to an open, removes its waiter, so nothing
+   * is left registered.
+   */
+  private until(ready: () => boolean): Effect.Effect<void, Error> {
+    return Effect.callback((resume) => {
+      const waiter: Waiter = () => {
+        const failed = this.failed;
+        if (failed !== undefined) {
+          queueMicrotask(() => resume(Effect.fail(failed)));
+        } else if (ready()) {
+          queueMicrotask(() => resume(Effect.void));
+        } else {
+          return false;
+        }
         return true;
+      };
+      if (!waiter()) this.waiters.push(waiter);
+      return Effect.sync(() => {
+        this.waiters = this.waiters.filter((w) => w !== waiter);
       });
     });
   }
