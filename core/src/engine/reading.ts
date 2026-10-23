@@ -107,6 +107,31 @@ function keyedOf({ name, key }: SavedColumn): KeyedColumn {
   return { name, key: key ?? pointerTo('', name) };
 }
 
+/**
+ * savedOf returns what a save writes of how a source's rows were read,
+ * which readOf reads back. Delimited text writes nothing, as it always has.
+ * JSON Lines writes its kind and every column in the spec, so a reopen
+ * gives each key its column before the pass reaches it.
+ */
+export function savedOf(spec: ReadSpec): Pick<Held, 'kind' | 'columns'> {
+  switch (spec.kind) {
+    case 'delimited':
+      return {};
+    case 'jsonl':
+      return { kind: 'jsonl', columns: spec.columns.map(pinnedOf) };
+    default:
+      return unreachable(spec);
+  }
+}
+
+/**
+ * pinnedOf returns a column as a save pins it, leaving out a key keyedOf
+ * finds again from the name.
+ */
+function pinnedOf({ name, key }: KeyedColumn): SavedColumn {
+  return key === pointerTo('', name) ? { name } : { name, key };
+}
+
 /** Behind is what holds a source's stored bytes: one file, or several joined as bytes. */
 export type Behind =
   | { readonly t: 'file'; readonly stored: ByteSource }
