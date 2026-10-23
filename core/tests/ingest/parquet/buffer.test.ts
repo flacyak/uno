@@ -17,34 +17,16 @@ import {
 import { bytesSource } from '@store';
 import type { ByteSource } from '@store';
 
+import { logged } from './tables.ts';
+
 /** How many bytes the file holds. */
 const SIZE = 1_000;
 
 /** The file's bytes, each its own offset modulo 256. */
 const BYTES = Uint8Array.from({ length: SIZE }, (_, i) => i % 256);
 
-/** A source over BYTES, with each read as [offset, length] in `reads`. */
-function logged(): {
-  source: ByteSource;
-  reads: Array<[offset: number, length: number]>;
-} {
-  const inner = bytesSource(BYTES);
-  const reads: Array<[offset: number, length: number]> = [];
-  return {
-    reads,
-    source: {
-      size: inner.size,
-      read(offset, length) {
-        reads.push([offset, length]);
-        return inner.read(offset, length);
-      },
-      close: () => inner.close(),
-    },
-  };
-}
-
 test('a slice is the exact bytes asked for, from one read of them', async () => {
-  const { source, reads } = logged();
+  const { source, reads } = logged(BYTES);
   const file = asyncBufferOf(source, chunkCache(0));
   expect(file.byteLength).toBe(SIZE);
   expect(new Uint8Array(await file.slice(100, 300))).toEqual(
@@ -54,7 +36,7 @@ test('a slice is the exact bytes asked for, from one read of them', async () => 
 });
 
 test('a slice takes its ends as ArrayBuffer.slice takes them', async () => {
-  const { source, reads } = logged();
+  const { source, reads } = logged(BYTES);
   const file = asyncBufferOf(source, chunkCache(0));
   const ends: Array<[start: number, end?: number]> = [
     [900],
@@ -93,7 +75,7 @@ test('hyparquet reads a file through it', async () => {
 const ROOMY = 1 << 20;
 
 test('a range inside a held slice is answered without a read', async () => {
-  const { source, reads } = logged();
+  const { source, reads } = logged(BYTES);
   const cache = chunkCache(ROOMY);
   const file = asyncBufferOf(source, cache);
   // A reader that writes over its copy leaves the held bytes as they were.
@@ -113,8 +95,8 @@ test('a range inside a held slice is answered without a read', async () => {
 });
 
 test('slices are held per file, and one range asked twice at once is read once', async () => {
-  const a = logged();
-  const b = logged();
+  const a = logged(BYTES);
+  const b = logged(BYTES);
   const cache = chunkCache(ROOMY);
   await Promise.all([
     asyncBufferOf(a.source, cache).slice(0, 100),
@@ -126,7 +108,7 @@ test('slices are held per file, and one range asked twice at once is read once',
 });
 
 test('the slice used least recently goes once the budget is passed', async () => {
-  const { source, reads } = logged();
+  const { source, reads } = logged(BYTES);
   const cache = chunkCache(250);
   const file = asyncBufferOf(source, cache);
   await file.slice(0, 100);
@@ -141,7 +123,7 @@ test('the slice used least recently goes once the budget is passed', async () =>
 });
 
 test('a slice larger than the budget is read, and neither held nor pushes one out', async () => {
-  const { source, reads } = logged();
+  const { source, reads } = logged(BYTES);
   const cache = chunkCache(100);
   const file = asyncBufferOf(source, cache);
   await file.slice(0, 50);
@@ -153,7 +135,7 @@ test('a slice larger than the budget is read, and neither held nor pushes one ou
 });
 
 test('a failed read is not held, so the next slice of it reads again', async () => {
-  const { source } = logged();
+  const { source } = logged(BYTES);
   let failures = 1;
   const flaky: ByteSource = {
     ...source,
