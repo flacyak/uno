@@ -6,6 +6,8 @@
  * the Schema and a new generation number. Every stored row stays as read.
  */
 
+import { Effect } from 'effect';
+
 import type { HeldFile, HeldPart, HeldParts } from '@document';
 import { trimSpace } from '@go';
 import { headerOf, labelOf, openFormat } from '@ingest';
@@ -60,6 +62,7 @@ import {
   unmeasured,
 } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
+import { Turns, awaited } from '@turns';
 
 /** Minimum milliseconds between progress messages. */
 const PROGRESS_MS = 100;
@@ -173,7 +176,8 @@ export class View {
   private finding: AbortController | undefined;
   /** Edits undo took back, newest last, for redo. A new edit empties it. */
   private undone: Edit[] = [];
-  private queue: Promise<unknown> = Promise.resolve();
+  /** The queue an edit, an undo, a redo and a save's part() run through. */
+  private readonly turns = new Turns();
   private waiters: Waiter[] = [];
   private failed: Error | undefined;
   private readonly abort = new AbortController();
@@ -566,10 +570,9 @@ export class View {
     if (!this.transform) throw new Refusal({ t: 'in-view' });
   }
 
+  /** serially runs `fn` as the next turn of the queue. */
   private serially<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn);
-    this.queue = run.catch(() => undefined);
-    return run;
+    return Effect.runPromise(this.turns.next(awaited(fn)));
   }
 
   // ------------------------------------------------------------ recognising
