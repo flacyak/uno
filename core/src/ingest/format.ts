@@ -226,12 +226,20 @@ export function headerOf(record: readonly string[]): string[] {
   return namesBeside([], record);
 }
 
+/** The characters a pointer segment writes as escapes. */
+const POINTER_ESCAPED = /[~/]/;
+
 /**
  * pointerTo returns the RFC 6901 pointer to member `name` of what `parent`
  * points to. A '~' in the name is written '~0', and a '/' is written '~1'.
+ * Most names hold neither, and the JSON Lines index pass writes a pointer
+ * for every cell, so a name is scanned for them before it is rewritten.
  */
 export function pointerTo(parent: string, name: string): string {
-  return `${parent}/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+  const segment = POINTER_ESCAPED.test(name)
+    ? name.replaceAll('~', '~0').replaceAll('/', '~1')
+    : name;
+  return `${parent}/${segment}`;
 }
 
 /** The extension, lower-cased, including its dot. "" when there is none. */
