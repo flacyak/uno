@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, test } from "vite-plus/test";
 
 import { Refusal, english } from "@engine";
 import type { Said } from "@engine";
+import type { ParquetFeature } from "@said";
 
 import { PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
 import { baseLocale, setLocale } from "@paraglide/runtime";
@@ -97,6 +98,11 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   },
   "not-read": { t: "not-read", name: "events.jsonl", what: "JSON Lines" },
   "parquet-broken": { t: "parquet-broken", name: "sales-q3.parquet" },
+  "parquet-unsupported": {
+    t: "parquet-unsupported",
+    name: "events.parquet",
+    feature: "variant",
+  },
   "keeps-no-connections": { t: "keeps-no-connections" },
   "offers-no-sign-ins": { t: "offers-no-sign-ins" },
   "tries-no-connection": { t: "tries-no-connection" },
@@ -151,6 +157,23 @@ test("the other shapes of a kind are the engine's English too", () => {
     { t: "carried-too-large", name: "ads.csv", bytes: 2 * KB * MB, limit: 256 * MB },
   ];
   for (const shape of shapes) expect(say(shape), JSON.stringify(shape)).toBe(english(shape));
+});
+
+test("every Parquet feature is said as the engine says it", () => {
+  const features: Record<ParquetFeature, true> = {
+    encryption: true,
+    brotli: true,
+    lz4: true,
+    lzo: true,
+    interval: true,
+    bson: true,
+    variant: true,
+    "external-columns": true,
+  };
+  for (const feature of Object.keys(features) as ParquetFeature[]) {
+    const shape: Said = { t: "parquet-unsupported", name: "q3.parquet", feature };
+    expect(say(shape), feature).toBe(english(shape));
+  }
 });
 
 test("text a step looks for is quoted with what cannot be seen in it escaped", () => {
