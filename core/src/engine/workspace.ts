@@ -11,6 +11,8 @@
  * View.
  */
 
+import { Effect } from 'effect';
+
 import {
   isAbsolute,
   isWorkspace,
@@ -46,6 +48,7 @@ import type { Meeting, Unconnected } from '@store/s3';
 import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
+import { Turns, awaited } from '@turns';
 import { View } from './view.ts';
 import type { Carried, Part } from './view.ts';
 
@@ -167,7 +170,8 @@ export class Workspace {
   private readonly states = new Map<string, State>();
 
   private transform = false;
-  private queue: Promise<unknown> = Promise.resolve();
+  /** The queue everything that changes the log runs through. */
+  private readonly turns = new Turns();
   private closed = false;
 
   constructor(
@@ -703,7 +707,7 @@ export class Workspace {
   async close(): Promise<void> {
     this.closed = true;
     await this.drop();
-    await this.queue;
+    await Effect.runPromise(this.turns.drained);
     await this.drop();
   }
 
@@ -733,13 +737,19 @@ export class Workspace {
     return source;
   }
 
+  /**
+   * serially runs `fn` as the next turn of the queue, and refuses it if the
+   * workspace was closed by the time its turn came.
+   */
   private serially<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(() => {
-      this.live();
-      return fn();
-    });
-    this.queue = run.catch(() => undefined);
-    return run;
+    return Effect.runPromise(
+      this.turns.next(
+        awaited(async () => {
+          this.live();
+          return fn();
+        }),
+      ),
+    );
   }
 }
 
