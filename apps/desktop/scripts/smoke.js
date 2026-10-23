@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HOME_REGION } from "@core-tests/store/regions";
+import { EVENTS_FILE, EVENTS_WORKSPACE, eventsText } from "../src/main/smoke/events.ts";
 import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@core-tests/store/standin";
 import {
   DRIVEN_LANGUAGE_ENV,
@@ -118,6 +119,37 @@ await writeFile(
   }),
 );
 
+// A JSON Lines file whose last events hold a key the first ones lack, and a
+// workspace that says it was read as JSON Lines, which is how such a file
+// is read until one named on its own is. In a folder of its own, as above.
+const events = join(scratch, "late", EVENTS_FILE);
+const eventsWorkspace = join(scratch, "late", EVENTS_WORKSPACE);
+await mkdir(dirname(events), { recursive: true });
+const eventLines = Buffer.from(eventsText());
+await writeFile(events, eventLines);
+await writeFile(
+  eventsWorkspace,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [
+      {
+        id: "events",
+        name: EVENTS_FILE,
+        path: events,
+        bytes: eventLines.length,
+        kind: "jsonl",
+        rows: 0,
+        cols: 0,
+        state: { active: { row: 0, col: 0 } },
+      },
+    ],
+    active: "events",
+    log: [],
+    extra: new Map(),
+    at: eventsWorkspace,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -199,6 +231,7 @@ const { code, out } = await drive("smoke", {
     // The object's address, for the check that adds it.
     UNO_SMOKE_OBJECT: object,
     UNO_SMOKE_SENT: sent,
+    UNO_SMOKE_EVENTS: eventsWorkspace,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits
