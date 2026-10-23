@@ -252,6 +252,24 @@ test("the sign-in list is the engine's profiles, between this machine and public
   expect(form().querySelector(".fine")!.textContent).toBe(
     "Each connection is one file in connections/. The profile list is read from ~/.aws; uno stores the name, never the keys.",
   );
+
+  // The policy the profile's keys need shows once a bucket is named, as the
+  // one copyable thing, and public access needs none.
+  const block = form().querySelector<HTMLElement>(".policy")!;
+  expect(block.hidden).toBe(true);
+  type("bucket", "acme-exports");
+  type("prefix", "shop");
+  expect(block.hidden).toBe(false);
+  const shown = [...block.querySelectorAll<HTMLElement>(".row")].filter((r) => !r.hidden);
+  expect(shown.map((r) => r.querySelector(".copyable")!.textContent)).toEqual([
+    permissionPolicy({ bucket: "acme-exports", prefix: "shop/" }),
+  ]);
+  expect(block.querySelector(".how")!.textContent).toMatch(
+    /^The IAM user or role whose keys sign in/,
+  );
+  select().value = "public";
+  select().dispatchEvent(new Event("change", { bubbles: true }));
+  expect(block.hidden).toBe(true);
 });
 
 // With a role mode on offer, the form asks for the role's ARN and shows what
@@ -268,7 +286,7 @@ test("an engine that signs in with a role asks for its ARN and shows what to han
   expect(select().value).toBe("role");
   const row = field("roleArn").closest("label")!;
   expect(row.hidden).toBe(false);
-  const block = form().querySelector<HTMLElement>(".role")!;
+  const block = form().querySelector<HTMLElement>(".policy")!;
   expect(block.hidden).toBe(false);
   // The block sits above the role's row, so a person copies before they paste.
   expect(block.nextElementSibling).toBe(row);

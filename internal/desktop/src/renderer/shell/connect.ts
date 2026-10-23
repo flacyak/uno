@@ -13,7 +13,7 @@ import { roleNameOf, validConnection } from "@library";
 import type { Tried } from "@store/s3";
 
 import { m } from "@paraglide/messages";
-import { RoleBlock } from "./role.ts";
+import { PolicyBlock } from "./policy.ts";
 import { Words, button, el, message, option } from "./util.ts";
 
 /** What the form asks of the shell. */
@@ -187,10 +187,12 @@ export class ConnectForm {
   /** The role's row, shown while "role" is selected. */
   private readonly roleRow: HTMLElement;
   /**
-   * What a person copies to make the role, shown above its ARN while "role"
-   * is selected and the engine has said what the role has to trust.
+   * The IAM documents to copy. For a role sign-in, what to hand to whoever
+   * makes the role, shown above its ARN once the engine has said what the
+   * role has to trust. For a profile or the machine, the permission policy
+   * its keys need.
    */
-  private readonly role: RoleBlock;
+  private readonly policy: PolicyBlock;
   private readonly region = document.createElement("div");
   private readonly result = document.createElement("div");
   private readonly saving = document.createElement("div");
@@ -240,7 +242,7 @@ export class ConnectForm {
     words.attr(this.roleArn, "aria-label", m.connect_role_aria);
     this.roleArn.placeholder = EXAMPLE_ROLE;
     this.roleRow = field(words, m.field_role, this.roleArn);
-    this.role = new RoleBlock();
+    this.policy = new PolicyBlock();
     this.region.className = "value";
     this.result.className = "result";
     this.result.setAttribute("role", "status");
@@ -258,7 +260,7 @@ export class ConnectForm {
       field(words, m.field_bucket, this.bucket),
       field(words, m.field_prefix, this.prefix),
       field(words, m.field_sign_in, this.signIn),
-      this.role.el,
+      this.policy.el,
       this.roleRow,
       field(words, m.field_region, this.region),
       this.result,
@@ -290,7 +292,7 @@ export class ConnectForm {
   /** relabel rewrites the form's text in the current language. */
   relabel(): void {
     this.words.write();
-    this.role.relabel();
+    this.policy.relabel();
     this.options(this.offered);
     this.paint();
   }
@@ -467,17 +469,20 @@ export class ConnectForm {
   private paint(): void {
     const s = this.status;
     // The role row shows while "role" is selected. The block of what to copy
-    // shows with it once the engine has said what the role has to trust, and
-    // follows the bucket and prefix as they are typed.
-    const role = this.signIn.value === "role";
+    // shows with it once the engine has said what the role has to trust. For
+    // keys it shows the permission policy once a bucket is named, and public
+    // access needs no policy. The policy follows the bucket and prefix as
+    // they are typed.
+    const signIn = this.signIn.value;
+    const role = signIn === "role";
     this.roleRow.hidden = !role;
+    const place = { bucket: this.bucket.value.trim(), prefix: folderOf(this.prefix.value) };
     const trust = this.offered.trust;
-    if (role && trust !== undefined) {
-      this.role.show(trust, {
-        bucket: this.bucket.value.trim(),
-        prefix: folderOf(this.prefix.value),
-      });
-    } else this.role.hide();
+    if (role) {
+      if (trust === undefined) this.policy.hide();
+      else this.policy.show(place, trust);
+    } else if (signIn !== "public" && place.bucket !== "") this.policy.show(place);
+    else this.policy.hide();
     this.region.textContent =
       s.t === "tried"
         ? m.connect_region_detected({ region: s.tried.connection.region ?? UNKNOWN_REGION })
