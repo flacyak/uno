@@ -3,7 +3,7 @@ name: efficiency
 # What a change costs in requests and bytes, measured on every pull request
 # and on every push to main.
 #
-# internal/grid/tests/efficiency counts what a person waits on: requests sent,
+# grid/tests/efficiency counts what a person waits on: requests sent,
 # bytes asked for, directory entries read. The counts are exact, the same on
 # every run and every runner, so a difference between a pull request and its
 # base is something the change did.
@@ -55,7 +55,7 @@ jobs:
       # runs: a table of what got worse is what somebody needs then.
       - name: Measure
         id: measure
-        working-directory: internal/grid
+        working-directory: grid
         run: vp test tests/efficiency
 
       # The base is measured with its own tests, in a checkout of its own, so
@@ -71,21 +71,21 @@ jobs:
           git fetch --depth=1 origin "$BASE_SHA"
           git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
           cd "$RUNNER_TEMP/base"
-          if [ -d internal/grid/tests/efficiency ]; then
+          if [ -d grid/tests/efficiency ]; then
             vp install
-            cd internal/grid
+            cd grid
             vp test tests/efficiency || true
           fi
 
       - name: Report
         if: always() && steps.measure.outcome != 'skipped'
-        working-directory: internal/grid
+        working-directory: grid
         env:
           OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.GRAFANA_OTLP_ENDPOINT }}
           OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.GRAFANA_OTLP_HEADERS }}
         run: |
           node --import ../paths.js scripts/efficiency.ts \
-            --base "$RUNNER_TEMP/base/internal/grid/out/efficiency" \
+            --base "$RUNNER_TEMP/base/grid/out/efficiency" \
             --out "$RUNNER_TEMP/efficiency.md"
           cat "$RUNNER_TEMP/efficiency.md" >> "$GITHUB_STEP_SUMMARY"
 

@@ -1,6 +1,6 @@
 # @uno/desktop
 
-uno's desktop client: an Electron shell over [`@uno/grid`](../grid).
+uno's desktop client: an Electron shell over [`@uno/grid`](../../grid).
 
 It holds no spreadsheet logic. Opening a file is `@uno/grid/engine`, changing a
 cell is `sheet.set`, saving is `writeDocument`. This package is the window, the
