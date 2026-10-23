@@ -23,6 +23,13 @@ import type { Provider } from '@plugin';
 import { diskLister } from './disklister.ts';
 import type { ByteSource, FileHandler, FileStore } from './index.ts';
 import { isRemote, readAll } from './index.ts';
+import {
+  CONTAINER_HOST,
+  IMDS_IPV4,
+  IMDS_IPV6,
+  containerCredentials,
+  instanceCredentials,
+} from './metadata.ts';
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import {
   assumeRole,
@@ -306,7 +313,8 @@ function held(
 
 /**
  * hostSession is the end of the chain, where the AWS SDKs look last: a web
- * identity token the environment names. Undefined where the host offers none.
+ * identity token the environment names, the endpoint beside a container,
+ * then the instance metadata service. Undefined where the host offers none.
  */
 async function hostSession(
   env: Env,
@@ -323,7 +331,8 @@ async function hostSession(
     };
     return held(await webIdentitySession(env, ask, 'the environment'), region);
   }
-  return undefined;
+  const session = (await containerSession(env)) ?? (await instanceSession(env));
+  return session === undefined ? undefined : held(session, region);
 }
 
 /** What a web identity session is asked for, and where its token is. */
@@ -361,6 +370,48 @@ async function webIdentitySession(
     },
     { endpoint: env['AWS_ENDPOINT_URL_STS'] },
   );
+}
+
+/**
+ * containerSession asks the endpoint the environment names beside a
+ * container: a path on the ECS host, or a full URL. Undefined off a
+ * container. The endpoint's token comes from a file where one is named.
+ */
+async function containerSession(env: Env): Promise<Session | undefined> {
+  const relative = envVar(env, 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI');
+  const url =
+    relative === undefined
+      ? envVar(env, 'AWS_CONTAINER_CREDENTIALS_FULL_URI')
+      : CONTAINER_HOST + relative;
+  if (url === undefined) return undefined;
+  const tokenFile = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE');
+  let authorization = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN');
+  if (tokenFile !== undefined) {
+    const text = await readText(tokenFile);
+    if (text === undefined) {
+      throw new Error(
+        `the environment names the container token file ${tokenFile}, which is not there`,
+      );
+    }
+    authorization = text.trim();
+  }
+  return containerCredentials(url, authorization);
+}
+
+/**
+ * instanceSession asks the instance metadata service, at the endpoint the
+ * environment names or the one its mode picks, unless the environment turns
+ * it off. Undefined where no role answers.
+ */
+function instanceSession(env: Env): Promise<Session | undefined> {
+  if (env['AWS_EC2_METADATA_DISABLED']?.toLowerCase() === 'true')
+    return Promise.resolve(undefined);
+  const ipv6 =
+    env['AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE']?.toLowerCase() === 'ipv6';
+  const endpoint =
+    envVar(env, 'AWS_EC2_METADATA_SERVICE_ENDPOINT') ??
+    (ipv6 ? IMDS_IPV6 : IMDS_IPV4);
+  return instanceCredentials(endpoint);
 }
 
 /** The environment's value for `name`, where it is set and not empty. */
@@ -524,9 +575,26 @@ async function roleSession(
       );
     }
     source = found;
+  } else if (credentialSource === 'Ec2InstanceMetadata') {
+    const session = await instanceSession(env);
+    if (session === undefined) {
+      throw new Error(
+        `the AWS profile ${profile} takes its credentials from the instance it runs on, and no instance metadata service with a role answered`,
+      );
+    }
+    source = session;
+  } else if (credentialSource === 'EcsContainer') {
+    const session = await containerSession(env);
+    if (session === undefined) {
+      throw new Error(
+        `the AWS profile ${profile} takes its credentials from its container, and the environment names no container endpoint`,
+      );
+    }
+    source = session;
   } else if (credentialSource !== undefined) {
     throw new Error(
-      `the AWS profile ${profile} takes its credentials from ${credentialSource}, which uno does not reach · use source_profile or Environment`,
+      `the AWS profile ${profile} takes its credentials from ${credentialSource}, which uno does not know · ` +
+        'use source_profile, or a credential_source of Environment, Ec2InstanceMetadata or EcsContainer',
     );
   } else {
     throw new Error(
