@@ -63,6 +63,15 @@ PAGES["s3://acme-exports/ads/"] = [
 
 const Q3: Connection = { name: "q3", path: "s3://acme-exports/2025/q3", kind: "s3" };
 
+// Page events as JSON Lines, under both names it goes by, beside a CSV.
+PAGES["s3://acme-exports/events"] = [
+  file("events-000000.jsonl", "s3://acme-exports/events/events-000000.jsonl", 700),
+  file("events-000001.ndjson", "s3://acme-exports/events/events-000001.ndjson", 800),
+  file("pages.csv", "s3://acme-exports/events/pages.csv", 90),
+];
+
+const EVENTS: Connection = { name: "events", path: "s3://acme-exports/events", kind: "s3" };
+
 /**
  * A prefix listed in pages. Each inner list is one page, and the cursor for
  * the next page is its index.
@@ -497,6 +506,23 @@ test("how files are read as one is chosen while Add as one is offered, and kept"
   // Re-pointing picks one file, so `joining` is undefined.
   await panel.repoint(TABS[0]!);
   expect(panel.joining).toBeUndefined();
+});
+
+test("the header-row choice applies unless every file picked is JSON Lines by name", async () => {
+  const panel = new Sources(
+    new Stand(),
+    () => TABS,
+    [EVENTS],
+    () => {},
+  );
+  await panel.open(EVENTS);
+  await panel.toggle(named(panel, "events-000000.jsonl"));
+  await panel.toggle(named(panel, "events-000001.ndjson"));
+  expect(panel.joining).toEqual({ header: "first", fileColumn: false });
+  expect(panel.headerChoice).toBe(false);
+
+  await panel.toggle(named(panel, "pages.csv"));
+  expect(panel.headerChoice).toBe(true);
 });
 
 test("one selected file is peeked at, and a second selected puts the peek away", async () => {
