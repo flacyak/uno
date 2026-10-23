@@ -1,7 +1,8 @@
 /**
  * @fileoverview A Parquet table reads its footer from one read of the file's
  * tail, or two where the footer is longer, and says what the file holds. A
- * file whose footer is damaged is refused as parquet-broken.
+ * file that uses what uno does not read yet is refused by name, and one
+ * whose footer is damaged as parquet-broken.
  */
 
 import { parquetWriteBuffer } from 'hyparquet-writer';
@@ -10,12 +11,12 @@ import { expect, test } from 'vite-plus/test';
 import { CHUNK_CACHE_BYTES, chunkCache } from '@ingest/parquet/buffer';
 import { PARQUET_TAIL_BYTES, openTable } from '@ingest/parquet/table';
 import { Refusal } from '@said';
-import type { Said } from '@said';
+import type { ParquetFeature, Said } from '@said';
 import type { ByteSource } from '@store';
 import { ROWS } from '@core-tests/testdata/sales-q3';
 
 import { SALES_GROUP_ROWS } from '../../../scripts/fixtures.ts';
-import { SALES, logged, opened } from './tables.ts';
+import { SALES, logged, opened, testdata } from './tables.ts';
 
 /** The columns of a file wider than its footer's tail. */
 const WIDE_COLUMNS = 2_000;
@@ -42,6 +43,19 @@ async function refusalOf(
     throw err;
   }
   return undefined;
+}
+
+/** Each vendored parquet-testing file that is refused, with what it uses. */
+async function expectRefused(
+  files: ReadonlyArray<[path: string, feature: ParquetFeature]>,
+): Promise<void> {
+  for (const [path, feature] of files) {
+    expect(await refusalOf(path, testdata(`parquet/${path}`)), path).toEqual({
+      t: 'parquet-unsupported',
+      name: path,
+      feature,
+    });
+  }
 }
 
 test('a footer in the tail says the columns, rows and groups from one read', async () => {
@@ -113,6 +127,12 @@ test('a truncated or damaged footer is refused as parquet-broken', async () => {
       name,
     });
   }
+});
+
+test('a file whose footer is encrypted is refused by name', async () => {
+  await expectRefused([
+    ['encrypt_columns_and_footer.parquet.encrypted', 'encryption'],
+  ]);
 });
 
 test('a failed read of the file is passed on as it failed', async () => {
