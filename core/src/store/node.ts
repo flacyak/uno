@@ -1242,6 +1242,24 @@ function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
 }
 
 /**
+ * No source in the chain had credentials: not the environment, not the
+ * profile, not the host. The sentence says where to put some.
+ */
+export class NoCredentials extends Data.TaggedError('NoCredentials')<{
+  profile: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message:
+        `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, ` +
+        `put keys for the ${parts.profile} profile in ~/.aws/credentials, or run uno where a role is attached`,
+    });
+  }
+}
+
+/**
  * awsCredentials finds credentials the way the AWS CLI does: the environment
  * first, then the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or
  * `default`, then the host the process runs on. This is the `machine` way
@@ -1266,11 +1284,37 @@ export function awsCredentials(
     if (fromProfile !== undefined) return fromProfile;
     const fromHost = await Effect.runPromise(hostSession(env, region));
     if (fromHost !== undefined) return fromHost;
-    throw new Error(
-      `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, ` +
-        `put keys for the ${profile} profile in ~/.aws/credentials, or run uno where a role is attached`,
-    );
+    throw new NoCredentials({ profile });
   });
+}
+
+/** A profile neither ~/.aws/config nor ~/.aws/credentials has a section for. */
+export class NoSuchProfile extends Data.TaggedError('NoSuchProfile')<{
+  profile: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `there is no AWS profile called ${parts.profile} in ~/.aws/config or ~/.aws/credentials`,
+    });
+  }
+}
+
+/**
+ * A profile that is there and offers none of the ways in uno can use. The
+ * sentence names them.
+ */
+export class ProfileNoWayIn extends Data.TaggedError('ProfileNoWayIn')<{
+  profile: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} has no way in uno can use · give it keys in ~/.aws/credentials, a credential_process, or an SSO sign-in`,
+    });
+  }
 }
 
 /**
@@ -1292,13 +1336,9 @@ export function profileCredentials(
       !files.credentials.has(profile) &&
       configOf(files, profile) === undefined
     ) {
-      throw new Error(
-        `there is no AWS profile called ${profile} in ~/.aws/config or ~/.aws/credentials`,
-      );
+      throw new NoSuchProfile({ profile });
     }
-    throw new Error(
-      `the AWS profile ${profile} has no way in uno can use · give it keys in ~/.aws/credentials, a credential_process, or an SSO sign-in`,
-    );
+    throw new ProfileNoWayIn({ profile });
   });
 }
 
