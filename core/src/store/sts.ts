@@ -7,6 +7,9 @@
  * to reach a network. The guard test in tests/store/opens.test.ts checks
  * that. Every file read is in store/node.ts, which reads ~/.aws and passes
  * the token or role in.
+ *
+ * An exchange is an Effect that fails with what the service said. The
+ * function named for the call runs it as a Promise, at the store's edge.
  */
 
 import { Data, Effect } from 'effect';
@@ -216,34 +219,53 @@ export interface WebIdentityAsk {
 }
 
 /**
- * assumeRoleWithWebIdentity calls STS AssumeRoleWithWebIdentity and returns
+ * webIdentityExchange calls STS AssumeRoleWithWebIdentity and succeeds with
  * the role's session. The call is unsigned: the token says who is asking.
- * It goes as a POST, since a token can run past what a URL holds.
+ * It goes as a POST, since a token can run past what a URL holds. It fails
+ * as roleExchange does.
  * @param ask the role, the session, the token and the region
  * @param opts where the exchange is sent and how requests go out
  * @return the role's session
  */
-export async function assumeRoleWithWebIdentity(
+export function webIdentityExchange(
+  ask: WebIdentityAsk,
+  opts: ExchangeOptions = {},
+): Effect.Effect<Session, StsFailure> {
+  return Effect.gen(function* () {
+    yield* checkSessionName(ask.roleArn, ask.sessionName);
+    const go = opts.fetch ?? fetch;
+    const query: Array<[string, string]> = [
+      ['Action', 'AssumeRoleWithWebIdentity'],
+      ['Version', STS_VERSION],
+      ['RoleArn', ask.roleArn],
+      ['RoleSessionName', ask.sessionName],
+      ['WebIdentityToken', ask.token],
+    ];
+    if (ask.durationSeconds !== undefined)
+      query.push(['DurationSeconds', String(ask.durationSeconds)]);
+    const res = yield* Effect.promise(() =>
+      go(`${stsBase(ask.region, opts)}/`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: encodeQuery(query),
+      }),
+    );
+    return yield* sessionIn(res, ask.roleArn);
+  });
+}
+
+/**
+ * assumeRoleWithWebIdentity runs webIdentityExchange as a Promise, for a
+ * caller outside the store.
+ * @param ask the role, the session, the token and the region
+ * @param opts where the exchange is sent and how requests go out
+ * @return the role's session
+ */
+export function assumeRoleWithWebIdentity(
   ask: WebIdentityAsk,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
-  await Effect.runPromise(checkSessionName(ask.roleArn, ask.sessionName));
-  const go = opts.fetch ?? fetch;
-  const query: Array<[string, string]> = [
-    ['Action', 'AssumeRoleWithWebIdentity'],
-    ['Version', STS_VERSION],
-    ['RoleArn', ask.roleArn],
-    ['RoleSessionName', ask.sessionName],
-    ['WebIdentityToken', ask.token],
-  ];
-  if (ask.durationSeconds !== undefined)
-    query.push(['DurationSeconds', String(ask.durationSeconds)]);
-  const res = await go(`${stsBase(ask.region, opts)}/`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: encodeQuery(query),
-  });
-  return Effect.runPromise(sessionIn(res, ask.roleArn));
+  return Effect.runPromise(webIdentityExchange(ask, opts));
 }
 
 /**
