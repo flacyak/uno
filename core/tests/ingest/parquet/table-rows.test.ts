@@ -1,14 +1,20 @@
 /**
  * @fileoverview A Parquet table reads rows as the text their writer meant:
  * the sales fixture as sales-q3.csv reads, and any range as a whole read
- * has it.
+ * has it. A page that does not decode is refused as parquet-broken, and a
+ * failed read is passed on as it failed.
  */
 
+import { parquetMetadata } from 'hyparquet/src/index.js';
 import { expect, test } from 'vite-plus/test';
 
 import { chunkCache } from '@ingest/parquet/buffer';
 import { openTable } from '@ingest/parquet/table';
 import type { Table } from '@ingest/parquet/table';
+import { Refusal } from '@said';
+import type { Said } from '@said';
+import { bytesSource } from '@store';
+import type { ByteSource } from '@store';
 import { random } from '@core-tests/random';
 import { ROWS } from '@core-tests/testdata/sales-q3';
 
@@ -20,6 +26,9 @@ const NAME = 'sales-q3.snappy.parquet';
 /** How many random ranges are read, and the seed that picks them. */
 const RANGES = 40;
 const SEED = 44;
+
+/** The bytes of a page header overwritten to damage it. */
+const DAMAGE_BYTES = 16;
 
 /** Some ranges of `rows` rows: fixed ones, and RANGES picked at random. */
 function rangesOf(
@@ -106,4 +115,36 @@ test('a field of a struct reads as a column of its own, and empty where its stru
   expect(await nulls.read(0, nulls.rows)).toEqual(
     Array.from({ length: nulls.rows }, () => ['']),
   );
+});
+
+test('a page that does not decode is refused as parquet-broken', async () => {
+  const [group] = parquetMetadata(SALES.slice().buffer).row_groups;
+  const chunk = group!.columns[0]!.meta_data!;
+  const start = Number(chunk.dictionary_page_offset ?? chunk.data_page_offset);
+  const damaged = SALES.slice();
+  damaged.fill(0xff, start, start + DAMAGE_BYTES);
+  const table = await opened(NAME, damaged);
+  let said: Said | undefined;
+  await table.read(0, 1).catch((err: unknown) => {
+    if (!(err instanceof Refusal)) throw err;
+    said = err.said;
+  });
+  expect(said).toEqual({ t: 'parquet-broken', name: NAME });
+});
+
+test('a failed read of a page is passed on as it failed', async () => {
+  const failure = new Error('EIO: i/o error, read');
+  const inner = bytesSource(SALES);
+  let footerRead = false;
+  const source: ByteSource = {
+    size: inner.size,
+    read: (offset, length) => {
+      if (footerRead) return Promise.reject(failure);
+      footerRead = true;
+      return inner.read(offset, length);
+    },
+    close: () => inner.close(),
+  };
+  const table = await openTable(NAME, source, chunkCache(0));
+  await expect(table.read(0, 1)).rejects.toBe(failure);
 });
