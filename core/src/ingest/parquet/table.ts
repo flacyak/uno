@@ -223,6 +223,13 @@ function typeFeatureOf({
   return logical?.type === 'VARIANT' ? 'variant' : undefined;
 }
 
+/** The nested fields of one row group, decoded whole. */
+interface Whole {
+  readonly group: number;
+  readonly fields: string;
+  readonly rows: Promise<Assembled[]>;
+}
+
 /** Page is the values of a flat field's rows [start, end), as decoded. */
 interface Page {
   readonly start: number;
@@ -241,15 +248,17 @@ class ParquetTable implements Table {
   /** The top-level fields, in schema order. */
   private readonly fields: readonly string[];
   /**
-   * The top-level fields whose pages hyparquet hands over before it
-   * assembles them, which a read cannot keep: a struct, a list, a map or a
-   * repeated field.
+   * The top-level fields hyparquet decodes to the end of a column chunk
+   * for any of its rows, where the chunk has no offset index: a struct, a
+   * list, a map or a repeated field.
    */
   private readonly nested: ReadonlySet<string>;
   /** The footer as hyparquet is handed it, from plainOf. */
   private readonly plain: FileMetaData;
   /** The stored slices the last read that read any asked for, by range. */
   private slices = new Map<string, Promise<ArrayBuffer>>();
+  /** The nested fields of the row group with no offset index read last. */
+  private whole: Whole | undefined;
   /** The pages of each flat field the last read of it decoded. */
   private readonly pages = new Map<string, readonly Page[]>();
 
@@ -323,35 +332,85 @@ class ParquetTable implements Table {
   }
 
   /**
-   * Rows [start, end) of `fields` as hyparquet assembles them. Only the
-   * pages that hold them are read where a row group has offset indexes.
+   * Rows [start, end) of `fields` as hyparquet assembles them, a row group
+   * at a time. Where a group has offset indexes only the pages that hold
+   * the rows are read.
    *
-   * hyparquet decodes a page whole, whatever rows are asked, so the pages a
-   * read decoded of a flat field serve the next read they hold. They keep
-   * no more than the decode that made them held at once.
+   * hyparquet decodes a page whole, and without offset indexes a nested
+   * field's chunk to its end, whatever rows are asked. So the pages a read
+   * decoded of a flat field serve the next read they hold, and the nested
+   * fields of a group with no offset indexes are decoded for the whole
+   * group once and kept while reads stay in it. Neither keeps more than
+   * the decode that made it held at once.
    */
   private async assembled(
     start: number,
     end: number,
     fields: readonly string[],
   ): Promise<Assembled[]> {
+    const file = this.buffer();
+    const rows: Assembled[] = [];
+    for (const [group, span] of this.spans.entries()) {
+      const from = Math.max(start, span.start);
+      const to = Math.min(end, span.start + span.rows);
+      if (from < to)
+        rows.push(...(await this.inGroup(file, group, from, to, fields)));
+    }
+    return rows;
+  }
+
+  /** Rows [from, to) of `fields`, which lie in one row group. */
+  private async inGroup(
+    file: AsyncBuffer,
+    group: number,
+    from: number,
+    to: number,
+    fields: readonly string[],
+  ): Promise<Assembled[]> {
+    const span = this.spans[group]!;
+    const whole = span.paged ? [] : fields.filter((f) => this.nested.has(f));
     const kept = new Map<string, unknown[]>();
     for (const field of fields) {
       const values = this.nested.has(field)
         ? undefined
-        : this.keptValues(field, start, end);
+        : this.keptValues(field, from, to);
       if (values !== undefined) kept.set(field, values);
     }
-    const asked = fields.filter((field) => !kept.has(field));
+    const asked = fields.filter((f) => !whole.includes(f) && !kept.has(f));
     const read =
       asked.length === 0
-        ? Array.from({ length: end - start }, (): Assembled => ({}))
-        : await this.decoded(this.buffer(), start, end, asked);
+        ? Array.from({ length: to - from }, (): Assembled => ({}))
+        : await this.decoded(file, from, to, asked);
+    const nested =
+      whole.length === 0 ? [] : await this.wholeOf(file, group, whole);
+    const at = from - span.start;
     return read.map((row, i) => {
-      const out: Record<string, unknown> = { ...row };
+      const out: Record<string, unknown> = { ...row, ...nested[at + i] };
       for (const [field, values] of kept) out[field] = values[i];
       return out;
     });
+  }
+
+  /**
+   * The rows of `group` of the nested `fields`, decoded once while reads of
+   * them stay in the group.
+   */
+  private wholeOf(
+    file: AsyncBuffer,
+    group: number,
+    nested: readonly string[],
+  ): Promise<Assembled[]> {
+    const fields = JSON.stringify(nested);
+    if (this.whole?.group !== group || this.whole.fields !== fields) {
+      const { start, rows: count } = this.spans[group]!;
+      const rows = this.decoded(file, start, start + count, nested);
+      this.whole = { group, fields, rows };
+      // A read that failed is not kept, so the next one tries again.
+      rows.catch(() => {
+        if (this.whole?.rows === rows) this.whole = undefined;
+      });
+    }
+    return this.whole.rows;
   }
 
   /**
