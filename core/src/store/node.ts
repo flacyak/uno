@@ -687,6 +687,73 @@ function cachedToken(text: string): Record<string, unknown> | undefined {
 }
 
 /**
+ * A role profile with mfa_serial, which asks for a code uno has no prompt
+ * for. The sentence says how to sign in from a shell instead.
+ */
+export class MfaRefused extends Data.TaggedError('MfaRefused')<{
+  profile: string;
+  roleArn: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; roleArn: string }) {
+    super({
+      ...parts,
+      message:
+        `the AWS profile ${parts.profile} asks for an MFA code to assume ${parts.roleArn}, which uno cannot ask for · ` +
+        `run \`aws configure export-credentials --profile ${parts.profile} --format env\` and start uno from that shell`,
+    });
+  }
+}
+
+/**
+ * A chain of source profiles that comes back to one already on it. `chain`
+ * is the whole loop, ending with the profile it came back to.
+ */
+export class SourceLoop extends Data.TaggedError('SourceLoop')<{
+  profile: string;
+  chain: readonly string[];
+  message: string;
+}> {
+  constructor(parts: { profile: string; chain: readonly string[] }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} takes its credentials from a loop · ${parts.chain.join(' → ')}`,
+    });
+  }
+}
+
+/** A role profile with neither a source_profile nor a credential_source. */
+export class NoSourceProfile extends Data.TaggedError('NoSourceProfile')<{
+  profile: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} names a role_arn and no source_profile to assume it with`,
+    });
+  }
+}
+
+/** A credential_source other than the three uno knows. */
+export class CredentialSourceUnknown extends Data.TaggedError(
+  'CredentialSourceUnknown',
+)<{
+  profile: string;
+  source: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; source: string }) {
+    super({
+      ...parts,
+      message:
+        `the AWS profile ${parts.profile} takes its credentials from ${parts.source}, which uno does not know · ` +
+        'use source_profile, or a credential_source of Environment, Ec2InstanceMetadata or EcsContainer',
+    });
+  }
+}
+
+/**
  * roleSession assumes the role a profile names with the credentials of its
  * source_profile, which may be any kind of profile, including another role.
  * A chain that comes back to a profile already on it is refused naming the
@@ -708,12 +775,8 @@ async function roleSession(
   through: readonly string[],
 ): Promise<Session> {
   const chain = [...through, profile];
-  if (setting('mfa_serial') !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} asks for an MFA code to assume ${roleArn}, which uno cannot ask for · ` +
-        `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
-    );
-  }
+  if (setting('mfa_serial') !== undefined)
+    throw new MfaRefused({ profile, roleArn });
 
   // A profile with a web identity token has no source: the token says who
   // is asking.
@@ -736,11 +799,8 @@ async function roleSession(
   const sourceProfile = setting('source_profile');
   const credentialSource = setting('credential_source');
   if (sourceProfile !== undefined) {
-    if (chain.includes(sourceProfile)) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from a loop · ${[...chain, sourceProfile].join(' → ')}`,
-      );
-    }
+    if (chain.includes(sourceProfile))
+      throw new SourceLoop({ profile, chain: [...chain, sourceProfile] });
     // A profile that is its own source means the static keys beside its
     // role_arn.
     const found =
@@ -778,14 +838,9 @@ async function roleSession(
     }
     source = session;
   } else if (credentialSource !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} takes its credentials from ${credentialSource}, which uno does not know · ` +
-        'use source_profile, or a credential_source of Environment, Ec2InstanceMetadata or EcsContainer',
-    );
+    throw new CredentialSourceUnknown({ profile, source: credentialSource });
   } else {
-    throw new Error(
-      `the AWS profile ${profile} names a role_arn and no source_profile to assume it with`,
-    );
+    throw new NoSourceProfile({ profile });
   }
 
   const duration = setting('duration_seconds');
