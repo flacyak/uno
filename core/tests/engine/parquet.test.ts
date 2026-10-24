@@ -409,6 +409,10 @@ test('held to Parquet with pinned columns, each key finds its column, a lost key
   expect(await reading.pages.rows(0, ROWS)).toEqual(want);
 });
 
+/** The row a logged edit is made in, and what it writes. */
+const EDITED_ROW = 3000;
+const EDITED = 'edited';
+
 /** A .uno holding `source`, whose log is `sheet`'s edits to it. */
 function workspace(source: Held, sheet: Sheet): Blob {
   const uno = writeDocument({
@@ -463,4 +467,24 @@ test('a workspace that says a source was read as Parquet opens it so, every row 
     });
     expect(src.opened.columns.map((c) => c.header)).toEqual(SALES_COLUMNS);
     expect(await everyRow(src)).toEqual(salesRows());
+  }));
+
+test('a schema reordered since the save keeps each column, and each logged edit, on its key', () =>
+  withEngine(async (engine) => {
+    // Saved when the file held revenue and units first, date pinned by its
+    // name alone.
+    const order = ['revenue', 'units', 'date', 'region', 'rep', 'channel'];
+    const columns = order.map((name): SavedColumn =>
+      name === 'date' ? { name } : { name, key: `/${name}` },
+    );
+    const want = salesRows().map((row) => under(order, row));
+    const sheet = new Sheet(SALES_NAME, order, want);
+    const col = order.indexOf('units');
+    sheet.set(EDITED_ROW, col, EDITED);
+
+    const blob = workspace(salesSource(sheet, columns), sheet);
+    const src = await openOne(engine, { name: 'q3.uno', blob });
+    expect(src.opened.columns.map((c) => c.header)).toEqual(order);
+    want[EDITED_ROW]![col] = EDITED;
+    expect(await everyRow(src)).toEqual(want);
   }));
