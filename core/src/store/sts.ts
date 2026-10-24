@@ -158,13 +158,13 @@ export class NotSignedIn extends Data.TaggedError('NotSignedIn')<{
 }
 
 /**
- * signInAgain is the error message for an SSO sign-in that has lapsed,
- * with the command that fixes it. Also used by store/node.ts.
+ * signInAgain is NotSignedIn's sentence: what is wrong with the sign-in,
+ * and the command that fixes it.
  * @param profile the profile's name
  * @param why what is wrong with the sign-in
  * @return the message, with the command that signs in again
  */
-export function signInAgain(profile: string, why: string): string {
+function signInAgain(profile: string, why: string): string {
   return `the AWS profile ${profile} is not signed in · ${why} · sign in with \`aws sso login --profile ${profile}\``;
 }
 
