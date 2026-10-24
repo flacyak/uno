@@ -1,8 +1,9 @@
 /**
  * @fileoverview A Parquet table reads rows as the text their writer meant:
- * the sales fixture as sales-q3.csv reads, and any range as a whole read
- * has it. A page that does not decode is refused as parquet-broken, and a
- * failed read is passed on as it failed.
+ * the sales fixture as sales-q3.csv reads, any range as a whole read has
+ * it, and one column alone with every other cell empty. A page that does
+ * not decode is refused as parquet-broken, and a failed read is passed on
+ * as it failed.
  */
 
 import { parquetMetadata } from 'hyparquet/src/index.js';
@@ -16,7 +17,7 @@ import type { Said } from '@said';
 import { bytesSource } from '@store';
 import type { ByteSource } from '@store';
 import { random } from '@core-tests/random';
-import { ROWS } from '@core-tests/testdata/sales-q3';
+import { COLS, REGION, ROWS } from '@core-tests/testdata/sales-q3';
 
 import { SALES_GROUP_ROWS } from '../../../scripts/fixtures.ts';
 import { SALES, logged, opened, salesRows, testdata } from './tables.ts';
@@ -115,6 +116,40 @@ test('a field of a struct reads as a column of its own, and empty where its stru
   expect(await nulls.read(0, nulls.rows)).toEqual(
     Array.from({ length: nulls.rows }, () => ['']),
   );
+});
+
+/** `rows` with every cell but those of column `only` emptied. */
+function only(rows: readonly string[][], column: number): string[][] {
+  return rows.map((row) => row.map((cell, i) => (i === column ? cell : '')));
+}
+
+test('a read of one column fills only that column, and reads only its chunks', async () => {
+  const { source, reads } = logged(SALES);
+  const table = await openTable(NAME, source, chunkCache(0));
+  const opening = reads.length;
+  const whole = await table.read(0, ROWS);
+  const wholeAsked = bytesAsked(reads, opening);
+  const before = reads.length;
+  expect(await table.read(0, ROWS, REGION)).toEqual(only(whole, REGION));
+  expect(bytesAsked(reads, before)).toBeLessThan(wholeAsked / 2);
+});
+
+test('a read of one field of a struct fills only that field', async () => {
+  const table = await opened(
+    'nonnullable.impala.parquet',
+    testdata('parquet/nonnullable.impala.parquet'),
+  );
+  const whole = await table.read(0, table.rows);
+  const field = table.columns.findIndex(
+    ({ key }) => key === '/nested_Struct/c/D',
+  );
+  expect(await table.read(0, table.rows, field)).toEqual(only(whole, field));
+  expect(only(whole, field)[0]![field]).not.toBe('');
+});
+
+test('a read of a column the table does not have is a range error', async () => {
+  const table = await opened(NAME, SALES);
+  await expect(table.read(0, 1, COLS)).rejects.toBeInstanceOf(RangeError);
 });
 
 test('a page that does not decode is refused as parquet-broken', async () => {
