@@ -574,6 +574,7 @@
   "parquet_feature_bson": "o tipo BSON do Parquet",
   "parquet_feature_variant": "o tipo VARIANT do Parquet",
   "parquet_feature_external_columns": "o Parquet com colunas guardadas noutros ficheiros",
+  "parquet_feature_several_files": "ler vários ficheiros Parquet como um só",
   "refused_keeps_no_connections": "este motor não guarda conexões · sua plataforma não lhe deu de onde lê-las",
   "refused_offers_no_sign_ins": "este motor não tem nenhuma forma de iniciar sessão para oferecer · sua plataforma não se conecta a nada",
   "refused_tries_no_connection": "este motor não pode testar uma conexão · sua plataforma não se conecta a nada"
