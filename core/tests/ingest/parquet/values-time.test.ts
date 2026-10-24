@@ -106,13 +106,42 @@ test('a timestamp past what a Date holds is its count', () => {
   ]);
 });
 
-test('a nanosecond INT96 keeps nine digits, before 1970 as after it', () => {
-  // hyparquet hands an INT96 over as nanoseconds since 1970.
-  const values = [1234567890123456789n, -1n, 1000000000n];
+/** The Julian day of 1970-01-01. */
+const JULIAN_1970 = 2_440_588;
+
+/** The bytes an INT96 takes, and where its Julian day starts in them. */
+const INT96_BYTES = 12;
+const INT96_DAY_AT = 8;
+
+/** An INT96's stored bytes: the nanoseconds into its day, then its Julian day. */
+function int96(nanos: bigint, day: number): Uint8Array {
+  const bytes = new Uint8Array(INT96_BYTES);
+  const view = new DataView(bytes.buffer);
+  view.setBigInt64(0, nanos, true);
+  view.setInt32(INT96_DAY_AT, day, true);
+  return bytes;
+}
+
+test('an INT96 is its Julian day and the nanoseconds into it, at nine digits', () => {
+  const values = [
+    int96(84690123456789n, JULIAN_1970 + 14288),
+    int96(86399999999999n, JULIAN_1970 - 1),
+    int96(1000000000n, JULIAN_1970),
+  ];
   expect(textsOf({ name: 'x', type: 'INT96' }, values)).toEqual([
     '2009-02-13T23:31:30.123456789',
     '1969-12-31T23:59:59.999999999',
     '1970-01-01T00:00:01',
+  ]);
+});
+
+test('an INT96 Spark wrote past 64 bits of microseconds reads as Spark was given it', () => {
+  // Spark wrote 290000-12-30T23:00:00 from microseconds whose sum with the
+  // epoch's Julian day wrapped, which left a negative day and nanoseconds.
+  // A Date does not reach the year 290000, so it is its count.
+  const overflowed = int96(-32509551616000n, -105862232);
+  expect(textsOf({ name: 'x', type: 'INT96' }, [overflowed])).toEqual([
+    '9089380393200000000000',
   ]);
 });
 
