@@ -1,0 +1,7 @@
+{"rows":3,"groups":1,"codecs":["snappy"],"paged":false}
+["column with known type","/column with known type"]
+["column with unknown type","/column with unknown type"]
+
+["known string 1","unknown string 1"]
+["known string 2","unknown string 2"]
+["known string 3","unknown string 3"]

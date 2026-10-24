@@ -1,0 +1,11 @@
+{"rows":8,"groups":1,"codecs":["snappy"],"paged":false}
+["b_struct.b_c_int","/b_struct/b_c_int"]
+
+[""]
+[""]
+[""]
+[""]
+[""]
+[""]
+[""]
+[""]
