@@ -15,7 +15,7 @@ import v8 from 'node:v8';
 
 import { heapPerSourceByte } from '../../cache/heap.ts';
 import { collector } from '../../cache/layout.ts';
-import { memorySource, shapeBytes } from '../../cache/shapes.ts';
+import { shapeBytes } from '../../cache/shapes.ts';
 
 const MB = 1 << 20;
 const SAMPLE_BYTES = 8 * MB;
@@ -43,10 +43,14 @@ const SHAPES: Record<string, () => Uint8Array> = {
   // One column of six-digit ids: 7 bytes a row.
   ids: () => made('id\n', (i) => `${100000 + (i % 900000)}\n`),
   // Two columns of two digits: 6 bytes a row.
-  pairs: () => made('a,b\n', (i) => `${10 + (i % 90)},${10 + ((i * 7) % 90)}\n`),
+  pairs: () =>
+    made('a,b\n', (i) => `${10 + (i % 90)},${10 + ((i * 7) % 90)}\n`),
   // Two 40-character ASCII fields: 13 characters or more, so sliced strings.
   text: () =>
-    made('id,title,note\n', (i) => `${i},${ASCII_40},${ASCII_40.slice(i % 5)}\n`),
+    made(
+      'id,title,note\n',
+      (i) => `${i},${ASCII_40},${ASCII_40.slice(i % 5)}\n`,
+    ),
   // A 20-character non-Latin-1 field: two-byte text.
   kanji: () => made('id,city\n', (i) => `${i},${KANJI_20.slice(i % 3)}\n`),
 };
