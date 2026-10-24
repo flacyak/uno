@@ -15,11 +15,18 @@ import type { Compression } from '@said';
  */
 export type StoredCompression = Compression | 'bzip2' | 'xz' | 'lz4' | 'snappy';
 
+/** The extensions that name JSON Lines, lower-cased with their dot. */
+export const LINES_EXTENSIONS: readonly string[] = ['.jsonl', '.ndjson'];
+
 /**
  * The extensions of the files uno reads, lower-cased with their dot. It grows
  * as ingest learns formats.
  */
-export const READ_EXTENSIONS: readonly string[] = ['.csv', '.tsv'];
+export const READ_EXTENSIONS: readonly string[] = [
+  '.csv',
+  '.tsv',
+  ...LINES_EXTENSIONS,
+];
 
 /** The compressions uno reads a file through. It grows as ingest learns them. */
 export const READ_COMPRESSIONS: readonly Compression[] = [];
@@ -93,6 +100,14 @@ export function nameParts(name: string): NameParts {
   }
   const [stem, extension] = split(rest);
   return { stem, extension, suffix: file.slice(stem.length), compression };
+}
+
+/**
+ * linesByName says whether a name claims JSON Lines: .jsonl or .ndjson, alone
+ * or under a compression. The bytes decide what a name claims nothing about.
+ */
+export function linesByName(name: string): boolean {
+  return LINES_EXTENSIONS.includes(nameParts(name).extension);
 }
 
 /** readable says whether a name is a read extension, alone or under a read compression. */

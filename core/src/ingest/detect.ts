@@ -15,7 +15,7 @@ import { Refusal } from '@said';
 import type { Compression, ReadKind, Unread } from '@said';
 import type { ByteSource } from '@store';
 import { HEAD_BYTES } from './format.ts';
-import { nameParts } from './names.ts';
+import { linesByName, nameParts } from './names.ts';
 import { bomLength } from './scan.ts';
 
 /** How many bytes Parquet's magic takes, at each end of the file. */
@@ -73,9 +73,6 @@ const COMPRESSIONS: ReadonlyArray<
 
 /** The extensions that name delimited text, whatever the first line holds. */
 const DELIMITED_EXTENSIONS = ['.csv', '.tsv'];
-
-/** The extensions that name JSON Lines. */
-const LINES_EXTENSIONS = ['.jsonl', '.ndjson'];
 
 /** A JSON document's extension. It is JSON Lines when its first line is an object. */
 const JSON_EXTENSION = '.json';
@@ -145,8 +142,7 @@ export async function detect(
 
   const { extension } = nameParts(name);
   if (DELIMITED_EXTENSIONS.includes(extension)) return DELIMITED;
-  if (LINES_EXTENSIONS.includes(extension) || opensWithObject(head))
-    return unread('JSON Lines');
+  if (linesByName(name) || opensWithObject(head)) return unread('JSON Lines');
   return extension === JSON_EXTENSION ? unread('JSON') : DELIMITED;
 }
 

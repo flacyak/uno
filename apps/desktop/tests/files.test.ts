@@ -95,6 +95,6 @@ test("a picked path is given the workspace extension when it was typed without",
 });
 
 test("the Open dialog lists a workspace and what core reads, and the Add dialog what core reads", () => {
-  expect(OPEN_EXTENSIONS).toEqual(["uno", "csv", "tsv"]);
-  expect(ADD_EXTENSIONS).toEqual(["csv", "tsv"]);
+  expect(OPEN_EXTENSIONS).toEqual(["uno", "csv", "tsv", "jsonl", "ndjson"]);
+  expect(ADD_EXTENSIONS).toEqual(["csv", "tsv", "jsonl", "ndjson"]);
 });

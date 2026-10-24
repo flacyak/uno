@@ -8,6 +8,7 @@ import { describe, expect, test } from 'vite-plus/test';
 import {
   DIALOG_EXTENSIONS,
   READ_EXTENSIONS,
+  linesByName,
   nameParts,
   readable,
 } from '@ingest/names';
@@ -116,6 +117,12 @@ describe('a readable name', () => {
     expect(readable('s3://acme-exports/2025/q3.csv')).toBe(true);
   });
 
+  test('ends in a JSON Lines extension, in any case', () => {
+    expect(readable('events.jsonl')).toBe(true);
+    expect(readable('EVENTS.NDJSON')).toBe(true);
+    expect(readable('s3://acme-exports/2025/part-00000.jsonl')).toBe(true);
+  });
+
   test('is not a hidden file, a name with no extension or another format', () => {
     expect(readable('.csv')).toBe(false);
     expect(readable('README')).toBe(false);
@@ -134,5 +141,20 @@ describe('a readable name', () => {
       expect(readable(`q3${extension}`)).toBe(true);
       expect(listed).toContain(extension);
     }
+  });
+});
+
+describe('a name that claims JSON Lines', () => {
+  test('ends in .jsonl or .ndjson, in any case, alone or under a compression', () => {
+    expect(linesByName('events.jsonl')).toBe(true);
+    expect(linesByName('Events.NDJSON')).toBe(true);
+    expect(linesByName('s3://acme/2025/events.jsonl.gz')).toBe(true);
+  });
+
+  test('claims nothing with another extension or none', () => {
+    expect(linesByName('events.json')).toBe(false);
+    expect(linesByName('events.csv')).toBe(false);
+    expect(linesByName('events')).toBe(false);
+    expect(linesByName('.jsonl')).toBe(false);
   });
 });
