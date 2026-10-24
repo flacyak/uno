@@ -37,10 +37,10 @@ import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import {
   NotSignedIn,
   assumeRole,
-  ssoRoleCredentials,
+  ssoExchange,
   webIdentityExchange,
 } from './sts.ts';
-import type { Session, StsFailure } from './sts.ts';
+import type { Session, SsoFailure, StsFailure } from './sts.ts';
 import { unreachable } from '@never';
 
 /**
@@ -341,7 +341,11 @@ async function profileSession(
     fromConfig?.has('sso_session') === true ||
     fromConfig?.has('sso_start_url') === true
   ) {
-    return held(await ssoSession(env, files, profile, fromConfig), region, as);
+    return held(
+      await Effect.runPromise(ssoSession(env, files, profile, fromConfig)),
+      region,
+      as,
+    );
   }
   return undefined;
 }
@@ -579,45 +583,46 @@ export class SsoSettingMissing extends Data.TaggedError('SsoSettingMissing')<{
  * @param section the profile's config section
  * @return the role's session
  */
-async function ssoSession(
+function ssoSession(
   env: Env,
   files: AwsFiles,
   profile: string,
   section: Map<string, string>,
-): Promise<Session> {
-  const named = section.get('sso_session');
-  let portal = section;
-  if (named !== undefined) {
-    const found = files.config.get(`sso-session ${named}`);
-    if (found === undefined) throw new SsoSessionMissing({ profile, named });
-    portal = found;
-  }
-  const startUrl = portal.get('sso_start_url');
-  const ssoRegion = portal.get('sso_region');
-  const accountId = section.get('sso_account_id');
-  const roleName = section.get('sso_role_name');
-  const missing = [
-    ['sso_start_url', startUrl],
-    ['sso_region', ssoRegion],
-    ['sso_account_id', accountId],
-    ['sso_role_name', roleName],
-  ].find(([, v]) => v === undefined)?.[0];
-  if (missing !== undefined)
-    throw new SsoSettingMissing({ profile, setting: missing });
+): Effect.Effect<Session, SsoSessionMissing | SsoSettingMissing | SsoFailure> {
+  return Effect.gen(function* () {
+    const named = section.get('sso_session');
+    let portal = section;
+    if (named !== undefined) {
+      const found = files.config.get(`sso-session ${named}`);
+      if (found === undefined)
+        return yield* new SsoSessionMissing({ profile, named });
+      portal = found;
+    }
+    const startUrl = portal.get('sso_start_url');
+    const ssoRegion = portal.get('sso_region');
+    const accountId = section.get('sso_account_id');
+    const roleName = section.get('sso_role_name');
+    const missing = [
+      ['sso_start_url', startUrl],
+      ['sso_region', ssoRegion],
+      ['sso_account_id', accountId],
+      ['sso_role_name', roleName],
+    ].find(([, v]) => v === undefined)?.[0];
+    if (missing !== undefined)
+      return yield* new SsoSettingMissing({ profile, setting: missing });
 
-  const accessToken = await Effect.runPromise(
-    cachedSignIn(env, profile, named ?? startUrl!),
-  );
-  return ssoRoleCredentials(
-    {
-      profile,
-      region: ssoRegion!,
-      accountId: accountId!,
-      roleName: roleName!,
-      accessToken,
-    },
-    { endpoint: env['AWS_ENDPOINT_URL_SSO'] },
-  );
+    const accessToken = yield* cachedSignIn(env, profile, named ?? startUrl!);
+    return yield* ssoExchange(
+      {
+        profile,
+        region: ssoRegion!,
+        accountId: accountId!,
+        roleName: roleName!,
+        accessToken,
+      },
+      { endpoint: env['AWS_ENDPOINT_URL_SSO'] },
+    );
+  });
 }
 
 /**
