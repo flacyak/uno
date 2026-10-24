@@ -8,7 +8,7 @@
  * returns the whole rows in the window. The heads are strings in this file.
  */
 
-import { expect, test } from 'vite-plus/test';
+import { describe, expect, test } from 'vite-plus/test';
 
 import { PEEK_BYTES, PEEK_ROWS, peek, peekHead, readHead } from '@engine/peek';
 import type { Head } from '@engine/peek';
@@ -379,4 +379,56 @@ test('a header the window did not reach the end of peeks as no rows', async () =
   expect(peeked.rows).toEqual([]);
   expect(peeked.header[0]).toBe('column_0');
   expect(peeked.header.length).toBeLessThan(200);
+});
+
+describe('a JSON Lines head', () => {
+  const lines =
+    '{"id":1,"name":"Ada"}\n{"id":2,"name":"Ben","late":true}\n{"id":3}\n';
+
+  test('peeks as a column per key, in the order the head meets them, under its label', async () => {
+    const peeked = await peekHead('events.jsonl', head(lines));
+    expect(peeked.label).toEqual({ t: 'read-lines', charset: 'UTF-8' });
+    expect(peeked.header).toEqual(['id', 'name', 'late']);
+    expect(peeked.rows).toEqual([
+      ['1', 'Ada', ''],
+      ['2', 'Ben', 'true'],
+      ['3', '', ''],
+    ]);
+  });
+
+  test('drops a line the window cut, and learns no key from it', async () => {
+    const cut = head(lines, lines.indexOf('"late"') + 3);
+    const peeked = await peekHead('events.jsonl', cut);
+    expect(peeked.header).toEqual(['id', 'name']);
+    expect(peeked.rows).toEqual([['1', 'Ada']]);
+  });
+
+  test('learns the keys of a last line with no line break, when the head is the whole file', async () => {
+    const peeked = await peekHead(
+      'events.jsonl',
+      head('{"id":1}\n{"id":2,"z":0}'),
+    );
+    expect(peeked.header).toEqual(['id', 'z']);
+    expect(peeked.rows).toEqual([
+      ['1', ''],
+      ['2', '0'],
+    ]);
+  });
+
+  test('has no header row to choose: every line is a row either way', async () => {
+    const peeked = await peekHead(
+      'events.jsonl',
+      head(lines),
+      PEEK_ROWS,
+      'none',
+    );
+    expect(peeked.header).toEqual(['id', 'name', 'late']);
+    expect(peeked.rows).toHaveLength(3);
+  });
+
+  test('that is empty peeks as no columns and no rows', async () => {
+    const peeked = await peekHead('events.jsonl', head(''));
+    expect(peeked.header).toEqual([]);
+    expect(peeked.rows).toEqual([]);
+  });
 });
