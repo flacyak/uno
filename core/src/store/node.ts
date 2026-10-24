@@ -722,6 +722,49 @@ export class SourceLoop extends Data.TaggedError('SourceLoop')<{
   }
 }
 
+/** A source_profile that offers no way in uno can use. */
+export class SourceNoWayIn extends Data.TaggedError('SourceNoWayIn')<{
+  profile: string;
+  sourceProfile: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; sourceProfile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} takes its credentials from ${parts.sourceProfile}, which has no way in uno can use`,
+    });
+  }
+}
+
+/** The three credential_source settings uno knows. */
+type CredentialSource = 'Environment' | 'Ec2InstanceMetadata' | 'EcsContainer';
+
+/** What each credential_source is called when it has nothing to give. */
+const SOURCE_EMPTY: Record<CredentialSource, string> = {
+  Environment:
+    'the environment, which has no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
+  Ec2InstanceMetadata:
+    'the instance it runs on, and no instance metadata service with a role answered',
+  EcsContainer:
+    'its container, and the environment names no container endpoint',
+};
+
+/** A credential_source uno knows, with nothing in it to assume the role with. */
+export class CredentialSourceEmpty extends Data.TaggedError(
+  'CredentialSourceEmpty',
+)<{
+  profile: string;
+  source: CredentialSource;
+  message: string;
+}> {
+  constructor(parts: { profile: string; source: CredentialSource }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} takes its credentials from ${SOURCE_EMPTY[parts.source]}`,
+    });
+  }
+}
+
 /** A role profile with neither a source_profile nor a credential_source. */
 export class NoSourceProfile extends Data.TaggedError('NoSourceProfile')<{
   profile: string;
@@ -807,35 +850,26 @@ async function roleSession(
       sourceProfile === profile
         ? profileKeysOnly(env, files, profile)
         : await profileSession(env, files, sourceProfile, chain);
-    if (found === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from ${sourceProfile}, which has no way in uno can use`,
-      );
-    }
+    if (found === undefined)
+      throw new SourceNoWayIn({ profile, sourceProfile });
     source = found.creds;
   } else if (credentialSource === 'Environment') {
     const found = envKeys(env, DEFAULT_REGION);
-    if (found === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from the environment, which has no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY`,
-      );
-    }
+    if (found === undefined)
+      throw new CredentialSourceEmpty({ profile, source: 'Environment' });
     source = found;
   } else if (credentialSource === 'Ec2InstanceMetadata') {
     const session = await Effect.runPromise(instanceSession(env));
-    if (session === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from the instance it runs on, and no instance metadata service with a role answered`,
-      );
-    }
+    if (session === undefined)
+      throw new CredentialSourceEmpty({
+        profile,
+        source: 'Ec2InstanceMetadata',
+      });
     source = session;
   } else if (credentialSource === 'EcsContainer') {
     const session = await Effect.runPromise(containerSession(env));
-    if (session === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from its container, and the environment names no container endpoint`,
-      );
-    }
+    if (session === undefined)
+      throw new CredentialSourceEmpty({ profile, source: 'EcsContainer' });
     source = session;
   } else if (credentialSource !== undefined) {
     throw new CredentialSourceUnknown({ profile, source: credentialSource });
