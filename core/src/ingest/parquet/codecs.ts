@@ -24,6 +24,14 @@ export const COMPRESSORS: Compressors = {
   ZSTD: (page) => decompress(page),
 };
 
+/** Every codec uno reads, in the order a label names them. */
+export const CODECS: readonly ParquetCodec[] = [
+  'uncompressed',
+  'snappy',
+  'gzip',
+  'zstd',
+];
+
 /** What a codec is to uno: one it reads, or a feature it refuses. */
 type CodecUse =
   | { readonly reads: ParquetCodec }
