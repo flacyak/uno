@@ -81,28 +81,44 @@ export async function ssoRoleCredentials(
   }
   if (!res.ok)
     throw new SsoPortalRefused({ profile: ask.profile, status: res.status });
-  const body = (await res.json()) as {
-    roleCredentials?: Record<string, unknown>;
-  };
-  const r = body.roleCredentials;
-  const id = r?.['accessKeyId'];
-  const secret = r?.['secretAccessKey'];
-  const token = r?.['sessionToken'];
-  const expiration = r?.['expiration'];
-  if (
-    typeof id !== 'string' ||
-    typeof secret !== 'string' ||
-    typeof token !== 'string' ||
-    typeof expiration !== 'number'
-  ) {
-    throw new SsoUnreadable({ profile: ask.profile });
-  }
-  return {
-    accessKeyId: id,
-    secretAccessKey: secret,
-    sessionToken: token,
-    expiration: new Date(expiration),
-  };
+  return Effect.runPromise(ssoSessionIn(res, ask.profile));
+}
+
+/**
+ * ssoSessionIn reads the portal's answer to GetRoleCredentials: the session
+ * it holds, or the refusal where it holds none uno can read.
+ * @param res the portal's answer, with a success status
+ * @param profile the profile, for the error
+ * @return the session the answer holds
+ */
+function ssoSessionIn(
+  res: Response,
+  profile: string,
+): Effect.Effect<Session, SsoUnreadable> {
+  return Effect.gen(function* () {
+    const body = (yield* Effect.promise(() => res.json())) as {
+      roleCredentials?: Record<string, unknown>;
+    };
+    const r = body.roleCredentials;
+    const id = r?.['accessKeyId'];
+    const secret = r?.['secretAccessKey'];
+    const token = r?.['sessionToken'];
+    const expiration = r?.['expiration'];
+    if (
+      typeof id !== 'string' ||
+      typeof secret !== 'string' ||
+      typeof token !== 'string' ||
+      typeof expiration !== 'number'
+    ) {
+      return yield* new SsoUnreadable({ profile });
+    }
+    return {
+      accessKeyId: id,
+      secretAccessKey: secret,
+      sessionToken: token,
+      expiration: new Date(expiration),
+    };
+  });
 }
 
 /**
