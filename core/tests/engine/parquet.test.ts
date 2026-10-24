@@ -39,8 +39,19 @@ const LAST_BLOCK = 4;
 /** The sales fixture's name and path on disk. */
 const SALES_NAME = 'sales-q3.snappy.parquet';
 const SALES_PATH = testdata(SALES_NAME);
-/** Where a test's expected row takes an empty cell. */
+/** The sales fixture's columns, in the file's order. */
+const SALES_COLUMNS = ['date', 'region', 'rep', 'channel', 'units', 'revenue'];
+
+/** Where SALES_COLUMNS has no column of a name. */
 const ABSENT = -1;
+
+/** A row of the sales fixture, with the cells of the columns `names` names. */
+function under(names: readonly string[], row: readonly string[]): string[] {
+  return names.map((name) => {
+    const i = SALES_COLUMNS.indexOf(name);
+    return i === ABSENT ? '' : row[i]!;
+  });
+}
 
 test('a planned index has every row readable at once, in blocks of blockRows', () => {
   const { rows, size, blockRows } = PLAN;
@@ -131,7 +142,7 @@ function asText(rows: readonly string[][]): number {
 
 /** The sales fixture's table. */
 function sales(): Promise<Table> {
-  return opened('sales-q3.snappy.parquet', SALES);
+  return opened(SALES_NAME, SALES);
 }
 
 test('a block of a paged row group reads alone', async () => {
@@ -290,7 +301,7 @@ test('a scan that keeps nothing decodes every window once, and leaves the cache 
 test('held to Parquet, the sales fixture reads as sales-q3.csv does, complete at open with its exact rows', async () => {
   const source = bytesSource(SALES);
   const reading = await openReading({
-    name: 'sales-q3.snappy.parquet',
+    name: SALES_NAME,
     source,
     spec: { kind: 'parquet', columns: [] },
     header: 'first',
@@ -298,8 +309,7 @@ test('held to Parquet, the sales fixture reads as sales-q3.csv does, complete at
   });
   expect(english(reading.label)).toBe('Parquet · snappy · 5 row groups');
   expect(reading.behind).toEqual({ t: 'file', stored: source });
-  const names = ['date', 'region', 'rep', 'channel', 'units', 'revenue'];
-  const columns = names.map((name) => ({ name, key: `/${name}` }));
+  const columns = SALES_COLUMNS.map((name) => ({ name, key: `/${name}` }));
   expect(reading.columns()).toEqual(columns);
   expect(reading.spec()).toEqual({ kind: 'parquet', columns });
 
@@ -360,7 +370,7 @@ test('held to Parquet with pinned columns, each key finds its column, a lost key
     { name: 'region', key: '/rep' },
   ];
   const reading = await openReading({
-    name: 'sales-q3.snappy.parquet',
+    name: SALES_NAME,
     source: bytesSource(SALES),
     spec: { kind: 'parquet', columns: pinned },
     header: 'first',
@@ -374,11 +384,8 @@ test('held to Parquet with pinned columns, each key finds its column, a lost key
   ];
   expect(reading.columns()).toEqual(columns);
   expect(reading.spec()).toEqual({ kind: 'parquet', columns });
-  const [date, region, rep, channel, units, revenue] = [0, 1, 2, 3, 4, 5];
-  const want = salesRows().map((row) =>
-    [revenue, units, ABSENT, rep, date, region, channel].map((i) =>
-      i === ABSENT ? '' : row[i]!,
-    ),
-  );
+  // The file's columns each laid-out column reads, and none for gone.
+  const read = ['revenue', 'units', 'gone', 'rep', 'date', 'region', 'channel'];
+  const want = salesRows().map((row) => under(read, row));
   expect(await reading.pages.rows(0, ROWS)).toEqual(want);
 });
