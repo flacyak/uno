@@ -200,7 +200,8 @@ export interface ReadAsk {
  * with no spec is detected first, its head read once. One held to JSON Lines
  * starts from the columns its spec pins, and learns the rest as it is
  * indexed. One held to Parquet reads its footer, through a cache of the
- * chunks it reads that the View keeps.
+ * chunks it reads that the View keeps, and finds each pinned column by its
+ * key.
  */
 export async function openReading(ask: ReadAsk): Promise<Reading> {
   const { name, source, spec, tuning } = ask;
@@ -221,7 +222,7 @@ export async function openReading(ask: ReadAsk): Promise<Reading> {
       });
     }
     const table = await openTable(name, source, chunkCache(CHUNK_CACHE_BYTES));
-    return tableReading(name, source, table, tuning);
+    return tableReading(name, source, table, tuning, spec.columns);
   }
   const head = spec === undefined ? await detectedHead(ask) : undefined;
   const format = await openFormat(
