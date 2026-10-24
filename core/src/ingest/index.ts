@@ -47,6 +47,7 @@ export {
   DIALOG_EXTENSIONS,
   READ_COMPRESSIONS,
   READ_EXTENSIONS,
+  linesByName,
   nameParts,
   readable,
 } from './names.ts';
