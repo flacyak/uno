@@ -861,28 +861,7 @@ async function processCredentials(
   const words = splitCommand(command);
   const [program, ...args] = words;
   if (program === undefined) throw new ProcessEmpty({ profile });
-
-  let out: string;
-  try {
-    const run = await execFileAsync(program, args, {
-      timeout: PROCESS_MS,
-      maxBuffer: PROCESS_BYTES,
-      encoding: 'utf8',
-      windowsHide: true,
-    });
-    out = run.stdout;
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & {
-      stderr?: string;
-      killed?: boolean;
-    };
-    let why: string;
-    if (e.code === 'ENOENT') why = `there is no program called ${program}`;
-    else if (e.killed === true)
-      why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
-    else why = (e.stderr?.trim().split('\n')[0] ?? '') || e.message;
-    throw new ProcessFailed({ profile, why });
-  }
+  const out = await Effect.runPromise(runProcess(profile, program, args));
 
   let o: Record<string, unknown>;
   try {
@@ -909,6 +888,46 @@ async function processCredentials(
     printed.expiration = at;
   }
   return printed;
+}
+
+/**
+ * runProcess runs a credential_process program with its arguments and gives
+ * it PROCESS_MS to answer, succeeding with what it printed. It fails with
+ * ProcessFailed where there is no such program, it ran out of time, or it
+ * failed: the first line it wrote to stderr says why.
+ * @param profile the profile, for the failure
+ * @param program the program
+ * @param args its arguments
+ * @return what the program printed
+ */
+function runProcess(
+  profile: string,
+  program: string,
+  args: readonly string[],
+): Effect.Effect<string, ProcessFailed> {
+  return Effect.tryPromise({
+    try: async () => {
+      const run = await execFileAsync(program, args, {
+        timeout: PROCESS_MS,
+        maxBuffer: PROCESS_BYTES,
+        encoding: 'utf8',
+        windowsHide: true,
+      });
+      return run.stdout;
+    },
+    catch: (err) => {
+      const e = err as NodeJS.ErrnoException & {
+        stderr?: string;
+        killed?: boolean;
+      };
+      let why: string;
+      if (e.code === 'ENOENT') why = `there is no program called ${program}`;
+      else if (e.killed === true)
+        why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
+      else why = (e.stderr?.trim().split('\n')[0] ?? '') || e.message;
+      return new ProcessFailed({ profile, why });
+    },
+  });
 }
 
 /**
