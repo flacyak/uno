@@ -1,15 +1,17 @@
 /**
- * @fileoverview The Parquet files the Parquet tests open, and sources over
- * them that log each read.
+ * @fileoverview The Parquet files the Parquet tests open, the rows the sales
+ * fixture holds, and sources over them that log each read.
  */
 
 import { readFileSync } from 'node:fs';
 
+import { readAll } from '@ingest/csv';
 import { CHUNK_CACHE_BYTES, chunkCache } from '@ingest/parquet/buffer';
 import { openTable } from '@ingest/parquet/table';
 import type { Table } from '@ingest/parquet/table';
 import { bytesSource } from '@store';
 import type { ByteSource } from '@store';
+import { COLS, FIXTURE } from '@core-tests/testdata/sales-q3';
 
 const TESTDATA = new URL('../../testdata/', import.meta.url);
 
@@ -20,6 +22,14 @@ export function testdata(path: string): Uint8Array {
 
 /** sales-q3.csv as Parquet, as scripts/fixtures.ts writes it. */
 export const SALES = testdata('sales-q3.snappy.parquet');
+
+/** sales-q3.csv's rows, with the cells a short row leaves out empty. */
+export function salesRows(): string[][] {
+  const [, ...rows] = readAll(readFileSync(FIXTURE, 'utf8'), ',');
+  return rows.map((row) =>
+    Array.from({ length: COLS }, (_, i) => row[i] ?? ''),
+  );
+}
 
 /** A source over `bytes`, with each read as [offset, length] in `reads`. */
 export function logged(bytes: Uint8Array): {
