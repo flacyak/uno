@@ -8,7 +8,8 @@
  * start, and one page holds the rows of many blocks, so a block decodes with
  * the blocks around it, a window at a time, and every block of the window is
  * kept. A window holds as many blocks as DECODE_WINDOW_BYTES allows, counted
- * at the heaviest of its row groups' uncompressed bytes.
+ * at the heaviest of its row groups' uncompressed bytes and of the text the
+ * last window took per row.
  */
 
 import type { Table } from '@ingest';
@@ -17,8 +18,8 @@ import type { Blocks, Index, Indexed } from './reading.ts';
 import { BlockCache, rowsThrough } from './rows.ts';
 
 /**
- * The uncompressed row group bytes one window decodes at most, which bounds
- * both the memory and the time a decode takes.
+ * The bytes one window's rows take at most, uncompressed or as text, which
+ * bounds both the memory and the time a decode takes.
  */
 export const DECODE_WINDOW_BYTES = 16 << 20;
 
@@ -78,10 +79,14 @@ export class PlannedIndex implements Index {
 /** TableRows is what TablePages reads of a Table. */
 export type TableRows = Pick<Table, 'read' | 'paged' | 'bytesPerRow'>;
 
-/** Window is blocks decoded together: the first one's number, and each one's rows. */
+/** Window is blocks decoded together. */
 interface Window {
+  /** The first block's number. */
   readonly first: number;
+  /** Each block's rows. */
   readonly blocks: readonly string[][][];
+  /** Each block's bytes as delimited text. */
+  readonly costs: readonly number[];
 }
 
 /**
@@ -98,10 +103,14 @@ export class TablePages implements Blocks {
   /** Windows being read to keep, by each block they hold. */
   private readonly loading = new Map<number, Promise<Window>>();
   /**
-   * The last window read to keep nothing, so a scan down the rows decodes
-   * each window once and leaves the cache as it is.
+   * The window decoded last, whether it was kept or not. Its blocks are
+   * read from it until another replaces it, so a scan that keeps nothing
+   * decodes each window once, and a block the cache let go to hold the rest
+   * of its own window is not decoded again.
    */
-  private passing: Window | undefined;
+  private last: Window | undefined;
+  /** The text bytes per row of the window decoded last. */
+  private textPerRow = 0;
 
   constructor(
     name: string,
@@ -131,11 +140,10 @@ export class TablePages implements Blocks {
 
   /**
    * records reads one block's rows, with the blocks of its window. With
-   * `keep = false` they are decoded and the cache is left as it is, and the
-   * window is held aside for the next block until another replaces it.
+   * `keep = false` they are decoded and the cache is left as it is.
    */
   async records(block: number, keep = true): Promise<string[][]> {
-    const hit = this.cache.get(block) ?? blockIn(this.passing, block);
+    const hit = this.cache.get(block) ?? blockIn(this.last, block);
     if (hit !== undefined) return hit;
     const window = await (this.loading.get(block) ?? this.load(block, keep));
     return window.blocks[block - window.first]!;
@@ -144,13 +152,12 @@ export class TablePages implements Blocks {
   /** load decodes the window holding `block`, and with `keep` caches it. */
   private load(block: number, keep: boolean): Promise<Window> {
     const [first, end] = this.windowOf(block);
-    if (!keep) {
-      return this.decode(first, end).then((window) => (this.passing = window));
-    }
-    const pending = this.decode(first, end)
+    const decoded = this.decode(first, end);
+    if (!keep) return decoded;
+    const pending = decoded
       .then((window) => {
         window.blocks.forEach((rows, i) => {
-          this.cache.put(first + i, rows, textBytes(rows));
+          this.cache.put(first + i, rows, window.costs[i]!);
         });
         return window;
       })
@@ -186,12 +193,16 @@ export class TablePages implements Blocks {
   /**
    * How many blocks of the rows of blocks [first, end) fit in
    * DECODE_WINDOW_BYTES, at least one. A row counts as the most
-   * uncompressed bytes per row of the row groups under them.
+   * uncompressed bytes per row of the row groups under them, or as the
+   * text bytes per row of the last window where that is more.
    */
   private fitting([first, end]: readonly [number, number]): number {
     const [start] = this.index.rowsOf(first);
     const [, stop] = this.index.rowsOf(end - 1);
-    const perRow = this.table.bytesPerRow(start, stop);
+    const perRow = Math.max(
+      this.table.bytesPerRow(start, stop),
+      this.textPerRow,
+    );
     const blockBytes = perRow * this.index.blockRows;
     return Math.max(1, Math.floor(DECODE_WINDOW_BYTES / blockBytes));
   }
@@ -210,7 +221,11 @@ export class TablePages implements Blocks {
       const [from, to] = this.index.rowsOf(b);
       blocks.push(rows.slice(from - start, to - start));
     }
-    return { first, blocks };
+    const costs = blocks.map(textBytes);
+    const text = costs.reduce((sum, cost) => sum + cost, 0);
+    if (rows.length > 0) this.textPerRow = text / rows.length;
+    this.last = { first, blocks, costs };
+    return this.last;
   }
 }
 
