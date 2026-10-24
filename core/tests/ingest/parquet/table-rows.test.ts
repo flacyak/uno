@@ -20,7 +20,14 @@ import { random } from '@core-tests/random';
 import { COLS, REGION, ROWS } from '@core-tests/testdata/sales-q3';
 
 import { SALES_GROUP_ROWS } from '../../../scripts/fixtures.ts';
-import { SALES, logged, opened, salesRows, testdata } from './tables.ts';
+import {
+  SALES,
+  logged,
+  opened,
+  salesRows,
+  testdata,
+  withoutPageIndexes,
+} from './tables.ts';
 
 const NAME = 'sales-q3.snappy.parquet';
 
@@ -182,4 +189,26 @@ test('a failed read of a page is passed on as it failed', async () => {
   };
   const table = await openTable(NAME, source, chunkCache(0));
   await expect(table.read(0, 1)).rejects.toBe(failure);
+});
+
+/** Every row of `table`, read `size` rows at a time. */
+async function inWindows(table: Table, size: number): Promise<string[][]> {
+  const rows: string[][] = [];
+  for (let start = 0; start < table.rows; start += size) {
+    rows.push(...(await table.read(start, start + size)));
+  }
+  return rows;
+}
+
+test('the windows of a row group with no page index read its chunks once, whatever the chunk cache holds', async () => {
+  const name = 'int32_with_null_pages.parquet';
+  const bytes = withoutPageIndexes(testdata(`parquet/${name}`));
+  const { source, reads } = logged(bytes);
+  const table = await openTable(name, source, chunkCache(0));
+  expect(table.paged(0, table.rows)).toBe(false);
+  const opening = reads.length;
+  const window = table.rows / 10;
+  const whole = await (await opened(name, bytes)).read(0, table.rows);
+  expect(await inWindows(table, window)).toEqual(whole);
+  expect(reads.slice(opening)).toHaveLength(1);
 });
