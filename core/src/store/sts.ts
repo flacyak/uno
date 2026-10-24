@@ -9,6 +9,8 @@
  * the token or role in.
  */
 
+import { Data } from 'effect';
+
 import { parseTime } from '@go';
 import { encodeQuery, signV4 } from './s3.ts';
 import type { AwsCredentials } from './s3.ts';
@@ -236,19 +238,68 @@ function stsBase(region: string, opts: ExchangeOptions): string {
 }
 
 /**
+ * A role session name STS would not take, refused before any request is
+ * sent.
+ */
+export class SessionNameRefused extends Data.TaggedError('SessionNameRefused')<{
+  roleArn: string;
+  sessionName: string;
+  message: string;
+}> {
+  constructor(parts: { roleArn: string; sessionName: string }) {
+    super({
+      ...parts,
+      message:
+        `${parts.roleArn} cannot be assumed as ${JSON.stringify(parts.sessionName)} · ` +
+        'a role session name is 2 to 64 of letters, digits and +=,.@_-',
+    });
+  }
+}
+
+/**
  *
  * checkSessionName refuses a name STS would not take, before any request is sent.
  * @param roleArn the role, for the error
  * @param sessionName the name to check
  */
 function checkSessionName(roleArn: string, sessionName: string): void {
-  if (!SESSION_NAME.test(sessionName)) {
-    throw new Error(
-      `${roleArn} cannot be assumed as ${JSON.stringify(sessionName)} · ` +
-        'a role session name is 2 to 64 of letters, digits and +=,.@_-',
-    );
+  if (!SESSION_NAME.test(sessionName))
+    throw new SessionNameRefused({ roleArn, sessionName });
+}
+
+/**
+ * STS would not let the role be assumed: its error code, and its message
+ * where it gave one.
+ */
+export class StsRefused extends Data.TaggedError('StsRefused')<{
+  roleArn: string;
+  code: string;
+  detail?: string;
+  message: string;
+}> {
+  constructor(parts: { roleArn: string; code: string; detail?: string }) {
+    super({
+      ...parts,
+      message: `STS would not let ${parts.roleArn} be assumed · ${parts.code}${parts.detail === undefined ? '' : `: ${parts.detail}`}`,
+    });
   }
 }
+
+/** STS let the role be assumed and answered with no credentials uno could read. */
+export class StsUnreadable extends Data.TaggedError('StsUnreadable')<{
+  roleArn: string;
+  message: string;
+}> {
+  constructor(parts: { roleArn: string }) {
+    super({
+      ...parts,
+      message: `STS let ${parts.roleArn} be assumed and answered with no credentials uno could read`,
+    });
+  }
+}
+
+/** What assuming a role at STS can fail with. */
+export type StsFailure = SessionNameRefused | StsRefused | StsUnreadable;
 
 /**
  * sessionIn reads STS's answer to a role assumption: the session it holds,
@@ -260,11 +311,11 @@ function checkSessionName(roleArn: string, sessionName: string): void {
 async function sessionIn(res: Response, roleArn: string): Promise<Session> {
   const body = await res.text();
   if (!res.ok) {
-    const code = text(body, 'Code') ?? `HTTP ${res.status}`;
-    const message = text(body, 'Message');
-    throw new Error(
-      `STS would not let ${roleArn} be assumed · ${code}${message === undefined ? '' : `: ${message}`}`,
-    );
+    throw new StsRefused({
+      roleArn,
+      code: text(body, 'Code') ?? `HTTP ${res.status}`,
+      detail: text(body, 'Message'),
+    });
   }
 
   // A missing Credentials element reads as empty, so every field is missing.
@@ -279,9 +330,7 @@ async function sessionIn(res: Response, roleArn: string): Promise<Session> {
     token === undefined ||
     expiration === undefined
   ) {
-    throw new Error(
-      `STS let ${roleArn} be assumed and answered with no credentials uno could read`,
-    );
+    throw new StsUnreadable({ roleArn });
   }
   return {
     accessKeyId: id,
