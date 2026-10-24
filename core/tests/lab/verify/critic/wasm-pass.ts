@@ -34,7 +34,12 @@ import type { Format } from '@ingest';
 import type { ByteSource } from '@store';
 import { nodeSource } from '@store/node';
 
-import { drop, repeatedFile, resident, FULL_REPEATS } from '../../read/fixture.ts';
+import {
+  drop,
+  repeatedFile,
+  resident,
+  FULL_REPEATS,
+} from '../../read/fixture.ts';
 import { BulkIndex } from '../../scanner/bulk.ts';
 import { WasmScanner } from '../../scanner/wasm.ts';
 
@@ -169,7 +174,9 @@ async function main(): Promise<void> {
     for (const name of PASSES) {
       const got = await runPass(name, source, format);
       if (name !== 'readonly' && got.records !== want.records) {
-        throw new Error(`${name}: ${got.records} records, stock ${want.records}`);
+        throw new Error(
+          `${name}: ${got.records} records, stock ${want.records}`,
+        );
       }
       if (name !== 'readonly' && got.blocks !== want.blocks) {
         throw new Error(`${name}: ${got.blocks} blocks, stock ${want.blocks}`);
