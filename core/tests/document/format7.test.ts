@@ -221,12 +221,12 @@ describe('a source that says how it was read is refused on reading', () => {
     [
       'a kind this build does not know, by name',
       (m) => (m.sources[0]!['kind'] = 'avro'),
-      'books.uno: events.jsonl: this build does not know kind "avro" · it reads "jsonl"',
+      'books.uno: events.jsonl: this build does not know kind "avro" · it reads "jsonl", "parquet"',
     ],
     [
       'a kind that is not text',
       (m) => (m.sources[0]!['kind'] = 7),
-      'books.uno: events.jsonl: this build does not know kind 7 · it reads "jsonl"',
+      'books.uno: events.jsonl: this build does not know kind 7 · it reads "jsonl", "parquet"',
     ],
     [
       'a compression this build does not know, by name',
@@ -236,7 +236,7 @@ describe('a source that says how it was read is refused on reading', () => {
     [
       'a kind this build does not know on several files',
       (m) => (m.sources[1]!['kind'] = 'avro'),
-      'books.uno: shards: this build does not know kind "avro" · it reads "jsonl"',
+      'books.uno: shards: this build does not know kind "avro" · it reads "jsonl", "parquet"',
     ],
     // The kind is read first: only delimited text has to say header.
     [
@@ -245,7 +245,7 @@ describe('a source that says how it was read is refused on reading', () => {
         m.sources[1]!['kind'] = 'avro';
         delete m.sources[1]!['header'];
       },
-      'books.uno: shards: this build does not know kind "avro" · it reads "jsonl"',
+      'books.uno: shards: this build does not know kind "avro" · it reads "jsonl", "parquet"',
     ],
     [
       'columns that are not a list',
@@ -278,8 +278,8 @@ describe('a source that says how it was read is refused on reading', () => {
   });
 });
 
-/** JSON Lines, the kind a source says it was read as. */
-const KIND: SourceKind = 'jsonl';
+/** Parquet, a kind a source says it was read as. */
+const KIND: SourceKind = 'parquet';
 /**
  * A compression no build reads yet, cast in to see where the writer puts
  * it. It joins its type in the change that reads it.
@@ -309,7 +309,7 @@ describe('a source with a kind', () => {
       "bytes": 48211904,
       "path": "exports/events.jsonl",
       "version": "\\"5e0c2a\\"",
-      "kind": "jsonl",
+      "kind": "parquet",
       "compression": "gzip",
       "rows": 310455,
       "cols": 3
@@ -340,13 +340,16 @@ describe('a source with a kind', () => {
       'cols',
       'columns',
     ]);
-    expect(m.sources[0]!['kind']).toBe('jsonl');
+    expect(m.sources[0]!['kind']).toBe('parquet');
   });
 
-  test('of JSON Lines reads back as it was held, with its pinned columns', () => {
-    const doc = workspace([{ ...events(), kind: KIND }]);
-    const [back] = readContainer('books.uno', writeDocument(doc), AT).sources;
-    expect(back).toEqual(doc.sources[0]);
-    expect(back!.kind).toBe('jsonl');
-  });
+  test.each<SourceKind>(['jsonl', 'parquet'])(
+    'of kind %s reads back as it was held, with its pinned columns',
+    (kind) => {
+      const doc = workspace([{ ...events(), kind }]);
+      const [back] = readContainer('books.uno', writeDocument(doc), AT).sources;
+      expect(back).toEqual(doc.sources[0]);
+      expect(back!.kind).toBe(kind);
+    },
+  );
 });
