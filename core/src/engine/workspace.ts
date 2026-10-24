@@ -209,7 +209,11 @@ export class Workspace {
       // never lists one as opening.
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
-      const view = await this.view(id, ref, undefined, false, signal);
+      const opening = this.view(id, ref, undefined, false);
+      const view =
+        signal === undefined
+          ? await Effect.runPromise(opening)
+          : await cancellable(opening, signal, ref.name);
       return { opened: [this.keep(view)], showing: id };
     });
   }
@@ -251,7 +255,9 @@ export class Workspace {
       const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, carried, 'parts' in to);
+        view = await Effect.runPromise(
+          this.view(id, to, carried, 'parts' in to),
+        );
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -323,7 +329,9 @@ export class Workspace {
           });
       });
 
-      const view = await this.view(id, ref, { container: '', edits: was.log });
+      const view = await Effect.runPromise(
+        this.view(id, ref, { container: '', edits: was.log }),
+      );
 
       // Swapped only after the new view is open, so a failed append leaves
       // the old source in place.
@@ -411,13 +419,17 @@ export class Workspace {
     try {
       let view: View;
       if (src.parts !== undefined) {
-        view = await this.view(src.id, joinedFrom(src), carried);
+        view = await Effect.runPromise(
+          this.view(src.id, joinedFrom(src), carried),
+        );
       } else if (src.raw === undefined) {
         // By path, pinned to the saved version where there is one.
-        view = await this.view(
-          src.id,
-          fileAt(src.name, src.path ?? '', src.version),
-          carried,
+        view = await Effect.runPromise(
+          this.view(
+            src.id,
+            fileAt(src.name, src.path ?? '', src.version),
+            carried,
+          ),
         );
       } else {
         const bytes = bytesSource(src.raw);
@@ -478,15 +490,13 @@ export class Workspace {
   }
 
   /** view opens a ref as a View. With `whole`, every part of a source over
-   * several files is opened first, so a missing part fails here by name.
-   * Aborting `signal` cancels the open. */
-  private async view(
+   * several files is opened first, so a missing part fails here by name. */
+  private view(
     id: string,
     ref: SourceRef,
     carried: Carried | undefined,
     whole = false,
-    signal?: AbortSignal,
-  ): Promise<View> {
+  ): Effect.Effect<View, unknown> {
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
@@ -504,18 +514,18 @@ export class Workspace {
       header: headerModeOf(ref),
       parts: 'parts' in ref ? ref : undefined,
     });
-    const view =
-      signal === undefined
-        ? await Effect.runPromise(opening)
-        : await cancellable(opening, signal, ref.name);
-    view.connection = this.through(ref);
-    if ('parts' in ref) {
-      view.opened.parts = ref.parts.map((part) => ({
-        name: part.ref.name,
-        path: 'path' in part.ref ? part.ref.path : '',
-      }));
-    }
-    return view;
+    return opening.pipe(
+      Effect.map((view) => {
+        view.connection = this.through(ref);
+        if ('parts' in ref) {
+          view.opened.parts = ref.parts.map((part) => ({
+            name: part.ref.name,
+            path: 'path' in part.ref ? part.ref.path : '',
+          }));
+        }
+        return view;
+      }),
+    );
   }
 
   /**
