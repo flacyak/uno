@@ -122,8 +122,9 @@ function keyedOf({ name, key }: SavedColumn): KeyedColumn {
 /**
  * savedOf returns what a save writes of how a source's rows were read,
  * which readOf reads back. Delimited text writes nothing, as it always has.
- * JSON Lines writes its kind and every column in the spec, so a reopen
- * gives each key its column before the pass reaches it.
+ * JSON Lines and Parquet write their kind and every column in the spec, so
+ * a reopen gives each key its column: before the pass reaches it, or where
+ * a reordered schema moved it.
  */
 export function savedOf(spec: ReadSpec): Pick<Held, 'kind' | 'columns'> {
   switch (spec.kind) {
@@ -132,8 +133,7 @@ export function savedOf(spec: ReadSpec): Pick<Held, 'kind' | 'columns'> {
     case 'jsonl':
       return { kind: 'jsonl', columns: spec.columns.map(pinnedOf) };
     case 'parquet':
-      // Written once a .uno can say a source is Parquet.
-      return {};
+      return { kind: 'parquet', columns: spec.columns.map(pinnedOf) };
     default:
       return unreachable(spec);
   }
