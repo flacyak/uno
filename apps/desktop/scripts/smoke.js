@@ -13,7 +13,7 @@
 import { newManifest, readContainer, writeDocument } from "@uno/core/document";
 import { parseConnection } from "@uno/core/library";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -144,6 +144,18 @@ await writeFile(
     at: eventsWorkspace,
   }),
 );
+// A workspace saved over the Parquet fixture, which says its source was read
+// as Parquet. Detection does not read Parquet yet, so this is how a person
+// reaches it.
+const parquet = join(testdata, "sales-q3.snappy.parquet");
+const held = join(scratch, "held", "sales-q3-parquet.uno");
+await writeOneSource(held, {
+  id: "sales",
+  name: "sales-q3.snappy.parquet",
+  path: parquet,
+  bytes: (await stat(parquet)).size,
+  kind: "parquet",
+});
 
 const electron = (await import("electron")).default;
 
@@ -227,6 +239,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_OBJECT: object,
     UNO_SMOKE_SENT: sent,
     UNO_SMOKE_EVENTS: eventsWorkspace,
+    UNO_SMOKE_PARQUET: held,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits
