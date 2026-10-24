@@ -8,6 +8,8 @@
 
 import type { Held, SavedColumn } from '@document';
 import {
+  CHUNK_CACHE_BYTES,
+  chunkCache,
   delimitedRecords,
   detect,
   headOf,
@@ -15,6 +17,7 @@ import {
   linesFormat,
   openFormat,
   pointerTo,
+  openTable,
   refuseNotRead,
 } from '@ingest';
 import type { Column, HeaderMode, KeyedColumn, RecordFormat } from '@ingest';
@@ -24,8 +27,9 @@ import type { ReadKind, Said } from '@said';
 import { headed, multiOf } from '@store';
 import type { ByteSource, MultiSource } from '@store';
 import { indexPass } from './pass.ts';
-import { Pages, RowIndex } from './rows.ts';
+import { ONE_FILE, Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
+import { tableReading } from './table.ts';
 
 /** Indexed is how much of a source's stored bytes its pass has accounted for. */
 export interface Indexed {
@@ -78,6 +82,11 @@ export type ReadSpec =
       readonly kind: 'jsonl';
       /** The columns in order, each found by its key wherever it is first seen. */
       readonly columns: readonly KeyedColumn[];
+    }
+  | {
+      readonly kind: 'parquet';
+      /** The columns in order, each found by its key in the file's schema. */
+      readonly columns: readonly KeyedColumn[];
     };
 
 /**
@@ -119,6 +128,9 @@ export function savedOf(spec: ReadSpec): Pick<Held, 'kind' | 'columns'> {
       return {};
     case 'jsonl':
       return { kind: 'jsonl', columns: spec.columns.map(pinnedOf) };
+    case 'parquet':
+      // Written once a .uno can say a source is Parquet.
+      return {};
     default:
       return unreachable(spec);
   }
@@ -187,7 +199,8 @@ export interface ReadAsk {
  * openReading reads the head of a source and opens its Reading. A source
  * with no spec is detected first, its head read once. One held to JSON Lines
  * starts from the columns its spec pins, and learns the rest as it is
- * indexed.
+ * indexed. One held to Parquet reads its footer, through a cache of the
+ * chunks it reads that the View keeps.
  */
 export async function openReading(ask: ReadAsk): Promise<Reading> {
   const { name, source, spec, tuning } = ask;
@@ -197,6 +210,10 @@ export async function openReading(ask: ReadAsk): Promise<Reading> {
       kind: 'jsonl',
       columns: lines.columns(),
     }));
+  }
+  if (spec?.kind === 'parquet') {
+    const table = await openTable(name, source, chunkCache(CHUNK_CACHE_BYTES));
+    return tableReading(name, source, table, tuning);
   }
   const head = spec === undefined ? await detectedHead(ask) : undefined;
   const format = await openFormat(
@@ -236,9 +253,6 @@ async function detectedHead(ask: ReadAsk): Promise<Uint8Array> {
   refuseNotRead(name, found);
   return head.bytes;
 }
-
-/** The one run of every block of a single file. */
-const ONE_FILE: readonly Run[] = [{ row: 0, part: 0 }];
 
 /**
  * recordReading reads a file of records: the index pass finds where each
