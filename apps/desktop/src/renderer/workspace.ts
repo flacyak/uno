@@ -65,6 +65,25 @@ export function reloaded(was: Tab, now: Tab): string {
   return parts.join(" · ");
 }
 
+/** A relink or append in flight: the files it reads, and the tab it brings. */
+interface Pointing {
+  readonly kind: "relink" | "append";
+  readonly refs: readonly SourceRef[];
+  readonly fresh: Promise<Tab>;
+}
+
+/** Returns whether two lists of refs read the same files in the same order. */
+function sameFiles(a: readonly SourceRef[], b: readonly SourceRef[]): boolean {
+  return a.length === b.length && a.every((ref, i) => sameFile(ref, b[i]!));
+}
+
+/** Returns whether two refs read one file under one name: one path and version, or one Blob. */
+function sameFile(a: SourceRef, b: SourceRef): boolean {
+  if (a.name !== b.name) return false;
+  if ("path" in a && "path" in b) return a.path === b.path && a.version === b.version;
+  return "blob" in a && "blob" in b && a.blob === b.blob;
+}
+
 /** One source in the workspace. */
 export class Tab {
   /** The recogniser's current offer for this source, if any. */
@@ -183,6 +202,12 @@ export class Workspace {
    * marks the workspace dirty for them.
    */
   private readonly relinked = new Set<string>();
+  /**
+   * The relink or append in flight for each source, by id. The same one asked
+   * again before it is answered joins it, so Reload pressed twice reads the
+   * file once. Any other goes after it, as the engine answers in order.
+   */
+  private readonly pointing = new Map<string, Pointing>();
 
   private constructor(
     /** The engine this workspace owns. The panel lists and peeks through it. */
@@ -262,17 +287,39 @@ export class Workspace {
    * Points a tab at a different file. The tab is replaced by a new one that
    * keeps its sidebar position, selected cell and saved log.
    */
-  async relink(tab: Tab, ref: SourceRef): Promise<Tab> {
-    // Only a tab whose file is now found is marked relinked.
-    return this.replace(tab, await this.engine.relink(tab.source, ref), (fresh) => !fresh.missing);
+  relink(tab: Tab, ref: SourceRef): Promise<Tab> {
+    return this.point(tab, "relink", [ref], async () =>
+      // Only a tab whose file is now found is marked relinked.
+      this.replace(tab, await this.engine.relink(tab.source, ref), (fresh) => !fresh.missing),
+    );
   }
 
   /**
    * Adds files to the end of a multi-file tab. The tab is replaced by a new
    * one that keeps its sidebar position, selected cell, log and saved log.
    */
-  async append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
-    return this.replace(tab, await this.engine.append(tab.source, [...files]), () => true);
+  append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
+    return this.point(tab, "append", files, async () =>
+      this.replace(tab, await this.engine.append(tab.source, [...files]), () => true),
+    );
+  }
+
+  /** Runs `start` for `tab`'s source, or joins the same kind over the same files in flight. */
+  private async point(
+    tab: Tab,
+    kind: Pointing["kind"],
+    refs: readonly SourceRef[],
+    start: () => Promise<Tab>,
+  ): Promise<Tab> {
+    const was = this.pointing.get(tab.id);
+    if (was?.kind === kind && sameFiles(was.refs, refs)) return was.fresh;
+    const now: Pointing = { kind, refs, fresh: start() };
+    this.pointing.set(tab.id, now);
+    try {
+      return await now.fresh;
+    } finally {
+      if (this.pointing.get(tab.id) === now) this.pointing.delete(tab.id);
+    }
   }
 
   /**
