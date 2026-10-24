@@ -9,6 +9,8 @@
  * them in.
  */
 
+import { Data } from 'effect';
+
 import { parseTime } from '@go';
 import type { Session } from './sts.ts';
 
@@ -136,9 +138,50 @@ export async function containerCredentials(
   }
   if (!res.ok) {
     await res.body?.cancel();
-    throw new Error(`${who} answered ${res.status}`);
+    throw new HostRefused({ who, code: String(res.status) });
   }
   return sessionIn(await res.text(), who);
+}
+
+/**
+ * The endpoint turned the request away: with a status, or with the Code and
+ * Message the instance metadata service puts in a body.
+ */
+export class HostRefused extends Data.TaggedError('HostRefused')<{
+  who: string;
+  code: string;
+  detail?: string;
+  message: string;
+}> {
+  constructor(parts: { who: string; code: string; detail?: string }) {
+    super({
+      ...parts,
+      message: `${parts.who} answered ${parts.code}${parts.detail === undefined ? '' : `: ${parts.detail}`}`,
+    });
+  }
+}
+
+/** The endpoint answered with something other than JSON. */
+export class NotJson extends Data.TaggedError('NotJson')<{
+  who: string;
+  message: string;
+}> {
+  constructor(parts: { who: string }) {
+    super({ ...parts, message: `${parts.who} did not answer with JSON` });
+  }
+}
+
+/** The endpoint answered with JSON that holds no keys uno could read. */
+export class HostUnreadable extends Data.TaggedError('HostUnreadable')<{
+  who: string;
+  message: string;
+}> {
+  constructor(parts: { who: string }) {
+    super({
+      ...parts,
+      message: `${parts.who} answered with no credentials uno could read`,
+    });
+  }
 }
 
 /**
@@ -154,15 +197,16 @@ function sessionIn(body: string, who: string): Session {
   try {
     o = JSON.parse(body) as Record<string, unknown>;
   } catch {
-    throw new Error(`${who} did not answer with JSON`);
+    throw new NotJson({ who });
   }
   const code = o['Code'];
   if (code !== undefined && code !== 'Success') {
     const message = o['Message'];
-    throw new Error(
-      `${who} answered ${typeof code === 'string' ? code : JSON.stringify(code)}` +
-        (typeof message === 'string' ? `: ${message}` : ''),
-    );
+    throw new HostRefused({
+      who,
+      code: typeof code === 'string' ? code : JSON.stringify(code),
+      detail: typeof message === 'string' ? message : undefined,
+    });
   }
   const id = o['AccessKeyId'];
   const secret = o['SecretAccessKey'];
@@ -176,7 +220,7 @@ function sessionIn(body: string, who: string): Session {
     typeof token !== 'string' ||
     expiration === undefined
   ) {
-    throw new Error(`${who} answered with no credentials uno could read`);
+    throw new HostUnreadable({ who });
   }
   return {
     accessKeyId: id,
