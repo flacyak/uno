@@ -104,6 +104,8 @@ export type Said =
   // How a file was read, for the status bar.
   | { t: 'read'; delimiter: string; header: HeaderMode; charset: Charset }
   | { t: 'read-lines'; charset: Charset }
+  /** Parquet: its pages' codecs, and its row groups where it is one file. */
+  | { t: 'read-parquet'; codecs: ParquetCodec[]; groups?: number }
 
   // What a program does, for the recogniser's banner.
   | { t: 'program'; steps: StepSaid[] }
@@ -295,6 +297,14 @@ const SENTENCES: Sentences<Said> = {
     return s.header === 'first' ? read : `${read} · no header row`;
   },
   'read-lines': (s) => `${s.charset} · ${KINDS.jsonl}`,
+  'read-parquet': (s) => {
+    const parts = [KINDS.parquet];
+    if (s.codecs.length > 0) parts.push(s.codecs.join(', '));
+    if (s.groups !== undefined) {
+      parts.push(`${s.groups} row group${s.groups === 1 ? '' : 's'}`);
+    }
+    return parts.join(' · ');
+  },
 
   program: (s) =>
     s.steps.length === 0 ? 'change nothing' : s.steps.map(step).join(', then '),

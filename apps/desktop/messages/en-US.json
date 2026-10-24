@@ -421,6 +421,20 @@
   "kind_delimited": "delimited text",
   "kind_jsonl": "JSON Lines",
   "kind_parquet": "Parquet",
+  "parquet_codec_uncompressed": "uncompressed",
+  "parquet_codec_snappy": "snappy",
+  "parquet_codec_gzip": "gzip",
+  "parquet_codec_zstd": "zstd",
+  "parquet_row_groups": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} row group",
+        "plural=other": "{n} row groups"
+      }
+    }
+  ],
   "changed_version_same_size": "{name} is not the version the workspace was saved against · it is the same size",
   "changed_version_sizes": "{name} is not the version the workspace was saved against · it is {now} now and was {was}",
   "changed_size": "{name} is {now} now and was {was} when the workspace was saved",

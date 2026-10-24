@@ -30,6 +30,18 @@ describe('english', () => {
       'UTF-8 · JSON Lines',
     );
     expect(
+      english({ t: 'read-parquet', codecs: ['snappy', 'zstd'], groups: 12 }),
+    ).toBe('Parquet · snappy, zstd · 12 row groups');
+    expect(
+      english({ t: 'read-parquet', codecs: ['uncompressed'], groups: 1 }),
+    ).toBe('Parquet · uncompressed · 1 row group');
+    expect(english({ t: 'read-parquet', codecs: ['gzip'] })).toBe(
+      'Parquet · gzip',
+    );
+    expect(english({ t: 'read-parquet', codecs: [], groups: 0 })).toBe(
+      'Parquet · 0 row groups',
+    );
+    expect(
       english({
         t: 'workspace-too-large',
         name: 'q4.uno',

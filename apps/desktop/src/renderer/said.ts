@@ -10,11 +10,11 @@
 import { Refusal, messageOf } from "@engine";
 import type { CharName, ReadKind, Said, Sought, StepSaid } from "@engine";
 import { quote } from "@go";
-import type { ParquetFeature, Sentences } from "@said";
+import type { ParquetCodec, ParquetFeature, Sentences } from "@said";
 
 import { m } from "@paraglide/messages";
 import { getLocale } from "@paraglide/runtime";
-import { bytes, num } from "./locale.ts";
+import { bytes, list, num } from "./locale.ts";
 
 /** Returns an error's message. A Refusal is translated into the app's locale. */
 export function said(err: unknown): string {
@@ -64,6 +64,23 @@ const FEATURES: Record<ParquetFeature, () => string> = {
   variant: m.parquet_feature_variant,
   "external-columns": m.parquet_feature_external_columns,
 };
+
+/** The message function for each Parquet page codec. Called at use so the current locale applies. */
+const CODECS: Record<ParquetCodec, () => string> = {
+  uncompressed: m.parquet_codec_uncompressed,
+  snappy: m.parquet_codec_snappy,
+  gzip: m.parquet_codec_gzip,
+  zstd: m.parquet_codec_zstd,
+};
+
+/** How a Parquet file was read: the format, its pages' codecs, and its row groups where known. */
+function readParquet(codecs: readonly ParquetCodec[], groups: number | undefined): string {
+  const parts: string[] = [m.kind_parquet()];
+  const names = codecs.map((codec) => CODECS[codec]());
+  if (names.length > 0) parts.push(list(names));
+  if (groups !== undefined) parts.push(m.parquet_row_groups({ count: groups }));
+  return parts.join(" · ");
+}
 
 /**
  * Wraps text in the locale's quotation marks, with invisible characters
@@ -125,6 +142,7 @@ const SAYS: Sentences<Said> = {
     return headed ? m.read_delimiter(read) : m.read_delimiter_no_header(read);
   },
   "read-lines": (s) => m.read_lines({ charset: s.charset }),
+  "read-parquet": (s) => readParquet(s.codecs, s.groups),
 
   program: (s) => {
     const [first, ...rest] = s.steps.map(step);
