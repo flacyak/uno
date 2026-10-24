@@ -223,6 +223,13 @@ function typeFeatureOf({
   return logical?.type === 'VARIANT' ? 'variant' : undefined;
 }
 
+/** Page is the values of a flat field's rows [start, end), as decoded. */
+interface Page {
+  readonly start: number;
+  readonly end: number;
+  readonly values: ArrayLike<unknown>;
+}
+
 /** ParquetTable is a Table over the footer it was opened with. */
 class ParquetTable implements Table {
   readonly columns: readonly Column[];
@@ -231,10 +238,20 @@ class ParquetTable implements Table {
   readonly codecs: readonly ParquetCodec[];
   private readonly spans: readonly Group[];
   private readonly leaves: readonly Leaf[];
+  /** The top-level fields, in schema order. */
+  private readonly fields: readonly string[];
+  /**
+   * The top-level fields whose pages hyparquet hands over before it
+   * assembles them, which a read cannot keep: a struct, a list, a map or a
+   * repeated field.
+   */
+  private readonly nested: ReadonlySet<string>;
   /** The footer as hyparquet is handed it, from plainOf. */
   private readonly plain: FileMetaData;
   /** The stored slices the last read that read any asked for, by range. */
   private slices = new Map<string, Promise<ArrayBuffer>>();
+  /** The pages of each flat field the last read of it decoded. */
+  private readonly pages = new Map<string, readonly Page[]>();
 
   private readonly name: string;
   private readonly file: ByteSource;
@@ -258,6 +275,12 @@ class ParquetTable implements Table {
     }
     this.plain = plainOf(metadata);
     this.columns = this.leaves.map((leaf) => leaf.column);
+    this.fields = [...new Set(this.leaves.map(({ path }) => path[0]!))];
+    this.nested = new Set(
+      this.leaves
+        .filter(({ path, shape }) => path.length > 1 || shape.t !== 'primitive')
+        .map(({ path }) => path[0]!),
+    );
     this.spans = groupsOf(metadata.row_groups);
     this.groups = this.spans.length;
     const last = this.spans.at(-1);
@@ -288,7 +311,8 @@ class ParquetTable implements Table {
       throw new RangeError(`a Parquet table has no column ${only}`);
     }
     if (end <= start) return [];
-    const rows = await this.assembled(start, end, asked?.path[0]);
+    const fields = asked === undefined ? this.fields : [asked.path[0]!];
+    const rows = await this.assembled(start, end, fields);
     return rows.map((row) =>
       this.leaves.map((leaf) =>
         asked === undefined || leaf === asked
@@ -299,28 +323,71 @@ class ParquetTable implements Table {
   }
 
   /**
-   * Rows [start, end) as hyparquet assembles them, of every top-level field
-   * or of `field` alone. Only the pages that hold them are read where a row
-   * group has offset indexes.
+   * Rows [start, end) of `fields` as hyparquet assembles them. Only the
+   * pages that hold them are read where a row group has offset indexes.
+   *
+   * hyparquet decodes a page whole, whatever rows are asked, so the pages a
+   * read decoded of a flat field serve the next read they hold. They keep
+   * no more than the decode that made them held at once.
    */
   private async assembled(
     start: number,
     end: number,
-    field?: string,
+    fields: readonly string[],
+  ): Promise<Assembled[]> {
+    const kept = new Map<string, unknown[]>();
+    for (const field of fields) {
+      const values = this.nested.has(field)
+        ? undefined
+        : this.keptValues(field, start, end);
+      if (values !== undefined) kept.set(field, values);
+    }
+    const asked = fields.filter((field) => !kept.has(field));
+    const read =
+      asked.length === 0
+        ? Array.from({ length: end - start }, (): Assembled => ({}))
+        : await this.decoded(this.buffer(), start, end, asked);
+    return read.map((row, i) => {
+      const out: Record<string, unknown> = { ...row };
+      for (const [field, values] of kept) out[field] = values[i];
+      return out;
+    });
+  }
+
+  /**
+   * Rows [start, end) of `fields`, as hyparquet decodes and assembles them.
+   * The pages it decodes of each flat field are kept for the next read.
+   */
+  private async decoded(
+    file: AsyncBuffer,
+    start: number,
+    end: number,
+    fields: readonly string[],
   ): Promise<Assembled[]> {
     let rows: Assembled[] = [];
+    const pages = new Map<string, Page[]>();
     try {
       await parquetRead({
-        file: this.buffer(),
+        file,
         metadata: this.plain,
         rowStart: start,
         rowEnd: end,
-        columns: field === undefined ? undefined : [field],
+        columns: [...fields],
         rowFormat: 'object',
         useOffsetIndex: true,
         parsers: PARSERS,
         utf8: false,
         compressors: COMPRESSORS,
+        onPage: ({
+          pathInSchema: [field = ''],
+          columnData,
+          rowStart,
+          rowEnd,
+        }) => {
+          if (this.nested.has(field)) return;
+          const page = { start: rowStart, end: rowEnd, values: columnData };
+          pages.set(field, [...(pages.get(field) ?? []), page]);
+        },
         onComplete: (read: Assembled[]) => {
           rows = read;
         },
@@ -329,7 +396,29 @@ class ParquetTable implements Table {
       if (err instanceof ReadFailed) throw err.reason;
       throw new Refusal({ t: 'parquet-broken', name: this.name });
     }
+    for (const [field, decoded] of pages) this.pages.set(field, decoded);
     return rows;
+  }
+
+  /**
+   * The values of a flat field's rows [from, to), where pages the last
+   * read of it decoded hold every one.
+   */
+  private keptValues(
+    field: string,
+    from: number,
+    to: number,
+  ): unknown[] | undefined {
+    const pages = this.pages.get(field) ?? [];
+    const values: unknown[] = [];
+    for (let row = from; row < to;) {
+      const page = pages.find(({ start, end }) => start <= row && row < end);
+      if (page === undefined) return undefined;
+      for (const stop = Math.min(to, page.end); row < stop; row++) {
+        values.push(page.values[row - page.start]);
+      }
+    }
+    return values;
   }
 
   /**
