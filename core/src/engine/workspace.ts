@@ -197,13 +197,14 @@ export class Workspace {
   // ------------------------------------------------------------ sources
 
   /**
-   * open adds a file to the workspace and returns what it opened. A .uno
-   * opens every source it holds, and only into an empty workspace.
+   * Adds a file to the workspace, as a turn of the queue. A .uno opens every
+   * source it holds, and only into an empty workspace.
    *
-   * The engine's edge runs it with a cancel as its interruption. The open
-   * honours one as its turn begins and while the view waits for its sample
-   * rows; a cancel at any other point is left unheard, and the open is
-   * answered.
+   * The engine's edge runs the Effect with a cancel as its interruption. The
+   * open honours one as its turn begins and while the view waits for its
+   * sample rows; a cancel at any other point is left unheard, and the open
+   * is answered.
+   * @return What it opened, and which source to show.
    */
   open(ref: SourceRef): Effect.Effect<Opening, unknown> {
     return this.turn(
@@ -216,7 +217,12 @@ export class Workspace {
           return yield* awaited(() => this.openWorkspace(ref));
         }
         const id = sourceId(ref.name, this.sources.keys());
-        const view = yield* this.view(id, ref, undefined, false);
+        const view = yield* this.view(
+          id,
+          ref,
+          /* carried= */ undefined,
+          /* whole= */ false,
+        );
         return { opened: [this.keep(view)], showing: id };
       }),
     );
@@ -493,8 +499,11 @@ export class Workspace {
     return ids.size === 1 ? id : undefined;
   }
 
-  /** view opens a ref as a View. With `whole`, every part of a source over
-   * several files is opened first, so a missing part fails here by name. */
+  /**
+   * Opens a ref as a View, with its connection and parts filled in. With
+   * `whole`, every part of a source over several files is opened first, so a
+   * missing part fails here by name.
+   */
   private view(
     id: string,
     ref: SourceRef,
@@ -533,9 +542,9 @@ export class Workspace {
   }
 
   /**
-   * sourceOf opens a ref's bytes. With `whole`, every part of a source over
-   * several files is opened as well, so a missing part fails here by name,
-   * and the bytes are closed again when one does.
+   * Opens a ref's bytes. With `whole`, every part of a source over several
+   * files is opened as well, so a missing part fails here by name, and the
+   * bytes are closed again when one does.
    */
   private async sourceOf(ref: SourceRef, whole: boolean): Promise<ByteSource> {
     const source = await this.openSource(ref);
@@ -761,7 +770,7 @@ export class Workspace {
   }
 
   /**
-   * turn runs an effect as the next turn of the queue, and refuses it if the
+   * Runs an effect as the next turn of the queue, and refuses it if the
    * workspace was closed by the time its turn came.
    */
   private turn<A, E>(
@@ -776,7 +785,7 @@ export class Workspace {
     );
   }
 
-  /** serially runs `fn` as the next turn of the queue. */
+  /** Runs `fn` as the next turn of the queue. */
   private serially<T>(fn: () => Promise<T>): Promise<T> {
     return Effect.runPromise(this.turn(awaited(fn)));
   }
