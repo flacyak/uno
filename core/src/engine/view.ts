@@ -212,10 +212,10 @@ export class View {
    * closes the bytes.
    */
   static open(ask: OpenAsk): Effect.Effect<View, unknown> {
-    const v = new View(ask.id, ask.name, ask.path, ask.port, ask.began);
-    v.carried = ask.carried?.raw;
-    v.parts = ask.parts;
     return Effect.gen(function* () {
+      const v = new View(ask.id, ask.name, ask.path, ask.port, ask.began);
+      v.carried = ask.carried?.raw;
+      v.parts = ask.parts;
       // The bytes are the view's from here: every failure of the open closes
       // the view, and the view closes them.
       v.source = yield* awaited(ask.source);
