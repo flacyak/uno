@@ -994,6 +994,8 @@ export class Shell {
       );
       this.shown(w.active === fresh);
     } catch (err) {
+      // A relink whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
   }
