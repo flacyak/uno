@@ -47,14 +47,14 @@ export interface HostOptions {
 }
 
 /**
- * askInstance asks the instance metadata service for the keys of the role
- * the instance runs as. IMDSv2 is asked first; a service that turns the
- * token request away is asked the v1 way. Undefined where nothing of the
- * kind answers, or the instance has no role, so the chain goes on to say
- * there are no credentials.
- * @param endpoint where the service is
- * @param opts how requests go out
- * @return the role's session, or undefined where nothing answers or no role is attached
+ * Asks the instance metadata service for the keys of the role the instance
+ * runs as. IMDSv2 is asked first; a service that turns the token request
+ * away is asked the v1 way. Undefined where nothing of the kind answers, or
+ * the instance has no role, so the chain goes on to say there are no
+ * credentials.
+ * @param endpoint Where the service is.
+ * @return The role's session, or undefined where nothing answers or no role
+ *     is attached.
  */
 export function askInstance(
   endpoint: string,
@@ -97,11 +97,9 @@ export function askInstance(
 }
 
 /**
- * instanceCredentials runs askInstance as a Promise, for a caller outside
- * the store.
- * @param endpoint where the service is
- * @param opts how requests go out
- * @return the role's session, or undefined where nothing answers or no role is attached
+ * Runs askInstance as a Promise, for a caller outside the store.
+ * @return The role's session, or undefined where nothing answers or no role
+ *     is attached.
  */
 export function instanceCredentials(
   endpoint: string,
@@ -110,12 +108,17 @@ export function instanceCredentials(
   return Effect.runPromise(askInstance(endpoint, opts));
 }
 
-/** The instance metadata service named the role and would not hand out its keys. */
+/**
+ * The instance metadata service named the role and would not hand out its
+ * keys.
+ */
 export class InstanceRefused extends Data.TaggedError('InstanceRefused')<{
+  /** The instance's role, as the sentence names it. */
   who: string;
   status: number;
   message: string;
 }> {
+  /** @param parts The instance's role and the status answered. */
   constructor(parts: { who: string; status: number }) {
     super({
       ...parts,
@@ -125,14 +128,12 @@ export class InstanceRefused extends Data.TaggedError('InstanceRefused')<{
 }
 
 /**
- * askContainer asks the endpoint beside a container for the keys of the
- * task's role. `authorization` is the token the endpoint checks, where it
- * checks one. Plain http is allowed only to this host, so the token is sent
- * nowhere else.
- * @param url the endpoint
- * @param authorization the token it checks, if any
- * @param opts how requests go out
- * @return the task's session
+ * Asks the endpoint beside a container for the keys of the task's role.
+ * `authorization` is the token the endpoint checks, where it checks one.
+ * Plain http is allowed only to this host, so the token is sent nowhere
+ * else.
+ * @param url The endpoint.
+ * @param authorization The token it checks, if any.
  */
 export function askContainer(
   url: string,
@@ -163,14 +164,7 @@ export function askContainer(
   });
 }
 
-/**
- * containerCredentials runs askContainer as a Promise, for a caller outside
- * the store.
- * @param url the endpoint
- * @param authorization the token it checks, if any
- * @param opts how requests go out
- * @return the task's session
- */
+/** Runs askContainer as a Promise, for a caller outside the store. */
 export function containerCredentials(
   url: string,
   authorization: string | undefined,
@@ -180,14 +174,12 @@ export function containerCredentials(
 }
 
 /**
- * ask sends one request to a host endpoint and gives it HOST_MS to answer.
- * It fails with NoAnswer where nothing answers in time or the connection
- * fails, with the runtime's own account of it as the reason.
- * @param go how the request goes out
- * @param who the endpoint, for the failure
- * @param url where the request goes
- * @param init the request's method and headers
- * @return the answer
+ * Sends one request to a host endpoint and gives it HOST_MS to answer. It
+ * fails with NoAnswer where nothing answers in time or the connection fails,
+ * with the runtime's own account of it as the reason.
+ * @param go How the request goes out.
+ * @param who The endpoint, for the failure.
+ * @param init The request's method and headers.
  */
 function ask(
   go: typeof fetch,
@@ -206,21 +198,12 @@ function ask(
   );
 }
 
-/**
- * text is an answer's body as text.
- * @param res the answer
- * @return its body
- */
+/** Reads an answer's body as text. */
 function text(res: Response): Effect.Effect<string> {
   return Effect.promise(() => res.text());
 }
 
-/**
- * drop lets go of an answer whose body is not read, so its connection is
- * freed.
- * @param res the answer
- * @return nothing
- */
+/** Lets go of an answer whose body is not read, so its connection is freed. */
 function drop(res: Response): Effect.Effect<void> {
   return Effect.promise(async () => {
     await res.body?.cancel();
