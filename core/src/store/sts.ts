@@ -140,45 +140,66 @@ const STS_VERSION = '2011-06-15';
 const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
 
 /**
- * assumeRole calls STS AssumeRole as one signed GET, with `source` as the
- * caller's credentials, and returns the role's session.
+ * roleExchange calls STS AssumeRole as one signed GET, with `source` as the
+ * caller's credentials, and succeeds with the role's session.
  *
- * An error includes STS's error code and message.
+ * It fails with a session name STS would not take, or with what STS said:
+ * its error code and message. A request STS never answers rejects with the
+ * runtime's own error, as a defect.
  * @param ask the role, the session and the region
  * @param source the caller's keys, which sign the request
  * @param opts where the exchange is sent and how requests go out
  * @return the role's session
  */
-export async function assumeRole(
+export function roleExchange(
+  ask: RoleAsk,
+  source: Omit<AwsCredentials, 'region'>,
+  opts: ExchangeOptions = {},
+): Effect.Effect<Session, StsFailure> {
+  return Effect.gen(function* () {
+    yield* checkSessionName(ask.roleArn, ask.sessionName);
+    const go = opts.fetch ?? fetch;
+    const query: Array<[string, string]> = [
+      ['Action', 'AssumeRole'],
+      ['Version', STS_VERSION],
+      ['RoleArn', ask.roleArn],
+      ['RoleSessionName', ask.sessionName],
+    ];
+    if (ask.durationSeconds !== undefined)
+      query.push(['DurationSeconds', String(ask.durationSeconds)]);
+    if (ask.externalId !== undefined)
+      query.push(['ExternalId', ask.externalId]);
+    // Encoded with the encoder SigV4 signs with, so the query on the wire
+    // matches the signature. URLSearchParams would write a space as `+`.
+    const url = new URL(`${stsBase(ask.region, opts)}/?${encodeQuery(query)}`);
+
+    const headers = signV4(
+      { method: 'GET', url, headers: {} },
+      source,
+      ask.region,
+      'sts',
+      new Date(),
+    );
+    const res = yield* Effect.promise(() =>
+      go(url, { method: 'GET', headers }),
+    );
+    return yield* sessionIn(res, ask.roleArn);
+  });
+}
+
+/**
+ * assumeRole runs roleExchange as a Promise, for a caller outside the store.
+ * @param ask the role, the session and the region
+ * @param source the caller's keys, which sign the request
+ * @param opts where the exchange is sent and how requests go out
+ * @return the role's session
+ */
+export function assumeRole(
   ask: RoleAsk,
   source: Omit<AwsCredentials, 'region'>,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
-  checkSessionName(ask.roleArn, ask.sessionName);
-  const go = opts.fetch ?? fetch;
-  const query: Array<[string, string]> = [
-    ['Action', 'AssumeRole'],
-    ['Version', STS_VERSION],
-    ['RoleArn', ask.roleArn],
-    ['RoleSessionName', ask.sessionName],
-  ];
-  if (ask.durationSeconds !== undefined)
-    query.push(['DurationSeconds', String(ask.durationSeconds)]);
-  if (ask.externalId !== undefined) query.push(['ExternalId', ask.externalId]);
-  // Encoded with the encoder SigV4 signs with, so the query on the wire
-  // matches the signature. URLSearchParams would write a space as `+`.
-  const url = new URL(`${stsBase(ask.region, opts)}/?${encodeQuery(query)}`);
-
-  const headers = signV4(
-    { method: 'GET', url, headers: {} },
-    source,
-    ask.region,
-    'sts',
-    new Date(),
-  );
-  return Effect.runPromise(
-    sessionIn(await go(url, { method: 'GET', headers }), ask.roleArn),
-  );
+  return Effect.runPromise(roleExchange(ask, source, opts));
 }
 
 /** What AssumeRoleWithWebIdentity is asked for. */
@@ -206,7 +227,7 @@ export async function assumeRoleWithWebIdentity(
   ask: WebIdentityAsk,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
-  checkSessionName(ask.roleArn, ask.sessionName);
+  await Effect.runPromise(checkSessionName(ask.roleArn, ask.sessionName));
   const go = opts.fetch ?? fetch;
   const query: Array<[string, string]> = [
     ['Action', 'AssumeRoleWithWebIdentity'],
@@ -259,14 +280,19 @@ export class SessionNameRefused extends Data.TaggedError('SessionNameRefused')<{
 }
 
 /**
- *
- * checkSessionName refuses a name STS would not take, before any request is sent.
+ * checkSessionName refuses a name STS would not take, before any request is
+ * sent.
  * @param roleArn the role, for the error
  * @param sessionName the name to check
+ * @return nothing, or the refusal
  */
-function checkSessionName(roleArn: string, sessionName: string): void {
-  if (!SESSION_NAME.test(sessionName))
-    throw new SessionNameRefused({ roleArn, sessionName });
+function checkSessionName(
+  roleArn: string,
+  sessionName: string,
+): Effect.Effect<void, SessionNameRefused> {
+  return SESSION_NAME.test(sessionName)
+    ? Effect.void
+    : Effect.fail(new SessionNameRefused({ roleArn, sessionName }));
 }
 
 /**
