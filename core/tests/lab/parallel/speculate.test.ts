@@ -127,6 +127,13 @@ const BOM_CHANCE = 0.1;
 const MAX_CHARS = 40;
 /** Number of random files to check. */
 const SEEDS = 3000;
+/**
+ * How long the random input test may take. Its 3000 seeds, each cut at
+ * every byte, run in about 4 s alone and 7 s under the full parallel run, so
+ * the default 5 s failed the file now and then. The budget sits well above
+ * both.
+ */
+const RANDOM_INPUT_MS = 30_000;
 /** Random sets of cuts tried per file, and the most cuts in one. */
 const RANDOM_CUT_SETS = 4;
 const MAX_RANDOM_CUTS = 6;
@@ -175,7 +182,7 @@ function placesOf(
 }
 
 describe('stitched speculative scans agree with RecordScanner', () => {
-  test('on random input, cut anywhere', () => {
+  test('on random input, cut anywhere', { timeout: RANDOM_INPUT_MS }, () => {
     const places = new Map<Place, number>();
     const states = new Map<State, number>();
 
