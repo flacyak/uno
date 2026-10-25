@@ -2,7 +2,8 @@
  * @fileoverview A reload or an append still reading its file when another
  * workspace opens, and an edit or a removal waiting behind such a reload,
  * over the real engine. The disk provider holds the file's open back, as a
- * slow disk or bucket would, until the other workspace has opened.
+ * slow disk or bucket would, until the other workspace has opened or the edit
+ * has been typed.
  *
  * @vitest-environment happy-dom
  */
@@ -13,6 +14,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { UNITS } from "@main/smoke/fixture";
+import { m } from "@paraglide/messages";
 import type { Provider } from "@plugin";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
@@ -67,6 +69,7 @@ function gated(): { provider: Provider; hold: (path: string) => Promise<() => vo
 }
 
 const said = (): string => document.querySelector("#status-msg")?.textContent ?? "";
+const summary = (): string => document.querySelector("#status-file")?.textContent ?? "";
 const tabs = (): string[] =>
   [...document.querySelectorAll<HTMLElement>(".tab")].map((t) => t.dataset["source"] ?? "");
 
@@ -156,7 +159,7 @@ test(
 );
 
 test(
-  "an edit waiting behind a reload when another workspace opens ends quietly",
+  "an edit waiting behind a reload counts as unsaved, and ends quietly when another workspace opens",
   async () => {
     // r reloads the tab, and its file waits to open.
     const asked = gate.hold(FIXTURE);
@@ -166,13 +169,16 @@ test(
 
     // An edit made now waits in the engine behind the reload.
     await editUnits("1204");
+    // It has not landed, yet the first open warns over it.
+    await shell.openPath(SECOND);
+    expect(said()).toBe(m.unsaved_edits_open_again());
     await opensOver(SECOND, go, "google-ads-sales");
   },
   CHECK_MS,
 );
 
 test(
-  "a removal waiting behind a reload when another workspace opens ends quietly",
+  "a removal waiting behind a reload counts as unsaved, and ends quietly when another workspace opens",
   async () => {
     // A saved workspace of two sources. r reloads the first, and its file
     // waits to open.
@@ -187,7 +193,32 @@ test(
     // reload.
     press("ArrowDown");
     press("Delete");
+    // It has not landed, yet the first open warns over it.
+    await shell.openPath(FIXTURE);
+    expect(said()).toBe(m.unsaved_edits_open_again());
     await opensOver(FIXTURE, go, "sales-q3");
+  },
+  CHECK_MS,
+);
+
+test(
+  "an edit that lands after the reload it waited behind counts as unsaved",
+  async () => {
+    // r reloads the tab, and an edit made while its file waits to open waits
+    // behind it.
+    const asked = gate.hold(FIXTURE);
+    shell.showPanel();
+    press("r");
+    const go = await asked;
+    await editUnits("1204");
+
+    // The reload lands, then the edit, on the tab the reload made.
+    go();
+    const counted = (): boolean => summary().includes(m.edits_count({ count: 1 }));
+    expect(await until(page, counted)).toBe(true);
+    expect(shell.unsaved).toBe(true);
+    await shell.openPath(SECOND);
+    expect(said()).toBe(m.unsaved_edits_open_again());
   },
   CHECK_MS,
 );
