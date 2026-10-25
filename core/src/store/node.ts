@@ -783,6 +783,57 @@ const PROCESS_MS = 30_000;
 /** The most a credential_process program may print. */
 const PROCESS_BYTES = 1 << 20;
 
+/** A profile whose credential_process is set to nothing. */
+export class ProcessEmpty extends Data.TaggedError('ProcessEmpty')<{
+  profile: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} has an empty credential_process`,
+    });
+  }
+}
+
+/**
+ * A credential_process that did not run to a good end: there is no such
+ * program, it ran out of time, or it failed, with the first line it wrote to
+ * stderr as `why`.
+ */
+export class ProcessFailed extends Data.TaggedError('ProcessFailed')<{
+  profile: string;
+  why: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; why: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}'s credential_process failed · ${parts.why}`,
+    });
+  }
+}
+
+/**
+ * A credential_process that ran and printed something other than the CLI's
+ * version 1 JSON: `why` says what was wrong with it.
+ */
+export class ProcessUnreadable extends Data.TaggedError('ProcessUnreadable')<{
+  profile: string;
+  why: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; why: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}'s credential_process ${parts.why}`,
+    });
+  }
+}
+
+/** What running a credential_process can fail with. */
+export type ProcessFailure = ProcessEmpty | ProcessFailed | ProcessUnreadable;
+
 /** Keys a credential_process printed, and when they expire where it said. */
 interface Printed {
   accessKeyId: string;
@@ -804,16 +855,12 @@ async function processCredentials(
   profile: string,
   command: string,
 ): Promise<Printed> {
-  /** fail is an Error about this profile's credential_process. */
-  const fail = (why: string): Error =>
-    new Error(`the AWS profile ${profile}'s credential_process ${why}`);
+  /** fail is the refusal of what this profile's credential_process printed. */
+  const fail = (why: string): ProcessUnreadable =>
+    new ProcessUnreadable({ profile, why });
   const words = splitCommand(command);
   const [program, ...args] = words;
-  if (program === undefined) {
-    throw new Error(
-      `the AWS profile ${profile} has an empty credential_process`,
-    );
-  }
+  if (program === undefined) throw new ProcessEmpty({ profile });
 
   let out: string;
   try {
@@ -834,7 +881,7 @@ async function processCredentials(
     else if (e.killed === true)
       why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
     else why = (e.stderr?.trim().split('\n')[0] ?? '') || e.message;
-    throw fail(`failed · ${why}`);
+    throw new ProcessFailed({ profile, why });
   }
 
   let o: Record<string, unknown>;
