@@ -181,6 +181,35 @@ test('a UTF-8 header over Windows-1252 rows opens, with every row in its place',
   }
 });
 
+test('a UTF-8 byte order mark on a Windows-1252 file is not in the header or the rows', async () => {
+  const body = bytesOf(UTF8_BOM, 'a,b\n1,caf', [E_ACUTE], '\n2,x\n');
+  expect(sniffEncoding(body)).toBe('other');
+  const sheet = read('f.csv', body);
+  expect(sheet.columns.map((c) => c.header)).toEqual(['a', 'b']);
+  expect(sheet.raw(0, 1)).toBe('café');
+  // Under "none" the mark is not in the first row either.
+  expect(read('f.csv', body, 'none').raw(0, 0)).toBe('a');
+
+  const { src, done } = await open('f.csv', body);
+  try {
+    expect(src.opened.columns.map((c) => c.header)).toEqual(['a', 'b']);
+    expect(await allRows(src)).toEqual([
+      ['1', 'café'],
+      ['2', 'x'],
+    ]);
+  } finally {
+    done();
+  }
+});
+
+// A single NUL is as often a stray byte: `max(nuls) * 16 >= units` holds for
+// one in any head of 32 bytes or fewer.
+test('a short UTF-8 file with one NUL is not UTF-16', () => {
+  const body = bytesOf('id,name\n1,a', [NUL], '\n2,b\n');
+  expect(sniffEncoding(body)).toBe('utf-8');
+  expect(read('f.csv', body).raw(0, 1)).toBe('a\0');
+});
+
 test('a NUL in a UTF-8 file is a byte in its cell, and does not make the file UTF-16', async () => {
   const lines = Array.from(
     { length: 50 },
