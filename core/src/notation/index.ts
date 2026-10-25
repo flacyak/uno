@@ -115,8 +115,13 @@ class Scanner {
 
     let content = this.group();
     if (content === undefined && this.i < this.src.length) {
-      content = this.src.slice(this.i, this.i + 1);
-      this.i++;
+      // One rune, or a whole \command, so a refusal can name it.
+      const n =
+        this.src[this.i] === '\\'
+          ? 1 + word(this.src.slice(this.i + 1)).length
+          : 1;
+      content = this.src.slice(this.i, this.i + n);
+      this.i += n;
     }
     if (content === undefined || content.length === 0) {
       return this.bail(`${quote(mark)} needs a symbol after it`, start);
