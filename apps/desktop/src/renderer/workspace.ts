@@ -44,16 +44,23 @@ export type Mode = "view" | "transform";
 
 /**
  * Returns the status message after a reload, comparing the old tab with the
- * new one: whether the version changed (for a file with a version), whether
- * the size changed, and how many edits were replayed.
+ * new one: whether a file on disk was written since, whether the version
+ * changed (for a file with a version), whether the size changed, and how many
+ * edits were replayed.
  */
 export function reloaded(was: Tab, now: Tab): string {
   const before = was.link?.version;
   const after = now.link?.version;
   const sized = was.bytes === now.bytes;
   const moved = { now: bytes(now.bytes), was: bytes(was.bytes) };
+  const modified = now.link?.modified;
+  // The versions decide where either side has one, as in unchanged(). A file
+  // with neither that kept its size and modified time was not written since.
+  const versioned = before !== undefined || after !== undefined;
   let found: string;
-  if (before === undefined || after === undefined) {
+  if (!versioned && sized && modified !== undefined && modified === was.link?.modified) {
+    found = m.reload_no_change_on_disk();
+  } else if (before === undefined || after === undefined) {
     found = sized ? m.reload_same_size() : m.reload_size_moved(moved);
   } else if (before === after) {
     found = m.reload_no_change();
