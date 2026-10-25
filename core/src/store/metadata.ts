@@ -89,11 +89,23 @@ export async function instanceCredentials(
   const who = `the instance's role ${role}`;
   if (!keys.ok) {
     await keys.body?.cancel();
-    throw new Error(
-      `${who}: the instance metadata service answered ${keys.status}`,
-    );
+    throw new InstanceRefused({ who, status: keys.status });
   }
   return sessionIn(await keys.text(), who);
+}
+
+/** The instance metadata service named the role and would not hand out its keys. */
+export class InstanceRefused extends Data.TaggedError('InstanceRefused')<{
+  who: string;
+  status: number;
+  message: string;
+}> {
+  constructor(parts: { who: string; status: number }) {
+    super({
+      ...parts,
+      message: `${parts.who}: the instance metadata service answered ${parts.status}`,
+    });
+  }
 }
 
 /**
@@ -117,15 +129,13 @@ export async function containerCredentials(
   try {
     u = new URL(url);
   } catch {
-    throw new Error(`${who} is not a URL`);
+    throw new NotAUrl({ who });
   }
   if (
     u.protocol !== 'https:' &&
     !(u.protocol === 'http:' && CONTAINER_HOSTS.has(u.hostname))
   ) {
-    throw new Error(
-      `${who} is neither https nor on this host · uno sends a token to those alone`,
-    );
+    throw new NotThisHost({ who });
   }
   let res: Response;
   try {
@@ -134,13 +144,56 @@ export async function containerCredentials(
       signal: AbortSignal.timeout(HOST_MS),
     });
   } catch (err) {
-    throw new Error(`${who} did not answer · ${(err as Error).message}`);
+    throw new NoAnswer({ who, reason: (err as Error).message });
   }
   if (!res.ok) {
     await res.body?.cancel();
     throw new HostRefused({ who, code: String(res.status) });
   }
   return sessionIn(await res.text(), who);
+}
+
+/** The container endpoint the environment names is not a URL. */
+export class NotAUrl extends Data.TaggedError('NotAUrl')<{
+  who: string;
+  message: string;
+}> {
+  constructor(parts: { who: string }) {
+    super({ ...parts, message: `${parts.who} is not a URL` });
+  }
+}
+
+/**
+ * The container endpoint is somewhere a token may not go in the clear:
+ * plain http to a host other than this one.
+ */
+export class NotThisHost extends Data.TaggedError('NotThisHost')<{
+  who: string;
+  message: string;
+}> {
+  constructor(parts: { who: string }) {
+    super({
+      ...parts,
+      message: `${parts.who} is neither https nor on this host · uno sends a token to those alone`,
+    });
+  }
+}
+
+/**
+ * Nothing answered at the endpoint within the second it is given, or the
+ * connection failed. `reason` is the runtime's own account of it.
+ */
+export class NoAnswer extends Data.TaggedError('NoAnswer')<{
+  who: string;
+  reason: string;
+  message: string;
+}> {
+  constructor(parts: { who: string; reason: string }) {
+    super({
+      ...parts,
+      message: `${parts.who} did not answer · ${parts.reason}`,
+    });
+  }
 }
 
 /**
@@ -183,6 +236,26 @@ export class HostUnreadable extends Data.TaggedError('HostUnreadable')<{
     });
   }
 }
+
+/** What asking the instance metadata service for its keys can fail with. */
+export type InstanceFailure =
+  | NoAnswer
+  | InstanceRefused
+  | HostRefused
+  | NotJson
+  | HostUnreadable;
+
+/** What asking the container endpoint for its keys can fail with. */
+export type ContainerFailure =
+  | NotAUrl
+  | NotThisHost
+  | NoAnswer
+  | HostRefused
+  | NotJson
+  | HostUnreadable;
+
+/** What asking a host for its keys can fail with. */
+export type HostFailure = InstanceFailure | ContainerFailure;
 
 /**
  * sessionIn reads the JSON both endpoints answer with: AccessKeyId,
