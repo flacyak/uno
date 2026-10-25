@@ -42,7 +42,10 @@ export function relativeTo(file: string, dir: string): string {
   const sep = file.charAt(dir.length);
   if (head !== dir || !SEP.test(sep)) return '';
   const rest = file.slice(dir.length + 1);
-  return rest === '' ? '' : rest.replace(/\\/g, '/');
+  // A doubled separator leaves `rest` absolute, and `against` would hand it
+  // back as a path from the root.
+  if (rest === '' || SEP.test(rest.charAt(0))) return '';
+  return rest.replace(/\\/g, '/');
 }
 
 /**
