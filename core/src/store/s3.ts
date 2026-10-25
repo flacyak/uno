@@ -10,7 +10,7 @@
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { Data, Effect } from 'effect';
+import { Data, Duration, Effect, Schedule } from 'effect';
 
 import { compareStrings, concat } from '@go';
 import type { Connection } from '@library';
@@ -156,9 +156,9 @@ export function keyName(key: string): string {
   return key.slice(key.lastIndexOf('/') + 1);
 }
 
-/** How many times a request that failed on the network or with a 5xx is tried. */
+/** How many times a request that failed on the network or with a 5xx is sent. */
 const TRIES = 3;
-/** The wait before the second try. It doubles for the third. */
+/** The wait before the second send. It doubles for the third. */
 const BACKOFF_MS = 200;
 /** How many times one request follows a bucket to another region. */
 const MOVES = 1;
@@ -303,35 +303,36 @@ export function s3Requests(opts: S3Options): S3Requests {
   }
 
   /**
-   * request is `attempt` with retries for network and 5xx failures, and one
-   * move to the region the bucket says it is in. `at` takes the region, since
-   * the retry after a move goes to a different host and needs a new signature.
+   * request is `attempt` with its retries. A network or server failure is
+   * sent again after a wait that doubles, and a move is sent again at once,
+   * to the region the bucket named, with the waits starting over there. After
+   * the last try a server failure and a move hand back the reply they carry,
+   * and a network failure rejects. `at` takes the region, since the send
+   * after a move goes to a different host and needs a new signature.
    */
-  async function request(
+  function request(
     loc: S3Location,
     at: (region: string) => URL,
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
   ): Promise<Response> {
-    let moves = 0;
-    for (let tries = 1; ; tries++) {
-      try {
-        return await Effect.runPromise(attempt(loc, at, method, extra));
-      } catch (failure) {
-        if (failure instanceof Moved) {
-          if (moves >= MOVES) return failure.reply;
-          moves++;
-        } else if (failure instanceof ServerFailure) {
-          if (tries >= TRIES) return failure.reply;
-          await wait(BACKOFF_MS << (tries - 1));
-        } else if (failure instanceof NetworkFailure) {
-          if (tries >= TRIES) throw failure;
-          await wait(BACKOFF_MS << (tries - 1));
-        } else {
-          throw failure;
-        }
-      }
-    }
+    return Effect.runPromise(
+      attempt(loc, at, method, extra).pipe(
+        Effect.retry({
+          schedule: Schedule.exponential(Duration.millis(BACKOFF_MS)),
+          times: TRIES - 1,
+          while: (failure) => failure._tag !== 'Moved',
+        }),
+        Effect.retry({
+          times: MOVES,
+          while: (failure) => failure._tag === 'Moved',
+        }),
+        Effect.catchTags({
+          ServerFailure: (failure) => Effect.succeed(failure.reply),
+          Moved: (failure) => Effect.succeed(failure.reply),
+        }),
+      ),
+    );
   }
 
   const requests: S3Requests = {
@@ -908,8 +909,4 @@ export function encode(s: string): string {
     /[!'()*]/g,
     (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
