@@ -98,10 +98,15 @@ function counted(field: string, value: unknown, least: number): void {
 }
 
 /**
- * cancellable runs an open with `signal`'s abort reaching it as an
- * interruption, and turns an interrupted open back into the refusal the
- * client expects. The open is run uninterruptible, so a cancel lands only
- * where the open lets it.
+ * Runs an open with `signal`'s abort reaching it as an interruption, and
+ * turns an interrupted open back into the refusal the client expects.
+ *
+ * The open is run uninterruptible, so a cancel lands only where the open
+ * lets it: the fiber keeps a cancel that arrives in between and lands it at
+ * the open's next interruptible step, and one that arrives after the last
+ * such step is left unheard.
+ * @param signal Aborted to cancel the open.
+ * @param name The file's name, for the refusal.
  */
 async function cancellable<A>(
   open: Effect.Effect<A, unknown>,
