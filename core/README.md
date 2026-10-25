@@ -75,6 +75,22 @@ The 37 that have one are what the engine itself refuses and says in ordinary use
 The rest are the diagnostics of a broken `.uno`, an AWS profile, S3, and the parsers.
 Giving one a kind is adding it to `Said`, after which the compiler asks for its English in `english` and for its message wherever a client writes one.
 
+## Effect
+
+A Promise chain that carried a retry, a queue, a cancel or a file's lifetime by hand runs on [Effect](https://effect.website).
+It runs inside the store and the engine, and stops at the package's edge.
+`FileHandler`, `ByteSource`, `FileStore` and the client's `Engine` take and return Promises as they did, so nothing outside the core sees an `Effect`.
+`Effect.runPromise` is called at that edge and nowhere else.
+
+What fails inside is typed.
+A failure is a class made with `Data.TaggedError`, declared in the module that raises it, with the English sentence as its `message`.
+`runPromise` rejects with the very value that failed, so the message a test or a person reads is the one it read before.
+A `Refusal` fails an Effect as itself and crosses the port as its `Said`, as before.
+
+A cancel is an interruption.
+The caller's `AbortSignal` is handed to `runPromise`, and an interrupted run is turned back into the `Refusal` the caller expects at the edge.
+Nothing in the desktop's renderer, its main process or the smoke tests uses Effect.
+
 ## Files with no header row
 
 A reader is told whether a file's first record names its columns: `openFormat`,
