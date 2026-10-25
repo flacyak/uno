@@ -219,6 +219,17 @@ test('the index serves closed blocks only, and projects the row count', () => {
   expect(index.bytesOf(2)).toEqual([50, 1010]);
 });
 
+test('a complete index seeds a longer one with every block but its last', () => {
+  const was = new RowIndex(10, 60, { blockRows: 2, blockBytes: 1 << 20 });
+  for (const offset of [10, 20, 30, 40, 50]) was.begin(offset);
+  expect(RowIndex.seeded(was, 100), 'while it indexes').toBeUndefined();
+
+  was.complete = true;
+  const index = RowIndex.seeded(was, 100)!;
+  // Blocks start at rows 0, 2 and 4. The one at 4 is scanned again.
+  expect([index.scanned, index.counted, index.readable()]).toEqual([50, 4, 2]);
+});
+
 test('a block closes at its byte budget as well as its row count', () => {
   const index = new RowIndex(0, 100, { blockRows: 100, blockBytes: 25 });
   for (const offset of [0, 10, 20, 30, 40, 60]) index.begin(offset);
