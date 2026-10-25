@@ -766,27 +766,28 @@ describe('a region out of a body never becomes a host', () => {
 // These use a stand-in fetch that answers from a script, so each failure on
 // the way is one the test wrote, and every call is counted.
 describe('a request that fails on the way is sent again', () => {
-  /** The HEAD reply for the fixture: its size and ETag, as S3 answers. */
+  /** Answers the fixture's HEAD as S3 does: its size and ETag. */
   const found = () =>
     new Response(null, {
       status: 200,
       headers: { 'content-length': String(bytes.length), etag: etagOf(bytes) },
     });
-  /** A reply that says `status` and nothing else. */
+  /** Answers with `status` and nothing else. */
   const answered = (status: number) => new Response(null, { status });
-  /** The 301 S3 sends for the wrong region, with the header alone. */
+  /** Answers as S3 does to the wrong region: a 301 with the header alone. */
   const moved = () =>
     new Response(null, {
       status: 301,
       headers: { 'x-amz-bucket-region': HOME_REGION },
     });
-  /** A fetch that threw: the network dropped the request. */
+  /** Rejects as fetch does when the network drops the request. */
   const dropped = () => Promise.reject(new TypeError('fetch failed'));
 
   /**
-   * A fetch answering each call from the next entry of `script`. It records
-   * each call's host and how often the credentials had been asked by then,
-   * and throws once the script runs out.
+   * Makes an S3 handler over a fetch that answers each call from the next
+   * entry of `script`, and throws once the script runs out.
+   * @return The handler, with the host of each call and how often the
+   *     credentials had been asked by then, for the tests to read.
    */
   function scripted(script: Array<() => Response | Promise<Response>>) {
     const hosts: string[] = [];
