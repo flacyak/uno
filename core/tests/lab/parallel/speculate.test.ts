@@ -130,6 +130,11 @@ const SEEDS = 3000;
 /** Random sets of cuts tried per file, and the most cuts in one. */
 const RANDOM_CUT_SETS = 4;
 const MAX_RANDOM_CUTS = 6;
+/**
+ * The random cuts take about five seconds alone, the default timeout, so
+ * beside the rest of the suite they went over it.
+ */
+const RANDOM_TIMEOUT_MS = 120_000;
 
 function csvish(rand: () => number): string {
   let s = rand() < BOM_CHANCE ? '﻿' : '';
@@ -175,7 +180,7 @@ function placesOf(
 }
 
 describe('stitched speculative scans agree with RecordScanner', () => {
-  test('on random input, cut anywhere', () => {
+  test('on random input, cut anywhere', { timeout: RANDOM_TIMEOUT_MS }, () => {
     const places = new Map<Place, number>();
     const states = new Map<State, number>();
 
