@@ -569,9 +569,11 @@ function envVar(env: Env, name: string): string | undefined {
 /** A profile that names an sso-session section ~/.aws/config does not have. */
 export class SsoSessionMissing extends Data.TaggedError('SsoSessionMissing')<{
   profile: string;
+  /** The sso-session name the profile gives. */
   named: string;
   message: string;
 }> {
+  /** @param parts The profile and the sso-session name it gives. */
   constructor(parts: { profile: string; named: string }) {
     super({
       ...parts,
@@ -586,6 +588,7 @@ export class SsoSettingMissing extends Data.TaggedError('SsoSettingMissing')<{
   setting: string;
   message: string;
 }> {
+  /** @param parts The profile and the setting left out. */
   constructor(parts: { profile: string; setting: string }) {
     super({
       ...parts,
@@ -595,19 +598,15 @@ export class SsoSettingMissing extends Data.TaggedError('SsoSettingMissing')<{
 }
 
 /**
- * ssoSession reads the token `aws sso login` cached for a profile and trades
- * it at the SSO portal for the profile's role.
+ * Reads the token `aws sso login` cached for a profile and trades it at the
+ * SSO portal for the profile's role.
  *
  * The portal is named in one of two layouts: an `[sso-session <name>]`
  * section the profile names with sso_session, cached under the SHA-1 of that
  * name, or sso_start_url and sso_region in the profile itself, cached under
  * the SHA-1 of the URL. A missing or expired token is refused with the
  * command that fixes it, before the portal is asked.
- * @param env the environment
- * @param files the AWS files
- * @param profile the profile's name
- * @param section the profile's config section
- * @return the role's session
+ * @param section The profile's config section.
  */
 function ssoSession(
   env: Env,
@@ -652,13 +651,13 @@ function ssoSession(
 }
 
 /**
- * cachedSignIn is the access token `aws sso login` cached under `cacheKey`
- * in ~/.aws/sso/cache. A token that is missing, unreadable or expired fails
+ * Reads the access token `aws sso login` cached under `cacheKey` in
+ * ~/.aws/sso/cache. A token that is missing, unreadable or expired fails
  * with NotSignedIn, which says how to sign in again.
- * @param env the environment, for the home folder
- * @param profile the profile, for the refusal
- * @param cacheKey the sso-session name or start URL the token is cached under
- * @return the access token
+ * @param env The environment, for the home folder.
+ * @param profile The profile, for the refusal.
+ * @param cacheKey The sso-session name or start URL the token is cached
+ *     under.
  */
 function cachedSignIn(
   env: Env,
