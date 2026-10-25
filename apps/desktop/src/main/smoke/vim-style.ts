@@ -272,6 +272,17 @@ export const VIM_STYLE: Check[] = [
       if (!(await until(() => !banner.hidden && banner.textContent.includes("region") && banner.textContent.includes(counted(ROWS - 3) + " cells")))) {
         return "the banner says " + JSON.stringify(banner.textContent);
       }
+      // The panel is closed, so the banner reaches the window's top right,
+      // and Not now ends before the × there. A page with no × sets --corner
+      // to 0, and the banner pads its right as its left. Said last, once ga
+      // has run, so the checks after this one start where they expect.
+      if (!document.querySelector("#panel").hidden) return "the panel is open";
+      const notNowEnds = banner.querySelector("button:last-child").getBoundingClientRect().right;
+      const closeLeft = document.querySelector("#close").getBoundingClientRect().left;
+      document.documentElement.style.setProperty("--corner", "0px");
+      const bare = getComputedStyle(banner).paddingRight;
+      document.documentElement.style.removeProperty("--corner");
+      const pads = getComputedStyle(banner).paddingLeft;
 
       for (const key of ["4", "l", "g", "a"]) await press(key); // from revenue
       const region = () => document.querySelectorAll("tbody tr")[3].children[GUTTER + REGION].textContent;
@@ -288,7 +299,9 @@ export const VIM_STYLE: Check[] = [
       await press("g");
       await press("a");
       const none = text("#status-msg");
-      return none === "nothing to apply" ? "" : "ga with no banner says " + JSON.stringify(none);
+      if (none !== "nothing to apply") return "ga with no banner says " + JSON.stringify(none);
+      if (notNowEnds > closeLeft) return "Not now runs to " + Math.round(notNowEnds) + ", past the × at " + Math.round(closeLeft);
+      return bare === pads ? "" : "with --corner at 0 the banner pads its right " + bare + " and its left " + pads;
     `,
   },
   {
