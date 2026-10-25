@@ -72,35 +72,32 @@ export interface Beside {
  * sign as sent.
  */
 export function versionIdOf(body: Uint8Array): string {
-  let id = versions.get(body);
-  if (id === undefined) {
-    id = createHash('md5').update(body).digest('base64');
-    versions.set(body, id);
-  }
-  return id;
+  return md5Of(body).toString('base64');
 }
-
-/**
- * Each body's version id, computed once. remember asks for every object's on
- * every request.
- */
-const versions = new WeakMap<Uint8Array, string>();
 
 /**
  * etagOf is the ETag the stand-in gives an object: the MD5 of its bytes in
  * quotes, as S3 gives an object uploaded in one piece.
  */
 export function etagOf(body: Uint8Array): string {
-  let etag = etags.get(body);
-  if (etag === undefined) {
-    etag = `"${createHash('md5').update(body).digest('hex')}"`;
-    etags.set(body, etag);
-  }
-  return etag;
+  return `"${md5Of(body).toString('hex')}"`;
 }
 
-/** Each body's ETag, computed once. */
-const etags = new WeakMap<Uint8Array, string>();
+/**
+ * md5Of is a body's MD5, computed once. A versioned bucket asks for the
+ * VersionId of every body it holds on every request.
+ */
+function md5Of(body: Uint8Array): Buffer {
+  let digest = digests.get(body);
+  if (digest === undefined) {
+    digest = createHash('md5').update(body).digest();
+    digests.set(body, digest);
+  }
+  return digest;
+}
+
+/** Each body's MD5. */
+const digests = new WeakMap<Uint8Array, Buffer>();
 
 /** The default wrong-region reply: a 301 with the x-amz-bucket-region header. */
 export const MOVED: Misdirect = {
