@@ -67,7 +67,8 @@ const NO_SIDEBAR = "no-sidebar";
 
 /**
  * An action that would close the workspace and drop its edits: Ctrl+O, the
- * window's ×, or a workspace picked from the sidebar.
+ * window's ×, a workspace picked from the sidebar, or a .uno named on the
+ * command line or dropped on the window.
  */
 type Dropping = "open" | "quit" | `path:${string}` | `recent:${string}`;
 
@@ -213,9 +214,12 @@ export class Shell {
           return;
         }
         // A single dropped .uno opens with an empty save path, so the first
-        // save asks where to write.
-        if (refs.length === 1 && isWorkspace(refs[0]!)) void this.load(refs[0]!, "");
-        else void this.addSources(refs);
+        // save asks where to write. Over unsaved edits it asks first.
+        const ref = refs[0];
+        if (refs.length === 1 && ref !== undefined && isWorkspace(ref)) {
+          const path = "path" in ref ? ref.path : ref.name;
+          if (this.drops(`path:${path}`)) void this.load(ref, "");
+        } else void this.addSources(refs);
       },
       (text) => this.say(text, true),
     );
@@ -819,7 +823,8 @@ export class Shell {
   private readonly chords: ReadonlyMap<string, { run: () => void; when?: () => boolean }> = new Map(
     [
       ["Shift+b", { run: () => this.showPanel() }],
-      ["b", { run: () => this.toggleSidebar() }],
+      // Under Vim-style Ctrl+B pages up, wherever the keys are.
+      ["b", { run: () => this.toggleSidebar(), when: () => this.input.name === "default" }],
       ["e", { run: () => this.toggleMode() }],
       [
         "z",
@@ -972,6 +977,7 @@ export class Shell {
   private async pointAt(tab: Tab, ref: SourceRef, said?: (fresh: Tab) => string): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.keepSelection(w, tab);
     try {
       const fresh = await w.relink(tab, ref);
       if (this.workspace !== w) return;
@@ -991,12 +997,22 @@ export class Shell {
   }
 
   /**
+   * keepSelection writes the grid's selection onto the showing tab. A tab's
+   * cell is otherwise saved only when it is left, so a tab replaced in place
+   * while showing would come back at a stale one.
+   */
+  private keepSelection(w: Workspace, tab: Tab): void {
+    if (w.active === tab && this.grid !== undefined) tab.cell = this.grid.selection();
+  }
+
+  /**
    * append adds files to the end of a multi-file tab. Files that read
    * differently from the tab's first are refused and the tab is left as it was.
    */
   private async append(tab: Tab, files: readonly SingleRef[]): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.keepSelection(w, tab);
     try {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;

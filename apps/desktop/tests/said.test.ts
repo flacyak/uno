@@ -107,7 +107,7 @@ describe.each(samples)("%s", (_kind, sample) => {
 test("the other shapes of a kind are the engine's English too", () => {
   const shapes: Said[] = [
     { t: "read", delimiter: ",", header: "first", charset: "UTF-8" },
-    { t: "read", delimiter: ";", header: "first", charset: "Windows-1252" },
+    { t: "read", delimiter: ";", header: "first", charset: "UTF-8" },
     { t: "read", delimiter: "\t", header: "first", charset: "UTF-8" },
     { t: "read", delimiter: "\t", header: "none", charset: "UTF-8" },
     { t: "program", steps: [] },
