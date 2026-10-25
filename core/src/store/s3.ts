@@ -156,7 +156,9 @@ export function keyName(key: string): string {
   return key.slice(key.lastIndexOf('/') + 1);
 }
 
-/** How many times a request that failed on the network or with a 5xx is sent. */
+/**
+ * How many times a request that failed on the network or with a 5xx is sent.
+ */
 const TRIES = 3;
 /** The wait before the second send. It doubles for the third. */
 const BACKOFF_MS = 200;
@@ -200,27 +202,25 @@ export interface S3Requests {
   where(bucket: string): Promise<string>;
 }
 
-/**
- * NetworkFailure is a send that fetch itself threw on, so S3 never answered.
- * `message` is the fetch error's own, and a caller reads what it read before.
- */
+/** A send that fetch itself threw on, so S3 never answered. */
 class NetworkFailure extends Data.TaggedError('NetworkFailure')<{
   readonly cause: unknown;
+  /** The fetch error's own, so a caller reads what it read before. */
   readonly message: string;
 }> {}
 
 /**
- * ServerFailure is a reply of 500 or more. It is sent again, and after the
- * last try the reply is handed back as it is, so it carries no sentence.
+ * A reply of 500 or more. The request is sent again, and after the last try
+ * the reply is handed back as it is, so the failure carries no sentence.
  */
 class ServerFailure extends Data.TaggedError('ServerFailure')<{
   readonly reply: Response;
 }> {}
 
 /**
- * Moved is a 301 or 400 naming another region for the bucket. The region is
- * remembered before it is raised, so the next send goes there. A move past
- * the last one allowed hands back the reply as it is.
+ * A 301 or 400 naming another region for the bucket. The region is remembered
+ * before the failure is raised, so the next send goes there. A move past the
+ * last one allowed hands back the reply as it is.
  */
 class Moved extends Data.TaggedError('Moved')<{
   readonly region: string;
@@ -261,10 +261,18 @@ export function s3Requests(opts: S3Options): S3Requests {
   }
 
   /**
-   * attempt asks for the credentials and sends once. It fails as a
-   * NetworkFailure where fetch threw, as a Moved where a 301 or 400 names
-   * another region, which it remembers first, and as a ServerFailure for a
-   * 5xx. Every other reply is the answer.
+   * Asks for the credentials and sends the request once.
+   *
+   * Fails with a `NetworkFailure` where fetch threw, with a `Moved` where a 301
+   * or a 400 names another region, which is remembered first, and with a
+   * `ServerFailure` for a 5xx. Any other reply is the answer.
+   * @param loc The bucket and key the request is about, which the credentials
+   *     are asked for.
+   * @param at Builds the URL for a region, since a send after a move goes to a
+   *     different host and needs a new signature.
+   * @param method HEAD for an object's size, GET for a range of it.
+   * @param extra Headers beyond the signature, such as a Range.
+   * @return The reply, or the failure by kind.
    */
   function attempt(
     loc: S3Location,
@@ -303,12 +311,14 @@ export function s3Requests(opts: S3Options): S3Requests {
   }
 
   /**
-   * request is `attempt` with its retries. A network or server failure is
-   * sent again after a wait that doubles, and a move is sent again at once,
-   * to the region the bucket named, with the waits starting over there. After
-   * the last try a server failure and a move hand back the reply they carry,
-   * and a network failure rejects. `at` takes the region, since the send
-   * after a move goes to a different host and needs a new signature.
+   * Sends the request with its retries.
+   *
+   * Each send is one `attempt` on these same arguments. A network or server
+   * failure is sent again after a wait that doubles, and a move is sent again
+   * at once, to the region the bucket named, with the waits starting over
+   * there. After the last try a server failure and a move hand back the reply
+   * they carry, and a network failure rejects.
+   * @return The reply, after the retries.
    */
   function request(
     loc: S3Location,
