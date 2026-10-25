@@ -74,15 +74,13 @@ export async function ssoRoleCredentials(
     headers: { 'x-amz-sso_bearer_token': ask.accessToken },
   });
   if (res.status === 401 || res.status === 403) {
-    throw new Error(
-      signInAgain(ask.profile, 'the SSO portal turned its sign-in away'),
-    );
+    throw new NotSignedIn({
+      profile: ask.profile,
+      why: 'the SSO portal turned its sign-in away',
+    });
   }
-  if (!res.ok) {
-    throw new Error(
-      `the AWS profile ${ask.profile}: the SSO portal answered ${res.status}`,
-    );
-  }
+  if (!res.ok)
+    throw new SsoPortalRefused({ profile: ask.profile, status: res.status });
   const body = (await res.json()) as {
     roleCredentials?: Record<string, unknown>;
   };
@@ -97,9 +95,7 @@ export async function ssoRoleCredentials(
     typeof token !== 'string' ||
     typeof expiration !== 'number'
   ) {
-    throw new Error(
-      `the AWS profile ${ask.profile}: the SSO portal's answer held no credentials`,
-    );
+    throw new SsoUnreadable({ profile: ask.profile });
   }
   return {
     accessKeyId: id,
@@ -107,6 +103,22 @@ export async function ssoRoleCredentials(
     sessionToken: token,
     expiration: new Date(expiration),
   };
+}
+
+/**
+ * An SSO sign-in that has lapsed or was never made, with the command that
+ * signs in again. `why` says what is wrong with it. Raised here when the
+ * portal turns the sign-in away, and by store/node.ts for a cached sign-in
+ * that is missing, unreadable or expired.
+ */
+export class NotSignedIn extends Data.TaggedError('NotSignedIn')<{
+  profile: string;
+  why: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string; why: string }) {
+    super({ ...parts, message: signInAgain(parts.profile, parts.why) });
+  }
 }
 
 /**
@@ -119,6 +131,36 @@ export async function ssoRoleCredentials(
 export function signInAgain(profile: string, why: string): string {
   return `the AWS profile ${profile} is not signed in · ${why} · sign in with \`aws sso login --profile ${profile}\``;
 }
+
+/** The SSO portal answered with a status other than success. */
+export class SsoPortalRefused extends Data.TaggedError('SsoPortalRefused')<{
+  profile: string;
+  status: number;
+  message: string;
+}> {
+  constructor(parts: { profile: string; status: number }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}: the SSO portal answered ${parts.status}`,
+    });
+  }
+}
+
+/** The SSO portal let the role be read and answered with no credentials. */
+export class SsoUnreadable extends Data.TaggedError('SsoUnreadable')<{
+  profile: string;
+  message: string;
+}> {
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}: the SSO portal's answer held no credentials`,
+    });
+  }
+}
+
+/** What trading an SSO sign-in for a role's keys can fail with. */
+export type SsoFailure = NotSignedIn | SsoPortalRefused | SsoUnreadable;
 
 /** What AssumeRole is asked for. */
 export interface RoleAsk {
