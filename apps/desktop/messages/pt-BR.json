@@ -152,6 +152,7 @@
   "reload_same_size": "o mesmo tamanho",
   "reload_size_moved": "{now}, antes {was}",
   "reload_no_change": "sem mudanças no bucket",
+  "reload_no_change_on_disk": "sem mudanças",
   "reload_new_version_same_size": "uma versão nova, do mesmo tamanho",
   "reload_new_version_size_moved": "uma versão nova, {now}, antes {was}",
   "edits_replayed": [
