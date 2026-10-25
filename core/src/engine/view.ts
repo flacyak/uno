@@ -354,7 +354,7 @@ export class View {
         progress: v.progress(),
         edits: carried?.edits ?? [],
         generation: v.generation,
-        link: path === '' ? undefined : linkTo(path, source.version),
+        link: path === '' ? undefined : linkTo(path, source),
       };
       return v;
     } catch (err) {
@@ -1041,9 +1041,13 @@ function deepest(edits: readonly Edit[] | undefined): number {
   return row + 1;
 }
 
-/** linkTo builds a Link from a path and an optional version. */
-function linkTo(path: string, version: string | undefined): Link {
-  return version === undefined ? { path } : { path, version };
+/** linkTo builds a Link from a path and what its source says of the file. */
+function linkTo(path: string, { version, modified }: ByteSource): Link {
+  return {
+    path,
+    ...(version === undefined ? {} : { version }),
+    ...(modified === undefined ? {} : { modified }),
+  };
 }
 
 /**

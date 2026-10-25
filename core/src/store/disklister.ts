@@ -37,6 +37,15 @@ export function diskLister(page: number = PAGE): Lister {
   };
 }
 
+/**
+ * modifiedMs is when a file was last written, in whole ms since 1970. Node
+ * keeps a fraction of a ms in `mtimeMs` and rounds it in `mtime`, so the open
+ * and the lister both read the time here, and agree on a file nobody touched.
+ */
+export function modifiedMs(stats: Stats): number {
+  return Math.trunc(stats.mtimeMs);
+}
+
 /** Row is one directory entry, classified. */
 interface Row {
   readonly name: string;
@@ -152,7 +161,7 @@ function entryOf(dir: string): (row: Row) => Promise<Entry> {
       name: row.name,
       path,
       folder: row.folder,
-      ...(st === undefined ? {} : { modified: st.mtime }),
+      ...(st === undefined ? {} : { modified: new Date(modifiedMs(st)) }),
       ...(st === undefined || row.folder ? {} : { bytes: st.size }),
     };
   };
@@ -169,7 +178,7 @@ async function statEntry(path: string): Promise<Entry> {
     name: basename(path),
     path,
     folder: st.isDirectory(),
-    modified: st.mtime,
+    modified: new Date(modifiedMs(st)),
     ...(st.isDirectory() ? {} : { bytes: st.size }),
   };
 }

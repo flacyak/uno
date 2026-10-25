@@ -65,6 +65,12 @@ export interface Link {
   version?: string;
 
   /**
+   * When the file on disk was last written, in whole ms since 1970. Measured
+   * at the open, and never saved.
+   */
+  modified?: number;
+
+  /**
    * Why this source is absent: its file is missing, or failed to open. The
    * source keeps its id, edits and place in the log, and
    * `relink` gives it a file again.
