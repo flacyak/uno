@@ -1457,6 +1457,7 @@ export class RoleOnDesktop extends Data.TaggedError('RoleOnDesktop')<{
   roleArn: string;
   message: string;
 }> {
+  /** @param parts The connection, as the sentence names it, and its role. */
   constructor(parts: { connection: string; roleArn: string }) {
     super({
       ...parts,
@@ -1468,10 +1469,9 @@ export class RoleOnDesktop extends Data.TaggedError('RoleOnDesktop')<{
 }
 
 /**
- * connectionAuth is the desktop's ways of signing in: `machine`, `profile`
- * and `public`. `role` is refused. It is the hosted engine's.
- * @param env the environment, process.env by default
- * @return the ways of signing in
+ * Offers the desktop's ways of signing in: `machine`, `profile` and
+ * `public`. `role` is refused. It is the hosted engine's.
+ * @param env The environment, process.env by default.
  */
 export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const machine = awsCredentials(env);
@@ -1551,6 +1551,7 @@ export class MachineOnHosted extends Data.TaggedError('MachineOnHosted')<{
   connection: string;
   message: string;
 }> {
+  /** @param parts The connection, as the sentence names it. */
   constructor(parts: { connection: string }) {
     super({
       ...parts,
@@ -1562,15 +1563,13 @@ export class MachineOnHosted extends Data.TaggedError('MachineOnHosted')<{
 }
 
 /**
- * hostedAuth is the hosted engine's ways of signing in: `role` and `public`.
- * A `role` connection is assumed through STS with the tenant's external ID,
- * as a session named for the person, and its keys are kept until shortly
- * before they expire. The keys are kept per role, in this process, and a
- * process is one workspace's, so no session is ever shared across tenants. `machine` and
+ * Offers the hosted engine's ways of signing in: `role` and `public`. A
+ * `role` connection is assumed through STS with the tenant's external ID, as
+ * a session named for the person, and its keys are kept until shortly before
+ * they expire. The keys are kept per role, in this process, and a process is
+ * one workspace's, so no session is ever shared across tenants. `machine` and
  * `profile` are refused, and `machine()` rejects, so only an address a
  * connection covers is read.
- * @param opts what the engine signs in with
- * @return the ways of signing in
  */
 export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   const env = opts.env ?? process.env;
