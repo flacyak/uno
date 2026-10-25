@@ -204,6 +204,7 @@ export class Workspace {
    * open honours one as its turn begins and while the view waits for its
    * sample rows; a cancel at any other point is left unheard, and the open
    * is answered.
+   * @param ref What to open: a file, or a .uno.
    * @return What it opened, and which source to show.
    */
   open(ref: SourceRef): Effect.Effect<Opening, unknown> {
