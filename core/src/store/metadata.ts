@@ -109,44 +109,58 @@ export class InstanceRefused extends Data.TaggedError('InstanceRefused')<{
 }
 
 /**
- * containerCredentials asks the endpoint beside a container for the keys of
- * the task's role. `authorization` is the token the endpoint checks, where
- * it checks one. Plain http is allowed only to this host, so the token is
- * sent nowhere else.
+ * askContainer asks the endpoint beside a container for the keys of the
+ * task's role. `authorization` is the token the endpoint checks, where it
+ * checks one. Plain http is allowed only to this host, so the token is sent
+ * nowhere else.
  * @param url the endpoint
  * @param authorization the token it checks, if any
  * @param opts how requests go out
  * @return the task's session
  */
-export async function containerCredentials(
+export function askContainer(
+  url: string,
+  authorization: string | undefined,
+  opts: HostOptions = {},
+): Effect.Effect<Session, ContainerFailure> {
+  return Effect.gen(function* () {
+    const go = opts.fetch ?? fetch;
+    const who = `the container endpoint ${url}`;
+    const u = yield* Effect.try({
+      try: () => new URL(url),
+      catch: () => new NotAUrl({ who }),
+    });
+    if (
+      u.protocol !== 'https:' &&
+      !(u.protocol === 'http:' && CONTAINER_HOSTS.has(u.hostname))
+    ) {
+      return yield* new NotThisHost({ who });
+    }
+    const res = yield* ask(go, who, u, {
+      headers: authorization === undefined ? {} : { authorization },
+    });
+    if (!res.ok) {
+      yield* drop(res);
+      return yield* new HostRefused({ who, code: String(res.status) });
+    }
+    return yield* sessionIn(yield* text(res), who);
+  });
+}
+
+/**
+ * containerCredentials runs askContainer as a Promise, for a caller outside
+ * the store.
+ * @param url the endpoint
+ * @param authorization the token it checks, if any
+ * @param opts how requests go out
+ * @return the task's session
+ */
+export function containerCredentials(
   url: string,
   authorization: string | undefined,
   opts: HostOptions = {},
 ): Promise<Session> {
-  const go = opts.fetch ?? fetch;
-  const who = `the container endpoint ${url}`;
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    throw new NotAUrl({ who });
-  }
-  if (
-    u.protocol !== 'https:' &&
-    !(u.protocol === 'http:' && CONTAINER_HOSTS.has(u.hostname))
-  ) {
-    throw new NotThisHost({ who });
-  }
-  const res = await Effect.runPromise(
-    ask(go, who, u, {
-      headers: authorization === undefined ? {} : { authorization },
-    }),
-  );
-  if (!res.ok) {
-    await res.body?.cancel();
-    throw new HostRefused({ who, code: String(res.status) });
-  }
-  return Effect.runPromise(sessionIn(await res.text(), who));
+  return Effect.runPromise(askContainer(url, authorization, opts));
 }
 
 /**
@@ -174,6 +188,27 @@ function ask(
       Effect.fail(new NoAnswer({ who, reason: timedOut.message })),
     ),
   );
+}
+
+/**
+ * text is an answer's body as text.
+ * @param res the answer
+ * @return its body
+ */
+function text(res: Response): Effect.Effect<string> {
+  return Effect.promise(() => res.text());
+}
+
+/**
+ * drop lets go of an answer whose body is not read, so its connection is
+ * freed.
+ * @param res the answer
+ * @return nothing
+ */
+function drop(res: Response): Effect.Effect<void> {
+  return Effect.promise(async () => {
+    await res.body?.cancel();
+  });
 }
 
 /** The container endpoint the environment names is not a URL. */
