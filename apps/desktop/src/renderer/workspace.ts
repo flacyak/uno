@@ -262,6 +262,12 @@ export class Workspace {
    * file once. Any other goes after it, as the engine answers in order.
    */
   private readonly pointing = new Map<string, Pointing>();
+  /**
+   * Edits, undos, redos and removals sent to the engine and not yet answered.
+   * One may wait behind a relink or append in flight, as the engine answers in
+   * order. Adds are left out, since each is listed as opening until answered.
+   */
+  private writes = 0;
 
   private constructor(
     /** The engine this workspace owns. The panel lists and peeks through it. */
@@ -331,7 +337,7 @@ export class Workspace {
    * next tab (or the last) is now showing and the grid must redraw.
    */
   async remove(tab: Tab): Promise<boolean> {
-    await this.engine.remove(tab.source);
+    await this.writing(this.engine.remove(tab.source));
     const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return false;
     const was = this.tabs[i]!;
@@ -378,6 +384,23 @@ export class Workspace {
     } finally {
       if (this.pointing.get(tab.id) === now) this.pointing.delete(tab.id);
     }
+  }
+
+  /** Waits for `write`, an edit, undo, redo or removal, and counts it in
+   * `writes` until the engine answers. */
+  private async writing<T>(write: Promise<T>): Promise<T> {
+    this.writes++;
+    try {
+      return await write;
+    } finally {
+      this.writes--;
+    }
+  }
+
+  /** The tab for `tab`'s source now, found by id, since a relink or append
+   * answered while an edit waited may have replaced `tab`. */
+  private current(tab: Tab): Tab {
+    return this.tabs.find((t) => t.id === tab.id) ?? tab;
   }
 
   /**
@@ -489,7 +512,8 @@ export class Workspace {
     const t = this.showing;
     const pending = t.band.write(row, col, value);
     try {
-      t.landed(await t.source.edit({ op: Op.Set, row, col, now: value }));
+      const changed = await this.writing(t.source.edit({ op: Op.Set, row, col, now: value }));
+      this.current(t).landed(changed);
     } catch (err) {
       t.band.restore(pending);
       throw err;
@@ -502,9 +526,10 @@ export class Workspace {
     const t = this.tabs.find((tab) => tab.id === offer.source);
     if (t === undefined) throw new Error(m.offer_source_gone());
     t.offer = null;
-    t.landed(
-      await t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
+    const changed = await this.writing(
+      t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
     );
+    this.current(t).landed(changed);
   }
 
   /**
@@ -513,22 +538,25 @@ export class Workspace {
    * unknown column.
    */
   async bind(tab: Tab, col: number, expr: string): Promise<void> {
-    tab.landed(await tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }));
+    const changed = await this.writing(
+      tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }),
+    );
+    this.current(tab).landed(changed);
   }
 
   /** Undoes the showing tab's last edit and returns that edit. */
   async undo(): Promise<Edit> {
     const t = this.showing;
-    const changed = await t.source.undo();
-    t.undone(changed);
+    const changed = await this.writing(t.source.undo());
+    this.current(t).undone(changed);
     return changed.edit;
   }
 
   /** Redoes the showing tab's last undone edit and returns it. */
   async redo(): Promise<Edit> {
     const t = this.showing;
-    const changed = await t.source.redo();
-    t.landed(changed);
+    const changed = await this.writing(t.source.redo());
+    this.current(t).landed(changed);
     return changed.edit;
   }
 
@@ -547,9 +575,11 @@ export class Workspace {
     return `${base || m.workspace_file_stem()}.uno`;
   }
 
-  /** Whether there is unsaved work: an edit, a source added or removed, or
-   * a source that a relink or append left other than as last saved. */
+  /** Whether there is unsaved work: an edit, a source added or removed, a
+   * source that a relink or append left other than as last saved, or an edit,
+   * undo, redo or removal still waiting on the engine. */
   get dirty(): boolean {
+    if (this.writes > 0) return true;
     const ids = this.tabs.map((t) => t.id);
     const same =
       ids.length === this.savedSources.length && ids.every((id, i) => id === this.savedSources[i]);
