@@ -49,6 +49,7 @@ export {
   relativeTo,
   samePath,
 } from './path.ts';
+export type { ChartColumn, Plot } from './chart.ts';
 export {
   formatFor,
   readContainer,
