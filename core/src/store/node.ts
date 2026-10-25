@@ -317,20 +317,17 @@ export type ChainFailure =
   | ProfileNoWayIn;
 
 /**
- * profileSession signs in as one named profile the way the AWS CLI does,
- * when the profile offers one of the ways below, and returns undefined
- * otherwise.
+ * Signs in as one named profile the way the AWS CLI does, when the profile
+ * offers one of the ways below, and returns undefined otherwise.
  *
  * In order: a role_arn is assumed through its source. Static keys in
  * ~/.aws/credentials or the config section are used as they are and read
  * again after a minute. A credential_process is run and its output read. An
  * SSO profile trades its cached token for keys. Expiring keys are reused
  * until shortly before they expire.
- * @param env the environment
- * @param files the AWS files
- * @param profile the profile to sign in as
- * @param through the profiles already on a role chain, so a loop is refused
- * @return the session, or undefined where the profile offers no way in
+ * @param profile The profile to sign in as.
+ * @param through The profiles already on a role chain, so a loop is refused.
+ * @return The session, or undefined where the profile offers no way in.
  */
 function profileSession(
   env: Env,
@@ -403,12 +400,11 @@ function held(
 }
 
 /**
- * hostSession is the end of the chain, where the AWS SDKs look last: a web
+ * Asks the host, where the chain ends and the AWS SDKs look last: a web
  * identity token the environment names, the endpoint beside a container,
  * then the instance metadata service. Undefined where the host offers none.
- * @param env the environment
- * @param region the region the session signs for
- * @return the host's session, or undefined
+ * @param region The region the session signs for.
+ * @return The host's session, or undefined.
  */
 function hostSession(
   env: Env,
@@ -449,6 +445,10 @@ export class TokenFileMissing extends Data.TaggedError('TokenFileMissing')<{
   file: string;
   message: string;
 }> {
+  /**
+   * @param parts Who names the file, which kind it is, and where it was
+   *     looked for.
+   */
   constructor(parts: {
     named: string;
     kind: 'web identity' | 'container';
@@ -471,13 +471,10 @@ interface WebIdentityFile {
 }
 
 /**
- * webIdentitySession reads the token in the file and trades it at STS for
- * the role. `named` is who names the file, for an error: the AWS profile
- * x, or the environment.
- * @param env the environment, for the STS endpoint
- * @param ask the role, the token's file and the session
- * @param named who names the file, for an error
- * @return the role's session
+ * Reads the token in the file and trades it at STS for the role.
+ * @param env The environment, for the STS endpoint.
+ * @param named Who names the file, for an error: the AWS profile x, or the
+ *     environment.
  */
 function webIdentitySession(
   env: Env,
@@ -507,11 +504,10 @@ function webIdentitySession(
 }
 
 /**
- * containerSession asks the endpoint the environment names beside a
- * container: a path on the ECS host, or a full URL. Undefined off a
- * container. The endpoint's token comes from a file where one is named.
- * @param env the environment
- * @return the task's session, or undefined off a container
+ * Asks the endpoint the environment names beside a container: a path on the
+ * ECS host, or a full URL. Undefined off a container. The endpoint's token
+ * comes from a file where one is named.
+ * @return The task's session, or undefined off a container.
  */
 function containerSession(
   env: Env,
@@ -541,11 +537,10 @@ function containerSession(
 }
 
 /**
- * instanceSession asks the instance metadata service, at the endpoint the
- * environment names or the one its mode picks, unless the environment turns
- * it off. Undefined where no role answers.
- * @param env the environment
- * @return the instance's session, or undefined
+ * Asks the instance metadata service, at the endpoint the environment names
+ * or the one its mode picks, unless the environment turns it off. Undefined
+ * where no role answers.
+ * @return The instance's session, or undefined.
  */
 function instanceSession(
   env: Env,
