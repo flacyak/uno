@@ -711,7 +711,7 @@ export class Shell {
       grid.show(w.rows, w.editable);
       this.empty.hidden = true;
       this.content.hidden = false;
-      grid.moveTo(w.active.cell.row, w.active.cell.col);
+      this.restore(w, grid);
       grid.focus();
       this.say("");
     } catch (err) {
@@ -906,7 +906,7 @@ export class Shell {
     if (on === undefined) return;
     const { workspace: w, grid } = on;
     if (w.active !== tab) {
-      w.active.cell = grid.selection();
+      w.active.keep(grid.selection());
       w.show(tab);
       this.showActive();
     }
@@ -919,8 +919,17 @@ export class Shell {
     if (on === undefined) return;
     const { workspace: w, grid } = on;
     grid.show(w.rows, w.editable);
-    grid.moveTo(w.active.cell.row, w.active.cell.col);
+    this.restore(w, grid);
     this.paintAll();
+  }
+
+  /**
+   * restore moves the grid to the active tab's cell. Where the grid stops
+   * short of it, as on a missing file, the tab keeps the cell.
+   */
+  private restore(w: Workspace, grid: Grid): void {
+    grid.moveTo(w.active.cell.row, w.active.cell.col);
+    w.active.shownAt(grid.selection());
   }
 
   /**
@@ -1007,7 +1016,7 @@ export class Shell {
    * while showing would come back at a stale one.
    */
   private keepSelection(w: Workspace, tab: Tab): void {
-    if (w.active === tab && this.grid !== undefined) tab.cell = this.grid.selection();
+    if (w.active === tab && this.grid !== undefined) tab.keep(this.grid.selection());
   }
 
   /**
