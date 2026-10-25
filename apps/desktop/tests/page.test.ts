@@ -38,7 +38,7 @@ test("labelPage writes the heads, the empty state and the switch", () => {
 
 test("the empty state lists the extensions core reads, then a workspace's", () => {
   labelPage();
-  expect(text("#empty .exts")).toBe("csv · tsv · jsonl · ndjson · uno");
+  expect(text("#empty .exts")).toBe("csv · tsv · jsonl · ndjson · json · uno");
 });
 
 test("the empty state's sentence keeps its link, with the words the message marks", () => {

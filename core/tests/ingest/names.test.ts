@@ -123,6 +123,11 @@ describe('a readable name', () => {
     expect(readable('s3://acme-exports/2025/part-00000.jsonl')).toBe(true);
   });
 
+  test('ends in .json, as Spark and BigQuery name JSON Lines', () => {
+    expect(readable('part-00000.json')).toBe(true);
+    expect(readable('Events.JSON')).toBe(true);
+  });
+
   test('is not a hidden file, a name with no extension or another format', () => {
     expect(readable('.csv')).toBe(false);
     expect(readable('README')).toBe(false);
