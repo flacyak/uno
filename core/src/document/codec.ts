@@ -370,10 +370,13 @@ function crc32(bytes: Uint8Array): number {
 
 /**
  * checkLog refuses a document with a source whose id is "" or shared, a log
- * line naming a source outside it, or an active source outside it.
+ * line naming a source outside it or numbered out of order, or an active
+ * source outside it. The numbering is what readLog asks of a file, so a
+ * document that writes is one that opens.
  */
 function checkLog(d: Document): void {
   const ids = new Set<string>();
+  const counted = new Map<string, number>();
   for (const src of d.sources) {
     if (src.id === '')
       throw new Error(`${src.name} has no id to log its edits under`);
@@ -396,6 +399,12 @@ function checkLog(d: Document): void {
       throw new Error(
         `edit ${l.edit.seq} names ${l.source}, which is not a source here`,
       );
+    const expected = (counted.get(l.source) ?? 0) + 1;
+    if (l.edit.seq !== expected)
+      throw new Error(
+        `edit ${l.edit.seq} of ${l.source} is logged where edit ${expected} comes next`,
+      );
+    counted.set(l.source, expected);
   }
   if (!ids.has(d.active))
     throw new Error(`the active source ${d.active} is not a source here`);

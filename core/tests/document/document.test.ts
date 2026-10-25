@@ -554,6 +554,15 @@ describe('a workspace of several sources', () => {
       'names tiktok, which is not a source here',
     );
   });
+
+  test('a log with a gap in its numbering is not written', () => {
+    const { doc } = twoSources();
+    const { source, edit } = doc.log[doc.log.length - 1]!;
+    doc.log.push({ source, edit: { ...edit, seq: edit.seq + 2 } });
+    expect(() => writeDocument(doc)).toThrow(
+      `edit ${edit.seq + 2} of ${source} is logged where edit ${edit.seq + 1} comes next`,
+    );
+  });
 });
 
 // ---------------------------------------------------------- pointed at
