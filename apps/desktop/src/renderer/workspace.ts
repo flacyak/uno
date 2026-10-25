@@ -100,12 +100,19 @@ function asRecorded(was: Tab, now: Tab): boolean {
   );
 }
 
+/** Returns whether `a` and `b` are the same cell. */
+function sameCell(a: Cell, b: Cell): boolean {
+  return a.row === b.row && a.col === b.col;
+}
+
 /** One source in the workspace. */
 export class Tab {
   /** The recogniser's current offer for this source, if any. */
   offer: Offer | null = null;
   /** The selected cell, saved when another tab is shown, or read from a .uno. */
   cell: Cell = { row: 0, col: 0 };
+  /** Where the grid stopped short of `cell`, as it does on a missing file. */
+  private short: Cell | undefined;
   /**
    * The version the bucket holds now, when it differs from the one this tab
    * reads. Undefined while the tab reads the newest or is still unchecked.
@@ -205,6 +212,21 @@ export class Tab {
   saved(): void {
     this.savedEdits = this.edits.slice();
     this.savedSinceOpen = true;
+  }
+
+  /** Notes where the grid stands after moving to this tab's cell. */
+  shownAt(at: Cell): void {
+    this.short = sameCell(at, this.cell) ? undefined : at;
+  }
+
+  /**
+   * Keeps `at`, the grid's selection, as the selected cell. A grid still
+   * where it stopped short of the cell leaves the cell as it was.
+   */
+  keep(at: Cell): void {
+    if (this.short !== undefined && sameCell(at, this.short)) return;
+    this.cell = at;
+    this.short = undefined;
   }
 }
 
@@ -554,7 +576,7 @@ export class Workspace {
    * serialising.
    */
   bytes(cell: Cell, at: string): Promise<Uint8Array> {
-    this.showing.cell = cell;
+    this.showing.keep(cell);
     return this.engine.save(
       {
         source: this.showing.id,
