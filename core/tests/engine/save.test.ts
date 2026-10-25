@@ -440,12 +440,16 @@ test('sources added to one workspace save and reopen together', async () => {
   // Reopened as the same two sources.
   const second = connect();
   try {
-    const { sources, showing } = await second.engine.open({
+    const { sources, showing, cells } = await second.engine.open({
       name: 'q4.uno',
       path: join(dir, 'q4.uno'),
     });
     expect(sources.map((s) => s.id)).toEqual(['sales-q3', 'google-ads']);
     expect(showing).toBe('google-ads');
+    expect(cells).toEqual([
+      { source: 'sales-q3', row: 2, col: UNITS },
+      { source: 'google-ads', row: 0, col: COST },
+    ]);
     expect(sources[1]!.opened.edits).toHaveLength(1);
     expect((await sources[0]!.rows(2, 1)).rows[0]![UNITS]).toBe('1455');
   } finally {
