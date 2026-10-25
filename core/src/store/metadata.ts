@@ -9,7 +9,7 @@
  * them in.
  */
 
-import { Data } from 'effect';
+import { Data, Effect } from 'effect';
 
 import { parseTime } from '@go';
 import type { Session } from './sts.ts';
@@ -91,7 +91,7 @@ export async function instanceCredentials(
     await keys.body?.cancel();
     throw new InstanceRefused({ who, status: keys.status });
   }
-  return sessionIn(await keys.text(), who);
+  return Effect.runPromise(sessionIn(await keys.text(), who));
 }
 
 /** The instance metadata service named the role and would not hand out its keys. */
@@ -150,7 +150,7 @@ export async function containerCredentials(
     await res.body?.cancel();
     throw new HostRefused({ who, code: String(res.status) });
   }
-  return sessionIn(await res.text(), who);
+  return Effect.runPromise(sessionIn(await res.text(), who));
 }
 
 /** The container endpoint the environment names is not a URL. */
@@ -265,40 +265,43 @@ export type HostFailure = InstanceFailure | ContainerFailure;
  * @param who the endpoint, for an error
  * @return the session the body holds
  */
-function sessionIn(body: string, who: string): Session {
-  let o: Record<string, unknown>;
-  try {
-    o = JSON.parse(body) as Record<string, unknown>;
-  } catch {
-    throw new NotJson({ who });
-  }
-  const code = o['Code'];
-  if (code !== undefined && code !== 'Success') {
-    const message = o['Message'];
-    throw new HostRefused({
-      who,
-      code: typeof code === 'string' ? code : JSON.stringify(code),
-      detail: typeof message === 'string' ? message : undefined,
+function sessionIn(
+  body: string,
+  who: string,
+): Effect.Effect<Session, HostRefused | NotJson | HostUnreadable> {
+  return Effect.gen(function* () {
+    const o = yield* Effect.try({
+      try: () => JSON.parse(body) as Record<string, unknown>,
+      catch: () => new NotJson({ who }),
     });
-  }
-  const id = o['AccessKeyId'];
-  const secret = o['SecretAccessKey'];
-  const token = o['Token'];
-  const expiration = parseTime(
-    typeof o['Expiration'] === 'string' ? o['Expiration'] : undefined,
-  );
-  if (
-    typeof id !== 'string' ||
-    typeof secret !== 'string' ||
-    typeof token !== 'string' ||
-    expiration === undefined
-  ) {
-    throw new HostUnreadable({ who });
-  }
-  return {
-    accessKeyId: id,
-    secretAccessKey: secret,
-    sessionToken: token,
-    expiration,
-  };
+    const code = o['Code'];
+    if (code !== undefined && code !== 'Success') {
+      const message = o['Message'];
+      return yield* new HostRefused({
+        who,
+        code: typeof code === 'string' ? code : JSON.stringify(code),
+        detail: typeof message === 'string' ? message : undefined,
+      });
+    }
+    const id = o['AccessKeyId'];
+    const secret = o['SecretAccessKey'];
+    const token = o['Token'];
+    const expiration = parseTime(
+      typeof o['Expiration'] === 'string' ? o['Expiration'] : undefined,
+    );
+    if (
+      typeof id !== 'string' ||
+      typeof secret !== 'string' ||
+      typeof token !== 'string' ||
+      expiration === undefined
+    ) {
+      return yield* new HostUnreadable({ who });
+    }
+    return {
+      accessKeyId: id,
+      secretAccessKey: secret,
+      sessionToken: token,
+      expiration,
+    };
+  });
 }
