@@ -8,7 +8,6 @@
 
 import { Sheet } from '@sheet';
 import { readAll } from './csv.ts';
-import { bomLength } from './scan.ts';
 import {
   columnNames,
   decodersFor,
@@ -74,12 +73,7 @@ export function read(
  */
 function decoded(name: string, bytes: Uint8Array): [string, Charset] {
   const decoders = decodersFor(name, sniffEncoding(bytes));
-  // The byte order mark is skipped by hand: the Windows-1252 decoder has no
-  // notion of one and would read it as three characters.
-  return [
-    decoders.head.decode(bytes.subarray(bomLength(bytes))),
-    decoders.charset,
-  ];
+  return [decoders.head.decode(bytes), decoders.charset];
 }
 
 /** The byte order mark as a character. */

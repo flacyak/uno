@@ -20,10 +20,15 @@ const PEEK = 64 << 10;
 
 export type { Charset } from '@said';
 
+/** What decodes bytes: a TextDecoder, or one wrapped. */
+interface Decoder {
+  decode(bytes: Uint8Array): string;
+}
+
 /** The decoders a file is read with: one for its head, one for its records. */
 interface Decoders {
-  /** Strips a leading byte order mark. */
-  readonly head: TextDecoder;
+  /** Strips a leading byte order mark, and one only. */
+  readonly head: Decoder;
   /** Keeps one. Records start past any byte order mark, so a U+FEFF in one
    * is data. */
   readonly data: TextDecoder;
@@ -38,11 +43,18 @@ const UTF8: Decoders = {
 
 /**
  * Bytes sniffed as "other" are read as Windows-1252, in which every byte is
- * a character, so one decoder serves both roles.
+ * a character. The decoder has no notion of a byte order mark and would read
+ * one as three characters, so the head skips it by hand.
  */
 const WINDOWS_1252: Decoders = (() => {
   const decoder = new TextDecoder('windows-1252');
-  return { head: decoder, data: decoder, charset: 'Windows-1252' };
+  return {
+    head: {
+      decode: (bytes) => decoder.decode(bytes.subarray(bomLength(bytes))),
+    },
+    data: decoder,
+    charset: 'Windows-1252',
+  };
 })();
 
 /**
@@ -173,10 +185,8 @@ export async function peekFormat(
   }
   if (second < 0) return undefined;
 
-  // The byte order mark is skipped by hand: the Windows-1252 decoder has no
-  // notion of one and would read it as three characters.
   const first = readAll(
-    decoders.head.decode(head.subarray(bomLength(head), second)),
+    decoders.head.decode(head.subarray(0, second)),
     comma,
   )[0]!;
   return {
