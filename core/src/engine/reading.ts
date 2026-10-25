@@ -219,11 +219,11 @@ export async function openReading(ask: ReadAsk): Promise<Reading> {
     if (found.t === 'records' && found.layout === 'lines') {
       return linesReading(name, source, head, [], tuning);
     }
-    return delimitedReading(name, headed(source, head), ask.header, tuning);
+    return delimitedReading(name, source, head, ask.header, tuning);
   }
   switch (spec.kind) {
     case 'delimited':
-      return delimitedReading(name, source, spec.header, tuning);
+      return delimitedReading(name, source, undefined, spec.header, tuning);
     case 'jsonl':
       return linesReading(
         name,
@@ -284,15 +284,19 @@ async function detectedHead(ask: ReadAsk): Promise<DetectedHead> {
 
 /**
  * delimitedReading reads delimited text, its encoding and delimiter sniffed
- * from the head of `source`.
+ * from `head`, where detection read it, or from the front of `source`. The
+ * rows are read through `source` itself, which several files joined as bytes
+ * are told apart by.
  */
 async function delimitedReading(
   name: string,
   source: ByteSource,
+  head: Uint8Array | undefined,
   header: HeaderMode,
   tuning: Tuning,
 ): Promise<Reading> {
-  const format = await openFormat(name, source, header);
+  const sniffed = head === undefined ? source : headed(source, head);
+  const format = await openFormat(name, sniffed, header);
   const delimited: ReadSpec = { kind: 'delimited', header: format.header };
   return recordReading(
     name,
