@@ -1,8 +1,9 @@
 /**
  * @fileoverview A tab reloaded while showing comes back at the cell that was
  * selected. A tab's cell is saved when it is left, so the showing tab's has to
- * be read off the grid before the tab is replaced. Runs over the real shell
- * and engine.
+ * be read off the grid before the tab is replaced. The file is as the
+ * workspace records it, so the reload leaves the workspace clean. Runs over
+ * the real shell and engine.
  *
  * @vitest-environment happy-dom
  */
@@ -28,7 +29,7 @@ beforeAll(async () => {
   shell = await bootShell();
 }, 20_000);
 
-test("a reload of the showing tab keeps the selected cell", async () => {
+test("a reload of the showing tab keeps the selected cell, and leaves the workspace clean", async () => {
   await page.clickCell(5, 0);
   expect(await until(page, () => cell().includes("row 6")), cell()).toBe(true);
 
@@ -40,4 +41,6 @@ test("a reload of the showing tab keeps the selected cell", async () => {
   expect(await until(page, () => message().startsWith("reloaded")), message()).toBe(true);
 
   expect(cell()).toContain("row 6");
+  expect(shell.unsaved).toBe(false);
+  expect(document.querySelector(".dirty")).toBeNull();
 });

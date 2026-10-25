@@ -145,12 +145,28 @@ test("Reload reads the newer version, lands the edits on it, and says what chang
   }
 });
 
-test("Reload of an object nobody touched says so", async () => {
+// A save records the version a tab reads, so reading a new one at the same
+// size leaves something to save.
+test("Reload of a new version marks its tab unsaved", async () => {
+  const w = await both();
+  try {
+    const remote = w.sources.find((t) => t.name === "google-ads.csv")!;
+    b.objects.set(KEY, enc.encode(ADS_AGAIN));
+    const fresh = await w.relink(remote, { name: "google-ads.csv", path: OBJECT });
+    expect(w.unsaved(fresh)).toBe(true);
+  } finally {
+    w.close();
+  }
+});
+
+test("Reload of an object nobody touched says so, and leaves its tab saved", async () => {
   const w = await both();
   try {
     const remote = w.sources.find((t) => t.name === "google-ads.csv")!;
     const fresh = await w.relink(remote, { name: "google-ads.csv", path: OBJECT });
     expect(reloaded(remote, fresh)).toBe("reloaded google-ads.csv · no change in the bucket");
+    // The tab reads the version it read before, so there is nothing to save.
+    expect(w.unsaved(fresh)).toBe(false);
   } finally {
     w.close();
   }

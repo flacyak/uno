@@ -84,6 +84,22 @@ function sameFile(a: SourceRef, b: SourceRef): boolean {
   return "blob" in a && "blob" in b && a.blob === b.blob;
 }
 
+/**
+ * Returns whether `now` reads the file as the last save recorded it: `was`
+ * reads it so, and `now` reads the same path, version and size, the same
+ * parts, and is found or missing alike.
+ */
+function asRecorded(was: Tab, now: Tab): boolean {
+  return (
+    !was.changedSinceSave &&
+    was.link?.path === now.link?.path &&
+    was.link?.version === now.link?.version &&
+    was.bytes === now.bytes &&
+    was.missing === now.missing &&
+    sameFiles(was.parts ?? [], now.parts ?? [])
+  );
+}
+
 /** One source in the workspace. */
 export class Tab {
   /** The recogniser's current offer for this source, if any. */
@@ -99,6 +115,8 @@ export class Tab {
   /** The edit log as last reported by the engine, and as it was at the last save. */
   private edits: Edit[];
   private savedEdits: Edit[];
+  /** Whether a save came after this tab opened, and recorded the file as it is now. */
+  private savedSinceOpen = false;
 
   constructor(
     readonly source: SourceHandle,
@@ -145,6 +163,11 @@ export class Tab {
     return this.link?.missing !== undefined;
   }
 
+  /** Whether the file changed since the last save: the open found it so, and no save came after. */
+  get changedSinceSave(): boolean {
+    return this.link?.changed !== undefined && !this.savedSinceOpen;
+  }
+
   /** The state of the file behind this tab. */
   get state(): State {
     return stateOf(this);
@@ -181,6 +204,7 @@ export class Tab {
 
   saved(): void {
     this.savedEdits = this.edits.slice();
+    this.savedSinceOpen = true;
   }
 }
 
@@ -197,9 +221,10 @@ export class Workspace {
   /** The source ids as of the last save. */
   private savedSources: string[] = [];
   /**
-   * Ids of sources relinked or appended to since the last save. Both changes
-   * leave the log and the source list as they were, so this set is what
-   * marks the workspace dirty for them.
+   * Ids of sources relinked or appended to since the last save, where the new
+   * tab reads the file other than as that save recorded it. Both changes leave
+   * the log and the source list as they were, so this set is what marks the
+   * workspace dirty for them.
    */
   private readonly relinked = new Set<string>();
   /**
@@ -289,8 +314,7 @@ export class Workspace {
    */
   relink(tab: Tab, ref: SourceRef): Promise<Tab> {
     return this.point(tab, "relink", [ref], async () =>
-      // Only a tab whose file is now found is marked relinked.
-      this.replace(tab, await this.engine.relink(tab.source, ref), (fresh) => !fresh.missing),
+      this.replace(tab, await this.engine.relink(tab.source, ref)),
     );
   }
 
@@ -300,7 +324,7 @@ export class Workspace {
    */
   append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
     return this.point(tab, "append", files, async () =>
-      this.replace(tab, await this.engine.append(tab.source, [...files]), () => true),
+      this.replace(tab, await this.engine.append(tab.source, [...files])),
     );
   }
 
@@ -324,19 +348,19 @@ export class Workspace {
 
   /**
    * Replaces the tab for `tab`'s source with a new tab for `source` at the
-   * same position, with the same selected cell and saved log. `pointed`
-   * decides whether the new tab is marked relinked. The tab is found by id,
+   * same position, with the same selected cell and saved log, and marks it
+   * relinked unless it reads the file as last saved. The tab is found by id,
    * since a relink or append answered first may have replaced `tab`, and
    * only the newest handle hears the engine.
    */
-  private replace(tab: Tab, source: SourceHandle, pointed: (fresh: Tab) => boolean): Tab {
+  private replace(tab: Tab, source: SourceHandle): Tab {
     const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return tab;
     const was = this.tabs[i]!;
     const fresh = this.tab(source, was.savedLog);
     fresh.cell = was.cell;
     this.tabs[i] = fresh;
-    if (pointed(fresh)) this.relinked.add(fresh.id);
+    if (!asRecorded(was, fresh)) this.relinked.add(fresh.id);
     if (this.showing === was) this.showing = fresh;
     return fresh;
   }
@@ -490,7 +514,7 @@ export class Workspace {
   }
 
   /** Whether there is unsaved work: an edit, a source added or removed, or
-   * a source relinked or appended to. */
+   * a source that a relink or append left other than as last saved. */
   get dirty(): boolean {
     const ids = this.tabs.map((t) => t.id);
     const same =
@@ -508,7 +532,10 @@ export class Workspace {
     );
   }
 
-  /** Whether a tab has unsaved changes, was relinked, or was added since the last save. */
+  /**
+   * Whether a tab has unsaved changes, was left other than as last saved by a
+   * relink or append, or was added since the last save.
+   */
   unsaved(tab: Tab): boolean {
     return tab.dirty || this.relinked.has(tab.id) || !this.savedSources.includes(tab.id);
   }
