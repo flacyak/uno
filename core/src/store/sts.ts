@@ -54,6 +54,9 @@ export interface SsoAsk {
  * Trades an SSO access token for a role's temporary keys through the SSO
  * portal's GetRoleCredentials. A 401 or 403 means the sign-in has expired or
  * been revoked, and the failure says to sign in again.
+ * @param ask The profile's portal, account and role, with its access token.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's temporary keys.
  */
 export function ssoExchange(
   ask: SsoAsk,
@@ -87,7 +90,12 @@ export function ssoExchange(
   });
 }
 
-/** Runs ssoExchange as a Promise, for a caller outside the store. */
+/**
+ * Runs ssoExchange as a Promise, for a caller outside the store.
+ * @param ask The profile's portal, account and role, with its access token.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's temporary keys.
+ */
 export function ssoRoleCredentials(
   ask: SsoAsk,
   opts: ExchangeOptions = {},
@@ -220,7 +228,10 @@ const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
  * It fails with a session name STS would not take, or with what STS said:
  * its error code and message. A request STS never answers rejects with the
  * runtime's own error, as a defect.
+ * @param ask The role, the session and the region.
  * @param source The caller's keys, which sign the request.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
  */
 export function roleExchange(
   ask: RoleAsk,
@@ -258,7 +269,13 @@ export function roleExchange(
   });
 }
 
-/** Runs roleExchange as a Promise, for a caller outside the store. */
+/**
+ * Runs roleExchange as a Promise, for a caller outside the store.
+ * @param ask The role, the session and the region.
+ * @param source The caller's keys, which sign the request.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
+ */
 export function assumeRole(
   ask: RoleAsk,
   source: Omit<AwsCredentials, 'region'>,
@@ -284,6 +301,9 @@ export interface WebIdentityAsk {
  * Calls STS AssumeRoleWithWebIdentity and succeeds with the role's session.
  * The call is unsigned: the token says who is asking. It goes as a POST,
  * since a token can run past what a URL holds. It fails as roleExchange does.
+ * @param ask The role, the session, the token and the region.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
  */
 export function webIdentityExchange(
   ask: WebIdentityAsk,
@@ -312,7 +332,12 @@ export function webIdentityExchange(
   });
 }
 
-/** Runs webIdentityExchange as a Promise, for a caller outside the store. */
+/**
+ * Runs webIdentityExchange as a Promise, for a caller outside the store.
+ * @param ask The role, the session, the token and the region.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
+ */
 export function assumeRoleWithWebIdentity(
   ask: WebIdentityAsk,
   opts: ExchangeOptions = {},
