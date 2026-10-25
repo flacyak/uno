@@ -51,37 +51,57 @@ export interface SsoAsk {
 }
 
 /**
- * ssoRoleCredentials trades an SSO access token for a role's temporary keys
+ * ssoExchange trades an SSO access token for a role's temporary keys
  * through the SSO portal's GetRoleCredentials. A 401 or 403 means the sign-in
- * has expired or been revoked, and the error says to sign in again.
+ * has expired or been revoked, and the failure says to sign in again.
  * @param ask the profile's portal, account and role, with its access token
  * @param opts where the exchange is sent and how requests go out
  * @return the role's temporary keys
  */
-export async function ssoRoleCredentials(
+export function ssoExchange(
+  ask: SsoAsk,
+  opts: ExchangeOptions = {},
+): Effect.Effect<Session, SsoFailure> {
+  return Effect.gen(function* () {
+    const go = opts.fetch ?? fetch;
+    const base = (
+      opts.endpoint ?? `https://portal.sso.${ask.region}.amazonaws.com`
+    ).replace(/\/+$/, '');
+    const url = new URL(`${base}/federation/credentials`);
+    url.searchParams.set('account_id', ask.accountId);
+    url.searchParams.set('role_name', ask.roleName);
+
+    const res = yield* Effect.promise(() =>
+      go(url, { headers: { 'x-amz-sso_bearer_token': ask.accessToken } }),
+    );
+    if (res.status === 401 || res.status === 403) {
+      return yield* new NotSignedIn({
+        profile: ask.profile,
+        why: 'the SSO portal turned its sign-in away',
+      });
+    }
+    if (!res.ok) {
+      return yield* new SsoPortalRefused({
+        profile: ask.profile,
+        status: res.status,
+      });
+    }
+    return yield* ssoSessionIn(res, ask.profile);
+  });
+}
+
+/**
+ * ssoRoleCredentials runs ssoExchange as a Promise, for a caller outside the
+ * store.
+ * @param ask the profile's portal, account and role, with its access token
+ * @param opts where the exchange is sent and how requests go out
+ * @return the role's temporary keys
+ */
+export function ssoRoleCredentials(
   ask: SsoAsk,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
-  const go = opts.fetch ?? fetch;
-  const base = (
-    opts.endpoint ?? `https://portal.sso.${ask.region}.amazonaws.com`
-  ).replace(/\/+$/, '');
-  const url = new URL(`${base}/federation/credentials`);
-  url.searchParams.set('account_id', ask.accountId);
-  url.searchParams.set('role_name', ask.roleName);
-
-  const res = await go(url, {
-    headers: { 'x-amz-sso_bearer_token': ask.accessToken },
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new NotSignedIn({
-      profile: ask.profile,
-      why: 'the SSO portal turned its sign-in away',
-    });
-  }
-  if (!res.ok)
-    throw new SsoPortalRefused({ profile: ask.profile, status: res.status });
-  return Effect.runPromise(ssoSessionIn(res, ask.profile));
+  return Effect.runPromise(ssoExchange(ask, opts));
 }
 
 /**
