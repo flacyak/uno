@@ -67,7 +67,8 @@ const NO_SIDEBAR = "no-sidebar";
 
 /**
  * An action that would close the workspace and drop its edits: Ctrl+O, the
- * window's ×, or a workspace picked from the sidebar.
+ * window's ×, a workspace picked from the sidebar, or a .uno named on the
+ * command line or dropped on the window.
  */
 type Dropping = "open" | "quit" | `path:${string}` | `recent:${string}`;
 
@@ -213,9 +214,12 @@ export class Shell {
           return;
         }
         // A single dropped .uno opens with an empty save path, so the first
-        // save asks where to write.
-        if (refs.length === 1 && isWorkspace(refs[0]!)) void this.load(refs[0]!, "");
-        else void this.addSources(refs);
+        // save asks where to write. Over unsaved edits it asks first.
+        const ref = refs[0];
+        if (refs.length === 1 && ref !== undefined && isWorkspace(ref)) {
+          const path = "path" in ref ? ref.path : ref.name;
+          if (this.drops(`path:${path}`)) void this.load(ref, "");
+        } else void this.addSources(refs);
       },
       (text) => this.say(text, true),
     );
