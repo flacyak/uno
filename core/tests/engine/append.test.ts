@@ -367,8 +367,8 @@ test('a file the source already reads is refused, and so is one given twice', as
 
 test('a JSON Lines source over parts is read as JSON Lines again once a part is appended', async () => {
   const file = await written();
-  // A part is detected as it is appended, and this build reads JSON Lines
-  // only through a spec, so the part appended is an empty file.
+  // A part appended is read as the source is held, so an empty file keeps
+  // the rows as they were; multilines.test appends a part with rows.
   const empty = join(await mkdtemp(join(tmpdir(), 'uno-append-')), 'empty.txt');
   await writeFile(empty, '');
   const { engine, done } = connect(undefined, multiProviders());
