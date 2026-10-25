@@ -13,6 +13,7 @@
   "compilerOptions": {
     "paths": {
       "@never": ["./core/src/never.ts"],
+      "@turns": ["./core/src/turns.ts"],
       "@document": ["./core/src/document/index.ts"],
       "@document/*": ["./core/src/document/*.ts"],
       "@engine": ["./core/src/engine/index.ts"],
