@@ -214,16 +214,13 @@ const STS_VERSION = '2011-06-15';
 const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
 
 /**
- * roleExchange calls STS AssumeRole as one signed GET, with `source` as the
- * caller's credentials, and succeeds with the role's session.
+ * Calls STS AssumeRole as one signed GET, with `source` as the caller's
+ * credentials, and succeeds with the role's session.
  *
  * It fails with a session name STS would not take, or with what STS said:
  * its error code and message. A request STS never answers rejects with the
  * runtime's own error, as a defect.
- * @param ask the role, the session and the region
- * @param source the caller's keys, which sign the request
- * @param opts where the exchange is sent and how requests go out
- * @return the role's session
+ * @param source The caller's keys, which sign the request.
  */
 export function roleExchange(
   ask: RoleAsk,
@@ -261,13 +258,7 @@ export function roleExchange(
   });
 }
 
-/**
- * assumeRole runs roleExchange as a Promise, for a caller outside the store.
- * @param ask the role, the session and the region
- * @param source the caller's keys, which sign the request
- * @param opts where the exchange is sent and how requests go out
- * @return the role's session
- */
+/** Runs roleExchange as a Promise, for a caller outside the store. */
 export function assumeRole(
   ask: RoleAsk,
   source: Omit<AwsCredentials, 'region'>,
@@ -290,13 +281,9 @@ export interface WebIdentityAsk {
 }
 
 /**
- * webIdentityExchange calls STS AssumeRoleWithWebIdentity and succeeds with
- * the role's session. The call is unsigned: the token says who is asking.
- * It goes as a POST, since a token can run past what a URL holds. It fails
- * as roleExchange does.
- * @param ask the role, the session, the token and the region
- * @param opts where the exchange is sent and how requests go out
- * @return the role's session
+ * Calls STS AssumeRoleWithWebIdentity and succeeds with the role's session.
+ * The call is unsigned: the token says who is asking. It goes as a POST,
+ * since a token can run past what a URL holds. It fails as roleExchange does.
  */
 export function webIdentityExchange(
   ask: WebIdentityAsk,
@@ -325,13 +312,7 @@ export function webIdentityExchange(
   });
 }
 
-/**
- * assumeRoleWithWebIdentity runs webIdentityExchange as a Promise, for a
- * caller outside the store.
- * @param ask the role, the session, the token and the region
- * @param opts where the exchange is sent and how requests go out
- * @return the role's session
- */
+/** Runs webIdentityExchange as a Promise, for a caller outside the store. */
 export function assumeRoleWithWebIdentity(
   ask: WebIdentityAsk,
   opts: ExchangeOptions = {},
@@ -362,6 +343,7 @@ export class SessionNameRefused extends Data.TaggedError('SessionNameRefused')<{
   sessionName: string;
   message: string;
 }> {
+  /** @param parts The role and the session name refused. */
   constructor(parts: { roleArn: string; sessionName: string }) {
     super({
       ...parts,
@@ -373,11 +355,8 @@ export class SessionNameRefused extends Data.TaggedError('SessionNameRefused')<{
 }
 
 /**
- * checkSessionName refuses a name STS would not take, before any request is
- * sent.
- * @param roleArn the role, for the error
- * @param sessionName the name to check
- * @return nothing, or the refusal
+ * Refuses a name STS would not take, before any request is sent.
+ * @param roleArn The role, for the error.
  */
 function checkSessionName(
   roleArn: string,
@@ -394,10 +373,13 @@ function checkSessionName(
  */
 export class StsRefused extends Data.TaggedError('StsRefused')<{
   roleArn: string;
+  /** STS's error code, or `HTTP <status>` where its answer named none. */
   code: string;
+  /** STS's message, where it gave one. */
   detail?: string;
   message: string;
 }> {
+  /** @param parts The role, STS's error code, and its message if any. */
   constructor(parts: { roleArn: string; code: string; detail?: string }) {
     super({
       ...parts,
@@ -406,11 +388,15 @@ export class StsRefused extends Data.TaggedError('StsRefused')<{
   }
 }
 
-/** STS let the role be assumed and answered with no credentials uno could read. */
+/**
+ * STS let the role be assumed and answered with no credentials uno could
+ * read.
+ */
 export class StsUnreadable extends Data.TaggedError('StsUnreadable')<{
   roleArn: string;
   message: string;
 }> {
+  /** @param parts The role. */
   constructor(parts: { roleArn: string }) {
     super({
       ...parts,
@@ -423,11 +409,9 @@ export class StsUnreadable extends Data.TaggedError('StsUnreadable')<{
 export type StsFailure = SessionNameRefused | StsRefused | StsUnreadable;
 
 /**
- * sessionIn reads STS's answer to a role assumption: the session it holds,
- * or the refusal with STS's error code and message.
- * @param res STS's answer
- * @param roleArn the role, for the error
- * @return the session the answer holds
+ * Reads STS's answer to a role assumption: the session it holds, or the
+ * refusal with STS's error code and message.
+ * @param roleArn The role, for the error.
  */
 function sessionIn(
   res: Response,
