@@ -208,34 +208,53 @@ export class View {
 
   /**
    * open detects the format, starts indexing, waits for the sample rows,
-   * replays any carried edits, and returns the view.
+   * replays any carried edits, and returns the view. Whatever ends the open
+   * short of a view closes it, which stops the index and closes the bytes.
    */
-  static async open(ask: OpenAsk): Promise<View> {
-    const { id, name, path, port, tuning, carried, began } = ask;
-    const telemetry = ask.telemetry ?? unmeasured;
-    const v = new View(id, name, path, port, began);
-    v.carried = carried?.raw;
+  static open(ask: OpenAsk): Effect.Effect<View, unknown> {
+    const v = new View(ask.id, ask.name, ask.path, ask.port, ask.began);
+    v.carried = ask.carried?.raw;
     v.parts = ask.parts;
-    // The bytes are the view's from here: every failure of the open closes
-    // the view, and the view closes them.
-    const source = await ask.source();
-    v.source = source;
+    return Effect.gen(function* () {
+      // The bytes are the view's from here: every failure of the open closes
+      // the view, and the view closes them.
+      v.source = yield* awaited(ask.source);
+      return yield* Effect.gen(() => View.sample(v, ask)).pipe(
+        Effect.onError(() => Effect.promise(() => v.close())),
+      );
+    });
+  }
+
+  /**
+   * sample is the open's work over the open bytes, written as a generator
+   * for Effect.gen: it detects the format, starts the index, waits for the
+   * sample rows and the deepest row the carried edits name, replays the
+   * edits, describes the columns and fills in `opened`.
+   */
+  private static *sample(
+    v: View,
+    ask: OpenAsk,
+  ): Generator<Effect.Effect<unknown, unknown>, View, never> {
+    const { id, name, path, port, tuning, carried } = ask;
+    const telemetry = ask.telemetry ?? unmeasured;
+    const source = v.source;
 
     // Errors for a source from a .uno name the .uno as well.
     const container = carried === undefined ? '' : carried.container;
     const within = (why: Said): Said =>
       container === '' ? why : { t: 'about', subject: container, why };
 
-    let format: Format;
-    try {
-      format = await openFormat(name, source, ask.header);
-    } catch (err) {
-      await v.close();
-      if (container === '') throw err;
-      throw new Refusal(
-        within({ t: 'about', subject: name, why: saidOf(err) }),
-      );
-    }
+    const format = yield* awaited(() =>
+      openFormat(name, source, ask.header),
+    ).pipe(
+      Effect.mapError((err) =>
+        container === ''
+          ? err
+          : new Refusal(
+              within({ t: 'about', subject: name, why: saidOf(err) }),
+            ),
+      ),
+    );
 
     v.format = format;
     v.index = new RowIndex(format.dataStart, source.size, tuning);
@@ -310,44 +329,39 @@ export class View {
       }
     });
 
-    try {
-      // Wait until the index covers the sample rows and the deepest row the
-      // carried edits name. Carried bytes wait for the whole index.
-      const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
-      const whole = carried?.raw !== undefined;
-      await Effect.runPromise(
-        v.until(() => index.complete || (!whole && index.readable() >= want)),
-      );
-      // From here the open is answered, so a cancel is left unheard.
-      signal?.removeEventListener('abort', cancelled);
-      started = true;
+    // Wait until the index covers the sample rows and the deepest row the
+    // carried edits name. Carried bytes wait for the whole index.
+    const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
+    const whole = carried?.raw !== undefined;
+    yield* v.until(
+      () => index.complete || (!whole && index.readable() >= want),
+    );
+    // From here the open is answered, so a cancel is left unheard.
+    signal?.removeEventListener('abort', cancelled);
+    started = true;
 
-      if (carried !== undefined) {
-        v.schema.rows = index.readable();
-        try {
-          v.schema.replay(carried.edits);
-        } catch (err) {
-          throw new Refusal(within({ t: 'replaying', name, why: saidOf(err) }));
-        }
-      }
-
-      v.opened = {
-        source: id,
-        name,
-        size: source.size,
-        label: labelOf(format),
-        columns: await v.columns(),
-        progress: v.progress(),
-        edits: carried?.edits ?? [],
-        generation: v.generation,
-        link: path === '' ? undefined : linkTo(path, source.version),
-      };
-      return v;
-    } catch (err) {
-      signal?.removeEventListener('abort', cancelled);
-      await v.close();
-      throw err;
+    if (carried !== undefined) {
+      v.schema.rows = index.readable();
+      yield* Effect.try({
+        try: () => v.schema.replay(carried.edits),
+        catch: (err) =>
+          new Refusal(within({ t: 'replaying', name, why: saidOf(err) })),
+      });
     }
+
+    const columns = yield* awaited(() => v.columns());
+    v.opened = {
+      source: id,
+      name,
+      size: source.size,
+      label: labelOf(format),
+      columns,
+      progress: v.progress(),
+      edits: carried?.edits ?? [],
+      generation: v.generation,
+      link: path === '' ? undefined : linkTo(path, source.version),
+    };
+    return v;
   }
 
   /** progress is how far the index has got, and how long the open has taken. */
