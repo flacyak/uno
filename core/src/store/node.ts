@@ -1472,6 +1472,7 @@ export class RoleOnDesktop extends Data.TaggedError('RoleOnDesktop')<{
  * Offers the desktop's ways of signing in: `machine`, `profile` and
  * `public`. `role` is refused. It is the hosted engine's.
  * @param env The environment, process.env by default.
+ * @return The ways of signing in.
  */
 export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const machine = awsCredentials(env);
@@ -1570,6 +1571,8 @@ export class MachineOnHosted extends Data.TaggedError('MachineOnHosted')<{
  * one workspace's, so no session is ever shared across tenants. `machine` and
  * `profile` are refused, and `machine()` rejects, so only an address a
  * connection covers is read.
+ * @param opts What the engine signs in with.
+ * @return The ways of signing in.
  */
 export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   const env = opts.env ?? process.env;

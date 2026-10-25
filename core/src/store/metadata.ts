@@ -53,6 +53,7 @@ export interface HostOptions {
  * the instance has no role, so the chain goes on to say there are no
  * credentials.
  * @param endpoint Where the service is.
+ * @param opts How requests go out.
  * @return The role's session, or undefined where nothing answers or no role
  *     is attached.
  */
@@ -98,6 +99,8 @@ export function askInstance(
 
 /**
  * Runs askInstance as a Promise, for a caller outside the store.
+ * @param endpoint Where the service is.
+ * @param opts How requests go out.
  * @return The role's session, or undefined where nothing answers or no role
  *     is attached.
  */
@@ -134,6 +137,8 @@ export class InstanceRefused extends Data.TaggedError('InstanceRefused')<{
  * else.
  * @param url The endpoint.
  * @param authorization The token it checks, if any.
+ * @param opts How requests go out.
+ * @return The task's session.
  */
 export function askContainer(
   url: string,
@@ -164,7 +169,13 @@ export function askContainer(
   });
 }
 
-/** Runs askContainer as a Promise, for a caller outside the store. */
+/**
+ * Runs askContainer as a Promise, for a caller outside the store.
+ * @param url The endpoint.
+ * @param authorization The token it checks, if any.
+ * @param opts How requests go out.
+ * @return The task's session.
+ */
 export function containerCredentials(
   url: string,
   authorization: string | undefined,
