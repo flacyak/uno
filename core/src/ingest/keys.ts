@@ -10,7 +10,9 @@
  */
 
 import { suffixed } from '@sheet';
+import { pointerTo } from './format.ts';
 import { segmentsOf } from './json.ts';
+import type { Column } from './records.ts';
 
 /**
  * How many columns keys may take in one JSON Lines file. A line with a key
@@ -110,4 +112,20 @@ export class KeyRegistry {
     if (!this.places.has(column.key)) this.places.set(column.key, at);
     return at;
   }
+}
+
+/**
+ * keyedColumn returns a pinned column with its key, which a save leaves out
+ * where it is the pointer to a top-level field called the column's name.
+ */
+export function keyedColumn({ name, key }: Column): KeyedColumn {
+  return { name, key: key ?? pointerTo('', name) };
+}
+
+/**
+ * pinnedColumn returns a column as a save pins it, leaving out a key
+ * keyedColumn finds again from the name.
+ */
+export function pinnedColumn({ name, key }: KeyedColumn): Column {
+  return key === pointerTo('', name) ? { name } : { name, key };
 }
