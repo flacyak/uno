@@ -323,52 +323,48 @@ export type ChainFailure =
  * @param through the profiles already on a role chain, so a loop is refused
  * @return the session, or undefined where the profile offers no way in
  */
-async function profileSession(
+function profileSession(
   env: Env,
   files: AwsFiles,
   profile: string,
   through: readonly string[] = [],
-): Promise<Held | undefined> {
-  const p = files.credentials.get(profile);
-  const fromConfig = configOf(files, profile);
-  const region = regionOf(env, files, profile);
-  const as = `the AWS profile ${profile}`;
+): Effect.Effect<Held | undefined, ChainFailure> {
+  return Effect.gen(function* () {
+    const p = files.credentials.get(profile);
+    const fromConfig = configOf(files, profile);
+    const region = regionOf(env, files, profile);
+    const as = `the AWS profile ${profile}`;
 
-  // A profile with role_arn is the role, whatever else it holds, as for the
-  // CLI.
-  const roleArn = fromConfig?.get('role_arn') ?? p?.get('role_arn');
-  if (roleArn !== undefined) {
-    const setting = (key: string): string | undefined =>
-      fromConfig?.get(key) ?? p?.get(key);
-    return held(
-      await roleSession(env, files, profile, roleArn, setting, through),
-      region,
-      as,
-    );
-  }
+    // A profile with role_arn is the role, whatever else it holds, as for the
+    // CLI.
+    const roleArn = fromConfig?.get('role_arn') ?? p?.get('role_arn');
+    if (roleArn !== undefined) {
+      const setting = (key: string): string | undefined =>
+        fromConfig?.get(key) ?? p?.get(key);
+      const session = yield* Effect.promise(() =>
+        roleSession(env, files, profile, roleArn, setting, through),
+      );
+      return held(session, region, as);
+    }
 
-  const own = profileKeysOnly(env, files, profile);
-  if (own !== undefined)
-    return { creds: { ...own.creds, as }, until: own.until };
-  const command = fromConfig?.get('credential_process');
-  if (command !== undefined) {
-    return held(
-      await Effect.runPromise(processCredentials(profile, command)),
-      region,
-      as,
-    );
-  }
-  if (
-    fromConfig?.has('sso_session') === true ||
-    fromConfig?.has('sso_start_url') === true
-  ) {
-    return held(
-      await Effect.runPromise(ssoSession(env, files, profile, fromConfig)),
-      region,
-      as,
-    );
-  }
-  return undefined;
+    const own = profileKeysOnly(env, files, profile);
+    if (own !== undefined)
+      return { creds: { ...own.creds, as }, until: own.until };
+    const command = fromConfig?.get('credential_process');
+    if (command !== undefined)
+      return held(yield* processCredentials(profile, command), region, as);
+    if (
+      fromConfig?.has('sso_session') === true ||
+      fromConfig?.has('sso_start_url') === true
+    ) {
+      return held(
+        yield* ssoSession(env, files, profile, fromConfig),
+        region,
+        as,
+      );
+    }
+    return undefined;
+  });
 }
 
 /**
@@ -870,7 +866,9 @@ async function roleSession(
     const found =
       sourceProfile === profile
         ? profileKeysOnly(env, files, profile)
-        : await profileSession(env, files, sourceProfile, chain);
+        : await Effect.runPromise(
+            profileSession(env, files, sourceProfile, chain),
+          );
     if (found === undefined)
       throw new SourceNoWayIn({ profile, sourceProfile });
     source = found.creds;
@@ -1191,7 +1189,9 @@ export function awsCredentials(
     const fromEnv = envKeys(env, region);
     if (fromEnv !== undefined)
       return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
-    const fromProfile = await profileSession(env, files, profile);
+    const fromProfile = await Effect.runPromise(
+      profileSession(env, files, profile),
+    );
     if (fromProfile !== undefined) return fromProfile;
     const fromHost = await Effect.runPromise(hostSession(env, region));
     if (fromHost !== undefined) return fromHost;
@@ -1215,7 +1215,7 @@ export function profileCredentials(
 ): () => Promise<AwsCredentials> {
   return cached(async () => {
     const files = await awsFiles(env);
-    const held = await profileSession(env, files, profile);
+    const held = await Effect.runPromise(profileSession(env, files, profile));
     if (held !== undefined) return held;
     if (
       !files.credentials.has(profile) &&
