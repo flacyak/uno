@@ -1023,6 +1023,8 @@ export class Shell {
       this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
       this.shown(w.active === fresh);
     } catch (err) {
+      // An append whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
     // Ask the folders again: what was offered is now appended or refused.
