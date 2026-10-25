@@ -205,11 +205,13 @@ export class View {
   }
 
   /**
-   * open detects the format, starts indexing, waits for the sample rows,
-   * replays any carried edits, and returns the view. A cancel reaches it as
-   * an interruption, which lands at the wait for the sample rows. Whatever
-   * ends the open short of a view closes it, which stops the index and
-   * closes the bytes.
+   * Opens the bytes, detects the format, starts indexing, waits for the
+   * sample rows, replays any carried edits, and returns the view.
+   *
+   * A cancel reaches it as an interruption, which lands at the wait for the
+   * sample rows. Whatever ends the open short of a view closes it, which
+   * stops the index and closes the bytes.
+   * @return The Effect that opens the view, which its caller runs.
    */
   static open(ask: OpenAsk): Effect.Effect<View, unknown> {
     return Effect.gen(function* () {
@@ -226,10 +228,11 @@ export class View {
   }
 
   /**
-   * sample is the open's work over the open bytes, written as a generator
-   * for Effect.gen: it detects the format, starts the index, waits for the
-   * sample rows and the deepest row the carried edits name, replays the
-   * edits, describes the columns and fills in `opened`.
+   * Yields the open's steps over the open bytes, as a generator for
+   * Effect.gen: it detects the format, starts the index, waits for the sample
+   * rows and the deepest row the carried edits name, replays the edits,
+   * describes the columns and fills in `opened`.
+   * @param v The view being opened, with its bytes open.
    */
   private static *sample(
     v: View,
@@ -576,7 +579,7 @@ export class View {
     if (!this.transform) throw new Refusal({ t: 'in-view' });
   }
 
-  /** serially runs `fn` as the next turn of the queue. */
+  /** Runs `fn` as the next turn of the queue. */
   private serially<T>(fn: () => Promise<T>): Promise<T> {
     return Effect.runPromise(this.turns.next(awaited(fn)));
   }
@@ -959,12 +962,15 @@ export class View {
   }
 
   /**
-   * until completes once `ready` returns true, or fails with the index's
-   * failure if it fails first. It resumes in a microtask, as a Promise would:
-   * the index pass that woke it has asked for its next chunk by then, so a
-   * read the waiter goes on to make follows the pass's. Interrupting it,
-   * which is what a cancel does to an open, removes its waiter, so nothing
-   * is left registered.
+   * Completes once `ready` returns true, or fails with the index's failure if
+   * it fails first.
+   *
+   * It resumes in a microtask, as a Promise would: the index pass that woke
+   * it has asked for its next chunk by then, so a read the waiter goes on to
+   * make follows the pass's. Interrupting it, which is what a cancel does to
+   * an open, removes its waiter, so nothing is left registered.
+   * @param ready Reports whether the index has got far enough. It is asked
+   *     again each time the index moves.
    */
   private until(ready: () => boolean): Effect.Effect<void, Error> {
     return Effect.callback((resume) => {
