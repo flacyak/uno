@@ -19,13 +19,8 @@ describe('english', () => {
       english({ t: 'read', delimiter: ',', header: 'first', charset: 'UTF-8' }),
     ).toBe("UTF-8 · delimiter ','");
     expect(
-      english({
-        t: 'read',
-        delimiter: ';',
-        header: 'first',
-        charset: 'Windows-1252',
-      }),
-    ).toBe("Windows-1252 · delimiter ';'");
+      english({ t: 'read', delimiter: ';', header: 'first', charset: 'UTF-8' }),
+    ).toBe("UTF-8 · delimiter ';'");
     expect(
       english({ t: 'read', delimiter: '\t', header: 'none', charset: 'UTF-8' }),
     ).toBe('UTF-8 · tab-separated · no header row');

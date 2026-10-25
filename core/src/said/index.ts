@@ -13,7 +13,7 @@ import { unreachable } from '@never';
 import type { HeaderMode } from '@store/multi';
 
 /** Charset is the name of a file's text encoding, as the status bar shows it. */
-export type Charset = 'UTF-8' | 'Windows-1252';
+export type Charset = 'UTF-8';
 
 /** The punctuation a description can name, as plurals. */
 export type CharName =
