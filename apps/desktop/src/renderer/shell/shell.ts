@@ -819,7 +819,8 @@ export class Shell {
   private readonly chords: ReadonlyMap<string, { run: () => void; when?: () => boolean }> = new Map(
     [
       ["Shift+b", { run: () => this.showPanel() }],
-      ["b", { run: () => this.toggleSidebar() }],
+      // Under Vim-style Ctrl+B pages up, wherever the keys are.
+      ["b", { run: () => this.toggleSidebar(), when: () => this.input.name === "default" }],
       ["e", { run: () => this.toggleMode() }],
       [
         "z",
