@@ -17,6 +17,7 @@ import {
 import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
+import type { ChartColumn, Plot } from './chart.ts';
 import type {
   Document,
   FileSource,
@@ -711,6 +712,18 @@ function optional<T>(
   return v;
 }
 
+/** required reads a field the way optional does, and refuses it when absent. */
+function required<T>(
+  o: Record<string, unknown>,
+  key: string,
+  expects: Expects<T>,
+  where: string,
+): T {
+  const v = o[key];
+  if (!expects.is(v)) throw new Error(`${where}: ${key} ${expects.not}`);
+  return v;
+}
+
 /**
  * parseManifest reads either manifest layout into one shape with a list of
  * sources. Before format 4 a manifest held one `source` and the grid's shape
@@ -945,6 +958,32 @@ function parseEdit(where: string, v: unknown): Edit {
   const was = o['was'];
   if (typeof was === 'string' && was !== '') e.was = was;
   return e;
+}
+
+const COL: Expects<number> = { is: isByteCount, not: 'is not a column number' };
+
+/**
+ * parsePlot reads what a chart draws. Bars and pie name the `by` column whose
+ * values they show, and may name a `sum` column to add up per value. Scatter
+ * names its `x` and `y`.
+ */
+export function parsePlot(where: string, value: unknown): Plot {
+  const p = asRecord(value);
+  const column = (key: string): ChartColumn => ({
+    col: required(asRecord(p[key]), 'col', COL, `${where}: ${key}`),
+    header: required(asRecord(p[key]), 'header', TEXT, `${where}: ${key}`),
+  });
+  const t = required(p, 't', TEXT, where);
+  switch (t) {
+    case 'bars':
+    case 'pie':
+      if (p['sum'] === undefined) return { t, by: column('by') };
+      return { t, by: column('by'), sum: column('sum') };
+    case 'scatter':
+      return { t, x: column('x'), y: column('y') };
+    default:
+      throw new Error(`${where}: this build cannot draw ${JSON.stringify(t)}`);
+  }
 }
 
 // ------------------------------------------------------------- writing
