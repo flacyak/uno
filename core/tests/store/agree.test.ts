@@ -52,16 +52,6 @@ function utf16(text: string, order: 'le' | 'be'): Uint8Array {
   return out;
 }
 
-/** `before`, then é as the one Windows-1252 byte, then `after`. */
-const E_ACUTE_1252 = 0xe9;
-function windows1252(before: string, after: string): Uint8Array {
-  return concat(
-    encoder.encode(before),
-    Uint8Array.of(E_ACUTE_1252),
-    encoder.encode(after),
-  );
-}
-
 /** The name of the file at `i`: a.csv, b.csv and on. */
 function nameOf(i: number): string {
   return `${String.fromCharCode('a'.charCodeAt(0) + i)}.csv`;
@@ -346,16 +336,6 @@ const WITH_HEADER: Case[] = [
     message:
       "b.csv (part 2 of 2): its text encoding is UTF-16 little-endian and a.csv's is UTF-8",
     differs: { kind: 'encoding', first: 'utf-8', part: 'utf-16le' },
-  },
-  {
-    title:
-      'a part that is no kind of Unicode is refused, though its header is the same',
-    was: ['date,region,total\n1,N,5\n', 'date,region,total\n2,S,6\n'],
-    at: 1,
-    now: windows1252('date,region,total\n2,Orl', 'ans,6\n'),
-    message:
-      "b.csv (part 2 of 2): its text encoding is neither UTF-8 nor UTF-16 and a.csv's is UTF-8",
-    differs: { kind: 'encoding', first: 'utf-8', part: 'other' },
   },
   {
     title:

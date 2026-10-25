@@ -42,22 +42,6 @@ const UTF8: Decoders = {
 };
 
 /**
- * Bytes sniffed as "other" are read as Windows-1252, in which every byte is
- * a character. The decoder has no notion of a byte order mark and would read
- * one as three characters, so the head skips it by hand.
- */
-const WINDOWS_1252: Decoders = (() => {
-  const decoder = new TextDecoder('windows-1252');
-  return {
-    head: {
-      decode: (bytes) => decoder.decode(bytes.subarray(bomLength(bytes))),
-    },
-    data: decoder,
-    charset: 'Windows-1252',
-  };
-})();
-
-/**
  * UnsupportedEncodingError is thrown for an encoding beyond this build:
  * UTF-16 today.
  * It carries the encoding.
@@ -80,8 +64,6 @@ export function decodersFor(name: string, encoding: Encoding): Decoders {
   switch (encoding) {
     case 'utf-8':
       return UTF8;
-    case 'other':
-      return WINDOWS_1252;
     case 'utf-16le':
     case 'utf-16be':
       throw new UnsupportedEncodingError(name, encoding);
@@ -291,7 +273,6 @@ const ENCODING_NAMES: Readonly<Record<Encoding, string>> = {
   'utf-8': 'UTF-8',
   'utf-16le': 'UTF-16 little-endian',
   'utf-16be': 'UTF-16 big-endian',
-  other: 'neither UTF-8 nor UTF-16',
 };
 
 /** encodingName is an encoding's display name. */
