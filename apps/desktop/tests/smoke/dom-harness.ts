@@ -38,7 +38,7 @@ export const SECOND = join(TESTDATA, "google-ads-sales.csv");
 
 /** How long the first rows get to arrive from the engine, and how often the
  * DOM is polled, matching index.ts's FIRST_ROWS_MS and POLL_MS. */
-const FIRST_ROWS_MS = 20_000;
+export const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
 
 /**

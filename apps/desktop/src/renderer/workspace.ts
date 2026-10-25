@@ -104,7 +104,7 @@ function asRecorded(was: Tab, now: Tab): boolean {
 export class Tab {
   /** The recogniser's current offer for this source, if any. */
   offer: Offer | null = null;
-  /** The selected cell, saved when another tab is shown. */
+  /** The selected cell, saved when another tab is shown, or read from a .uno. */
   cell: Cell = { row: 0, col: 0 };
   /**
    * The version the bucket holds now, when it differs from the one this tab
@@ -270,10 +270,15 @@ export class Workspace {
    * Opens a ref and adds its sources as tabs. Returns the tab to show: the
    * one the engine names, or the first added. The caller decides whether to
    * show it. Aborting `signal` cancels the open while it is in flight.
+   * Each tab starts on the cell a .uno left it on.
    */
   async add(ref: SourceRef, signal?: AbortSignal): Promise<Tab> {
-    const { sources, showing } = await this.engine.open(ref, signal);
+    const { sources, showing, cells } = await this.engine.open(ref, signal);
     const added = sources.map((s) => this.tab(s));
+    for (const { source, row, col } of cells) {
+      const t = added.find((a) => a.id === source);
+      if (t !== undefined) t.cell = { row, col };
+    }
     this.tabs.push(...added);
     return added.find((t) => t.id === showing) ?? added[0]!;
   }

@@ -119,6 +119,8 @@ export interface Opening {
   opened: Opened[];
   /** The source to show: the one just added, or the one a .uno was left on. */
   showing: string;
+  /** The cell each source of a .uno was left on. Empty otherwise. */
+  cells: Place['cells'];
 }
 
 /** An edit as a client sends it. The engine numbers it and fills in `was`. */
