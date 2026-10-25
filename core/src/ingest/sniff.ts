@@ -120,6 +120,11 @@ const UTF16_UNIT_BYTES = 2;
 
 /** The most code units per NUL for the head to count as UTF-16. */
 const UTF16_UNITS_PER_NUL = 16;
+/**
+ * The fewest NULs on one side for the head to count as UTF-16. One alone is
+ * as often a stray byte in a short UTF-8 file.
+ */
+const UTF16_MIN_NULS = 2;
 
 /**
  * sniffEncoding guesses the encoding from the head of a file. A UTF-16 byte
@@ -142,10 +147,8 @@ export function sniffEncoding(head: Uint8Array): Encoding {
     else second++;
   }
   const units = Math.ceil(head.length / UTF16_UNIT_BYTES);
-  if (
-    first + second > 0 &&
-    Math.max(first, second) * UTF16_UNITS_PER_NUL >= units
-  ) {
+  const most = Math.max(first, second);
+  if (most >= UTF16_MIN_NULS && most * UTF16_UNITS_PER_NUL >= units) {
     return second >= first ? 'utf-16le' : 'utf-16be';
   }
 
