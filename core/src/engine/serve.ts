@@ -6,6 +6,8 @@
  * providers, and calls `serve`.
  */
 
+import { Cause, Effect, Exit } from 'effect';
+
 import { ROWS_AT_MOST } from './protocol.ts';
 import type { Port, Reply, Request, SignIns } from './protocol.ts';
 import { Refusal, saidOf } from '@said';
@@ -95,6 +97,30 @@ function counted(field: string, value: unknown, least: number): void {
   });
 }
 
+/**
+ * cancellable runs an open with `signal`'s abort reaching it as an
+ * interruption, and turns an interrupted open back into the refusal the
+ * client expects. The open is run uninterruptible, so a cancel lands only
+ * where the open lets it.
+ */
+async function cancellable<A>(
+  open: Effect.Effect<A, unknown>,
+  signal: AbortSignal,
+  name: string,
+): Promise<A> {
+  const exit = await Effect.runPromiseExit(open, {
+    signal,
+    uninterruptible: true,
+  });
+  if (Exit.isFailure(exit)) {
+    if (Cause.hasInterrupts(exit.cause)) {
+      throw new Refusal({ t: 'cancelled', name });
+    }
+    throw Cause.squash(exit.cause);
+  }
+  return exit.value;
+}
+
 /** idOf returns the numeric id of a message, if it has one. */
 function idOf(msg: unknown): number | undefined {
   const id = fieldOf(msg, 'id');
@@ -144,7 +170,11 @@ export function serve(
       const abort = new AbortController();
       opening.set(m.id, abort);
       try {
-        const added = await workspace.open(m.ref, abort.signal);
+        const added = await cancellable(
+          workspace.open(m.ref),
+          abort.signal,
+          m.ref.name,
+        );
         return { t: 'opened', added };
       } finally {
         opening.delete(m.id);
