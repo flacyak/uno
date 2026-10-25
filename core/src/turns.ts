@@ -10,16 +10,25 @@
 
 import { Deferred, Effect } from 'effect';
 
+/**
+ * Effects that run one at a time, in the order they were asked for.
+ *
+ * Hold one wherever changes have to land in order, and run each change
+ * through `next`. Nothing is swallowed to keep the queue going: a turn that
+ * fails or is interrupted lets the next one go, and its failure is its
+ * caller's alone. `drained` waits for every turn asked for so far, which is
+ * what a close needs.
+ */
 export class Turns {
   /** The turn before, done or not. The next turn waits for it. */
   private last: Effect.Effect<void> = Effect.void;
 
   /**
-   * next runs `effect` as the next turn. It takes its place in the order the
-   * moment it is run, starts after the turn before it has ended, however that
-   * one ended, and lets the turn after it go however it ends itself. Its
-   * failure is its caller's alone.
+   * Runs `effect` as the next turn.
    *
+   * The turn takes its place in the order the moment it is run, starts after
+   * the turn before it has ended, however that one ended, and lets the turn
+   * after it go however it ends itself. Its failure is its caller's alone.
    * @param effect What the turn does.
    * @return The turn's result, or its failure as it is.
    */
@@ -35,17 +44,16 @@ export class Turns {
     });
   }
 
-  /** drained completes once every turn asked for so far has ended. */
+  /** Completes once every turn asked for so far has ended. */
   get drained(): Effect.Effect<void> {
     return this.last;
   }
 }
 
 /**
- * awaited runs Promise code as an Effect that fails with whatever the Promise
+ * Runs Promise code as an Effect that fails with whatever the Promise
  * rejected with, as it is: a Refusal fails the Effect as itself, and
  * `Effect.runPromise` rejects with the very value again.
- *
  * @param run Starts the Promise.
  * @return The Promise's value, or its rejection as the failure.
  */
