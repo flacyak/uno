@@ -101,6 +101,11 @@ describe('case mapping', () => {
   test('equalFold', () => {
     expect(equalFold('ABC', 'abc')).toBe(true);
     expect(equalFold('ABC', 'abd')).toBe(false);
+    // Runes that fold together only through their upper case.
+    expect(equalFold('ſ', 's')).toBe(true);
+    expect(equalFold('ς', 'σ')).toBe(true);
+    expect(equalFold('ϑ', 'θ')).toBe(true);
+    expect(equalFold('ß', 'ss')).toBe(false);
   });
 });
 
