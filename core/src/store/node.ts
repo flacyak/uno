@@ -814,6 +814,42 @@ export class CredentialSourceUnknown extends Data.TaggedError(
 }
 
 /**
+ * fromSourceProfile is the credentials of a role profile's source_profile,
+ * which may be any kind of profile, including another role. A source already
+ * on the chain is refused naming the loop, and one with no way in is refused
+ * by name. A profile that is its own source means the static keys beside its
+ * role_arn.
+ * @param env the environment
+ * @param files the AWS files
+ * @param profile the profile naming the role
+ * @param sourceProfile its source_profile
+ * @param chain the profiles on the chain so far, `profile` last
+ * @return the source's credentials
+ */
+function fromSourceProfile(
+  env: Env,
+  files: AwsFiles,
+  profile: string,
+  sourceProfile: string,
+  chain: readonly string[],
+): Effect.Effect<Omit<AwsCredentials, 'region'>, ChainFailure> {
+  return Effect.gen(function* () {
+    if (chain.includes(sourceProfile))
+      return yield* new SourceLoop({
+        profile,
+        chain: [...chain, sourceProfile],
+      });
+    const found =
+      sourceProfile === profile
+        ? profileKeysOnly(env, files, profile)
+        : yield* profileSession(env, files, sourceProfile, chain);
+    if (found === undefined)
+      return yield* new SourceNoWayIn({ profile, sourceProfile });
+    return found.creds;
+  });
+}
+
+/**
  * roleSession assumes the role a profile names with the credentials of its
  * source_profile, which may be any kind of profile, including another role.
  * A chain that comes back to a profile already on it is refused naming the
@@ -859,19 +895,9 @@ async function roleSession(
   const sourceProfile = setting('source_profile');
   const credentialSource = setting('credential_source');
   if (sourceProfile !== undefined) {
-    if (chain.includes(sourceProfile))
-      throw new SourceLoop({ profile, chain: [...chain, sourceProfile] });
-    // A profile that is its own source means the static keys beside its
-    // role_arn.
-    const found =
-      sourceProfile === profile
-        ? profileKeysOnly(env, files, profile)
-        : await Effect.runPromise(
-            profileSession(env, files, sourceProfile, chain),
-          );
-    if (found === undefined)
-      throw new SourceNoWayIn({ profile, sourceProfile });
-    source = found.creds;
+    source = await Effect.runPromise(
+      fromSourceProfile(env, files, profile, sourceProfile, chain),
+    );
   } else if (credentialSource === 'Environment') {
     const found = envKeys(env, DEFAULT_REGION);
     if (found === undefined)
