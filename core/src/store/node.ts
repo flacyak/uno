@@ -720,6 +720,7 @@ export class MfaRefused extends Data.TaggedError('MfaRefused')<{
   roleArn: string;
   message: string;
 }> {
+  /** @param parts The profile and the role it assumes. */
   constructor(parts: { profile: string; roleArn: string }) {
     super({
       ...parts,
@@ -730,15 +731,14 @@ export class MfaRefused extends Data.TaggedError('MfaRefused')<{
   }
 }
 
-/**
- * A chain of source profiles that comes back to one already on it. `chain`
- * is the whole loop, ending with the profile it came back to.
- */
+/** A chain of source profiles that comes back to one already on it. */
 export class SourceLoop extends Data.TaggedError('SourceLoop')<{
   profile: string;
+  /** The whole loop, ending with the profile it came back to. */
   chain: readonly string[];
   message: string;
 }> {
+  /** @param parts The profile and the loop. */
   constructor(parts: { profile: string; chain: readonly string[] }) {
     super({
       ...parts,
@@ -753,6 +753,7 @@ export class SourceNoWayIn extends Data.TaggedError('SourceNoWayIn')<{
   sourceProfile: string;
   message: string;
 }> {
+  /** @param parts The profile and its source_profile. */
   constructor(parts: { profile: string; sourceProfile: string }) {
     super({
       ...parts,
@@ -774,7 +775,9 @@ const SOURCE_EMPTY: Record<CredentialSource, string> = {
     'its container, and the environment names no container endpoint',
 };
 
-/** A credential_source uno knows, with nothing in it to assume the role with. */
+/**
+ * A credential_source uno knows, with nothing in it to assume the role with.
+ */
 export class CredentialSourceEmpty extends Data.TaggedError(
   'CredentialSourceEmpty',
 )<{
@@ -782,6 +785,7 @@ export class CredentialSourceEmpty extends Data.TaggedError(
   source: CredentialSource;
   message: string;
 }> {
+  /** @param parts The profile and the credential_source with nothing in it. */
   constructor(parts: { profile: string; source: CredentialSource }) {
     super({
       ...parts,
@@ -795,6 +799,7 @@ export class NoSourceProfile extends Data.TaggedError('NoSourceProfile')<{
   profile: string;
   message: string;
 }> {
+  /** @param parts The profile. */
   constructor(parts: { profile: string }) {
     super({
       ...parts,
@@ -811,6 +816,7 @@ export class CredentialSourceUnknown extends Data.TaggedError(
   source: string;
   message: string;
 }> {
+  /** @param parts The profile and the credential_source it names. */
   constructor(parts: { profile: string; source: string }) {
     super({
       ...parts,
@@ -822,17 +828,16 @@ export class CredentialSourceUnknown extends Data.TaggedError(
 }
 
 /**
- * fromSourceProfile is the credentials of a role profile's source_profile,
- * which may be any kind of profile, including another role. A source already
- * on the chain is refused naming the loop, and one with no way in is refused
- * by name. A profile that is its own source means the static keys beside its
- * role_arn.
- * @param env the environment
- * @param files the AWS files
- * @param profile the profile naming the role
- * @param sourceProfile its source_profile
- * @param chain the profiles on the chain so far, `profile` last
- * @return the source's credentials
+ * Reads the credentials of a role profile's source_profile, which may be any
+ * kind of profile, including another role.
+ *
+ * A source already on the chain is refused naming the loop, and one with no
+ * way in is refused by name. A profile that is its own source means the
+ * static keys beside its role_arn.
+ * @param profile The profile naming the role.
+ * @param sourceProfile Its source_profile.
+ * @param chain The profiles on the chain so far, `profile` last.
+ * @return The source's credentials.
  */
 function fromSourceProfile(
   env: Env,
@@ -858,14 +863,13 @@ function fromSourceProfile(
 }
 
 /**
- * fromCredentialSource is the credentials of the credential_source a role
- * profile names: the environment's keys, the instance's role, or the
- * container's. A source with nothing in it, one uno does not know, and a
- * profile naming no source at all are each refused by name.
- * @param env the environment
- * @param profile the profile naming the role
- * @param credentialSource its credential_source, if any
- * @return the source's credentials
+ * Reads the credentials of the credential_source a role profile names: the
+ * environment's keys, the instance's role, or the container's. A source with
+ * nothing in it, one uno does not know, and a profile naming no source at all
+ * are each refused by name.
+ * @param profile The profile naming the role.
+ * @param credentialSource Its credential_source, if any.
+ * @return The source's credentials.
  */
 function fromCredentialSource(
   env: Env,
@@ -918,17 +922,14 @@ function fromCredentialSource(
 }
 
 /**
- * roleSession assumes the role a profile names with the credentials of its
+ * Assumes the role a profile names with the credentials of its
  * source_profile, which may be any kind of profile, including another role.
  * A chain that comes back to a profile already on it is refused naming the
  * loop. mfa_serial is refused, since a code needs a prompt the engine lacks.
- * @param env the environment
- * @param files the AWS files
- * @param profile the profile naming the role
- * @param roleArn the role
- * @param setting reads a key from the profile's sections
- * @param through the profiles already on the chain
- * @return the role's session
+ * @param profile The profile naming the role.
+ * @param setting Reads a key from the profile's sections.
+ * @param through The profiles already on the chain.
+ * @return The role's session.
  */
 function roleSession(
   env: Env,
