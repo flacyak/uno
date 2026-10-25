@@ -22,12 +22,12 @@ const FILE = repeated(REPEATS);
 const OPENED = 3;
 
 /** The most requests an append may send. */
-const REQUESTS_BUDGET = 19;
+const REQUESTS_BUDGET = 13;
 /**
- * The most bytes an append may ask for: the new file, and every file the
- * source had, which it indexes again.
+ * The most bytes an append may ask for: the new file, the heads of the files
+ * it opens, and the blocks it reads for the columns and to index again.
  */
-const BYTES_BUDGET = 10_100_000;
+const BYTES_BUDGET = 2_800_000;
 
 /** Where the files are in the bucket. */
 const FOLDER = 'exports';
@@ -38,7 +38,7 @@ afterEach(async () => {
   s = undefined;
 });
 
-test('appending a file to a source of several files reads every file again', async () => {
+test('appending a file to a source of several files reads the new file and little else', async () => {
   const files = Array.from({ length: OPENED + 1 }, (_, i): SingleRef => {
     const name = `export-${i + 1}.csv`;
     return { name, path: `s3://${BUCKET}/${FOLDER}/${name}` };

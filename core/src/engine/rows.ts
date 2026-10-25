@@ -64,6 +64,24 @@ export class RowIndex {
     this.scanned = start;
   }
 
+  /**
+   * seeded returns an index of `size` bytes that begin with the bytes `was`
+   * indexed, holding every block of `was` but the last, or undefined while
+   * `was` is incomplete or holds no rows. A pass from `scanned` reads that
+   * block again and on into the new bytes, as a pass from the start would.
+   */
+  static seeded(was: RowIndex, size: number): RowIndex | undefined {
+    if (!was.complete || was.blocks === 0) return undefined;
+    const last = was.blocks - 1;
+    const index = new RowIndex(was.start, size, was.tuning);
+    index.firsts = was.firsts.slice();
+    index.offsets = was.offsets.slice();
+    index.blocks = last;
+    index.counted = was.firsts[last]!;
+    index.scanned = was.offsets[last]!;
+    return index;
+  }
+
   /** begin records that the next record starts at offset. Called once per record, in order. */
   begin(offset: number): void {
     const b = this.blocks;

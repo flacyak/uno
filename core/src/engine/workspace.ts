@@ -47,7 +47,7 @@ import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { View } from './view.ts';
-import type { Carried, Part } from './view.ts';
+import type { Carried, OpenAsk, Part } from './view.ts';
 
 /**
  * The largest .uno file read whole. It bounds the container file itself.
@@ -224,7 +224,7 @@ export class Workspace {
       // never lists one as opening.
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
-      const view = await this.view(id, ref, undefined, false, signal);
+      const view = await this.view(id, ref, undefined, { signal });
       return { opened: [this.keep(view)], showing: id, cells: [] };
     });
   }
@@ -266,7 +266,7 @@ export class Workspace {
       const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, carried, 'parts' in to);
+        view = await this.view(id, to, carried, { whole: 'parts' in to });
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -302,7 +302,8 @@ export class Workspace {
    * append adds files at the end of a source over several files. Existing
    * parts keep their places, so every row keeps its number and the log is
    * replayed unchanged. A file already in the source, or given twice, is
-   * refused. A failed append leaves the source as it was.
+   * refused. A failed append leaves the source as it was. The new view keeps
+   * the old one's index, and reads on from its last block into the new files.
    */
   append(id: string, files: readonly SingleRef[]): Promise<Opened> {
     return this.serially(async () => {
@@ -338,7 +339,8 @@ export class Workspace {
           });
       });
 
-      const view = await this.view(id, ref, { container: '', edits: was.log });
+      const carried: Carried = { container: '', edits: was.log };
+      const view = await this.view(id, ref, carried, { extending: was });
 
       // Swapped only after the new view is open, so a failed append leaves
       // the old source in place.
@@ -498,9 +500,9 @@ export class Workspace {
     id: string,
     ref: SourceRef,
     carried: Carried | undefined,
-    whole = false,
-    signal?: AbortSignal,
+    ask: Pick<OpenAsk, 'signal' | 'extending'> & { whole?: boolean } = {},
   ): Promise<View> {
+    const { whole = false, signal, extending } = ask;
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
@@ -534,6 +536,7 @@ export class Workspace {
       header: headerModeOf(ref),
       parts: 'parts' in ref ? ref : undefined,
       signal,
+      extending,
     });
     view.connection = this.through(ref);
     if ('parts' in ref) {
