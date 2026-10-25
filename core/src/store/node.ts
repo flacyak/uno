@@ -6,6 +6,11 @@
  * `write` builds a sibling temp file, fsyncs it and renames it over the
  * target. Only this file and store/disklister.ts import node:fs. The guard
  * test in tests/store/opens.test.ts checks that.
+ *
+ * The chain runs as Effects, each step failing with the classes declared
+ * beside it, and ChainFailure names them all. The exported functions run
+ * the chain with Effect.runPromise, which rejects with the very failure, so
+ * a caller reads the same sentence from a Promise as before.
  */
 
 import { execFile } from 'node:child_process';
@@ -306,7 +311,10 @@ export type ChainFailure =
   | SsoFailure
   | StsFailure
   | ContainerFailure
-  | InstanceFailure;
+  | InstanceFailure
+  | NoCredentials
+  | NoSuchProfile
+  | ProfileNoWayIn;
 
 /**
  * profileSession signs in as one named profile the way the AWS CLI does,
@@ -1270,21 +1278,30 @@ export class NoCredentials extends Data.TaggedError('NoCredentials')<{
 export function awsCredentials(
   env: Env = process.env,
 ): () => Promise<AwsCredentials> {
-  return cached(async () => {
+  return cached(() => Effect.runPromise(machineChain(env)));
+}
+
+/**
+ * machineChain is the chain awsCredentials reads, as one Effect: the
+ * environment, the profile, then the host, failing with NoCredentials where
+ * none of them has any.
+ * @param env the environment
+ * @return the credentials, kept until shortly before they expire
+ */
+function machineChain(env: Env): Effect.Effect<Held, ChainFailure> {
+  return Effect.gen(function* () {
     const profile =
       env['AWS_PROFILE'] ?? env['AWS_DEFAULT_PROFILE'] ?? 'default';
-    const files = await awsFiles(env);
+    const files = yield* Effect.promise(() => awsFiles(env));
     const region = regionOf(env, files, profile);
     const fromEnv = envKeys(env, region);
     if (fromEnv !== undefined)
       return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
-    const fromProfile = await Effect.runPromise(
-      profileSession(env, files, profile),
-    );
+    const fromProfile = yield* profileSession(env, files, profile);
     if (fromProfile !== undefined) return fromProfile;
-    const fromHost = await Effect.runPromise(hostSession(env, region));
+    const fromHost = yield* hostSession(env, region);
     if (fromHost !== undefined) return fromHost;
-    throw new NoCredentials({ profile });
+    return yield* new NoCredentials({ profile });
   });
 }
 
@@ -1328,17 +1345,32 @@ export function profileCredentials(
   profile: string,
   env: Env = process.env,
 ): () => Promise<AwsCredentials> {
-  return cached(async () => {
-    const files = await awsFiles(env);
-    const held = await Effect.runPromise(profileSession(env, files, profile));
+  return cached(() => Effect.runPromise(profileChain(profile, env)));
+}
+
+/**
+ * profileChain is the sign-in profileCredentials reads, as one Effect: the
+ * profile's own way in, failing by name where the profile is not there or
+ * offers none.
+ * @param profile the profile to sign in as
+ * @param env the environment
+ * @return the credentials, kept until shortly before they expire
+ */
+function profileChain(
+  profile: string,
+  env: Env,
+): Effect.Effect<Held, ChainFailure> {
+  return Effect.gen(function* () {
+    const files = yield* Effect.promise(() => awsFiles(env));
+    const held = yield* profileSession(env, files, profile);
     if (held !== undefined) return held;
     if (
       !files.credentials.has(profile) &&
       configOf(files, profile) === undefined
     ) {
-      throw new NoSuchProfile({ profile });
+      return yield* new NoSuchProfile({ profile });
     }
-    throw new ProfileNoWayIn({ profile });
+    return yield* new ProfileNoWayIn({ profile });
   });
 }
 
