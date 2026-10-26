@@ -186,3 +186,37 @@ test('a workspace whose charts have all gone saves as one that never had any', a
     done();
   }
 });
+
+test('a chart request adds a chart over a source it holds, or replaces the one with its id where it stood', async () => {
+  const { engine, done } = connect();
+  try {
+    await opened(engine, []);
+    await engine.chart(NORTH);
+    await engine.chart(SOUTH);
+    const titled = { ...NORTH, title: 'Rows per region' };
+    await engine.chart(titled);
+    const west = { ...SOUTH, source: 'west' };
+    await expect(engine.chart(west)).rejects.toThrow('no source called west');
+
+    const back = readContainer('q3.uno', await saved(engine));
+    expect(back.charts).toStrictEqual([titled, SOUTH]);
+  } finally {
+    done();
+  }
+});
+
+test('an unchart request removes the chart it names, and refuses one there is not', async () => {
+  const { engine, done } = connect();
+  try {
+    await opened(engine, [NORTH, SOUTH]);
+    await engine.unchart(NORTH.id);
+    await expect(engine.unchart(NORTH.id)).rejects.toMatchObject({
+      said: { t: 'no-such-chart', id: NORTH.id },
+    });
+
+    const back = readContainer('q3.uno', await saved(engine));
+    expect(back.charts).toStrictEqual([SOUTH]);
+  } finally {
+    done();
+  }
+});

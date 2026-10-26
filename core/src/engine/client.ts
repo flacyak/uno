@@ -154,6 +154,16 @@ export class Engine {
     if (this.gone === undefined) this.port.post({ t: 'mode', transform });
   }
 
+  /** chart adds a chart, or replaces the one with its id where it stood. */
+  async chart(chart: Chart): Promise<void> {
+    await this.ask('charted', (id) => ({ t: 'chart', id, chart }));
+  }
+
+  /** unchart removes a chart from the workspace, named by its id. */
+  async unchart(chart: string): Promise<void> {
+    await this.ask('uncharted', (id) => ({ t: 'unchart', id, chart }));
+  }
+
   /** save returns the workspace as a .uno. Refused if carried sources total
    * more than limit bytes. */
   async save(place: Place, limit: number): Promise<Uint8Array> {
