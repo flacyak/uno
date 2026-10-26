@@ -6,6 +6,8 @@
  * the Schema and a new generation number. Every stored row stays as read.
  */
 
+import { Effect } from 'effect';
+
 import type { HeldFile, HeldPart, HeldParts } from '@document';
 import { trimSpace } from '@go';
 import { headerOf, labelOf, openFormat } from '@ingest';
@@ -60,6 +62,7 @@ import {
   unmeasured,
 } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
+import { Turns, awaited } from '@turns';
 
 /** Minimum milliseconds between progress messages. */
 const PROGRESS_MS = 100;
@@ -121,8 +124,11 @@ export interface OpenAsk {
   name: string;
   /** Where the bytes are, or "" for carried bytes. */
   path: string;
-  /** The bytes. The view owns the source from here on and closes it if the open fails. */
-  source: ByteSource;
+  /**
+   * Opens the bytes. The view owns them from the moment they are open, and
+   * closes them if the open fails.
+   */
+  source: () => Promise<ByteSource>;
   port: Port<Request, Reply>;
   tuning: Tuning;
   /**
@@ -137,8 +143,6 @@ export interface OpenAsk {
   header?: HeaderMode;
   /** Set for a source over several files. */
   parts?: PartsRef;
-  /** Aborted to cancel the open while it still waits for its sample rows. */
-  signal?: AbortSignal;
 }
 
 export class View {
@@ -173,7 +177,8 @@ export class View {
   private finding: AbortController | undefined;
   /** Edits undo took back, newest last, for redo. A new edit empties it. */
   private undone: Edit[] = [];
-  private queue: Promise<unknown> = Promise.resolve();
+  /** The queue an edit, an undo, a redo and a save's part() run through. */
+  private readonly turns = new Turns();
   private waiters: Waiter[] = [];
   private failed: Error | undefined;
   private readonly abort = new AbortController();
@@ -200,52 +205,66 @@ export class View {
   }
 
   /**
-   * open detects the format, starts indexing, waits for the sample rows,
-   * replays any carried edits, and returns the view.
+   * Opens the bytes, detects the format, starts indexing, waits for the
+   * sample rows, replays any carried edits, and returns the view.
+   *
+   * A cancel reaches it as an interruption, which lands at the wait for the
+   * sample rows. Whatever ends the open short of a view closes it, which
+   * stops the index and closes the bytes.
+   * @param ask Everything the open needs: the source and its name, the port,
+   *     the tuning, when the open began, and what a .uno carried for it.
+   * @return The Effect that opens the view, which its caller runs.
    */
-  static async open(ask: OpenAsk): Promise<View> {
-    const { id, name, path, source, port, tuning, carried, began } = ask;
+  static open(ask: OpenAsk): Effect.Effect<View, unknown> {
+    return Effect.gen(function* () {
+      const v = new View(ask.id, ask.name, ask.path, ask.port, ask.began);
+      v.carried = ask.carried?.raw;
+      v.parts = ask.parts;
+      // The bytes are the view's from here: every failure of the open closes
+      // the view, and the view closes them.
+      v.source = yield* awaited(ask.source);
+      return yield* Effect.gen(() => View.sample(v, ask)).pipe(
+        Effect.onError(() => Effect.promise(() => v.close())),
+      );
+    });
+  }
+
+  /**
+   * Yields the open's steps over the open bytes, as a generator for
+   * Effect.gen: it detects the format, starts the index, waits for the sample
+   * rows and the deepest row the carried edits name, replays the edits,
+   * describes the columns and fills in `opened`.
+   * @param v The view being opened, with its bytes open.
+   */
+  private static *sample(
+    v: View,
+    ask: OpenAsk,
+  ): Generator<Effect.Effect<unknown, unknown>, View, never> {
+    const { id, name, path, port, tuning, carried } = ask;
     const telemetry = ask.telemetry ?? unmeasured;
-    const v = new View(id, name, path, port, began);
-    v.carried = carried?.raw;
-    v.parts = ask.parts;
+    const source = v.source;
 
     // Errors for a source from a .uno name the .uno as well.
     const container = carried === undefined ? '' : carried.container;
     const within = (why: Said): Said =>
       container === '' ? why : { t: 'about', subject: container, why };
 
-    let format: Format;
-    try {
-      format = await openFormat(name, source, ask.header);
-    } catch (err) {
-      await source.close();
-      if (container === '') throw err;
-      throw new Refusal(
-        within({ t: 'about', subject: name, why: saidOf(err) }),
-      );
-    }
+    const format = yield* awaited(() =>
+      openFormat(name, source, ask.header),
+    ).pipe(
+      Effect.mapError((err) =>
+        container === ''
+          ? err
+          : new Refusal(
+              within({ t: 'about', subject: name, why: saidOf(err) }),
+            ),
+      ),
+    );
 
-    v.source = source;
     v.format = format;
     v.index = new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.schema = schemaOf(format, ask.parts);
-
-    // A cancel fails the wait below with its refusal, kept ahead of the
-    // close's own, and closes the view, which stops the index.
-    const signal = ask.signal;
-    const cancelled = (): void => {
-      v.fail(new Refusal({ t: 'cancelled', name }));
-      // A close that fails is reported by the open's own catch, which closes
-      // again and awaits it, so the listener's call must not surface it as
-      // an unhandled rejection.
-      v.close().catch(() => undefined);
-    };
-    // The file open and the format sniff take no signal, so an abort during
-    // them takes effect here, once they return.
-    if (signal?.aborted) cancelled();
-    else signal?.addEventListener('abort', cancelled, { once: true });
 
     let told = 0;
     let started = false;
@@ -300,44 +319,40 @@ export class View {
       }
     });
 
-    try {
-      // Wait until the index covers the sample rows and the deepest row the
-      // carried edits name. Carried bytes wait for the whole index.
-      const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
-      const whole = carried?.raw !== undefined;
-      await v.until(
-        () => index.complete || (!whole && index.readable() >= want),
-      );
-      // From here the open is answered, so a cancel is left unheard.
-      signal?.removeEventListener('abort', cancelled);
-      started = true;
+    // Wait until the index covers the sample rows and the deepest row the
+    // carried edits name. Carried bytes wait for the whole index. The open
+    // is run uninterruptible, and this wait is the one step a cancel can
+    // interrupt: everything around it runs to its end.
+    const want = Math.max(SAMPLE_ROWS, deepest(carried?.edits));
+    const whole = carried?.raw !== undefined;
+    yield* Effect.interruptible(
+      v.until(() => index.complete || (!whole && index.readable() >= want)),
+    );
+    // From here the open is answered, so a cancel is left unheard.
+    started = true;
 
-      if (carried !== undefined) {
-        v.schema.rows = index.readable();
-        try {
-          v.schema.replay(carried.edits);
-        } catch (err) {
-          throw new Refusal(within({ t: 'replaying', name, why: saidOf(err) }));
-        }
-      }
-
-      v.opened = {
-        source: id,
-        name,
-        size: source.size,
-        label: labelOf(format),
-        columns: await v.columns(),
-        progress: v.progress(),
-        edits: carried?.edits ?? [],
-        generation: v.generation,
-        link: path === '' ? undefined : linkTo(path, source.version),
-      };
-      return v;
-    } catch (err) {
-      signal?.removeEventListener('abort', cancelled);
-      await v.close();
-      throw err;
+    if (carried !== undefined) {
+      v.schema.rows = index.readable();
+      yield* Effect.try({
+        try: () => v.schema.replay(carried.edits),
+        catch: (err) =>
+          new Refusal(within({ t: 'replaying', name, why: saidOf(err) })),
+      });
     }
+
+    const columns = yield* awaited(() => v.columns());
+    v.opened = {
+      source: id,
+      name,
+      size: source.size,
+      label: labelOf(format),
+      columns,
+      progress: v.progress(),
+      edits: carried?.edits ?? [],
+      generation: v.generation,
+      link: path === '' ? undefined : linkTo(path, source.version),
+    };
+    return v;
   }
 
   /** progress is how far the index has got, and how long the open has taken. */
@@ -566,10 +581,9 @@ export class View {
     if (!this.transform) throw new Refusal({ t: 'in-view' });
   }
 
+  /** Runs `fn` as the next turn of the queue. */
   private serially<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn);
-    this.queue = run.catch(() => undefined);
-    return run;
+    return Effect.runPromise(this.turns.next(awaited(fn)));
   }
 
   // ------------------------------------------------------------ recognising
@@ -629,7 +643,9 @@ export class View {
       let told = Date.now();
       let slice = Date.now();
       for (let row = 0; ;) {
-        await this.until(() => index.complete || index.readable() > row);
+        await Effect.runPromise(
+          this.until(() => index.complete || index.readable() > row),
+        );
         if (signal.aborted) return;
         if (row >= index.readable()) break;
 
@@ -830,7 +846,7 @@ export class View {
         };
       }
       if (this.path === '') {
-        await this.until(() => this.index.complete);
+        await Effect.runPromise(this.until(() => this.index.complete));
         const raw =
           this.carried ?? (await this.source.read(0, this.source.size));
         return { raw, bytes: this.size, version: this.version, ...this.kept() };
@@ -947,16 +963,33 @@ export class View {
     await this.source.close();
   }
 
-  /** until resolves once `ready` returns true, or rejects if the index fails first. */
-  private until(ready: () => boolean): Promise<void> {
-    if (this.failed !== undefined) return Promise.reject(this.failed);
-    if (ready()) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      this.waiters.push(() => {
-        if (this.failed !== undefined) reject(this.failed);
-        else if (ready()) resolve();
-        else return false;
+  /**
+   * Completes once `ready` returns true, or fails with the index's failure if
+   * it fails first.
+   *
+   * It resumes in a microtask, as a Promise would: the index pass that woke
+   * it has asked for its next chunk by then, so a read the waiter goes on to
+   * make follows the pass's. Interrupting it, which is what a cancel does to
+   * an open, removes its waiter, so nothing is left registered.
+   * @param ready Reports whether the index has got far enough. It is asked
+   *     again each time the index moves.
+   */
+  private until(ready: () => boolean): Effect.Effect<void, Error> {
+    return Effect.callback((resume) => {
+      const waiter: Waiter = () => {
+        const failed = this.failed;
+        if (failed !== undefined) {
+          queueMicrotask(() => resume(Effect.fail(failed)));
+        } else if (ready()) {
+          queueMicrotask(() => resume(Effect.void));
+        } else {
+          return false;
+        }
         return true;
+      };
+      if (!waiter()) this.waiters.push(waiter);
+      return Effect.sync(() => {
+        this.waiters = this.waiters.filter((w) => w !== waiter);
       });
     });
   }

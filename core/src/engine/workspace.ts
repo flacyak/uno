@@ -11,6 +11,8 @@
  * View.
  */
 
+import { Effect } from 'effect';
+
 import {
   isAbsolute,
   isWorkspace,
@@ -46,6 +48,7 @@ import type { Meeting, Unconnected } from '@store/s3';
 import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
+import { Turns, awaited } from '@turns';
 import { View } from './view.ts';
 import type { Carried, Part } from './view.ts';
 
@@ -167,7 +170,8 @@ export class Workspace {
   private readonly states = new Map<string, State>();
 
   private transform = false;
-  private queue: Promise<unknown> = Promise.resolve();
+  /** The queue everything that changes the log runs through. */
+  private readonly turns = new Turns();
   private closed = false;
 
   constructor(
@@ -193,21 +197,36 @@ export class Workspace {
   // ------------------------------------------------------------ sources
 
   /**
-   * open adds a file to the workspace and returns what it opened. A .uno
-   * opens every source it holds, and only into an empty workspace. Aborting
-   * `signal` refuses an open still in flight as cancelled.
+   * Adds a file to the workspace, as a turn of the queue. A .uno opens every
+   * source it holds, and only into an empty workspace.
+   *
+   * The engine's edge runs the Effect with a cancel as its interruption. The
+   * open honours one as its turn begins and while the view waits for its
+   * sample rows; a cancel at any other point is left unheard, and the open
+   * is answered.
+   * @param ref What to open: a file, or a .uno.
+   * @return What it opened, and which source to show.
    */
-  open(ref: SourceRef, signal?: AbortSignal): Promise<Opening> {
-    return this.serially(async () => {
-      if (signal?.aborted)
-        throw new Refusal({ t: 'cancelled', name: ref.name });
-      // A .uno open honours a cancel only before its turn, since the shell
-      // never lists one as opening.
-      if (isWorkspace(ref)) return this.openWorkspace(ref);
-      const id = sourceId(ref.name, this.sources.keys());
-      const view = await this.view(id, ref, undefined, false, signal);
-      return { opened: [this.keep(view)], showing: id };
-    });
+  open(ref: SourceRef): Effect.Effect<Opening, unknown> {
+    return this.turn(
+      Effect.gen({ self: this }, function* () {
+        // A cancel that arrived while the open waited for its turn lands
+        // here, before anything is opened. A .uno open can be cancelled here
+        // alone, since the shell never lists one as opening.
+        yield* Effect.interruptible(Effect.void);
+        if (isWorkspace(ref)) {
+          return yield* awaited(() => this.openWorkspace(ref));
+        }
+        const id = sourceId(ref.name, this.sources.keys());
+        const view = yield* this.view(
+          id,
+          ref,
+          /* carried= */ undefined,
+          /* whole= */ false,
+        );
+        return { opened: [this.keep(view)], showing: id };
+      }),
+    );
   }
 
   /**
@@ -247,7 +266,9 @@ export class Workspace {
       const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, carried, 'parts' in to);
+        view = await Effect.runPromise(
+          this.view(id, to, carried, 'parts' in to),
+        );
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -319,7 +340,9 @@ export class Workspace {
           });
       });
 
-      const view = await this.view(id, ref, { container: '', edits: was.log });
+      const view = await Effect.runPromise(
+        this.view(id, ref, { container: '', edits: was.log }),
+      );
 
       // Swapped only after the new view is open, so a failed append leaves
       // the old source in place.
@@ -407,26 +430,32 @@ export class Workspace {
     try {
       let view: View;
       if (src.parts !== undefined) {
-        view = await this.view(src.id, joinedFrom(src), carried);
+        view = await Effect.runPromise(
+          this.view(src.id, joinedFrom(src), carried),
+        );
       } else if (src.raw === undefined) {
         // By path, pinned to the saved version where there is one.
-        view = await this.view(
-          src.id,
-          fileAt(src.name, src.path ?? '', src.version),
-          carried,
+        view = await Effect.runPromise(
+          this.view(
+            src.id,
+            fileAt(src.name, src.path ?? '', src.version),
+            carried,
+          ),
         );
       } else {
-        view = await View.open({
+        const bytes = bytesSource(src.raw);
+        const opening = View.open({
           id: src.id,
           name: src.name,
           path: '',
-          source: bytesSource(src.raw),
+          source: () => Promise.resolve(bytes),
           carried,
           port: this.port,
           tuning: this.tuning,
           began: performance.now(),
           telemetry: this.telemetry,
         });
+        view = await Effect.runPromise(opening);
       }
       view.opened.link = linkOf(view, src);
       return view;
@@ -471,26 +500,55 @@ export class Workspace {
     return ids.size === 1 ? id : undefined;
   }
 
-  /** view opens a ref as a View. With `whole`, every part of a source over
-   * several files is opened first, so a missing part fails here by name.
-   * Aborting `signal` cancels the open. */
-  private async view(
+  /**
+   * Opens a ref as a View, with its connection and parts filled in. With
+   * `whole`, every part of a source over several files is opened first, so a
+   * missing part fails here by name.
+   */
+  private view(
     id: string,
     ref: SourceRef,
     carried: Carried | undefined,
     whole = false,
-    signal?: AbortSignal,
-  ): Promise<View> {
+  ): Effect.Effect<View, unknown> {
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
     const path = 'path' in ref ? ref.path : '';
+    const opening = View.open({
+      id,
+      name: ref.name,
+      path,
+      source: () => this.sourceOf(ref, whole),
+      carried,
+      port: this.port,
+      tuning: this.tuning,
+      began,
+      telemetry: this.telemetry,
+      header: headerModeOf(ref),
+      parts: 'parts' in ref ? ref : undefined,
+    });
+    return opening.pipe(
+      Effect.map((view) => {
+        view.connection = this.through(ref);
+        if ('parts' in ref) {
+          view.opened.parts = ref.parts.map((part) => ({
+            name: part.ref.name,
+            path: 'path' in part.ref ? part.ref.path : '',
+          }));
+        }
+        return view;
+      }),
+    );
+  }
+
+  /**
+   * Opens a ref's bytes. With `whole`, every part of a source over several
+   * files is opened as well, so a missing part fails here by name, and the
+   * bytes are closed again when one does.
+   */
+  private async sourceOf(ref: SourceRef, whole: boolean): Promise<ByteSource> {
     const source = await this.openSource(ref);
-    // A cancel that arrived while the file was opening is answered here.
-    if (signal?.aborted) {
-      await source.close();
-      throw new Refusal({ t: 'cancelled', name: ref.name });
-    }
     // versions() opens every part still unread. A part that fails to open
     // closes the source and is the error.
     if (whole) {
@@ -501,28 +559,7 @@ export class Workspace {
           throw err;
         });
     }
-    const view = await View.open({
-      id,
-      name: ref.name,
-      path,
-      source,
-      carried,
-      port: this.port,
-      tuning: this.tuning,
-      began,
-      telemetry: this.telemetry,
-      header: headerModeOf(ref),
-      parts: 'parts' in ref ? ref : undefined,
-      signal,
-    });
-    view.connection = this.through(ref);
-    if ('parts' in ref) {
-      view.opened.parts = ref.parts.map((part) => ({
-        name: part.ref.name,
-        path: 'path' in part.ref ? part.ref.path : '',
-      }));
-    }
-    return view;
+    return source;
   }
 
   private keep(source: Source): Opened {
@@ -703,7 +740,7 @@ export class Workspace {
   async close(): Promise<void> {
     this.closed = true;
     await this.drop();
-    await this.queue;
+    await Effect.runPromise(this.turns.drained);
     await this.drop();
   }
 
@@ -733,13 +770,25 @@ export class Workspace {
     return source;
   }
 
+  /**
+   * Runs an effect as the next turn of the queue, and refuses it if the
+   * workspace was closed by the time its turn came.
+   */
+  private turn<A, E>(
+    effect: Effect.Effect<A, E>,
+  ): Effect.Effect<A, E | Refusal> {
+    return this.turns.next(
+      Effect.suspend((): Effect.Effect<A, E | Refusal> =>
+        this.closed
+          ? Effect.fail(new Refusal({ t: 'workspace-closed' }))
+          : effect,
+      ),
+    );
+  }
+
+  /** Runs `fn` as the next turn of the queue. */
   private serially<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(() => {
-      this.live();
-      return fn();
-    });
-    this.queue = run.catch(() => undefined);
-    return run;
+    return Effect.runPromise(this.turn(awaited(fn)));
   }
 }
 

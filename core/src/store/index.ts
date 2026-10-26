@@ -7,6 +7,8 @@
  * refused by name.
  */
 
+import { Effect } from 'effect';
+
 import { compareStrings } from '@go';
 import type { Connection, Formula } from '@library';
 import {
@@ -24,6 +26,7 @@ import type { HeaderMode, Part } from './multi.ts';
 // Type only, so the run-time import graph stays one-way with the plugin
 // package.
 import type { Provider } from '@plugin';
+import { Turns, awaited } from '@turns';
 
 // Browsing is its own interface, in store/list.ts.
 export { listWith, statWith } from './list.ts';
@@ -386,19 +389,21 @@ export interface Connections {
  */
 export function connectionsIn(store: FileStore, dir: string): Connections {
   let all: readonly Connection[] = [];
-  let queue: Promise<unknown> = Promise.resolve();
+  const turns = new Turns();
   return {
     get all() {
       return all;
     },
     load() {
-      const run = queue.then(async () => {
-        const read = await loadConnections(store, dir);
-        all = read.connections;
-        return read;
-      });
-      queue = run.catch(() => undefined);
-      return run;
+      return Effect.runPromise(
+        turns.next(
+          awaited(async () => {
+            const read = await loadConnections(store, dir);
+            all = read.connections;
+            return read;
+          }),
+        ),
+      );
     },
   };
 }
