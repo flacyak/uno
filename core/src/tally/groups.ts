@@ -2,7 +2,7 @@
  * @fileoverview A column's rows counted, or another column summed, per value.
  */
 
-import { compareStrings } from '@go';
+import { compareStrings, runes } from '@go';
 import { parse } from '@num';
 
 import { ExactSum } from './exact.ts';
@@ -12,6 +12,14 @@ import { ExactSum } from './exact.ts';
  * a chart draws. A fold of short ids that reaches it holds about 3 MB.
  */
 export const DISTINCT_AT_MOST = 10_000;
+/** GROUPS_SENT is how many groups a snapshot sends, more than a chart shows. */
+export const GROUPS_SENT = 50;
+/**
+ * LABEL_AT_MOST is how many code points of its value a sent group keeps, a
+ * few lines of text. At 4 bytes a code point, GROUPS_SENT labels come to 50 KB
+ * at most, however many values a column has and however long they are.
+ */
+export const LABEL_AT_MOST = 256;
 
 /** What a fold ranks its groups by: their rows, or the sum of their cells. */
 export type Measure = 'rows' | 'sum';
@@ -24,6 +32,7 @@ export interface Skipped {
 
 /** One value's rows, and the sum of their cells. */
 export interface Group {
+  /** Cut to LABEL_AT_MOST code points when sent, so two can read the same. */
   value: string;
   rows: number;
   /** 0 when the fold's measure is `rows`. */
@@ -32,8 +41,12 @@ export interface Group {
 
 /** What a fold holds, read. */
 export interface Groups {
-  /** Every group, the largest first, ties in value order. */
+  /** At most GROUPS_SENT groups, the largest first, ties in value order. */
   groups: Group[];
+  /** The groups not sent that measure more than zero, read as one. */
+  others: { values: number; rows: number; sum: number };
+  /** The groups not sent that measure zero or less, which a pie leaves out. */
+  below: { values: number; rows: number; sum: number };
   /** The rows of values first seen past DISTINCT_AT_MOST, and their sum. */
   rest: { rows: number; sum: number };
   /** Cells of the summed column, none when the fold's measure is `rows`. */
@@ -95,8 +108,28 @@ export class GroupsFold {
     groups.sort(
       (a, b) => size(b) - size(a) || compareStrings(a.value, b.value),
     );
-    const rest = { rows: this.rest.rows, sum: this.rest.sum.value() };
-    return { groups, rest, skipped: { ...this.skipped } };
+    const unsent = groups.splice(GROUPS_SENT);
+    return {
+      groups: groups.map((g) => ({
+        ...g,
+        value: runes(g.value).slice(0, LABEL_AT_MOST).join(''),
+      })),
+      others: this.merged(unsent.filter((g) => size(g) > 0)),
+      below: this.merged(unsent.filter((g) => size(g) <= 0)),
+      rest: { rows: this.rest.rows, sum: this.rest.sum.value() },
+      skipped: { ...this.skipped },
+    };
+  }
+
+  /** merged reads groups as one, their sums merged and read once. */
+  private merged(unsent: Group[]): Groups['others'] {
+    const all = new Count();
+    for (const { value } of unsent) {
+      const { rows, sum } = this.groups.get(value)!;
+      all.rows += rows;
+      all.sum.merge(sum);
+    }
+    return { values: unsent.length, rows: all.rows, sum: all.sum.value() };
   }
 
   /** count adds a row to `to`, or takes one back when `sign` is -1. */
