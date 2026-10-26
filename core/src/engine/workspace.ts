@@ -677,6 +677,22 @@ export class Workspace {
     });
   }
 
+  /** chart adds a chart, or replaces the one with its id where it stood. */
+  chart(chart: Chart): Promise<void> {
+    return this.serially(async () => {
+      this.need(chart.source);
+      this.charts.set(chart.id, chart);
+    });
+  }
+
+  /** unchart removes the shown chart with the id, and keeps a carried one. */
+  unchart(id: string): Promise<void> {
+    return this.serially(async () => {
+      if (!this.charts.delete(id))
+        throw new Refusal({ t: 'no-such-chart', id });
+    });
+  }
+
   // ------------------------------------------------------------ saving
 
   /**

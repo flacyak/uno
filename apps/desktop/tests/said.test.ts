@@ -66,6 +66,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   },
   "workspace-closed": { t: "workspace-closed" },
   "no-such-source": { t: "no-such-source", id: "ads" },
+  "no-such-chart": { t: "no-such-chart", id: "c3" },
   "source-absent": { t: "source-absent", name: "ads.csv" },
   "point-one-at-several": { t: "point-one-at-several", file: "parts", count: 3, name: "ads.csv" },
   "point-several-at-one": { t: "point-several-at-one", name: "sales", count: 3, file: "q3.csv" },

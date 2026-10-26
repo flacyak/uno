@@ -310,6 +310,11 @@ export type Request =
   | { t: 'try'; id: number; connection: Connection }
   /** Transform allows edits and runs the recogniser over every source. View is read-only. */
   | { t: 'mode'; transform: boolean }
+  /** Add a chart over a source of the workspace, or replace the one with its
+   * id where it stood. */
+  | { t: 'chart'; id: number; chart: Chart }
+  /** Remove a chart from the workspace, named by its id. */
+  | { t: 'unchart'; id: number; chart: string }
   /** Write the workspace as a .uno. Refused if carried sources total more than limit bytes. */
   | { t: 'save'; id: number; place: Place; limit: number }
   | { t: 'close' };
@@ -342,6 +347,8 @@ export type Reply =
   | { t: 'tried'; id: number; tried: Tried }
   /** Null when the recogniser finishes with an empty proposal. */
   | { t: 'offer'; source: string; generation: number; offer: Offer | null }
+  | { t: 'charted'; id: number }
+  | { t: 'uncharted'; id: number }
   | { t: 'saved'; id: number; bytes: Uint8Array }
   /** Unnumbered, a failure of an index or a pass behind a source. */
   | { t: 'error'; id?: number; source?: string; said: Said };
