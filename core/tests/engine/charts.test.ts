@@ -1,11 +1,19 @@
 /**
  * @fileoverview A workspace's charts in the engine: the open of a .uno hands
- * them over, and a save writes them back.
+ * them over, a save writes them back, and each goes with its source.
  */
 
+import { unzipSync } from 'fflate';
 import { expect, test } from 'vite-plus/test';
 
-import { newManifest, readContainer, writeDocument } from '@document';
+import {
+  LOG_ENTRY,
+  MANIFEST_ENTRY,
+  STATE_ENTRY,
+  newManifest,
+  readContainer,
+  writeDocument,
+} from '@document';
 import type { CarriedChart, Chart } from '@document';
 import type { Engine } from '@engine';
 import { blobProvider } from '@store';
@@ -108,6 +116,54 @@ test("a .uno's charts come back from a save as the .uno held them", async () => 
     const back = readContainer('q3.uno', await saved(engine));
     expect(back.charts).toStrictEqual(charts);
     expect(back.carriedCharts).toStrictEqual([newer('north')]);
+  } finally {
+    done();
+  }
+});
+
+test('a chart over a source the .uno does not hold is left out', async () => {
+  const { engine, done } = connect();
+  try {
+    // A build before charts removed the west source, and kept its charts.
+    // A carried chart that names no source has none to lose.
+    const west = { ...SOUTH, source: 'west' };
+    const carried = [newer('west'), newer('')];
+    const added = await opened(engine, [NORTH, west], carried);
+    expect(added.charts).toStrictEqual([NORTH]);
+
+    const back = readContainer('q3.uno', await saved(engine));
+    expect(back.charts).toStrictEqual([NORTH]);
+    expect(back.carriedCharts).toStrictEqual([newer('')]);
+  } finally {
+    done();
+  }
+});
+
+test('a removed source takes its charts with it', async () => {
+  const { engine, done } = connect();
+  try {
+    const carried = [newer('north'), newer('south')];
+    const { sources } = await opened(engine, [NORTH, SOUTH], carried);
+    await engine.remove(sources[1]!);
+
+    const back = readContainer('q3.uno', await saved(engine));
+    expect(back.charts).toStrictEqual([NORTH]);
+    expect(back.carriedCharts).toStrictEqual([newer('north')]);
+  } finally {
+    done();
+  }
+});
+
+test('a workspace whose charts have all gone saves as one that never had any', async () => {
+  const { engine, done } = connect();
+  try {
+    const { sources } = await opened(engine, [SOUTH], [newer('south')]);
+    await engine.remove(sources[1]!);
+
+    const entries = Object.keys(unzipSync(await saved(engine)));
+    expect(entries.sort()).toEqual(
+      [MANIFEST_ENTRY, STATE_ENTRY, LOG_ENTRY].sort(),
+    );
   } finally {
     done();
   }

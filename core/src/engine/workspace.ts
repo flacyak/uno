@@ -244,7 +244,7 @@ export class Workspace {
 
   /**
    * remove takes a source out of the workspace, and its edits out of the
-   * log. Removing the last source is refused.
+   * log. Its charts go with it. Removing the last source is refused.
    */
   remove(id: string): Promise<void> {
     return this.serially(async () => {
@@ -254,6 +254,9 @@ export class Workspace {
       }
       this.sources.delete(id);
       this.states.delete(id);
+      for (const chart of this.charts.values())
+        if (chart.source === id) this.charts.delete(chart.id);
+      this.carriedCharts = this.carriedCharts.filter((c) => c.source !== id);
       this.trail = this.trail.filter((s) => s !== id);
       await source.close();
     });
@@ -415,10 +418,14 @@ export class Workspace {
 
   /**
    * keepCharts keeps a .uno's charts, and the ones it carries. A chart whose
-   * id is already kept is carried too, so no chart takes another's place.
+   * id is already kept is carried too, so no chart takes another's place. A
+   * chart over a source the .uno does not hold, which a build before charts
+   * may have removed, is left out.
    */
   private keepCharts(doc: Document): void {
+    const held = new Set(doc.sources.map((s) => s.id));
     for (const chart of doc.charts ?? []) {
+      if (!held.has(chart.source)) continue;
       if (this.charts.has(chart.id)) {
         const json = JSON.stringify(chart);
         this.carriedCharts.push({ source: chart.source, json });
@@ -426,7 +433,10 @@ export class Workspace {
         this.charts.set(chart.id, chart);
       }
     }
-    this.carriedCharts.push(...(doc.carriedCharts ?? []));
+    for (const c of doc.carriedCharts ?? []) {
+      // One that names no source has none to lose.
+      if (c.source === '' || held.has(c.source)) this.carriedCharts.push(c);
+    }
   }
 
   /**
