@@ -97,7 +97,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
     encoding: "gzip",
     bucket: "open-data",
   },
-  "not-read": { t: "not-read", name: "events.jsonl", what: "JSON Lines" },
+  "not-read": { t: "not-read", name: "sales-q3.csv.gz", what: "gzip" },
   "parquet-broken": { t: "parquet-broken", name: "sales-q3.parquet" },
   "parquet-unsupported": {
     t: "parquet-unsupported",

@@ -36,15 +36,15 @@ const TABS: Open[] = [
 const VIEWPORT = 600;
 const ROW = 24;
 
-function name(i: number): string {
-  return `orders-${String(i).padStart(6, "0")}.csv`;
+function name(i: number, extension = ".csv"): string {
+  return `orders-${String(i).padStart(6, "0")}${extension}`;
 }
 
-/** `n` objects in the bucket. */
-function objects(n: number): Entry[] {
+/** `n` objects in the bucket, CSVs unless `extension` says otherwise. */
+function objects(n: number, extension = ".csv"): Entry[] {
   return Array.from({ length: n }, (_, i) => ({
-    name: name(i),
-    path: `s3://acme-exports/${name(i)}`,
+    name: name(i, extension),
+    path: `s3://acme-exports/${name(i, extension)}`,
     folder: false,
     bytes: 2048,
   }));
@@ -636,6 +636,18 @@ test("files added as one have a header row and no _file column until the choices
   press(d.list, " ");
   await settle();
   expect(choices(d.root)!.boxes.map((box) => box.checked)).toEqual([false, true]);
+});
+
+test("JSON Lines files added as one are offered no header-row choice", async () => {
+  const d = draw(new Bucket(objects(2, ".jsonl")));
+  await browse(d);
+  press(d.list, " ");
+  press(d.list, "ArrowDown");
+  press(d.list, " ");
+  await settle();
+  const shown = choices(d.root)!;
+  expect(shown.said).toBe("as one_file column");
+  expect(shown.boxes).toHaveLength(1);
 });
 
 test("files that were added are let go of, and ones that did not open stay picked", async () => {

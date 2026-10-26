@@ -29,6 +29,7 @@ import {
   ROWS,
   UNITS,
 } from "./fixture.ts";
+import { LINES } from "./lines.ts";
 import { MEETS } from "./meets.ts";
 import { MULTI } from "./multi.ts";
 import { OPEN } from "./open.ts";
@@ -67,6 +68,7 @@ const CHECKS: Check[] = [
   ...AGAIN,
   ...WIDEN,
   ...PARQUET,
+  ...LINES,
 ];
 
 /**

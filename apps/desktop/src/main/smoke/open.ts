@@ -1,8 +1,8 @@
 /**
  * @fileoverview Checks that the fixture opened: the bridge, the header, the
  * virtualiser, and a window that ignores input from the person at the desktop.
- * It then checks that a JSON Lines, a gzip and a Parquet file added beside
- * the fixture are each refused by name.
+ * It then checks that a gzip and a Parquet file added beside the fixture are
+ * each refused by name.
  */
 
 import { join } from "node:path";
@@ -15,7 +15,6 @@ const TESTDATA = process.env["UNO_SMOKE_TESTDATA"] ?? "";
 
 /** Files this build does not read yet, and what each holds. */
 const UNREAD = [
-  ["events.jsonl", "JSON Lines"],
   ["sales-q3.csv.gz", "gzip"],
   ["par1.bin", "Parquet"],
 ] as const;
@@ -219,7 +218,7 @@ export const OPEN: Check[] = [
   },
   {
     // Added beside the fixture, the way a command line naming several does.
-    name: "a JSON Lines, a gzip and a Parquet file are each refused by name, not read as text",
+    name: "a gzip and a Parquet file are each refused by name, not read as text",
     send: ["menu:add-paths", UNREAD.map(([name]) => join(TESTDATA, name))],
     shot: "not-read",
     script: `

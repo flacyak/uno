@@ -1,7 +1,7 @@
 /**
  * @fileoverview A file this build does not read yet, opened fresh, is refused
- * by name: JSON Lines, a gzip-compressed CSV and a Parquet file. Each is
- * refused when opened alone, when peeked at and as a part of several files.
+ * by name: a gzip-compressed CSV and a Parquet file. Each is refused when
+ * opened alone, when peeked at and as a part of several files.
  * A source a workspace already logged edits against is read as it was when
  * they were made, and so again when relinked to that file. Relinked to a
  * copy of it, it is refused, since a file it was not read from is read the
@@ -36,7 +36,6 @@ import {
 
 /** Each fixture, and what it holds that this build does not read. */
 const UNREAD: ReadonlyArray<readonly [string, Unread]> = [
-  ['events.jsonl', 'JSON Lines'],
   ['sales-q3.csv.gz', 'gzip'],
   ['par1.bin', 'Parquet'],
 ];
@@ -186,7 +185,7 @@ describe('a .jsonl a workspace logged edits against before', () => {
       await asLogged(src);
     }));
 
-  test('read as one with a copy of itself, refuses a .jsonl appended to it by name', () =>
+  test('read as one with a copy of itself, appends a .jsonl copy as its log was made', () =>
     withEngine(async (engine) => {
       const dir = await mkdtemp(join(tmpdir(), 'uno-unread-'));
       /** Copy `n` of the file, in its own name. */
@@ -214,11 +213,10 @@ describe('a .jsonl a workspace logged edits against before', () => {
       const src = await openOne(engine, { name: 'q3.uno', blob: uno });
       await asLogged(src);
 
-      const refused = await refusal(engine.append(src, [three]));
-      expect(refused.said).toEqual({
-        t: 'about',
-        subject: `${three.name} (part 3 of 3)`,
-        why: { t: 'not-read', name: three.name, what: 'JSON Lines' },
-      });
+      // The copy is split at commas under a header row like the parts before
+      // it, since that is how the source's log was made.
+      const longer = await engine.append(src, [three]);
+      await asLogged(longer);
+      expect(longer.opened.parts).toHaveLength(3);
     }));
 });

@@ -30,7 +30,6 @@ export type ReadKind = 'delimited' | 'jsonl' | 'parquet';
  */
 export type Unread =
   | 'JSON'
-  | 'JSON Lines'
   | 'Parquet'
   | 'gzip'
   | 'zstd'
