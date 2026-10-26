@@ -18,7 +18,11 @@ import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import type { Chart, ChartColumn, ChartPlace, Plot } from './chart.ts';
-import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from './chart.ts';
+import {
+  PLACE_DIGITS,
+  REFRESH_MINUTES_AT_MOST,
+  TITLE_AT_MOST,
+} from './chart.ts';
 import type {
   Document,
   FileSource,
@@ -1146,7 +1150,21 @@ function sheetStateJSON(s: State): {
 function chartsJSON(charts: readonly Chart[]): unknown {
   return {
     version: CHARTS_VERSION,
-    charts: charts.map((chart) => parseChart(CHARTS_ENTRY, chart)),
+    charts: charts.map((chart) => {
+      const c = parseChart(CHARTS_ENTRY, chart);
+      return { ...c, place: placeJSON(c.place) };
+    }),
+  };
+}
+
+/** placeJSON rounds x and y to PLACE_DIGITS and the size to whole px. */
+function placeJSON(p: ChartPlace): ChartPlace {
+  const scale = 10 ** PLACE_DIGITS;
+  return {
+    x: Math.round(p.x * scale) / scale,
+    y: Math.round(p.y * scale) / scale,
+    width: Math.round(p.width),
+    height: Math.round(p.height),
   };
 }
 
