@@ -103,7 +103,7 @@ export function readDocument(
 /**
  * readContainer reads a .uno as stored: the manifest, the bytes of each
  * carried source, the resolved path of each pointed-at source, the state,
- * the log and any entries beyond what this build knows.
+ * the log, the charts and any entries beyond what this build knows.
  *
  * `at` is where the .uno is. Relative pointers are resolved from it. With
  * `at` empty, a relative pointer is returned as written.
@@ -146,6 +146,7 @@ export function readContainer(
     sources,
     active,
     log,
+    ...readCharts(entries[CHARTS_ENTRY]),
     extra: readExtra(entries, m),
     at,
   };
@@ -263,6 +264,10 @@ export function writeDocument(d: Document): Uint8Array {
   const charts = d.charts ?? [];
   const carried = d.carriedCharts ?? [];
   if (charts.length + carried.length > 0) {
+    // Charts written over an entry this build cannot read would lose it.
+    const kept = d.extra.get(CHARTS_ENTRY);
+    if (kept !== undefined && readCharts(kept) === undefined)
+      throw new Error(`${CHARTS_ENTRY} is one this build cannot read`);
     entries.push({
       name: CHARTS_ENTRY,
       bytes: encoder.encode(formatJSON(chartsJSON(charts, carried))),
@@ -655,6 +660,39 @@ function readLog(
     log.push({ source, edit });
   }
   return log;
+}
+
+/**
+ * readCharts reads the charts entry, and carries a chart parseChart refuses
+ * as its JSON text. It gives undefined when there is no entry, or one this
+ * build cannot read: not JSON, a newer version, or no list of at most
+ * CHARTS_AT_MOST charts. The entry stays whole in extra either way.
+ */
+function readCharts(
+  bytes: Uint8Array | undefined,
+): Pick<Document, 'charts' | 'carriedCharts'> | undefined {
+  if (bytes === undefined) return undefined;
+  let o: Record<string, unknown>;
+  try {
+    o = asRecord(JSON.parse(decoder.decode(bytes)));
+  } catch {
+    return undefined;
+  }
+  if (asNumber(o['version']) > CHARTS_VERSION) return undefined;
+  const listed = o['charts'];
+  if (!Array.isArray(listed) || listed.length > CHARTS_AT_MOST)
+    return undefined;
+  const charts: Chart[] = [];
+  const carriedCharts: CarriedChart[] = [];
+  listed.forEach((raw: unknown) => {
+    try {
+      charts.push(parseChart(CHARTS_ENTRY, raw));
+    } catch {
+      const source = asString(asRecord(raw)['source']);
+      carriedCharts.push({ source, json: JSON.stringify(raw) });
+    }
+  });
+  return { charts, carriedCharts };
 }
 
 /**

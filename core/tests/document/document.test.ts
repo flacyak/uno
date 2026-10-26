@@ -9,6 +9,7 @@ import { describe, expect, test, vi } from 'vite-plus/test';
 import {
   BASE_VERSION,
   CHARTS_ENTRY,
+  CHARTS_VERSION,
   FORMAT_VERSION,
   FORMULA_VERSION,
   LOG_ENTRY,
@@ -852,6 +853,12 @@ describe("a workspace's charts", () => {
     id: 'c1',
   };
 
+  /** PER_REGION as the file keeps it. */
+  const SAVED = {
+    ...PER_REGION,
+    place: { x: 1, y: 0.1235, width: 420, height: 260 },
+  };
+
   /** A newer build's chart, of a kind and with a key this build does not
    * know, as this build carries it. */
   const NEWER = {
@@ -911,11 +918,60 @@ describe("a workspace's charts", () => {
   });
 
   test(`are kept to ${CHARTS_AT_MOST}, the carried ones counted`, () => {
-    expect(() => writeDocument(charted(MOST))).not.toThrow();
+    const most = readContainer('sales.uno', writeDocument(charted(MOST)));
+    expect(most.charts).toHaveLength(CHARTS_AT_MOST);
 
     const over = { ...charted(MOST), carriedCharts: [NEWER] };
     expect(() => writeDocument(over)).toThrow(
       `${CHARTS_AT_MOST + 1} charts are more than the ${CHARTS_AT_MOST} a workspace keeps`,
     );
+  });
+
+  test('come back as they were saved, and through a save not given them', () => {
+    const bytes = writeDocument(charted([PER_REGION]));
+    const back = readContainer('sales.uno', bytes);
+    expect(back.charts).toStrictEqual([SAVED]);
+
+    // A caller that keeps only the extras it opened with keeps them too.
+    const again = writeDocument({ ...charted(), extra: back.extra });
+    expect(readContainer('sales.uno', again).charts).toStrictEqual([SAVED]);
+  });
+
+  test('come back through a save by a build that does not know them', () => {
+    const written = unzipSync(writeDocument(charted([PER_REGION])));
+    // Such a build reads the entry as one it does not know, and writes it back.
+    const extra = new Map([[CHARTS_ENTRY, written[CHARTS_ENTRY]!]]);
+    const bytes = writeDocument({ ...charted(), extra });
+    expect(readContainer('sales.uno', bytes).charts).toStrictEqual([SAVED]);
+  });
+
+  test('carry one this build cannot read as its text, and read the rest', () => {
+    const entries = unzipSync(writeDocument(charted()));
+    const text = `{"version":${CHARTS_VERSION},"charts":[${NEWER.json},${JSON.stringify(SAVED)}]}`;
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.charts).toStrictEqual([SAVED]);
+    expect(back.carriedCharts).toStrictEqual([NEWER]);
+  });
+
+  test.each([
+    ['is not JSON', `{"version":${CHARTS_VERSION},`],
+    ['is a newer version', `{"version":${CHARTS_VERSION + 1},"charts":[]}`],
+    ['holds no list of charts', `{"version":${CHARTS_VERSION},"charts":{}}`],
+    [
+      `holds more than ${CHARTS_AT_MOST} charts`,
+      JSON.stringify({ version: CHARTS_VERSION, charts: [...MOST, SAVED] }),
+    ],
+  ])('are kept whole, unread, when their entry %s', (_what, text) => {
+    const entries = unzipSync(writeDocument(charted()));
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.charts).toBeUndefined();
+    expect(() => writeDocument({ ...back, charts: [PER_REGION] })).toThrow(
+      `${CHARTS_ENTRY} is one this build cannot read`,
+    );
+
+    const again = unzipSync(writeDocument(back));
+    expect(strFromU8(again[CHARTS_ENTRY]!)).toBe(text);
   });
 });
