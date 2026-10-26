@@ -49,9 +49,11 @@ export {
   relativeTo,
   samePath,
 } from './path.ts';
-export type { ChartColumn, Plot } from './chart.ts';
+export { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from './chart.ts';
+export type { Chart, ChartColumn, Plot } from './chart.ts';
 export {
   formatFor,
+  parseChart,
   readContainer,
   readDocument,
   versionFor,

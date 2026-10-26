@@ -17,7 +17,8 @@ import {
 import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
-import type { ChartColumn, Plot } from './chart.ts';
+import type { Chart, ChartColumn, Plot } from './chart.ts';
+import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from './chart.ts';
 import type {
   Document,
   FileSource,
@@ -960,7 +961,37 @@ function parseEdit(where: string, v: unknown): Edit {
   return e;
 }
 
+const NAME: Expects<string> = {
+  is: (v): v is string => isText(v) && v !== '',
+  not: 'is empty or not text',
+};
+const TITLE: Expects<string> = {
+  is: (v): v is string => isText(v) && v.length <= TITLE_AT_MOST,
+  not: `is not text of at most ${TITLE_AT_MOST} characters`,
+};
+const MINUTES: Expects<number> = {
+  is: (v): v is number => isByteCount(v) && v <= REFRESH_MINUTES_AT_MOST,
+  not: `is not a whole number of minutes from 0 to ${REFRESH_MINUTES_AT_MOST}`,
+};
 const COL: Expects<number> = { is: isByteCount, not: 'is not a column number' };
+
+/**
+ * parseChart reads one chart from view/charts.json or from a `chart`
+ * request, so the file and the wire accept the same records. `where` names
+ * it in an error before its id is known. A key it does not read is left out.
+ */
+export function parseChart(where: string, value: unknown): Chart {
+  const o = asRecord(value);
+  const id = required(o, 'id', NAME, where);
+  const chart = `${where} (${id})`;
+  return {
+    id,
+    source: required(o, 'source', NAME, chart),
+    plot: parsePlot(`${chart}: plot`, o['plot']),
+    title: required(o, 'title', TITLE, chart),
+    refresh: required(o, 'refresh', MINUTES, chart),
+  };
+}
 
 /**
  * parsePlot reads what a chart draws. Bars and pie name the `by` column whose
