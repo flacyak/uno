@@ -131,6 +131,9 @@ export interface Opening {
   /** The charts of a .uno over the sources it holds, oldest first, each id
    * once. Empty otherwise. */
   charts: Chart[];
+  /** The ids of the charts it carries but cannot show, which a new chart
+   * cannot take. Empty otherwise. */
+  carriedIds: string[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
