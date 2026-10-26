@@ -7,6 +7,9 @@ import { unzipSync } from 'fflate';
 import { expect, test } from 'vite-plus/test';
 
 import {
+  CHARTS_AT_MOST,
+  CHARTS_ENTRY,
+  CHARTS_VERSION,
   LOG_ENTRY,
   MANIFEST_ENTRY,
   STATE_ENTRY,
@@ -51,9 +54,14 @@ function newer(source: string): CarriedChart {
   return { source, json };
 }
 
-/** opened opens a .uno of a north and a south source holding `charts` and
- * `carried`. */
-function opened(engine: Engine, charts: Chart[], carried: CarriedChart[] = []) {
+/** opened opens a .uno of a north and a south source holding `charts`,
+ * `carried`, and the entries in `extra`. */
+function opened(
+  engine: Engine,
+  charts: Chart[],
+  carried: CarriedChart[] = [],
+  extra = new Map<string, Uint8Array>(),
+) {
   const uno = writeDocument({
     manifest: newManifest(),
     sources: [
@@ -64,7 +72,7 @@ function opened(engine: Engine, charts: Chart[], carried: CarriedChart[] = []) {
     log: [],
     charts,
     carriedCharts: carried,
-    extra: new Map(),
+    extra,
     at: '',
   });
   return engine.open({ name: 'q3.uno', blob: new Blob([new Uint8Array(uno)]) });
@@ -216,6 +224,46 @@ test('an unchart request removes the chart it names, and refuses one there is no
 
     const back = readContainer('q3.uno', await saved(engine));
     expect(back.charts).toStrictEqual([SOUTH]);
+  } finally {
+    done();
+  }
+});
+
+test('a chart past the most a workspace keeps is refused, counting the carried ones', async () => {
+  const { engine, done } = connect();
+  try {
+    // The .uno leaves room for one chart more, the last a workspace keeps.
+    const carried = [newer('north')];
+    const charts = Array.from(
+      { length: CHARTS_AT_MOST - carried.length - 1 },
+      (_, i) => ({ ...NORTH, id: `c${i + 1}` }),
+    );
+    await opened(engine, charts, carried);
+    await engine.chart({ ...SOUTH, id: 'last' });
+    const past = { ...SOUTH, id: 'one-more' };
+    const refused = { said: { t: 'charts-at-most', limit: CHARTS_AT_MOST } };
+    await expect(engine.chart(past)).rejects.toMatchObject(refused);
+    // One that replaces a chart takes no place of its own.
+    await engine.chart({ ...NORTH, title: 'Rows per region' });
+  } finally {
+    done();
+  }
+});
+
+test('charts this build cannot read are written back whole, and refuse every change', async () => {
+  const { engine, done } = connect();
+  try {
+    const json = { version: CHARTS_VERSION + 1, charts: [NORTH] };
+    const entry = new TextEncoder().encode(JSON.stringify(json));
+    const extra = new Map([[CHARTS_ENTRY, entry]]);
+    const added = await opened(engine, [], [], extra);
+    expect(added.charts).toStrictEqual([]);
+    expect(added.chartsNote).toStrictEqual({ t: 'charts-newer' });
+    const refused = { said: { t: 'charts-newer' } };
+    await expect(engine.chart(SOUTH)).rejects.toMatchObject(refused);
+    await expect(engine.unchart(NORTH.id)).rejects.toMatchObject(refused);
+
+    expect(unzipSync(await saved(engine))[CHARTS_ENTRY]).toStrictEqual(entry);
   } finally {
     done();
   }

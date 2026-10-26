@@ -51,7 +51,11 @@ export {
   relativeTo,
   samePath,
 } from './path.ts';
-export { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from './chart.ts';
+export {
+  CHARTS_AT_MOST,
+  REFRESH_MINUTES_AT_MOST,
+  TITLE_AT_MOST,
+} from './chart.ts';
 export type {
   CarriedChart,
   Chart,

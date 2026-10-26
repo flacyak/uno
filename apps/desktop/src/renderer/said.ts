@@ -124,6 +124,7 @@ const SAYS: Sentences<Said> = {
 
   "charts-kept": (s) => m.charts_kept({ count: s.count }),
   "charts-left-out": (s) => m.charts_left_out({ count: s.count }),
+  "charts-newer": m.charts_newer,
 
   "only-source": (s) => m.refused_only_source({ name: s.name }),
   "append-to-absent": (s) => m.refused_append_to_absent({ name: s.name }),
@@ -147,6 +148,7 @@ const SAYS: Sentences<Said> = {
   "workspace-closed": m.refused_workspace_closed,
   "no-such-source": (s) => m.refused_no_such_source({ id: s.id }),
   "no-such-chart": (s) => m.refused_no_such_chart({ id: s.id }),
+  "charts-at-most": (s) => m.refused_charts_at_most({ limit: num(s.limit) }),
   "source-absent": (s) => m.refused_source_absent({ name: s.name }),
   "point-one-at-several": (s) =>
     m.refused_point_one_at_several({ file: s.file, count: s.count, name: s.name }),

@@ -69,6 +69,8 @@ export type Said =
   // What an open of a .uno did with the charts it cannot show.
   | { t: 'charts-kept'; count: number }
   | { t: 'charts-left-out'; count: number }
+  /** Also the refusal of chart and unchart while the charts cannot be read. */
+  | { t: 'charts-newer' }
 
   // What a workspace refuses.
   | { t: 'only-source'; name: string }
@@ -90,6 +92,7 @@ export type Said =
   | { t: 'workspace-closed' }
   | { t: 'no-such-source'; id: string }
   | { t: 'no-such-chart'; id: string }
+  | { t: 'charts-at-most'; limit: number }
   | { t: 'source-absent'; name: string }
   | { t: 'point-one-at-several'; file: string; count: number; name: string }
   | { t: 'point-several-at-one'; name: string; count: number; file: string }
@@ -244,6 +247,8 @@ const SENTENCES: Sentences<Said> = {
     s.count === 1
       ? '1 chart named a source this workspace no longer has, and was left out'
       : `${s.count} charts named a source this workspace no longer has, and were left out`,
+  'charts-newer': () =>
+    "this workspace's charts are in a form this uno cannot read · they are kept as they were, and cannot be changed here",
 
   'only-source': (s) =>
     `${s.name} is the only source here, and a workspace needs one`,
@@ -267,6 +272,8 @@ const SENTENCES: Sentences<Said> = {
   'workspace-closed': () => 'the workspace was closed',
   'no-such-source': (s) => `no source called ${s.id} is open`,
   'no-such-chart': (s) => `no chart called ${s.id} is in the workspace`,
+  'charts-at-most': (s) =>
+    `a workspace keeps at most ${s.limit} charts · remove one to make another`,
   'source-absent': (s) =>
     `${s.name} has no file behind it · point it at one to read its rows`,
   'point-one-at-several': (s) =>
