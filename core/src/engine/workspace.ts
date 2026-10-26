@@ -399,7 +399,7 @@ export class Workspace {
           ] as const,
       ),
     );
-    this.keepCharts(doc);
+    const chartsNote = this.keepCharts(doc);
     for (const [src, source] of opened) {
       this.keep(source);
       this.states.set(src.id, src.state);
@@ -413,6 +413,7 @@ export class Workspace {
       showing: doc.active,
       cells: doc.sources.map((s) => ({ source: s.id, ...s.state.active })),
       charts: [...this.charts.values()],
+      chartsNote,
     };
   }
 
@@ -420,9 +421,9 @@ export class Workspace {
    * keepCharts keeps a .uno's charts, and the ones it carries. A chart whose
    * id is already kept is carried too, so no chart takes another's place. A
    * chart over a source the .uno does not hold, which a build before charts
-   * may have removed, is left out.
+   * may have removed, is left out. It returns what the open says of them.
    */
-  private keepCharts(doc: Document): void {
+  private keepCharts(doc: Document): Said | undefined {
     const held = new Set(doc.sources.map((s) => s.id));
     for (const chart of doc.charts ?? []) {
       if (!held.has(chart.source)) continue;
@@ -437,6 +438,8 @@ export class Workspace {
       // One that names no source has none to lose.
       if (c.source === '' || held.has(c.source)) this.carriedCharts.push(c);
     }
+    const kept = this.carriedCharts.length;
+    return kept === 0 ? undefined : { t: 'charts-kept', count: kept };
   }
 
   /**
