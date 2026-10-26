@@ -25,6 +25,11 @@ const SEEDS = 3;
 // One row in this many has a blank y.
 const BLANK_EVERY = 3;
 
+/** blockOf returns the block that holds `row`. */
+function blockOf(row: number): number {
+  return Math.floor(row / BLOCK_ROWS);
+}
+
 /** rowsOf returns the rows of `blocks`, block by block. */
 function rowsOf(blocks: number[]): number[] {
   const offsets = [...Array(BLOCK_ROWS).keys()];
@@ -34,7 +39,7 @@ function rowsOf(blocks: number[]): number[] {
 /** folded folds `rows` in the order `order` gives. */
 function folded(rows: Row[], order = [...rows.keys()]): SampleFold {
   const fold = new SampleFold();
-  for (const row of order) fold.add(row, ...rows[row]!);
+  for (const row of order) fold.add(blockOf(row), row, ...rows[row]!);
   return fold;
 }
 
@@ -43,14 +48,14 @@ test('a sample fold sends the points of the rows of least rank', () => {
   const y = (r: number) => (r % BLANK_EVERY === 0 ? '' : `${2 * r}`);
   const ranked = [...Array(ROWS).keys()].sort(byRank);
   const fold = new SampleFold();
-  for (let r = 0; r < ROWS; r++) fold.add(r, `${r}`, y(r));
+  for (let r = 0; r < ROWS; r++) fold.add(blockOf(r), r, `${r}`, y(r));
   // A row left out keeps its place in the sample, with no point.
   const sampled = ranked.slice(0, SCATTER_POINTS_AT_MOST);
   const x = sampled.filter((r) => y(r) !== '');
   expect(fold.snapshot()).toMatchObject({ x, y: x.map((r) => 2 * r) });
   // Rows that all read as numbers fill the sample, whatever their order.
   const full = new SampleFold();
-  for (const r of ranked) full.add(r, `${r}`, `${r}`);
+  for (const r of ranked) full.add(blockOf(r), r, `${r}`, `${r}`);
   expect(full.snapshot().x).toHaveLength(SCATTER_POINTS_AT_MOST);
 });
 
@@ -95,4 +100,9 @@ test('a sample fold of revenue against units reads the sales sheet', () => {
   expect(sample.x).toHaveLength(SCATTER_POINTS_AT_MOST - 3);
   expect(sample.plotted).toBe(4808);
   expect(sample.skipped).toEqual({ blank: 4, unparsed: 0 });
+  expect(sample.least).toEqual({ x: 180, y: 7200 });
+  expect(sample.most).toEqual({ x: 2600, y: 104000 });
+  // A fold with nothing plotted reads its least and most as 0.
+  const none = new SampleFold().snapshot();
+  expect(none).toMatchObject({ least: { x: 0, y: 0 }, most: { x: 0, y: 0 } });
 });
