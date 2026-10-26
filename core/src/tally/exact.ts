@@ -46,6 +46,18 @@ export class ExactSum {
     this.count = kept;
   }
 
+  /** remove takes `x` back out, as adding its negation does. */
+  remove(x: number): void {
+    this.add(-x);
+  }
+
+  /** merge adds what `other` holds, and a sum merged into itself doubles. */
+  merge(other: ExactSum): void {
+    const units = other.units;
+    for (const p of other.partials.slice(0, other.count)) this.add(p);
+    this.units += units;
+  }
+
   /** value is the sum rounded to the nearest double, ties to even. */
   value(): number {
     if (this.units !== 0) {
