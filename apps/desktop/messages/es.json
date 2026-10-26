@@ -456,6 +456,7 @@
       }
     }
   ],
+  "charts_newer": "los gráficos de este espacio de trabajo están en una forma que esta versión de uno no puede leer · se conservan tal como estaban, y aquí no se pueden cambiar",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",
@@ -485,6 +486,7 @@
   "refused_workspace_closed": "el espacio de trabajo se cerró",
   "refused_no_such_source": "no hay ninguna fuente abierta llamada {id}",
   "refused_no_such_chart": "no hay ningún gráfico llamado {id} en el espacio de trabajo",
+  "refused_charts_at_most": "un espacio de trabajo guarda como mucho {limit} gráficos · quita uno para hacer otro",
   "refused_source_absent": "{name} no tiene un archivo detrás · dirígelo a uno para leer sus filas",
   "refused_point_one_at_several": [
     {

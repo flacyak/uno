@@ -440,6 +440,7 @@
       }
     }
   ],
+  "charts_newer": "this workspace's charts are in a form this uno cannot read · they are kept as they were, and cannot be changed here",
   "refused_only_source": "{name} is the only source here, and a workspace needs one",
   "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
   "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
@@ -468,6 +469,7 @@
   "refused_workspace_closed": "the workspace was closed",
   "refused_no_such_source": "no source called {id} is open",
   "refused_no_such_chart": "no chart called {id} is in the workspace",
+  "refused_charts_at_most": "a workspace keeps at most {limit} charts · remove one to make another",
   "refused_source_absent": "{name} has no file behind it · point it at one to read its rows",
   "refused_point_one_at_several": [
     {
