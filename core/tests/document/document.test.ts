@@ -927,14 +927,11 @@ describe("a workspace's charts", () => {
     );
   });
 
-  test('come back as they were saved, and through a save not given them', () => {
+  test('come back as they were saved, and not as an extra too', () => {
     const bytes = writeDocument(charted([PER_REGION]));
     const back = readContainer('sales.uno', bytes);
     expect(back.charts).toStrictEqual([SAVED]);
-
-    // A caller that keeps only the extras it opened with keeps them too.
-    const again = writeDocument({ ...charted(), extra: back.extra });
-    expect(readContainer('sales.uno', again).charts).toStrictEqual([SAVED]);
+    expect(back.extra.has(CHARTS_ENTRY)).toBe(false);
   });
 
   test('come back through a save by a build that does not know them', () => {
