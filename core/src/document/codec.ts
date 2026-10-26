@@ -17,7 +17,7 @@ import {
 import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
-import type { Chart, ChartColumn, Plot } from './chart.ts';
+import type { Chart, ChartColumn, ChartPlace, Plot } from './chart.ts';
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from './chart.ts';
 import type {
   Document,
@@ -973,6 +973,17 @@ const MINUTES: Expects<number> = {
   is: (v): v is number => isByteCount(v) && v <= REFRESH_MINUTES_AT_MOST,
   not: `is not a whole number of minutes from 0 to ${REFRESH_MINUTES_AT_MOST}`,
 };
+const FRACTION: Expects<number> = {
+  is: (v): v is number => typeof v === 'number' && v >= 0 && v <= 1,
+  not: 'is not a fraction from 0 to 1',
+};
+/** The least width or height: the smallest whole px, as a save keeps them. */
+const SIZE_PX_AT_LEAST = 1;
+const PIXELS: Expects<number> = {
+  is: (v): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && v >= SIZE_PX_AT_LEAST,
+  not: `is not a size of at least ${SIZE_PX_AT_LEAST} px`,
+};
 const COL: Expects<number> = { is: isByteCount, not: 'is not a column number' };
 
 /**
@@ -989,6 +1000,7 @@ export function parseChart(where: string, value: unknown): Chart {
     source: required(o, 'source', NAME, chart),
     plot: parsePlot(`${chart}: plot`, o['plot']),
     title: required(o, 'title', TITLE, chart),
+    place: parsePlace(`${chart}: place`, o['place']),
     refresh: required(o, 'refresh', MINUTES, chart),
   };
 }
@@ -1015,6 +1027,17 @@ export function parsePlot(where: string, value: unknown): Plot {
     default:
       throw new Error(`${where}: this build cannot draw ${JSON.stringify(t)}`);
   }
+}
+
+/** parsePlace reads where a chart's window sits. */
+function parsePlace(where: string, value: unknown): ChartPlace {
+  const p = asRecord(value);
+  return {
+    x: required(p, 'x', FRACTION, where),
+    y: required(p, 'y', FRACTION, where),
+    width: required(p, 'width', PIXELS, where),
+    height: required(p, 'height', PIXELS, where),
+  };
 }
 
 // ------------------------------------------------------------- writing

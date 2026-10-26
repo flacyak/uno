@@ -27,6 +27,18 @@ export type Plot =
   /** One point per row, x against y, both number columns. */
   | { t: 'scatter'; x: ChartColumn; y: ChartColumn };
 
+/**
+ * Where a chart's window sits. width and height are CSS px. x and y are
+ * fractions (0..1) of the room left beside and below the window, so a window
+ * at the right edge stays at the right edge on any screen.
+ */
+export interface ChartPlace {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface Chart {
   /** Unique in the workspace. uno makes 'c1', 'c2', ..., and reads any name. */
   id: string;
@@ -35,6 +47,7 @@ export interface Chart {
   plot: Plot;
   /** The person's title, or '' for the one the plot makes. */
   title: string;
+  place: ChartPlace;
   /** Minutes between scheduled checks of the source. 0 is by hand only. */
   refresh: number;
 }
