@@ -19,7 +19,7 @@ import type { Edit } from '@sheet';
 import type { Sheet } from '@sheet';
 import { extensionOf } from '@ingest';
 import type { FileRef, HeaderMode } from '@store';
-import type { Chart } from './chart.ts';
+import type { CarriedChart, Chart } from './chart.ts';
 import { against, baseOf, dirOf, relativeTo } from './path.ts';
 
 /**
@@ -350,8 +350,8 @@ export interface Logged {
 /**
  * Document is one .uno in memory.
  *
- * `writeDocument` reads manifest, sources, active, log, charts, at and extra.
- * `sheets` is set only by `readDocument` and ignored by the writer.
+ * `writeDocument` reads every field but `sheets`, which is set only by
+ * `readDocument` and ignored by the writer.
  */
 export interface Document {
   /**
@@ -365,8 +365,11 @@ export interface Document {
   active: string;
   log: Logged[];
 
-  /** The workspace's charts, oldest first. Without any, no entry is written. */
+  /** The workspace's charts, oldest first. With none, and none carried, the
+   * writer adds no entry of its own. */
   charts?: readonly Chart[];
+  /** The charts this build cannot read, written back after `charts`. */
+  carriedCharts?: readonly CarriedChart[];
 
   /**
    * Where the .uno itself is, so a source under the same folder is stored
