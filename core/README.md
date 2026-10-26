@@ -16,6 +16,7 @@ codebase.
 | `ingest`   | bytes to rows: a CSV reader, a record scanner, a sniff   |
 | `engine`   | open a file without loading it: index, pages, passes     |
 | `said`     | what the engine says to a person, as data                |
+| `tally`    | a column's numbers added up for its charts, exactly      |
 | `pattern`  | the recogniser: watch edits, propose the rest            |
 | `document` | the `.uno` codec, `Uint8Array` in and out                |
 | `library`  | the `.unof` codecs, formulas and connections, as strings |
