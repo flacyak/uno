@@ -17,8 +17,15 @@ import {
 import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
-import type { Chart, ChartColumn, ChartPlace, Plot } from './chart.ts';
+import type {
+  CarriedChart,
+  Chart,
+  ChartColumn,
+  ChartPlace,
+  Plot,
+} from './chart.ts';
 import {
+  CHARTS_AT_MOST,
   PLACE_DIGITS,
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
@@ -254,10 +261,11 @@ export function writeDocument(d: Document): Uint8Array {
   // A workspace without charts writes no entry for them, so it saves as it
   // did before charts.
   const charts = d.charts ?? [];
-  if (charts.length > 0) {
+  const carried = d.carriedCharts ?? [];
+  if (charts.length + carried.length > 0) {
     entries.push({
       name: CHARTS_ENTRY,
-      bytes: encoder.encode(formatJSON(chartsJSON(charts))),
+      bytes: encoder.encode(formatJSON(chartsJSON(charts, carried))),
     });
   }
 
@@ -1145,15 +1153,29 @@ function sheetStateJSON(s: State): {
 
 /**
  * chartsJSON writes each chart through parseChart, which refuses one a read
- * would refuse and gives its keys in the order the file keeps.
+ * would refuse and gives its keys in the order the file keeps. The carried
+ * ones follow as they were read. More than CHARTS_AT_MOST in all are refused,
+ * since a read keeps such an entry whole.
  */
-function chartsJSON(charts: readonly Chart[]): unknown {
+function chartsJSON(
+  charts: readonly Chart[],
+  carried: readonly CarriedChart[],
+): unknown {
+  const count = charts.length + carried.length;
+  if (count > CHARTS_AT_MOST) {
+    throw new Error(
+      `${count} charts are more than the ${CHARTS_AT_MOST} a workspace keeps`,
+    );
+  }
   return {
     version: CHARTS_VERSION,
-    charts: charts.map((chart) => {
-      const c = parseChart(CHARTS_ENTRY, chart);
-      return { ...c, place: placeJSON(c.place) };
-    }),
+    charts: [
+      ...charts.map((chart) => {
+        const c = parseChart(CHARTS_ENTRY, chart);
+        return { ...c, place: placeJSON(c.place) };
+      }),
+      ...carried.map((c): unknown => JSON.parse(c.json)),
+    ],
   };
 }
 

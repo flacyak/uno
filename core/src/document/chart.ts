@@ -3,6 +3,12 @@
  * columns. view/charts.json keeps its record and a `chart` request carries it.
  */
 
+/**
+ * The most charts a workspace keeps, carried ones included. Sixteen windows
+ * of a new chart's size, four by four, fill most of a full HD screen.
+ */
+export const CHARTS_AT_MOST = 16;
+
 /** The longest title: a long sentence, counted as an input's maxlength does. */
 export const TITLE_AT_MOST = 200;
 
@@ -56,4 +62,11 @@ export interface Chart {
   place: ChartPlace;
   /** Minutes between scheduled checks of the source. 0 is by hand only. */
   refresh: number;
+}
+
+/** A chart parseChart refuses, such as a newer build's, kept as its JSON. */
+export interface CarriedChart {
+  /** The source it names, or '' for none, so it can go with its source. */
+  source: string;
+  json: string;
 }
