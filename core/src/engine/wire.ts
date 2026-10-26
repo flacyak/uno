@@ -6,6 +6,10 @@
  * envelope, then the bytes in order. One message is one frame, so each
  * frame is decoded on its own.
  *
+ * Every frame is numbered, and says the highest number heard from the other
+ * side, so a session can tell what the other side has and send again what it
+ * has not once a socket drops. A frame may carry the acknowledgement alone.
+ *
  * Dates, Maps, undefined, and non-finite numbers are tagged in the JSON so
  * they round-trip. Bytes ride beside the JSON, so a browser can send a
  * dropped file as a Blob and leave the socket to read it.
@@ -40,25 +44,41 @@ const LENGTH_BYTES = 4;
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
-/** A binary frame's JSON: the message, and the length of each byte run after it. */
+/**
+ * Carried is what one frame holds: the highest number heard from the other
+ * side, and a numbered message, or the acknowledgement alone.
+ */
+export type Carried =
+  | { seq: number; ack: number; message: unknown }
+  | { seq?: undefined; ack: number; message?: undefined };
+
+/** A frame's JSON: the numbers, the message, and in a binary frame the length of each byte run after it. */
 interface Envelope {
-  sizes: number[];
-  message: Json;
+  seq?: number;
+  ack: number;
+  sizes?: number[];
+  message?: Json;
 }
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
 /**
- * encode writes a message as a frame. It throws on a value outside the
- * encoding, such as a class instance or a function.
+ * encode writes what a frame carries as a frame. It throws on a value
+ * outside the encoding, such as a class instance or a function.
  */
-export function encode(message: unknown): Frame {
+export function encode(carried: Carried): Frame {
+  if (carried.seq === undefined) return JSON.stringify({ ack: carried.ack });
   const attached: Array<Uint8Array<ArrayBuffer> | Blob> = [];
-  const json = write(message, attached);
-  if (attached.length === 0) return JSON.stringify(json);
+  const json = write(carried.message, attached);
+  const envelope: Envelope = {
+    seq: carried.seq,
+    ack: carried.ack,
+    message: json,
+  };
+  if (attached.length === 0) return JSON.stringify(envelope);
 
-  const envelope: Envelope = { sizes: attached.map(sizeOf), message: json };
+  envelope.sizes = attached.map(sizeOf);
   const head = encoder.encode(JSON.stringify(envelope));
   const length = new Uint8Array(LENGTH_BYTES);
   new DataView(length.buffer).setUint32(0, head.byteLength);
@@ -87,11 +107,11 @@ export function frameBytes(frame: Frame): number {
 }
 
 /**
- * decode reads a frame back into a message. It throws on a malformed frame.
- * The result is `unknown`; the caller checks the message's shape.
+ * decode reads a frame back into what it carries. It throws on a malformed
+ * frame. The message is `unknown`; the caller checks its shape.
  */
-export function decode(frame: string | Uint8Array): unknown {
-  if (typeof frame === 'string') return read(parse(frame), []);
+export function decode(frame: string | Uint8Array): Carried {
+  if (typeof frame === 'string') return carried(parse(frame), []);
 
   if (frame.byteLength < LENGTH_BYTES)
     throw new Error('a binary frame too short to hold a message');
@@ -101,12 +121,8 @@ export function decode(frame: string | Uint8Array): unknown {
     throw new Error('a binary frame shorter than its own header says');
 
   const envelope = parse(decoder.decode(frame.subarray(LENGTH_BYTES, headEnd)));
-  if (
-    !isRecord(envelope) ||
-    !Array.isArray(envelope['sizes']) ||
-    !('message' in envelope)
-  ) {
-    throw new Error('a binary frame without sizes and a message');
+  if (!isRecord(envelope) || !Array.isArray(envelope['sizes'])) {
+    throw new Error('a binary frame without sizes');
   }
 
   const attached: Uint8Array[] = [];
@@ -125,7 +141,29 @@ export function decode(frame: string | Uint8Array): unknown {
       'a binary frame whose bytes do not add up to the sizes it gives',
     );
   }
-  return read(envelope['message'], attached);
+  return carried(envelope, attached);
+}
+
+/** counted accepts a number of frames: a non-negative whole number. */
+function counted(value: Json | undefined): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** carried reads the numbers off an envelope, and the message when it holds one. */
+function carried(envelope: Json, attached: readonly Uint8Array[]): Carried {
+  if (!isRecord(envelope) || !counted(envelope['ack'])) {
+    throw new Error('a frame without an acknowledgement');
+  }
+  const ack = envelope['ack'];
+  if (!('seq' in envelope)) return { ack };
+  if (!counted(envelope['seq']) || !('message' in envelope)) {
+    throw new Error('a frame numbered without a message');
+  }
+  return {
+    seq: envelope['seq'],
+    ack,
+    message: read(envelope['message']!, attached),
+  };
 }
 
 function parse(text: string): Json {
@@ -307,6 +345,9 @@ export function socketPort(
   const listeners: Array<(e: { data: unknown }) => void> = [];
   const closes: Array<() => void> = [];
   let closed = false;
+  /** The number of the last frame sent, and of the last one heard. */
+  let seq = 0;
+  let heard = 0;
 
   socket.binaryType = 'arraybuffer';
   socket.addEventListener('message', (e) => {
@@ -315,7 +356,10 @@ export function socketPort(
     if (typeof data !== 'string' && !(data instanceof Uint8Array)) return;
     let message: unknown;
     try {
-      message = decode(data);
+      const got = decode(data);
+      if (got.seq === undefined) return;
+      heard = got.seq;
+      message = got.message;
     } catch (err) {
       message = trouble(`the engine sent ${messageOf(err)}`);
     }
@@ -335,7 +379,8 @@ export function socketPort(
   return {
     postMessage(message) {
       if (closed) return;
-      const frame = encode(message);
+      const frame = encode({ seq: seq + 1, ack: heard, message });
+      seq++;
       const weight = frameBytes(frame);
       if (weight > limit) {
         throw new Error(

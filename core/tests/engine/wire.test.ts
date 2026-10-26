@@ -18,6 +18,7 @@ import {
   socketPort,
 } from '@engine';
 import type {
+  Carried,
   Frame,
   MessagePortLike,
   Reply,
@@ -37,8 +38,13 @@ async function join(frame: Frame): Promise<string | Uint8Array> {
   return new Uint8Array(await new Blob(frame).arrayBuffer());
 }
 
+/** numbered is a message as the first frame of a session carries it. */
+function numbered(message: unknown): Carried {
+  return { seq: 1, ack: 0, message };
+}
+
 async function across(message: unknown): Promise<unknown> {
-  return decode(await join(encode(message)));
+  return decode(await join(encode(numbered(message)))).message;
 }
 
 test('plain data is one text frame, and reads back equal', async () => {
@@ -49,7 +55,7 @@ test('plain data is one text frame, and reads back equal', async () => {
     rows: [['a', '1']],
     raws: [null],
   };
-  const frame = encode(message);
+  const frame = encode(numbered(message));
   expect(typeof frame).toBe('string');
   expect(await across(message)).toEqual(message);
 });
@@ -80,7 +86,7 @@ test('an undefined field is an absent one', async () => {
 
 test('bytes ride beside the JSON, as the pieces they were handed over as', async () => {
   const saved = new Uint8Array([0, 1, 2, 253, 254, 255]);
-  const frame = encode({ t: 'saved', id: 3, bytes: saved });
+  const frame = encode(numbered({ t: 'saved', id: 3, bytes: saved }));
   expect(Array.isArray(frame)).toBe(true);
   // The same array, by identity.
   expect(frame).toContain(saved);
@@ -94,15 +100,17 @@ test('bytes ride beside the JSON, as the pieces they were handed over as', async
 test('a Blob crosses with its bytes and its type, and several keep their order', async () => {
   const first = new Blob(['a,b\n1,2\n'], { type: 'text/csv' });
   const second = new Blob(['c\n3\n']);
-  const frame = encode({
-    parts: [
-      { name: 'one.csv', blob: first },
-      { name: 'two.csv', blob: second },
-    ],
-  });
+  const frame = encode(
+    numbered({
+      parts: [
+        { name: 'one.csv', blob: first },
+        { name: 'two.csv', blob: second },
+      ],
+    }),
+  );
   expect(frame).toContain(first);
 
-  const back = decode(await join(frame)) as {
+  const back = decode(await join(frame)).message as {
     parts: Array<{ name: string; blob: Blob }>;
   };
   expect(back.parts.map((p) => p.name)).toEqual(['one.csv', 'two.csv']);
@@ -120,10 +128,9 @@ test("an object of somebody's own that uses the tag as a key is still theirs", a
 });
 
 test('a key called __proto__ is a key, and reaches no prototype', () => {
-  const back = decode('{"__proto__":{"polluted":true}}') as Record<
-    string,
-    unknown
-  >;
+  const back = decode(
+    '{"seq":1,"ack":0,"message":{"__proto__":{"polluted":true}}}',
+  ).message as Record<string, unknown>;
   expect(Object.getPrototypeOf(back)).toBe(Object.prototype);
   expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
   expect(Object.keys(back)).toEqual(['__proto__']);
@@ -131,20 +138,22 @@ test('a key called __proto__ is a key, and reaches no prototype', () => {
 
 test('what cannot be written down is refused at the sender, by name', () => {
   class Sheet {}
-  expect(() => encode({ sheet: new Sheet() })).toThrow(
+  expect(() => encode(numbered({ sheet: new Sheet() }))).toThrow(
     'a Sheet cannot cross to an engine',
   );
-  expect(() => encode({ fn: () => 1 })).toThrow(
+  expect(() => encode(numbered({ fn: () => 1 }))).toThrow(
     'a function cannot cross to an engine',
   );
 });
 
 test('a frame this did not write is refused in a sentence', async () => {
   expect(() => decode('{not json')).toThrow('a frame that is not JSON');
-  expect(() => decode('{"$":"sheet"}')).toThrow('written down as "sheet"');
-  expect(() => decode('{"$":"bytes","i":0}')).toThrow(
-    'naming bytes its frame does not hold',
+  expect(() => decode('{"seq":1,"ack":0,"message":{"$":"sheet"}}')).toThrow(
+    'written down as "sheet"',
   );
+  expect(() =>
+    decode('{"seq":1,"ack":0,"message":{"$":"bytes","i":0}}'),
+  ).toThrow('naming bytes its frame does not hold');
   expect(() => decode(new Uint8Array([0, 0]))).toThrow(
     'too short to hold a message',
   );
@@ -153,15 +162,38 @@ test('a frame this did not write is refused in a sentence', async () => {
   );
 
   const whole = (await join(
-    encode({ bytes: new Uint8Array(8) }),
+    encode(numbered({ bytes: new Uint8Array(8) })),
   )) as Uint8Array;
   expect(() => decode(whole.subarray(0, whole.length - 1))).toThrow(
     'do not add up',
   );
 });
 
+test('a frame is numbered, says what was heard, or carries the acknowledgement alone', async () => {
+  expect(decode('{"ack":4}')).toEqual({ ack: 4 });
+  expect(encode({ ack: 4 })).toBe('{"ack":4}');
+  const frame = encode({ seq: 9, ack: 4, message: { t: 'close' } });
+  expect(frame).toBe('{"seq":9,"ack":4,"message":{"t":"close"}}');
+  const binary = decode(
+    await join(
+      encode({ seq: 2, ack: 1, message: { bytes: new Uint8Array(3) } }),
+    ),
+  );
+  expect(binary.seq).toBe(2);
+  expect(binary.ack).toBe(1);
+
+  expect(() => decode('{"t":"close"}')).toThrow('without an acknowledgement');
+  expect(() => decode('{"ack":-1}')).toThrow('without an acknowledgement');
+  expect(() => decode('{"seq":1,"ack":0}')).toThrow(
+    'numbered without a message',
+  );
+  expect(() => decode('{"seq":1.5,"ack":0,"message":1}')).toThrow(
+    'numbered without a message',
+  );
+});
+
 test('frameBytes weighs a binary frame exactly', () => {
-  const frame = encode({ blob: new Blob([new Uint8Array(1000)]) });
+  const frame = encode(numbered({ blob: new Blob([new Uint8Array(1000)]) }));
   const pieces = frame as Array<Uint8Array | Blob>;
   expect(frameBytes(frame)).toBe(
     pieces.reduce(
