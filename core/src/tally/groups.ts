@@ -6,6 +6,7 @@ import { compareStrings, runes } from '@go';
 import { parse } from '@num';
 
 import { ExactSum } from './exact.ts';
+import type { Skipped } from './skipped.ts';
 
 /**
  * DISTINCT_AT_MOST is how many values a fold keeps a group for, far more than
@@ -23,12 +24,6 @@ export const LABEL_AT_MOST = 256;
 
 /** What a fold ranks its groups by: their rows, or the sum of their cells. */
 export type Measure = 'rows' | 'sum';
-
-/** The cells a sum left out: empty ones, and ones that are not numbers. */
-export interface Skipped {
-  blank: number;
-  unparsed: number;
-}
 
 /** One value's rows, and the sum of their cells. */
 export interface Group {

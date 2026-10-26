@@ -5,9 +5,12 @@
 import { expect, test } from 'vite-plus/test';
 
 import { TUNING } from '@engine/rows';
+import { read } from '@ingest';
+import { parse } from '@num';
 import { byRank } from '@tally/rank';
 import { SCATTER_POINTS_AT_MOST, SampleFold } from '@tally/sample';
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
+import { REVENUE, UNITS, bytes } from '@core-tests/testdata/sales-q3';
 
 /** A row's x cell and y cell. */
 type Row = [string, string];
@@ -70,5 +73,26 @@ test('a sample fold reads the same block by block, in any order', () => {
     expect(merged.snapshot(), `seed ${seed}`).toEqual(whole);
     const order = rowsOf(shuffled(blocks, random));
     expect(folded(rows, order).snapshot()).toEqual(whole);
+    // A row with a word in either cell is not a number, else it is blank.
+    const out = rows.filter((row) => row.some((c) => parse(c) === undefined));
+    const words = out.filter((row) => row.includes('n/a')).length;
+    expect(whole.plotted).toBe(ROWS - out.length);
+    expect(whole.skipped).toEqual({
+      blank: out.length - words,
+      unparsed: words,
+    });
   }
+});
+
+test('a sample fold of revenue against units reads the sales sheet', () => {
+  const sheet = read('sales-q3.csv', bytes);
+  const rows = Array.from({ length: sheet.rows() }, (_, r): Row => [
+    sheet.display(r, UNITS),
+    sheet.display(r, REVENUE),
+  ]);
+  const sample = folded(rows).snapshot();
+  // Four rows are blank, and three of them rank among the first 4,096.
+  expect(sample.x).toHaveLength(SCATTER_POINTS_AT_MOST - 3);
+  expect(sample.plotted).toBe(4808);
+  expect(sample.skipped).toEqual({ blank: 4, unparsed: 0 });
 });
