@@ -862,6 +862,7 @@ describe("a workspace's charts", () => {
   /** A newer build's chart, of a kind and with a key this build does not
    * know, as this build carries it. */
   const NEWER = {
+    id: 'c2',
     source: 'sales',
     json: '{"id":"c2","source":"sales","plot":{"t":"line"},"glow":true}',
   };

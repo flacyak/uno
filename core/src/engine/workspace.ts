@@ -240,7 +240,13 @@ export class Workspace {
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
       const view = await this.view(id, ref, undefined, { signal });
-      return { opened: [this.keep(view)], showing: id, cells: [], charts: [] };
+      return {
+        opened: [this.keep(view)],
+        showing: id,
+        cells: [],
+        charts: [],
+        carriedIds: [],
+      };
     });
   }
 
@@ -415,6 +421,7 @@ export class Workspace {
       showing: doc.active,
       cells: doc.sources.map((s) => ({ source: s.id, ...s.state.active })),
       charts: [...this.charts.values()],
+      carriedIds: this.carriedCharts.map((c) => c.id),
       chartsNote,
     };
   }
@@ -435,7 +442,7 @@ export class Workspace {
         leftOut++;
       } else if (this.charts.has(chart.id)) {
         const json = JSON.stringify(chart);
-        this.carriedCharts.push({ source: chart.source, json });
+        this.carriedCharts.push({ id: chart.id, source: chart.source, json });
       } else {
         this.charts.set(chart.id, chart);
       }
@@ -686,6 +693,10 @@ export class Workspace {
     return this.serially(async () => {
       this.refuseUnreadableCharts();
       this.need(chart.source);
+      // A carried chart keeps its id, so a new chart cannot take it.
+      const taken = this.carriedCharts.some((c) => c.id === chart.id);
+      if (!this.charts.has(chart.id) && taken)
+        throw new Refusal({ t: 'chart-id-taken', id: chart.id });
       // A save writes the carried charts too, and at most CHARTS_AT_MOST.
       const count = this.charts.size + this.carriedCharts.length;
       if (!this.charts.has(chart.id) && count >= CHARTS_AT_MOST)

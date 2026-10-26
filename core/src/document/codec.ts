@@ -689,8 +689,10 @@ function readCharts(
     try {
       charts.push(parseChart(CHARTS_ENTRY, raw));
     } catch {
-      const source = asString(asRecord(raw)['source']);
-      carriedCharts.push({ source, json: JSON.stringify(raw) });
+      const o = asRecord(raw);
+      const id = asString(o['id']);
+      const source = asString(o['source']);
+      carriedCharts.push({ id, source, json: JSON.stringify(raw) });
     }
   });
   return { charts, carriedCharts };

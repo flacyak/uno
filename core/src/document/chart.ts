@@ -66,6 +66,8 @@ export interface Chart {
 
 /** A chart parseChart refuses, such as a newer build's, kept as its JSON. */
 export interface CarriedChart {
+  /** Its id, or '' for none, so a new chart cannot take it. */
+  id: string;
   /** The source it names, or '' for none, so it can go with its source. */
   source: string;
   json: string;

@@ -49,6 +49,9 @@ export interface Added {
   showing: string;
   cells: Place['cells'];
   charts: Chart[];
+  /** The ids of the charts it carries but cannot show, which a new chart
+   * cannot take. */
+  carriedIds: string[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
@@ -96,6 +99,7 @@ export class Engine {
         showing: added.showing,
         cells: added.cells,
         charts: added.charts,
+        carriedIds: added.carriedIds,
         chartsNote: added.chartsNote,
       };
     } finally {
