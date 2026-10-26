@@ -1,0 +1,77 @@
+/**
+ * @fileoverview A workspace's charts in the engine: the open of a .uno hands
+ * them over.
+ */
+
+import { expect, test } from 'vite-plus/test';
+
+import { newManifest, writeDocument } from '@document';
+import type { Chart } from '@document';
+import type { Engine } from '@engine';
+import { blobProvider } from '@store';
+import { COLS, REGION, ROWS } from '@core-tests/testdata/sales-q3';
+import { FIXTURE, connect } from './harness.ts';
+
+/** The fixture as a source of the workspace, by its path. */
+const SALES = {
+  name: 'sales-q3.csv',
+  path: FIXTURE,
+  rows: ROWS,
+  cols: COLS,
+  state: { active: { row: 0, col: 0 } },
+};
+
+/** Rows per region of the north source, placed as a save writes it. */
+const NORTH: Chart = {
+  id: 'c1',
+  source: 'north',
+  plot: { t: 'bars', by: { col: REGION, header: 'region' } },
+  title: '',
+  place: { x: 1, y: 0, width: 420, height: 260 },
+  refresh: 0,
+};
+
+/** The same chart over the south source. */
+const SOUTH: Chart = { ...NORTH, id: 'c2', source: 'south' };
+
+/** opened opens a .uno of a north and a south source holding `charts`. */
+function opened(engine: Engine, charts: Chart[]) {
+  const uno = writeDocument({
+    manifest: newManifest(),
+    sources: [
+      { ...SALES, id: 'north' },
+      { ...SALES, id: 'south' },
+    ],
+    active: 'north',
+    log: [],
+    charts,
+    extra: new Map(),
+    at: '',
+  });
+  return engine.open({ name: 'q3.uno', blob: new Blob([new Uint8Array(uno)]) });
+}
+
+test("an open hands over a .uno's charts, oldest first, and a file's none", async () => {
+  const { engine, done } = connect();
+  try {
+    const added = await opened(engine, [NORTH, SOUTH]);
+    expect(added.charts).toStrictEqual([NORTH, SOUTH]);
+
+    const file = await engine.open({ name: 'sales-q3.csv', path: FIXTURE });
+    expect(file.charts).toStrictEqual([]);
+  } finally {
+    done();
+  }
+});
+
+test('a source that opens as missing keeps its charts', async () => {
+  // With no disk to read from, each source of the .uno opens as missing.
+  const { engine, done } = connect(undefined, [blobProvider()]);
+  try {
+    const added = await opened(engine, [NORTH, SOUTH]);
+    for (const s of added.sources) expect(s.opened.link?.missing).toBeDefined();
+    expect(added.charts).toStrictEqual([NORTH, SOUTH]);
+  } finally {
+    done();
+  }
+});

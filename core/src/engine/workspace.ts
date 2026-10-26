@@ -225,7 +225,7 @@ export class Workspace {
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
       const view = await this.view(id, ref, undefined, { signal });
-      return { opened: [this.keep(view)], showing: id, cells: [] };
+      return { opened: [this.keep(view)], showing: id, cells: [], charts: [] };
     });
   }
 
@@ -395,6 +395,7 @@ export class Workspace {
       opened: [...this.sources.values()].map((v) => v.opened),
       showing: doc.active,
       cells: doc.sources.map((s) => ({ source: s.id, ...s.state.active })),
+      charts: [...(doc.charts ?? [])],
     };
   }
 

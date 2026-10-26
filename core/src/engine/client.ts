@@ -25,6 +25,7 @@ import type {
   SignIns,
   SourceRef,
 } from './protocol.ts';
+import type { Chart } from '@document';
 import { Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import type { Connection } from '@library';
@@ -41,11 +42,13 @@ export interface RowsReply extends RowsPage {
   first: number;
 }
 
-/** What an open added: one handle per source, which one to show, and where each was left. */
+/** What an open added: one handle per source, which one to show, where each
+ * was left, and the charts over them. */
 export interface Added {
   sources: SourceHandle[];
   showing: string;
   cells: Place['cells'];
+  charts: Chart[];
 }
 
 export class Engine {
@@ -90,6 +93,7 @@ export class Engine {
         sources: added.opened.map((o) => this.adopt(o)),
         showing: added.showing,
         cells: added.cells,
+        charts: added.charts,
       };
     } finally {
       signal?.removeEventListener('abort', cancel);
