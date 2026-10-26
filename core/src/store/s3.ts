@@ -16,7 +16,7 @@ import { compareStrings, concat } from '@go';
 import type { Connection } from '@library';
 import { covering } from '@library';
 import type { Provider } from '@plugin';
-import { messageOf } from '@said';
+import { Refusal, messageOf } from '@said';
 import type { FileHandler } from './index.ts';
 import { readAhead } from './ahead.ts';
 import { s3Lister } from './s3lister.ts';
@@ -229,6 +229,9 @@ class Moved extends Data.TaggedError('Moved')<{
   readonly reply: Response;
 }> {}
 
+/** Address is the URL a request goes to in `region`, signed or not. */
+type Address = (region: string, signed: boolean) => URL;
+
 /**
  * s3Requests makes an S3Requests over `opts`, with its own memory of which
  * region each bucket is in. s3Files and s3Lister each make their own.
@@ -240,14 +243,15 @@ export function s3Requests(opts: S3Options): S3Requests {
 
   /** One signed request, sent once, to the URL `at` gives for `region`. */
   async function send(
-    at: (region: string) => URL,
+    at: Address,
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
     creds: Signing,
     region: string,
   ): Promise<Response> {
-    const url = at(region);
-    if ('unsigned' in creds) return go(url, { method, headers: extra });
+    if ('unsigned' in creds)
+      return go(at(region, false), { method, headers: extra });
+    const url = at(region, true);
     const headers = signV4(
       {
         method,
@@ -270,7 +274,7 @@ export function s3Requests(opts: S3Options): S3Requests {
    */
   function attempt(
     loc: S3Location,
-    at: (region: string) => URL,
+    at: Address,
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
   ): Effect.Effect<Response, NetworkFailure | ServerFailure | Moved> {
@@ -314,7 +318,7 @@ export function s3Requests(opts: S3Options): S3Requests {
    */
   function request(
     loc: S3Location,
-    at: (region: string) => URL,
+    at: Address,
     method: 'HEAD' | 'GET',
     extra: Record<string, string>,
   ): Promise<Response> {
@@ -341,7 +345,10 @@ export function s3Requests(opts: S3Options): S3Requests {
     object: (loc, method, extra, version) =>
       request(
         loc,
-        (region) => objectUrl(loc, region, opts.endpoint, version),
+        (region, signed) =>
+          objectUrl(loc, region, opts.endpoint, version, {
+            stored: method === 'GET' && signed,
+          }),
         method,
         extra,
       ),
@@ -505,6 +512,16 @@ export function s3Files(opts: S3Options): FileHandler {
         head = await send.object(loc, 'HEAD', {});
       }
       if (!head.ok) throw await refused(send, loc, head);
+      // Only a signed GET can ask for the bytes as stored. An unsigned one
+      // would get them undone by fetch, so the object is refused here.
+      const encoding = undoneEncoding(head);
+      if (encoding !== undefined && 'unsigned' in (await opts.credentials(loc)))
+        throw new Refusal({
+          t: 'stored-encoded',
+          name: url,
+          encoding,
+          bucket: loc.bucket,
+        });
       const size = sizeOf(head, url);
       // Every range is asked for with If-Match on this ETag, so an object
       // rewritten mid-read answers 412 and the bytes stay from one version.
@@ -707,6 +724,27 @@ export function sizeOf(head: Response, url: string): number {
   return size;
 }
 
+/** The content codings fetch undoes on the way in, whatever the case. */
+const FETCH_UNDOES: ReadonlySet<string> = new Set([
+  'gzip',
+  'x-gzip',
+  'deflate',
+  'br',
+  'zstd',
+]);
+
+/**
+ * undoneEncoding is the Content-Encoding a HEAD names when it lists a coding
+ * fetch undoes, and undefined otherwise. A label fetch does not know, such as
+ * the utf-8 an upload often gives text, leaves the bytes as stored.
+ */
+function undoneEncoding(head: Response): string | undefined {
+  const named = head.headers.get('content-encoding');
+  if (named === null) return undefined;
+  const codings = named.split(',').map((c) => c.trim().toLowerCase());
+  return codings.some((c) => FETCH_UNDOES.has(c)) ? named : undefined;
+}
+
 /** The Error for a refused reply, naming the object and whose credentials
  * were turned away. */
 export async function refused(
@@ -762,18 +800,24 @@ function bucketUrl(
   return `https://${bucket}.s3.${region}.amazonaws.com`;
 }
 
-/** The object's address, asking for one version where `version` is a
- * VersionId. */
+/**
+ * The object's address, asking for one version where `version` is a
+ * VersionId. With `stored`, S3 is asked to answer with Content-Encoding
+ * identity, so fetch hands back the bytes as S3 holds them instead of undoing
+ * a gzip the object was stored with. S3 takes that on a signed request only.
+ */
 function objectUrl(
   loc: S3Location,
   region: string,
   endpoint: string | undefined,
-  version?: string,
+  version: string | undefined,
+  { stored }: { stored: boolean },
 ): URL {
   const at = `${bucketUrl(loc.bucket, region, endpoint)}/${encodePath(loc.key)}`;
-  return new URL(
-    version === undefined ? at : `${at}?versionId=${encode(version)}`,
-  );
+  const query: Array<[string, string]> = [];
+  if (version !== undefined) query.push(['versionId', version]);
+  if (stored) query.push(['response-content-encoding', 'identity']);
+  return new URL(query.length === 0 ? at : `${at}?${encodeQuery(query)}`);
 }
 
 /**
