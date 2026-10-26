@@ -85,9 +85,18 @@ export class SampleFold {
 
   /** add folds `row` of `block`, whose x cell is `xCell` and y `yCell`. */
   add(block: number, row: number, xCell: string, yCell: string): void {
-    const point = this.count(xCell, yCell);
+    const point = this.count(xCell, yCell, 1);
     if (point !== undefined) this.page(block).widen(block, point, point);
     this.keep(row, point);
+  }
+
+  /**
+   * remove takes back a row that add folded, so an edit can add the row's
+   * new cells. Its block keeps its least and most, which may then be too wide.
+   */
+  remove(block: number, row: number, xCell: string, yCell: string): void {
+    this.count(xCell, yCell, -1);
+    this.kept.delete(row);
   }
 
   /** merge takes in what `other` folded, of rows this fold has not. */
@@ -158,17 +167,18 @@ export class SampleFold {
     this.last = rows[SCATTER_POINTS_AT_MOST - 1];
   }
 
-  /** count counts a row, and returns its point when it has one. */
-  private count(xCell: string, yCell: string): Point | undefined {
+  /** count counts a row, or takes one back when `sign` is -1. */
+  private count(xCell: string, yCell: string, sign: 1 | -1): Point | undefined {
     const x = parse(xCell);
     const y = parse(yCell);
     if (x === undefined || y === undefined) {
       const word = (v: number | undefined, cell: string) =>
         v === undefined && cell !== '';
-      this.skipped[word(x, xCell) || word(y, yCell) ? 'unparsed' : 'blank']++;
+      const kind = word(x, xCell) || word(y, yCell) ? 'unparsed' : 'blank';
+      this.skipped[kind] += sign;
       return undefined;
     }
-    this.plotted++;
+    this.plotted += sign;
     return { x, y };
   }
 }
