@@ -68,6 +68,7 @@ export type Said =
 
   // What an open of a .uno did with the charts it cannot show.
   | { t: 'charts-kept'; count: number }
+  | { t: 'charts-left-out'; count: number }
 
   // What a workspace refuses.
   | { t: 'only-source'; name: string }
@@ -238,6 +239,10 @@ const SENTENCES: Sentences<Said> = {
     s.count === 1
       ? '1 chart this uno cannot show is kept as it was'
       : `${s.count} charts this uno cannot show are kept as they were`,
+  'charts-left-out': (s) =>
+    s.count === 1
+      ? '1 chart named a source this workspace no longer has, and was left out'
+      : `${s.count} charts named a source this workspace no longer has, and were left out`,
 
   'only-source': (s) =>
     `${s.name} is the only source here, and a workspace needs one`,

@@ -430,6 +430,16 @@
       }
     }
   ],
+  "charts_left_out": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} chart named a source this workspace no longer has, and was left out",
+        "plural=other": "{n} charts named a source this workspace no longer has, and were left out"
+      }
+    }
+  ],
   "refused_only_source": "{name} is the only source here, and a workspace needs one",
   "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
   "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
