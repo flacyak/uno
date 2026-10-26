@@ -6,6 +6,11 @@
  * `write` builds a sibling temp file, fsyncs it and renames it over the
  * target. Only this file and store/disklister.ts import node:fs. The guard
  * test in tests/store/opens.test.ts checks that.
+ *
+ * The chain runs as Effects, each step failing with the classes declared
+ * beside it, and ChainFailure names them all. The exported functions run
+ * the chain with Effect.runPromise, which rejects with the very failure, so
+ * a caller reads the same sentence from a Promise as before.
  */
 
 import { execFile } from 'node:child_process';
@@ -15,6 +20,8 @@ import { mkdtemp, open, readdir, rename, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+
+import { Data, Effect } from 'effect';
 
 import { compareStrings, parseTime } from '@go';
 import type { AuthMode, Connection } from '@library';
@@ -27,17 +34,19 @@ import {
   CONTAINER_HOST,
   IMDS_IPV4,
   IMDS_IPV6,
-  containerCredentials,
-  instanceCredentials,
+  askContainer,
+  askInstance,
 } from './metadata.ts';
+import type { ContainerFailure, InstanceFailure } from './metadata.ts';
 import type { AwsCredentials, S3Location, Signing } from './s3.ts';
 import {
+  NotSignedIn,
   assumeRole,
-  assumeRoleWithWebIdentity,
-  signInAgain,
-  ssoRoleCredentials,
+  roleExchange,
+  ssoExchange,
+  webIdentityExchange,
 } from './sts.ts';
-import type { Session } from './sts.ts';
+import type { Session, SsoFailure, StsFailure } from './sts.ts';
 import { unreachable } from '@never';
 
 /**
@@ -284,58 +293,89 @@ function homeOf(env: Env): string {
 }
 
 /**
- * profileSession signs in as one named profile the way the AWS CLI does,
- * when the profile offers one of the ways below, and returns undefined
- * otherwise.
+ * What the credential chain can fail with, from any step: a profile's
+ * settings, its credential_process or SSO sign-in, the host's endpoints, the
+ * STS exchange, or the chain having nothing at all.
+ */
+export type ChainFailure =
+  | TokenFileMissing
+  | MfaRefused
+  | SourceLoop
+  | SourceNoWayIn
+  | CredentialSourceEmpty
+  | CredentialSourceUnknown
+  | NoSourceProfile
+  | ProcessFailure
+  | SsoSessionMissing
+  | SsoSettingMissing
+  | SsoFailure
+  | StsFailure
+  | ContainerFailure
+  | InstanceFailure
+  | NoCredentials
+  | NoSuchProfile
+  | ProfileNoWayIn;
+
+/**
+ * Signs in as one named profile the way the AWS CLI does, when the profile
+ * offers one of the ways below, and returns undefined otherwise.
  *
  * In order: a role_arn is assumed through its source. Static keys in
  * ~/.aws/credentials or the config section are used as they are and read
  * again after a minute. A credential_process is run and its output read. An
  * SSO profile trades its cached token for keys. Expiring keys are reused
  * until shortly before they expire.
- * @param env the environment
- * @param files the AWS files
- * @param profile the profile to sign in as
- * @param through the profiles already on a role chain, so a loop is refused
- * @return the session, or undefined where the profile offers no way in
+ * @param profile The profile to sign in as.
+ * @param through The profiles already on a role chain, so a loop is refused.
+ * @return The session, or undefined where the profile offers no way in.
  */
-async function profileSession(
+function profileSession(
   env: Env,
   files: AwsFiles,
   profile: string,
   through: readonly string[] = [],
-): Promise<Held | undefined> {
-  const p = files.credentials.get(profile);
-  const fromConfig = configOf(files, profile);
-  const region = regionOf(env, files, profile);
-  const as = `the AWS profile ${profile}`;
+): Effect.Effect<Held | undefined, ChainFailure> {
+  return Effect.gen(function* () {
+    const p = files.credentials.get(profile);
+    const fromConfig = configOf(files, profile);
+    const region = regionOf(env, files, profile);
+    const as = `the AWS profile ${profile}`;
 
-  // A profile with role_arn is the role, whatever else it holds, as for the
-  // CLI.
-  const roleArn = fromConfig?.get('role_arn') ?? p?.get('role_arn');
-  if (roleArn !== undefined) {
-    const setting = (key: string): string | undefined =>
-      fromConfig?.get(key) ?? p?.get(key);
-    return held(
-      await roleSession(env, files, profile, roleArn, setting, through),
-      region,
-      as,
-    );
-  }
+    // A profile with role_arn is the role, whatever else it holds, as for the
+    // CLI.
+    const roleArn = fromConfig?.get('role_arn') ?? p?.get('role_arn');
+    if (roleArn !== undefined) {
+      const setting = (key: string): string | undefined =>
+        fromConfig?.get(key) ?? p?.get(key);
+      const session = yield* roleSession(
+        env,
+        files,
+        profile,
+        roleArn,
+        setting,
+        through,
+      );
+      return held(session, region, as);
+    }
 
-  const own = profileKeysOnly(env, files, profile);
-  if (own !== undefined)
-    return { creds: { ...own.creds, as }, until: own.until };
-  const command = fromConfig?.get('credential_process');
-  if (command !== undefined)
-    return held(await processCredentials(profile, command), region, as);
-  if (
-    fromConfig?.has('sso_session') === true ||
-    fromConfig?.has('sso_start_url') === true
-  ) {
-    return held(await ssoSession(env, files, profile, fromConfig), region, as);
-  }
-  return undefined;
+    const own = profileKeysOnly(env, files, profile);
+    if (own !== undefined)
+      return { creds: { ...own.creds, as }, until: own.until };
+    const command = fromConfig?.get('credential_process');
+    if (command !== undefined)
+      return held(yield* processCredentials(profile, command), region, as);
+    if (
+      fromConfig?.has('sso_session') === true ||
+      fromConfig?.has('sso_start_url') === true
+    ) {
+      return held(
+        yield* ssoSession(env, files, profile, fromConfig),
+        region,
+        as,
+      );
+    }
+    return undefined;
+  });
 }
 
 /**
@@ -360,30 +400,65 @@ function held(
 }
 
 /**
- * hostSession is the end of the chain, where the AWS SDKs look last: a web
+ * Asks the host, where the chain ends and the AWS SDKs look last: a web
  * identity token the environment names, the endpoint beside a container,
  * then the instance metadata service. Undefined where the host offers none.
- * @param env the environment
- * @param region the region the session signs for
- * @return the host's session, or undefined
+ * @param region The region the session signs for.
+ * @return The host's session, or undefined.
  */
-async function hostSession(
+function hostSession(
   env: Env,
   region: string,
-): Promise<Held | undefined> {
-  const tokenFile = envVar(env, 'AWS_WEB_IDENTITY_TOKEN_FILE');
-  const roleArn = envVar(env, 'AWS_ROLE_ARN');
-  if (tokenFile !== undefined && roleArn !== undefined) {
-    const ask = {
-      roleArn,
-      tokenFile,
-      sessionName: envVar(env, 'AWS_ROLE_SESSION_NAME'),
-      region,
-    };
-    return held(await webIdentitySession(env, ask, 'the environment'), region);
+): Effect.Effect<
+  Held | undefined,
+  TokenFileMissing | StsFailure | ContainerFailure | InstanceFailure
+> {
+  return Effect.gen(function* () {
+    const tokenFile = envVar(env, 'AWS_WEB_IDENTITY_TOKEN_FILE');
+    const roleArn = envVar(env, 'AWS_ROLE_ARN');
+    if (tokenFile !== undefined && roleArn !== undefined) {
+      const ask = {
+        roleArn,
+        tokenFile,
+        sessionName: envVar(env, 'AWS_ROLE_SESSION_NAME'),
+        region,
+      };
+      return held(
+        yield* webIdentitySession(env, ask, 'the environment'),
+        region,
+      );
+    }
+    const session =
+      (yield* containerSession(env)) ?? (yield* instanceSession(env));
+    return session === undefined ? undefined : held(session, region);
+  });
+}
+
+/**
+ * A token file that is not there: a web identity token or a container
+ * endpoint's token, named by the environment or by a profile.
+ */
+export class TokenFileMissing extends Data.TaggedError('TokenFileMissing')<{
+  /** Who names the file: the environment, or `the AWS profile x`. */
+  named: string;
+  kind: 'web identity' | 'container';
+  file: string;
+  message: string;
+}> {
+  /**
+   * @param parts Who names the file, which kind it is, and where it was
+   *     looked for.
+   */
+  constructor(parts: {
+    named: string;
+    kind: 'web identity' | 'container';
+    file: string;
+  }) {
+    super({
+      ...parts,
+      message: `${parts.named} names the ${parts.kind} token file ${parts.file}, which is not there`,
+    });
   }
-  const session = (await containerSession(env)) ?? (await instanceSession(env));
-  return session === undefined ? undefined : held(session, region);
 }
 
 /** What a web identity session is asked for, and where its token is. */
@@ -396,81 +471,88 @@ interface WebIdentityFile {
 }
 
 /**
- * webIdentitySession reads the token in the file and trades it at STS for
- * the role. `named` is who names the file, for an error: the AWS profile
- * x, or the environment.
- * @param env the environment, for the STS endpoint
- * @param ask the role, the token's file and the session
- * @param named who names the file, for an error
- * @return the role's session
+ * Reads the token in the file and trades it at STS for the role.
+ * @param env The environment, for the STS endpoint.
+ * @param named Who names the file, for an error: the AWS profile x, or the
+ *     environment.
  */
-async function webIdentitySession(
+function webIdentitySession(
   env: Env,
   ask: WebIdentityFile,
   named: string,
-): Promise<Session> {
-  const token = await readText(ask.tokenFile);
-  if (token === undefined) {
-    throw new Error(
-      `${named} names the web identity token file ${ask.tokenFile}, which is not there`,
-    );
-  }
-  return assumeRoleWithWebIdentity(
-    {
-      roleArn: ask.roleArn,
-      sessionName: ask.sessionName ?? `uno-${Date.now()}`,
-      token: token.trim(),
-      durationSeconds: ask.durationSeconds,
-      region: ask.region,
-    },
-    { endpoint: env['AWS_ENDPOINT_URL_STS'] },
-  );
-}
-
-/**
- * containerSession asks the endpoint the environment names beside a
- * container: a path on the ECS host, or a full URL. Undefined off a
- * container. The endpoint's token comes from a file where one is named.
- * @param env the environment
- * @return the task's session, or undefined off a container
- */
-async function containerSession(env: Env): Promise<Session | undefined> {
-  const relative = envVar(env, 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI');
-  const url =
-    relative === undefined
-      ? envVar(env, 'AWS_CONTAINER_CREDENTIALS_FULL_URI')
-      : CONTAINER_HOST + relative;
-  if (url === undefined) return undefined;
-  const tokenFile = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE');
-  let authorization = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN');
-  if (tokenFile !== undefined) {
-    const text = await readText(tokenFile);
-    if (text === undefined) {
-      throw new Error(
-        `the environment names the container token file ${tokenFile}, which is not there`,
-      );
+): Effect.Effect<Session, TokenFileMissing | StsFailure> {
+  return Effect.gen(function* () {
+    const token = yield* Effect.promise(() => readText(ask.tokenFile));
+    if (token === undefined) {
+      return yield* new TokenFileMissing({
+        named,
+        kind: 'web identity',
+        file: ask.tokenFile,
+      });
     }
-    authorization = text.trim();
-  }
-  return containerCredentials(url, authorization);
+    return yield* webIdentityExchange(
+      {
+        roleArn: ask.roleArn,
+        sessionName: ask.sessionName ?? `uno-${Date.now()}`,
+        token: token.trim(),
+        durationSeconds: ask.durationSeconds,
+        region: ask.region,
+      },
+      { endpoint: env['AWS_ENDPOINT_URL_STS'] },
+    );
+  });
 }
 
 /**
- * instanceSession asks the instance metadata service, at the endpoint the
- * environment names or the one its mode picks, unless the environment turns
- * it off. Undefined where no role answers.
- * @param env the environment
- * @return the instance's session, or undefined
+ * Asks the endpoint the environment names beside a container: a path on the
+ * ECS host, or a full URL. Undefined off a container. The endpoint's token
+ * comes from a file where one is named.
+ * @return The task's session, or undefined off a container.
  */
-function instanceSession(env: Env): Promise<Session | undefined> {
+function containerSession(
+  env: Env,
+): Effect.Effect<Session | undefined, TokenFileMissing | ContainerFailure> {
+  return Effect.gen(function* () {
+    const relative = envVar(env, 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI');
+    const url =
+      relative === undefined
+        ? envVar(env, 'AWS_CONTAINER_CREDENTIALS_FULL_URI')
+        : CONTAINER_HOST + relative;
+    if (url === undefined) return undefined;
+    const tokenFile = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE');
+    let authorization = envVar(env, 'AWS_CONTAINER_AUTHORIZATION_TOKEN');
+    if (tokenFile !== undefined) {
+      const text = yield* Effect.promise(() => readText(tokenFile));
+      if (text === undefined) {
+        return yield* new TokenFileMissing({
+          named: 'the environment',
+          kind: 'container',
+          file: tokenFile,
+        });
+      }
+      authorization = text.trim();
+    }
+    return yield* askContainer(url, authorization);
+  });
+}
+
+/**
+ * Asks the instance metadata service, at the endpoint the environment names
+ * or the one its mode picks, unless the environment turns it off. Undefined
+ * where no role answers.
+ * @return The instance's session, or undefined.
+ */
+function instanceSession(
+  env: Env,
+): Effect.Effect<Session | undefined, InstanceFailure> {
   if (env['AWS_EC2_METADATA_DISABLED']?.toLowerCase() === 'true')
-    return Promise.resolve(undefined);
+    return Effect.succeed(undefined);
   const ipv6 =
     env['AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE']?.toLowerCase() === 'ipv6';
   const endpoint =
     envVar(env, 'AWS_EC2_METADATA_SERVICE_ENDPOINT') ??
     (ipv6 ? IMDS_IPV6 : IMDS_IPV4);
-  return instanceCredentials(endpoint);
+  return askInstance(endpoint);
 }
 
 /**
@@ -484,85 +566,132 @@ function envVar(env: Env, name: string): string | undefined {
   return value === undefined || value === '' ? undefined : value;
 }
 
+/** A profile that names an sso-session section ~/.aws/config does not have. */
+export class SsoSessionMissing extends Data.TaggedError('SsoSessionMissing')<{
+  profile: string;
+  /** The sso-session name the profile gives. */
+  named: string;
+  message: string;
+}> {
+  /** @param parts The profile and the sso-session name it gives. */
+  constructor(parts: { profile: string; named: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} names sso-session ${parts.named}, which ~/.aws/config does not have`,
+    });
+  }
+}
+
+/** An SSO profile with one of its four settings left out. */
+export class SsoSettingMissing extends Data.TaggedError('SsoSettingMissing')<{
+  profile: string;
+  setting: string;
+  message: string;
+}> {
+  /** @param parts The profile and the setting left out. */
+  constructor(parts: { profile: string; setting: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} signs in through SSO and has no ${parts.setting}`,
+    });
+  }
+}
+
 /**
- * ssoSession reads the token `aws sso login` cached for a profile and trades
- * it at the SSO portal for the profile's role.
+ * Reads the token `aws sso login` cached for a profile and trades it at the
+ * SSO portal for the profile's role.
  *
  * The portal is named in one of two layouts: an `[sso-session <name>]`
  * section the profile names with sso_session, cached under the SHA-1 of that
  * name, or sso_start_url and sso_region in the profile itself, cached under
  * the SHA-1 of the URL. A missing or expired token is refused with the
  * command that fixes it, before the portal is asked.
- * @param env the environment
- * @param files the AWS files
- * @param profile the profile's name
- * @param section the profile's config section
- * @return the role's session
+ * @param section The profile's config section.
  */
-async function ssoSession(
+function ssoSession(
   env: Env,
   files: AwsFiles,
   profile: string,
   section: Map<string, string>,
-): Promise<Session> {
-  const named = section.get('sso_session');
-  const portal =
-    named === undefined ? section : files.config.get(`sso-session ${named}`);
-  if (portal === undefined) {
-    throw new Error(
-      `the AWS profile ${profile} names sso-session ${named}, which ~/.aws/config does not have`,
-    );
-  }
-  const startUrl = portal.get('sso_start_url');
-  const ssoRegion = portal.get('sso_region');
-  const accountId = section.get('sso_account_id');
-  const roleName = section.get('sso_role_name');
-  const missing = [
-    ['sso_start_url', startUrl],
-    ['sso_region', ssoRegion],
-    ['sso_account_id', accountId],
-    ['sso_role_name', roleName],
-  ].find(([, v]) => v === undefined)?.[0];
-  if (missing !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} signs in through SSO and has no ${missing}`,
-    );
-  }
+): Effect.Effect<Session, SsoSessionMissing | SsoSettingMissing | SsoFailure> {
+  return Effect.gen(function* () {
+    const named = section.get('sso_session');
+    let portal = section;
+    if (named !== undefined) {
+      const found = files.config.get(`sso-session ${named}`);
+      if (found === undefined)
+        return yield* new SsoSessionMissing({ profile, named });
+      portal = found;
+    }
+    const startUrl = portal.get('sso_start_url');
+    const ssoRegion = portal.get('sso_region');
+    const accountId = section.get('sso_account_id');
+    const roleName = section.get('sso_role_name');
+    const missing = [
+      ['sso_start_url', startUrl],
+      ['sso_region', ssoRegion],
+      ['sso_account_id', accountId],
+      ['sso_role_name', roleName],
+    ].find(([, v]) => v === undefined)?.[0];
+    if (missing !== undefined)
+      return yield* new SsoSettingMissing({ profile, setting: missing });
 
-  const cacheKey = named ?? startUrl!;
-  const name = createHash('sha1').update(cacheKey).digest('hex') + '.json';
-  const path = join(homeOf(env), '.aws', 'sso', 'cache', name);
-  const text = await readText(path);
-  if (text === undefined)
-    throw new Error(signInAgain(profile, 'uno found no SSO sign-in for it'));
-  // A cache file that fails to parse is refused like a missing sign-in.
-  const token = cachedToken(text);
-  // Older CLIs wrote the time with a UTC suffix, where newer write Z.
-  const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, 'Z'));
-  if (typeof token?.accessToken !== 'string' || expires === undefined) {
-    throw new Error(
-      signInAgain(profile, 'its cached SSO sign-in could not be read'),
-    );
-  }
-  if (expires.getTime() <= Date.now()) {
-    throw new Error(
-      signInAgain(
+    const accessToken = yield* cachedSignIn(env, profile, named ?? startUrl!);
+    return yield* ssoExchange(
+      {
         profile,
-        `its SSO sign-in expired at ${expires.toISOString()}`,
-      ),
+        region: ssoRegion!,
+        accountId: accountId!,
+        roleName: roleName!,
+        accessToken,
+      },
+      { endpoint: env['AWS_ENDPOINT_URL_SSO'] },
     );
-  }
+  });
+}
 
-  return ssoRoleCredentials(
-    {
-      profile,
-      region: ssoRegion!,
-      accountId: accountId!,
-      roleName: roleName!,
-      accessToken: token.accessToken,
-    },
-    { endpoint: env['AWS_ENDPOINT_URL_SSO'] },
-  );
+/**
+ * Reads the access token `aws sso login` cached under `cacheKey` in
+ * ~/.aws/sso/cache. A token that is missing, unreadable or expired fails
+ * with NotSignedIn, which says how to sign in again.
+ * @param env The environment, for the home folder.
+ * @param profile The profile, for the refusal.
+ * @param cacheKey The sso-session name or start URL the token is cached
+ *     under.
+ */
+function cachedSignIn(
+  env: Env,
+  profile: string,
+  cacheKey: string,
+): Effect.Effect<string, NotSignedIn> {
+  return Effect.gen(function* () {
+    const name = createHash('sha1').update(cacheKey).digest('hex') + '.json';
+    const path = join(homeOf(env), '.aws', 'sso', 'cache', name);
+    const text = yield* Effect.promise(() => readText(path));
+    if (text === undefined) {
+      return yield* new NotSignedIn({
+        profile,
+        why: 'uno found no SSO sign-in for it',
+      });
+    }
+    // A cache file that fails to parse is refused like a missing sign-in.
+    const token = cachedToken(text);
+    // Older CLIs wrote the time with a UTC suffix, where newer write Z.
+    const expires = parseTime(String(token?.expiresAt).replace(/UTC$/, 'Z'));
+    if (typeof token?.accessToken !== 'string' || expires === undefined) {
+      return yield* new NotSignedIn({
+        profile,
+        why: 'its cached SSO sign-in could not be read',
+      });
+    }
+    if (expires.getTime() <= Date.now()) {
+      return yield* new NotSignedIn({
+        profile,
+        why: `its SSO sign-in expired at ${expires.toISOString()}`,
+      });
+    }
+    return token.accessToken;
+  });
 }
 
 /**
@@ -583,117 +712,276 @@ function cachedToken(text: string): Record<string, unknown> | undefined {
 }
 
 /**
- * roleSession assumes the role a profile names with the credentials of its
+ * A role profile with mfa_serial, which asks for a code uno has no prompt
+ * for. The sentence says how to sign in from a shell instead.
+ */
+export class MfaRefused extends Data.TaggedError('MfaRefused')<{
+  profile: string;
+  roleArn: string;
+  message: string;
+}> {
+  /** @param parts The profile and the role it assumes. */
+  constructor(parts: { profile: string; roleArn: string }) {
+    super({
+      ...parts,
+      message:
+        `the AWS profile ${parts.profile} asks for an MFA code to assume ${parts.roleArn}, which uno cannot ask for · ` +
+        `run \`aws configure export-credentials --profile ${parts.profile} --format env\` and start uno from that shell`,
+    });
+  }
+}
+
+/** A chain of source profiles that comes back to one already on it. */
+export class SourceLoop extends Data.TaggedError('SourceLoop')<{
+  profile: string;
+  /** The whole loop, ending with the profile it came back to. */
+  chain: readonly string[];
+  message: string;
+}> {
+  /** @param parts The profile and the loop. */
+  constructor(parts: { profile: string; chain: readonly string[] }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} takes its credentials from a loop · ${parts.chain.join(' → ')}`,
+    });
+  }
+}
+
+/** A source_profile that offers no way in uno can use. */
+export class SourceNoWayIn extends Data.TaggedError('SourceNoWayIn')<{
+  profile: string;
+  sourceProfile: string;
+  message: string;
+}> {
+  /** @param parts The profile and its source_profile. */
+  constructor(parts: { profile: string; sourceProfile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} takes its credentials from ${parts.sourceProfile}, which has no way in uno can use`,
+    });
+  }
+}
+
+/** The three credential_source settings uno knows. */
+type CredentialSource = 'Environment' | 'Ec2InstanceMetadata' | 'EcsContainer';
+
+/** What each credential_source is called when it has nothing to give. */
+const SOURCE_EMPTY: Record<CredentialSource, string> = {
+  Environment:
+    'the environment, which has no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
+  Ec2InstanceMetadata:
+    'the instance it runs on, and no instance metadata service with a role answered',
+  EcsContainer:
+    'its container, and the environment names no container endpoint',
+};
+
+/**
+ * A credential_source uno knows, with nothing in it to assume the role with.
+ */
+export class CredentialSourceEmpty extends Data.TaggedError(
+  'CredentialSourceEmpty',
+)<{
+  profile: string;
+  source: CredentialSource;
+  message: string;
+}> {
+  /** @param parts The profile and the credential_source with nothing in it. */
+  constructor(parts: { profile: string; source: CredentialSource }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} takes its credentials from ${SOURCE_EMPTY[parts.source]}`,
+    });
+  }
+}
+
+/** A role profile with neither a source_profile nor a credential_source. */
+export class NoSourceProfile extends Data.TaggedError('NoSourceProfile')<{
+  profile: string;
+  message: string;
+}> {
+  /** @param parts The profile. */
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} names a role_arn and no source_profile to assume it with`,
+    });
+  }
+}
+
+/** A credential_source other than the three uno knows. */
+export class CredentialSourceUnknown extends Data.TaggedError(
+  'CredentialSourceUnknown',
+)<{
+  profile: string;
+  source: string;
+  message: string;
+}> {
+  /** @param parts The profile and the credential_source it names. */
+  constructor(parts: { profile: string; source: string }) {
+    super({
+      ...parts,
+      message:
+        `the AWS profile ${parts.profile} takes its credentials from ${parts.source}, which uno does not know · ` +
+        'use source_profile, or a credential_source of Environment, Ec2InstanceMetadata or EcsContainer',
+    });
+  }
+}
+
+/**
+ * Reads the credentials of a role profile's source_profile, which may be any
+ * kind of profile, including another role.
+ *
+ * A source already on the chain is refused naming the loop, and one with no
+ * way in is refused by name. A profile that is its own source means the
+ * static keys beside its role_arn.
+ * @param profile The profile naming the role.
+ * @param sourceProfile Its source_profile.
+ * @param chain The profiles on the chain so far, `profile` last.
+ * @return The source's credentials.
+ */
+function fromSourceProfile(
+  env: Env,
+  files: AwsFiles,
+  profile: string,
+  sourceProfile: string,
+  chain: readonly string[],
+): Effect.Effect<Omit<AwsCredentials, 'region'>, ChainFailure> {
+  return Effect.gen(function* () {
+    if (chain.includes(sourceProfile))
+      return yield* new SourceLoop({
+        profile,
+        chain: [...chain, sourceProfile],
+      });
+    const found =
+      sourceProfile === profile
+        ? profileKeysOnly(env, files, profile)
+        : yield* profileSession(env, files, sourceProfile, chain);
+    if (found === undefined)
+      return yield* new SourceNoWayIn({ profile, sourceProfile });
+    return found.creds;
+  });
+}
+
+/**
+ * Reads the credentials of the credential_source a role profile names: the
+ * environment's keys, the instance's role, or the container's. A source with
+ * nothing in it, one uno does not know, and a profile naming no source at all
+ * are each refused by name.
+ * @param profile The profile naming the role.
+ * @param credentialSource Its credential_source, if any.
+ * @return The source's credentials.
+ */
+function fromCredentialSource(
+  env: Env,
+  profile: string,
+  credentialSource: string | undefined,
+): Effect.Effect<
+  Omit<AwsCredentials, 'region'>,
+  | CredentialSourceEmpty
+  | CredentialSourceUnknown
+  | NoSourceProfile
+  | TokenFileMissing
+  | ContainerFailure
+  | InstanceFailure
+> {
+  return Effect.gen(function* () {
+    if (credentialSource === 'Environment') {
+      const found = envKeys(env, DEFAULT_REGION);
+      if (found === undefined)
+        return yield* new CredentialSourceEmpty({
+          profile,
+          source: 'Environment',
+        });
+      return found;
+    }
+    if (credentialSource === 'Ec2InstanceMetadata') {
+      const session = yield* instanceSession(env);
+      if (session === undefined)
+        return yield* new CredentialSourceEmpty({
+          profile,
+          source: 'Ec2InstanceMetadata',
+        });
+      return session;
+    }
+    if (credentialSource === 'EcsContainer') {
+      const session = yield* containerSession(env);
+      if (session === undefined)
+        return yield* new CredentialSourceEmpty({
+          profile,
+          source: 'EcsContainer',
+        });
+      return session;
+    }
+    if (credentialSource !== undefined)
+      return yield* new CredentialSourceUnknown({
+        profile,
+        source: credentialSource,
+      });
+    return yield* new NoSourceProfile({ profile });
+  });
+}
+
+/**
+ * Assumes the role a profile names with the credentials of its
  * source_profile, which may be any kind of profile, including another role.
  * A chain that comes back to a profile already on it is refused naming the
  * loop. mfa_serial is refused, since a code needs a prompt the engine lacks.
- * @param env the environment
- * @param files the AWS files
- * @param profile the profile naming the role
- * @param roleArn the role
- * @param setting reads a key from the profile's sections
- * @param through the profiles already on the chain
- * @return the role's session
+ * @param profile The profile naming the role.
+ * @param setting Reads a key from the profile's sections.
+ * @param through The profiles already on the chain.
+ * @return The role's session.
  */
-async function roleSession(
+function roleSession(
   env: Env,
   files: AwsFiles,
   profile: string,
   roleArn: string,
   setting: (key: string) => string | undefined,
   through: readonly string[],
-): Promise<Session> {
-  const chain = [...through, profile];
-  if (setting('mfa_serial') !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} asks for an MFA code to assume ${roleArn}, which uno cannot ask for · ` +
-        `run \`aws configure export-credentials --profile ${profile} --format env\` and start uno from that shell`,
-    );
-  }
+): Effect.Effect<Session, ChainFailure> {
+  return Effect.gen(function* () {
+    const chain = [...through, profile];
+    if (setting('mfa_serial') !== undefined)
+      return yield* new MfaRefused({ profile, roleArn });
 
-  // A profile with a web identity token has no source: the token says who
-  // is asking.
-  const tokenFile = setting('web_identity_token_file');
-  if (tokenFile !== undefined) {
+    // A profile with a web identity token has no source: the token says who
+    // is asking.
+    const tokenFile = setting('web_identity_token_file');
+    if (tokenFile !== undefined) {
+      const duration = setting('duration_seconds');
+      const ask: WebIdentityFile = {
+        roleArn,
+        tokenFile,
+        sessionName: setting('role_session_name'),
+        durationSeconds: duration === undefined ? undefined : Number(duration),
+        region: regionOf(env, files, profile),
+      };
+      return yield* webIdentitySession(env, ask, `the AWS profile ${profile}`);
+    }
+
+    const sourceProfile = setting('source_profile');
+    const source =
+      sourceProfile === undefined
+        ? yield* fromCredentialSource(
+            env,
+            profile,
+            setting('credential_source'),
+          )
+        : yield* fromSourceProfile(env, files, profile, sourceProfile, chain);
+
     const duration = setting('duration_seconds');
-    const ask: WebIdentityFile = {
-      roleArn,
-      tokenFile,
-      sessionName: setting('role_session_name'),
-      durationSeconds: duration === undefined ? undefined : Number(duration),
-      region: regionOf(env, files, profile),
-    };
-    return webIdentitySession(env, ask, `the AWS profile ${profile}`);
-  }
-
-  let source: Omit<AwsCredentials, 'region'>;
-  const sourceProfile = setting('source_profile');
-  const credentialSource = setting('credential_source');
-  if (sourceProfile !== undefined) {
-    if (chain.includes(sourceProfile)) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from a loop · ${[...chain, sourceProfile].join(' → ')}`,
-      );
-    }
-    // A profile that is its own source means the static keys beside its
-    // role_arn.
-    const found =
-      sourceProfile === profile
-        ? profileKeysOnly(env, files, profile)
-        : await profileSession(env, files, sourceProfile, chain);
-    if (found === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from ${sourceProfile}, which has no way in uno can use`,
-      );
-    }
-    source = found.creds;
-  } else if (credentialSource === 'Environment') {
-    const found = envKeys(env, DEFAULT_REGION);
-    if (found === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from the environment, which has no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY`,
-      );
-    }
-    source = found;
-  } else if (credentialSource === 'Ec2InstanceMetadata') {
-    const session = await instanceSession(env);
-    if (session === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from the instance it runs on, and no instance metadata service with a role answered`,
-      );
-    }
-    source = session;
-  } else if (credentialSource === 'EcsContainer') {
-    const session = await containerSession(env);
-    if (session === undefined) {
-      throw new Error(
-        `the AWS profile ${profile} takes its credentials from its container, and the environment names no container endpoint`,
-      );
-    }
-    source = session;
-  } else if (credentialSource !== undefined) {
-    throw new Error(
-      `the AWS profile ${profile} takes its credentials from ${credentialSource}, which uno does not know · ` +
-        'use source_profile, or a credential_source of Environment, Ec2InstanceMetadata or EcsContainer',
+    return yield* roleExchange(
+      {
+        roleArn,
+        sessionName: setting('role_session_name') ?? `uno-${Date.now()}`,
+        externalId: setting('external_id'),
+        durationSeconds: duration === undefined ? undefined : Number(duration),
+        region: regionOf(env, files, profile),
+      },
+      source,
+      { endpoint: env['AWS_ENDPOINT_URL_STS'] },
     );
-  } else {
-    throw new Error(
-      `the AWS profile ${profile} names a role_arn and no source_profile to assume it with`,
-    );
-  }
-
-  const duration = setting('duration_seconds');
-  return assumeRole(
-    {
-      roleArn,
-      sessionName: setting('role_session_name') ?? `uno-${Date.now()}`,
-      externalId: setting('external_id'),
-      durationSeconds: duration === undefined ? undefined : Number(duration),
-      region: regionOf(env, files, profile),
-    },
-    source,
-    { endpoint: env['AWS_ENDPOINT_URL_STS'] },
-  );
+  });
 }
 
 /**
@@ -734,6 +1022,61 @@ const PROCESS_MS = 30_000;
 /** The most a credential_process program may print. */
 const PROCESS_BYTES = 1 << 20;
 
+/** A profile whose credential_process is set to nothing. */
+export class ProcessEmpty extends Data.TaggedError('ProcessEmpty')<{
+  profile: string;
+  message: string;
+}> {
+  /** @param parts The profile. */
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} has an empty credential_process`,
+    });
+  }
+}
+
+/**
+ * A credential_process that did not run to a good end: there is no such
+ * program, it ran out of time, or it failed.
+ */
+export class ProcessFailed extends Data.TaggedError('ProcessFailed')<{
+  profile: string;
+  /** What went wrong, or the first line the program wrote to stderr. */
+  why: string;
+  message: string;
+}> {
+  /** @param parts The profile and what went wrong. */
+  constructor(parts: { profile: string; why: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}'s credential_process failed · ${parts.why}`,
+    });
+  }
+}
+
+/**
+ * A credential_process that ran and printed something other than the CLI's
+ * version 1 JSON.
+ */
+export class ProcessUnreadable extends Data.TaggedError('ProcessUnreadable')<{
+  profile: string;
+  /** What was wrong with what it printed. */
+  why: string;
+  message: string;
+}> {
+  /** @param parts The profile and what was wrong with what it printed. */
+  constructor(parts: { profile: string; why: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}'s credential_process ${parts.why}`,
+    });
+  }
+}
+
+/** What running a credential_process can fail with. */
+export type ProcessFailure = ProcessEmpty | ProcessFailed | ProcessUnreadable;
+
 /** Keys a credential_process printed, and when they expire where it said. */
 interface Printed {
   accessKeyId: string;
@@ -743,76 +1086,87 @@ interface Printed {
 }
 
 /**
- * processCredentials runs a profile's credential_process and reads the keys
- * it prints. The command is split into words the way a shell would and run
- * directly, as a program and its arguments. The output must be the CLI's
- * version 1 JSON.
- * @param profile the profile, for errors
- * @param command the credential_process line
- * @return the keys printed
+ * Runs a profile's credential_process and reads the keys it prints. The
+ * command is split into words the way a shell would and run directly, as a
+ * program and its arguments. The output must be the CLI's version 1 JSON.
+ * @param profile The profile, for errors.
+ * @param command The credential_process line.
  */
-async function processCredentials(
+function processCredentials(
   profile: string,
   command: string,
-): Promise<Printed> {
-  /** fail is an Error about this profile's credential_process. */
-  const fail = (why: string): Error =>
-    new Error(`the AWS profile ${profile}'s credential_process ${why}`);
-  const words = splitCommand(command);
-  const [program, ...args] = words;
-  if (program === undefined) {
-    throw new Error(
-      `the AWS profile ${profile} has an empty credential_process`,
-    );
-  }
+): Effect.Effect<Printed, ProcessFailure> {
+  return Effect.gen(function* () {
+    // A refusal of what this profile's credential_process printed.
+    const fail = (why: string): ProcessUnreadable =>
+      new ProcessUnreadable({ profile, why });
+    const words = splitCommand(command);
+    const [program, ...args] = words;
+    if (program === undefined) return yield* new ProcessEmpty({ profile });
+    const out = yield* runProcess(profile, program, args);
 
-  let out: string;
-  try {
-    const run = await execFileAsync(program, args, {
-      timeout: PROCESS_MS,
-      maxBuffer: PROCESS_BYTES,
-      encoding: 'utf8',
-      windowsHide: true,
+    const o = yield* Effect.try({
+      try: () => JSON.parse(out) as Record<string, unknown>,
+      catch: () => fail('did not print JSON'),
     });
-    out = run.stdout;
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & {
-      stderr?: string;
-      killed?: boolean;
-    };
-    let why: string;
-    if (e.code === 'ENOENT') why = `there is no program called ${program}`;
-    else if (e.killed === true)
-      why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
-    else why = (e.stderr?.trim().split('\n')[0] ?? '') || e.message;
-    throw fail(`failed · ${why}`);
-  }
+    if (o['Version'] !== 1) {
+      return yield* fail(
+        `printed version ${JSON.stringify(o['Version'])} · uno reads version 1`,
+      );
+    }
+    const id = o['AccessKeyId'];
+    const secret = o['SecretAccessKey'];
+    if (typeof id !== 'string' || typeof secret !== 'string') {
+      return yield* fail('printed no AccessKeyId and SecretAccessKey');
+    }
+    const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
+    if (typeof o['SessionToken'] === 'string')
+      printed.sessionToken = o['SessionToken'];
+    if (typeof o['Expiration'] === 'string') {
+      const at = parseTime(o['Expiration']);
+      if (at === undefined)
+        return yield* fail('printed an Expiration uno cannot read');
+      printed.expiration = at;
+    }
+    return printed;
+  });
+}
 
-  let o: Record<string, unknown>;
-  try {
-    o = JSON.parse(out) as Record<string, unknown>;
-  } catch {
-    throw fail('did not print JSON');
-  }
-  if (o['Version'] !== 1) {
-    throw fail(
-      `printed version ${JSON.stringify(o['Version'])} · uno reads version 1`,
-    );
-  }
-  const id = o['AccessKeyId'];
-  const secret = o['SecretAccessKey'];
-  if (typeof id !== 'string' || typeof secret !== 'string') {
-    throw fail('printed no AccessKeyId and SecretAccessKey');
-  }
-  const printed: Printed = { accessKeyId: id, secretAccessKey: secret };
-  if (typeof o['SessionToken'] === 'string')
-    printed.sessionToken = o['SessionToken'];
-  if (typeof o['Expiration'] === 'string') {
-    const at = parseTime(o['Expiration']);
-    if (at === undefined) throw fail('printed an Expiration uno cannot read');
-    printed.expiration = at;
-  }
-  return printed;
+/**
+ * Runs a credential_process program with its arguments and gives it
+ * PROCESS_MS to answer, succeeding with what it printed. It fails with
+ * ProcessFailed where there is no such program, it ran out of time, or it
+ * failed: the first line it wrote to stderr says why.
+ * @param profile The profile, for the failure.
+ */
+function runProcess(
+  profile: string,
+  program: string,
+  args: readonly string[],
+): Effect.Effect<string, ProcessFailed> {
+  return Effect.tryPromise({
+    try: async () => {
+      const run = await execFileAsync(program, args, {
+        timeout: PROCESS_MS,
+        maxBuffer: PROCESS_BYTES,
+        encoding: 'utf8',
+        windowsHide: true,
+      });
+      return run.stdout;
+    },
+    catch: (err) => {
+      const e = err as NodeJS.ErrnoException & {
+        stderr?: string;
+        killed?: boolean;
+      };
+      let why: string;
+      if (e.code === 'ENOENT') why = `there is no program called ${program}`;
+      else if (e.killed === true)
+        why = `it did not answer within ${PROCESS_MS / 1000} seconds`;
+      else why = (e.stderr?.trim().split('\n')[0] ?? '') || e.message;
+      return new ProcessFailed({ profile, why });
+    },
+  });
 }
 
 /**
@@ -890,61 +1244,127 @@ function cached(read: () => Promise<Held>): () => Promise<AwsCredentials> {
 }
 
 /**
- * awsCredentials finds credentials the way the AWS CLI does: the environment
- * first, then the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or
- * `default`, then the host the process runs on. This is the `machine` way
- * of signing in, and what a request outside every connection signs with.
- * @param env the environment, process.env by default
- * @return a function answering the credentials, reading again as they age
+ * No source in the chain had credentials: not the environment, not the
+ * profile, not the host. The sentence says where to put some.
+ */
+export class NoCredentials extends Data.TaggedError('NoCredentials')<{
+  profile: string;
+  message: string;
+}> {
+  /** @param parts The profile the chain looked for. */
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message:
+        `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, ` +
+        `put keys for the ${parts.profile} profile in ~/.aws/credentials, or run uno where a role is attached`,
+    });
+  }
+}
+
+/**
+ * Finds credentials the way the AWS CLI does: the environment first, then
+ * the profile AWS_PROFILE or AWS_DEFAULT_PROFILE names, or `default`, then
+ * the host the process runs on. This is the `machine` way of signing in, and
+ * what a request outside every connection signs with.
+ * @param env The environment, process.env by default.
+ * @return A function answering the credentials, reading again as they age.
  */
 export function awsCredentials(
   env: Env = process.env,
 ): () => Promise<AwsCredentials> {
-  return cached(async () => {
+  return cached(() => Effect.runPromise(machineChain(env)));
+}
+
+/**
+ * Runs the chain awsCredentials reads, as one Effect: the environment, the
+ * profile, then the host, failing with NoCredentials where none of them has
+ * any.
+ * @return The credentials, kept until shortly before they expire.
+ */
+function machineChain(env: Env): Effect.Effect<Held, ChainFailure> {
+  return Effect.gen(function* () {
     const profile =
       env['AWS_PROFILE'] ?? env['AWS_DEFAULT_PROFILE'] ?? 'default';
-    const files = await awsFiles(env);
+    const files = yield* Effect.promise(() => awsFiles(env));
     const region = regionOf(env, files, profile);
     const fromEnv = envKeys(env, region);
     if (fromEnv !== undefined)
       return { creds: fromEnv, until: Date.now() + CREDENTIALS_MS };
-    const fromProfile = await profileSession(env, files, profile);
+    const fromProfile = yield* profileSession(env, files, profile);
     if (fromProfile !== undefined) return fromProfile;
-    const fromHost = await hostSession(env, region);
+    const fromHost = yield* hostSession(env, region);
     if (fromHost !== undefined) return fromHost;
-    throw new Error(
-      `no AWS credentials · set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, ` +
-        `put keys for the ${profile} profile in ~/.aws/credentials, or run uno where a role is attached`,
-    );
+    return yield* new NoCredentials({ profile });
   });
 }
 
+/** A profile neither ~/.aws/config nor ~/.aws/credentials has a section for. */
+export class NoSuchProfile extends Data.TaggedError('NoSuchProfile')<{
+  profile: string;
+  message: string;
+}> {
+  /** @param parts The profile. */
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `there is no AWS profile called ${parts.profile} in ~/.aws/config or ~/.aws/credentials`,
+    });
+  }
+}
+
 /**
- * profileCredentials signs in as one named profile, ignoring AWS_PROFILE and
- * any keys in the environment.
- * @param profile the profile to sign in as
- * @param env the environment, process.env by default
- * @return a function answering the credentials, reading again as they age
+ * A profile that is there and offers none of the ways in uno can use. The
+ * sentence names them.
+ */
+export class ProfileNoWayIn extends Data.TaggedError('ProfileNoWayIn')<{
+  profile: string;
+  message: string;
+}> {
+  /** @param parts The profile. */
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile} has no way in uno can use · give it keys in ~/.aws/credentials, a credential_process, or an SSO sign-in`,
+    });
+  }
+}
+
+/**
+ * Signs in as one named profile, ignoring AWS_PROFILE and any keys in the
+ * environment.
+ * @param profile The profile to sign in as.
+ * @param env The environment, process.env by default.
+ * @return A function answering the credentials, reading again as they age.
  */
 export function profileCredentials(
   profile: string,
   env: Env = process.env,
 ): () => Promise<AwsCredentials> {
-  return cached(async () => {
-    const files = await awsFiles(env);
-    const held = await profileSession(env, files, profile);
+  return cached(() => Effect.runPromise(profileChain(profile, env)));
+}
+
+/**
+ * Runs the sign-in profileCredentials reads, as one Effect: the profile's
+ * own way in, failing by name where the profile is not there or offers none.
+ * @param profile The profile to sign in as.
+ * @return The credentials, kept until shortly before they expire.
+ */
+function profileChain(
+  profile: string,
+  env: Env,
+): Effect.Effect<Held, ChainFailure> {
+  return Effect.gen(function* () {
+    const files = yield* Effect.promise(() => awsFiles(env));
+    const held = yield* profileSession(env, files, profile);
     if (held !== undefined) return held;
     if (
       !files.credentials.has(profile) &&
       configOf(files, profile) === undefined
     ) {
-      throw new Error(
-        `there is no AWS profile called ${profile} in ~/.aws/config or ~/.aws/credentials`,
-      );
+      return yield* new NoSuchProfile({ profile });
     }
-    throw new Error(
-      `the AWS profile ${profile} has no way in uno can use · give it keys in ~/.aws/credentials, a credential_process, or an SSO sign-in`,
-    );
+    return yield* new ProfileNoWayIn({ profile });
   });
 }
 
@@ -1028,10 +1448,31 @@ function unsigned(c: Connection, env: Env): Signing {
 }
 
 /**
- * connectionAuth is the desktop's ways of signing in: `machine`, `profile`
- * and `public`. `role` is refused. It is the hosted engine's.
- * @param env the environment, process.env by default
- * @return the ways of signing in
+ * A connection that signs in with a role, on the desktop, where only uno's
+ * hosted engine takes one on. The sentence says what to connect it with
+ * instead.
+ */
+export class RoleOnDesktop extends Data.TaggedError('RoleOnDesktop')<{
+  connection: string;
+  roleArn: string;
+  message: string;
+}> {
+  /** @param parts The connection, as the sentence names it, and its role. */
+  constructor(parts: { connection: string; roleArn: string }) {
+    super({
+      ...parts,
+      message:
+        `${parts.connection} signs in with a role, which only uno's hosted engine takes on · ` +
+        `on the desktop, connect it with a profile that can assume ${parts.roleArn}`,
+    });
+  }
+}
+
+/**
+ * Offers the desktop's ways of signing in: `machine`, `profile` and
+ * `public`. `role` is refused. It is the hosted engine's.
+ * @param env The environment, process.env by default.
+ * @return The ways of signing in.
  */
 export function connectionAuth(env: Env = process.env): ConnectionAuth {
   const machine = awsCredentials(env);
@@ -1056,10 +1497,10 @@ export function connectionAuth(env: Env = process.env): ConnectionAuth {
         case 'public':
           return unsigned(c, env);
         case 'role':
-          throw new Error(
-            `${who(c)} signs in with a role, which only uno's hosted engine takes on · ` +
-              `on the desktop, connect it with a profile that can assume ${c.auth.roleArn}`,
-          );
+          throw new RoleOnDesktop({
+            connection: who(c),
+            roleArn: c.auth.roleArn,
+          });
         default:
           return unreachable(c.auth);
       }
@@ -1087,15 +1528,51 @@ export interface HostedOptions {
 }
 
 /**
- * hostedAuth is the hosted engine's ways of signing in: `role` and `public`.
- * A `role` connection is assumed through STS with the tenant's external ID,
- * as a session named for the person, and its keys are kept until shortly
- * before they expire. The keys are kept per role, in this process, and a
- * process is one workspace's, so no session is ever shared across tenants. `machine` and
+ * An address no connection covers, on the hosted engine, which has no
+ * machine of its own to sign with.
+ */
+export class OutsideEveryConnection extends Data.TaggedError(
+  'OutsideEveryConnection',
+)<{ message: string }> {
+  constructor() {
+    super({
+      message:
+        "uno's hosted engine reads only the buckets a connection covers · " +
+        'it signs in with a role in your account, not with a machine of its own',
+    });
+  }
+}
+
+/**
+ * A connection that signs in as a machine or a profile, on the hosted
+ * engine, which is no machine of anyone's. The sentence says what to connect
+ * it with instead.
+ */
+export class MachineOnHosted extends Data.TaggedError('MachineOnHosted')<{
+  connection: string;
+  message: string;
+}> {
+  /** @param parts The connection, as the sentence names it. */
+  constructor(parts: { connection: string }) {
+    super({
+      ...parts,
+      message:
+        `${parts.connection} signs in as a machine of its own, which uno's hosted engine is not · ` +
+        'connect it with a role in your account that uno may assume',
+    });
+  }
+}
+
+/**
+ * Offers the hosted engine's ways of signing in: `role` and `public`. A
+ * `role` connection is assumed through STS with the tenant's external ID, as
+ * a session named for the person, and its keys are kept until shortly before
+ * they expire. The keys are kept per role, in this process, and a process is
+ * one workspace's, so no session is ever shared across tenants. `machine` and
  * `profile` are refused, and `machine()` rejects, so only an address a
  * connection covers is read.
- * @param opts what the engine signs in with
- * @return the ways of signing in
+ * @param opts What the engine signs in with.
+ * @return The ways of signing in.
  */
 export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   const env = opts.env ?? process.env;
@@ -1103,12 +1580,7 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
   return {
     modes: ['role', 'public'],
     machine() {
-      return Promise.reject(
-        new Error(
-          "uno's hosted engine reads only the buckets a connection covers · " +
-            'it signs in with a role in your account, not with a machine of its own',
-        ),
-      );
+      return Promise.reject(new OutsideEveryConnection());
     },
     async of(c) {
       switch (c.auth.mode) {
@@ -1142,10 +1614,7 @@ export function hostedAuth(opts: HostedOptions): ConnectionAuth {
           return unsigned(c, env);
         case 'machine':
         case 'profile':
-          throw new Error(
-            `${who(c)} signs in as a machine of its own, which uno's hosted engine is not · ` +
-              'connect it with a role in your account that uno may assume',
-          );
+          throw new MachineOnHosted({ connection: who(c) });
         default:
           return unreachable(c.auth);
       }

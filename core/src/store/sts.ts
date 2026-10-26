@@ -7,7 +7,12 @@
  * to reach a network. The guard test in tests/store/opens.test.ts checks
  * that. Every file read is in store/node.ts, which reads ~/.aws and passes
  * the token or role in.
+ *
+ * An exchange is an Effect that fails with what the service said. The
+ * function named for the call runs it as a Promise, at the store's edge.
  */
+
+import { Data, Effect } from 'effect';
 
 import { parseTime } from '@go';
 import { encodeQuery, signV4 } from './s3.ts';
@@ -46,74 +51,153 @@ export interface SsoAsk {
 }
 
 /**
- * ssoRoleCredentials trades an SSO access token for a role's temporary keys
- * through the SSO portal's GetRoleCredentials. A 401 or 403 means the sign-in
- * has expired or been revoked, and the error says to sign in again.
- * @param ask the profile's portal, account and role, with its access token
- * @param opts where the exchange is sent and how requests go out
- * @return the role's temporary keys
+ * Trades an SSO access token for a role's temporary keys through the SSO
+ * portal's GetRoleCredentials. A 401 or 403 means the sign-in has expired or
+ * been revoked, and the failure says to sign in again.
+ * @param ask The profile's portal, account and role, with its access token.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's temporary keys.
  */
-export async function ssoRoleCredentials(
+export function ssoExchange(
   ask: SsoAsk,
   opts: ExchangeOptions = {},
-): Promise<Session> {
-  const go = opts.fetch ?? fetch;
-  const base = (
-    opts.endpoint ?? `https://portal.sso.${ask.region}.amazonaws.com`
-  ).replace(/\/+$/, '');
-  const url = new URL(`${base}/federation/credentials`);
-  url.searchParams.set('account_id', ask.accountId);
-  url.searchParams.set('role_name', ask.roleName);
+): Effect.Effect<Session, SsoFailure> {
+  return Effect.gen(function* () {
+    const go = opts.fetch ?? fetch;
+    const base = (
+      opts.endpoint ?? `https://portal.sso.${ask.region}.amazonaws.com`
+    ).replace(/\/+$/, '');
+    const url = new URL(`${base}/federation/credentials`);
+    url.searchParams.set('account_id', ask.accountId);
+    url.searchParams.set('role_name', ask.roleName);
 
-  const res = await go(url, {
-    headers: { 'x-amz-sso_bearer_token': ask.accessToken },
+    const res = yield* Effect.promise(() =>
+      go(url, { headers: { 'x-amz-sso_bearer_token': ask.accessToken } }),
+    );
+    if (res.status === 401 || res.status === 403) {
+      return yield* new NotSignedIn({
+        profile: ask.profile,
+        why: 'the SSO portal turned its sign-in away',
+      });
+    }
+    if (!res.ok) {
+      return yield* new SsoPortalRefused({
+        profile: ask.profile,
+        status: res.status,
+      });
+    }
+    return yield* ssoSessionIn(res, ask.profile);
   });
-  if (res.status === 401 || res.status === 403) {
-    throw new Error(
-      signInAgain(ask.profile, 'the SSO portal turned its sign-in away'),
-    );
-  }
-  if (!res.ok) {
-    throw new Error(
-      `the AWS profile ${ask.profile}: the SSO portal answered ${res.status}`,
-    );
-  }
-  const body = (await res.json()) as {
-    roleCredentials?: Record<string, unknown>;
-  };
-  const r = body.roleCredentials;
-  const id = r?.['accessKeyId'];
-  const secret = r?.['secretAccessKey'];
-  const token = r?.['sessionToken'];
-  const expiration = r?.['expiration'];
-  if (
-    typeof id !== 'string' ||
-    typeof secret !== 'string' ||
-    typeof token !== 'string' ||
-    typeof expiration !== 'number'
-  ) {
-    throw new Error(
-      `the AWS profile ${ask.profile}: the SSO portal's answer held no credentials`,
-    );
-  }
-  return {
-    accessKeyId: id,
-    secretAccessKey: secret,
-    sessionToken: token,
-    expiration: new Date(expiration),
-  };
 }
 
 /**
- * signInAgain is the error message for an SSO sign-in that has lapsed,
- * with the command that fixes it. Also used by store/node.ts.
- * @param profile the profile's name
- * @param why what is wrong with the sign-in
- * @return the message, with the command that signs in again
+ * Runs ssoExchange as a Promise, for a caller outside the store.
+ * @param ask The profile's portal, account and role, with its access token.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's temporary keys.
  */
-export function signInAgain(profile: string, why: string): string {
+export function ssoRoleCredentials(
+  ask: SsoAsk,
+  opts: ExchangeOptions = {},
+): Promise<Session> {
+  return Effect.runPromise(ssoExchange(ask, opts));
+}
+
+/**
+ * Reads the portal's answer to GetRoleCredentials: the session it holds, or
+ * the refusal where it holds none uno can read.
+ * @param res The portal's answer, with a success status.
+ * @param profile The profile, for the error.
+ */
+function ssoSessionIn(
+  res: Response,
+  profile: string,
+): Effect.Effect<Session, SsoUnreadable> {
+  return Effect.gen(function* () {
+    const body = (yield* Effect.promise(() => res.json())) as {
+      roleCredentials?: Record<string, unknown>;
+    };
+    const r = body.roleCredentials;
+    const id = r?.['accessKeyId'];
+    const secret = r?.['secretAccessKey'];
+    const token = r?.['sessionToken'];
+    const expiration = r?.['expiration'];
+    if (
+      typeof id !== 'string' ||
+      typeof secret !== 'string' ||
+      typeof token !== 'string' ||
+      typeof expiration !== 'number'
+    ) {
+      return yield* new SsoUnreadable({ profile });
+    }
+    return {
+      accessKeyId: id,
+      secretAccessKey: secret,
+      sessionToken: token,
+      expiration: new Date(expiration),
+    };
+  });
+}
+
+/**
+ * An SSO sign-in that has lapsed or was never made. The sentence says what is
+ * wrong with it and gives the command that signs in again. Raised here when
+ * the portal turns the sign-in away, and by store/node.ts for a cached
+ * sign-in that is missing, unreadable or expired.
+ */
+export class NotSignedIn extends Data.TaggedError('NotSignedIn')<{
+  profile: string;
+  /** What is wrong with the sign-in. */
+  why: string;
+  message: string;
+}> {
+  /** @param parts The profile and what is wrong with its sign-in. */
+  constructor(parts: { profile: string; why: string }) {
+    super({ ...parts, message: signInAgain(parts.profile, parts.why) });
+  }
+}
+
+/**
+ * Builds NotSignedIn's sentence: what is wrong with the sign-in, and the
+ * command that fixes it.
+ * @param why What is wrong with the sign-in.
+ * @return The sentence, with the command that signs in again.
+ */
+function signInAgain(profile: string, why: string): string {
   return `the AWS profile ${profile} is not signed in · ${why} · sign in with \`aws sso login --profile ${profile}\``;
 }
+
+/** The SSO portal answered with a status other than success. */
+export class SsoPortalRefused extends Data.TaggedError('SsoPortalRefused')<{
+  profile: string;
+  status: number;
+  message: string;
+}> {
+  /** @param parts The profile and the status the portal answered. */
+  constructor(parts: { profile: string; status: number }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}: the SSO portal answered ${parts.status}`,
+    });
+  }
+}
+
+/** The SSO portal let the role be read and answered with no credentials. */
+export class SsoUnreadable extends Data.TaggedError('SsoUnreadable')<{
+  profile: string;
+  message: string;
+}> {
+  /** @param parts The profile. */
+  constructor(parts: { profile: string }) {
+    super({
+      ...parts,
+      message: `the AWS profile ${parts.profile}: the SSO portal's answer held no credentials`,
+    });
+  }
+}
+
+/** What trading an SSO sign-in for a role's keys can fail with. */
+export type SsoFailure = NotSignedIn | SsoPortalRefused | SsoUnreadable;
 
 /** What AssumeRole is asked for. */
 export interface RoleAsk {
@@ -138,43 +222,66 @@ const STS_VERSION = '2011-06-15';
 const SESSION_NAME = /^[\w+=,.@-]{2,64}$/;
 
 /**
- * assumeRole calls STS AssumeRole as one signed GET, with `source` as the
- * caller's credentials, and returns the role's session.
+ * Calls STS AssumeRole as one signed GET, with `source` as the caller's
+ * credentials, and succeeds with the role's session.
  *
- * An error includes STS's error code and message.
- * @param ask the role, the session and the region
- * @param source the caller's keys, which sign the request
- * @param opts where the exchange is sent and how requests go out
- * @return the role's session
+ * It fails with a session name STS would not take, or with what STS said:
+ * its error code and message. A request STS never answers rejects with the
+ * runtime's own error, as a defect.
+ * @param ask The role, the session and the region.
+ * @param source The caller's keys, which sign the request.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
  */
-export async function assumeRole(
+export function roleExchange(
+  ask: RoleAsk,
+  source: Omit<AwsCredentials, 'region'>,
+  opts: ExchangeOptions = {},
+): Effect.Effect<Session, StsFailure> {
+  return Effect.gen(function* () {
+    yield* checkSessionName(ask.roleArn, ask.sessionName);
+    const go = opts.fetch ?? fetch;
+    const query: Array<[string, string]> = [
+      ['Action', 'AssumeRole'],
+      ['Version', STS_VERSION],
+      ['RoleArn', ask.roleArn],
+      ['RoleSessionName', ask.sessionName],
+    ];
+    if (ask.durationSeconds !== undefined)
+      query.push(['DurationSeconds', String(ask.durationSeconds)]);
+    if (ask.externalId !== undefined)
+      query.push(['ExternalId', ask.externalId]);
+    // Encoded with the encoder SigV4 signs with, so the query on the wire
+    // matches the signature. URLSearchParams would write a space as `+`.
+    const url = new URL(`${stsBase(ask.region, opts)}/?${encodeQuery(query)}`);
+
+    const headers = signV4(
+      { method: 'GET', url, headers: {} },
+      source,
+      ask.region,
+      'sts',
+      new Date(),
+    );
+    const res = yield* Effect.promise(() =>
+      go(url, { method: 'GET', headers }),
+    );
+    return yield* sessionIn(res, ask.roleArn);
+  });
+}
+
+/**
+ * Runs roleExchange as a Promise, for a caller outside the store.
+ * @param ask The role, the session and the region.
+ * @param source The caller's keys, which sign the request.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
+ */
+export function assumeRole(
   ask: RoleAsk,
   source: Omit<AwsCredentials, 'region'>,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
-  checkSessionName(ask.roleArn, ask.sessionName);
-  const go = opts.fetch ?? fetch;
-  const query: Array<[string, string]> = [
-    ['Action', 'AssumeRole'],
-    ['Version', STS_VERSION],
-    ['RoleArn', ask.roleArn],
-    ['RoleSessionName', ask.sessionName],
-  ];
-  if (ask.durationSeconds !== undefined)
-    query.push(['DurationSeconds', String(ask.durationSeconds)]);
-  if (ask.externalId !== undefined) query.push(['ExternalId', ask.externalId]);
-  // Encoded with the encoder SigV4 signs with, so the query on the wire
-  // matches the signature. URLSearchParams would write a space as `+`.
-  const url = new URL(`${stsBase(ask.region, opts)}/?${encodeQuery(query)}`);
-
-  const headers = signV4(
-    { method: 'GET', url, headers: {} },
-    source,
-    ask.region,
-    'sts',
-    new Date(),
-  );
-  return sessionIn(await go(url, { method: 'GET', headers }), ask.roleArn);
+  return Effect.runPromise(roleExchange(ask, source, opts));
 }
 
 /** What AssumeRoleWithWebIdentity is asked for. */
@@ -191,34 +298,51 @@ export interface WebIdentityAsk {
 }
 
 /**
- * assumeRoleWithWebIdentity calls STS AssumeRoleWithWebIdentity and returns
- * the role's session. The call is unsigned: the token says who is asking.
- * It goes as a POST, since a token can run past what a URL holds.
- * @param ask the role, the session, the token and the region
- * @param opts where the exchange is sent and how requests go out
- * @return the role's session
+ * Calls STS AssumeRoleWithWebIdentity and succeeds with the role's session.
+ * The call is unsigned: the token says who is asking. It goes as a POST,
+ * since a token can run past what a URL holds. It fails as roleExchange does.
+ * @param ask The role, the session, the token and the region.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
  */
-export async function assumeRoleWithWebIdentity(
+export function webIdentityExchange(
+  ask: WebIdentityAsk,
+  opts: ExchangeOptions = {},
+): Effect.Effect<Session, StsFailure> {
+  return Effect.gen(function* () {
+    yield* checkSessionName(ask.roleArn, ask.sessionName);
+    const go = opts.fetch ?? fetch;
+    const query: Array<[string, string]> = [
+      ['Action', 'AssumeRoleWithWebIdentity'],
+      ['Version', STS_VERSION],
+      ['RoleArn', ask.roleArn],
+      ['RoleSessionName', ask.sessionName],
+      ['WebIdentityToken', ask.token],
+    ];
+    if (ask.durationSeconds !== undefined)
+      query.push(['DurationSeconds', String(ask.durationSeconds)]);
+    const res = yield* Effect.promise(() =>
+      go(`${stsBase(ask.region, opts)}/`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: encodeQuery(query),
+      }),
+    );
+    return yield* sessionIn(res, ask.roleArn);
+  });
+}
+
+/**
+ * Runs webIdentityExchange as a Promise, for a caller outside the store.
+ * @param ask The role, the session, the token and the region.
+ * @param opts Where the exchange is sent and how requests go out.
+ * @return The role's session.
+ */
+export function assumeRoleWithWebIdentity(
   ask: WebIdentityAsk,
   opts: ExchangeOptions = {},
 ): Promise<Session> {
-  checkSessionName(ask.roleArn, ask.sessionName);
-  const go = opts.fetch ?? fetch;
-  const query: Array<[string, string]> = [
-    ['Action', 'AssumeRoleWithWebIdentity'],
-    ['Version', STS_VERSION],
-    ['RoleArn', ask.roleArn],
-    ['RoleSessionName', ask.sessionName],
-    ['WebIdentityToken', ask.token],
-  ];
-  if (ask.durationSeconds !== undefined)
-    query.push(['DurationSeconds', String(ask.durationSeconds)]);
-  const res = await go(`${stsBase(ask.region, opts)}/`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: encodeQuery(query),
-  });
-  return sessionIn(res, ask.roleArn);
+  return Effect.runPromise(webIdentityExchange(ask, opts));
 }
 
 /**
@@ -236,57 +360,118 @@ function stsBase(region: string, opts: ExchangeOptions): string {
 }
 
 /**
- *
- * checkSessionName refuses a name STS would not take, before any request is sent.
- * @param roleArn the role, for the error
- * @param sessionName the name to check
+ * A role session name STS would not take, refused before any request is
+ * sent.
  */
-function checkSessionName(roleArn: string, sessionName: string): void {
-  if (!SESSION_NAME.test(sessionName)) {
-    throw new Error(
-      `${roleArn} cannot be assumed as ${JSON.stringify(sessionName)} · ` +
+export class SessionNameRefused extends Data.TaggedError('SessionNameRefused')<{
+  roleArn: string;
+  sessionName: string;
+  message: string;
+}> {
+  /** @param parts The role and the session name refused. */
+  constructor(parts: { roleArn: string; sessionName: string }) {
+    super({
+      ...parts,
+      message:
+        `${parts.roleArn} cannot be assumed as ${JSON.stringify(parts.sessionName)} · ` +
         'a role session name is 2 to 64 of letters, digits and +=,.@_-',
-    );
+    });
   }
 }
 
 /**
- * sessionIn reads STS's answer to a role assumption: the session it holds,
- * or the refusal with STS's error code and message.
- * @param res STS's answer
- * @param roleArn the role, for the error
- * @return the session the answer holds
+ * Refuses a name STS would not take, before any request is sent.
+ * @param roleArn The role, for the error.
  */
-async function sessionIn(res: Response, roleArn: string): Promise<Session> {
-  const body = await res.text();
-  if (!res.ok) {
-    const code = text(body, 'Code') ?? `HTTP ${res.status}`;
-    const message = text(body, 'Message');
-    throw new Error(
-      `STS would not let ${roleArn} be assumed · ${code}${message === undefined ? '' : `: ${message}`}`,
-    );
-  }
+function checkSessionName(
+  roleArn: string,
+  sessionName: string,
+): Effect.Effect<void, SessionNameRefused> {
+  return SESSION_NAME.test(sessionName)
+    ? Effect.void
+    : Effect.fail(new SessionNameRefused({ roleArn, sessionName }));
+}
 
-  // A missing Credentials element reads as empty, so every field is missing.
-  const credentials = text(body, 'Credentials') ?? '';
-  const id = text(credentials, 'AccessKeyId');
-  const secret = text(credentials, 'SecretAccessKey');
-  const token = text(credentials, 'SessionToken');
-  const expiration = parseTime(text(credentials, 'Expiration'));
-  if (
-    id === undefined ||
-    secret === undefined ||
-    token === undefined ||
-    expiration === undefined
-  ) {
-    throw new Error(
-      `STS let ${roleArn} be assumed and answered with no credentials uno could read`,
-    );
+/**
+ * STS would not let the role be assumed: its error code, and its message
+ * where it gave one.
+ */
+export class StsRefused extends Data.TaggedError('StsRefused')<{
+  roleArn: string;
+  /** STS's error code, or `HTTP <status>` where its answer named none. */
+  code: string;
+  /** STS's message, where it gave one. */
+  detail?: string;
+  message: string;
+}> {
+  /** @param parts The role, STS's error code, and its message if any. */
+  constructor(parts: { roleArn: string; code: string; detail?: string }) {
+    super({
+      ...parts,
+      message: `STS would not let ${parts.roleArn} be assumed · ${parts.code}${parts.detail === undefined ? '' : `: ${parts.detail}`}`,
+    });
   }
-  return {
-    accessKeyId: id,
-    secretAccessKey: secret,
-    sessionToken: token,
-    expiration,
-  };
+}
+
+/**
+ * STS let the role be assumed and answered with no credentials uno could
+ * read.
+ */
+export class StsUnreadable extends Data.TaggedError('StsUnreadable')<{
+  roleArn: string;
+  message: string;
+}> {
+  /** @param parts The role. */
+  constructor(parts: { roleArn: string }) {
+    super({
+      ...parts,
+      message: `STS let ${parts.roleArn} be assumed and answered with no credentials uno could read`,
+    });
+  }
+}
+
+/** What assuming a role at STS can fail with. */
+export type StsFailure = SessionNameRefused | StsRefused | StsUnreadable;
+
+/**
+ * Reads STS's answer to a role assumption: the session it holds, or the
+ * refusal with STS's error code and message.
+ * @param roleArn The role, for the error.
+ */
+function sessionIn(
+  res: Response,
+  roleArn: string,
+): Effect.Effect<Session, StsRefused | StsUnreadable> {
+  return Effect.gen(function* () {
+    const body = yield* Effect.promise(() => res.text());
+    if (!res.ok) {
+      return yield* new StsRefused({
+        roleArn,
+        code: text(body, 'Code') ?? `HTTP ${res.status}`,
+        detail: text(body, 'Message'),
+      });
+    }
+
+    // A missing Credentials element reads as empty, so every field is
+    // missing.
+    const credentials = text(body, 'Credentials') ?? '';
+    const id = text(credentials, 'AccessKeyId');
+    const secret = text(credentials, 'SecretAccessKey');
+    const token = text(credentials, 'SessionToken');
+    const expiration = parseTime(text(credentials, 'Expiration'));
+    if (
+      id === undefined ||
+      secret === undefined ||
+      token === undefined ||
+      expiration === undefined
+    ) {
+      return yield* new StsUnreadable({ roleArn });
+    }
+    return {
+      accessKeyId: id,
+      secretAccessKey: secret,
+      sessionToken: token,
+      expiration,
+    };
+  });
 }
