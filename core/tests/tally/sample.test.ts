@@ -43,6 +43,18 @@ function folded(rows: Row[], order = [...rows.keys()]): SampleFold {
   return fold;
 }
 
+/** line returns rows whose y is twice their x, the row's number. */
+function line(): Row[] {
+  return Array.from({ length: ROWS }, (_, r): Row => [`${r}`, `${2 * r}`]);
+}
+
+/** edit takes back a row's cells and folds its new ones, as an edit does. */
+function edit(fold: SampleFold, rows: Row[], row: number, to: Row): void {
+  fold.remove(blockOf(row), row, ...rows[row]!);
+  rows[row] = to;
+  fold.add(blockOf(row), row, ...to);
+}
+
 test('a sample fold sends the points of the rows of least rank', () => {
   // A row's y is twice its x, or blank.
   const y = (r: number) => (r % BLANK_EVERY === 0 ? '' : `${2 * r}`);
@@ -105,4 +117,24 @@ test('a sample fold of revenue against units reads the sales sheet', () => {
   // A fold with nothing plotted reads its least and most as 0.
   const none = new SampleFold().snapshot();
   expect(none).toMatchObject({ least: { x: 0, y: 0 }, most: { x: 0, y: 0 } });
+});
+
+test('an edit inside the sample moves one point, and one outside none', () => {
+  const rows = line();
+  const ranked = [...rows.keys()].sort(byRank);
+  // In rank order, a fold cuts its kept rows at the last row it samples.
+  const fold = folded(rows, ranked);
+  const { x, y } = fold.snapshot();
+  edit(fold, rows, ranked[SCATTER_POINTS_AT_MOST - 1]!, ['0.5', '0.5']);
+  edit(fold, rows, ranked.at(-1)!, [`${ROWS}`, '-1']);
+  edit(fold, rows, ranked.at(-2)!, ['', '1']);
+  edit(fold, rows, ranked.at(-2)!, ['n/a', '1']);
+  expect(fold.snapshot()).toEqual({
+    x: [...x.slice(0, -1), 0.5],
+    y: [...y.slice(0, -1), 0.5],
+    plotted: ROWS - 1,
+    least: { x: 0, y: -1 },
+    most: { x: ROWS, y: 2 * (ROWS - 1) },
+    skipped: { blank: 0, unparsed: 1 },
+  });
 });
