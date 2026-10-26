@@ -30,8 +30,9 @@ export interface Sample {
 
 /**
  * SampleFold keeps a scatter's points: those of the SCATTER_POINTS_AT_MOST
- * rows of least rowRank, which hangs on the row number alone. A row whose x
- * or y is not a number keeps its place in the sample, with no point.
+ * rows of least rowRank, which hangs on the row number alone, so blocks of
+ * rows fold alone or in any order into the same sample. A row whose x or y
+ * is not a number keeps its place in the sample, with no point.
  */
 export class SampleFold {
   /** Each kept row's point, or undefined when the row is left out. */
@@ -44,6 +45,11 @@ export class SampleFold {
     const x = parse(xCell);
     const y = parse(yCell);
     this.keep(row, x === undefined || y === undefined ? undefined : { x, y });
+  }
+
+  /** merge takes in the rows `other` folded. */
+  merge(other: SampleFold): void {
+    for (const [row, point] of other.kept) this.keep(row, point);
   }
 
   /** snapshot reads the fold as plain numbers. */
