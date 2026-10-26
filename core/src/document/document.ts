@@ -19,6 +19,7 @@ import type { Edit } from '@sheet';
 import type { Sheet } from '@sheet';
 import { extensionOf } from '@ingest';
 import type { FileRef, HeaderMode } from '@store';
+import type { Chart } from './chart.ts';
 import { against, baseOf, dirOf, relativeTo } from './path.ts';
 
 /**
@@ -77,6 +78,14 @@ export const GENERATOR = 'uno 0.2.0';
 export const MANIFEST_ENTRY = 'uno.json';
 export const STATE_ENTRY = 'sheet/state.json';
 export const LOG_ENTRY = 'edits/log.jsonl';
+/** Found by name: a build that does not know charts would drop a uno.json key
+ * naming it, and keeps the entry. */
+export const CHARTS_ENTRY = 'view/charts.json';
+
+/** The layout of CHARTS_ENTRY this build writes. A later build that adds a
+ * key to the entry, or to a chart of a kind this build reads, raises it, since
+ * this build saves only the keys it reads. */
+export const CHARTS_VERSION = 1;
 
 /** Entry stem for a one-source workspace: data/source.csv. */
 const SOURCE_STEM = 'data/source';
@@ -341,7 +350,7 @@ export interface Logged {
 /**
  * Document is one .uno in memory.
  *
- * `writeDocument` reads manifest, sources, active, log, at and extra.
+ * `writeDocument` reads manifest, sources, active, log, charts, at and extra.
  * `sheets` is set only by `readDocument` and ignored by the writer.
  */
 export interface Document {
@@ -355,6 +364,9 @@ export interface Document {
   /** The id of the source that was showing. */
   active: string;
   log: Logged[];
+
+  /** The workspace's charts, oldest first. Without any, no entry is written. */
+  charts?: readonly Chart[];
 
   /**
    * Where the .uno itself is, so a source under the same folder is stored

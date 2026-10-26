@@ -4,10 +4,11 @@
  */
 
 import { strFromU8, unzipSync, zipSync } from 'fflate';
-import { describe, expect, test } from 'vite-plus/test';
+import { describe, expect, test, vi } from 'vite-plus/test';
 
 import {
   BASE_VERSION,
+  CHARTS_ENTRY,
   FORMAT_VERSION,
   FORMULA_VERSION,
   LOG_ENTRY,
@@ -22,7 +23,7 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type { Document, State } from '@document';
+import type { Chart, Document, State } from '@document';
 import { parse as parseFormula } from '@formula';
 import { read as ingestRead } from '@ingest';
 import { parse as parseProgram } from '@program';
@@ -833,5 +834,49 @@ describe("a source's id", () => {
   test('is never empty', () => {
     expect(sourceId('', [])).toBe('source');
     expect(sourceId('¿?.csv', [])).toBe('source');
+  });
+});
+
+// ------------------------------------------------------------------ charts
+
+describe("a workspace's charts", () => {
+  /** Rows per region at the right edge, with its keys in no particular order. */
+  const PER_REGION: Chart = {
+    refresh: 0,
+    place: { height: 260, width: 420, y: 0, x: 1 },
+    title: '',
+    plot: { by: { header: 'region', col: REGION }, t: 'bars' },
+    source: 'sales',
+    id: 'c1',
+  };
+
+  /** A one-source workspace holding `charts`. */
+  function charted(charts?: readonly Chart[]): Document {
+    return { ...saved('sales.csv').doc, charts };
+  }
+
+  // The entry is compared whole, so a moved or added key fails.
+  test('are written after the log, each key in its place', () => {
+    const doc = charted([PER_REGION]);
+    const entries = unzipSync(writeDocument(doc));
+
+    expect(doc.manifest.format, 'no newer format').toBe(BASE_VERSION);
+    expect(Object.keys(entries).slice(-2)).toEqual([LOG_ENTRY, CHARTS_ENTRY]);
+    const written = strFromU8(entries[CHARTS_ENTRY]!);
+    expect(JSON.stringify(JSON.parse(written))).toBe(
+      '{"version":1,"charts":[{"id":"c1","source":"sales",' +
+        '"plot":{"t":"bars","by":{"col":1,"header":"region"}},"title":"",' +
+        '"place":{"x":1,"y":0,"width":420,"height":260},"refresh":0}]}',
+    );
+  });
+
+  test('add nothing to the file when there are none, to the byte', () => {
+    // One save time for both, so their bytes can match.
+    vi.setSystemTime(new Date('2026-10-29T12:00:00Z'));
+    try {
+      expect(writeDocument(charted([]))).toEqual(writeDocument(charted()));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

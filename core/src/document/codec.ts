@@ -35,6 +35,8 @@ import type {
 } from './document.ts';
 import {
   BASE_VERSION,
+  CHARTS_ENTRY,
+  CHARTS_VERSION,
   FORMAT_VERSION,
   FORMULA_VERSION,
   GENERATOR,
@@ -245,6 +247,15 @@ export function writeDocument(d: Document): Uint8Array {
     },
     { name: LOG_ENTRY, bytes: encoder.encode(formatLog(d.log, single)) },
   );
+  // A workspace without charts writes no entry for them, so it saves as it
+  // did before charts.
+  const charts = d.charts ?? [];
+  if (charts.length > 0) {
+    entries.push({
+      name: CHARTS_ENTRY,
+      bytes: encoder.encode(formatJSON(chartsJSON(charts))),
+    });
+  }
 
   // Extra entries go back in, in name order, so a saved file keeps the same
   // layout between saves.
@@ -1125,6 +1136,17 @@ function sheetStateJSON(s: State): {
       s.columnFormulas !== undefined && s.columnFormulas.length > 0
         ? s.columnFormulas
         : undefined,
+  };
+}
+
+/**
+ * chartsJSON writes each chart through parseChart, which refuses one a read
+ * would refuse and gives its keys in the order the file keeps.
+ */
+function chartsJSON(charts: readonly Chart[]): unknown {
+  return {
+    version: CHARTS_VERSION,
+    charts: charts.map((chart) => parseChart(CHARTS_ENTRY, chart)),
   };
 }
 
