@@ -138,3 +138,31 @@ test('an edit inside the sample moves one point, and one outside none', () => {
     skipped: { blank: 0, unparsed: 1 },
   });
 });
+
+test('an edit that takes a least or most marks its block to fold again', () => {
+  const rows = line();
+  const fold = folded(rows);
+  const far = 2 * ROWS;
+  // Row 1 of blocks 0 to 3 takes in turn its block's most y, most x, least
+  // x and least y.
+  const blocks = [0, 1, 2, 3];
+  const taken = blocks.map((b) => b * BLOCK_ROWS + 1);
+  const [tall, wide, left, low] = taken;
+  edit(fold, rows, tall, [rows[tall]![0], `${far}`]);
+  edit(fold, rows, wide, [`${far}`, rows[wide]![1]]);
+  edit(fold, rows, left, [`${-far}`, rows[left]![1]]);
+  edit(fold, rows, low, [rows[low]![0], `${-far}`]);
+  expect(fold.stale()).toEqual([]);
+  for (const row of taken) edit(fold, rows, row, line()[row]!);
+  expect(fold.stale()).toEqual(blocks);
+  // A fold that takes this one in takes its marks too.
+  const into = new SampleFold();
+  into.merge(fold);
+  expect(into.stale()).toEqual(blocks);
+  // Until they are folded again, their least and most take in every row.
+  expect(fold.snapshot().least).toEqual({ x: -far, y: -far });
+  expect(fold.snapshot().most).toEqual({ x: far, y: far });
+  for (const b of blocks) fold.refold(b, folded(rows, rowsOf([b])));
+  expect(fold.stale()).toEqual([]);
+  expect(fold.snapshot()).toEqual(folded(rows).snapshot());
+});
