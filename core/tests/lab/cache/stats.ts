@@ -55,7 +55,7 @@ const MULBERRY_SHIFT_B = 7;
 const MULBERRY_SHIFT_C = 14;
 const MULBERRY_MIX = 61;
 /** 2 to the 32nd, to turn a 32-bit integer into a fraction. */
-const UINT32_RANGE = 2 ** 32;
+export const UINT32_RANGE = 2 ** 32;
 
 /** seeded returns a generator that yields the same numbers for the same seed. */
 export function seeded(seed: number): Random {
