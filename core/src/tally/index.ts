@@ -3,5 +3,5 @@
  */
 
 export { ExactSum } from './exact.ts';
-export { GroupsFold } from './groups.ts';
-export type { Group, Groups } from './groups.ts';
+export { DISTINCT_AT_MOST, GroupsFold } from './groups.ts';
+export type { Group, Groups, Measure, Skipped } from './groups.ts';
