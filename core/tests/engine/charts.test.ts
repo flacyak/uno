@@ -81,9 +81,24 @@ test("an open hands over a .uno's charts, oldest first, and a file's none", asyn
   try {
     const added = await opened(engine, [NORTH, SOUTH]);
     expect(added.charts).toStrictEqual([NORTH, SOUTH]);
+    expect(added.chartsNote).toBeUndefined();
 
     const file = await engine.open({ name: 'sales-q3.csv', path: FIXTURE });
     expect(file.charts).toStrictEqual([]);
+    expect(file.chartsNote).toBeUndefined();
+  } finally {
+    done();
+  }
+});
+
+test('an open says how many charts it keeps that it cannot show', async () => {
+  const { engine, done } = connect();
+  try {
+    // A repeated id, a newer build's chart, and one that names no source.
+    const repeated = { ...SOUTH, id: NORTH.id };
+    const carried = [newer('north'), newer('')];
+    const added = await opened(engine, [NORTH, repeated], carried);
+    expect(added.chartsNote).toStrictEqual({ t: 'charts-kept', count: 3 });
   } finally {
     done();
   }

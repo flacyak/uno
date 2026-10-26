@@ -131,6 +131,8 @@ export interface Opening {
   /** The charts of a .uno over the sources it holds, oldest first, each id
    * once. Empty otherwise. */
   charts: Chart[];
+  /** Said once, when the .uno held charts this build cannot show. */
+  chartsNote?: Said;
 }
 
 /** An edit as a client sends it. The engine numbers it and fills in `was`. */

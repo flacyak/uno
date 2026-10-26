@@ -66,6 +66,9 @@ export type Said =
   | { t: 'version-changed'; name: string; sizes?: { now: number; was: number } }
   | { t: 'size-changed'; name: string; now: number; was: number }
 
+  // What an open of a .uno did with the charts it cannot show.
+  | { t: 'charts-kept'; count: number }
+
   // What a workspace refuses.
   | { t: 'only-source'; name: string }
   | { t: 'append-to-absent'; name: string }
@@ -230,6 +233,11 @@ const SENTENCES: Sentences<Said> = {
   },
   'size-changed': (s) =>
     `${s.name} is ${formatBytes(s.now)} now and was ${formatBytes(s.was)} when the workspace was saved`,
+
+  'charts-kept': (s) =>
+    s.count === 1
+      ? '1 chart this uno cannot show is kept as it was'
+      : `${s.count} charts this uno cannot show are kept as they were`,
 
   'only-source': (s) =>
     `${s.name} is the only source here, and a workspace needs one`,

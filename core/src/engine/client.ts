@@ -49,6 +49,8 @@ export interface Added {
   showing: string;
   cells: Place['cells'];
   charts: Chart[];
+  /** Said once, when the .uno held charts this build cannot show. */
+  chartsNote?: Said;
 }
 
 export class Engine {
@@ -94,6 +96,7 @@ export class Engine {
         showing: added.showing,
         cells: added.cells,
         charts: added.charts,
+        chartsNote: added.chartsNote,
       };
     } finally {
       signal?.removeEventListener('abort', cancel);
