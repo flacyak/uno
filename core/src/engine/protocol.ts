@@ -128,7 +128,7 @@ export interface Opening {
   showing: string;
   /** The cell each source of a .uno was left on. Empty otherwise. */
   cells: Place['cells'];
-  /** The charts of a .uno, oldest first. Empty otherwise. */
+  /** The charts of a .uno, oldest first, each id once. Empty otherwise. */
   charts: Chart[];
 }
 
