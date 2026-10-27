@@ -441,6 +441,7 @@
     }
   ],
   "charts_newer": "this workspace's charts are in a form this uno cannot read · they are kept as they were, and cannot be changed here",
+  "chart_column_gone": "{name} has no column called {header}",
   "refused_only_source": "{name} is the only source here, and a workspace needs one",
   "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
   "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
