@@ -10,11 +10,10 @@ import {
   KeyRegistry,
   LINE_COLUMN,
   LINE_KEY,
+  keyedColumn,
+  pinnedColumn,
 } from '@ingest/keys';
 import type { KeyedColumn } from '@ingest/keys';
-
-/** A limit a test reaches in a few keys. */
-const SMALL_LIMIT = 2;
 
 /**
  * Columns a save pinned, where nested a then b was seen before a literal
@@ -25,6 +24,9 @@ const PINNED: readonly KeyedColumn[] = [
   { name: 'a.b', key: '/a/b' },
   { name: 'a.b_2', key: '/a.b' },
 ];
+
+/** A limit a test reaches in a few keys. */
+const SMALL_LIMIT = 2;
 
 /** registry returns a registry under `limit` that starts from `pinned`. */
 function registry(
@@ -173,5 +175,28 @@ describe('KeyRegistry adds the line column at first need', () => {
       LINE_COLUMN,
       `${LINE_COLUMN}_2`,
     ]);
+  });
+});
+
+describe('a save pins a column without the key its name finds again', () => {
+  test('a top-level field named as its column pins by name alone', () => {
+    expect(pinnedColumn({ name: 'id', key: '/id' })).toEqual({ name: 'id' });
+    expect(keyedColumn({ name: 'id' })).toEqual({ name: 'id', key: '/id' });
+  });
+
+  test('so does a field whose name needs escaping in its pointer', () => {
+    const escaped = { name: 'a/b', key: '/a~1b' };
+    expect(pinnedColumn(escaped)).toEqual({ name: 'a/b' });
+    expect(keyedColumn({ name: 'a/b' })).toEqual(escaped);
+  });
+
+  test('any other key is pinned beside the name, and read back as it was', () => {
+    const nested = { name: 'user.name', key: '/user/name' };
+    const renamed = { name: 'a.b_2', key: '/a.b' };
+    const line = { name: LINE_COLUMN, key: LINE_KEY };
+    for (const column of [nested, renamed, line]) {
+      expect(pinnedColumn(column)).toEqual(column);
+      expect(keyedColumn(pinnedColumn(column))).toEqual(column);
+    }
   });
 });

@@ -9,17 +9,25 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vite-plus/test';
 
-import { PARQUET_MAGIC_BYTES, detect, kindOf } from '@ingest/detect';
+import {
+  PARQUET_MAGIC_BYTES,
+  detect,
+  headOf,
+  kindOf,
+  readableHead,
+  refuseUnread,
+} from '@ingest/detect';
 import type { Detected, StoredHead } from '@ingest/detect';
+import { HEAD_BYTES } from '@ingest/format';
 import { sniffEncoding } from '@ingest/sniff';
+import { Refusal } from '@said';
 import type { ReadKind, Unread } from '@said';
+import type { ByteSource } from '@store';
+import { blobSource } from '@store';
 import { random } from '@core-tests/random';
 
 /** The fixtures' folder, ending in its separator. */
 const testdata = fileURLToPath(new URL('../testdata/', import.meta.url));
-
-/** How much of a file a head holds here: as much as a peek reads. */
-const HEAD_BYTES = 64 << 10;
 
 const encoder = new TextEncoder();
 
@@ -57,7 +65,7 @@ function unread(what: Unread): Detected {
 /** bytesOf joins byte values and ASCII text into one array. */
 function bytesOf(
   ...parts: ReadonlyArray<readonly number[] | string>
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(
     parts.flatMap((p) => (typeof p === 'string' ? [...encoder.encode(p)] : p)),
   );
@@ -261,5 +269,70 @@ describe('delimited text stays delimited text', () => {
           DELIMITED,
         );
     }
+  });
+});
+
+describe('an open refuses by name what this build does not read', () => {
+  /** A source over `bytes` that records the offset and length of every read. */
+  function recorded(bytes: Uint8Array<ArrayBuffer>): {
+    source: ByteSource;
+    reads: [number, number][];
+  } {
+    const reads: [number, number][] = [];
+    const blob = blobSource(new Blob([bytes]));
+    const source: ByteSource = {
+      ...blob,
+      read: (offset, length) => {
+        reads.push([offset, length]);
+        return blob.read(offset, length);
+      },
+    };
+    return { source, reads };
+  }
+
+  test('a head is one read of the first HEAD_BYTES, and its tail is read only when asked', async () => {
+    const csv = recorded(encoder.encode('date,units\n2026-07-01,1204\n'));
+    const head = await headOf(csv.source);
+    expect(head.size).toBe(csv.source.size);
+    expect(csv.reads).toEqual([[0, csv.source.size]]);
+    expect(await head.tail(PARQUET_MAGIC_BYTES)).toEqual(
+      encoder.encode('204\n'),
+    );
+    expect(csv.reads).toEqual([
+      [0, csv.source.size],
+      [csv.source.size - PARQUET_MAGIC_BYTES, PARQUET_MAGIC_BYTES],
+    ]);
+
+    const long = recorded(new Uint8Array(HEAD_BYTES + 1));
+    await headOf(long.source);
+    expect(long.reads).toEqual([[0, HEAD_BYTES]]);
+  });
+
+  test('readableHead returns the head of a file this build reads', async () => {
+    const text = 'date,units\n2026-07-01,1204\n';
+    const csv = blobSource(new Blob([text]));
+    expect(await readableHead('q3.csv', csv)).toEqual(encoder.encode(text));
+  });
+
+  test('and refuses the rest by name, saying what the file holds', async () => {
+    const gzip = blobSource(new Blob([gzipSync('a,b\n1,2\n')]));
+    const refused = await readableHead('q3.csv.gz', gzip).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+    expect(refused).toBeInstanceOf(Refusal);
+    expect((refused as Refusal).said).toEqual({
+      t: 'not-read',
+      name: 'q3.csv.gz',
+      what: 'gzip',
+    });
+
+    const parquet = await headOf(blobSource(new Blob([PARQUET])));
+    await expect(refuseUnread('q3.parquet', parquet)).rejects.toThrow(
+      'q3.parquet: Parquet is not supported yet',
+    );
+    await expect(
+      refuseUnread('q3.csv', stored('a,b\n').head),
+    ).resolves.toBeUndefined();
   });
 });
