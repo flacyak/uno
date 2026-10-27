@@ -34,6 +34,7 @@ import type {
   SingleRef,
 } from '@store';
 import { indexPass } from './pass.ts';
+import { TALLY_MS } from './protocol.ts';
 import type {
   Changed,
   ColumnInfo,
@@ -752,11 +753,13 @@ export class View {
 
   /**
    * tallyBlocks folds each block from `first`, the first row a chart lacks,
-   * as the index reaches it, and posts the charts' tallies at its end.
+   * as the index reaches it, and posts the charts' tallies every TALLY_MS
+   * while the pass runs and once at its end.
    */
   private async tallyBlocks(first: number, signal: AbortSignal): Promise<void> {
     const index = this.index;
-    let slice = Date.now();
+    let told = Date.now();
+    let slice = told;
     for (let row = first; ;) {
       await this.until(() => index.complete || index.readable() > row);
       if (signal.aborted) return;
@@ -771,7 +774,13 @@ export class View {
         this.shownIn(col, from, records, files),
       );
       row = end;
-      if (Date.now() - slice >= SLICE_MS) slice = await turn();
+
+      const now = Date.now();
+      if (now - told >= TALLY_MS) {
+        told = now;
+        this.postTallies(false);
+      }
+      if (now - slice >= SLICE_MS) slice = await turn();
     }
     this.postTallies(true);
   }
