@@ -9,6 +9,7 @@ import { expect, test } from 'vite-plus/test';
 
 import {
   BYTES,
+  COLLECTOR_VARIABLES,
   DURATION_BOUNDS,
   Engine,
   INDEX,
@@ -241,6 +242,16 @@ test('a meter adds measurements up into one OTLP request', () => {
     startTimeUnixNano: `${BEGAN}000000`,
     timeUnixNano: `${LATER}000000`,
   };
+  // A running total is first sent from zero, at the moment it was first
+  // recorded, which here is when the meter began.
+  const zeroTimes = {
+    startTimeUnixNano: `${BEGAN}000000`,
+    timeUnixNano: `${BEGAN}000000`,
+  };
+  const rowsAttributes = [
+    { key: 'outcome', value: { stringValue: 'answered' } },
+    { key: 'request', value: { stringValue: 'rows' } },
+  ];
 
   // 3 ms falls in the bucket up to 5, 40 in the one up to 50, and 1e9 in the
   // overflow bucket.
@@ -255,11 +266,16 @@ test('a meter adds measurements up into one OTLP request', () => {
       aggregationTemporality: 2,
       dataPoints: [
         {
+          ...zeroTimes,
+          attributes: rowsAttributes,
+          count: '0',
+          sum: 0,
+          bucketCounts: buckets.map(() => '0'),
+          explicitBounds: [...DURATION_BOUNDS],
+        },
+        {
           ...times,
-          attributes: [
-            { key: 'outcome', value: { stringValue: 'answered' } },
-            { key: 'request', value: { stringValue: 'rows' } },
-          ],
+          attributes: rowsAttributes,
           count: '3',
           sum: 1e9 + 43,
           bucketCounts: buckets,
@@ -274,13 +290,25 @@ test('a meter adds measurements up into one OTLP request', () => {
     sum: {
       aggregationTemporality: 2,
       isMonotonic: true,
-      dataPoints: [{ ...times, attributes: [], asDouble: 150 }],
+      dataPoints: [
+        { ...zeroTimes, attributes: [], asDouble: 0 },
+        { ...times, attributes: [], asDouble: 150 },
+      ],
     },
   });
+  // A level is read as it stands, and has no zero to start from.
   expect(level).toEqual({
     name: 'uno.level',
     unit: '1',
     gauge: { dataPoints: [{ ...times, attributes: [], asDouble: 9 }] },
+  });
+
+  // The zero goes with the first payload alone.
+  const [again, againIndexed] =
+    meter.payload().resourceMetrics[0]!.scopeMetrics[0]!.metrics;
+  expect(again).toMatchObject({ histogram: { dataPoints: [{ count: '3' }] } });
+  expect(againIndexed).toMatchObject({
+    sum: { dataPoints: [{ asDouble: 150 }] },
   });
 });
 
@@ -434,6 +462,22 @@ test('a protocol that is not OTLP over HTTP is refused by name', () => {
   ).toThrow('OTEL_EXPORTER_OTLP_METRICS_PROTOCOL is grpc');
 });
 
+test('a protocol setting that does not read as a protocol is described by its length, since it may hold a secret', () => {
+  const token = 'glc_eyJvIjoiMTIzNDU2NyIsIm4iOiJ1bm8ifQ==';
+  let said = '';
+  try {
+    collector({
+      OTEL_EXPORTER_OTLP_ENDPOINT: GATEWAY,
+      OTEL_EXPORTER_OTLP_PROTOCOL: token,
+    });
+  } catch (err) {
+    said = (err as Error).message;
+  }
+  expect(said).toContain('OTEL_EXPORTER_OTLP_PROTOCOL is not a protocol');
+  expect(said).toContain(`${token.length} characters long`);
+  expect(said).not.toContain(token);
+});
+
 test('an endpoint that is not a URL is refused by name, saying what is wrong and not what it holds', () => {
   const TOKEN = 'glc_secret';
   const refused = (endpoint: string): string => {
@@ -474,4 +518,43 @@ test('headers that are set and hold no header are refused by name', () => {
     ...READ,
     headers: {},
   });
+});
+
+/** readBy is every variable `collector` asks `env` for, whatever it finds. */
+function readBy(env: Record<string, string>): Set<string> {
+  const asked = new Set<string>();
+  collector(
+    new Proxy(env, {
+      get(target, name) {
+        if (typeof name === 'string') asked.add(name);
+        return Reflect.get(target, name);
+      },
+    }),
+  );
+  return asked;
+}
+
+test('the variables a collector is read from are all it reads, so handing them on hands the collector on', () => {
+  // A variable is asked for only while the ones before it were empty, so
+  // each endpoint is set alone, and what either run asked for is the whole.
+  const asked = new Set([
+    ...readBy({ OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp.example.test' }),
+    ...readBy({
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'https://metrics.example.test',
+    }),
+    ...readBy({}),
+  ]);
+  expect([...asked].toSorted()).toEqual([...COLLECTOR_VARIABLES].toSorted());
+
+  const env = {
+    OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp.example.test/otlp',
+    OTEL_EXPORTER_OTLP_HEADERS: 'Authorization=Basic%20all',
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'https://traces.example.test',
+    PATH: '/usr/bin',
+  };
+  const handed = Object.fromEntries(
+    COLLECTOR_VARIABLES.map((name) => [name, env[name as keyof typeof env]]),
+  );
+  expect(collector(handed)).toEqual(collector(env));
 });

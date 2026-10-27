@@ -47,6 +47,7 @@ export { serve } from './serve.ts';
 export type { Connecting } from './serve.ts';
 export {
   BYTES,
+  COLLECTOR_VARIABLES,
   DURATION_BOUNDS,
   ENDPOINT_VARIABLE,
   HEADERS_VARIABLE,

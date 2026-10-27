@@ -3,9 +3,10 @@
  * OTLP collector.
  *
  * `serve` calls a Telemetry function with each measurement: how long a
- * request took, how long a source took to index. Sending is left to the
- * platform. A measurement carries timings and request kinds only, so file
- * names, paths and buckets stay on the machine.
+ * request took, how long a source took to index. Sending is store/otlp.ts's,
+ * to the collector a platform reads from its environment with `collector`.
+ * A measurement carries timings and request kinds only, so file names,
+ * paths and buckets stay on the machine.
  *
  * Meter sums measurements, and `payload` writes the totals as an OTLP
  * metrics request in JSON for a collector's /v1/metrics endpoint.
@@ -147,6 +148,10 @@ interface Series {
   unit: string;
   attributes: KeyValue[];
   total: Total;
+  /** When the series was first recorded, in milliseconds since 1970. */
+  created: number;
+  /** Whether a payload has carried the series yet. */
+  reported: boolean;
 }
 
 function begin(kind: Kind): Total {
@@ -212,7 +217,14 @@ export class Meter {
     const key = JSON.stringify([m.name, m.kind, attributes]);
     let series = this.series.get(key);
     if (series === undefined) {
-      series = { name: m.name, unit: m.unit, attributes, total: begin(m.kind) };
+      series = {
+        name: m.name,
+        unit: m.unit,
+        attributes,
+        total: begin(m.kind),
+        created: this.now(),
+        reported: false,
+      };
       this.series.set(key, series);
     }
     add(series.total, m.value);
@@ -223,17 +235,37 @@ export class Meter {
     return this.series.size === 0;
   }
 
-  /** payload returns every total so far as one OTLP metrics request. */
+  /**
+   * payload returns every total so far as one OTLP metrics request.
+   *
+   * A running total is first sent from zero, at the moment its series began,
+   * as well as at its total. A collector takes a series' first point for
+   * where it starts and counts nothing until the next, so an engine that
+   * sends once, as a short-lived one does, would otherwise count for nothing.
+   * The zero goes with the first payload that carries the series, and no
+   * other.
+   */
   payload(): Payload {
+    const now = this.now();
     const point: Point = {
       attributes: [],
       startTimeUnixNano: nanos(this.began),
-      timeUnixNano: nanos(this.now()),
+      timeUnixNano: nanos(now),
     };
 
     const metrics = new Map<string, Metric>();
     for (const s of this.series.values()) {
       const at = { ...point, attributes: s.attributes };
+      // Strictly before the total's own point, which a collector would drop
+      // as a duplicate were the two stamped alike, and never before it began.
+      const zeroMs = Math.min(s.created, now - 1);
+      const zeroAt = {
+        ...at,
+        startTimeUnixNano: nanos(Math.min(this.began, zeroMs)),
+        timeUnixNano: nanos(zeroMs),
+      };
+      const first = !s.reported;
+      s.reported = true;
       const key = JSON.stringify([s.name, s.total.kind]);
       const metric = metrics.get(key) ?? {
         name: s.name,
@@ -243,6 +275,15 @@ export class Meter {
       metrics.set(key, metric);
 
       if ('histogram' in metric && s.total.kind === 'duration') {
+        if (first) {
+          metric.histogram.dataPoints.push({
+            ...zeroAt,
+            count: '0',
+            sum: 0,
+            bucketCounts: s.total.buckets.map(() => '0'),
+            explicitBounds: [...DURATION_BOUNDS],
+          });
+        }
         metric.histogram.dataPoints.push({
           ...at,
           count: String(s.total.count),
@@ -251,6 +292,7 @@ export class Meter {
           explicitBounds: [...DURATION_BOUNDS],
         });
       } else if ('sum' in metric && s.total.kind === 'count') {
+        if (first) metric.sum.dataPoints.push({ ...zeroAt, asDouble: 0 });
         metric.sum.dataPoints.push({ ...at, asDouble: s.total.sum });
       } else if ('gauge' in metric && s.total.kind === 'level') {
         metric.gauge.dataPoints.push({ ...at, asDouble: s.total.value });
@@ -315,10 +357,26 @@ export const METRICS_HEADERS_VARIABLE = 'OTEL_EXPORTER_OTLP_METRICS_HEADERS';
 export const METRICS_PROTOCOL_VARIABLE = 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL';
 
 /**
+ * Every variable `collector` reads, for a platform that hands its collector
+ * on to a process it starts somewhere else, such as an instance it launches.
+ */
+export const COLLECTOR_VARIABLES: readonly string[] = [
+  METRICS_ENDPOINT_VARIABLE,
+  ENDPOINT_VARIABLE,
+  METRICS_HEADERS_VARIABLE,
+  HEADERS_VARIABLE,
+  METRICS_PROTOCOL_VARIABLE,
+  PROTOCOL_VARIABLE,
+];
+
+/**
  * The protocol settings accepted. Both mean OTLP over HTTP, where the
  * collector tells JSON from protobuf by content type. gRPC is refused.
  */
 const HTTP_PROTOCOLS: readonly string[] = ['http/json', 'http/protobuf'];
+
+/** What a protocol's name looks like, grpc or http/json, and so may be said back. */
+const PROTOCOL_NAME = /^[a-z]{1,16}(\/[a-z]{1,16})?$/i;
 
 /** Quote characters stripped from a pasted value. */
 const QUOTES = ['"', "'"];
@@ -410,8 +468,13 @@ export function collector(
 
   const protocol = setOf(env, [METRICS_PROTOCOL_VARIABLE, PROTOCOL_VARIABLE]);
   if (protocol.value !== '' && !HTTP_PROTOCOLS.includes(protocol.value)) {
+    // A protocol's name is said back. Anything else may be a token pasted
+    // into the wrong variable, and is described by its length alone.
+    const is = PROTOCOL_NAME.test(protocol.value)
+      ? `is ${protocol.value}`
+      : `is not a protocol, and is ${protocol.value.length} characters long`;
     throw new Error(
-      `${protocol.variable} is ${protocol.value}, and metrics are sent as OTLP over HTTP · set it to http/json or leave it unset`,
+      `${protocol.variable} ${is}, and metrics are sent as OTLP over HTTP · set it to http/json or leave it unset`,
     );
   }
 
