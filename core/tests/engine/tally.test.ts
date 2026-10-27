@@ -22,13 +22,14 @@ import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
 import { GroupsFold, SampleFold } from '@tally';
 import {
+  CHANNEL,
   COLS,
   REGION,
   REVENUE,
   ROWS,
   UNITS,
 } from '@core-tests/testdata/sales-q3';
-import { FIXTURE, TINY, connect, openOne, sales } from './harness.ts';
+import { FIXTURE, TINY, connect, indexed, openOne, sales } from './harness.ts';
 
 const NAME = 'sales-q3.csv';
 const SOURCE = 'sales';
@@ -128,13 +129,14 @@ function opened(engine: Engine, charts: Chart[]): Promise<SourceHandle> {
 }
 
 /**
- * holding returns a disk provider that holds the first read of a block after
- * `arm`, which `held` reports, until `release`, or refuses it with the
- * refusal `arm` is given. A block's read is shorter than an index chunk's and
- * ends before the file does.
+ * holding returns a disk provider that counts its reads, and holds the first
+ * read of a block after `arm`, which `held` reports, until `release`, or
+ * refuses it with the refusal `arm` is given. A block's read is shorter than
+ * an index chunk's and ends before the file does.
  */
 function holding() {
   const disk = diskProvider();
+  let reads = 0;
   let armed = false;
   let refusal: Refusal | undefined;
   let caught = (): void => {};
@@ -150,6 +152,7 @@ function holding() {
         return {
           size: source.size,
           async read(offset, length) {
+            reads++;
             const block =
               length < TINY.chunkBytes && offset + length < source.size;
             if (armed && block) {
@@ -169,7 +172,7 @@ function holding() {
     armed = true;
     refusal = refuse;
   };
-  return { provider, arm, held, release };
+  return { provider, arm, held, release, reads: () => reads };
 }
 
 test("a chart's column is found where it was, or by its header where the file moved it, and one the file has not names itself", () => {
@@ -190,6 +193,11 @@ test('a chart folds each block from the first it lacks, and one attached later l
   expect(tallies.from()).toBe(0);
   tallies.detach('c2');
   expect(tallies.from()).toBe(ROWS);
+  // A chart attached again keeps its fold while it reads the same columns.
+  tallies.attach({ ...REGION_ROWS, title: 'Rows per region' }, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  tallies.attach({ ...REGION_ROWS, plot: REGION_REVENUE.plot }, HEADERS);
+  expect(tallies.from()).toBe(0);
 });
 
 test('charts folded a block at a time read as the pure fold of every row, and are pending until read complete', () => {
@@ -287,6 +295,34 @@ test('a chart whose source cannot be read hears why, once, and one added afterwa
     const last = heard.of(UNITS_REVENUE.id);
     await engine.chart(UNITS_REVENUE);
     expect(await last).toStrictEqual(pure(UNITS_REVENUE.plot));
+  } finally {
+    done();
+  }
+});
+
+test('a chart added once the source is read hears its tally, and one replaced hears it again, from the fold it kept while it reads the same columns', async () => {
+  const hold = holding();
+  const { engine, done } = connect(TINY, [hold.provider]);
+  try {
+    const src = await openOne(engine, FILE);
+    await indexed(src);
+    const heard = new Heard(src);
+    const chart = { ...REGION_ROWS, source: src.id };
+    let last = heard.of(chart.id);
+    await engine.chart(chart);
+    expect(await last).toStrictEqual(pure(chart.plot));
+
+    const reads = hold.reads();
+    last = heard.of(chart.id);
+    await engine.chart({ ...chart, title: 'Rows per region' });
+    expect(await last).toStrictEqual(pure(chart.plot));
+    expect(hold.reads()).toBe(reads);
+
+    const plot: Plot = { t: 'bars', by: column(CHANNEL) };
+    last = heard.of(chart.id);
+    await engine.chart({ ...chart, plot });
+    expect(await last).toStrictEqual(pure(plot));
+    expect(hold.reads()).toBeGreaterThan(reads);
   } finally {
     done();
   }
