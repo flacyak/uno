@@ -12,7 +12,9 @@
  */
 
 import { concat } from '@go';
-import { decodersFor } from './format.ts';
+import { english } from '@said';
+import { Sheet } from '@sheet';
+import { HEAD_BYTES, decodersFor } from './format.ts';
 import type { Scanner } from './format.ts';
 import { walkLine } from './json.ts';
 import { JSON_COLUMNS_LIMIT, KeyRegistry, LINE_KEY } from './keys.ts';
@@ -134,4 +136,26 @@ export function linesFormat(
       splitLines(data.decode(bytes)).map((line) => rowOf(registry, line)),
     label: () => ({ t: 'read-lines', charset }),
   };
+}
+
+/**
+ * readLines reads a whole JSON Lines file into a Sheet, as the engine reads
+ * one through a workspace that pinned `pinned`: every line that holds more
+ * than blanks is a row, laid out over the pinned columns and each key met
+ * after them.
+ */
+export function readLines(
+  name: string,
+  bytes: Uint8Array,
+  pinned: readonly KeyedColumn[],
+): Sheet {
+  const format = linesFormat(name, bytes.subarray(0, HEAD_BYTES), pinned);
+  const data = bytes.subarray(format.dataStart);
+  const indexer = format.indexer(() => {});
+  indexer.push(data, format.dataStart);
+  indexer.end?.();
+  const columns = format.columns().map((column) => column.name);
+  const sheet = new Sheet(name, columns, format.decode(data));
+  sheet.source = english(format.label());
+  return sheet;
 }

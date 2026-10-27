@@ -5,29 +5,25 @@
  * rows and multi-byte characters. It is written to the temp directory once.
  */
 
-import { closeSync, existsSync, openSync, statSync, writeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import v8 from 'node:v8';
-import vm from 'node:vm';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
 import { RowIndex, TUNING } from '@engine';
 import type { Engine } from '@engine';
 import { peekFormat } from '@ingest';
-import type { ByteSource } from '@store';
 import { diskProvider, nodeSource } from '@store/node';
 import { SCREEN, connect, indexed, openOne } from '@core-tests/engine/harness';
 import { record } from './record.ts';
 import type { Metric } from './record.ts';
+import { collector, countNewlines, counted, writeOnce } from './synthetic.ts';
+import type { Synthetic } from './synthetic.ts';
 
 /** The file's size, give or take the last batch of rows. */
 const FILE_BYTES = 200 << 20;
 /** Where the file is written, named for its size. */
 const FILE = join(tmpdir(), `uno-index-${FILE_BYTES}.csv`);
-/** Rows written per `writeSync`. */
-const BATCH = 4096;
 
 /** One in this many rows has a newline inside a quoted field. */
 const NEWLINE_EVERY = 7;
@@ -37,7 +33,6 @@ const CRLF_EVERY = 5;
 const WIDE_EVERY = 3;
 
 const HEADER = 'id,customer,note,amount,city\n';
-const LF = 0x0a;
 const CUSTOMERS = [
   '"Okafor, Ada"',
   'Lindqvist',
@@ -84,68 +79,8 @@ function* rows(): Generator<string> {
   }
 }
 
-/** writeFile writes the file if absent or short, and returns its row count. */
-function writeFile(): number {
-  if (existsSync(FILE) && statSync(FILE).size >= FILE_BYTES) return countRows();
-  const fd = openSync(FILE, 'w');
-  let written = writeSync(fd, HEADER);
-  let count = 0;
-  let batch: string[] = [];
-  for (const row of rows()) {
-    batch.push(row);
-    count++;
-    if (batch.length === BATCH) {
-      written += writeSync(fd, batch.join(''));
-      batch = [];
-      if (written >= FILE_BYTES) break;
-    }
-  }
-  closeSync(fd);
-  return count;
-}
-
-/** countRows counts the rows of an existing file by replaying the generator. */
-function countRows(): number {
-  const size = statSync(FILE).size;
-  let at = HEADER.length;
-  let count = 0;
-  for (const row of rows()) {
-    at += Buffer.byteLength(row);
-    count++;
-    if (at >= size) break;
-  }
-  return count;
-}
-
-/** countNewlines counts LF bytes in a chunk. */
-function countNewlines(chunk: Uint8Array): number {
-  let n = 0;
-  for (let i = 0; i < chunk.length; i++) if (chunk[i] === LF) n++;
-  return n;
-}
-
-/** collector exposes gc and returns it as a callable. */
-function collector(): () => void {
-  v8.setFlagsFromString('--expose-gc');
-  return vm.runInNewContext('gc') as () => void;
-}
-
-/** counted wraps a source and counts the bytes read through it. */
-function counted(src: ByteSource): { source: ByteSource; bytes: () => number } {
-  let bytes = 0;
-  return {
-    bytes: () => bytes,
-    source: {
-      size: src.size,
-      async read(offset, length) {
-        const out = await src.read(offset, length);
-        bytes += out.length;
-        return out;
-      },
-      close: () => src.close(),
-    },
-  };
-}
+/** The CSV, written once. */
+const CSV: Synthetic = { path: FILE, head: HEADER, bytes: FILE_BYTES, rows };
 
 let engine: Engine | undefined;
 let done: (() => void) | undefined;
@@ -156,7 +91,7 @@ afterEach(() => {
 });
 
 test('the index pass scans bytes at disk speed and keeps little per row', async () => {
-  const expected = writeFile();
+  const expected = writeOnce(CSV);
   const gc = collector();
   const metrics: Metric[] = [];
 

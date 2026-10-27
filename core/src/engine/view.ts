@@ -233,15 +233,13 @@ export class View {
     const header = ask.header ?? 'first';
     try {
       // A source from a .uno, relinked or appended to is read as its log
-      // was made. Several files opened anew are read as delimited text, each
-      // part detected as it is measured. A file on its own is detected, and
-      // its head read once.
+      // was made. A file on its own, or several opened anew, is detected and
+      // its head read once: for several, the head of their join, which every
+      // part was held to as it was measured.
       v.reading = await openReading({
         name,
         source,
-        spec:
-          ask.read ??
-          (ask.parts === undefined ? undefined : { kind: 'delimited', header }),
+        spec: ask.read,
         expect: ask.expect,
         header,
         tuning,

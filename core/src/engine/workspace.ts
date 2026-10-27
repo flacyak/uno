@@ -21,7 +21,16 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type { Document, Held, HeldParts, Logged, State } from '@document';
+import type {
+  Document,
+  Held,
+  HeldParts,
+  Logged,
+  SourceKind,
+  State,
+} from '@document';
+import type { Layout } from '@ingest';
+import { unreachable } from '@never';
 import type { Edit } from '@sheet';
 import {
   bytesSource,
@@ -817,7 +826,7 @@ function sizeOf(kept: Part): number {
  * each part by path and saved version, with the extent the save measured.
  */
 function joinedFrom(
-  src: Pick<HeldParts, 'name' | 'parts' | 'header' | 'fileColumn'>,
+  src: Pick<HeldParts, 'name' | 'parts' | 'header' | 'fileColumn' | 'kind'>,
 ): PartsRef {
   return {
     name: src.name,
@@ -831,7 +840,26 @@ function joinedFrom(
     })),
     header: src.header,
     fileColumn: src.fileColumn,
+    layout: joinedLayout(src.kind),
   };
+}
+
+/**
+ * joinedLayout is how a saved source's parts sit in their text, for the kinds
+ * read as bytes joined: delimited text where no kind is saved, and JSON
+ * Lines. Parquet parts each describe their own bytes, so they have none.
+ */
+function joinedLayout(kind: SourceKind | undefined): Layout | undefined {
+  switch (kind) {
+    case undefined:
+      return 'delimited';
+    case 'jsonl':
+      return 'lines';
+    case 'parquet':
+      return undefined;
+    default:
+      return unreachable(kind);
+  }
 }
 
 /**

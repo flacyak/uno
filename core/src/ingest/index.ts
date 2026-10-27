@@ -47,11 +47,13 @@ export {
   DIALOG_EXTENSIONS,
   READ_COMPRESSIONS,
   READ_EXTENSIONS,
+  linesByName,
   nameParts,
   readable,
 } from './names.ts';
 export type { NameParts, StoredCompression } from './names.ts';
-export { linesFormat } from './jsonl.ts';
+export { linesFormat, readLines } from './jsonl.ts';
+export { keyedColumn, pinnedColumn } from './keys.ts';
 export type { KeyedColumn } from './keys.ts';
 export { CHUNK_CACHE_BYTES, chunkCache } from './parquet/buffer.ts';
 export type { ChunkCache } from './parquet/buffer.ts';

@@ -861,9 +861,16 @@ describe("a source's entry", () => {
     ).toBe('data/source/part-0-c000.snappy.parquet');
   });
 
-  test('is .csv for a file with no extension', () => {
+  test('is .csv for a file with no extension, or the extension of its kind', () => {
     expect(sourceEntry('export', 'export')).toBe('data/source/export.csv');
     expect(sourceEntry('export')).toBe('data/source.csv');
+    expect(sourceEntry('events', 'events', 'jsonl')).toBe(
+      'data/source/events.jsonl',
+    );
+    expect(sourceEntry('events', undefined, 'jsonl')).toBe('data/source.jsonl');
+    expect(sourceEntry('events.json', 'events', 'jsonl')).toBe(
+      'data/source/events.json',
+    );
   });
 
   test('of a compressed file carried alone keeps its compound extension', () => {

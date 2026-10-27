@@ -16,12 +16,21 @@ import {
   UnsupportedEncodingError,
   bomLength,
   delimiterName,
+  detect,
   encodingName,
+  headOf,
   openFormat,
   peekFormat,
-  readableHead,
+  refuseNotRead,
 } from '@ingest';
-import type { Encoding, Format, HeaderMode } from '@ingest';
+import type {
+  Detected,
+  Encoding,
+  Format,
+  HeaderMode,
+  Layout,
+  StoredHead,
+} from '@ingest';
 import { headed, openWith } from './index.ts';
 import type { ByteSource, FileHandler, SingleRef } from './index.ts';
 // Type only.
@@ -31,7 +40,8 @@ import { Refusal, messageOf } from '@said';
 /**
  * Whether the parts have a header row. With "first", the first part's header
  * names the columns and every later part's header is skipped. With "none",
- * every line of every part is a row.
+ * every line of every part is a row. JSON Lines parts have no header row
+ * either way.
  */
 export type { HeaderMode };
 
@@ -139,6 +149,8 @@ export interface NamedColumn {
  * differs in several ways, the most specific kind is reported.
  */
 export type Disagreement =
+  /** Records that sit in the text another way: JSON Lines beside delimited text. */
+  | { kind: 'layout'; first: Layout; part: Layout }
   | { kind: 'encoding'; first: Encoding; part: Encoding }
   | { kind: 'delimiter'; first: string; part: string }
   /** Columns in the same places under other names. */
@@ -181,6 +193,12 @@ export class DisagreementError extends Error {
 
 /** How many columns an error names before counting the rest. */
 const COLUMNS_NAMED = 3;
+
+/** Each layout as an error names it. */
+const LAYOUT_NAMES: Record<Layout, string> = {
+  delimited: 'delimited text',
+  lines: 'JSON Lines',
+};
 
 const LF = 0x0a;
 
@@ -246,10 +264,11 @@ export async function openMulti(
   handlers: readonly FileHandler[],
   parts: readonly Part[],
   header: HeaderMode,
+  held?: Layout,
 ): Promise<MultiSource> {
   if (parts.length === 0)
     throw new Error('a multi-file source needs at least one part');
-  const opened = new Parts(handlers, parts, header);
+  const opened = new Parts(handlers, parts, header, held);
   try {
     await opened.measure();
   } catch (err) {
@@ -331,6 +350,11 @@ class Parts {
   private first: Promise<Format | undefined> | undefined;
   /** The first part's head, read as it was measured, until `first` reads it. */
   private firstHead: Uint8Array | undefined;
+  /**
+   * What the first part holds: detected as it was measured, or from its head
+   * when a later part is measured against it.
+   */
+  private firstDetected: Promise<Detected> | undefined;
   /** The disagreement that refuses the whole source, once found. */
   private refused: DisagreementError | undefined;
   /** Whether `close` has been called, after which every open and read is
@@ -339,15 +363,23 @@ class Parts {
   private readonly handlers: readonly FileHandler[];
   private readonly parts: readonly Part[];
   private readonly header: HeaderMode;
+  /**
+   * How the parts' records sit in their text where the source was read
+   * before, which every part is read as. Undefined on a fresh open, which
+   * holds every part to what the first holds.
+   */
+  private readonly held: Layout | undefined;
 
   constructor(
     handlers: readonly FileHandler[],
     parts: readonly Part[],
     header: HeaderMode,
+    held: Layout | undefined,
   ) {
     this.handlers = handlers;
     this.parts = parts;
     this.header = header;
+    this.held = held;
     this.sources = parts.map(() => undefined);
     this.extents = parts.map((p) => p.extent);
   }
@@ -445,16 +477,24 @@ class Parts {
       ) {
         throw new Error('it is not the version this source was saved against');
       }
-      // A part that came bare is detected, and one this build does not read
-      // is refused by name. Its head is read once.
+      // A part's head is read once: detection says what it holds, one this
+      // build does not read is refused by name, and a later part's first data
+      // row is found in it. A first part that came with an extent is not
+      // read until a part is measured against it.
       const head =
-        was === undefined ? await readableHead(ref.name, source) : undefined;
+        i === 0 && was !== undefined ? undefined : await headOf(source);
+      const found =
+        head === undefined ? undefined : await detect(ref.name, head);
+      if (found !== undefined) refuseNotRead(ref.name, found);
+      if (i === 0 && found !== undefined) {
+        this.firstDetected = Promise.resolve(found);
+      }
       const extent: Extent = {
         bytes: source.size,
-        skip: await this.skip(
-          i,
-          head === undefined ? source : headed(source, head),
-        ),
+        skip:
+          head === undefined || found === undefined
+            ? 0
+            : await this.skip(i, source, head, found),
         unterminated:
           source.size > 0 && (await source.read(source.size - 1, 1))[0] !== LF,
       };
@@ -466,7 +506,7 @@ class Parts {
         throw new Error(`it is not the file this source was made from${sizes}`);
       }
       this.extents[i] = extent;
-      if (i === 0) this.firstHead = head;
+      if (i === 0) this.firstHead = head?.bytes;
       return source;
     } catch (err) {
       await source.close();
@@ -477,14 +517,26 @@ class Parts {
   /**
    * skip is how many bytes at the start of part `i` the join leaves out.
    *
-   * The first part and an empty part skip 0 bytes. A later part is checked
-   * against the first part's format, then skipped up to its first data row,
-   * which under a "none" header is just a byte order mark. A part holding
-   * zero records skips its byte order mark only.
+   * The first part and an empty part skip 0 bytes. A later part is read as
+   * the source was read before, or, on a fresh open, as what the first part
+   * holds, and one whose records sit in its text another way is refused. A
+   * JSON Lines part skips its byte order mark: every line is a row. A
+   * delimited part is checked against the first part's format, then skipped
+   * up to its first data row, which under a "none" header is just a byte
+   * order mark. A part holding zero records skips its byte order mark only.
    */
-  private async skip(i: number, source: ByteSource): Promise<number> {
-    if (i === 0 || source.size === 0) return 0;
+  private async skip(
+    i: number,
+    stored: ByteSource,
+    head: StoredHead,
+    found: Detected,
+  ): Promise<number> {
+    if (i === 0 || stored.size === 0) return 0;
 
+    const layout = this.held ?? (await this.layoutAgreed(i, found));
+    if (layout === 'lines') return bomLength(head.bytes);
+
+    const source = headed(stored, head.bytes);
     const format = await this.formatOrDiffers(i, source);
     const first = format === undefined ? undefined : await this.firstFormat();
     if (format !== undefined && first !== undefined) {
@@ -542,6 +594,35 @@ class Parts {
     return this.header === 'first' && i === 0
       ? openFormat(name, source)
       : peekFormat(name, source, this.header);
+  }
+
+  /**
+   * layoutAgreed is how part `i`'s records sit in its text, once it is the
+   * way the first part's do. A part read another way is refused.
+   */
+  private async layoutAgreed(i: number, found: Detected): Promise<Layout> {
+    const layout = layoutOf(this.parts[i]!.ref.name, found);
+    const first = layoutOf(this.parts[0]!.ref.name, await this.firstFound());
+    if (layout !== first)
+      this.refuse(i, { kind: 'layout', first, part: layout });
+    return layout;
+  }
+
+  /**
+   * What the first part holds, detected once: as it was measured, or from
+   * its head when a later part is first measured against it.
+   */
+  private firstFound(): Promise<Detected> {
+    return (this.firstDetected ??= this.source(0)
+      .then((source) => {
+        const head = this.firstHead;
+        return headOf(head === undefined ? source : headed(source, head));
+      })
+      .then((head) => detect(this.parts[0]!.ref.name, head))
+      .catch((err: unknown) => {
+        this.firstDetected = undefined;
+        throw this.failed(0, err);
+      }));
   }
 
   /** How the first part reads, read once, from its head where it has one. */
@@ -712,10 +793,34 @@ function without(
   return kept === shorter.length ? left : undefined;
 }
 
+/**
+ * layoutOf is how a detected part's records sit in its text. A Parquet part
+ * describes its own bytes alone, so several are refused as such, and a part
+ * this build does not read was refused by name before this.
+ */
+function layoutOf(name: string, found: Detected): Layout {
+  switch (found.t) {
+    case 'records':
+      return found.layout;
+    case 'parquet':
+      throw new Refusal({
+        t: 'parquet-unsupported',
+        name,
+        feature: 'several-files',
+      });
+    case 'not-read':
+      throw new Refusal({ t: 'not-read', name, what: found.what });
+    default:
+      return unreachable(found);
+  }
+}
+
 /** said is a disagreement as the rest of a sentence that starts with the
  * part's name. */
 function said(differs: Disagreement, first: string): string {
   switch (differs.kind) {
+    case 'layout':
+      return `it is ${LAYOUT_NAMES[differs.part]} and ${first} is ${LAYOUT_NAMES[differs.first]}`;
     case 'encoding':
       return `its text encoding is ${encodingName(differs.part)} and ${first}'s is ${encodingName(differs.first)}`;
     case 'delimiter':
@@ -802,7 +907,7 @@ export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
     async open(ref) {
       if (!('parts' in ref))
         throw new Error(`${ref.name}: not several files read as one`);
-      const { name, parts, header } = ref;
+      const { name, parts, header, layout } = ref;
       if (parts.length === 0) {
         throw new Error(
           `${name} has no parts · several files read as one needs at least one`,
@@ -816,7 +921,7 @@ export function multiFiles(handlers: readonly FileHandler[]): FileHandler {
           `${name}: ${partLabel(parts, nested)} is several files itself · a part is one file`,
         );
       }
-      const source = await openMulti(handlers, parts, header);
+      const source = await openMulti(handlers, parts, header, layout);
       joined.set(source, source);
       return source;
     },

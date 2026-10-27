@@ -15,7 +15,7 @@ import { describe, expect, test } from 'vite-plus/test';
 import { Refusal, RowIndex, TUNING } from '@engine';
 import { openReading, readOf, savedOf } from '@engine/reading';
 import type { Expected, ReadSpec } from '@engine/reading';
-import { labelOf, openFormat } from '@ingest';
+import { labelOf, linesByName, openFormat } from '@ingest';
 import type { HeaderMode } from '@ingest';
 import type { Said, Unread } from '@said';
 import { bytesSource } from '@store';
@@ -160,7 +160,6 @@ const FILES = readdirSync(TESTDATA, { withFileTypes: true })
 
 /** The test files this build does not read, and what each holds. */
 const UNREAD: ReadonlyMap<string, Unread> = new Map([
-  ['events.jsonl', 'JSON Lines'],
   ['sales-q3.csv.gz', 'gzip'],
   ['par1.bin', 'Parquet'],
   ['sales-q3.snappy.parquet', 'Parquet'],
@@ -189,6 +188,16 @@ function formatted(name: string, header: HeaderMode): Promise<Seen> {
     const { columns, dataStart } = format;
     return { columns, dataStart, label: labelOf(format) };
   });
+}
+
+/**
+ * How a test file reads fresh: JSON Lines as held to it with no column
+ * pinned, and the rest as openFormat reads it under a header row.
+ */
+function fresh(name: string): Promise<Seen> {
+  return linesByName(name)
+    ? read(name, { kind: 'jsonl', columns: [] })
+    : formatted(name, 'first');
 }
 
 /**
@@ -224,11 +233,11 @@ describe.each(FILES)('%s', (name) => {
     },
   );
 
-  test('read fresh, reads as openFormat does or is refused by name', async () => {
+  test('read fresh, reads as held to its own kind or is refused by name', async () => {
     const what = UNREAD.get(name);
     expect(await read(name)).toEqual(
       what === undefined
-        ? await formatted(name, 'first')
+        ? await fresh(name)
         : refused({ t: 'not-read', name, what }),
     );
   });
