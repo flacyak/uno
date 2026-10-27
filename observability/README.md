@@ -20,7 +20,9 @@ Metrics go as OTLP over HTTP, so a protocol setting other than `http/json` or `h
 
 A measurement says what was done and how long it took.
 It carries the kind of request, whether the bytes were on a disk or in a bucket, and the count and size of requests to S3.
-It carries no file name, path, bucket or key, and tests in both packages hold it to that.
+It carries no file name, path, bucket or key, and the core's tests hold it to that.
+Each engine process is an instance of its own, named at random in `service.instance.id`, which Grafana files as the `instance` label.
+A total is cumulative since its process began, so two engines on one series would write over each other's, and the dashboard sums across instances instead.
 
 | Metric in Grafana                        | What it is                                               | Labels                      |
 | ---------------------------------------- | -------------------------------------------------------- | --------------------------- |

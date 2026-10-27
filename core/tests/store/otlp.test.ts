@@ -5,8 +5,13 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import type { Collector, Resource } from '@engine';
-import { S3_RECEIVED, S3_REQUESTS, exporter } from '@store/otlp';
+import type { Collector, Payload, Resource } from '@engine';
+import {
+  INSTANCE_ATTRIBUTE,
+  S3_RECEIVED,
+  S3_REQUESTS,
+  exporter,
+} from '@store/otlp';
 import type { Exporter } from '@store/otlp';
 
 const COLLECTOR: Collector = {
@@ -17,7 +22,7 @@ const RESOURCE: Resource = {
   service: 'uno-engine',
   attributes: { 'service.version': '1.2.3' },
 };
-const OBJECT = 'https://bucket.example.test/key';
+const OBJECT = 'https://bucket.example.test/exports/ledger-q3.csv';
 const LENGTH = 4096;
 
 /** One request that went out. */
@@ -112,6 +117,7 @@ test('requests to S3 are counted on their way through, with nothing of where the
     expect(body).toContain(`"asDouble":${LENGTH}`);
     expect(body).toContain('"2xx"');
     expect(body).not.toContain('bucket.example.test');
+    expect(body).not.toContain('ledger-q3');
   });
 });
 
@@ -155,7 +161,64 @@ test('a collector that cannot be reached costs the engine nothing', async () => 
       value: 1,
     });
     await expect(e.flush()).resolves.toBeUndefined();
-    // A failed request to S3 still rejects, and is counted.
+    // A failed request to S3 still rejects.
     await expect(e.fetch(OBJECT)).rejects.toThrow('no route');
   });
+});
+
+test('a request to S3 that fails is counted as failed, with no bytes', async () => {
+  const { sent, go } = network();
+  const bucketDown: typeof fetch = (input, init) =>
+    input === OBJECT ? Promise.reject(new Error('no route')) : go(input, init);
+  await sending(bucketDown, async (e) => {
+    await expect(e.fetch(OBJECT, { method: 'GET' })).rejects.toThrow(
+      'no route',
+    );
+    await e.flush();
+    const body = sent[0]!.body;
+    expect(body).toContain(`"${S3_REQUESTS}"`);
+    expect(body).toContain('"failed"');
+    expect(body).not.toContain(`"${S3_RECEIVED}"`);
+  });
+});
+
+/** instanceOf is the instance a posted payload is filed under. */
+function instanceOf(body: string): string | undefined {
+  const payload = JSON.parse(body) as Payload;
+  return payload.resourceMetrics[0]?.resource.attributes.find(
+    (a) => a.key === INSTANCE_ATTRIBUTE,
+  )?.value.stringValue;
+}
+
+test('two engines sending at once are two instances, so neither writes over the other', async () => {
+  const { sent, go } = network();
+  const measure = async (e: Exporter): Promise<void> => {
+    e.record({
+      name: 'uno.engine.request',
+      kind: 'duration',
+      unit: 'ms',
+      value: 1,
+    });
+    await e.flush();
+  };
+  await sending(go, measure);
+  await sending(go, measure);
+
+  const [first, second] = sent.map((s) => instanceOf(s.body));
+  expect(first).toMatch(/^[0-9a-f-]{36}$/);
+  expect(second).toMatch(/^[0-9a-f-]{36}$/);
+  expect(first).not.toBe(second);
+
+  // A platform that names its instance is taken at its word.
+  const named = exporter(
+    COLLECTOR,
+    { service: 'uno-engine', attributes: { [INSTANCE_ATTRIBUTE]: 'box-1' } },
+    go,
+  );
+  try {
+    await measure(named);
+    expect(instanceOf(sent[2]!.body)).toBe('box-1');
+  } finally {
+    named.stop();
+  }
 });
