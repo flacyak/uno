@@ -741,6 +741,7 @@ export class View {
   /**
    * tally starts the pass over the blocks the charts lack again, from the
    * first of them, once the view is announced, so an open costs nothing new.
+   * A read that fails leaves each chart still folding unread.
    */
   private tally(): void {
     this.tallying?.abort();
@@ -751,8 +752,10 @@ export class View {
     const abort = new AbortController();
     this.tallying = abort;
     this.tallyBlocks(first, abort.signal).catch((err: unknown) => {
-      if (!abort.signal.aborted)
-        this.tell({ t: 'error', source: this.id, said: saidOf(err) });
+      if (abort.signal.aborted) return;
+      for (const [chart, tally] of this.tallies.unread(saidOf(err))) {
+        this.postTally(chart, tally);
+      }
     });
   }
 
