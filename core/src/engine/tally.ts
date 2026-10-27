@@ -21,6 +21,12 @@ interface Tallying {
   /** Rows folded: every row before the first block it lacks. */
   rows: number;
   /**
+   * Rows folded ahead of `rows`, as [from, end): the blocks the index
+   * completed while the pass behind them was still reading, which join
+   * `rows` once it reaches them.
+   */
+  ahead: [number, number] | undefined;
+  /**
    * Whether the chart has heard its last tally: the complete one, or that
    * its source could not be read.
    */
@@ -61,7 +67,8 @@ export class Tallies {
       plot.t === 'scatter'
         ? new SampleFold()
         : new GroupsFold(plot.sum === undefined ? 'rows' : 'sum');
-    this.charts.set(id, { key, cols, fold, rows: 0, done: false });
+    const t = { key, cols, fold, rows: 0, ahead: undefined, done: false };
+    this.charts.set(id, t);
     return undefined;
   }
 
@@ -80,8 +87,20 @@ export class Tallies {
   }
 
   /**
+   * wants says whether a pending chart's fold ends at `from`, so the block
+   * there must be read for it.
+   */
+  wants(from: number): boolean {
+    for (const t of this.charts.values()) {
+      if (!t.done && t.rows === from) return true;
+    }
+    return false;
+  }
+
+  /**
    * fold adds `block`, the rows from `from` to `end`, to every pending chart
-   * that lacks it. `shown` returns what a column of the block shows, by row.
+   * that can take it: as its next block, or ahead of the pass behind it.
+   * `shown` returns what a column of the block shows, by row.
    */
   fold(
     block: number,
@@ -90,7 +109,7 @@ export class Tallies {
     shown: (col: number) => (row: number) => string,
   ): void {
     for (const t of this.charts.values()) {
-      if (t.done || t.rows !== from) continue;
+      if (t.done || !takes(t, from)) continue;
       const [first, second] = t.cols.map(shown);
       for (let row = from; row < end; row++) {
         if (t.fold instanceof SampleFold) {
@@ -99,7 +118,7 @@ export class Tallies {
           t.fold.add(first!(row), second === undefined ? '' : second(row));
         }
       }
-      t.rows = end;
+      took(t, from, end);
     }
   }
 
@@ -111,7 +130,8 @@ export class Tallies {
     const read: Array<[string, Tally]> = [];
     for (const [id, t] of this.charts) {
       if (t.done) continue;
-      const coverage = { rows: t.rows, total, complete };
+      const ahead = t.ahead === undefined ? 0 : t.ahead[1] - t.ahead[0];
+      const coverage = { rows: t.rows + ahead, total, complete };
       const tally: Tally =
         t.fold instanceof SampleFold
           ? { t: 'sample', coverage, ...t.fold.snapshot() }
@@ -131,6 +151,31 @@ export class Tallies {
       t.done = true;
     }
     return unread;
+  }
+}
+
+/**
+ * takes says whether the block from `from` is one `t` can fold: its next,
+ * the next of the run it folded ahead, or the first of that run.
+ */
+function takes(t: Tallying, from: number): boolean {
+  if (t.rows === from) return true;
+  return t.ahead === undefined ? from > t.rows : t.ahead[1] === from;
+}
+
+/**
+ * took records that `t` folded the rows from `from` to `end`, and joins the
+ * run it folded ahead once its rows reach it.
+ */
+function took(t: Tallying, from: number, end: number): void {
+  if (t.rows !== from) {
+    t.ahead = t.ahead === undefined ? [from, end] : [t.ahead[0], end];
+    return;
+  }
+  t.rows = end;
+  if (t.ahead?.[0] === end) {
+    t.rows = t.ahead[1];
+    t.ahead = undefined;
   }
 }
 
