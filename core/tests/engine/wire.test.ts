@@ -26,11 +26,13 @@ import type {
   Request,
   SourceHandle,
   SourceRef,
+  Tally,
   WebSocketLike,
 } from '@engine';
 import { sources } from '@plugin';
 import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
+import { GroupsFold, SampleFold } from '@tally';
 import { FIXTURE, bytes, sales } from './harness.ts';
 
 /** join turns a frame into the one value a socket would deliver. */
@@ -59,6 +61,33 @@ test('plain data is one text frame, and reads back equal', async () => {
   const frame = encode(numbered(message));
   expect(typeof frame).toBe('string');
   expect(await across(message)).toEqual(message);
+});
+
+test("a chart's tally from either fold is plain data, and crosses as one text frame", async () => {
+  const groups = new GroupsFold('sum');
+  const sample = new SampleFold();
+  // A region, a revenue and a units cell, with a blank and a word left out.
+  const rows: Array<[string, string, string]> = [
+    ['North', '1.5', '2'],
+    ['South', '', '4'],
+    ['North', '3', 'n/a'],
+  ];
+  // Every row is in the first block.
+  const block = 0;
+  rows.forEach(([region, revenue, units], row) => {
+    groups.add(region, revenue);
+    sample.add(block, row, revenue, units);
+  });
+  const coverage = { rows: rows.length, total: rows.length, complete: true };
+  const tallies: Tally[] = [
+    { t: 'groups', coverage, ...groups.snapshot() },
+    { t: 'sample', coverage, ...sample.snapshot() },
+  ];
+  for (const tally of tallies) {
+    expect(JSON.parse(JSON.stringify(tally))).toEqual(tally);
+    expect(typeof encode(numbered(tally))).toBe('string');
+    expect(await across(tally)).toEqual(tally);
+  }
 });
 
 test('a Date, a Map and the numbers JSON has no word for come back as themselves', async () => {
