@@ -158,6 +158,8 @@ class Absent {
   }
 
   mode(_transform: boolean): void {}
+  chart(_chart: Chart): void {}
+  unchart(_id: string): void {}
   close(): Promise<void> {
     return Promise.resolve();
   }
@@ -612,6 +614,10 @@ export class Workspace {
   private keep(source: Source): Opened {
     this.sources.set(source.id, source);
     if (this.transform) source.mode(true);
+    // Its charts tally it, as they did any view it takes the place of.
+    for (const chart of this.charts.values()) {
+      if (chart.source === source.id) source.chart(chart);
+    }
     return source.opened;
   }
 
@@ -692,7 +698,7 @@ export class Workspace {
   chart(chart: Chart): Promise<void> {
     return this.serially(async () => {
       this.refuseUnreadableCharts();
-      this.need(chart.source);
+      const source = this.need(chart.source);
       // A carried chart keeps its id, so a new chart cannot take it.
       const taken = this.carriedCharts.some((c) => c.id === chart.id);
       if (!this.charts.has(chart.id) && taken)
@@ -701,7 +707,12 @@ export class Workspace {
       const count = this.charts.size + this.carriedCharts.length;
       if (!this.charts.has(chart.id) && count >= CHARTS_AT_MOST)
         throw new Refusal({ t: 'charts-at-most', limit: CHARTS_AT_MOST });
+      // A chart moved to another source stops tallying the one it left.
+      const was = this.charts.get(chart.id);
+      if (was !== undefined && was.source !== chart.source)
+        this.need(was.source).unchart(chart.id);
       this.charts.set(chart.id, chart);
+      source.chart(chart);
     });
   }
 
@@ -709,8 +720,10 @@ export class Workspace {
   unchart(id: string): Promise<void> {
     return this.serially(async () => {
       this.refuseUnreadableCharts();
-      if (!this.charts.delete(id))
-        throw new Refusal({ t: 'no-such-chart', id });
+      const chart = this.charts.get(id);
+      if (chart === undefined) throw new Refusal({ t: 'no-such-chart', id });
+      this.charts.delete(id);
+      this.need(chart.source).unchart(id);
     });
   }
 
