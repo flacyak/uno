@@ -20,6 +20,7 @@ import {
   serve,
 } from '@engine';
 import type { MessagePortLike, Reply, Request } from '@engine';
+import type { Tap } from '@engine/pass';
 import { openFormat } from '@ingest';
 import type { Format } from '@ingest';
 import { isNumber } from '@num';
@@ -263,8 +264,8 @@ test('the index keeps block starts past 4 GB exactly, at two numbers a block', (
   expect(index.readable()).toBe(blocks);
 });
 
-/** indexedFixture reads the fixture from memory and indexes all of it at TINY. */
-async function indexedFixture(): Promise<{
+/** indexedFixture indexes the fixture at TINY, handing each block to `tap`. */
+async function indexedFixture(tap?: Tap): Promise<{
   source: ByteSource;
   format: Format;
   index: RowIndex;
@@ -279,9 +280,23 @@ async function indexedFixture(): Promise<{
     tuning: TINY,
     signal: new AbortController().signal,
     progress() {},
+    tap,
   });
   return { source, format, index };
 }
+
+test('the index pass hands a tap each block it completes, whole, out of its chunks', async () => {
+  const handed: number[] = [];
+  const taken: Uint8Array[] = [];
+  const { format } = await indexedFixture(async (block, bytesOf) => {
+    handed.push(block);
+    taken.push(bytesOf());
+  });
+  // Every block in order, the last once the scan is complete.
+  expect(handed).toEqual(handed.map((_, block) => block));
+  const rows = taken.flatMap((block) => format.decode(block));
+  expect(widened(rows)).toEqual(sheetRows(sales, 0, ROWS, 'raw'));
+});
 
 test('the page cache stays within its budget however much is read', async () => {
   const { source, format, index } = await indexedFixture();
