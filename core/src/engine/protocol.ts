@@ -379,6 +379,14 @@ export type Reply =
   | { t: 'tried'; id: number; tried: Tried }
   /** Null when the recogniser finishes with an empty proposal. */
   | { t: 'offer'; source: string; generation: number; offer: Offer | null }
+  /** Unnumbered, like offer: a chart's tally, taken at `generation`. */
+  | {
+      t: 'tally';
+      source: string;
+      chart: string;
+      generation: number;
+      tally: Tally;
+    }
   | { t: 'charted'; id: number }
   | { t: 'uncharted'; id: number }
   | { t: 'saved'; id: number; bytes: Uint8Array }
