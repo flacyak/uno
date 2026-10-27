@@ -194,6 +194,10 @@ export class View {
   private readonly tallies = new Tallies();
   /** The pass folding blocks for the charts, while one lacks any. */
   private tallying: AbortController | undefined;
+  /** How many blocks the index pass has handed the tap, folded or left. */
+  private tapped = 0;
+  /** When the tap's slice began. It yields every SLICE_MS, like the pass. */
+  private tapSlice = Date.now();
   /** Edits undo took back, newest last, for redo. A new edit empties it. */
   private undone: Edit[] = [];
   private queue: Promise<unknown> = Promise.resolve();
@@ -293,6 +297,7 @@ export class View {
       index,
       tuning,
       signal: v.abort.signal,
+      tap: (block, bytes) => v.tap(block, bytes),
       progress() {
         v.wake();
         if (index.complete) {
@@ -761,26 +766,32 @@ export class View {
 
   /**
    * tallyBlocks folds each block from `first`, the first row a chart lacks,
-   * as the index reaches it, and posts the charts' tallies every TALLY_MS
-   * while the pass runs and once at its end.
+   * once the tap has been handed it, and posts the charts' tallies every
+   * TALLY_MS while the pass runs and once at its end. A block the tap folded
+   * out of the index's own chunk is passed over, so the pass reads only the
+   * blocks complete before a chart came and the ones the tap left.
    */
   private async tallyBlocks(first: number, signal: AbortSignal): Promise<void> {
     const index = this.index;
     let told = Date.now();
     let slice = told;
     for (let row = first; ;) {
-      await this.until(() => index.complete || index.readable() > row);
+      await this.until(
+        () => index.complete || this.tapped > index.blockOf(row),
+      );
       if (signal.aborted) return;
       if (row >= index.readable()) break;
 
       const block = index.blockOf(row);
       const [from, end] = index.rowsOf(block);
-      const records = await this.pages.records(block, false);
-      const files = await this.files(from, records.length);
-      if (signal.aborted) return;
-      this.tallies.fold(block, from, end, (col) =>
-        this.shownIn(col, from, records, files),
-      );
+      if (this.tallies.wants(from)) {
+        const records = await this.pages.records(block, false);
+        const files = await this.files(from, records.length);
+        if (signal.aborted) return;
+        this.tallies.fold(block, from, end, (col) =>
+          this.shownIn(col, from, records, files),
+        );
+      }
       row = end;
 
       const now = Date.now();
@@ -791,6 +802,29 @@ export class View {
       if (now - slice >= SLICE_MS) slice = await turn();
     }
     this.postTallies(true);
+  }
+
+  /**
+   * tap folds `block`, which the index has just completed, for the charts,
+   * out of the index's own bytes, so a chart beside the index reads nothing
+   * of its own. A block it cannot fold is left to the pass, which says why.
+   */
+  private async tap(block: number, bytes: () => Uint8Array): Promise<void> {
+    this.tapped = block + 1;
+    if (this.tallies.from() === undefined) return;
+    const [from, end] = this.index.rowsOf(block);
+    try {
+      const records = this.format.decode(bytes());
+      // A block with other rows than the index recorded is left to the pass.
+      if (records.length !== end - from) return;
+      const files = await this.files(from, records.length);
+      this.tallies.fold(block, from, end, (col) =>
+        this.shownIn(col, from, records, files),
+      );
+    } catch {
+      // The pass reads the block again, and posts why when it cannot.
+    }
+    if (Date.now() - this.tapSlice >= SLICE_MS) this.tapSlice = await turn();
   }
 
   /** postTallies posts each pending chart's tally over the rows so far. */

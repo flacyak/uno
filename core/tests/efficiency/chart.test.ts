@@ -29,9 +29,14 @@ const OBJECT = repeated(REPEATS);
 
 /**
  * The most charts beside the index may fetch, index included, as a multiple
- * of the object: today the index once, then every block once more.
+ * of the object. Of it, 0.1 is AHEAD - 1 chunks of SMALL.chunkBytes fetched
+ * twice: the open's reads of SAMPLE_ROWS, four blocks of SMALL.blockRows,
+ * push the index's stream out of the store's last REMEMBERED reads
+ * (core/src/store/ahead.ts), and topUp drops the chunks held for it. A store
+ * that keeps a reader while its held chunks are still wanted brings this to
+ * about 1.08, and lowers the budget to 1.1 with it.
  */
-const BESIDE_BUDGET = 2.2;
+const BESIDE_BUDGET = 1.2;
 /** The most charts made after the index may fetch, as a multiple of the object. */
 const AFTER_BUDGET = 1.05;
 
@@ -92,7 +97,7 @@ afterEach(async () => {
 
 const metrics: Metric[] = [];
 
-test('charts beside the index stay within what they fetch today, index included', async () => {
+test('charts attached as the open answers fetch the object once, the blocks complete before they came and the chunks the read-ahead drops', async () => {
   r = await remote(OBJECT, SMALL);
   const door = r.door;
   // Reads are let through one at a time, lowest first, so the index is no
