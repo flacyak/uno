@@ -8,6 +8,7 @@
 import { expect, test } from 'vite-plus/test';
 
 import {
+  CLOSED,
   Engine,
   decode,
   encode,
@@ -222,7 +223,7 @@ class FakeSocket implements WebSocketLike {
   sent: Array<string | Blob> = [];
   private queue: Promise<void> = Promise.resolve();
   private readonly messages: Array<(e: { data: unknown }) => void> = [];
-  private readonly closes: Array<() => void> = [];
+  private readonly closes: Array<(e: { code: number }) => void> = [];
 
   send(data: string | Blob): void {
     this.sent.push(data);
@@ -234,21 +235,19 @@ class FakeSocket implements WebSocketLike {
     });
   }
 
-  close(): void {
+  close(code = CLOSED): void {
     const peer = this.peer;
     this.queue = this.queue.then(() => {
-      for (const fn of peer?.closes ?? []) fn();
+      for (const fn of peer?.closes ?? []) fn({ code });
     });
   }
 
   addEventListener(type: 'message', fn: (e: { data: unknown }) => void): void;
-  addEventListener(type: 'close', fn: () => void): void;
-  addEventListener(
-    type: 'message' | 'close',
-    fn: (e: { data: unknown }) => void,
-  ): void {
-    if (type === 'message') this.messages.push(fn);
-    else this.closes.push(() => fn({ data: undefined }));
+  addEventListener(type: 'close', fn: (e: { code: number }) => void): void;
+  addEventListener(type: 'message' | 'close', fn: (e: never) => void): void {
+    if (type === 'message')
+      this.messages.push(fn as (e: { data: unknown }) => void);
+    else this.closes.push(fn as (e: { code: number }) => void);
   }
 }
 
