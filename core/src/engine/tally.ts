@@ -197,11 +197,15 @@ export class Tallies {
     return read;
   }
 
-  /** unread returns, for each pending chart, that its source could not be read. */
-  unread(said: Said): Array<[string, Tally]> {
+  /**
+   * unread returns, for each pending chart, or for each pending one of
+   * `ids`, that its source could not be read.
+   */
+  unread(said: Said, ids?: readonly string[]): Array<[string, Tally]> {
     const unread: Array<[string, Tally]> = [];
-    for (const [id, t] of this.charts) {
-      if (t.done) continue;
+    for (const id of ids ?? this.charts.keys()) {
+      const t = this.charts.get(id);
+      if (t === undefined || t.done) continue;
       unread.push([id, { t: 'unread', said }]);
       t.done = true;
     }
