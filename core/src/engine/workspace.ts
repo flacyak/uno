@@ -21,17 +21,7 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type {
-  Document,
-  Held,
-  HeldParts,
-  Logged,
-  SavedColumn,
-  State,
-} from '@document';
-import { pointerTo } from '@ingest';
-import type { KeyedColumn } from '@ingest';
-import { unreachable } from '@never';
+import type { Document, Held, HeldParts, Logged, State } from '@document';
 import type { Edit } from '@sheet';
 import {
   bytesSource,
@@ -60,6 +50,7 @@ import type {
 import { Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import type { Meeting, Unconnected } from '@store/s3';
+import { readOf } from './reading.ts';
 import type { ReadSpec } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
@@ -803,31 +794,6 @@ export class Workspace {
     this.queue = run.catch(() => undefined);
     return run;
   }
-}
-
-/**
- * readOf returns how a .uno source's rows were read when its log was made. A
- * source that names no kind is delimited text, in every format, so no log
- * moves under a detector that would read its file another way. JSON Lines
- * starts from the columns it pinned, so each key finds its column again.
- */
-function readOf(src: Pick<Held, 'kind' | 'header' | 'columns'>): ReadSpec {
-  switch (src.kind) {
-    case undefined:
-      return { kind: 'delimited', header: src.header ?? 'first' };
-    case 'jsonl':
-      return { kind: 'jsonl', columns: (src.columns ?? []).map(keyedOf) };
-    default:
-      return unreachable(src.kind);
-  }
-}
-
-/**
- * keyedOf returns a pinned column with its key, which a save leaves out
- * where it is the pointer to a top-level field called the column's name.
- */
-function keyedOf({ name, key }: SavedColumn): KeyedColumn {
-  return { name, key: key ?? pointerTo('', name) };
 }
 
 /** pathsOf returns every address a .uno source reads from. A carried source has none. */

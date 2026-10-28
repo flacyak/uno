@@ -6,6 +6,7 @@
  * The View holds one Reading and asks it alone how its rows are read.
  */
 
+import type { Held, SavedColumn } from '@document';
 import {
   delimitedRecords,
   detect,
@@ -13,9 +14,11 @@ import {
   kindOf,
   linesFormat,
   openFormat,
+  pointerTo,
   refuseNotRead,
 } from '@ingest';
 import type { Column, HeaderMode, KeyedColumn, RecordFormat } from '@ingest';
+import { unreachable } from '@never';
 import { Refusal } from '@said';
 import type { ReadKind, Said } from '@said';
 import { headed, multiOf } from '@store';
@@ -76,6 +79,33 @@ export type ReadSpec =
       /** The columns in order, each found by its key wherever it is first seen. */
       readonly columns: readonly KeyedColumn[];
     };
+
+/**
+ * readOf returns how a .uno source's rows were read when its log was made. A
+ * source that names no kind is delimited text, in every format, so no log
+ * moves under a detector that would read its file another way. JSON Lines
+ * starts from the columns it pinned, so each key finds its column again.
+ */
+export function readOf(
+  src: Pick<Held, 'kind' | 'header' | 'columns'>,
+): ReadSpec {
+  switch (src.kind) {
+    case undefined:
+      return { kind: 'delimited', header: src.header ?? 'first' };
+    case 'jsonl':
+      return { kind: 'jsonl', columns: (src.columns ?? []).map(keyedOf) };
+    default:
+      return unreachable(src.kind);
+  }
+}
+
+/**
+ * keyedOf returns a pinned column with its key, which a save leaves out
+ * where it is the pointer to a top-level field called the column's name.
+ */
+function keyedOf({ name, key }: SavedColumn): KeyedColumn {
+  return { name, key: key ?? pointerTo('', name) };
+}
 
 /** Behind is what holds a source's stored bytes: one file, or several joined as bytes. */
 export type Behind =
