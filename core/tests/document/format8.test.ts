@@ -4,7 +4,8 @@
  * Under a root each part's path is stored relative to it. A source that says
  * none of them is written as before, which format6.test.ts and
  * format7.test.ts hold to the byte. Covers what is written, which format it
- * needs, and the refusals for a part outside its root.
+ * needs, round trips, and the refusals for a part outside its root and a
+ * newer format.
  */
 
 import { describe, expect, test } from 'vite-plus/test';
@@ -13,13 +14,16 @@ import {
   PARTS_VERSION,
   ROWS_VERSION,
   formatFor,
+  readContainer,
   writeDocument,
 } from '@document';
 import type { HeldPart, HeldParts } from '@document';
 import {
+  AT,
   manifestOf,
   manifestText,
   partsOf,
+  tampered,
   workspace,
 } from '@core-tests/document/manifest';
 
@@ -228,6 +232,29 @@ describe('a source read in row space is not written', () => {
     };
     expect(() => writeDocument(workspace([source]))).toThrow(
       'which is not under s3://lake/orders/',
+    );
+  });
+});
+
+describe('a source read in row space reads back', () => {
+  test('as it was held, with its log', () => {
+    const doc = workspace([orders()]);
+    const back = readContainer('books.uno', writeDocument(doc), AT);
+    expect(back.sources).toEqual(doc.sources);
+    expect(back.log).toEqual(doc.log);
+  });
+});
+
+// Format 9 is newer than this build.
+describe('a format 9 file', () => {
+  const NEWER = ROWS_VERSION + 1;
+
+  test('is refused by name', () => {
+    const uno = tampered(workspace([orders()]), (m) => (m.format = NEWER));
+    expect(() => readContainer('books.uno', uno, AT)).toThrow(
+      new Error(
+        `books.uno was saved by a newer uno (format ${NEWER}, this build reads ${ROWS_VERSION}). Update uno to open it`,
+      ),
     );
   });
 });

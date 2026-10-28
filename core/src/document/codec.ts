@@ -28,6 +28,7 @@ import type {
   Logged,
   Manifest,
   OneOf,
+  PartsJoin,
   PartsSource,
   SavedColumn,
   Source,
@@ -42,6 +43,7 @@ import {
   HEADER_MODES,
   LOG_ENTRY,
   MANIFEST_ENTRY,
+  PARTS_JOINS,
   PARTS_VERSION,
   POINTED_VERSION,
   READ_VERSION,
@@ -57,7 +59,7 @@ import {
   sourceId,
   storedPath,
 } from './document.ts';
-import { baseOf, underRoot } from './path.ts';
+import { baseOf, onRoot, underRoot } from './path.ts';
 
 const decoder = new TextDecoder('utf-8');
 const encoder = new TextEncoder();
@@ -187,15 +189,25 @@ function carriedBytes(
   return raw;
 }
 
-/** heldParts builds the in-memory form of a parts source, with each part's
- * path resolved from `at`. */
+/**
+ * heldParts builds the in-memory form of a parts source. The root is
+ * resolved from `at`. Each part's path is joined onto the root when there is
+ * one, and resolved from `at` otherwise.
+ */
 function heldParts(src: PartsSource, state: State, at: string): HeldParts {
+  const root = src.root === undefined ? undefined : resolvedPath(src.root, at);
   return {
     id: src.id,
     name: src.name,
     connection: src.connection === '' ? undefined : src.connection,
+    join: src.join,
+    root,
+    partitions: src.partitions,
     parts: src.parts.map((part): HeldPart => {
-      const path = resolvedPath(part.path, at);
+      const path =
+        root === undefined
+          ? resolvedPath(part.path, at)
+          : onRoot(part.path, root);
       return {
         name: part.name === '' ? baseOf(path) : part.name,
         path,
@@ -203,6 +215,8 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
         version: part.version === '' ? undefined : part.version,
         skip: part.skip,
         unterminated: part.unterminated,
+        compression: part.compression,
+        rows: part.rows,
       };
     }),
     kind: src.kind,
@@ -745,13 +759,18 @@ function asString(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
 
-/** Whether a value is a byte count: a whole number of zero or more. */
-function isByteCount(v: unknown): v is number {
+/** Whether a value is a count of bytes or rows: a whole number of zero or
+ * more. */
+function isCount(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0;
 }
 
 function isText(v: unknown): v is string {
   return typeof v === 'string';
+}
+
+function isTexts(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every(isText);
 }
 
 function isFlag(v: unknown): v is boolean {
@@ -766,9 +785,14 @@ interface Expects<T> {
 
 const TEXT: Expects<string> = { is: isText, not: 'is not text' };
 const FLAG: Expects<boolean> = { is: isFlag, not: 'is neither true nor false' };
+const TEXTS: Expects<string[]> = { is: isTexts, not: 'is not a list of names' };
 const BYTE_COUNT: Expects<number> = {
-  is: isByteCount,
+  is: isCount,
   not: 'is not a number of bytes',
+};
+const ROW_COUNT: Expects<number> = {
+  is: isCount,
+  not: 'is not a number of rows',
 };
 
 /**
@@ -883,9 +907,9 @@ function parseManifest(name: string, v: unknown): Manifest {
  * parseSource reads one of the manifest's sources: a parts source when it
  * has `parts`, otherwise a file source. A file source is read leniently,
  * with a missing key read as its zero value. Parts are read strictly, and a
- * bad list is refused naming the part. So are a kind, a compression and
- * pinned columns, and a kind or compression this build does not know is
- * refused by name.
+ * bad list is refused naming the part. So are a kind, a compression, pinned
+ * columns, a join, a root and partitions, and a kind, compression or join
+ * this build does not know is refused by name.
  */
 function parseSource(name: string, s: Record<string, unknown>): Source {
   const base = {
@@ -931,8 +955,9 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       `${source} has no parts · several files read as one need at least one`,
     );
   }
+  const join = oneOf(s, 'join', PARTS_JOINS, source);
   const parts = listed.map((raw, i) =>
-    parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw),
+    parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw, join),
   );
 
   const kind = oneOf(s, 'kind', SOURCE_KINDS, source);
@@ -942,6 +967,9 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
   const fileColumn = optional(s, 'fileColumn', FLAG, source);
   return {
     ...base,
+    join,
+    root: optional(s, 'root', TEXT, source),
+    partitions: optional(s, 'partitions', TEXTS, source),
     parts,
     kind,
     header,
@@ -981,10 +1009,15 @@ function parseColumns(where: string, v: unknown): SavedColumn[] | undefined {
 }
 
 /**
- * parsePart reads one part. `which` names it in an error before its path is
- * known. `skip` and `unterminated` default to 0 and false when missing.
+ * parsePart reads one part of a source joined by `join`. `which` names it in
+ * an error before its path is known. `skip` and `unterminated` default to 0
+ * and false when missing, and are read only for a part joined as bytes.
  */
-function parsePart(which: string, p: unknown): SourcePart {
+function parsePart(
+  which: string,
+  p: unknown,
+  join: PartsJoin | undefined,
+): SourcePart {
   if (!isRecord(p))
     throw new Error(`${which} is not a file with a path and bytes`);
 
@@ -994,21 +1027,26 @@ function parsePart(which: string, p: unknown): SourcePart {
   const part = `${which} (${path})`;
 
   const bytes = p['bytes'];
-  if (!isByteCount(bytes))
+  if (!isCount(bytes))
     throw new Error(`${part} does not say how many bytes it is`);
 
   const partName = optional(p, 'name', TEXT, part);
   const version = optional(p, 'version', TEXT, part);
-  const skip = optional(p, 'skip', BYTE_COUNT, part);
-  const unterminated = optional(p, 'unterminated', FLAG, part);
+  const bytesJoined = join === undefined;
+  const skip = bytesJoined ? (optional(p, 'skip', BYTE_COUNT, part) ?? 0) : 0;
+  const unterminated = bytesJoined
+    ? (optional(p, 'unterminated', FLAG, part) ?? false)
+    : false;
 
   return {
     name: partName ?? '',
     path,
     bytes,
     version: version ?? '',
-    skip: skip ?? 0,
-    unterminated: unterminated ?? false,
+    skip,
+    unterminated,
+    compression: oneOf(p, 'compression', SOURCE_COMPRESSIONS, part),
+    rows: optional(p, 'rows', ROW_COUNT, part),
   };
 }
 

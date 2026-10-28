@@ -27,7 +27,7 @@ import { against, dirOf, relativeTo } from './path.ts';
  * A file declares the lowest version that can read it, so a workspace an
  * older build could replay still opens there.
  */
-export const FORMAT_VERSION = 7;
+export const FORMAT_VERSION = 8;
 
 /** A log of only single-cell edits. */
 export const BASE_VERSION = 1;
@@ -116,6 +116,9 @@ export const SOURCE_COMPRESSIONS = closed<SourceCompression>({});
  */
 export type PartsJoin = 'rows';
 
+/** The joins this build reads. */
+export const PARTS_JOINS = closed<PartsJoin>({ rows: true });
+
 export const GENERATOR = 'uno 0.2.0';
 
 /**
@@ -198,6 +201,9 @@ export interface FileSource extends SourceBase, ReadAs {
   parts?: never;
   header?: never;
   fileColumn?: never;
+  join?: never;
+  root?: never;
+  partitions?: never;
 }
 
 /**
@@ -406,6 +412,9 @@ export interface HeldFile extends HeldBase, ReadAs {
   parts?: never;
   header?: never;
   fileColumn?: never;
+  join?: never;
+  root?: never;
+  partitions?: never;
 }
 
 /**
