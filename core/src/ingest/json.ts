@@ -40,6 +40,20 @@ const WORDS: ReadonlyMap<string, string> = new Map([
 ]);
 /** RFC 8259's whitespace, which may come before and after any token. */
 const BLANKS: ReadonlySet<string> = new Set([' ', '\t', '\n', '\r']);
+/** The cell of an empty object, which has no members to flatten. */
+const EMPTY_OBJECT = '{}';
+
+/**
+ * How deep objects may nest in a line, the line's own object counted.
+ * JSON.parse has no such limit, but walkLine reads each level a call deeper,
+ * so it refuses a deeper line rather than overflow the stack.
+ */
+export const DEPTH_LIMIT = 256;
+
+/** A member's value: the text of its cell, or an object's members. */
+type Member = string | Members;
+/** An object's members by name, where the last of a repeated name wins. */
+type Members = Map<string, Member>;
 
 /**
  * Tokens reads RFC 8259's tokens from one line, in order, each past the
@@ -79,7 +93,7 @@ class Tokens {
     return name !== undefined && this.eat(':') ? name : undefined;
   }
 
-  /** cell reads one value and returns the text of its cell. */
+  /** cell reads a value other than an object and returns its cell. */
   cell(): string | undefined {
     return this.scalar();
   }
@@ -142,39 +156,61 @@ function pointerTo(parent: string, name: string): string {
 }
 
 /**
- * membersOf reads a line that holds one object and returns each member's
- * cell by name, where the last of a repeated name wins. It returns undefined
- * when the line holds anything else.
+ * membersOf reads an object nested `depth` levels inside the line's own and
+ * returns its members, where the last of a repeated name wins in the place
+ * the name first had. It returns undefined when what comes next is not an
+ * object, or nests too deep.
  */
-function membersOf(tokens: Tokens): Map<string, string> | undefined {
-  const members = new Map<string, string>();
-  if (!tokens.eat('{')) return undefined;
-  if (tokens.eat('}')) return tokens.end() ? members : undefined;
-  for (;;) {
+function membersOf(tokens: Tokens, depth: number): Members | undefined {
+  if (depth === DEPTH_LIMIT || !tokens.eat('{')) return undefined;
+  const members: Members = new Map();
+  if (tokens.eat('}')) return members;
+  do {
     const name = tokens.name();
     if (name === undefined) return undefined;
-    const cell = tokens.cell();
-    if (cell === undefined) return undefined;
-    members.set(name, cell);
-    if (tokens.eat(',')) continue;
-    return tokens.eat('}') && tokens.end() ? members : undefined;
+    const member =
+      tokens.peek() === '{' ? membersOf(tokens, depth + 1) : tokens.cell();
+    if (member === undefined) return undefined;
+    members.set(name, member);
+  } while (tokens.eat(','));
+  return tokens.eat('}') ? members : undefined;
+}
+
+/**
+ * flatten calls `leaf` with the pointer and the text of each cell under the
+ * object `parent` points to. A nested object's members are cells in its
+ * place, and an empty object is one cell.
+ */
+function flatten(
+  parent: string,
+  members: Members,
+  leaf: (key: string, text: string) => void,
+): void {
+  for (const [name, member] of members) {
+    const key = pointerTo(parent, name);
+    if (typeof member === 'string') leaf(key, member);
+    else if (member.size === 0) leaf(key, EMPTY_OBJECT);
+    else flatten(key, member, leaf);
   }
 }
 
 /**
- * walkLine reads one JSON Lines record and calls `leaf` with each member's
- * RFC 6901 pointer and the text of its cell, where the last of a repeated name
- * wins. A string is unescaped, a number is as written, true and false are
- * words, and null is an empty cell. walkLine reads no array or object yet, and
- * refuses a line that holds one. When the line is not one JSON object,
- * walkLine reports nothing and returns false. It never throws.
+ * walkLine reads one JSON Lines record and calls `leaf` with each cell's
+ * RFC 6901 pointer and text, where the last of a repeated name wins. A nested
+ * object's members are cells of their own, so {"a":{"b":1}} has the cell /a/b,
+ * and an empty object is the cell {}. A string is unescaped, a number is as
+ * written, true and false are words, and null is an empty cell. walkLine
+ * reads no array yet, and refuses a line that holds one or nests deeper than
+ * DEPTH_LIMIT. When the line is not one JSON object, walkLine reports nothing
+ * and returns false. It never throws.
  */
 export function walkLine(
   line: string,
   leaf: (key: string, text: string) => void,
 ): boolean {
-  const members = membersOf(new Tokens(line));
-  if (members === undefined) return false;
-  for (const [name, cell] of members) leaf(pointerTo('', name), cell);
+  const tokens = new Tokens(line);
+  const members = membersOf(tokens, 0);
+  if (members === undefined || !tokens.end()) return false;
+  flatten('', members, leaf);
   return true;
 }
