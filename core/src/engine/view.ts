@@ -912,7 +912,12 @@ export class View {
       if (this.path === '') {
         await this.until(() => this.reading.index.complete);
         const raw = this.carried ?? (await this.bytes.read(0, this.bytes.size));
-        return { raw, bytes: this.size, version: this.version, ...this.kept() };
+        return {
+          raw,
+          bytes: this.size,
+          version: this.version,
+          ...this.kept(),
+        };
       }
       return {
         path: this.path,
@@ -926,8 +931,8 @@ export class View {
 
   /**
    * kept returns the edits, the row and column counts they were made over,
-   * and how the rows were read: for JSON Lines, every column the schema
-   * shows.
+   * and how the rows were read: for JSON Lines and Parquet, their kind and
+   * every column found.
    */
   private kept(): Pick<Part, 'edits' | 'rows' | 'cols' | 'kind' | 'columns'> {
     return {

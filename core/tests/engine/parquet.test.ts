@@ -2,9 +2,11 @@
  * @fileoverview A Parquet file read by the engine: a workspace that says a
  * source was read as Parquet reopens it so, as its CSV twin reads, each
  * pinned column found by its key and each logged edit on its cell, its
- * blocks planned from its row count and complete from the start. A block of a paged row group
- * reads alone, and one of an unpaged group with its window, once while the
- * rows are scrolled, and the cache holds them within its budget as text.
+ * blocks planned from its row count and complete from the start, and a
+ * save records it so. A block of a paged row group reads alone, and one of
+ * an unpaged group with its window, sized to its heaviest rows, once while
+ * the rows are scrolled, and the cache holds them within its budget as
+ * text.
  */
 
 import { expect, test, vi } from 'vite-plus/test';
@@ -27,7 +29,7 @@ import {
 } from '@engine/table';
 import type { TableRows } from '@engine/table';
 import type { Table } from '@ingest';
-import { Sheet } from '@sheet';
+import { Op, Sheet } from '@sheet';
 import { bytesSource } from '@store';
 import { multiFiles } from '@store/multi';
 import { localFiles } from '@store/node';
@@ -413,6 +415,9 @@ test('held to Parquet with pinned columns, each key finds its column, a lost key
 const EDITED_ROW = 3000;
 const EDITED = 'edited';
 
+/** A save's limit on carried bytes, which a pointed-at source never nears. */
+const ROOMY = 1 << 20;
+
 /** A .uno holding `source`, whose log is `sheet`'s edits to it. */
 function workspace(source: Held, sheet: Sheet): Blob {
   const uno = writeDocument({
@@ -518,3 +523,29 @@ test('several files joined as bytes that say they were read as Parquet are refus
       'q3.uno: sales: sales: reading several Parquet files as one is not supported yet',
     );
   }));
+
+test('a source read as Parquet saves its kind and pinned columns, and its edit reopens on its cell', async () => {
+  const sheet = new Sheet(SALES_NAME, [], []);
+  const blob = workspace(salesSource(sheet), sheet);
+  const col = SALES_COLUMNS.indexOf('units');
+  let saved: Uint8Array = new Uint8Array();
+  await withEngine(async (engine) => {
+    const src = await openOne(engine, { name: 'q3.uno', blob });
+    engine.mode(true);
+    await src.edit({ op: Op.Set, row: EDITED_ROW, col, now: EDITED });
+    saved = await engine.save({ source: src.id, cells: [], at: '' }, ROOMY);
+  });
+
+  const [source] = readContainer('q3.uno', saved).sources;
+  expect(source?.kind).toBe('parquet');
+  // Each column is the top-level field of its name, so no key is written.
+  expect(source?.columns).toEqual(SALES_COLUMNS.map((name) => ({ name })));
+  const want = salesRows();
+  want[EDITED_ROW]![col] = EDITED;
+  await withEngine(async (engine) => {
+    const blob = new Blob([new Uint8Array(saved)]);
+    const src = await openOne(engine, { name: 'q3.uno', blob });
+    expect(saidIn(src.opened.label)).toBe('Parquet · snappy · 5 row groups');
+    expect(await everyRow(src)).toEqual(want);
+  });
+});
