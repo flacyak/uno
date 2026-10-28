@@ -127,6 +127,14 @@ export async function detect(
 }
 
 /**
+ * opensAsParquet says whether bytes start with a Parquet magic, which only
+ * the file's last bytes confirm. Only such a head needs its tail read.
+ */
+export function opensAsParquet(bytes: Uint8Array): boolean {
+  return PARQUET_MAGICS.some((magic) => startsWith(bytes, magic));
+}
+
+/**
  * refuseUnread detects what a file holds, and refuses it by name where this
  * build does not read it yet.
  */
