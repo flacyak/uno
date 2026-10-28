@@ -149,8 +149,8 @@ export interface Element {
 
 /**
  * Scalar is one stored value as hyparquet reads it with identity parsers and
- * no DECIMAL annotation. A decimal is its unscaled integer, and a string or
- * binary is its bytes.
+ * no DECIMAL annotation. A decimal is its unscaled integer, and a string, a
+ * binary or an INT96 is its bytes.
  */
 type Scalar =
   | null
@@ -214,6 +214,8 @@ const HOURS_PER_DAY = 24n;
 const SECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE;
 const SECONDS_PER_DAY = HOURS_PER_DAY * SECONDS_PER_HOUR;
 const MILLIS_PER_DAY = Number(ticksPerDay('millis'));
+const MICROS_PER_DAY = ticksPerDay('micros');
+const NANOS_PER_MICRO = ticksPerSecond('nanos') / ticksPerSecond('micros');
 
 /** The digits of an hour, a minute or a second on a clock. */
 const CLOCK_DIGITS = 2;
@@ -240,10 +242,16 @@ const STRING: Logical = { t: 'string' };
 const UNSIGNED: Logical = { t: 'unsigned' };
 
 /**
- * hyparquet reads an INT96 with no converted type as nanoseconds since 1970.
- * Nothing in the file says whether they count from UTC.
+ * An INT96 with no converted type is a timestamp, written as nanoseconds
+ * since 1970. Nothing in the file says whether they count from UTC.
  */
 const INT96_TIMESTAMP: Logical = { t: 'timestamp', unit: 'nanos', utc: false };
+
+/** The Julian day of 1970-01-01, which an INT96 counts its days from. */
+const JULIAN_EPOCH_DAY = 2_440_588n;
+
+/** Where an INT96's Julian day starts, after the nanoseconds into it. */
+const INT96_DAY_AT = 8;
 
 /** The time units an annotation names, as Logical names them. */
 const UNITS: Readonly<Record<AnnotatedUnit, TimeUnit>> = {
@@ -490,8 +498,8 @@ function storedOf({ physical, logical }: Primitive, key: string): Scalar {
     case 'BOOLEAN':
       return key === 'true';
     case 'INT64':
-    case 'INT96':
       return INTEGER.test(key) ? BigInt(key) : key;
+    case 'INT96':
     case 'BYTE_ARRAY':
     case 'FIXED_LEN_BYTE_ARRAY':
       // hyparquet hands a float16 over as a number, and a string through
@@ -553,7 +561,11 @@ function isNumeric(logical: Logical | undefined, value: Scalar): boolean {
 /** A value by what its primitive says it means, or as it is with none. */
 function scalarOf(primitive: Primitive | undefined, value: Scalar): string {
   if (value === null || value === undefined) return '';
-  if (value instanceof Uint8Array) return bytesOf(primitive?.logical, value);
+  if (value instanceof Uint8Array) {
+    return primitive?.physical === 'INT96'
+      ? numberOf(primitive, int96Of(value))
+      : bytesOf(primitive?.logical, value);
+  }
   if (primitive && (typeof value === 'number' || typeof value === 'bigint')) {
     return numberOf(primitive, value);
   }
@@ -585,6 +597,24 @@ function numberOf(primitive: Primitive, value: number | bigint): string {
         ? floatOf(Number(value), FLOAT32_DIGITS, Math.fround)
         : String(value);
   }
+}
+
+/**
+ * An INT96's stored bytes as nanoseconds since 1970: the nanoseconds into
+ * its day, a signed 64-bit integer, then its Julian day. Spark writes one
+ * from microseconds whose sum with the epoch's Julian day wraps at 64 bits,
+ * so they wrap the same way here, which reads back the time Spark was
+ * given.
+ */
+function int96Of(bytes: Uint8Array): bigint {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const nanos = view.getBigInt64(0, true);
+  const day = BigInt(view.getInt32(INT96_DAY_AT, true));
+  const micros = BigInt.asIntN(
+    INT64_BITS,
+    (day - JULIAN_EPOCH_DAY) * MICROS_PER_DAY + nanos / NANOS_PER_MICRO,
+  );
+  return micros * NANOS_PER_MICRO + (nanos % NANOS_PER_MICRO);
 }
 
 /**
