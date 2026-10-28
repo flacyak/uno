@@ -1,7 +1,8 @@
 /**
  * @fileoverview `engine.append`: adding parts to the end of a source of several
  * files read as one. The rows extend, the log is unchanged, and every edit
- * stays on its cell, in the open source and in a save of it.
+ * stays on its cell, in the open source and in a save of it. A JSON Lines
+ * source is read as JSON Lines again once a part is appended.
  */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
@@ -28,12 +29,21 @@ import {
   indexed,
   multiProviders,
   openOne,
+  saidIn,
   sales,
   sheetRows,
   widened,
   FIXTURE,
   TINY,
 } from './harness.ts';
+import {
+  ID_KEY,
+  LATE,
+  LATE_KEY,
+  NAME as LINES,
+  workspace,
+  written,
+} from './late.ts';
 
 /** What the parts are called as one source. */
 const NAME = 'sales-q3';
@@ -77,6 +87,9 @@ const FIRST_TWO: SourceRef = {
 
 /** The part that is appended. */
 const THIRD = part(OPENED);
+
+/** The late key's column in a JSON Lines source, after its id column. */
+const LATE_COL = 1;
 
 /** The whole file's rows with `edits` made to its units. */
 function expected(
@@ -347,6 +360,42 @@ test('a file the source already reads is refused, and so is one given twice', as
     );
     expect(src.progress.rows).toBe(ROWS_BEFORE);
     expect(widened(await everyRow(src))).toEqual(expected(EDITS, ROWS_BEFORE));
+  } finally {
+    done();
+  }
+});
+
+test('a JSON Lines source over parts is read as JSON Lines again once a part is appended', async () => {
+  const file = await written();
+  // A part is detected as it is appended, and this build reads JSON Lines
+  // only through a spec, so the part appended is an empty file.
+  const empty = join(await mkdtemp(join(tmpdir(), 'uno-append-')), 'empty.txt');
+  await writeFile(empty, '');
+  const { engine, done } = connect(undefined, multiProviders());
+  try {
+    const src = await openOne(engine, {
+      name: UNO,
+      blob: workspace(file, 'part'),
+    });
+    await indexed(src);
+    engine.mode(true);
+    const late = { row: LATE, col: LATE_COL, now: 'edited' };
+    await src.edit({ op: Op.Set, ...late });
+
+    const longer = await engine.append(src, [
+      { name: 'empty.txt', path: empty },
+    ]);
+    expect(saidIn(longer.opened.label)).toBe('UTF-8 · JSON Lines');
+    expect(longer.opened.columns.map((column) => column.header)).toEqual([
+      ID_KEY,
+      LATE_KEY,
+      FILE_COLUMN,
+    ]);
+    await indexed(longer);
+    expect(longer.progress.rows).toBe(src.progress.rows);
+    expect((await longer.rows(LATE, 1)).rows).toEqual([
+      [String(LATE), late.now, LINES],
+    ]);
   } finally {
     done();
   }
