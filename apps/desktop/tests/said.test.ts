@@ -85,6 +85,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "nothing-to-undo": { t: "nothing-to-undo" },
   "nothing-to-redo": { t: "nothing-to-redo" },
   "in-view": { t: "in-view" },
+  "columns-moved": { t: "columns-moved", name: "events.jsonl" },
   "file-closed": { t: "file-closed" },
   cancelled: { t: "cancelled", name: "ads.csv" },
   "changed-on-disk": { t: "changed-on-disk", name: "ads.csv" },

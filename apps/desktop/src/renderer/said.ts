@@ -183,6 +183,7 @@ const SAYS: Sentences<Said> = {
   "nothing-to-undo": m.refused_nothing_to_undo,
   "nothing-to-redo": m.refused_nothing_to_redo,
   "in-view": m.refused_in_view,
+  "columns-moved": (s) => m.refused_columns_moved({ name: s.name }),
   "file-closed": m.refused_file_closed,
   cancelled: (s) => m.refused_cancelled({ name: s.name }),
   "changed-on-disk": (s) => m.refused_changed_on_disk({ name: s.name }),

@@ -142,6 +142,7 @@ export type Said =
   | { t: 'nothing-to-undo' }
   | { t: 'nothing-to-redo' }
   | { t: 'in-view' }
+  | { t: 'columns-moved'; name: string }
   | { t: 'file-closed' }
   | { t: 'cancelled'; name: string }
   | { t: 'changed-on-disk'; name: string }
@@ -323,6 +324,8 @@ const SENTENCES: Sentences<Said> = {
   'nothing-to-undo': () => 'there is nothing to undo',
   'nothing-to-redo': () => 'there is nothing to redo',
   'in-view': () => 'the file is in view · Ctrl+E to transform',
+  'columns-moved': (s) =>
+    `${s.name} gained columns while the edit was on its way, so it was not made · make it again`,
   'file-closed': () => 'the file was closed',
   cancelled: (s) => `opening ${s.name} was cancelled`,
   'changed-on-disk': (s) => `${s.name} changed on disk after it was opened`,
