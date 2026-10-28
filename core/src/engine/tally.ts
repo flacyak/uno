@@ -1,18 +1,31 @@
 /**
- * @fileoverview A view's charts, each folded over the rows read so far. A
- * chart reads the columns its plot names, found again by header where the
- * file moved them.
+ * @fileoverview A view's charts, each folded over the rows read so far.
+ *
+ * A pass over the view's blocks feeds every chart in order, so a chart's
+ * fold holds every row before the first block it lacks. A chart reads the
+ * columns its plot names, found again by header where the file moved them.
  */
 
 import type { Chart, ChartColumn, Plot } from '@document';
 import { GroupsFold, SampleFold } from '@tally';
 
-/** Tallies folds a view's charts, each attached to be folded. */
+/** One chart's fold, and how far it has got. */
+interface Tallying {
+  /** The plot's columns, where the view's headers put them. */
+  cols: number[];
+  fold: GroupsFold | SampleFold;
+  /** Rows folded: every row before the first block it lacks. */
+  rows: number;
+  /** Whether the chart has heard its last tally, the complete one. */
+  done: boolean;
+}
+
+/**
+ * Tallies folds a view's charts. A chart is attached to be folded, and is
+ * pending until it hears its complete tally.
+ */
 export class Tallies {
-  private readonly charts = new Map<
-    string,
-    { cols: number[]; fold: GroupsFold | SampleFold }
-  >();
+  private readonly charts = new Map<string, Tallying>();
 
   /**
    * attach folds `chart` from its first row, or returns the header of a
@@ -33,8 +46,46 @@ export class Tallies {
       plot.t === 'scatter'
         ? new SampleFold()
         : new GroupsFold(plot.sum === undefined ? 'rows' : 'sum');
-    this.charts.set(id, { cols, fold });
+    this.charts.set(id, { cols, fold, rows: 0, done: false });
     return undefined;
+  }
+
+  /** detach stops folding the chart with `id`. */
+  detach(id: string): void {
+    this.charts.delete(id);
+  }
+
+  /** from is the first row a pending chart lacks, or undefined when none is. */
+  from(): number | undefined {
+    let from: number | undefined;
+    for (const t of this.charts.values()) {
+      if (!t.done && (from === undefined || t.rows < from)) from = t.rows;
+    }
+    return from;
+  }
+
+  /**
+   * fold adds `block`, the rows from `from` to `end`, to every pending chart
+   * that lacks it. `shown` returns what a column of the block shows, by row.
+   */
+  fold(
+    block: number,
+    from: number,
+    end: number,
+    shown: (col: number) => (row: number) => string,
+  ): void {
+    for (const t of this.charts.values()) {
+      if (t.done || t.rows !== from) continue;
+      const [first, second] = t.cols.map(shown);
+      for (let row = from; row < end; row++) {
+        if (t.fold instanceof SampleFold) {
+          t.fold.add(block, row, first!(row), second!(row));
+        } else {
+          t.fold.add(first!(row), second === undefined ? '' : second(row));
+        }
+      }
+      t.rows = end;
+    }
   }
 }
 
