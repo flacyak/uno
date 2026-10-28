@@ -1,8 +1,9 @@
 /**
  * @fileoverview A file this build does not read yet, opened fresh, is refused
  * by name: JSON Lines, a gzip-compressed CSV and a Parquet file. Each is
- * refused when opened alone and when peeked at. A source a workspace already
- * logged edits against is read as it was when they were made.
+ * refused when opened alone, when peeked at and as a part of several files.
+ * A source a workspace already logged edits against is read as it was when
+ * they were made.
  */
 
 import { readFileSync } from 'node:fs';
@@ -27,6 +28,9 @@ const UNREAD: ReadonlyArray<readonly [string, Unread]> = [
   ['sales-q3.csv.gz', 'gzip'],
   ['par1.bin', 'Parquet'],
 ];
+
+/** A part beside each fixture that is read: the first third of the export. */
+const PART = 'sales-q3-part-1.csv';
 
 /** The Refusal `asked` rejects with. Fails if it is anything else. */
 async function refusal(asked: Promise<unknown>): Promise<Refusal> {
@@ -64,6 +68,22 @@ describe.each(UNREAD)('%s', (name, what) => {
   test('peeked at is refused by name', () =>
     withEngine(async (engine) => {
       expect((await refusal(engine.peek(ref))).said).toEqual(said);
+    }));
+
+  test('as a part beside a CSV is refused by name, naming the part', () =>
+    withEngine(async (engine) => {
+      for (const [parts, at] of [
+        [[{ ref: { name: PART, path: testdata(PART) } }, { ref }], 2],
+        [[{ ref }, { ref: { name: PART, path: testdata(PART) } }], 1],
+      ] as const) {
+        const asked = engine.open({ name: 'q3', parts, header: 'first' });
+        const refused = await refusal(asked);
+        expect(refused.said).toEqual({
+          t: 'about',
+          subject: `${name} (part ${at} of 2)`,
+          why: said,
+        });
+      }
     }));
 });
 
