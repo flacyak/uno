@@ -208,15 +208,20 @@ export class Pages {
   }
 
   /**
-   * records reads one block's source rows. With `keep = false` the block is
-   * decoded and the cache is left as it is.
+   * records reads one block's source rows. With `keep = false` the cache is
+   * left as it is, order included: a held or loading block is served as it
+   * is, and any other is decoded and not kept. A second reader of the whole
+   * file, such as the survey, leaves the grid's pages to be evicted in the
+   * order the grid last read them.
    */
   records(block: number, keep = true): Promise<string[][]> {
     const hit = this.cache.get(block);
     if (hit !== undefined) {
-      // Re-insert so the block becomes the newest entry in the Map.
-      this.cache.delete(block);
-      this.cache.set(block, hit);
+      if (keep) {
+        // Re-insert so the block becomes the newest entry in the Map.
+        this.cache.delete(block);
+        this.cache.set(block, hit);
+      }
       return Promise.resolve(hit.records);
     }
 

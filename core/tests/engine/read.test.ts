@@ -21,11 +21,13 @@ import {
 } from '@engine';
 import type { MessagePortLike, Reply, Request } from '@engine';
 import { openFormat } from '@ingest';
+import type { Format } from '@ingest';
 import { isNumber } from '@num';
 import { NO_ROW, Op } from '@sheet';
 import type { Provider } from '@plugin';
 import { sources } from '@plugin';
 import { blobSource } from '@store';
+import type { ByteSource } from '@store';
 import { diskProvider } from '@store/node';
 import {
   LAST_ROW,
@@ -261,7 +263,12 @@ test('the index keeps block starts past 4 GB exactly, at two numbers a block', (
   expect(index.readable()).toBe(blocks);
 });
 
-test('the page cache stays within its budget however much is read', async () => {
+/** indexedFixture reads the fixture from memory and indexes all of it at TINY. */
+async function indexedFixture(): Promise<{
+  source: ByteSource;
+  format: Format;
+  index: RowIndex;
+}> {
   const source = blobSource(new Blob([bytes]));
   const format = await openFormat('sales-q3.csv', source);
   const index = new RowIndex(format.dataStart, source.size, TINY);
@@ -273,7 +280,11 @@ test('the page cache stays within its budget however much is read', async () => 
     signal: new AbortController().signal,
     progress() {},
   });
+  return { source, format, index };
+}
 
+test('the page cache stays within its budget however much is read', async () => {
+  const { source, format, index } = await indexedFixture();
   const pages = new Pages(
     'sales-q3.csv',
     source,
@@ -288,6 +299,40 @@ test('the page cache stays within its budget however much is read', async () => 
     );
     expect(pages.held).toBeLessThanOrEqual(TINY.cacheBytes);
   }
+});
+
+// The grid reads block 1 and then block 0. A second reader then reads every
+// block without keeping it, as find and the survey do. Block 1 is still the
+// oldest, so the grid's next block evicts it and block 0 stays.
+test("a read of every block that keeps none leaves the grid's recent pages in order", async () => {
+  const { source, format, index } = await indexedFixture();
+  let reads = 0;
+  const metered: ByteSource = {
+    ...source,
+    read(offset, length) {
+      reads++;
+      return source.read(offset, length);
+    },
+  };
+  const size = (block: number): number => {
+    const [start, end] = index.bytesOf(block);
+    return end - start;
+  };
+  // Room for block 0 and either of the next two, and no more.
+  const budget = size(0) + Math.max(size(1), size(2));
+  const pages = new Pages('sales-q3.csv', metered, format, index, budget);
+
+  await pages.records(1);
+  await pages.records(0);
+  const last = index.blockOf(ROWS - 1);
+  for (let block = 0; block <= last; block++) await pages.records(block, false);
+  await pages.records(2);
+
+  reads = 0;
+  await pages.records(0);
+  expect(reads, 'block 0 is still held').toBe(0);
+  await pages.records(1);
+  expect(reads, 'block 1 was evicted').toBe(1);
 });
 
 test('a failed open names the file', async () => {
