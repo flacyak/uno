@@ -5,6 +5,9 @@
  * drop what the cursor has already shown, take a page. Each call starts from
  * a fresh readdir.
  *
+ * A walk reads every folder under a root depth-first, each folder's entries
+ * in the order byPartPath gives them, so its files come in path order.
+ *
  * Only this file and store/node.ts import node:fs. The guard test in
  * tests/store/opens.test.ts checks that.
  */
@@ -14,8 +17,9 @@ import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { compareStrings } from '@go';
+import { byPartPath } from './hive.ts';
 import { isRemote } from './index.ts';
-import type { Entry, Lister, Listing } from './list.ts';
+import type { Entry, Listing, Walker } from './list.ts';
 import { PAGE, byPageKey, pageKey } from './list.ts';
 
 // Re-exported for tests that page a folder by it.
@@ -23,17 +27,19 @@ export { PAGE };
 
 /**
  * diskLister browses this machine's disks: one readdir per page, and a stat
- * for each entry on the page.
+ * for each entry on the page. A walk reads every folder under its root and
+ * stats each file.
  *
  * `page` is the page size. Tests set it small.
  */
-export function diskLister(page: number = PAGE): Lister {
+export function diskLister(page: number = PAGE): Walker {
   return {
     label: 'local files',
     // Every scheme-free path, the same rule localFiles opens by.
     handles: (path) => !isRemote(path),
     list: (dir, cursor) => listDir(dir, page, cursor),
     stat: statEntry,
+    walk: (root) => walkDir(root),
   };
 }
 
@@ -71,6 +77,55 @@ async function listDir(
   // rows end within the page, this is the last page.
   const after = rows[page];
   return after === undefined ? { entries } : { entries, next: pageKey(after) };
+}
+
+/** Walked is one file a walk found, and the folder under the root it is in. */
+interface Walked {
+  readonly folder: string;
+  readonly row: Row;
+}
+
+/** Walk is what a walk has found so far. */
+interface Walk {
+  readonly root: string;
+  readonly found: Walked[];
+}
+
+/** walkDir reads every file under `root` as one page. */
+async function walkDir(root: string): Promise<Listing> {
+  const walk: Walk = { root, found: [] };
+  await walkFolder(walk, '');
+
+  const entries = await Promise.all(
+    walk.found.map(async ({ folder, row }) => ({
+      ...(await entryOf(join(root, folder))(row)),
+      name: under(folder, row.name),
+    })),
+  );
+  return { entries };
+}
+
+/** walkFolder adds the files under `folder` to the walk, depth-first. */
+async function walkFolder(walk: Walk, folder: string): Promise<void> {
+  const dir = join(walk.root, folder);
+  const found = namesOf(
+    await readdir(dir, { withFileTypes: true, encoding: 'buffer' }),
+  );
+  const rows = (await rowsOf(dir, found)).toSorted((a, b) =>
+    byPartPath(a.name, b.name),
+  );
+  for (const row of rows) {
+    if (!row.folder) {
+      walk.found.push({ folder, row });
+      continue;
+    }
+    await walkFolder(walk, under(folder, row.name));
+  }
+}
+
+/** under is a name's path under the root, in `folder` under it. */
+function under(folder: string, name: string): string {
+  return folder === '' ? name : `${folder}/${name}`;
 }
 
 /** Found is one directory entry with its name decoded to a string. */
