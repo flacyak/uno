@@ -22,16 +22,18 @@ const SOURCES = [
   ['North'],
 ];
 
-const FILES = ['a.csv', 'a.csv', 'b.csv'];
+/** Each row's supplied values, one array shared by the rows of a file. */
+const IN_A = ['a.csv'];
+const IN_B = ['b.csv'];
+const FILES = [IN_A, IN_A, IN_B];
 
 const REFUSAL =
   'edit 1: _file shows which file each row came from, so it cannot be changed';
 
 function schema(): Schema {
-  return new Schema(HEADERS, SOURCES.length, {
-    col: FILE,
-    shows: 'which file each row came from',
-  });
+  return new Schema(HEADERS, SOURCES.length, [
+    { col: FILE, shows: 'which file each row came from' },
+  ]);
 }
 
 function edit(

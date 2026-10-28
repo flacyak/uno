@@ -387,22 +387,22 @@ export class View {
   }
 
   /**
-   * files returns the `_file` cell for each of `count` rows from `first`:
-   * the name of the part holding the row's first byte. Undefined for a
-   * source that lacks the column.
+   * files returns the supplied values for each of `count` rows from
+   * `first`: the name of the part holding the row's first byte, for `_file`.
+   * Undefined for a source that lacks the column.
    */
   private async files(
     first: number,
     count: number,
-  ): Promise<string[] | undefined> {
-    if (this.schema.supplied === undefined) return undefined;
+  ): Promise<string[][] | undefined> {
+    if (this.schema.supplied.length === 0) return undefined;
     const ref = this.parts;
     const reading = this.reading;
     if (ref === undefined || reading.behind.t !== 'bytes') {
       throw new Refusal({ t: 'joins-unknown-for-column', name: this.name });
     }
 
-    const names: string[] = [];
+    const names: string[][] = [];
     const end = first + count;
     for (let row = first; row < end;) {
       const block = reading.index.blockOf(row);
@@ -410,7 +410,7 @@ export class View {
       const runs = await reading.runs(block);
       for (let run = 0; row < Math.min(to, end); row++) {
         while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
-        names.push(ref.parts[runs[run]!.part]?.ref.name ?? '');
+        names.push([ref.parts[runs[run]!.part]?.ref.name ?? '']);
       }
     }
     return names;
@@ -686,22 +686,25 @@ export class View {
    *
    * A formula column finishes the whole block once, since it reads other
    * columns. A plain column is read a cell at a time: a note's rendering,
-   * the file name for the supplied column, or the stored value.
+   * the value supplied for a supplied column, or the stored value.
    */
   private shownIn(
     col: number,
     from: number,
     records: readonly (readonly string[])[],
-    files: readonly string[] | undefined,
+    files: readonly (readonly string[])[] | undefined,
   ): (row: number) => string {
     const schema = this.schema;
     if (schema.formula(col) !== undefined) {
       const finished = finishRows(schema, from, records, files);
       return (row) => finished[row - from]!.shown[col] ?? '';
     }
-    if (schema.supplied?.col === col) {
+    const nth = schema.supplied.findIndex((s) => s.col === col);
+    if (nth >= 0) {
       return (row) =>
-        schema.writtenIn(row)?.get(col)?.rendered ?? files?.[row - from] ?? '';
+        schema.writtenIn(row)?.get(col)?.rendered ??
+        files?.[row - from]?.[nth] ??
+        '';
     }
     return (row) =>
       schema.writtenIn(row)?.get(col)?.rendered ??
@@ -940,10 +943,9 @@ function schemaOf(
 ): Schema {
   const names = columns.map((column) => column.name);
   if (parts?.fileColumn !== true) return new Schema(names, 0);
-  return new Schema(headerOf([...names, FILE_COLUMN]), 0, {
-    col: names.length,
-    shows: FILE_SHOWS,
-  });
+  return new Schema(headerOf([...names, FILE_COLUMN]), 0, [
+    { col: names.length, shows: FILE_SHOWS },
+  ]);
 }
 
 /** deepest returns one past the highest row the edits name, or 0 when none
