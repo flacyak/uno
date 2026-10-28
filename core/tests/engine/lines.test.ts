@@ -2,7 +2,8 @@
  * @fileoverview A workspace that says a source was read as JSON Lines opens
  * it as JSON Lines. Read through tiny blocks, the engine's rows equal a
  * reference parse of a file with blank lines, CRLF, a byte order mark,
- * broken lines and a key first seen deep in it.
+ * broken lines and a key first seen deep in it, whether the workspace
+ * pinned its columns or none, and a logged edit stays on its cell.
  */
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
@@ -29,7 +30,10 @@ import {
   padded,
   saidIn,
 } from './harness.ts';
-import { LINES, jsonLines, parsed, rowsOf } from './reference.ts';
+import { LATE, LINES, jsonLines, parsed, rowsOf } from './reference.ts';
+
+/** What the logged edit writes. */
+const EDITED = 'edited';
 
 /**
  * workspace writes a .uno over the file at `path` that says it was read as
@@ -94,4 +98,32 @@ test('pinning no columns, every row is the reference parse, the late key and bro
     await indexed(src);
     const rows = await everyRow(src);
     expect(padded(rows, file.keys.length)).toEqual(rowsOf(file, file.keys));
+  }));
+
+test('pinning every column in its own order, each key finds its column and an edit stays on its cell', () =>
+  withFile(async (engine, path, text) => {
+    const file = parsed(text);
+    // Pinned backwards, and the id column by its name alone.
+    const keys = file.keys.toReversed();
+    const columns = keys.map((key, i): SavedColumn => {
+      return key === '/id' ? { name: 'id' } : { name: `c${i}`, key };
+    });
+    const sheet = new Sheet(
+      'events.jsonl',
+      columns.map((column) => column.name),
+      rowsOf(file, keys),
+    );
+    const edit = { row: LATE, col: keys.indexOf('/user/name') };
+    sheet.set(edit.row, edit.col, EDITED);
+
+    const bytes = new TextEncoder().encode(text).length;
+    const blob = workspace(path, bytes, sheet, columns);
+    const src = await openOne(engine, { name: 'q3.uno', blob });
+    expect(src.opened.columns.map((c) => c.header)).toEqual(
+      columns.map((column) => column.name),
+    );
+    await indexed(src);
+    const want = rowsOf(file, keys);
+    want[edit.row]![edit.col] = EDITED;
+    expect(await everyRow(src)).toEqual(want);
   }));
