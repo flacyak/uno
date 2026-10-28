@@ -3,6 +3,8 @@
  * decodes against fflate, where it breaks, its heads, and its checkpoints.
  */
 
+import { gzipSync } from 'node:zlib';
+
 import { Gunzip, inflateSync } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
@@ -14,7 +16,7 @@ import {
   gzipInflater,
   inflateHead,
 } from '@ingest/gzip';
-import type { Checkpoint, Inflater } from '@ingest/gzip';
+import type { Checkpoint, Inflater, InflaterBudget } from '@ingest/gzip';
 import { concat, differAt, fixture, kind } from './bytes.ts';
 
 /** The gzip fixtures: one of each shape a file comes in. */
@@ -38,6 +40,18 @@ const NO_BYTES = new Uint8Array(0);
 const BITS_PER_BYTE = 8;
 /** A span of one byte keeps every block boundary that decodes anything. */
 const EVERY_BOUNDARY = 1;
+/** A span that twice.csv.gz passes many times over. */
+const SMALL_SPAN = 16 << 10;
+/** Whole windows a small budget holds. */
+const SMALL_WINDOWS = 4;
+/** Members in a file of many, each small enough to be one deflate block. */
+const MEMBERS = 64;
+const MEMBER_BYTES = 1 << 10;
+/** A budget twice.csv.gz fills a few times at SMALL_SPAN. */
+const SMALL_BUDGET: InflaterBudget = {
+  windows: SMALL_WINDOWS * WINDOW_BYTES,
+  spans: 0,
+};
 
 /** What fflate's streaming gunzip makes of every member. */
 function fflate(stored: Uint8Array): Uint8Array {
@@ -165,6 +179,11 @@ describe('a gzip head inflates', () => {
   );
 });
 
+/** The window bytes the checkpoints hold. */
+function held(checkpoints: readonly Checkpoint[]): number {
+  return checkpoints.reduce((sum, point) => sum + point.window.length, 0);
+}
+
 /**
  * The stored bytes from where a block starts, moved down so it starts at bit
  * 0. Deflate fills each byte from its low bit up. A stored block that starts
@@ -245,5 +264,42 @@ describe('a gzip pass keeps checkpoints', () => {
       });
       expect(differAt(rest, whole.subarray(point.decoded))).toBe(-1);
     }
+  });
+
+  test('within a small budget, the span doubling each time it fills', () => {
+    const stored = fixture('gzip/twice.csv.gz');
+    const inflater = gzipInflater(SMALL_BUDGET, SMALL_SPAN);
+    for (let at = 0; at < stored.length; at += SLICE) {
+      inflater.push(stored.subarray(at, at + SLICE), () => {});
+      const windows = held(inflater.checkpoints());
+      expect(windows).toBeLessThanOrEqual(SMALL_BUDGET.windows);
+    }
+    const ends = [
+      ...inflater.checkpoints().map(({ decoded }) => decoded),
+      inflater.end(),
+    ];
+    expect(ends[0], 'the member start').toBe(0);
+    // From each checkpoint to the next, and from the last to the end.
+    const gaps = ends.slice(1).map((end, i) => end - ends[i]!);
+    const tail = gaps.pop()!;
+    const shortest = Math.min(...gaps);
+    // Thinning joins gaps two by two, so they grow with the span and alike.
+    expect(shortest, 'the shortest gap').toBeGreaterThanOrEqual(2 * SMALL_SPAN);
+    expect(Math.max(...gaps, tail), 'the longest').toBeLessThan(2 * shortest);
+  });
+
+  test('within a small budget, a member start costing a whole window', () => {
+    const csv = fixture('sales-q3.csv');
+    const stored = concat(
+      Array.from({ length: MEMBERS }, (_, n) =>
+        gzipSync(csv.subarray(n * MEMBER_BYTES, (n + 1) * MEMBER_BYTES)),
+      ),
+    );
+    const inflater = gzipInflater(SMALL_BUDGET, EVERY_BOUNDARY);
+    const { checkpoints } = pass(stored, SLICE, inflater);
+    expect(checkpoints.map(kind)).toEqual(
+      checkpoints.map(() => 'a member start'),
+    );
+    expect(checkpoints.length).toBeLessThanOrEqual(SMALL_WINDOWS);
   });
 });
