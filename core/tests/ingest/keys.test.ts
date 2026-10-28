@@ -5,7 +5,12 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { JSON_COLUMNS_LIMIT, KeyRegistry } from '@ingest/keys';
+import {
+  JSON_COLUMNS_LIMIT,
+  KeyRegistry,
+  LINE_COLUMN,
+  LINE_KEY,
+} from '@ingest/keys';
 import type { KeyedColumn } from '@ingest/keys';
 
 /** A limit a test reaches in a few keys. */
@@ -75,6 +80,7 @@ describe('KeyRegistry places keys in the order they are first seen', () => {
     keys.place('/a.b');
     keys.place('/x_2');
     keys.place('/x~1');
+    keys.line();
     expect(keys.columns().slice(0, given.length)).toEqual(given);
   });
 });
@@ -102,6 +108,13 @@ describe('KeyRegistry starts from the pinned columns', () => {
     expect(keys.columns()).toEqual(twice);
     expect(keys.place('/b')).toBe(0);
   });
+
+  test('a pinned line column is the line column', () => {
+    const line = { name: LINE_COLUMN, key: LINE_KEY };
+    const keys = registry(JSON_COLUMNS_LIMIT, [line]);
+    expect(keys.line()).toBe(0);
+    expect(keys.place('/a')).toBe(1);
+  });
 });
 
 describe('KeyRegistry adds no key column past its limit', () => {
@@ -126,5 +139,39 @@ describe('KeyRegistry adds no key column past its limit', () => {
     const keys = registry(SMALL_LIMIT, PINNED);
     expect(keys.place('/a.b')).toBe(2);
     expect(keys.place('/c')).toBeUndefined();
+  });
+});
+
+describe('KeyRegistry adds the line column at first need', () => {
+  test('the line column comes once, past the limit too', () => {
+    const keys = registry(SMALL_LIMIT);
+    keys.place('/a');
+    keys.place('/b');
+    expect(keys.columnOf(LINE_KEY)).toBeUndefined();
+    expect(keys.line()).toBe(SMALL_LIMIT);
+    expect(keys.line()).toBe(SMALL_LIMIT);
+    expect(keys.columnOf(LINE_KEY)).toBe(SMALL_LIMIT);
+    expect(keys.columns()[SMALL_LIMIT]).toEqual({
+      name: LINE_COLUMN,
+      key: LINE_KEY,
+    });
+  });
+
+  test('the line column takes no key column from the limit', () => {
+    const keys = registry(SMALL_LIMIT);
+    expect(keys.line()).toBe(0);
+    expect(keys.place('/a')).toBe(1);
+    expect(keys.place('/b')).toBe(2);
+    expect(keys.place('/c')).toBeUndefined();
+  });
+
+  test('a key named _line keeps the name, and the line column is suffixed', () => {
+    const keys = registry();
+    keys.place(`/${LINE_COLUMN}`);
+    keys.line();
+    expect(keys.columns().map(({ name }) => name)).toEqual([
+      LINE_COLUMN,
+      `${LINE_COLUMN}_2`,
+    ]);
   });
 });
