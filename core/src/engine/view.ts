@@ -44,7 +44,7 @@ import type {
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import { openReading } from './reading.ts';
-import type { Blocks, Index, Reading } from './reading.ts';
+import type { Reading } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import {
   BYTES,
@@ -145,14 +145,12 @@ export class View {
   private readonly began: number;
 
   opened!: Opened;
-  pages!: Blocks;
   generation = 0;
 
   /** How the source's rows are found and read. */
   private reading!: Reading;
   /** The stored bytes the reading reads. */
   private source!: ByteSource;
-  private index!: Index;
   private schema!: Schema;
 
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
@@ -238,8 +236,6 @@ export class View {
 
     v.source = source;
     const reading = v.reading;
-    v.index = reading.index;
-    v.pages = reading.pages;
     v.schema = schemaOf(reading.columns(), ask.parts);
 
     // A cancel fails the wait below with its refusal, kept ahead of the
@@ -259,7 +255,7 @@ export class View {
 
     let told = 0;
     let started = false;
-    const index = v.index;
+    const index = reading.index;
     reading
       .pass(v.abort.signal, () => {
         v.wake();
@@ -342,7 +338,7 @@ export class View {
 
   /** progress is how far the index has got, and how long the open has taken. */
   private progress(): Progress {
-    const index = this.index;
+    const index = this.reading.index;
     const { done, total } = index.indexed();
     return {
       done,
@@ -358,7 +354,7 @@ export class View {
 
   /** rows reads rows with the log applied, tagged with the generation they were built at. */
   async rows(first: number, count: number): Promise<RowsPage> {
-    const source = await this.pages.rows(first, count);
+    const source = await this.reading.pages.rows(first, count);
     const files = await this.files(Math.max(0, first), source.length);
     const schema = this.schema;
     const generation = this.generation;
@@ -377,7 +373,7 @@ export class View {
 
   /** columns infers each column's kind from the sample rows, with the log applied. */
   private async columns(): Promise<ColumnInfo[]> {
-    const source = await this.pages.rows(0, SAMPLE_ROWS);
+    const source = await this.reading.pages.rows(0, SAMPLE_ROWS);
     const files = await this.files(0, source.length);
     const schema = this.schema;
     const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
@@ -413,8 +409,8 @@ export class View {
     const names: string[] = [];
     const end = first + count;
     for (let row = first; row < end;) {
-      const block = this.index.blockOf(row);
-      const [from, to] = this.index.rowsOf(block);
+      const block = reading.index.blockOf(row);
+      const [from, to] = reading.index.rowsOf(block);
       const runs = await reading.runs(block);
       for (let run = 0; row < Math.min(to, end); row++) {
         while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
@@ -465,7 +461,7 @@ export class View {
       const e = this.undone.pop();
       if (e === undefined) throw new Refusal({ t: 'nothing-to-redo' });
 
-      this.schema.rows = this.index.readable();
+      this.schema.rows = this.reading.index.readable();
       try {
         this.schema.record(e);
       } catch (err) {
@@ -479,7 +475,7 @@ export class View {
   private async record(req: EditRequest): Promise<Changed> {
     this.refuseInView();
 
-    const index = this.index;
+    const index = this.reading.index;
     const schema = this.schema;
     schema.rows = index.readable();
 
@@ -496,7 +492,7 @@ export class View {
     // learns from it.
     const inRange = req.row >= 0 && req.row < schema.rows && req.col >= 0;
     if (cell && inRange && req.col < schema.headers.length) {
-      const [row] = await this.pages.rows(req.row, 1);
+      const [row] = await this.reading.pages.rows(req.row, 1);
       e.was = valueAt(schema, req.row, req.col, row ?? []);
     }
     if (req.op === Op.Unbind) {
@@ -578,7 +574,7 @@ export class View {
     generation: number,
   ): Promise<void> {
     const schema = this.schema;
-    const index = this.index;
+    const index = this.reading.index;
 
     for (const col of cols) {
       const survey = Survey.start(col, schema.headers[col]!, byCol.get(col)!);
@@ -593,7 +589,7 @@ export class View {
 
         const block = index.blockOf(row);
         const [from, end] = index.rowsOf(block);
-        const records = await this.pages.records(block, false);
+        const records = await this.reading.pages.records(block, false);
         if (signal.aborted) return;
 
         const values: string[] = [];
@@ -640,7 +636,7 @@ export class View {
         sample: p.sample,
         ambiguous: p.ambiguous,
         scanned: survey.rows,
-        rows: this.index.rows(),
+        rows: this.reading.index.rows(),
         complete,
       },
     });
@@ -662,7 +658,7 @@ export class View {
     if (matches === undefined)
       return { row: null, searched: 0, complete: true };
 
-    const index = this.index;
+    const index = this.reading.index;
     const down = req.dir === 1;
     let row = down
       ? Math.max(0, req.from + 1)
@@ -673,7 +669,7 @@ export class View {
     while (down ? row < index.readable() : row >= 0) {
       const block = index.blockOf(row);
       const [from, end] = index.rowsOf(block);
-      const records = await this.pages.records(block, false);
+      const records = await this.reading.pages.records(block, false);
       const files = await this.files(from, records.length);
       if (abort.signal.aborted) return { row: null, searched, complete: false };
 
@@ -788,7 +784,7 @@ export class View {
         };
       }
       if (this.path === '') {
-        await this.until(() => this.index.complete);
+        await this.until(() => this.reading.index.complete);
         const raw =
           this.carried ?? (await this.source.read(0, this.source.size));
         return { raw, bytes: this.size, version: this.version, ...this.kept() };
@@ -807,7 +803,7 @@ export class View {
   private kept(): Pick<Part, 'edits' | 'rows' | 'cols'> {
     return {
       edits: this.schema.edits(),
-      rows: this.index.readable(),
+      rows: this.reading.index.readable(),
       cols: this.schema.headers.length,
     };
   }
