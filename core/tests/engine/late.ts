@@ -60,15 +60,18 @@ function asText(lines: readonly string[]): string {
   return lines.map((line) => `${line}\n`).join('');
 }
 
-/** written writes the file: an id on each line, and from LATE a late key. */
-export async function written(): Promise<OnDisk> {
+/**
+ * written writes the file: an id on each line, and from LATE a late key,
+ * LATE_KEY unless said.
+ */
+export async function written(key = LATE_KEY): Promise<OnDisk> {
   const lines: string[] = [];
   for (let row = 0; row < LATE + TAIL; row++) {
     const [id, late] = cellsAt(row);
     lines.push(
       row < LATE
         ? `{"${ID_KEY}":${id}}`
-        : `{"${ID_KEY}":${id},"${LATE_KEY}":"${late}"}`,
+        : `{"${ID_KEY}":${id},"${key}":"${late}"}`,
     );
   }
   const text = asText(lines);
