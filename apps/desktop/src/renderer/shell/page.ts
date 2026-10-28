@@ -5,6 +5,9 @@
  * again when the language changes, along with the document's lang and dir.
  */
 
+import { WORKSPACE_FILTER } from "@document";
+import { DIALOG_EXTENSIONS } from "@ingest";
+
 import { m } from "@paraglide/messages";
 import { getLocale, getTextDirection } from "@paraglide/runtime";
 import type { MessagePart } from "@paraglide/runtime";
@@ -20,10 +23,20 @@ export function labelPage(): void {
   say("#new .label", m.new_workspace());
   say("#empty h1", m.empty_title());
   link(found("#open"), m.empty_or_open.parts());
+  say("#empty .exts", extensions());
   say('#mode-switch [data-mode="view"]', m.switch_view());
   say('#mode-switch [data-mode="transform"]', m.switch_transform());
   found("#status-cmd").setAttribute("aria-label", m.command_aria());
   found("#close").setAttribute("aria-label", m.close_window_aria());
+}
+
+/**
+ * extensions is the line under the empty state's sentence: the extensions
+ * the Open dialog lists, the workspace's last. They read the same in every
+ * language.
+ */
+function extensions(): string {
+  return [...DIALOG_EXTENSIONS, WORKSPACE_FILTER].join(" · ");
 }
 
 function say(selector: string, text: string): void {
