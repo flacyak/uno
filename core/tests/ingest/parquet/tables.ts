@@ -7,7 +7,11 @@
 import { readFileSync } from 'node:fs';
 
 import { parquetMetadata } from 'hyparquet/src/index.js';
-import { ByteWriter, ParquetWriter } from 'hyparquet-writer';
+import {
+  ByteWriter,
+  ParquetWriter,
+  parquetWriteBuffer,
+} from 'hyparquet-writer';
 
 import { readAll } from '@ingest/csv';
 import {
@@ -57,6 +61,43 @@ export function logged(bytes: Uint8Array): {
 /** `bytes` opened as a table called `name`. */
 export function opened(name: string, bytes: Uint8Array): Promise<Table> {
   return openTable(name, bytesSource(bytes), chunkCache(CHUNK_CACHE_BYTES));
+}
+
+/**
+ * A row of `unpaged(rows)`: its number, and a name made from it, as textOf
+ * writes them.
+ */
+export function unpagedRow(i: number): string[] {
+  return [String(i), `n${i}`];
+}
+
+/** How many strings each row of `unpaged(rows)` stores. */
+export const UNPAGED_STRINGS = 1;
+
+/**
+ * A file of `rows` rows in one row group with no page index, each column
+ * chunk one page: a number, and a string that differs on every row.
+ */
+export function unpaged(rows: number): Uint8Array {
+  const numbers = Array.from({ length: rows }, (_, i) => i);
+  const buffer = parquetWriteBuffer({
+    schema: [
+      { name: 'root', num_children: 2 },
+      { name: 'id', type: 'INT32', repetition_type: 'REQUIRED' },
+      {
+        name: 'name',
+        type: 'BYTE_ARRAY',
+        converted_type: 'UTF8',
+        repetition_type: 'REQUIRED',
+      },
+    ],
+    columnData: [
+      { name: 'id', data: numbers },
+      { name: 'name', data: numbers.map((i) => `n${i}`) },
+    ],
+    rowGroupSize: rows,
+  });
+  return new Uint8Array(buffer);
 }
 
 /**
