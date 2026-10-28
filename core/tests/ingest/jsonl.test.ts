@@ -53,6 +53,11 @@ function rows({ format, bytes, begins }: Indexed): string[][] {
     : format.decode(bytes.subarray(begins[0], bytes.length));
 }
 
+/** names returns the names of a format's columns. */
+function names(format: RecordFormat): string[] {
+  return format.columns().map((column) => column.name);
+}
+
 /** Columns a save pinned: a nested key, then a top-level one. */
 const PINNED: readonly KeyedColumn[] = [
   { name: 'u.n', key: '/u/n' },
@@ -134,6 +139,16 @@ describe('the indexer gives each key a column where it is first seen', () => {
     expect(rows(file)).toEqual([
       ['1', 'x', ''],
       ['3', '', 'true'],
+    ]);
+  });
+
+  test('and _line where a line that is not one JSON object first comes', () => {
+    const file = indexed('{"a":1}\n[1,2]\n{"b":2}');
+    expect(names(file.format)).toEqual(['a', LINE_COLUMN, 'b']);
+    expect(rows(file)).toEqual([
+      ['1', '', ''],
+      ['', '[1,2]', ''],
+      ['', '', '2'],
     ]);
   });
 });
