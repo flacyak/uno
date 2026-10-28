@@ -95,11 +95,11 @@ export interface Element {
 }
 
 /**
- * ParquetValue is one value of a column as hyparquet reads it with identity
- * parsers and no DECIMAL annotation. A decimal is its unscaled integer, and
- * a string or binary is its bytes.
+ * Scalar is one stored value as hyparquet reads it with identity parsers and
+ * no DECIMAL annotation. A decimal is its unscaled integer, and a string or
+ * binary is its bytes.
  */
-export type ParquetValue =
+type Scalar =
   | null
   | undefined
   | boolean
@@ -107,6 +107,17 @@ export type ParquetValue =
   | bigint
   | string
   | Uint8Array;
+
+/**
+ * ParquetValue is one value of a column as hyparquet assembles it: a stored
+ * value, the array of a LIST or a repeated field, or the object of a MAP or
+ * a struct. A MAP's object is keyed by String of each stored key, so a key
+ * handed over as bytes reads as their numbers joined by commas.
+ */
+export type ParquetValue =
+  | Scalar
+  | readonly ParquetValue[]
+  | { readonly [key: string]: ParquetValue };
 
 /** The significant digits that write any float32 so it reads back exactly. */
 export const FLOAT32_DIGITS = 9;
@@ -153,6 +164,9 @@ const MILLIS_PER_DAY = Number(ticksPerDay('millis'));
 
 /** The digits of an hour, a minute or a second on a clock. */
 const CLOCK_DIGITS = 2;
+
+/** A number as RFC 8259 writes one, which NaN and Infinity are not. */
+const JSON_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
 /**
  * Bytes that are not UTF-8 throw, so they can be written as 0x-hex. A byte
@@ -348,17 +362,90 @@ function logicalOf(element: Element): Logical | undefined {
 
 /**
  * textOf writes a leaf's value as the text its writer meant. A number is
- * exact, at its own precision, and a null is an empty cell.
+ * exact, at its own precision, a list, a map or a struct is compact JSON,
+ * and a null is an empty cell.
  */
 export function textOf({ shape }: Leaf, value: ParquetValue): string {
+  if (!isScalar(value)) return jsonOf(shape, value);
   return scalarOf(shape.t === 'primitive' ? shape : undefined, value);
 }
 
+/** Whether a value is one stored value, rather than an array or an object. */
+function isScalar(value: ParquetValue): value is Scalar {
+  return (
+    typeof value !== 'object' || value === null || value instanceof Uint8Array
+  );
+}
+
+/** Whether a value is the array of a LIST or a repeated field. */
+function isArray(value: ParquetValue): value is readonly ParquetValue[] {
+  return Array.isArray(value);
+}
+
+/**
+ * A value as compact JSON, each value in it written as its shape says. A
+ * value whose shape is not known is written as it is.
+ */
+function jsonOf(shape: Shape | undefined, value: ParquetValue): string {
+  if (isScalar(value)) {
+    return tokenOf(shape?.t === 'primitive' ? shape : undefined, value);
+  }
+  if (isArray(value)) {
+    const items = shape?.t === 'list' ? shape.of : undefined;
+    return `[${value.map((item) => jsonOf(items, item)).join(',')}]`;
+  }
+  const members = Object.entries(value).map(
+    ([key, member]) =>
+      `${JSON.stringify(key)}:${jsonOf(memberOf(shape, key), member)}`,
+  );
+  return `{${members.join(',')}}`;
+}
+
+/** The shape of a map's values, or of a struct's field named `key`. */
+function memberOf(shape: Shape | undefined, key: string): Shape | undefined {
+  switch (shape?.t) {
+    case 'map':
+      return shape.values;
+    case 'struct':
+      return shape.fields.get(key);
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * One stored value as a JSON token: a number where its column writes one
+ * that JSON can hold, true or false, null, or else its text as a string.
+ */
+function tokenOf(primitive: Primitive | undefined, value: Scalar): string {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'boolean') return String(value);
+  const text = scalarOf(primitive, value);
+  return isNumeric(primitive?.logical, value) && JSON_NUMBER.test(text)
+    ? text
+    : JSON.stringify(text);
+}
+
+/**
+ * Whether a column writes a value as a number, rather than as a date, a
+ * time, a UUID or text.
+ */
+function isNumeric(logical: Logical | undefined, value: Scalar): boolean {
+  switch (logical?.t) {
+    case 'decimal':
+      return true;
+    case 'date':
+    case 'time':
+    case 'timestamp':
+    case 'uuid':
+      return false;
+    default:
+      return typeof value === 'number' || typeof value === 'bigint';
+  }
+}
+
 /** A value by what its primitive says it means, or as it is with none. */
-function scalarOf(
-  primitive: Primitive | undefined,
-  value: ParquetValue,
-): string {
+function scalarOf(primitive: Primitive | undefined, value: Scalar): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Uint8Array) return bytesOf(primitive?.logical, value);
   if (primitive && (typeof value === 'number' || typeof value === 'bigint')) {
