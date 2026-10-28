@@ -268,6 +268,12 @@ export function serve(
     const answer = await handler(msg);
     if (answer !== undefined && 'id' in msg)
       port.post({ ...answer, id: msg.id });
+    // The sources an answer names are heard from only after it.
+    if (answer?.t === 'opened') {
+      for (const o of answer.added.opened) workspace.announce(o.source);
+    } else if (answer?.t === 'relinked' || answer?.t === 'appended') {
+      workspace.announce(answer.opened.source);
+    }
   }
 
   /** took records how long a request took and whether it was answered or refused. */

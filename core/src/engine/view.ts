@@ -75,6 +75,9 @@ export const FILE_COLUMN = '_file';
 
 type Waiter = () => boolean;
 
+/** A message a view posts about itself, unasked. */
+type Told = Extract<Reply, { t: 'progress' | 'offer' | 'error' }>;
+
 /** Run is a run of a block's rows that came from one part. */
 interface Run {
   /** The first row of the run, counting from 0 at the block's first. */
@@ -190,6 +193,8 @@ export class View {
   private readonly abort = new AbortController();
   /** The close under way or done. A later close returns it. */
   private closing: Promise<void> | undefined;
+  /** The latest of each kind told before announce. Undefined from then on. */
+  private held: Map<Told['t'], Told> | undefined = new Map();
 
   /** How long the open had taken when the index completed, final from then on. */
   private took: number | undefined;
@@ -294,14 +299,14 @@ export class View {
         const now = Date.now();
         if (!index.complete && now - told < PROGRESS_MS) return;
         told = now;
-        port.post({ t: 'progress', source: id, progress: v.progress() });
+        v.tell({ t: 'progress', source: id, progress: v.progress() });
       },
     }).catch((err: unknown) => {
       v.fail(err);
       // Before open returns, the failure is thrown from open instead. After
       // a close, the abort is the cause and the failure is swallowed.
       if (started && !v.abort.signal.aborted) {
-        port.post({
+        v.tell({
           t: 'error',
           source: id,
           said: { t: 'about', subject: name, why: saidOf(err) },
@@ -601,7 +606,7 @@ export class View {
       .sort((a, b) => a - b);
 
     if (cols.length === 0) {
-      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
+      this.tell({ t: 'offer', source: this.id, generation, offer: null });
       return;
     }
 
@@ -610,7 +615,7 @@ export class View {
     this.surveyColumns(cols, byCol, abort.signal, generation).catch(
       (err: unknown) => {
         if (!abort.signal.aborted) {
-          this.port.post({ t: 'error', source: this.id, said: saidOf(err) });
+          this.tell({ t: 'error', source: this.id, said: saidOf(err) });
         }
       },
     );
@@ -671,13 +676,13 @@ export class View {
       }
     }
     if (!signal.aborted)
-      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
+      this.tell({ t: 'offer', source: this.id, generation, offer: null });
   }
 
   private offer(survey: Survey, generation: number, complete: boolean): void {
     const p = survey.proposal();
     if (p === undefined) return;
-    this.port.post({
+    this.tell({
       t: 'offer',
       source: this.id,
       generation,
@@ -940,6 +945,30 @@ export class View {
   }
 
   // ------------------------------------------------------------ lifetime
+
+  /**
+   * announce posts what was held, with the progress now in place of any held,
+   * and from then on posts what the view is told. A second call does nothing.
+   */
+  announce(): void {
+    const held = this.held;
+    if (held === undefined) return;
+    this.held = undefined;
+    const progress = this.progress();
+    held.set('progress', { t: 'progress', source: this.id, progress });
+    for (const msg of held.values()) this.tell(msg);
+  }
+
+  /**
+   * tell posts a message about the view. Until the view is announced it keeps
+   * the latest of each kind instead, and once the view is closing it posts
+   * nothing, so a refused view is never heard under the id it was opened for.
+   */
+  private tell(msg: Told): void {
+    if (this.abort.signal.aborted) return;
+    if (this.held === undefined) this.port.post(msg);
+    else this.held.set(msg.t, msg);
+  }
 
   /** close stops the passes and closes the source. A second close returns
    * the first. */
