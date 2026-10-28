@@ -19,10 +19,28 @@ export type Physical =
   | 'BYTE_ARRAY'
   | 'FIXED_LEN_BYTE_ARRAY';
 
+/** What a time or a timestamp counts. */
+export type TimeUnit = 'millis' | 'micros' | 'nanos';
+
+/**
+ * Logical is what a stored value means, where that changes how it is
+ * written. A string, JSON, an enum and a signed integer are written as
+ * their stored value is.
+ */
+export type Logical =
+  | { readonly t: 'decimal'; readonly scale: number }
+  | { readonly t: 'timestamp'; readonly unit: TimeUnit; readonly utc: boolean }
+  | { readonly t: 'time'; readonly unit: TimeUnit; readonly utc: boolean }
+  | { readonly t: 'unsigned' }
+  | { readonly t: 'date' }
+  | { readonly t: 'uuid' }
+  | { readonly t: 'float16' };
+
 /** Primitive is the type of one stored value. */
 export interface Primitive {
   readonly t: 'primitive';
   readonly physical: Physical;
+  readonly logical?: Logical;
 }
 
 /**
@@ -52,6 +70,15 @@ export interface Leaf {
   readonly shape: Shape;
 }
 
+/** Annotation is a schema element's logical type, in hyparquet's fields. */
+export interface Annotation {
+  readonly type: string;
+  readonly scale?: number;
+  readonly unit?: string;
+  readonly isAdjustedToUTC?: boolean;
+  readonly isSigned?: boolean;
+}
+
 /**
  * Element is one element of a footer's schema, as hyparquet's SchemaElement
  * holds it. The schema lists a group's children after it, depth first.
@@ -62,6 +89,8 @@ export interface Element {
   readonly repetition_type?: 'REQUIRED' | 'OPTIONAL' | 'REPEATED';
   readonly num_children?: number;
   readonly converted_type?: string;
+  readonly scale?: number;
+  readonly logical_type?: Annotation;
 }
 
 /** A schema element with its children. */
@@ -69,6 +98,31 @@ interface Tree {
   readonly element: Element;
   readonly children: readonly Tree[];
 }
+
+const UNSIGNED: Logical = { t: 'unsigned' };
+
+/** The time units hyparquet names, as Logical names them. */
+const UNITS: ReadonlyMap<string, TimeUnit> = new Map([
+  ['MILLIS', 'millis'],
+  ['MICROS', 'micros'],
+  ['NANOS', 'nanos'],
+]);
+
+/**
+ * What a converted type means, on an element with no logical type that says
+ * otherwise. The legacy times and timestamps count from UTC.
+ */
+const CONVERTED: ReadonlyMap<string, Logical> = new Map<string, Logical>([
+  ['DATE', { t: 'date' }],
+  ['TIMESTAMP_MILLIS', { t: 'timestamp', unit: 'millis', utc: true }],
+  ['TIMESTAMP_MICROS', { t: 'timestamp', unit: 'micros', utc: true }],
+  ['TIME_MILLIS', { t: 'time', unit: 'millis', utc: true }],
+  ['TIME_MICROS', { t: 'time', unit: 'micros', utc: true }],
+  ['UINT_8', UNSIGNED],
+  ['UINT_16', UNSIGNED],
+  ['UINT_32', UNSIGNED],
+  ['UINT_64', UNSIGNED],
+]);
 
 /**
  * columnsOf reads a footer's schema as the file's columns, in schema order.
@@ -177,10 +231,41 @@ function valueShapeOf(node: Tree): Shape {
   };
 }
 
-/** The primitive a leaf element stores. */
+/** The primitive a leaf element stores, with its annotation. */
 function primitiveOf(element: Element): Primitive {
   if (element.type === undefined) {
     throw new Error(`parquet column ${element.name} has no type`);
   }
-  return { t: 'primitive', physical: element.type };
+  return {
+    t: 'primitive',
+    physical: element.type,
+    logical: logicalOf(element),
+  };
+}
+
+/** What an element's annotation means, from its logical or converted type. */
+function logicalOf(element: Element): Logical | undefined {
+  const { logical_type: annotation, converted_type: converted } = element;
+  const unit = UNITS.get(annotation?.unit ?? '');
+  const utc = annotation?.isAdjustedToUTC === true;
+  switch (annotation?.type) {
+    case 'DECIMAL':
+      return { t: 'decimal', scale: annotation.scale ?? 0 };
+    case 'TIMESTAMP':
+      return unit && { t: 'timestamp', unit, utc };
+    case 'TIME':
+      return unit && { t: 'time', unit, utc };
+    case 'INTEGER':
+      return annotation.isSigned === false ? UNSIGNED : undefined;
+    case 'DATE':
+      return { t: 'date' };
+    case 'UUID':
+      return { t: 'uuid' };
+    case 'FLOAT16':
+      return { t: 'float16' };
+    default:
+      return converted === 'DECIMAL'
+        ? { t: 'decimal', scale: element.scale ?? 0 }
+        : CONVERTED.get(converted ?? '');
+  }
 }
