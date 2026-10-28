@@ -6,7 +6,8 @@
  * The bytes decide first. Parquet starts and ends with its magic, and each
  * compression starts with its own. Only then does the name decide between
  * JSON Lines and delimited text. What this build does not read yet comes back
- * named, and `readableHead` refuses it by name as a file is opened.
+ * named, and an open refuses it by name: through openReading for one file,
+ * and through `readableHead` for each part of several.
  */
 
 import { unreachable } from '@never';

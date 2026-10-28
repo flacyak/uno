@@ -6,10 +6,17 @@
  * The View holds one Reading and asks it alone how its rows are read.
  */
 
-import { delimitedRecords, openFormat, readableHead } from '@ingest';
+import {
+  delimitedRecords,
+  detect,
+  headOf,
+  kindOf,
+  openFormat,
+  refuseNotRead,
+} from '@ingest';
 import type { Column, HeaderMode, RecordFormat } from '@ingest';
 import { Refusal } from '@said';
-import type { Said } from '@said';
+import type { ReadKind, Said } from '@said';
 import { headed, multiOf } from '@store';
 import type { ByteSource, MultiSource } from '@store';
 import { indexPass } from './pass.ts';
@@ -90,6 +97,14 @@ export interface Reading {
   close(): Promise<void>;
 }
 
+/** Expected is what a relinked file is held to. */
+export interface Expected {
+  /** The source's name, which a refusal names beside the file's. */
+  readonly name: string;
+  /** The kind of rows the source's log was read as. */
+  readonly kind: ReadKind;
+}
+
 /** ReadAsk is what openReading is given. */
 export interface ReadAsk {
   /** The file's name, which detection reads and errors name. */
@@ -98,6 +113,9 @@ export interface ReadAsk {
   readonly source: ByteSource;
   /** How a log was read. Detection is skipped, and the bytes are read so. */
   readonly spec?: ReadSpec;
+  /** What a relink holds the file to. One detected as another kind of rows
+   * is refused as one. */
+  readonly expect?: Expected;
   /** Whether the first record names the columns, where no spec says. */
   readonly header: HeaderMode;
   readonly tuning: Tuning;
@@ -105,13 +123,11 @@ export interface ReadAsk {
 
 /**
  * openReading reads the head of a source and opens its Reading. A source
- * with no spec is detected first, its head read once, and one this build
- * does not read is refused by name.
+ * with no spec is detected first, its head read once.
  */
 export async function openReading(ask: ReadAsk): Promise<Reading> {
   const { name, source, spec, tuning } = ask;
-  const head =
-    spec === undefined ? await readableHead(name, source) : undefined;
+  const head = spec === undefined ? await detectedHead(ask) : undefined;
   const format = await openFormat(
     name,
     head === undefined ? source : headed(source, head),
@@ -121,6 +137,29 @@ export async function openReading(ask: ReadAsk): Promise<Reading> {
     kind: 'delimited',
     header: format.header,
   });
+}
+
+/**
+ * detectedHead reads a source's head and detects what it holds. A file of
+ * another kind of rows than a relink expects is refused as one, ahead of a
+ * file this build does not read, which is refused by name.
+ */
+async function detectedHead(ask: ReadAsk): Promise<Uint8Array> {
+  const { name, expect } = ask;
+  const head = await headOf(ask.source);
+  const found = await detect(name, head);
+  const now = kindOf(found);
+  if (expect !== undefined && now !== undefined && now !== expect.kind) {
+    throw new Refusal({
+      t: 'relink-other-kind',
+      name: expect.name,
+      file: name,
+      was: expect.kind,
+      now,
+    });
+  }
+  refuseNotRead(name, found);
+  return head.bytes;
 }
 
 /** The one run of every block of a single file. */
