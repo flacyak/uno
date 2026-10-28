@@ -192,6 +192,7 @@ export function serve(
       }
       counted('row', m.edit.row, NO_ROW);
       counted('col', m.edit.col, 0);
+      if (m.edit.width !== undefined) counted('width', m.edit.width, 0);
       return {
         t: 'changed',
         source: m.source,
