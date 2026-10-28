@@ -26,6 +26,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   about: { t: "about", subject: "q4.uno", why: { t: "nothing-to-undo" } },
   replaying: { t: "replaying", name: "ads.csv", why: { t: "in-view" } },
   read: { t: "read", delimiter: ";", header: "none", charset: "UTF-8" },
+  "read-lines": { t: "read-lines", charset: "UTF-8" },
   program: {
     t: "program",
     steps: [

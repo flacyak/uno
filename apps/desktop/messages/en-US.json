@@ -386,6 +386,7 @@
   "read_delimiter_no_header": "{charset} · delimiter '{delimiter}' · no header row",
   "read_tabs": "{charset} · tab-separated",
   "read_tabs_no_header": "{charset} · tab-separated · no header row",
+  "read_lines": "{charset} · JSON Lines",
   "said_about": "{subject}: {why}",
   "said_replaying": "replaying edits to {name}: {why}",
   "said_unknown": "this page is older than its engine · reload it to read what it said",
