@@ -255,6 +255,15 @@ export class Engine {
         return;
       }
 
+      case 'widened': {
+        const s = this.sources.get(msg.source);
+        // Drop columns from an older generation than the handle holds.
+        if (s === undefined || msg.generation < s.generation) return;
+        s.generation = msg.generation;
+        s.onColumns(msg.columns, msg.generation);
+        return;
+      }
+
       case 'offer': {
         const s = this.sources.get(msg.source);
         // Drop an offer built from an older generation of the log.
@@ -310,6 +319,11 @@ export class SourceHandle {
   onProgress: (progress: Progress) => void = () => {};
   /** Called with the recogniser's proposal, or null when there is none. */
   onOffer: (offer: Offer | null) => void = () => {};
+  /**
+   * Called with every column once the engine finds more as it indexes, and
+   * the generation they hold from. Rows built before it are stale.
+   */
+  onColumns: (columns: ColumnInfo[], generation: number) => void = () => {};
 
   constructor(engine: Engine, opened: Opened) {
     this.engine = engine;
