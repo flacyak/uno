@@ -8,6 +8,7 @@
 
 import type { Chart, ChartColumn, Plot } from '@document';
 import { GroupsFold, SampleFold } from '@tally';
+import type { Tally } from './protocol.ts';
 
 /** One chart's fold, and how far it has got. */
 interface Tallying {
@@ -86,6 +87,25 @@ export class Tallies {
       }
       t.rows = end;
     }
+  }
+
+  /**
+   * read returns each pending chart's tally over `total` rows. A complete one
+   * is the chart's last, until it is attached again.
+   */
+  read(total: number, complete: boolean): Array<[string, Tally]> {
+    const read: Array<[string, Tally]> = [];
+    for (const [id, t] of this.charts) {
+      if (t.done) continue;
+      const coverage = { rows: t.rows, total, complete };
+      const tally: Tally =
+        t.fold instanceof SampleFold
+          ? { t: 'sample', coverage, ...t.fold.snapshot() }
+          : { t: 'groups', coverage, ...t.fold.snapshot() };
+      read.push([id, tally]);
+      t.done = complete;
+    }
+    return read;
   }
 }
 
