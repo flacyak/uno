@@ -4,7 +4,14 @@
  */
 
 import { readdirSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vite-plus/test';
@@ -105,6 +112,24 @@ test("a walked file carries its size and time, and its path is the file's", asyn
   expect(entry.bytes).toBe('readme.txt'.length);
   expect(entry.modified).toBeInstanceOf(Date);
   expect(await readFile(entry.path, 'utf8')).toBe('readme.txt');
+});
+
+// A link back up the tree would be walked without end. A link elsewhere is
+// walked as the folder it leads to.
+test('a symlinked folder is followed, and one that loops back is passed over', async () => {
+  const loops = join(outside, 'loops');
+  await mkdir(join(loops, 'year=2025'), { recursive: true });
+  await writeFile(join(loops, 'year=2025', 'part-0.csv'), 'x');
+  await symlink(loops, join(loops, 'year=2025', 'again'));
+  await symlink('.', join(loops, 'here'));
+  await symlink(root, join(loops, 'linked'));
+
+  const found = names(await walked(loops));
+
+  expect(found).toContain('year=2025/part-0.csv');
+  expect(found).toContain('linked/year=2024/month=9/part-0.csv');
+  expect(found).toHaveLength(1 + FILES.length);
+  expect(found.some((n) => n.startsWith('here/'))).toBe(false);
 });
 
 test('a root that is not there is a failure that names it', async () => {

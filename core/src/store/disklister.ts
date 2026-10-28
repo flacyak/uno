@@ -13,7 +13,7 @@
  */
 
 import type { Dirent, Stats } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, realpath, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { compareStrings } from '@go';
@@ -105,7 +105,7 @@ async function walkDir(
   cursor: string | undefined,
 ): Promise<Listing> {
   const walk: Walk = { root, wants: page + 1, found: [] };
-  await walkFolder(walk, '', cursor?.split('/') ?? []);
+  await walkFolder(walk, '', cursor?.split('/') ?? [], [root]);
 
   const entries = await Promise.all(
     walk.found.slice(0, page).map(async ({ folder, row }) => ({
@@ -124,11 +124,15 @@ async function walkDir(
  * has as many as it wants. `after` is the rest of the cursor's path from
  * here: a name before its first segment is passed over, and the one equal to
  * it is the folder the cursor goes on into, or the cursor's own file.
+ *
+ * `inside` is the folder and every folder above it, as walked. A symlinked
+ * folder that leads to one of them is passed over, so a loop ends.
  */
 async function walkFolder(
   walk: Walk,
   folder: string,
   after: readonly string[],
+  inside: readonly string[],
 ): Promise<void> {
   const dir = join(walk.root, folder);
   const found = namesOf(
@@ -146,8 +150,10 @@ async function walkFolder(
       if (standing === 'after') walk.found.push({ folder, row });
       continue;
     }
+    const path = join(dir, row.name);
+    if (row.stats !== undefined && (await circles(path, inside))) continue;
     const next = standing === 'on' ? deeper : [];
-    await walkFolder(walk, under(folder, row.name), next);
+    await walkFolder(walk, under(folder, row.name), next, [...inside, path]);
   }
 }
 
@@ -168,6 +174,19 @@ function standingOf(
 /** under is a name's path under the root, in `folder` under it. */
 function under(folder: string, name: string): string {
   return folder === '' ? name : `${folder}/${name}`;
+}
+
+/**
+ * circles says whether a symlinked folder leads to a folder the walk is
+ * already inside.
+ */
+async function circles(
+  link: string,
+  inside: readonly string[],
+): Promise<boolean> {
+  const target = await realpath(link);
+  const folders = await Promise.all(inside.map((path) => realpath(path)));
+  return folders.includes(target);
 }
 
 /** Found is one directory entry with its name decoded to a string. */
