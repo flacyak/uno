@@ -132,6 +132,24 @@ const BYTE_BITS = 8;
 const HEX = 16;
 const HEX_BYTE_DIGITS = 2;
 
+/** The digits of a second's fraction that each time unit counts. */
+const FRACTION_DIGITS: Readonly<Record<TimeUnit, number>> = {
+  millis: 3,
+  micros: 6,
+  nanos: 9,
+};
+
+const DECIMAL_RADIX = 10n;
+const SECONDS_PER_MINUTE = 60n;
+const MINUTES_PER_HOUR = 60n;
+const HOURS_PER_DAY = 24n;
+const SECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE;
+const SECONDS_PER_DAY = HOURS_PER_DAY * SECONDS_PER_HOUR;
+const MILLIS_PER_DAY = Number(ticksPerDay('millis'));
+
+/** The digits of an hour, a minute or a second on a clock. */
+const CLOCK_DIGITS = 2;
+
 /**
  * Bytes that are not UTF-8 throw, so they can be written as 0x-hex. A byte
  * order mark is kept, since it is part of the value.
@@ -145,6 +163,12 @@ interface Tree {
 }
 
 const UNSIGNED: Logical = { t: 'unsigned' };
+
+/**
+ * hyparquet reads an INT96 with no converted type as nanoseconds since 1970.
+ * Nothing in the file says whether they count from UTC.
+ */
+const INT96_TIMESTAMP: Logical = { t: 'timestamp', unit: 'nanos', utc: false };
 
 /** The time units hyparquet names, as Logical names them. */
 const UNITS: ReadonlyMap<string, TimeUnit> = new Map([
@@ -293,6 +317,9 @@ function logicalOf(element: Element): Logical | undefined {
   const { logical_type: annotation, converted_type: converted } = element;
   const unit = UNITS.get(annotation?.unit ?? '');
   const utc = annotation?.isAdjustedToUTC === true;
+  if (element.type === 'INT96' && converted === undefined) {
+    return INT96_TIMESTAMP;
+  }
   switch (annotation?.type) {
     case 'DECIMAL':
       return { t: 'decimal', scale: annotation.scale ?? 0 };
@@ -350,11 +377,64 @@ function numberOf(primitive: Primitive, value: number | bigint): string {
     }
     case 'float16':
       return floatOf(Number(value), FLOAT16_DIGITS, f16round);
+    case 'date':
+      return dateOf(Number(value)) ?? String(value);
+    case 'timestamp':
+      return timestampOf(BigInt(value), logical.unit, logical.utc);
     default:
       return physical === 'FLOAT'
         ? floatOf(Number(value), FLOAT32_DIGITS, Math.fround)
         : String(value);
   }
+}
+
+/**
+ * A `count` of `unit` since 1970-01-01T00:00 in ISO 8601, ending in Z where
+ * it counts from UTC. One past what a Date holds is written as its count.
+ */
+function timestampOf(count: bigint, unit: TimeUnit, utc: boolean): string {
+  const perDay = ticksPerDay(unit);
+  const sinceMidnight = ((count % perDay) + perDay) % perDay;
+  const date = dateOf(Number((count - sinceMidnight) / perDay));
+  if (date === undefined) return String(count);
+  return `${date}T${clockOf(sinceMidnight, unit)}${utc ? 'Z' : ''}`;
+}
+
+/** Days since 1970-01-01 as YYYY-MM-DD, or undefined past what a Date holds. */
+function dateOf(days: number): string | undefined {
+  const date = new Date(days * MILLIS_PER_DAY);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const iso = date.toISOString();
+  return iso.slice(0, iso.indexOf('T'));
+}
+
+/**
+ * A `count` of `unit` inside one day as HH:MM:SS, with the fraction at the
+ * unit's every digit where it is not zero.
+ */
+function clockOf(count: bigint, unit: TimeUnit): string {
+  const perSecond = ticksPerSecond(unit);
+  const seconds = count / perSecond;
+  const fraction = count % perSecond;
+  const clock = [
+    seconds / SECONDS_PER_HOUR,
+    (seconds / SECONDS_PER_MINUTE) % MINUTES_PER_HOUR,
+    seconds % SECONDS_PER_MINUTE,
+  ]
+    .map((part) => String(part).padStart(CLOCK_DIGITS, '0'))
+    .join(':');
+  if (fraction === 0n) return clock;
+  return `${clock}.${String(fraction).padStart(FRACTION_DIGITS[unit], '0')}`;
+}
+
+/** How many of `unit` make one second. */
+function ticksPerSecond(unit: TimeUnit): bigint {
+  return DECIMAL_RADIX ** BigInt(FRACTION_DIGITS[unit]);
+}
+
+/** How many of `unit` make one day. */
+function ticksPerDay(unit: TimeUnit): bigint {
+  return SECONDS_PER_DAY * ticksPerSecond(unit);
 }
 
 /** Stored bytes: a decimal's unscaled integer, or else UTF-8 or 0x-hex. */
