@@ -384,8 +384,62 @@ interface Piece {
 }
 
 /**
+ * Span copies the decoded bytes a cursor passes and holds the last of them:
+ * at least `keep` once it has passed that many, and less than PIECE_BYTES
+ * more. It copies into chunks of PIECE_BYTES, so a stream of tiny blocks
+ * costs what one of large blocks does.
+ */
+class Span {
+  /** The chunks, each full but the last. */
+  private readonly chunks: Uint8Array[] = [];
+  /** The decoded offset of the first byte held. */
+  from: number;
+  /** The decoded offset past the last byte held. */
+  to: number;
+  /** How many bytes behind `to` the span holds. */
+  private readonly keep: number;
+
+  constructor(keep: number, at: number) {
+    this.keep = keep;
+    this.from = at;
+    this.to = at;
+  }
+
+  /** Adds the decoded bytes at `to`, and lets go of what it need not hold. */
+  add(bytes: Uint8Array): void {
+    if (this.keep === 0) {
+      this.to += bytes.length;
+      this.from = this.to;
+      return;
+    }
+    let rest = bytes;
+    while (rest.length > 0) {
+      const used = (this.to - this.from) % PIECE_BYTES;
+      if (used === 0) this.chunks.push(new Uint8Array(PIECE_BYTES));
+      const part = rest.subarray(0, PIECE_BYTES - used);
+      this.chunks.at(-1)!.set(part, used);
+      this.to += part.length;
+      rest = rest.subarray(part.length);
+    }
+    while (this.to - this.from - PIECE_BYTES >= this.keep) {
+      this.chunks.shift();
+      this.from += PIECE_BYTES;
+    }
+  }
+
+  /** The bytes held, in decoded order. */
+  pieces(): Piece[] {
+    return this.chunks.map((chunk, i) => {
+      const at = this.from + i * PIECE_BYTES;
+      return { at, bytes: chunk.subarray(0, this.to - at) };
+    });
+  }
+}
+
+/**
  * Cursor inflates from a checkpoint on, reading the stored bytes as it needs
- * them. It holds the piece it inflated last.
+ * them. It holds the piece it inflated last, and a span of `keep` bytes
+ * before it for reads behind it.
  */
 class Cursor {
   /** The piece inflated last, good until the next step. */
@@ -394,24 +448,35 @@ class Cursor {
   private readonly members: Members;
   /** The stored offset of the next bytes to read. */
   private next: number;
+  private readonly span: Span;
 
-  private constructor(stored: Stored, members: Members, next: number) {
+  private constructor(
+    stored: Stored,
+    members: Members,
+    next: number,
+    keep: number,
+  ) {
     this.stored = stored;
     this.members = members;
     this.next = next;
     this.last = { at: members.decoded, bytes: NONE };
+    this.span = new Span(keep, members.decoded);
   }
 
-  /** A cursor resumed at `point`. */
-  static async resume(stored: Stored, point: Checkpoint): Promise<Cursor> {
+  /** A cursor resumed at `point` that keeps `keep` bytes behind it. */
+  static async resume(
+    stored: Stored,
+    point: Checkpoint,
+    keep: number,
+  ): Promise<Cursor> {
     const bytes = await stored.read(point.stored, INFLATE_SLICE_BYTES);
     const members = Members.resume(point, bytes);
-    return new Cursor(stored, members, point.stored + bytes.length);
+    return new Cursor(stored, members, point.stored + bytes.length, keep);
   }
 
   /** The decoded offset of the first byte held. */
   get from(): number {
-    return this.last.at;
+    return this.span.from;
   }
 
   /** The decoded offset it has inflated to. */
@@ -433,6 +498,7 @@ class Cursor {
       out.set(part, got);
       got += part.length;
     };
+    for (const piece of this.span.pieces()) copy(piece);
     copy(this.last);
     while (got < length && (await this.step())) copy(this.last);
     return out.subarray(0, got);
@@ -449,6 +515,7 @@ class Cursor {
       this.next += bytes.length;
       this.members.feed(bytes);
     }
+    this.span.add(this.last.bytes);
     this.last = { at: this.members.decoded, bytes: this.members.step() };
     return true;
   }
@@ -466,6 +533,11 @@ class GzipInflater implements Inflater {
    * the first, which a read before any other resumes from.
    */
   private readonly most: number;
+  /**
+   * Decoded bytes a cursor keeps behind it: the budget's spans, each as long
+   * as the span this began with, however often thinning doubles it.
+   */
+  private readonly keep: number;
   /** Where the last read left off, which the next carries on from. */
   private cursor: Cursor | undefined;
   /** The last read, which the next waits for, since they share the cursor. */
@@ -479,6 +551,7 @@ class GzipInflater implements Inflater {
     this.stored = stored;
     this.span = span;
     this.most = Math.max(1, Math.floor(budget.windows / WINDOW_BYTES));
+    this.keep = budget.spans * span;
   }
 
   push(
@@ -530,7 +603,7 @@ class GzipInflater implements Inflater {
     if (cursor && cursor.from <= offset && point.decoded <= cursor.to) {
       return cursor;
     }
-    this.cursor = await Cursor.resume(this.stored, point);
+    this.cursor = await Cursor.resume(this.stored, point, this.keep);
     return this.cursor;
   }
 
