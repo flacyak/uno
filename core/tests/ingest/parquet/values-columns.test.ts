@@ -2,14 +2,14 @@
  * @fileoverview columnsOf reads a footer's schema, as hyparquet hands it, as
  * the columns a sheet shows, each keyed by an RFC 6901 pointer: a struct's
  * fields under dotted names, and a LIST, a MAP or a repeated field as one
- * column.
+ * column. A leaf's annotation says what its stored values mean.
  */
 
 import type { SchemaElement } from 'hyparquet/src/index.js';
 import { expect, test } from 'vite-plus/test';
 
 import { columnsOf } from '@ingest/parquet/values';
-import type { Leaf, Primitive, Shape } from '@ingest/parquet/values';
+import type { Leaf, Logical, Primitive, Shape } from '@ingest/parquet/values';
 
 /** The columns of a schema written as hyparquet types one. */
 function leavesOf(schema: SchemaElement[]): Leaf[] {
@@ -132,6 +132,97 @@ test('a MAP is one column, and a struct inside a LIST stays whole', () => {
     ['tags', { t: 'map', values: INT32 }],
     ['points', { t: 'list', of: POINT }],
   ]);
+});
+
+test('an annotation says what the stored value means', () => {
+  const cases: Array<[SchemaElement, Logical | undefined]> = [
+    [
+      { name: 'x', type: 'INT32', converted_type: 'DECIMAL', scale: 2 },
+      { t: 'decimal', scale: 2 },
+    ],
+    [
+      {
+        name: 'x',
+        type: 'FIXED_LEN_BYTE_ARRAY',
+        logical_type: { type: 'DECIMAL', precision: 38, scale: 10 },
+      },
+      { t: 'decimal', scale: 10 },
+    ],
+    [
+      { name: 'x', type: 'INT64', converted_type: 'TIMESTAMP_MICROS' },
+      { t: 'timestamp', unit: 'micros', utc: true },
+    ],
+    [
+      {
+        name: 'x',
+        type: 'INT64',
+        logical_type: {
+          type: 'TIMESTAMP',
+          isAdjustedToUTC: false,
+          unit: 'NANOS',
+        },
+      },
+      { t: 'timestamp', unit: 'nanos', utc: false },
+    ],
+    [
+      { name: 'x', type: 'INT32', converted_type: 'TIME_MILLIS' },
+      { t: 'time', unit: 'millis', utc: true },
+    ],
+    [{ name: 'x', type: 'INT32', converted_type: 'DATE' }, { t: 'date' }],
+    [
+      { name: 'x', type: 'INT64', converted_type: 'UINT_64' },
+      { t: 'unsigned' },
+    ],
+    [
+      {
+        name: 'x',
+        type: 'INT32',
+        logical_type: { type: 'INTEGER', bitWidth: 32, isSigned: true },
+      },
+      undefined,
+    ],
+    [
+      {
+        name: 'x',
+        type: 'FIXED_LEN_BYTE_ARRAY',
+        logical_type: { type: 'UUID' },
+      },
+      { t: 'uuid' },
+    ],
+    [
+      {
+        name: 'x',
+        type: 'FIXED_LEN_BYTE_ARRAY',
+        logical_type: { type: 'FLOAT16' },
+      },
+      { t: 'float16' },
+    ],
+    [{ name: 'x', type: 'BYTE_ARRAY', converted_type: 'UTF8' }, undefined],
+  ];
+  for (const [element, logical] of cases) {
+    const [leaf] = fieldOf(element);
+    expect(leaf!.shape, JSON.stringify(element)).toEqual({
+      t: 'primitive',
+      physical: element.type,
+      logical,
+    });
+  }
+});
+
+test('the elements of a LIST keep their annotation', () => {
+  const [leaf] = fieldOf(
+    { name: 'prices', converted_type: 'LIST', num_children: 1 },
+    { name: 'list', repetition_type: 'REPEATED', num_children: 1 },
+    { name: 'element', type: 'INT64', converted_type: 'DECIMAL', scale: 2 },
+  );
+  expect(leaf!.shape).toEqual({
+    t: 'list',
+    of: {
+      t: 'primitive',
+      physical: 'INT64',
+      logical: { t: 'decimal', scale: 2 },
+    },
+  });
 });
 
 test("a pointer escapes '~' and '/' in a name", () => {
