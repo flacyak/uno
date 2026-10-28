@@ -96,6 +96,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
     bucket: "open-data",
   },
   "not-read": { t: "not-read", name: "events.jsonl", what: "JSON Lines" },
+  "parquet-broken": { t: "parquet-broken", name: "sales-q3.parquet" },
   "keeps-no-connections": { t: "keeps-no-connections" },
   "offers-no-sign-ins": { t: "offers-no-sign-ins" },
   "tries-no-connection": { t: "tries-no-connection" },

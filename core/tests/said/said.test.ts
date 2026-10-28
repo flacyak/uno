@@ -119,6 +119,12 @@ describe('english', () => {
       'events.jsonl gained columns while the edit was on its way, so it was not made · make it again',
     );
   });
+
+  test('says a Parquet file is damaged', () => {
+    expect(english({ t: 'parquet-broken', name: 'sales-q3.parquet' })).toBe(
+      'sales-q3.parquet: its Parquet footer or pages are damaged',
+    );
+  });
 });
 
 describe('a kind from an engine newer than this build', () => {
