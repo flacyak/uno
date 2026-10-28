@@ -388,8 +388,11 @@ export function sourceEntry(name: string, id?: string): string {
   );
 }
 
+/** The workspace file extension without its dot, as a dialog's filter names it. */
+export const WORKSPACE_FILTER = 'uno';
+
 /** The workspace file extension. The engine recognises a workspace by it. */
-export const WORKSPACE_EXT = '.uno';
+export const WORKSPACE_EXT = `.${WORKSPACE_FILTER}`;
 
 /**
  * isWorkspace says whether a ref names a .uno. Several files read as one are
