@@ -13,7 +13,7 @@ import { expect, test } from 'vite-plus/test';
 import { newManifest, writeDocument } from '@document';
 import type { Chart, Plot } from '@document';
 import { TALLY_MS } from '@engine';
-import type { Engine, SourceHandle, Tally } from '@engine';
+import type { EditRequest, Engine, SourceHandle, Tally } from '@engine';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -520,6 +520,41 @@ test('a source pointed at a file again hears tallies of its new view alone, and 
     expect(await last).toStrictEqual(pure(REGION_ROWS.plot));
     await src.rows(0, 1);
     expect(heard.all).toStrictEqual([[REGION_ROWS.id, pure(REGION_ROWS.plot)]]);
+  } finally {
+    done();
+  }
+});
+
+test('an edit moves each chart that reads its column by the one row, which hears its complete tally again, and a chart over another column is not heard from', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+    const src = await opened(engine, charts);
+    const heard = new Heard(src);
+    for (const last of charts.map((chart) => heard.of(chart.id))) await last;
+    const settled = heard.all.length;
+    engine.mode(true);
+    const sheet = read(NAME, bytes);
+    const moved = async (
+      over: Chart[],
+      change: () => Promise<unknown>,
+      of: Sheet,
+    ) => {
+      const lasts = over.map((chart) => heard.of(chart.id));
+      await change();
+      for (const [i, chart] of over.entries()) {
+        expect(await lasts[i]).toStrictEqual(pure(chart.plot, of));
+      }
+    };
+    const edit = async (req: EditRequest) =>
+      sheet.replay([(await src.edit(req)).edit]);
+    const revenue = [REGION_REVENUE, UNITS_REVENUE];
+    const set = { op: Op.Set, row: EDITED, col: REVENUE, now: ABOVE_ALL };
+    await moved(revenue, () => edit(set), sheet);
+    // A round trip, after which anything posted before it has landed.
+    await src.rows(0, 1);
+    const once = revenue.map((chart) => chart.id);
+    expect(heard.all.slice(settled).map(([chart]) => chart)).toEqual(once);
   } finally {
     done();
   }
