@@ -146,3 +146,34 @@ test('files in one folder order by name as written', () => {
     'k=1/part-9.parquet',
   ]);
 });
+
+/** orders is `paths` in every order they can be given in. */
+function orders(paths: readonly string[]): string[][] {
+  if (paths.length <= 1) return [[...paths]];
+  return paths.flatMap((first, i) =>
+    orders(paths.toSpliced(i, 1)).map((rest) => [first, ...rest]),
+  );
+}
+
+// k=2=x names no key. Were it to order by code point among the values of k,
+// it would fall between k=10 and k=9 and the three would order in a circle.
+test('a name that is no pair comes after the pairs of its key, from any order', () => {
+  const names = [
+    'k=9/f',
+    'k=10/f',
+    'k=2=x/f',
+    'id=7/f',
+    'id=10/f',
+    'id=5Q==/f',
+  ];
+
+  for (const given of orders(names))
+    expect(sorted(given)).toEqual([
+      'id=7/f',
+      'id=10/f',
+      'id=5Q==/f',
+      'k=9/f',
+      'k=10/f',
+      'k=2=x/f',
+    ]);
+});
