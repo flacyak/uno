@@ -402,6 +402,7 @@
   "read_tabs_no_header": "{charset} · separado por tabuladores · sin fila de encabezado",
   "said_about": "{subject}: {why}",
   "said_replaying": "al reaplicar las ediciones de {name}: {why}",
+  "said_unknown": "esta página es más antigua que su motor · recárgala para leer lo que dijo",
   "program_nothing": "no cambiar nada",
   "program_then": "{before}, y después {after}",
   "step_trim": "quitar los espacios de ambos extremos",
