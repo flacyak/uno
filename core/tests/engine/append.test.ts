@@ -179,6 +179,30 @@ test('a part appended extends the rows and leaves every edit on its cell', async
   }
 });
 
+// The append reads again the block the second part ends in, so rows run on
+// across the join as in a fresh open, here out of a quote the part left open.
+test('a part appended after one that ends in an open quote reads as a fresh open', async () => {
+  const open = join(await mkdtemp(join(tmpdir(), 'uno-append-')), 'open.csv');
+  await writeFile(open, `${new TextDecoder().decode(partBytes[1])}7,"open`);
+  const refs = [part(0), { name: PART_NAMES[1]!, path: open }, THIRD];
+  const parts = refs.map((ref) => ({ ref }));
+  const opened: SourceRef = { ...FIRST_TWO, parts: parts.slice(0, OPENED) };
+
+  const { engine, done } = connect(TINY, multiProviders());
+  try {
+    const fresh = await openOne(engine, { ...FIRST_TWO, parts });
+    const before = await openOne(engine, opened);
+    await indexed(before);
+    const src = await engine.append(before, [THIRD]);
+    await Promise.all([indexed(fresh), indexed(src)]);
+
+    expect(src.progress.rows).toBe(fresh.progress.rows);
+    expect(await everyRow(src)).toEqual(await everyRow(fresh));
+  } finally {
+    done();
+  }
+});
+
 test('a save after an append records the longer list of parts, and reopens the same', async () => {
   const file = join(await mkdtemp(join(tmpdir(), 'uno-append-')), UNO);
   const first = connect(TINY, multiProviders());

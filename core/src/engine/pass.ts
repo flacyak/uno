@@ -21,8 +21,8 @@ export interface PassContext {
 }
 
 /**
- * indexPass reads from the first data record to the end of the file and
- * records where each block of rows starts.
+ * indexPass reads from `index.scanned`, the first data record for a new index,
+ * to the end of the file, and records where each block of rows starts.
  *
  * Each chunk read is awaited, so other work runs between chunks.
  */
@@ -30,7 +30,7 @@ export async function indexPass(ctx: PassContext): Promise<void> {
   const { source, format, index, tuning, signal } = ctx;
   const scanner = format.scanner((offset) => index.begin(offset));
 
-  for (let at = format.dataStart; at < source.size;) {
+  for (let at = index.scanned; at < source.size;) {
     if (signal.aborted) return;
     const chunk = await source.read(
       at,

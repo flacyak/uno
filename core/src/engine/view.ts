@@ -142,6 +142,8 @@ export interface OpenAsk {
   parts?: PartsRef;
   /** Aborted to cancel the open while it still waits for its sample rows. */
   signal?: AbortSignal;
+  /** The source an append extends. Its index is kept where it still holds. */
+  extending?: View;
 }
 
 export class View {
@@ -242,7 +244,15 @@ export class View {
 
     v.source = source;
     v.format = format;
-    v.index = new RowIndex(format.dataStart, source.size, tuning);
+    // The scanner finds records by the delimiter alone, so over the same
+    // bytes from the same first data record it finds the ones `was` found.
+    const was = ask.extending;
+    const seed =
+      was?.format.delimiter === format.delimiter &&
+      was.index.start === format.dataStart
+        ? RowIndex.seeded(was.index, source.size)
+        : undefined;
+    v.index = seed ?? new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.schema = schemaOf(format, ask.parts);
 
