@@ -25,7 +25,6 @@ export {
   decodersFor,
   delimiterName,
   encodingName,
-  extensionOf,
   headerOf,
   labelOf,
   openFormat,
