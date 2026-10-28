@@ -14,6 +14,8 @@ import { random } from './random.ts';
 const PAST_THE_STACK = 100_000;
 /** Number of random lines to check. */
 const SEEDS = 4000;
+/** The least share of random lines that must read, and that must be refused. */
+const LEAST_SHARE = 0.25;
 /** A string, kept whole, or whitespace between tokens, dropped. */
 const BETWEEN_TOKENS = /("(?:[^"\\]|\\.)*")|[ \t\n\r]+/g;
 /** What comes just before a value in minified JSON. */
@@ -278,7 +280,8 @@ describe('walkLine', () => {
     expect(walked(`{"a":${arraysIn(PAST_THE_STACK)}}`)).toBe(false);
   });
 
-  test('reads each random line as JSON.parse reads it, flattened', () => {
+  test('reads exactly the random lines JSON.parse reads as an object, as they flatten', () => {
+    let read = 0;
     for (let seed = 1; seed <= SEEDS; seed++) {
       const line = jsonish(random(seed));
       const shown = `seed ${seed}: ${JSON.stringify(line)}`;
@@ -286,6 +289,7 @@ describe('walkLine', () => {
       const leaves = walked(line);
       expect(leaves !== false, shown).toBe(isObject(want));
       if (leaves === false || !isObject(want)) continue;
+      read++;
       const reference = flat(want, '');
       const cells = new Map(leaves);
       expect([...cells.keys()].sort(), shown).toEqual(
@@ -299,5 +303,7 @@ describe('walkLine', () => {
         );
       }
     }
+    expect(read).toBeGreaterThan(SEEDS * LEAST_SHARE);
+    expect(SEEDS - read).toBeGreaterThan(SEEDS * LEAST_SHARE);
   });
 });
