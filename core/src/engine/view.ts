@@ -68,6 +68,12 @@ export const FILE_COLUMN = '_file';
 
 type Waiter = () => boolean;
 
+/** Sample is the rows each column's kind is inferred from, and the values supplied for them. */
+interface Sample {
+  rows: string[][];
+  supplied: (readonly string[])[] | undefined;
+}
+
 /** A source's edits and, for a carried source, its bytes, as read from a
  * .uno. */
 export interface Carried {
@@ -378,11 +384,19 @@ export class View {
 
   /** columns infers each column's kind from the sample rows, with the log applied. */
   private async columns(): Promise<ColumnInfo[]> {
-    const source = await this.reading.pages.rows(0, SAMPLE_ROWS);
-    const supplied = await this.suppliedFor(0, source.length);
-    const schema = this.schema;
-    const shown = finishRows(schema, 0, source, supplied).map((f) => f.shown);
+    return this.columnsOf(await this.sample());
+  }
 
+  /** sample reads the rows each column's kind is inferred from. */
+  private async sample(): Promise<Sample> {
+    const rows = await this.reading.pages.rows(0, SAMPLE_ROWS);
+    return { rows, supplied: await this.suppliedFor(0, rows.length) };
+  }
+
+  /** columnsOf infers each column's kind from `sample`, with the log applied. */
+  private columnsOf({ rows, supplied }: Sample): ColumnInfo[] {
+    const schema = this.schema;
+    const shown = finishRows(schema, 0, rows, supplied).map((f) => f.shown);
     return schema.headers.map((header, col) => {
       const { kind, flagged } = inferKind(
         shown.length,
