@@ -63,6 +63,22 @@ class Page {
     this.mostX[i] = Math.max(this.mostX[i]!, most.x);
     this.mostY[i] = Math.max(this.mostY[i]!, most.y);
   }
+
+  /** set puts block `at`'s least and most at `least` and `most`. */
+  set(at: number, least: Point, most: Point): void {
+    const i = at % PAGE_BLOCKS;
+    this.leastX[i] = least.x;
+    this.leastY[i] = least.y;
+    this.mostX[i] = most.x;
+    this.mostY[i] = most.y;
+  }
+
+  /** touches reports whether `p` sits on block `at`'s least or most. */
+  touches(at: number, p: Point): boolean {
+    const [least, most] = this.extent(at);
+    const onX = p.x === least.x || p.x === most.x;
+    return onX || p.y === least.y || p.y === most.y;
+  }
 }
 
 /**
@@ -82,12 +98,26 @@ export class SampleFold {
   private readonly skipped: Skipped = { blank: 0, unparsed: 0 };
   /** Each block's least and most, by the first block of their page. */
   private readonly pages = new Map<number, Page>();
+  /** The blocks whose least or most an edit took back. */
+  private readonly stales = new Set<number>();
 
   /** add folds `row` of `block`, whose x cell is `xCell` and y `yCell`. */
   add(block: number, row: number, xCell: string, yCell: string): void {
-    const point = this.count(xCell, yCell);
+    const point = this.count(xCell, yCell, 1);
     if (point !== undefined) this.page(block).widen(block, point, point);
     this.keep(row, point);
+  }
+
+  /**
+   * remove takes back a row that add folded, so an edit can add the row's
+   * new cells. A row on its block's least or most leaves the block stale.
+   */
+  remove(block: number, row: number, xCell: string, yCell: string): void {
+    const point = this.count(xCell, yCell, -1);
+    if (point !== undefined && this.page(block).touches(block, point)) {
+      this.stales.add(block);
+    }
+    this.kept.delete(row);
   }
 
   /** merge takes in what `other` folded, of rows this fold has not. */
@@ -102,6 +132,18 @@ export class SampleFold {
         mine.widen(at, ...page.extent(at));
       }
     }
+    for (const block of other.stales) this.stales.add(block);
+  }
+
+  /** refold mends stale `block` from `alone`, a fold of its rows alone. */
+  refold(block: number, alone: SampleFold): void {
+    this.page(block).set(block, ...alone.extent());
+    this.stales.delete(block);
+  }
+
+  /** stale lists the blocks whose least and most an edit may leave too wide. */
+  stale(): number[] {
+    return [...this.stales].sort((a, b) => a - b);
   }
 
   /** snapshot reads the fold as plain numbers. */
@@ -158,17 +200,18 @@ export class SampleFold {
     this.last = rows[SCATTER_POINTS_AT_MOST - 1];
   }
 
-  /** count counts a row, and returns its point when it has one. */
-  private count(xCell: string, yCell: string): Point | undefined {
+  /** count counts a row, or takes one back when `sign` is -1. */
+  private count(xCell: string, yCell: string, sign: 1 | -1): Point | undefined {
     const x = parse(xCell);
     const y = parse(yCell);
     if (x === undefined || y === undefined) {
       const word = (v: number | undefined, cell: string) =>
         v === undefined && cell !== '';
-      this.skipped[word(x, xCell) || word(y, yCell) ? 'unparsed' : 'blank']++;
+      const kind = word(x, xCell) || word(y, yCell) ? 'unparsed' : 'blank';
+      this.skipped[kind] += sign;
       return undefined;
     }
-    this.plotted++;
+    this.plotted += sign;
     return { x, y };
   }
 }
