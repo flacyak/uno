@@ -683,12 +683,14 @@ export class Shell {
         ref,
         engine,
         savePath,
-        () => this.repaint(),
-        (tab) => {
-          // Repaint the banner only for the active tab's offer.
-          if (opened !== undefined && this.workspace === opened && opened.active === tab) {
-            this.paintBanner();
-          }
+        {
+          changed: () => this.repaint(),
+          offered: (tab) => {
+            // Repaint the banner only for the active tab's offer.
+            if (opened !== undefined && this.workspace === opened && opened.active === tab) {
+              this.paintBanner();
+            }
+          },
         },
         signal,
       );

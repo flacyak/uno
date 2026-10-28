@@ -184,6 +184,14 @@ export class Tab {
   }
 }
 
+/** WorkspaceEvents is what a workspace tells whoever shows it. */
+export interface WorkspaceEvents {
+  /** Rows landed or index progress changed. */
+  changed(): void;
+  /** A source's offer changed. */
+  offered(tab: Tab): void;
+}
+
 export class Workspace {
   /** The path a plain save writes to. Empty until saved once or opened from a .uno. */
   path = "";
@@ -206,10 +214,7 @@ export class Workspace {
   private constructor(
     /** The engine this workspace owns. The panel lists and peeks through it. */
     readonly engine: Engine,
-    /** Called when rows land or index progress changes. */
-    private readonly changed: () => void,
-    /** Called when a source's offer changes, with its tab. */
-    private readonly offered: (tab: Tab) => void,
+    private readonly events: WorkspaceEvents,
   ) {}
 
   /**
@@ -223,11 +228,10 @@ export class Workspace {
     ref: SourceRef,
     engine: Engine,
     savePath: string,
-    changed: () => void,
-    offered: (tab: Tab) => void,
+    events: WorkspaceEvents,
     signal?: AbortSignal,
   ): Promise<Workspace> {
-    const w = new Workspace(engine, changed, offered);
+    const w = new Workspace(engine, events);
     w.showing = await w.add(ref, signal);
     // The sources it opened with count as saved.
     w.savedSources = w.tabs.map((t) => t.id);
@@ -248,11 +252,12 @@ export class Workspace {
   }
 
   private tab(source: SourceHandle, saved?: readonly Edit[]): Tab {
-    const t = new Tab(source, new Band(source, this.changed), saved);
-    source.onProgress = () => this.changed();
+    const changed = (): void => this.events.changed();
+    const t = new Tab(source, new Band(source, changed), saved);
+    source.onProgress = changed;
     source.onOffer = (offer) => {
       t.offer = offer;
-      this.offered(t);
+      this.events.offered(t);
     };
     return t;
   }
