@@ -7,7 +7,8 @@ import { describe, expect, test } from 'vite-plus/test';
 
 import { readAll } from '@ingest/csv';
 import { RecordScanner, bomLength } from '@ingest/scan';
-import { random } from '@core-tests/random';
+import type { Random } from './random.ts';
+import { random } from './random.ts';
 
 const encoder = new TextEncoder();
 const whole = new TextDecoder('utf-8');
@@ -74,7 +75,8 @@ const MAX_CHARS = 40;
 /** Number of random files to check. */
 const SEEDS = 4000;
 
-function csvish(rand: () => number): string {
+/** csvish returns a random file of the alphabet's characters. */
+function csvish(rand: Random): string {
   let s = rand() < BOM_CHANCE ? '\uFEFF' : '';
   const n = Math.floor(rand() * MAX_CHARS);
   for (let i = 0; i < n; i++)
