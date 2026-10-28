@@ -16,7 +16,8 @@ import {
   Z_STREAM_END,
   zlibInflate,
   zlibInflateInit2,
-  zlibInflateReset,
+  zlibInflateReset2,
+  zlibInflateSetDictionary,
 } from 'pako';
 
 /** Decoded bytes between checkpoints, before any thinning. */
@@ -34,6 +35,8 @@ const MAX_WINDOW_BITS = 15;
 const GZIP_WRAPPER = 16;
 /** Window bits that have zlib read a gzip wrapper. */
 const GZIP_WINDOW_BITS = MAX_WINDOW_BITS + GZIP_WRAPPER;
+/** Negative window bits have zlib read raw deflate, with no wrapper. */
+const RAW_WINDOW_BITS = -MAX_WINDOW_BITS;
 /** The data_type flag of an inflate that stopped at a block boundary. */
 const BLOCK_BOUNDARY = 0x80;
 /** The data_type flag of a member whose last block has been read. */
@@ -45,6 +48,17 @@ const BITS_PER_BYTE = 8;
 const PIECE_BYTES = 256 << 10;
 /** No bytes: the piece of a step that read padding alone, an empty window. */
 const NONE = new Uint8Array(0);
+/** A gzip member's trailer: its CRC, then its decoded length. */
+const TRAILER_BYTES = 8;
+/**
+ * An empty dynamic block that is not the last, low bit first. It is 95 bits
+ * long, an odd count, so it changes the parity of a preface.
+ */
+const EMPTY_DYNAMIC = [4, 0xe0, 0x81, 8, 0, 0, 0, 0, 0x20, 0xa8, 0xab, 0x1f];
+const EMPTY_DYNAMIC_BITS = 95;
+/** An empty fixed block that is not the last: its header, then its end. */
+const EMPTY_FIXED = 0b10;
+const EMPTY_FIXED_BITS = 10;
 
 /**
  * BrokenStream is thrown for a compressed stream that is damaged or cut
@@ -137,12 +151,38 @@ class Members {
   member = 0;
   /** The last member has ended, and no other has begun. */
   ended = false;
+  /**
+   * Trailer bytes to pass over once the member ends. zlib reads a trailer
+   * itself, except after a member resumed as raw deflate.
+   */
+  private trailer = 0;
 
-  constructor() {
-    zlibInflateInit2(this.z, GZIP_WINDOW_BITS);
+  constructor(windowBits = GZIP_WINDOW_BITS) {
+    zlibInflateInit2(this.z, windowBits);
     this.z.output = this.buffer;
     this.z.next_out = WINDOW_BYTES;
     this.z.avail_out = PIECE_BYTES;
+  }
+
+  /**
+   * Members resumed at a checkpoint, given the stored bytes from the byte it
+   * starts in. The rest of its member is raw deflate, with the checkpoint's
+   * window as the dictionary and a preface for the bits not yet used.
+   */
+  static resume(point: Checkpoint, stored: Uint8Array): Members {
+    const members = new Members(RAW_WINDOW_BITS);
+    zlibInflateSetDictionary(members.z, point.window);
+    members.decoded = point.decoded;
+    members.trailer = TRAILER_BYTES;
+    if (point.bits === 0) {
+      members.feed(stored, point.stored);
+      return members;
+    }
+    const lead = preface(stored[0]!, point.bits);
+    const rest = stored.subarray(1);
+    const input = joined([lead, rest], lead.length + rest.length);
+    members.feed(input, point.stored + 1 - lead.length);
+    return members;
   }
 
   /** The stored offset inflate has read to. */
@@ -155,9 +195,12 @@ class Members {
     return this.z.avail_in === 0;
   }
 
-  /** Hands over the next stored bytes, once the last have been read. */
-  feed(stored: Uint8Array): void {
-    this.base = this.at;
+  /**
+   * Hands over the next stored bytes, once the last have been read. They
+   * start at stored offset `at`, by default where the last ended.
+   */
+  feed(stored: Uint8Array, at = this.at): void {
+    this.base = at;
     this.z.input = stored;
     this.z.next_in = 0;
     this.z.avail_in = stored.length;
@@ -167,12 +210,12 @@ class Members {
   step(): Uint8Array {
     const z = this.z;
     if (this.ended) {
-      while (z.avail_in > 0 && z.input[z.next_in] === 0) {
-        z.next_in++;
-        z.avail_in--;
-      }
+      const trailer = Math.min(this.trailer, z.avail_in);
+      this.skip(trailer);
+      this.trailer -= trailer;
+      while (z.avail_in > 0 && z.input[z.next_in] === 0) this.skip(1);
       if (z.avail_in === 0) return NONE;
-      zlibInflateReset(z);
+      zlibInflateReset2(z, GZIP_WINDOW_BITS);
       this.ended = false;
       this.member = this.decoded;
     }
@@ -217,8 +260,43 @@ class Members {
 
   /** Throws BrokenStream unless the stored bytes ended with a member. */
   end(): void {
-    if (!this.ended) throw new BrokenStream(this.at, 'it ends mid-member');
+    if (!this.ended || this.trailer > 0) {
+      throw new BrokenStream(this.at, 'it ends mid-member');
+    }
   }
+
+  /** Passes over `count` bytes of input. */
+  private skip(count: number): void {
+    this.z.next_in += count;
+    this.z.avail_in -= count;
+  }
+}
+
+/**
+ * Deflate input that decodes to nothing and leaves inflate holding the bits
+ * of `byte` after the first `used`, as zran's inflatePreface does. Empty
+ * blocks bring the input to a byte boundary once those bits follow.
+ */
+function preface(byte: number, used: number): Uint8Array {
+  const unused = BITS_PER_BYTE - used;
+  const bits: number[] = [];
+  const append = (value: number, count: number): void => {
+    for (let i = 0; i < count; i++) bits.push((value >> i) & 1);
+  };
+  if (unused % 2 === 1) {
+    for (const value of EMPTY_DYNAMIC) {
+      append(value, Math.min(BITS_PER_BYTE, EMPTY_DYNAMIC_BITS - bits.length));
+    }
+  }
+  while ((bits.length + unused) % BITS_PER_BYTE !== 0) {
+    append(EMPTY_FIXED, EMPTY_FIXED_BITS);
+  }
+  append(byte >> used, unused);
+  const out = new Uint8Array(bits.length / BITS_PER_BYTE);
+  bits.forEach((bit, i) => {
+    out[Math.floor(i / BITS_PER_BYTE)]! |= bit << (i % BITS_PER_BYTE);
+  });
+  return out;
 }
 
 /** Lays pieces end to end, up to `length` bytes. */
