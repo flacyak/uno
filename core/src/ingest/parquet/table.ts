@@ -81,11 +81,13 @@ export interface Table {
   /** Whether every row group under rows [start, end) has offset indexes. */
   paged(start: number, end: number): boolean;
   /**
-   * Rows [start, end) of the file, each cell as textOf writes it. A failed
-   * read of the file is passed on as it failed, and a page that does not
-   * decode is refused as parquet-broken.
+   * Rows [start, end) of the file, each cell as textOf writes it. With
+   * `only`, the index of one column, only the top-level field holding it is
+   * read, and every other cell is ''. A failed read of the file is passed on
+   * as it failed, and a page that does not decode is refused as
+   * parquet-broken.
    */
-  read(start: number, end: number): Promise<string[][]>;
+  read(start: number, end: number, only?: number): Promise<string[][]>;
 }
 
 /** What the footer says of one row group. */
@@ -269,19 +271,32 @@ class ParquetTable implements Table {
     );
   }
 
-  async read(start: number, end: number): Promise<string[][]> {
+  async read(start: number, end: number, only?: number): Promise<string[][]> {
+    const asked = only === undefined ? undefined : this.leaves[only];
+    if (only !== undefined && asked === undefined) {
+      throw new RangeError(`a Parquet table has no column ${only}`);
+    }
     if (end <= start) return [];
-    const rows = await this.assembled(start, end);
+    const rows = await this.assembled(start, end, asked?.path[0]);
     return rows.map((row) =>
-      this.leaves.map((leaf) => textOf(leaf, valueAt(row, leaf.path))),
+      this.leaves.map((leaf) =>
+        asked === undefined || leaf === asked
+          ? textOf(leaf, valueAt(row, leaf.path))
+          : '',
+      ),
     );
   }
 
   /**
-   * Rows [start, end) as hyparquet assembles them. Only the pages that hold
-   * them are read where a row group has offset indexes.
+   * Rows [start, end) as hyparquet assembles them, of every top-level field
+   * or of `field` alone. Only the pages that hold them are read where a row
+   * group has offset indexes.
    */
-  private async assembled(start: number, end: number): Promise<Assembled[]> {
+  private async assembled(
+    start: number,
+    end: number,
+    field?: string,
+  ): Promise<Assembled[]> {
     let rows: Assembled[] = [];
     try {
       await parquetRead({
@@ -289,6 +304,7 @@ class ParquetTable implements Table {
         metadata: this.plain,
         rowStart: start,
         rowEnd: end,
+        columns: field === undefined ? undefined : [field],
         rowFormat: 'object',
         useOffsetIndex: true,
         parsers: PARSERS,
