@@ -4,6 +4,8 @@
  * say whether it is JSON Lines or delimited text.
  */
 
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vite-plus/test';
 
@@ -11,6 +13,7 @@ import { PARQUET_MAGIC_BYTES, detect } from '@ingest/detect';
 import type { Detected, StoredHead } from '@ingest/detect';
 import { sniffEncoding } from '@ingest/sniff';
 import type { Unread } from '@said';
+import { random } from '@core-tests/random';
 
 /** How much of a file a head holds here: as much as a peek reads. */
 const HEAD_BYTES = 64 << 10;
@@ -204,5 +207,42 @@ describe('then the name and the first line decide', () => {
     expect(await detected('events.json', lines)).toEqual(unread('JSON Lines'));
     for (const text of ['[]', '[{"id":1}]', '{\n"id":1\n}', '{"a":1} {"b":2}'])
       expect(await detected('events.json', text), text).toEqual(unread('JSON'));
+  });
+});
+
+describe('delimited text stays delimited text', () => {
+  const testdata = fileURLToPath(new URL('../testdata/', import.meta.url));
+  const fixtures = readdirSync(testdata).filter((name) =>
+    /\.(csv|tsv)$/.test(name),
+  );
+
+  test('every CSV and TSV fixture, under its name and under none', async () => {
+    expect(fixtures.length).toBeGreaterThan(0);
+    for (const name of fixtures) {
+      const bytes = new Uint8Array(readFileSync(testdata + name));
+      expect(await detected(name, bytes), name).toEqual(DELIMITED);
+      expect(await detected(name.replace(/\..*$/, ''), bytes), name).toEqual(
+        DELIMITED,
+      );
+    }
+  });
+
+  /** How many random heads are checked, and the most bytes each holds. */
+  const SEEDS = 1000;
+  const MAX_BYTES = 64;
+  const BYTE_VALUES = 256;
+
+  test('a random head is delimited text', async () => {
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const rand = random(seed);
+      const bytes = Uint8Array.from(
+        { length: Math.floor(rand() * MAX_BYTES) },
+        () => Math.floor(rand() * BYTE_VALUES),
+      );
+      for (const name of ['r.csv', 'r.tsv', 'r'])
+        expect(await detected(name, bytes), `seed ${seed}, ${name}`).toEqual(
+          DELIMITED,
+        );
+    }
   });
 });

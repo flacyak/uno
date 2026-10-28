@@ -7,6 +7,7 @@ import { describe, expect, test } from 'vite-plus/test';
 
 import { readAll } from '@ingest/csv';
 import { RecordScanner, bomLength } from '@ingest/scan';
+import { random } from '@core-tests/random';
 
 const encoder = new TextEncoder();
 const whole = new TextDecoder('utf-8');
@@ -45,17 +46,6 @@ function piecewise(
     );
   }
   return rows;
-}
-
-/** mulberry32 random number generator. A failure reports its seed. */
-function random(seed: number): () => number {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = seed;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 // Every byte the scanner acts on, plus multi-byte letters and a U+FEFF that
