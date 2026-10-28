@@ -59,19 +59,20 @@ test('a planned index of no rows has no blocks', () => {
 type Reads = Array<[start: number, end: number]>;
 
 /**
- * A table whose rows are one cell, the row's number, which is paged or not
- * and takes `bytesPerRow` uncompressed.
+ * A table whose rows are one cell, by default the row's number, which is
+ * paged or not and takes `bytesPerRow` uncompressed.
  */
 function planned(
   paged: boolean,
   bytesPerRow: number | TableRows['bytesPerRow'],
+  cell: (row: number) => string = String,
 ): { rows: TableRows; reads: Reads } {
   const reads: Reads = [];
   const rows: TableRows = {
     read: (start, end) => {
       reads.push([start, end]);
       const cells = Array.from({ length: end - start }, (_, i) => [
-        String(start + i),
+        cell(start + i),
       ]);
       return Promise.resolve(cells);
     },
@@ -171,6 +172,34 @@ test('a window is sized by the heaviest row group under its rows', async () => {
   expect(reads).toEqual([[0, end]]);
   const bytes = heavyFrom * light + (end - heavyFrom) * heavy;
   expect(bytes).toBeLessThanOrEqual(DECODE_WINDOW_BYTES);
+});
+
+/** The text bytes of each row of a table whose text far outweighs its stored bytes. */
+const TEXT_ROW_BYTES = 4096;
+
+test('a window whose text outgrows the cache decodes once, and the next is sized by that text', async () => {
+  const count = UNEVEN.rows;
+  const cell = 'x'.repeat(TEXT_ROW_BYTES - CELL_END_BYTES);
+  const { rows, reads } = planned(false, UNEVEN.light, () => cell);
+  const { pages, index } = pagesOver(rows, count);
+  for (let first = 0; first < count; first += SCREEN) {
+    expect(await pages.rows(first, SCREEN)).toHaveLength(
+      Math.min(SCREEN, count - first),
+    );
+    expect(pages.held).toBeLessThanOrEqual(TUNING.cacheBytes);
+  }
+  // The first window's text is more than the cache holds, so the cache
+  // lets its first blocks go, and they are read from the window itself.
+  const firstText = MAX_WINDOW_BLOCKS * TUNING.blockRows * TEXT_ROW_BYTES;
+  expect(firstText).toBeGreaterThan(TUNING.cacheBytes);
+  const after = DECODE_WINDOW_BYTES / (TEXT_ROW_BYTES * TUNING.blockRows);
+  const windows: Reads = [[0, MAX_WINDOW_BLOCKS * TUNING.blockRows]];
+  for (let b = MAX_WINDOW_BLOCKS; b < index.blocks; b += after) {
+    const [start] = index.rowsOf(b);
+    const [, end] = index.rowsOf(Math.min(b + after, index.blocks) - 1);
+    windows.push([start, end]);
+  }
+  expect(reads).toEqual(windows);
 });
 
 test('the sales fixture reads as sales-q3.csv does, every window once', async () => {
