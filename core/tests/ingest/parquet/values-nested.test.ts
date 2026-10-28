@@ -7,6 +7,8 @@
 import type { SchemaElement } from 'hyparquet/src/index.js';
 import { expect, test } from 'vite-plus/test';
 
+import type { ParquetValue } from '@ingest/parquet/values';
+
 import { textsOf } from './texts.ts';
 
 const encoder = new TextEncoder();
@@ -50,20 +52,47 @@ test('a number JSON cannot hold, a date and bytes are strings in a list', () => 
   expect(textsOf(bytes, [values])).toEqual(['["say \\"hi\\"","0xff"]']);
 });
 
-test('a map writes its values as its value column says', () => {
-  const elements: SchemaElement[] = [
-    { name: 'counts', converted_type: 'MAP', num_children: 1 },
+/** A MAP named `name`, its `key` and `value` columns following. */
+function map(
+  name: string,
+  key: SchemaElement,
+  value: SchemaElement,
+): SchemaElement[] {
+  return [
+    { name, converted_type: 'MAP', num_children: 1 },
     { name: 'key_value', repetition_type: 'REPEATED', num_children: 2 },
-    {
-      name: 'key',
-      type: 'BYTE_ARRAY',
-      converted_type: 'UTF8',
-      repetition_type: 'REQUIRED',
-    },
-    { name: 'value', type: 'INT64', converted_type: 'UINT_64' },
+    { ...key, name: 'key', repetition_type: 'REQUIRED' },
+    { ...value, name: 'value' },
   ];
-  expect(textsOf(elements, [{ 'a"b': -1n, c: null }, {}])).toEqual([
-    '{"a\\"b":18446744073709551615,"c":null}',
+}
+
+/** A MAP key as hyparquet reads one with identity parsers. */
+type Key = boolean | number | bigint | string | Uint8Array;
+
+/**
+ * A MAP's value as hyparquet's assembleMaps builds one: an object keyed by
+ * String of each stored key, so a key stored as bytes is their numbers
+ * joined by commas.
+ */
+function mapOf(
+  keys: readonly Key[],
+  values: readonly ParquetValue[],
+): ParquetValue {
+  return Object.fromEntries(keys.map((key, i) => [String(key), values[i]]));
+}
+
+test('a map writes its values as its value column says', () => {
+  const elements = map(
+    'counts',
+    { name: 'key', type: 'BYTE_ARRAY', converted_type: 'UTF8' },
+    { name: 'value', type: 'INT64', converted_type: 'UINT_64' },
+  );
+  const counts = mapOf(
+    [encoder.encode('a"b'), encoder.encode('cd')],
+    [-1n, null],
+  );
+  expect(textsOf(elements, [counts, mapOf([], [])])).toEqual([
+    '{"a\\"b":18446744073709551615,"cd":null}',
     '{}',
   ]);
 });
