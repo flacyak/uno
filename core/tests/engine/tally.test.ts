@@ -1,16 +1,22 @@
 /**
  * @fileoverview The engine tallies a source's charts behind the index: each
- * chart hears its fold of every row as the pure fold reads it, and a chart
- * reads the columns its plot names, found by header where the file moved
- * them.
+ * chart hears its fold of every row as the pure fold reads it, and a partial
+ * one a second while the source is still being read, and a chart reads the
+ * columns its plot names, found by header where the file moved them.
  */
+
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import { expect, test } from 'vite-plus/test';
 
 import { newManifest, writeDocument } from '@document';
 import type { Chart, Plot } from '@document';
+import { TALLY_MS } from '@engine';
 import type { Engine, SourceHandle, Tally } from '@engine';
 import { Tallies } from '@engine/tally';
+import type { Provider } from '@plugin';
+import { blobProvider } from '@store';
+import { diskProvider } from '@store/node';
 import { GroupsFold, SampleFold } from '@tally';
 import {
   COLS,
@@ -118,6 +124,47 @@ function opened(engine: Engine, charts: Chart[]): Promise<SourceHandle> {
   return openOne(engine, { name: 'q3.uno', blob });
 }
 
+/**
+ * holding returns a disk provider that holds the first read of a block after
+ * `arm`, which `held` reports, until `release`. A block's read is shorter
+ * than an index chunk's and ends before the file does.
+ */
+function holding() {
+  const disk = diskProvider();
+  let armed = false;
+  let caught = (): void => {};
+  let release = (): void => {};
+  const held = new Promise<void>((resolve) => (caught = resolve));
+  const until = new Promise<void>((resolve) => (release = resolve));
+  const provider: Provider = {
+    ...disk,
+    files: {
+      ...disk.files,
+      async open(ref) {
+        const source = await disk.files.open(ref);
+        return {
+          size: source.size,
+          async read(offset, length) {
+            const block =
+              length < TINY.chunkBytes && offset + length < source.size;
+            if (armed && block) {
+              armed = false;
+              caught();
+              await until;
+            }
+            return source.read(offset, length);
+          },
+          close: () => source.close(),
+        };
+      },
+    },
+  };
+  const arm = (): void => {
+    armed = true;
+  };
+  return { provider, arm, held, release };
+}
+
 test("a chart's column is found where it was, or by its header where the file moved it, and one the file has not names itself", () => {
   const tallies = new Tallies();
   expect(tallies.attach(REGION_ROWS, HEADERS)).toBeUndefined();
@@ -156,6 +203,28 @@ test('each chart of a .uno hears its fold of every row, as the pure fold reads i
     for (const [i, chart] of charts.entries()) {
       expect(await lasts[i]).toStrictEqual(pure(chart.plot));
     }
+  } finally {
+    done();
+  }
+});
+
+test('a chart hears a partial tally after TALLY_MS while its source is still being read, then the complete one', async () => {
+  const hold = holding();
+  const { engine, done } = connect(TINY, [hold.provider, blobProvider()]);
+  try {
+    const heard = new Heard(await opened(engine, [REGION_ROWS]));
+    const last = heard.of(REGION_ROWS.id);
+    hold.arm();
+    await hold.held;
+    await sleep(TALLY_MS);
+    hold.release();
+    expect(await last).toStrictEqual(pure(REGION_ROWS.plot));
+
+    const [, partial] = heard.all[0]!;
+    if (partial.t === 'unread') throw new Error('the first tally is unread');
+    expect(partial.coverage.complete).toBe(false);
+    expect(partial.coverage.rows).toBeGreaterThan(0);
+    expect(partial.coverage.rows).toBeLessThan(ROWS);
   } finally {
     done();
   }
