@@ -9,8 +9,9 @@
  * named, and `readableHead` refuses it by name as a file is opened.
  */
 
+import { unreachable } from '@never';
 import { Refusal } from '@said';
-import type { Compression, Unread } from '@said';
+import type { Compression, ReadKind, Unread } from '@said';
 import type { ByteSource } from '@store';
 import { HEAD_BYTES } from './format.ts';
 import { nameParts } from './names.ts';
@@ -104,6 +105,21 @@ export type Detected =
 /** Delimited text, which the encoding and delimiter sniffs read from here. */
 const DELIMITED: Detected = { t: 'records', layout: 'delimited' };
 
+/** The kind of rows each layout of records is. */
+const LAYOUT_KINDS: Record<Layout, ReadKind> = {
+  delimited: 'delimited',
+  lines: 'jsonl',
+};
+
+/**
+ * The kind of rows each format this build names and does not read yet
+ * holds. A compression hides its kind, and a JSON document has none.
+ */
+const UNREAD_KINDS: Partial<Record<Unread, ReadKind>> = {
+  'JSON Lines': 'jsonl',
+  Parquet: 'parquet',
+};
+
 /**
  * detect says what a file holds. Parquet comes first, confirmed by the
  * file's last bytes, then each compression. Then the name decides: .jsonl
@@ -124,6 +140,24 @@ export async function detect(
   if (LINES_EXTENSIONS.includes(extension) || opensWithObject(head))
     return unread('JSON Lines');
   return extension === JSON_EXTENSION ? unread('JSON') : DELIMITED;
+}
+
+/**
+ * kindOf returns the kind of rows a detected file holds, whether this build
+ * reads it yet or not. Undefined for a compression, whose bytes hide what it
+ * holds until they are read, and for a JSON document.
+ */
+export function kindOf(found: Detected): ReadKind | undefined {
+  switch (found.t) {
+    case 'records':
+      return LAYOUT_KINDS[found.layout];
+    case 'parquet':
+      return 'parquet';
+    case 'not-read':
+      return UNREAD_KINDS[found.what];
+    default:
+      return unreachable(found);
+  }
 }
 
 /**
