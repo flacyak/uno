@@ -435,6 +435,21 @@
   "kind_delimited": "texto delimitado",
   "kind_jsonl": "JSON Lines",
   "kind_parquet": "Parquet",
+  "parquet_codec_uncompressed": "sin comprimir",
+  "parquet_codec_snappy": "snappy",
+  "parquet_codec_gzip": "gzip",
+  "parquet_codec_zstd": "zstd",
+  "parquet_row_groups": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} grupo de filas",
+        "plural=many": "{n} grupos de filas",
+        "plural=other": "{n} grupos de filas"
+      }
+    }
+  ],
   "changed_version_same_size": "{name} no es la versión con la que se guardó el espacio de trabajo · tiene el mismo tamaño",
   "changed_version_sizes": "{name} no es la versión con la que se guardó el espacio de trabajo · ahora ocupa {now} y antes {was}",
   "changed_size": "{name} ocupa {now} ahora y ocupaba {was} cuando se guardó el espacio de trabajo",

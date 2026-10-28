@@ -28,6 +28,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   replaying: { t: "replaying", name: "ads.csv", why: { t: "in-view" } },
   read: { t: "read", delimiter: ";", header: "none", charset: "UTF-8" },
   "read-lines": { t: "read-lines", charset: "UTF-8" },
+  "read-parquet": { t: "read-parquet", codecs: ["snappy", "zstd"], groups: 12 },
   program: {
     t: "program",
     steps: [
@@ -133,6 +134,9 @@ test("the other shapes of a kind are the engine's English too", () => {
     { t: "read", delimiter: ";", header: "first", charset: "UTF-8" },
     { t: "read", delimiter: "\t", header: "first", charset: "UTF-8" },
     { t: "read", delimiter: "\t", header: "none", charset: "UTF-8" },
+    { t: "read-parquet", codecs: ["uncompressed"], groups: 1 },
+    { t: "read-parquet", codecs: ["gzip"] },
+    { t: "read-parquet", codecs: [], groups: 0 },
     { t: "program", steps: [] },
     { t: "program", steps: [{ t: "upper" }, { t: "lower" }] },
     { t: "program", steps: [{ t: "notation", text: "slice(0, 2)" }] },
@@ -174,6 +178,18 @@ test("every Parquet feature is said as the engine says it", () => {
     const shape: Said = { t: "parquet-unsupported", name: "q3.parquet", feature };
     expect(say(shape), feature).toBe(english(shape));
   }
+});
+
+test("a Parquet label lists its codecs and counts its row groups in the reader's language", () => {
+  const one: Said = { t: "read-parquet", codecs: ["uncompressed", "snappy"], groups: 1 };
+  const many: Said = { t: "read-parquet", codecs: ["gzip", "snappy", "zstd"], groups: 1200 };
+  void setLocale("es", { reload: false });
+  expect(say(one)).toBe("Parquet · sin comprimir y snappy · 1 grupo de filas");
+  void setLocale("pt-BR", { reload: false });
+  expect(say(many)).toBe("Parquet · gzip, snappy e zstd · 1.200 grupos de linhas");
+  // Each codec's name comes through a message, so none is left as written.
+  void setLocale(PSEUDO_LOCALE, { reload: false });
+  expect(say(many)).not.toMatch(/gzip|snappy|zstd/);
 });
 
 test("text a step looks for is quoted with what cannot be seen in it escaped", () => {
