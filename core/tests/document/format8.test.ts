@@ -4,16 +4,19 @@
  * Under a root each part's path is stored relative to it. A source that says
  * none of them is written as before, which format6.test.ts and
  * format7.test.ts hold to the byte. Covers what is written, which format it
- * needs, round trips after a move, and the refusals for a part outside its
- * root and a value this build does not know.
+ * needs, round trips at scale and after a move, and the refusals for a part
+ * outside its root and a value this build does not know.
  */
 
+import { unzipSync } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
+  MANIFEST_ENTRY,
   PARTS_VERSION,
   ROWS_VERSION,
   formatFor,
+  isAbsolute,
   readContainer,
   writeDocument,
 } from '@document';
@@ -291,6 +294,76 @@ describe('a source read in row space reads back', () => {
     });
     const [back] = readContainer('books.uno', uno, AT).sources;
     expect(back!.parts![1]).toMatchObject({ skip: 0, unterminated: false });
+  });
+});
+
+describe('a dataset of 10,000 parts', () => {
+  /** How many parts, as a Spark job writes a decade of monthly folders. */
+  const PART_COUNT = 10_000;
+  /** How many files the job wrote into each year=/month= folder. */
+  const PARTS_PER_FOLDER = 84;
+  const MONTHS_PER_YEAR = 12;
+  const FIRST_YEAR = 2015;
+  /** Spark names every file of one write after the job's id. */
+  const JOB = '6f1c2b3a-9d4e-4f5a-8b7c-1d2e3f4a5b6c';
+  const SPLIT_DIGITS = 5;
+  const ETAG_DIGITS = 32;
+  const HEX = 16;
+  const WAREHOUSE = 's3://acme-lake/warehouse/sales.db/orders/';
+  /** The size and rows of the first part. Each later one is a little
+   * smaller, so no two are alike. */
+  const PART_BYTES = 134_217_728;
+  const PART_ROWS = 1_048_576;
+
+  /**
+   * What uno.json may weigh for each part, a little over the 245 bytes it
+   * weighs today: most of it the file name and the indentation every
+   * manifest is written with.
+   */
+  const MANIFEST_BYTES_PER_PART = 250;
+  const MANIFEST_BUDGET = PART_COUNT * MANIFEST_BYTES_PER_PART;
+  /** What the .uno itself may weigh, deflated, which is about 130 KB today. */
+  const CONTAINER_BUDGET = 140 * 1024;
+
+  function sparkPart(i: number): HeldPart {
+    const folder = Math.floor(i / PARTS_PER_FOLDER);
+    const year = FIRST_YEAR + Math.floor(folder / MONTHS_PER_YEAR);
+    const month = 1 + (folder % MONTHS_PER_YEAR);
+    const split = String(i % PARTS_PER_FOLDER).padStart(SPLIT_DIGITS, '0');
+    const name = `part-${split}-${JOB}-c000.snappy.parquet`;
+    return {
+      name,
+      path: `${WAREHOUSE}year=${year}/month=${month}/${name}`,
+      bytes: PART_BYTES - i,
+      version: `"${i.toString(HEX).padStart(ETAG_DIGITS, '0')}"`,
+      skip: 0,
+      unterminated: false,
+      rows: PART_ROWS - i,
+    };
+  }
+
+  function dataset(): HeldParts {
+    return {
+      ...orders(),
+      root: WAREHOUSE,
+      parts: Array.from({ length: PART_COUNT }, (_, i) => sparkPart(i)),
+    };
+  }
+
+  test('round-trips with every part relative to its root, within budget', () => {
+    const doc = workspace([dataset()]);
+    const uno = writeDocument(doc);
+    const manifest = unzipSync(uno)[MANIFEST_ENTRY]!;
+    const m = manifestOf(uno);
+
+    expect(partsOf(m)).toHaveLength(PART_COUNT);
+    expect(partsOf(m).some((p) => isAbsolute(String(p['path'])))).toBe(false);
+    expect(partsOf(m)[0]!['path']).toBe(
+      `year=${FIRST_YEAR}/month=1/${sparkPart(0).name}`,
+    );
+    expect(manifest.length).toBeLessThan(MANIFEST_BUDGET);
+    expect(uno.length).toBeLessThan(CONTAINER_BUDGET);
+    expect(readContainer('books.uno', uno, AT).sources).toEqual(doc.sources);
   });
 });
 
