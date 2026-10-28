@@ -7,6 +7,7 @@
  */
 
 import type { Chart, ChartColumn, Plot } from '@document';
+import type { Said } from '@said';
 import { GroupsFold, SampleFold } from '@tally';
 import type { Tally } from './protocol.ts';
 
@@ -17,7 +18,10 @@ interface Tallying {
   fold: GroupsFold | SampleFold;
   /** Rows folded: every row before the first block it lacks. */
   rows: number;
-  /** Whether the chart has heard its last tally, the complete one. */
+  /**
+   * Whether the chart has heard its last tally: the complete one, or that
+   * its source could not be read.
+   */
   done: boolean;
 }
 
@@ -106,6 +110,17 @@ export class Tallies {
       t.done = complete;
     }
     return read;
+  }
+
+  /** unread returns, for each pending chart, that its source could not be read. */
+  unread(said: Said): Array<[string, Tally]> {
+    const unread: Array<[string, Tally]> = [];
+    for (const [id, t] of this.charts) {
+      if (t.done) continue;
+      unread.push([id, { t: 'unread', said }]);
+      t.done = true;
+    }
+    return unread;
   }
 }
 
