@@ -51,6 +51,8 @@ export async function indexPass(ctx: IndexContext): Promise<void> {
     ctx.progress();
   }
 
+  // The last record is learned before the block that holds it is readable.
+  scanner.end?.();
   index.complete = true;
   ctx.progress();
 }
