@@ -19,6 +19,8 @@ const INITIAL_BLOCKS = 64;
 
 /** BulkIndex records where each block of rows starts, as RowIndex does. */
 export class BulkIndex {
+  private readonly tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>;
+
   private firsts = new Float64Array(INITIAL_BLOCKS);
   private offsets = new Float64Array(INITIAL_BLOCKS);
   /** Blocks opened so far. */
@@ -26,9 +28,9 @@ export class BulkIndex {
   /** Records begun so far. */
   counted = 0;
 
-  constructor(
-    private readonly tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>,
-  ) {}
+  constructor(tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>) {
+    this.tuning = tuning;
+  }
 
   /** The first row of a block. */
   firstRow(block: number): number {

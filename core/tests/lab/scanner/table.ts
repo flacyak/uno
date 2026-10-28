@@ -85,14 +85,14 @@ function tableFor(sep: number): Uint8Array {
 
 /** TableScanner steps a transition table one byte at a time. */
 export class TableScanner implements LabScanner {
+  private readonly begin: Begin;
+
   state: State = LINE;
   crAt = 0;
   private readonly table: Uint8Array;
 
-  constructor(
-    comma: string,
-    private readonly begin: Begin,
-  ) {
+  constructor(comma: string, begin: Begin) {
+    this.begin = begin;
     this.table = tableFor(separatorByte(comma));
   }
 
