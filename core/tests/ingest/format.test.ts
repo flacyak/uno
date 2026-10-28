@@ -15,6 +15,7 @@ import {
   sniffEncoding,
 } from '@ingest';
 import type { Encoding } from '@ingest';
+import { pointerTo } from '@ingest/format';
 import { blobSource } from '@store';
 
 /** Bytes openFormat reads first, before it knows how long the header is. */
@@ -244,4 +245,11 @@ test('a delimiter and an encoding each have a name a sentence can use', () => {
     'UTF-16 little-endian',
     'UTF-16 big-endian',
   ]);
+});
+
+test("pointerTo escapes '~' before '/', so a name reads back as written", () => {
+  expect(pointerTo('', 'a')).toBe('/a');
+  expect(pointerTo('/a', 'm~/s')).toBe('/a/m~0~1s');
+  expect(pointerTo('', '~1')).toBe('/~01');
+  expect(pointerTo('', '')).toBe('/');
 });
