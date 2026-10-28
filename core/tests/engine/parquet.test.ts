@@ -234,11 +234,15 @@ test('the cache holds blocks at the bytes they take as text, within its budget',
   }
 });
 
-test('a block read to keep nothing leaves the cache as it is', async () => {
+test('a scan that keeps nothing decodes every window once, and leaves the cache as it is', async () => {
+  const { rows, reads } = counted(await sales());
   const want = salesRows();
-  const { pages } = pagesOver(await sales(), want.length, TINY);
-  expect(await pages.records(1, false)).toEqual(
-    want.slice(TINY.blockRows, 2 * TINY.blockRows),
-  );
+  const { pages, index } = pagesOver(rows, want.length, TINY);
+  const scanned: string[][] = [];
+  for (let block = 0; block < index.blocks; block++) {
+    scanned.push(...(await pages.records(block, false)));
+  }
+  expect(scanned).toEqual(want);
+  expect(reads).toHaveLength(Math.ceil(index.blocks / MAX_WINDOW_BLOCKS));
   expect(pages.held).toBe(0);
 });
