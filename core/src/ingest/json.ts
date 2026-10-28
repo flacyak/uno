@@ -40,13 +40,18 @@ const WORDS: ReadonlyMap<string, string> = new Map([
 ]);
 /** RFC 8259's whitespace, which may come before and after any token. */
 const BLANKS: ReadonlySet<string> = new Set([' ', '\t', '\n', '\r']);
+/** The bracket that closes an array or an object, by the one that opens it. */
+const CLOSES: ReadonlyMap<string, string> = new Map([
+  ['[', ']'],
+  ['{', '}'],
+]);
 /** The cell of an empty object, which has no members to flatten. */
 const EMPTY_OBJECT = '{}';
 
 /**
- * How deep objects may nest in a line, the line's own object counted.
- * JSON.parse has no such limit, but walkLine reads each level a call deeper,
- * so it refuses a deeper line rather than overflow the stack.
+ * How deep objects and arrays may nest in a line, the line's own object
+ * counted. JSON.parse has no such limit, but walkLine reads each level a call
+ * deeper, so it refuses a deeper line rather than overflow the stack.
  */
 export const DEPTH_LIMIT = 256;
 
@@ -113,9 +118,59 @@ class Tokens {
     return this.eat(close);
   }
 
-  /** cell reads a value other than an object and returns its cell. */
-  cell(): string | undefined {
-    return this.scalar();
+  /**
+   * cell reads a value other than an object, nested `depth` levels inside the
+   * line's own object, and returns its cell. An array's cell is the array
+   * minified.
+   */
+  cell(depth: number): string | undefined {
+    return this.peek() === '[' ? this.minified(depth) : this.scalar();
+  }
+
+  /**
+   * minified reads a value nested `depth` levels inside the line's own object
+   * and returns it as written, less the whitespace between its tokens.
+   */
+  private minified(depth: number): string | undefined {
+    const open = this.peek();
+    const close = CLOSES.get(open);
+    if (close === undefined) return this.written();
+    const items: string[] = [];
+    const read = this.list(open, close, depth, () => {
+      const item =
+        open === '{'
+          ? this.minifiedMember(depth + 1)
+          : this.minified(depth + 1);
+      if (item === undefined) return false;
+      items.push(item);
+      return true;
+    });
+    return read ? `${open}${items.join(',')}${close}` : undefined;
+  }
+
+  /**
+   * minifiedMember reads an object's member whose value is nested `depth`
+   * levels inside the line's own object, and returns it as written, less the
+   * whitespace between its tokens.
+   */
+  private minifiedMember(depth: number): string | undefined {
+    const name = this.quoted();
+    if (name === undefined || !this.eat(':')) return undefined;
+    const value = this.minified(depth);
+    return value === undefined ? undefined : `${name}:${value}`;
+  }
+
+  /** written reads a string, a number or a word and returns it as written. */
+  private written(): string | undefined {
+    return this.peek() === '"' ? this.quoted() : this.literal();
+  }
+
+  /** quoted reads a string and returns it as written, quotes included. */
+  private quoted(): string | undefined {
+    this.skip();
+    const from = this.at;
+    if (this.string() === undefined) return undefined;
+    return this.line.slice(from, this.at);
   }
 
   /** string reads a string and returns it unescaped. */
@@ -199,7 +254,9 @@ function membersOf(tokens: Tokens, depth: number): Members | undefined {
     const name = tokens.name();
     if (name === undefined) return false;
     const member =
-      tokens.peek() === '{' ? membersOf(tokens, depth + 1) : tokens.cell();
+      tokens.peek() === '{'
+        ? membersOf(tokens, depth + 1)
+        : tokens.cell(depth + 1);
     if (member === undefined) return false;
     members.set(name, member);
     return true;
@@ -229,11 +286,12 @@ function flatten(
  * walkLine reads one JSON Lines record and calls `leaf` with each cell's
  * RFC 6901 pointer and text, where the last of a repeated name wins. A nested
  * object's members are cells of their own, so {"a":{"b":1}} has the cell /a/b,
- * and an empty object is the cell {}. A string is unescaped, a number is as
- * written, true and false are words, and null is an empty cell. walkLine
- * reads no array yet, and refuses a line that holds one or nests deeper than
- * DEPTH_LIMIT. When the line is not one JSON object, walkLine reports nothing
- * and returns false. It never throws.
+ * and an empty object is the cell {}. An array is one cell, as written less
+ * the whitespace between its tokens, so its numbers and escapes are as
+ * written too. A string is unescaped, a number is as written, true and false
+ * are words, and null is an empty cell. When the line is not one JSON object,
+ * or nests deeper than DEPTH_LIMIT, walkLine reports nothing and returns
+ * false. It never throws.
  */
 export function walkLine(
   line: string,
