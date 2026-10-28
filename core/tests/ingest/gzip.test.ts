@@ -12,7 +12,7 @@ import {
   gzipInflater,
   inflateHead,
 } from '@ingest/gzip';
-import type { Checkpoint } from '@ingest/gzip';
+import type { Checkpoint, Inflater } from '@ingest/gzip';
 import { concat, differAt, fixture } from './bytes.ts';
 
 /** The gzip fixtures: one of each shape a file comes in. */
@@ -32,6 +32,8 @@ const SLICES = [1, SLICE, Number.MAX_SAFE_INTEGER];
 const CRC_BYTES = 4;
 const TRAILER_BYTES = 8;
 const NO_BYTES = new Uint8Array(0);
+/** A span of one byte keeps every block boundary that decodes anything. */
+const EVERY_BOUNDARY = 1;
 
 /** What fflate's streaming gunzip makes of every member. */
 function fflate(stored: Uint8Array): Uint8Array {
@@ -40,12 +42,12 @@ function fflate(stored: Uint8Array): Uint8Array {
   return concat(pieces);
 }
 
-/** One pass of a gzip inflater, `slice` stored bytes at a push. */
+/** One pass of `inflater`, `slice` stored bytes at a push. */
 function pass(
   stored: Uint8Array,
   slice: number,
+  inflater: Inflater = gzipInflater(),
 ): { decoded: Uint8Array; checkpoints: readonly Checkpoint[] } {
-  const inflater = gzipInflater();
   const pieces: Uint8Array[] = [];
   const offsets: number[] = [];
   for (let at = 0; at < stored.length; at += slice) {
@@ -177,18 +179,29 @@ function bgzfBlocks(stored: Uint8Array): Omit<Checkpoint, 'window' | 'bits'>[] {
 }
 
 describe('a gzip pass keeps checkpoints', () => {
-  test('at every member start, with no window', () => {
+  /** The member starts a pass that keeps every block boundary keeps. */
+  function memberStarts(stored: Uint8Array): Checkpoint[] {
+    const inflater = gzipInflater(EVERY_BOUNDARY);
+    const { checkpoints } = pass(stored, SLICE, inflater);
+    return checkpoints.filter(({ window }) => window.length === 0);
+  }
+
+  test('at member starts, with no window', () => {
     const bgzf = fixture('gzip/bgzf.csv.gz');
-    const { checkpoints } = pass(bgzf, SLICE);
-    expect(checkpoints).toEqual(
+    expect(memberStarts(bgzf)).toEqual(
       bgzfBlocks(bgzf).map((at) => ({ ...at, bits: 0, window: NO_BYTES })),
     );
     const parts = [1, 2].map((n) => fixture(`sales-q3-part-${n}.csv`).length);
-    const members = pass(fixture('gzip/members.csv.gz'), SLICE);
-    expect(members.checkpoints.map((point) => point.decoded)).toEqual([
+    const members = memberStarts(fixture('gzip/members.csv.gz'));
+    expect(members.map((point) => point.decoded)).toEqual([
       0,
       parts[0],
       parts[0]! + parts[1]!,
     ]);
+  });
+
+  test('a span apart, member starts as well', () => {
+    const { checkpoints } = pass(fixture('gzip/bgzf.csv.gz'), SLICE);
+    expect(checkpoints.map(({ decoded }) => decoded)).toEqual([0]);
   });
 });

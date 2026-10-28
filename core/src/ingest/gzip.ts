@@ -4,7 +4,8 @@
  *
  * All three run pako's low-level zlib API through one class, Members, which
  * inflates gzip members one after another and stops at every deflate block
- * boundary. A checkpoint is a member start, which needs no window.
+ * boundary. A checkpoint is such a boundary with the 32 KB decoded before it,
+ * as Mark Adler's zran keeps, or a member start, which needs no window.
  */
 
 import {
@@ -18,6 +19,8 @@ import {
   zlibInflateReset,
 } from 'pako';
 
+/** Decoded bytes between checkpoints, before any thinning. */
+export const CHECKPOINT_SPAN = 16 << 20;
 /** How far back a deflate reference reaches: the bytes a window holds. */
 export const WINDOW_BYTES = 32 << 10;
 
@@ -238,15 +241,25 @@ export function inflateHead(
   };
 }
 
-/** gzipInflater inflates a gzip file once and keeps every member start. */
-export function gzipInflater(): Inflater {
-  return new GzipInflater();
+/**
+ * gzipInflater inflates a gzip file once. It keeps a checkpoint at the first
+ * block boundary, a member start, then at each one at least `span` past the
+ * last checkpoint.
+ */
+export function gzipInflater(span: number = CHECKPOINT_SPAN): Inflater {
+  return new GzipInflater(span);
 }
 
 /** GzipInflater is one pass through a gzip file. */
 class GzipInflater implements Inflater {
   private readonly members = new Members();
   private readonly kept: Checkpoint[] = [];
+  /** The decoded bytes between checkpoints. */
+  private readonly span: number;
+
+  constructor(span: number) {
+    this.span = span;
+  }
 
   push(
     stored: Uint8Array,
@@ -272,14 +285,11 @@ class GzipInflater implements Inflater {
     return this.kept;
   }
 
-  /**
-   * Keeps a block boundary that starts a member. It replaces a last
-   * checkpoint at the same decoded offset.
-   */
+  /** Keeps a block boundary a span past the last checkpoint, or the first. */
   private reached(start: BlockStart): void {
-    const { decoded, member } = this.members;
-    if (decoded !== member) return;
-    if (this.kept.at(-1)?.decoded === decoded) this.kept.pop();
+    const decoded = this.members.decoded;
+    const last = this.kept.at(-1);
+    if (last !== undefined && decoded - last.decoded < this.span) return;
     this.kept.push({ ...start, decoded, window: this.members.window() });
   }
 }
