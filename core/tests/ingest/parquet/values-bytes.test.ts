@@ -10,6 +10,16 @@ import { textsOf } from './texts.ts';
 
 const encoder = new TextEncoder();
 
+/** The bytes a UUID holds. */
+const UUID_BYTES = 16;
+
+const HEX = 16;
+
+/** Bytes written as hex, two digits each. */
+function bytesOf(hex: string): Uint8Array {
+  return Uint8Array.from(hex.match(/../g) ?? [], (pair) => parseInt(pair, HEX));
+}
+
 test('a string reads as the UTF-8 it holds, a byte order mark kept', () => {
   const element: SchemaElement = {
     name: 'x',
@@ -61,4 +71,21 @@ test('fixed-length bytes read as UTF-8 or 0x-hex, as any bytes do', () => {
   };
   const values = [encoder.encode('ok'), new Uint8Array([0x80, 0x0a])];
   expect(textsOf(element, values)).toEqual(['ok', '0x800a']);
+});
+
+test('a UUID reads in canonical form, and one of the wrong length as 0x-hex', () => {
+  const element: SchemaElement = {
+    name: 'x',
+    type: 'FIXED_LEN_BYTE_ARRAY',
+    type_length: UUID_BYTES,
+    logical_type: { type: 'UUID' },
+  };
+  const uuid = bytesOf('123e4567e89b12d3a456426614174000');
+  // Sixteen bytes that are UTF-8, which a UUID does not read as.
+  const text = encoder.encode('abcdefghijklmnop');
+  expect(textsOf(element, [uuid, text, new Uint8Array([0xab])])).toEqual([
+    '123e4567-e89b-12d3-a456-426614174000',
+    '61626364-6566-6768-696a-6b6c6d6e6f70',
+    '0xab',
+  ]);
 });
