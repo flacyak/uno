@@ -142,6 +142,17 @@ export interface OpenAsk {
 }
 
 export class View {
+  /** The source's id in the workspace and its log. */
+  readonly id: string;
+  /** The file's name. `ingest` picks a decoder by it. */
+  readonly name: string;
+  private readonly port: Port<Request, Reply>;
+  /**
+   * When the open began. A Progress's time and the INDEX measurement both
+   * count from here, so the status bar and the collector agree.
+   */
+  private readonly began: number;
+
   opened!: Opened;
   pages!: Pages;
   generation = 0;
@@ -184,18 +195,16 @@ export class View {
   private took: number | undefined;
 
   private constructor(
-    /** The source's id in the workspace and its log. */
-    readonly id: string,
-    /** The file's name. `ingest` picks a decoder by it. */
-    readonly name: string,
+    id: string,
+    name: string,
     path: string,
-    private readonly port: Port<Request, Reply>,
-    /**
-     * When the open began. A Progress's time and the INDEX measurement both
-     * count from here, so the status bar and the collector agree.
-     */
-    private readonly began: number,
+    port: Port<Request, Reply>,
+    began: number,
   ) {
+    this.id = id;
+    this.name = name;
+    this.port = port;
+    this.began = began;
     this.path = path;
   }
 
