@@ -63,6 +63,7 @@ const FEATURES: Record<ParquetFeature, () => string> = {
   bson: m.parquet_feature_bson,
   variant: m.parquet_feature_variant,
   "external-columns": m.parquet_feature_external_columns,
+  "several-files": m.parquet_feature_several_files,
 };
 
 /** The message function for each Parquet page codec. Called at use so the current locale applies. */

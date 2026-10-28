@@ -19,6 +19,8 @@ import {
 import type { TableRows } from '@engine/table';
 import type { Table } from '@ingest';
 import { bytesSource } from '@store';
+import { multiFiles } from '@store/multi';
+import { localFiles } from '@store/node';
 import {
   SALES,
   UNPAGED_STRINGS,
@@ -28,12 +30,15 @@ import {
   unpagedRow,
 } from '@core-tests/ingest/parquet/tables';
 import { ROWS } from '@core-tests/testdata/sales-q3';
-import { SCREEN, TINY } from './harness.ts';
+import { SCREEN, TINY, testdata } from './harness.ts';
 
 /** A planned file's rows and stored bytes, and the rows in its blocks. */
 const PLAN = { rows: 30, size: 4096, blockRows: 7 };
 /** The block holding PLAN's last two rows. */
 const LAST_BLOCK = 4;
+/** The sales fixture's name and path on disk. */
+const SALES_NAME = 'sales-q3.snappy.parquet';
+const SALES_PATH = testdata(SALES_NAME);
 
 test('a planned index has every row readable at once, in blocks of blockRows', () => {
   const { rows, size, blockRows } = PLAN;
@@ -310,4 +315,36 @@ test('held to Parquet, the sales fixture reads as sales-q3.csv does, complete at
   expect(await reading.runs(index.blockOf(ROWS - 1))).toEqual([
     { row: 0, part: 0 },
   ]);
+});
+
+test('held to Parquet, several files joined as bytes are refused by name', async () => {
+  // Parts with saved extents are read as a log was made, undetected.
+  const part = {
+    ref: { name: SALES_NAME, path: SALES_PATH },
+    extent: { bytes: SALES.length, skip: 0, unterminated: false },
+  };
+  const source = await multiFiles([localFiles()]).open({
+    name: 'sales',
+    parts: [part, part],
+    header: 'none',
+  });
+  try {
+    await expect(
+      openReading({
+        name: 'sales',
+        source,
+        spec: { kind: 'parquet', columns: [] },
+        header: 'first',
+        tuning: TINY,
+      }),
+    ).rejects.toMatchObject({
+      said: {
+        t: 'parquet-unsupported',
+        name: 'sales',
+        feature: 'several-files',
+      },
+    });
+  } finally {
+    await source.close();
+  }
 });

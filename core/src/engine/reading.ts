@@ -212,6 +212,14 @@ export async function openReading(ask: ReadAsk): Promise<Reading> {
     }));
   }
   if (spec?.kind === 'parquet') {
+    // Each Parquet file's footer describes its own bytes alone.
+    if (multiOf(source) !== undefined) {
+      throw new Refusal({
+        t: 'parquet-unsupported',
+        name,
+        feature: 'several-files',
+      });
+    }
     const table = await openTable(name, source, chunkCache(CHUNK_CACHE_BYTES));
     return tableReading(name, source, table, tuning);
   }

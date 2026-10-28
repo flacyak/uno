@@ -48,7 +48,8 @@ export type ParquetCodec = 'uncompressed' | 'snappy' | 'gzip' | 'zstd';
 
 /**
  * ParquetFeature is what a Parquet file can use that uno does not read yet:
- * encryption, a page codec, a column type, or columns kept in other files.
+ * encryption, a page codec, a column type, columns kept in other files, or
+ * several files read as one.
  */
 export type ParquetFeature =
   | 'encryption'
@@ -58,7 +59,8 @@ export type ParquetFeature =
   | 'interval'
   | 'bson'
   | 'variant'
-  | 'external-columns';
+  | 'external-columns'
+  | 'several-files';
 
 /** The punctuation a description can name, as plurals. */
 export type CharName =
@@ -281,6 +283,7 @@ const FEATURES: Record<ParquetFeature, string> = {
   bson: 'the Parquet BSON type',
   variant: 'the Parquet VARIANT type',
   'external-columns': 'Parquet with columns kept in other files',
+  'several-files': 'reading several Parquet files as one',
 };
 
 const SENTENCES: Sentences<Said> = {
