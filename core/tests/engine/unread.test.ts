@@ -1,0 +1,97 @@
+/**
+ * @fileoverview A file this build does not read yet: JSON Lines, a
+ * gzip-compressed CSV and a Parquet file. A source a workspace already logged
+ * edits against is read as it was when they were made.
+ */
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, test } from 'vite-plus/test';
+
+import { newManifest, writeDocument } from '@document';
+import type { Engine } from '@engine';
+import { read } from '@ingest';
+import { connect, multiProviders, openOne, saidIn } from './harness.ts';
+
+/** A fixture's path in tests/testdata. */
+function testdata(name: string): string {
+  return fileURLToPath(new URL(`../testdata/${name}`, import.meta.url));
+}
+
+/** Runs `use` with an engine that opens files, blobs and parts. */
+async function withEngine(use: (engine: Engine) => Promise<void>) {
+  const { engine, done } = connect(undefined, multiProviders());
+  try {
+    await use(engine);
+  } finally {
+    done();
+  }
+}
+
+describe('a .jsonl a workspace logged edits against before', () => {
+  const name = 'events.jsonl';
+  const path = testdata(name);
+  const bytes = new Uint8Array(readFileSync(path));
+
+  // As it was read when the edits were made: delimited text, split at commas.
+  const sheet = read(name, bytes);
+  const EDITED = { row: 2, col: 1, now: 'edited' };
+  sheet.set(EDITED.row, EDITED.col, EDITED.now);
+
+  /** A format 6 workspace holding the source as `held`, with the edit. */
+  function workspace(
+    held: { path: string; bytes: number } | { raw: Uint8Array },
+  ): Blob {
+    const uno = writeDocument({
+      manifest: newManifest(),
+      sources: [
+        {
+          id: 'events',
+          name,
+          rows: sheet.rows(),
+          cols: sheet.cols(),
+          state: { active: { row: 0, col: 0 } },
+          ...held,
+        },
+      ],
+      active: 'events',
+      log: sheet.edits().map((edit) => ({ source: 'events', edit })),
+      extra: new Map(),
+      at: '',
+    });
+    return new Blob([new Uint8Array(uno)]);
+  }
+
+  /** Whether `src` reads as the edits were made, with the edit on its cell. */
+  async function asLogged(
+    src: Awaited<ReturnType<typeof openOne>>,
+  ): Promise<void> {
+    expect(saidIn(src.opened.link?.missing)).toBeUndefined();
+    expect(saidIn(src.opened.link?.changed)).toBeUndefined();
+    expect(src.opened.edits).toHaveLength(1);
+    expect(src.opened.columns.map((c) => c.header)).toEqual(
+      sheet.columns.map((c) => c.header),
+    );
+    const { rows } = await src.rows(EDITED.row, 1);
+    expect(rows[0]![EDITED.col]).toBe(EDITED.now);
+  }
+
+  test('pointed at, reopens with its edits on the same cells', () =>
+    withEngine(async (engine) => {
+      const uno = workspace({ path, bytes: bytes.length });
+      await asLogged(await openOne(engine, { name: 'q3.uno', blob: uno }));
+    }));
+
+  test('carried, reopens with its edits on the same cells', () =>
+    withEngine(async (engine) => {
+      const uno = workspace({ raw: bytes });
+      await asLogged(await openOne(engine, { name: 'q3.uno', blob: uno }));
+    }));
+
+  test('relinked, is read as its edits were made', () =>
+    withEngine(async (engine) => {
+      const uno = workspace({ path, bytes: bytes.length });
+      const src = await openOne(engine, { name: 'q3.uno', blob: uno });
+      await asLogged(await engine.relink(src, { name, path }));
+    }));
+});
