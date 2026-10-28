@@ -42,7 +42,7 @@ import type {
 } from './protocol.ts';
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
-import { openReading } from './reading.ts';
+import { openReading, savedOf } from './reading.ts';
 import type { Expected, Reading, ReadSpec } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import {
@@ -851,9 +851,23 @@ export class View {
     return behind.t === 'file' ? behind.stored : behind.joined;
   }
 
-  /** How the source's rows are read, as a save records it. */
+  /**
+   * How the source's rows are read, as a save records it and a relink reads
+   * them again. A found column is named as the schema shows it: where a
+   * column the source supplies held its key's name first, it shows the name
+   * with a suffix, and a reopen shows that name again.
+   */
   get spec(): ReadSpec {
-    return this.reading.spec();
+    const spec = this.reading.spec();
+    if (spec.kind !== 'jsonl') return spec;
+    const { headers, supplied } = this.schema;
+    const shown = headers.length - supplied.length;
+    return {
+      kind: 'jsonl',
+      columns: spec.columns
+        .slice(0, shown)
+        .map(({ key }, col) => ({ name: headers[col]!, key })),
+    };
   }
 
   /** The size of the carried bytes, or of the source. */
@@ -910,12 +924,17 @@ export class View {
     });
   }
 
-  /** kept returns the edits and the row and column counts they were made over. */
-  private kept(): Pick<Part, 'edits' | 'rows' | 'cols'> {
+  /**
+   * kept returns the edits, the row and column counts they were made over,
+   * and how the rows were read: for JSON Lines, every column the schema
+   * shows.
+   */
+  private kept(): Pick<Part, 'edits' | 'rows' | 'cols' | 'kind' | 'columns'> {
     return {
       edits: this.schema.edits(),
       rows: this.reading.index.readable(),
       cols: this.schema.headers.length,
+      ...savedOf(this.spec),
     };
   }
 
