@@ -92,32 +92,27 @@ await writeFile(
   `[finance]\naws_access_key_id = ${KEYS.accessKeyId}\naws_secret_access_key = ${KEYS.secretAccessKey}\n`,
 );
 
+/** Writes a workspace of `source` alone, with no log, to `at`. */
+async function writeOneSource(at, source) {
+  await mkdir(dirname(at), { recursive: true });
+  await writeFile(
+    at,
+    writeDocument({
+      manifest: newManifest(),
+      sources: [{ rows: 0, cols: 0, state: { active: { row: 0, col: 0 } }, ...source }],
+      active: source.id,
+      log: [],
+      extra: new Map(),
+      at,
+    }),
+  );
+}
+
 // A workspace a colleague sent: one source, in a bucket this run has no
 // connection to. It is in its own folder, since every .uno directly in the
 // scratch folder is taken as one this run saved.
 const sent = join(scratch, "sent", "gone.uno");
-await mkdir(dirname(sent), { recursive: true });
-await writeFile(
-  sent,
-  writeDocument({
-    manifest: newManifest(),
-    sources: [
-      {
-        id: "gone",
-        name: "gone.csv",
-        path: GONE,
-        bytes: 0,
-        rows: 0,
-        cols: 0,
-        state: { active: { row: 0, col: 0 } },
-      },
-    ],
-    active: "gone",
-    log: [],
-    extra: new Map(),
-    at: sent,
-  }),
-);
+await writeOneSource(sent, { id: "gone", name: "gone.csv", path: GONE, bytes: 0 });
 
 // A JSON Lines file whose last events hold a key the first ones lack, and a
 // workspace that says it was read as JSON Lines, which is how such a file
