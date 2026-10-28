@@ -93,7 +93,8 @@ export type ReadSpec =
  * readOf returns how a .uno source's rows were read when its log was made. A
  * source that names no kind is delimited text, in every format, so no log
  * moves under a detector that would read its file another way. JSON Lines
- * starts from the columns it pinned, so each key finds its column again.
+ * and Parquet start from the columns they pinned, so each key finds its
+ * column again.
  */
 export function readOf(
   src: Pick<Held, 'kind' | 'header' | 'columns'>,
@@ -103,6 +104,8 @@ export function readOf(
       return { kind: 'delimited', header: src.header ?? 'first' };
     case 'jsonl':
       return { kind: 'jsonl', columns: (src.columns ?? []).map(keyedOf) };
+    case 'parquet':
+      return { kind: 'parquet', columns: (src.columns ?? []).map(keyedOf) };
     default:
       return unreachable(src.kind);
   }
