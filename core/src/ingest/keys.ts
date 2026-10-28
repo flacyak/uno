@@ -9,7 +9,7 @@
  * finds its column again wherever it first turns up.
  */
 
-import { suffixed } from './format.ts';
+import { suffixed } from '@sheet';
 import { segmentsOf } from './json.ts';
 
 /**

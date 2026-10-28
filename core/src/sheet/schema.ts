@@ -422,12 +422,20 @@ export function namesBeside(
       seen.add(name);
       return name;
     }
-    let n = FIRST_SUFFIX;
-    while (taken.has(`${name}_${n}`)) n++;
-    const unique = `${name}_${n}`;
+    const unique = suffixed(name, taken);
     taken.add(unique);
     return unique;
   });
+}
+
+/**
+ * suffixed returns `name` with the lowest suffix, from _2, that makes a name
+ * `taken` does not hold.
+ */
+export function suffixed(name: string, taken: ReadonlySet<string>): string {
+  let n = FIRST_SUFFIX;
+  while (taken.has(`${name}_${n}`)) n++;
+  return `${name}_${n}`;
 }
 
 /**
