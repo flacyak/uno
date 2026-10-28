@@ -282,6 +282,40 @@ describe('a source read in row space is not written', () => {
       new Error('orders is partitioned and has no root to read its keys from'),
     );
   });
+
+  // '..' climbs out of a root, in a folder and in a bucket alike.
+  test.each([
+    [BESIDE, `${BESIDE}../../etc/orders.csv`],
+    [ROOT, `${ROOT}../returns/part-00000.parquet`],
+  ])('under %s with a part that climbs out through ..', (root, path) => {
+    const source: HeldParts = {
+      ...orders(),
+      root,
+      parts: [{ ...part('p'), path }],
+    };
+    expect(() => writeDocument(workspace([source]))).toThrow(
+      new Error(
+        `orders: p (part 1 of 1) is at ${path}, which is not under ${root}`,
+      ),
+    );
+  });
+
+  // In a bucket a backslash is part of a key, so orders\x.parquet sits beside
+  // the prefix orders/ and not under it.
+  test('with a key that reads as under its root only through a backslash', () => {
+    const root = 's3://lake/orders';
+    const path = 's3://lake/orders\\x.parquet';
+    const source: HeldParts = {
+      ...orders(),
+      root,
+      parts: [{ ...part('p'), path }],
+    };
+    expect(() => writeDocument(workspace([source]))).toThrow(
+      new Error(
+        `orders: p (part 1 of 1) is at ${path}, which is not under ${root}`,
+      ),
+    );
+  });
 });
 
 describe('a source read in row space reads back', () => {
@@ -318,6 +352,21 @@ describe('a source read in row space reads back', () => {
     expect(back!.parts![0]!.path).toBe(
       '/media/stick/q4/lake/orders/year=2024/month=11/part-00000.snappy.parquet',
     );
+  });
+
+  // S3 separates a key with '/' alone, so a backslash, a drive-like segment
+  // and a doubled slash are each part of a key under the root, and the part
+  // opens as the object it was saved as.
+  test('with each key under its bucket root as written', () => {
+    const keys = ['a\\b.parquet', 'c:/a.parquet', '/a.parquet'];
+    const source: HeldParts = {
+      ...orders(),
+      parts: keys.map((key) => part(key)),
+    };
+    const doc = workspace([source]);
+    const uno = writeDocument(doc);
+    expect(partsOf(manifestOf(uno)).map((p) => p['path'])).toEqual(keys);
+    expect(readContainer('books.uno', uno, AT).sources).toEqual(doc.sources);
   });
 
   // A part read on its own has no bytes before it to skip, whatever the
