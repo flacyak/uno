@@ -123,6 +123,7 @@ order of reads is the scenario's and not a race.
 | `index.test.ts`  | bytes and rows indexed per second, and bytes kept per row     |
 | `find.test.ts`   | what a find to the end of a file costs beside a bound column  |
 | `save.test.ts`   | what a second save of bytes already carried costs             |
+| `append.test.ts` | requests and bytes to append one file to a source of several  |
 
 Each file holds its numbers to a budget, which is what they are today, so a
 change that costs more fails.

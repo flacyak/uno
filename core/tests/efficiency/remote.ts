@@ -11,6 +11,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { Engine } from '@engine';
 import type { SourceHandle, Tuning } from '@engine';
+import { multiProvider } from '@store';
 import { diskProvider } from '@store/node';
 import { s3Provider } from '@store/s3';
 import { bytes, connect, openOne } from '@core-tests/engine/harness';
@@ -169,28 +170,39 @@ export interface Remote {
   close(): Promise<void>;
 }
 
+/** Served is objects in a stand-in bucket, an engine, and the Door between. */
+export type Served = Omit<Remote, 'open'>;
+
 /** remote serves `object` from the stand-in bucket to an engine tuned by `tuning`. */
 export async function remote(
   object: Uint8Array,
   tuning: Tuning,
 ): Promise<Remote> {
-  const b: Bucket = await bucket(
-    undefined,
-    HOME_REGION,
-    new Map([[KEY, object]]),
-  );
+  const s = await served(new Map([[KEY, object]]), tuning);
+  return {
+    ...s,
+    open: () =>
+      openOne(s.engine, { name: 'big.csv', path: `s3://${BUCKET}/${KEY}` }),
+  };
+}
+
+/** served serves `objects` as `remote` does, to an engine that reads several as one. */
+export async function served(
+  objects: Map<string, Uint8Array>,
+  tuning: Tuning,
+): Promise<Served> {
+  const b: Bucket = await bucket(undefined, HOME_REGION, objects);
   const door = new Door();
   const s3 = s3Provider({
     credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
     endpoint: b.endpoint,
     fetch: door.fetch,
   });
-  const { engine, done } = connect(tuning, [diskProvider(), s3]);
+  const single = [diskProvider(), s3];
+  const { engine, done } = connect(tuning, [...single, multiProvider(single)]);
   return {
     door,
     engine,
-    open: () =>
-      openOne(engine, { name: 'big.csv', path: `s3://${BUCKET}/${KEY}` }),
     async close() {
       door.release();
       await door.quiet();
