@@ -71,7 +71,7 @@ class Tokens {
 
   /** peek skips whitespace and returns the next character, '' at the end. */
   peek(): string {
-    while (BLANKS.has(this.line.charAt(this.at))) this.at++;
+    this.skip();
     return this.line.charAt(this.at);
   }
 
@@ -127,15 +127,27 @@ class Tokens {
   /** scalar reads a string, a number or a word and returns its cell. */
   private scalar(): string | undefined {
     if (this.peek() === '"') return this.string();
+    const literal = this.literal();
+    return literal === undefined ? undefined : (WORDS.get(literal) ?? literal);
+  }
+
+  /** literal reads a number or a word and returns it as written. */
+  private literal(): string | undefined {
+    this.skip();
     const from = this.at;
     if (this.match(NUMBER)) return this.line.slice(from, this.at);
-    for (const [word, cell] of WORDS) {
+    for (const word of WORDS.keys()) {
       if (this.line.startsWith(word, from)) {
         this.at += word.length;
-        return cell;
+        return word;
       }
     }
     return undefined;
+  }
+
+  /** skip advances past whitespace. */
+  private skip(): void {
+    while (BLANKS.has(this.line.charAt(this.at))) this.at++;
   }
 
   /** match advances past `pattern` when it matches here. */
