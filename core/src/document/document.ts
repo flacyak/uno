@@ -61,18 +61,27 @@ export const PARTS_VERSION = 6;
 export const READ_VERSION = 7;
 
 /**
+ * OneOf is a closed set of values a uno.json field may hold: the guard that
+ * checks a value, and every value, in the order a refusal lists them.
+ */
+export interface OneOf<T extends string> {
+  is: (v: string) => v is T;
+  known: readonly string[];
+}
+
+/** closed is the set of `members`' keys, which name every value of T. */
+function closed<T extends string>(members: Record<T, true>): OneOf<T> {
+  return {
+    is: (v): v is T => Object.hasOwn(members, v),
+    known: Object.keys(members),
+  };
+}
+
+/**
  * Every header mode, as uno.json spells it. A mode added to HeaderMode has
  * to be added here.
  */
-const HEADER_MODES: Record<HeaderMode, true> = { first: true, none: true };
-
-/** The header modes this build reads, in the order a refusal lists them. */
-export const KNOWN_HEADER_MODES: readonly string[] = Object.keys(HEADER_MODES);
-
-/** isHeaderMode is true when `v` is a header mode this build knows. */
-export function isHeaderMode(v: string): v is HeaderMode {
-  return Object.hasOwn(HEADER_MODES, v);
-}
+export const HEADER_MODES = closed<HeaderMode>({ first: true, none: true });
 
 /**
  * How a source's rows sit in its bytes when they are not delimited text, as

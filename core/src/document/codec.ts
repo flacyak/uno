@@ -17,6 +17,7 @@ import {
 import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
+import type { HeaderMode } from '@store';
 import type {
   Document,
   FileSource,
@@ -26,6 +27,7 @@ import type {
   HeldParts,
   Logged,
   Manifest,
+  OneOf,
   PartsSource,
   SavedColumn,
   Source,
@@ -37,7 +39,7 @@ import {
   FORMAT_VERSION,
   FORMULA_VERSION,
   GENERATOR,
-  KNOWN_HEADER_MODES,
+  HEADER_MODES,
   LOG_ENTRY,
   MANIFEST_ENTRY,
   PARTS_VERSION,
@@ -46,7 +48,6 @@ import {
   RULE_VERSION,
   SOURCES_VERSION,
   STATE_ENTRY,
-  isHeaderMode,
   logOf,
   resolvedPath,
   sourceEntry,
@@ -742,6 +743,34 @@ function optional<T>(
 }
 
 /**
+ * oneOf reads a field that a record may leave out, whose value is one of
+ * `set`: undefined when absent, the value when `set` has it, and otherwise a
+ * refusal naming the value and listing what this build knows.
+ */
+function oneOf<T extends string>(
+  o: Record<string, unknown>,
+  key: string,
+  set: OneOf<T>,
+  where: string,
+): T | undefined {
+  const v = o[key];
+  if (v === undefined) return undefined;
+  if (typeof v === 'string' && set.is(v)) return v;
+  throw new Error(
+    `${where}: this build does not know ${key} ${JSON.stringify(v)} · it reads ${quoted(set.known)}`,
+  );
+}
+
+/**
+ * quoted lists values as a refusal does: each in quotes, separated by
+ * commas, or "none" when there are none.
+ */
+function quoted(values: readonly string[]): string {
+  if (values.length === 0) return 'none';
+  return values.map((v) => JSON.stringify(v)).join(', ');
+}
+
+/**
  * parseManifest reads either manifest layout into one shape with a list of
  * sources. Before format 4 a manifest held one `source` and the grid's shape
  * under `sheet`. That source gets the id a new workspace would give it.
@@ -855,22 +884,20 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
     parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw),
   );
 
-  const known = KNOWN_HEADER_MODES.map((mode) => JSON.stringify(mode)).join(
-    ', ',
-  );
-  const header = s['header'];
-  if (header === undefined) {
-    throw new Error(
-      `${source} has parts and no header · it has to say whether they have a header row, as one of ${known}`,
-    );
-  }
-  if (typeof header !== 'string' || !isHeaderMode(header)) {
-    throw new Error(
-      `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
-    );
-  }
+  const header = headerOf(source, s);
   const fileColumn = optional(s, 'fileColumn', FLAG, source);
   return { ...base, parts, header, fileColumn: fileColumn ?? false };
+}
+
+/** headerOf reads the header mode a parts source of delimited text needs. */
+function headerOf(source: string, s: Record<string, unknown>): HeaderMode {
+  const header = oneOf(s, 'header', HEADER_MODES, source);
+  if (header === undefined) {
+    throw new Error(
+      `${source} has parts and no header · it has to say whether they have a header row, as one of ${quoted(HEADER_MODES.known)}`,
+    );
+  }
+  return header;
 }
 
 /**
