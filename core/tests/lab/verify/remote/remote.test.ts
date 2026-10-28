@@ -119,7 +119,7 @@ async function bandOnce(
 }
 
 describe('a band jump today', () => {
-  test('reads its blocks one after another, and read-ahead guesses the wrong lengths', async () => {
+  test('reads its blocks one after another, and nothing ahead of them', async () => {
     const index = await wholeIndex(OBJECT, TUNING);
     const rows = index.rows();
     const jumps = jumpRows(rows, 20);
@@ -179,7 +179,10 @@ describe('a band jump today', () => {
       }),
     );
     expect(serialAll).toBe(true);
-    expect(unusedTotal).toBeGreaterThan(0);
+    // Blocks differ in length, so read-ahead never takes them for a run.
+    expect(unusedTotal).toBe(0);
+    expect(lengthMismatches).toBe(0);
+    expect(rawTotal).toBe(blocksRead);
   });
 
   test('blocks of 1,024 rows differ in byte length in this fixture', async () => {
