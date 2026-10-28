@@ -1,0 +1,10 @@
+{"rows":6,"groups":1,"codecs":["uncompressed"],"paged":false}
+["id","/id"]
+["phoneNumbers.phone","/phoneNumbers/phone"]
+
+["1",""]
+["2",""]
+["3","[]"]
+["4","[{\"number\":5555555555,\"kind\":null}]"]
+["5","[{\"number\":1111111111,\"kind\":\"home\"}]"]
+["6","[{\"number\":1111111111,\"kind\":\"home\"},{\"number\":2222222222,\"kind\":null},{\"number\":3333333333,\"kind\":\"mobile\"}]"]
