@@ -14,6 +14,7 @@ import { baseOf } from "@document";
 import { saidOf } from "@engine";
 import type { Link, PartInfo, Peeked, Said, SourceRef } from "@engine";
 import { compareStrings } from "@go";
+import { readable } from "@ingest";
 import type { Connection as Saved } from "@library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@store";
 import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "@store/s3";
@@ -230,12 +231,6 @@ export interface Button {
   /** The tab to re-point, set while re-pointing. */
   to?: string;
 }
-
-/**
- * The file extensions a person can pick. Other files are listed only.
- * Grows as ingest adds formats.
- */
-export const READS: readonly string[] = [".csv", ".tsv"];
 
 /** Case-insensitive substring match. An empty query matches everything. */
 function matches(name: string, query: string): boolean {
@@ -756,11 +751,9 @@ export class Sources {
     return this.picks.has(entry.path);
   }
 
-  /** Whether an entry can be selected: a file with an extension in READS. */
+  /** Whether an entry can be selected: a file whose name core reads. Other files are listed only. */
   selectable(entry: Entry): boolean {
-    if (entry.folder) return false;
-    const dot = entry.name.lastIndexOf(".");
-    return dot > 0 && READS.includes(entry.name.slice(dot).toLowerCase());
+    return !entry.folder && readable(entry.name);
   }
 
   /**
