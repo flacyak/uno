@@ -579,6 +579,14 @@ export class View {
       if (was !== undefined) e.was = was;
     }
 
+    // A widen moves the supplied columns right, so an edit aimed at another
+    // count of columns may name one that moved. The count is compared in the
+    // turn the edit is folded.
+    const width = schema.headers.length;
+    const moved = req.width !== undefined && req.width !== width;
+    if (moved && schema.supplied.length > 0) {
+      throw new Refusal({ t: 'columns-moved', name: this.name });
+    }
     schema.record(e);
     this.undone = [];
     return this.changed(e);
