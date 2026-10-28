@@ -6,7 +6,7 @@
  * the Schema and a new generation number. Every stored row stays as read.
  */
 
-import type { HeldFile, HeldPart, HeldParts } from '@document';
+import type { Chart, HeldFile, HeldPart, HeldParts } from '@document';
 import { trimSpace } from '@go';
 import { headerOf, labelOf, openFormat } from '@ingest';
 import type { Format } from '@ingest';
@@ -52,6 +52,7 @@ import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
+import { Tallies } from './tally.ts';
 import {
   BYTES,
   INDEX,
@@ -76,7 +77,7 @@ export const FILE_COLUMN = '_file';
 type Waiter = () => boolean;
 
 /** A message a view posts about itself, unasked. */
-type Told = Extract<Reply, { t: 'progress' | 'offer' | 'error' }>;
+type Told = Extract<Reply, { t: 'progress' | 'offer' | 'error' | 'tally' }>;
 
 /** Run is a run of a block's rows that came from one part. */
 interface Run {
@@ -187,6 +188,10 @@ export class View {
   private survey: AbortController | undefined;
   /** The find running now. A newer find aborts it. */
   private finding: AbortController | undefined;
+  /** The charts over the view, each folded over the blocks read so far. */
+  private readonly tallies = new Tallies();
+  /** The pass folding blocks for the charts, while one lacks any. */
+  private tallying: AbortController | undefined;
   /** Edits undo took back, newest last, for redo. A new edit empties it. */
   private undone: Edit[] = [];
   private queue: Promise<unknown> = Promise.resolve();
@@ -195,8 +200,9 @@ export class View {
   private readonly abort = new AbortController();
   /** The close under way or done. A later close returns it. */
   private closing: Promise<void> | undefined;
-  /** The latest of each kind told before announce. Undefined from then on. */
-  private held: Map<Told['t'], Told> | undefined = new Map();
+  /** The latest of each kind told before announce, and of each chart's
+   * tally. Undefined from then on. */
+  private held: Map<string, Told> | undefined = new Map();
 
   /** How long the open had taken when the index completed, final from then on. */
   private took: number | undefined;
@@ -712,6 +718,73 @@ export class View {
     });
   }
 
+  // ------------------------------------------------------------ tallying
+
+  /** chart tallies `chart` over the view. */
+  chart(chart: Chart): void {
+    this.tallies.attach(chart, this.schema.headers);
+    this.tally();
+  }
+
+  /** unchart stops tallying the chart with `id`. */
+  unchart(id: string): void {
+    this.tallies.detach(id);
+    this.tally();
+  }
+
+  /**
+   * tally starts the pass over the blocks the charts lack again, from the
+   * first of them, once the view is announced, so an open costs nothing new.
+   */
+  private tally(): void {
+    this.tallying?.abort();
+    this.tallying = undefined;
+    if (this.held !== undefined) return;
+    const first = this.tallies.from();
+    if (first === undefined) return;
+    const abort = new AbortController();
+    this.tallying = abort;
+    this.tallyBlocks(first, abort.signal).catch((err: unknown) => {
+      if (!abort.signal.aborted)
+        this.tell({ t: 'error', source: this.id, said: saidOf(err) });
+    });
+  }
+
+  /**
+   * tallyBlocks folds each block from `first`, the first row a chart lacks,
+   * as the index reaches it, and posts the charts' tallies at its end.
+   */
+  private async tallyBlocks(first: number, signal: AbortSignal): Promise<void> {
+    const index = this.index;
+    let slice = Date.now();
+    for (let row = first; ;) {
+      await this.until(() => index.complete || index.readable() > row);
+      if (signal.aborted) return;
+      if (row >= index.readable()) break;
+
+      const block = index.blockOf(row);
+      const [from, end] = index.rowsOf(block);
+      const records = await this.pages.records(block, false);
+      const files = await this.files(from, records.length);
+      if (signal.aborted) return;
+      this.tallies.fold(block, from, end, (col) =>
+        this.shownIn(col, from, records, files),
+      );
+      row = end;
+      if (Date.now() - slice >= SLICE_MS) slice = await turn();
+    }
+    this.postTallies(true);
+  }
+
+  /** postTallies posts each pending chart's tally, taken at the generation now. */
+  private postTallies(complete: boolean): void {
+    const generation = this.generation;
+    const total = this.index.rows();
+    for (const [chart, tally] of this.tallies.read(total, complete)) {
+      this.tell({ t: 'tally', source: this.id, chart, generation, tally });
+    }
+  }
+
   // ------------------------------------------------------------ finding
 
   /**
@@ -958,7 +1031,9 @@ export class View {
 
   /**
    * announce posts what was held, with the progress now in place of any held,
-   * and from then on posts what the view is told. A second call does nothing.
+   * and from then on posts what the view is told. The charts' pass starts
+   * here, so a view that is never announced reads nothing for them. A second
+   * call does nothing.
    */
   announce(): void {
     const held = this.held;
@@ -967,6 +1042,7 @@ export class View {
     const progress = this.progress();
     held.set('progress', { t: 'progress', source: this.id, progress });
     for (const msg of held.values()) this.tell(msg);
+    this.tally();
   }
 
   /**
@@ -976,8 +1052,9 @@ export class View {
    */
   private tell(msg: Told): void {
     if (this.abort.signal.aborted) return;
+    const key = msg.t === 'tally' ? `tally ${msg.chart}` : msg.t;
     if (this.held === undefined) this.port.post(msg);
-    else this.held.set(msg.t, msg);
+    else this.held.set(key, msg);
   }
 
   /** close stops the passes and closes the source. A second close returns
@@ -991,6 +1068,7 @@ export class View {
     this.abort.abort();
     this.survey?.abort();
     this.finding?.abort();
+    this.tallying?.abort();
     this.fail(new Refusal({ t: 'file-closed' }));
     await this.source.close();
   }

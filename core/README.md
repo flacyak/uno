@@ -50,7 +50,10 @@ The engine also owns the edit log. `sheet` folds the log into a `Schema`, and
 new generation number rather than a rewrite. A `Sheet` is the same schema over
 rows held in memory, which is how the tests in `tests/sheet` pin the rules a
 file the engine never loads follows. The recogniser's `Survey` counts over one
-block of rows at a time, so its offer can grow while the engine reads.
+block of rows at a time, so its offer can grow while the engine reads. A
+`View` tallies the charts over it the same way, behind the index, through the
+folds in `tally`, and posts each chart's tally once a second until the file is
+read and once more at the end.
 
 Indexing is the first pass. Validation, deduplication, splitting and format
 conversion are meant to be the next ones, each a loop over a `PassContext`
