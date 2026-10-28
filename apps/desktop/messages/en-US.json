@@ -417,6 +417,9 @@
   "chars_plus_signs": "plus signs",
   "chars_brackets": "brackets",
   "chars_quotes": "quotes",
+  "kind_delimited": "delimited text",
+  "kind_jsonl": "JSON Lines",
+  "kind_parquet": "Parquet",
   "changed_version_same_size": "{name} is not the version the workspace was saved against · it is the same size",
   "changed_version_sizes": "{name} is not the version the workspace was saved against · it is {now} now and was {was}",
   "changed_size": "{name} is {now} now and was {was} when the workspace was saved",
@@ -496,6 +499,7 @@
       }
     }
   ],
+  "refused_relink_other_kind": "{name} was read as {was}, and {file} is {now}",
   "refused_log_lost_edit": "the log lost track of an edit to {source}",
   "refused_bucket_unconnected": "{container} reads s3://{bucket}/…, which no connection covers · connect {bucket} to read it",
   "refused_joins_unknown_for_column": "{name} is read as one by something that does not say how its files join, so it cannot show which file each row came from",

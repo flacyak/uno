@@ -87,6 +87,29 @@ describe('english', () => {
       english({ t: 'not-read', name: 'sales-q3.csv.gz', what: 'gzip' }),
     ).toBe('sales-q3.csv.gz: gzip is not supported yet');
   });
+
+  test('names how a source was read and what the file it was pointed at is', () => {
+    expect(
+      english({
+        t: 'relink-other-kind',
+        name: 'sales-q3.csv',
+        file: 'sales-q3.parquet',
+        was: 'delimited',
+        now: 'parquet',
+      }),
+    ).toBe(
+      'sales-q3.csv was read as delimited text, and sales-q3.parquet is Parquet',
+    );
+    expect(
+      english({
+        t: 'relink-other-kind',
+        name: 'events.jsonl',
+        file: 'q3.csv',
+        was: 'jsonl',
+        now: 'delimited',
+      }),
+    ).toBe('events.jsonl was read as JSON Lines, and q3.csv is delimited text');
+  });
 });
 
 describe('a kind from an engine newer than this build', () => {

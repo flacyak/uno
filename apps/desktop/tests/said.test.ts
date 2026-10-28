@@ -68,6 +68,13 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "point-one-at-several": { t: "point-one-at-several", file: "parts", count: 3, name: "ads.csv" },
   "point-several-at-one": { t: "point-several-at-one", name: "sales", count: 3, file: "q3.csv" },
   "point-several-at-other": { t: "point-several-at-other", name: "sales", count: 3, given: 2 },
+  "relink-other-kind": {
+    t: "relink-other-kind",
+    name: "sales-q3.csv",
+    file: "sales-q3.parquet",
+    was: "delimited",
+    now: "parquet",
+  },
   "log-lost-edit": { t: "log-lost-edit", source: "ads" },
   "bucket-unconnected": { t: "bucket-unconnected", container: "q4.uno", bucket: "acme-exports" },
   "joins-unknown-for-column": { t: "joins-unknown-for-column", name: "sales" },
@@ -131,6 +138,13 @@ test("the other shapes of a kind are the engine's English too", () => {
       ],
     },
     { t: "version-changed", name: "ads.csv" },
+    {
+      t: "relink-other-kind",
+      name: "events.jsonl",
+      file: "q3.csv",
+      was: "jsonl",
+      now: "delimited",
+    },
     { t: "carried-too-large", name: "ads.csv", bytes: 2 * KB * MB, limit: 256 * MB },
   ];
   for (const shape of shapes) expect(say(shape), JSON.stringify(shape)).toBe(english(shape));
