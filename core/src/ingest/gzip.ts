@@ -21,8 +21,12 @@ import {
 
 /** Decoded bytes between checkpoints, before any thinning. */
 export const CHECKPOINT_SPAN = 16 << 20;
+/** Window bytes a file read alone may hold. */
+export const CHECKPOINT_BUDGET = 32 << 20;
 /** How far back a deflate reference reaches: the bytes a window holds. */
 export const WINDOW_BYTES = 32 << 10;
+/** Decoded spans a file read alone keeps for reads behind its cursor. */
+export const SPANS_KEPT = 1;
 
 /** zlib's window bits for a 32 KB window. */
 const MAX_WINDOW_BITS = 15;
@@ -66,6 +70,28 @@ export interface Checkpoint {
   readonly decoded: number;
   /** The decoded bytes before it in its member, up to WINDOW_BYTES. */
   readonly window: Uint8Array;
+}
+
+/** InflaterBudget is the memory an inflater may keep. */
+export interface InflaterBudget {
+  /**
+   * Window bytes, a whole window for each checkpoint, a member start's too.
+   * Past it every other checkpoint goes and the span doubles.
+   */
+  readonly windows: number;
+  /** Decoded spans kept for reads behind the cursor. */
+  readonly spans: number;
+}
+
+/** ALONE is the budget of a file read alone. */
+export const ALONE: InflaterBudget = {
+  windows: CHECKPOINT_BUDGET,
+  spans: SPANS_KEPT,
+};
+
+/** partBudget is the budget of each of `openParts` parts read as one. */
+export function partBudget(openParts: number): InflaterBudget {
+  return { windows: Math.floor(CHECKPOINT_BUDGET / openParts), spans: 0 };
 }
 
 /**
@@ -246,19 +272,32 @@ export function inflateHead(
  * block boundary, a member start, then at each one at least `span` past the
  * last checkpoint.
  */
-export function gzipInflater(span: number = CHECKPOINT_SPAN): Inflater {
-  return new GzipInflater(span);
+export function gzipInflater(
+  budget: InflaterBudget,
+  span: number = CHECKPOINT_SPAN,
+): Inflater {
+  return new GzipInflater(budget, span);
 }
 
-/** GzipInflater is one pass through a gzip file. */
+/**
+ * GzipInflater holds its checkpoints under the budget: when one more would
+ * pass it, every other checkpoint goes and the span doubles.
+ */
 class GzipInflater implements Inflater {
   private readonly members = new Members();
-  private readonly kept: Checkpoint[] = [];
-  /** The decoded bytes between checkpoints. */
-  private readonly span: number;
+  private kept: Checkpoint[] = [];
+  /**
+   * The checkpoints the budget holds, a whole window for each, and at least
+   * the first, which a read before any other resumes from.
+   */
+  private readonly most: number;
 
-  constructor(span: number) {
+  /** The decoded bytes between checkpoints, which thinning doubles. */
+  private span: number;
+
+  constructor(budget: InflaterBudget, span: number) {
     this.span = span;
+    this.most = Math.max(1, Math.floor(budget.windows / WINDOW_BYTES));
   }
 
   push(
@@ -291,5 +330,12 @@ class GzipInflater implements Inflater {
     const last = this.kept.at(-1);
     if (last !== undefined && decoded - last.decoded < this.span) return;
     this.kept.push({ ...start, decoded, window: this.members.window() });
+    while (this.kept.length > this.most) this.thin();
+  }
+
+  /** Drops every other checkpoint after the first, and doubles the span. */
+  private thin(): void {
+    this.kept = this.kept.filter((_, i) => i % 2 === 0);
+    this.span *= 2;
   }
 }
