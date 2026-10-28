@@ -41,6 +41,8 @@
       "@sheet/*": ["./core/src/sheet/*.ts"],
       "@store": ["./core/src/store/index.ts"],
       "@store/*": ["./core/src/store/*.ts"],
+      "@tally": ["./core/src/tally/index.ts"],
+      "@tally/*": ["./core/src/tally/*.ts"],
       "@core-tests/*": ["./core/tests/*.ts"],
       "@desktop-engine/*": ["./apps/desktop/src/engine/*.ts"],
       "@main/*": ["./apps/desktop/src/main/*.ts"],
