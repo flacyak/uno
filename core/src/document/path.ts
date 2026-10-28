@@ -4,7 +4,9 @@
  * A source under the workspace's folder is stored relative to that folder.
  * Any other source is stored absolute. A relative path always descends from
  * the folder, so `against` is a plain concatenation and every path passes
- * through as written.
+ * through as written. A dataset's parts are all under its root, so each is
+ * stored relative to the root and joined back onto it, whatever it looks
+ * like.
  *
  * This runs in the browser too, so it uses string operations only.
  */
@@ -61,6 +63,23 @@ export function relativeTo(file: string, dir: string): string {
 export function against(stored: string, dir: string): string {
   if (stored === '' || dir === '' || isAbsolute(stored)) return stored;
   return joined(dir, stored);
+}
+
+/**
+ * underRoot returns where `file` sits under a dataset's `root`, as uno.json
+ * stores a part's path, or "" when it is not under the root. Under a bucket
+ * prefix such as s3://lake/orders/ it is the rest of the key, as written.
+ */
+export function underRoot(file: string, root: string): string {
+  return descent(file, root);
+}
+
+/**
+ * onRoot resolves a part's path stored under `root`. Every part is under its
+ * root, so the path is joined onto the root however it starts.
+ */
+export function onRoot(stored: string, root: string): string {
+  return joined(root, stored);
 }
 
 /**

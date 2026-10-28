@@ -11,10 +11,12 @@ import {
   baseOf,
   dirOf,
   isAbsolute,
+  onRoot,
   relativeTo,
   resolvedPath,
   samePath,
   storedPath,
+  underRoot,
 } from '@document';
 
 test("a path under the workspace's folder is written down relative to it", () => {
@@ -129,6 +131,37 @@ test('a folder written with its separator at the end holds the paths under it', 
   expect(against('year=2024/part-0.parquet', 's3://lake/orders/')).toBe(
     's3://lake/orders/year=2024/part-0.parquet',
   );
+});
+
+// S3 separates a key with '/' alone. A backslash, a drive-like segment and
+// a doubled slash are each part of the key, and come back as they went in.
+test('a part under a bucket root is stored as the rest of its key, as written', () => {
+  const root = 's3://lake/orders/';
+  const keys = ['a\\b.parquet', 'c:/a.parquet', '/a.parquet', 'x/s3://y'];
+  for (const key of keys) {
+    expect(underRoot(root + key, root)).toBe(key);
+    expect(onRoot(key, root)).toBe(root + key);
+  }
+  expect(underRoot('s3://lake/orders\\x.parquet', 's3://lake/orders')).toBe('');
+  expect(underRoot('s3://lake/orders/../x.parquet', root)).toBe('');
+  expect(onRoot('a.parquet', 's3://lake/orders')).toBe(
+    's3://lake/orders/a.parquet',
+  );
+});
+
+// A folder on disk reads either separator, as a path written on Windows does.
+test('a part under a folder root is stored with forward slashes', () => {
+  expect(underRoot('C:\\lake\\year=2024\\a.csv', 'C:\\lake\\')).toBe(
+    'year=2024/a.csv',
+  );
+  expect(onRoot('year=2024/a.csv', 'C:\\lake\\')).toBe(
+    'C:\\lake\\year=2024/a.csv',
+  );
+  expect(underRoot('/data/lake/c:/a.parquet', '/data/lake')).toBe(
+    'c:/a.parquet',
+  );
+  expect(onRoot('c:/a.parquet', '/data/lake')).toBe('/data/lake/c:/a.parquet');
+  expect(underRoot('/data/lake/../../etc/x.csv', '/data/lake/')).toBe('');
 });
 
 // '..' climbs out of a folder, on disk and in an S3 URL alike, and '.' names
