@@ -74,6 +74,8 @@ export interface ByteSource {
    * ETag in its quotes. Undefined for a file on disk.
    */
   readonly version?: string;
+  /** When a file on disk was last written, in whole ms since 1970. */
+  readonly modified?: number;
   /** Up to `length` bytes from `offset`. Fewer only at the end of the file. */
   read(offset: number, length: number): Promise<Uint8Array>;
   close(): Promise<void>;
