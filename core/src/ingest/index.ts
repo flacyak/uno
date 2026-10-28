@@ -47,6 +47,8 @@ export {
   readable,
 } from './names.ts';
 export type { NameParts, StoredCompression } from './names.ts';
+export { delimitedRecords } from './records.ts';
+export type { Column, RecordFormat } from './records.ts';
 export { RecordScanner, bomLength } from './scan.ts';
 export { sniffDelimiter, sniffEncoding } from './sniff.ts';
 export type { Encoding } from './sniff.ts';
