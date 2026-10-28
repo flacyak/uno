@@ -134,6 +134,26 @@ test('a MAP is one column, and a struct inside a LIST stays whole', () => {
   ]);
 });
 
+test('a VARIANT is one column, as hyparquet decodes it into one value', () => {
+  const leaves = leavesOf([
+    { name: 'root', num_children: 2 },
+    { name: 'id', type: 'INT32' },
+    {
+      name: 'v',
+      repetition_type: 'OPTIONAL',
+      num_children: 3,
+      logical_type: { type: 'VARIANT' },
+    },
+    { name: 'metadata', type: 'BYTE_ARRAY', repetition_type: 'REQUIRED' },
+    { name: 'value', type: 'BYTE_ARRAY', repetition_type: 'OPTIONAL' },
+    { name: 'typed_value', type: 'INT64', repetition_type: 'OPTIONAL' },
+  ]);
+  expect(leaves.map((leaf) => [leaf.column, leaf.shape])).toEqual([
+    [{ name: 'id', key: '/id' }, INT32],
+    [{ name: 'v', key: '/v' }, { t: 'variant' }],
+  ]);
+});
+
 test('an annotation says what the stored value means', () => {
   const cases: Array<[SchemaElement, Logical | undefined]> = [
     [

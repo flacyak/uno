@@ -45,14 +45,16 @@ export interface Primitive {
 }
 
 /**
- * Shape is the type of a column's values: a primitive, or a list, map or
- * struct of further shapes, which is written as JSON.
+ * Shape is the type of a column's values: a primitive, a list, map or
+ * struct of further shapes, which is written as JSON, or a VARIANT, whose
+ * values hyparquet decodes and which carry no shape of their own.
  */
 export type Shape =
   | Primitive
   | { readonly t: 'list'; readonly of: Shape }
   | { readonly t: 'map'; readonly keys: Shape; readonly values: Shape }
-  | { readonly t: 'struct'; readonly fields: ReadonlyMap<string, Shape> };
+  | { readonly t: 'struct'; readonly fields: ReadonlyMap<string, Shape> }
+  | { readonly t: 'variant' };
 
 /**
  * Column is a leaf as a sheet shows it: a name unique in its file, and the
@@ -266,8 +268,9 @@ const CONVERTED: ReadonlyMap<Converted, Logical> = new Map<Converted, Logical>([
 
 /**
  * columnsOf reads a footer's schema as the file's columns, in schema order.
- * A struct's fields flatten to dotted names, and a LIST, a MAP or a repeated
- * field is one column. A name already taken gets headerOf's suffix.
+ * A struct's fields flatten to dotted names, and a LIST, a MAP, a VARIANT or
+ * a repeated field is one column. A name already taken gets headerOf's
+ * suffix.
  */
 export function columnsOf(schema: readonly Element[]): Leaf[] {
   const found: Array<Omit<Leaf, 'column'>> = [];
@@ -317,8 +320,14 @@ function isStruct(node: Tree): boolean {
     node.children.length > 0 &&
     node.element.repetition_type !== 'REPEATED' &&
     !isList(node) &&
-    !isMap(node)
+    !isMap(node) &&
+    !isVariant(node)
   );
+}
+
+/** Whether a group is a VARIANT, which hyparquet decodes into one value. */
+function isVariant({ element }: Tree): boolean {
+  return element.logical_type?.type === 'VARIANT';
 }
 
 /** Whether hyparquet reads a group as a LIST, by its own test. */
@@ -358,6 +367,7 @@ function valueShapeOf(node: Tree): Shape {
   const { element, children } = node;
   const [group] = children;
   if (group === undefined) return primitiveOf(element);
+  if (isVariant(node)) return { t: 'variant' };
   if (isMap(node)) {
     const [key, value] = group.children;
     return { t: 'map', keys: shapeOf(key!), values: shapeOf(value!) };
@@ -420,8 +430,8 @@ function logicalOf(element: Element): Logical | undefined {
 
 /**
  * textOf writes a leaf's value as the text its writer meant. A number is
- * exact, at its own precision, a list, a map or a struct is compact JSON,
- * and a null is an empty cell.
+ * exact, at its own precision, a list, a map, a struct or a VARIANT's
+ * object is compact JSON, and a null is an empty cell.
  */
 export function textOf({ shape }: Leaf, value: ParquetValue): string {
   if (!isScalar(value)) return jsonOf(shape, value);
