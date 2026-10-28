@@ -34,6 +34,9 @@ export type Unread =
   | 'LZ4'
   | 'zip';
 
+/** A table format, whose log says which of its files hold live rows. */
+export type TableFormat = 'Delta Lake' | 'Iceberg' | 'Hudi';
+
 /** The punctuation a description can name, as plurals. */
 export type CharName =
   | 'commas'
