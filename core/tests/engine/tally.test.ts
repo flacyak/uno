@@ -2,7 +2,8 @@
  * @fileoverview The engine tallies a source's charts behind the index: each
  * chart hears its fold of every row as the pure fold reads it, and a partial
  * one a second while the source is still being read, and a chart reads the
- * columns its plot names, found by header where the file moved them.
+ * columns its plot names, found by header where the file moved them, or
+ * hears which one the file has not.
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -225,6 +226,35 @@ test('a chart hears a partial tally after TALLY_MS while its source is still bei
     expect(partial.coverage.complete).toBe(false);
     expect(partial.coverage.rows).toBeGreaterThan(0);
     expect(partial.coverage.rows).toBeLessThan(ROWS);
+  } finally {
+    done();
+  }
+});
+
+test("a chart's column is found by its header where the file moved it, and each chart over a column the file has not hears which", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const region = { col: REVENUE, header: 'region' };
+    const moved: Chart = { ...REGION_ROWS, plot: { t: 'bars', by: region } };
+    const margin = { col: REGION, header: 'margin' };
+    const gone: Chart = { ...moved, id: 'c2', plot: { t: 'pie', by: margin } };
+    const cost = { col: UNITS, header: 'cost' };
+    const x = column(UNITS);
+    const also: Chart = {
+      ...moved,
+      id: 'c3',
+      plot: { t: 'scatter', x, y: cost },
+    };
+    const charts = [moved, gone, also];
+    const heard = new Heard(await opened(engine, charts));
+    const [one, two, three] = charts.map((chart) => heard.of(chart.id));
+    expect(await one).toStrictEqual(pure(REGION_ROWS.plot));
+    const unread = (header: string) => ({
+      t: 'unread',
+      said: { t: 'chart-column-gone', header, name: NAME },
+    });
+    expect(await two).toStrictEqual(unread('margin'));
+    expect(await three).toStrictEqual(unread('cost'));
   } finally {
     done();
   }

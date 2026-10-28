@@ -457,6 +457,7 @@
     }
   ],
   "charts_newer": "los gráficos de este espacio de trabajo están en una forma que esta versión de uno no puede leer · se conservan tal como estaban, y aquí no se pueden cambiar",
+  "chart_column_gone": "{name} no tiene ninguna columna llamada {header}",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",
