@@ -5,6 +5,7 @@
  * is refused by name, and one whose footer is damaged as parquet-broken.
  */
 
+import { parquetMetadata } from 'hyparquet/src/index.js';
 import {
   ByteWriter,
   ParquetWriter,
@@ -138,6 +139,33 @@ test('a file longer than the tail with no magic at its head is refused as parque
     t: 'parquet-broken',
     name: 'wide.parquet',
   });
+});
+
+test('rows say the most uncompressed bytes per row of their row groups, and whether they are paged', async () => {
+  const table = await opened('sales-q3.snappy.parquet', SALES);
+  const { row_groups: groups } = parquetMetadata(SALES.slice().buffer);
+  const perRow = groups.map(
+    (group) =>
+      group.columns.reduce(
+        (sum, chunk) => sum + Number(chunk.meta_data?.total_uncompressed_size),
+        0,
+      ) / Number(group.num_rows),
+  );
+  const group = SALES_GROUP_ROWS;
+  expect(table.bytesPerRow(0, 1)).toBe(perRow[0]);
+  expect(table.bytesPerRow(group, group + 1)).toBe(perRow[1]);
+  expect(table.bytesPerRow(group - 1, group + 1)).toBe(
+    Math.max(perRow[0]!, perRow[1]!),
+  );
+  expect(table.bytesPerRow(0, ROWS)).toBe(Math.max(...perRow));
+  expect(table.bytesPerRow(ROWS, ROWS + 1)).toBe(0);
+  expect(table.paged(0, ROWS)).toBe(false);
+
+  const paged = await opened(
+    'int32_with_null_pages.parquet',
+    testdata('parquet/int32_with_null_pages.parquet'),
+  );
+  expect(paged.paged(0, paged.rows)).toBe(true);
 });
 
 test('a truncated or damaged footer is refused as parquet-broken', async () => {

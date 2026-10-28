@@ -50,6 +50,24 @@ export interface Table {
   readonly groups: number;
   /** The codecs of the file's pages, in the order CODECS names them. */
   readonly codecs: readonly ParquetCodec[];
+  /**
+   * The most uncompressed bytes per row among the row groups under rows
+   * [start, end), or 0 where there are none. It sizes a decode window.
+   */
+  bytesPerRow(start: number, end: number): number;
+  /** Whether every row group under rows [start, end) has offset indexes. */
+  paged(start: number, end: number): boolean;
+}
+
+/** What the footer says of one row group. */
+interface Group {
+  /** The row of the file the group starts at. */
+  readonly start: number;
+  readonly rows: number;
+  /** The bytes its column chunks take uncompressed. */
+  readonly bytes: number;
+  /** Whether each of its column chunks has an offset index. */
+  readonly paged: boolean;
 }
 
 /**
@@ -170,6 +188,7 @@ class ParquetTable implements Table {
   readonly rows: number;
   readonly groups: number;
   readonly codecs: readonly ParquetCodec[];
+  private readonly spans: readonly Group[];
 
   constructor(
     name: string,
@@ -184,10 +203,48 @@ class ParquetTable implements Table {
       throw new Refusal({ t: 'parquet-broken', name });
     }
     this.columns = leaves.map((leaf) => leaf.column);
-    this.groups = metadata.row_groups.length;
-    this.rows = metadata.row_groups.reduce(
-      (sum, group) => sum + Number(group.num_rows),
-      0,
+    this.spans = groupsOf(metadata.row_groups);
+    this.groups = this.spans.length;
+    const last = this.spans.at(-1);
+    this.rows = last === undefined ? 0 : last.start + last.rows;
+  }
+
+  bytesPerRow(start: number, end: number): number {
+    const under = this.under(start, end);
+    return Math.max(0, ...under.map((span) => span.bytes / span.rows));
+  }
+
+  paged(start: number, end: number): boolean {
+    return this.under(start, end).every((span) => span.paged);
+  }
+
+  /** The row groups that hold any of rows [start, end). */
+  private under(start: number, end: number): Group[] {
+    // An empty group's start can lie inside the range, but it holds none.
+    return this.spans.filter(
+      (span) =>
+        span.rows > 0 && span.start < end && start < span.start + span.rows,
     );
   }
+}
+
+/** What the footer says of each row group, in file order. */
+function groupsOf(groups: readonly RowGroup[]): Group[] {
+  let start = 0;
+  return groups.map((group) => {
+    const rows = Number(group.num_rows);
+    const span = {
+      start,
+      rows,
+      bytes: group.columns.reduce(
+        (sum, chunk) => sum + Number(chunk.meta_data?.total_uncompressed_size),
+        0,
+      ),
+      paged: group.columns.every((chunk) =>
+        Boolean(chunk.offset_index_offset && chunk.offset_index_length),
+      ),
+    };
+    start += rows;
+    return span;
+  });
 }
