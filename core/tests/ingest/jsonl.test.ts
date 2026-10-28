@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { linesFormat } from '@ingest/jsonl';
-import { LINE_COLUMN, LINE_KEY } from '@ingest/keys';
+import { JSON_COLUMNS_LIMIT, LINE_COLUMN, LINE_KEY } from '@ingest/keys';
 import type { KeyedColumn } from '@ingest/keys';
 import type { RecordFormat } from '@ingest/records';
 
@@ -150,5 +150,31 @@ describe('the indexer gives each key a column where it is first seen', () => {
       ['', '[1,2]', ''],
       ['', '', '2'],
     ]);
+  });
+
+  test('up to the limit, past which a line fills what it can and is kept whole in _line', () => {
+    const keys = Array.from({ length: JSON_COLUMNS_LIMIT + 1 }, (_, i) => i);
+    const wide = `{${keys.map((i) => `"k${i}":${i}`).join(',')}}`;
+    const late = `{"k0":"x","k${JSON_COLUMNS_LIMIT}":"y"}`;
+    const file = indexed(`${wide}\n${late}\n`);
+    const columns = names(file.format);
+    expect(columns).toHaveLength(JSON_COLUMNS_LIMIT + 1);
+    expect(columns.at(-1)).toBe(LINE_COLUMN);
+    const [first, second] = rows(file);
+    expect(first).toEqual([...keys.slice(0, -1).map(String), wide]);
+    expect(second![0]).toBe('x');
+    expect(second!.at(-1)).toBe(late);
+  });
+
+  test('the last line, with no LF, once the file has ended', () => {
+    const text = '{"a":1}\n{"b":2}';
+    expect(names(indexed(text, 1, [], false).format)).toEqual(['a']);
+    expect(names(indexed(text, 1).format)).toEqual(['a', 'b']);
+  });
+
+  test('and a pinned key keeps its column wherever it first appears', () => {
+    const file = indexed('{"b":2,"a":1}\n', WHOLE, PINNED);
+    expect(names(file.format)).toEqual(['u.n', 'a', 'b']);
+    expect(rows(file)).toEqual([['', '1', '2']]);
   });
 });
