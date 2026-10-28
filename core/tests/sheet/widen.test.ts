@@ -21,6 +21,8 @@ const FILE_SHOWS = 'which file each row came from';
 /** The two columns that arrive, and where _file sits once they have. */
 const ARRIVING = ['city', 'zip'];
 const FILE_WIDENED = FILE + ARRIVING.length;
+/** Where city lands: the column _file held before it moved. */
+const CITY = FILE;
 
 /** Each row as the source holds it before city and zip arrive. */
 const NARROW = [
@@ -47,6 +49,15 @@ function schema(): Schema {
   return new Schema(HEADERS, ROWS, [{ col: FILE, shows: FILE_SHOWS }]);
 }
 
+/** Every operation, with a value and a row it can name. */
+const OPS: Array<[Edit['op'], string, number]> = [
+  [Op.Set, 'c.csv', 0],
+  [Op.Note, 'x^2', 0],
+  [Op.Apply, 'trim', NO_ROW],
+  [Op.Bind, 'units * 2', NO_ROW],
+  [Op.Unbind, '', NO_ROW],
+];
+
 function edit(
   op: Edit['op'],
   col: number,
@@ -54,6 +65,16 @@ function edit(
   row: number = NO_ROW,
 ): Edit {
   return { seq: 0, op, row, col, now };
+}
+
+/**
+ * undo takes back the last edit as View.undo does, by rebuilding the schema
+ * from the edits before it over the schema's own columns.
+ */
+function undo(s: Schema): [Schema, Edit] {
+  const edits = s.edits();
+  const last = edits.pop()!;
+  return [Schema.of(s.headers, s.rows, edits, s.supplied), last];
 }
 
 describe('a widened schema', () => {
@@ -159,5 +180,61 @@ describe('a widened schema', () => {
     s.widen(ARRIVING);
     expect(headers).toEqual(HEADERS);
     expect(supplied).toEqual([{ col: FILE, shows: FILE_SHOWS }]);
+  });
+
+  test('refuses every edit to the supplied column where it moved, and takes one where it was', () => {
+    const s = schema();
+    s.widen(ARRIVING);
+    const refusal = `edit 1: _file shows ${FILE_SHOWS}, so it cannot be changed`;
+    for (const [op, now, row] of OPS) {
+      expect(() => s.record(edit(op, FILE_WIDENED, now, row)), op).toThrow(
+        refusal,
+      );
+    }
+    expect(s.empty).toBe(true);
+    s.record(edit(Op.Set, CITY, 'Hobart', 0));
+    expect(s.writtenIn(0)?.get(CITY)?.now).toBe('Hobart');
+  });
+
+  test('undoes and redoes over the columns that arrived', () => {
+    const s = schema();
+    s.record(edit(Op.Bind, DOUBLE, 'units * 2'));
+    s.widen(ARRIVING);
+    s.record(edit(Op.Set, CITY, 'Hobart', 0));
+
+    const [undone, last] = undo(s);
+    expect(undone.headers).toEqual(s.headers);
+    expect(undone.supplied).toEqual(s.supplied);
+    expect(finishRows(undone, 0, WIDE, FILES)[0]!.shown).toEqual([
+      'West',
+      '4',
+      '8',
+      'Perth',
+      '6000',
+      'a.csv',
+    ]);
+
+    undone.record(last);
+    expect(finishRows(undone, 0, WIDE, FILES)[0]!.shown).toEqual([
+      'West',
+      '4',
+      '8',
+      'Hobart',
+      '6000',
+      'a.csv',
+    ]);
+
+    // Back past the edit made before the widen, the columns stay.
+    const [first] = undo(undo(undone)[0]);
+    expect(first.empty).toBe(true);
+    expect(first.headers).toEqual(s.headers);
+    expect(finishRows(first, 0, WIDE, FILES)[0]!.shown).toEqual([
+      'West',
+      '4',
+      '',
+      'Perth',
+      '6000',
+      'a.csv',
+    ]);
   });
 });
