@@ -4,23 +4,26 @@
  * Under a root each part's path is stored relative to it. A source that says
  * none of them is written as before, which format6.test.ts and
  * format7.test.ts hold to the byte. Covers what is written, which format it
- * needs, round trips at scale and after a move, and the refusals for a part
- * outside its root and a value this build does not know.
+ * needs, round trips at scale and after a move, files from older formats,
+ * and the refusals for a part outside its root and a value this build does
+ * not know.
  */
 
-import { unzipSync } from 'fflate';
+import { strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
+  LOG_ENTRY,
   MANIFEST_ENTRY,
   PARTS_VERSION,
   ROWS_VERSION,
+  STATE_ENTRY,
   formatFor,
   isAbsolute,
   readContainer,
   writeDocument,
 } from '@document';
-import type { HeldPart, HeldParts } from '@document';
+import type { HeldFile, HeldPart, HeldParts } from '@document';
 import {
   AT,
   manifestOf,
@@ -364,6 +367,109 @@ describe('a dataset of 10,000 parts', () => {
     expect(manifest.length).toBeLessThan(MANIFEST_BUDGET);
     expect(uno.length).toBeLessThan(CONTAINER_BUDGET);
     expect(readContainer('books.uno', uno, AT).sources).toEqual(doc.sources);
+  });
+});
+
+/** A .uno whose uno.json is `manifest`, with one source's state and no log. */
+function saved(manifest: string, active: string): Uint8Array {
+  const state = {
+    source: active,
+    sheets: [{ source: active, active: { row: 0, col: 0 } }],
+  };
+  return zipSync({
+    [MANIFEST_ENTRY]: strToU8(manifest),
+    [STATE_ENTRY]: strToU8(JSON.stringify(state)),
+    [LOG_ENTRY]: strToU8(''),
+  });
+}
+
+// Each manifest is written out as that format's build wrote it.
+describe('a file from an older format', () => {
+  test('6 still reads, its parts joined as bytes', () => {
+    const uno = saved(
+      `{
+  "format": 6,
+  "generator": "uno 0.2.0",
+  "sources": [
+    {
+      "id": "shop-orders",
+      "name": "shop-orders",
+      "parts": [
+        { "path": "exports/orders-2025-10.csv", "bytes": 2040109871, "version": "\\"9b2cf5\\"" },
+        { "path": "exports/orders-2025-11.csv", "bytes": 2254857830, "skip": 118, "unterminated": true }
+      ],
+      "header": "first",
+      "rows": 61204418,
+      "cols": 11
+    }
+  ],
+  "sheet": { "entry": "sheet/state.json" },
+  "edits": { "count": 0, "entry": "edits/log.jsonl" }
+}
+`,
+      'shop-orders',
+    );
+    const held: HeldParts = {
+      id: 'shop-orders',
+      name: 'shop-orders',
+      parts: [
+        {
+          name: 'orders-2025-10.csv',
+          path: '/home/cpa/q4/exports/orders-2025-10.csv',
+          bytes: 2_040_109_871,
+          version: '"9b2cf5"',
+          skip: 0,
+          unterminated: false,
+        },
+        {
+          name: 'orders-2025-11.csv',
+          path: '/home/cpa/q4/exports/orders-2025-11.csv',
+          bytes: 2_254_857_830,
+          skip: 118,
+          unterminated: true,
+        },
+      ],
+      header: 'first',
+      rows: 61_204_418,
+      cols: 11,
+      state: { active: { row: 0, col: 0 } },
+    };
+    expect(readContainer('books.uno', uno, AT).sources).toEqual([held]);
+  });
+
+  test('7 still reads, with its pinned columns', () => {
+    const uno = saved(
+      `{
+  "format": 7,
+  "generator": "uno 0.2.0",
+  "sources": [
+    {
+      "id": "events",
+      "name": "events.jsonl",
+      "bytes": 48211904,
+      "path": "exports/events.jsonl",
+      "rows": 310455,
+      "cols": 2,
+      "columns": [{ "name": "id" }, { "name": "user.name", "key": "/user/name" }]
+    }
+  ],
+  "sheet": { "entry": "sheet/state.json" },
+  "edits": { "count": 0, "entry": "edits/log.jsonl" }
+}
+`,
+      'events',
+    );
+    const held: HeldFile = {
+      id: 'events',
+      name: 'events.jsonl',
+      path: '/home/cpa/q4/exports/events.jsonl',
+      bytes: 48_211_904,
+      columns: [{ name: 'id' }, { name: 'user.name', key: '/user/name' }],
+      rows: 310_455,
+      cols: 2,
+      state: { active: { row: 0, col: 0 } },
+    };
+    expect(readContainer('books.uno', uno, AT).sources).toEqual([held]);
   });
 });
 
