@@ -1,7 +1,8 @@
 /**
- * @fileoverview Inflates gzip: a whole file, or a head up to a limit.
+ * @fileoverview Inflates gzip: a whole file, a head up to a limit, or one
+ * pass through a file pushed a slice at a time.
  *
- * Both run pako's low-level zlib API through one class, Members, which
+ * All three run pako's low-level zlib API through one class, Members, which
  * inflates gzip members one after another and stops at every deflate block
  * boundary.
  */
@@ -43,6 +44,24 @@ export class BrokenStream extends Error {
     this.name = 'BrokenStream';
     this.at = at;
   }
+}
+
+/** Inflater inflates a compressed file once, from the start. */
+export interface Inflater {
+  /**
+   * Feeds the next stored bytes, from 0 in order. `out` gets each decoded
+   * piece and its decoded offset; the piece is good until `out` returns.
+   * Throws BrokenStream.
+   */
+  push(
+    stored: Uint8Array,
+    out: (decoded: Uint8Array, at: number) => void,
+  ): void;
+  /**
+   * The stored bytes ended. Returns the decoded size; throws BrokenStream for
+   * a stream cut short.
+   */
+  end(): number;
 }
 
 /**
@@ -163,4 +182,32 @@ export function inflateHead(
     bytes: joined(pieces, Math.min(members.decoded, limit)),
     ended: members.hungry && members.ended && members.decoded <= limit,
   };
+}
+
+/** gzipInflater inflates a gzip file once, a slice at a time. */
+export function gzipInflater(): Inflater {
+  return new GzipInflater();
+}
+
+/** GzipInflater is one pass through a gzip file. */
+class GzipInflater implements Inflater {
+  private readonly members = new Members();
+
+  push(
+    stored: Uint8Array,
+    out: (decoded: Uint8Array, at: number) => void,
+  ): void {
+    const members = this.members;
+    members.feed(stored);
+    while (!members.hungry) {
+      const at = members.decoded;
+      const piece = members.step();
+      if (piece.length > 0) out(piece, at);
+    }
+  }
+
+  end(): number {
+    this.members.end();
+    return this.members.decoded;
+  }
 }
