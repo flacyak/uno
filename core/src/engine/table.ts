@@ -14,8 +14,10 @@
 
 import type { Table } from '@ingest';
 import { Refusal } from '@said';
-import type { Blocks, Index, Indexed } from './reading.ts';
-import { BlockCache, rowsThrough } from './rows.ts';
+import type { ByteSource } from '@store';
+import type { Blocks, Index, Indexed, Reading } from './reading.ts';
+import { BlockCache, ONE_FILE, rowsThrough } from './rows.ts';
+import type { Tuning } from './rows.ts';
 
 /**
  * The bytes one window's rows take at most, uncompressed or as text, which
@@ -31,6 +33,35 @@ export const MAX_WINDOW_BLOCKS = 16;
  * delimited text, a delimiter or a newline.
  */
 const CELL_END_BYTES = 1;
+
+/**
+ * tableReading reads a Parquet file through its Table, whose footer was
+ * read as it opened. Its index is complete from the start, so its pass only
+ * says so.
+ */
+export function tableReading(
+  name: string,
+  file: ByteSource,
+  table: Table,
+  tuning: Tuning,
+): Reading {
+  const index = new PlannedIndex(table.rows, file.size, tuning.blockRows);
+  const { columns, codecs, groups } = table;
+  return {
+    label: { t: 'read-parquet', codecs: [...codecs], groups },
+    index,
+    pages: new TablePages(name, table, index, tuning.cacheBytes),
+    behind: { t: 'file', stored: file },
+    columns: () => columns,
+    spec: () => ({ kind: 'parquet', columns }),
+    pass: (signal, progress) => {
+      if (!signal.aborted) progress();
+      return Promise.resolve();
+    },
+    runs: () => Promise.resolve(ONE_FILE),
+    close: () => file.close(),
+  };
+}
 
 /**
  * PlannedIndex is an Index whose blocks are all known when it is made: each

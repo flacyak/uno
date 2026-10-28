@@ -8,7 +8,7 @@
 
 import { Refusal } from '@said';
 import type { ByteSource } from '@store';
-import type { Index, Indexed } from './reading.ts';
+import type { Index, Indexed, Run } from './reading.ts';
 
 export interface Tuning {
   /** Bytes a pass reads at a time. */
@@ -193,6 +193,9 @@ export class BlockCache {
     }
   }
 }
+
+/** The one run of every block of a single file. */
+export const ONE_FILE: readonly Run[] = [{ row: 0, part: 0 }];
 
 /**
  * rowsThrough reads up to `count` rows from `first` a block at a time,
