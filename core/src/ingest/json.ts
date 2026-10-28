@@ -243,6 +243,18 @@ function pointerTo(parent: string, name: string): string {
 }
 
 /**
+ * segmentsOf returns the names of the members RFC 6901 pointer `key` passes
+ * through, each read back from how pointerTo writes it: /a~1b/m~0n passes
+ * through a/b, then m~n. '~1' is read before '~0', so ~01 reads as ~1.
+ */
+export function segmentsOf(key: string): string[] {
+  return key
+    .split('/')
+    .slice(1)
+    .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
+}
+
+/**
  * membersOf reads an object nested `depth` levels inside the line's own and
  * returns its members, where the last of a repeated name wins in the place
  * the name first had. It returns undefined when what comes next is not an
