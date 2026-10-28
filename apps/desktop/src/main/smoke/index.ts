@@ -33,6 +33,7 @@ import { MEETS } from "./meets.ts";
 import { MULTI } from "./multi.ts";
 import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
+import { PARQUET } from "./parquet.ts";
 import { REFRESH } from "./refresh.ts";
 import { SETTINGS } from "./settings.ts";
 import { SIDEBAR } from "./sidebar.ts";
@@ -65,6 +66,7 @@ const CHECKS: Check[] = [
   ...SIDEBAR,
   ...AGAIN,
   ...WIDEN,
+  ...PARQUET,
 ];
 
 /**

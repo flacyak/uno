@@ -22,6 +22,7 @@ export function counted(n: number): string {
 export const GUTTER = 1;
 
 export const ROWS = 4812;
+export const COLS = 6;
 export const DATE = 0;
 export const REGION = 1;
 export const REP = 2;
