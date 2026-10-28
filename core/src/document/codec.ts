@@ -47,6 +47,8 @@ import {
   READ_VERSION,
   RULE_VERSION,
   SOURCES_VERSION,
+  SOURCE_COMPRESSIONS,
+  SOURCE_KINDS,
   STATE_ENTRY,
   logOf,
   resolvedPath,
@@ -155,6 +157,9 @@ function heldFile(
     path: src.path === '' ? undefined : resolvedPath(src.path, at),
     bytes: src.bytes,
     version: src.version === '' ? undefined : src.version,
+    kind: src.kind,
+    compression: src.compression,
+    columns: src.columns,
     connection: src.connection === '' ? undefined : src.connection,
     rows: src.rows,
     cols: src.cols,
@@ -199,8 +204,10 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
         unterminated: part.unterminated,
       };
     }),
+    kind: src.kind,
     header: src.header,
     fileColumn: src.fileColumn ? true : undefined,
+    columns: src.columns,
     rows: src.rows,
     cols: src.cols,
     state,
@@ -685,6 +692,11 @@ function readExtra(
 
 // ------------------------------------------------------------- shaping
 
+/** Whether a value is a JSON object: neither null nor a list. */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 function asRecord(v: unknown): Record<string, unknown> {
   return typeof v === 'object' && v !== null
     ? (v as Record<string, unknown>)
@@ -837,7 +849,9 @@ function parseManifest(name: string, v: unknown): Manifest {
  * parseSource reads one of the manifest's sources: a parts source when it
  * has `parts`, otherwise a file source. A file source is read leniently,
  * with a missing key read as its zero value. Parts are read strictly, and a
- * bad list is refused naming the part.
+ * bad list is refused naming the part. So are a kind, a compression and
+ * pinned columns, and a kind or compression this build does not know is
+ * refused by name.
  */
 function parseSource(name: string, s: Record<string, unknown>): Source {
   const base = {
@@ -847,6 +861,7 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
     rows: asNumber(s['rows']),
     cols: asNumber(s['cols']),
   };
+  const source = `${name}: ${base.name}`;
   if (s['parts'] === undefined) {
     return {
       ...base,
@@ -855,12 +870,14 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       entry: asString(s['entry']),
       path: asString(s['path']),
       version: asString(s['version']),
+      kind: oneOf(s, 'kind', SOURCE_KINDS, source),
+      compression: oneOf(s, 'compression', SOURCE_COMPRESSIONS, source),
+      columns: parseColumns(source, s['columns']),
     };
   }
 
   if (base.name === '')
     throw new Error(`${name}: the manifest names no source file`);
-  const source = `${name}: ${base.name}`;
 
   // A source has exactly one of a path, an entry or parts.
   let one = '';
@@ -884,9 +901,19 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
     parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw),
   );
 
-  const header = headerOf(source, s);
+  const kind = oneOf(s, 'kind', SOURCE_KINDS, source);
+  // Only delimited text, which has no kind, says whether it has a header
+  // row. Any other kind is held as "first", what a reader takes unless told.
+  const header = kind === undefined ? headerOf(source, s) : 'first';
   const fileColumn = optional(s, 'fileColumn', FLAG, source);
-  return { ...base, parts, header, fileColumn: fileColumn ?? false };
+  return {
+    ...base,
+    parts,
+    kind,
+    header,
+    fileColumn: fileColumn ?? false,
+    columns: parseColumns(source, s['columns']),
+  };
 }
 
 /** headerOf reads the header mode a parts source of delimited text needs. */
@@ -901,14 +928,31 @@ function headerOf(source: string, s: Record<string, unknown>): HeaderMode {
 }
 
 /**
+ * parseColumns reads a source's pinned columns, strictly: undefined when
+ * absent, and otherwise a list of columns, each with a name and maybe a key.
+ * `where` names the source in an error.
+ */
+function parseColumns(where: string, v: unknown): SavedColumn[] | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v))
+    throw new Error(`${where}: columns is not a list of columns`);
+  return v.map((raw, i): SavedColumn => {
+    const which = `${where}: column ${i + 1} of ${v.length}`;
+    if (!isRecord(raw)) throw new Error(`${which} is not a column with a name`);
+    const name = raw['name'];
+    if (typeof name !== 'string') throw new Error(`${which} has no name`);
+    const key = optional(raw, 'key', TEXT, `${which} (${name})`);
+    return key === undefined ? { name } : { name, key };
+  });
+}
+
+/**
  * parsePart reads one part. `which` names it in an error before its path is
  * known. `skip` and `unterminated` default to 0 and false when missing.
  */
-function parsePart(which: string, raw: unknown): SourcePart {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+function parsePart(which: string, p: unknown): SourcePart {
+  if (!isRecord(p))
     throw new Error(`${which} is not a file with a path and bytes`);
-  }
-  const p = asRecord(raw);
 
   const path = p['path'];
   if (typeof path !== 'string' || path === '')
