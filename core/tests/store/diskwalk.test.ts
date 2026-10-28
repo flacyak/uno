@@ -132,6 +132,38 @@ test('a symlinked folder is followed, and one that loops back is passed over', a
   expect(found.some((n) => n.startsWith('here/'))).toBe(false);
 });
 
+test('a folder the cursor was in, gone before the next page, is walked past', async () => {
+  const gone = join(outside, 'gone');
+  for (const path of ['a/1.csv', 'a/2.csv', 'b/1.csv']) {
+    await mkdir(dirname(join(gone, path)), { recursive: true });
+    await writeFile(join(gone, path), 'x');
+  }
+  const lister = diskLister(1);
+  const first = await lister.walk(gone);
+  await rm(join(gone, 'a'), { recursive: true });
+
+  const second = await lister.walk(gone, first.next);
+
+  expect(first.entries.map((e) => e.name)).toEqual(['a/1.csv']);
+  expect(second.entries.map((e) => e.name)).toEqual(['b/1.csv']);
+  expect(second.next).toBeUndefined();
+});
+
+// The cursor lands in k=10. Were k=2=x to order between k=10 and k=9, the
+// next page would take k=9 to be behind the cursor and leave it out.
+test('a walk of one file a page finds every file beside a name that is no pair', async () => {
+  const mixed = join(outside, 'mixed');
+  const paths = ['k=9/f.csv', 'k=10/f.csv', 'k=2=x/f.csv'];
+  for (const path of paths) {
+    await mkdir(dirname(join(mixed, path)), { recursive: true });
+    await writeFile(join(mixed, path), 'x');
+  }
+
+  const found = names(await walked(mixed, diskLister(1)));
+
+  expect(found).toEqual(paths);
+});
+
 test('a root that is not there is a failure that names it', async () => {
   await expect(diskLister().walk(join(outside, 'never-made'))).rejects.toThrow(
     'never-made',
