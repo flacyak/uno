@@ -96,7 +96,8 @@ export interface Element {
 
 /**
  * ParquetValue is one value of a column as hyparquet reads it with identity
- * parsers, so a string or binary is its bytes.
+ * parsers and no DECIMAL annotation. A decimal is its unscaled integer, and
+ * a string or binary is its bytes.
  */
 export type ParquetValue =
   | null
@@ -113,6 +114,8 @@ export const FLOAT32_DIGITS = 9;
 /** The bits an INT32 and an INT64 hold, read as unsigned where annotated. */
 const INT32_BITS = 32;
 const INT64_BITS = 64;
+
+const BYTE_BITS = 8;
 
 /** The radix and width of one byte in 0x-hex. */
 const HEX = 16;
@@ -315,7 +318,7 @@ function scalarOf(
   value: ParquetValue,
 ): string {
   if (value === null || value === undefined) return '';
-  if (value instanceof Uint8Array) return bytesOf(value);
+  if (value instanceof Uint8Array) return bytesOf(primitive?.logical, value);
   if (primitive && (typeof value === 'number' || typeof value === 'bigint')) {
     return numberOf(primitive, value);
   }
@@ -328,6 +331,8 @@ function numberOf(primitive: Primitive, value: number | bigint): string {
   // String(-0) is '0', which reads back as +0. Only a float is ever -0.
   if (Object.is(value, -0)) return '-0';
   switch (logical?.t) {
+    case 'decimal':
+      return decimalOf(BigInt(value), logical.scale);
     case 'unsigned': {
       const bits = physical === 'INT64' ? INT64_BITS : INT32_BITS;
       return String(BigInt.asUintN(bits, BigInt(value)));
@@ -339,13 +344,35 @@ function numberOf(primitive: Primitive, value: number | bigint): string {
   }
 }
 
-/** Stored bytes as UTF-8 where they decode cleanly, and 0x-hex otherwise. */
-function bytesOf(bytes: Uint8Array): string {
+/** Stored bytes: a decimal's unscaled integer, or else UTF-8 or 0x-hex. */
+function bytesOf(logical: Logical | undefined, bytes: Uint8Array): string {
+  if (logical?.t === 'decimal') {
+    return decimalOf(signedOf(bytes), logical.scale);
+  }
   try {
     return UTF8.decode(bytes);
   } catch {
     return `0x${hexOf(bytes)}`;
   }
+}
+
+/** An unscaled integer as a decimal with every one of its scale's digits. */
+function decimalOf(unscaled: bigint, scale: number): string {
+  const sign = unscaled < 0n ? '-' : '';
+  const digits = String(unscaled < 0n ? -unscaled : unscaled);
+  const padded = digits.padStart(scale + 1, '0');
+  const point = padded.length - scale;
+  const fraction = scale > 0 ? `.${padded.slice(point)}` : '';
+  return `${sign}${padded.slice(0, point)}${fraction}`;
+}
+
+/** Big-endian two's complement bytes as the integer they hold. */
+function signedOf(bytes: Uint8Array): bigint {
+  let value = 0n;
+  for (const byte of bytes) {
+    value = (value << BigInt(BYTE_BITS)) | BigInt(byte);
+  }
+  return BigInt.asIntN(bytes.length * BYTE_BITS, value);
 }
 
 /**
