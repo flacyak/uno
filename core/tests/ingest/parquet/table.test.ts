@@ -5,7 +5,11 @@
  * is refused by name, and one whose footer is damaged as parquet-broken.
  */
 
-import { parquetWriteBuffer } from 'hyparquet-writer';
+import {
+  ByteWriter,
+  ParquetWriter,
+  parquetWriteBuffer,
+} from 'hyparquet-writer';
 import { expect, test } from 'vite-plus/test';
 
 import { PARQUET_MAGIC_BYTES } from '@ingest/detect';
@@ -59,7 +63,23 @@ async function expectRefused(
   }
 }
 
-test('a footer in the tail says the columns, rows and groups from one read', async () => {
+/** A file of one INT32 column, n, with `change` made to it before its footer. */
+function written(change: (writer: ParquetWriter) => void): Uint8Array {
+  const writer = new ByteWriter();
+  const parquet = new ParquetWriter({
+    writer,
+    schema: [
+      { name: 'root', num_children: 1 },
+      { name: 'n', type: 'INT32', repetition_type: 'REQUIRED' },
+    ],
+  });
+  parquet.write({ columnData: [{ name: 'n', data: [1] }] });
+  change(parquet);
+  parquet.finish();
+  return new Uint8Array(writer.getBuffer());
+}
+
+test('a footer in the tail says the columns, rows, groups and codecs from one read', async () => {
   const { source, reads } = logged(SALES);
   const table = await openTable(
     'sales-q3.snappy.parquet',
@@ -74,6 +94,7 @@ test('a footer in the tail says the columns, rows and groups from one read', asy
   );
   expect(table.rows).toBe(ROWS);
   expect(table.groups).toBe(Math.ceil(ROWS / SALES_GROUP_ROWS));
+  expect(table.codecs).toEqual(['snappy']);
   // The file is smaller than the tail, so the one read is all of it.
   expect(reads).toEqual([[0, SALES.length]]);
 });
@@ -149,6 +170,30 @@ test('a file whose footer is encrypted is refused by name', async () => {
   await expectRefused([
     ['encrypt_columns_and_footer.parquet.encrypted', 'encryption'],
   ]);
+});
+
+test('pages in a codec uno does not read, and encrypted columns, are refused by name', async () => {
+  await expectRefused([
+    ['large_string_map.brotli.parquet', 'brotli'],
+    ['lz4_raw_compressed.parquet', 'lz4'],
+    ['hadoop_lz4_compressed.parquet', 'lz4'],
+    ['encrypt_columns_plaintext_footer.parquet.encrypted', 'encryption'],
+  ]);
+});
+
+test('columns kept in another file are refused by name', async () => {
+  const elsewhere = written((parquet) => {
+    parquet.row_groups[0]!.columns[0]!.file_path = 'other.parquet';
+  });
+  expect(await refusalOf('q3.parquet', elsewhere)).toEqual({
+    t: 'parquet-unsupported',
+    name: 'q3.parquet',
+    feature: 'external-columns',
+  });
+  const here = written((parquet) => {
+    parquet.row_groups[0]!.columns[0]!.file_path = '';
+  });
+  expect(await refusalOf('q3.parquet', here)).toBeUndefined();
 });
 
 test('a failed read of the file is passed on as it failed', async () => {

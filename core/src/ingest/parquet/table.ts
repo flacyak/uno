@@ -1,6 +1,6 @@
 /**
  * @fileoverview A Parquet file as a table of text: its footer, read once when
- * it opens, says its columns and its row groups.
+ * it opens, says its columns, its row groups and the codecs of its pages.
  *
  * A file that uses what uno does not read yet is refused by name as
  * parquet-unsupported, and one whose footer does not decode as
@@ -8,10 +8,11 @@
  */
 
 import { parquetMetadata } from 'hyparquet/src/index.js';
-import type { FileMetaData } from 'hyparquet/src/index.js';
+import type { FileMetaData, RowGroup } from 'hyparquet/src/index.js';
 
 import { concat } from '@go';
 import { Refusal } from '@said';
+import type { ParquetCodec } from '@said';
 import type { ByteSource } from '@store';
 
 import {
@@ -21,6 +22,7 @@ import {
   parquetMagicAt,
 } from '../detect.ts';
 import type { ChunkCache } from './buffer.ts';
+import { CODECS, codecOf } from './codecs.ts';
 import { columnsOf } from './values.ts';
 import type { Column, Leaf } from './values.ts';
 
@@ -42,6 +44,8 @@ export interface Table {
   readonly columns: readonly Column[];
   readonly rows: number;
   readonly groups: number;
+  /** The codecs of the file's pages, in the order CODECS names them. */
+  readonly codecs: readonly ParquetCodec[];
 }
 
 /**
@@ -54,7 +58,9 @@ export async function openTable(
   file: ByteSource,
   chunks: ChunkCache,
 ): Promise<Table> {
-  return new ParquetTable(name, await footerOf(name, file, chunks));
+  const metadata = await footerOf(name, file, chunks);
+  const codecs = codecsOf(name, metadata.row_groups);
+  return new ParquetTable(name, metadata, codecs);
 }
 
 /**
@@ -105,13 +111,40 @@ async function footerOf(
   }
 }
 
+/**
+ * The codecs of every column chunk in the file, in the order CODECS names
+ * them. Encrypted columns, columns kept in other files and codecs uno does
+ * not read are refused.
+ */
+function codecsOf(name: string, groups: readonly RowGroup[]): ParquetCodec[] {
+  const found = new Set<ParquetCodec>();
+  for (const chunk of groups.flatMap((group) => group.columns)) {
+    const encrypted =
+      chunk.crypto_metadata !== undefined ||
+      chunk.encrypted_column_metadata !== undefined;
+    // An empty path names this file, as hyparquet reads it.
+    if (encrypted || chunk.file_path) {
+      const feature = encrypted ? 'encryption' : 'external-columns';
+      throw new Refusal({ t: 'parquet-unsupported', name, feature });
+    }
+    found.add(codecOf(name, chunk.meta_data?.codec));
+  }
+  return CODECS.filter((codec) => found.has(codec));
+}
+
 /** ParquetTable is a Table over the footer it was opened with. */
 class ParquetTable implements Table {
   readonly columns: readonly Column[];
   readonly rows: number;
   readonly groups: number;
+  readonly codecs: readonly ParquetCodec[];
 
-  constructor(name: string, metadata: FileMetaData) {
+  constructor(
+    name: string,
+    metadata: FileMetaData,
+    codecs: readonly ParquetCodec[],
+  ) {
+    this.codecs = codecs;
     let leaves: Leaf[];
     try {
       leaves = columnsOf(metadata.schema);
