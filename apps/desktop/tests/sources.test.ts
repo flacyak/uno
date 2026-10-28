@@ -501,16 +501,14 @@ test("one selected file is peeked at, and a second selected puts the peek away",
   await panel.toggle(named(panel, "jul.csv"));
 
   expect(stand.peeks).toEqual(["s3://acme-exports/2025/q3/jul.csv"]);
-  expect(panel.peeked?.header).toEqual(["jul.csv"]);
-  expect(panel.peeking).toBe(false);
+  expect(panel.peek).toMatchObject({ t: "peeked", peeked: { header: ["jul.csv"] } });
 
   await panel.toggle(named(panel, "aug.tsv"));
 
   // A peek is of one file, so two picked leaves the one peek made and clears
   // what was shown.
   expect(stand.peeks).toEqual(["s3://acme-exports/2025/q3/jul.csv"]);
-  expect(panel.peeked).toBeUndefined();
-  expect(panel.peeking).toBe(false);
+  expect(panel.peek).toBeUndefined();
 });
 
 test("a peek of a file that is no longer the one selected is dropped", async () => {
@@ -524,15 +522,14 @@ test("a peek of a file that is no longer the one selected is dropped", async () 
   const first = panel.toggle(named(panel, "jul.csv"));
   const off = panel.toggle(named(panel, "jul.csv"));
   const second = panel.toggle(named(panel, "aug.tsv"));
-  expect(panel.peeking).toBe(true);
+  expect(panel.peek).toEqual({ t: "reading" });
 
   stand.answer("s3://acme-exports/2025/q3/aug.tsv");
   stand.answer("s3://acme-exports/2025/q3/jul.csv");
   await Promise.all([first, off, second]);
 
   expect(names(panel.selected)).toEqual(["aug.tsv"]);
-  expect(panel.peeked?.header).toEqual(["aug.tsv"]);
-  expect(panel.peeking).toBe(false);
+  expect(panel.peek).toMatchObject({ t: "peeked", peeked: { header: ["aug.tsv"] } });
 });
 
 test("browsing somewhere else lets go of the selection and the peek on its way", async () => {
@@ -542,20 +539,19 @@ test("browsing somewhere else lets go of the selection and the peek on its way",
   stand.holdPeeks = true;
 
   const peek = panel.toggle(named(panel, "jul.csv"));
-  expect(panel.peeking).toBe(true);
+  expect(panel.peek).toEqual({ t: "reading" });
 
   await panel.enter(named(panel, "raw"));
 
   expect(panel.selected).toEqual([]);
   expect(panel.buttons).toEqual([]);
-  expect(panel.peeking).toBe(false);
+  expect(panel.peek).toBeUndefined();
 
   // The peek lands after leaving the folder, and is dropped.
   stand.answer("s3://acme-exports/2025/q3/jul.csv");
   await peek;
 
-  expect(panel.peeked).toBeUndefined();
-  expect(panel.peeking).toBe(false);
+  expect(panel.peek).toBeUndefined();
 
   // Going back to where the file was finds it unpicked.
   await panel.up();
@@ -849,7 +845,7 @@ test("the selection and the keys stay where they were when a page lands", async 
   expect(panel.place).toEqual({ section: "browser", line: 2 });
   expect(panel.entries[panel.place.line]!.name).toBe("b.csv");
   expect(names(panel.selected)).toEqual(["b.csv"]);
-  expect(panel.peeked?.header).toEqual(["b.csv"]);
+  expect(panel.peek).toMatchObject({ t: "peeked", peeked: { header: ["b.csv"] } });
 
   // A file from the new page can join it, and they come back in listing order.
   await panel.toggle(named(panel, "c.csv"));
