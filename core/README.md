@@ -73,7 +73,7 @@ How a file was read, what a program does, and how a file differs from the one a 
 
 Not every sentence has a kind yet.
 What has none is `{ t: "text" }`: the diagnostic as it was written, in English, passed on whole.
-The 37 that have one are what the engine itself refuses and says in ordinary use.
+Those that have one are what the engine itself refuses and says in ordinary use.
 The rest are the diagnostics of a broken `.uno`, an AWS profile, S3, and the parsers.
 Giving one a kind is adding it to `Said`, after which the compiler asks for its English in `english` and for its message wherever a client writes one.
 
