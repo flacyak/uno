@@ -1,7 +1,8 @@
 /**
- * @fileoverview A JSON Lines file reads as one row per line: a decode lays
- * each line out over the columns the file has, with a line that does not lay
- * out in full kept whole in _line, and adds none.
+ * @fileoverview A JSON Lines file reads as one row per line: its indexer
+ * gives each key a column in the order keys are first seen, and a decode
+ * lays each line out over those columns, with a line that does not lay out
+ * in full kept whole in _line, and adds none.
  */
 
 import { describe, expect, test } from 'vite-plus/test';
@@ -119,5 +120,20 @@ describe('a JSON Lines file reads as one row per line', () => {
     expect(() => linesFormat('events.jsonl', utf16, [])).toThrow(
       'events.jsonl: UTF-16 little-endian is not supported yet',
     );
+  });
+});
+
+describe('the indexer gives each key a column where it is first seen', () => {
+  test('in the order keys come, each named by its pointer', () => {
+    const file = indexed('{"a":1,"u":{"n":"x"}}\n{"b":true,"a":"3"}\n');
+    expect(file.format.columns()).toEqual([
+      { name: 'a', key: '/a' },
+      { name: 'u.n', key: '/u/n' },
+      { name: 'b', key: '/b' },
+    ]);
+    expect(rows(file)).toEqual([
+      ['1', 'x', ''],
+      ['3', '', 'true'],
+    ]);
   });
 });
