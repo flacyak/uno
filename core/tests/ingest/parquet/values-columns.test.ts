@@ -1,7 +1,8 @@
 /**
  * @fileoverview columnsOf reads a footer's schema, as hyparquet hands it, as
  * the columns a sheet shows, each keyed by an RFC 6901 pointer: a struct's
- * fields under dotted names, and a repeated field as one column.
+ * fields under dotted names, and a LIST, a MAP or a repeated field as one
+ * column.
  */
 
 import type { SchemaElement } from 'hyparquet/src/index.js';
@@ -91,6 +92,44 @@ test('a repeated field is one column, a list of its values', () => {
   ]);
   expect(leaves.map((leaf) => [leaf.column.name, leaf.shape])).toEqual([
     ['ids', { t: 'list', of: INT32 }],
+    ['points', { t: 'list', of: POINT }],
+  ]);
+});
+
+test('a LIST is one column of its elements, in either layout', () => {
+  const threeLevel = fieldOf(
+    { name: 'ids', converted_type: 'LIST', num_children: 1 },
+    { name: 'list', repetition_type: 'REPEATED', num_children: 1 },
+    { name: 'element', type: 'INT32' },
+  );
+  const twoLevel = fieldOf(
+    { name: 'ids', converted_type: 'LIST', num_children: 1 },
+    { name: 'array', type: 'INT32', repetition_type: 'REPEATED' },
+  );
+  const list: Shape = { t: 'list', of: INT32 };
+  expect(threeLevel.map((leaf) => [leaf.column.name, leaf.shape])).toEqual([
+    ['ids', list],
+  ]);
+  expect(twoLevel.map((leaf) => [leaf.column.name, leaf.shape])).toEqual([
+    ['ids', list],
+  ]);
+});
+
+test('a MAP is one column, and a struct inside a LIST stays whole', () => {
+  const leaves = leavesOf([
+    { name: 'root', num_children: 2 },
+    { name: 'tags', converted_type: 'MAP', num_children: 1 },
+    { name: 'key_value', repetition_type: 'REPEATED', num_children: 2 },
+    { name: 'key', type: 'BYTE_ARRAY', repetition_type: 'REQUIRED' },
+    { name: 'value', type: 'INT32' },
+    { name: 'points', converted_type: 'LIST', num_children: 1 },
+    { name: 'list', repetition_type: 'REPEATED', num_children: 1 },
+    { name: 'element', num_children: 2 },
+    { name: 'x', type: 'INT32' },
+    { name: 'y', type: 'INT32' },
+  ]);
+  expect(leaves.map((leaf) => [leaf.column.name, leaf.shape])).toEqual([
+    ['tags', { t: 'map', values: INT32 }],
     ['points', { t: 'list', of: POINT }],
   ]);
 });
