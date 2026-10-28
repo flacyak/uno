@@ -3,12 +3,32 @@
  * anything but one object without a throw.
  */
 
+import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vite-plus/test';
 
 import { DEPTH_LIMIT, walkLine } from '@ingest/json';
+import { jsonish } from './jsonish.ts';
+import { random } from './random.ts';
 
 /** How deep a line nests that would overflow the stack if walkLine read it. */
 const PAST_THE_STACK = 100_000;
+/** Number of random lines to check. */
+const SEEDS = 4000;
+/** A string, kept whole, or whitespace between tokens, dropped. */
+const BETWEEN_TOKENS = /("(?:[^"\\]|\\.)*")|[ \t\n\r]+/g;
+/** What comes just before a value in minified JSON. */
+const BEFORE_VALUE = [':', ',', '['];
+/** What comes just after a value in minified JSON. */
+const AFTER_VALUE = [',', ']', '}'];
+/** RFC 8259's number, as the whole of a text. */
+const NUMBER_TEXT = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/;
+
+/** A value as JSON.parse returns it. */
+type Json = null | boolean | number | string | Json[] | JsonObject;
+/** An object as JSON.parse returns it. */
+interface JsonObject {
+  [name: string]: Json;
+}
 
 /**
  * walked returns the leaves walkLine reports for `line`, or false when it
@@ -25,6 +45,63 @@ function walked(line: string): Array<[string, string]> | false {
 function nested(depth: number): string {
   const around = depth - 1;
   return `${'{"a":'.repeat(around)}{}${'}'.repeat(around)}`;
+}
+
+/** parsed returns what JSON.parse makes of `text`, or undefined if it throws. */
+function parsed(text: string): Json | undefined {
+  try {
+    return JSON.parse(text) as Json;
+  } catch {
+    return undefined;
+  }
+}
+
+/** isObject says whether `value` is an object, and not an array or scalar. */
+function isObject(value: Json | undefined): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** minified returns JSON text less the whitespace between its tokens. */
+function minified(text: string): string {
+  return text.replace(BETWEEN_TOKENS, (_, string?: string) => string ?? '');
+}
+
+/** writes says whether `line`, minified, holds `text` as a whole value. */
+function writes(line: string, text: string): boolean {
+  const written = minified(line);
+  return BEFORE_VALUE.some((before) =>
+    AFTER_VALUE.some((after) => written.includes(before + text + after)),
+  );
+}
+
+/**
+ * flat is the reference flatten: each value below `parent` in `object` but
+ * the objects that have members, by RFC 6901 pointer.
+ */
+function flat(object: JsonObject, parent: string): Array<[string, Json]> {
+  return Object.entries(object).flatMap(
+    ([name, value]): Array<[string, Json]> => {
+      const key = `${parent}/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+      const inner = isObject(value) && Object.keys(value).length > 0;
+      return inner ? flat(value, key) : [[key, value]];
+    },
+  );
+}
+
+/**
+ * fits says whether `text` is the cell of `value`: a string as it is, true
+ * and false as words, null as nothing, and a number, an array or an empty
+ * object as `line` writes it, whole, less whitespace.
+ */
+function fits(text: string, value: Json, line: string): boolean {
+  if (value === null) return text === '';
+  if (typeof value === 'string') return text === value;
+  if (typeof value === 'boolean') return text === String(value);
+  if (!writes(line, text)) return false;
+  if (typeof value === 'number') {
+    return NUMBER_TEXT.test(text) && Object.is(Number(text), value);
+  }
+  return isDeepStrictEqual(parsed(text), value);
 }
 
 /** arraysIn returns the array of a line nested `depth` deep in arrays. */
@@ -199,5 +276,28 @@ describe('walkLine', () => {
     expect(walked(nested(PAST_THE_STACK))).toBe(false);
     expect(walked(`{"a":${arraysIn(DEPTH_LIMIT + 1)}}`)).toBe(false);
     expect(walked(`{"a":${arraysIn(PAST_THE_STACK)}}`)).toBe(false);
+  });
+
+  test('reads each random line as JSON.parse reads it, flattened', () => {
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const line = jsonish(random(seed));
+      const shown = `seed ${seed}: ${JSON.stringify(line)}`;
+      const want = parsed(line);
+      const leaves = walked(line);
+      expect(leaves !== false, shown).toBe(isObject(want));
+      if (leaves === false || !isObject(want)) continue;
+      const reference = flat(want, '');
+      const cells = new Map(leaves);
+      expect([...cells.keys()].sort(), shown).toEqual(
+        reference.map(([key]) => key).sort(),
+      );
+      expect(cells.size, shown).toBe(leaves.length);
+      for (const [key, value] of reference) {
+        const text = cells.get(key) ?? '';
+        expect(fits(text, value, line), `${shown} at ${key}: ${text}`).toBe(
+          true,
+        );
+      }
+    }
   });
 });
