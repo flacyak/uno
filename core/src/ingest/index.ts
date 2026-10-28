@@ -50,6 +50,8 @@ export {
   readable,
 } from './names.ts';
 export type { NameParts, StoredCompression } from './names.ts';
+export { linesFormat } from './jsonl.ts';
+export type { KeyedColumn } from './keys.ts';
 export { delimitedRecords } from './records.ts';
 export type { Column, RecordFormat } from './records.ts';
 export { RecordScanner, bomLength } from './scan.ts';
