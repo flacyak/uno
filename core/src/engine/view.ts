@@ -43,7 +43,7 @@ import type {
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import { openReading } from './reading.ts';
-import type { Reading } from './reading.ts';
+import type { Reading, ReadSpec } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import {
   BYTES,
@@ -122,6 +122,9 @@ export interface OpenAsk {
   began: number;
   /** The edits, and for a carried source the bytes, a .uno holds for it. */
   carried?: Carried;
+  /** How a .uno says the rows were read when its log was made. Detection is
+   * skipped, and the bytes are read so. */
+  read?: ReadSpec;
   telemetry?: Telemetry;
   /** Whether the first line names the columns. A header row unless said. */
   header?: HeaderMode;
@@ -212,14 +215,15 @@ export class View {
 
     const header = ask.header ?? 'first';
     try {
-      // A file opened fresh on its own is detected, and its head read once.
-      // One opened with a log is read as delimited text, as its log was
-      // made, and each part of several files is detected as it is measured.
+      // A source from a .uno is read as its log was made. A file opened fresh
+      // on its own is detected, and its head read once. One opened with a
+      // log is read as delimited text, and each part of several files is
+      // detected as it is measured.
       const fresh = carried === undefined && ask.parts === undefined;
       v.reading = await openReading({
         name,
         source,
-        spec: fresh ? undefined : { kind: 'delimited', header },
+        spec: ask.read ?? (fresh ? undefined : { kind: 'delimited', header }),
         header,
         tuning,
       });
