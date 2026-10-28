@@ -128,6 +128,35 @@ test("a column found as the file is indexed is drawn with its badge in the turn 
   expect(selected()).toEqual({ row: ROW, col: PAGE });
 });
 
+test("an edit after the widen is aimed among the columns drawn, and lands in the new one", async () => {
+  const fake = await opened(KEYS);
+  fake.widen(WIDE);
+  expect(await page.until([{ row: ROW, col: KEYS.length, equals: cellAt(LATE, ROW) }])).toBe(true);
+
+  await page.press("e", { ctrlKey: true });
+  await page.clickCell(ROW, KEYS.length);
+  await page.press("Enter");
+  await page.setEditorValue("autumn-sale");
+  await page.press("Enter");
+
+  expect(await until(page, () => fake.edits.length === 1)).toBe(true);
+  const edit = { op: Op.Set, row: ROW, col: KEYS.length, now: "autumn-sale", width: WIDE.length };
+  expect(fake.edits[0]).toEqual(edit);
+});
+
+test("a selection on _file moves right with it as a column is found, and stays on its cell", async () => {
+  const fake = await opened(FILED);
+  await page.clickCell(ROW, KEYS.length);
+  const onFile = `_file · row ${ROW + 1}`;
+  expect(await page.text("#status-cell")).toBe(onFile);
+
+  fake.widen(FILED_WIDE);
+  await delivered();
+  expect(headers()).toEqual(FILED_WIDE.map((c) => c.header));
+  expect(await page.text("#status-cell")).toBe(onFile);
+  expect(selected()).toEqual({ row: ROW, col: KEYS.length + 1 });
+});
+
 /** tabOver opens a workspace with no shell over a fake engine whose source has `columns`. */
 async function tabOver(columns: ColumnInfo[]): Promise<[Workspace, FakeEngine]> {
   const fake = new FakeEngine(columns);
