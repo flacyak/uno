@@ -57,7 +57,7 @@ type Reads = Array<[start: number, end: number]>;
  */
 function planned(
   paged: boolean,
-  bytesPerRow: number,
+  bytesPerRow: number | TableRows['bytesPerRow'],
 ): { rows: TableRows; reads: Reads } {
   const reads: Reads = [];
   const rows: TableRows = {
@@ -69,7 +69,8 @@ function planned(
       return Promise.resolve(cells);
     },
     paged: () => paged,
-    bytesPerRow: () => bytesPerRow,
+    bytesPerRow:
+      typeof bytesPerRow === 'number' ? () => bytesPerRow : bytesPerRow,
   };
   return { rows, reads };
 }
@@ -144,6 +145,25 @@ test('a block of an unpaged row group whose rows fill a window decodes alone', a
   const { pages } = pagesOver(rows, PLAN.rows, TINY);
   await pages.records(2);
   expect(reads).toEqual([[2 * TINY.blockRows, 3 * TINY.blockRows]]);
+});
+
+/** A table's rows: a light row group, then a far heavier one from `heavyFrom`. */
+const UNEVEN = { rows: 40_000, heavyFrom: 3_000, light: 4, heavy: 4096 };
+
+test('a window is sized by the heaviest row group under its rows', async () => {
+  const { rows: count, heavyFrom, light, heavy } = UNEVEN;
+  const { rows, reads } = planned(false, (_, end) =>
+    end > heavyFrom ? heavy : light,
+  );
+  const { pages } = pagesOver(rows, count);
+  await pages.records(0);
+  // Block 0 lies in the light group, but a window of MAX_WINDOW_BLOCKS
+  // sized by it alone would take more than three times DECODE_WINDOW_BYTES.
+  const end =
+    (DECODE_WINDOW_BYTES / (heavy * TUNING.blockRows)) * TUNING.blockRows;
+  expect(reads).toEqual([[0, end]]);
+  const bytes = heavyFrom * light + (end - heavyFrom) * heavy;
+  expect(bytes).toBeLessThanOrEqual(DECODE_WINDOW_BYTES);
 });
 
 test('the sales fixture reads as sales-q3.csv does, every window once', async () => {
