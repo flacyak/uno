@@ -94,14 +94,18 @@ export interface Element {
   readonly logical_type?: Annotation;
 }
 
-/** ParquetValue is one value of a column as hyparquet reads it. */
+/**
+ * ParquetValue is one value of a column as hyparquet reads it with identity
+ * parsers, so a string or binary is its bytes.
+ */
 export type ParquetValue =
   | null
   | undefined
   | boolean
   | number
   | bigint
-  | string;
+  | string
+  | Uint8Array;
 
 /** The significant digits that write any float32 so it reads back exactly. */
 export const FLOAT32_DIGITS = 9;
@@ -109,6 +113,16 @@ export const FLOAT32_DIGITS = 9;
 /** The bits an INT32 and an INT64 hold, read as unsigned where annotated. */
 const INT32_BITS = 32;
 const INT64_BITS = 64;
+
+/** The radix and width of one byte in 0x-hex. */
+const HEX = 16;
+const HEX_BYTE_DIGITS = 2;
+
+/**
+ * Bytes that are not UTF-8 throw, so they can be written as 0x-hex. A byte
+ * order mark is kept, since it is part of the value.
+ */
+const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /** A schema element with its children. */
 interface Tree {
@@ -301,6 +315,7 @@ function scalarOf(
   value: ParquetValue,
 ): string {
   if (value === null || value === undefined) return '';
+  if (value instanceof Uint8Array) return bytesOf(value);
   if (primitive && (typeof value === 'number' || typeof value === 'bigint')) {
     return numberOf(primitive, value);
   }
@@ -324,6 +339,15 @@ function numberOf(primitive: Primitive, value: number | bigint): string {
   }
 }
 
+/** Stored bytes as UTF-8 where they decode cleanly, and 0x-hex otherwise. */
+function bytesOf(bytes: Uint8Array): string {
+  try {
+    return UTF8.decode(bytes);
+  } catch {
+    return `0x${hexOf(bytes)}`;
+  }
+}
+
 /**
  * The shortest text that `round`, a float format's rounding, maps back to
  * `value`, with at most `digits` significant digits.
@@ -339,4 +363,11 @@ function floatOf(
     if (round(Number(text)) === value) return String(Number(text));
   }
   return String(Number(value.toPrecision(digits)));
+}
+
+/** Bytes as lower-case hex, two digits each. */
+function hexOf(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) =>
+    byte.toString(HEX).padStart(HEX_BYTE_DIGITS, '0'),
+  ).join('');
 }
