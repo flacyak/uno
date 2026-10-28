@@ -26,6 +26,7 @@ import {
   tampered,
   workspace,
 } from '@core-tests/document/manifest';
+import type { WrittenManifest } from '@core-tests/document/manifest';
 
 /** The bucket prefix the dataset was found under. */
 const ROOT = 's3://lake/orders/';
@@ -290,6 +291,60 @@ describe('a source read in row space reads back', () => {
     });
     const [back] = readContainer('books.uno', uno, AT).sources;
     expect(back!.parts![1]).toMatchObject({ skip: 0, unterminated: false });
+  });
+});
+
+// readContainer refuses what this build cannot read, by name, listing what
+// it can.
+describe('a source read in row space is refused on reading', () => {
+  const DECEMBER =
+    'books.uno: orders: part 2 of 3 (year=2024/month=12/part-00000.snappy.parquet)';
+
+  const refusals: Array<
+    [what: string, change: (m: WrittenManifest) => void, message: string]
+  > = [
+    [
+      'a join this build does not know, by name',
+      (m) => (m.sources[0]!['join'] = 'zip'),
+      'books.uno: orders: this build does not know join "zip" · it reads "rows"',
+    ],
+    [
+      'a root that is not text',
+      (m) => (m.sources[0]!['root'] = ['s3://lake', 'orders']),
+      'books.uno: orders: root is not text',
+    ],
+    [
+      'partitions that are not a list',
+      (m) => (m.sources[0]!['partitions'] = 'year,month'),
+      'books.uno: orders: partitions is not a list of names',
+    ],
+    [
+      'a partition that is not text',
+      (m) => (m.sources[0]!['partitions'] = ['year', 12]),
+      'books.uno: orders: partitions is not a list of names',
+    ],
+    [
+      'a part whose rows are not a count',
+      (m) => (partsOf(m)[1]!['rows'] = 9.5),
+      `${DECEMBER}: rows is not a number of rows`,
+    ],
+    [
+      'a part of fewer than no rows',
+      (m) => (partsOf(m)[1]!['rows'] = -1),
+      `${DECEMBER}: rows is not a number of rows`,
+    ],
+    [
+      'a part compressed in a way this build does not know, by name',
+      (m) => (partsOf(m)[1]!['compression'] = 'bzip2'),
+      `${DECEMBER}: this build does not know compression "bzip2" · it reads none`,
+    ],
+  ];
+
+  test.each(refusals)('with %s', (_what, change, message) => {
+    const uno = tampered(workspace([orders()]), change);
+    expect(() => readContainer('books.uno', uno, AT)).toThrow(
+      new Error(message),
+    );
   });
 });
 
