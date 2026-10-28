@@ -6,8 +6,9 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { ERR_CELL, NO_ROW, Op, Schema, finishRows } from '@sheet';
-import type { Edit } from '@sheet';
+import { FILE_SHOWS } from '@said';
+import { ERR_CELL, Op, Schema, finishRows } from '@sheet';
+import { FILES, OPS, edit } from './harness.ts';
 
 const UNITS = 1;
 const DOUBLE = 2;
@@ -22,17 +23,12 @@ const SOURCES = [
   ['North'],
 ];
 
-/** Each row's supplied values, one array shared by the rows of a file. */
-const IN_A = ['a.csv'];
-const IN_B = ['b.csv'];
-const FILES = [IN_A, IN_A, IN_B];
-
 const REFUSAL =
   'edit 1: _file shows which file each row came from, so it cannot be changed';
 
 function schema(): Schema {
   return new Schema(HEADERS, SOURCES.length, [
-    { col: FILE, shows: 'which file each row came from' },
+    { col: FILE, shows: FILE_SHOWS },
   ]);
 }
 
@@ -56,24 +52,6 @@ function partitioned(): Schema {
     { col: YEAR, shows: 'the year in its path' },
     { col: MONTH, shows: 'the month in its path' },
   ]);
-}
-
-/** Every operation, with a value and a row it can name. */
-const OPS: Array<[Edit['op'], string, number]> = [
-  [Op.Set, 'c.csv', 0],
-  [Op.Note, 'x^2', 0],
-  [Op.Apply, 'trim', NO_ROW],
-  [Op.Bind, 'units * 2', NO_ROW],
-  [Op.Unbind, '', NO_ROW],
-];
-
-function edit(
-  op: Edit['op'],
-  col: number,
-  now: string,
-  row: number = NO_ROW,
-): Edit {
-  return { seq: 0, op, row, col, now };
 }
 
 describe('a supplied column', () => {
@@ -124,7 +102,7 @@ describe('a supplied column', () => {
   });
 
   test('is refused anywhere but the last columns, in the order handed', () => {
-    const shows = 'which file each row came from';
+    const shows = FILE_SHOWS;
     const refusal = 'the supplied columns are not the last';
     expect(
       () => new Schema(HEADERS, SOURCES.length, [{ col: UNITS, shows }]),
