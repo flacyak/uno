@@ -2,9 +2,12 @@
  * @fileoverview Reads one JSON Lines record as the cells it holds.
  *
  * walkLine is a strict RFC 8259 tokenizer. A line it accepts is one JSON
- * object, and a line it refuses costs no throw.
+ * object, and a line it refuses costs no throw. It keeps each number as
+ * written, so 12345678901234567890 and 1.10 come back as they were.
  */
 
+/** RFC 8259's number: an optional minus, digits, a fraction, an exponent. */
+const NUMBER = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
 /**
  * A run of what a string holds as written: all but '"', '\' and the controls
  * U+0000 to U+001F, which RFC 8259 writes only as escapes.
@@ -25,6 +28,15 @@ const ESCAPES: ReadonlyMap<string, string> = new Map([
   ['n', '\n'],
   ['r', '\r'],
   ['t', '\t'],
+]);
+/**
+ * Each word JSON writes, with its cell: true and false as they are, and null
+ * as an empty cell.
+ */
+const WORDS: ReadonlyMap<string, string> = new Map([
+  ['true', 'true'],
+  ['false', 'false'],
+  ['null', ''],
 ]);
 /** RFC 8259's whitespace, which may come before and after any token. */
 const BLANKS: ReadonlySet<string> = new Set([' ', '\t', '\n', '\r']);
@@ -69,7 +81,7 @@ class Tokens {
 
   /** cell reads one value and returns the text of its cell. */
   cell(): string | undefined {
-    return this.string();
+    return this.scalar();
   }
 
   /** string reads a string and returns it unescaped. */
@@ -96,6 +108,20 @@ class Tokens {
     if (!this.match(HEX_DIGITS)) return undefined;
     const code = Number.parseInt(this.line.slice(from, this.at), HEX);
     return String.fromCharCode(code);
+  }
+
+  /** scalar reads a string, a number or a word and returns its cell. */
+  private scalar(): string | undefined {
+    if (this.peek() === '"') return this.string();
+    const from = this.at;
+    if (this.match(NUMBER)) return this.line.slice(from, this.at);
+    for (const [word, cell] of WORDS) {
+      if (this.line.startsWith(word, from)) {
+        this.at += word.length;
+        return cell;
+      }
+    }
+    return undefined;
   }
 
   /** match advances past `pattern` when it matches here. */
@@ -138,9 +164,10 @@ function membersOf(tokens: Tokens): Map<string, string> | undefined {
 /**
  * walkLine reads one JSON Lines record and calls `leaf` with each member's
  * RFC 6901 pointer and the text of its cell, where the last of a repeated name
- * wins. A member's cell is its string, unescaped. walkLine reads no other kind
- * of value yet, and refuses a line that holds one. When the line is not one
- * JSON object, walkLine reports nothing and returns false. It never throws.
+ * wins. A string is unescaped, a number is as written, true and false are
+ * words, and null is an empty cell. walkLine reads no array or object yet, and
+ * refuses a line that holds one. When the line is not one JSON object,
+ * walkLine reports nothing and returns false. It never throws.
  */
 export function walkLine(
   line: string,
