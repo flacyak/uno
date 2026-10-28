@@ -63,6 +63,9 @@ async function expectRefused(
   }
 }
 
+/** The bytes of an INTERVAL: months, days and milliseconds. */
+const INTERVAL_BYTES = 12;
+
 /** A file of one INT32 column, n, with `change` made to it before its footer. */
 function written(change: (writer: ParquetWriter) => void): Uint8Array {
   const writer = new ByteWriter();
@@ -194,6 +197,33 @@ test('columns kept in another file are refused by name', async () => {
     parquet.row_groups[0]!.columns[0]!.file_path = '';
   });
   expect(await refusalOf('q3.parquet', here)).toBeUndefined();
+});
+
+test('a column of a type uno does not read yet is refused by name', async () => {
+  await expectRefused([
+    ['bson.parquet', 'bson'],
+    ['shredded_variant/case-001.parquet', 'variant'],
+  ]);
+  const interval = new Uint8Array(
+    parquetWriteBuffer({
+      schema: [
+        { name: 'root', num_children: 1 },
+        {
+          name: 'span',
+          type: 'FIXED_LEN_BYTE_ARRAY',
+          type_length: INTERVAL_BYTES,
+          converted_type: 'INTERVAL',
+          repetition_type: 'REQUIRED',
+        },
+      ],
+      columnData: [{ name: 'span', data: [new Uint8Array(INTERVAL_BYTES)] }],
+    }),
+  );
+  expect(await refusalOf('q3.parquet', interval)).toEqual({
+    t: 'parquet-unsupported',
+    name: 'q3.parquet',
+    feature: 'interval',
+  });
 });
 
 test('a failed read of the file is passed on as it failed', async () => {
