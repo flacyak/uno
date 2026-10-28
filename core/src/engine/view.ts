@@ -351,16 +351,16 @@ export class View {
   /** rows reads rows with the log applied, tagged with the generation they were built at. */
   async rows(first: number, count: number): Promise<RowsPage> {
     const source = await this.reading.pages.rows(first, count);
-    const files = await this.files(Math.max(0, first), source.length);
+    const supplied = await this.suppliedFor(Math.max(0, first), source.length);
     const schema = this.schema;
     const generation = this.generation;
 
-    if (schema.empty && files === undefined)
+    if (schema.empty && supplied === undefined)
       return { generation, rows: source, raws: [] };
 
     const rows: string[][] = [];
     const raws: Array<string[] | null> = [];
-    for (const f of finishRows(schema, first, source, files)) {
+    for (const f of finishRows(schema, first, source, supplied)) {
       rows.push(f.shown as string[]);
       raws.push(f.shown === f.raw ? null : (f.raw as string[]));
     }
@@ -370,9 +370,9 @@ export class View {
   /** columns infers each column's kind from the sample rows, with the log applied. */
   private async columns(): Promise<ColumnInfo[]> {
     const source = await this.reading.pages.rows(0, SAMPLE_ROWS);
-    const files = await this.files(0, source.length);
+    const supplied = await this.suppliedFor(0, source.length);
     const schema = this.schema;
-    const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
+    const shown = finishRows(schema, 0, source, supplied).map((f) => f.shown);
 
     return schema.headers.map((header, col) => {
       const { kind, flagged } = inferKind(
@@ -387,14 +387,15 @@ export class View {
   }
 
   /**
-   * files returns the supplied values for each of `count` rows from
-   * `first`: the name of the part holding the row's first byte, for `_file`.
-   * Undefined for a source that lacks the column.
+   * suppliedFor returns, for each of `count` rows from `first`, the values
+   * of the schema's supplied columns that the part holding the row's first
+   * byte supplies. Each part's values are built once, and its rows share
+   * them. Undefined for a source with no supplied columns.
    */
-  private async files(
+  private async suppliedFor(
     first: number,
     count: number,
-  ): Promise<string[][] | undefined> {
+  ): Promise<(readonly string[])[] | undefined> {
     if (this.schema.supplied.length === 0) return undefined;
     const ref = this.parts;
     const reading = this.reading;
@@ -402,7 +403,8 @@ export class View {
       throw new Refusal({ t: 'joins-unknown-for-column', name: this.name });
     }
 
-    const names: string[][] = [];
+    const byPart = new Map<number, readonly string[]>();
+    const values: (readonly string[])[] = [];
     const end = first + count;
     for (let row = first; row < end;) {
       const block = reading.index.blockOf(row);
@@ -410,10 +412,16 @@ export class View {
       const runs = await reading.runs(block);
       for (let run = 0; row < Math.min(to, end); row++) {
         while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
-        names.push([ref.parts[runs[run]!.part]?.ref.name ?? '']);
+        const part = runs[run]!.part;
+        let supplies = byPart.get(part);
+        if (supplies === undefined) {
+          supplies = suppliedBy(ref, part);
+          byPart.set(part, supplies);
+        }
+        values.push(supplies);
       }
     }
-    return names;
+    return values;
   }
 
   // ------------------------------------------------------------ changing
@@ -666,11 +674,11 @@ export class View {
       const block = index.blockOf(row);
       const [from, end] = index.rowsOf(block);
       const records = await this.reading.pages.records(block, false);
-      const files = await this.files(from, records.length);
+      const supplied = await this.suppliedFor(from, records.length);
       if (abort.signal.aborted) return { row: null, searched, complete: false };
 
       // Only the searched column is finished.
-      const shown = this.shownIn(req.col, from, records, files);
+      const shown = this.shownIn(req.col, from, records, supplied);
       for (; down ? row < end : row >= from; row += req.dir) {
         searched++;
         if (matches(shown(row))) return { row, searched, complete: true };
@@ -692,18 +700,18 @@ export class View {
     col: number,
     from: number,
     records: readonly (readonly string[])[],
-    files: readonly (readonly string[])[] | undefined,
+    supplied: readonly (readonly string[])[] | undefined,
   ): (row: number) => string {
     const schema = this.schema;
     if (schema.formula(col) !== undefined) {
-      const finished = finishRows(schema, from, records, files);
+      const finished = finishRows(schema, from, records, supplied);
       return (row) => finished[row - from]!.shown[col] ?? '';
     }
     const nth = schema.supplied.findIndex((s) => s.col === col);
     if (nth >= 0) {
       return (row) =>
         schema.writtenIn(row)?.get(col)?.rendered ??
-        files?.[row - from]?.[nth] ??
+        supplied?.[row - from]?.[nth] ??
         '';
     }
     return (row) =>
@@ -946,6 +954,14 @@ function schemaOf(
   return new Schema(headerOf([...names, FILE_COLUMN]), 0, [
     { col: names.length, shows: FILE_SHOWS },
   ]);
+}
+
+/**
+ * suppliedBy returns the values one part of a source supplies, in the order
+ * schemaOf adds their columns: today its name alone, for `_file`.
+ */
+function suppliedBy(ref: PartsRef, part: number): readonly string[] {
+  return [ref.parts[part]?.ref.name ?? ''];
 }
 
 /** deepest returns one past the highest row the edits name, or 0 when none
