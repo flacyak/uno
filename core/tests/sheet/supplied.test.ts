@@ -122,6 +122,21 @@ describe('a supplied column', () => {
       SOURCES,
     );
   });
+
+  test('is refused anywhere but the last columns, in the order handed', () => {
+    const shows = 'which file each row came from';
+    const refusal = 'the supplied columns are not the last';
+    expect(
+      () => new Schema(HEADERS, SOURCES.length, [{ col: UNITS, shows }]),
+    ).toThrow(refusal);
+    expect(
+      () =>
+        new Schema(PARTITIONED, SOURCES.length, [
+          { col: MONTH, shows },
+          { col: YEAR, shows },
+        ]),
+    ).toThrow(refusal);
+  });
 });
 
 describe('two supplied columns', () => {
