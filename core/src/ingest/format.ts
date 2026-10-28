@@ -8,6 +8,7 @@
 
 import { english } from '@said';
 import { unreachable } from '@never';
+import { namesBeside } from '@sheet';
 import type { ByteSource } from '@store';
 import { readAll } from './csv.ts';
 import { RecordScanner, bomLength } from './scan.ts';
@@ -229,17 +230,7 @@ export function suffixed(name: string, taken: ReadonlySet<string>): string {
  * later duplicate takes the lowest free suffix: product_cost_2, then _3.
  */
 export function headerOf(record: readonly string[]): string[] {
-  const taken = new Set(record);
-  const seen = new Set<string>();
-  return record.map((name) => {
-    if (!seen.has(name)) {
-      seen.add(name);
-      return name;
-    }
-    const unique = suffixed(name, taken);
-    taken.add(unique);
-    return unique;
-  });
+  return namesBeside([], record);
 }
 
 /**
