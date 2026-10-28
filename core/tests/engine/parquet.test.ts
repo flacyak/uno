@@ -1,14 +1,23 @@
 /**
- * @fileoverview A Parquet file read by the engine: held to Parquet it reads
- * as its CSV twin does, each pinned column found by its key, its blocks
- * planned from its row count and complete from the start. A block of a paged row group
+ * @fileoverview A Parquet file read by the engine: a workspace that says a
+ * source was read as Parquet reopens it so, as its CSV twin reads, each
+ * pinned column found by its key and each logged edit on its cell, its
+ * blocks planned from its row count and complete from the start. A block of a paged row group
  * reads alone, and one of an unpaged group with its window, once while the
  * rows are scrolled, and the cache holds them within its budget as text.
  */
 
 import { expect, test, vi } from 'vite-plus/test';
 
+import {
+  READ_VERSION,
+  newManifest,
+  readContainer,
+  writeDocument,
+} from '@document';
+import type { Held, SavedColumn } from '@document';
 import { TUNING, english } from '@engine';
+import type { Engine } from '@engine';
 import { openReading } from '@engine/reading';
 import {
   DECODE_WINDOW_BYTES,
@@ -18,6 +27,7 @@ import {
 } from '@engine/table';
 import type { TableRows } from '@engine/table';
 import type { Table } from '@ingest';
+import { Sheet } from '@sheet';
 import { bytesSource } from '@store';
 import { multiFiles } from '@store/multi';
 import { localFiles } from '@store/node';
@@ -30,7 +40,16 @@ import {
   unpagedRow,
 } from '@core-tests/ingest/parquet/tables';
 import { ROWS } from '@core-tests/testdata/sales-q3';
-import { SCREEN, TINY, testdata } from './harness.ts';
+import {
+  SCREEN,
+  TINY,
+  connect,
+  everyRow,
+  multiProviders,
+  openOne,
+  saidIn,
+  testdata,
+} from './harness.ts';
 
 /** A planned file's rows and stored bytes, and the rows in its blocks. */
 const PLAN = { rows: 30, size: 4096, blockRows: 7 };
@@ -389,3 +408,59 @@ test('held to Parquet with pinned columns, each key finds its column, a lost key
   const want = salesRows().map((row) => under(read, row));
   expect(await reading.pages.rows(0, ROWS)).toEqual(want);
 });
+
+/** A .uno holding `source`, whose log is `sheet`'s edits to it. */
+function workspace(source: Held, sheet: Sheet): Blob {
+  const uno = writeDocument({
+    manifest: newManifest(),
+    sources: [source],
+    active: source.id,
+    log: sheet.edits().map((edit) => ({ source: source.id, edit })),
+    extra: new Map(),
+    at: '',
+  });
+  expect(readContainer('q3.uno', uno).manifest.format).toBe(READ_VERSION);
+  return new Blob([new Uint8Array(uno)]);
+}
+
+/** The sales fixture, said to be read as Parquet with `columns` pinned. */
+function salesSource(sheet: Sheet, columns?: SavedColumn[]): Held {
+  return {
+    id: 'sales',
+    name: SALES_NAME,
+    path: SALES_PATH,
+    bytes: SALES.length,
+    kind: 'parquet',
+    columns,
+    rows: sheet.rows(),
+    cols: sheet.cols(),
+    state: { active: { row: 0, col: 0 } },
+  };
+}
+
+/** withEngine runs `use` with an engine under TINY tuning. */
+async function withEngine(use: (engine: Engine) => Promise<void>) {
+  const { engine, done } = connect(TINY, multiProviders());
+  try {
+    await use(engine);
+  } finally {
+    done();
+  }
+}
+
+test('a workspace that says a source was read as Parquet opens it so, every row read and complete at open', () =>
+  withEngine(async (engine) => {
+    const sheet = new Sheet(SALES_NAME, [], []);
+    const blob = workspace(salesSource(sheet), sheet);
+    const src = await openOne(engine, { name: 'q3.uno', blob });
+    expect(saidIn(src.opened.label)).toBe('Parquet · snappy · 5 row groups');
+    expect(src.opened.progress).toMatchObject({
+      done: SALES.length,
+      total: SALES.length,
+      readable: ROWS,
+      rows: ROWS,
+      complete: true,
+    });
+    expect(src.opened.columns.map((c) => c.header)).toEqual(SALES_COLUMNS);
+    expect(await everyRow(src)).toEqual(salesRows());
+  }));
