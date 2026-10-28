@@ -59,9 +59,9 @@ export async function openTable(
 
 /**
  * The footer of `file`, from one read of its last PARQUET_TAIL_BYTES and one
- * more of the rest of a longer footer. The magic at the end is checked, and
- * the one at the start where the reads reach it: a file that opens as
- * Parquet had it checked as it was detected.
+ * more of the rest of a longer footer. The magic is checked at both ends:
+ * where the tail does not reach the start, its first bytes are read beside
+ * it.
  */
 async function footerOf(
   name: string,
@@ -71,7 +71,10 @@ async function footerOf(
   const broken = new Refusal({ t: 'parquet-broken', name });
   if (file.size < PARQUET_MIN_BYTES) throw broken;
   const tailStart = Math.max(file.size - PARQUET_TAIL_BYTES, 0);
-  const tail = new Uint8Array(await chunks.slice(file, tailStart, file.size));
+  const [tail, head] = await Promise.all([
+    chunks.slice(file, tailStart, file.size).then((b) => new Uint8Array(b)),
+    tailStart === 0 ? undefined : file.read(0, PARQUET_MAGIC_BYTES),
+  ]);
   const end = parquetMagicAt(tail, tail.length - PARQUET_MAGIC_BYTES);
   if (end === 'PARE') {
     throw new Refusal({
@@ -80,7 +83,9 @@ async function footerOf(
       feature: 'encryption',
     });
   }
-  if (end !== 'PAR1') throw broken;
+  if (end !== 'PAR1' || parquetMagicAt(head ?? tail, 0) !== 'PAR1') {
+    throw broken;
+  }
   const length = new DataView(tail.buffer, tail.byteOffset).getUint32(
     tail.length - FOOTER_END_BYTES,
     true,
@@ -91,7 +96,6 @@ async function footerOf(
     start < tailStart ? await file.read(start, tailStart - start) : undefined;
   const held = rest === undefined ? tail : concat([rest, tail]);
   const heldStart = file.size - held.length;
-  if (heldStart === 0 && parquetMagicAt(held, 0) !== 'PAR1') throw broken;
   try {
     return parquetMetadata(held.subarray(start - heldStart), {
       geoparquet: false,
