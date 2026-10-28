@@ -11,13 +11,10 @@ import type { Said } from '@said';
 import { GroupsFold, SampleFold } from '@tally';
 import type { Tally } from './protocol.ts';
 
-/** One chart's fold, and how far it has got. */
-interface Tallying {
+/** How far one chart's fold has got. */
+interface Folding {
   /** Which fold the plot's columns make, so a like chart can keep it. */
   key: string;
-  /** The plot's columns, where the view's headers put them. */
-  cols: number[];
-  fold: GroupsFold | SampleFold;
   /** Rows folded: every row before the first block it lacks. */
   rows: number;
   /**
@@ -34,6 +31,15 @@ interface Tallying {
 }
 
 /**
+ * One chart's fold, over the plot's columns where the view's headers put
+ * them: a sample of `x` against `y`, or groups by one column, summing
+ * another where the plot names one.
+ */
+type Tallying =
+  | (Folding & { t: 'sample'; fold: SampleFold; x: number; y: number })
+  | (Folding & { t: 'groups'; fold: GroupsFold; by: number; sum?: number });
+
+/**
  * Tallies folds a view's charts. A chart is attached to be folded, and is
  * pending until it hears its complete tally.
  */
@@ -47,27 +53,16 @@ export class Tallies {
    */
   attach(chart: Chart, headers: readonly string[]): string | undefined {
     const { id, plot } = chart;
-    const cols: number[] = [];
-    for (const column of columnsOf(plot)) {
-      const col = placeOf(column, headers);
-      if (col === undefined) {
-        this.charts.delete(id);
-        return column.header;
-      }
-      cols.push(col);
+    const t = tallying(plot, headers);
+    if (typeof t === 'string') {
+      this.charts.delete(id);
+      return t;
     }
-    const kind = plot.t === 'scatter' ? 'sample' : 'groups';
-    const key = `${kind} ${cols.join(' ')}`;
     const was = this.charts.get(id);
-    if (was?.key === key) {
+    if (was?.key === t.key) {
       was.done = false;
       return undefined;
     }
-    const fold =
-      plot.t === 'scatter'
-        ? new SampleFold()
-        : new GroupsFold(plot.sum === undefined ? 'rows' : 'sum');
-    const t = { key, cols, fold, rows: 0, ahead: undefined, done: false };
     this.charts.set(id, t);
     return undefined;
   }
@@ -110,12 +105,17 @@ export class Tallies {
   ): void {
     for (const t of this.charts.values()) {
       if (t.done || !takes(t, from)) continue;
-      const [first, second] = t.cols.map(shown);
-      for (let row = from; row < end; row++) {
-        if (t.fold instanceof SampleFold) {
-          t.fold.add(block, row, first!(row), second!(row));
-        } else {
-          t.fold.add(first!(row), second === undefined ? '' : second(row));
+      if (t.t === 'sample') {
+        const x = shown(t.x);
+        const y = shown(t.y);
+        for (let row = from; row < end; row++) {
+          t.fold.add(block, row, x(row), y(row));
+        }
+      } else {
+        const by = shown(t.by);
+        const sum = t.sum === undefined ? undefined : shown(t.sum);
+        for (let row = from; row < end; row++) {
+          t.fold.add(by(row), sum?.(row));
         }
       }
       took(t, from, end);
@@ -133,7 +133,7 @@ export class Tallies {
       const ahead = t.ahead === undefined ? 0 : t.ahead[1] - t.ahead[0];
       const coverage = { rows: t.rows + ahead, total, complete };
       const tally: Tally =
-        t.fold instanceof SampleFold
+        t.t === 'sample'
           ? { t: 'sample', coverage, ...t.fold.snapshot() }
           : { t: 'groups', coverage, ...t.fold.snapshot() };
       read.push([id, tally]);
@@ -152,6 +152,38 @@ export class Tallies {
     }
     return unread;
   }
+}
+
+/**
+ * tallying makes the fold `plot` reads, over its columns where `headers`
+ * put them, or returns the header of a column the view has not.
+ */
+function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
+  const folding = unfolded();
+  if (plot.t === 'scatter') {
+    const x = placeOf(plot.x, headers);
+    const y = placeOf(plot.y, headers);
+    if (x === undefined) return plot.x.header;
+    if (y === undefined) return plot.y.header;
+    const key = `sample ${x} ${y}`;
+    return { ...folding, key, t: 'sample', fold: new SampleFold(), x, y };
+  }
+  const by = placeOf(plot.by, headers);
+  if (by === undefined) return plot.by.header;
+  if (plot.sum === undefined) {
+    const key = `groups ${by}`;
+    return { ...folding, key, t: 'groups', fold: new GroupsFold(), by };
+  }
+  const sum = placeOf(plot.sum, headers);
+  if (sum === undefined) return plot.sum.header;
+  const key = `groups ${by} ${sum}`;
+  const fold = new GroupsFold('sum');
+  return { ...folding, key, t: 'groups', fold, by, sum };
+}
+
+/** unfolded is how far a fold has got before any row: nothing, pending. */
+function unfolded(): Omit<Folding, 'key'> {
+  return { rows: 0, ahead: undefined, done: false };
 }
 
 /**
@@ -177,12 +209,6 @@ function took(t: Tallying, from: number, end: number): void {
     t.rows = t.ahead[1];
     t.ahead = undefined;
   }
-}
-
-/** columnsOf lists the columns a plot reads, the one it groups by first. */
-function columnsOf(plot: Plot): ChartColumn[] {
-  if (plot.t === 'scatter') return [plot.x, plot.y];
-  return plot.sum === undefined ? [plot.by] : [plot.by, plot.sum];
 }
 
 /**
