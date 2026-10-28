@@ -9,6 +9,9 @@
  * core never names it and builds its own page codecs.
  */
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseSync } from 'vite-plus';
 import { expect, test } from 'vite-plus/test';
 
 import { core, plant } from './sources.ts';
@@ -23,6 +26,9 @@ const ENTRIES: readonly string[] = ['hyparquet/src/index.js', 'fzstd'];
  */
 const NAMED = /["'`]((?:hyparquet|fzstd)[^"'`]*)["'`]/g;
 
+/** A module that loads another by a name made at run time. */
+const LOADS = /\brequire\s*\(|\bgetBuiltinModule\b/;
+
 /** Every name of the packages in the core other than an entry, as `file: name`. */
 function misnamed(files: ReadonlyMap<string, string>): string[] {
   return [...files]
@@ -32,6 +38,48 @@ function misnamed(files: ReadonlyMap<string, string>): string[] {
     .filter(({ name }) => !ENTRIES.includes(name))
     .map(({ file, name }) => `${file}: ${name}`)
     .sort();
+}
+
+/** What a module imports, re-exports or loads, as the names it gives. */
+function names(url: string): string[] {
+  const text = readFileSync(fileURLToPath(url), 'utf8');
+  const { module } = parseSync(url, text);
+  return [
+    ...module.staticImports.map((i) => i.moduleRequest.value),
+    ...module.staticExports.flatMap((e) =>
+      e.entries.flatMap((x) => x.moduleRequest?.value ?? []),
+    ),
+    ...module.dynamicImports.map(({ moduleRequest: { start, end } }) =>
+      text.slice(start, end).replace(/^(["'`])(.*)\1$/s, '$2'),
+    ),
+    ...(LOADS.test(text) ? ['require'] : []),
+  ];
+}
+
+/** A module's path from the node_modules folder it is in. */
+function shown(url: string): string {
+  const at = '/node_modules/';
+  return url.slice(url.lastIndexOf(at) + at.length);
+}
+
+/**
+ * Every name the module `entry` resolves to reaches outside its own package,
+ * following its relative imports, as `file: name`. A Node builtin is one, and
+ * so is another package.
+ */
+function outward(entry: string): string[] {
+  const found = new Set<string>();
+  const seen = new Set<string>();
+  const next = [import.meta.resolve(entry)];
+  for (let url = next.pop(); url !== undefined; url = next.pop()) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+    for (const name of names(url)) {
+      if (name.startsWith('.')) next.push(new URL(name, url).href);
+      else found.add(`${shown(url)}: ${name}`);
+    }
+  }
+  return [...found].sort();
 }
 
 test('the core names hyparquet and fzstd only by their entries', () => {
@@ -56,4 +104,13 @@ test('a planted name other than an entry fails it', () => {
       `ingest/format.ts: ${name}`,
     ]);
   }
+});
+
+test('each entry reaches no Node builtin and no other package', () => {
+  for (const entry of ENTRIES) expect(outward(entry), entry).toEqual([]);
+});
+
+// The walk is proved on the name the core avoids.
+test("the walk finds the fs that hyparquet's bare name reaches", () => {
+  expect(outward('hyparquet')).toEqual(['hyparquet/src/node.js: fs']);
 });
