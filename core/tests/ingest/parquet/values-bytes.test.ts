@@ -6,6 +6,8 @@
 import type { SchemaElement } from 'hyparquet/src/index.js';
 import { expect, test } from 'vite-plus/test';
 
+import { stringFromBytes } from '@ingest/parquet/values';
+
 import { textsOf } from './texts.ts';
 
 const encoder = new TextEncoder();
@@ -32,6 +34,13 @@ test('a string reads as the UTF-8 it holds, a byte order mark kept', () => {
     new Uint8Array(),
   ];
   expect(textsOf(element, values)).toEqual(['héllo, 世界', '﻿a', '']);
+});
+
+test('a string comes over from hyparquet as the text textOf writes', () => {
+  expect(stringFromBytes(encoder.encode('héllo'))).toBe('héllo');
+  expect(stringFromBytes(bytesOf('ff61'))).toBe('0xff61');
+  expect(stringFromBytes(new Uint8Array())).toBe('');
+  expect(stringFromBytes(undefined)).toBeUndefined();
 });
 
 test('JSON and an enum read as the text they were written as', () => {

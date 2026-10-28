@@ -25,10 +25,11 @@ export type TimeUnit = 'millis' | 'micros' | 'nanos';
 
 /**
  * Logical is what a stored value means, where that changes how it is
- * written. A string, JSON, an enum and a signed integer are written as
- * their stored value is.
+ * written or read back from a MAP's key. JSON, an enum and a signed integer
+ * are written as their stored value is.
  */
 export type Logical =
+  | { readonly t: 'string' }
   | { readonly t: 'decimal'; readonly scale: number }
   | { readonly t: 'timestamp'; readonly unit: TimeUnit; readonly utc: boolean }
   | { readonly t: 'time'; readonly unit: TimeUnit; readonly utc: boolean }
@@ -235,6 +236,7 @@ interface Tree {
   readonly children: readonly Tree[];
 }
 
+const STRING: Logical = { t: 'string' };
 const UNSIGNED: Logical = { t: 'unsigned' };
 
 /**
@@ -255,6 +257,7 @@ const UNITS: Readonly<Record<AnnotatedUnit, TimeUnit>> = {
  * otherwise. The legacy times and timestamps count from UTC.
  */
 const CONVERTED: ReadonlyMap<Converted, Logical> = new Map<Converted, Logical>([
+  ['UTF8', STRING],
   ['DATE', { t: 'date' }],
   ['TIMESTAMP_MILLIS', { t: 'timestamp', unit: 'millis', utc: true }],
   ['TIMESTAMP_MICROS', { t: 'timestamp', unit: 'micros', utc: true }],
@@ -412,6 +415,8 @@ function logicalOf(element: Element): Logical | undefined {
       };
     case 'INTEGER':
       return annotation.isSigned ? undefined : UNSIGNED;
+    case 'STRING':
+      return STRING;
     case 'DATE':
       return { t: 'date' };
     case 'UUID':
@@ -489,8 +494,10 @@ function storedOf({ physical, logical }: Primitive, key: string): Scalar {
       return INTEGER.test(key) ? BigInt(key) : key;
     case 'BYTE_ARRAY':
     case 'FIXED_LEN_BYTE_ARRAY':
-      // hyparquet hands a float16 over as a number.
+      // hyparquet hands a float16 over as a number, and a string through
+      // stringFromBytes as its text.
       if (logical?.t === 'float16') return Number(key);
+      if (logical?.t === 'string') return key;
       return key === ''
         ? new Uint8Array()
         : Uint8Array.from(key.split(','), Number);
@@ -654,6 +661,18 @@ function bytesOf(logical: Logical | undefined, bytes: Uint8Array): string {
   } catch {
     return `0x${hexOf(bytes)}`;
   }
+}
+
+/**
+ * stringFromBytes is the parser that has hyparquet hand a string over as
+ * textOf writes it: its UTF-8, or 0x-hex where its bytes are not UTF-8. A
+ * MAP keyed by strings is then keyed by their text, which keeps the keys in
+ * their stored order, apart from keys that read as array indexes.
+ */
+export function stringFromBytes(
+  bytes: Uint8Array | undefined,
+): string | undefined {
+  return bytes && bytesOf(undefined, bytes);
 }
 
 /** An unscaled integer as a decimal with every one of its scale's digits. */
