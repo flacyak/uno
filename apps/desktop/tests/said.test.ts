@@ -80,6 +80,12 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "file-closed": { t: "file-closed" },
   cancelled: { t: "cancelled", name: "ads.csv" },
   "changed-on-disk": { t: "changed-on-disk", name: "ads.csv" },
+  "stored-encoded": {
+    t: "stored-encoded",
+    name: "s3://open-data/census/2025.csv.gz",
+    encoding: "gzip",
+    bucket: "open-data",
+  },
   "keeps-no-connections": { t: "keeps-no-connections" },
   "offers-no-sign-ins": { t: "offers-no-sign-ins" },
   "tries-no-connection": { t: "tries-no-connection" },

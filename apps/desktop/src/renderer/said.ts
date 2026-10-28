@@ -171,6 +171,8 @@ const SAYS: Sentences<Said> = {
   "file-closed": m.refused_file_closed,
   cancelled: (s) => m.refused_cancelled({ name: s.name }),
   "changed-on-disk": (s) => m.refused_changed_on_disk({ name: s.name }),
+  "stored-encoded": (s) =>
+    m.refused_stored_encoded({ name: s.name, encoding: s.encoding, bucket: s.bucket }),
 
   "keeps-no-connections": m.refused_keeps_no_connections,
   "offers-no-sign-ins": m.refused_offers_no_sign_ins,
