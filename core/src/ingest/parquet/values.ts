@@ -6,6 +6,8 @@
  * are.
  */
 
+import { headerOf } from '../format.ts';
+
 /** How a Parquet file stores a value. */
 export type Physical =
   | 'BOOLEAN'
@@ -24,6 +26,15 @@ export interface Primitive {
 }
 
 /**
+ * Shape is the type of a column's values: a primitive, or a list or struct
+ * of further shapes, which is written as JSON.
+ */
+export type Shape =
+  | Primitive
+  | { readonly t: 'list'; readonly of: Shape }
+  | { readonly t: 'struct'; readonly fields: ReadonlyMap<string, Shape> };
+
+/**
  * Column is a leaf as a sheet shows it: a name unique in its file, and the
  * leaf's field path as an RFC 6901 pointer.
  */
@@ -32,12 +43,12 @@ export interface Column {
   readonly key: string;
 }
 
-/** Leaf is one column of a Parquet file. */
+/** Leaf is one column of a Parquet file. A struct is not one; each field is. */
 export interface Leaf {
   readonly column: Column;
   /** The field names from the top of the schema down to this column. */
   readonly path: readonly string[];
-  readonly shape: Primitive;
+  readonly shape: Shape;
 }
 
 /**
@@ -57,16 +68,30 @@ interface Tree {
   readonly children: readonly Tree[];
 }
 
-/** columnsOf reads a footer's schema as the file's columns, in schema order. */
+/**
+ * columnsOf reads a footer's schema as the file's columns, in schema order.
+ * A struct's fields flatten to dotted names, and a repeated field is one
+ * column. A name already taken gets headerOf's suffix.
+ */
 export function columnsOf(schema: readonly Element[]): Leaf[] {
-  return treeOf(schema).children.map(({ element }) => {
-    const path = [element.name];
-    return {
-      column: { name: element.name, key: pointerOf(path) },
-      path,
-      shape: primitiveOf(element),
-    };
-  });
+  const found: Array<Omit<Leaf, 'column'>> = [];
+  const walk = (node: Tree, path: readonly string[]): void => {
+    if (!isStruct(node)) {
+      found.push({ path, shape: shapeOf(node) });
+      return;
+    }
+    for (const child of node.children) {
+      walk(child, [...path, child.element.name]);
+    }
+  };
+  for (const child of treeOf(schema).children) {
+    walk(child, [child.element.name]);
+  }
+  const names = headerOf(found.map(({ path }) => path.join('.')));
+  return found.map((leaf, i) => ({
+    column: { name: names[i]!, key: pointerOf(leaf.path) },
+    ...leaf,
+  }));
 }
 
 /** The schema's root, with every element under its group. */
@@ -88,6 +113,32 @@ function pointerOf(path: readonly string[]): string {
   return path
     .map((name) => `/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`)
     .join('');
+}
+
+/** Whether a node is a struct, whose fields are columns of their own. */
+function isStruct(node: Tree): boolean {
+  return (
+    node.children.length > 0 && node.element.repetition_type !== 'REPEATED'
+  );
+}
+
+/** The shape of a node's values. A repeated node holds a list of them. */
+function shapeOf(node: Tree): Shape {
+  const shape = valueShapeOf(node);
+  return node.element.repetition_type === 'REPEATED'
+    ? { t: 'list', of: shape }
+    : shape;
+}
+
+/** The shape of one value of a node. */
+function valueShapeOf({ element, children }: Tree): Shape {
+  if (children.length === 0) return primitiveOf(element);
+  return {
+    t: 'struct',
+    fields: new Map(
+      children.map((child) => [child.element.name, shapeOf(child)]),
+    ),
+  };
 }
 
 /** The primitive a leaf element stores. */
