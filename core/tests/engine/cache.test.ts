@@ -65,3 +65,11 @@ test('a block costing more than the budget is held alone, until the next', () =>
   expect(heldOf(cache, [3, 4])).toEqual([4]);
   expect(cache.held).toBe(BLOCK_COST);
 });
+
+test('a block put again takes the place of what it held, at its new cost', () => {
+  const cache = filled();
+  cache.put(0, recordsOf(9), 2 * BLOCK_COST);
+  expect(cache.get(0)).toEqual(recordsOf(9));
+  expect(heldOf(cache, [0, 1, 2])).toEqual([0, 2]);
+  expect(cache.held).toBe(BUDGET);
+});

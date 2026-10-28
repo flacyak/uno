@@ -170,10 +170,15 @@ export class BlockCache {
   }
 
   /**
-   * put holds a block's records at `cost`, then evicts the oldest blocks
-   * until the cost held is within the budget.
+   * put holds a block's records at `cost`, in place of any it held, then
+   * evicts the oldest blocks until the cost held is within the budget.
    */
   put(block: number, records: string[][], cost: number): void {
+    const held = this.blocks.get(block);
+    if (held !== undefined) {
+      this.blocks.delete(block);
+      this.kept -= held.cost;
+    }
     this.blocks.set(block, { records, cost });
     this.kept += cost;
     for (const [key, entry] of this.blocks) {
