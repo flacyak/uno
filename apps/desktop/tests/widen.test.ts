@@ -1,8 +1,10 @@
 /**
  * @fileoverview A source whose columns grow while it is indexed, drawn by the
- * real shell over a fake engine. Each edit carries the column count the grid
- * draws, and a tab's saved cell stays on its cell as _file moves right, while
- * one in a tab that had no columns stays where it is.
+ * real shell over a fake engine. A column found as the file is indexed gets a
+ * header cell with its badge in the turn it arrives, the band is read again,
+ * the selection and a tab's saved cell stay on their cell as _file moves
+ * right, a tab that had no columns keeps its cell, and each edit carries the
+ * column count the grid draws.
  *
  * @vitest-environment happy-dom
  */
@@ -11,6 +13,7 @@ import { beforeAll, expect, test } from "vite-plus/test";
 
 import { Engine, messagePort } from "@engine";
 import type { ColumnInfo, MessagePortLike, Reply, Request } from "@engine";
+import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
 import { Workspace } from "@renderer/workspace";
 import { Op } from "@sheet";
@@ -28,6 +31,7 @@ const KEYS: ColumnInfo[] = [
 
 /** The column the source finds late: blank in every sample row, so text. */
 const LATE: ColumnInfo = { header: "campaign", kind: "text", flagged: false };
+const WIDE = [...KEYS, LATE];
 
 /** The source as the one part of a source that shows each row's file in _file. */
 const FILE: ColumnInfo = { header: "_file", kind: "text", flagged: false };
@@ -36,6 +40,9 @@ const FILED_WIDE = [...KEYS, LATE, FILE];
 
 /** The row a saved cell or the selection is left on before the widen. */
 const ROW = 2;
+/** The column the selection is left on, and what the status bar says of its cell. */
+const PAGE = KEYS.findIndex((column) => column.header === "page");
+const PICKED = `${KEYS[PAGE]!.header} · row ${ROW + 1}`;
 
 const page = domPage();
 let shell: Shell;
@@ -74,6 +81,53 @@ test("an edit carries the column count the grid draws", async () => {
   expect(fake.edits[0]).toEqual({ op: Op.Set, row: 2, col: 1, now: "signup", width: KEYS.length });
 });
 
+/** headers returns each header cell's name, and badges each's kind badge. */
+function headers(): string[] {
+  return [...document.querySelectorAll("thead th .colname")].map((n) => n.textContent ?? "");
+}
+function badges(): string[] {
+  return [...document.querySelectorAll("thead th .badge")].map((b) => b.textContent ?? "");
+}
+
+/** rowsAsked counts the rows requests the engine has been sent. */
+function rowsAsked(fake: FakeEngine): number {
+  return fake.asked.filter((r) => r.t === "rows").length;
+}
+
+/** selected returns where the cell drawn as selected is among the drawn rows. */
+function selected(): { row: number; col: number } | undefined {
+  const td = document.querySelector("tbody td.sel");
+  const tr = td?.parentElement;
+  if (td === null || tr === null || tr === undefined) return undefined;
+  const rows = [...document.querySelectorAll("tbody tr")];
+  return { row: rows.indexOf(tr as HTMLTableRowElement), col: [...tr.children].indexOf(td) - 1 };
+}
+
+/** delivered resolves once a reply sent before it has been handed to the client. */
+function delivered(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve));
+}
+
+test("a column found as the file is indexed is drawn with its badge in the turn it arrives, over rows read again", async () => {
+  const fake = await opened(KEYS);
+  await page.clickCell(ROW, PAGE);
+  expect(await page.text("#status-cell")).toBe(PICKED);
+  const asked = rowsAsked(fake);
+
+  fake.widen(WIDE);
+  await delivered();
+  expect(headers(), "drawn before the next frame").toEqual(WIDE.map((c) => c.header));
+  expect(badges()).toEqual(WIDE.map((c) => c.kind));
+  expect(await page.text("#status-file")).toContain(m.columns_count({ count: WIDE.length }));
+  const rows = await page.rows();
+  expect(rows.every((r) => r.cells.length === WIDE.length)).toBe(true);
+
+  expect(await page.until([{ row: ROW, col: KEYS.length, equals: cellAt(LATE, ROW) }])).toBe(true);
+  expect(rowsAsked(fake), "rows built before the widen are stale").toBeGreaterThan(asked);
+  expect(await page.text("#status-cell")).toBe(PICKED);
+  expect(selected()).toEqual({ row: ROW, col: PAGE });
+});
+
 /** tabOver opens a workspace with no shell over a fake engine whose source has `columns`. */
 async function tabOver(columns: ColumnInfo[]): Promise<[Workspace, FakeEngine]> {
   const fake = new FakeEngine(columns);
@@ -83,13 +137,14 @@ async function tabOver(columns: ColumnInfo[]): Promise<[Workspace, FakeEngine]> 
 }
 
 test("a tab's saved cell on _file moves right with it, and one in a tab of no columns stays", async () => {
-  const [w] = await tabOver(FILED);
-  const [bare] = await tabOver([]);
+  const [w, fake] = await tabOver(FILED);
+  const [bare, none] = await tabOver([]);
   try {
     const tab = w.active;
     tab.cell = { row: ROW, col: KEYS.length };
-    tab.widened(FILED_WIDE);
-    bare.active.widened(KEYS);
+    fake.widen(FILED_WIDE);
+    none.widen(KEYS);
+    await delivered();
     expect(tab.cell).toEqual({ row: ROW, col: KEYS.length + 1 });
     expect(tab.band.columns).toEqual(FILED_WIDE);
     expect(bare.active.cell, "a cell that named no column").toEqual({ row: 0, col: 0 });

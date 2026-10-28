@@ -200,6 +200,11 @@ export interface WorkspaceEvents {
   changed(): void;
   /** A source's offer changed. */
   offered(tab: Tab): void;
+  /**
+   * A source found columns as it was indexed. Its band holds them already,
+   * so whoever draws it can draw them at once.
+   */
+  widened(tab: Tab): void;
 }
 
 export class Workspace {
@@ -268,6 +273,10 @@ export class Workspace {
     source.onOffer = (offer) => {
       t.offer = offer;
       this.events.offered(t);
+    };
+    source.onColumns = (columns) => {
+      t.widened(columns);
+      this.events.widened(t);
     };
     return t;
   }
