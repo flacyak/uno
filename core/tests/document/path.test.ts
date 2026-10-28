@@ -131,6 +131,29 @@ test('a folder written with its separator at the end holds the paths under it', 
   );
 });
 
+// '..' climbs out of a folder, on disk and in an S3 URL alike, and '.' names
+// the folder it is in.
+test('a path through a dot segment is under no folder', () => {
+  expect(relativeTo('/home/cpa/q4/../q3/sales.csv', '/home/cpa/q4')).toBe('');
+  expect(relativeTo('/home/cpa/q4/./sales.csv', '/home/cpa/q4')).toBe('');
+  expect(relativeTo('s3://lake/q4/../q3/sales.csv', 's3://lake/q4')).toBe('');
+  expect(relativeTo('/home/cpa/q4/..x/sales.csv', '/home/cpa/q4')).toBe(
+    '..x/sales.csv',
+  );
+  expect(
+    storedPath('/home/cpa/q4/../q3/sales.csv', '/home/cpa/q4/books.uno'),
+  ).toBe('/home/cpa/q4/../q3/sales.csv');
+});
+
+// A workspace in a bucket stores the sources beside it as S3 keys.
+test('a path beside a workspace in a bucket keeps its key as written', () => {
+  const at = 's3://lake/q4/books.uno';
+  expect(storedPath('s3://lake/q4/a\\b.csv', at)).toBe('a\\b.csv');
+  expect(resolvedPath('a\\b.csv', at)).toBe('s3://lake/q4/a\\b.csv');
+  // A drive-like key would read back as a path of its own.
+  expect(storedPath('s3://lake/q4/c:/a.csv', at)).toBe('s3://lake/q4/c:/a.csv');
+});
+
 test('two paths are the same place whichever way their slashes lean', () => {
   expect(samePath('C:\\data\\q4\\sales.csv', 'C:/data/q4/sales.csv')).toBe(
     true,
