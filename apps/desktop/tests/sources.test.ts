@@ -435,6 +435,12 @@ test("files added as one are named for what their names share, back to a whole w
   expect(joinedName(at("orders-2025-01.csv", "orders-2025-02.csv"))).toBe("orders-2025.csv");
   expect(joinedName(at("sales-q3-part-1.csv", "sales-q3-part-2.csv"))).toBe("sales-q3-part.csv");
   expect(joinedName(at("ads-q3.csv", "ads-q4.csv"))).toBe("ads.csv");
+  // A compressed file keeps every extension it has.
+  expect(joinedName(at("events-01.jsonl.gz", "events-02.jsonl.gz"))).toBe("events.jsonl.gz");
+  // A codec named before .parquet is part of the stem.
+  expect(joinedName(at("part-0.snappy.parquet", "part-1.snappy.parquet"))).toBe("part.parquet");
+  // A key written on Windows is named for what follows its last backslash.
+  expect(joinedName(at("exports\\orders-01.csv", "exports\\orders-02.csv"))).toBe("orders.csv");
   // One name that is the start of the other ends on a whole word already.
   expect(joinedName(at("sales.tsv", "sales_eu.tsv"))).toBe("sales.tsv");
   // A shared start of one letter is too short: the folder names them.
