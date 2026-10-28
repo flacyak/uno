@@ -1,13 +1,19 @@
 /**
  * @fileoverview A Parquet file read by the engine: its blocks are planned
- * from its row count, complete from the start, and read through a cache that
- * holds them within its budget as text.
+ * from its row count, complete from the start. A block of a paged row group
+ * reads alone, and one of an unpaged group with its window, once while the
+ * rows are scrolled, and the cache holds them within its budget as text.
  */
 
 import { expect, test } from 'vite-plus/test';
 
 import { TUNING } from '@engine';
-import { PlannedIndex, TablePages } from '@engine/table';
+import {
+  DECODE_WINDOW_BYTES,
+  MAX_WINDOW_BLOCKS,
+  PlannedIndex,
+  TablePages,
+} from '@engine/table';
 import type { TableRows } from '@engine/table';
 import type { Table } from '@ingest';
 import { SALES, opened, salesRows } from '@core-tests/ingest/parquet/tables';
@@ -45,8 +51,14 @@ test('a planned index of no rows has no blocks', () => {
 /** Reads asked of a table, as [start, end) rows. */
 type Reads = Array<[start: number, end: number]>;
 
-/** A table whose rows are one cell, the row's number. */
-function planned(): { rows: TableRows; reads: Reads } {
+/**
+ * A table whose rows are one cell, the row's number, which is paged or not
+ * and takes `bytesPerRow` uncompressed.
+ */
+function planned(
+  paged: boolean,
+  bytesPerRow: number,
+): { rows: TableRows; reads: Reads } {
   const reads: Reads = [];
   const rows: TableRows = {
     read: (start, end) => {
@@ -56,6 +68,22 @@ function planned(): { rows: TableRows; reads: Reads } {
       ]);
       return Promise.resolve(cells);
     },
+    paged: () => paged,
+    bytesPerRow: () => bytesPerRow,
+  };
+  return { rows, reads };
+}
+
+/** `table` with each read it is asked for logged in `reads`. */
+function counted(table: Table): { rows: TableRows; reads: Reads } {
+  const reads: Reads = [];
+  const rows: TableRows = {
+    read: (start, end) => {
+      reads.push([start, end]);
+      return table.read(start, end);
+    },
+    paged: (start, end) => table.paged(start, end),
+    bytesPerRow: (start, end) => table.bytesPerRow(start, end),
   };
   return { rows, reads };
 }
@@ -86,8 +114,8 @@ function sales(): Promise<Table> {
   return opened('sales-q3.snappy.parquet', SALES);
 }
 
-test('a block reads alone', async () => {
-  const { rows, reads } = planned();
+test('a block of a paged row group reads alone', async () => {
+  const { rows, reads } = planned(true, DECODE_WINDOW_BYTES);
   const { pages } = pagesOver(rows, PLAN.rows, TINY);
   const second = Array.from({ length: TINY.blockRows }, (_, i) => [
     String(TINY.blockRows + i),
@@ -96,10 +124,34 @@ test('a block reads alone', async () => {
   expect(reads).toEqual([[TINY.blockRows, 2 * TINY.blockRows]]);
 });
 
-test('the sales fixture reads as sales-q3.csv does', async () => {
+test('a window holds the blocks DECODE_WINDOW_BYTES of their row group does, aligned', async () => {
+  const blocks = 4;
+  const bytesPerRow = DECODE_WINDOW_BYTES / (blocks * TINY.blockRows);
+  const { rows, reads } = planned(false, bytesPerRow);
+  const { pages } = pagesOver(rows, PLAN.rows, TINY);
+  // Blocks 1 and 3 are in the window of blocks 0 to 3, and block 4 in the last.
+  await pages.records(1);
+  await pages.records(3);
+  await pages.records(LAST_BLOCK);
+  expect(reads).toEqual([
+    [0, blocks * TINY.blockRows],
+    [blocks * TINY.blockRows, PLAN.rows],
+  ]);
+});
+
+test('a block of an unpaged row group whose rows fill a window decodes alone', async () => {
+  const { rows, reads } = planned(false, DECODE_WINDOW_BYTES);
+  const { pages } = pagesOver(rows, PLAN.rows, TINY);
+  await pages.records(2);
+  expect(reads).toEqual([[2 * TINY.blockRows, 3 * TINY.blockRows]]);
+});
+
+test('the sales fixture reads as sales-q3.csv does, every window once', async () => {
+  const { rows, reads } = counted(await sales());
   const want = salesRows();
-  const { pages } = pagesOver(await sales(), want.length, TINY);
+  const { pages, index } = pagesOver(rows, want.length, TINY);
   expect(await pages.rows(0, want.length)).toEqual(want);
+  expect(reads).toHaveLength(Math.ceil(index.blocks / MAX_WINDOW_BLOCKS));
 });
 
 test('the cache holds blocks at the bytes they take as text, within its budget', async () => {
