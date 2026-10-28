@@ -1,12 +1,14 @@
 /**
- * @fileoverview A file's stored bytes say whether it is Parquet before any
- * text is sniffed.
+ * @fileoverview A file's stored bytes say whether it is Parquet or
+ * compressed before any text is sniffed.
  */
 
+import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vite-plus/test';
 
 import { PARQUET_MAGIC_BYTES, detect } from '@ingest/detect';
 import type { Detected, StoredHead } from '@ingest/detect';
+import { sniffEncoding } from '@ingest/sniff';
 import type { Unread } from '@said';
 
 /** How much of a file a head holds here: as much as a peek reads. */
@@ -63,7 +65,28 @@ const FOOTER_LENGTH = [BODY.length, 0x00, 0x00, 0x00];
 /** A Parquet file's shape: its magic, a body, a footer length, its magic. */
 const PARQUET = bytesOf(PAR1, BODY, FOOTER_LENGTH, PAR1);
 
+const BZIP2_BLOCK = [0x31, 0x41, 0x59, 0x26, 0x53, 0x59];
+const BZIP2_END = [0x17, 0x72, 0x45, 0x38, 0x50, 0x90];
+
+/** Each magic, then bytes as its stream would hold them. */
+const MAGICS: ReadonlyArray<readonly [Unread, Uint8Array]> = [
+  ['Parquet', PARQUET],
+  ['gzip', new Uint8Array(gzipSync('date,units\n2026-07-01,1204\n'))],
+  ['zstd', bytesOf([0x28, 0xb5, 0x2f, 0xfd], BODY)],
+  ['bzip2', bytesOf('BZh9', BZIP2_BLOCK, BODY)],
+  ['bzip2', bytesOf('BZh1', BZIP2_END, BODY)],
+  ['xz', bytesOf([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00], BODY)],
+  ['snappy', bytesOf([0xff, 0x06, 0x00, 0x00], 'sNaPpY', BODY)],
+  ['LZ4', bytesOf([0x04, 0x22, 0x4d, 0x18], BODY)],
+  ['zip', bytesOf('PK', [0x03, 0x04], BODY)],
+];
+
 describe('the bytes decide first', () => {
+  test.each(MAGICS)('%s is recognised by its magic', async (what, bytes) => {
+    for (const name of ['data.csv', 'data.jsonl', 'data'])
+      expect(await detected(name, bytes), name).toEqual(unread(what));
+  });
+
   test('a PAR1 head is Parquet only where the file ends with PAR1', async () => {
     const parquet = stored(PARQUET);
     expect(await detect('q3.parquet', parquet.head)).toEqual(unread('Parquet'));
@@ -86,9 +109,28 @@ describe('the bytes decide first', () => {
   });
 
   test('the tail is read only for a PAR1 head', async () => {
+    for (const [, bytes] of MAGICS.filter(([what]) => what !== 'Parquet')) {
+      const file = stored(bytes);
+      await detect('data.csv', file.head);
+      expect(file.tails).toEqual([]);
+    }
     const csv = stored('date,units\n2026-07-01,1204\n');
     await detect('q3.csv', csv.head);
     expect(csv.tails).toEqual([]);
+  });
+
+  test("'BZh' text without the block magic stays text", async () => {
+    expect(await detected('notes.csv', 'BZh9,units\n1,2\n')).toEqual(DELIMITED);
+    expect(await detected('notes', 'BZh\n')).toEqual(DELIMITED);
+    // A digit out of range, before a block magic.
+    const zero = bytesOf('BZh0', BZIP2_BLOCK);
+    expect(await detected('notes.csv', zero)).toEqual(DELIMITED);
+  });
+
+  test('gzip bytes no longer look like UTF-16', async () => {
+    const gzip = new Uint8Array(gzipSync('a,b\n1,2\n'));
+    expect(sniffEncoding(gzip)).not.toBe('utf-8');
+    expect(await detected('q3.csv.gz', gzip)).toEqual(unread('gzip'));
   });
 
   test('an empty head and a one-byte head are text', async () => {
