@@ -43,7 +43,7 @@ import type {
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import { openReading } from './reading.ts';
-import type { Reading, ReadSpec } from './reading.ts';
+import type { Expected, Reading, ReadSpec } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import {
   BYTES,
@@ -125,6 +125,9 @@ export interface OpenAsk {
   /** How a .uno says the rows were read when its log was made. Detection is
    * skipped, and the bytes are read so. */
   read?: ReadSpec;
+  /** What a relink holds one file to. One detected as another kind of rows
+   * than its log was read as is refused. */
+  expect?: Expected;
   telemetry?: Telemetry;
   /** Whether the first line names the columns. A header row unless said. */
   header?: HeaderMode;
@@ -215,15 +218,16 @@ export class View {
 
     const header = ask.header ?? 'first';
     try {
-      // A source from a .uno is read as its log was made. A file opened fresh
-      // on its own is detected, and its head read once. One opened with a
-      // log is read as delimited text, and each part of several files is
-      // detected as it is measured.
-      const fresh = carried === undefined && ask.parts === undefined;
+      // A source from a .uno is read as its log was made. Several files are
+      // read as delimited text, each part detected as it is measured. A
+      // file on its own is detected, and its head read once.
       v.reading = await openReading({
         name,
         source,
-        spec: ask.read ?? (fresh ? undefined : { kind: 'delimited', header }),
+        spec:
+          ask.read ??
+          (ask.parts === undefined ? undefined : { kind: 'delimited', header }),
+        expect: ask.expect,
         header,
         tuning,
       });
@@ -759,6 +763,11 @@ export class View {
   private get bytes(): ByteSource {
     const { behind } = this.reading;
     return behind.t === 'file' ? behind.stored : behind.joined;
+  }
+
+  /** How the source's rows are read, as a save records it. */
+  get spec(): ReadSpec {
+    return this.reading.spec();
   }
 
   /** The size of the carried bytes, or of the source. */

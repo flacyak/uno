@@ -133,6 +133,11 @@ class Absent {
     return this.kept.raw?.length ?? 0;
   }
 
+  /** How the source's rows were read when its log was made. */
+  get spec(): ReadSpec {
+    return readOf(this.kept);
+  }
+
   /** Returns what the .uno held, unchanged. */
   part(): Promise<Part> {
     return Promise.resolve(this.kept);
@@ -166,7 +171,7 @@ class Absent {
 type Source = View | Absent;
 
 /** What Workspace.view opens a ref with, besides the ref. */
-type ViewAsk = Pick<OpenAsk, 'carried' | 'read' | 'signal'> & {
+type ViewAsk = Pick<OpenAsk, 'carried' | 'read' | 'expect' | 'signal'> & {
   /** Opens every part of several files first, so a missing part fails here
    * by name. */
   whole?: boolean;
@@ -265,7 +270,9 @@ export class Workspace {
   /**
    * relink points a source at a different file. The id stays, and the edits
    * are replayed over the new file. A failed open leaves the source as it
-   * was and throws.
+   * was and throws. The file the source was read from is read again as its
+   * log was made, and another file is refused if it holds another kind of
+   * rows.
    *
    * One exception: a source that was waiting for its bucket to be connected,
    * relinked to the same addresses now that they are covered, becomes a
@@ -282,7 +289,11 @@ export class Workspace {
       const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, { carried, whole: 'parts' in to });
+        view = await this.view(id, to, {
+          carried,
+          whole: 'parts' in to,
+          ...heldTo(was, to),
+        });
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -546,6 +557,7 @@ export class Workspace {
       origin: originOf(ref),
       carried,
       read: ask.read,
+      expect: ask.expect,
       port: this.port,
       tuning: this.tuning,
       began,
@@ -880,6 +892,20 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
       return extent === undefined ? { ref: now } : { ref: now, extent };
     }),
   };
+}
+
+/**
+ * heldTo says how a relink reads one file. The file the source was read
+ * from is read as its log was made, as a reopen reads it. Any other file is
+ * detected, and refused when it holds another kind of rows. Several files
+ * keep the extents they were saved with.
+ */
+function heldTo(was: Source, to: SourceRef): Pick<ViewAsk, 'read' | 'expect'> {
+  if ('parts' in to) return {};
+  if ('path' in to && was.path !== '' && to.path === was.path) {
+    return { read: was.spec };
+  }
+  return { expect: { name: was.name, kind: was.spec.kind } };
 }
 
 /** originOf says what a ref hands its bytes over as. */
