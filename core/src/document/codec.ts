@@ -45,6 +45,7 @@ import {
   PARTS_VERSION,
   POINTED_VERSION,
   READ_VERSION,
+  ROWS_VERSION,
   RULE_VERSION,
   SOURCES_VERSION,
   SOURCE_COMPRESSIONS,
@@ -56,7 +57,7 @@ import {
   sourceId,
   storedPath,
 } from './document.ts';
-import { baseOf } from './path.ts';
+import { baseOf, underRoot } from './path.ts';
 
 const decoder = new TextDecoder('utf-8');
 const encoder = new TextEncoder();
@@ -422,15 +423,18 @@ function checkLog(d: Document): void {
 
 /**
  * checkParts refuses an empty parts source, or one with a part whose path
- * is "".
+ * is "" or is not under the source's root.
  */
 function checkParts(src: HeldParts): void {
   if (src.parts.length === 0)
     throw new Error(`${src.name} has no parts to point at`);
+  const { root } = src;
   src.parts.forEach((part, i) => {
-    if (part.path === '') {
+    const which = `${src.name}: ${part.name} (part ${i + 1} of ${src.parts.length})`;
+    if (part.path === '') throw new Error(`${which} has no path to point at`);
+    if (root !== undefined && underRoot(part.path, root) === '') {
       throw new Error(
-        `${src.name}: ${part.name} (part ${i + 1} of ${src.parts.length}) has no path to point at`,
+        `${which} is at ${part.path}, which is not under ${root}`,
       );
     }
   });
@@ -494,21 +498,34 @@ function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
 
 /**
  * partsSource is what the manifest records of a parts source, for a .uno
- * saved to `at`. Each part's path is stored the way a file source's path is.
+ * saved to `at`. Under a root each part's path is stored relative to it,
+ * which checkParts holds every part to. Otherwise each part's path, like the
+ * root, is stored the way a file source's path is.
  */
 function partsSource(src: HeldParts, at: string): PartsSource {
+  const { root } = src;
+  // Where one part's bytes end and the next's begin is the byte join's alone.
+  const bytesJoined = src.join === undefined;
   return {
     id: src.id,
     name: src.name,
     connection: src.connection ?? '',
+    join: src.join,
+    root: root === undefined ? undefined : storedPath(root, at),
+    partitions: src.partitions?.slice(),
     parts: src.parts.map((part): SourcePart => ({
       // The name is written only when the path's last piece differs from it.
       name: part.name === baseOf(part.path) ? '' : part.name,
-      path: storedPath(part.path, at),
+      path:
+        root === undefined
+          ? storedPath(part.path, at)
+          : underRoot(part.path, root),
       bytes: part.bytes,
       version: part.version ?? '',
-      skip: part.skip,
-      unterminated: part.unterminated,
+      skip: bytesJoined ? part.skip : 0,
+      unterminated: bytesJoined ? part.unterminated : false,
+      compression: part.compression,
+      rows: part.rows,
     })),
     kind: src.kind,
     header: src.header,
@@ -531,14 +548,16 @@ function pinned(
 
 /**
  * formatFor returns the lowest format version that can open this workspace:
- * READ_VERSION with a source that says how it was read, PARTS_VERSION with a
- * parts source, POINTED_VERSION with a pointed-at source, SOURCES_VERSION
- * with more than one source, and otherwise whatever the log needs.
+ * ROWS_VERSION with a source read in row space, READ_VERSION with a source
+ * that says how it was read, PARTS_VERSION with a parts source,
+ * POINTED_VERSION with a pointed-at source, SOURCES_VERSION with more than
+ * one source, and otherwise whatever the log needs.
  */
 export function formatFor(
   sources: readonly Held[],
   log: readonly Logged[],
 ): number {
+  if (sources.some(readsRows)) return ROWS_VERSION;
   if (sources.some(saysHowRead)) return READ_VERSION;
   if (sources.some((s) => s.parts !== undefined)) return PARTS_VERSION;
   if (sources.some((s) => s.path !== undefined)) return POINTED_VERSION;
@@ -555,6 +574,21 @@ function saysHowRead(s: Held): boolean {
     s.kind !== undefined ||
     s.compression !== undefined ||
     s.columns !== undefined
+  );
+}
+
+/**
+ * readsRows is true for a parts source with a join, a root or partitions, or
+ * with a part that says its compression or its rows. Parts picked by hand
+ * and joined as bytes say none of them.
+ */
+function readsRows(s: Held): boolean {
+  if (s.parts === undefined) return false;
+  return (
+    s.join !== undefined ||
+    s.root !== undefined ||
+    s.partitions !== undefined ||
+    s.parts.some((p) => p.compression !== undefined || p.rows !== undefined)
   );
 }
 
