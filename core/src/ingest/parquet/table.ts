@@ -233,6 +233,8 @@ class ParquetTable implements Table {
   private readonly leaves: readonly Leaf[];
   /** The footer as hyparquet is handed it, from plainOf. */
   private readonly plain: FileMetaData;
+  /** The stored slices the last read that read any asked for, by range. */
+  private slices = new Map<string, Promise<ArrayBuffer>>();
 
   private readonly name: string;
   private readonly file: ByteSource;
@@ -309,7 +311,7 @@ class ParquetTable implements Table {
     let rows: Assembled[] = [];
     try {
       await parquetRead({
-        file: passing(asyncBufferOf(this.file, this.chunks)),
+        file: this.buffer(),
         metadata: this.plain,
         rowStart: start,
         rowEnd: end,
@@ -328,6 +330,34 @@ class ParquetTable implements Table {
       throw new Refusal({ t: 'parquet-broken', name: this.name });
     }
     return rows;
+  }
+
+  /**
+   * The table's file as one read of the table reads it through hyparquet.
+   * A slice the last read that read any asked for comes from memory:
+   * without offset indexes, each read of a row group's rows reads its
+   * column chunks whole, and they can be more than the chunk cache holds.
+   */
+  private buffer(): AsyncBuffer {
+    const file = passing(asyncBufferOf(this.file, this.chunks));
+    const last = this.slices;
+    const asked = new Map<string, Promise<ArrayBuffer>>();
+    return {
+      byteLength: file.byteLength,
+      slice: (start, end) => {
+        this.slices = asked;
+        const range = `${start}:${end}`;
+        const bytes = asked.get(range) ?? last.get(range);
+        if (bytes !== undefined) {
+          asked.set(range, bytes);
+          return bytes;
+        }
+        const read = Promise.resolve(file.slice(start, end));
+        asked.set(range, read);
+        read.catch(() => asked.delete(range));
+        return read;
+      },
+    };
   }
 }
 
