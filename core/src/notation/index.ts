@@ -43,11 +43,15 @@ export function supported(src: string): Error | undefined {
  * first error. One walk serves both `render` and `supported`.
  */
 class Scanner {
+  private readonly src: string[];
+
   out = '';
   err: Error | undefined;
   private i = 0;
 
-  constructor(private readonly src: string[]) {}
+  constructor(src: string[]) {
+    this.src = src;
+  }
 
   run(): void {
     while (this.i < this.src.length) {
