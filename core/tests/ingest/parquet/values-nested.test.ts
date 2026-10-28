@@ -50,6 +50,45 @@ test('a number JSON cannot hold, a date and bytes are strings in a list', () => 
   expect(textsOf(bytes, [values])).toEqual(['["say \\"hi\\"","0xff"]']);
 });
 
+test('a map writes its values as its value column says', () => {
+  const elements: SchemaElement[] = [
+    { name: 'counts', converted_type: 'MAP', num_children: 1 },
+    { name: 'key_value', repetition_type: 'REPEATED', num_children: 2 },
+    {
+      name: 'key',
+      type: 'BYTE_ARRAY',
+      converted_type: 'UTF8',
+      repetition_type: 'REQUIRED',
+    },
+    { name: 'value', type: 'INT64', converted_type: 'UINT_64' },
+  ];
+  expect(textsOf(elements, [{ 'a"b': -1n, c: null }, {}])).toEqual([
+    '{"a\\"b":18446744073709551615,"c":null}',
+    '{}',
+  ]);
+});
+
+test('a struct in a list writes each field as its own column would', () => {
+  const elements: SchemaElement[] = [
+    ...list('points', { name: 'element', num_children: 3 }),
+    {
+      name: 'at',
+      type: 'INT64',
+      logical_type: {
+        type: 'TIMESTAMP',
+        isAdjustedToUTC: true,
+        unit: 'MILLIS',
+      },
+    },
+    { name: 'label', type: 'BYTE_ARRAY', logical_type: { type: 'STRING' } },
+    { name: 'ok', type: 'BOOLEAN' },
+  ];
+  const point = { at: 1n, label: encoder.encode('é'), ok: true };
+  expect(textsOf(elements, [[point, null]])).toEqual([
+    '[{"at":"1970-01-01T00:00:00.001Z","label":"é","ok":true},null]',
+  ]);
+});
+
 test('a list of lists and a repeated field are arrays too', () => {
   const lists: SchemaElement[] = [
     ...list('grid', {
