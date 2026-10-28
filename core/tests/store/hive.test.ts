@@ -79,3 +79,70 @@ test('month=9 comes before month=10, inside the year they are under', () => {
     'year=2024/month=10/part-0.parquet',
   ]);
 });
+
+test('leading zeros order as the number they write, then as written', () => {
+  const months = ['m=10/f', 'm=9/f', 'm=09/f', 'm=1/f', 'm=0/f', 'm=00/f'];
+
+  expect(sorted(months)).toEqual([
+    'm=0/f',
+    'm=00/f',
+    'm=1/f',
+    'm=09/f',
+    'm=9/f',
+    'm=10/f',
+  ]);
+});
+
+test('a whole number past what a double holds still orders exactly', () => {
+  const ids = ['id=9007199254740993/f', 'id=9007199254740992/f'];
+
+  expect(sorted(ids)).toEqual([
+    'id=9007199254740992/f',
+    'id=9007199254740993/f',
+  ]);
+});
+
+test('a whole number comes before any other value of its key', () => {
+  const paths = ['k=b/f', 'k=10/f', `k=${HIVE_NULL}/f`, 'k=2/f', 'k=-1/f'];
+
+  expect(sorted(paths)).toEqual([
+    'k=2/f',
+    'k=10/f',
+    'k=-1/f',
+    `k=${HIVE_NULL}/f`,
+    'k=b/f',
+  ]);
+});
+
+// UTF-16 order would put U+20000, a surrogate pair, before U+FFFD.
+test('other values order by code point, unicode included', () => {
+  const cities = [
+    'c=Århus/f',
+    'c=Zürich/f',
+    'c=Zagreb/f',
+    'c=\u{20000}/f',
+    'c=\uFFFD/f',
+  ];
+
+  expect(sorted(cities)).toEqual([
+    'c=Zagreb/f',
+    'c=Zürich/f',
+    'c=Århus/f',
+    'c=\uFFFD/f',
+    'c=\u{20000}/f',
+  ]);
+});
+
+test('files in one folder order by name as written', () => {
+  const files = [
+    'k=1/part-10.parquet',
+    'k=1/part-9.parquet',
+    'k=1/part-0.parquet',
+  ];
+
+  expect(sorted(files)).toEqual([
+    'k=1/part-0.parquet',
+    'k=1/part-10.parquet',
+    'k=1/part-9.parquet',
+  ]);
+});
