@@ -32,6 +32,14 @@ export {
   peekFormat,
 } from './format.ts';
 export type { Format, HeaderMode, Scanner, Charset } from './format.ts';
+export {
+  DIALOG_EXTENSIONS,
+  READ_COMPRESSIONS,
+  READ_EXTENSIONS,
+  nameParts,
+  readable,
+} from './names.ts';
+export type { NameParts, StoredCompression } from './names.ts';
 export { RecordScanner, bomLength } from './scan.ts';
 export { sniffDelimiter, sniffEncoding } from './sniff.ts';
 export type { Encoding } from './sniff.ts';
