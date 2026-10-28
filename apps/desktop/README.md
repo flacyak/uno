@@ -185,6 +185,7 @@ the newest after one a save pinned. The log replays over it and the tab takes
 its version, and the status bar says what Reload found -- a new version and
 how its size moved, or no change in the bucket -- and how many edits replayed.
 The next save records the new version.
+A file on disk has no version, so Reload says no change when its size and modified time are what its last open measured.
 
 ## Connections
 

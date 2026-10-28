@@ -1,13 +1,12 @@
 /**
  * @fileoverview Newer in the bucket, and Reload. askNewer sends one HEAD per
  * tab reading an object, and marks a tab whose object has a new version. Reload
- * reads the newer version.
+ * reads the newer version, and says when a file on disk was not written since.
  *
  * Runs over the real engine and the stand-in bucket.
  */
 
-import { writeFile } from "node:fs/promises";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vite-plus/test";
@@ -25,6 +24,8 @@ const ADS = "Ad_Date,Cost\n2024-11-16,$12.50\n2024-11-17,$8.00\n";
 const ADS_AGAIN = "Ad_Date,Cost\n2024-11-16,$12.50\n2024-11-17,$9.00\n";
 const KEY = "ads/google-ads.csv";
 const OBJECT = `s3://acme-exports/${KEY}`;
+/** A time nothing here was written at, for a touch to leave or a link to say. */
+const TOUCHED = new Date("2024-11-18T09:00:00Z");
 
 const enc = new TextEncoder();
 
@@ -134,6 +135,8 @@ test("Reload reads the newer version, lands the edits on it, and says what chang
     const rows = (await fresh.source.rows(0, 2)).rows;
     expect(rows[0]![0]).toBe("2024-11-15");
     expect(rows[1]![1]).toBe("$9.00");
+    // Versions written within one second say the same Last-Modified, and the versions decide.
+    for (const t of [remote, fresh]) t.link!.modified = TOUCHED.getTime();
     expect(reloaded(remote, fresh)).toBe(
       "reloaded google-ads.csv · a new version, the same size · 1 edit replayed",
     );
@@ -167,6 +170,22 @@ test("Reload of an object nobody touched says so, and leaves its tab saved", asy
     expect(reloaded(remote, fresh)).toBe("reloaded google-ads.csv · no change in the bucket");
     // The tab reads the version it read before, so there is nothing to save.
     expect(w.unsaved(fresh)).toBe(false);
+  } finally {
+    w.close();
+  }
+});
+
+test("Reload of a file on disk nobody touched says so, and hears a touch", async () => {
+  const w = await both();
+  try {
+    const local = w.sources.find((t) => t.name === "local.csv")!;
+    const ref = { name: "local.csv", path: local.link!.path };
+    const again = await w.relink(local, ref);
+    expect(reloaded(local, again)).toBe("reloaded local.csv · no change");
+
+    await utimes(ref.path, TOUCHED, TOUCHED);
+    const touched = await w.relink(again, ref);
+    expect(reloaded(again, touched)).toBe("reloaded local.csv · the same size");
   } finally {
     w.close();
   }
