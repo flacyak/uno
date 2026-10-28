@@ -21,7 +21,16 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type { Document, Held, HeldParts, Logged, State } from '@document';
+import type {
+  Document,
+  Held,
+  HeldParts,
+  Logged,
+  SavedColumn,
+  State,
+} from '@document';
+import { pointerTo } from '@ingest';
+import type { KeyedColumn } from '@ingest';
 import { unreachable } from '@never';
 import type { Edit } from '@sheet';
 import {
@@ -270,9 +279,9 @@ export class Workspace {
   /**
    * relink points a source at a different file. The id stays, and the edits
    * are replayed over the new file. A failed open leaves the source as it
-   * was and throws. The file the source was read from is read again as its
-   * log was made, and another file is refused if it holds another kind of
-   * rows.
+   * was and throws. Several files, and the one file the source was read
+   * from, are read again as the log was made, and another file is refused
+   * if it holds another kind of rows.
    *
    * One exception: a source that was waiting for its bucket to be connected,
    * relinked to the same addresses now that they are covered, becomes a
@@ -327,9 +336,10 @@ export class Workspace {
 
   /**
    * append adds files at the end of a source over several files. Existing
-   * parts keep their places, so every row keeps its number and the log is
-   * replayed unchanged. A file already in the source, or given twice, is
-   * refused. A failed append leaves the source as it was.
+   * parts keep their places and the rows are read as before, so every row
+   * keeps its number and the log is replayed unchanged. A file already in
+   * the source, or given twice, is refused. A failed append leaves the
+   * source as it was.
    */
   append(id: string, files: readonly SingleRef[]): Promise<Opened> {
     return this.serially(async () => {
@@ -367,6 +377,7 @@ export class Workspace {
 
       const view = await this.view(id, ref, {
         carried: { container: '', edits: was.log },
+        read: was.spec,
       });
 
       // Swapped only after the new view is open, so a failed append leaves
@@ -797,13 +808,26 @@ export class Workspace {
 /**
  * readOf returns how a .uno source's rows were read when its log was made. A
  * source that names no kind is delimited text, in every format, so no log
- * moves under a detector that would read its file another way.
+ * moves under a detector that would read its file another way. JSON Lines
+ * starts from the columns it pinned, so each key finds its column again.
  */
-function readOf(src: Pick<Held, 'kind' | 'header'>): ReadSpec {
-  if (src.kind === undefined) {
-    return { kind: 'delimited', header: src.header ?? 'first' };
+function readOf(src: Pick<Held, 'kind' | 'header' | 'columns'>): ReadSpec {
+  switch (src.kind) {
+    case undefined:
+      return { kind: 'delimited', header: src.header ?? 'first' };
+    case 'jsonl':
+      return { kind: 'jsonl', columns: (src.columns ?? []).map(keyedOf) };
+    default:
+      return unreachable(src.kind);
   }
-  return unreachable(src.kind);
+}
+
+/**
+ * keyedOf returns a pinned column with its key, which a save leaves out
+ * where it is the pointer to a top-level field called the column's name.
+ */
+function keyedOf({ name, key }: SavedColumn): KeyedColumn {
+  return { name, key: key ?? pointerTo('', name) };
 }
 
 /** pathsOf returns every address a .uno source reads from. A carried source has none. */
@@ -895,16 +919,14 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
 }
 
 /**
- * heldTo says how a relink reads one file. The file the source was read
- * from is read as its log was made, as a reopen reads it. Any other file is
- * detected, and refused when it holds another kind of rows. Several files
- * keep the extents they were saved with.
+ * heldTo says how a relink reads its files. Several files, and the one file
+ * the source was read from, are read as the log was made, as a reopen reads
+ * them, and several keep the extents they were saved with. Any other file
+ * is detected, and refused when it holds another kind of rows.
  */
 function heldTo(was: Source, to: SourceRef): Pick<ViewAsk, 'read' | 'expect'> {
-  if ('parts' in to) return {};
-  if ('path' in to && was.path !== '' && to.path === was.path) {
-    return { read: was.spec };
-  }
+  const same = 'path' in to && was.path !== '' && to.path === was.path;
+  if ('parts' in to || same) return { read: was.spec };
   return { expect: { name: was.name, kind: was.spec.kind } };
 }
 

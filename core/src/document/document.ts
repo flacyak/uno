@@ -91,14 +91,14 @@ export const HEADER_MODES = closed<HeaderMode>({ first: true, none: true });
 
 /**
  * How a source's rows sit in its bytes when they are not delimited text, as
- * uno.json spells it. A source with no kind is delimited text. None is read
- * yet: a kind joins here in the change that makes the engine read it, so no
- * build writes or accepts a kind it cannot read.
+ * uno.json spells it: "jsonl" for JSON Lines. A source with no kind is
+ * delimited text. A kind joins here in the change that makes the engine read
+ * it, so no build writes or accepts a kind it cannot read.
  */
-export type SourceKind = never;
+export type SourceKind = 'jsonl';
 
 /** The kinds this build reads. */
-export const SOURCE_KINDS = closed<SourceKind>({});
+export const SOURCE_KINDS = closed<SourceKind>({ jsonl: true });
 
 /**
  * What a file source's bytes were compressed with, as uno.json spells it.
