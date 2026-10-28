@@ -528,7 +528,7 @@ export class View {
 
   /**
    * undo takes the last edit back by rebuilding the schema from the edits
-   * before it. It touches the schema alone.
+   * before it, and moves the charts by its row as an edit does.
    */
   undo(): Promise<Changed> {
     return this.serially(async () => {
@@ -537,9 +537,10 @@ export class View {
       const last = edits.pop();
       if (last === undefined) throw new Refusal({ t: 'nothing-to-undo' });
       const was = this.schema;
+      const edited = await this.edited(last);
       this.schema = Schema.of(was.headers, was.rows, edits, was.supplied);
       this.undone.push(last);
-      return this.changed(last, undefined);
+      return this.changed(last, edited);
     });
   }
 
@@ -553,13 +554,14 @@ export class View {
       if (e === undefined) throw new Refusal({ t: 'nothing-to-redo' });
 
       this.schema.rows = this.index.readable();
+      const edited = await this.edited(e);
       try {
         this.schema.record(e);
       } catch (err) {
         this.undone.push(e);
         throw err;
       }
-      return this.changed(e, undefined);
+      return this.changed(e, edited);
     });
   }
 
