@@ -15,6 +15,7 @@ import type { Chart, Plot } from '@document';
 import { TALLY_MS } from '@engine';
 import type { Engine, SourceHandle, Tally } from '@engine';
 import { Tallies } from '@engine/tally';
+import type { Block } from '@engine/tally';
 import { parse } from '@formula';
 import { read } from '@ingest';
 import type { Provider } from '@plugin';
@@ -53,6 +54,8 @@ const column = (col: number) => ({ col, header: HEADERS[col]! });
 const WHOLE = { rows: ROWS, total: ROWS, complete: true };
 /** The row the edits change, inside the first block. */
 const EDITED = 3;
+/** A revenue above every one in the fixture, which makes its row the most. */
+const ABOVE_ALL = '999999';
 
 /** Rows per region, placed as a save writes a new chart. */
 const REGION_ROWS: Chart = {
@@ -108,6 +111,16 @@ function folded(charts: Chart[]): Tallies {
 /** shownRow is what each column of `sheet` shows for `row`. */
 function shownRow(sheet: Sheet, row: number): string[] {
   return sheet.columns.map((_, col) => sheet.display(row, col));
+}
+
+/** blocks reads a TINY block of `sheet`, as the folds read one. */
+function blocks(sheet: Sheet): (block: number) => Promise<Block> {
+  const shown = (col: number) => (row: number) => sheet.display(row, col);
+  return (block) => {
+    const from = block * TINY.blockRows;
+    const end = Math.min(from + TINY.blockRows, ROWS);
+    return Promise.resolve({ from, end, shown });
+  };
 }
 
 /** Heard collects the tallies a handle hears, and waits for a chart's last. */
@@ -251,7 +264,7 @@ test('a chart takes the blocks the index completes ahead of the pass behind it, 
   expect(tallies.read(ROWS, true)).toStrictEqual(whole);
 });
 
-test('an edit moves each chart that reads its column by the one row, which is pending again, and a chart over another column is not read again', () => {
+test('an edit moves each chart that reads its column by the one row, which is pending again, and a chart over another column is not read again', async () => {
   const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
   const tallies = folded(charts);
   tallies.read(ROWS, true);
@@ -259,10 +272,28 @@ test('an edit moves each chart that reads its column by the one row, which is pe
   const before = shownRow(sheet, EDITED);
   sheet.set(EDITED, REVENUE, '1');
   const block = Math.floor(EDITED / TINY.blockRows);
-  tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  const after = shownRow(sheet, EDITED);
+  const moved = tallies.cell(block, EDITED, before, after);
+  await tallies.mend(moved, blocks(sheet));
   const over = [REGION_REVENUE, UNITS_REVENUE];
   const again = over.map((chart) => [chart.id, pure(chart.plot, sheet)]);
   expect(tallies.read(ROWS, true)).toStrictEqual(again);
+});
+
+test('a scatter whose edit took back its most folds that block again, so its extent is exact', async () => {
+  const tallies = folded([UNITS_REVENUE]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  for (const revenue of [ABOVE_ALL, '1']) {
+    const before = shownRow(sheet, EDITED);
+    sheet.set(EDITED, REVENUE, revenue);
+    const after = shownRow(sheet, EDITED);
+    const moved = tallies.cell(block, EDITED, before, after);
+    await tallies.mend(moved, blocks(sheet));
+    const again = [[UNITS_REVENUE.id, pure(UNITS_REVENUE.plot, sheet)]];
+    expect(tallies.read(ROWS, true)).toStrictEqual(again);
+  }
 });
 
 test('each chart of a .uno hears its fold of every row, as the pure fold reads it', async () => {
