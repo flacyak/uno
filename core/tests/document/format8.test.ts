@@ -9,7 +9,12 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { ROWS_VERSION, writeDocument } from '@document';
+import {
+  PARTS_VERSION,
+  ROWS_VERSION,
+  formatFor,
+  writeDocument,
+} from '@document';
 import type { HeldPart, HeldParts } from '@document';
 import { manifestOf, partsOf, workspace } from '@core-tests/document/manifest';
 
@@ -61,6 +66,14 @@ describe('a source read in row space', () => {
     expect(ROWS_VERSION).toBe(8);
   });
 
+  // A part with no rows in it is counted, and says so.
+  test('writes a part counted at no rows', () => {
+    const source = orders();
+    source.parts[2] = { ...source.parts[2]!, rows: 0 };
+    const m = manifestOf(writeDocument(workspace([source])));
+    expect(partsOf(m)[2]!['rows']).toBe(0);
+  });
+
   // skip and unterminated place one part's bytes after another's, which a
   // part read on its own never needs.
   test("leaves out the byte join's skip and unterminated", () => {
@@ -72,6 +85,26 @@ describe('a source read in row space', () => {
       'bytes',
       'version',
       'rows',
+    ]);
+  });
+
+  // Files picked by hand have no root, so each path is stored as a file
+  // source's is.
+  test('with no root stores each part the way a file source is stored', () => {
+    const source: HeldParts = {
+      ...orders(),
+      root: undefined,
+      partitions: undefined,
+      parts: [
+        { ...part('a.parquet'), path: '/home/cpa/q4/exports/a.parquet' },
+        { ...part('b.parquet'), path: '/mnt/data/b.parquet' },
+      ],
+    };
+    const m = manifestOf(writeDocument(workspace([source])));
+    expect(m.sources[0]!['root']).toBeUndefined();
+    expect(partsOf(m).map((p) => p['path'])).toEqual([
+      'exports/a.parquet',
+      '/mnt/data/b.parquet',
     ]);
   });
 
@@ -90,6 +123,25 @@ describe('a source read in row space', () => {
     expect(partsOf(m)[0]!['path']).toBe(
       'year=2024/month=11/part-00000.snappy.parquet',
     );
+  });
+
+  test('needs format 8 for any one of its keys alone', () => {
+    const plain: HeldParts = {
+      ...orders(),
+      join: undefined,
+      root: undefined,
+      partitions: undefined,
+      parts: orders().parts.map((p) => ({ ...p, rows: undefined })),
+    };
+    expect(formatFor([plain], [])).toBe(PARTS_VERSION);
+    const alone: HeldParts[] = [
+      { ...plain, join: 'rows' },
+      { ...plain, root: ROOT },
+      { ...plain, root: ROOT, partitions: [] },
+      { ...plain, parts: [{ ...plain.parts[0]!, rows: 1 }] },
+    ];
+    for (const source of alone)
+      expect(formatFor([source], [])).toBe(ROWS_VERSION);
   });
 });
 
