@@ -70,6 +70,9 @@ function join(frame: Frame): string | Blob {
 }
 
 export class Session {
+  private readonly far: string;
+  private readonly limit: number;
+
   /**
    * Called when the socket the session is on closes, with its code. Not
    * called for a socket replaced by `attach`, nor once the session is over.
@@ -105,10 +108,9 @@ export class Session {
    * decode is reported with. `postMessage` throws if the encoded frame is
    * over `limit` bytes.
    */
-  constructor(
-    private readonly far: string,
-    private readonly limit = FRAME_LIMIT,
-  ) {
+  constructor(far: string, limit = FRAME_LIMIT) {
+    this.far = far;
+    this.limit = limit;
     this.port = {
       postMessage: (message) => this.send(message),
       addEventListener: (...[type, fn]: Listening) => {

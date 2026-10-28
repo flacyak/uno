@@ -48,6 +48,8 @@ export interface Added {
 }
 
 export class Engine {
+  private readonly port: Port<Reply, Request>;
+
   /** Called with a failure outside any request: an index, a survey, a band, or a lost connection. */
   onError: (said: Said) => void = () => {};
 
@@ -57,7 +59,8 @@ export class Engine {
   /** Set once closed or the connection is lost. Every later request rejects with it. */
   private gone: Error | undefined;
 
-  constructor(private readonly port: Port<Reply, Request>) {
+  constructor(port: Port<Reply, Request>) {
+    this.port = port;
     port.listen(
       (msg) => this.receive(msg),
       () => this.lost(),
@@ -296,6 +299,9 @@ export class Engine {
  * engine said on open and since, and sends the requests that name it.
  */
 export class SourceHandle {
+  readonly engine: Engine;
+  readonly opened: Opened;
+
   /** The latest index progress the engine reported. */
   progress: Progress;
   /** The latest log generation the engine reported. Rows built before it are stale. */
@@ -305,10 +311,9 @@ export class SourceHandle {
   /** Called with the recogniser's proposal, or null when there is none. */
   onOffer: (offer: Offer | null) => void = () => {};
 
-  constructor(
-    readonly engine: Engine,
-    readonly opened: Opened,
-  ) {
+  constructor(engine: Engine, opened: Opened) {
+    this.engine = engine;
+    this.opened = opened;
     this.progress = opened.progress;
     this.generation = opened.generation;
   }
@@ -404,6 +409,10 @@ export interface Pending {
  * until the engine has recorded it.
  */
 export class Band {
+  private readonly source: SourceHandle;
+  /** Called when rows land, so whoever draws can draw them. */
+  private readonly changed: () => void;
+
   columns: readonly ColumnInfo[];
 
   private start = 0;
@@ -414,11 +423,9 @@ export class Band {
   private asking = false;
   private broken = false;
 
-  constructor(
-    private readonly source: SourceHandle,
-    /** Called when rows land, so whoever draws can draw them. */
-    private readonly changed: () => void,
-  ) {
+  constructor(source: SourceHandle, changed: () => void) {
+    this.source = source;
+    this.changed = changed;
     this.columns = source.opened.columns;
     this.generation = source.opened.generation;
   }
