@@ -35,7 +35,15 @@ import type {
 import { sources } from '@plugin';
 import type { Provider } from '@plugin';
 import { diskProvider } from '@store/node';
-import { FIXTURE, TINY, bytes, indexed, openOne, slowed } from './harness.ts';
+import {
+  FIXTURE,
+  TINY,
+  bytes,
+  indexed,
+  multiProviders,
+  openOne,
+  slowed,
+} from './harness.ts';
 
 /** An engine over a real channel, with every measurement kept in `seen`. */
 function measured(
@@ -111,6 +119,35 @@ test('an engine says how long each request and each index took, and nothing abou
     ).toBe(1);
 
     // Every measurement keeps the file's name out.
+    const said = JSON.stringify(seen);
+    expect(said).not.toContain('sales-q3');
+    expect(said).not.toContain(FIXTURE);
+  } finally {
+    engine.close();
+  }
+});
+
+test('an index is measured by what its bytes were handed as, and nothing names them', async () => {
+  const { engine, seen } = measured(multiProviders());
+  try {
+    const blob = new Blob([bytes]);
+    await indexed(await openOne(engine, { name: 'sales-q3.csv', blob }));
+    await indexed(
+      await openOne(engine, {
+        name: 'sales-q3',
+        parts: [
+          { ref: { name: 'sales-q3-a.csv', path: FIXTURE } },
+          { ref: { name: 'sales-q3-b.csv', blob } },
+        ],
+        header: 'first',
+      }),
+    );
+
+    const places = seen
+      .filter((m) => m.name === INDEX)
+      .map((m) => m.attributes?.['place']);
+    expect(places).toEqual(['dropped', 'joined']);
+
     const said = JSON.stringify(seen);
     expect(said).not.toContain('sales-q3');
     expect(said).not.toContain(FIXTURE);
