@@ -98,6 +98,12 @@ type Unsaved = 'id' | 'name' | 'state';
  */
 export type Origin = 'carried' | 'dropped' | 'joined' | 'bucket' | 'disk';
 
+/**
+ * Stored is how a source's stored bytes are handed to a View: a ByteSource
+ * over one file, or over several files joined as bytes.
+ */
+export type Stored = { readonly t: 'source'; readonly source: ByteSource };
+
 /** What View.open is given. */
 export interface OpenAsk {
   id: string;
@@ -105,8 +111,9 @@ export interface OpenAsk {
   name: string;
   /** Where the bytes are, or "" where no one path holds them. */
   path: string;
-  /** The bytes. The view owns the source from here on and closes it if the open fails. */
-  source: ByteSource;
+  /** The stored bytes. The view owns them from here on and closes them if
+   * the open fails. */
+  stored: Stored;
   /** What the bytes were handed as. */
   origin: Origin;
   port: Port<Request, Reply>;
@@ -199,7 +206,8 @@ export class View {
    * replays any carried edits, and returns the view.
    */
   static async open(ask: OpenAsk): Promise<View> {
-    const { id, name, path, source, port, tuning, carried, began } = ask;
+    const { id, name, path, port, tuning, carried, began } = ask;
+    const { source } = ask.stored;
     const telemetry = ask.telemetry ?? unmeasured;
     const v = new View(id, name, path, port, began);
     v.carried = carried?.raw;
