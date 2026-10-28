@@ -24,6 +24,7 @@ import type {
   RowsPage,
   SignIns,
   SourceRef,
+  Tally,
 } from './protocol.ts';
 import type { Chart } from '@document';
 import { Refusal, saidOf } from '@said';
@@ -287,6 +288,15 @@ export class Engine {
         return;
       }
 
+      case 'tally': {
+        const s = this.sources.get(msg.source);
+        // Drop a tally from an older generation of the log. Only an offer or
+        // an edit's reply moves the generation, so a tally leaves it as it is.
+        if (s === undefined || msg.generation < s.generation) return;
+        s.onTally(msg.chart, msg.tally);
+        return;
+      }
+
       case 'changed': {
         const s = this.sources.get(msg.source);
         if (s !== undefined)
@@ -333,6 +343,8 @@ export class SourceHandle {
   onProgress: (progress: Progress) => void = () => {};
   /** Called with the recogniser's proposal, or null when there is none. */
   onOffer: (offer: Offer | null) => void = () => {};
+  /** Called with the id of a chart over this source, and its latest tally. */
+  onTally: (chart: string, tally: Tally) => void = () => {};
 
   constructor(engine: Engine, opened: Opened) {
     this.engine = engine;

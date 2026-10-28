@@ -15,6 +15,7 @@ import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
+import type { Groups, Sample } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -214,6 +215,34 @@ export interface Offer {
   complete: boolean;
 }
 
+/** How much of its source a tally covers. */
+export interface Coverage {
+  /** Rows folded. */
+  rows: number;
+  /** Rows in the source, an estimate until the index is complete. */
+  total: number;
+  /** The index is complete, and every row of it is folded. */
+  complete: boolean;
+}
+
+/** A bars or pie chart's tally: rows, or a sum, per value. */
+export interface GroupsTally extends Groups {
+  t: 'groups';
+  coverage: Coverage;
+}
+
+/** A scatter's tally: some of its points, and the extent of every row. */
+export interface SampleTally extends Sample {
+  t: 'sample';
+  coverage: Coverage;
+}
+
+/**
+ * Tally is a chart's fold of its source, read as plain numbers, strings and
+ * arrays, or why the source could not be read.
+ */
+export type Tally = GroupsTally | SampleTally | { t: 'unread'; said: Said };
+
 /**
  * Peeked is a preview of a file: its header and first rows, read from the
  * front of the file apart from the workspace.
@@ -350,6 +379,14 @@ export type Reply =
   | { t: 'tried'; id: number; tried: Tried }
   /** Null when the recogniser finishes with an empty proposal. */
   | { t: 'offer'; source: string; generation: number; offer: Offer | null }
+  /** Unnumbered, like offer: a chart's tally, taken at `generation`. */
+  | {
+      t: 'tally';
+      source: string;
+      chart: string;
+      generation: number;
+      tally: Tally;
+    }
   | { t: 'charted'; id: number }
   | { t: 'uncharted'; id: number }
   | { t: 'saved'; id: number; bytes: Uint8Array }
@@ -390,3 +427,5 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
 }
 
 export { formatBytes, messageOf } from '@said';
+export { GROUPS_SENT, LABEL_AT_MOST, SCATTER_POINTS_AT_MOST } from '@tally';
+export type { Group, Groups, Point, Sample, Skipped } from '@tally';
