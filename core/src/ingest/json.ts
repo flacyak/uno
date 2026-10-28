@@ -11,6 +11,21 @@
  */
 // oxlint-disable-next-line no-control-regex -- the controls are what it leaves out.
 const UNESCAPED = /[^"\\\x00-\x1f]*/y;
+/** The four hex digits after '\u'. */
+const HEX_DIGITS = /[0-9a-fA-F]{4}/y;
+/** The base the digits after '\u' are written in. */
+const HEX = 16;
+/** What each escape but '\u' stands for, by the character after '\'. */
+const ESCAPES: ReadonlyMap<string, string> = new Map([
+  ['"', '"'],
+  ['\\', '\\'],
+  ['/', '/'],
+  ['b', '\b'],
+  ['f', '\f'],
+  ['n', '\n'],
+  ['r', '\r'],
+  ['t', '\t'],
+]);
 /** RFC 8259's whitespace, which may come before and after any token. */
 const BLANKS: ReadonlySet<string> = new Set([' ', '\t', '\n', '\r']);
 
@@ -57,13 +72,30 @@ class Tokens {
     return this.string();
   }
 
-  /** string reads a string that holds no escape and returns what it holds. */
+  /** string reads a string and returns it unescaped. */
   private string(): string | undefined {
     if (!this.eat('"')) return undefined;
+    let text = '';
+    for (;;) {
+      const from = this.at;
+      this.match(UNESCAPED);
+      text += this.line.slice(from, this.at);
+      const next = this.line.charAt(this.at++);
+      if (next === '"') return text;
+      const escaped = next === '\\' ? this.escape() : undefined;
+      if (escaped === undefined) return undefined;
+      text += escaped;
+    }
+  }
+
+  /** escape reads an escape past its '\' and returns what it stands for. */
+  private escape(): string | undefined {
+    const kind = this.line.charAt(this.at++);
+    if (kind !== 'u') return ESCAPES.get(kind);
     const from = this.at;
-    this.match(UNESCAPED);
-    const text = this.line.slice(from, this.at);
-    return this.line.charAt(this.at++) === '"' ? text : undefined;
+    if (!this.match(HEX_DIGITS)) return undefined;
+    const code = Number.parseInt(this.line.slice(from, this.at), HEX);
+    return String.fromCharCode(code);
   }
 
   /** match advances past `pattern` when it matches here. */
@@ -106,10 +138,9 @@ function membersOf(tokens: Tokens): Map<string, string> | undefined {
 /**
  * walkLine reads one JSON Lines record and calls `leaf` with each member's
  * RFC 6901 pointer and the text of its cell, where the last of a repeated name
- * wins. A member's cell is the string it holds. walkLine reads no escape and
- * no other kind of value yet, and refuses a line that holds one. When the line
- * is not one JSON object, walkLine reports nothing and returns false. It never
- * throws.
+ * wins. A member's cell is its string, unescaped. walkLine reads no other kind
+ * of value yet, and refuses a line that holds one. When the line is not one
+ * JSON object, walkLine reports nothing and returns false. It never throws.
  */
 export function walkLine(
   line: string,

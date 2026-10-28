@@ -41,7 +41,7 @@ describe('walkLine', () => {
     ],
     [
       'the last of a repeated name wins, in the place the name first had',
-      '{"a":"x","b":"y","a":"z"}',
+      String.raw`{"a":"x","b":"y","\u0061":"z"}`,
       [
         ['/a', 'z'],
         ['/b', 'y'],
@@ -56,6 +56,20 @@ describe('walkLine', () => {
       ],
     ],
     ['an empty object has no leaves', '{ }', []],
+    [
+      'strings are unescaped',
+      String.raw`{"s":"q\" b\\ s\/ \b\f\n\r\t"}`,
+      [['/s', 'q" b\\ s/ \b\f\n\r\t']],
+    ],
+    [
+      'a \\u escape is one UTF-16 unit, so a pair makes one character',
+      String.raw`{"e":"\u00e9","pair":"\ud83d\uDE00","lone":"\udc00"}`,
+      [
+        ['/e', 'é'],
+        ['/pair', '😀'],
+        ['/lone', '\udc00'],
+      ],
+    ],
   ];
 
   for (const [name, line, leaves] of read) {
@@ -66,6 +80,8 @@ describe('walkLine', () => {
     ['an empty line', ''],
     ['a truncated object', '{"a":"x"'],
     ['a truncated string', '{"a":"x'],
+    ['a truncated escape', String.raw`{"a":"\u00"}`],
+    ['an unknown escape', String.raw`{"a":"\x41"}`],
     ['a bare string', '"x"'],
     ['an array', '[{"a":"x"}]'],
     ['two objects', '{} {}'],
