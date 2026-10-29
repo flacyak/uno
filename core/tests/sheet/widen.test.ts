@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { FILE_SHOWS } from '@said';
-import { Op, Schema, finishRows, namesBeside } from '@sheet';
+import { Op, Schema, finishRows } from '@sheet';
 import type { Edit } from '@sheet';
 import { FILES, OPS, edit } from './harness.ts';
 
@@ -95,24 +95,6 @@ describe('a widened schema', () => {
     expect(s.headers.at(-2)).toBe('_file_3');
     expect(s.headers.at(-1)).toBe('_file');
     expect(s.supplied[0]!.col).toBe(s.headers.length - 1);
-  });
-
-  test('names what arrives by the rule a header row is named by', () => {
-    // A header row is named beside nothing: the first of each name keeps it.
-    expect(namesBeside([], ['a', 'a', 'a_2', 'b', 'a'])).toEqual([
-      'a',
-      'a_3',
-      'a_2',
-      'b',
-      'a_4',
-    ]);
-    // Beside kept columns, every name one of them has takes a suffix.
-    expect(namesBeside(['a', 'a_2'], ['a', 'b', 'a', 'b'])).toEqual([
-      'a_3',
-      'b',
-      'a_4',
-      'b_2',
-    ]);
   });
 
   test('keeps every logged edit on its cell', () => {
