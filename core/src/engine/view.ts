@@ -610,14 +610,19 @@ export class View {
   }
 
   /**
-   * changed answers an edit with the generation it made, and moves the charts
-   * by a cell edit's row, from what it showed before to what it shows now.
-   * A moved chart hears its tally again from a pass, started when none runs.
+   * changed answers an edit with the generation it made. A cell edit moves
+   * the charts by its row, from what it showed before to what it shows now;
+   * an edit over a whole column folds again the charts that read what it
+   * changed. A moved chart hears its tally again from a pass, started when
+   * none runs.
    */
   private async changed(e: Edit, edited: Edited | undefined): Promise<Changed> {
     this.generation++;
     this.recognise();
-    if (edited !== undefined) {
+    if (e.row === NO_ROW) {
+      const cols = new Set([e.col, ...this.schema.readersOf(e.col)]);
+      if (this.tallies.refold(cols)) this.tally();
+    } else if (edited !== undefined) {
       const now = shownRow(this.schema, e.row, edited.raw, edited.files);
       const block = this.index.blockOf(e.row);
       const moved = this.tallies.cell(block, e.row, edited.shown, now);

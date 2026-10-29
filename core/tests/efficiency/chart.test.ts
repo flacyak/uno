@@ -1,16 +1,23 @@
 /**
  * @fileoverview Measures the bytes fetched to tally charts over an object,
- * beside the index and after it.
+ * beside the index and after it, and what an edit fetches once they are.
  */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
 import type { Chart, Plot } from '@document';
 import { TUNING } from '@engine';
-import type { SourceHandle, Tally, Tuning } from '@engine';
+import type { EditRequest, SourceHandle, Tally, Tuning } from '@engine';
 import { Tallies } from '@engine/tally';
+import { NO_ROW, Op } from '@sheet';
 import { indexed, sales } from '@core-tests/engine/harness';
-import { REGION, REVENUE, ROWS, UNITS } from '@core-tests/testdata/sales-q3';
+import {
+  CHANNEL,
+  REGION,
+  REVENUE,
+  ROWS,
+  UNITS,
+} from '@core-tests/testdata/sales-q3';
 import { record } from './record.ts';
 import type { Metric } from './record.ts';
 import { remote, repeated } from './remote.ts';
@@ -39,6 +46,15 @@ const OBJECT = repeated(REPEATS);
 const BESIDE_BUDGET = 1.2;
 /** The most charts made after the index may fetch, as a multiple of the object. */
 const AFTER_BUDGET = 1.05;
+/**
+ * The most one edit of a cell may fetch, charts or none: the block of its
+ * row, read once, 3,161 to 3,212 bytes measured for the three below. A
+ * scatter whose least or most the edit took back folds that block again
+ * out of the page cache, which the row's read filled.
+ */
+const EDIT_AT_MOST = { requests: 1, bytes: SMALL.blockBytes };
+/** What an edit over a column no chart reads may fetch. */
+const NOTHING = { requests: 0, bytes: 0 };
 
 const HEADERS = sales.columns.map((c) => c.header);
 /** The fixture's column `col`, as a chart names it. */
@@ -49,6 +65,26 @@ const PLOTS: Plot[] = [
   { t: 'pie', by: column(REGION), sum: column(REVENUE) },
   { t: 'scatter', x: column(UNITS), y: column(REVENUE) },
 ];
+
+/**
+ * The rows the edits change: the first row of the third and of the fifth
+ * copy of the fixture, and the seventh copy's row of greatest revenue, each
+ * in a block of its own that the open did not read.
+ */
+const PLAIN_ROW = 2 * ROWS;
+const BARS_ROW = 4 * ROWS;
+const MOST_ROW = 6 * ROWS + greatest(REVENUE);
+
+/** greatest is the fixture row whose `col` holds the largest number. */
+function greatest(col: number): number {
+  let at = 0;
+  for (let row = 1; row < ROWS; row++) {
+    const more =
+      Number(sales.display(row, col)) > Number(sales.display(at, col));
+    if (more) at = row;
+  }
+  return at;
+}
 
 /** charts puts each plot over `source`, placed as a save writes a new chart. */
 function charts(source: string): Chart[] {
@@ -141,6 +177,58 @@ test('charts made after the index fetch the object once more', async () => {
     },
     { name: 'charts after index: requests', unit: 'requests', value: requests },
   );
-  record('chart', metrics);
   expect(times).toBeLessThanOrEqual(AFTER_BUDGET);
+}, 60_000);
+
+test('an edit of a cell fetches the block of its row at most, charted column or not, and one over a column no chart reads fetches nothing', async () => {
+  r = await remote(OBJECT, SMALL);
+  const door = r.door;
+  const src = await door.during(r.open());
+  await door.during(indexed(src));
+  await door.quiet();
+  await charted(r, src);
+  r.engine.mode(true);
+  const fetched = async (req: EditRequest) => {
+    const from = door.asked.length;
+    await door.during(src.edit(req));
+    await door.quiet();
+    return door.since(from);
+  };
+  const set = (row: number, col: number, now: string): EditRequest => {
+    return { op: Op.Set, row, col, now };
+  };
+  const plain = await fetched(set(PLAIN_ROW, CHANNEL, 'web'));
+  const bars = await fetched(set(BARS_ROW, REGION, 'South'));
+  const most = await fetched(set(MOST_ROW, REVENUE, '0'));
+  const program = 'replace(/,/, "")';
+  const apply = { op: Op.Apply, row: NO_ROW, col: CHANNEL, now: program };
+  const applied = await fetched(apply);
+  metrics.push(
+    {
+      name: 'set on an uncharted column: bytes fetched',
+      unit: 'bytes',
+      value: plain.bytes,
+    },
+    {
+      name: 'set on a charted column: bytes fetched',
+      unit: 'bytes',
+      value: bars.bytes,
+    },
+    {
+      name: "set taking back a scatter's most: bytes fetched",
+      unit: 'bytes',
+      value: most.bytes,
+    },
+    {
+      name: 'apply over an uncharted column: requests',
+      unit: 'requests',
+      value: applied.requests,
+    },
+  );
+  record('chart', metrics);
+  for (const edit of [plain, bars, most]) {
+    expect(edit.requests).toBe(EDIT_AT_MOST.requests);
+    expect(edit.bytes).toBeLessThanOrEqual(EDIT_AT_MOST.bytes);
+  }
+  expect(applied).toEqual(NOTHING);
 }, 60_000);
