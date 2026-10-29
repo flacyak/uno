@@ -10,9 +10,11 @@ import { createHash, createHmac } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 
 import { readContainer } from '@document';
+import { Refusal } from '@said';
 import {
   EMPTY_SHA256,
   encode,
@@ -481,6 +483,36 @@ describe('a source in a bucket', () => {
     );
   });
 
+  // As `aws s3 cp --content-encoding gzip` leaves a .gz: its bytes as they
+  // are, and every answer saying they are gzip, which fetch would undo.
+  test('reads an object stored with Content-Encoding gzip as the bytes it holds', async () => {
+    const s3 = s3Files({
+      credentials: () => Promise.resolve(KEYS),
+      endpoint: b.endpoint,
+    });
+    const key = '2025/sales-q3.csv.gz';
+    const stored = new Uint8Array(gzipSync(bytes));
+    b.objects.set(key, stored);
+    b.encodings.set(key, 'gzip');
+    b.seen.length = 0;
+
+    const file = await s3.open(at(key));
+    expect(file.size).toBe(stored.length);
+    const middle = Math.floor(stored.length / 2);
+    const SPAN = 100;
+    expect(await file.read(middle, SPAN)).toEqual(
+      stored.subarray(middle, middle + SPAN),
+    );
+    expect(await file.read(0, stored.length)).toEqual(stored);
+    await file.close();
+
+    // Each GET was signed asking for the bytes as stored, and S3 let it in.
+    const gets = b.seen.filter((r) => r.method === 'GET');
+    expect(gets.length).toBeGreaterThan(0);
+    for (const get of gets)
+      expect(get.query).toContain('response-content-encoding=identity');
+  });
+
   // The saved path is the URL as it was opened.
   test('saves as the URL it came from, and opens again from it', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'uno-s3-'));
@@ -549,6 +581,63 @@ describe('a source in a bucket', () => {
     } finally {
       local.done();
     }
+  });
+});
+
+// S3 refuses response-content-encoding on a request that is not signed, so a
+// read without signing in gets an object's bytes back as fetch leaves them.
+describe('an object in a public bucket', () => {
+  const PUBLIC = 'open-data';
+  const GZIPPED = 'census/2025.csv.gz';
+  const LABELLED = 'census/2025.csv';
+  let b: Bucket;
+  beforeAll(async () => {
+    b = await bucket(undefined, HOME_REGION, undefined, {
+      [PUBLIC]: {
+        objects: new Map([
+          [GZIPPED, new Uint8Array(gzipSync(bytes))],
+          [LABELLED, bytes],
+        ]),
+        encodings: new Map([
+          [GZIPPED, 'gzip'],
+          [LABELLED, 'utf-8'],
+        ]),
+        public: true,
+      },
+    });
+  });
+  afterAll(() => b.close());
+
+  const anonymous = () =>
+    s3Files({
+      credentials: () =>
+        Promise.resolve({ unsigned: true, region: HOME_REGION }),
+      endpoint: b.endpoint,
+    });
+
+  // fetch would undo the gzip, and a range from its middle would not inflate.
+  test('stored with Content-Encoding gzip is refused before a byte is read, saying to sign in', async () => {
+    b.seen.length = 0;
+    const path = `s3://${PUBLIC}/${GZIPPED}`;
+    const opening = anonymous().open({ name: '2025.csv.gz', path });
+    await expect(opening).rejects.toBeInstanceOf(Refusal);
+    await expect(opening).rejects.toMatchObject({
+      said: {
+        t: 'stored-encoded',
+        name: path,
+        encoding: 'gzip',
+        bucket: PUBLIC,
+      },
+    });
+    expect(b.seen.map((r) => r.method)).toEqual(['HEAD']);
+  });
+
+  // An upload often labels text utf-8, a coding fetch does not know.
+  test('labelled with a coding fetch leaves alone is read as it is', async () => {
+    const path = `s3://${PUBLIC}/${LABELLED}`;
+    const file = await anonymous().open({ name: '2025.csv', path });
+    expect(await file.read(0, bytes.length)).toEqual(bytes);
+    await file.close();
   });
 });
 

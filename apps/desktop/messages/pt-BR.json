@@ -402,6 +402,7 @@
   "read_tabs_no_header": "{charset} · separado por tabulações · sem linha de cabeçalho",
   "said_about": "{subject}: {why}",
   "said_replaying": "ao reaplicar as edições de {name}: {why}",
+  "said_unknown": "esta página é mais antiga que seu motor · recarregue-a para ler o que ele disse",
   "program_nothing": "não mudar nada",
   "program_then": "{before}, e depois {after}",
   "step_trim": "tirar os espaços das duas pontas",
@@ -540,6 +541,7 @@
   "refused_file_closed": "o arquivo foi fechado",
   "refused_cancelled": "a abertura de {name} foi cancelada",
   "refused_changed_on_disk": "{name} mudou no disco depois de aberto",
+  "refused_stored_encoded": "{name} foi armazenado com Content-Encoding {encoding}, e o uno só lê um objeto assim quando faz login · conecte {bucket} com login para lê-lo",
   "refused_keeps_no_connections": "este motor não guarda conexões · sua plataforma não lhe deu de onde lê-las",
   "refused_offers_no_sign_ins": "este motor não tem nenhuma forma de entrar para oferecer · sua plataforma não se conecta a nada",
   "refused_tries_no_connection": "este motor não pode testar uma conexão · sua plataforma não se conecta a nada"

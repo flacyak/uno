@@ -109,6 +109,7 @@ export type Said =
   | { t: 'file-closed' }
   | { t: 'cancelled'; name: string }
   | { t: 'changed-on-disk'; name: string }
+  | { t: 'stored-encoded'; name: string; encoding: string; bucket: string }
 
   // What an engine refuses because its platform left out the means.
   | { t: 'keeps-no-connections' }
@@ -278,6 +279,8 @@ const SENTENCES: Sentences<Said> = {
   'file-closed': () => 'the file was closed',
   cancelled: (s) => `opening ${s.name} was cancelled`,
   'changed-on-disk': (s) => `${s.name} changed on disk after it was opened`,
+  'stored-encoded': (s) =>
+    `${s.name} was stored with Content-Encoding ${s.encoding}, and uno reads such an object only when it signs in · connect ${s.bucket} with a sign-in to read it`,
 
   'keeps-no-connections': () =>
     'this engine keeps no connections · its platform gave it nowhere to read them from',
@@ -287,8 +290,16 @@ const SENTENCES: Sentences<Said> = {
     'this engine cannot try a connection · its platform connects to nothing',
 };
 
+/**
+ * What a kind this build does not have is said as. A hosted page and its
+ * engine are separate builds, so a newer engine can send one.
+ */
+const UNKNOWN_KIND =
+  'this page is older than its engine · reload it to read what it said';
+
 /** english renders a Said as its English sentence. */
 export function english(s: Said): string {
+  if (!Object.hasOwn(SENTENCES, s.t)) return UNKNOWN_KIND;
   // SENTENCES is typed per kind and s is the union; the cast pairs them.
   return (SENTENCES[s.t] as (s: Said) => string)(s);
 }

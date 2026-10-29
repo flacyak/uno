@@ -65,6 +65,26 @@ test('the last chunk is asked for as long as the object has left', async () => {
   await read(CHUNK, CHUNK);
   await read(2 * CHUNK, CHUNK);
   expect((await read(3 * CHUNK, 40)).length).toBe(40);
+  expect(r.asked, 'each chunk once').toEqual([0, 100, 200, 300]);
+});
+
+// A band reads its blocks of rows back to back, each as long as it is. Only a
+// run of reads of one length is a reader going through in order.
+test('reads one after another of different lengths are read as asked, and a run of one length is read ahead', async () => {
+  const r = counting();
+  const read = readAhead(r.read, SIZE);
+  // The last length, which the read after them repeats.
+  const RUN = 75;
+  const lengths = [120, 40, 300, RUN];
+  let at = 0;
+  for (const length of lengths) {
+    await read(at, length);
+    at += length;
+  }
+  expect(r.asked, 'only what was asked').toEqual([0, 120, 160, 460]);
+
+  await read(at, RUN);
+  expect(r.asked.slice(lengths.length)).toEqual([535, 610, 685, 760]);
 });
 
 // Out-of-order reads are served as asked, and the in-order reader keeps its

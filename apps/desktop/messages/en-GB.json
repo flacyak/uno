@@ -388,6 +388,7 @@
   "read_tabs_no_header": "{charset} · tab-separated · no header row",
   "said_about": "{subject}: {why}",
   "said_replaying": "replaying edits to {name}: {why}",
+  "said_unknown": "this page is older than its engine · reload it to read what it said",
   "program_nothing": "change nothing",
   "program_then": "{before}, then {after}",
   "step_trim": "trim the spaces off both ends",
@@ -521,6 +522,7 @@
   "refused_file_closed": "the file was closed",
   "refused_cancelled": "opening {name} was cancelled",
   "refused_changed_on_disk": "{name} changed on disk after it was opened",
+  "refused_stored_encoded": "{name} was stored with Content-Encoding {encoding}, and uno reads such an object only when it signs in · connect {bucket} with a sign-in to read it",
   "refused_keeps_no_connections": "this engine keeps no connections · its platform gave it nowhere to read them from",
   "refused_offers_no_sign_ins": "this engine has no way of signing in to offer · its platform connects to nothing",
   "refused_tries_no_connection": "this engine cannot try a connection · its platform connects to nothing"

@@ -11,7 +11,8 @@
  */
 
 import { baseOf } from "@document";
-import type { Link, PartInfo, Peeked, SourceRef } from "@engine";
+import { saidOf } from "@engine";
+import type { Link, PartInfo, Peeked, Said, SourceRef } from "@engine";
 import { compareStrings } from "@go";
 import type { Connection as Saved } from "@library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@store";
@@ -211,6 +212,9 @@ export interface Crumb {
   path: string;
 }
 
+/** What the peek under the browser shows of the one picked file, or why it shows none. */
+export type Peek = { t: "reading" } | { t: "peeked"; peeked: Peeked } | { t: "refused"; why: Said };
+
 /**
  * A button under the browser. The panel builds the refs; the shell opens
  * them.
@@ -376,8 +380,7 @@ export class Sources {
    * from. `carry` extends it when a later page lands.
    */
   private where: { from: readonly Entry[]; at: Map<string, number> } | undefined;
-  private shown: Peeked | undefined;
-  private looking = false;
+  private shown: Peek | undefined;
   /** Counter for peek requests, used the same way as `asked`. */
   private looked = 0;
   /** The filter text, lower-cased. "" matches everything. */
@@ -803,14 +806,9 @@ export class Sources {
     this.changed();
   }
 
-  /** The peek of the single selected file, once loaded. Undefined otherwise. */
-  get peeked(): Peeked | undefined {
+  /** What the peek shows of the single selected file. Undefined while there is none. */
+  get peek(): Peek | undefined {
     return this.shown;
-  }
-
-  /** Whether a peek is in flight. */
-  get peeking(): boolean {
-    return this.looking;
   }
 
   /**
@@ -1000,7 +998,6 @@ export class Sources {
     this.picks.clear();
     this.picked++;
     this.shown = undefined;
-    this.looking = false;
     this.looked++;
   }
 
@@ -1012,20 +1009,19 @@ export class Sources {
     const mine = ++this.looked;
     const picked = this.selected;
     const one = picked.length === 1 ? picked[0] : undefined;
-    this.shown = undefined;
-    this.looking = one !== undefined;
+    this.shown = one === undefined ? undefined : { t: "reading" };
     this.changed();
     if (one === undefined) return;
 
     try {
       const peeked = await this.listings.peek({ name: one.name, path: one.path });
       if (mine !== this.looked) return;
-      this.shown = peeked;
-    } catch {
-      // A failed peek leaves the preview empty. The file can still be added.
+      this.shown = { t: "peeked", peeked };
+    } catch (err) {
+      // A failed peek says why in place of the rows. The file can still be added.
       if (mine !== this.looked) return;
+      this.shown = { t: "refused", why: saidOf(err) };
     }
-    this.looking = false;
     this.changed();
   }
 }

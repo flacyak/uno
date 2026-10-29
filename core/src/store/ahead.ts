@@ -2,8 +2,9 @@
  * @fileoverview Read-ahead for a reader going through an object in order.
  *
  * Wraps a function that reads one range. When a read continues where an
- * earlier one ended, the next chunks of the same length are requested before
- * they are asked for, so several requests are in flight at once.
+ * earlier one of the same length ended, the next chunks of that length are
+ * requested before they are asked for, so several requests are in flight at
+ * once.
  */
 
 /** How many chunks a sequential reader has in flight or held at once, the
@@ -30,10 +31,12 @@ interface Stream {
 /**
  * readAhead wraps `read` with read-ahead for sequential readers.
  *
- * A read that starts where an earlier read ended continues that reader. The
- * reader's next chunks, of the same length, are requested so that `ahead`
- * are in flight or held, counting the one it is waiting on. Any other read
- * is passed to `read` as it is.
+ * A read that starts where an earlier read of the same length ended continues
+ * that reader, as does its last chunk, cut short by the end of the object.
+ * The reader's next chunks, of the same length, are requested so that
+ * `ahead` are in flight or held, counting the one it is waiting on. Any
+ * other read is passed to `read` as it is, so reads back to back of
+ * different lengths, such as a band's blocks of rows, ask for nothing ahead.
  *
  * A held chunk stays with the reader it was requested for while that reader
  * is among the last `REMEMBERED` reads. Then it is dropped. Two sequential
@@ -90,9 +93,14 @@ export function readAhead(
   }
 
   return (offset, length) => {
-    // A read that starts where a recent read ended continues that reader,
-    // which becomes the stream.
-    const going = recent.findLast((who) => who.next === offset);
+    // A read that starts where a recent read of its length ended, or that
+    // takes what is left of the object, continues that reader, which becomes
+    // the stream.
+    const going = recent.findLast(
+      (who) =>
+        who.next === offset &&
+        (who.length === length || offset + length === size),
+    );
     if (going === undefined) {
       remember({ next: offset + length, length });
     } else {
