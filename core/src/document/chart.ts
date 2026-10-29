@@ -10,6 +10,12 @@ export const TITLE_AT_MOST = 200;
 export const REFRESH_MINUTES_AT_MOST = 7 * 24 * 60;
 
 /**
+ * The decimals a saved x or y keeps, so a window that has not moved saves the
+ * same bytes. Four keep it within a px in any room under 10,000 px.
+ */
+export const PLACE_DIGITS = 4;
+
+/**
  * A column a chart reads: its place, and its header when the chart was made,
  * so a relink can be checked.
  */

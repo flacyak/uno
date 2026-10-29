@@ -840,10 +840,11 @@ describe("a source's id", () => {
 // ------------------------------------------------------------------ charts
 
 describe("a workspace's charts", () => {
-  /** Rows per region at the right edge, with its keys in no particular order. */
+  /** Rows per region at the right edge, as a drag leaves it, with its keys
+   * in no particular order. */
   const PER_REGION: Chart = {
     refresh: 0,
-    place: { height: 260, width: 420, y: 0, x: 1 },
+    place: { height: 259.5, width: 420.25, y: 0.123456, x: 1 },
     title: '',
     plot: { by: { header: 'region', col: REGION }, t: 'bars' },
     source: 'sales',
@@ -855,8 +856,8 @@ describe("a workspace's charts", () => {
     return { ...saved('sales.csv').doc, charts };
   }
 
-  // The entry is compared whole, so a moved or added key fails.
-  test('are written after the log, each key in its place', () => {
+  // The entry is compared whole, so a moved key or an unrounded place fails.
+  test('are written after the log, each key in its place, at whole px', () => {
     const doc = charted([PER_REGION]);
     const entries = unzipSync(writeDocument(doc));
 
@@ -866,7 +867,15 @@ describe("a workspace's charts", () => {
     expect(JSON.stringify(JSON.parse(written))).toBe(
       '{"version":1,"charts":[{"id":"c1","source":"sales",' +
         '"plot":{"t":"bars","by":{"col":1,"header":"region"}},"title":"",' +
-        '"place":{"x":1,"y":0,"width":420,"height":260},"refresh":0}]}',
+        '"place":{"x":1,"y":0.1235,"width":420,"height":260},"refresh":0}]}',
+    );
+  });
+
+  // The check comes before the rounding, so 0.6 px is not saved as 1 px.
+  test('are refused where reading them would be', () => {
+    const place = { ...PER_REGION.place, width: 0.6 };
+    expect(() => writeDocument(charted([{ ...PER_REGION, place }]))).toThrow(
+      `${CHARTS_ENTRY} (c1): place: width is not a size of at least 1 px`,
     );
   });
 
