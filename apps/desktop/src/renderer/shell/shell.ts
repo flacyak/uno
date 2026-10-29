@@ -952,6 +952,8 @@ export class Shell {
       // Removing the showing tab shows its neighbour.
       this.shown(showing);
     } catch (err) {
+      // A removal whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
   }
@@ -1086,6 +1088,8 @@ export class Shell {
       await change(w);
       this.say("");
     } catch (err) {
+      // An edit whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
     this.changed(w);
