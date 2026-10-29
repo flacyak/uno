@@ -110,6 +110,9 @@ export type Detected =
 /** Delimited text, which the encoding and delimiter sniffs read from here. */
 const DELIMITED: Detected = { t: 'records', layout: 'delimited' };
 
+/** JSON Lines, read one object per line. */
+const LINES: Detected = { t: 'records', layout: 'lines' };
+
 /** The kind of rows each layout of records is. */
 const LAYOUT_KINDS: Record<Layout, ReadKind> = {
   delimited: 'delimited',
@@ -121,7 +124,6 @@ const LAYOUT_KINDS: Record<Layout, ReadKind> = {
  * holds. A compression hides its kind, and a JSON document has none.
  */
 const UNREAD_KINDS: Partial<Record<Unread, ReadKind>> = {
-  'JSON Lines': 'jsonl',
   Parquet: 'parquet',
 };
 
@@ -142,7 +144,7 @@ export async function detect(
 
   const { extension } = nameParts(name);
   if (DELIMITED_EXTENSIONS.includes(extension)) return DELIMITED;
-  if (linesByName(name) || opensWithObject(head)) return unread('JSON Lines');
+  if (linesByName(name) || opensWithObject(head)) return LINES;
   return extension === JSON_EXTENSION ? unread('JSON') : DELIMITED;
 }
 
