@@ -21,7 +21,15 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type { Document, Held, HeldParts, Logged, State } from '@document';
+import type {
+  CarriedChart,
+  Chart,
+  Document,
+  Held,
+  HeldParts,
+  Logged,
+  State,
+} from '@document';
 import type { Edit } from '@sheet';
 import { bytesSource, headerModeOf, multiOf, openWith, partMap } from '@store';
 import type { ByteSource, FileHandler, PartsRef, SingleRef } from '@store';
@@ -185,6 +193,11 @@ export class Workspace {
   private extra = new Map<string, Uint8Array>();
   /** Each source's saved state from the .uno, carried into the next save. */
   private readonly states = new Map<string, State>();
+  /** The workspace's charts by id, oldest first. */
+  private readonly charts = new Map<string, Chart>();
+  /** The charts carried as their JSON into the next save: those this build
+   * cannot read, and those whose id is already kept. */
+  private carriedCharts: CarriedChart[] = [];
 
   private transform = false;
   private queue: Promise<unknown> = Promise.resolve();
@@ -383,6 +396,7 @@ export class Workspace {
           ] as const,
       ),
     );
+    this.keepCharts(doc);
     for (const [src, source] of opened) {
       this.keep(source);
       this.states.set(src.id, src.state);
@@ -395,8 +409,24 @@ export class Workspace {
       opened: [...this.sources.values()].map((v) => v.opened),
       showing: doc.active,
       cells: doc.sources.map((s) => ({ source: s.id, ...s.state.active })),
-      charts: [...(doc.charts ?? [])],
+      charts: [...this.charts.values()],
     };
+  }
+
+  /**
+   * keepCharts keeps a .uno's charts, and the ones it carries. A chart whose
+   * id is already kept is carried too, so no chart takes another's place.
+   */
+  private keepCharts(doc: Document): void {
+    for (const chart of doc.charts ?? []) {
+      if (this.charts.has(chart.id)) {
+        const json = JSON.stringify(chart);
+        this.carriedCharts.push({ source: chart.source, json });
+      } else {
+        this.charts.set(chart.id, chart);
+      }
+    }
+    this.carriedCharts.push(...(doc.carriedCharts ?? []));
   }
 
   /**
@@ -574,6 +604,8 @@ export class Workspace {
     const sources = [...this.sources.values()];
     this.sources.clear();
     this.states.clear();
+    this.charts.clear();
+    this.carriedCharts = [];
     this.trail = [];
     await Promise.all(sources.map((v) => v.close()));
   }
@@ -666,6 +698,8 @@ export class Workspace {
         sources: held,
         active: this.sources.has(place.source) ? place.source : sources[0]!.id,
         log: interleave(this.trail, parts),
+        charts: [...this.charts.values()],
+        carriedCharts: this.carriedCharts,
         extra: this.extra,
         at: place.at,
       };

@@ -1,16 +1,19 @@
 /**
  * @fileoverview A workspace's charts in the engine: the open of a .uno hands
- * them over.
+ * them over, and a save writes them back.
  */
 
 import { expect, test } from 'vite-plus/test';
 
-import { newManifest, writeDocument } from '@document';
-import type { Chart } from '@document';
+import { newManifest, readContainer, writeDocument } from '@document';
+import type { CarriedChart, Chart } from '@document';
 import type { Engine } from '@engine';
 import { blobProvider } from '@store';
 import { COLS, REGION, ROWS } from '@core-tests/testdata/sales-q3';
 import { FIXTURE, connect } from './harness.ts';
+
+/** A save's bound on carried bytes. Every source is read from the disk. */
+const CARRIES_NOTHING = 0;
 
 /** The fixture as a source of the workspace, by its path. */
 const SALES = {
@@ -34,8 +37,15 @@ const NORTH: Chart = {
 /** The same chart over the south source. */
 const SOUTH: Chart = { ...NORTH, id: 'c2', source: 'south' };
 
-/** opened opens a .uno of a north and a south source holding `charts`. */
-function opened(engine: Engine, charts: Chart[]) {
+/** A newer build's chart over `source`, as this build carries it. */
+function newer(source: string): CarriedChart {
+  const json = `{"id":"c3","source":"${source}","plot":{"t":"line"}}`;
+  return { source, json };
+}
+
+/** opened opens a .uno of a north and a south source holding `charts` and
+ * `carried`. */
+function opened(engine: Engine, charts: Chart[], carried: CarriedChart[] = []) {
   const uno = writeDocument({
     manifest: newManifest(),
     sources: [
@@ -45,10 +55,17 @@ function opened(engine: Engine, charts: Chart[]) {
     active: 'north',
     log: [],
     charts,
+    carriedCharts: carried,
     extra: new Map(),
     at: '',
   });
   return engine.open({ name: 'q3.uno', blob: new Blob([new Uint8Array(uno)]) });
+}
+
+/** saved saves the workspace. */
+function saved(engine: Engine): Promise<Uint8Array> {
+  const place = { source: 'north', cells: [], at: '' };
+  return engine.save(place, CARRIES_NOTHING);
 }
 
 test("an open hands over a .uno's charts, oldest first, and a file's none", async () => {
@@ -71,6 +88,26 @@ test('a source that opens as missing keeps its charts', async () => {
     const added = await opened(engine, [NORTH, SOUTH]);
     for (const s of added.sources) expect(s.opened.link?.missing).toBeDefined();
     expect(added.charts).toStrictEqual([NORTH, SOUTH]);
+
+    const back = readContainer('q3.uno', await saved(engine));
+    expect(back.charts).toStrictEqual([NORTH, SOUTH]);
+  } finally {
+    done();
+  }
+});
+
+test("a .uno's charts come back from a save as the .uno held them", async () => {
+  const { engine, done } = connect();
+  try {
+    // A repeated id is carried, so it takes no chart's place.
+    const repeated = { ...SOUTH, id: NORTH.id };
+    const charts = [NORTH, SOUTH, repeated];
+    const added = await opened(engine, charts, [newer('north')]);
+    expect(added.charts).toStrictEqual([NORTH, SOUTH]);
+
+    const back = readContainer('q3.uno', await saved(engine));
+    expect(back.charts).toStrictEqual(charts);
+    expect(back.carriedCharts).toStrictEqual([newer('north')]);
   } finally {
     done();
   }

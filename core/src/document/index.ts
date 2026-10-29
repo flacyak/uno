@@ -52,7 +52,13 @@ export {
   samePath,
 } from './path.ts';
 export { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from './chart.ts';
-export type { Chart, ChartColumn, ChartPlace, Plot } from './chart.ts';
+export type {
+  CarriedChart,
+  Chart,
+  ChartColumn,
+  ChartPlace,
+  Plot,
+} from './chart.ts';
 export {
   formatFor,
   parseChart,
