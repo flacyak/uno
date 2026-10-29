@@ -21,7 +21,16 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type { Document, Held, HeldParts, Logged, State } from '@document';
+import type {
+  Document,
+  Held,
+  HeldParts,
+  Logged,
+  SourceKind,
+  State,
+} from '@document';
+import type { Layout } from '@ingest';
+import { unreachable } from '@never';
 import type { Edit } from '@sheet';
 import {
   bytesSource,
@@ -50,11 +59,13 @@ import type {
 import { Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import type { Meeting, Unconnected } from '@store/s3';
+import { readOf } from './reading.ts';
+import type { ReadSpec } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { View } from './view.ts';
-import type { Carried, Origin, Part } from './view.ts';
+import type { Carried, OpenAsk, Origin, Part } from './view.ts';
 
 /**
  * The largest .uno file read whole. It bounds the container file itself.
@@ -131,6 +142,11 @@ class Absent {
     return this.kept.raw?.length ?? 0;
   }
 
+  /** How the source's rows were read when its log was made. */
+  get spec(): ReadSpec {
+    return readOf(this.kept);
+  }
+
   /** Returns what the .uno held, unchanged. */
   part(): Promise<Part> {
     return Promise.resolve(this.kept);
@@ -162,6 +178,13 @@ class Absent {
 
 /** A source in the workspace: a View over its rows, or an Absent. */
 type Source = View | Absent;
+
+/** What Workspace.view opens a ref with, besides the ref. */
+type ViewAsk = Pick<OpenAsk, 'carried' | 'read' | 'expect' | 'signal'> & {
+  /** Opens every part of several files first, so a missing part fails here
+   * by name. */
+  whole?: boolean;
+};
 
 export class Workspace {
   /** The handlers this engine can open files through. */
@@ -231,7 +254,7 @@ export class Workspace {
       // never lists one as opening.
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
-      const view = await this.view(id, ref, undefined, false, signal);
+      const view = await this.view(id, ref, { signal });
       return { opened: [this.keep(view)], showing: id };
     });
   }
@@ -256,7 +279,9 @@ export class Workspace {
   /**
    * relink points a source at a different file. The id stays, and the edits
    * are replayed over the new file. A failed open leaves the source as it
-   * was and throws.
+   * was and throws. Several files, and the one file the source was read
+   * from, are read again as the log was made, and another file is refused
+   * if it holds another kind of rows.
    *
    * One exception: a source that was waiting for its bucket to be connected,
    * relinked to the same addresses now that they are covered, becomes a
@@ -273,7 +298,11 @@ export class Workspace {
       const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, carried, 'parts' in to);
+        view = await this.view(id, to, {
+          carried,
+          whole: 'parts' in to,
+          ...heldTo(was, to),
+        });
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -307,9 +336,10 @@ export class Workspace {
 
   /**
    * append adds files at the end of a source over several files. Existing
-   * parts keep their places, so every row keeps its number and the log is
-   * replayed unchanged. A file already in the source, or given twice, is
-   * refused. A failed append leaves the source as it was.
+   * parts keep their places and the rows are read as before, so every row
+   * keeps its number and the log is replayed unchanged. A file already in
+   * the source, or given twice, is refused. A failed append leaves the
+   * source as it was.
    */
   append(id: string, files: readonly SingleRef[]): Promise<Opened> {
     return this.serially(async () => {
@@ -345,7 +375,10 @@ export class Workspace {
           });
       });
 
-      const view = await this.view(id, ref, { container: '', edits: was.log });
+      const view = await this.view(id, ref, {
+        carried: { container: '', edits: was.log },
+        read: was.spec,
+      });
 
       // Swapped only after the new view is open, so a failed append leaves
       // the old source in place.
@@ -430,25 +463,27 @@ export class Workspace {
       );
     }
     const carried: Carried = { container, raw: src.raw, edits };
+    const read = readOf(src);
     try {
       let view: View;
       if (src.parts !== undefined) {
-        view = await this.view(src.id, joinedFrom(src), carried);
+        view = await this.view(src.id, joinedFrom(src), { carried, read });
       } else if (src.raw === undefined) {
         // By path, pinned to the saved version where there is one.
         view = await this.view(
           src.id,
           fileAt(src.name, src.path ?? '', src.version),
-          carried,
+          { carried, read },
         );
       } else {
         view = await View.open({
           id: src.id,
           name: src.name,
           path: '',
-          source: bytesSource(src.raw),
+          stored: { t: 'source', source: bytesSource(src.raw) },
           origin: 'carried',
           carried,
+          read,
           port: this.port,
           tuning: this.tuning,
           began: performance.now(),
@@ -498,16 +533,13 @@ export class Workspace {
     return ids.size === 1 ? id : undefined;
   }
 
-  /** view opens a ref as a View. With `whole`, every part of a source over
-   * several files is opened first, so a missing part fails here by name.
-   * Aborting `signal` cancels the open. */
+  /** view opens a ref as a View. */
   private async view(
     id: string,
     ref: SourceRef,
-    carried: Carried | undefined,
-    whole = false,
-    signal?: AbortSignal,
+    ask: ViewAsk = {},
   ): Promise<View> {
+    const { carried, whole, signal } = ask;
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
@@ -532,9 +564,11 @@ export class Workspace {
       id,
       name: ref.name,
       path,
-      source,
+      stored: { t: 'source', source },
       origin: originOf(ref),
       carried,
+      read: ask.read,
+      expect: ask.expect,
       port: this.port,
       tuning: this.tuning,
       began,
@@ -792,7 +826,7 @@ function sizeOf(kept: Part): number {
  * each part by path and saved version, with the extent the save measured.
  */
 function joinedFrom(
-  src: Pick<HeldParts, 'name' | 'parts' | 'header' | 'fileColumn'>,
+  src: Pick<HeldParts, 'name' | 'parts' | 'header' | 'fileColumn' | 'kind'>,
 ): PartsRef {
   return {
     name: src.name,
@@ -806,7 +840,26 @@ function joinedFrom(
     })),
     header: src.header,
     fileColumn: src.fileColumn,
+    layout: joinedLayout(src.kind),
   };
+}
+
+/**
+ * joinedLayout is how a saved source's parts sit in their text, for the kinds
+ * read as bytes joined: delimited text where no kind is saved, and JSON
+ * Lines. Parquet parts each describe their own bytes, so they have none.
+ */
+function joinedLayout(kind: SourceKind | undefined): Layout | undefined {
+  switch (kind) {
+    case undefined:
+      return 'delimited';
+    case 'jsonl':
+      return 'lines';
+    case 'parquet':
+      return undefined;
+    default:
+      return unreachable(kind);
+  }
 }
 
 /**
@@ -857,6 +910,18 @@ function pointedTo(was: Source, ref: SourceRef): SourceRef {
       return extent === undefined ? { ref: now } : { ref: now, extent };
     }),
   };
+}
+
+/**
+ * heldTo says how a relink reads its files. Several files, and the one file
+ * the source was read from, are read as the log was made, as a reopen reads
+ * them, and several keep the extents they were saved with. Any other file
+ * is detected, and refused when it holds another kind of rows.
+ */
+function heldTo(was: Source, to: SourceRef): Pick<ViewAsk, 'read' | 'expect'> {
+  const same = 'path' in to && was.path !== '' && to.path === was.path;
+  if ('parts' in to || same) return { read: was.spec };
+  return { expect: { name: was.name, kind: was.spec.kind } };
 }
 
 /** originOf says what a ref hands its bytes over as. */

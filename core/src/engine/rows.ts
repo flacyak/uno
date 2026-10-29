@@ -1,13 +1,14 @@
 /**
- * @fileoverview The row index, and the page cache that reads rows through it.
+ * @fileoverview The row index, the block cache, and the pages that read rows
+ * through both.
  *
  * The index is two arrays of numbers with one entry per block of rows. The
- * page cache keeps decoded blocks up to a byte budget.
+ * block cache keeps decoded blocks up to a budget of what each costs.
  */
 
-import type { Format } from '@ingest';
 import { Refusal } from '@said';
 import type { ByteSource } from '@store';
+import type { Index, Indexed, Run } from './reading.ts';
 
 export interface Tuning {
   /** Bytes a pass reads at a time. */
@@ -37,7 +38,7 @@ export const TUNING: Tuning = {
  * A block is a run of whole records, so any block can be read and decoded on
  * its own. A row's block is found by binary search over the block starts.
  */
-export class RowIndex {
+export class RowIndex implements Index {
   /** Where the first data record starts. */
   readonly start: number;
   readonly size: number;
@@ -122,6 +123,11 @@ export class RowIndex {
     return [this.firsts[block]!, end];
   }
 
+  /** indexed is the bytes scanned so far, out of the file's size. */
+  indexed(): Indexed {
+    return { done: this.scanned, total: this.size };
+  }
+
   /** Returns the byte range of a block, as [start, end). */
   bytesOf(block: number): [number, number] {
     const end = block + 1 < this.blocks ? this.offsets[block + 1]! : this.size;
@@ -136,57 +142,131 @@ function grow(a: Float64Array<ArrayBuffer>): Float64Array<ArrayBuffer> {
 }
 
 /**
+ * BlockCache holds decoded blocks up to a budget, each at the cost it was put
+ * with. The block used least recently is evicted first, and the block just
+ * put is kept even when it alone costs more than the budget.
+ */
+export class BlockCache {
+  /** Oldest use first. */
+  private readonly blocks = new Map<
+    number,
+    { records: string[][]; cost: number }
+  >();
+  private kept = 0;
+  private readonly budget: number;
+
+  constructor(budget: number) {
+    this.budget = budget;
+  }
+
+  /** The summed cost of the blocks held. */
+  get held(): number {
+    return this.kept;
+  }
+
+  /** get returns a held block's records and makes it the newest use. */
+  get(block: number): string[][] | undefined {
+    const hit = this.blocks.get(block);
+    if (hit === undefined) return undefined;
+    // Re-insert so the block becomes the newest entry in the Map.
+    this.blocks.delete(block);
+    this.blocks.set(block, hit);
+    return hit.records;
+  }
+
+  /**
+   * put holds a block's records at `cost`, in place of any it held, then
+   * evicts the oldest blocks until the cost held is within the budget.
+   */
+  put(block: number, records: string[][], cost: number): void {
+    const held = this.blocks.get(block);
+    if (held !== undefined) {
+      this.blocks.delete(block);
+      this.kept -= held.cost;
+    }
+    this.blocks.set(block, { records, cost });
+    this.kept += cost;
+    for (const [key, entry] of this.blocks) {
+      if (this.kept <= this.budget || key === block) break;
+      this.blocks.delete(key);
+      this.kept -= entry.cost;
+    }
+  }
+}
+
+/** The one run of every block of a single file. */
+export const ONE_FILE: readonly Run[] = [{ row: 0, part: 0 }];
+
+/**
+ * rowsThrough reads up to `count` rows from `first` a block at a time,
+ * through `records`, stopping at the index's readable limit.
+ */
+export async function rowsThrough(
+  index: Pick<Index, 'readable' | 'blockOf' | 'rowsOf'>,
+  records: (block: number) => Promise<string[][]>,
+  first: number,
+  count: number,
+): Promise<string[][]> {
+  const end = Math.min(first + count, index.readable());
+  const out: string[][] = [];
+
+  for (let row = Math.max(0, first); row < end;) {
+    const block = index.blockOf(row);
+    const [from] = index.rowsOf(block);
+    const rows = await records(block);
+    for (let i = row - from; i < rows.length && row < end; i++, row++)
+      out.push(rows[i]!);
+  }
+  return out;
+}
+
+/** Decoder turns the bytes of one block into its records. */
+export interface Decoder {
+  /** The records in bytes that begin and end on a record boundary. */
+  decode(bytes: Uint8Array): string[][];
+}
+
+/**
  * Pages reads rows through an index and caches decoded blocks.
  *
- * The cache is bounded by the source bytes of the blocks it holds. The least
- * recently used block is evicted first.
+ * A block costs the cache its source bytes, so the budget bounds the source
+ * bytes of the blocks it holds.
  */
 export class Pages {
   private readonly name: string;
-  private readonly source: ByteSource;
-  private readonly format: Format;
+  private readonly source: Pick<ByteSource, 'read'>;
+  private readonly decoder: Decoder;
   private readonly index: RowIndex;
-  private readonly budget: number;
-
-  private readonly cache = new Map<
-    number,
-    { records: string[][]; bytes: number }
-  >();
+  private readonly cache: BlockCache;
   private readonly loading = new Map<number, Promise<string[][]>>();
-  private kept = 0;
 
   constructor(
     name: string,
-    source: ByteSource,
-    format: Format,
+    source: Pick<ByteSource, 'read'>,
+    decoder: Decoder,
     index: RowIndex,
     budget: number,
   ) {
     this.name = name;
     this.source = source;
-    this.format = format;
+    this.decoder = decoder;
     this.index = index;
-    this.budget = budget;
+    this.cache = new BlockCache(budget);
   }
 
   /** Source bytes of the blocks in the cache. */
   get held(): number {
-    return this.kept;
+    return this.cache.held;
   }
 
   /** rows reads up to count rows from first, stopping at the readable limit. */
-  async rows(first: number, count: number): Promise<string[][]> {
-    const end = Math.min(first + count, this.index.readable());
-    const out: string[][] = [];
-
-    for (let row = Math.max(0, first); row < end;) {
-      const block = this.index.blockOf(row);
-      const [from] = this.index.rowsOf(block);
-      const records = await this.records(block);
-      for (let i = row - from; i < records.length && row < end; i++, row++)
-        out.push(records[i]!);
-    }
-    return out;
+  rows(first: number, count: number): Promise<string[][]> {
+    return rowsThrough(
+      this.index,
+      (block) => this.records(block),
+      first,
+      count,
+    );
   }
 
   /**
@@ -195,12 +275,7 @@ export class Pages {
    */
   records(block: number, keep = true): Promise<string[][]> {
     const hit = this.cache.get(block);
-    if (hit !== undefined) {
-      // Re-insert so the block becomes the newest entry in the Map.
-      this.cache.delete(block);
-      this.cache.set(block, hit);
-      return Promise.resolve(hit.records);
-    }
+    if (hit !== undefined) return Promise.resolve(hit);
 
     let pending = this.loading.get(block);
     if (pending !== undefined) return pending;
@@ -208,7 +283,8 @@ export class Pages {
 
     pending = this.decode(block)
       .then((records) => {
-        this.keep(block, records);
+        const [start, end] = this.index.bytesOf(block);
+        this.cache.put(block, records, end - start);
         return records;
       })
       .finally(() => this.loading.delete(block));
@@ -219,7 +295,7 @@ export class Pages {
   private async decode(block: number): Promise<string[][]> {
     const [start, end] = this.index.bytesOf(block);
     const [from, to] = this.index.rowsOf(block);
-    const records = this.format.decode(
+    const records = this.decoder.decode(
       await this.source.read(start, end - start),
     );
 
@@ -229,16 +305,5 @@ export class Pages {
       throw new Refusal({ t: 'changed-on-disk', name: this.name });
     }
     return records;
-  }
-
-  private keep(block: number, records: string[][]): void {
-    const [start, end] = this.index.bytesOf(block);
-    this.cache.set(block, { records, bytes: end - start });
-    this.kept += end - start;
-    for (const [key, entry] of this.cache) {
-      if (this.kept <= this.budget || key === block) break;
-      this.cache.delete(key);
-      this.kept -= entry.bytes;
-    }
   }
 }

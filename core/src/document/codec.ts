@@ -14,9 +14,11 @@ import {
   rfc3339,
   sha256Hex,
 } from '@go';
-import { read as ingestRead } from '@ingest';
+import { keyedColumn, read as ingestRead, readLines } from '@ingest';
+import { unreachable } from '@never';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
+import type { HeaderMode } from '@store';
 import type {
   Document,
   FileSource,
@@ -26,7 +28,10 @@ import type {
   HeldParts,
   Logged,
   Manifest,
+  OneOf,
+  PartsJoin,
   PartsSource,
+  SavedColumn,
   Source,
   SourcePart,
   State,
@@ -36,22 +41,26 @@ import {
   FORMAT_VERSION,
   FORMULA_VERSION,
   GENERATOR,
-  KNOWN_HEADER_MODES,
+  HEADER_MODES,
   LOG_ENTRY,
   MANIFEST_ENTRY,
+  PARTS_JOINS,
   PARTS_VERSION,
   POINTED_VERSION,
+  READ_VERSION,
+  ROWS_VERSION,
   RULE_VERSION,
   SOURCES_VERSION,
+  SOURCE_COMPRESSIONS,
+  SOURCE_KINDS,
   STATE_ENTRY,
-  isHeaderMode,
   logOf,
   resolvedPath,
   sourceEntry,
   sourceId,
   storedPath,
 } from './document.ts';
-import { baseOf } from './path.ts';
+import { baseOf, onRoot, underRoot } from './path.ts';
 
 const decoder = new TextDecoder('utf-8');
 const encoder = new TextEncoder();
@@ -68,14 +77,14 @@ export function readDocument(
 ): Document {
   const doc = readContainer(name, bytes, at);
 
-  // Each carried source is read the way a dropped file is, then its log is
+  // Each carried source is read the way its log was made, then the log is
   // replayed over it.
   const sheets = new Map<string, Sheet>();
   for (const src of doc.sources) {
     const raw = src.raw;
     if (raw === undefined) continue;
     const sheet = blamed(`${name}: embedded ${src.name}`, () =>
-      ingestRead(src.name, raw),
+      readCarried(src, raw),
     );
     blamed(`${name}: replaying edits to ${src.name}`, () =>
       sheet.replay(logOf(doc.log, src.id)),
@@ -83,6 +92,26 @@ export function readDocument(
     sheets.set(src.id, sheet);
   }
   return { ...doc, sheets };
+}
+
+/**
+ * readCarried reads a carried source's bytes the way its log was made: as
+ * JSON Lines over the columns it pinned, or as delimited text. Parquet is
+ * read by the engine alone.
+ */
+function readCarried(src: Held, raw: Uint8Array): Sheet {
+  switch (src.kind) {
+    case undefined:
+      return ingestRead(src.name, raw);
+    case 'jsonl':
+      return readLines(src.name, raw, (src.columns ?? []).map(keyedColumn));
+    case 'parquet':
+      throw new Error(
+        `${src.name}: a carried Parquet file is read by the engine alone`,
+      );
+    default:
+      return unreachable(src.kind);
+  }
 }
 
 /**
@@ -121,9 +150,11 @@ export function readContainer(
   );
   const sources: Held[] = m.sources.map((src) => {
     const state = states.get(src.id) ?? { active: { row: 0, col: 0 } };
-    return src.parts === undefined
-      ? heldFile(name, entries, src, state, at)
-      : heldParts(src, state, at);
+    if (src.parts === undefined) return heldFile(name, entries, src, state, at);
+    const held = heldParts(src, state, at);
+    // A parts source that opens is one that saves again.
+    blamed(name, () => checkParts(held));
+    return held;
   });
 
   return {
@@ -152,6 +183,9 @@ function heldFile(
     path: src.path === '' ? undefined : resolvedPath(src.path, at),
     bytes: src.bytes,
     version: src.version === '' ? undefined : src.version,
+    kind: src.kind,
+    compression: src.compression,
+    columns: src.columns,
     connection: src.connection === '' ? undefined : src.connection,
     rows: src.rows,
     cols: src.cols,
@@ -178,15 +212,25 @@ function carriedBytes(
   return raw;
 }
 
-/** heldParts builds the in-memory form of a parts source, with each part's
- * path resolved from `at`. */
+/**
+ * heldParts builds the in-memory form of a parts source. The root is
+ * resolved from `at`. Each part's path is joined onto the root when there is
+ * one, and resolved from `at` otherwise.
+ */
 function heldParts(src: PartsSource, state: State, at: string): HeldParts {
+  const root = src.root === undefined ? undefined : resolvedPath(src.root, at);
   return {
     id: src.id,
     name: src.name,
     connection: src.connection === '' ? undefined : src.connection,
+    join: src.join,
+    root,
+    partitions: src.partitions,
     parts: src.parts.map((part): HeldPart => {
-      const path = resolvedPath(part.path, at);
+      const path =
+        root === undefined
+          ? resolvedPath(part.path, at)
+          : onRoot(part.path, root);
       return {
         name: part.name === '' ? baseOf(path) : part.name,
         path,
@@ -194,10 +238,14 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
         version: part.version === '' ? undefined : part.version,
         skip: part.skip,
         unterminated: part.unterminated,
+        compression: part.compression,
+        rows: part.rows,
       };
     }),
+    kind: src.kind,
     header: src.header,
     fileColumn: src.fileColumn ? true : undefined,
+    columns: src.columns,
     rows: src.rows,
     cols: src.cols,
     state,
@@ -411,18 +459,49 @@ function checkLog(d: Document): void {
 }
 
 /**
- * checkParts refuses an empty parts source, or one with a part whose path
- * is "".
+ * checkParts refuses an empty parts source, a root of "", a part whose path
+ * is "" or is not under the source's root, and partition keys that
+ * checkPartitions refuses.
  */
 function checkParts(src: HeldParts): void {
   if (src.parts.length === 0)
     throw new Error(`${src.name} has no parts to point at`);
+  const { root } = src;
+  if (root === '') throw new Error(`${src.name} has a root with no path`);
   src.parts.forEach((part, i) => {
-    if (part.path === '') {
+    const which = `${src.name}: ${part.name} (part ${i + 1} of ${src.parts.length})`;
+    if (part.path === '') throw new Error(`${which} has no path to point at`);
+    if (root !== undefined && underRoot(part.path, root) === '') {
       throw new Error(
-        `${src.name}: ${part.name} (part ${i + 1} of ${src.parts.length}) has no path to point at`,
+        `${which} is at ${part.path}, which is not under ${root}`,
       );
     }
+  });
+  checkPartitions(src);
+}
+
+/**
+ * checkPartitions refuses partition keys with no root to read their values
+ * from, and a key that is "" or is named twice.
+ */
+function checkPartitions(src: HeldParts): void {
+  const keys = src.partitions;
+  if (keys === undefined) return;
+  if (src.root === undefined) {
+    throw new Error(
+      `${src.name} is partitioned and has no root to read its keys from`,
+    );
+  }
+  const seen = new Set<string>();
+  keys.forEach((key, i) => {
+    if (key === '') {
+      throw new Error(
+        `${src.name}: partition key ${i + 1} of ${keys.length} has no name`,
+      );
+    }
+    if (seen.has(key))
+      throw new Error(`${src.name} is partitioned by ${key} twice`);
+    seen.add(key);
   });
 }
 
@@ -470,54 +549,112 @@ function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
       src.raw === undefined
         ? ''
         : single
-          ? sourceEntry(src.name)
-          : sourceEntry(src.name, src.id),
+          ? sourceEntry(src.name, undefined, src.kind)
+          : sourceEntry(src.name, src.id, src.kind),
     path: src.path === undefined ? '' : storedPath(src.path, at),
     version: src.path === undefined ? '' : (src.version ?? ''),
+    kind: src.kind,
+    compression: src.compression,
     rows: src.rows,
     cols: src.cols,
+    columns: pinned(src.columns),
   };
 }
 
 /**
  * partsSource is what the manifest records of a parts source, for a .uno
- * saved to `at`. Each part's path is stored the way a file source's path is.
+ * saved to `at`. Under a root each part's path is stored relative to it,
+ * which checkParts holds every part to. Otherwise each part's path, like the
+ * root, is stored the way a file source's path is.
  */
 function partsSource(src: HeldParts, at: string): PartsSource {
+  const { root } = src;
+  // Where one part's bytes end and the next's begin is the byte join's alone.
+  const bytesJoined = src.join === undefined;
   return {
     id: src.id,
     name: src.name,
     connection: src.connection ?? '',
+    join: src.join,
+    root: root === undefined ? undefined : storedPath(root, at),
+    partitions: src.partitions?.slice(),
     parts: src.parts.map((part): SourcePart => ({
       // The name is written only when the path's last piece differs from it.
       name: part.name === baseOf(part.path) ? '' : part.name,
-      path: storedPath(part.path, at),
+      path:
+        root === undefined
+          ? storedPath(part.path, at)
+          : underRoot(part.path, root),
       bytes: part.bytes,
       version: part.version ?? '',
-      skip: part.skip,
-      unterminated: part.unterminated,
+      skip: bytesJoined ? part.skip : 0,
+      unterminated: bytesJoined ? part.unterminated : false,
+      compression: part.compression,
+      rows: part.rows,
     })),
+    kind: src.kind,
     header: src.header,
     fileColumn: src.fileColumn === true,
     rows: src.rows,
     cols: src.cols,
+    columns: pinned(src.columns),
   };
 }
 
 /**
+ * pinned is what the manifest records of a source's columns: each name, then
+ * its key where one is set. A key of "" is a key, and is kept.
+ */
+function pinned(
+  columns: readonly SavedColumn[] | undefined,
+): SavedColumn[] | undefined {
+  return columns?.map(({ name, key }): SavedColumn => ({ name, key }));
+}
+
+/**
  * formatFor returns the lowest format version that can open this workspace:
- * PARTS_VERSION with a parts source, POINTED_VERSION with a pointed-at
- * source, SOURCES_VERSION with more than one source, and otherwise whatever
- * the log needs.
+ * ROWS_VERSION with a source read in row space, READ_VERSION with a source
+ * that says how it was read, PARTS_VERSION with a parts source,
+ * POINTED_VERSION with a pointed-at source, SOURCES_VERSION with more than
+ * one source, and otherwise whatever the log needs.
  */
 export function formatFor(
   sources: readonly Held[],
   log: readonly Logged[],
 ): number {
+  if (sources.some(readsRows)) return ROWS_VERSION;
+  if (sources.some(saysHowRead)) return READ_VERSION;
   if (sources.some((s) => s.parts !== undefined)) return PARTS_VERSION;
   if (sources.some((s) => s.path !== undefined)) return POINTED_VERSION;
   if (sources.length > 1) return SOURCES_VERSION;
   return versionFor(log.map((l) => l.edit));
+}
+
+/**
+ * saysHowRead is true for a source with a kind, a compression or pinned
+ * columns. Delimited text read as it always was says none of them.
+ */
+function saysHowRead(s: Held): boolean {
+  return (
+    s.kind !== undefined ||
+    s.compression !== undefined ||
+    s.columns !== undefined
+  );
+}
+
+/**
+ * readsRows is true for a parts source with a join, a root or partitions, or
+ * with a part that says its compression or its rows. Parts picked by hand
+ * and joined as bytes say none of them.
+ */
+function readsRows(s: Held): boolean {
+  if (s.parts === undefined) return false;
+  return (
+    s.join !== undefined ||
+    s.root !== undefined ||
+    s.partitions !== undefined ||
+    s.parts.some((p) => p.compression !== undefined || p.rows !== undefined)
+  );
 }
 
 /**
@@ -654,6 +791,11 @@ function readExtra(
 
 // ------------------------------------------------------------- shaping
 
+/** Whether a value is a JSON object: neither null nor a list. */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 function asRecord(v: unknown): Record<string, unknown> {
   return typeof v === 'object' && v !== null
     ? (v as Record<string, unknown>)
@@ -668,13 +810,18 @@ function asString(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
 
-/** Whether a value is a byte count: a whole number of zero or more. */
-function isByteCount(v: unknown): v is number {
+/** Whether a value is a count of bytes or rows: a whole number of zero or
+ * more. */
+function isCount(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0;
 }
 
 function isText(v: unknown): v is string {
   return typeof v === 'string';
+}
+
+function isTexts(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every(isText);
 }
 
 function isFlag(v: unknown): v is boolean {
@@ -689,9 +836,14 @@ interface Expects<T> {
 
 const TEXT: Expects<string> = { is: isText, not: 'is not text' };
 const FLAG: Expects<boolean> = { is: isFlag, not: 'is neither true nor false' };
+const TEXTS: Expects<string[]> = { is: isTexts, not: 'is not a list of names' };
 const BYTE_COUNT: Expects<number> = {
-  is: isByteCount,
+  is: isCount,
   not: 'is not a number of bytes',
+};
+const ROW_COUNT: Expects<number> = {
+  is: isCount,
+  not: 'is not a number of rows',
 };
 
 /**
@@ -709,6 +861,34 @@ function optional<T>(
   if (v !== undefined && !expects.is(v))
     throw new Error(`${where}: ${key} ${expects.not}`);
   return v;
+}
+
+/**
+ * oneOf reads a field that a record may leave out, whose value is one of
+ * `set`: undefined when absent, the value when `set` has it, and otherwise a
+ * refusal naming the value and listing what this build knows.
+ */
+function oneOf<T extends string>(
+  o: Record<string, unknown>,
+  key: string,
+  set: OneOf<T>,
+  where: string,
+): T | undefined {
+  const v = o[key];
+  if (v === undefined) return undefined;
+  if (typeof v === 'string' && set.is(v)) return v;
+  throw new Error(
+    `${where}: this build does not know ${key} ${JSON.stringify(v)} · it reads ${quoted(set.known)}`,
+  );
+}
+
+/**
+ * quoted lists values as a refusal does: each in quotes, separated by
+ * commas, or "none" when there are none.
+ */
+function quoted(values: readonly string[]): string {
+  if (values.length === 0) return 'none';
+  return values.map((v) => JSON.stringify(v)).join(', ');
 }
 
 /**
@@ -778,7 +958,9 @@ function parseManifest(name: string, v: unknown): Manifest {
  * parseSource reads one of the manifest's sources: a parts source when it
  * has `parts`, otherwise a file source. A file source is read leniently,
  * with a missing key read as its zero value. Parts are read strictly, and a
- * bad list is refused naming the part.
+ * bad list is refused naming the part. So are a kind, a compression, pinned
+ * columns, a join, a root and partitions, and a kind, compression or join
+ * this build does not know is refused by name.
  */
 function parseSource(name: string, s: Record<string, unknown>): Source {
   const base = {
@@ -788,6 +970,7 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
     rows: asNumber(s['rows']),
     cols: asNumber(s['cols']),
   };
+  const source = `${name}: ${base.name}`;
   if (s['parts'] === undefined) {
     return {
       ...base,
@@ -796,12 +979,14 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       entry: asString(s['entry']),
       path: asString(s['path']),
       version: asString(s['version']),
+      kind: oneOf(s, 'kind', SOURCE_KINDS, source),
+      compression: oneOf(s, 'compression', SOURCE_COMPRESSIONS, source),
+      columns: parseColumns(source, s['columns']),
     };
   }
 
   if (base.name === '')
     throw new Error(`${name}: the manifest names no source file`);
-  const source = `${name}: ${base.name}`;
 
   // A source has exactly one of a path, an entry or parts.
   let one = '';
@@ -821,37 +1006,71 @@ function parseSource(name: string, s: Record<string, unknown>): Source {
       `${source} has no parts · several files read as one need at least one`,
     );
   }
+  const join = oneOf(s, 'join', PARTS_JOINS, source);
   const parts = listed.map((raw, i) =>
-    parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw),
+    parsePart(`${source}: part ${i + 1} of ${listed.length}`, raw, join),
   );
 
-  const known = KNOWN_HEADER_MODES.map((mode) => JSON.stringify(mode)).join(
-    ', ',
-  );
-  const header = s['header'];
+  const kind = oneOf(s, 'kind', SOURCE_KINDS, source);
+  // Only delimited text, which has no kind, says whether it has a header
+  // row. Any other kind is held as "first", what a reader takes unless told.
+  const header = kind === undefined ? headerOf(source, s) : 'first';
+  const fileColumn = optional(s, 'fileColumn', FLAG, source);
+  return {
+    ...base,
+    join,
+    root: optional(s, 'root', TEXT, source),
+    partitions: optional(s, 'partitions', TEXTS, source),
+    parts,
+    kind,
+    header,
+    fileColumn: fileColumn ?? false,
+    columns: parseColumns(source, s['columns']),
+  };
+}
+
+/** headerOf reads the header mode a parts source of delimited text needs. */
+function headerOf(source: string, s: Record<string, unknown>): HeaderMode {
+  const header = oneOf(s, 'header', HEADER_MODES, source);
   if (header === undefined) {
     throw new Error(
-      `${source} has parts and no header · it has to say whether they have a header row, as one of ${known}`,
+      `${source} has parts and no header · it has to say whether they have a header row, as one of ${quoted(HEADER_MODES.known)}`,
     );
   }
-  if (typeof header !== 'string' || !isHeaderMode(header)) {
-    throw new Error(
-      `${source}: this build does not know header ${JSON.stringify(header)} · it reads ${known}`,
-    );
-  }
-  const fileColumn = optional(s, 'fileColumn', FLAG, source);
-  return { ...base, parts, header, fileColumn: fileColumn ?? false };
+  return header;
 }
 
 /**
- * parsePart reads one part. `which` names it in an error before its path is
- * known. `skip` and `unterminated` default to 0 and false when missing.
+ * parseColumns reads a source's pinned columns, strictly: undefined when
+ * absent, and otherwise a list of columns, each with a name and maybe a key.
+ * `where` names the source in an error.
  */
-function parsePart(which: string, raw: unknown): SourcePart {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+function parseColumns(where: string, v: unknown): SavedColumn[] | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v))
+    throw new Error(`${where}: columns is not a list of columns`);
+  return v.map((raw, i): SavedColumn => {
+    const which = `${where}: column ${i + 1} of ${v.length}`;
+    if (!isRecord(raw)) throw new Error(`${which} is not a column with a name`);
+    const name = raw['name'];
+    if (typeof name !== 'string') throw new Error(`${which} has no name`);
+    const key = optional(raw, 'key', TEXT, `${which} (${name})`);
+    return key === undefined ? { name } : { name, key };
+  });
+}
+
+/**
+ * parsePart reads one part of a source joined by `join`. `which` names it in
+ * an error before its path is known. `skip` and `unterminated` default to 0
+ * and false when missing, and are read only for a part joined as bytes.
+ */
+function parsePart(
+  which: string,
+  p: unknown,
+  join: PartsJoin | undefined,
+): SourcePart {
+  if (!isRecord(p))
     throw new Error(`${which} is not a file with a path and bytes`);
-  }
-  const p = asRecord(raw);
 
   const path = p['path'];
   if (typeof path !== 'string' || path === '')
@@ -859,21 +1078,26 @@ function parsePart(which: string, raw: unknown): SourcePart {
   const part = `${which} (${path})`;
 
   const bytes = p['bytes'];
-  if (!isByteCount(bytes))
+  if (!isCount(bytes))
     throw new Error(`${part} does not say how many bytes it is`);
 
   const partName = optional(p, 'name', TEXT, part);
   const version = optional(p, 'version', TEXT, part);
-  const skip = optional(p, 'skip', BYTE_COUNT, part);
-  const unterminated = optional(p, 'unterminated', FLAG, part);
+  const bytesJoined = join === undefined;
+  const skip = bytesJoined ? (optional(p, 'skip', BYTE_COUNT, part) ?? 0) : 0;
+  const unterminated = bytesJoined
+    ? (optional(p, 'unterminated', FLAG, part) ?? false)
+    : false;
 
   return {
     name: partName ?? '',
     path,
     bytes,
     version: version ?? '',
-    skip: skip ?? 0,
-    unterminated: unterminated ?? false,
+    skip,
+    unterminated,
+    compression: oneOf(p, 'compression', SOURCE_COMPRESSIONS, part),
+    rows: optional(p, 'rows', ROW_COUNT, part),
   };
 }
 
@@ -992,7 +1216,9 @@ function sourceJSON(s: Source): unknown {
     const parts = s.parts.map((p) =>
       omitempty(p, 'name', 'version', 'skip', 'unterminated'),
     );
-    return { ...omitempty(s, 'connection', 'fileColumn'), parts };
+    // A header row is delimited text's, and delimited text has no kind.
+    const header = s.kind === undefined ? s.header : undefined;
+    return { ...omitempty(s, 'connection', 'fileColumn'), parts, header };
   }
   return omitempty(s, 'connection', 'sha256', 'entry', 'path', 'version');
 }

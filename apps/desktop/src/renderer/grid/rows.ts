@@ -20,6 +20,13 @@ export function unnamed(header: string): boolean {
   return header.trim() === "";
 }
 
+/** A column as the header draws it. */
+export interface Column {
+  header: string;
+  kind: Kind;
+  flagged: boolean;
+}
+
 /**
  * The data the grid draws. Implemented by a Sheet and by an engine's band.
  *
@@ -27,7 +34,7 @@ export function unnamed(header: string): boolean {
  * row loaded.
  */
 export interface Rows {
-  readonly columns: readonly { header: string; kind: Kind; flagged: boolean }[];
+  readonly columns: readonly Column[];
   rows(): number;
   cols(): number;
   display(row: number, col: number): string;

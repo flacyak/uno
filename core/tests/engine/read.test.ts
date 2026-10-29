@@ -279,6 +279,35 @@ test('the page cache stays within its budget however much is read', async () => 
   }
 });
 
+test('the index pass tells its scanner the file ended once every chunk is pushed, before the index is complete', async () => {
+  const source = blobSource(new Blob([bytes]));
+  /** Each pass's bytes pushed, and whether the index was complete, at end. */
+  const ends: Array<{ pushed: number; complete: boolean }> = [];
+  const pass = async (signal: AbortSignal): Promise<void> => {
+    const index = new RowIndex(0, source.size, TINY);
+    let pushed = 0;
+    const scanner = () => ({
+      push: (chunk: Uint8Array) => void (pushed += chunk.length),
+      end: () => ends.push({ pushed, complete: index.complete }),
+    });
+    const format = { dataStart: 0, scanner };
+    await indexPass({
+      source,
+      format,
+      index,
+      tuning: TINY,
+      signal,
+      progress() {},
+    });
+  };
+
+  await pass(new AbortController().signal);
+  expect(ends).toEqual([{ pushed: source.size, complete: false }]);
+  // A pass cut short has not reached the end.
+  await pass(AbortSignal.abort());
+  expect(ends).toHaveLength(1);
+});
+
 test('a failed open names the file', async () => {
   const missing = join(
     await mkdtemp(join(tmpdir(), 'uno-engine-')),

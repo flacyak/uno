@@ -5,7 +5,7 @@
  * round trips, and the refusals for malformed part lists.
  */
 
-import { strFromU8, unzipSync, zipSync } from 'fflate';
+import { unzipSync } from 'fflate';
 import { describe, expect, test } from 'vite-plus/test';
 
 import {
@@ -13,13 +13,21 @@ import {
   MANIFEST_ENTRY,
   PARTS_VERSION,
   POINTED_VERSION,
-  newManifest,
   readContainer,
   readDocument,
   writeDocument,
 } from '@document';
-import type { Document, Held, HeldParts } from '@document';
+import type { Held, HeldParts } from '@document';
 import { sha256Hex } from '@go';
+import {
+  AT,
+  manifestOf,
+  manifestText,
+  partsOf,
+  tampered,
+  workspace,
+} from '@core-tests/document/manifest';
+import type { WrittenManifest } from '@core-tests/document/manifest';
 
 const encoder = new TextEncoder();
 
@@ -29,11 +37,7 @@ const CSV_BYTES = encoder.encode(CSV_BODY);
 const CSV_ROWS = 2;
 const CSV_COLS = 3;
 
-/** Fixed created time, so the full manifest text can be compared. */
-const CREATED = new Date('2026-09-30T12:00:00Z');
-
-/** Workspace path, and the bucket folder the parts are in. */
-const AT = '/home/cpa/q4/books.uno';
+/** The bucket folder the parts are in. */
 const BUCKET_DIR = 's3://acme-exports/shop/2025';
 
 /** A source of three monthly order files in a bucket, read as one. */
@@ -100,54 +104,6 @@ function files(): Held[] {
   ];
 }
 
-function workspace(sources: Held[], at = AT): Document {
-  return {
-    manifest: { ...newManifest(), created: CREATED },
-    sources,
-    active: sources[0]!.id,
-    log: [
-      {
-        source: sources[0]!.id,
-        edit: { seq: 1, op: 'set', row: 3, col: 1, was: 'West', now: 'west' },
-      },
-    ],
-    extra: new Map(),
-    at,
-  };
-}
-
-/** The written uno.json as text. */
-function manifestText(uno: Uint8Array): string {
-  return strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!);
-}
-
-interface WrittenManifest {
-  format: number;
-  modified: string;
-  sources: Array<Record<string, unknown>>;
-}
-
-function manifestOf(uno: Uint8Array): WrittenManifest {
-  return JSON.parse(manifestText(uno)) as WrittenManifest;
-}
-
-/** Writes `doc`, applies `change` to its manifest, and returns the new .uno bytes. */
-function tampered(
-  doc: Document,
-  change: (m: WrittenManifest) => void,
-): Uint8Array {
-  const entries = unzipSync(writeDocument(doc));
-  const m = JSON.parse(strFromU8(entries[MANIFEST_ENTRY]!)) as WrittenManifest;
-  change(m);
-  entries[MANIFEST_ENTRY] = encoder.encode(JSON.stringify(m));
-  return zipSync(entries);
-}
-
-/** The parts of the first source of a written manifest. */
-function partsOf(m: WrittenManifest): Array<Record<string, unknown>> {
-  return m.sources[0]!['parts'] as Array<Record<string, unknown>>;
-}
-
 describe('a workspace with no source of several files', () => {
   // The full manifest text is compared, so any moved or added key fails.
   test('still writes format 5, to the byte', () => {
@@ -203,11 +159,11 @@ describe('a workspace with no source of several files', () => {
 });
 
 describe('a source of several files', () => {
-  test('needs format 6, which is the highest this build writes', () => {
+  test('needs format 6, the rung for several files read as one', () => {
     const doc = workspace([orders()]);
     writeDocument(doc);
     expect(doc.manifest.format).toBe(PARTS_VERSION);
-    expect(PARTS_VERSION).toBe(FORMAT_VERSION);
+    expect(PARTS_VERSION).toBe(6);
   });
 
   // Each part is written with its path, bytes and version, plus skip when it

@@ -708,15 +708,20 @@ export class Panel {
 
   /**
    * choices is the line above "Add as one": whether each file has a header
-   * row, and whether a `_file` column records which file a row came from.
+   * row, where the files picked can have one, and whether a `_file` column
+   * records which file a row came from.
    */
   private choices(joining: Joining): HTMLElement {
     const line = el("div", "choices");
+    line.append(el("span", "", m.panel_as_one()));
+    if (this.sources.headerChoice) {
+      line.append(
+        choice(m.panel_header_row(), m.panel_header_row_hint(), joining.header === "first", (on) =>
+          this.sources.join({ header: on ? "first" : "none" }),
+        ),
+      );
+    }
     line.append(
-      el("span", "", m.panel_as_one()),
-      choice(m.panel_header_row(), m.panel_header_row_hint(), joining.header === "first", (on) =>
-        this.sources.join({ header: on ? "first" : "none" }),
-      ),
       choice(m.panel_file_column(), m.panel_file_column_hint(), joining.fileColumn, (on) =>
         this.sources.join({ fileColumn: on }),
       ),

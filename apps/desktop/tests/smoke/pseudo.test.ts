@@ -14,6 +14,7 @@
 
 import { beforeAll, expect, test } from "vite-plus/test";
 
+import { DIALOG_EXTENSIONS } from "@ingest";
 import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
 import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
@@ -61,8 +62,8 @@ const UNTRANSLATED: readonly RegExp[] = [
   /acme-exports|\bs3\b|\bdefault\b|~\/\.aws/g,
   // The example role's ARN.
   /arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+/g,
-  // The file extensions the empty state lists.
-  /\b(csv|tsv)\b/g,
+  // The file extensions the empty state lists, as the dialogs name them.
+  new RegExp(`\\b(${DIALOG_EXTENSIONS.join("|")})\\b`, "g"),
   // The encoding's name.
   /UTF-8/g,
 ];

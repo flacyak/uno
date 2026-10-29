@@ -8,13 +8,13 @@
  */
 
 import { Refusal, messageOf } from "@engine";
-import type { CharName, Said, Sought, StepSaid } from "@engine";
+import type { CharName, ReadKind, Said, Sought, StepSaid } from "@engine";
 import { quote } from "@go";
-import type { Sentences } from "@said";
+import type { ParquetCodec, ParquetFeature, Sentences } from "@said";
 
 import { m } from "@paraglide/messages";
 import { getLocale } from "@paraglide/runtime";
-import { bytes, num } from "./locale.ts";
+import { bytes, list, num } from "./locale.ts";
 
 /** Returns an error's message. A Refusal is translated into the app's locale. */
 export function said(err: unknown): string {
@@ -44,6 +44,43 @@ const CHARS: Record<CharName, () => string> = {
 
 function charName(name: CharName): string {
   return CHARS[name]();
+}
+
+/** The message function for what each kind of rows is called. Called at use so the current locale applies. */
+const KINDS: Record<ReadKind, () => string> = {
+  delimited: m.kind_delimited,
+  jsonl: m.kind_jsonl,
+  parquet: m.kind_parquet,
+};
+
+/** The message function for each Parquet feature uno does not read yet. Called at use so the current locale applies. */
+const FEATURES: Record<ParquetFeature, () => string> = {
+  encryption: m.parquet_feature_encryption,
+  brotli: m.parquet_feature_brotli,
+  lz4: m.parquet_feature_lz4,
+  lzo: m.parquet_feature_lzo,
+  interval: m.parquet_feature_interval,
+  bson: m.parquet_feature_bson,
+  variant: m.parquet_feature_variant,
+  "external-columns": m.parquet_feature_external_columns,
+  "several-files": m.parquet_feature_several_files,
+};
+
+/** The message function for each Parquet page codec. Called at use so the current locale applies. */
+const CODECS: Record<ParquetCodec, () => string> = {
+  uncompressed: m.parquet_codec_uncompressed,
+  snappy: m.parquet_codec_snappy,
+  gzip: m.parquet_codec_gzip,
+  zstd: m.parquet_codec_zstd,
+};
+
+/** How a Parquet file was read: the format, its pages' codecs, and its row groups where known. */
+function readParquet(codecs: readonly ParquetCodec[], groups: number | undefined): string {
+  const parts: string[] = [m.kind_parquet()];
+  const names = codecs.map((codec) => CODECS[codec]());
+  if (names.length > 0) parts.push(list(names));
+  if (groups !== undefined) parts.push(m.parquet_row_groups({ count: groups }));
+  return parts.join(" · ");
 }
 
 /**
@@ -105,6 +142,8 @@ const SAYS: Sentences<Said> = {
     const read = { charset: s.charset, delimiter: s.delimiter };
     return headed ? m.read_delimiter(read) : m.read_delimiter_no_header(read);
   },
+  "read-lines": (s) => m.read_lines({ charset: s.charset }),
+  "read-parquet": (s) => readParquet(s.codecs, s.groups),
 
   program: (s) => {
     const [first, ...rest] = s.steps.map(step);
@@ -150,6 +189,13 @@ const SAYS: Sentences<Said> = {
     m.refused_point_several_at_one({ name: s.name, count: s.count, file: s.file }),
   "point-several-at-other": (s) =>
     m.refused_point_several_at_other({ name: s.name, count: s.count, given: num(s.given) }),
+  "relink-other-kind": (s) =>
+    m.refused_relink_other_kind({
+      name: s.name,
+      file: s.file,
+      was: KINDS[s.was](),
+      now: KINDS[s.now](),
+    }),
   "log-lost-edit": (s) => m.refused_log_lost_edit({ source: s.source }),
   "bucket-unconnected": (s) =>
     m.refused_bucket_unconnected({ container: s.container, bucket: s.bucket }),
@@ -168,11 +214,16 @@ const SAYS: Sentences<Said> = {
   "nothing-to-undo": m.refused_nothing_to_undo,
   "nothing-to-redo": m.refused_nothing_to_redo,
   "in-view": m.refused_in_view,
+  "columns-moved": (s) => m.refused_columns_moved({ name: s.name }),
   "file-closed": m.refused_file_closed,
   cancelled: (s) => m.refused_cancelled({ name: s.name }),
   "changed-on-disk": (s) => m.refused_changed_on_disk({ name: s.name }),
   "stored-encoded": (s) =>
     m.refused_stored_encoded({ name: s.name, encoding: s.encoding, bucket: s.bucket }),
+  "not-read": (s) => m.refused_not_read({ name: s.name, what: s.what }),
+  "parquet-broken": (s) => m.refused_parquet_broken({ name: s.name }),
+  "parquet-unsupported": (s) =>
+    m.refused_parquet_unsupported({ name: s.name, feature: FEATURES[s.feature]() }),
 
   "keeps-no-connections": m.refused_keeps_no_connections,
   "offers-no-sign-ins": m.refused_offers_no_sign_ins,

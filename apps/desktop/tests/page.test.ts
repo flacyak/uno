@@ -22,9 +22,9 @@ beforeEach(() => {
 const text = (selector: string): string => document.querySelector(selector)?.textContent ?? "";
 
 test("the markup ships its elements without their words", () => {
-  // The dots, the + and the extensions are the same in every language, so they
-  // are all the text the markup holds.
-  expect(document.body.textContent.replace(/\s+/g, " ").trim()).toBe("+ csv · tsv · uno · ·");
+  // The dots and the + are the same in every language, so they are all the
+  // text the markup holds.
+  expect(document.body.textContent.replace(/\s+/g, " ").trim()).toBe("+ · ·");
 });
 
 test("labelPage writes the heads, the empty state and the switch", () => {
@@ -34,6 +34,11 @@ test("labelPage writes the heads, the empty state and the switch", () => {
   expect(text("#empty h1")).toBe(m.empty_title());
   expect(text('[data-mode="view"]')).toBe(m.switch_view());
   expect(text('[data-mode="transform"]')).toBe(m.switch_transform());
+});
+
+test("the empty state lists the extensions core reads, then a workspace's", () => {
+  labelPage();
+  expect(text("#empty .exts")).toBe("csv · tsv · jsonl · ndjson · json · uno");
 });
 
 test("the empty state's sentence keeps its link, with the words the message marks", () => {

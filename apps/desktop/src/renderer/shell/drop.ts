@@ -6,12 +6,14 @@
 import "./empty.css";
 
 import { WORKSPACE_EXT } from "@document";
+import { readable } from "@ingest";
 
 import { m } from "@paraglide/messages";
-import { READS } from "@renderer/sources";
 
-/** The file extensions a drop may open: a workspace, or what the panel reads. */
-const OPENABLE = [WORKSPACE_EXT, ...READS];
+/** Whether a drop may open a file: a workspace, or a file the panel reads. */
+function openable(name: string): boolean {
+  return name.toLowerCase().endsWith(WORKSPACE_EXT) || readable(name);
+}
 
 /** Returns whether a drag carries files. */
 function carriesFiles(e: DragEvent): boolean {
@@ -20,9 +22,8 @@ function carriesFiles(e: DragEvent): boolean {
 
 /**
  * wireDrop opens files dropped anywhere on `root`, and adds the "over" class
- * to `zone` while files are dragged over it. The drop opens when every
- * file's extension is in OPENABLE; otherwise it is refused by the first
- * other file's name.
+ * to `zone` while files are dragged over it. The drop opens when every file
+ * is openable; otherwise it is refused by the first other file's name.
  */
 export function wireDrop(
   root: HTMLElement,
@@ -54,7 +55,7 @@ export function wireDrop(
     const files = [...(e.dataTransfer?.files ?? [])];
     if (files.length === 0) return;
 
-    const odd = files.find((f) => !OPENABLE.some((ext) => f.name.toLowerCase().endsWith(ext)));
+    const odd = files.find((f) => !openable(f.name));
     if (odd !== undefined) {
       refuse(m.drop_not_spreadsheet({ name: odd.name }));
       return;

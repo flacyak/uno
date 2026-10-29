@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, test } from "vite-plus/test";
 
 import { Refusal, english } from "@engine";
 import type { Said } from "@engine";
+import type { ParquetFeature } from "@said";
 
 import { PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
 import { baseLocale, setLocale } from "@paraglide/runtime";
@@ -26,6 +27,8 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   about: { t: "about", subject: "q4.uno", why: { t: "nothing-to-undo" } },
   replaying: { t: "replaying", name: "ads.csv", why: { t: "in-view" } },
   read: { t: "read", delimiter: ";", header: "none", charset: "UTF-8" },
+  "read-lines": { t: "read-lines", charset: "UTF-8" },
+  "read-parquet": { t: "read-parquet", codecs: ["snappy", "zstd"], groups: 12 },
   program: {
     t: "program",
     steps: [
@@ -68,6 +71,13 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "point-one-at-several": { t: "point-one-at-several", file: "parts", count: 3, name: "ads.csv" },
   "point-several-at-one": { t: "point-several-at-one", name: "sales", count: 3, file: "q3.csv" },
   "point-several-at-other": { t: "point-several-at-other", name: "sales", count: 3, given: 2 },
+  "relink-other-kind": {
+    t: "relink-other-kind",
+    name: "sales-q3.csv",
+    file: "sales-q3.parquet",
+    was: "delimited",
+    now: "parquet",
+  },
   "log-lost-edit": { t: "log-lost-edit", source: "ads" },
   "bucket-unconnected": { t: "bucket-unconnected", container: "q4.uno", bucket: "acme-exports" },
   "joins-unknown-for-column": { t: "joins-unknown-for-column", name: "sales" },
@@ -77,6 +87,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "nothing-to-undo": { t: "nothing-to-undo" },
   "nothing-to-redo": { t: "nothing-to-redo" },
   "in-view": { t: "in-view" },
+  "columns-moved": { t: "columns-moved", name: "events.jsonl" },
   "file-closed": { t: "file-closed" },
   cancelled: { t: "cancelled", name: "ads.csv" },
   "changed-on-disk": { t: "changed-on-disk", name: "ads.csv" },
@@ -85,6 +96,13 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
     name: "s3://open-data/census/2025.csv.gz",
     encoding: "gzip",
     bucket: "open-data",
+  },
+  "not-read": { t: "not-read", name: "sales-q3.csv.gz", what: "gzip" },
+  "parquet-broken": { t: "parquet-broken", name: "sales-q3.parquet" },
+  "parquet-unsupported": {
+    t: "parquet-unsupported",
+    name: "events.parquet",
+    feature: "variant",
   },
   "keeps-no-connections": { t: "keeps-no-connections" },
   "offers-no-sign-ins": { t: "offers-no-sign-ins" },
@@ -116,6 +134,9 @@ test("the other shapes of a kind are the engine's English too", () => {
     { t: "read", delimiter: ";", header: "first", charset: "UTF-8" },
     { t: "read", delimiter: "\t", header: "first", charset: "UTF-8" },
     { t: "read", delimiter: "\t", header: "none", charset: "UTF-8" },
+    { t: "read-parquet", codecs: ["uncompressed"], groups: 1 },
+    { t: "read-parquet", codecs: ["gzip"] },
+    { t: "read-parquet", codecs: [], groups: 0 },
     { t: "program", steps: [] },
     { t: "program", steps: [{ t: "upper" }, { t: "lower" }] },
     { t: "program", steps: [{ t: "notation", text: "slice(0, 2)" }] },
@@ -130,9 +151,46 @@ test("the other shapes of a kind are the engine's English too", () => {
       ],
     },
     { t: "version-changed", name: "ads.csv" },
+    {
+      t: "relink-other-kind",
+      name: "events.jsonl",
+      file: "q3.csv",
+      was: "jsonl",
+      now: "delimited",
+    },
     { t: "carried-too-large", name: "ads.csv", bytes: 2 * KB * MB, limit: 256 * MB },
   ];
   for (const shape of shapes) expect(say(shape), JSON.stringify(shape)).toBe(english(shape));
+});
+
+test("every Parquet feature is said as the engine says it", () => {
+  const features: Record<ParquetFeature, true> = {
+    encryption: true,
+    brotli: true,
+    lz4: true,
+    lzo: true,
+    interval: true,
+    bson: true,
+    variant: true,
+    "external-columns": true,
+    "several-files": true,
+  };
+  for (const feature of Object.keys(features) as ParquetFeature[]) {
+    const shape: Said = { t: "parquet-unsupported", name: "q3.parquet", feature };
+    expect(say(shape), feature).toBe(english(shape));
+  }
+});
+
+test("a Parquet label lists its codecs and counts its row groups in the reader's language", () => {
+  const one: Said = { t: "read-parquet", codecs: ["uncompressed", "snappy"], groups: 1 };
+  const many: Said = { t: "read-parquet", codecs: ["gzip", "snappy", "zstd"], groups: 1200 };
+  void setLocale("es", { reload: false });
+  expect(say(one)).toBe("Parquet · sin comprimir y snappy · 1 grupo de filas");
+  void setLocale("pt-BR", { reload: false });
+  expect(say(many)).toBe("Parquet · gzip, snappy e zstd · 1.200 grupos de linhas");
+  // Each codec's name comes through a message, so none is left as written.
+  void setLocale(PSEUDO_LOCALE, { reload: false });
+  expect(say(many)).not.toMatch(/gzip|snappy|zstd/);
 });
 
 test("text a step looks for is quoted with what cannot be seen in it escaped", () => {

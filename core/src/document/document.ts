@@ -17,9 +17,9 @@
 
 import type { Edit } from '@sheet';
 import type { Sheet } from '@sheet';
-import { extensionOf } from '@ingest';
+import { nameParts } from '@ingest';
 import type { FileRef, HeaderMode } from '@store';
-import { against, baseOf, dirOf, relativeTo } from './path.ts';
+import { against, dirOf, relativeTo } from './path.ts';
 
 /**
  * FORMAT_VERSION is the highest layout this build reads and writes.
@@ -27,7 +27,7 @@ import { against, baseOf, dirOf, relativeTo } from './path.ts';
  * A file declares the lowest version that can read it, so a workspace an
  * older build could replay still opens there.
  */
-export const FORMAT_VERSION = 6;
+export const FORMAT_VERSION = 8;
 
 /** A log of only single-cell edits. */
 export const BASE_VERSION = 1;
@@ -55,18 +55,73 @@ export const POINTED_VERSION = 5;
 export const PARTS_VERSION = 6;
 
 /**
+ * A workspace with a source that says how its rows were read: a kind, a
+ * compression or pinned columns.
+ */
+export const READ_VERSION = 7;
+
+/**
+ * A workspace with a source whose parts are read in row space, each on its
+ * own and laid end to end, or that were found under a root.
+ */
+export const ROWS_VERSION = 8;
+
+/**
+ * OneOf is a closed set of values a uno.json field may hold: the guard that
+ * checks a value, and every value, in the order a refusal lists them.
+ */
+export interface OneOf<T extends string> {
+  is: (v: string) => v is T;
+  known: readonly string[];
+}
+
+/** closed is the set of `members`' keys, which name every value of T. */
+function closed<T extends string>(members: Record<T, true>): OneOf<T> {
+  return {
+    is: (v): v is T => Object.hasOwn(members, v),
+    known: Object.keys(members),
+  };
+}
+
+/**
  * Every header mode, as uno.json spells it. A mode added to HeaderMode has
  * to be added here.
  */
-const HEADER_MODES: Record<HeaderMode, true> = { first: true, none: true };
+export const HEADER_MODES = closed<HeaderMode>({ first: true, none: true });
 
-/** The header modes this build reads, in the order a refusal lists them. */
-export const KNOWN_HEADER_MODES: readonly string[] = Object.keys(HEADER_MODES);
+/**
+ * How a source's rows sit in its bytes when they are not delimited text, as
+ * uno.json spells it: "jsonl" for JSON Lines and "parquet" for Parquet. A
+ * source with no kind is delimited text. A kind joins here in the change
+ * that makes the engine read it, so no build writes or accepts a kind it
+ * cannot read.
+ */
+export type SourceKind = 'jsonl' | 'parquet';
 
-/** isHeaderMode is true when `v` is a header mode this build knows. */
-export function isHeaderMode(v: string): v is HeaderMode {
-  return Object.hasOwn(HEADER_MODES, v);
-}
+/** The kinds this build reads. */
+export const SOURCE_KINDS = closed<SourceKind>({
+  jsonl: true,
+  parquet: true,
+});
+
+/**
+ * What a file source's bytes were compressed with, as uno.json spells it.
+ * None is read yet: a compression joins here in the change that makes the
+ * engine read it.
+ */
+export type SourceCompression = never;
+
+/** The compressions this build reads. */
+export const SOURCE_COMPRESSIONS = closed<SourceCompression>({});
+
+/**
+ * How a parts source's files are laid end to end when not as bytes, as
+ * uno.json spells it. A source with no join has its parts' bytes joined.
+ */
+export type PartsJoin = 'rows';
+
+/** The joins this build reads. */
+export const PARTS_JOINS = closed<PartsJoin>({ rows: true });
 
 export const GENERATOR = 'uno 0.2.0';
 
@@ -123,7 +178,7 @@ interface SourceBase {
  * inside the zip. `path` is where the file was at the save, relative to the
  * .uno when the file is under its folder and absolute otherwise.
  */
-export interface FileSource extends SourceBase {
+export interface FileSource extends SourceBase, ReadAs {
   /**
    * The file's size: the entry's length for a carried source, or what the
    * file measured at the save for a pointed-at one. The opener uses it to
@@ -150,6 +205,9 @@ export interface FileSource extends SourceBase {
   parts?: never;
   header?: never;
   fileColumn?: never;
+  join?: never;
+  root?: never;
+  partitions?: never;
 }
 
 /**
@@ -157,10 +215,13 @@ export interface FileSource extends SourceBase {
  * are a fixed, ordered list: the log names rows by number, so the order
  * decides which row an edit lands on.
  */
-export interface PartsSource extends SourceBase {
+export interface PartsSource extends SourceBase, ReadAs, JoinedAs {
   /** The files, in the order their rows are read. At least one. */
   parts: SourcePart[];
-  /** Whether the parts have a header row. */
+  /**
+   * Whether the parts have a header row. Written only for delimited text,
+   * the parts with no kind, and read as "first" for any other kind.
+   */
   header: HeaderMode;
   /**
    * Whether a `_file` column shows which part each row came from. The
@@ -169,6 +230,7 @@ export interface PartsSource extends SourceBase {
   fileColumn: boolean;
 
   bytes?: never;
+  compression?: never;
   sha256?: never;
   entry?: never;
   path?: never;
@@ -180,13 +242,15 @@ export interface PartsSource extends SourceBase {
  *
  * `bytes`, `skip` and `unterminated` are what the join measured at the save.
  * The next open places every part from them alone. A part whose size or
- * `version` has changed since is refused by name.
+ * `version` has changed since is refused by name. `skip` and `unterminated`
+ * are the byte join's, and are written only for parts joined as bytes.
  */
-export interface SourcePart {
+export interface SourcePart extends ReadAlone {
   /** The part's name when it differs from the last piece of its path, and
    * "" otherwise. `ingest` picks a decoder by it. */
   name: string;
-  /** Where the part is, stored the way a file source's path is. */
+  /** Where the part is: relative to the source's root when it has one, and
+   * otherwise stored the way a file source's path is. */
   path: string;
   /** The part's size at the save. */
   bytes: number;
@@ -198,6 +262,67 @@ export interface SourcePart {
   skip: number;
   /** Whether the part's last line is unterminated. The join adds a newline. */
   unterminated: boolean;
+}
+
+/**
+ * JoinedAs is how a parts source's files are laid end to end, and where they
+ * were found. Files picked by hand and joined as bytes record none of it.
+ */
+interface JoinedAs {
+  /** 'rows' when each part is read on its own and its rows are laid after
+   * the last part's. Absent when the parts' bytes are joined. */
+  join?: PartsJoin;
+  /**
+   * The folder or bucket prefix the parts were found under, such as
+   * s3://lake/orders/. Every part is under it, and its path is stored
+   * relative to it. The root itself is stored the way a file source's path
+   * is, and held absolute.
+   */
+  root?: string;
+  /** The Hive keys in each part's path under the root, such as year and
+   * month, in path order. */
+  partitions?: string[];
+}
+
+/**
+ * ReadAlone is what a part read on its own in row space records of itself.
+ */
+interface ReadAlone {
+  /** What the part's bytes are compressed with. Absent for a plain part. */
+  compression?: SourceCompression;
+  /** How many rows the part held, once a pass has counted them. */
+  rows?: number;
+}
+
+/**
+ * ReadAs is how a source's rows were read, as a source records it. Delimited
+ * text read as it always was records none of it.
+ */
+interface ReadAs {
+  /** How the rows sit in the bytes. Absent for delimited text. */
+  kind?: SourceKind;
+  /**
+   * What a file's bytes are compressed with. Absent for a plain file, and
+   * for a source of several files.
+   */
+  compression?: SourceCompression;
+  /**
+   * The data columns at the save, in grid order, for a source that learns
+   * its columns from its rows. A reopen gives each key back its column.
+   */
+  columns?: SavedColumn[];
+}
+
+/**
+ * SavedColumn is one data column as uno.json pins it: the name the grid
+ * shows, and the key its cells are found by in each row, an RFC 6901
+ * pointer. The name never changes once given, so the key always finds the
+ * column its logged edits were made in.
+ */
+export interface SavedColumn {
+  name: string;
+  /** Left out when it is the pointer of a top-level field called `name`. */
+  key?: string;
 }
 
 /** Where the state entry is. */
@@ -276,7 +401,7 @@ interface HeldBase {
  * HeldFile is a source that is one file. Exactly one of `raw` and `path` is
  * set: `raw` means the save copies the file in, `path` means it points at it.
  */
-export interface HeldFile extends HeldBase {
+export interface HeldFile extends HeldBase, ReadAs {
   /** The file's bytes, for a carried source. */
   raw?: Uint8Array;
   /** Where the file is, absolute, for a pointed-at source. */
@@ -291,16 +416,19 @@ export interface HeldFile extends HeldBase {
   parts?: never;
   header?: never;
   fileColumn?: never;
+  join?: never;
+  root?: never;
+  partitions?: never;
 }
 
 /**
  * HeldParts is a source that is several files read as one. Every part is
  * pointed at, so a save writes only its path.
  */
-export interface HeldParts extends HeldBase {
+export interface HeldParts extends HeldBase, ReadAs, JoinedAs {
   /** The files, in the order their rows are read. At least one. */
   parts: HeldPart[];
-  /** Whether the parts have a header row. */
+  /** Whether the parts have a header row. Saved for delimited text only. */
   header: HeaderMode;
   /** Whether a `_file` column shows which part each row came from. */
   fileColumn?: boolean;
@@ -309,22 +437,26 @@ export interface HeldParts extends HeldBase {
   path?: never;
   bytes?: never;
   version?: never;
+  compression?: never;
 }
 
 /** HeldPart is one file of a HeldParts source. */
-export interface HeldPart {
+export interface HeldPart extends ReadAlone {
   /** The part's name. `ingest` picks a decoder by it. */
   name: string;
-  /** Where the part is, absolute. */
+  /** Where the part is, absolute, and under the source's root when it has
+   * one. */
   path: string;
   /** The part's size. */
   bytes: number;
   /** Which version of the part the log was made against, where the store
    * can say. */
   version?: string;
-  /** How many bytes at the start of the part the join leaves out. */
+  /** How many bytes at the start of the part the join leaves out. 0 for a
+   * part read in row space. */
   skip: number;
-  /** Whether the part's last line is unterminated. */
+  /** Whether the part's last line is unterminated. False for a part read in
+   * row space. */
   unterminated: boolean;
 }
 
@@ -374,22 +506,37 @@ export interface Document {
   sheets?: Map<string, Sheet>;
 }
 
+/** The extension an extensionless source is carried under, by its kind. */
+const CARRIED_EXTENSIONS: Record<SourceKind, string> = {
+  jsonl: '.jsonl',
+  parquet: '.parquet',
+};
+
 /**
  * sourceEntry names a source's zip entry after the file it holds, so a
  * workspace opened from a TSV writes data/source.tsv. With `id` the entry is
- * data/source/<id>.<ext>, and otherwise data/source.<ext>. An extensionless
- * name gets .csv.
+ * data/source/<id>.<ext>, and otherwise data/source.<ext>. A compressed file
+ * keeps every extension, as data/source/sales.csv.gz, and an extensionless
+ * name gets the extension of its kind: .csv where it has none.
  */
-export function sourceEntry(name: string, id?: string): string {
-  const ext = extensionOf(name);
+export function sourceEntry(
+  name: string,
+  id?: string,
+  kind?: SourceKind,
+): string {
+  const ext = nameParts(name).suffix.toLowerCase();
+  const carried = kind === undefined ? '.csv' : CARRIED_EXTENSIONS[kind];
   return (
     (id === undefined ? SOURCE_STEM : SOURCE_DIR + id) +
-    (ext === '' ? '.csv' : ext)
+    (ext === '' ? carried : ext)
   );
 }
 
+/** The workspace file extension without its dot, as a dialog's filter names it. */
+export const WORKSPACE_FILTER = 'uno';
+
 /** The workspace file extension. The engine recognises a workspace by it. */
-export const WORKSPACE_EXT = '.uno';
+export const WORKSPACE_EXT = `.${WORKSPACE_FILTER}`;
 
 /**
  * isWorkspace says whether a ref names a .uno. Several files read as one are
@@ -404,14 +551,13 @@ const ID_UNSAFE = /[^A-Za-z0-9._-]+/g;
 
 /**
  * sourceId names a source after its file, as the log calls it: google-ads
- * for Google Ads.csv. A name already in `taken` gets a numeric suffix:
- * google-ads_2, then _3, and so on.
+ * for Google Ads.csv, and sales for sales.csv.gz. A folder is named after
+ * itself. A name already in `taken` gets a numeric suffix: google-ads_2, then
+ * _3, and so on.
  */
 export function sourceId(name: string, taken: Iterable<string>): string {
-  const file = baseOf(name);
-  const dot = file.lastIndexOf('.');
-  const stem = (dot > 0 ? file.slice(0, dot) : file)
-    .replace(ID_UNSAFE, '-')
+  const stem = nameParts(name)
+    .stem.replace(ID_UNSAFE, '-')
     .replace(/^[-.]+|-+$/g, '')
     .toLowerCase();
   const base = stem === '' ? 'source' : stem;

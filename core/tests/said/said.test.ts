@@ -26,6 +26,21 @@ describe('english', () => {
     expect(
       english({ t: 'read', delimiter: '\t', header: 'none', charset: 'UTF-8' }),
     ).toBe('UTF-8 · tab-separated · no header row');
+    expect(english({ t: 'read-lines', charset: 'UTF-8' })).toBe(
+      'UTF-8 · JSON Lines',
+    );
+    expect(
+      english({ t: 'read-parquet', codecs: ['snappy', 'zstd'], groups: 12 }),
+    ).toBe('Parquet · snappy, zstd · 12 row groups');
+    expect(
+      english({ t: 'read-parquet', codecs: ['uncompressed'], groups: 1 }),
+    ).toBe('Parquet · uncompressed · 1 row group');
+    expect(english({ t: 'read-parquet', codecs: ['gzip'] })).toBe(
+      'Parquet · gzip',
+    );
+    expect(english({ t: 'read-parquet', codecs: [], groups: 0 })).toBe(
+      'Parquet · 0 row groups',
+    );
     expect(
       english({
         t: 'workspace-too-large',
@@ -77,6 +92,70 @@ describe('english', () => {
     expect(
       english({ t: 'size-changed', name: 'ads.csv', now: 2048, was: 1024 }),
     ).toBe('ads.csv is 2.0 KB now and was 1.0 KB when the workspace was saved');
+  });
+
+  test('names a format this build does not read in the sentence a .json was refused with', () => {
+    expect(english({ t: 'not-read', name: 'data.json', what: 'JSON' })).toBe(
+      'data.json: JSON is not supported yet',
+    );
+    expect(
+      english({ t: 'not-read', name: 'sales-q3.csv.gz', what: 'gzip' }),
+    ).toBe('sales-q3.csv.gz: gzip is not supported yet');
+  });
+
+  test('names how a source was read and what the file it was pointed at is', () => {
+    expect(
+      english({
+        t: 'relink-other-kind',
+        name: 'sales-q3.csv',
+        file: 'sales-q3.parquet',
+        was: 'delimited',
+        now: 'parquet',
+      }),
+    ).toBe(
+      'sales-q3.csv was read as delimited text, and sales-q3.parquet is Parquet',
+    );
+    expect(
+      english({
+        t: 'relink-other-kind',
+        name: 'events.jsonl',
+        file: 'q3.csv',
+        was: 'jsonl',
+        now: 'delimited',
+      }),
+    ).toBe('events.jsonl was read as JSON Lines, and q3.csv is delimited text');
+  });
+
+  test('says an edit was not made because its source gained columns', () => {
+    expect(english({ t: 'columns-moved', name: 'events.jsonl' })).toBe(
+      'events.jsonl gained columns while the edit was on its way, so it was not made · make it again',
+    );
+  });
+
+  test('says a Parquet file is damaged', () => {
+    expect(english({ t: 'parquet-broken', name: 'sales-q3.parquet' })).toBe(
+      'sales-q3.parquet: its Parquet footer or pages are damaged',
+    );
+  });
+
+  test('names what a Parquet file uses that this build does not read', () => {
+    expect(
+      english({
+        t: 'parquet-unsupported',
+        name: 'events.parquet',
+        feature: 'variant',
+      }),
+    ).toBe('events.parquet: the Parquet VARIANT type is not supported yet');
+    expect(
+      english({ t: 'parquet-unsupported', name: 'q3.parquet', feature: 'lz4' }),
+    ).toBe('q3.parquet: Parquet compressed with LZ4 is not supported yet');
+    expect(
+      english({
+        t: 'parquet-unsupported',
+        name: 'sales',
+        feature: 'several-files',
+      }),
+    ).toBe('sales: reading several Parquet files as one is not supported yet');
   });
 });
 

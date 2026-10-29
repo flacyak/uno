@@ -167,6 +167,15 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
+      fzstd:
+        specifier: 0.1.1
+        version: 0.1.1
+      hyparquet:
+        specifier: 1.31.5
+        version: 1.31.5
+      pako:
+        specifier: 3.0.3
+        version: 3.0.3
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
@@ -174,6 +183,9 @@ importers:
       bumpp:
         specifier: ^11.1.0
         version: 11.1.0
+      hyparquet-writer:
+        specifier: 0.9.1
+        version: 0.9.1
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -1384,12 +1396,24 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  fzstd@0.1.1:
+    resolution: {integrity: sha512-dkuVSOKKwh3eas5VkJy1AW1vFpet8TA/fGmVA5krThl8YcOVE/8ZIoEA1+U1vEn5ckxxhLirSdY837azmbaNHA==}
+
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
   happy-dom@20.14.5:
     resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
     engines: {node: '>=20.0.0'}
+
+  hyparquet-writer@0.9.1:
+    resolution: {integrity: sha512-TSzG3B2Ib11YUxiqNhvtRBYKQh9WCgS0UUxlXA1I1u+supy8h0viXbyPlB81BoXtgoHBbvX72Owu1mJ318XROQ==}
+
+  hyparquet@1.20.2:
+    resolution: {integrity: sha512-aFTpoe/ufVxb5f3PRCWBXZgKhUFKfcueGq31bGn2W1Qx7sLm45UJeHovwQhtTykL8AMhKEgNsgaKbOZcvFVtoA==}
+
+  hyparquet@1.31.5:
+    resolution: {integrity: sha512-KPVfaxW8xOiO2/4fjeiBfFNEXhGVw9tfcb9ha2iNZdJ3J/yBjEwIeAnTyyuhllFFTb9YO9wg0DfRAOnm6KCvBg==}
 
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
@@ -1543,6 +1567,9 @@ packages:
 
   package-manager-detector@1.8.0:
     resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
+
+  pako@3.0.3:
+    resolution: {integrity: sha512-tmrebBBYI5FOw8QICGwJNqE8fotC8R+gwcxOvoFNv+GKehOI6Lc6YBolNcQNnC4v96l1wt7rh102ifD4kVeZAQ==}
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
@@ -2545,6 +2572,8 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
+  fzstd@0.1.1: {}
+
   graceful-fs@4.2.11: {}
 
   happy-dom@20.14.5:
@@ -2559,6 +2588,14 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  hyparquet-writer@0.9.1:
+    dependencies:
+      hyparquet: 1.20.2
+
+  hyparquet@1.20.2: {}
+
+  hyparquet@1.31.5: {}
 
   jiti@2.7.0: {}
 
@@ -2715,6 +2752,8 @@ snapshots:
       vite-plus: 0.3.1(@types/node@26.5.0)(happy-dom@20.14.5)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)
 
   package-manager-detector@1.8.0: {}
+
+  pako@3.0.3: {}
 
   pathe@2.0.3: {}
 

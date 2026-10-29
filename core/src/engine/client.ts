@@ -255,6 +255,15 @@ export class Engine {
         return;
       }
 
+      case 'widened': {
+        const s = this.sources.get(msg.source);
+        // Drop columns from an older generation than the handle holds.
+        if (s === undefined || msg.generation < s.generation) return;
+        s.generation = msg.generation;
+        s.onColumns(msg.columns, msg.generation);
+        return;
+      }
+
       case 'offer': {
         const s = this.sources.get(msg.source);
         // Drop an offer built from an older generation of the log.
@@ -310,6 +319,11 @@ export class SourceHandle {
   onProgress: (progress: Progress) => void = () => {};
   /** Called with the recogniser's proposal, or null when there is none. */
   onOffer: (offer: Offer | null) => void = () => {};
+  /**
+   * Called with every column once the engine finds more as it indexes, and
+   * the generation they hold from. Rows built before it are stale.
+   */
+  onColumns: (columns: ColumnInfo[], generation: number) => void = () => {};
 
   constructor(engine: Engine, opened: Opened) {
     this.engine = engine;
@@ -387,6 +401,43 @@ function isKind<K extends Reply['t']>(
 
 /** Rows a Band requests at a time, centred on the viewport. */
 export const BAND_ROWS = 2000;
+
+/**
+ * Inserted is where the columns a source found as it was indexed went in
+ * among the columns it had, and how many of each there are.
+ */
+export interface Inserted {
+  /** The column the first of them is at. */
+  at: number;
+  /** How many went in. */
+  count: number;
+  /** How many columns there were before them. */
+  had: number;
+}
+
+/**
+ * insertedIn returns where `now` holds the columns `was` lacks. A source
+ * puts the columns it finds before the ones it supplies, under names no
+ * column has, so they start at the first header that differs.
+ */
+export function insertedIn(
+  was: readonly Pick<ColumnInfo, 'header'>[],
+  now: readonly Pick<ColumnInfo, 'header'>[],
+): Inserted {
+  let at = 0;
+  while (at < was.length && was[at]!.header === now[at]?.header) at++;
+  return { at, count: Math.max(0, now.length - was.length), had: was.length };
+}
+
+/**
+ * movedTo returns where column `col` is once `inserted` went in. A place at
+ * or past the columns there were names none of them, as a selection in a
+ * grid of no columns does, and stays where it is.
+ */
+export function movedTo(col: number, inserted: Inserted): number {
+  const named = col >= inserted.at && col < inserted.had;
+  return named ? col + inserted.count : col;
+}
 
 /** A typed value shown before the engine has recorded it, and the values it replaced. */
 export interface Pending {
@@ -485,6 +536,22 @@ export class Band {
   settle(p: Pending): void {
     const i = this.pending.indexOf(p);
     if (i >= 0) this.pending.splice(i, 1);
+  }
+
+  /**
+   * widen takes every column of a source that found more as it was indexed,
+   * and returns where they went in. Each held row and typed value moves with
+   * its column, and a held row shows the found columns blank until it is
+   * read again: no row read before they were found holds them.
+   */
+  widen(columns: readonly ColumnInfo[]): Inserted {
+    const inserted = insertedIn(this.columns, columns);
+    this.columns = columns;
+    const blanks = Array<string>(inserted.count).fill('');
+    for (const cells of this.data) cells.splice(inserted.at, 0, ...blanks);
+    for (const cells of this.raws) cells?.splice(inserted.at, 0, ...blanks);
+    for (const p of this.pending) p.col = movedTo(p.col, inserted);
+    return inserted;
   }
 
   /** restore puts back the values a refused edit replaced. */

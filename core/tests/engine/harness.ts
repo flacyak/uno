@@ -5,8 +5,9 @@
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
-import { Engine, english, messagePort, serve } from '@engine';
+import { Engine, Refusal, english, messagePort, serve } from '@engine';
 import type {
   MessagePortLike,
   Reply,
@@ -22,7 +23,7 @@ import { sources } from '@plugin';
 import type { Provider } from '@plugin';
 import type { Sheet } from '@sheet';
 import { blobProvider, multiProvider } from '@store';
-import type { Connections } from '@store';
+import type { Connections, FileRef } from '@store';
 import { diskProvider } from '@store/node';
 import { bytes, FIXTURE } from '@core-tests/testdata/sales-q3';
 
@@ -43,12 +44,14 @@ export const TINY: Tuning = {
 
 /**
  * connect serves an engine over a real MessageChannel and returns a client
- * for it. `providers` go to `serve` as a platform would hand them.
+ * for it. `providers` go to `serve` as a platform would hand them, and `tap`
+ * is handed every reply the client is sent, in order, before the client.
  */
 export function connect(
   tuning?: Tuning,
   providers: Provider[] = [diskProvider(), blobProvider()],
   connecting?: Connecting | Connections,
+  tap?: (reply: Reply) => void,
 ): { engine: Engine; done: () => void } {
   const { port1, port2 } = new MessageChannel();
   serve(
@@ -60,8 +63,20 @@ export function connect(
       ? connecting
       : { connections: connecting },
   );
+  const client = messagePort<Reply, Request>(
+    port2 as unknown as MessagePortLike,
+  );
   const engine = new Engine(
-    messagePort<Reply, Request>(port2 as unknown as MessagePortLike),
+    tap === undefined
+      ? client
+      : {
+          ...client,
+          listen: (fn, gone) =>
+            client.listen((reply) => {
+              tap(reply);
+              fn(reply);
+            }, gone),
+        },
   );
   return {
     engine,
@@ -72,10 +87,13 @@ export function connect(
 }
 
 /**
- * slowed returns `provider` with `ms` added before every read, so an index
- * over it spans several progress replies.
+ * readsThrough returns `provider` with `before` awaited ahead of every read,
+ * given the file it reads and the range it asks for.
  */
-export function slowed(provider: Provider, ms: number): Provider {
+export function readsThrough(
+  provider: Provider,
+  before: (ref: FileRef, offset: number, length: number) => Promise<void>,
+): Provider {
   const { files } = provider;
   return {
     ...provider,
@@ -88,7 +106,7 @@ export function slowed(provider: Provider, ms: number): Provider {
           size: source.size,
           version: source.version,
           async read(offset, length) {
-            await sleep(ms);
+            await before(ref, offset, length);
             return source.read(offset, length);
           },
           close: () => source.close(),
@@ -98,9 +116,17 @@ export function slowed(provider: Provider, ms: number): Provider {
   };
 }
 
-/** Disk and blob providers, plus a multi provider over both. */
-export function multiProviders(): Provider[] {
-  const single = [diskProvider(), blobProvider()];
+/**
+ * slowed returns `provider` with `ms` added before every read, so an index
+ * over it spans several progress replies.
+ */
+export function slowed(provider: Provider, ms: number): Provider {
+  return readsThrough(provider, () => sleep(ms));
+}
+
+/** `disk` and a blob provider, plus a multi provider over both. */
+export function multiProviders(disk = diskProvider()): Provider[] {
+  const single = [disk, blobProvider()];
   return [...single, multiProvider(single)];
 }
 
@@ -150,9 +176,36 @@ export function sheetRows(
   return out;
 }
 
+/**
+ * padded returns `rows` with "" out to `width` cells, as a short row shows.
+ * A row wider than `width` keeps every cell.
+ */
+export function padded(rows: string[][], width: number): string[][] {
+  return rows.map((row) =>
+    Array.from({ length: Math.max(width, row.length) }, (_, i) => row[i] ?? ''),
+  );
+}
+
 /** Rows padded with "" to the fixture's column count. */
 export function widened(rows: string[][]): string[][] {
-  return rows.map((r) => sales.columns.map((_, col) => r[col] ?? ''));
+  return padded(rows, sales.columns.length);
+}
+
+/** A fixture's path in tests/testdata. */
+export function testdata(name: string): string {
+  return fileURLToPath(new URL(`../testdata/${name}`, import.meta.url));
+}
+
+/** The Refusal `asked` rejects with. Fails if it is anything else. */
+export async function refusal(asked: Promise<unknown>): Promise<Refusal> {
+  const err: unknown = await asked.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  if (!(err instanceof Refusal)) {
+    throw new Error(`expected a Refusal, and got ${String(err)}`);
+  }
+  return err;
 }
 
 /** `said` in English, or undefined for an undefined `said`. */

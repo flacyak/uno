@@ -20,14 +20,15 @@ import {
 } from '@library';
 import { JOINS, OPENS, claim } from './claim.ts';
 // Type only. The handler that opens parts is re-exported below.
+import type { Layout } from '@ingest';
 import type { HeaderMode, Part } from './multi.ts';
 // Type only, so the run-time import graph stays one-way with the plugin
 // package.
 import type { Provider } from '@plugin';
 
 // Browsing is its own interface, in store/list.ts.
-export { listWith, statWith } from './list.ts';
-export type { Entry, Listing, Lister } from './list.ts';
+export { listWith, statWith, walkWith } from './list.ts';
+export type { Entry, Listing, Lister, Walker } from './list.ts';
 
 // Several files read as one, in store/multi.ts. It opens its parts through
 // openWith.
@@ -99,6 +100,11 @@ export type SingleRef =
        * which version that was.
        */
       version?: string;
+      /**
+       * The size a listing gave. With an ETag in quotes as the version, a
+       * bucket's handler opens the file from these two and sends no HEAD.
+       */
+      bytes?: number;
     }
   | { name: string; blob: Blob };
 
@@ -117,6 +123,13 @@ export interface PartsRef {
   header: HeaderMode;
   /** Whether a `_file` column shows which part each row came from. */
   fileColumn?: boolean;
+  /**
+   * How the parts' records sit in their text, where the source was read
+   * before: its log was made over delimited text or JSON Lines, and its parts
+   * are read so again. Absent on a fresh open, which detects what the first
+   * part holds and holds every other part to it.
+   */
+  layout?: Layout;
 }
 
 /**
@@ -229,6 +242,24 @@ export function bytesSource(bytes: Uint8Array): ByteSource {
         bytes.subarray(offset, Math.min(offset + length, bytes.length)),
       ),
     close: () => Promise.resolve(),
+  };
+}
+
+/**
+ * headed is `source` with every read that falls inside `head`, its first
+ * bytes already read, answered from memory. A read past it goes to `source`.
+ */
+export function headed(source: ByteSource, head: Uint8Array): ByteSource {
+  return {
+    size: source.size,
+    version: source.version,
+    read: (offset, length) => {
+      const end = Math.min(offset + length, source.size);
+      return end <= head.length
+        ? Promise.resolve(head.subarray(offset, end))
+        : source.read(offset, length);
+    },
+    close: () => source.close(),
   };
 }
 

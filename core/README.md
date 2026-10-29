@@ -73,7 +73,7 @@ How a file was read, what a program does, and how a file differs from the one a 
 
 Not every sentence has a kind yet.
 What has none is `{ t: "text" }`: the diagnostic as it was written, in English, passed on whole.
-The 37 that have one are what the engine itself refuses and says in ordinary use.
+Those that have one are what the engine itself refuses and says in ordinary use.
 The rest are the diagnostics of a broken `.uno`, an AWS profile, S3, and the parsers.
 Giving one a kind is adding it to `Said`, after which the compiler asks for its English in `english` and for its message wherever a client writes one.
 
@@ -119,7 +119,7 @@ order of reads is the scenario's and not a race.
 | `ahead.test.ts`  | bytes fetched to index an object, alone and beside a reader   |
 | `band.test.ts`   | requests and bytes for one jump of the grid's 2,000 row band  |
 | `open.test.ts`   | requests and bytes an open waits on before it shows rows      |
-| `lister.test.ts` | directory entries read again for each page of a 20,000 folder |
+| `lister.test.ts` | directory entries read again per page of a list and of a walk |
 | `index.test.ts`  | bytes and rows indexed per second, and bytes kept per row     |
 | `find.test.ts`   | what a find to the end of a file costs beside a bound column  |
 | `save.test.ts`   | what a second save of bytes already carried costs             |

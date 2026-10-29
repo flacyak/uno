@@ -165,3 +165,24 @@ test("a blank header is drawn as the column's place, and dressed as a name the f
   expect(scroller.querySelectorAll("thead th .badge").length).toBe(3);
   expect(scroller.querySelector("tbody tr")?.children.length).toBe(4);
 });
+
+test("a source that gains columns has its header and every row drawn again, a cell for each", () => {
+  const { view, scroller } = make(600);
+  let cols = 2;
+  const grows: Rows = {
+    ...sheet(10),
+    get columns() {
+      return sheet(10, cols).columns;
+    },
+    cols: () => cols,
+  };
+  view.show(grows, false);
+
+  cols = 3;
+  view.refresh();
+
+  expect(scroller.querySelectorAll("thead th .colname").length).toBe(cols);
+  const rows = [...scroller.querySelectorAll("tbody tr")];
+  expect(rows.every((tr) => tr.children.length === cols + 1)).toBe(true);
+  expect(rows[0]!.children[cols]!.textContent).toBe("0,2");
+});

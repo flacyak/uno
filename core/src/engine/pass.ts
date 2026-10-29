@@ -21,12 +21,20 @@ export interface PassContext {
 }
 
 /**
+ * IndexContext is what indexPass is handed: a PassContext whose format need
+ * only say where the data starts and find where each record does.
+ */
+export interface IndexContext extends Omit<PassContext, 'format'> {
+  readonly format: Pick<Format, 'dataStart' | 'scanner'>;
+}
+
+/**
  * indexPass reads from the first data record to the end of the file and
  * records where each block of rows starts.
  *
  * Each chunk read is awaited, so other work runs between chunks.
  */
-export async function indexPass(ctx: PassContext): Promise<void> {
+export async function indexPass(ctx: IndexContext): Promise<void> {
   const { source, format, index, tuning, signal } = ctx;
   const scanner = format.scanner((offset) => index.begin(offset));
 
@@ -43,6 +51,8 @@ export async function indexPass(ctx: PassContext): Promise<void> {
     ctx.progress();
   }
 
+  // The last record is learned before the block that holds it is readable.
+  scanner.end?.();
   index.complete = true;
   ctx.progress();
 }

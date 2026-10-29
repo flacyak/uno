@@ -376,6 +376,16 @@ test('a part is opened when the source opens only where nothing says its extent'
   expect(m.opened).toHaveLength(PARTS);
 });
 
+test('a bare part has its head read once as the source opens', async () => {
+  for (const header of ['first', 'none'] as const) {
+    const m = memory(fixtureFiles());
+    const parts = PART_NAMES.map((name) => ({ ref: inMemory(name) }));
+    await openMulti([m.handler], parts, header);
+    const heads = m.reads.filter((r) => r.offset === 0).map((r) => r.name);
+    expect(heads.toSorted(), header).toEqual([...PART_NAMES]);
+  }
+});
+
 test('a part with its extent is not opened until a read needs it', async () => {
   const parts = await measuredParts();
   const m = memory(fixtureFiles());

@@ -29,15 +29,18 @@ import {
   ROWS,
   UNITS,
 } from "./fixture.ts";
+import { LINES } from "./lines.ts";
 import { MEETS } from "./meets.ts";
 import { MULTI } from "./multi.ts";
 import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
+import { PARQUET } from "./parquet.ts";
 import { REFRESH } from "./refresh.ts";
 import { SETTINGS } from "./settings.ts";
 import { SIDEBAR } from "./sidebar.ts";
 import { SOURCES } from "./sources.ts";
 import { VIM_STYLE } from "./vim-style.ts";
+import { WIDEN } from "./widen.ts";
 
 /**
  * How long the first rows get to arrive from the engine, and how often the
@@ -63,6 +66,9 @@ const CHECKS: Check[] = [
   ...MULTI,
   ...SIDEBAR,
   ...AGAIN,
+  ...WIDEN,
+  ...PARQUET,
+  ...LINES,
 ];
 
 /**

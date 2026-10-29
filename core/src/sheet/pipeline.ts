@@ -109,33 +109,27 @@ export function finish(
  * `first`. Everything but formulas is applied a row at a time. Formulas are
  * then computed a column at a time over the block, in dependency order.
  *
- * With an empty log and a schema whose `supplied` is undefined, each row is
+ * With an empty log and a schema with no supplied columns, each row is
  * returned as the source array itself.
  *
- * `supplied` holds the value of the schema's supplied column for each row of
- * the block. It is written into the finished row, and a formula that names
- * the column reads it there. A schema with a supplied column copies every
- * row.
+ * `supplied[i]` holds row i's values for the schema's supplied columns, in
+ * their order; the rows of one part can share one array. They are written
+ * into the finished row, and a formula that names a supplied column reads it
+ * there. A schema with supplied columns copies every row.
  */
 export function finishRows(
   schema: Schema,
   first: number,
   sources: readonly (readonly string[])[],
-  supplied?: readonly string[],
+  supplied?: readonly (readonly string[])[],
 ): Finished[] {
-  if (schema.empty && schema.supplied === undefined) {
+  if (schema.empty && schema.supplied.length === 0) {
     return sources.map((source) => ({ raw: source, shown: source }));
   }
 
   const order = schema.computedColumns();
   const out = sources.map((source, i) =>
-    finishCells(
-      schema,
-      first + i,
-      source,
-      order.length > 0,
-      supplied?.[i] ?? '',
-    ),
+    finishCells(schema, first + i, source, order.length > 0, supplied?.[i]),
   );
   if (order.length === 0 || out.length === 0) return out;
 
@@ -168,25 +162,26 @@ export function finishRows(
  * of `raw` when a note or a formula writes into it, and `raw` itself
  * otherwise.
  *
- * `supplied` is the row's value for the schema's supplied column. It is
- * written into both `raw` and `shown`.
+ * `supplied` is the row's values for the schema's supplied columns, in
+ * their order, and "" for any it lacks. They are written into both `raw` and
+ * `shown`, whatever the source has there.
  */
 function finishCells(
   schema: Schema,
   row: number,
   source: readonly string[],
   computed: boolean,
-  supplied: string,
+  supplied: readonly string[] | undefined,
 ): Finished {
   const width = schema.headers.length;
   const written = schema.writtenIn(row);
-  const fill = schema.supplied?.col;
   const raw: string[] = [];
   for (let c = 0; c < width; c++) {
-    raw.push(
-      c === fill ? supplied : stored(schema, c, written?.get(c), source),
-    );
+    raw.push(stored(schema, c, written?.get(c), source));
   }
+  schema.supplied.forEach(({ col }, nth) => {
+    raw[col] = supplied?.[nth] ?? '';
+  });
 
   let notes = false;
   if (written !== undefined) {

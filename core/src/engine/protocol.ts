@@ -127,6 +127,12 @@ export interface EditRequest {
   row: number;
   col: number;
   now: string;
+  /**
+   * How many columns the client drew when it aimed the edit. While a source
+   * supplies columns, an edit aimed at another count is refused, since the
+   * column it names may have moved. A client that sends none is not checked.
+   */
+  width?: number;
 }
 
 /** The result of an edit, undo or redo: the edit, and the columns after it. */
@@ -315,6 +321,17 @@ export type Reply =
   | { t: 'relinked'; id: number; opened: Opened }
   | { t: 'appended'; id: number; opened: Opened }
   | { t: 'progress'; source: string; progress: Progress }
+  /**
+   * Unnumbered, every column of a source that found columns as it was
+   * indexed. Rows built before `generation` are stale. A client that knows no
+   * such reply finds no request it answers, and draws the columns it had.
+   */
+  | {
+      t: 'widened';
+      source: string;
+      generation: number;
+      columns: ColumnInfo[];
+    }
   | ({ t: 'rows'; id: number; first: number } & RowsPage)
   | { t: 'changed'; id: number; source: string; changed: Changed }
   | { t: 'found'; id: number; found: Found }

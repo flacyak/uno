@@ -6,10 +6,11 @@
  *
  * Listing uses `delimiter=/`. Keys flat under the prefix come back
  * as Contents and become files. Deeper keys are folded into CommonPrefixes
- * and become folders.
+ * and become folders. A walk sends no delimiter, so every key under the
+ * prefix comes back as Contents.
  */
 
-import type { Entry, Lister, Listing } from './list.ts';
+import type { Entry, Listing, Walker } from './list.ts';
 import { PAGE, byPageKey } from './list.ts';
 import type { S3Options, S3Requests } from './s3.ts';
 import {
@@ -24,19 +25,20 @@ import {
   versionOf,
 } from './s3.ts';
 import { readListing, when } from './s3xml.ts';
-import type { KeyEntry } from './s3xml.ts';
+import type { KeyEntry, ListResult } from './s3xml.ts';
 
 /**
- * s3Lister browses buckets: one ListObjectsV2 per page, and one HEAD per
- * stat.
+ * s3Lister browses buckets: one ListObjectsV2 per page of a listing or a
+ * walk, and one HEAD per stat.
  */
-export function s3Lister(opts: S3Options): Lister {
+export function s3Lister(opts: S3Options): Walker {
   const send = s3Requests(opts);
   return {
     label: 'S3',
     handles: (path) => s3Prefix(path) !== undefined,
     list: (path, cursor) => listPrefix(send, path, cursor),
     stat: (path) => statObject(send, path),
+    walk: (root, cursor) => walkPrefix(send, root, cursor),
   };
 }
 
@@ -74,12 +76,59 @@ async function listPrefix(
   path: string,
   cursor: string | undefined,
 ): Promise<Listing> {
+  const where = placeOf(path);
+  const page = await pageAt(send, path, where, cursor, '/');
+  const entries = [
+    ...page.prefixes.map((prefix) => folderAt(where.bucket, prefix)),
+    ...page.keys.flatMap((key) => fileAt(where.bucket, key, keyName)),
+  ].toSorted(byPageKey);
+  return page.next === undefined ? { entries } : { entries, next: page.next };
+}
+
+/**
+ * walkPrefix reads one page of every key under a folder, at any depth, in
+ * the bucket's order. The root is read as a folder, so `s3://b/sales` walks
+ * what `s3://b/sales/` does and leaves `sales-old/` out. Each file is named
+ * by its key under the root.
+ */
+async function walkPrefix(
+  send: S3Requests,
+  root: string,
+  cursor: string | undefined,
+): Promise<Listing> {
+  const { bucket, prefix } = placeOf(root);
+  const folder = prefix === '' || prefix.endsWith('/') ? prefix : `${prefix}/`;
+  const where = { bucket, prefix: folder };
+  const page = await pageAt(send, root, where, cursor, undefined);
+  const entries = page.keys.flatMap((key) =>
+    fileAt(bucket, key, (k) => k.slice(folder.length)),
+  );
+  return page.next === undefined ? { entries } : { entries, next: page.next };
+}
+
+/** placeOf is the place a path names in a bucket. Throws for any other path. */
+function placeOf(path: string): S3Prefix {
   const where = s3Prefix(path);
   if (where === undefined) throw new Error(`${path}: not a place in S3`);
+  return where;
+}
 
+/**
+ * pageAt sends one ListObjectsV2 for `where` from `cursor` and reads it. A
+ * `delimiter` folds the keys below the prefix into folders. Throws, naming
+ * `path`, when the bucket refuses, or when a truncated page does not say
+ * where the next one starts.
+ */
+async function pageAt(
+  send: S3Requests,
+  path: string,
+  where: S3Prefix,
+  cursor: string | undefined,
+  delimiter: '/' | undefined,
+): Promise<ListResult> {
   const res = await send.bucket(where.bucket, {
     'list-type': '2',
-    delimiter: '/',
+    ...(delimiter === undefined ? {} : { delimiter }),
     'max-keys': String(PAGE),
     ...(where.prefix === '' ? {} : { prefix: where.prefix }),
     ...(cursor === undefined ? {} : { 'continuation-token': cursor }),
@@ -96,12 +145,7 @@ async function listPrefix(
       `${path}: S3 says this prefix has more pages but not where the next one starts`,
     );
   }
-
-  const entries = [
-    ...page.prefixes.map((prefix) => folderAt(where.bucket, prefix)),
-    ...page.keys.flatMap((key) => fileAt(where.bucket, key)),
-  ].toSorted(byPageKey);
-  return page.next === undefined ? { entries } : { entries, next: page.next };
+  return page;
 }
 
 /**
@@ -118,19 +162,24 @@ function folderAt(bucket: string, prefix: string): Entry {
 }
 
 /**
- * fileAt is one key as a file entry, or none.
+ * fileAt is one key as a file entry, or none, named by what `nameOf` makes
+ * of its key.
  *
  * It drops a folder marker, a key ending in a slash. A key equal to a prefix
  * with no slash at its end is an object of that name, and is kept.
  * `version` is the ETag from the listing.
  */
-function fileAt(bucket: string, key: KeyEntry): Entry[] {
+function fileAt(
+  bucket: string,
+  key: KeyEntry,
+  nameOf: (key: string) => string,
+): Entry[] {
   if (key.key.endsWith('/')) return [];
   // Only the fields keyIn could read are present, so they carry over as is.
   const { key: k, ...facts } = key;
   return [
     {
-      name: keyName(k),
+      name: nameOf(k),
       path: s3Url({ bucket, key: k }),
       folder: false,
       ...facts,

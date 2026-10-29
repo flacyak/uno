@@ -63,6 +63,15 @@ PAGES["s3://acme-exports/ads/"] = [
 
 const Q3: Connection = { name: "q3", path: "s3://acme-exports/2025/q3", kind: "s3" };
 
+// Page events as JSON Lines, under both names it goes by, beside a CSV.
+PAGES["s3://acme-exports/events"] = [
+  file("events-000000.jsonl", "s3://acme-exports/events/events-000000.jsonl", 700),
+  file("events-000001.ndjson", "s3://acme-exports/events/events-000001.ndjson", 800),
+  file("pages.csv", "s3://acme-exports/events/pages.csv", 90),
+];
+
+const EVENTS: Connection = { name: "events", path: "s3://acme-exports/events", kind: "s3" };
+
 /**
  * A prefix listed in pages. Each inner list is one page, and the cursor for
  * the next page is its index.
@@ -435,6 +444,12 @@ test("files added as one are named for what their names share, back to a whole w
   expect(joinedName(at("orders-2025-01.csv", "orders-2025-02.csv"))).toBe("orders-2025.csv");
   expect(joinedName(at("sales-q3-part-1.csv", "sales-q3-part-2.csv"))).toBe("sales-q3-part.csv");
   expect(joinedName(at("ads-q3.csv", "ads-q4.csv"))).toBe("ads.csv");
+  // A compressed file keeps every extension it has.
+  expect(joinedName(at("events-01.jsonl.gz", "events-02.jsonl.gz"))).toBe("events.jsonl.gz");
+  // A codec named before .parquet is part of the stem.
+  expect(joinedName(at("part-0.snappy.parquet", "part-1.snappy.parquet"))).toBe("part.parquet");
+  // A key written on Windows is named for what follows its last backslash.
+  expect(joinedName(at("exports\\orders-01.csv", "exports\\orders-02.csv"))).toBe("orders.csv");
   // One name that is the start of the other ends on a whole word already.
   expect(joinedName(at("sales.tsv", "sales_eu.tsv"))).toBe("sales.tsv");
   // A shared start of one letter is too short: the folder names them.
@@ -491,6 +506,23 @@ test("how files are read as one is chosen while Add as one is offered, and kept"
   // Re-pointing picks one file, so `joining` is undefined.
   await panel.repoint(TABS[0]!);
   expect(panel.joining).toBeUndefined();
+});
+
+test("the header-row choice applies unless every file picked is JSON Lines by name", async () => {
+  const panel = new Sources(
+    new Stand(),
+    () => TABS,
+    [EVENTS],
+    () => {},
+  );
+  await panel.open(EVENTS);
+  await panel.toggle(named(panel, "events-000000.jsonl"));
+  await panel.toggle(named(panel, "events-000001.ndjson"));
+  expect(panel.joining).toEqual({ header: "first", fileColumn: false });
+  expect(panel.headerChoice).toBe(false);
+
+  await panel.toggle(named(panel, "pages.csv"));
+  expect(panel.headerChoice).toBe(true);
 });
 
 test("one selected file is peeked at, and a second selected puts the peek away", async () => {

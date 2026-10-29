@@ -14,6 +14,7 @@ import { baseOf } from "@document";
 import { saidOf } from "@engine";
 import type { Link, PartInfo, Peeked, Said, SourceRef } from "@engine";
 import { compareStrings } from "@go";
+import { linesByName, nameParts, readable } from "@ingest";
 import type { Connection as Saved } from "@library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@store";
 import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "@store/s3";
@@ -231,12 +232,6 @@ export interface Button {
   to?: string;
 }
 
-/**
- * The file extensions a person can pick. Other files are listed only.
- * Grows as ingest adds formats.
- */
-export const READS: readonly string[] = [".csv", ".tsv"];
-
 /** Case-insensitive substring match. An empty query matches everything. */
 function matches(name: string, query: string): boolean {
   return query === "" || name.toLowerCase().includes(query);
@@ -285,8 +280,9 @@ const BREAKS = "-_. ";
 
 /**
  * Returns the name for several files added as one: the shared prefix of
- * their stems, cut back to a whole word, plus the first file's extension.
- * `orders-2025-01.csv` and `orders-2025-02.csv` give `orders-2025.csv`.
+ * their stems, cut back to a whole word, plus the first file's extensions.
+ * `orders-2025-01.csv` and `orders-2025-02.csv` give `orders-2025.csv`, and
+ * `events-01.jsonl.gz` and `events-02.jsonl.gz` give `events.jsonl.gz`.
  *
  * When the shared prefix is empty, the name is the first file's folder, or
  * the first file's stem for a bare file name.
@@ -294,12 +290,7 @@ const BREAKS = "-_. ";
 export function joinedName(files: ReadonlyArray<{ name: string; path: string }>): string {
   const first = files[0];
   if (first === undefined) return "";
-  const dot = first.name.lastIndexOf(".");
-  const extension = dot > 0 ? first.name.slice(dot) : "";
-  const stems = files.map((f) => {
-    const at = f.name.lastIndexOf(".");
-    return at > 0 ? f.name.slice(0, at) : f.name;
-  });
+  const stems = files.map((f) => nameParts(f.name).stem);
 
   let shared = stems[0]!;
   for (const stem of stems) {
@@ -317,7 +308,7 @@ export function joinedName(files: ReadonlyArray<{ name: string; path: string }>)
   while (end > 0 && BREAKS.includes(shared[end - 1]!)) end--;
 
   const base = shared.slice(0, end) || trailTo(first.path)?.at(-1)?.name || stems[0]!;
-  return base + extension;
+  return base + nameParts(first.name).suffix;
 }
 
 /**
@@ -756,11 +747,9 @@ export class Sources {
     return this.picks.has(entry.path);
   }
 
-  /** Whether an entry can be selected: a file with an extension in READS. */
+  /** Whether an entry can be selected: a file whose name core reads. Other files are listed only. */
   selectable(entry: Entry): boolean {
-    if (entry.folder) return false;
-    const dot = entry.name.lastIndexOf(".");
-    return dot > 0 && READS.includes(entry.name.slice(dot).toLowerCase());
+    return !entry.folder && readable(entry.name);
   }
 
   /**
@@ -798,6 +787,14 @@ export class Sources {
    */
   get joining(): Joining | undefined {
     return this.selected.length > 1 && this.repointing === undefined ? this.how : undefined;
+  }
+
+  /**
+   * Whether the header-row choice applies to the files picked: some file is
+   * not JSON Lines by name. JSON Lines has no header row to choose.
+   */
+  get headerChoice(): boolean {
+    return this.selected.some((entry) => !linesByName(entry.name));
   }
 
   /** Updates the Joining choices. They persist for later picks. */
