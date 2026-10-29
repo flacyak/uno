@@ -221,6 +221,29 @@ test('charts folded a block at a time read as the pure fold of every row, and ar
   expect(tallies.read(ROWS, true)).toStrictEqual([]);
 });
 
+test('a chart takes the blocks the index completes ahead of the pass behind it, and joins them when the pass reaches them', () => {
+  const tallies = new Tallies();
+  tallies.attach(REGION_ROWS, HEADERS);
+  const shown = (col: number) => (row: number) => sales.display(row, col);
+  const rows = TINY.blockRows;
+  const fold = (block: number) => {
+    const from = block * rows;
+    tallies.fold(block, from, Math.min(from + rows, ROWS), shown);
+  };
+  // The pass reads block 0 while the index completes blocks 3 and 4.
+  for (const block of [0, 3, 4]) fold(block);
+  expect(tallies.from()).toBe(rows);
+  expect(tallies.wants(rows)).toBe(true);
+  expect(tallies.wants(3 * rows)).toBe(false);
+  const partial = [[REGION_ROWS.id, { coverage: { rows: 3 * rows } }]];
+  expect(tallies.read(ROWS, false)).toMatchObject(partial);
+  for (const block of [1, 2]) fold(block);
+  expect(tallies.from()).toBe(5 * rows);
+  for (let block = 5; block * rows < ROWS; block++) fold(block);
+  const whole = [[REGION_ROWS.id, pure(REGION_ROWS.plot)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(whole);
+});
+
 test('each chart of a .uno hears its fold of every row, as the pure fold reads it', async () => {
   const { engine, done } = connect(TINY);
   try {
