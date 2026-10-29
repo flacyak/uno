@@ -4,10 +4,10 @@
  * did not try. slack.ts measures spare array capacity. Measures memory only.
  *
  * Usage, from core/ (plain node, then Electron's runtime):
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/cache/ratio.ts
  *   ELECTRON_RUN_AS_NODE=1 ../apps/desktop/node_modules/electron/dist/electron \
- *     --experimental-transform-types --import ../paths.js \
+ *     --import ../paths.js \
  *     tests/lab/verify/cache/ratio.ts
  */
 

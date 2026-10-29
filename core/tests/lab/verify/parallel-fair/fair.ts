@@ -12,7 +12,7 @@
  *
  * Run from core/:
  *
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/parallel-fair/fair.ts [PATH] [--samples N] [--small]
  *     [--reads N]
  *

@@ -3,7 +3,7 @@
  * the scanner, and what a single-thread change wins back.
  *
  * Run from core/:
- *   node --experimental-transform-types --disable-warning=ExperimentalWarning \
+ *   node --disable-warning=ExperimentalWarning \
  *     --import ../paths.js tests/lab/read/read.bench.ts \
  *     [--small] [--only <regex over ids>] [--list]
  *
@@ -48,7 +48,6 @@ const OUT = fileURLToPath(
 );
 
 const NODE_FLAGS = [
-  '--experimental-transform-types',
   '--disable-warning=ExperimentalWarning',
   '--expose-gc',
   '--import',

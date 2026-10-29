@@ -56,6 +56,11 @@ export interface Supplied {
 }
 
 export class Schema {
+  readonly headers: readonly string[];
+  /** The column the holder of the rows fills in, if any. It is one of
+   * `headers`, so an expression can name it. */
+  readonly supplied?: Supplied;
+
   /** How many rows an edit may name. The holder of the rows keeps it current. */
   rows: number;
 
@@ -72,13 +77,9 @@ export class Schema {
   /** Header to index, or -1 for a header more than one column has. */
   private readonly names = new Map<string, number>();
 
-  constructor(
-    readonly headers: readonly string[],
-    rows: number,
-    /** The column the holder of the rows fills in, if any. It is one of
-     * `headers`, so an expression can name it. */
-    readonly supplied?: Supplied,
-  ) {
+  constructor(headers: readonly string[], rows: number, supplied?: Supplied) {
+    this.headers = headers;
+    this.supplied = supplied;
     this.rows = rows;
     headers.forEach((h, i) => this.names.set(h, this.names.has(h) ? -1 : i));
   }

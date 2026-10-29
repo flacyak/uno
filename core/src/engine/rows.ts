@@ -38,6 +38,11 @@ export const TUNING: Tuning = {
  * its own. A row's block is found by binary search over the block starts.
  */
 export class RowIndex {
+  /** Where the first data record starts. */
+  readonly start: number;
+  readonly size: number;
+  private readonly tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>;
+
   private firsts = new Float64Array(64);
   private offsets = new Float64Array(64);
   private blocks = 0;
@@ -49,11 +54,13 @@ export class RowIndex {
   complete = false;
 
   constructor(
-    /** Where the first data record starts. */
-    readonly start: number,
-    readonly size: number,
-    private readonly tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>,
+    start: number,
+    size: number,
+    tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>,
   ) {
+    this.start = start;
+    this.size = size;
+    this.tuning = tuning;
     this.scanned = start;
   }
 
@@ -135,6 +142,12 @@ function grow(a: Float64Array<ArrayBuffer>): Float64Array<ArrayBuffer> {
  * recently used block is evicted first.
  */
 export class Pages {
+  private readonly name: string;
+  private readonly source: ByteSource;
+  private readonly format: Format;
+  private readonly index: RowIndex;
+  private readonly budget: number;
+
   private readonly cache = new Map<
     number,
     { records: string[][]; bytes: number }
@@ -143,12 +156,18 @@ export class Pages {
   private kept = 0;
 
   constructor(
-    private readonly name: string,
-    private readonly source: ByteSource,
-    private readonly format: Format,
-    private readonly index: RowIndex,
-    private readonly budget: number,
-  ) {}
+    name: string,
+    source: ByteSource,
+    format: Format,
+    index: RowIndex,
+    budget: number,
+  ) {
+    this.name = name;
+    this.source = source;
+    this.format = format;
+    this.index = index;
+    this.budget = budget;
+  }
 
   /** Source bytes of the blocks in the cache. */
   get held(): number {

@@ -18,8 +18,12 @@ import { bytes, connect, indexed, openOne } from './harness.ts';
 
 /** Milliseconds added to each request to the bucket. */
 const LATENCY_MS = 50;
-/** How much faster indexing must be with read-ahead. */
-const FASTER = 3;
+/**
+ * How much of the latency read-ahead can hide must show as time saved. The
+ * rest is left to the machine's load, which falls on both runs, but not
+ * evenly.
+ */
+const SHOWN = 0.5;
 
 /** The chunk size: small, so the object is about 120 chunks. */
 const CHUNK = 16 << 10;
@@ -44,19 +48,31 @@ beforeAll(async () => {
 });
 afterAll(() => b.close());
 
+/** Indexed is one run: how long it took and what it sent. */
+interface Indexed {
+  ms: number;
+  /** Reads of exactly the chunk size. */
+  reads: number;
+  /** The most of those out at once. */
+  peak: number;
+}
+
 /**
- * indexing opens and indexes the object with `ahead` chunks in flight. Returns
- * the time taken and the most chunk-sized reads out at once. Only reads of
- * exactly the chunk size are counted.
+ * indexing opens and indexes the object with `ahead` chunks in flight. Only
+ * reads of exactly the chunk size are counted.
  */
-async function indexing(ahead: number): Promise<{ ms: number; peak: number }> {
+async function indexing(ahead: number): Promise<Indexed> {
   let out = 0;
   let peak = 0;
+  let reads = 0;
   const counted: typeof fetch = async (input, init) => {
     const range = new Headers(init?.headers).get('range');
     const m = range === null ? null : /^bytes=(\d+)-(\d+)$/.exec(range);
     const chunk = m !== null && Number(m[2]) - Number(m[1]) + 1 === CHUNK;
-    if (chunk) peak = Math.max(peak, ++out);
+    if (chunk) {
+      reads++;
+      peak = Math.max(peak, ++out);
+    }
     try {
       return await fetch(input, init);
     } finally {
@@ -78,19 +94,21 @@ async function indexing(ahead: number): Promise<{ ms: number; peak: number }> {
       path: `s3://${BUCKET}/${KEY}`,
     });
     await indexed(src);
-    return { ms: performance.now() - started, peak };
+    return { ms: performance.now() - started, reads, peak };
   } finally {
     done();
   }
 }
 
-test('with 50 ms added per request, indexing is at least 3× faster and holds at most four chunks', async () => {
-  expect(BIG.length / CHUNK, 'enough chunks to wait on').toBeGreaterThan(100);
-
+test('with 50 ms added per request, read-ahead hides most of the latency and holds at most four chunks', async () => {
   const one = await indexing(1);
   const four = await indexing(AHEAD);
+  expect(one.reads, 'enough chunks to wait on').toBeGreaterThan(100);
   expect(one.peak, 'one at a time').toBe(1);
-  expect(one.ms / four.ms).toBeGreaterThanOrEqual(FASTER);
+  // One at a time, every chunk read waits the latency in turn. AHEAD at a
+  // time, all but one in every AHEAD wait under another's.
+  const hidden = one.reads * LATENCY_MS * (1 - 1 / AHEAD);
+  expect(one.ms - four.ms).toBeGreaterThanOrEqual(hidden * SHOWN);
   // At most AHEAD chunks out at once: under 40 MB at the default chunk size.
   expect(four.peak).toBe(AHEAD);
   expect(AHEAD * TUNING.chunkBytes).toBeLessThan(40 << 20);

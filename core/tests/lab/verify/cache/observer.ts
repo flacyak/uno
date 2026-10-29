@@ -5,7 +5,7 @@
  * level's "automatic" pauses? Counts entries only, times nothing.
  *
  * Usage, from core/:
- *   node --experimental-transform-types --import ../paths.js \
+ *   node --import ../paths.js \
  *     tests/lab/verify/cache/observer.ts
  */
 

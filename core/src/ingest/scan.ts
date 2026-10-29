@@ -47,14 +47,14 @@ type State =
  * chunk finishes the scan.
  */
 export class RecordScanner {
+  private readonly begin: (offset: number) => void;
+
   private state: State = LINE;
   private crAt = 0;
   private readonly sep: number;
 
-  constructor(
-    comma: string,
-    private readonly begin: (offset: number) => void,
-  ) {
+  constructor(comma: string, begin: (offset: number) => void) {
+    this.begin = begin;
     const sep = comma.charCodeAt(0);
     if (
       comma.length !== 1 ||

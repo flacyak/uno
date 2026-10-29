@@ -103,7 +103,11 @@ function collectRefs(n: Node, into: Set<string>): void {
  * whose root is undefined evaluates to EmptyFormulaError on every row.
  */
 export class Formula {
-  constructor(readonly root?: Node) {}
+  readonly root?: Node;
+
+  constructor(root?: Node) {
+    this.root = root;
+  }
 
   /** The text form. "" when the root is undefined. */
   toString(): string {
