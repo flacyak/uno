@@ -434,6 +434,17 @@
   "changed_version_same_size": "{name} não é a versão com a qual o espaço de trabalho foi salvo · tem o mesmo tamanho",
   "changed_version_sizes": "{name} não é a versão com a qual o espaço de trabalho foi salvo · agora tem {now} e antes tinha {was}",
   "changed_size": "{name} tem {now} agora e tinha {was} quando o espaço de trabalho foi salvo",
+  "charts_kept": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} gráfico que este uno não consegue mostrar é mantido como estava",
+        "plural=many": "{n} gráficos que este uno não consegue mostrar são mantidos como estavam",
+        "plural=other": "{n} gráficos que este uno não consegue mostrar são mantidos como estavam"
+      }
+    }
+  ],
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um arquivo por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só arquivo · arquivos só são anexados a vários lidos como um",

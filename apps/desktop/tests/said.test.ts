@@ -36,6 +36,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   },
   "version-changed": { t: "version-changed", name: "ads.csv", sizes: { now: 3 * MB, was: 2 * MB } },
   "size-changed": { t: "size-changed", name: "ads.csv", now: 40 * KB, was: 12 * KB },
+  "charts-kept": { t: "charts-kept", count: 3 },
   "only-source": { t: "only-source", name: "ads.csv" },
   "append-to-absent": { t: "append-to-absent", name: "ads.csv" },
   "append-to-one-file": { t: "append-to-one-file", name: "ads.csv" },
@@ -124,6 +125,7 @@ test("the other shapes of a kind are the engine's English too", () => {
       ],
     },
     { t: "version-changed", name: "ads.csv" },
+    { t: "charts-kept", count: 1 },
     { t: "carried-too-large", name: "ads.csv", bytes: 2 * KB * MB, limit: 256 * MB },
   ];
   for (const shape of shapes) expect(say(shape), JSON.stringify(shape)).toBe(english(shape));
