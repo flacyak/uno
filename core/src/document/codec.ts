@@ -141,13 +141,14 @@ export function readContainer(
       : heldParts(src, state, at);
   });
 
+  const chartsRead = readCharts(entries[CHARTS_ENTRY]);
   return {
     manifest: m,
     sources,
     active,
     log,
-    ...readCharts(entries[CHARTS_ENTRY]),
-    extra: readExtra(entries, m),
+    ...chartsRead,
+    extra: readExtra(entries, m, chartsRead !== undefined),
     at,
   };
 }
@@ -666,7 +667,7 @@ function readLog(
  * readCharts reads the charts entry, and carries a chart parseChart refuses
  * as its JSON text. It gives undefined when there is no entry, or one this
  * build cannot read: not JSON, a newer version, or no list of at most
- * CHARTS_AT_MOST charts. The entry stays whole in extra either way.
+ * CHARTS_AT_MOST charts. Such an entry stays whole in extra.
  */
 function readCharts(
   bytes: Uint8Array | undefined,
@@ -696,14 +697,16 @@ function readCharts(
 }
 
 /**
- * readExtra collects the entries beyond those the manifest names, so the
- * next save writes them back.
+ * readExtra collects the entries beyond those the manifest names, and the
+ * charts entry unless `charted`, so the next save writes them back.
  */
 function readExtra(
   entries: Record<string, Uint8Array>,
   m: Manifest,
+  charted: boolean,
 ): Map<string, Uint8Array> {
   const known = new Set([MANIFEST_ENTRY, m.sheet.entry, m.edits.entry]);
+  if (charted) known.add(CHARTS_ENTRY);
   for (const s of m.sources)
     if (s.entry !== undefined && s.entry !== '') known.add(s.entry);
 
