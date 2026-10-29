@@ -71,6 +71,8 @@ export type Said =
   | { t: 'charts-left-out'; count: number }
   /** Also the refusal of chart and unchart while the charts cannot be read. */
   | { t: 'charts-newer' }
+  /** Why a chart has no tally: its source has no column of the header. */
+  | { t: 'chart-column-gone'; header: string; name: string }
 
   // What a workspace refuses.
   | { t: 'only-source'; name: string }
@@ -250,6 +252,7 @@ const SENTENCES: Sentences<Said> = {
       : `${s.count} charts named a source this workspace no longer has, and were left out`,
   'charts-newer': () =>
     "this workspace's charts are in a form this uno cannot read · they are kept as they were, and cannot be changed here",
+  'chart-column-gone': (s) => `${s.name} has no column called ${s.header}`,
 
   'only-source': (s) =>
     `${s.name} is the only source here, and a workspace needs one`,

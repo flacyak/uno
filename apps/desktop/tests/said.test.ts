@@ -39,6 +39,7 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "charts-kept": { t: "charts-kept", count: 3 },
   "charts-left-out": { t: "charts-left-out", count: 3 },
   "charts-newer": { t: "charts-newer" },
+  "chart-column-gone": { t: "chart-column-gone", header: "margin", name: "ads.csv" },
   "only-source": { t: "only-source", name: "ads.csv" },
   "append-to-absent": { t: "append-to-absent", name: "ads.csv" },
   "append-to-one-file": { t: "append-to-one-file", name: "ads.csv" },

@@ -125,6 +125,7 @@ const SAYS: Sentences<Said> = {
   "charts-kept": (s) => m.charts_kept({ count: s.count }),
   "charts-left-out": (s) => m.charts_left_out({ count: s.count }),
   "charts-newer": m.charts_newer,
+  "chart-column-gone": (s) => m.chart_column_gone({ header: s.header, name: s.name }),
 
   "only-source": (s) => m.refused_only_source({ name: s.name }),
   "append-to-absent": (s) => m.refused_append_to_absent({ name: s.name }),

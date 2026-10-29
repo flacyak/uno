@@ -48,6 +48,7 @@ import type {
   Reply,
   Request,
   RowsPage,
+  Tally,
 } from './protocol.ts';
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
@@ -721,9 +722,13 @@ export class View {
 
   // ------------------------------------------------------------ tallying
 
-  /** chart tallies `chart` over the view. */
+  /** chart tallies `chart` over the view, or says why it cannot read it. */
   chart(chart: Chart): void {
-    this.tallies.attach(chart, this.schema.headers);
+    const header = this.tallies.attach(chart, this.schema.headers);
+    if (header !== undefined) {
+      const said: Said = { t: 'chart-column-gone', header, name: this.name };
+      this.postTally(chart.id, { t: 'unread', said });
+    }
     this.tally();
   }
 
@@ -736,6 +741,7 @@ export class View {
   /**
    * tally starts the pass over the blocks the charts lack again, from the
    * first of them, once the view is announced, so an open costs nothing new.
+   * A read that fails leaves each chart still folding unread.
    */
   private tally(): void {
     this.tallying?.abort();
@@ -746,8 +752,10 @@ export class View {
     const abort = new AbortController();
     this.tallying = abort;
     this.tallyBlocks(first, abort.signal).catch((err: unknown) => {
-      if (!abort.signal.aborted)
-        this.tell({ t: 'error', source: this.id, said: saidOf(err) });
+      if (abort.signal.aborted) return;
+      for (const [chart, tally] of this.tallies.unread(saidOf(err))) {
+        this.postTally(chart, tally);
+      }
     });
   }
 
@@ -785,13 +793,18 @@ export class View {
     this.postTallies(true);
   }
 
-  /** postTallies posts each pending chart's tally, taken at the generation now. */
+  /** postTallies posts each pending chart's tally over the rows so far. */
   private postTallies(complete: boolean): void {
-    const generation = this.generation;
     const total = this.index.rows();
     for (const [chart, tally] of this.tallies.read(total, complete)) {
-      this.tell({ t: 'tally', source: this.id, chart, generation, tally });
+      this.postTally(chart, tally);
     }
+  }
+
+  /** postTally posts a chart's tally, taken at the generation now. */
+  private postTally(chart: string, tally: Tally): void {
+    const generation = this.generation;
+    this.tell({ t: 'tally', source: this.id, chart, generation, tally });
   }
 
   // ------------------------------------------------------------ finding

@@ -2,7 +2,8 @@
  * @fileoverview The engine tallies a source's charts behind the index: each
  * chart hears its fold of every row as the pure fold reads it, and a partial
  * one a second while the source is still being read, and a chart reads the
- * columns its plot names, found by header where the file moved them.
+ * columns its plot names, found by header where the file moved them, or
+ * hears which one the file has not, or that its source could not be read.
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -15,6 +16,8 @@ import { TALLY_MS } from '@engine';
 import type { Engine, SourceHandle, Tally } from '@engine';
 import { Tallies } from '@engine/tally';
 import type { Provider } from '@plugin';
+import { Refusal } from '@said';
+import type { Said } from '@said';
 import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
 import { GroupsFold, SampleFold } from '@tally';
@@ -126,12 +129,14 @@ function opened(engine: Engine, charts: Chart[]): Promise<SourceHandle> {
 
 /**
  * holding returns a disk provider that holds the first read of a block after
- * `arm`, which `held` reports, until `release`. A block's read is shorter
- * than an index chunk's and ends before the file does.
+ * `arm`, which `held` reports, until `release`, or refuses it with the
+ * refusal `arm` is given. A block's read is shorter than an index chunk's and
+ * ends before the file does.
  */
 function holding() {
   const disk = diskProvider();
   let armed = false;
+  let refusal: Refusal | undefined;
   let caught = (): void => {};
   let release = (): void => {};
   const held = new Promise<void>((resolve) => (caught = resolve));
@@ -150,6 +155,7 @@ function holding() {
             if (armed && block) {
               armed = false;
               caught();
+              if (refusal !== undefined) throw refusal;
               await until;
             }
             return source.read(offset, length);
@@ -159,8 +165,9 @@ function holding() {
       },
     },
   };
-  const arm = (): void => {
+  const arm = (refuse?: Refusal): void => {
     armed = true;
+    refusal = refuse;
   };
   return { provider, arm, held, release };
 }
@@ -225,6 +232,61 @@ test('a chart hears a partial tally after TALLY_MS while its source is still bei
     expect(partial.coverage.complete).toBe(false);
     expect(partial.coverage.rows).toBeGreaterThan(0);
     expect(partial.coverage.rows).toBeLessThan(ROWS);
+  } finally {
+    done();
+  }
+});
+
+test("a chart's column is found by its header where the file moved it, and each chart over a column the file has not hears which", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const region = { col: REVENUE, header: 'region' };
+    const moved: Chart = { ...REGION_ROWS, plot: { t: 'bars', by: region } };
+    const margin = { col: REGION, header: 'margin' };
+    const gone: Chart = { ...moved, id: 'c2', plot: { t: 'pie', by: margin } };
+    const cost = { col: UNITS, header: 'cost' };
+    const x = column(UNITS);
+    const also: Chart = {
+      ...moved,
+      id: 'c3',
+      plot: { t: 'scatter', x, y: cost },
+    };
+    const charts = [moved, gone, also];
+    const heard = new Heard(await opened(engine, charts));
+    const [one, two, three] = charts.map((chart) => heard.of(chart.id));
+    expect(await one).toStrictEqual(pure(REGION_ROWS.plot));
+    const unread = (header: string) => ({
+      t: 'unread',
+      said: { t: 'chart-column-gone', header, name: NAME },
+    });
+    expect(await two).toStrictEqual(unread('margin'));
+    expect(await three).toStrictEqual(unread('cost'));
+  } finally {
+    done();
+  }
+});
+
+test('a chart whose source cannot be read hears why, once, and one added afterwards is tallied', async () => {
+  const hold = holding();
+  const { engine, done } = connect(TINY, [hold.provider, blobProvider()]);
+  try {
+    const charts = [REGION_ROWS, REGION_REVENUE];
+    const src = await opened(engine, charts);
+    const heard = new Heard(src);
+    const lasts = charts.map((chart) => heard.of(chart.id));
+    const said: Said = { t: 'changed-on-disk', name: NAME };
+    hold.arm(new Refusal(said));
+    for (const last of lasts) {
+      expect(await last).toStrictEqual({ t: 'unread', said });
+    }
+    // A round trip, after which anything posted before it has landed.
+    await src.rows(0, 1);
+    const unread = charts.map((chart) => [chart.id, { t: 'unread', said }]);
+    expect(heard.all).toStrictEqual(unread);
+
+    const last = heard.of(UNITS_REVENUE.id);
+    await engine.chart(UNITS_REVENUE);
+    expect(await last).toStrictEqual(pure(UNITS_REVENUE.plot));
   } finally {
     done();
   }
