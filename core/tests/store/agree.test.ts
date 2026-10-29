@@ -559,3 +559,113 @@ test('when two parts disagree, the earlier one in the list is named, whichever o
   await expect(opening).rejects.toThrow(DisagreementError);
   await expect(opening).rejects.toMatchObject({ part: 1, partName: nameOf(1) });
 });
+
+describe('a part whose records sit in its text another way than the first', () => {
+  /** Files under their own names, and the parts that point at them. */
+  function named(entries: ReadonlyArray<readonly [string, Content]>): {
+    files: Map<string, Uint8Array>;
+    parts: Part[];
+  } {
+    return {
+      files: new Map(
+        entries.map(([name, content]) => [name, bytesOf(content)]),
+      ),
+      parts: entries.map(([name]) => ({ ref: inMemory(name) })),
+    };
+  }
+
+  const LINES = '{"id":1}\n{"id":2}\n';
+  const CSV = 'id\n1\n2\n';
+
+  test('delimited text after JSON Lines is refused naming both', async () => {
+    const { files, parts } = named([
+      ['a.jsonl', LINES],
+      ['b.csv', CSV],
+    ]);
+    const err = await refusal(() =>
+      openMulti([memory(files).handler], parts, 'first'),
+    );
+    expect(err.message).toBe(
+      'b.csv (part 2 of 2): it is delimited text and a.jsonl is JSON Lines',
+    );
+    expect(err.part).toBe(1);
+    expect(err.differs).toEqual({
+      kind: 'layout',
+      first: 'lines',
+      part: 'delimited',
+    });
+  });
+
+  test('JSON Lines after delimited text is refused naming both', async () => {
+    const { files, parts } = named([
+      ['a.csv', CSV],
+      ['b.jsonl', LINES],
+    ]);
+    const err = await refusal(() =>
+      openMulti([memory(files).handler], parts, 'first'),
+    );
+    expect(err.message).toBe(
+      'b.jsonl (part 2 of 2): it is JSON Lines and a.csv is delimited text',
+    );
+    expect(err.differs).toEqual({
+      kind: 'layout',
+      first: 'delimited',
+      part: 'lines',
+    });
+  });
+
+  test.each<HeaderMode>(['first', 'none'])(
+    'JSON Lines parts skip a byte order mark alone, with header %s',
+    async (header) => {
+      const { files, parts } = named([
+        ['a.jsonl', '\uFEFF{"id":1}\n'],
+        ['b.jsonl', '\uFEFF{"id":2}\n'],
+        ['c.jsonl', '{"id":3}'],
+      ]);
+      const source = await openMulti([memory(files).handler], parts, header);
+      expect(source.extents.map((extent) => extent.skip)).toEqual([
+        0,
+        UTF8_MARK.length,
+        0,
+      ]);
+      expect(await source.read(0, source.size)).toEqual(
+        concat(UTF8_MARK, encoder.encode('{"id":1}\n{"id":2}\n{"id":3}')),
+      );
+      await source.close();
+    },
+  );
+
+  test('a source read before holds every part to its layout, whatever the parts hold', async () => {
+    // Read as delimited text when its log was made, a .jsonl part skips its
+    // first line as a header.
+    const delimited = named([
+      ['a.jsonl', LINES],
+      ['b.jsonl', LINES],
+    ]);
+    const asText = await openMulti(
+      [memory(delimited.files).handler],
+      delimited.parts,
+      'first',
+      'delimited',
+    );
+    expect(asText.extents.map((extent) => extent.skip)).toEqual([
+      0,
+      '{"id":1}\n'.length,
+    ]);
+    await asText.close();
+
+    // Held to JSON Lines, a CSV part is read a line per row.
+    const mixed = named([
+      ['a.jsonl', LINES],
+      ['b.csv', CSV],
+    ]);
+    const asLines = await openMulti(
+      [memory(mixed.files).handler],
+      mixed.parts,
+      'first',
+      'lines',
+    );
+    expect(asLines.extents.map((extent) => extent.skip)).toEqual([0, 0]);
+    await asLines.close();
+  });
+});
