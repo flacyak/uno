@@ -6,7 +6,7 @@
  * The View holds one Reading and asks it alone how its rows are read.
  */
 
-import type { Held, SavedColumn } from '@document';
+import type { Held } from '@document';
 import {
   CHUNK_CACHE_BYTES,
   chunkCache,
@@ -16,7 +16,8 @@ import {
   kindOf,
   linesFormat,
   openFormat,
-  pointerTo,
+  keyedColumn,
+  pinnedColumn,
   openTable,
   refuseNotRead,
 } from '@ingest';
@@ -109,20 +110,12 @@ export function readOf(
     case undefined:
       return { kind: 'delimited', header: src.header ?? 'first' };
     case 'jsonl':
-      return { kind: 'jsonl', columns: (src.columns ?? []).map(keyedOf) };
+      return { kind: 'jsonl', columns: (src.columns ?? []).map(keyedColumn) };
     case 'parquet':
-      return { kind: 'parquet', columns: (src.columns ?? []).map(keyedOf) };
+      return { kind: 'parquet', columns: (src.columns ?? []).map(keyedColumn) };
     default:
       return unreachable(src.kind);
   }
-}
-
-/**
- * keyedOf returns a pinned column with its key, which a save leaves out
- * where it is the pointer to a top-level field called the column's name.
- */
-function keyedOf({ name, key }: SavedColumn): KeyedColumn {
-  return { name, key: key ?? pointerTo('', name) };
 }
 
 /**
@@ -137,20 +130,12 @@ export function savedOf(spec: ReadSpec): Pick<Held, 'kind' | 'columns'> {
     case 'delimited':
       return {};
     case 'jsonl':
-      return { kind: 'jsonl', columns: spec.columns.map(pinnedOf) };
+      return { kind: 'jsonl', columns: spec.columns.map(pinnedColumn) };
     case 'parquet':
-      return { kind: 'parquet', columns: spec.columns.map(pinnedOf) };
+      return { kind: 'parquet', columns: spec.columns.map(pinnedColumn) };
     default:
       return unreachable(spec);
   }
-}
-
-/**
- * pinnedOf returns a column as a save pins it, leaving out a key keyedOf
- * finds again from the name.
- */
-function pinnedOf({ name, key }: KeyedColumn): SavedColumn {
-  return key === pointerTo('', name) ? { name } : { name, key };
 }
 
 /** Behind is what holds a source's stored bytes: one file, or several joined as bytes. */
