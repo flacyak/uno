@@ -8,6 +8,8 @@
  * makes the compiler require its sentence here and in every client.
  */
 
+import { Data } from 'effect';
+
 import { quote } from '@go/strconv';
 import { unreachable } from '@never';
 import type { HeaderMode } from '@store/multi';
@@ -180,17 +182,17 @@ export type Said =
  * Refusal is an Error that carries its message as `Said`. Its message is the
  * English.
  *
- * `said` is declared and then assigned rather than taken as a parameter
- * property: Node loads this file as source under its type stripping for the
- * smoke, preview and efficiency scripts, and that strips erasable syntax only.
+ * It is an Effect tagged error too: an Effect that yields one fails with it,
+ * `Effect.catchTag('Refusal', ...)` takes it back as this class, and a run
+ * that fails with one rejects with it as it was made. Where it is thrown and
+ * caught as an Error, `instanceof Refusal` and `saidOf` work as before.
  */
-export class Refusal extends Error {
+export class Refusal extends Data.TaggedError('Refusal')<{
   readonly said: Said;
-
+  readonly message: string;
+}> {
   constructor(said: Said) {
-    super(english(said));
-    this.name = 'Refusal';
-    this.said = said;
+    super({ said, message: english(said) });
   }
 }
 
