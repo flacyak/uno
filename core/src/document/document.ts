@@ -506,18 +506,29 @@ export interface Document {
   sheets?: Map<string, Sheet>;
 }
 
+/** The extension an extensionless source is carried under, by its kind. */
+const CARRIED_EXTENSIONS: Record<SourceKind, string> = {
+  jsonl: '.jsonl',
+  parquet: '.parquet',
+};
+
 /**
  * sourceEntry names a source's zip entry after the file it holds, so a
  * workspace opened from a TSV writes data/source.tsv. With `id` the entry is
  * data/source/<id>.<ext>, and otherwise data/source.<ext>. A compressed file
  * keeps every extension, as data/source/sales.csv.gz, and an extensionless
- * name gets .csv.
+ * name gets the extension of its kind: .csv where it has none.
  */
-export function sourceEntry(name: string, id?: string): string {
+export function sourceEntry(
+  name: string,
+  id?: string,
+  kind?: SourceKind,
+): string {
   const ext = nameParts(name).suffix.toLowerCase();
+  const carried = kind === undefined ? '.csv' : CARRIED_EXTENSIONS[kind];
   return (
     (id === undefined ? SOURCE_STEM : SOURCE_DIR + id) +
-    (ext === '' ? '.csv' : ext)
+    (ext === '' ? carried : ext)
   );
 }
 

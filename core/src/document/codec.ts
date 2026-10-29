@@ -14,7 +14,8 @@ import {
   rfc3339,
   sha256Hex,
 } from '@go';
-import { read as ingestRead } from '@ingest';
+import { keyedColumn, read as ingestRead, readLines } from '@ingest';
+import { unreachable } from '@never';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import type { HeaderMode } from '@store';
@@ -76,14 +77,14 @@ export function readDocument(
 ): Document {
   const doc = readContainer(name, bytes, at);
 
-  // Each carried source is read the way a dropped file is, then its log is
+  // Each carried source is read the way its log was made, then the log is
   // replayed over it.
   const sheets = new Map<string, Sheet>();
   for (const src of doc.sources) {
     const raw = src.raw;
     if (raw === undefined) continue;
     const sheet = blamed(`${name}: embedded ${src.name}`, () =>
-      ingestRead(src.name, raw),
+      readCarried(src, raw),
     );
     blamed(`${name}: replaying edits to ${src.name}`, () =>
       sheet.replay(logOf(doc.log, src.id)),
@@ -91,6 +92,26 @@ export function readDocument(
     sheets.set(src.id, sheet);
   }
   return { ...doc, sheets };
+}
+
+/**
+ * readCarried reads a carried source's bytes the way its log was made: as
+ * JSON Lines over the columns it pinned, or as delimited text. Parquet is
+ * read by the engine alone.
+ */
+function readCarried(src: Held, raw: Uint8Array): Sheet {
+  switch (src.kind) {
+    case undefined:
+      return ingestRead(src.name, raw);
+    case 'jsonl':
+      return readLines(src.name, raw, (src.columns ?? []).map(keyedColumn));
+    case 'parquet':
+      throw new Error(
+        `${src.name}: a carried Parquet file is read by the engine alone`,
+      );
+    default:
+      return unreachable(src.kind);
+  }
 }
 
 /**
@@ -528,8 +549,8 @@ function fileSource(src: HeldFile, single: boolean, at: string): FileSource {
       src.raw === undefined
         ? ''
         : single
-          ? sourceEntry(src.name)
-          : sourceEntry(src.name, src.id),
+          ? sourceEntry(src.name, undefined, src.kind)
+          : sourceEntry(src.name, src.id, src.kind),
     path: src.path === undefined ? '' : storedPath(src.path, at),
     version: src.path === undefined ? '' : (src.version ?? ''),
     kind: src.kind,
