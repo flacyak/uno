@@ -538,6 +538,22 @@ export class Band {
     if (i >= 0) this.pending.splice(i, 1);
   }
 
+  /**
+   * widen takes every column of a source that found more as it was indexed,
+   * and returns where they went in. Each held row and typed value moves with
+   * its column, and a held row shows the found columns blank until it is
+   * read again: no row read before they were found holds them.
+   */
+  widen(columns: readonly ColumnInfo[]): Inserted {
+    const inserted = insertedIn(this.columns, columns);
+    this.columns = columns;
+    const blanks = Array<string>(inserted.count).fill('');
+    for (const cells of this.data) cells.splice(inserted.at, 0, ...blanks);
+    for (const cells of this.raws) cells?.splice(inserted.at, 0, ...blanks);
+    for (const p of this.pending) p.col = movedTo(p.col, inserted);
+    return inserted;
+  }
+
   /** restore puts back the values a refused edit replaced. */
   restore(p: Pending): void {
     this.settle(p);
