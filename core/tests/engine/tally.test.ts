@@ -15,9 +15,13 @@ import type { Chart, Plot } from '@document';
 import { TALLY_MS } from '@engine';
 import type { Engine, SourceHandle, Tally } from '@engine';
 import { Tallies } from '@engine/tally';
+import { parse } from '@formula';
+import { read } from '@ingest';
 import type { Provider } from '@plugin';
 import { Refusal } from '@said';
 import type { Said } from '@said';
+import { NO_ROW, Op } from '@sheet';
+import type { Sheet } from '@sheet';
 import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
 import { GroupsFold, SampleFold } from '@tally';
@@ -29,7 +33,15 @@ import {
   ROWS,
   UNITS,
 } from '@core-tests/testdata/sales-q3';
-import { FIXTURE, TINY, connect, indexed, openOne, sales } from './harness.ts';
+import {
+  FIXTURE,
+  TINY,
+  bytes,
+  connect,
+  indexed,
+  openOne,
+  sales,
+} from './harness.ts';
 
 const NAME = 'sales-q3.csv';
 const SOURCE = 'sales';
@@ -62,9 +74,9 @@ const UNITS_REVENUE: Chart = {
   plot: { t: 'scatter', x: column(UNITS), y: column(REVENUE) },
 };
 
-/** pure folds every row of the sheet for `plot`, as its complete tally. */
-function pure(plot: Plot): Tally {
-  const cell = (row: number, at: { col: number }) => sales.display(row, at.col);
+/** pure folds every row of `sheet` for `plot`, as its complete tally. */
+function pure(plot: Plot, sheet: Sheet = sales): Tally {
+  const cell = (row: number, at: { col: number }) => sheet.display(row, at.col);
   if (plot.t === 'scatter') {
     const fold = new SampleFold();
     for (let r = 0; r < ROWS; r++)
@@ -300,6 +312,25 @@ test('a chart whose source cannot be read hears why, once, and one added afterwa
   }
 });
 
+test('a chart over a bound column tallies what the column computes', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const src = await openOne(engine, FILE);
+    engine.mode(true);
+    const formula = 'revenue / 1000';
+    await src.edit({ op: Op.Bind, row: NO_ROW, col: CHANNEL, now: formula });
+    const last = new Heard(src).of(REGION_ROWS.id);
+    const plot: Plot = { t: 'bars', by: column(REGION), sum: column(CHANNEL) };
+    await engine.chart({ ...REGION_ROWS, source: src.id, plot });
+
+    const sheet = read(NAME, bytes);
+    sheet.bind(CHANNEL, parse(formula));
+    expect(await last).toStrictEqual(pure(plot, sheet));
+  } finally {
+    done();
+  }
+});
+
 test('a chart added once the source is read hears its tally, and one replaced hears it again, from the fold it kept while it reads the same columns', async () => {
   const hold = holding();
   const { engine, done } = connect(TINY, [hold.provider]);
@@ -323,6 +354,64 @@ test('a chart added once the source is read hears its tally, and one replaced he
     await engine.chart({ ...chart, plot });
     expect(await last).toStrictEqual(pure(plot));
     expect(hold.reads()).toBeGreaterThan(reads);
+  } finally {
+    done();
+  }
+});
+
+test('a chart added while another is being folded joins the pass, and neither counts a row twice', async () => {
+  const hold = holding();
+  const { engine, done } = connect(TINY, [hold.provider, blobProvider()]);
+  try {
+    const heard = new Heard(await opened(engine, [REGION_ROWS]));
+    const one = heard.of(REGION_ROWS.id);
+    const two = heard.of(REGION_REVENUE.id);
+    hold.arm();
+    await hold.held;
+    await engine.chart(REGION_REVENUE);
+    hold.release();
+    expect(await one).toStrictEqual(pure(REGION_ROWS.plot));
+    expect(await two).toStrictEqual(pure(REGION_REVENUE.plot));
+  } finally {
+    done();
+  }
+});
+
+test('an uncharted chart is not heard from again, while another over the source still is', async () => {
+  const hold = holding();
+  const { engine, done } = connect(TINY, [hold.provider, blobProvider()]);
+  try {
+    const src = await opened(engine, [REGION_ROWS, REGION_REVENUE]);
+    const heard = new Heard(src);
+    const last = heard.of(REGION_REVENUE.id);
+    hold.arm();
+    await hold.held;
+    await engine.unchart(REGION_ROWS.id);
+    hold.release();
+    expect(await last).toStrictEqual(pure(REGION_REVENUE.plot));
+    // A round trip, after which anything posted before it has landed.
+    await src.rows(0, 1);
+    const charts = new Set(heard.all.map(([chart]) => chart));
+    expect([...charts]).toEqual([REGION_REVENUE.id]);
+  } finally {
+    done();
+  }
+});
+
+test('a source pointed at a file again hears tallies of its new view alone, and none from the one it replaced', async () => {
+  const hold = holding();
+  const { engine, done } = connect(TINY, [hold.provider, blobProvider()]);
+  try {
+    const was = await opened(engine, [REGION_ROWS]);
+    hold.arm();
+    await hold.held;
+    const src = await engine.relink(was, FILE);
+    const heard = new Heard(src);
+    const last = heard.of(REGION_ROWS.id);
+    hold.release();
+    expect(await last).toStrictEqual(pure(REGION_ROWS.plot));
+    await src.rows(0, 1);
+    expect(heard.all).toStrictEqual([[REGION_ROWS.id, pure(REGION_ROWS.plot)]]);
   } finally {
     done();
   }
