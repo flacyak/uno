@@ -12,6 +12,8 @@
  */
 
 import {
+  CHARTS_AT_MOST,
+  CHARTS_ENTRY,
   isAbsolute,
   isWorkspace,
   logOf,
@@ -424,6 +426,8 @@ export class Workspace {
    * may have removed, is left out. It returns what the open says of them.
    */
   private keepCharts(doc: Document): Said | undefined {
+    // An entry this build cannot read gives no charts. It stays whole in extra.
+    if (doc.extra.has(CHARTS_ENTRY)) return { t: 'charts-newer' };
     const held = new Set(doc.sources.map((s) => s.id));
     let leftOut = 0;
     for (const chart of doc.charts ?? []) {
@@ -680,7 +684,12 @@ export class Workspace {
   /** chart adds a chart, or replaces the one with its id where it stood. */
   chart(chart: Chart): Promise<void> {
     return this.serially(async () => {
+      this.refuseUnreadableCharts();
       this.need(chart.source);
+      // A save writes the carried charts too, and at most CHARTS_AT_MOST.
+      const count = this.charts.size + this.carriedCharts.length;
+      if (!this.charts.has(chart.id) && count >= CHARTS_AT_MOST)
+        throw new Refusal({ t: 'charts-at-most', limit: CHARTS_AT_MOST });
       this.charts.set(chart.id, chart);
     });
   }
@@ -688,9 +697,16 @@ export class Workspace {
   /** unchart removes the shown chart with the id, and keeps a carried one. */
   unchart(id: string): Promise<void> {
     return this.serially(async () => {
+      this.refuseUnreadableCharts();
       if (!this.charts.delete(id))
         throw new Refusal({ t: 'no-such-chart', id });
     });
+  }
+
+  /** refuseUnreadableCharts throws while the charts entry is one this build
+   * cannot read, which a save writes back whole. */
+  private refuseUnreadableCharts(): void {
+    if (this.extra.has(CHARTS_ENTRY)) throw new Refusal({ t: 'charts-newer' });
   }
 
   // ------------------------------------------------------------ saving
