@@ -1,6 +1,7 @@
 /**
  * @fileoverview A workspace's charts in the engine: the open of a .uno hands
- * them over, a save writes them back, and each goes with its source.
+ * them over, a request adds, replaces or removes one, a save writes them
+ * back, and each goes with its source.
  */
 
 import { unzipSync } from 'fflate';
@@ -50,8 +51,9 @@ const SOUTH: Chart = { ...NORTH, id: 'c2', source: 'south' };
 
 /** A newer build's chart over `source`, as this build carries it. */
 function newer(source: string): CarriedChart {
-  const json = `{"id":"c3","source":"${source}","plot":{"t":"line"}}`;
-  return { source, json };
+  const id = 'c3';
+  const json = `{"id":"${id}","source":"${source}","plot":{"t":"line"}}`;
+  return { id, source, json };
 }
 
 /** opened opens a .uno of a north and a south source holding `charts`,
@@ -264,6 +266,27 @@ test('charts this build cannot read are written back whole, and refuse every cha
     await expect(engine.unchart(NORTH.id)).rejects.toMatchObject(refused);
 
     expect(unzipSync(await saved(engine))[CHARTS_ENTRY]).toStrictEqual(entry);
+  } finally {
+    done();
+  }
+});
+
+test('a new chart cannot take the id of a chart the workspace carries', async () => {
+  const { engine, done } = connect();
+  try {
+    // A repeated id is carried too, and the chart shown with it can change.
+    const repeated = { ...SOUTH, id: NORTH.id };
+    const carried = newer('north');
+    const added = await opened(engine, [NORTH, repeated], [carried]);
+    expect(added.carriedIds).toStrictEqual([NORTH.id, carried.id]);
+    const titled = { ...NORTH, title: 'Rows per region' };
+    await engine.chart(titled);
+    const same = { ...SOUTH, id: carried.id };
+    const taken = { said: { t: 'chart-id-taken', id: carried.id } };
+    await expect(engine.chart(same)).rejects.toMatchObject(taken);
+
+    const back = readContainer('q3.uno', await saved(engine));
+    expect(back.charts).toStrictEqual([titled, repeated]);
   } finally {
     done();
   }

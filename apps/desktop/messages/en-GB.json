@@ -469,6 +469,7 @@
   "refused_workspace_closed": "the workspace was closed",
   "refused_no_such_source": "no source called {id} is open",
   "refused_no_such_chart": "no chart called {id} is in the workspace",
+  "refused_chart_id_taken": "a chart this uno cannot show is already called {id}",
   "refused_charts_at_most": "a workspace keeps at most {limit} charts · remove one to make another",
   "refused_source_absent": "{name} has no file behind it · point it at one to read its rows",
   "refused_point_one_at_several": [

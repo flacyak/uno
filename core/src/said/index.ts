@@ -92,6 +92,7 @@ export type Said =
   | { t: 'workspace-closed' }
   | { t: 'no-such-source'; id: string }
   | { t: 'no-such-chart'; id: string }
+  | { t: 'chart-id-taken'; id: string }
   | { t: 'charts-at-most'; limit: number }
   | { t: 'source-absent'; name: string }
   | { t: 'point-one-at-several'; file: string; count: number; name: string }
@@ -272,6 +273,8 @@ const SENTENCES: Sentences<Said> = {
   'workspace-closed': () => 'the workspace was closed',
   'no-such-source': (s) => `no source called ${s.id} is open`,
   'no-such-chart': (s) => `no chart called ${s.id} is in the workspace`,
+  'chart-id-taken': (s) =>
+    `a chart this uno cannot show is already called ${s.id}`,
   'charts-at-most': (s) =>
     `a workspace keeps at most ${s.limit} charts · remove one to make another`,
   'source-absent': (s) =>
