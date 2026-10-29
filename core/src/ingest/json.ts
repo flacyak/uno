@@ -41,7 +41,10 @@ const WORDS: ReadonlyMap<string, string> = new Map([
   ['null', ''],
 ]);
 /** RFC 8259's whitespace, which may come before and after any token. */
-const BLANKS: ReadonlySet<string> = new Set([' ', '\t', '\n', '\r']);
+const SPACE = 0x20;
+const TAB = 0x09;
+const LF = 0x0a;
+const CR = 0x0d;
 /** The bracket that closes an array or an object, by the one that opens it. */
 const CLOSES: ReadonlyMap<string, string> = new Map([
   ['[', ']'],
@@ -224,7 +227,10 @@ class Tokens {
 
   /** skip advances past whitespace. */
   private skip(): void {
-    while (BLANKS.has(this.line.charAt(this.at))) this.at++;
+    const { line } = this;
+    let at = this.at;
+    while (at < line.length && isBlank(line.charCodeAt(at))) at++;
+    this.at = at;
   }
 
   /** match advances past `pattern` when it matches here. */
@@ -234,6 +240,11 @@ class Tokens {
     this.at = pattern.lastIndex;
     return true;
   }
+}
+
+/** isBlank says whether a character code is RFC 8259 whitespace. */
+function isBlank(code: number): boolean {
+  return code === SPACE || code === TAB || code === LF || code === CR;
 }
 
 /**
