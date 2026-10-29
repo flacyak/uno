@@ -13,7 +13,7 @@ import { expect, test } from 'vite-plus/test';
 import { newManifest, writeDocument } from '@document';
 import type { Chart, Plot } from '@document';
 import { TALLY_MS } from '@engine';
-import type { Engine, SourceHandle, Tally } from '@engine';
+import type { EditRequest, Engine, SourceHandle, Tally } from '@engine';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -29,6 +29,7 @@ import { GroupsFold, SampleFold } from '@tally';
 import {
   CHANNEL,
   COLS,
+  LAST_ROW,
   REGION,
   REVENUE,
   ROWS,
@@ -56,6 +57,8 @@ const WHOLE = { rows: ROWS, total: ROWS, complete: true };
 const EDITED = 3;
 /** A revenue above every one in the fixture, which makes its row the most. */
 const ABOVE_ALL = '999999';
+/** The byte that ends each line of the fixture. */
+const NEWLINE = '\n'.charCodeAt(0);
 
 /** Rows per region, placed as a save writes a new chart. */
 const REGION_ROWS: Chart = {
@@ -123,6 +126,12 @@ function blocks(sheet: Sheet): (block: number) => Promise<Block> {
   };
 }
 
+/** rowAt is the fixture row that starts at byte `offset`, under the header. */
+function rowAt(offset: number): number {
+  const lines = bytes.subarray(0, offset).filter((byte) => byte === NEWLINE);
+  return lines.length - 1;
+}
+
 /** Heard collects the tallies a handle hears, and waits for a chart's last. */
 class Heard {
   readonly all: Array<[string, Tally]> = [];
@@ -162,18 +171,18 @@ function opened(engine: Engine, charts: Chart[]): Promise<SourceHandle> {
 
 /**
  * holding returns a disk provider that counts its reads, and holds the first
- * read of a block after `arm`, which `held` reports, until `release`, or
- * refuses it with the refusal `arm` is given. A block's read is shorter than
- * an index chunk's and ends before the file does.
+ * read of a block after `arm`, which `held` reports with its offset, until
+ * `release`, or refuses it with the refusal `arm` is given. A block's read is
+ * shorter than an index chunk's and ends before the file does.
  */
 function holding() {
   const disk = diskProvider();
   let reads = 0;
   let armed = false;
   let refusal: Refusal | undefined;
-  let caught = (): void => {};
+  let caught: (offset: number) => void = () => {};
   let release = (): void => {};
-  const held = new Promise<void>((resolve) => (caught = resolve));
+  const held = new Promise<number>((resolve) => (caught = resolve));
   const until = new Promise<void>((resolve) => (release = resolve));
   const provider: Provider = {
     ...disk,
@@ -189,7 +198,7 @@ function holding() {
               length < TINY.chunkBytes && offset + length < source.size;
             if (armed && block) {
               armed = false;
-              caught();
+              caught(offset);
               if (refusal !== undefined) throw refusal;
               await until;
             }
@@ -520,6 +529,75 @@ test('a source pointed at a file again hears tallies of its new view alone, and 
     expect(await last).toStrictEqual(pure(REGION_ROWS.plot));
     await src.rows(0, 1);
     expect(heard.all).toStrictEqual([[REGION_ROWS.id, pure(REGION_ROWS.plot)]]);
+  } finally {
+    done();
+  }
+});
+
+test('an edit moves each chart that reads its column by the one row, which hears its complete tally again, undo and redo move it back and forth, and a chart over another column is not heard from', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+    const src = await opened(engine, charts);
+    const heard = new Heard(src);
+    for (const last of charts.map((chart) => heard.of(chart.id))) await last;
+    const settled = heard.all.length;
+    engine.mode(true);
+    const sheet = read(NAME, bytes);
+    const moved = async (
+      over: Chart[],
+      change: () => Promise<unknown>,
+      of: Sheet,
+    ) => {
+      const lasts = over.map((chart) => heard.of(chart.id));
+      await change();
+      for (const [i, chart] of over.entries()) {
+        expect(await lasts[i]).toStrictEqual(pure(chart.plot, of));
+      }
+    };
+    const edit = async (req: EditRequest) =>
+      sheet.replay([(await src.edit(req)).edit]);
+    const revenue = [REGION_REVENUE, UNITS_REVENUE];
+    const set = { op: Op.Set, row: EDITED, col: REVENUE, now: ABOVE_ALL };
+    await moved(revenue, () => edit(set), sheet);
+    await moved(revenue, () => src.undo(), sales);
+    await moved(revenue, () => src.redo(), sheet);
+    const region = [REGION_ROWS, REGION_REVENUE];
+    const note = { op: Op.Note, row: EDITED, col: REGION, now: 'x^2' };
+    await moved(region, () => edit(note), sheet);
+    // A round trip, after which anything posted before it has landed.
+    await src.rows(0, 1);
+    const ids = (over: Chart[]) => over.map((chart) => chart.id);
+    const once = [revenue, revenue, revenue, region].flatMap(ids);
+    expect(heard.all.slice(settled).map(([chart]) => chart)).toEqual(once);
+  } finally {
+    done();
+  }
+});
+
+test('an edit while the source is being read moves a chart by a row it has folded, before the pass or ahead of it, leaves a row of the block being read and one beyond it to the pass, and no row is counted twice', async () => {
+  const hold = holding();
+  const { engine, done } = connect(TINY, [hold.provider, blobProvider()]);
+  try {
+    const src = await opened(engine, [REGION_REVENUE]);
+    const last = new Heard(src).of(REGION_REVENUE.id);
+    hold.arm();
+    // The first row of the block whose read is held, after the ones the
+    // pass has folded, and the first of the block beyond it.
+    const held = rowAt(await hold.held);
+    expect(held).toBeGreaterThan(EDITED);
+    const beyond = held + TINY.blockRows;
+    await indexed(src);
+    engine.mode(true);
+    const sheet = read(NAME, bytes);
+    const log = [];
+    for (const row of [EDITED, held, beyond, LAST_ROW]) {
+      const set = { op: Op.Set, row, col: REVENUE, now: ABOVE_ALL };
+      log.push((await src.edit(set)).edit);
+    }
+    sheet.replay(log);
+    hold.release();
+    expect(await last).toStrictEqual(pure(REGION_REVENUE.plot, sheet));
   } finally {
     done();
   }
