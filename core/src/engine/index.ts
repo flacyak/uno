@@ -6,7 +6,14 @@
  * holds a band of rows around the viewport and asks the worker for more.
  */
 
-export { BAND_ROWS, Band, Engine, SourceHandle } from './client.ts';
+export {
+  BAND_ROWS,
+  Band,
+  Engine,
+  SourceHandle,
+  insertedIn,
+  movedTo,
+} from './client.ts';
 export type { Added, Pending, RowsReply } from './client.ts';
 export { indexPass } from './pass.ts';
 export type { PassContext } from './pass.ts';
