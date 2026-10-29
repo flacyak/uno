@@ -711,6 +711,7 @@ export class Shell {
       grid.show(w.rows, w.editable);
       this.empty.hidden = true;
       this.content.hidden = false;
+      grid.moveTo(w.active.cell.row, w.active.cell.col);
       grid.focus();
       this.say("");
     } catch (err) {

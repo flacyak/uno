@@ -41,10 +41,11 @@ export interface RowsReply extends RowsPage {
   first: number;
 }
 
-/** What an open added: one handle per source, and which one to show. */
+/** What an open added: one handle per source, which one to show, and where each was left. */
 export interface Added {
   sources: SourceHandle[];
   showing: string;
+  cells: Place['cells'];
 }
 
 export class Engine {
@@ -88,6 +89,7 @@ export class Engine {
       return {
         sources: added.opened.map((o) => this.adopt(o)),
         showing: added.showing,
+        cells: added.cells,
       };
     } finally {
       signal?.removeEventListener('abort', cancel);
