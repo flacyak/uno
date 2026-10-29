@@ -7,7 +7,7 @@
  */
 
 import { mkdtempSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { copyFile, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
@@ -17,8 +17,8 @@ import { UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import type { Shell } from "@renderer/shell/shell";
-import { FIRST_ROWS_MS, SECOND, bootShell } from "./smoke/dom-harness.ts";
-import { domPage } from "./smoke/dom-page.ts";
+import { FIRST_ROWS_MS, FIXTURE, SECOND, bootShell } from "./smoke/dom-harness.ts";
+import { domPage, until } from "./smoke/dom-page.ts";
 
 /** The Clicks column of the second export. */
 const CLICKS = 2;
@@ -68,4 +68,26 @@ test("a save after the reopen keeps each source's cell", async () => {
   await shell.save();
   const back = readContainer(basename(saved), await readFile(saved));
   expect(back.sources.map((s) => s.state.active)).toEqual([SALES, ADS]);
+});
+
+test("a source whose file has gone keeps its cell, and comes back on it once found", async () => {
+  const copy = join(mkdtempSync(join(tmpdir(), "uno-reopen-gone-")), basename(FIXTURE));
+  await copyFile(FIXTURE, copy);
+  await shell.openPath(copy);
+  const sales = await go(SALES);
+  await shell.save();
+
+  await rm(copy);
+  await shell.openPath(saved);
+  await shell.save();
+  const back = readContainer(basename(saved), await readFile(saved));
+  expect(back.sources.map((s) => s.state.active)).toEqual([SALES]);
+
+  // r on the tab's line in the panel reloads it from the file put back.
+  await copyFile(FIXTURE, copy);
+  shell.showPanel();
+  document
+    .querySelector(".panel-list")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true, cancelable: true }));
+  expect(await until(page, () => cell() === sales), cell()).toBe(true);
 });
