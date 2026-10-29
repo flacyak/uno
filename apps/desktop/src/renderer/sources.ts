@@ -14,7 +14,7 @@ import { baseOf } from "@document";
 import { saidOf } from "@engine";
 import type { Link, PartInfo, Peeked, Said, SourceRef } from "@engine";
 import { compareStrings } from "@go";
-import { nameParts, readable } from "@ingest";
+import { linesByName, nameParts, readable } from "@ingest";
 import type { Connection as Saved } from "@library";
 import type { Entry, HeaderMode, Listing, PartsRef, SingleRef } from "@store";
 import { keyFolder, keyName, s3Location, s3PrefixUrl, s3Url } from "@store/s3";
@@ -787,6 +787,14 @@ export class Sources {
    */
   get joining(): Joining | undefined {
     return this.selected.length > 1 && this.repointing === undefined ? this.how : undefined;
+  }
+
+  /**
+   * Whether the header-row choice applies to the files picked: some file is
+   * not JSON Lines by name. JSON Lines has no header row to choose.
+   */
+  get headerChoice(): boolean {
+    return this.selected.some((entry) => !linesByName(entry.name));
   }
 
   /** Updates the Joining choices. They persist for later picks. */
