@@ -136,7 +136,7 @@ test("a .uno's charts come back from a save as the .uno held them", async () => 
   }
 });
 
-test('a chart over a source the .uno does not hold is left out', async () => {
+test('a chart over a source the .uno does not hold is left out, and the open says so', async () => {
   const { engine, done } = connect();
   try {
     // A build before charts removed the west source, and kept its charts.
@@ -145,6 +145,9 @@ test('a chart over a source the .uno does not hold is left out', async () => {
     const carried = [newer('west'), newer('')];
     const added = await opened(engine, [NORTH, west], carried);
     expect(added.charts).toStrictEqual([NORTH]);
+    // The two left out are gone from the next save, and the one kept is
+    // not, so the note counts the two.
+    expect(added.chartsNote).toStrictEqual({ t: 'charts-left-out', count: 2 });
 
     const back = readContainer('q3.uno', await saved(engine));
     expect(back.charts).toStrictEqual([NORTH]);

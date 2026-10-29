@@ -123,6 +123,7 @@ const SAYS: Sentences<Said> = {
   "size-changed": (s) => m.changed_size({ name: s.name, now: bytes(s.now), was: bytes(s.was) }),
 
   "charts-kept": (s) => m.charts_kept({ count: s.count }),
+  "charts-left-out": (s) => m.charts_left_out({ count: s.count }),
 
   "only-source": (s) => m.refused_only_source({ name: s.name }),
   "append-to-absent": (s) => m.refused_append_to_absent({ name: s.name }),

@@ -425,9 +425,11 @@ export class Workspace {
    */
   private keepCharts(doc: Document): Said | undefined {
     const held = new Set(doc.sources.map((s) => s.id));
+    let leftOut = 0;
     for (const chart of doc.charts ?? []) {
-      if (!held.has(chart.source)) continue;
-      if (this.charts.has(chart.id)) {
+      if (!held.has(chart.source)) {
+        leftOut++;
+      } else if (this.charts.has(chart.id)) {
         const json = JSON.stringify(chart);
         this.carriedCharts.push({ source: chart.source, json });
       } else {
@@ -437,7 +439,11 @@ export class Workspace {
     for (const c of doc.carriedCharts ?? []) {
       // One that names no source has none to lose.
       if (c.source === '' || held.has(c.source)) this.carriedCharts.push(c);
+      else leftOut++;
     }
+    // One left out is gone from the next save, so the note counts the ones
+    // left out over the ones carried.
+    if (leftOut > 0) return { t: 'charts-left-out', count: leftOut };
     const kept = this.carriedCharts.length;
     return kept === 0 ? undefined : { t: 'charts-kept', count: kept };
   }

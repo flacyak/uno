@@ -445,6 +445,17 @@
       }
     }
   ],
+  "charts_left_out": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} gráfico nomeava uma fonte que este espaço de trabalho já não tem, e foi deixado de fora",
+        "plural=many": "{n} gráficos nomeavam uma fonte que este espaço de trabalho já não tem, e foram deixados de fora",
+        "plural=other": "{n} gráficos nomeavam uma fonte que este espaço de trabalho já não tem, e foram deixados de fora"
+      }
+    }
+  ],
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um ficheiro por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só ficheiro · ficheiros só são anexados a vários lidos como um",
