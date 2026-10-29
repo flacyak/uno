@@ -178,14 +178,16 @@ export class Tallies {
   }
 
   /**
-   * read returns each pending chart's tally over `total` rows. A complete one
-   * is the chart's last, until it is attached again.
+   * read returns each pending chart's tally over `total` rows, complete once
+   * the index is, `indexed`, and the chart has folded every row. A complete
+   * one is the chart's last, until it is attached again or moved.
    */
-  read(total: number, complete: boolean): Array<[string, Tally]> {
+  read(total: number, indexed: boolean): Array<[string, Tally]> {
     const read: Array<[string, Tally]> = [];
     for (const [id, t] of this.charts) {
       if (t.done) continue;
       const ahead = t.ahead === undefined ? 0 : t.ahead[1] - t.ahead[0];
+      const complete = indexed && t.rows === total;
       const coverage = { rows: t.rows + ahead, total, complete };
       const tally: Tally =
         t.t === 'sample'
