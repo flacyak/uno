@@ -215,6 +215,12 @@ export interface Offer {
   complete: boolean;
 }
 
+/**
+ * The least time between a chart's tallies while its source is still being
+ * read: a second, so a chart that takes minutes to read moves as a clock does.
+ */
+export const TALLY_MS = 1000;
+
 /** How much of its source a tally covers. */
 export interface Coverage {
   /** Rows folded. */

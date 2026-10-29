@@ -18,6 +18,7 @@ export {
   LABEL_AT_MOST,
   ROWS_AT_MOST,
   SCATTER_POINTS_AT_MOST,
+  TALLY_MS,
   formatBytes,
   messageOf,
   messagePort,
