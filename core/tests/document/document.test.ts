@@ -24,6 +24,7 @@ import {
   writeDocument,
 } from '@document';
 import type { Chart, Document, State } from '@document';
+import { CHARTS_AT_MOST } from '@document/chart';
 import { parse as parseFormula } from '@formula';
 import { read as ingestRead } from '@ingest';
 import { parse as parseProgram } from '@program';
@@ -851,6 +852,19 @@ describe("a workspace's charts", () => {
     id: 'c1',
   };
 
+  /** A newer build's chart, of a kind and with a key this build does not
+   * know, as this build carries it. */
+  const NEWER = {
+    source: 'sales',
+    json: '{"id":"c2","source":"sales","plot":{"t":"line"},"glow":true}',
+  };
+
+  /** As many charts as a workspace keeps. */
+  const MOST = Array.from({ length: CHARTS_AT_MOST }, (_, i) => ({
+    ...PER_REGION,
+    id: `c${i + 1}`,
+  }));
+
   /** A one-source workspace holding `charts`. */
   function charted(charts?: readonly Chart[]): Document {
     return { ...saved('sales.csv').doc, charts };
@@ -887,5 +901,21 @@ describe("a workspace's charts", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('this build cannot read go back after the rest, as they were', () => {
+    const doc = { ...charted([PER_REGION]), carriedCharts: [NEWER] };
+    const entry = unzipSync(writeDocument(doc))[CHARTS_ENTRY]!;
+    const { charts } = JSON.parse(strFromU8(entry)) as { charts: unknown[] };
+    expect(JSON.stringify(charts[1])).toBe(NEWER.json);
+  });
+
+  test(`are kept to ${CHARTS_AT_MOST}, the carried ones counted`, () => {
+    expect(() => writeDocument(charted(MOST))).not.toThrow();
+
+    const over = { ...charted(MOST), carriedCharts: [NEWER] };
+    expect(() => writeDocument(over)).toThrow(
+      `${CHARTS_AT_MOST + 1} charts are more than the ${CHARTS_AT_MOST} a workspace keeps`,
+    );
   });
 });
