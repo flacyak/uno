@@ -37,6 +37,13 @@ interface Held {
 const QUIET_MS = 5;
 /** Quiet rounds in a row before the engine counts as quiet. */
 const QUIET_ROUNDS = 3;
+/**
+ * The share of a round the event loop may spend in callbacks for the round
+ * to count as quiet. The engine shares the loop, so a round it spends
+ * decoding or folding is work and not silence: 0.04 was measured idle, and
+ * 0.94 while a slice of the index tap ran.
+ */
+const ACTIVE_AT_MOST = 0.5;
 
 const RANGE = /^bytes=(\d+)-(\d+)$/;
 
@@ -85,12 +92,18 @@ export class Door {
     }
   };
 
-  /** quiet resolves after QUIET_ROUNDS silent rounds with all requests done. */
+  /**
+   * quiet resolves after QUIET_ROUNDS rounds in a row with no request sent
+   * or in flight and the event loop idle.
+   */
   async quiet(): Promise<void> {
     for (let rounds = 0; rounds < QUIET_ROUNDS;) {
       const before = this.asked.length;
+      const loop = performance.eventLoopUtilization();
       await sleep(QUIET_MS);
-      rounds = this.out === 0 && this.asked.length === before ? rounds + 1 : 0;
+      const { utilization } = performance.eventLoopUtilization(loop);
+      const silent = this.out === 0 && this.asked.length === before;
+      rounds = silent && utilization <= ACTIVE_AT_MOST ? rounds + 1 : 0;
     }
   }
 
