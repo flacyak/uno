@@ -8,6 +8,7 @@
 
 import { ROWS_AT_MOST } from './protocol.ts';
 import type { Port, Reply, Request, SignIns } from './protocol.ts';
+import { parseChart } from '@document';
 import { Refusal, saidOf } from '@said';
 import { NO_ROW } from '@sheet';
 import type { Said } from '@said';
@@ -248,6 +249,16 @@ export function serve(
     mode: async (m) => {
       workspace.mode(m.transform);
       return undefined;
+    },
+    chart: async (m) => {
+      await workspace.chart(parseChart('a chart request', m.chart));
+      return { t: 'charted' };
+    },
+    unchart: async (m) => {
+      if (typeof m.chart !== 'string')
+        throw new Refusal({ t: 'text', text: 'an unchart names no chart' });
+      await workspace.unchart(m.chart);
+      return { t: 'uncharted' };
     },
     save: async (m) => ({
       t: 'saved',

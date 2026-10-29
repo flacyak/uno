@@ -89,6 +89,7 @@ export type Said =
     }
   | { t: 'workspace-closed' }
   | { t: 'no-such-source'; id: string }
+  | { t: 'no-such-chart'; id: string }
   | { t: 'source-absent'; name: string }
   | { t: 'point-one-at-several'; file: string; count: number; name: string }
   | { t: 'point-several-at-one'; name: string; count: number; file: string }
@@ -265,6 +266,7 @@ const SENTENCES: Sentences<Said> = {
     `the ${s.count} sources with no file behind them come to ${formatBytes(s.bytes)}, over the ${formatBytes(s.limit)} a workspace can carry`,
   'workspace-closed': () => 'the workspace was closed',
   'no-such-source': (s) => `no source called ${s.id} is open`,
+  'no-such-chart': (s) => `no chart called ${s.id} is in the workspace`,
   'source-absent': (s) =>
     `${s.name} has no file behind it · point it at one to read its rows`,
   'point-one-at-several': (s) =>

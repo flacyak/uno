@@ -146,6 +146,7 @@ const SAYS: Sentences<Said> = {
     }),
   "workspace-closed": m.refused_workspace_closed,
   "no-such-source": (s) => m.refused_no_such_source({ id: s.id }),
+  "no-such-chart": (s) => m.refused_no_such_chart({ id: s.id }),
   "source-absent": (s) => m.refused_source_absent({ name: s.name }),
   "point-one-at-several": (s) =>
     m.refused_point_one_at_several({ file: s.file, count: s.count, name: s.name }),

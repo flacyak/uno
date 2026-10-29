@@ -467,6 +467,7 @@
   ],
   "refused_workspace_closed": "the workspace was closed",
   "refused_no_such_source": "no source called {id} is open",
+  "refused_no_such_chart": "no chart called {id} is in the workspace",
   "refused_source_absent": "{name} has no file behind it · point it at one to read its rows",
   "refused_point_one_at_several": [
     {

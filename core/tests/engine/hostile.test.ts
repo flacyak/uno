@@ -166,18 +166,27 @@ test('a request of a known kind with its fields wrong is refused, once, by id', 
     { t: 'undo', id: 31 },
     { t: 'redo', id: 32, source: 5 },
     { t: 'remove', id: 33, source: ['a'] },
+    { t: 'chart', id: 34 },
+    { t: 'chart', id: 35, chart: { id: 'c1', source: 'nope' } },
+    { t: 'unchart', id: 36, chart: { id: 'c1' } },
+    { t: 'unchart', id: 37, chart: 'c1' },
   ];
   for (const msg of bad) p.send(msg);
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
-  for (let id = 10; id <= 33; id++) {
+  for (let id = 10; id <= 37; id++) {
     const got = withId(p.replies, id);
     expect(
       got.map((r) => r.t),
       `request ${id}`,
     ).toEqual(['error']);
   }
+  // Refused at the port, by what is wrong with them, before the workspace.
+  expect([...withId(p.replies, 35), ...withId(p.replies, 36)]).toMatchObject([
+    { said: { t: 'text', text: 'a chart request (c1): plot: t is not text' } },
+    { said: { t: 'text', text: 'an unchart names no chart' } },
+  ]);
 });
 
 test('an id that is not a number still gets a reply it can be matched by, and never a throw', async () => {
