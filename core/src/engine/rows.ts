@@ -101,6 +101,11 @@ export class RowIndex {
     this.counted++;
   }
 
+  /** How many blocks have begun. The last may still be growing. */
+  get begun(): number {
+    return this.blocks;
+  }
+
   /**
    * readable returns how many rows can be read now. Before the scan finishes
    * this excludes the last block, which may still be growing.
