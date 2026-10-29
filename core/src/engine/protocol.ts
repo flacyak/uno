@@ -8,6 +8,7 @@
  * a Web Worker, or a MessageChannel.
  */
 
+import type { Chart } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Change } from '@pattern';
 import type { Said } from '@said';
@@ -127,6 +128,8 @@ export interface Opening {
   showing: string;
   /** The cell each source of a .uno was left on. Empty otherwise. */
   cells: Place['cells'];
+  /** The charts of a .uno, oldest first. Empty otherwise. */
+  charts: Chart[];
 }
 
 /** An edit as a client sends it. The engine numbers it and fills in `was`. */
