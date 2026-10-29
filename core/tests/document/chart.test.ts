@@ -16,18 +16,21 @@ const REGION = { col: 1, header: 'region' };
 const REVENUE = { col: 4, header: 'revenue' };
 const UNITS = { col: 5, header: 'units' };
 const NO_HEADER = { col: 0, header: '' };
+const PLACE = { x: 1, y: 0, width: 420, height: 260 };
 
-/** Revenue per region, with the longest title and wait. */
+/** Revenue per region at the right edge, with the longest title and wait. */
 const BARS: Chart = {
   id: 'c1',
   source: 'sales',
   plot: { t: 'bars', by: REGION, sum: REVENUE },
   title: 'r'.repeat(TITLE_AT_MOST),
+  place: PLACE,
   refresh: REFRESH_MINUTES_AT_MOST,
 };
 
 const NOT_TITLE = `title is not text of at most ${TITLE_AT_MOST} characters`;
 const NOT_MINUTES = `refresh is not a whole number of minutes from 0 to ${REFRESH_MINUTES_AT_MOST}`;
+const NOT_SIZE = 'is not a size of at least 1 px';
 
 describe('parsePlot', () => {
   test.each<Plot>([
@@ -51,7 +54,10 @@ describe('parsePlot', () => {
 
 describe('parseChart', () => {
   test('reads a chart at its limits, and leaves out a key it does not know', () => {
-    expect(parseChart(WHERE, { ...BARS, colour: 'teal' })).toStrictEqual(BARS);
+    const by = { ...REGION, colour: 'teal' };
+    const place = { ...PLACE, colour: 'teal' };
+    const told = { ...BARS, plot: { ...BARS.plot, by }, place, colour: 'teal' };
+    expect(parseChart(WHERE, told)).toStrictEqual(BARS);
   });
 
   test('refuses a chart with no id, naming where it is', () => {
@@ -67,6 +73,10 @@ describe('parseChart', () => {
     ['refresh', -1, NOT_MINUTES],
     ['refresh', 1.5, NOT_MINUTES],
     ['refresh', REFRESH_MINUTES_AT_MOST + 1, NOT_MINUTES],
+    ['place', { ...PLACE, x: -0.5 }, 'place: x is not a fraction from 0 to 1'],
+    ['place', { ...PLACE, y: 1.5 }, 'place: y is not a fraction from 0 to 1'],
+    ['place', { ...PLACE, width: 0.4 }, `place: width ${NOT_SIZE}`],
+    ['place', { ...PLACE, height: Infinity }, `place: height ${NOT_SIZE}`],
   ])('refuses %s %o, naming the chart and the key', (key, value, said) => {
     expect(() => parseChart(WHERE, { ...BARS, [key]: value })).toThrow(
       new Error(`${WHERE} (c1): ${said}`),
