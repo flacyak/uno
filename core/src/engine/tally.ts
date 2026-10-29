@@ -13,6 +13,8 @@ import type { Tally } from './protocol.ts';
 
 /** One chart's fold, and how far it has got. */
 interface Tallying {
+  /** Which fold the plot's columns make, so a like chart can keep it. */
+  key: string;
   /** The plot's columns, where the view's headers put them. */
   cols: number[];
   fold: GroupsFold | SampleFold;
@@ -33,8 +35,9 @@ export class Tallies {
   private readonly charts = new Map<string, Tallying>();
 
   /**
-   * attach folds `chart` from its first row, or returns the header of a
-   * column the view has not, which leaves the chart with no fold.
+   * attach folds `chart`, keeping the fold of the chart with its id when it
+   * reads the same columns the same way, or returns the header of a column
+   * the view has not, which leaves the chart with no fold.
    */
   attach(chart: Chart, headers: readonly string[]): string | undefined {
     const { id, plot } = chart;
@@ -47,11 +50,18 @@ export class Tallies {
       }
       cols.push(col);
     }
+    const kind = plot.t === 'scatter' ? 'sample' : 'groups';
+    const key = `${kind} ${cols.join(' ')}`;
+    const was = this.charts.get(id);
+    if (was?.key === key) {
+      was.done = false;
+      return undefined;
+    }
     const fold =
       plot.t === 'scatter'
         ? new SampleFold()
         : new GroupsFold(plot.sum === undefined ? 'rows' : 'sum');
-    this.charts.set(id, { cols, fold, rows: 0, done: false });
+    this.charts.set(id, { key, cols, fold, rows: 0, done: false });
     return undefined;
   }
 
