@@ -51,6 +51,8 @@ const HEADERS = sales.columns.map((c) => c.header);
 const column = (col: number) => ({ col, header: HEADERS[col]! });
 /** The coverage of a tally folded from every row. */
 const WHOLE = { rows: ROWS, total: ROWS, complete: true };
+/** The row the edits change, inside the first block. */
+const EDITED = 3;
 
 /** Rows per region, placed as a save writes a new chart. */
 const REGION_ROWS: Chart = {
@@ -101,6 +103,11 @@ function folded(charts: Chart[]): Tallies {
     tallies.fold(from / TINY.blockRows, from, end, shown);
   }
   return tallies;
+}
+
+/** shownRow is what each column of `sheet` shows for `row`. */
+function shownRow(sheet: Sheet, row: number): string[] {
+  return sheet.columns.map((_, col) => sheet.display(row, col));
 }
 
 /** Heard collects the tallies a handle hears, and waits for a chart's last. */
@@ -242,6 +249,20 @@ test('a chart takes the blocks the index completes ahead of the pass behind it, 
   for (let block = 5; block * rows < ROWS; block++) fold(block);
   const whole = [[REGION_ROWS.id, pure(REGION_ROWS.plot)]];
   expect(tallies.read(ROWS, true)).toStrictEqual(whole);
+});
+
+test('an edit moves each chart that reads its column by the one row, which is pending again, and a chart over another column is not read again', () => {
+  const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+  const tallies = folded(charts);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REVENUE, '1');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  const over = [REGION_REVENUE, UNITS_REVENUE];
+  const again = over.map((chart) => [chart.id, pure(chart.plot, sheet)]);
+  expect(tallies.read(ROWS, true)).toStrictEqual(again);
 });
 
 test('each chart of a .uno hears its fold of every row, as the pure fold reads it', async () => {
