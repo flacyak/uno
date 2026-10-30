@@ -82,6 +82,13 @@ type Waiter = () => boolean;
 /** A message a view posts about itself, unasked. */
 type Told = Extract<Reply, { t: 'progress' | 'offer' | 'error' | 'tally' }>;
 
+/** The row a cell edit names, read before the edit, with what it showed. */
+interface Edited {
+  raw: readonly string[];
+  files: string[] | undefined;
+  shown: readonly string[];
+}
+
 /** Run is a run of a block's rows that came from one part. */
 interface Run {
   /** The first row of the run, counting from 0 at the block's first. */
@@ -532,7 +539,7 @@ export class View {
       const was = this.schema;
       this.schema = Schema.of(was.headers, was.rows, edits, was.supplied);
       this.undone.push(last);
-      return this.changed(last);
+      return this.changed(last, undefined);
     });
   }
 
@@ -552,7 +559,7 @@ export class View {
         this.undone.push(e);
         throw err;
       }
-      return this.changed(e);
+      return this.changed(e, undefined);
     });
   }
 
@@ -574,11 +581,8 @@ export class View {
 
     // `was` is the value the cell stored before the edit. The recogniser
     // learns from it.
-    const inRange = req.row >= 0 && req.row < schema.rows && req.col >= 0;
-    if (cell && inRange && req.col < schema.headers.length) {
-      const [row] = await this.pages.rows(req.row, 1);
-      e.was = valueAt(schema, req.row, req.col, row ?? []);
-    }
+    const edited = await this.edited(e);
+    if (edited !== undefined) e.was = valueAt(schema, e.row, e.col, edited.raw);
     if (req.op === Op.Unbind) {
       const was = schema.binding(req.col);
       if (was !== undefined) e.was = was;
@@ -586,12 +590,40 @@ export class View {
 
     schema.record(e);
     this.undone = [];
-    return this.changed(e);
+    return this.changed(e, edited);
   }
 
-  private async changed(e: Edit): Promise<Changed> {
+  /**
+   * edited reads the row a cell edit names, as it is stored and as it shows
+   * now, or undefined for a column edit or a row the view has not read.
+   */
+  private async edited(e: Edit): Promise<Edited | undefined> {
+    const schema = this.schema;
+    const inRows = e.row >= 0 && e.row < this.index.readable();
+    const inCols = e.col >= 0 && e.col < schema.headers.length;
+    if (!inRows || !inCols) return undefined;
+    const [raw = []] = await this.pages.rows(e.row, 1);
+    const files = await this.files(e.row, 1);
+    return { raw, files, shown: shownRow(schema, e.row, raw, files) };
+  }
+
+  /**
+   * changed answers an edit with the generation it made, and moves the charts
+   * by a cell edit's row, from what it showed before to what it shows now.
+   * A moved chart hears its tally again from a pass, started when none runs.
+   */
+  private async changed(e: Edit, edited: Edited | undefined): Promise<Changed> {
     this.generation++;
     this.recognise();
+    if (edited !== undefined) {
+      const now = shownRow(this.schema, e.row, edited.raw, edited.files);
+      const block = this.index.blockOf(e.row);
+      const moved = this.tallies.cell(block, e.row, edited.shown, now);
+      await this.tallies
+        .mend(moved, (at) => this.blockRows(at))
+        .catch((err: unknown) => this.unread(err, moved));
+      if (this.tallying === undefined) this.tally();
+    }
     return {
       edit: e,
       generation: this.generation,
@@ -1177,6 +1209,16 @@ export class View {
     this.failed ??= err instanceof Error ? err : new Error(String(err));
     this.wake();
   }
+}
+
+/** shownRow is what `row` shows under `schema`, as the charts read it. */
+function shownRow(
+  schema: Schema,
+  row: number,
+  raw: readonly string[],
+  files: string[] | undefined,
+): readonly string[] {
+  return finishRows(schema, row, [raw], files)[0]!.shown;
 }
 
 /**
