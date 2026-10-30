@@ -157,7 +157,14 @@ await writeOneSource(held, {
   kind: "parquet",
 });
 
-const electron = (await import("electron")).default;
+/**
+ * What is started: Electron on the app folder or, when UNO_SMOKE_APP names a
+ * packaged uno's executable, that executable alone, since the app is inside
+ * it. The release workflow smokes the packaged app this way.
+ */
+const packaged = process.env["UNO_SMOKE_APP"];
+const electron = packaged ?? (await import("electron")).default;
+const app = packaged === undefined ? [pkg] : [];
 
 requireDisplay("smoke");
 
@@ -196,7 +203,12 @@ const AGAIN_MS = 15_000;
 function again(path) {
   const child = spawn(
     electron,
-    [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, ...(path === undefined ? [] : [path])],
+    [
+      ...app,
+      `--user-data-dir=${data}`,
+      DRIVEN_LANGUAGE_SWITCH,
+      ...(path === undefined ? [] : [path]),
+    ],
     { stdio: ["ignore", "inherit", "inherit"], env: electronEnv(process.env, DRIVEN_LANGUAGE_ENV) },
   );
   return new Promise((resolve) => {
@@ -229,7 +241,7 @@ function answer(what) {
 
 const { code, out } = await drive("smoke", {
   electron,
-  args: [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, fixture],
+  args: [...app, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, fixture],
   env: electronEnv(process.env, {
     ...DRIVEN_LANGUAGE_ENV,
     UNO_SMOKE: scratch,

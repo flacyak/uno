@@ -161,9 +161,11 @@ test("smoke opens the app directory, not the main bundle, and on fixtures that e
   const src = read("smoke.js");
   // Electron given a directory reads the package's `main`, which makes
   // __dirname in the bundle point at out/main and the preload resolve beside
-  // it.
+  // it. A packaged uno, named by UNO_SMOKE_APP, has the app inside it and is
+  // given no directory.
+  expect(src).toMatch(/const app = packaged === undefined \? \[pkg\] : \[\];/);
   expect(src).toMatch(
-    /args:\s*\[pkg,\s*`--user-data-dir=\$\{data\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
+    /args:\s*\[\.\.\.app,\s*`--user-data-dir=\$\{data\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
   );
   expect(read("launch.js")).toMatch(/spawn\(electron,\s*args/);
   for (const fixture of ["sales-q3.csv", "google-ads-sales.csv"]) {
