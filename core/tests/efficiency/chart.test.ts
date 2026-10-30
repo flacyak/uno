@@ -44,7 +44,11 @@ const OBJECT = repeated(REPEATS);
  * about 1.08, and lowers the budget to 1.1 with it.
  */
 const BESIDE_BUDGET = 1.2;
-/** The most charts made after the index may fetch, as a multiple of the object. */
+/**
+ * The most charts made after the index may fetch, as a multiple of the
+ * object: each block once, and the chunks the read-ahead asks behind RUN
+ * blocks of one byte length in a row (core/src/store/ahead.ts).
+ */
 const AFTER_BUDGET = 1.05;
 /**
  * The most one edit of a cell may fetch, charts or none: the block of its

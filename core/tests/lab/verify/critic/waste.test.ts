@@ -4,7 +4,7 @@
  * A request is wasted when another request starts at the same offset with a
  * different length: readAhead took reads of one length for a run and asked
  * ahead, and the next read there was of another length. Blocks of rows differ
- * in length, so that happens only where two blocks in a row match.
+ * in length, so that happens only where RUN blocks in a row match.
  */
 
 import { afterEach, expect, test } from 'vite-plus/test';

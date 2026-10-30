@@ -2,14 +2,23 @@
  * @fileoverview Read-ahead for a reader going through an object in order.
  *
  * Wraps a function that reads one range. When a read continues where an
- * earlier one of the same length ended, the next chunks of that length are
- * requested before they are asked for, so several requests are in flight at
- * once.
+ * earlier one of the same length ended, and RUN such reads have come one
+ * after another, the next chunks of that length are requested before they
+ * are asked for, so several requests are in flight at once.
  */
 
 /** How many chunks a sequential reader has in flight or held at once, the
  * one it is waiting on included. */
 export const AHEAD = 4;
+
+/**
+ * How many reads of one length, one after another, make a reader going
+ * through in order. Blocks of rows are near one length, so a walk over them
+ * meets two neighbours of one length by chance: 12 pairs among the 602
+ * blocks tests/efficiency/chart.test.ts walks, of 77 lengths, and no three
+ * in a row. A chunk reader reads one length throughout.
+ */
+export const RUN = 3;
 
 /** Reads `length` bytes from `offset`. */
 export type ReadRange = (offset: number, length: number) => Promise<Uint8Array>;
@@ -22,10 +31,11 @@ export type ReadRange = (offset: number, length: number) => Promise<Uint8Array>;
 export const REMEMBERED = 4;
 
 /** One sequential reader: the offset its next read starts at, and the
- * length it reads. */
+ * length it reads, and how many of that length have come one after another. */
 interface Stream {
   next: number;
   length: number;
+  run: number;
 }
 
 /**
@@ -33,10 +43,11 @@ interface Stream {
  *
  * A read that starts where an earlier read of the same length ended continues
  * that reader, as does its last chunk, cut short by the end of the object.
- * The reader's next chunks, of the same length, are requested so that
- * `ahead` are in flight or held, counting the one it is waiting on. Any
- * other read is passed to `read` as it is, so reads back to back of
- * different lengths, such as a band's blocks of rows, ask for nothing ahead.
+ * Once RUN of its reads have come one after another, the reader's next
+ * chunks, of the same length, are requested so that `ahead` are in flight or
+ * held, counting the one it is waiting on. Any other read is passed to
+ * `read` as it is, so reads back to back of different lengths, such as a
+ * band's blocks of rows, ask for nothing ahead, nor do two of one length.
  *
  * A held chunk stays with the reader it was requested for while that reader
  * is among the last `REMEMBERED` reads. Then it is dropped. Two sequential
@@ -95,18 +106,19 @@ export function readAhead(
   return (offset, length) => {
     // A read that starts where a recent read of its length ended, or that
     // takes what is left of the object, continues that reader, which becomes
-    // the stream.
+    // the stream once its run is RUN reads long.
     const going = recent.findLast(
       (who) =>
         who.next === offset &&
         (who.length === length || offset + length === size),
     );
     if (going === undefined) {
-      remember({ next: offset + length, length });
+      remember({ next: offset + length, length, run: 1 });
     } else {
       going.next = offset + length;
       going.length = length;
-      stream = going;
+      going.run++;
+      if (going.run >= RUN) stream = going;
       remember(going);
     }
 
