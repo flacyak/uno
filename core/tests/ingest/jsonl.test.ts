@@ -10,7 +10,7 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { walkLine } from '@ingest/json';
-import { linesFormat } from '@ingest/jsonl';
+import { linesFormat, readLines } from '@ingest/jsonl';
 import { JSON_COLUMNS_LIMIT, LINE_COLUMN, LINE_KEY } from '@ingest/keys';
 import type { KeyedColumn } from '@ingest/keys';
 import { splitLines } from '@ingest/lines';
@@ -87,11 +87,7 @@ describe('a JSON Lines file reads as one row per line', () => {
   });
 
   test('a byte order mark, CRLF and blank lines are not rows', () => {
-    const file = indexed(
-      '\uFEFF{"a":1}\r\n\r\n \t\r\n{"a":2}\r\n\n',
-      WHOLE,
-      PINNED,
-    );
+    const file = indexed('﻿{"a":1}\r\n\r\n \t\r\n{"a":2}\r\n\n', WHOLE, PINNED);
     expect(file.format.dataStart).toBe(3);
     expect(file.begins).toEqual([3, 18]);
     expect(rows(file)).toEqual([
@@ -133,6 +129,29 @@ describe('a JSON Lines file reads as one row per line', () => {
     expect(() => linesFormat('events.jsonl', utf16, [])).toThrow(
       'events.jsonl: UTF-16 little-endian is not supported yet',
     );
+  });
+});
+
+describe('readLines reads a whole file into a Sheet', () => {
+  test('as the engine reads one: the pinned columns, then each key as it comes, every line a row', () => {
+    const text = '\uFEFF{"a":1,"u":{"n":"x"}}\n\n[1]\r\n{"b":true,"a":"3"}';
+    const sheet = readLines('events.jsonl', encoder.encode(text), PINNED);
+    expect(sheet.name).toBe('events.jsonl');
+    expect(sheet.columns.map((column) => column.header)).toEqual([
+      'u.n',
+      'a',
+      LINE_COLUMN,
+      'b',
+    ]);
+    expect(sheet.rows()).toBe(3);
+    expect(
+      [0, 1, 2].map((row) => [0, 1, 2, 3].map((col) => sheet.raw(row, col))),
+    ).toEqual([
+      ['x', '1', '', ''],
+      ['', '', '[1]', ''],
+      ['', '3', '', 'true'],
+    ]);
+    expect(sheet.source).toBe('UTF-8 · JSON Lines');
   });
 });
 
