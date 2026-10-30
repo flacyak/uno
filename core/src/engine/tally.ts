@@ -178,6 +178,21 @@ export class Tallies {
   }
 
   /**
+   * refold starts the fold of each chart that reads any of `cols` again
+   * from its first row, for an edit that changed every row of them, and
+   * says whether any chart does.
+   */
+  refold(cols: ReadonlySet<number>): boolean {
+    let refolded = false;
+    for (const [id, t] of this.charts) {
+      if (!colsOf(t).some((col) => cols.has(col))) continue;
+      this.charts.set(id, fresh(t));
+      refolded = true;
+    }
+    return refolded;
+  }
+
+  /**
    * read returns each pending chart's tally over `total` rows, complete once
    * the index is, `indexed`, and the chart has folded every row. A complete
    * one is the chart's last, until it is attached again or moved.
@@ -245,6 +260,13 @@ function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
 /** unfolded is how far a fold has got before any row: nothing, pending. */
 function unfolded(): Omit<Folding, 'key'> {
   return { rows: 0, ahead: undefined, done: false };
+}
+
+/** fresh is `t` with nothing folded, pending again. */
+function fresh(t: Tallying): Tallying {
+  if (t.t === 'sample') return { ...t, ...unfolded(), fold: new SampleFold() };
+  const fold = new GroupsFold(t.sum === undefined ? 'rows' : 'sum');
+  return { ...t, ...unfolded(), fold };
 }
 
 /**

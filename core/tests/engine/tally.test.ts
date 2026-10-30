@@ -22,7 +22,7 @@ import type { Provider } from '@plugin';
 import { Refusal } from '@said';
 import type { Said } from '@said';
 import { NO_ROW, Op } from '@sheet';
-import type { Sheet } from '@sheet';
+import type { Edit, Sheet } from '@sheet';
 import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
 import { GroupsFold, SampleFold } from '@tally';
@@ -598,6 +598,57 @@ test('an edit while the source is being read moves a chart by a row it has folde
     sheet.replay(log);
     hold.release();
     expect(await last).toStrictEqual(pure(REGION_REVENUE.plot, sheet));
+  } finally {
+    done();
+  }
+});
+
+test('an edit over a whole column folds the charts that read it again, through a formula too, and a chart over another column is not heard from', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const src = await openOne(engine, FILE);
+    engine.mode(true);
+    const heard = new Heard(src);
+    const sum = (col: number): Plot => {
+      return { t: 'bars', by: column(REGION), sum: column(col) };
+    };
+    const units = {
+      ...REGION_ROWS,
+      id: 'c2',
+      source: src.id,
+      plot: sum(UNITS),
+    };
+    const channel = { ...units, id: 'c3', plot: sum(CHANNEL) };
+    const charts = [{ ...REGION_ROWS, source: src.id }, units, channel];
+    const lasts = charts.map((chart) => heard.of(chart.id));
+    for (const chart of charts) await engine.chart(chart);
+    for (const last of lasts) await last;
+    const settled = heard.all.length;
+    const log: Edit[] = [];
+    const refolded = async (over: Chart[], change: () => Promise<unknown>) => {
+      const lasts = over.map((chart) => heard.of(chart.id));
+      await change();
+      const sheet = read(NAME, bytes);
+      sheet.replay(log);
+      for (const [i, chart] of over.entries()) {
+        expect(await lasts[i]).toStrictEqual(pure(chart.plot, sheet));
+      }
+    };
+    const edit = (req: EditRequest) => async () => {
+      log.push((await src.edit(req)).edit);
+    };
+    const bind = { op: Op.Bind, row: NO_ROW, col: CHANNEL, now: 'units / 2' };
+    await refolded([channel], edit(bind));
+    const program = 'replace(/,/, "")';
+    const apply = { op: Op.Apply, row: NO_ROW, col: UNITS, now: program };
+    await refolded([units, channel], edit(apply));
+    const unbind = { op: Op.Unbind, row: NO_ROW, col: CHANNEL, now: '' };
+    await refolded([channel], edit(unbind));
+    await refolded([channel], () => src.undo().then(() => log.pop()));
+    // A round trip, after which anything posted before it has landed.
+    await src.rows(0, 1);
+    const ids = new Set(heard.all.slice(settled).map(([chart]) => chart));
+    expect([...ids]).toEqual([channel.id, units.id]);
   } finally {
     done();
   }

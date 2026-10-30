@@ -150,6 +150,15 @@ export class Schema {
   }
 
   /**
+   * readersOf lists the bound columns whose formulas read `col`, through
+   * one another, each after the ones it reads.
+   */
+  readersOf(col: number): number[] {
+    const down = this.graph.downstreamOf(this.headers[col]!);
+    return down.map((name) => this.names.get(name)!);
+  }
+
+  /**
    * resolve returns the index of the column with this header. It throws for
    * a header held by zero columns or by more than one.
    */
