@@ -1,182 +1,141 @@
-# A git tag is the single source of truth for uno's version.
+# A git tag is the single source of truth for uno's version. Pushing v1.2.0
+# packages the desktop app for Linux, macOS and Windows, runs the smoke checks
+# against the packaged Linux app, and publishes one GitHub release holding
+# every installer and their checksums.
 #
-# One ubuntu-latest runner does the whole release. uno is a Fyne GUI app, so
-# every desktop binary needs CGO and the target's GUI toolchain -- not just a C
-# compiler -- and fyne-cross supplies all three from its container images while
-# driving `fyne package`, so the output is a real .app bundle and a real .exe.
-# Docker is preinstalled on the runner, which is all fyne-cross needs. One
-# runner also means one process creating the release, so there is no ordering to
-# arrange between jobs.
+# Each platform is packaged on a runner of its own kind, because
+# electron-builder makes an installer with that platform's own tools: NSIS on
+# Windows, hdiutil and codesign on macOS, AppImage and dpkg on Linux.
+# apps/desktop/electron-builder.yml says what each makes. One job then
+# creates the release from what the three uploaded, so there is one process
+# creating it and no ordering to arrange between the packagers.
 name: release
 
 on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
-
-env:
-  APP_ID: io.uno.app
-  FYNE_CROSS_VERSION: v1.6.3
-  RCODESIGN_VERSION: "0.29.0"
-  # The SDK version fyne-cross supports. arm64 arrived with macOS 11.0, so this
-  # covers Apple Silicon.
-  MACOSX_SDK: MacOSX11.3.sdk
-
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  package:
+    strategy:
+      # One platform failing leaves the other two's installers to look at.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      # The same install the smoke job in test.yml does: Electron's binary is
+      # downloaded, because electron-builder packages it and the smoke step
+      # starts it. The cache is the one that job writes.
+      - uses: voidzero-dev/setup-vp@v1.19.0
         with:
-          # The changelog is generated from history, so a shallow clone is not
-          # enough.
-          fetch-depth: 0
+          version-file: pnpm-workspace.yaml
+          cache: true
+          run-install: true
 
-      - uses: actions/setup-go@v5
-        with:
-          # Tracks the module rather than a pinned string that can drift behind
-          # it.
-          go-version-file: go.mod
+      # package.json holds 0.0.0 in the repository. The tag is the version,
+      # and writing it here is what names the installers and what
+      # app.getVersion() answers inside the packaged app.
+      - name: Take the version from the tag
+        shell: bash
+        working-directory: apps/desktop
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
 
-      # Apple's SDK cannot be redistributed and its download needs an Apple ID,
-      # so CI cannot fetch it. It is extracted once locally with
-      # `fyne-cross darwin-sdk-extract` and primed into this cache; see
-      # docs/RELEASER.md. A cold cache skips the darwin leg rather than failing
-      # the release -- note that Actions evicts an entry after 7 days without a
-      # hit, so a release cut after a quiet spell ships no macOS artifacts until
-      # the cache is primed again.
-      - name: Restore the macOS SDK
-        id: sdk
-        uses: actions/cache/restore@v4
-        with:
-          path: SDKs
-          key: macosx-sdk-11.3
+      # @uno/core's exports point at dist/, which is not committed, so the
+      # desktop package has nothing to bundle against until this has run.
+      - name: Build
+        run: vp run build
 
-      - name: Warn when the darwin leg is skipped
-        if: steps.sdk.outputs.cache-hit != 'true'
-        run: |
-          echo "::warning title=No macOS artifacts::The MacOSX SDK cache is cold, so the darwin leg was skipped. Re-prime it and re-cut the tag if this release needs macOS builds."
+      # The same root script anyone runs locally; see package.json. It builds
+      # the desktop app again and packages it for this runner's platform.
+      - name: Package
+        run: vp run package
 
-      - name: Install fyne-cross
-        run: go install github.com/fyne-io/fyne-cross@${{ env.FYNE_CROSS_VERSION }}
+      # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox
+      # is built on, and Electron exits rather than run without one.
+      - name: Allow the Electron sandbox
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Install rcodesign
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          # The static musl build needs neither Docker nor a Mac.
-          asset="apple-codesign-${RCODESIGN_VERSION}-x86_64-unknown-linux-musl"
-          curl -fsSL -o rcodesign.tar.gz \
-            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCODESIGN_VERSION}/${asset}.tar.gz"
-          tar -xzf rcodesign.tar.gz
-          install -m755 "${asset}/rcodesign" /usr/local/bin/rcodesign
-          rm -rf rcodesign.tar.gz "$asset"
-          rcodesign --version
-
-      - name: Build for Linux and Windows
-        run: |
-          set -euo pipefail
-          ldflags="-X main.version=${GITHUB_REF_NAME}"
-          fyne-cross linux   -arch=amd64,arm64 -app-id "$APP_ID" -ldflags "$ldflags"
-          fyne-cross windows -arch=amd64       -app-id "$APP_ID" -ldflags "$ldflags"
-
-      - name: Build for macOS
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          fyne-cross darwin -arch=amd64,arm64 -app-id "$APP_ID" \
-            -ldflags "-X main.version=${GITHUB_REF_NAME}" \
-            -macosx-sdk-path "${GITHUB_WORKSPACE}/SDKs/${MACOSX_SDK}"
-
-      # Order is load-bearing from here to the archive: package, merge, sign.
-      # `fyne package -os darwin` renders its own Info.plist over whatever was
-      # there, so the .uno declaration goes in afterwards; rcodesign then digests
-      # that Info.plist and every resource, so editing the bundle after signing
-      # invalidates the signature -- and an invalid signature on arm64 is a
-      # bundle macOS will not launch.
-      - name: Declare the .uno document type
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: python3 packaging/darwin/merge-document-types.py fyne-cross/dist/darwin-*/uno.app
-
-      - name: Sign the macOS bundles
-        if: steps.sdk.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          for app in fyne-cross/dist/darwin-*/uno.app; do
-            # With no certificate supplied this is an ad-hoc signature, which is
-            # what gets the app to run; the identity comes from the bundle's own
-            # CFBundleIdentifier. Gatekeeper still wants notarization.
-            rcodesign sign "$app"
-            rcodesign print-signature-info "$app" | head -20
-          done
-
-      - name: Assemble the release artifacts
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p release-artifacts
-          for dir in fyne-cross/dist/*/; do
-            platform="$(basename "$dir")"   # linux-amd64, darwin-arm64, ...
-            os="${platform%-*}"
-            arch="${platform##*-}"
-            for entry in "$dir"*; do
-              [ -e "$entry" ] || continue
-              name="$(basename "$entry")"
-              if [ -d "$entry" ]; then
-                # A signed .app bundle. -y stores symlinks as symlinks, which is
-                # what lets the signature survive the round trip.
-                (cd "$dir" && zip -qry "uno_${version}_${os}_${arch}.zip" "$name")
-                mv "${dir}uno_${version}_${os}_${arch}.zip" release-artifacts/
-              else
-                # Keep whatever extension fyne-cross chose (.tar.xz, .zip).
-                cp "$entry" "release-artifacts/uno_${version}_${os}_${arch}${name#uno}"
-              fi
-            done
-          done
-          # GoReleaser's checksum pipe only covers artifacts it built itself, and
-          # builds are disabled, so the checksums are computed here and upload as
-          # one more extra_file.
-          (cd release-artifacts && sha256sum -- * > "${RUNNER_TEMP}/checksums.txt")
-          mv "${RUNNER_TEMP}/checksums.txt" release-artifacts/
-          ls -l release-artifacts
-
-      # .goreleaser.yaml is generated rather than committed: fyne-cross builds
-      # the binaries and this workflow assembles them, so what GoReleaser needs
-      # is derived from the step above it.
-      - name: Generate the GoReleaser config
-        run: |
-          cat > .goreleaser.yaml <<'CONFIG'
-          version: 2
-          project_name: uno
-
-          builds:
-            - skip: true
-
-          # The checksums were computed over release-artifacts/ above and upload
-          # with the rest of that directory.
-          checksum:
-            disable: true
-
-          # release-artifacts/ is flat, so the glob still matches when the darwin
-          # leg is skipped.
-          release:
-            draft: false
-            prerelease: auto
-            extra_files:
-              - glob: release-artifacts/*
-
-          changelog:
-            sort: asc
-            use: github
-            filters:
-              exclude: ['^docs:', '^test:', '^chore:', '^ci:']
-          CONFIG
-          goreleaser check
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          args: release --clean
+      # test.yml smokes the built bundles under Electron from node_modules.
+      # This smokes the packaged app itself, the layout a person installs: the
+      # bundles inside the asar, the engine started from it, the renderer
+      # loaded over file://. The unpacked folder is what the AppImage and the
+      # .deb carry, and runs with no FUSE or dpkg on the runner.
+      - name: Smoke test the packaged app
+        if: runner.os == 'Linux'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UNO_SMOKE_APP: ${{ github.workspace }}/apps/desktop/out/release/linux-unpacked/uno
+        run: xvfb-run --auto-servernum vp run smoke
+
+      - name: Upload the smoke screenshot
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-window
+          path: apps/desktop/out/smoke/window.png
+          if-no-files-found: ignore
+
+      # Only the installers. electron-builder also leaves the unpacked app and
+      # its own metadata in out/release, which no release needs.
+      - name: Upload the installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ runner.os }}
+          path: apps/desktop/out/release/uno_*
+          if-no-files-found: error
+
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: release-artifacts
+
+      - name: Write the checksums
+        working-directory: release-artifacts
+        run: |
+          set -euo pipefail
+          sha256sum -- * > "${RUNNER_TEMP}/checksums.txt"
+          mv "${RUNNER_TEMP}/checksums.txt" .
+          ls -l
+
+      # The notes open with how to install, then GitHub's own list of what
+      # merged since the last release. A tag with a hyphen, v1.2.0-rc.1, is a
+      # pre-release.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prerelease=()
+          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
+          notes="$(cat <<'NOTES'
+          ## Installing
+
+          - **Linux**: the `.AppImage` runs as it is, once it is executable. The `.deb` installs on Debian and Ubuntu.
+          - **macOS**: open the `.dmg` and drag uno to Applications. The app is not notarized, so the first time, open it from the context menu with Open, then confirm.
+          - **Windows**: run the `.exe`. It installs for the current user.
+
+          `checksums.txt` holds the SHA-256 of every file.
+          NOTES
+          )"
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes "$notes" \
+            --generate-notes \
+            "${prerelease[@]}" \
+            release-artifacts/*
