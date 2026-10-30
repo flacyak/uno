@@ -25,7 +25,7 @@ import {
   valueAt,
 } from '@sheet';
 import type { Edit, Written } from '@sheet';
-import { isRemote, multiOf } from '@store';
+import { multiOf } from '@store';
 import type {
   ByteSource,
   HeaderMode,
@@ -128,15 +128,24 @@ export type Part = (Omit<HeldFile, Unsaved> | Omit<HeldParts, Unsaved>) & {
 };
 type Unsaved = 'id' | 'name' | 'state';
 
+/**
+ * Origin is what a source's bytes were handed as, which its index
+ * measurements name: bytes a .uno carried, a dropped file, several files
+ * read as one, an object in a bucket, or a file on a disk.
+ */
+export type Origin = 'carried' | 'dropped' | 'joined' | 'bucket' | 'disk';
+
 /** What View.open is given. */
 export interface OpenAsk {
   id: string;
   /** The file's name. `ingest` picks a decoder by it. */
   name: string;
-  /** Where the bytes are, or "" for carried bytes. */
+  /** Where the bytes are, or "" where no one path holds them. */
   path: string;
   /** The bytes. The view owns the source from here on and closes it if the open fails. */
   source: ByteSource;
+  /** What the bytes were handed as. */
+  origin: Origin;
   port: Port<Request, Reply>;
   tuning: Tuning;
   /**
@@ -294,11 +303,6 @@ export class View {
     let told = 0;
     let started = false;
     const index = v.index;
-    // The telemetry attribute for where the bytes came from.
-    let place: string;
-    if (carried?.raw !== undefined) place = 'carried';
-    else if (path === '') place = 'joined';
-    else place = isRemote(path) ? 'bucket' : 'disk';
     indexPass({
       source,
       format,
@@ -311,7 +315,7 @@ export class View {
         if (index.complete) {
           // The clock stops here, once: the pass reports completion one time.
           v.took = performance.now() - v.began;
-          const attributes = { place };
+          const attributes = { place: ask.origin };
           telemetry({
             name: INDEX,
             kind: 'duration',

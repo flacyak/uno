@@ -56,6 +56,12 @@ export const MODIFIED = '2026-09-20T12:00:00.000Z';
  */
 export interface Beside {
   objects: Map<string, Uint8Array>;
+  /**
+   * The Content-Encoding a key was stored with, where it has one. S3 names it
+   * on every answer for the key, unless a signed GET overrides it with
+   * response-content-encoding.
+   */
+  encodings?: Map<string, string>;
   keys?: AwsCredentials;
   public?: boolean;
   /**
@@ -119,6 +125,8 @@ export interface Bucket {
   }>;
   /** What each key holds. Change an entry to rewrite an object under a reader. */
   objects: Map<string, Uint8Array>;
+  /** The Content-Encoding a key of the default bucket was stored with. */
+  encodings: Map<string, string>;
   /** How long each answer waits before it is sent, in ms. 0 by default. */
   latency: number;
   close(): Promise<void>;
@@ -126,7 +134,8 @@ export interface Bucket {
 
 /**
  * bucket starts the stand-in: HEAD, ranged GET, If-Match, ListObjectsV2, a
- * redirect for the wrong region, and a 403 for a bad signature.
+ * stored Content-Encoding, a redirect for the wrong region, and a 403 for a
+ * bad signature.
  *
  * A request signed for a region other than `home` is answered with
  * `misdirect`. `objects` are the default bucket's contents, and `beside`
@@ -139,9 +148,10 @@ export async function bucket(
   beside: Record<string, Beside> = {},
 ): Promise<Bucket> {
   const seen: Bucket['seen'] = [];
+  const encodings = new Map<string, string>();
   /** Every bucket it holds. */
   const buckets = new Map<string, Beside>([
-    [BUCKET, { objects, keys: KEYS }],
+    [BUCKET, { objects, encodings, keys: KEYS }],
     ...Object.entries(beside),
   ]);
   /** Every body a versioned bucket has held under each key, by VersionId. */
@@ -195,8 +205,13 @@ export async function bucket(
     const held = buckets.get(name ?? '');
     if (held !== undefined) remember(name!, held);
 
-    // An unsigned request is answered only by a public bucket.
+    // An unsigned request is answered only by a public bucket, and S3
+    // refuses one that overrides a header of its answer.
     if (auth === '') {
+      if ([...url.searchParams.keys()].some((k) => k.startsWith('response-'))) {
+        res.writeHead(400).end();
+        return;
+      }
       if (held?.public === true) {
         serve(held, name!, rest, url, req, res);
         return;
@@ -317,9 +332,19 @@ export async function bucket(
       res.writeHead(412).end();
       return;
     }
+    const encoding =
+      url.searchParams.get('response-content-encoding') ??
+      held.encodings?.get(key);
+    const encoded: Record<string, string> =
+      encoding === undefined ? {} : { 'content-encoding': encoding };
     if (req.method === 'HEAD') {
       res
-        .writeHead(200, { 'content-length': body.length, etag, ...version })
+        .writeHead(200, {
+          'content-length': body.length,
+          etag,
+          ...version,
+          ...encoded,
+        })
         .end();
       return;
     }
@@ -331,6 +356,7 @@ export async function bucket(
         'content-length': part.length,
         etag,
         ...version,
+        ...encoded,
       })
       .end(part);
   }
@@ -341,6 +367,7 @@ export async function bucket(
     endpoint: `http://127.0.0.1:${port}`,
     seen,
     objects,
+    encodings,
     get latency() {
       return live.latency;
     },

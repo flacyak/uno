@@ -403,6 +403,7 @@
   "read_tabs_no_header": "{charset} · separado por tabuladores · sin fila de encabezado",
   "said_about": "{subject}: {why}",
   "said_replaying": "al reaplicar las ediciones de {name}: {why}",
+  "said_unknown": "esta página es más antigua que su motor · recárgala para leer lo que dijo",
   "program_nothing": "no cambiar nada",
   "program_then": "{before}, y después {after}",
   "step_trim": "quitar los espacios de ambos extremos",
@@ -568,6 +569,7 @@
   "refused_file_closed": "el archivo se cerró",
   "refused_cancelled": "se canceló la apertura de {name}",
   "refused_changed_on_disk": "{name} cambió en el disco después de abrirse",
+  "refused_stored_encoded": "{name} se guardó con Content-Encoding {encoding}, y uno solo lee un objeto así cuando inicia sesión · conecta {bucket} iniciando sesión para leerlo",
   "refused_keeps_no_connections": "este motor no guarda conexiones · su plataforma no le dio de dónde leerlas",
   "refused_offers_no_sign_ins": "este motor no tiene ninguna forma de iniciar sesión que ofrecer · su plataforma no se conecta a nada",
   "refused_tries_no_connection": "este motor no puede probar una conexión · su plataforma no se conecta a nada"

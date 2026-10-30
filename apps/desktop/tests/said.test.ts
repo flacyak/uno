@@ -87,6 +87,12 @@ const SAMPLES: { [K in Said["t"]]: Extract<Said, { t: K }> } = {
   "file-closed": { t: "file-closed" },
   cancelled: { t: "cancelled", name: "ads.csv" },
   "changed-on-disk": { t: "changed-on-disk", name: "ads.csv" },
+  "stored-encoded": {
+    t: "stored-encoded",
+    name: "s3://open-data/census/2025.csv.gz",
+    encoding: "gzip",
+    bucket: "open-data",
+  },
   "keeps-no-connections": { t: "keeps-no-connections" },
   "offers-no-sign-ins": { t: "offers-no-sign-ins" },
   "tries-no-connection": { t: "tries-no-connection" },
@@ -145,6 +151,27 @@ test("text a step looks for is quoted with what cannot be seen in it escaped", (
   };
   expect(say(tab)).toBe('remove "a\\tb"');
   expect(say(tab)).toBe(english(tab));
+});
+
+describe("a kind from an engine newer than this page", () => {
+  // As it crosses the port: a kind this build's Said does not have.
+  const newer = JSON.parse('{"t":"read-sideways","name":"ads.csv"}') as Said;
+
+  test("is said as the engine says it: as a page to reload", () => {
+    expect(say(newer)).toBe("this page is older than its engine · reload it to read what it said");
+    expect(say(newer)).toBe(english(newer));
+  });
+
+  test("is said through a message in every other language", () => {
+    void setLocale(PSEUDO_LOCALE, { reload: false });
+    expect(say(newer).startsWith(PSEUDO_OPEN)).toBe(true);
+  });
+
+  test("is said when it is why a refusal was made", () => {
+    expect(said(new Refusal({ t: "about", subject: "q4.uno", why: newer }))).toBe(
+      "q4.uno: this page is older than its engine · reload it to read what it said",
+    );
+  });
 });
 
 test("an error from the engine is said through its message, and any other as it was written", () => {

@@ -9,10 +9,14 @@
 
 import { beforeEach, expect, test } from "vite-plus/test";
 
-import type { Peeked, SourceRef } from "@engine";
+import { Refusal } from "@engine";
+import type { Peeked, Said, SourceRef } from "@engine";
 import type { Entry, Listing } from "@store";
 
+import { baseLocale, locales, setLocale } from "@paraglide/runtime";
+
 import type { InputName } from "@renderer/input";
+import { say } from "@renderer/said";
 import type { ConnectAsks } from "@renderer/shell/connect";
 import { Panel, rowAt, rowCount, rowOf, spans } from "@renderer/shell/panel";
 import type { Arriving, Connection, Listings, Open } from "@renderer/sources";
@@ -58,6 +62,8 @@ const PEEKED: Peeked = {
  */
 class Bucket implements Listings {
   readonly asked: (string | undefined)[] = [];
+  /** What a peek at each path is refused with. Any other path is peeked. */
+  readonly refuses = new Map<string, Said>();
 
   constructor(
     private readonly entries: Entry[],
@@ -74,8 +80,9 @@ class Bucket implements Listings {
     });
   }
 
-  peek(_ref: SourceRef): Promise<Peeked> {
-    return Promise.resolve(PEEKED);
+  peek(ref: SourceRef): Promise<Peeked> {
+    const why = "path" in ref ? this.refuses.get(ref.path) : undefined;
+    return why === undefined ? Promise.resolve(PEEKED) : Promise.reject(new Refusal(why));
   }
 }
 
@@ -218,6 +225,7 @@ async function browse(d: Drawn): Promise<void> {
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  void setLocale(baseLocale, { reload: false });
 });
 
 // ------------------------------------------------------------- the column
@@ -548,6 +556,36 @@ test("Space picks files, marks them, peeks at one, and the buttons add them", as
   press(d.list, "ArrowUp");
   press(d.list, "Enter");
   expect(d.added[2]).toEqual({ names: ["orders-000000.csv", "orders-000002.csv"], one: false });
+});
+
+test("a file that cannot be peeked at says why in each language, until one that can is picked", async () => {
+  const d = draw(new Bucket(objects(2)));
+  const why: Said = { t: "changed-on-disk", name: name(0) };
+  d.bucket.refuses.set(`s3://acme-exports/${name(0)}`, why);
+  await browse(d);
+
+  press(d.list, " ");
+  await settle();
+  const peek = d.root.querySelector<HTMLElement>(".panel-peek")!;
+  expect(peek.hidden).toBe(false);
+  expect(peek.textContent).toBe("orders-000000.csv changed on disk after it was opened");
+  expect(peek.querySelector("table")).toBeNull();
+  // The file can still be added.
+  expect(buttons(d.root)).toEqual(["Add 1"]);
+
+  for (const locale of locales) {
+    void setLocale(locale, { reload: false });
+    d.panel.relabel();
+    await settle();
+    expect(peek.textContent, locale).toBe(say(why));
+  }
+
+  press(d.list, " ");
+  press(d.list, "ArrowDown");
+  press(d.list, " ");
+  await settle();
+  expect(peek.textContent).not.toContain(say(why));
+  expect([...peek.querySelectorAll("th")].map((th) => th.textContent)).toEqual(["date", "amount"]);
 });
 
 /** The line of choices above "Add as one", and its two boxes. */
