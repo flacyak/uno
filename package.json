@@ -9,7 +9,8 @@
     "test": "vp run --filter '@uno/*' test",
     "check": "vp run --filter '@uno/*' check",
     "smoke": "vp run --filter @uno/desktop smoke",
-    "preview": "vp run --filter @uno/desktop preview"
+    "preview": "vp run --filter @uno/desktop preview",
+    "package": "vp run --filter @uno/desktop package"
   },
   "devDependencies": {
     "vite-plus": "catalog:"
