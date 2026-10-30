@@ -211,6 +211,16 @@ export class Tallies {
   }
 
   /**
+   * reclaim takes the charts `now` adopted from this view back, each with
+   * nothing folded, for an open of `now` that failed after adopt: a fold may
+   * hold rows of the blocks `now` read again, which this view has not.
+   */
+  reclaim(now: Tallies): void {
+    for (const [id, t] of now.charts) this.charts.set(id, fresh(t));
+    now.charts.clear();
+  }
+
+  /**
    * refold starts the fold of each chart that reads any of `cols` again
    * from its first row, for an edit that changed every row of them, and
    * says whether any chart does.

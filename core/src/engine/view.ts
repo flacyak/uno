@@ -394,6 +394,8 @@ export class View {
     } catch (err) {
       signal?.removeEventListener('abort', cancelled);
       await v.close();
+      // A failed append leaves the source as it was, its charts with it.
+      was?.reclaim(v);
       throw err;
     }
   }
@@ -811,6 +813,18 @@ export class View {
     } catch {
       // The charts fold from their first row, as over any new view.
     }
+  }
+
+  /**
+   * reclaim takes the charts `now` adopted back, for an open of `now` that
+   * failed after adopt, and folds them afresh: the tap of `now` may have
+   * folded rows of the blocks it read again into them, which this view
+   * has not.
+   */
+  private reclaim(now: View): void {
+    if (now.tallies.size === 0) return;
+    this.tallies.reclaim(now.tallies);
+    this.tally();
   }
 
   /**
