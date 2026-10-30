@@ -55,6 +55,7 @@ import type { Said } from '@said';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
 import { Tallies } from './tally.ts';
+import type { Block } from './tally.ts';
 import {
   BYTES,
   INDEX,
@@ -192,7 +193,7 @@ export class View {
   private finding: AbortController | undefined;
   /** The charts over the view, each folded over the blocks read so far. */
   private readonly tallies = new Tallies();
-  /** The pass folding blocks for the charts, while one lacks any. */
+  /** The pass folding blocks for the charts, while one is running. */
   private tallying: AbortController | undefined;
   /** How many blocks the index pass has handed the tap, folded or left. */
   private tapped = 0;
@@ -746,7 +747,8 @@ export class View {
   /**
    * tally starts the pass over the blocks the charts lack again, from the
    * first of them, once the view is announced, so an open costs nothing new.
-   * A read that fails leaves each chart still folding unread.
+   * A read that fails leaves each chart still folding unread. A pass that
+   * ends with a chart still pending starts again for it.
    */
   private tally(): void {
     this.tallying?.abort();
@@ -756,12 +758,25 @@ export class View {
     if (first === undefined) return;
     const abort = new AbortController();
     this.tallying = abort;
-    this.tallyBlocks(first, abort.signal).catch((err: unknown) => {
-      if (abort.signal.aborted) return;
-      for (const [chart, tally] of this.tallies.unread(saidOf(err))) {
-        this.postTally(chart, tally);
-      }
-    });
+    this.tallyBlocks(first, abort.signal)
+      .catch((err: unknown) => {
+        if (!abort.signal.aborted) this.unread(err);
+      })
+      .finally(() => {
+        if (this.tallying !== abort) return;
+        this.tallying = undefined;
+        if (this.tallies.from() !== undefined) this.tally();
+      });
+  }
+
+  /**
+   * unread says to each chart still folding, or to each of `ids` still
+   * folding, that its source could not be read.
+   */
+  private unread(err: unknown, ids?: readonly string[]): void {
+    for (const [chart, tally] of this.tallies.unread(saidOf(err), ids)) {
+      this.postTally(chart, tally);
+    }
   }
 
   /**
@@ -785,23 +800,20 @@ export class View {
       const block = index.blockOf(row);
       const [from, end] = index.rowsOf(block);
       if (this.tallies.wants(from)) {
-        const records = await this.pages.records(block, false);
-        const files = await this.files(from, records.length);
+        const { shown } = await this.blockRows(block);
         if (signal.aborted) return;
-        this.tallies.fold(block, from, end, (col) =>
-          this.shownIn(col, from, records, files),
-        );
+        this.tallies.fold(block, from, end, shown);
       }
       row = end;
 
       const now = Date.now();
       if (now - told >= TALLY_MS) {
         told = now;
-        this.postTallies(false);
+        this.postTallies();
       }
       if (now - slice >= SLICE_MS) slice = await turn();
     }
-    this.postTallies(true);
+    this.postTallies();
   }
 
   /**
@@ -827,12 +839,26 @@ export class View {
     if (Date.now() - this.tapSlice >= SLICE_MS) this.tapSlice = await turn();
   }
 
-  /** postTallies posts each pending chart's tally over the rows so far. */
-  private postTallies(complete: boolean): void {
-    const total = this.index.rows();
-    for (const [chart, tally] of this.tallies.read(total, complete)) {
-      this.postTally(chart, tally);
-    }
+  /**
+   * blockRows reads `block` through the page cache, as its rows and what
+   * each column of them shows.
+   */
+  private async blockRows(block: number): Promise<Block> {
+    const [from, end] = this.index.rowsOf(block);
+    const records = await this.pages.records(block, false);
+    const files = await this.files(from, records.length);
+    const shown = (col: number) => this.shownIn(col, from, records, files);
+    return { from, end, shown };
+  }
+
+  /**
+   * postTallies posts each pending chart's tally over the rows so far,
+   * complete once the index is and the chart has folded every row.
+   */
+  private postTallies(): void {
+    const index = this.index;
+    const read = this.tallies.read(index.rows(), index.complete);
+    for (const [chart, tally] of read) this.postTally(chart, tally);
   }
 
   /** postTally posts a chart's tally, taken at the generation now. */

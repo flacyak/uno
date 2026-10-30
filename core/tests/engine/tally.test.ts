@@ -241,6 +241,18 @@ test('charts folded a block at a time read as the pure fold of every row, and ar
   expect(tallies.read(ROWS, true)).toStrictEqual([]);
 });
 
+test('a chart that has folded every row of a complete index reads complete, while one still folding stays pending', () => {
+  const tallies = folded([REGION_ROWS]);
+  tallies.attach(REGION_REVENUE, HEADERS);
+  const [whole, partial] = tallies.read(ROWS, true);
+  expect(whole).toStrictEqual([REGION_ROWS.id, pure(REGION_ROWS.plot)]);
+  const pending = { coverage: { rows: 0, total: ROWS, complete: false } };
+  expect(partial).toMatchObject([REGION_REVENUE.id, pending]);
+  expect(tallies.from()).toBe(0);
+  const ids = tallies.read(ROWS, true).map(([id]) => id);
+  expect(ids).toEqual([REGION_REVENUE.id]);
+});
+
 test('a chart takes the blocks the index completes ahead of the pass behind it, and joins them when the pass reaches them', () => {
   const tallies = new Tallies();
   tallies.attach(REGION_ROWS, HEADERS);
