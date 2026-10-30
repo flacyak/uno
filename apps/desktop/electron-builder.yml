@@ -1,0 +1,70 @@
+# How the desktop app is packaged. `vp run package` reads this, and so does
+# .github/workflows/release.yml, once on each platform's runner.
+#
+# What goes in is out/, as scripts/build.js writes it: main, preload, the
+# engine and the renderer, each a bundle with everything it imports inside,
+# and package.json beside them. The app has no production dependency, so no
+# node_modules travels with it. The version comes from package.json, which
+# the release workflow sets from the tag before packaging.
+
+appId: io.uno.app
+productName: uno
+
+# One name for every file a release holds: uno_1.2.0_linux_x64.AppImage,
+# uno_1.2.0_mac_arm64.dmg, uno_1.2.0_win_x64.exe.
+artifactName: uno_${version}_${os}_${arch}.${ext}
+
+directories:
+  output: out/release
+
+files:
+  - out/main/**
+  - out/preload/**
+  - out/engine/**
+  - out/renderer/**
+
+# Nothing is published from here. The release workflow uploads what this
+# writes, so a build on a tag with a token in its environment stays a build.
+publish: null
+
+# .uno opens in uno: a document type on macOS, a registry class on Windows,
+# and a MIME type in the desktop entry on Linux.
+fileAssociations:
+  - ext: uno
+    name: uno workspace
+    description: uno workspace
+    mimeType: application/x-uno
+    role: Editor
+    rank: Owner
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  # There is no Apple certificate. An ad-hoc signature is what lets the app
+  # start on Apple silicon, which refuses unsigned code, and Gatekeeper still
+  # has the person open it from the context menu the first time. The hardened
+  # runtime is off because, with an ad-hoc identity, its library validation
+  # refuses Electron's own frameworks, which Electron signed.
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+
+linux:
+  # The executable would otherwise be named for the npm package, @unodesktop,
+  # which is nothing a person types.
+  executableName: uno
+  category: Office
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]

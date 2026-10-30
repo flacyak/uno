@@ -3,6 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "description": "uno's desktop client: an Electron shell over @uno/core.",
+  "homepage": "https://github.com/flacyak/uno",
+  "author": {
+    "name": "flacyak",
+    "email": "250593081+flacyak@users.noreply.github.com"
+  },
   "type": "module",
   "main": "out/main/index.cjs",
   "exports": {
@@ -18,7 +23,8 @@
     "smoke": "node scripts/build.js && node --import ../../paths.js scripts/smoke.js",
     "preview": "node scripts/build.js && node --import ../../paths.js scripts/preview.js",
     "test": "vp test",
-    "check": "node scripts/messages.js && vp check"
+    "check": "node scripts/messages.js && vp check",
+    "package": "node scripts/build.js && electron-builder"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.25.4",
