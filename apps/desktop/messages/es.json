@@ -400,6 +400,7 @@
   "read_delimiter_no_header": "{charset} · delimitador '{delimiter}' · sin fila de encabezado",
   "read_tabs": "{charset} · separado por tabuladores",
   "read_tabs_no_header": "{charset} · separado por tabuladores · sin fila de encabezado",
+  "read_lines": "{charset} · JSON Lines",
   "said_about": "{subject}: {why}",
   "said_replaying": "al reaplicar las ediciones de {name}: {why}",
   "said_unknown": "esta página es más antigua que su motor · recárgala para leer lo que dijo",
@@ -431,6 +432,24 @@
   "chars_plus_signs": "signos más",
   "chars_brackets": "paréntesis",
   "chars_quotes": "comillas",
+  "kind_delimited": "texto delimitado",
+  "kind_jsonl": "JSON Lines",
+  "kind_parquet": "Parquet",
+  "parquet_codec_uncompressed": "sin comprimir",
+  "parquet_codec_snappy": "snappy",
+  "parquet_codec_gzip": "gzip",
+  "parquet_codec_zstd": "zstd",
+  "parquet_row_groups": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} grupo de filas",
+        "plural=many": "{n} grupos de filas",
+        "plural=other": "{n} grupos de filas"
+      }
+    }
+  ],
   "changed_version_same_size": "{name} no es la versión con la que se guardó el espacio de trabajo · tiene el mismo tamaño",
   "changed_version_sizes": "{name} no es la versión con la que se guardó el espacio de trabajo · ahora ocupa {now} y antes {was}",
   "changed_size": "{name} ocupa {now} ahora y ocupaba {was} cuando se guardó el espacio de trabajo",
@@ -514,6 +533,7 @@
       }
     }
   ],
+  "refused_relink_other_kind": "{name} se leyó como {was}, y {file} es {now}",
   "refused_log_lost_edit": "el registro perdió la pista de una edición de {source}",
   "refused_bucket_unconnected": "{container} lee s3://{bucket}/…, que ninguna conexión cubre · conecta {bucket} para leerlo",
   "refused_joins_unknown_for_column": "a {name} lo lee como uno algo que no dice cómo se unen sus archivos, así que no puede mostrar de qué archivo viene cada fila",
@@ -538,10 +558,23 @@
   "refused_nothing_to_undo": "no hay nada que deshacer",
   "refused_nothing_to_redo": "no hay nada que rehacer",
   "refused_in_view": "el archivo está en modo ver · Ctrl+E para transformar",
+  "refused_columns_moved": "{name} ganó columnas mientras la edición iba en camino, así que no se hizo · vuelve a hacerla",
   "refused_file_closed": "el archivo se cerró",
   "refused_cancelled": "se canceló la apertura de {name}",
   "refused_changed_on_disk": "{name} cambió en el disco después de abrirse",
   "refused_stored_encoded": "{name} se guardó con Content-Encoding {encoding}, y uno solo lee un objeto así cuando inicia sesión · conecta {bucket} iniciando sesión para leerlo",
+  "refused_not_read": "{name}: {what} todavía no se admite",
+  "refused_parquet_broken": "{name}: el pie o las páginas del archivo Parquet están dañados",
+  "refused_parquet_unsupported": "{name}: {feature} todavía no se admite",
+  "parquet_feature_encryption": "el Parquet cifrado",
+  "parquet_feature_brotli": "el Parquet comprimido con Brotli",
+  "parquet_feature_lz4": "el Parquet comprimido con LZ4",
+  "parquet_feature_lzo": "el Parquet comprimido con LZO",
+  "parquet_feature_interval": "el tipo INTERVAL de Parquet",
+  "parquet_feature_bson": "el tipo BSON de Parquet",
+  "parquet_feature_variant": "el tipo VARIANT de Parquet",
+  "parquet_feature_external_columns": "el Parquet con columnas guardadas en otros archivos",
+  "parquet_feature_several_files": "leer varios archivos Parquet como uno solo",
   "refused_keeps_no_connections": "este motor no guarda conexiones · su plataforma no le dio de dónde leerlas",
   "refused_offers_no_sign_ins": "este motor no tiene ninguna forma de iniciar sesión que ofrecer · su plataforma no se conecta a nada",
   "refused_tries_no_connection": "este motor no puede probar una conexión · su plataforma no se conecta a nada"

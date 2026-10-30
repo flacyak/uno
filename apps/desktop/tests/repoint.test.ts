@@ -18,6 +18,7 @@ import { HOME_REGION } from "@core-tests/store/regions";
 import { bucket, etagOf } from "@core-tests/store/standin";
 import type { Bucket } from "@core-tests/store/standin";
 import { bucketEngine } from "./bucket-engine.ts";
+import { UNHEARD } from "./unheard.ts";
 import { Sources, stateOf } from "@renderer/sources";
 import { Workspace } from "@renderer/workspace";
 
@@ -52,13 +53,7 @@ afterAll(async () => {
 
 function open(path: string): Promise<Workspace> {
   const name = path.slice(path.lastIndexOf("/") + 1);
-  return Workspace.open(
-    { name, path },
-    bucketEngine(b),
-    path,
-    () => {},
-    () => {},
-  );
+  return Workspace.open({ name, path }, bucketEngine(b), path, UNHEARD);
 }
 
 test("a missing S3 source is re-pointed at another object, and its edits replay", async () => {

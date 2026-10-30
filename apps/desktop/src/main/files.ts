@@ -6,12 +6,19 @@
  * write (internal/safefile/write.go).
  */
 
-import { WORKSPACE_EXT } from "@document";
+import { WORKSPACE_EXT, WORKSPACE_FILTER } from "@document";
 import type { SourceRef } from "@engine";
+import { DIALOG_EXTENSIONS } from "@ingest";
 import { fileName, parseConnection } from "@library";
 import { nodeStore } from "@store/node";
 import { mkdir } from "node:fs/promises";
 import { basename, join } from "node:path";
+
+/** The extensions the Add dialog lists: the last extension of each name core reads. */
+export const ADD_EXTENSIONS: readonly string[] = DIALOG_EXTENSIONS;
+
+/** The extensions the Open dialog lists: a workspace's, then what Add lists. */
+export const OPEN_EXTENSIONS: readonly string[] = [WORKSPACE_FILTER, ...ADD_EXTENSIONS];
 
 export function sourceAt(path: string): SourceRef {
   return { name: basename(path), path };

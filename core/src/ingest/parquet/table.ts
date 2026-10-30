@@ -1,0 +1,621 @@
+/**
+ * @fileoverview A Parquet file as a table of text: its footer, read once when
+ * it opens, says its columns, its row groups and the codecs of its pages,
+ * and its rows are read through hyparquet as the text their writer meant.
+ *
+ * A file that uses what uno does not read yet is refused by name as
+ * parquet-unsupported, and one whose footer does not decode as
+ * parquet-broken.
+ */
+
+import { parquetMetadata, parquetRead } from 'hyparquet/src/index.js';
+import type {
+  AsyncBuffer,
+  FileMetaData,
+  ParquetParsers,
+  RowGroup,
+  SchemaElement,
+} from 'hyparquet/src/index.js';
+
+import { concat } from '@go';
+import { Refusal } from '@said';
+import type { ParquetCodec, ParquetFeature } from '@said';
+import type { ByteSource } from '@store';
+
+import {
+  PARQUET_FOOTER_LENGTH_BYTES,
+  PARQUET_MAGIC_BYTES,
+  PARQUET_MIN_BYTES,
+  parquetMagicAt,
+} from '../detect.ts';
+import { asyncBufferOf } from './buffer.ts';
+import type { ChunkCache } from './buffer.ts';
+import { CODECS, COMPRESSORS, codecOf } from './codecs.ts';
+import { columnsOf, stringFromBytes, textOf } from './values.ts';
+import type { Column, Leaf, ParquetValue } from './values.ts';
+
+/**
+ * The last bytes of a file read for its footer, which hold most footers
+ * whole. A longer footer takes one more read, of the rest of it.
+ */
+export const PARQUET_TAIL_BYTES = 64 << 10;
+
+/** What follows a footer: its length, a little-endian uint32, then the magic. */
+const FOOTER_END_BYTES = PARQUET_FOOTER_LENGTH_BYTES + PARQUET_MAGIC_BYTES;
+
+/**
+ * What hyparquet is told an INT96 is, so it hands each over as its stored
+ * bytes rather than as the timestamp it reads them as.
+ */
+const INT96_AS = 'FIXED_LEN_BYTE_ARRAY';
+
+/** The bytes an INT96 takes. */
+const INT96_BYTES = 12;
+
+/**
+ * The parsers hyparquet is handed. Each hands a value over as it is stored,
+ * so textOf writes it at its own precision, and a string comes as its text.
+ */
+const PARSERS: ParquetParsers = {
+  timestampFromMilliseconds: stored,
+  timestampFromMicroseconds: stored,
+  timestampFromNanoseconds: stored,
+  dateFromDays: stored,
+  stringFromBytes,
+  jsonFromBytes: stored,
+  geometryFromBytes: stored,
+  geographyFromBytes: stored,
+  uuidFromBytes: stored,
+};
+
+/** A row as hyparquet assembles it, keyed by top-level field. */
+type Assembled = Readonly<Record<string, unknown>>;
+
+/** Table is a Parquet file whose footer has been read. */
+export interface Table {
+  /**
+   * The columns in schema order: each field of a struct, and a list, a map
+   * or a repeated field as one.
+   */
+  readonly columns: readonly Column[];
+  readonly rows: number;
+  readonly groups: number;
+  /** The codecs of the file's pages, in the order CODECS names them. */
+  readonly codecs: readonly ParquetCodec[];
+  /**
+   * The most uncompressed bytes per row among the row groups under rows
+   * [start, end), or 0 where there are none. It sizes a decode window.
+   */
+  bytesPerRow(start: number, end: number): number;
+  /** Whether every row group under rows [start, end) has offset indexes. */
+  paged(start: number, end: number): boolean;
+  /**
+   * Rows [start, end) of the file, each cell as textOf writes it. With
+   * `only`, the index of one column, only the top-level field holding it is
+   * read, and every other cell is ''. A failed read of the file is passed on
+   * as it failed, and a page that does not decode is refused as
+   * parquet-broken.
+   */
+  read(start: number, end: number, only?: number): Promise<string[][]>;
+}
+
+/** What the footer says of one row group. */
+interface Group {
+  /** The row of the file the group starts at. */
+  readonly start: number;
+  readonly rows: number;
+  /** The bytes its column chunks take uncompressed. */
+  readonly bytes: number;
+  /** Whether each of its column chunks has an offset index. */
+  readonly paged: boolean;
+}
+
+/**
+ * openTable reads the footer of `file`, called `name` in what it refuses.
+ * The footer is read through `chunks`, so a small file's rows come from the
+ * same read.
+ */
+export async function openTable(
+  name: string,
+  file: ByteSource,
+  chunks: ChunkCache,
+): Promise<Table> {
+  const metadata = await footerOf(name, file, chunks);
+  const codecs = codecsOf(name, metadata.row_groups);
+  refuseTypes(name, metadata.schema);
+  return new ParquetTable(name, file, chunks, metadata, codecs);
+}
+
+/**
+ * The footer of `file`, from one read of its last PARQUET_TAIL_BYTES and one
+ * more of the rest of a longer footer. The magic is checked at both ends:
+ * where the tail does not reach the start, its first bytes are read beside
+ * it.
+ */
+async function footerOf(
+  name: string,
+  file: ByteSource,
+  chunks: ChunkCache,
+): Promise<FileMetaData> {
+  const broken = new Refusal({ t: 'parquet-broken', name });
+  if (file.size < PARQUET_MIN_BYTES) throw broken;
+  const tailStart = Math.max(file.size - PARQUET_TAIL_BYTES, 0);
+  const [tail, head] = await Promise.all([
+    chunks.slice(file, tailStart, file.size).then((b) => new Uint8Array(b)),
+    tailStart === 0 ? undefined : file.read(0, PARQUET_MAGIC_BYTES),
+  ]);
+  const end = parquetMagicAt(tail, tail.length - PARQUET_MAGIC_BYTES);
+  if (end === 'PARE') {
+    throw new Refusal({
+      t: 'parquet-unsupported',
+      name,
+      feature: 'encryption',
+    });
+  }
+  if (end !== 'PAR1' || parquetMagicAt(head ?? tail, 0) !== 'PAR1') {
+    throw broken;
+  }
+  const length = new DataView(tail.buffer, tail.byteOffset).getUint32(
+    tail.length - FOOTER_END_BYTES,
+    true,
+  );
+  const start = file.size - FOOTER_END_BYTES - length;
+  if (start < PARQUET_MAGIC_BYTES) throw broken;
+  const rest =
+    start < tailStart ? await file.read(start, tailStart - start) : undefined;
+  const held = rest === undefined ? tail : concat([rest, tail]);
+  const heldStart = file.size - held.length;
+  try {
+    return parquetMetadata(held.subarray(start - heldStart), {
+      parsers: PARSERS,
+      geoparquet: false,
+    });
+  } catch {
+    throw broken;
+  }
+}
+
+/**
+ * The codecs of every column chunk in the file, in the order CODECS names
+ * them. Encrypted columns, columns kept in other files and codecs uno does
+ * not read are refused.
+ */
+function codecsOf(name: string, groups: readonly RowGroup[]): ParquetCodec[] {
+  const found = new Set<ParquetCodec>();
+  for (const chunk of groups.flatMap((group) => group.columns)) {
+    const encrypted =
+      chunk.crypto_metadata !== undefined ||
+      chunk.encrypted_column_metadata !== undefined;
+    // An empty path names this file, as hyparquet reads it.
+    if (encrypted || chunk.file_path) {
+      const feature = encrypted ? 'encryption' : 'external-columns';
+      throw new Refusal({ t: 'parquet-unsupported', name, feature });
+    }
+    found.add(codecOf(name, chunk.meta_data?.codec));
+  }
+  return CODECS.filter((codec) => found.has(codec));
+}
+
+/** Refuses a column of a type uno does not read yet. */
+function refuseTypes(name: string, schema: readonly SchemaElement[]): void {
+  for (const element of schema) {
+    const feature = typeFeatureOf(element);
+    if (feature !== undefined) {
+      throw new Refusal({ t: 'parquet-unsupported', name, feature });
+    }
+  }
+}
+
+/**
+ * The type uno does not read yet that an element is annotated with. A
+ * VARIANT is one: hyparquet decodes its decimals as floats and its dates
+ * and timestamps as bare counts, and a cell written wrong is worse than a
+ * file refused by name.
+ */
+function typeFeatureOf({
+  converted_type: converted,
+  logical_type: logical,
+}: SchemaElement): ParquetFeature | undefined {
+  if (converted === 'INTERVAL' || logical?.type === 'INTERVAL') {
+    return 'interval';
+  }
+  if (converted === 'BSON' || logical?.type === 'BSON') return 'bson';
+  return logical?.type === 'VARIANT' ? 'variant' : undefined;
+}
+
+/** The nested fields of one row group, decoded whole. */
+interface Whole {
+  readonly group: number;
+  readonly fields: string;
+  readonly rows: Promise<Assembled[]>;
+}
+
+/** Page is the values of a flat field's rows [start, end), as decoded. */
+interface Page {
+  readonly start: number;
+  readonly end: number;
+  readonly values: ArrayLike<unknown>;
+}
+
+/** ParquetTable is a Table over the footer it was opened with. */
+class ParquetTable implements Table {
+  readonly columns: readonly Column[];
+  readonly rows: number;
+  readonly groups: number;
+  readonly codecs: readonly ParquetCodec[];
+  private readonly spans: readonly Group[];
+  private readonly leaves: readonly Leaf[];
+  /** The top-level fields, in schema order. */
+  private readonly fields: readonly string[];
+  /**
+   * The top-level fields hyparquet decodes to the end of a column chunk
+   * for any of its rows, where the chunk has no offset index: a struct, a
+   * list, a map or a repeated field.
+   */
+  private readonly nested: ReadonlySet<string>;
+  /** The footer as hyparquet is handed it, from plainOf. */
+  private readonly plain: FileMetaData;
+  /** The stored slices the last read that read any asked for, by range. */
+  private slices = new Map<string, Promise<ArrayBuffer>>();
+  /** The nested fields of the row group with no offset index read last. */
+  private whole: Whole | undefined;
+  /** The pages of each flat field the last read of it decoded. */
+  private readonly pages = new Map<string, readonly Page[]>();
+
+  private readonly name: string;
+  private readonly file: ByteSource;
+  private readonly chunks: ChunkCache;
+
+  constructor(
+    name: string,
+    file: ByteSource,
+    chunks: ChunkCache,
+    metadata: FileMetaData,
+    codecs: readonly ParquetCodec[],
+  ) {
+    this.name = name;
+    this.file = file;
+    this.chunks = chunks;
+    this.codecs = codecs;
+    try {
+      this.leaves = columnsOf(metadata.schema);
+    } catch {
+      throw new Refusal({ t: 'parquet-broken', name });
+    }
+    this.plain = plainOf(metadata);
+    this.columns = this.leaves.map((leaf) => leaf.column);
+    this.fields = [...new Set(this.leaves.map(({ path }) => path[0]!))];
+    this.nested = new Set(
+      this.leaves
+        .filter(({ path, shape }) => path.length > 1 || shape.t !== 'primitive')
+        .map(({ path }) => path[0]!),
+    );
+    this.spans = groupsOf(metadata.row_groups);
+    this.groups = this.spans.length;
+    const last = this.spans.at(-1);
+    this.rows = last === undefined ? 0 : last.start + last.rows;
+  }
+
+  bytesPerRow(start: number, end: number): number {
+    const under = this.under(start, end);
+    return Math.max(0, ...under.map((span) => span.bytes / span.rows));
+  }
+
+  paged(start: number, end: number): boolean {
+    return this.under(start, end).every((span) => span.paged);
+  }
+
+  /** The row groups that hold any of rows [start, end). */
+  private under(start: number, end: number): Group[] {
+    // An empty group's start can lie inside the range, but it holds none.
+    return this.spans.filter(
+      (span) =>
+        span.rows > 0 && span.start < end && start < span.start + span.rows,
+    );
+  }
+
+  async read(start: number, end: number, only?: number): Promise<string[][]> {
+    const asked = only === undefined ? undefined : this.leaves[only];
+    if (only !== undefined && asked === undefined) {
+      throw new RangeError(`a Parquet table has no column ${only}`);
+    }
+    if (end <= start) return [];
+    const fields = asked === undefined ? this.fields : [asked.path[0]!];
+    const rows = await this.assembled(start, end, fields);
+    return rows.map((row) =>
+      this.leaves.map((leaf) =>
+        asked === undefined || leaf === asked
+          ? textOf(leaf, valueAt(row, leaf.path))
+          : '',
+      ),
+    );
+  }
+
+  /**
+   * Rows [start, end) of `fields` as hyparquet assembles them, a row group
+   * at a time. Where a group has offset indexes only the pages that hold
+   * the rows are read.
+   *
+   * hyparquet decodes a page whole, and without offset indexes a nested
+   * field's chunk to its end, whatever rows are asked. So the pages a read
+   * decoded of a flat field serve the next read they hold, and the nested
+   * fields of a group with no offset indexes are decoded for the whole
+   * group once and kept while reads stay in it. Neither keeps more than
+   * the decode that made it held at once.
+   */
+  private async assembled(
+    start: number,
+    end: number,
+    fields: readonly string[],
+  ): Promise<Assembled[]> {
+    const file = this.buffer();
+    const rows: Assembled[] = [];
+    for (const [group, span] of this.spans.entries()) {
+      const from = Math.max(start, span.start);
+      const to = Math.min(end, span.start + span.rows);
+      if (from < to)
+        rows.push(...(await this.inGroup(file, group, from, to, fields)));
+    }
+    return rows;
+  }
+
+  /** Rows [from, to) of `fields`, which lie in one row group. */
+  private async inGroup(
+    file: AsyncBuffer,
+    group: number,
+    from: number,
+    to: number,
+    fields: readonly string[],
+  ): Promise<Assembled[]> {
+    const span = this.spans[group]!;
+    const whole = span.paged ? [] : fields.filter((f) => this.nested.has(f));
+    const kept = new Map<string, unknown[]>();
+    for (const field of fields) {
+      const values = this.nested.has(field)
+        ? undefined
+        : this.keptValues(field, from, to);
+      if (values !== undefined) kept.set(field, values);
+    }
+    const asked = fields.filter((f) => !whole.includes(f) && !kept.has(f));
+    const read =
+      asked.length === 0
+        ? Array.from({ length: to - from }, (): Assembled => ({}))
+        : await this.decoded(file, from, to, asked);
+    const nested =
+      whole.length === 0 ? [] : await this.wholeOf(file, group, whole);
+    const at = from - span.start;
+    return read.map((row, i) => {
+      const out: Record<string, unknown> = { ...row, ...nested[at + i] };
+      for (const [field, values] of kept) out[field] = values[i];
+      return out;
+    });
+  }
+
+  /**
+   * The rows of `group` of the nested `fields`, decoded once while reads of
+   * them stay in the group.
+   */
+  private wholeOf(
+    file: AsyncBuffer,
+    group: number,
+    nested: readonly string[],
+  ): Promise<Assembled[]> {
+    const fields = JSON.stringify(nested);
+    if (this.whole?.group !== group || this.whole.fields !== fields) {
+      const { start, rows: count } = this.spans[group]!;
+      const rows = this.decoded(file, start, start + count, nested);
+      this.whole = { group, fields, rows };
+      // A read that failed is not kept, so the next one tries again.
+      rows.catch(() => {
+        if (this.whole?.rows === rows) this.whole = undefined;
+      });
+    }
+    return this.whole.rows;
+  }
+
+  /**
+   * Rows [start, end) of `fields`, as hyparquet decodes and assembles them.
+   * The pages it decodes of each flat field are kept for the next read.
+   */
+  private async decoded(
+    file: AsyncBuffer,
+    start: number,
+    end: number,
+    fields: readonly string[],
+  ): Promise<Assembled[]> {
+    let rows: Assembled[] = [];
+    const pages = new Map<string, Page[]>();
+    try {
+      await parquetRead({
+        file,
+        metadata: this.plain,
+        rowStart: start,
+        rowEnd: end,
+        columns: [...fields],
+        rowFormat: 'object',
+        useOffsetIndex: true,
+        parsers: PARSERS,
+        utf8: false,
+        compressors: COMPRESSORS,
+        onPage: ({
+          pathInSchema: [field = ''],
+          columnData,
+          rowStart,
+          rowEnd,
+        }) => {
+          if (this.nested.has(field)) return;
+          const page = { start: rowStart, end: rowEnd, values: columnData };
+          pages.set(field, [...(pages.get(field) ?? []), page]);
+        },
+        onComplete: (read: Assembled[]) => {
+          rows = read;
+        },
+      });
+    } catch (err) {
+      if (err instanceof ReadFailed) throw err.reason;
+      throw new Refusal({ t: 'parquet-broken', name: this.name });
+    }
+    for (const [field, decoded] of pages) this.pages.set(field, decoded);
+    return rows;
+  }
+
+  /**
+   * The values of a flat field's rows [from, to), where pages the last
+   * read of it decoded hold every one.
+   */
+  private keptValues(
+    field: string,
+    from: number,
+    to: number,
+  ): unknown[] | undefined {
+    const pages = this.pages.get(field) ?? [];
+    const values: unknown[] = [];
+    for (let row = from; row < to;) {
+      const page = pages.find(({ start, end }) => start <= row && row < end);
+      if (page === undefined) return undefined;
+      for (const stop = Math.min(to, page.end); row < stop; row++) {
+        values.push(page.values[row - page.start]);
+      }
+    }
+    return values;
+  }
+
+  /**
+   * The table's file as one read of the table reads it through hyparquet.
+   * A slice the last read that read any asked for comes from memory:
+   * without offset indexes, each read of a row group's rows reads its
+   * column chunks whole, and they can be more than the chunk cache holds.
+   */
+  private buffer(): AsyncBuffer {
+    const file = passing(asyncBufferOf(this.file, this.chunks));
+    const last = this.slices;
+    const asked = new Map<string, Promise<ArrayBuffer>>();
+    return {
+      byteLength: file.byteLength,
+      slice: (start, end) => {
+        this.slices = asked;
+        const range = `${start}:${end}`;
+        const bytes = asked.get(range) ?? last.get(range);
+        if (bytes !== undefined) {
+          asked.set(range, bytes);
+          return bytes;
+        }
+        const read = Promise.resolve(file.slice(start, end));
+        asked.set(range, read);
+        read.catch(() => asked.delete(range));
+        return read;
+      },
+    };
+  }
+}
+
+/**
+ * `metadata` as hyparquet is handed it. A decimal has no DECIMAL
+ * annotation, so it comes over as its unscaled integer, and an INT96 is
+ * twelve fixed bytes, so it comes over as stored, for textOf to write each
+ * exactly.
+ */
+function plainOf(metadata: FileMetaData): FileMetaData {
+  return {
+    ...metadata,
+    schema: metadata.schema.map(plainElement),
+    row_groups: metadata.row_groups.map((group) => ({
+      ...group,
+      columns: group.columns.map((chunk) =>
+        chunk.meta_data?.type === 'INT96'
+          ? { ...chunk, meta_data: { ...chunk.meta_data, type: INT96_AS } }
+          : chunk,
+      ),
+    })),
+  };
+}
+
+/** `element` without its DECIMAL annotation, and an INT96 as its bytes. */
+function plainElement(element: SchemaElement): SchemaElement {
+  if (element.type === 'INT96') {
+    return { ...element, type: INT96_AS, type_length: INT96_BYTES };
+  }
+  const decimal =
+    element.converted_type === 'DECIMAL' ||
+    element.logical_type?.type === 'DECIMAL';
+  if (!decimal) return element;
+  const plain = { ...element };
+  delete plain.converted_type;
+  delete plain.logical_type;
+  return plain;
+}
+
+/**
+ * The value at a leaf's field path in an assembled row. A struct on the way
+ * that is null makes the value null.
+ */
+function valueAt(row: Assembled, path: readonly string[]): ParquetValue {
+  let value: unknown = row;
+  for (const field of path) {
+    if (!isStruct(value)) return null;
+    value = value[field];
+  }
+  // With PARSERS and no DECIMAL annotation, hyparquet assembles only the
+  // values ParquetValue names.
+  return value as ParquetValue;
+}
+
+/** Whether a value is a struct's object, rather than a list or a stored value. */
+function isStruct(value: unknown): value is Assembled {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Uint8Array)
+  );
+}
+
+/** A read of the file that failed, carried through hyparquet as it failed. */
+class ReadFailed extends Error {
+  readonly reason: unknown;
+
+  constructor(reason: unknown) {
+    super('a read of a Parquet file failed');
+    this.reason = reason;
+  }
+}
+
+/** `buffer`, with a failed read carried through hyparquet as ReadFailed. */
+function passing(buffer: AsyncBuffer): AsyncBuffer {
+  return {
+    byteLength: buffer.byteLength,
+    slice: async (start, end) => {
+      try {
+        return await buffer.slice(start, end);
+      } catch (reason) {
+        throw new ReadFailed(reason);
+      }
+    },
+  };
+}
+
+/** What the footer says of each row group, in file order. */
+function groupsOf(groups: readonly RowGroup[]): Group[] {
+  let start = 0;
+  return groups.map((group) => {
+    const rows = Number(group.num_rows);
+    const span = {
+      start,
+      rows,
+      bytes: group.columns.reduce(
+        (sum, chunk) => sum + Number(chunk.meta_data?.total_uncompressed_size),
+        0,
+      ),
+      paged: group.columns.every((chunk) =>
+        Boolean(chunk.offset_index_offset && chunk.offset_index_length),
+      ),
+    };
+    start += rows;
+    return span;
+  });
+}
+
+/** A value as it is stored. */
+function stored<T>(value: T): T {
+  return value;
+}

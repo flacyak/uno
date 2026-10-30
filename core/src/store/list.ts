@@ -1,6 +1,6 @@
 /**
  * @fileoverview The Lister interface: browsing a folder or a prefix one page at
- * a time.
+ * a time, and walking every file under one.
  *
  * The disk lister is store/disklister.ts and the bucket lister is
  * store/s3lister.ts. The error for a path every lister declines is built in
@@ -8,7 +8,7 @@
  */
 
 import { compareStrings } from '@go';
-import { BROWSES, claim } from './claim.ts';
+import { BROWSES, WALKS, claim } from './claim.ts';
 
 /**
  * How many entries one page of a listing holds. Sent to S3 as max-keys, and
@@ -57,8 +57,11 @@ export interface Entry {
   version?: string;
 }
 
-/** Listing is one page of a folder or a prefix, folders first and then by
- * name. */
+/**
+ * Listing is one page of a folder or a prefix. A list's page holds folders
+ * first and then files, by name. A walk's page holds files alone, in the
+ * order the lister walks them.
+ */
 export interface Listing {
   entries: Entry[];
   /** Where the next page starts, when there is one. Absent at the end. */
@@ -80,6 +83,12 @@ export interface Lister {
   list(path: string, cursor?: string): Promise<Listing>;
   /** Size and version now, from metadata alone. */
   stat(path: string): Promise<Entry>;
+  /**
+   * One page of every file under the folder or prefix `root`, at any depth,
+   * from `cursor`. Each entry is named by its path under the root, with a
+   * slash between folders. Absent where the place cannot be walked.
+   */
+  walk?(root: string, cursor?: string): Promise<Listing>;
 }
 
 /**
@@ -106,4 +115,20 @@ export async function statWith(
   path: string,
 ): Promise<Entry> {
   return claim(listers, path, (l) => l.handles(path), BROWSES).stat(path);
+}
+
+/** Walker is a Lister that walks. */
+export type Walker = Lister & Pick<Required<Lister>, 'walk'>;
+
+/**
+ * walkWith walks a folder or a prefix through the first lister that claims it
+ * and walks. Throws, naming the kinds this build walks, when none does.
+ */
+export async function walkWith(
+  listers: readonly Lister[],
+  root: string,
+  cursor?: string,
+): Promise<Listing> {
+  const walkers = listers.filter((l): l is Walker => l.walk !== undefined);
+  return claim(walkers, root, (l) => l.handles(root), WALKS).walk(root, cursor);
 }

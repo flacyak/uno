@@ -30,7 +30,7 @@ import {
 } from "./metrics.ts";
 import { el } from "@renderer/shell/util";
 import { columnLabel, unnamed } from "./rows.ts";
-import type { Cell, Rows } from "./rows.ts";
+import type { Cell, Column, Rows } from "./rows.ts";
 
 export class View {
   /** The rows being drawn, or undefined. */
@@ -44,6 +44,8 @@ export class View {
 
   /** Row elements, one per visible line, reused as the view scrolls. */
   private pool: HTMLTableRowElement[] = [];
+  /** The columns the header was last drawn from. A pooled row has a cell for each. */
+  private drawnColumns: readonly Column[] = [];
   private first = 0;
   /** The table's current `top` offset within the sizer. */
   private offset = 0;
@@ -104,15 +106,29 @@ export class View {
       this.scroller.scrollLeft = 0;
       this.seen = 0;
     }
-    this.pool = [];
-    this.body.replaceChildren();
+    this.emptyPool();
     this.refresh();
   }
 
-  /** Redraws the header and the visible rows. */
+  /** The columns the header shows, as it was last drawn. */
+  get drawn(): readonly Column[] {
+    return this.drawnColumns;
+  }
+
+  /**
+   * Redraws the header and the visible rows. A source that found columns
+   * since the header was drawn has its rows built again, a cell for each.
+   */
   refresh(): void {
+    if (this.source?.cols() !== this.drawnColumns.length) this.emptyPool();
     this.buildHead();
     this.layout();
+  }
+
+  /** Drops every pooled row. The next layout builds as many as it needs. */
+  private emptyPool(): void {
+    this.pool = [];
+    this.body.replaceChildren();
   }
 
   /** Runs layout on the next animation frame. Repeated calls coalesce. */
@@ -131,6 +147,7 @@ export class View {
    */
   private buildHead(): void {
     this.head.replaceChildren();
+    this.drawnColumns = this.source?.columns ?? [];
     if (this.source === undefined) return;
 
     const tr = el("tr");

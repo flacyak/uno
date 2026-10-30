@@ -8,28 +8,14 @@
  * is the same guard with the core running.
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vite-plus/test';
 
 import { blobFiles, openWith, readAll } from '@store';
 import { diskProvider, localFiles } from '@store/node';
 import { FIXTURE, bytes, connect } from '@core-tests/engine/harness';
+import { core, plant } from './sources.ts';
 import { MODULES, PLACES, offences as outside } from './ways.ts';
 import type { Way } from './ways.ts';
-
-const SRC = fileURLToPath(new URL('../../src', import.meta.url));
-
-function sources(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory()
-      ? sources(join(dir, e.name))
-      : e.name.endsWith('.ts')
-        ? [join(dir, e.name)]
-        : [],
-  );
-}
 
 /**
  * A pattern matching a module named as a string in any form: `from`, a bare
@@ -72,25 +58,6 @@ function offences(files: ReadonlyMap<string, string>): string[] {
     })),
   );
   return outside(uses);
-}
-
-/** The core's sources, by their path under src/. */
-function core(): Map<string, string> {
-  return new Map(
-    sources(SRC).map((file) => [
-      relative(SRC, file).replace(/\\/g, '/'),
-      readFileSync(file, 'utf8'),
-    ]),
-  );
-}
-
-/** The core with one line added to one file. */
-function plant(file: string, line: string): Map<string, string> {
-  const files = core();
-  const text = files.get(file);
-  if (text === undefined) throw new Error(`there is no ${file} to plant in`);
-  files.set(file, `${text}\n${line}\n`);
-  return files;
 }
 
 test('nothing outside a handler or a lister reads a file or a network, or runs a program', () => {

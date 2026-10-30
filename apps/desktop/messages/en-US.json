@@ -386,6 +386,7 @@
   "read_delimiter_no_header": "{charset} · delimiter '{delimiter}' · no header row",
   "read_tabs": "{charset} · tab-separated",
   "read_tabs_no_header": "{charset} · tab-separated · no header row",
+  "read_lines": "{charset} · JSON Lines",
   "said_about": "{subject}: {why}",
   "said_replaying": "replaying edits to {name}: {why}",
   "said_unknown": "this page is older than its engine · reload it to read what it said",
@@ -417,6 +418,23 @@
   "chars_plus_signs": "plus signs",
   "chars_brackets": "brackets",
   "chars_quotes": "quotes",
+  "kind_delimited": "delimited text",
+  "kind_jsonl": "JSON Lines",
+  "kind_parquet": "Parquet",
+  "parquet_codec_uncompressed": "uncompressed",
+  "parquet_codec_snappy": "snappy",
+  "parquet_codec_gzip": "gzip",
+  "parquet_codec_zstd": "zstd",
+  "parquet_row_groups": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} row group",
+        "plural=other": "{n} row groups"
+      }
+    }
+  ],
   "changed_version_same_size": "{name} is not the version the workspace was saved against · it is the same size",
   "changed_version_sizes": "{name} is not the version the workspace was saved against · it is {now} now and was {was}",
   "changed_size": "{name} is {now} now and was {was} when the workspace was saved",
@@ -496,6 +514,7 @@
       }
     }
   ],
+  "refused_relink_other_kind": "{name} was read as {was}, and {file} is {now}",
   "refused_log_lost_edit": "the log lost track of an edit to {source}",
   "refused_bucket_unconnected": "{container} reads s3://{bucket}/…, which no connection covers · connect {bucket} to read it",
   "refused_joins_unknown_for_column": "{name} is read as one by something that does not say how its files join, so it cannot show which file each row came from",
@@ -519,10 +538,23 @@
   "refused_nothing_to_undo": "there is nothing to undo",
   "refused_nothing_to_redo": "there is nothing to redo",
   "refused_in_view": "the file is in view · Ctrl+E to transform",
+  "refused_columns_moved": "{name} gained columns while the edit was on its way, so it was not made · make it again",
   "refused_file_closed": "the file was closed",
   "refused_cancelled": "opening {name} was cancelled",
   "refused_changed_on_disk": "{name} changed on disk after it was opened",
   "refused_stored_encoded": "{name} was stored with Content-Encoding {encoding}, and uno reads such an object only when it signs in · connect {bucket} with a sign-in to read it",
+  "refused_not_read": "{name}: {what} is not supported yet",
+  "refused_parquet_broken": "{name}: its Parquet footer or pages are damaged",
+  "refused_parquet_unsupported": "{name}: {feature} is not supported yet",
+  "parquet_feature_encryption": "encrypted Parquet",
+  "parquet_feature_brotli": "Parquet compressed with Brotli",
+  "parquet_feature_lz4": "Parquet compressed with LZ4",
+  "parquet_feature_lzo": "Parquet compressed with LZO",
+  "parquet_feature_interval": "the Parquet INTERVAL type",
+  "parquet_feature_bson": "the Parquet BSON type",
+  "parquet_feature_variant": "the Parquet VARIANT type",
+  "parquet_feature_external_columns": "Parquet with columns kept in other files",
+  "parquet_feature_several_files": "reading several Parquet files as one",
   "refused_keeps_no_connections": "this engine keeps no connections · its platform gave it nowhere to read them from",
   "refused_offers_no_sign_ins": "this engine has no way of signing in to offer · its platform connects to nothing",
   "refused_tries_no_connection": "this engine cannot try a connection · its platform connects to nothing"

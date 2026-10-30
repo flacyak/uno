@@ -8,6 +8,7 @@
 
 import { english } from '@said';
 import { unreachable } from '@never';
+import { namesBeside } from '@sheet';
 import type { ByteSource } from '@store';
 import { readAll } from './csv.ts';
 import { RecordScanner, bomLength } from './scan.ts';
@@ -15,8 +16,11 @@ import type { Charset, Said } from '@said';
 import { sniffDelimiter, sniffEncoding } from './sniff.ts';
 import type { Encoding } from './sniff.ts';
 
-/** How much of the head is read first, to sniff and to find the header. */
-const PEEK = 64 << 10;
+/**
+ * How much of the head is read first, to detect what the file holds, to sniff
+ * and to find the header.
+ */
+export const HEAD_BYTES = 64 << 10;
 
 export type { Charset } from '@said';
 
@@ -74,6 +78,12 @@ export function decodersFor(name: string, encoding: Encoding): Decoders {
 
 export interface Scanner {
   push(chunk: Uint8Array, base: number): void;
+  /**
+   * end is called once the last chunk has been pushed. A scanner that learns
+   * from each whole record learns the last one here, which may end with no
+   * line break.
+   */
+  end?(): void;
 }
 
 /**
@@ -147,7 +157,7 @@ export async function peekFormat(
   const ext = extensionOf(name);
   if (ext === '.json') throw new Error(`${name}: JSON is not supported yet`);
 
-  let want = Math.min(PEEK, src.size);
+  let want = Math.min(HEAD_BYTES, src.size);
   let head = await src.read(0, want);
   const encoding = sniffEncoding(head);
   const decoders = decodersFor(name, encoding);
@@ -213,19 +223,23 @@ function findDataStart(
  * later duplicate takes the lowest free suffix: product_cost_2, then _3.
  */
 export function headerOf(record: readonly string[]): string[] {
-  const taken = new Set(record);
-  const seen = new Set<string>();
-  return record.map((name) => {
-    if (!seen.has(name)) {
-      seen.add(name);
-      return name;
-    }
-    let n = 2;
-    while (taken.has(`${name}_${n}`)) n++;
-    const unique = `${name}_${n}`;
-    taken.add(unique);
-    return unique;
-  });
+  return namesBeside([], record);
+}
+
+/** The characters a pointer segment writes as escapes. */
+const POINTER_ESCAPED = /[~/]/;
+
+/**
+ * pointerTo returns the RFC 6901 pointer to member `name` of what `parent`
+ * points to. A '~' in the name is written '~0', and a '/' is written '~1'.
+ * Most names hold neither, and the JSON Lines index pass writes a pointer
+ * for every cell, so a name is scanned for them before it is rewritten.
+ */
+export function pointerTo(parent: string, name: string): string {
+  const segment = POINTER_ESCAPED.test(name)
+    ? name.replaceAll('~', '~0').replaceAll('/', '~1')
+    : name;
+  return `${parent}/${segment}`;
 }
 
 /** The extension, lower-cased, including its dot. "" when there is none. */

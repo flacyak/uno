@@ -1,6 +1,6 @@
 /**
- * @fileoverview One source in a workspace: its format, its index, its edit log,
- * and the pages read through them.
+ * @fileoverview One source in a workspace: the reading of its rows, its edit
+ * log, and the rows read through both.
  *
  * Every row returned has the log applied. An edit is one line folded into
  * the Schema and a new generation number. Every stored row stays as read.
@@ -8,8 +8,8 @@
 
 import type { HeldFile, HeldPart, HeldParts } from '@document';
 import { trimSpace } from '@go';
-import { headerOf, labelOf, openFormat } from '@ingest';
-import type { Format } from '@ingest';
+import { headerOf } from '@ingest';
+import type { Column } from '@ingest';
 import { isNumber } from '@num';
 import { MIN_EXAMPLES, Survey, gather } from '@pattern';
 import type { Example } from '@pattern';
@@ -25,15 +25,7 @@ import {
   valueAt,
 } from '@sheet';
 import type { Edit, Written } from '@sheet';
-import { multiOf } from '@store';
-import type {
-  ByteSource,
-  HeaderMode,
-  PartMap,
-  PartsRef,
-  SingleRef,
-} from '@store';
-import { indexPass } from './pass.ts';
+import type { ByteSource, HeaderMode, PartsRef, SingleRef } from '@store';
 import type {
   Changed,
   ColumnInfo,
@@ -50,7 +42,8 @@ import type {
 } from './protocol.ts';
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
-import { Pages, RowIndex } from './rows.ts';
+import { openReading, savedOf } from './reading.ts';
+import type { Expected, Reading, ReadSpec } from './reading.ts';
 import type { Tuning } from './rows.ts';
 import {
   BYTES,
@@ -75,24 +68,14 @@ export const FILE_COLUMN = '_file';
 
 type Waiter = () => boolean;
 
-/** Run is a run of a block's rows that came from one part. */
-interface Run {
-  /** The first row of the run, counting from 0 at the block's first. */
-  row: number;
-  /** Which part, counting from 0. */
-  part: number;
+/** Sample is the rows each column's kind is inferred from, and the values supplied for them. */
+interface Sample {
+  rows: string[][];
+  supplied: (readonly string[])[] | undefined;
 }
 
-/**
- * Crossing caches the runs of a block that holds rows from more than one
- * part. It is valid for the map and byte range it was computed from.
- */
-interface Crossing {
-  map: PartMap;
-  start: number;
-  end: number;
-  runs: Run[];
-}
+/** What a column blank in every sample row is inferred as. */
+const BLANK = inferKind(0, () => '');
 
 /** A source's edits and, for a carried source, its bytes, as read from a
  * .uno. */
@@ -121,6 +104,12 @@ type Unsaved = 'id' | 'name' | 'state';
  */
 export type Origin = 'carried' | 'dropped' | 'joined' | 'bucket' | 'disk';
 
+/**
+ * Stored is how a source's stored bytes are handed to a View: a ByteSource
+ * over one file, or over several files joined as bytes.
+ */
+export type Stored = { readonly t: 'source'; readonly source: ByteSource };
+
 /** What View.open is given. */
 export interface OpenAsk {
   id: string;
@@ -128,8 +117,9 @@ export interface OpenAsk {
   name: string;
   /** Where the bytes are, or "" where no one path holds them. */
   path: string;
-  /** The bytes. The view owns the source from here on and closes it if the open fails. */
-  source: ByteSource;
+  /** The stored bytes. The view owns them from here on and closes them if
+   * the open fails. */
+  stored: Stored;
   /** What the bytes were handed as. */
   origin: Origin;
   port: Port<Request, Reply>;
@@ -141,6 +131,12 @@ export interface OpenAsk {
   began: number;
   /** The edits, and for a carried source the bytes, a .uno holds for it. */
   carried?: Carried;
+  /** How a .uno says the rows were read when its log was made. Detection is
+   * skipped, and the bytes are read so. */
+  read?: ReadSpec;
+  /** What a relink holds one file to. One detected as another kind of rows
+   * than its log was read as is refused. */
+  expect?: Expected;
   telemetry?: Telemetry;
   /** Whether the first line names the columns. A header row unless said. */
   header?: HeaderMode;
@@ -163,13 +159,16 @@ export class View {
   private readonly began: number;
 
   opened!: Opened;
-  pages!: Pages;
   generation = 0;
 
-  private source!: ByteSource;
-  private format!: Format;
-  private index!: RowIndex;
+  /** How the source's rows are found and read, and what holds its bytes. */
+  private reading!: Reading;
   private schema!: Schema;
+  /**
+   * The columns as last worked out, which a widen extends. Set first in the
+   * turn the open's answer is built.
+   */
+  private lastColumns: ColumnInfo[] | undefined;
 
   /** The source bytes a .uno carried. Undefined for a file read from disk. */
   private carried: Uint8Array | undefined;
@@ -183,9 +182,6 @@ export class View {
 
   /** The parts ref a source over several files was opened from. */
   parts: PartsRef | undefined;
-
-  /** Cached runs for blocks that hold rows from more than one part. */
-  private readonly crossings = new Map<number, Crossing>();
 
   private transform = false;
   private survey: AbortController | undefined;
@@ -218,11 +214,12 @@ export class View {
   }
 
   /**
-   * open detects the format, starts indexing, waits for the sample rows,
+   * open opens the reading, starts indexing, waits for the sample rows,
    * replays any carried edits, and returns the view.
    */
   static async open(ask: OpenAsk): Promise<View> {
-    const { id, name, path, source, port, tuning, carried, began } = ask;
+    const { id, name, path, port, tuning, carried, began } = ask;
+    const { source } = ask.stored;
     const telemetry = ask.telemetry ?? unmeasured;
     const v = new View(id, name, path, port, began);
     v.carried = carried?.raw;
@@ -233,9 +230,20 @@ export class View {
     const within = (why: Said): Said =>
       container === '' ? why : { t: 'about', subject: container, why };
 
-    let format: Format;
+    const header = ask.header ?? 'first';
     try {
-      format = await openFormat(name, source, ask.header);
+      // A source from a .uno, relinked or appended to is read as its log
+      // was made. A file on its own, or several opened anew, is detected and
+      // its head read once: for several, the head of their join, which every
+      // part was held to as it was measured.
+      v.reading = await openReading({
+        name,
+        source,
+        spec: ask.read,
+        expect: ask.expect,
+        header,
+        tuning,
+      });
     } catch (err) {
       await source.close();
       if (container === '') throw err;
@@ -244,11 +252,8 @@ export class View {
       );
     }
 
-    v.source = source;
-    v.format = format;
-    v.index = new RowIndex(format.dataStart, source.size, tuning);
-    v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
-    v.schema = schemaOf(format, ask.parts);
+    const reading = v.reading;
+    v.schema = schemaOf(reading.columns(), ask.parts);
 
     // A cancel fails the wait below with its refusal, kept ahead of the
     // close's own, and closes the view, which stops the index.
@@ -267,14 +272,10 @@ export class View {
 
     let told = 0;
     let started = false;
-    const index = v.index;
-    indexPass({
-      source,
-      format,
-      index,
-      tuning,
-      signal: v.abort.signal,
-      progress() {
+    const index = reading.index;
+    reading
+      .pass(v.abort.signal, () => {
+        v.widen();
         v.wake();
         if (index.complete) {
           // The clock stops here, once: the pass reports completion one time.
@@ -291,7 +292,7 @@ export class View {
             name: INDEXED,
             kind: 'count',
             unit: BYTES,
-            value: source.size,
+            value: index.indexed().total,
             attributes,
           });
         }
@@ -299,19 +300,19 @@ export class View {
         if (!index.complete && now - told < PROGRESS_MS) return;
         told = now;
         port.post({ t: 'progress', source: id, progress: v.progress() });
-      },
-    }).catch((err: unknown) => {
-      v.fail(err);
-      // Before open returns, the failure is thrown from open instead. After
-      // a close, the abort is the cause and the failure is swallowed.
-      if (started && !v.abort.signal.aborted) {
-        port.post({
-          t: 'error',
-          source: id,
-          said: { t: 'about', subject: name, why: saidOf(err) },
-        });
-      }
-    });
+      })
+      .catch((err: unknown) => {
+        v.fail(err);
+        // Before open returns, the failure is thrown from open instead. After
+        // a close, the abort is the cause and the failure is swallowed.
+        if (started && !v.abort.signal.aborted) {
+          port.post({
+            t: 'error',
+            source: id,
+            said: { t: 'about', subject: name, why: saidOf(err) },
+          });
+        }
+      });
 
     try {
       // Wait until the index covers the sample rows and the deepest row the
@@ -334,16 +335,19 @@ export class View {
         }
       }
 
+      // The columns are worked out in the turn the answer is built, so a
+      // widen after it extends what the answer says.
+      const sample = await v.sample();
       v.opened = {
         source: id,
         name,
-        size: source.size,
-        label: labelOf(format),
-        columns: await v.columns(),
+        size: v.bytes.size,
+        label: reading.label,
+        columns: v.columnsOf(sample),
         progress: v.progress(),
         edits: carried?.edits ?? [],
         generation: v.generation,
-        link: path === '' ? undefined : linkTo(path, source.version),
+        link: path === '' ? undefined : linkTo(path, v.bytes.version),
       };
       return v;
     } catch (err) {
@@ -355,10 +359,11 @@ export class View {
 
   /** progress is how far the index has got, and how long the open has taken. */
   private progress(): Progress {
-    const index = this.index;
+    const index = this.reading.index;
+    const { done, total } = index.indexed();
     return {
-      done: index.scanned,
-      total: index.size,
+      done,
+      total,
       readable: index.readable(),
       rows: index.rows(),
       complete: index.complete,
@@ -370,17 +375,17 @@ export class View {
 
   /** rows reads rows with the log applied, tagged with the generation they were built at. */
   async rows(first: number, count: number): Promise<RowsPage> {
-    const source = await this.pages.rows(first, count);
-    const files = await this.files(Math.max(0, first), source.length);
+    const source = await this.reading.pages.rows(first, count);
+    const supplied = await this.suppliedFor(Math.max(0, first), source.length);
     const schema = this.schema;
     const generation = this.generation;
 
-    if (schema.empty && files === undefined)
+    if (schema.empty && supplied === undefined)
       return { generation, rows: source, raws: [] };
 
     const rows: string[][] = [];
     const raws: Array<string[] | null> = [];
-    for (const f of finishRows(schema, first, source, files)) {
+    for (const f of finishRows(schema, first, source, supplied)) {
       rows.push(f.shown as string[]);
       raws.push(f.shown === f.raw ? null : (f.raw as string[]));
     }
@@ -389,12 +394,23 @@ export class View {
 
   /** columns infers each column's kind from the sample rows, with the log applied. */
   private async columns(): Promise<ColumnInfo[]> {
-    const source = await this.pages.rows(0, SAMPLE_ROWS);
-    const files = await this.files(0, source.length);
-    const schema = this.schema;
-    const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
+    return this.columnsOf(await this.sample());
+  }
 
-    return schema.headers.map((header, col) => {
+  /** sample reads the rows each column's kind is inferred from. */
+  private async sample(): Promise<Sample> {
+    const rows = await this.reading.pages.rows(0, SAMPLE_ROWS);
+    return { rows, supplied: await this.suppliedFor(0, rows.length) };
+  }
+
+  /**
+   * columnsOf infers each column's kind from `sample`, with the log applied
+   * as it stands, and keeps them as the last columns.
+   */
+  private columnsOf({ rows, supplied }: Sample): ColumnInfo[] {
+    const schema = this.schema;
+    const shown = finishRows(schema, 0, rows, supplied).map((f) => f.shown);
+    this.lastColumns = schema.headers.map((header, col) => {
       const { kind, flagged } = inferKind(
         shown.length,
         (row) => shown[row]![col] ?? '',
@@ -404,79 +420,81 @@ export class View {
         ? { header, kind, flagged }
         : { header, kind, flagged, binding };
     });
+    return this.lastColumns;
   }
 
   /**
-   * files returns the `_file` cell for each of `count` rows from `first`:
-   * the name of the part holding the row's first byte. Undefined for a
-   * source that lacks the column.
+   * widen gives the schema a data column, before the supplied ones, for
+   * each column the reading has found since the schema last grew. The pass
+   * calls it in the turn it finds them, so no block decoded over a new
+   * column meets a schema without it. Rows built before are stale, so the
+   * generation moves on.
+   *
+   * Once the open's answer is built, it is kept saying every column, and
+   * every client is told by a widened reply. The open waits for the sample
+   * rows to be indexed, so a column found after it is blank in each.
    */
-  private async files(
+  private widen(): void {
+    const schema = this.schema;
+    const had = schema.headers.length - schema.supplied.length;
+    const found = this.reading.columns();
+    if (found.length <= had) return;
+    schema.widen(found.slice(had).map((column) => column.name));
+    this.generation++;
+
+    const last = this.lastColumns;
+    if (last === undefined) return;
+    const added = schema.headers
+      .slice(had, found.length)
+      .map((header): ColumnInfo => ({ header, ...BLANK }));
+    const columns = [...last.slice(0, had), ...added, ...last.slice(had)];
+    this.lastColumns = columns;
+    this.opened.columns = columns;
+    this.opened.generation = this.generation;
+    this.port.post({
+      t: 'widened',
+      source: this.id,
+      generation: this.generation,
+      columns,
+    });
+  }
+
+  /**
+   * suppliedFor returns, for each of `count` rows from `first`, the values
+   * of the schema's supplied columns that the part holding the row's first
+   * byte supplies. Each part's values are built once, and its rows share
+   * them. Undefined for a source with no supplied columns.
+   */
+  private async suppliedFor(
     first: number,
     count: number,
-  ): Promise<string[] | undefined> {
-    if (this.schema.supplied === undefined) return undefined;
+  ): Promise<(readonly string[])[] | undefined> {
+    if (this.schema.supplied.length === 0) return undefined;
     const ref = this.parts;
-    const multi = multiOf(this.source);
-    if (ref === undefined || multi === undefined) {
+    const reading = this.reading;
+    if (ref === undefined || reading.behind.t !== 'bytes') {
       throw new Refusal({ t: 'joins-unknown-for-column', name: this.name });
     }
 
-    const names: string[] = [];
+    const byPart = new Map<number, readonly string[]>();
+    const values: (readonly string[])[] = [];
     const end = first + count;
     for (let row = first; row < end;) {
-      const block = this.index.blockOf(row);
-      const [from, to] = this.index.rowsOf(block);
-      const runs = await this.runsIn(block, multi.map);
+      const block = reading.index.blockOf(row);
+      const [from, to] = reading.index.rowsOf(block);
+      const runs = await reading.runs(block);
       for (let run = 0; row < Math.min(to, end); row++) {
         while (run + 1 < runs.length && runs[run + 1]!.row <= row - from) run++;
-        names.push(ref.parts[runs[run]!.part]?.ref.name ?? '');
+        const part = runs[run]!.part;
+        let supplies = byPart.get(part);
+        if (supplies === undefined) {
+          supplies = suppliedBy(ref, part);
+          byPart.set(part, supplies);
+        }
+        values.push(supplies);
       }
     }
-    return names;
-  }
-
-  /**
-   * runsIn returns which part each row of a block came from, as runs.
-   *
-   * A block inside one part is one run. A block that crosses a part boundary
-   * is re-read up to its last part and scanned for row starts, and the
-   * result is cached.
-   */
-  private async runsIn(block: number, map: PartMap): Promise<Run[]> {
-    const [start, end] = this.index.bytesOf(block);
-    const first = map.partAt(start);
-    const last = map.partAt(end - 1);
-    if (first === undefined || last === undefined) {
-      throw new Refusal({ t: 'rows-past-files', name: this.name });
-    }
-    if (first === last) return [{ row: 0, part: first }];
-
-    const known = this.crossings.get(block);
-    if (
-      known !== undefined &&
-      known.map === map &&
-      known.start === start &&
-      known.end === end
-    ) {
-      return known.runs;
-    }
-
-    // Rows from the last part's first byte on belong to it, so only the
-    // bytes before it are scanned.
-    const until = map.spans[last]!.start;
-    const runs: Run[] = [];
-    let row = 0;
-    const scanner = this.format.scanner((offset) => {
-      const part = map.partAt(offset)!;
-      if (runs.at(-1)?.part !== part) runs.push({ row, part });
-      row++;
-    });
-    scanner.push(await this.source.read(start, until - start), start);
-    runs.push({ row, part: last });
-
-    this.crossings.set(block, { map, start, end, runs });
-    return runs;
+    return values;
   }
 
   // ------------------------------------------------------------ changing
@@ -520,7 +538,7 @@ export class View {
       const e = this.undone.pop();
       if (e === undefined) throw new Refusal({ t: 'nothing-to-redo' });
 
-      this.schema.rows = this.index.readable();
+      this.schema.rows = this.reading.index.readable();
       try {
         this.schema.record(e);
       } catch (err) {
@@ -534,7 +552,7 @@ export class View {
   private async record(req: EditRequest): Promise<Changed> {
     this.refuseInView();
 
-    const index = this.index;
+    const index = this.reading.index;
     const schema = this.schema;
     schema.rows = index.readable();
 
@@ -551,7 +569,7 @@ export class View {
     // learns from it.
     const inRange = req.row >= 0 && req.row < schema.rows && req.col >= 0;
     if (cell && inRange && req.col < schema.headers.length) {
-      const [row] = await this.pages.rows(req.row, 1);
+      const [row] = await this.reading.pages.rows(req.row, 1);
       e.was = valueAt(schema, req.row, req.col, row ?? []);
     }
     if (req.op === Op.Unbind) {
@@ -559,6 +577,14 @@ export class View {
       if (was !== undefined) e.was = was;
     }
 
+    // A widen moves the supplied columns right, so an edit aimed at another
+    // count of columns may name one that moved. The count is compared in the
+    // turn the edit is folded.
+    const width = schema.headers.length;
+    const moved = req.width !== undefined && req.width !== width;
+    if (moved && schema.supplied.length > 0) {
+      throw new Refusal({ t: 'columns-moved', name: this.name });
+    }
     schema.record(e);
     this.undone = [];
     return this.changed(e);
@@ -594,7 +620,6 @@ export class View {
   private recognise(): void {
     this.survey?.abort();
     this.survey = undefined;
-    const generation = this.generation;
 
     const byCol = this.transform
       ? gather(this.schema.edits())
@@ -605,19 +630,22 @@ export class View {
       .sort((a, b) => a - b);
 
     if (cols.length === 0) {
-      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
+      this.port.post({
+        t: 'offer',
+        source: this.id,
+        generation: this.generation,
+        offer: null,
+      });
       return;
     }
 
     const abort = new AbortController();
     this.survey = abort;
-    this.surveyColumns(cols, byCol, abort.signal, generation).catch(
-      (err: unknown) => {
-        if (!abort.signal.aborted) {
-          this.port.post({ t: 'error', source: this.id, said: saidOf(err) });
-        }
-      },
-    );
+    this.surveyColumns(cols, byCol, abort.signal).catch((err: unknown) => {
+      if (!abort.signal.aborted) {
+        this.port.post({ t: 'error', source: this.id, said: saidOf(err) });
+      }
+    });
   }
 
   /**
@@ -625,15 +653,18 @@ export class View {
    * time, and posts the first proposal one of them supports. Partial offers
    * are posted every PROGRESS_MS. It waits for the index to reach each row
    * before reading it.
+   *
+   * A new edit aborts the survey, so one still running was started over the
+   * log as it stands. An offer is posted at the generation of when it is
+   * posted: a widen moves no data column, so an offer holds across it.
    */
   private async surveyColumns(
     cols: number[],
     byCol: Map<number, Example[]>,
     signal: AbortSignal,
-    generation: number,
   ): Promise<void> {
     const schema = this.schema;
-    const index = this.index;
+    const index = this.reading.index;
 
     for (const col of cols) {
       const survey = Survey.start(col, schema.headers[col]!, byCol.get(col)!);
@@ -648,7 +679,7 @@ export class View {
 
         const block = index.blockOf(row);
         const [from, end] = index.rowsOf(block);
-        const records = await this.pages.records(block, false);
+        const records = await this.reading.pages.records(block, false);
         if (signal.aborted) return;
 
         const values: string[] = [];
@@ -663,28 +694,34 @@ export class View {
         const now = Date.now();
         if (now - told >= PROGRESS_MS) {
           told = now;
-          this.offer(survey, generation, false);
+          this.offer(survey, false);
         }
         if (now - slice >= SLICE_MS) slice = await turn();
       }
 
       if (signal.aborted) return;
       if (survey.proposal() !== undefined) {
-        this.offer(survey, generation, true);
+        this.offer(survey, true);
         return;
       }
     }
-    if (!signal.aborted)
-      this.port.post({ t: 'offer', source: this.id, generation, offer: null });
+    if (!signal.aborted) {
+      this.port.post({
+        t: 'offer',
+        source: this.id,
+        generation: this.generation,
+        offer: null,
+      });
+    }
   }
 
-  private offer(survey: Survey, generation: number, complete: boolean): void {
+  private offer(survey: Survey, complete: boolean): void {
     const p = survey.proposal();
     if (p === undefined) return;
     this.port.post({
       t: 'offer',
       source: this.id,
-      generation,
+      generation: this.generation,
       offer: {
         source: this.id,
         col: p.col,
@@ -695,7 +732,7 @@ export class View {
         sample: p.sample,
         ambiguous: p.ambiguous,
         scanned: survey.rows,
-        rows: this.index.rows(),
+        rows: this.reading.index.rows(),
         complete,
       },
     });
@@ -717,7 +754,7 @@ export class View {
     if (matches === undefined)
       return { row: null, searched: 0, complete: true };
 
-    const index = this.index;
+    const index = this.reading.index;
     const down = req.dir === 1;
     let row = down
       ? Math.max(0, req.from + 1)
@@ -728,12 +765,12 @@ export class View {
     while (down ? row < index.readable() : row >= 0) {
       const block = index.blockOf(row);
       const [from, end] = index.rowsOf(block);
-      const records = await this.pages.records(block, false);
-      const files = await this.files(from, records.length);
+      const records = await this.reading.pages.records(block, false);
+      const supplied = await this.suppliedFor(from, records.length);
       if (abort.signal.aborted) return { row: null, searched, complete: false };
 
       // Only the searched column is finished.
-      const shown = this.shownIn(req.col, from, records, files);
+      const shown = this.shownIn(req.col, from, records, supplied);
       for (; down ? row < end : row >= from; row += req.dir) {
         searched++;
         if (matches(shown(row))) return { row, searched, complete: true };
@@ -749,22 +786,25 @@ export class View {
    *
    * A formula column finishes the whole block once, since it reads other
    * columns. A plain column is read a cell at a time: a note's rendering,
-   * the file name for the supplied column, or the stored value.
+   * the value supplied for a supplied column, or the stored value.
    */
   private shownIn(
     col: number,
     from: number,
     records: readonly (readonly string[])[],
-    files: readonly string[] | undefined,
+    supplied: readonly (readonly string[])[] | undefined,
   ): (row: number) => string {
     const schema = this.schema;
     if (schema.formula(col) !== undefined) {
-      const finished = finishRows(schema, from, records, files);
+      const finished = finishRows(schema, from, records, supplied);
       return (row) => finished[row - from]!.shown[col] ?? '';
     }
-    if (schema.supplied?.col === col) {
+    const nth = schema.supplied.findIndex((s) => s.col === col);
+    if (nth >= 0) {
       return (row) =>
-        schema.writtenIn(row)?.get(col)?.rendered ?? files?.[row - from] ?? '';
+        schema.writtenIn(row)?.get(col)?.rendered ??
+        supplied?.[row - from]?.[nth] ??
+        '';
     }
     return (row) =>
       schema.writtenIn(row)?.get(col)?.rendered ??
@@ -803,15 +843,40 @@ export class View {
 
   // ------------------------------------------------------------ saving
 
+  /** The stored bytes behind the reading: one file, or several as one. */
+  private get bytes(): ByteSource {
+    const { behind } = this.reading;
+    return behind.t === 'file' ? behind.stored : behind.joined;
+  }
+
+  /**
+   * How the source's rows are read, as a save records it and a relink reads
+   * them again. A found column is named as the schema shows it: where a
+   * column the source supplies held its key's name first, it shows the name
+   * with a suffix, and a reopen shows that name again.
+   */
+  get spec(): ReadSpec {
+    const spec = this.reading.spec();
+    if (spec.kind !== 'jsonl') return spec;
+    const { headers, supplied } = this.schema;
+    const shown = headers.length - supplied.length;
+    return {
+      kind: 'jsonl',
+      columns: spec.columns
+        .slice(0, shown)
+        .map(({ key }, col) => ({ name: headers[col]!, key })),
+    };
+  }
+
   /** The size of the carried bytes, or of the source. */
   get size(): number {
-    return this.carried?.length ?? this.source.size;
+    return this.carried?.length ?? this.bytes.size;
   }
 
   /** The version the source was read at, where the store reports one.
    * Undefined for a carried source and a source over several files. */
   get version(): string | undefined {
-    return this.path === '' ? undefined : this.source.version;
+    return this.path === '' ? undefined : this.bytes.version;
   }
 
   /** Bytes a save would copy into the container: the size for a carried
@@ -843,10 +908,14 @@ export class View {
         };
       }
       if (this.path === '') {
-        await this.until(() => this.index.complete);
-        const raw =
-          this.carried ?? (await this.source.read(0, this.source.size));
-        return { raw, bytes: this.size, version: this.version, ...this.kept() };
+        await this.until(() => this.reading.index.complete);
+        const raw = this.carried ?? (await this.bytes.read(0, this.bytes.size));
+        return {
+          raw,
+          bytes: this.size,
+          version: this.version,
+          ...this.kept(),
+        };
       }
       return {
         path: this.path,
@@ -858,12 +927,17 @@ export class View {
     });
   }
 
-  /** kept returns the edits and the row and column counts they were made over. */
-  private kept(): Pick<Part, 'edits' | 'rows' | 'cols'> {
+  /**
+   * kept returns the edits, the row and column counts they were made over,
+   * and how the rows were read: for JSON Lines and Parquet, their kind and
+   * every column found.
+   */
+  private kept(): Pick<Part, 'edits' | 'rows' | 'cols' | 'kind' | 'columns'> {
     return {
       edits: this.schema.edits(),
-      rows: this.index.readable(),
+      rows: this.reading.index.readable(),
       cols: this.schema.headers.length,
+      ...savedOf(this.spec),
     };
   }
 
@@ -876,8 +950,8 @@ export class View {
     ref: PartsRef,
   ): Promise<{ parts: HeldPart[]; header: HeaderMode; fileColumn?: boolean }> {
     const count = ref.parts.length;
-    const multi = multiOf(this.source);
-    if (multi === undefined) {
+    const { behind } = this.reading;
+    if (behind.t !== 'bytes') {
       throw new Refusal({
         t: 'joins-unknown-for-save',
         name: this.name,
@@ -900,6 +974,7 @@ export class View {
 
     // versions() opens any part still unread. If that fails, the parts keep
     // the versions they were opened by.
+    const multi = behind.joined;
     const versions = await multi
       .versions()
       .catch(() => files.map((file) => file.version));
@@ -930,7 +1005,8 @@ export class View {
   extended(files: readonly SingleRef[]): PartsRef | undefined {
     const ref = this.parts;
     if (ref === undefined) return undefined;
-    const extents = multiOf(this.source)?.extents;
+    const { behind } = this.reading;
+    const extents = behind.t === 'bytes' ? behind.joined.extents : undefined;
     return {
       ...ref,
       parts: [
@@ -957,7 +1033,7 @@ export class View {
     this.survey?.abort();
     this.finding?.abort();
     this.fail(new Refusal({ t: 'file-closed' }));
-    await this.source.close();
+    await this.reading.close();
   }
 
   /** until resolves once `ready` returns true, or rejects if the index fails first. */
@@ -990,12 +1066,23 @@ export class View {
  * deduplicated, so an existing `_file` column keeps its name and the added
  * one takes a suffix.
  */
-function schemaOf(format: Format, parts: PartsRef | undefined): Schema {
-  if (parts?.fileColumn !== true) return new Schema(format.columns, 0);
-  return new Schema(headerOf([...format.columns, FILE_COLUMN]), 0, {
-    col: format.columns.length,
-    shows: FILE_SHOWS,
-  });
+function schemaOf(
+  columns: readonly Column[],
+  parts: PartsRef | undefined,
+): Schema {
+  const names = columns.map((column) => column.name);
+  if (parts?.fileColumn !== true) return new Schema(names, 0);
+  return new Schema(headerOf([...names, FILE_COLUMN]), 0, [
+    { col: names.length, shows: FILE_SHOWS },
+  ]);
+}
+
+/**
+ * suppliedBy returns the values one part of a source supplies, in the order
+ * schemaOf adds their columns: today its name alone, for `_file`.
+ */
+function suppliedBy(ref: PartsRef, part: number): readonly string[] {
+  return [ref.parts[part]?.ref.name ?? ''];
 }
 
 /** deepest returns one past the highest row the edits name, or 0 when none

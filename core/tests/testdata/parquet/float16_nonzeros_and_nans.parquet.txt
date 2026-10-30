@@ -1,0 +1,11 @@
+{"rows":8,"groups":1,"codecs":["uncompressed"],"paged":false}
+["x","/x"]
+
+[""]
+["1"]
+["-2"]
+["NaN"]
+["0"]
+["-1"]
+["-0"]
+["2"]

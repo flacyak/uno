@@ -12,8 +12,54 @@ import { quote } from '@go/strconv';
 import { unreachable } from '@never';
 import type { HeaderMode } from '@store/multi';
 
+/** Compression is a compression uno can read a stored file through. */
+export type Compression = 'gzip' | 'zstd';
+
 /** Charset is the name of a file's text encoding, as the status bar shows it. */
 export type Charset = 'UTF-8';
+
+/**
+ * ReadKind is how a source's rows sit in its bytes. A .uno that names no kind
+ * means delimited text.
+ */
+export type ReadKind = 'delimited' | 'jsonl' | 'parquet';
+
+/**
+ * Unread is a format or a compression this build names and does not read
+ * yet. A value leaves with the change that reads it.
+ */
+export type Unread =
+  | 'JSON'
+  | 'Parquet'
+  | 'gzip'
+  | 'zstd'
+  | 'bzip2'
+  | 'xz'
+  | 'snappy'
+  | 'LZ4'
+  | 'zip';
+
+/** A table format, whose log says which of its files hold live rows. */
+export type TableFormat = 'Delta Lake' | 'Iceberg' | 'Hudi';
+
+/** ParquetCodec is a codec uno reads a Parquet file's pages through. */
+export type ParquetCodec = 'uncompressed' | 'snappy' | 'gzip' | 'zstd';
+
+/**
+ * ParquetFeature is what a Parquet file can use that uno does not read yet:
+ * encryption, a page codec, a column type, columns kept in other files, or
+ * several files read as one.
+ */
+export type ParquetFeature =
+  | 'encryption'
+  | 'brotli'
+  | 'lz4'
+  | 'lzo'
+  | 'interval'
+  | 'bson'
+  | 'variant'
+  | 'external-columns'
+  | 'several-files';
 
 /** The punctuation a description can name, as plurals. */
 export type CharName =
@@ -58,6 +104,9 @@ export type Said =
 
   // How a file was read, for the status bar.
   | { t: 'read'; delimiter: string; header: HeaderMode; charset: Charset }
+  | { t: 'read-lines'; charset: Charset }
+  /** Parquet: its pages' codecs, and its row groups where it is one file. */
+  | { t: 'read-parquet'; codecs: ParquetCodec[]; groups?: number }
 
   // What a program does, for the recogniser's banner.
   | { t: 'program'; steps: StepSaid[] }
@@ -89,6 +138,13 @@ export type Said =
   | { t: 'point-one-at-several'; file: string; count: number; name: string }
   | { t: 'point-several-at-one'; name: string; count: number; file: string }
   | { t: 'point-several-at-other'; name: string; count: number; given: number }
+  | {
+      t: 'relink-other-kind';
+      name: string;
+      file: string;
+      was: ReadKind;
+      now: ReadKind;
+    }
   | { t: 'log-lost-edit'; source: string }
   | { t: 'bucket-unconnected'; container: string; bucket: string }
 
@@ -106,10 +162,14 @@ export type Said =
   | { t: 'nothing-to-undo' }
   | { t: 'nothing-to-redo' }
   | { t: 'in-view' }
+  | { t: 'columns-moved'; name: string }
   | { t: 'file-closed' }
   | { t: 'cancelled'; name: string }
   | { t: 'changed-on-disk'; name: string }
   | { t: 'stored-encoded'; name: string; encoding: string; bucket: string }
+  | { t: 'not-read'; name: string; what: Unread }
+  | { t: 'parquet-broken'; name: string }
+  | { t: 'parquet-unsupported'; name: string; feature: ParquetFeature }
 
   // What an engine refuses because its platform left out the means.
   | { t: 'keeps-no-connections' }
@@ -205,6 +265,26 @@ function step(s: StepSaid): string {
   return (STEPS[s.t] as (s: StepSaid) => string)(s);
 }
 
+/** What each kind of rows is called in a sentence. */
+const KINDS: Record<ReadKind, string> = {
+  delimited: 'delimited text',
+  jsonl: 'JSON Lines',
+  parquet: 'Parquet',
+};
+
+/** What each Parquet feature uno does not read yet is called in a sentence. */
+const FEATURES: Record<ParquetFeature, string> = {
+  encryption: 'encrypted Parquet',
+  brotli: 'Parquet compressed with Brotli',
+  lz4: 'Parquet compressed with LZ4',
+  lzo: 'Parquet compressed with LZO',
+  interval: 'the Parquet INTERVAL type',
+  bson: 'the Parquet BSON type',
+  variant: 'the Parquet VARIANT type',
+  'external-columns': 'Parquet with columns kept in other files',
+  'several-files': 'reading several Parquet files as one',
+};
+
 const SENTENCES: Sentences<Said> = {
   text: (s) => s.text,
   about: (s) => `${s.subject}: ${english(s.why)}`,
@@ -217,6 +297,15 @@ const SENTENCES: Sentences<Said> = {
         ? `${s.charset} · tab-separated`
         : `${s.charset} · delimiter '${s.delimiter}'`;
     return s.header === 'first' ? read : `${read} · no header row`;
+  },
+  'read-lines': (s) => `${s.charset} · ${KINDS.jsonl}`,
+  'read-parquet': (s) => {
+    const parts = [KINDS.parquet];
+    if (s.codecs.length > 0) parts.push(s.codecs.join(', '));
+    if (s.groups !== undefined) {
+      parts.push(`${s.groups} row group${s.groups === 1 ? '' : 's'}`);
+    }
+    return parts.join(' · ');
   },
 
   program: (s) =>
@@ -261,6 +350,8 @@ const SENTENCES: Sentences<Said> = {
     `${s.name} is ${s.count} files read as one, and ${s.file} is one file`,
   'point-several-at-other': (s) =>
     `${s.name} is ${s.count} files read as one, and cannot be pointed at ${s.given}`,
+  'relink-other-kind': (s) =>
+    `${s.name} was read as ${KINDS[s.was]}, and ${s.file} is ${KINDS[s.now]}`,
   'log-lost-edit': (s) => `the log lost track of an edit to ${s.source}`,
   'bucket-unconnected': (s) =>
     `${s.container} reads s3://${s.bucket}/…, which no connection covers · connect ${s.bucket} to read it`,
@@ -276,11 +367,17 @@ const SENTENCES: Sentences<Said> = {
   'nothing-to-undo': () => 'there is nothing to undo',
   'nothing-to-redo': () => 'there is nothing to redo',
   'in-view': () => 'the file is in view · Ctrl+E to transform',
+  'columns-moved': (s) =>
+    `${s.name} gained columns while the edit was on its way, so it was not made · make it again`,
   'file-closed': () => 'the file was closed',
   cancelled: (s) => `opening ${s.name} was cancelled`,
   'changed-on-disk': (s) => `${s.name} changed on disk after it was opened`,
   'stored-encoded': (s) =>
     `${s.name} was stored with Content-Encoding ${s.encoding}, and uno reads such an object only when it signs in · connect ${s.bucket} with a sign-in to read it`,
+  'not-read': (s) => `${s.name}: ${s.what} is not supported yet`,
+  'parquet-broken': (s) => `${s.name}: its Parquet footer or pages are damaged`,
+  'parquet-unsupported': (s) =>
+    `${s.name}: ${FEATURES[s.feature]} is not supported yet`,
 
   'keeps-no-connections': () =>
     'this engine keeps no connections · its platform gave it nowhere to read them from',

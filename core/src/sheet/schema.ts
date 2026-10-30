@@ -56,11 +56,6 @@ export interface Supplied {
 }
 
 export class Schema {
-  readonly headers: readonly string[];
-  /** The column the holder of the rows fills in, if any. It is one of
-   * `headers`, so an expression can name it. */
-  readonly supplied?: Supplied;
-
   /** How many rows an edit may name. The holder of the rows keeps it current. */
   rows: number;
 
@@ -76,12 +71,28 @@ export class Schema {
   private computed: number[] = [];
   /** Header to index, or -1 for a header more than one column has. */
   private readonly names = new Map<string, number>();
+  private headerNames: readonly string[];
+  private suppliedCols: readonly Supplied[];
 
-  constructor(headers: readonly string[], rows: number, supplied?: Supplied) {
-    this.headers = headers;
-    this.supplied = supplied;
+  constructor(
+    headers: readonly string[],
+    rows: number,
+    /** The columns the holder of the rows fills in, in the order it hands
+     * their values. Each is one of `headers`, so an expression can name it. */
+    supplied: readonly Supplied[] = [],
+  ) {
+    // The supplied columns come last, so data columns can be added before
+    // them without moving a column an edit can name.
+    const first = headers.length - supplied.length;
+    if (supplied.some(({ col }, nth) => col !== first + nth)) {
+      throw new Error(
+        `the supplied columns are not the last ${supplied.length} of the ${headers.length} columns, in order`,
+      );
+    }
     this.rows = rows;
-    headers.forEach((h, i) => this.names.set(h, this.names.has(h) ? -1 : i));
+    this.headerNames = headers;
+    this.suppliedCols = supplied;
+    this.index();
   }
 
   /** of builds a Schema from a saved log. */
@@ -89,7 +100,7 @@ export class Schema {
     headers: readonly string[],
     rows: number,
     edits: readonly Edit[],
-    supplied?: Supplied,
+    supplied?: readonly Supplied[],
   ): Schema {
     const s = new Schema(headers, rows, supplied);
     s.replay(edits);
@@ -120,7 +131,41 @@ export class Schema {
     }
   }
 
+  /**
+   * widen adds a data column for each of `names` after the last data column.
+   * Every supplied column moves right by their count, and no data column
+   * moves, so each logged edit stays on its cell: a supplied column refuses
+   * every edit. A name a column already has takes a suffix, so no column is
+   * renamed and every formula reads what it read.
+   */
+  widen(names: readonly string[]): void {
+    const at = this.headerNames.length - this.suppliedCols.length;
+    this.headerNames = [
+      ...this.headerNames.slice(0, at),
+      ...namesBeside(this.headerNames, names),
+      ...this.headerNames.slice(at),
+    ];
+    this.suppliedCols = this.suppliedCols.map((s) => ({
+      ...s,
+      col: s.col + names.length,
+    }));
+    this.index();
+    // The computed order is column numbers looked up by name.
+    this.reorder();
+  }
+
   // ------------------------------------------------------------ reading
+
+  /** Each column's name, in column order. */
+  get headers(): readonly string[] {
+    return this.headerNames;
+  }
+
+  /** The columns the holder of the rows fills in, in the order it hands
+   * their values. */
+  get supplied(): readonly Supplied[] {
+    return this.suppliedCols;
+  }
 
   /** True when the log is empty. */
   get empty(): boolean {
@@ -196,9 +241,10 @@ export class Schema {
       );
     }
     // A supplied column refuses every operation.
-    if (e.col === this.supplied?.col) {
+    const supplied = this.supplied.find((s) => s.col === e.col);
+    if (supplied !== undefined) {
       throw new Error(
-        `edit ${e.seq}: ${this.headers[e.col]} shows ${this.supplied.shows}, so it cannot be changed`,
+        `edit ${e.seq}: ${this.headers[e.col]} shows ${supplied.shows}, so it cannot be changed`,
       );
     }
 
@@ -336,6 +382,15 @@ export class Schema {
     this.reorder();
   }
 
+  /** index maps each header to its column, or to -1 when more than one
+   * column has it. */
+  private index(): void {
+    this.names.clear();
+    this.headerNames.forEach((h, i) =>
+      this.names.set(h, this.names.has(h) ? -1 : i),
+    );
+  }
+
   private reorder(): void {
     this.computed = this.graph.order().map((name) => this.names.get(name)!);
   }
@@ -345,6 +400,42 @@ export class Schema {
     this.resolve(name);
     return name;
   }
+}
+
+/** The suffix a name's first duplicate takes: _file_2. */
+const FIRST_SUFFIX = 2;
+
+/**
+ * namesBeside names the columns `added` beside the columns `kept`, so no two
+ * share a name. Every name in `kept` stays as it is. A name no column has
+ * yet stays, and any other takes the lowest suffix, from _2, that makes a
+ * name not yet taken. A header row is named beside nothing.
+ */
+export function namesBeside(
+  kept: readonly string[],
+  added: readonly string[],
+): string[] {
+  const taken = new Set([...kept, ...added]);
+  const seen = new Set(kept);
+  return added.map((name) => {
+    if (!seen.has(name)) {
+      seen.add(name);
+      return name;
+    }
+    const unique = suffixed(name, taken);
+    taken.add(unique);
+    return unique;
+  });
+}
+
+/**
+ * suffixed returns `name` with the lowest suffix, from _2, that makes a name
+ * `taken` does not hold.
+ */
+export function suffixed(name: string, taken: ReadonlySet<string>): string {
+  let n = FIRST_SUFFIX;
+  while (taken.has(`${name}_${n}`)) n++;
+  return `${name}_${n}`;
 }
 
 /**

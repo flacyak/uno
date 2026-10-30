@@ -6,57 +6,13 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { readAll } from '@ingest/csv';
-import { RecordScanner, bomLength } from '@ingest/scan';
+import { RecordScanner } from '@ingest/scan';
+import { piecewise, starts } from './chunks.ts';
+import type { Random } from '@core-tests/random';
+import { random } from '@core-tests/random';
 
 const encoder = new TextEncoder();
 const whole = new TextDecoder('utf-8');
-const piece = new TextDecoder('utf-8', { ignoreBOM: true });
-
-/** Record start offsets reported by the scanner when fed `chunk` bytes at a time. */
-function starts(bytes: Uint8Array, comma: string, chunk: number): number[] {
-  const out: number[] = [];
-  const s = new RecordScanner(comma, (offset) => out.push(offset));
-  const bom = bomLength(bytes);
-  for (let at = bom; at < bytes.length; at += chunk) {
-    s.push(bytes.subarray(at, Math.min(at + chunk, bytes.length)), at);
-  }
-  return out;
-}
-
-/**
- * Reads the file the way the engine does: split at every `every`th record
- * start, decode and parse each run on its own, and concatenate the rows.
- */
-function piecewise(
-  bytes: Uint8Array,
-  comma: string,
-  begins: number[],
-  every: number,
-): string[][] {
-  const cuts = [0];
-  for (let i = every; i < begins.length; i += every) cuts.push(begins[i]!);
-  cuts.push(bytes.length);
-
-  const rows: string[][] = [];
-  for (let i = 0; i + 1 < cuts.length; i++) {
-    const decoder = i === 0 ? whole : piece;
-    rows.push(
-      ...readAll(decoder.decode(bytes.subarray(cuts[i], cuts[i + 1])), comma),
-    );
-  }
-  return rows;
-}
-
-/** mulberry32 random number generator. A failure reports its seed. */
-function random(seed: number): () => number {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = seed;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 // Every byte the scanner acts on, plus multi-byte letters and a U+FEFF that
 // can land anywhere in the file.
@@ -84,7 +40,8 @@ const MAX_CHARS = 40;
 /** Number of random files to check. */
 const SEEDS = 4000;
 
-function csvish(rand: () => number): string {
+/** csvish returns a random file of the alphabet's characters. */
+function csvish(rand: Random): string {
   let s = rand() < BOM_CHANCE ? '\uFEFF' : '';
   const n = Math.floor(rand() * MAX_CHARS);
   for (let i = 0; i < n; i++)
@@ -102,14 +59,18 @@ describe('the scanner agrees with readAll', () => {
       const want = readAll(whole.decode(bytes), comma);
 
       for (const chunk of [1, 2, 7, 64]) {
-        const begins = starts(bytes, comma, chunk);
+        const begins = starts(
+          (begin) => new RecordScanner(comma, begin),
+          bytes,
+          chunk,
+        );
         expect(
           begins.length,
           `seed ${seed}, chunk ${chunk}: ${JSON.stringify(text)}`,
         ).toBe(want.length);
         for (const every of [1, 2, 3]) {
           expect(
-            piecewise(bytes, comma, begins, every),
+            piecewise(bytes, begins, every, (run) => readAll(run, comma)),
             `seed ${seed}, chunk ${chunk}, every ${every}: ${JSON.stringify(text)}`,
           ).toEqual(want);
         }
@@ -139,9 +100,11 @@ describe('the scanner agrees with readAll', () => {
   for (const [name, text, want] of cases) {
     test(name, () => {
       const bytes = encoder.encode(text);
-      expect(starts(bytes, ',', bytes.length)).toEqual(want);
+      const scanner = (begin: (offset: number) => void) =>
+        new RecordScanner(',', begin);
+      expect(starts(scanner, bytes, bytes.length)).toEqual(want);
       // Feeding one byte at a time gives the same offsets.
-      expect(starts(bytes, ',', 1)).toEqual(want);
+      expect(starts(scanner, bytes, 1)).toEqual(want);
     });
   }
 });

@@ -5,17 +5,21 @@
  * drop what the cursor has already shown, take a page. Each call starts from
  * a fresh readdir.
  *
+ * A walk reads every folder under a root depth-first, each folder's entries
+ * in the order byPartPath gives them, so its files come in path order.
+ *
  * Only this file and store/node.ts import node:fs. The guard test in
  * tests/store/opens.test.ts checks that.
  */
 
 import type { Dirent, Stats } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, realpath, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { compareStrings } from '@go';
+import { byPartPath } from './hive.ts';
 import { isRemote } from './index.ts';
-import type { Entry, Lister, Listing } from './list.ts';
+import type { Entry, Listing, Walker } from './list.ts';
 import { PAGE, byPageKey, pageKey } from './list.ts';
 
 // Re-exported for tests that page a folder by it.
@@ -23,17 +27,19 @@ export { PAGE };
 
 /**
  * diskLister browses this machine's disks: one readdir per page, and a stat
- * for each entry on the page.
+ * for each entry on the page. A walk's page reads the folders on the path it
+ * starts from and the ones it reaches, and stats each file on it.
  *
  * `page` is the page size. Tests set it small.
  */
-export function diskLister(page: number = PAGE): Lister {
+export function diskLister(page: number = PAGE): Walker {
   return {
     label: 'local files',
     // Every scheme-free path, the same rule localFiles opens by.
     handles: (path) => !isRemote(path),
     list: (dir, cursor) => listDir(dir, page, cursor),
     stat: statEntry,
+    walk: (root, cursor) => walkDir(root, page, cursor),
   };
 }
 
@@ -71,6 +77,116 @@ async function listDir(
   // rows end within the page, this is the last page.
   const after = rows[page];
   return after === undefined ? { entries } : { entries, next: pageKey(after) };
+}
+
+/** Walked is one file a walk found, and the folder under the root it is in. */
+interface Walked {
+  readonly folder: string;
+  readonly row: Row;
+}
+
+/** Walk is what a walk has found so far, and how many files it wants. */
+interface Walk {
+  readonly root: string;
+  readonly wants: number;
+  readonly found: Walked[];
+}
+
+/**
+ * walkDir reads one page of every file under `root`. The cursor is the path
+ * under the root of the last file the page before held, so the walk reads
+ * the folders on that path again and starts after it.
+ *
+ * It looks one file past the page to know whether a next page starts.
+ */
+async function walkDir(
+  root: string,
+  page: number,
+  cursor: string | undefined,
+): Promise<Listing> {
+  const walk: Walk = { root, wants: page + 1, found: [] };
+  await walkFolder(walk, '', cursor?.split('/') ?? [], [root]);
+
+  const entries = await Promise.all(
+    walk.found.slice(0, page).map(async ({ folder, row }) => ({
+      ...(await entryOf(join(root, folder))(row)),
+      name: under(folder, row.name),
+    })),
+  );
+  const last = entries.at(-1);
+  return walk.found.length > page && last !== undefined
+    ? { entries, next: last.name }
+    : { entries };
+}
+
+/**
+ * walkFolder adds the files under `folder` to the walk, depth-first, until it
+ * has as many as it wants. `after` is the rest of the cursor's path from
+ * here: a name before its first segment is passed over, and the one equal to
+ * it is the folder the cursor goes on into, or the cursor's own file.
+ *
+ * `inside` is the folder and every folder above it, as walked. A symlinked
+ * folder that leads to one of them is passed over, so a loop ends.
+ */
+async function walkFolder(
+  walk: Walk,
+  folder: string,
+  after: readonly string[],
+  inside: readonly string[],
+): Promise<void> {
+  const dir = join(walk.root, folder);
+  const found = namesOf(
+    await readdir(dir, { withFileTypes: true, encoding: 'buffer' }),
+  );
+  const rows = (await rowsOf(dir, found)).toSorted((a, b) =>
+    byPartPath(a.name, b.name),
+  );
+  const [mark, ...deeper] = after;
+  for (const row of rows) {
+    if (walk.found.length >= walk.wants) return;
+    const standing = standingOf(row.name, mark);
+    if (standing === 'before') continue;
+    if (!row.folder) {
+      if (standing === 'after') walk.found.push({ folder, row });
+      continue;
+    }
+    const path = join(dir, row.name);
+    if (row.stats !== undefined && (await circles(path, inside))) continue;
+    const next = standing === 'on' ? deeper : [];
+    await walkFolder(walk, under(folder, row.name), next, [...inside, path]);
+  }
+}
+
+/**
+ * standingOf is where a name stands against `mark`, the cursor's name at its
+ * depth: before it, on it, or after it. With no mark, every name is after.
+ */
+function standingOf(
+  name: string,
+  mark: string | undefined,
+): 'before' | 'on' | 'after' {
+  if (mark === undefined) return 'after';
+  const order = byPartPath(name, mark);
+  if (order === 0) return 'on';
+  return order < 0 ? 'before' : 'after';
+}
+
+/** under is a name's path under the root, in `folder` under it. */
+function under(folder: string, name: string): string {
+  return folder === '' ? name : `${folder}/${name}`;
+}
+
+/**
+ * circles says whether a symlinked folder leads to a folder the walk is
+ * already inside.
+ */
+async function circles(
+  link: string,
+  inside: readonly string[],
+): Promise<boolean> {
+  const target = await realpath(link);
+  const folders = await Promise.all(inside.map((path) => realpath(path)));
+  return folders.includes(target);
 }
 
 /** Found is one directory entry with its name decoded to a string. */

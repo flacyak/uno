@@ -1,15 +1,16 @@
 /**
- * @fileoverview listWith picks the first lister that claims a path, and refuses
- * by name a path every lister passes on.
+ * @fileoverview listWith and walkWith pick the first lister that claims a path,
+ * and refuse by name a path every lister passes on.
  *
  * The listers here are stubs that record what they were asked. Real listings
- * are in disk.test.ts and s3list.test.ts.
+ * are in disk.test.ts and s3list.test.ts, and real walks in diskwalk.test.ts
+ * and s3walk.test.ts.
  */
 
 import { expect, test } from 'vite-plus/test';
 
 import type { Entry, Lister, Listing } from '@store';
-import { listWith } from '@store';
+import { listWith, walkWith } from '@store';
 
 /** A lister that claims paths starting with `prefix` and lists what it was handed. */
 function stub(
@@ -78,5 +79,42 @@ test('a path nothing claims is refused by name', async () => {
 test('a build with no listers says so rather than trailing off', async () => {
   await expect(listWith([], '/home/jo/')).rejects.toThrow(
     '/home/jo/: nothing here browses it · this build browses nothing',
+  );
+});
+
+/** A stub that also walks, answering each walk with one file a folder down. */
+function walker(label: string, prefix: string): ReturnType<typeof stub> {
+  const lister = stub(label, prefix);
+  return {
+    ...lister,
+    walk(root, cursor): Promise<Listing> {
+      lister.asked.push([root, cursor]);
+      const file = 'year=2025/a.csv';
+      return Promise.resolve({
+        entries: [{ ...entry(root + file), name: file }],
+      });
+    },
+  };
+}
+
+// A lister that cannot walk is passed over for one that can.
+test('a walk goes to the first lister that claims the path and walks', async () => {
+  const browses = stub('S3', 's3://');
+  const walks = walker('S3', 's3://');
+
+  const listing = await walkWith([browses, walks], 's3://acme/', 'k');
+
+  expect(listing.entries.map((e) => e.path)).toEqual([
+    's3://acme/year=2025/a.csv',
+  ]);
+  expect(walks.asked).toEqual([['s3://acme/', 'k']]);
+  expect(browses.asked).toEqual([]);
+});
+
+test('a walk nothing here can make is refused, naming what walks', async () => {
+  const listers = [walker('local files', '/'), stub('S3', 's3://')];
+
+  await expect(walkWith(listers, 's3://acme/')).rejects.toThrow(
+    's3://acme/: nothing here lists every file under it · this build lists folders in local files',
   );
 });

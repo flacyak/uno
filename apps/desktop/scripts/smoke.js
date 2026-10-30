@@ -13,11 +13,12 @@
 import { newManifest, readContainer, writeDocument } from "@uno/core/document";
 import { parseConnection } from "@uno/core/library";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HOME_REGION } from "@core-tests/store/regions";
+import { EVENTS_FILE, EVENTS_WORKSPACE, eventsText } from "../src/main/smoke/events.ts";
 import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@core-tests/store/standin";
 import {
   DRIVEN_LANGUAGE_ENV,
@@ -31,9 +32,11 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
-const fixture = join(pkg, "../../core/tests/testdata/sales-q3.csv");
+// The core's test files, which the checks open from.
+const testdata = join(pkg, "../../core/tests/testdata");
+const fixture = join(testdata, "sales-q3.csv");
 // A second export, for the checks that a workspace holds several.
-const second = join(pkg, "../../core/tests/testdata/google-ads-sales.csv");
+const second = join(testdata, "google-ads-sales.csv");
 
 /** The object pasted into the sources panel: the second export, in S3. */
 const KEY = "2025/ads-q3.csv";
@@ -46,7 +49,7 @@ const BESIDE = ["2025/ads-q4.csv", "2025/sales-q3.csv"];
  * fourth that arrives later and is appended. The fourth is the first part's
  * bytes under a name that sorts after the third.
  */
-const PARTS = [1, 2, 3].map((n) => join(pkg, `../../core/tests/testdata/sales-q3-part-${n}.csv`));
+const PARTS = [1, 2, 3].map((n) => join(testdata, `sales-q3-part-${n}.csv`));
 const ARRIVING = new Map([
   ...(await Promise.all(
     PARTS.map(async (path, i) => [`shop/2025/sales-q3-part-${i + 1}.csv`, await readFile(path)]),
@@ -89,32 +92,70 @@ await writeFile(
   `[finance]\naws_access_key_id = ${KEYS.accessKeyId}\naws_secret_access_key = ${KEYS.secretAccessKey}\n`,
 );
 
+/** Writes a workspace of `source` alone, with no log, to `at`. */
+async function writeOneSource(at, source) {
+  await mkdir(dirname(at), { recursive: true });
+  await writeFile(
+    at,
+    writeDocument({
+      manifest: newManifest(),
+      sources: [{ rows: 0, cols: 0, state: { active: { row: 0, col: 0 } }, ...source }],
+      active: source.id,
+      log: [],
+      extra: new Map(),
+      at,
+    }),
+  );
+}
+
 // A workspace a colleague sent: one source, in a bucket this run has no
 // connection to. It is in its own folder, since every .uno directly in the
 // scratch folder is taken as one this run saved.
 const sent = join(scratch, "sent", "gone.uno");
-await mkdir(dirname(sent), { recursive: true });
+await writeOneSource(sent, { id: "gone", name: "gone.csv", path: GONE, bytes: 0 });
+
+// A JSON Lines file whose last events hold a key the first ones lack, and a
+// workspace that says it was read as JSON Lines, which is how such a file
+// is read until one named on its own is. In a folder of its own, as above.
+const events = join(scratch, "late", EVENTS_FILE);
+const eventsWorkspace = join(scratch, "late", EVENTS_WORKSPACE);
+await mkdir(dirname(events), { recursive: true });
+const eventLines = Buffer.from(eventsText());
+await writeFile(events, eventLines);
 await writeFile(
-  sent,
+  eventsWorkspace,
   writeDocument({
     manifest: newManifest(),
     sources: [
       {
-        id: "gone",
-        name: "gone.csv",
-        path: GONE,
-        bytes: 0,
+        id: "events",
+        name: EVENTS_FILE,
+        path: events,
+        bytes: eventLines.length,
+        kind: "jsonl",
         rows: 0,
         cols: 0,
         state: { active: { row: 0, col: 0 } },
       },
     ],
-    active: "gone",
+    active: "events",
     log: [],
     extra: new Map(),
-    at: sent,
+    at: eventsWorkspace,
   }),
 );
+// A workspace saved over the Parquet fixture, which says its source was read
+// as Parquet. Detection does not read Parquet yet, so this is how a person
+// reaches it.
+const parquet = join(testdata, "sales-q3.snappy.parquet");
+const held = join(scratch, "held", "sales-q3-parquet.uno");
+await writeOneSource(held, {
+  id: "sales",
+  name: "sales-q3.snappy.parquet",
+  path: parquet,
+  bytes: (await stat(parquet)).size,
+  kind: "parquet",
+});
 
 const electron = (await import("electron")).default;
 
@@ -193,9 +234,12 @@ const { code, out } = await drive("smoke", {
     ...DRIVEN_LANGUAGE_ENV,
     UNO_SMOKE: scratch,
     UNO_SMOKE_SOURCE: second,
+    UNO_SMOKE_TESTDATA: testdata,
     // The object's address, for the check that adds it.
     UNO_SMOKE_OBJECT: object,
     UNO_SMOKE_SENT: sent,
+    UNO_SMOKE_EVENTS: eventsWorkspace,
+    UNO_SMOKE_PARQUET: held,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits

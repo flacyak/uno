@@ -1,0 +1,4 @@
+{"rows":1,"groups":1,"codecs":["snappy"],"paged":false}
+["mycol","/mycol"]
+
+[""]

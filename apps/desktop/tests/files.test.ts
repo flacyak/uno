@@ -1,9 +1,9 @@
 /**
- * @fileoverview Main writing a workspace file.
+ * @fileoverview Main writing a workspace file, and what its dialogs list.
  *
  * A failed write leaves the existing file as it was, and removes its
  * scratch file. unoPath adds the .uno extension when a Save As path lacks
- * it.
+ * it. The Open and Add dialogs list the extensions core reads.
  */
 
 import { mkdtemp, mkdir, readFile, readdir, stat, chmod, writeFile } from "node:fs/promises";
@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 
-import { unoPath, writeAtomic } from "@main/files";
+import { ADD_EXTENSIONS, OPEN_EXTENSIONS, unoPath, writeAtomic } from "@main/files";
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 
@@ -92,4 +92,9 @@ test("a picked path is given the workspace extension when it was typed without",
   expect(unoPath("/home/me/sales.csv")).toBe("/home/me/sales.csv.uno");
   expect(unoPath("/home/me/sales.uno")).toBe("/home/me/sales.uno");
   expect(unoPath("/home/me/SALES.UNO")).toBe("/home/me/SALES.UNO");
+});
+
+test("the Open dialog lists a workspace and what core reads, and the Add dialog what core reads", () => {
+  expect(OPEN_EXTENSIONS).toEqual(["uno", "csv", "tsv", "jsonl", "ndjson", "json"]);
+  expect(ADD_EXTENSIONS).toEqual(["csv", "tsv", "jsonl", "ndjson", "json"]);
 });

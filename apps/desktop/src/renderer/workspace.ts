@@ -9,10 +9,12 @@
  * This file is plain logic, so tests run it directly.
  */
 
-import { isWorkspace } from "@document";
-import { Band } from "@engine";
+import { WORKSPACE_EXT, isWorkspace } from "@document";
+import { Band, movedTo } from "@engine";
 import type {
   Changed,
+  ColumnInfo,
+  EditRequest,
   Engine,
   FindRequest,
   Found,
@@ -23,6 +25,7 @@ import type {
   SourceHandle,
   SourceRef,
 } from "@engine";
+import { nameParts } from "@ingest";
 import { NO_ROW, Op, editEquals } from "@sheet";
 import type { Edit } from "@sheet";
 import type { Listing, SingleRef } from "@store";
@@ -41,6 +44,15 @@ import type { State } from "./sources.ts";
 export const CARRY_LIMIT = 256 << 20;
 
 export type Mode = "view" | "transform";
+
+/**
+ * Returns the file name a Save As suggests for a workspace whose first source
+ * is `source`: its stem, every extension dropped, plus .uno. orders.csv.gz
+ * suggests orders.uno.
+ */
+export function suggestedName(source: string): string {
+  return `${nameParts(source).stem || m.workspace_file_stem()}${WORKSPACE_EXT}`;
+}
 
 /**
  * Returns the status message after a reload, comparing the old tab with the
@@ -150,6 +162,23 @@ export class Tab {
     return a.length !== b.length || !a.every((e, i) => editEquals(e, b[i]!));
   }
 
+  /**
+   * Takes the columns the source found as it was indexed. They go in before
+   * the columns it supplies, so the saved cell moves with its column.
+   */
+  widened(columns: readonly ColumnInfo[]): void {
+    const inserted = this.band.widen(columns);
+    this.cell = { ...this.cell, col: movedTo(this.cell.col, inserted) };
+  }
+
+  /**
+   * Sends an edit with the column count the band draws, so the engine can
+   * refuse one aimed at a column that has moved since, and takes the change.
+   */
+  async edit(req: Omit<EditRequest, "width">): Promise<void> {
+    this.landed(await this.source.edit({ ...req, width: this.band.cols() }));
+  }
+
   landed(changed: Changed): void {
     this.edits.push(changed.edit);
     this.band.columns = changed.columns;
@@ -163,6 +192,19 @@ export class Tab {
   saved(): void {
     this.savedEdits = this.edits.slice();
   }
+}
+
+/** WorkspaceEvents is what a workspace tells whoever shows it. */
+export interface WorkspaceEvents {
+  /** Rows landed or index progress changed. */
+  changed(): void;
+  /** A source's offer changed. */
+  offered(tab: Tab): void;
+  /**
+   * A source found columns as it was indexed. Its band holds them already,
+   * so whoever draws it can draw them at once.
+   */
+  widened(tab: Tab): void;
 }
 
 export class Workspace {
@@ -187,10 +229,7 @@ export class Workspace {
   private constructor(
     /** The engine this workspace owns. The panel lists and peeks through it. */
     readonly engine: Engine,
-    /** Called when rows land or index progress changes. */
-    private readonly changed: () => void,
-    /** Called when a source's offer changes, with its tab. */
-    private readonly offered: (tab: Tab) => void,
+    private readonly events: WorkspaceEvents,
   ) {}
 
   /**
@@ -204,11 +243,10 @@ export class Workspace {
     ref: SourceRef,
     engine: Engine,
     savePath: string,
-    changed: () => void,
-    offered: (tab: Tab) => void,
+    events: WorkspaceEvents,
     signal?: AbortSignal,
   ): Promise<Workspace> {
-    const w = new Workspace(engine, changed, offered);
+    const w = new Workspace(engine, events);
     w.showing = await w.add(ref, signal);
     // The sources it opened with count as saved.
     w.savedSources = w.tabs.map((t) => t.id);
@@ -229,11 +267,16 @@ export class Workspace {
   }
 
   private tab(source: SourceHandle, saved?: readonly Edit[]): Tab {
-    const t = new Tab(source, new Band(source, this.changed), saved);
-    source.onProgress = () => this.changed();
+    const changed = (): void => this.events.changed();
+    const t = new Tab(source, new Band(source, changed), saved);
+    source.onProgress = changed;
     source.onOffer = (offer) => {
       t.offer = offer;
-      this.offered(t);
+      this.events.offered(t);
+    };
+    source.onColumns = (columns) => {
+      t.widened(columns);
+      this.events.widened(t);
     };
     return t;
   }
@@ -379,7 +422,7 @@ export class Workspace {
     const t = this.showing;
     const pending = t.band.write(row, col, value);
     try {
-      t.landed(await t.source.edit({ op: Op.Set, row, col, now: value }));
+      await t.edit({ op: Op.Set, row, col, now: value });
     } catch (err) {
       t.band.restore(pending);
       throw err;
@@ -392,9 +435,7 @@ export class Workspace {
     const t = this.tabs.find((tab) => tab.id === offer.source);
     if (t === undefined) throw new Error(m.offer_source_gone());
     t.offer = null;
-    t.landed(
-      await t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
-    );
+    await t.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program });
   }
 
   /**
@@ -403,7 +444,7 @@ export class Workspace {
    * unknown column.
    */
   async bind(tab: Tab, col: number, expr: string): Promise<void> {
-    tab.landed(await tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }));
+    await tab.edit({ op: Op.Bind, row: NO_ROW, col, now: expr });
   }
 
   /** Undoes the showing tab's last edit and returns that edit. */
@@ -433,8 +474,7 @@ export class Workspace {
 
   /** The file name to suggest in a Save As dialog: the first tab's stem plus .uno. */
   get suggestedFileName(): string {
-    const base = (this.tabs[0]?.name ?? "").replace(/\.[^.]*$/, "");
-    return `${base || m.workspace_file_stem()}.uno`;
+    return suggestedName(this.tabs[0]?.name ?? "");
   }
 
   /** Whether there is unsaved work: an edit, a source added or removed, or

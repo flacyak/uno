@@ -1,0 +1,15 @@
+{"rows":2,"groups":1,"codecs":["snappy"],"paged":false}
+["id","/id"]
+["bool_col","/bool_col"]
+["tinyint_col","/tinyint_col"]
+["smallint_col","/smallint_col"]
+["int_col","/int_col"]
+["bigint_col","/bigint_col"]
+["float_col","/float_col"]
+["double_col","/double_col"]
+["date_string_col","/date_string_col"]
+["string_col","/string_col"]
+["timestamp_col","/timestamp_col"]
+
+["6","true","0","0","0","0","0","0","04/01/09","0","2009-04-01T00:00:00"]
+["7","false","1","1","1","10","1.1","10.1","04/01/09","1","2009-04-01T00:01:00"]

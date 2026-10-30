@@ -17,6 +17,7 @@ import { bucket, etagOf } from "@core-tests/store/standin";
 import type { Bucket } from "@core-tests/store/standin";
 import { m } from "@paraglide/messages";
 import { bucketEngine } from "./bucket-engine.ts";
+import { UNHEARD } from "./unheard.ts";
 import { stateOf, stateWord } from "@renderer/sources";
 import { Workspace, reloaded } from "@renderer/workspace";
 
@@ -49,8 +50,7 @@ async function both(): Promise<Workspace> {
     { name: "google-ads.csv", path: OBJECT },
     bucketEngine(b),
     OBJECT,
-    () => {},
-    () => {},
+    UNHEARD,
   );
   const local = join(dir, "local.csv");
   await writeFile(local, ADS);

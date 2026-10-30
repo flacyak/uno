@@ -8,11 +8,11 @@
  * returns the whole rows in the window. The heads are strings in this file.
  */
 
-import { expect, test } from 'vite-plus/test';
+import { describe, expect, test } from 'vite-plus/test';
 
 import { PEEK_BYTES, PEEK_ROWS, peek, peekHead, readHead } from '@engine/peek';
 import type { Head } from '@engine/peek';
-import { headerOf, readAll } from '@ingest';
+import { PARQUET_MAGIC_BYTES, headerOf, readAll } from '@ingest';
 import { blobFiles } from '@store';
 import type { ByteSource, FileHandler, FileRef } from '@store';
 import { localFiles } from '@store/node';
@@ -194,6 +194,55 @@ test('a ref nothing opens is refused by name', async () => {
   );
 });
 
+/** A handler for one file holding `file`, recording its reads and closes. */
+function holding(file: Uint8Array): Watched {
+  const reads: Read[] = [];
+  let closed = 0;
+  const source: ByteSource = {
+    size: file.length,
+    read: (offset, length) => {
+      reads.push({ offset, length });
+      return Promise.resolve(file.subarray(offset, offset + length));
+    },
+    close: () => {
+      closed++;
+      return Promise.resolve();
+    },
+  };
+  return {
+    files: {
+      label: 'a file in memory',
+      handles: () => true,
+      open: () => Promise.resolve(source),
+    },
+    reads,
+    closed: () => closed,
+  };
+}
+
+test('a front that opens as Parquet does has the last 4 bytes read too, and is refused by name', async () => {
+  // Parquet's magic at each end, too far apart for one window to hold both.
+  const parquet = new Uint8Array(2 * PEEK_BYTES);
+  const magic = encoder.encode('PAR1');
+  parquet.set(magic);
+  parquet.set(magic, parquet.length - magic.length);
+  const f = holding(parquet);
+
+  const front = await readHead([f.files], BIG);
+
+  expect(f.reads).toEqual([
+    { offset: 0, length: PEEK_BYTES },
+    {
+      offset: parquet.length - PARQUET_MAGIC_BYTES,
+      length: PARQUET_MAGIC_BYTES,
+    },
+  ]);
+  expect(f.closed()).toBe(1);
+  await expect(peekHead('q3', front)).rejects.toThrow(
+    'q3: Parquet is not supported yet',
+  );
+});
+
 // ------------------------------------------------------------ the rows in it
 
 test('the fixture peeks as its six headers and the twenty rows under them', async () => {
@@ -330,4 +379,56 @@ test('a header the window did not reach the end of peeks as no rows', async () =
   expect(peeked.rows).toEqual([]);
   expect(peeked.header[0]).toBe('column_0');
   expect(peeked.header.length).toBeLessThan(200);
+});
+
+describe('a JSON Lines head', () => {
+  const lines =
+    '{"id":1,"name":"Ada"}\n{"id":2,"name":"Ben","late":true}\n{"id":3}\n';
+
+  test('peeks as a column per key, in the order the head meets them, under its label', async () => {
+    const peeked = await peekHead('events.jsonl', head(lines));
+    expect(peeked.label).toEqual({ t: 'read-lines', charset: 'UTF-8' });
+    expect(peeked.header).toEqual(['id', 'name', 'late']);
+    expect(peeked.rows).toEqual([
+      ['1', 'Ada', ''],
+      ['2', 'Ben', 'true'],
+      ['3', '', ''],
+    ]);
+  });
+
+  test('drops a line the window cut, and learns no key from it', async () => {
+    const cut = head(lines, lines.indexOf('"late"') + 3);
+    const peeked = await peekHead('events.jsonl', cut);
+    expect(peeked.header).toEqual(['id', 'name']);
+    expect(peeked.rows).toEqual([['1', 'Ada']]);
+  });
+
+  test('learns the keys of a last line with no line break, when the head is the whole file', async () => {
+    const peeked = await peekHead(
+      'events.jsonl',
+      head('{"id":1}\n{"id":2,"z":0}'),
+    );
+    expect(peeked.header).toEqual(['id', 'z']);
+    expect(peeked.rows).toEqual([
+      ['1', ''],
+      ['2', '0'],
+    ]);
+  });
+
+  test('has no header row to choose: every line is a row either way', async () => {
+    const peeked = await peekHead(
+      'events.jsonl',
+      head(lines),
+      PEEK_ROWS,
+      'none',
+    );
+    expect(peeked.header).toEqual(['id', 'name', 'late']);
+    expect(peeked.rows).toHaveLength(3);
+  });
+
+  test('that is empty peeks as no columns and no rows', async () => {
+    const peeked = await peekHead('events.jsonl', head(''));
+    expect(peeked.header).toEqual([]);
+    expect(peeked.rows).toEqual([]);
+  });
 });

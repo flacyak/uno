@@ -25,13 +25,42 @@ export {
   decodersFor,
   delimiterName,
   encodingName,
-  extensionOf,
   headerOf,
   labelOf,
   openFormat,
   peekFormat,
+  pointerTo,
 } from './format.ts';
 export type { Format, HeaderMode, Scanner, Charset } from './format.ts';
+export {
+  PARQUET_MAGIC_BYTES,
+  detect,
+  headOf,
+  kindOf,
+  opensAsParquet,
+  readableHead,
+  refuseNotRead,
+  refuseUnread,
+} from './detect.ts';
+export type { Detected, Layout, StoredHead } from './detect.ts';
+export {
+  DIALOG_EXTENSIONS,
+  READ_COMPRESSIONS,
+  READ_EXTENSIONS,
+  linesByName,
+  nameParts,
+  readable,
+} from './names.ts';
+export type { NameParts, StoredCompression } from './names.ts';
+export { linesFormat, readLines } from './jsonl.ts';
+export { keyedColumn, pinnedColumn } from './keys.ts';
+export type { KeyedColumn } from './keys.ts';
+export { CHUNK_CACHE_BYTES, chunkCache } from './parquet/buffer.ts';
+export type { ChunkCache } from './parquet/buffer.ts';
+export { openTable } from './parquet/table.ts';
+export type { Table } from './parquet/table.ts';
+export { delimitedRecords } from './records.ts';
+export type { Column, RecordFormat } from './records.ts';
 export { RecordScanner, bomLength } from './scan.ts';
 export { sniffDelimiter, sniffEncoding } from './sniff.ts';
 export type { Encoding } from './sniff.ts';
