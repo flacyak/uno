@@ -178,6 +178,33 @@ export class Tallies {
   }
 
   /**
+   * adopt takes over the folds of `was`'s charts for a view whose index
+   * kept every block `was` read but `block`, its last, whose rows `last`
+   * holds, and which the view reads again with the rows that follow. A fold
+   * that holds the block gives its rows back, so every fold holds the kept
+   * rows alone, and each chart is pending, to hear the rows that follow;
+   * `was` is left with no chart. attach keeps a fold adopted while the
+   * chart reads the same columns.
+   */
+  adopt(was: Tallies, block: number, last: Block): void {
+    const kept = last.from;
+    for (const [id, t] of was.charts) {
+      // A fold takes blocks whole, so one that holds the block's first row
+      // holds the block.
+      if (holds(t, kept)) unfold(t, block, last);
+      t.rows = Math.min(t.rows, kept);
+      if (t.ahead !== undefined) {
+        const [from, end] = t.ahead;
+        t.ahead = from < kept ? [from, Math.min(end, kept)] : undefined;
+      }
+      t.done = false;
+      this.charts.set(id, t);
+    }
+    // `was`, alive until it is closed, folds nothing more into these folds.
+    was.charts.clear();
+  }
+
+  /**
    * refold starts the fold of each chart that reads any of `cols` again
    * from its first row, for an edit that changed every row of them, and
    * says whether any chart does.
@@ -319,6 +346,26 @@ function sample(
   const xs = shown(x);
   const ys = shown(y);
   for (let row = from; row < end; row++) fold.add(block, row, xs(row), ys(row));
+}
+
+/**
+ * unfold takes the rows of `block` out of `t`'s fold, as they showed, so
+ * the block can be folded again whole. A sample's extent of the block is
+ * empty until then.
+ */
+function unfold(t: Tallying, block: number, { from, end, shown }: Block): void {
+  if (t.t === 'sample') {
+    const xs = shown(t.x);
+    const ys = shown(t.y);
+    for (let row = from; row < end; row++) {
+      t.fold.remove(block, row, xs(row), ys(row));
+    }
+    t.fold.refold(block, new SampleFold());
+  } else {
+    const by = shown(t.by);
+    const sum = t.sum === undefined ? undefined : shown(t.sum);
+    for (let row = from; row < end; row++) t.fold.remove(by(row), sum?.(row));
+  }
 }
 
 /**

@@ -35,6 +35,7 @@ import {
   ROWS,
   UNITS,
 } from '@core-tests/testdata/sales-q3';
+import { PARTS, PART_ROWS } from '@core-tests/testdata/sales-q3-parts';
 import {
   FIXTURE,
   TINY,
@@ -59,6 +60,10 @@ const EDITED = 3;
 const ABOVE_ALL = '999999';
 /** The byte that ends each line of the fixture. */
 const NEWLINE = '\n'.charCodeAt(0);
+/** How many parts of the fixture a source is opened with, before the last is appended. */
+const OPENED = PARTS - 1;
+/** How many rows the source has before the append. */
+const ROWS_BEFORE = PART_ROWS * OPENED;
 
 /** Rows per region, placed as a save writes a new chart. */
 const REGION_ROWS: Chart = {
@@ -82,30 +87,32 @@ const UNITS_REVENUE: Chart = {
   plot: { t: 'scatter', x: column(UNITS), y: column(REVENUE) },
 };
 
-/** pure folds every row of `sheet` for `plot`, as its complete tally. */
-function pure(plot: Plot, sheet: Sheet = sales): Tally {
+/** pure folds the first `rows` of `sheet` for `plot`, as its complete tally. */
+function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   const cell = (row: number, at: { col: number }) => sheet.display(row, at.col);
+  const coverage =
+    rows === ROWS ? WHOLE : { rows, total: rows, complete: true };
   if (plot.t === 'scatter') {
     const fold = new SampleFold();
-    for (let r = 0; r < ROWS; r++)
+    for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
-    return { t: 'sample', coverage: WHOLE, ...fold.snapshot() };
+    return { t: 'sample', coverage, ...fold.snapshot() };
   }
   const { by, sum } = plot;
   const fold = new GroupsFold(sum === undefined ? 'rows' : 'sum');
-  for (let r = 0; r < ROWS; r++) {
+  for (let r = 0; r < rows; r++) {
     fold.add(cell(r, by), sum === undefined ? '' : cell(r, sum));
   }
-  return { t: 'groups', coverage: WHOLE, ...fold.snapshot() };
+  return { t: 'groups', coverage, ...fold.snapshot() };
 }
 
-/** folded attaches `charts` and folds the sheet, a TINY block at a time. */
-function folded(charts: Chart[]): Tallies {
+/** folded attaches `charts` and folds the first `rows` of the sheet, a TINY block at a time. */
+function folded(charts: Chart[], rows = ROWS): Tallies {
   const tallies = new Tallies();
   for (const chart of charts) tallies.attach(chart, HEADERS);
   const shown = (col: number) => (row: number) => sales.display(row, col);
-  for (let from = 0; from < ROWS; from += TINY.blockRows) {
-    const end = Math.min(from + TINY.blockRows, ROWS);
+  for (let from = 0; from < rows; from += TINY.blockRows) {
+    const end = Math.min(from + TINY.blockRows, rows);
     tallies.fold(from / TINY.blockRows, from, end, shown);
   }
   return tallies;
@@ -282,6 +289,31 @@ test('a chart takes the blocks the index completes ahead of the pass behind it, 
   expect(tallies.from()).toBe(5 * rows);
   for (let block = 5; block * rows < ROWS; block++) fold(block);
   const whole = [[REGION_ROWS.id, pure(REGION_ROWS.plot)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(whole);
+});
+
+test('an append takes over each fold less the last block, which it folds again with the rows that follow, and each chart is pending until it has them', () => {
+  const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+  const was = folded(charts, ROWS_BEFORE);
+  was.read(ROWS_BEFORE, true);
+  const last = Math.floor((ROWS_BEFORE - 1) / TINY.blockRows);
+  const kept = last * TINY.blockRows;
+  const shown = (col: number) => (row: number) => sales.display(row, col);
+  const tallies = new Tallies();
+  tallies.adopt(was, last, { from: kept, end: ROWS_BEFORE, shown });
+  expect(was.from()).toBeUndefined();
+  for (const chart of charts) tallies.attach(chart, HEADERS);
+  expect(tallies.from()).toBe(kept);
+  const pending = { coverage: { rows: kept, total: ROWS, complete: false } };
+  const partial = charts.map((chart) => [chart.id, pending]);
+  expect(tallies.read(ROWS, false)).toMatchObject(partial);
+  // The last block grows into the rows that follow, and more follow it.
+  for (let from = kept, block = last; from < ROWS; block++) {
+    const end = Math.min(from + TINY.blockRows, ROWS);
+    tallies.fold(block, from, end, shown);
+    from = end;
+  }
+  const whole = charts.map((chart) => [chart.id, pure(chart.plot)]);
   expect(tallies.read(ROWS, true)).toStrictEqual(whole);
 });
 
