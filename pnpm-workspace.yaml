@@ -6,11 +6,13 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.3.1
   vite-plus: 0.3.1
 
-# pnpm does not run a dependency's install script unless it is named here.
-# Electron's fetches the ~100 MB runtime, so without this the app has nothing
-# to start.
-onlyBuiltDependencies:
-  - electron
+# pnpm does not run a dependency's install script unless it is ruled on here.
+# Electron's fetches the ~100 MB runtime, so without it the app has nothing to
+# start. electron-winstaller's fetches Squirrel, the Windows installer
+# electron-builder does not make for uno (electron-builder.yml makes NSIS).
+allowBuilds:
+  electron: true
+  electron-winstaller: false
 
 overrides:
   vite@*: "catalog:"
