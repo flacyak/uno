@@ -2,9 +2,10 @@
  * @fileoverview A view's charts, each folded over the rows read so far.
  *
  * A pass over the view's blocks feeds every chart in order, so a chart's
- * fold holds every row before the first block it lacks, and an edit moves
- * a fold by the one row it changed. A chart reads the columns its plot
- * names, found again by header where the file moved them.
+ * fold holds every row before the first block it lacks, an edit moves a
+ * fold by the one row it changed, and an append takes over the folds of
+ * the rows it kept. A chart reads the columns its plot names, found again
+ * by header where the file moved them.
  */
 
 import type { Chart, ChartColumn, Plot } from '@document';
@@ -81,6 +82,11 @@ export class Tallies {
   /** detach stops folding the chart with `id`. */
   detach(id: string): void {
     this.charts.delete(id);
+  }
+
+  /** How many charts are attached. */
+  get size(): number {
+    return this.charts.size;
   }
 
   /** from is the first row a pending chart lacks, or undefined when none is. */

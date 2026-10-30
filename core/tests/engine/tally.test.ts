@@ -13,7 +13,13 @@ import { expect, test } from 'vite-plus/test';
 import { newManifest, writeDocument } from '@document';
 import type { Chart, Plot } from '@document';
 import { TALLY_MS } from '@engine';
-import type { EditRequest, Engine, SourceHandle, Tally } from '@engine';
+import type {
+  EditRequest,
+  Engine,
+  SourceHandle,
+  SourceRef,
+  Tally,
+} from '@engine';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -23,7 +29,7 @@ import { Refusal } from '@said';
 import type { Said } from '@said';
 import { NO_ROW, Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
-import { blobProvider } from '@store';
+import { blobProvider, multiProvider } from '@store';
 import { diskProvider } from '@store/node';
 import { GroupsFold, SampleFold } from '@tally';
 import {
@@ -35,7 +41,12 @@ import {
   ROWS,
   UNITS,
 } from '@core-tests/testdata/sales-q3';
-import { PARTS, PART_ROWS } from '@core-tests/testdata/sales-q3-parts';
+import {
+  PARTS,
+  PART_FIXTURES,
+  PART_NAMES,
+  PART_ROWS,
+} from '@core-tests/testdata/sales-q3-parts';
 import {
   FIXTURE,
   TINY,
@@ -64,6 +75,16 @@ const NEWLINE = '\n'.charCodeAt(0);
 const OPENED = PARTS - 1;
 /** How many rows the source has before the append. */
 const ROWS_BEFORE = PART_ROWS * OPENED;
+/** Part `i` of the fixture as a ref to its file on disk. */
+const part = (i: number) => ({ name: PART_NAMES[i]!, path: PART_FIXTURES[i]! });
+/** The parts the source is opened with, as one ref. */
+const FIRST_TWO: SourceRef = {
+  name: 'sales-q3',
+  parts: Array.from({ length: OPENED }, (_, i) => ({ ref: part(i) })),
+  header: 'first',
+};
+/** The part that is appended. */
+const THIRD = part(OPENED);
 
 /** Rows per region, placed as a save writes a new chart. */
 const REGION_ROWS: Chart = {
@@ -561,6 +582,35 @@ test('a source pointed at a file again hears tallies of its new view alone, and 
     expect(await last).toStrictEqual(pure(REGION_ROWS.plot));
     await src.rows(0, 1);
     expect(heard.all).toStrictEqual([[REGION_ROWS.id, pure(REGION_ROWS.plot)]]);
+  } finally {
+    done();
+  }
+});
+
+test('an append keeps the folds of the rows it kept, so each chart hears its complete tally over every part with no read of the rows kept', async () => {
+  const hold = holding();
+  const single = [hold.provider, blobProvider()];
+  const { engine, done } = connect(TINY, [...single, multiProvider(single)]);
+  try {
+    const before = await openOne(engine, FIRST_TWO);
+    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE].map(
+      (chart) => ({ ...chart, source: before.id }),
+    );
+    const first = new Heard(before);
+    const lasts = charts.map((chart) => first.of(chart.id));
+    for (const chart of charts) await engine.chart(chart);
+    for (const last of lasts) await last;
+
+    const reads = hold.reads();
+    const src = await engine.append(before, [THIRD]);
+    const heard = new Heard(src);
+    const again = charts.map((chart) => heard.of(chart.id));
+    for (const [i, chart] of charts.entries()) {
+      expect(await again[i]).toStrictEqual(pure(chart.plot));
+    }
+    // A view that folded the kept rows again would read each of their blocks.
+    const blocksKept = Math.ceil(ROWS_BEFORE / TINY.blockRows);
+    expect(hold.reads() - reads).toBeLessThan(blocksKept);
   } finally {
     done();
   }
