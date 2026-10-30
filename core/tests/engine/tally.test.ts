@@ -53,6 +53,7 @@ import {
   bytes,
   connect,
   indexed,
+  multiProviders,
   openOne,
   sales,
 } from './harness.ts';
@@ -611,6 +612,39 @@ test('an append keeps the folds of the rows it kept, so each chart hears its com
     // A view that folded the kept rows again would read each of their blocks.
     const blocksKept = Math.ceil(ROWS_BEFORE / TINY.blockRows);
     expect(hold.reads() - reads).toBeLessThan(blocksKept);
+  } finally {
+    done();
+  }
+});
+
+test('an append keeps the edits of the rows it kept in the folds it takes over, so each chart hears its complete tally with them, as the new view shows them', async () => {
+  const { engine, done } = connect(TINY, multiProviders());
+  try {
+    const before = await openOne(engine, FIRST_TWO);
+    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE].map(
+      (chart) => ({ ...chart, source: before.id }),
+    );
+    const first = new Heard(before);
+    const lasts = charts.map((chart) => first.of(chart.id));
+    for (const chart of charts) await engine.chart(chart);
+    for (const last of lasts) await last;
+    engine.mode(true);
+    // The source's last row, in the block the append reads again.
+    const row = ROWS_BEFORE - 1;
+    const sheet = read(NAME, bytes);
+    const set = { op: Op.Set, row, col: REVENUE, now: '1' };
+    const note = { op: Op.Note, row, col: REGION, now: 'x^2' };
+    for (const req of [set, note]) {
+      sheet.replay([(await before.edit(req)).edit]);
+    }
+
+    const src = await engine.append(before, [THIRD]);
+    const heard = new Heard(src);
+    const again = charts.map((chart) => heard.of(chart.id));
+    for (const [i, chart] of charts.entries()) {
+      expect(await again[i]).toStrictEqual(pure(chart.plot, sheet));
+    }
+    expect((await src.rows(row, 1)).rows[0]).toEqual(shownRow(sheet, row));
   } finally {
     done();
   }
