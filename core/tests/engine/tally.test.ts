@@ -344,6 +344,16 @@ test('an append takes over each fold less the last block, which it folds again w
   expect(tallies.read(ROWS, true)).toStrictEqual(whole);
 });
 
+test('a fold taken over by a view whose headers put the columns elsewhere is not kept', () => {
+  const last = Math.floor((ROWS_BEFORE - 1) / TINY.blockRows);
+  const shown = (col: number) => (row: number) => sales.display(row, col);
+  const block = { from: last * TINY.blockRows, end: ROWS_BEFORE, shown };
+  const tallies = new Tallies();
+  tallies.adopt(folded([REGION_ROWS], ROWS_BEFORE), last, block);
+  tallies.attach(REGION_ROWS, [...HEADERS].reverse());
+  expect(tallies.from()).toBe(0);
+});
+
 test('an edit moves each chart that reads its column by the one row, which is pending again, and a chart over another column is not read again', async () => {
   const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
   const tallies = folded(charts);
@@ -593,8 +603,8 @@ test('a source pointed at a file again hears tallies of its new view alone, and 
   }
 });
 
-test('an append keeps the folds of the rows it kept, so each chart hears its complete tally over every part with no read of the rows kept', async () => {
-  const hold = holding();
+test('an append keeps the folds of the rows it kept, so each chart hears a partial tally over at least them while the new file is read, then its complete one over every part, with no read of the rows kept', async () => {
+  const hold = holding(THIRD.path);
   const single = [hold.provider, blobProvider()];
   const { engine, done } = connect(TINY, [...single, multiProvider(single)]);
   try {
@@ -608,15 +618,29 @@ test('an append keeps the folds of the rows it kept, so each chart hears its com
     for (const last of lasts) await last;
 
     const reads = hold.reads();
+    hold.arm();
     const src = await engine.append(before, [THIRD]);
     const heard = new Heard(src);
     const again = charts.map((chart) => heard.of(chart.id));
+    await hold.held;
+    await sleep(TALLY_MS);
+    hold.release();
     for (const [i, chart] of charts.entries()) {
       expect(await again[i]).toStrictEqual(pure(chart.plot));
     }
     // A view that folded the kept rows again would read each of their blocks.
     const blocksKept = Math.ceil(ROWS_BEFORE / TINY.blockRows);
     expect(hold.reads() - reads).toBeLessThan(blocksKept);
+    // The first tallies heard are partial, over at least the kept rows: the
+    // rows before the append less its last block, which is read again.
+    for (const [, partial] of heard.all.slice(0, charts.length)) {
+      if (partial.t === 'unread') throw new Error('a first tally is unread');
+      expect(partial.coverage.complete).toBe(false);
+      expect(partial.coverage.rows).toBeGreaterThanOrEqual(
+        ROWS_BEFORE - TINY.blockRows,
+      );
+      expect(partial.coverage.rows).toBeLessThan(ROWS);
+    }
   } finally {
     done();
   }
@@ -683,6 +707,20 @@ test('an append refused once its charts took the folds over gives them back, so 
     const set = { op: Op.Set, row: EDITED, col: REVENUE, now: '1' };
     sheet.replay([(await before.edit(set)).edit]);
     expect(await last).toStrictEqual(pure(chart.plot, sheet, ROWS_BEFORE));
+  } finally {
+    done();
+  }
+});
+
+test('a source pointed at another file folds its charts over that file alone, keeping nothing of the one it left', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const was = await opened(engine, [REGION_REVENUE]);
+    await new Heard(was).of(REGION_REVENUE.id);
+    const src = await engine.relink(was, part(0));
+    const last = new Heard(src).of(REGION_REVENUE.id);
+    const plot = REGION_REVENUE.plot;
+    expect(await last).toStrictEqual(pure(plot, sales, PART_ROWS));
   } finally {
     done();
   }
