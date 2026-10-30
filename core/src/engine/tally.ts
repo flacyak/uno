@@ -2,8 +2,9 @@
  * @fileoverview A view's charts, each folded over the rows read so far.
  *
  * A pass over the view's blocks feeds every chart in order, so a chart's
- * fold holds every row before the first block it lacks. A chart reads the
- * columns its plot names, found again by header where the file moved them.
+ * fold holds every row before the first block it lacks, and an edit moves
+ * a fold by the one row it changed. A chart reads the columns its plot
+ * names, found again by header where the file moved them.
  */
 
 import type { Chart, ChartColumn, Plot } from '@document';
@@ -123,6 +124,30 @@ export class Tallies {
   }
 
   /**
+   * cell moves each chart that has folded `row` of `block` and reads a
+   * column the row shows otherwise now, by that one row: out as it showed
+   * `before` the edit, and back in as it shows `after`. Each chart moved is
+   * pending again, so it hears its tally with the row moved, and its id is
+   * returned.
+   */
+  cell(
+    block: number,
+    row: number,
+    before: readonly string[],
+    after: readonly string[],
+  ): string[] {
+    const shows = (col: number) => (before[col] ?? '') !== (after[col] ?? '');
+    const moved: string[] = [];
+    for (const [id, t] of this.charts) {
+      if (!holds(t, row) || !colsOf(t).some(shows)) continue;
+      move(t, block, row, before, after);
+      t.done = false;
+      moved.push(id);
+    }
+    return moved;
+  }
+
+  /**
    * read returns each pending chart's tally over `total` rows. A complete one
    * is the chart's last, until it is attached again.
    */
@@ -208,6 +233,43 @@ function took(t: Tallying, from: number, end: number): void {
   if (t.ahead?.[0] === end) {
     t.rows = t.ahead[1];
     t.ahead = undefined;
+  }
+}
+
+/**
+ * holds says whether `t` has folded `row`: before its rows, or in the run
+ * it folded ahead of them.
+ */
+function holds(t: Tallying, row: number): boolean {
+  if (row < t.rows) return true;
+  return t.ahead !== undefined && t.ahead[0] <= row && row < t.ahead[1];
+}
+
+/** colsOf lists the columns `t` reads, the one it groups by first. */
+function colsOf(t: Tallying): number[] {
+  if (t.t === 'sample') return [t.x, t.y];
+  return t.sum === undefined ? [t.by] : [t.by, t.sum];
+}
+
+/**
+ * move takes `row` of `block` out of `t`'s fold as it showed `before`, and
+ * puts it back as it shows `after`.
+ */
+function move(
+  t: Tallying,
+  block: number,
+  row: number,
+  before: readonly string[],
+  after: readonly string[],
+): void {
+  const at = (shown: readonly string[], col: number | undefined) =>
+    col === undefined ? '' : (shown[col] ?? '');
+  if (t.t === 'sample') {
+    t.fold.remove(block, row, at(before, t.x), at(before, t.y));
+    t.fold.add(block, row, at(after, t.x), at(after, t.y));
+  } else {
+    t.fold.remove(at(before, t.by), at(before, t.sum));
+    t.fold.add(at(after, t.by), at(after, t.sum));
   }
 }
 
