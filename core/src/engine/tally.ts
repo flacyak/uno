@@ -41,6 +41,16 @@ type Tallying =
   | (Folding & { t: 'groups'; fold: GroupsFold; by: number; sum?: number });
 
 /**
+ * A block's rows as the folds read them: their range, and what a column of
+ * them shows, by row.
+ */
+export interface Block {
+  from: number;
+  end: number;
+  shown: (col: number) => (row: number) => string;
+}
+
+/**
  * Tallies folds a view's charts. A chart is attached to be folded, and is
  * pending until it hears its complete tally.
  */
@@ -107,11 +117,7 @@ export class Tallies {
     for (const t of this.charts.values()) {
       if (t.done || !takes(t, from)) continue;
       if (t.t === 'sample') {
-        const x = shown(t.x);
-        const y = shown(t.y);
-        for (let row = from; row < end; row++) {
-          t.fold.add(block, row, x(row), y(row));
-        }
+        sample(t.fold, t, block, { from, end, shown });
       } else {
         const by = shown(t.by);
         const sum = t.sum === undefined ? undefined : shown(t.sum);
@@ -126,9 +132,8 @@ export class Tallies {
   /**
    * cell moves each chart that has folded `row` of `block` and reads a
    * column the row shows otherwise now, by that one row: out as it showed
-   * `before` the edit, and back in as it shows `after`. Each chart moved is
-   * pending again, so it hears its tally with the row moved, and its id is
-   * returned.
+   * `before` the edit, and back in as it shows `after`. The ids of the
+   * charts moved are returned, for mend.
    */
   cell(
     block: number,
@@ -141,10 +146,35 @@ export class Tallies {
     for (const [id, t] of this.charts) {
       if (!holds(t, row) || !colsOf(t).some(shows)) continue;
       move(t, block, row, before, after);
-      t.done = false;
       moved.push(id);
     }
     return moved;
+  }
+
+  /**
+   * mend reads again, through `read`, each block whose least or most the
+   * row of a scatter among `moved` sat on, and folds it alone, so the
+   * block's extent is exact again. Then each chart of `moved` is pending
+   * again, so it hears its tally with the row moved. A read that fails
+   * leaves them pending too, so the caller can say unread to them.
+   */
+  async mend(
+    moved: readonly string[],
+    read: (block: number) => Promise<Block>,
+  ): Promise<void> {
+    const charts = moved.flatMap((id) => this.charts.get(id) ?? []);
+    try {
+      for (const t of charts) {
+        if (t.t !== 'sample') continue;
+        for (const stale of t.fold.stale()) {
+          const alone = new SampleFold();
+          sample(alone, t, stale, await read(stale));
+          t.fold.refold(stale, alone);
+        }
+      }
+    } finally {
+      for (const t of charts) t.done = false;
+    }
   }
 
   /**
@@ -249,6 +279,18 @@ function holds(t: Tallying, row: number): boolean {
 function colsOf(t: Tallying): number[] {
   if (t.t === 'sample') return [t.x, t.y];
   return t.sum === undefined ? [t.by] : [t.by, t.sum];
+}
+
+/** sample adds the rows of `block` to `fold`, as points of `x` against `y`. */
+function sample(
+  fold: SampleFold,
+  { x, y }: { x: number; y: number },
+  block: number,
+  { from, end, shown }: Block,
+): void {
+  const xs = shown(x);
+  const ys = shown(y);
+  for (let row = from; row < end; row++) fold.add(block, row, xs(row), ys(row));
 }
 
 /**
