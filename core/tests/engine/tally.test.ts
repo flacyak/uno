@@ -296,6 +296,27 @@ test('a scatter whose edit took back its most folds that block again, so its ext
   }
 });
 
+test('a scatter whose block cannot be read again is the one told its source could not be read, and a chart still folding goes on', async () => {
+  const tallies = folded([UNITS_REVENUE]);
+  tallies.read(ROWS, true);
+  tallies.attach(REGION_ROWS, HEADERS);
+  const sheet = read(NAME, bytes);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const was = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REVENUE, ABOVE_ALL);
+  const most = shownRow(sheet, EDITED);
+  await tallies.mend(tallies.cell(block, EDITED, was, most), blocks(sheet));
+  sheet.set(EDITED, REVENUE, '1');
+  const moved = tallies.cell(block, EDITED, most, shownRow(sheet, EDITED));
+  const unreadable = () => Promise.reject(new Error('unreadable'));
+  await expect(tallies.mend(moved, unreadable)).rejects.toThrow('unreadable');
+  const said: Said = { t: 'changed-on-disk', name: NAME };
+  const unread = [[UNITS_REVENUE.id, { t: 'unread', said }]];
+  expect(tallies.unread(said, moved)).toStrictEqual(unread);
+  const pending = tallies.read(ROWS, true).map(([id]) => id);
+  expect(pending).toEqual([REGION_ROWS.id]);
+});
+
 test('each chart of a .uno hears its fold of every row, as the pure fold reads it', async () => {
   const { engine, done } = connect(TINY);
   try {
