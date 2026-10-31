@@ -1,6 +1,7 @@
 /**
  * @fileoverview A workspace's charts over the real engine. The model mirrors
  * the records the engine holds, showing a change at once.
+ * Moving one leaves the workspace clean, and the next save keeps its place.
  */
 
 import { expect, test } from "vite-plus/test";
@@ -12,7 +13,7 @@ import type { SourceRef } from "@engine";
 import { REGION, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
-import { ADS, BARS, SALES, unoOf } from "./charted.ts";
+import { ADS, BARS, MOVED, SALES, unoOf } from "./charted.ts";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
 /** The sales export alone, and the name a .uno goes by here. */
@@ -155,12 +156,14 @@ test("a chart sent over a source on its way out stays where the engine holds it"
   });
 });
 
-test("a saved workspace reopens with its charts", async () => {
+test("a saved workspace reopens with its charts where they stood, and clean", async () => {
   await opened(FILE, async (w) => {
     expect(w.charts.all).toStrictEqual([]);
     const made = await w.charts.add(BARS);
+    w.charts.move(made.id, MOVED);
     await opened(uno(await bytesOf(w)), async (back) => {
-      expect(back.charts.all).toStrictEqual([made]);
+      expect(back.charts.all).toStrictEqual([{ ...made, place: MOVED }]);
+      expect(back.dirty).toBe(false);
     });
   });
 });
@@ -259,5 +262,37 @@ test("a chart that lands while the host writes the file stays unsaved", async ()
     await w.charts.remove(added.id);
     w.saved(UNO);
     expect(w.dirty, "removed since the bytes").toBe(true);
+  });
+});
+
+test("a move leaves the workspace clean, and the next save writes the new place", async () => {
+  const moved = { ...BARS, place: MOVED };
+  await opened(uno(unoOf([BARS])), async (w) => {
+    w.charts.move(BARS.id, MOVED);
+    // A chart that has gone has no window to move.
+    w.charts.move("c9", MOVED);
+    expect(w.charts.all).toStrictEqual([moved]);
+    expect(w.dirty).toBe(false);
+    expect(await savedCharts(w)).toStrictEqual([moved]);
+  });
+});
+
+test("a chart moved while a change waits on the engine keeps both", async () => {
+  const both = { ...BARS, title: "Rows", place: MOVED };
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const changed = w.charts.change(BARS.id, { title: both.title });
+    w.charts.move(BARS.id, MOVED);
+    await changed;
+    expect(w.charts.all).toStrictEqual([both]);
+    expect(await savedCharts(w)).toStrictEqual([both]);
+  });
+});
+
+test("a place a read would refuse stops no change and no save", async () => {
+  const titled = { ...BARS, title: "Rows" };
+  await opened(uno(unoOf([BARS])), async (w) => {
+    w.charts.move(BARS.id, { ...MOVED, x: 2 });
+    await w.charts.change(BARS.id, { title: titled.title });
+    expect(await savedCharts(w)).toStrictEqual([titled]);
   });
 });

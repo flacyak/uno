@@ -8,9 +8,10 @@
  * This file is plain logic, so tests run it directly.
  */
 
-import type { Chart, ChartColumn, Plot } from "@document";
+import { isPlace } from "@document";
+import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { Refusal } from "@engine";
-import type { Added, Engine } from "@engine";
+import type { Added, Engine, Place } from "@engine";
 
 /** What a person changes in a chart's form. */
 export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
@@ -45,6 +46,8 @@ export class Charts {
   /** The latest request on its way for each chart, shown over the answered
    * record until it lands: the record sent, or undefined for a removal. */
   private readonly sent = new Map<string, Chart | undefined>();
+  /** Where each moved window stands, over its chart's record. */
+  private readonly moved = new Map<string, ChartPlace>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The sources of the charts this workspace carries and cannot show. */
@@ -79,7 +82,9 @@ export class Charts {
     // A Map keeps a key where it first stood, so a change stays in line and a
     // new chart comes last.
     const shown = new Map<string, Chart | undefined>([...this.answered, ...this.sent]);
-    return [...shown.values()].filter((chart) => chart !== undefined);
+    return [...shown.values()]
+      .filter((chart) => chart !== undefined)
+      .map((chart) => ({ ...chart, place: this.moved.get(chart.id) ?? chart.place }));
   }
 
   /** The charts over a source, oldest first. */
@@ -90,6 +95,11 @@ export class Charts {
   /** Whether a chart leaves with a source, shown or carried. */
   leaveWith(source: string): boolean {
     return this.carrying.has(source) || this.over(source).length > 0;
+  }
+
+  /** Where each window stands, for a save to write. */
+  get places(): NonNullable<Place["charts"]> {
+    return this.all.map(({ id, place }) => ({ id, place }));
   }
 
   /** Whether a chart was added, removed or changed since the last save. */
@@ -120,6 +130,13 @@ export class Charts {
   async remove(id: string): Promise<void> {
     this.need(id);
     await this.send(id, undefined, this.engine.unchart(id));
+  }
+
+  /** Stands a chart's window at `place`. The next save writes it, as it does
+   * the selected cell, so a move asks nothing of the engine. A place a read
+   * would refuse leaves it where it stood, so no change is refused over it. */
+  move(id: string, place: ChartPlace): void {
+    if (isPlace(place)) this.moved.set(id, place);
   }
 
   /** Forgets the charts over a source, which left the engine with it. */

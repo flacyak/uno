@@ -1,22 +1,23 @@
 /**
  * @fileoverview A workspace's charts through the real shell and engine.
  * Removing a source warns of its charts first, and an open says what it could
- * not show of them.
+ * not show of them. Ctrl+S after a move writes the new place with no mark.
  *
  * @vitest-environment happy-dom
  */
 
 import { mkdtempSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
+import { readContainer } from "@document";
 import type { CarriedChart, Chart } from "@document";
 import { UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
-import { ADS, BARS, SALES, unoOf } from "./charted.ts";
+import { ADS, BARS, MOVED, SALES, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, FIXTURE, SECOND, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 
@@ -42,7 +43,7 @@ async function open(name: string, charts: Chart[], carried?: CarriedChart[]): Pr
 }
 
 beforeAll(async () => {
-  shell = await bootShell();
+  shell = await bootShell({ save: (path, bytes) => writeFile(path, bytes) });
 }, FIRST_ROWS_MS);
 
 test("the first × on a source with charts warns, and the second removes both", async () => {
@@ -104,4 +105,26 @@ test("an open says what it could not show of a .uno's charts, once", async () =>
 
   await open("whole.uno", [BARS]);
   expect(message()).toBe("");
+});
+
+test("Ctrl+S after a move writes the new place, with no unsaved mark", async () => {
+  const path = await open("moved.uno", [BARS]);
+  shell.charts?.move(BARS.id, MOVED);
+  expect(shell.unsaved).toBe(false);
+  // Ctrl+S is the menu's accelerator, which calls this.
+  await shell.save();
+  expect(message()).toBe(m.saved_path({ path }));
+  const back = readContainer(basename(path), await readFile(path));
+  expect(back.charts).toStrictEqual([{ ...BARS, place: MOVED }]);
+  expect(document.querySelector(".ws.open .dirty")).toBeNull();
+});
+
+test("a chart change stays unsaved through a save the host cannot write", async () => {
+  const path = await open("refused.uno", [BARS]);
+  await shell.charts?.change(BARS.id, { title: "Rows" });
+  await rm(path);
+  await mkdir(path);
+  await shell.save();
+  expect(message()).toContain("EISDIR");
+  expect(shell.unsaved).toBe(true);
 });

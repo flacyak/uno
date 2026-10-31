@@ -632,6 +632,7 @@ export class Workspace {
       {
         source: this.showing.id,
         cells: this.tabs.map((t) => ({ source: t.id, row: t.cell.row, col: t.cell.col })),
+        charts: this.charts.places,
         at,
       },
       CARRY_LIMIT,

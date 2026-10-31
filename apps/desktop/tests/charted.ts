@@ -27,6 +27,9 @@ export const BARS: Chart = {
   refresh: 0,
 };
 
+/** Where a person left a window. */
+export const MOVED = { x: 0.25, y: 0.5, width: 300, height: 200 };
+
 /** The bytes of a .uno of both exports, holding `charts` and carrying `carried`. */
 export function unoOf(charts: Chart[], carried: CarriedChart[] = []): Uint8Array {
   const held = { rows: ROWS, cols: COLS, state: { active: { row: 0, col: 0 } } };
