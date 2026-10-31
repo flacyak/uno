@@ -2,8 +2,8 @@
  * @fileoverview One workspace's charts. The engine keeps the records a save
  * writes, and this model mirrors them for the windows over the sheet. A change
  * shows at once and goes through the engine, and a refusal puts back what the
- * engine holds. It makes each new chart's id, and knows which changes a save
- * has yet to record.
+ * engine holds. It makes each new chart's id, knows which changes a save has
+ * yet to record, and holds what each chart last heard from its source.
  *
  * This file is plain logic, so tests run it directly.
  */
@@ -11,10 +11,18 @@
 import { isPlace } from "@document";
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { Refusal } from "@engine";
-import type { Added, Engine, Place } from "@engine";
+import type { Added, Engine, GroupsTally, Place, SampleTally, Tally } from "@engine";
 
 /** What a person changes in a chart's form. */
 export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
+
+/** What a chart's window draws from. */
+export interface Heard {
+  /** The latest tally, once one has come. */
+  latest: Tally | undefined;
+  /** The last complete one, which stays until the next one completes. */
+  complete: GroupsTally | SampleTally | undefined;
+}
 
 /** The columns a plot reads, in the order its kind names them. */
 function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
@@ -48,6 +56,8 @@ export class Charts {
   private readonly sent = new Map<string, Chart | undefined>();
   /** Where each moved window stands, over its chart's record. */
   private readonly moved = new Map<string, ChartPlace>();
+  /** What each chart last heard. */
+  private readonly tallied = new Map<string, Heard>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The sources of the charts this workspace carries and cannot show. */
@@ -137,6 +147,20 @@ export class Charts {
    * would refuse leaves it where it stood, so no change is refused over it. */
   move(id: string, place: ChartPlace): void {
     if (isPlace(place)) this.moved.set(id, place);
+  }
+
+  /** Takes a tally of chart `id`. The last complete tally stays until the next. */
+  hear(id: string, tally: Tally): void {
+    const kept = this.tallied.get(id)?.complete;
+    const complete = tally.t !== "unread" && tally.coverage.complete ? tally : kept;
+    this.tallied.set(id, { latest: tally, complete });
+  }
+
+  /** What chart `id`'s window draws from, or undefined for a chart that has
+   * gone. */
+  heard(id: string): Heard | undefined {
+    if (!this.all.some((chart) => chart.id === id)) return undefined;
+    return this.tallied.get(id) ?? { latest: undefined, complete: undefined };
   }
 
   /** Forgets the charts over a source, which left the engine with it. */

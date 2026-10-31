@@ -337,6 +337,7 @@ export class Workspace {
       t.offer = offer;
       this.offered(t);
     };
+    source.onTally = (chart, tally) => this.charts.hear(chart, tally);
     return t;
   }
 
