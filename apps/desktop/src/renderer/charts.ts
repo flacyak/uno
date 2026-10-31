@@ -17,9 +17,9 @@ export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
 export class Charts {
   /** The charts by id, oldest first, as the engine answered for them. */
   private readonly answered = new Map<string, Chart>();
-  /** The latest record on its way for each chart, shown over the answered one
-   * until it lands. */
-  private readonly sent = new Map<string, Chart>();
+  /** The latest request on its way for each chart, shown over the answered
+   * record until it lands: the record sent, or undefined for a removal. */
+  private readonly sent = new Map<string, Chart | undefined>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The count behind the ids uno makes. */
@@ -40,7 +40,8 @@ export class Charts {
   get all(): readonly Chart[] {
     // A Map keeps a key where it first stood, so a change stays in line and a
     // new chart comes last.
-    return [...new Map([...this.answered, ...this.sent]).values()];
+    const shown = new Map<string, Chart | undefined>([...this.answered, ...this.sent]);
+    return [...shown.values()].filter((chart) => chart !== undefined);
   }
 
   /** The charts over a source, oldest first. */
@@ -52,20 +53,21 @@ export class Charts {
    * refusal takes it away. */
   async add(chart: Omit<Chart, "id">): Promise<Chart> {
     const made = { ...chart, id: this.mint() };
-    await this.put(made);
+    await this.send(made.id, made, this.engine.chart(made));
     return made;
   }
 
   /** Changes what a chart shows, over any change still on its way. It shows at
    * once, and a refusal puts it back. */
   async change(id: string, shown: Partial<Shown>): Promise<void> {
-    await this.put({ ...this.need(id), ...shown });
+    const chart = { ...this.need(id), ...shown };
+    await this.send(id, chart, this.engine.chart(chart));
   }
 
-  /** Removes a chart. A refused removal leaves it. */
+  /** Removes a chart. It goes at once, and a refusal brings it back. */
   async remove(id: string): Promise<void> {
-    await this.engine.unchart(id);
-    this.answered.delete(id);
+    this.need(id);
+    await this.send(id, undefined, this.engine.unchart(id));
   }
 
   /** Forgets the charts over a source, which left the engine with it. */
@@ -83,15 +85,17 @@ export class Charts {
     return chart;
   }
 
-  /** Shows `chart` until the engine answers. Its answer keeps it. A refusal
-   * leaves what the engine holds, or a later record shown over it. */
-  private async put(chart: Chart): Promise<void> {
-    this.sent.set(chart.id, chart);
+  /** Shows `record` for chart `id`, or no chart for a removal, until `request`
+   * lands. The engine's answer keeps it. A refusal leaves what the engine
+   * holds, or a later request shown over it. */
+  private async send(id: string, record: Chart | undefined, request: Promise<void>): Promise<void> {
+    this.sent.set(id, record);
     try {
-      await this.engine.chart(chart);
-      this.answered.set(chart.id, chart);
+      await request;
+      if (record === undefined) this.answered.delete(id);
+      else this.answered.set(id, record);
     } finally {
-      if (this.sent.get(chart.id) === chart) this.sent.delete(chart.id);
+      if (this.sent.get(id) === record) this.sent.delete(id);
     }
   }
 

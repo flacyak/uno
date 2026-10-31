@@ -107,6 +107,29 @@ test("a refused change puts back what the engine answered for, under any later o
   });
 });
 
+test("a chart on its way out takes no other request", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const removed = w.charts.remove(BARS.id);
+    expect(w.charts.all).toStrictEqual([]);
+    const said = { said: { t: "no-such-chart", id: BARS.id } };
+    await expect(w.charts.change(BARS.id, { title: "x" })).rejects.toMatchObject(said);
+    await expect(w.charts.remove(BARS.id)).rejects.toMatchObject(said);
+    await removed;
+    expect(await savedCharts(w)).toBeUndefined();
+  });
+});
+
+test("a removal the engine refuses puts the chart back where it stood", async () => {
+  const second = { ...BARS, id: "c2" };
+  await opened(uno(unoOf([BARS, second])), async (w) => {
+    w.close();
+    const refused = w.charts.remove(BARS.id);
+    expect(w.charts.all).toStrictEqual([second]);
+    await expect(refused).rejects.toThrow("the engine was closed");
+    expect(w.charts.all).toStrictEqual([BARS, second]);
+  });
+});
+
 test("a removed source takes its charts out of the workspace", async () => {
   await opened(FILE, async (w) => {
     const other = await w.add({ name: "second.csv", path: SECOND });
