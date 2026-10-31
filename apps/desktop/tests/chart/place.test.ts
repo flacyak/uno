@@ -15,12 +15,15 @@ import {
   fresh,
   MIN_HEIGHT,
   MIN_WIDTH,
+  nudged,
+  NUDGE_PX,
   placed,
   placeOf,
   tucked,
   tucks,
 } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
+import type { Press } from "@renderer/keys";
 
 const ROOM: Room = { w: 1200, h: 800 };
 
@@ -41,6 +44,17 @@ const BOTH_SIDES_OPEN = 640 - 168 - 250 - 12;
 
 /** The same window at 200% zoom, which halves its px, with the sidebar alone open. */
 const ZOOMED = 640 / 2 - 168 - 12;
+
+/** A press of `key`, as a window's keydown hands it over. */
+function press(key: string, more: Partial<Press> = {}): Press {
+  return { key, ctrl: false, alt: false, meta: false, shift: false, repeat: false, ...more };
+}
+
+/** The place one press leaves a window with: placed, nudged, then placeOf. */
+function pressed(place: ChartPlace, key: Press, room: Room): ChartPlace {
+  const rect = nudged(placed(place, room), key, room);
+  return rect === undefined ? place : placeOf(rect, room, place);
+}
 
 test("a window at the right and bottom edges stays there as the room narrows", () => {
   for (const room of [ROOM, { w: 640, h: 400 }, SNUG, { w: 300, h: 200 }]) {
@@ -130,6 +144,51 @@ test("a new window in a room of 0 px keeps its size at the top, as a record take
   const plot = { t: "bars", by: { col: 0, header: "region" } };
   const chart = { id: "c1", source: "s1", plot, title: "", place, refresh: 0 };
   expect(parseChart("chart", chart).place).toEqual(place);
+});
+
+test.each<[string, Partial<Rect>, Partial<Rect>]>([
+  ["ArrowLeft", { x: RECT.x - NUDGE_PX }, { width: RECT.width - NUDGE_PX }],
+  ["ArrowRight", { x: RECT.x + NUDGE_PX }, { width: RECT.width + NUDGE_PX }],
+  ["ArrowUp", { y: RECT.y - NUDGE_PX }, { height: RECT.height - NUDGE_PX }],
+  ["ArrowDown", { y: RECT.y + NUDGE_PX }, { height: RECT.height + NUDGE_PX }],
+])("%s moves a window, and resizes it with Shift", (key, moved, resized) => {
+  expect(nudged(RECT, press(key), ROOM)).toEqual({ ...RECT, ...moved });
+  expect(nudged(RECT, press(key, { shift: true }), ROOM)).toEqual({ ...RECT, ...resized });
+});
+
+test("any other key, or a chord on an arrow, leaves a window to the shell", () => {
+  expect(nudged(RECT, press("a"), ROOM)).toBeUndefined();
+  expect(nudged(RECT, press("constructor", { shift: true }), ROOM)).toBeUndefined();
+  for (const chord of [{ ctrl: true }, { alt: true }, { meta: true }]) {
+    expect(nudged(RECT, press("ArrowLeft", chord), ROOM)).toBeUndefined();
+  }
+});
+
+test("an arrow held at the edge or at the least size leaves the window where it is", () => {
+  const corner = { ...PLACE, x: 1, y: 1 };
+  for (const shift of [false, true]) {
+    expect(pressed(corner, press("ArrowRight", { shift }), ROOM)).toEqual(corner);
+    expect(pressed(corner, press("ArrowDown", { shift }), ROOM)).toEqual(corner);
+  }
+  const least = { ...PLACE, width: MIN_WIDTH, height: MIN_HEIGHT };
+  expect(pressed(least, press("ArrowLeft", { shift: true }), ROOM)).toEqual(least);
+  expect(pressed(least, press("ArrowUp", { shift: true }), ROOM)).toEqual(least);
+});
+
+test("Shift and an arrow near the edge grow a window to it, with its corner still", () => {
+  const gap = NUDGE_PX / 2;
+  const rect = { ...RECT, x: ROOM.w - RECT.width - gap, y: ROOM.h - RECT.height - gap };
+  const wider = nudged(rect, press("ArrowRight", { shift: true }), ROOM);
+  expect(wider).toEqual({ ...rect, width: RECT.width + gap });
+  const taller = nudged(rect, press("ArrowDown", { shift: true }), ROOM);
+  expect(taller).toEqual({ ...rect, height: RECT.height + gap });
+});
+
+test("a move in a room the window fills keeps the place's other side", () => {
+  const place = { ...PLACE, x: 1 };
+  const room = { w: DEFAULT_WIDTH, h: ROOM.h };
+  const moved = pressed(place, press("ArrowDown"), room);
+  expect(moved).toEqual({ ...place, y: NUDGE_PX / (room.h - DEFAULT_HEIGHT) });
 });
 
 test.each<[string, Room]>([
