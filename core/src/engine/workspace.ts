@@ -15,6 +15,7 @@ import {
   CHARTS_AT_MOST,
   CHARTS_ENTRY,
   isAbsolute,
+  isPlace,
   isWorkspace,
   logOf,
   newManifest,
@@ -255,6 +256,7 @@ export class Workspace {
         cells: [],
         charts: [],
         carriedIds: [],
+        carriedOver: [],
       };
     });
   }
@@ -431,6 +433,7 @@ export class Workspace {
       cells: doc.sources.map((s) => ({ source: s.id, ...s.state.active })),
       charts: [...this.charts.values()],
       carriedIds: this.carriedCharts.map((c) => c.id),
+      carriedOver: this.carriedCharts.map((c) => c.source),
       chartsNote,
     };
   }
@@ -777,12 +780,18 @@ export class Workspace {
       });
       this.refuseWhere(held, place.at);
 
+      const places = new Map(place.charts?.map((c) => [c.id, c.place]));
       const doc: Document = {
         manifest: { ...newManifest(), created: this.created },
         sources: held,
         active: this.sources.has(place.source) ? place.source : sources[0]!.id,
         log: interleave(this.trail, parts),
-        charts: [...this.charts.values()],
+        // A window's place never stops a save, so one a read would refuse
+        // leaves the chart where it stood.
+        charts: [...this.charts.values()].map((chart) => {
+          const told = places.get(chart.id);
+          return isPlace(told) ? { ...chart, place: told } : chart;
+        }),
         carriedCharts: this.carriedCharts,
         extra: this.extra,
         at: place.at,
