@@ -1,7 +1,8 @@
 /**
  * @fileoverview A workspace's charts through the real shell and engine.
  * Removing a source warns of its charts first, and an open says what it could
- * not show of them. Ctrl+S after a move writes the new place with no mark.
+ * not show of them. Ctrl+S after a move writes the new place with no mark. Each
+ * chart has a window over the sheet for as long as its workspace is the open one.
  *
  * @vitest-environment happy-dom
  */
@@ -28,6 +29,8 @@ const dir = mkdtempSync(join(tmpdir(), "uno-charts-shell-"));
 const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
 const tab = (id: string): HTMLElement | null =>
   document.querySelector<HTMLElement>(`.tab[data-source="${id}"]`);
+const layer = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
+const windows = (): number => document.querySelectorAll(".chart").length;
 
 /** Clicks the × on a source's tab. */
 function close(id: string): void {
@@ -45,6 +48,57 @@ async function open(name: string, charts: Chart[], carried?: CarriedChart[]): Pr
 beforeAll(async () => {
   shell = await bootShell({ save: (path, bytes) => writeFile(path, bytes) });
 }, FIRST_ROWS_MS);
+
+test("a workspace with no charts leaves the layer hidden", () => {
+  expect(document.querySelector<HTMLElement>("#empty")!.hidden).toBe(true);
+  expect(layer().hidden).toBe(true);
+});
+
+test("a workspace's charts open a window each, and show over every tab", async () => {
+  await open("two.uno", [BARS, { ...BARS, id: "c2", source: ADS }]);
+  expect(layer().hidden).toBe(false);
+  expect(windows()).toBe(2);
+  expect(shell.unsaved).toBe(false);
+
+  await page.press("Tab", { ctrlKey: true });
+  expect(await until(page, () => tab(ADS)?.classList.contains("active") === true)).toBe(true);
+  expect(windows()).toBe(2);
+});
+
+test("a workspace with none takes the last one's windows away", async () => {
+  await open("before.uno", [BARS]);
+  await open("none.uno", []);
+  expect(windows()).toBe(0);
+});
+
+test("an open that fails leaves the windows of the workspace still open", async () => {
+  await open("stays.uno", [BARS]);
+  await shell.openPath(join(dir, "not-here.uno"));
+  expect(windows()).toBe(1);
+});
+
+test("an open overtaken by one that fails leaves them too", async () => {
+  await open("kept.uno", [BARS]);
+  const overtaken = join(dir, "overtaken.uno");
+  await writeFile(overtaken, unoOf([BARS, { ...BARS, id: "c2" }]));
+  await Promise.all([
+    shell.openRef({ name: "overtaken.uno", path: overtaken }),
+    shell.openPath(join(dir, "not-here.uno")),
+  ]);
+  expect(windows()).toBe(1);
+});
+
+test("of two opens at once, the windows are the later one's", async () => {
+  const early = join(dir, "early.uno");
+  const late = join(dir, "late.uno");
+  await writeFile(early, unoOf([BARS]));
+  await writeFile(late, unoOf([BARS, { ...BARS, id: "c2" }]));
+  await Promise.all([
+    shell.openRef({ name: "early.uno", path: early }),
+    shell.openRef({ name: "late.uno", path: late }),
+  ]);
+  expect(windows()).toBe(2);
+});
 
 test("the first × on a source with charts warns, and the second removes both", async () => {
   await open("warned.uno", [BARS]);

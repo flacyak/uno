@@ -5,6 +5,8 @@
  *
  * Each window draws from its chart's place, in the room the layer leaves. A
  * resize changes only what shows, so the layer writes nothing back.
+ *
+ * It is loaded with the first workspace that has charts.
  */
 
 import "./chart.css";
