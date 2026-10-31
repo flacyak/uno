@@ -424,3 +424,20 @@ test("a chart moved to another source keeps no complete tally of the one it left
     expect(w.charts.heard(BARS.id)).toMatchObject({ latest: partial, complete: undefined });
   });
 });
+
+test("a chart over a missing source shows its state, and hears once it is pointed at a file", async () => {
+  await opened(uno(unoOf([BARS], [], "/nowhere/sales-q3.csv")), async (w) => {
+    expect(w.charts.heard(BARS.id)).toMatchObject({ state: "missing", latest: undefined });
+    await w.relink(w.sources[0]!, FILE);
+    await completeOf(w);
+    expect(w.charts.heard(BARS.id)?.state).toBe("fine");
+  });
+});
+
+test("a chart over a source the workspace has not reads as over a missing one", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const refused = w.charts.change(BARS.id, { source: "gone" });
+    expect(w.charts.heard(BARS.id)?.state).toBe("missing");
+    await expect(refused).rejects.toThrow("no source");
+  });
+});

@@ -13,6 +13,8 @@ import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { Refusal } from "@engine";
 import type { Added, Engine, GroupsTally, Place, SampleTally, Tally } from "@engine";
 
+import type { State } from "./sources.ts";
+
 /** What a person changes in a chart's form. */
 export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
 
@@ -25,6 +27,10 @@ interface Tallied {
 
 /** What a chart's window draws from. */
 export interface Heard {
+  /** The state of the chart's source. A source that is missing or waits on its
+   * bucket posts no tally until it is pointed at a file. A source the workspace
+   * does not hold reads as missing. */
+  state: State;
   /** The latest tally of what the chart shows, once one has come. */
   latest: Tally | undefined;
   /** The last complete one, which stays until the next one completes. */
@@ -86,6 +92,8 @@ export class Charts {
     private readonly engine: Engine,
     /** Counts a request as a write until the engine answers it. */
     private readonly writing: (write: Promise<void>) => Promise<void>,
+    /** The state of a source, which a chart over it shows. */
+    private readonly sourceState: (source: string) => State,
   ) {}
 
   /** Takes the charts an open found, which count as saved, and the ids and
@@ -181,6 +189,7 @@ export class Charts {
     const held = this.tallied.get(id);
     const current = reads(held, chart.source, chart.plot);
     return {
+      state: this.sourceState(chart.source),
       latest: current ? held.latest : undefined,
       complete: current ? held.complete : undefined,
     };

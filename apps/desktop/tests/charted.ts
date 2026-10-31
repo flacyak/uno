@@ -30,13 +30,14 @@ export const BARS: Chart = {
 /** Where a person left a window. */
 export const MOVED = { x: 0.25, y: 0.5, width: 300, height: 200 };
 
-/** The bytes of a .uno of both exports, holding `charts` and carrying `carried`. */
-export function unoOf(charts: Chart[], carried: CarriedChart[] = []): Uint8Array {
+/** The bytes of a .uno of both exports, holding `charts` and carrying
+ * `carried`, with the sales export at `sales`. */
+export function unoOf(charts: Chart[], carried: CarriedChart[] = [], sales = FIXTURE): Uint8Array {
   const held = { rows: ROWS, cols: COLS, state: { active: { row: 0, col: 0 } } };
   return writeDocument({
     manifest: newManifest(),
     sources: [
-      { ...held, id: SALES, name: basename(FIXTURE), path: FIXTURE },
+      { ...held, id: SALES, name: basename(FIXTURE), path: sales },
       { ...held, id: ADS, name: basename(SECOND), path: SECOND },
     ],
     active: SALES,
