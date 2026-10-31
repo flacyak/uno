@@ -1,0 +1,52 @@
+/**
+ * @fileoverview Where a chart's window sits on the sheet. A place keeps the
+ * window's size in CSS px and its x and y as fractions of the room beside and
+ * below it, so a window draws from its place in a room of any size, and a
+ * resize changes only what shows. This file is plain logic, so tests run it
+ * directly.
+ */
+
+import type { ChartPlace } from "@document";
+
+/** The narrowest a window draws: a title beside the head's four 20 px buttons. */
+export const MIN_WIDTH = 240;
+
+/** The shortest a window draws: about 110 px of plot under a 29 px head, over a 22 px caption. */
+export const MIN_HEIGHT = 160;
+
+/** A new window's width. Four across fill most of a full HD screen. */
+export const DEFAULT_WIDTH = 420;
+
+/** A new window's height. Four down fill most of a full HD screen. */
+export const DEFAULT_HEIGHT = 260;
+
+/** The layer's box, which windows may fill, in CSS px. */
+export interface Room {
+  w: number;
+  h: number;
+}
+
+/** A window's box in the room, in CSS px from the room's top left. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** fit gives one side of a window: `wanted`, from `least` up to `most`. */
+function fit(wanted: number, least: number, most: number): number {
+  return Math.min(Math.max(wanted, least), most);
+}
+
+/** placed gives the rect a place draws in a room, whatever size the room is. */
+export function placed(place: ChartPlace, room: Room): Rect {
+  const width = fit(place.width, MIN_WIDTH, room.w);
+  const height = fit(place.height, MIN_HEIGHT, room.h);
+  return {
+    x: place.x * (room.w - width),
+    y: place.y * (room.h - height),
+    width,
+    height,
+  };
+}
