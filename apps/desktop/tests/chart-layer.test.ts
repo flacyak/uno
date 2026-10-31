@@ -12,7 +12,7 @@ import { beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart } from "@document";
 import { ChartLayer } from "@renderer/chart/layer";
-import { placed } from "@renderer/chart/place";
+import { MIN_HEIGHT, MIN_WIDTH, placed } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
 import { BARS, MOVED } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
@@ -192,4 +192,35 @@ test("a relabel keeps every window", () => {
   layer.relabel();
   expect(windows()).toHaveLength(were.length);
   were.forEach((box, i) => expect(windows()[i]).toBe(box));
+});
+
+test("a room too narrow tucks every window to its head, stacked from the top", () => {
+  shown(FLUSH, INSIDE);
+  const narrow = { w: MIN_WIDTH - 1, h: ROOM.h };
+  resize(narrow);
+  expect(windows().map(drawn)).toStrictEqual([
+    { x: 0, y: 0, width: narrow.w, height: HEAD },
+    { x: 0, y: HEAD, width: narrow.w, height: HEAD },
+  ]);
+});
+
+test("a room too short tucks them too, and each goes back to its place with the room", () => {
+  shown(FLUSH, INSIDE);
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(windows().map((box) => drawn(box).height)).toStrictEqual([HEAD, HEAD]);
+
+  resize(ROOM);
+  expect(windows().map(drawn)).toStrictEqual([
+    placed(FLUSH.place, ROOM),
+    placed(INSIDE.place, ROOM),
+  ]);
+});
+
+test("a sheet of no width shows nothing and loses nothing", () => {
+  shown(FLUSH);
+  resize({ w: 0, h: 0 });
+  expect(drawn(windows()[0]!).width).toBe(0);
+
+  resize(ROOM);
+  expect(drawn(windows()[0]!)).toStrictEqual(placed(FLUSH.place, ROOM));
 });

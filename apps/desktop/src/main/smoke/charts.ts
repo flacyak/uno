@@ -1,14 +1,15 @@
 /**
  * @fileoverview Checks of the chart windows in real layout: the layer over the
- * sheet keeps a window below the header row and any banner, clear of both
- * scrollbars and the ×, and inside its room at 200% zoom. None of it marks the
- * workspace unsaved, and the grid still takes the pointer and the keys beside
- * a window.
+ * sheet keeps a window below the header row and clear of both scrollbars and
+ * the ×, inside its room at 200% zoom, and tucked to its head where the side
+ * columns leave too little room. None of it marks the workspace unsaved, and
+ * the grid still takes the pointer and the keys beside a window.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot.
  */
 
+import { DEFAULT_HEIGHT } from "@renderer/chart/place";
 import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote. */
@@ -17,7 +18,7 @@ const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
 /** The zoom that halves the room. */
 const DOUBLE_ZOOM = 2;
 
-/** The window's least width, which 200% zoom takes the page under. */
+/** The window's least width, where both side columns leave too little room. */
 const NARROW_WIDTH = 640;
 
 /** A point over the grid's tenth row, left of the windows, and one over the top window. */
@@ -44,6 +45,7 @@ const GEOMETRY = `
   const edges = (at) => [at.left, at.top, at.right, at.bottom].join(" ");
   const unsaved = () => document.querySelector(".ws.open .dirty") !== null;
   const HEAD = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
+  const heads = () => windows().every((at) => at.height === HEAD && at.width === room().width);
 `;
 
 export const CHARTS: Check[] = [
@@ -146,6 +148,45 @@ export const CHARTS: Check[] = [
         if (at.height === HEAD) return "a window is tucked in a room at " + edges(room());
       }
       return unsaved() ? "the zoom marked the workspace unsaved" : "";
+    `,
+  },
+  {
+    // Tucked here, the windows are what the next check's reshape lands on, so
+    // that check has to tell them from the ones it waits for.
+    name: "at 200% zoom with both side columns open, each window tucks to its head",
+    script: `
+      ${GEOMETRY}
+      await openPanel();
+      return (await until(heads)) ? "" : "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+    `,
+  },
+  {
+    name: "in a narrow window with both side columns open, each window tucks to its head",
+    window: { width: NARROW_WIDTH },
+    shot: "charts-tucked",
+    script: `
+      ${GEOMETRY}
+      // The zoomed page is narrower, and its windows are tucked as well.
+      const tucked = () => innerWidth >= ${NARROW_WIDTH} && heads();
+      if (!(await until(tucked))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+      const [top, foot] = windows();
+      if (top.left !== room().left) return "the top window stands at " + edges(top) + " in a room at " + edges(room());
+      if (top.top !== room().top || foot.top !== top.bottom) return "the heads stand at " + edges(top) + " and " + edges(foot);
+      return unsaved() ? "tucking marked the workspace unsaved" : "";
+    `,
+  },
+  {
+    name: "with room again, each window goes back to its place",
+    window: {},
+    script: `
+      ${GEOMETRY}
+      document.querySelector("#panel-toggle").click();
+      const back = () => {
+        const [top, foot] = windows();
+        return top.height === ${DEFAULT_HEIGHT} && top.top === room().top && top.right === room().right && foot.bottom === room().bottom;
+      };
+      if (!(await until(back))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+      return unsaved() ? "going back marked the workspace unsaved" : "";
     `,
   },
 ];

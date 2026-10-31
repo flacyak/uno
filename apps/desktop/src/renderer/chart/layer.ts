@@ -14,7 +14,7 @@ import "./chart.css";
 import type { Charts } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
-import { placed } from "./place.ts";
+import { placed, tucked, tucks } from "./place.ts";
 import type { Rect } from "./place.ts";
 
 /** stand puts a window at `rect`, in the layer's CSS px. */
@@ -28,7 +28,7 @@ function stand(box: HTMLElement, rect: Rect): void {
 export class ChartLayer {
   /** The window of each chart showing, by chart id. */
   private readonly windows = new Map<string, HTMLElement>();
-  /** The height of the header row. */
+  /** The height of the header row, and of a tucked window. */
   private readonly head: number;
   /** The charts of the open workspace. */
   private charts: Pick<Charts, "all"> = { all: [] };
@@ -57,8 +57,8 @@ export class ChartLayer {
   }
 
   /**
-   * draw gives each chart its one window, at its place in the room, and takes
-   * away the rest.
+   * draw gives each chart its one window, each at its place in the room, or
+   * tucked if the room is too small, and takes away the rest.
    */
   draw(): void {
     const charts = this.charts.all;
@@ -72,7 +72,10 @@ export class ChartLayer {
     this.fit();
     const { width: w, height: h } = this.root.getBoundingClientRect();
     const room = { w, h };
-    for (const chart of charts) stand(this.windowOf(chart.id), placed(chart.place, room));
+    charts.forEach((chart, index) => {
+      const rect = tucks(room) ? tucked(index, this.head, room) : placed(chart.place, room);
+      stand(this.windowOf(chart.id), rect);
+    });
   }
 
   /**
