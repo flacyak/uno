@@ -375,7 +375,7 @@ function className(kind: Kind, selected: boolean): string {
 }
 
 /** Reads the `--row-h` CSS variable. Falls back to 29. */
-function readRowHeight(scope: Element): number {
+export function readRowHeight(scope: Element): number {
   const declared = getComputedStyle(scope).getPropertyValue("--row-h").trim();
   const parsed = Number.parseFloat(declared);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 29;
