@@ -53,6 +53,7 @@ import {
   bytes,
   connect,
   indexed,
+  multiProviders,
   openOne,
   sales,
 } from './harness.ts';
@@ -199,11 +200,12 @@ function opened(engine: Engine, charts: Chart[]): Promise<SourceHandle> {
 
 /**
  * holding returns a disk provider that counts its reads, and holds the first
- * read of a block after `arm`, which `held` reports with its offset, until
+ * read after `arm` of a block, or of a block or a whole chunk of the file at
+ * `path` where one is named, which `held` reports with its offset, until
  * `release`, or refuses it with the refusal `arm` is given. A block's read is
  * shorter than an index chunk's and ends before the file does.
  */
-function holding() {
+function holding(path?: string) {
   const disk = diskProvider();
   let reads = 0;
   let armed = false;
@@ -218,13 +220,17 @@ function holding() {
       ...disk.files,
       async open(ref) {
         const source = await disk.files.open(ref);
+        const named = 'path' in ref && ref.path === path;
         return {
           size: source.size,
           async read(offset, length) {
             reads++;
             const block =
               length < TINY.chunkBytes && offset + length < source.size;
-            if (armed && block) {
+            const chunk = length === TINY.chunkBytes;
+            const wanted =
+              path === undefined ? block : named && (block || chunk);
+            if (armed && wanted) {
               armed = false;
               caught(offset);
               if (refusal !== undefined) throw refusal;
@@ -611,6 +617,72 @@ test('an append keeps the folds of the rows it kept, so each chart hears its com
     // A view that folded the kept rows again would read each of their blocks.
     const blocksKept = Math.ceil(ROWS_BEFORE / TINY.blockRows);
     expect(hold.reads() - reads).toBeLessThan(blocksKept);
+  } finally {
+    done();
+  }
+});
+
+test('an append keeps the edits of the rows it kept in the folds it takes over, so each chart hears its complete tally with them, as the new view shows them', async () => {
+  const { engine, done } = connect(TINY, multiProviders());
+  try {
+    const before = await openOne(engine, FIRST_TWO);
+    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE].map(
+      (chart) => ({ ...chart, source: before.id }),
+    );
+    const first = new Heard(before);
+    const lasts = charts.map((chart) => first.of(chart.id));
+    for (const chart of charts) await engine.chart(chart);
+    for (const last of lasts) await last;
+    engine.mode(true);
+    // The source's last row, in the block the append reads again.
+    const row = ROWS_BEFORE - 1;
+    const sheet = read(NAME, bytes);
+    const set = { op: Op.Set, row, col: REVENUE, now: '1' };
+    const note = { op: Op.Note, row, col: REGION, now: 'x^2' };
+    for (const req of [set, note]) {
+      sheet.replay([(await before.edit(req)).edit]);
+    }
+
+    const src = await engine.append(before, [THIRD]);
+    const heard = new Heard(src);
+    const again = charts.map((chart) => heard.of(chart.id));
+    for (const [i, chart] of charts.entries()) {
+      expect(await again[i]).toStrictEqual(pure(chart.plot, sheet));
+    }
+    expect((await src.rows(row, 1)).rows[0]).toEqual(shownRow(sheet, row));
+  } finally {
+    done();
+  }
+});
+
+test('an append refused once its charts took the folds over gives them back, so the source kept hears its charts again, and after an edit', async () => {
+  const hold = holding(part(0).path);
+  const single = [hold.provider, blobProvider()];
+  const { engine, done } = connect(TINY, [...single, multiProvider(single)]);
+  try {
+    const before = await openOne(engine, FIRST_TWO);
+    const chart = { ...REGION_REVENUE, source: before.id };
+    const heard = new Heard(before);
+    let last = heard.of(chart.id);
+    await engine.chart(chart);
+    await last;
+
+    // The new view's read of its sample rows, after the folds are taken over.
+    const said: Said = { t: 'changed-on-disk', name: part(0).name };
+    hold.arm(new Refusal(said));
+    last = heard.of(chart.id);
+    await expect(engine.append(before, [THIRD])).rejects.toThrow(
+      'changed on disk after it was opened',
+    );
+    expect(before.progress.rows).toBe(ROWS_BEFORE);
+    expect(await last).toStrictEqual(pure(chart.plot, sales, ROWS_BEFORE));
+
+    engine.mode(true);
+    const sheet = read(NAME, bytes);
+    last = heard.of(chart.id);
+    const set = { op: Op.Set, row: EDITED, col: REVENUE, now: '1' };
+    sheet.replay([(await before.edit(set)).edit]);
+    expect(await last).toStrictEqual(pure(chart.plot, sheet, ROWS_BEFORE));
   } finally {
     done();
   }
