@@ -5,11 +5,14 @@
 
 import { expect, test } from "vite-plus/test";
 
+import { parseChart } from "@document";
 import type { ChartPlace } from "@document";
 
 import {
+  CASCADE_PX,
   DEFAULT_HEIGHT,
   DEFAULT_WIDTH,
+  fresh,
   MIN_HEIGHT,
   MIN_WIDTH,
   placed,
@@ -68,6 +71,30 @@ test("a tucked window is its head, at the room's width, stacked in list order", 
   expect(tucked(2, HEAD, room)).toEqual({ x: 0, y: 2 * HEAD, width: room.w, height: HEAD });
 });
 
+test("a new window goes at the top of the half away from the selected column", () => {
+  const right = placed(fresh(0, 0, ROOM), ROOM);
+  expect([right.y, right.width, right.height]).toEqual([0, DEFAULT_WIDTH, DEFAULT_HEIGHT]);
+  expect(right.x).toBeGreaterThanOrEqual(ROOM.w / 2);
+  expect(fresh(0, ROOM.w / 2 - 1, ROOM).x).toBe(1);
+
+  const left = placed(fresh(0, ROOM.w / 2, ROOM), ROOM);
+  expect(left.x + left.width).toBeLessThanOrEqual(ROOM.w / 2);
+});
+
+test("each chart already there moves a new one down, as far as the room goes", () => {
+  expect(placed(fresh(3, 0, ROOM), ROOM).y).toBeCloseTo(3 * CASCADE_PX);
+  const room = { w: ROOM.w, h: DEFAULT_HEIGHT + CASCADE_PX };
+  expect(placed(fresh(3, 0, room), room).y).toBe(CASCADE_PX);
+});
+
+test("a new window in a room of 0 px keeps its size at the top, as a record takes it", () => {
+  const place = fresh(3, 0, { w: 0, h: 0 });
+  expect([place.y, place.width, place.height]).toEqual([0, DEFAULT_WIDTH, DEFAULT_HEIGHT]);
+  const plot = { t: "bars", by: { col: 0, header: "region" } };
+  const chart = { id: "c1", source: "s1", plot, title: "", place, refresh: 0 };
+  expect(parseChart("chart", chart).place).toEqual(place);
+});
+
 test.each<[string, Room]>([
   ["no room", { w: 0, h: 0 }],
   ["no width", { w: 0, h: ROOM.h }],
@@ -75,6 +102,6 @@ test.each<[string, Room]>([
   ["a room of exactly one window", SNUG],
 ])("%s gives only numbers", (_name, room) => {
   const rect = placed({ ...PLACE, x: 0.5, y: 0.5 }, room);
-  const boxes = [rect, tucked(3, HEAD, room)];
+  const boxes = [rect, fresh(3, 0, room), tucked(3, HEAD, room)];
   expect(boxes.flatMap((box) => Object.values(box)).every(Number.isFinite)).toBe(true);
 });

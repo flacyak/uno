@@ -8,6 +8,8 @@
 
 import type { ChartPlace } from "@document";
 
+import { clamp } from "@renderer/grid/metrics";
+
 /** The narrowest a window draws: a title beside the head's four 20 px buttons. */
 export const MIN_WIDTH = 240;
 
@@ -19,6 +21,18 @@ export const DEFAULT_WIDTH = 420;
 
 /** A new window's height. Four down fill most of a full HD screen. */
 export const DEFAULT_HEIGHT = 260;
+
+/**
+ * How far down each chart already there puts a new one. This is under a head's
+ * 29 px, so the title of the window underneath still shows.
+ */
+export const CASCADE_PX = 24;
+
+/** A place's x or y at the room's left or top edge. */
+const NEAR_EDGE = 0;
+
+/** A place's x or y at the room's right or bottom edge. */
+const FAR_EDGE = 1;
 
 /** The layer's box, which windows may fill, in CSS px. */
 export interface Room {
@@ -37,6 +51,11 @@ export interface Rect {
 /** fit gives one side of a window: `wanted`, from `least` up to `most`. */
 function fit(wanted: number, least: number, most: number): number {
   return Math.min(Math.max(wanted, least), most);
+}
+
+/** share gives `offset` as a fraction of the `free` px, or `none` when no px are free. */
+function share(offset: number, free: number, none: number): number {
+  return free > 0 ? clamp(offset / free, FAR_EDGE) : none;
 }
 
 /** placed gives the rect a place draws in a room, whatever size the room is. */
@@ -62,4 +81,19 @@ export function tucks(room: Room): boolean {
  */
 export function tucked(index: number, head: number, room: Room): Rect {
   return { x: 0, y: index * head, width: room.w, height: head };
+}
+
+/**
+ * fresh gives a new window's place when `n` charts are already there: at the
+ * top of the half of the room away from the column selected at `selectedLeft`,
+ * flush to that half's outer edge. A room under twice the window's width has
+ * it cross the middle.
+ */
+export function fresh(n: number, selectedLeft: number, room: Room): ChartPlace {
+  return {
+    x: selectedLeft < room.w / 2 ? FAR_EDGE : NEAR_EDGE,
+    y: share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE),
+    width: DEFAULT_WIDTH,
+    height: DEFAULT_HEIGHT,
+  };
 }
