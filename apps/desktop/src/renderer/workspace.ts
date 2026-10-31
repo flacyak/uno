@@ -314,14 +314,15 @@ export class Workspace {
    * Each tab starts on the cell a .uno left it on.
    */
   async add(ref: SourceRef, signal?: AbortSignal): Promise<Tab> {
-    const { sources, showing, cells } = await this.engine.open(ref, signal);
-    const added = sources.map((s) => this.tab(s));
-    for (const { source, row, col } of cells) {
+    const opening = await this.engine.open(ref, signal);
+    this.charts.seed(opening);
+    const added = opening.sources.map((s) => this.tab(s));
+    for (const { source, row, col } of opening.cells) {
       const t = added.find((a) => a.id === source);
       if (t !== undefined) t.cell = { row, col };
     }
     this.tabs.push(...added);
-    return added.find((t) => t.id === showing) ?? added[0]!;
+    return added.find((t) => t.id === opening.showing) ?? added[0]!;
   }
 
   private tab(source: SourceHandle, saved?: readonly Edit[]): Tab {

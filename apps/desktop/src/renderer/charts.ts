@@ -8,7 +8,7 @@
 
 import type { Chart } from "@document";
 import { Refusal } from "@engine";
-import type { Engine } from "@engine";
+import type { Added, Engine } from "@engine";
 
 /** What a person changes in a chart's form. */
 export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
@@ -20,6 +20,11 @@ export class Charts {
   private made = 0;
 
   constructor(private readonly engine: Engine) {}
+
+  /** Takes the charts an open found. */
+  seed({ charts }: Pick<Added, "charts">): void {
+    for (const chart of charts) this.answered.set(chart.id, chart);
+  }
 
   /** The charts, oldest first. */
   get all(): readonly Chart[] {

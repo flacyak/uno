@@ -13,8 +13,9 @@ import { Workspace } from "@renderer/workspace";
 import { BARS } from "./charted.ts";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
-/** The sales export alone. */
+/** The sales export alone, and the name a .uno goes by here. */
 const FILE: SourceRef = { name: "sales-q3.csv", path: FIXTURE };
+const UNO = "q3.uno";
 
 /** Opens `ref` in a workspace of its own, runs `use` over it, and closes it. */
 async function opened(ref: SourceRef, use: (w: Workspace) => Promise<void>): Promise<void> {
@@ -27,9 +28,19 @@ async function opened(ref: SourceRef, use: (w: Workspace) => Promise<void>): Pro
   }
 }
 
+/** The .uno the engine writes for `w`. */
+function bytesOf(w: Workspace): Promise<Uint8Array> {
+  return w.bytes({ row: 0, col: 0 }, "");
+}
+
 /** The charts the engine writes for `w`, read back from its save. */
 async function savedCharts(w: Workspace): Promise<readonly Chart[] | undefined> {
-  return readContainer("q3.uno", await w.bytes({ row: 0, col: 0 }, "")).charts;
+  return readContainer(UNO, await bytesOf(w)).charts;
+}
+
+/** A ref to `bytes` as a .uno. */
+function uno(bytes: Uint8Array): SourceRef {
+  return { name: UNO, blob: new Blob([new Uint8Array(bytes)]) };
 }
 
 test("adding, changing and removing a chart go through the engine", async () => {
@@ -73,5 +84,15 @@ test("a removed source takes its charts out of the workspace", async () => {
     await w.remove(other);
     expect(w.charts.all).toStrictEqual([kept]);
     expect(await savedCharts(w)).toStrictEqual([kept]);
+  });
+});
+
+test("a saved workspace reopens with its charts", async () => {
+  await opened(FILE, async (w) => {
+    expect(w.charts.all).toStrictEqual([]);
+    const made = await w.charts.add(BARS);
+    await opened(uno(await bytesOf(w)), async (back) => {
+      expect(back.charts.all).toStrictEqual([made]);
+    });
   });
 });
