@@ -159,6 +159,12 @@ const PRELUDE = `
  */
 const COMPOSITED_MS = 120;
 
+/** The zoom a window opens at. */
+const FULL_ZOOM = 1;
+
+/** A window size limit of none. */
+const NO_LIMIT = 0;
+
 /**
  * shoot writes a picture of the window into the run's folder as <name>.png,
  * once the page has drawn and the compositor has caught up.
@@ -174,6 +180,19 @@ async function shoot(win: BrowserWindow, name: string): Promise<void> {
   const path = join(dir, `${name}.png`);
   await writeFile(path, image.toPNG());
   console.log(`smoke: screenshot ${path}`);
+}
+
+/**
+ * reshape sets the window's zoom and size, moving the pin main holds a driven
+ * window to.
+ */
+function reshape(win: BrowserWindow, zoom: number, width: number, height: number): void {
+  win.webContents.setZoomFactor(zoom);
+  win.setMinimumSize(NO_LIMIT, NO_LIMIT);
+  win.setMaximumSize(NO_LIMIT, NO_LIMIT);
+  win.setSize(width, height);
+  win.setMinimumSize(width, height);
+  win.setMaximumSize(width, height);
 }
 
 /**
@@ -216,10 +235,16 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   // Every run starts from the default input strategy.
   win.webContents.send("menu:input", "default");
 
+  const { width: fullWidth, height } = win.getBounds();
+
   for (const check of CHECKS) {
     try {
       if (check.ask !== undefined) await ask("smoke", check.ask);
       if (check.send !== undefined) win.webContents.send(...check.send);
+      if (check.window !== undefined) {
+        const { zoom = FULL_ZOOM, width = fullWidth } = check.window;
+        reshape(win, zoom, width, height);
+      }
       if (check.input !== undefined) {
         const { events } = check.input;
         const send = (): void => {

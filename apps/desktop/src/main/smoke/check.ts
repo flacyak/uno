@@ -29,6 +29,12 @@ export interface Check {
    * `through` is set.
    */
   input?: { events: readonly Input[]; through: boolean };
+  /**
+   * The window's zoom and width, set before the check runs, the way the View
+   * menu and a drag of its edge set them. What is left out goes back to what
+   * the run started with.
+   */
+  window?: { zoom?: number; width?: number };
   /** A check over `Page`. Returns a message on failure, or "" on success. */
   run?: (page: Page) => Promise<string>;
   /**
