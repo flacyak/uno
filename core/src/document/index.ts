@@ -65,6 +65,7 @@ export type {
 } from './chart.ts';
 export {
   formatFor,
+  isPlace,
   parseChart,
   readContainer,
   readDocument,
