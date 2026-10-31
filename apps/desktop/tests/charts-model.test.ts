@@ -207,7 +207,57 @@ test("adding, removing, and changing a chart's source, kind, columns, title or s
     expect(w.dirty, "the new chart gone").toBe(false);
     await w.charts.remove(BARS.id);
     expect(w.dirty, "a saved chart gone").toBe(true);
+  });
+});
+
+test("a save clears the mark only once the file is written", async () => {
+  await opened(FILE, async (w) => {
+    await w.charts.add(BARS);
+    // A failed host.save: the bytes were made, and saved() never comes.
+    await bytesOf(w);
+    expect(w.dirty).toBe(true);
+    await bytesOf(w);
     w.saved(UNO);
-    expect(w.dirty, "saved").toBe(false);
+    expect(w.dirty).toBe(false);
+  });
+});
+
+test("a chart waiting on the engine counts as unsaved", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const changed = w.charts.change(BARS.id, { title: BARS.title });
+    expect(w.dirty, "on its way").toBe(true);
+    await changed;
+    expect(w.dirty, "landed, and the same as saved").toBe(false);
+  });
+});
+
+test("a save records the chart sent before it, and leaves the one sent after it unsaved", async () => {
+  await opened(FILE, async (w) => {
+    const save = (): Promise<void> => bytesOf(w).then(() => w.saved(UNO));
+    const [made] = await Promise.all([w.charts.add(BARS), save()]);
+    expect(w.dirty, "written by the save").toBe(false);
+
+    const [, after] = await Promise.all([save(), w.charts.add(BARS)]);
+    expect(w.dirty, "sent after the save").toBe(true);
+    await w.charts.remove(after.id);
+    expect(w.dirty, "gone again").toBe(false);
+
+    const refused = expect(w.charts.change(made.id, { source: "gone" })).rejects.toThrow();
+    await Promise.all([refused, save()]);
+    expect(w.dirty, "refused before the save").toBe(false);
+  });
+});
+
+test("a chart that lands while the host writes the file stays unsaved", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    await bytesOf(w);
+    const added = await w.charts.add(BARS);
+    w.saved(UNO);
+    expect(w.dirty, "added since the bytes").toBe(true);
+
+    await bytesOf(w);
+    await w.charts.remove(added.id);
+    w.saved(UNO);
+    expect(w.dirty, "removed since the bytes").toBe(true);
   });
 });

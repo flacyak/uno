@@ -51,8 +51,14 @@ export class Charts {
   private made = 0;
   /** The charts as the last save recorded them. */
   private recorded = new Map<string, Chart>();
+  /** The charts as the last save wrote them, recorded once its file is. */
+  private written = this.recorded;
 
-  constructor(private readonly engine: Engine) {}
+  constructor(
+    private readonly engine: Engine,
+    /** Counts a request as a write until the engine answers it. */
+    private readonly writing: (write: Promise<void>) => Promise<void>,
+  ) {}
 
   /** Takes the charts an open found, which count as saved, and the ids of the
    * ones it carries. */
@@ -115,9 +121,14 @@ export class Charts {
     }
   }
 
-  /** Records the charts the engine answered for, whose file is written. */
+  /** Notes the charts answered for now as the ones a save wrote. */
+  wrote(): void {
+    this.written = new Map(this.answered);
+  }
+
+  /** Records what the last save wrote, now its file is written. */
   saved(): void {
-    this.recorded = new Map(this.answered);
+    this.recorded = this.written;
   }
 
   /** The chart with the id as its window shows it. One that has gone is
@@ -134,7 +145,7 @@ export class Charts {
   private async send(id: string, record: Chart | undefined, request: Promise<void>): Promise<void> {
     this.sent.set(id, record);
     try {
-      await request;
+      await this.writing(request);
       if (record === undefined) this.answered.delete(id);
       else this.answered.set(id, record);
     } finally {

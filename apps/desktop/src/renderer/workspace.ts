@@ -267,9 +267,10 @@ export class Workspace {
    */
   private readonly pointing = new Map<string, Pointing>();
   /**
-   * Edits, undos, redos and removals sent to the engine and not yet answered.
-   * One may wait behind a relink or append in flight, as the engine answers in
-   * order. Adds are left out, since each is listed as opening until answered.
+   * Edits, undos, redos, removals and chart changes sent to the engine and not
+   * yet answered. One may wait behind a relink or append in flight, as the
+   * engine answers in order. Adds are left out, since each is listed as opening
+   * until answered.
    */
   private writes = 0;
 
@@ -281,7 +282,7 @@ export class Workspace {
     /** Called when a source's offer changes, with its tab. */
     private readonly offered: (tab: Tab) => void,
   ) {
-    this.charts = new Charts(engine);
+    this.charts = new Charts(engine, (write) => this.writing(write));
   }
 
   /**
@@ -394,8 +395,8 @@ export class Workspace {
     }
   }
 
-  /** Waits for `write`, an edit, undo, redo or removal, and counts it in
-   * `writes` until the engine answers. */
+  /** Waits for `write`, an edit, undo, redo, removal or chart change, and
+   * counts it in `writes` until the engine answers. */
   private async writing<T>(write: Promise<T>): Promise<T> {
     this.writes++;
     try {
@@ -585,8 +586,8 @@ export class Workspace {
 
   /** Whether there is unsaved work: an edit, a source added or removed, a
    * source that a relink or append left other than as last saved, a chart
-   * added, removed or changed, or an edit, undo, redo or removal still waiting
-   * on the engine. */
+   * added, removed or changed, or an edit, undo, redo, removal or chart change
+   * still waiting on the engine. */
   get dirty(): boolean {
     if (this.writes > 0) return true;
     const ids = this.tabs.map((t) => t.id);
@@ -621,9 +622,9 @@ export class Workspace {
    * paths under the same folder relative to it, so it must be known before
    * serialising.
    */
-  bytes(cell: Cell, at: string): Promise<Uint8Array> {
+  async bytes(cell: Cell, at: string): Promise<Uint8Array> {
     this.showing.keep(cell);
-    return this.engine.save(
+    const written = await this.engine.save(
       {
         source: this.showing.id,
         cells: this.tabs.map((t) => ({ source: t.id, row: t.cell.row, col: t.cell.col })),
@@ -631,6 +632,10 @@ export class Workspace {
       },
       CARRY_LIMIT,
     );
+    // The engine answers in order, so the charts it answered for are those it
+    // wrote.
+    this.charts.wrote();
+    return written;
   }
 
   /** Records a completed save: sets the path and resets all dirty state. */
