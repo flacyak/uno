@@ -184,3 +184,12 @@ test("another workspace's charts take new windows, whatever their ids", () => {
   expect(windows()[0]).not.toBe(was);
   expect(drawn(windows()[0]!)).toStrictEqual(placed(MOVED, ROOM));
 });
+
+test("a relabel keeps every window", () => {
+  const { layer } = shown(FLUSH, INSIDE);
+  const were = windows();
+
+  layer.relabel();
+  expect(windows()).toHaveLength(were.length);
+  were.forEach((box, i) => expect(windows()[i]).toBe(box));
+});

@@ -1255,6 +1255,7 @@ export class Shell {
     // So was the last message.
     this.say("");
     this.panel.relabel();
+    this.layer?.relabel();
     // The header's hints, which the grid draws once per file.
     this.grid?.refresh();
     this.paintAll();

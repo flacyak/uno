@@ -51,6 +51,11 @@ export class ChartLayer {
     this.draw();
   }
 
+  /** relabel redraws the windows for a language change, leaving each one open. */
+  relabel(): void {
+    this.draw();
+  }
+
   /**
    * draw gives each chart its one window, at its place in the room, and takes
    * away the rest.
