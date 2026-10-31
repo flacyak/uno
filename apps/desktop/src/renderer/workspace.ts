@@ -344,6 +344,7 @@ export class Workspace {
    */
   async remove(tab: Tab): Promise<boolean> {
     await this.writing(this.engine.remove(tab.source));
+    this.charts.dropSource(tab.id);
     const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return false;
     const was = this.tabs[i]!;
