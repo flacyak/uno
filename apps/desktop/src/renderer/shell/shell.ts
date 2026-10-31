@@ -981,6 +981,8 @@ export class Shell {
       // The workspace says whether the removed tab was showing.
       const showing = await w.remove(tab);
       if (this.workspace !== w) return;
+      // Its charts went with it.
+      this.layer?.draw();
       this.say(m.removed_name({ name: tab.name }));
       // Removing the showing tab shows its neighbour.
       this.shown(showing);

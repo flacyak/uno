@@ -111,6 +111,7 @@ test("the first × on a source with charts warns, and the second removes both", 
   expect(await until(page, () => tab(SALES) === null)).toBe(true);
   expect(message()).toBe(m.removed_name({ name: basename(FIXTURE) }));
   expect(shell.charts?.all).toStrictEqual([]);
+  expect(windows()).toBe(0);
 });
 
 test("the first × on a source with charts and edits says both", async () => {

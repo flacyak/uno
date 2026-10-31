@@ -51,12 +51,23 @@ export class ChartLayer {
     this.draw();
   }
 
-  /** draw gives each chart its one window, at its place in the room. */
+  /**
+   * draw gives each chart its one window, at its place in the room, and takes
+   * away the rest.
+   */
   draw(): void {
+    const charts = this.charts.all;
+    const showing = new Set(charts.map((chart) => chart.id));
+    for (const [id, box] of this.windows) {
+      if (showing.has(id)) continue;
+      box.remove();
+      this.windows.delete(id);
+    }
+
     this.fit();
     const { width: w, height: h } = this.root.getBoundingClientRect();
     const room = { w, h };
-    for (const chart of this.charts.all) stand(this.windowOf(chart.id), placed(chart.place, room));
+    for (const chart of charts) stand(this.windowOf(chart.id), placed(chart.place, room));
   }
 
   /**

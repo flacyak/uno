@@ -141,3 +141,46 @@ test("a resize reads where each chart stands by then", () => {
   resize(ROOM);
   expect(drawn(windows()[0]!)).toStrictEqual(placed(MOVED, ROOM));
 });
+
+test("a draw takes away the window of a chart that went, and keeps the others", () => {
+  const { layer, model } = shown(FLUSH, INSIDE);
+  const kept = windows()[1];
+
+  model.all = [INSIDE];
+  layer.draw();
+  expect(windows()).toHaveLength(1);
+  expect(windows()[0]).toBe(kept);
+});
+
+test("a chart that comes back, as a refused removal brings it, has a window again", () => {
+  const { layer, model } = shown(FLUSH);
+  model.all = [];
+  layer.draw();
+
+  model.all = [FLUSH];
+  layer.draw();
+  expect(windows()).toHaveLength(1);
+});
+
+test("a draw adds a window for a new chart, after the others", () => {
+  const { layer, model } = shown(FLUSH);
+  const first = windows()[0];
+
+  model.all = [FLUSH, INSIDE];
+  layer.draw();
+  expect(windows()[0]).toBe(first);
+  expect(windows().map(drawn)).toStrictEqual([
+    placed(FLUSH.place, ROOM),
+    placed(INSIDE.place, ROOM),
+  ]);
+});
+
+test("another workspace's charts take new windows, whatever their ids", () => {
+  const { layer } = shown(FLUSH);
+  const was = windows()[0];
+
+  layer.show({ all: [{ ...FLUSH, place: MOVED }] });
+  expect(windows()).toHaveLength(1);
+  expect(windows()[0]).not.toBe(was);
+  expect(drawn(windows()[0]!)).toStrictEqual(placed(MOVED, ROOM));
+});
