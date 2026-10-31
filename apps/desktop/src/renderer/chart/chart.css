@@ -1,0 +1,20 @@
+/* Chart styles: the layer over the sheet and the windows on it. */
+
+/* The z-index puts the layer over the grid's header, editor and corner, which
+ * share the sheet's stacking context, and the sheet keeps it under the scrim
+ * and the panel. The grid takes the pointer wherever no window is. */
+.charts {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chart {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}

@@ -27,6 +27,14 @@ test("the markup ships its elements without their words", () => {
   expect(document.body.textContent.replace(/\s+/g, " ").trim()).toBe("+ csv · tsv · uno · ·");
 });
 
+test("the markup ships the chart layer empty and hidden, after the grid", () => {
+  const layer = document.querySelector<HTMLElement>("#charts")!;
+  expect(layer.hidden).toBe(true);
+  expect(layer.childElementCount).toBe(0);
+  expect(layer.previousElementSibling?.id).toBe("content");
+  expect(layer.nextElementSibling).toBeNull();
+});
+
 test("labelPage writes the heads, the empty state and the switch", () => {
   labelPage();
   expect(text(".sidebar-head")).toBe(m.workspaces_title());

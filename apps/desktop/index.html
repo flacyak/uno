@@ -47,6 +47,10 @@
           <!-- tabindex, because the grid listens for arrow keys here and a
                plain div cannot take focus. -->
           <div id="content" tabindex="0" hidden></div>
+
+          <!-- The chart windows, over the sheet. Beside the grid and not in it,
+               because a key pressed in #content is the grid's. -->
+          <div id="charts" class="charts" hidden></div>
         </div>
 
         <!-- The sources panel, on the right while it is open, under the end

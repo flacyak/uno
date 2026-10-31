@@ -107,8 +107,10 @@ body {
 
 /* `min-width: 0` so the sheet shrinks for the side columns and both stay on
  * the window. `isolation` keeps the grid's sticky headers in their
- * own stacking context, so the scrim only needs to be above the sheet. */
+ * own stacking context, so the scrim only needs to be above the sheet.
+ * `position` holds the chart layer to the sheet. */
 .win-sheet {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
