@@ -47,6 +47,8 @@ export class Charts {
   private readonly sent = new Map<string, Chart | undefined>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
+  /** The sources of the charts this workspace carries and cannot show. */
+  private readonly carrying = new Set<string>();
   /** The count behind the ids uno makes. */
   private made = 0;
   /** The charts as the last save recorded them. */
@@ -60,15 +62,16 @@ export class Charts {
     private readonly writing: (write: Promise<void>) => Promise<void>,
   ) {}
 
-  /** Takes the charts an open found, which count as saved, and the ids of the
-   * ones it carries. */
-  seed({ charts, carriedIds }: Pick<Added, "charts" | "carriedIds">): void {
-    for (const chart of charts) {
+  /** Takes the charts an open found, which count as saved, and the ids and
+   * sources of the ones it carries. */
+  seed(opening: Pick<Added, "charts" | "carriedIds" | "carriedOver">): void {
+    for (const chart of opening.charts) {
       this.answered.set(chart.id, chart);
       this.recorded.set(chart.id, chart);
       this.taken.add(chart.id);
     }
-    for (const id of carriedIds) this.taken.add(id);
+    for (const id of opening.carriedIds) this.taken.add(id);
+    for (const source of opening.carriedOver) this.carrying.add(source);
   }
 
   /** The charts as their windows show them, oldest first. */
@@ -82,6 +85,11 @@ export class Charts {
   /** The charts over a source, oldest first. */
   over(source: string): readonly Chart[] {
     return this.all.filter((chart) => chart.source === source);
+  }
+
+  /** Whether a chart leaves with a source, shown or carried. */
+  leaveWith(source: string): boolean {
+    return this.carrying.has(source) || this.over(source).length > 0;
   }
 
   /** Whether a chart was added, removed or changed since the last save. */
@@ -119,6 +127,7 @@ export class Charts {
     for (const chart of this.answered.values()) {
       if (chart.source === source) this.answered.delete(chart.id);
     }
+    this.carrying.delete(source);
   }
 
   /** Notes the charts answered for now as the ones a save wrote. */

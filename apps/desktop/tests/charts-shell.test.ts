@@ -11,7 +11,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import type { Chart } from "@document";
+import type { CarriedChart, Chart } from "@document";
+import { UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
 import { ADS, BARS, SALES, unoOf } from "./charted.ts";
@@ -31,10 +32,10 @@ function close(id: string): void {
   tab(id)!.querySelector<HTMLElement>(".close")!.click();
 }
 
-/** Writes a .uno holding `charts`, opens it, and returns its path. */
-async function open(name: string, charts: Chart[]): Promise<string> {
+/** Writes a .uno holding `charts` and carrying `carried`, opens it, and returns its path. */
+async function open(name: string, charts: Chart[], carried?: CarriedChart[]): Promise<string> {
   const path = join(dir, name);
-  await writeFile(path, unoOf(charts));
+  await writeFile(path, unoOf(charts, carried));
   await shell.openRef({ name, path });
   return path;
 }
@@ -54,6 +55,38 @@ test("the first × on a source with charts warns, and the second removes both", 
   expect(await until(page, () => tab(SALES) === null)).toBe(true);
   expect(message()).toBe(m.removed_name({ name: basename(FIXTURE) }));
   expect(shell.charts?.all).toStrictEqual([]);
+});
+
+test("the first × on a source with charts and edits says both", async () => {
+  await open("edited.uno", [BARS]);
+  await page.press("e", { ctrlKey: true });
+  await page.clickCell(0, UNITS);
+  await page.settle(1);
+  await page.press("Enter");
+  await page.setEditorValue("8");
+  await page.press("Enter");
+  expect(await until(page, () => shell.unsaved)).toBe(true);
+  close(SALES);
+  const charts = m.source_takes_charts({ name: basename(FIXTURE) });
+  expect(message()).toBe(`${m.edits_count({ count: 1 })} · ${charts}`);
+});
+
+test("the first × on a source whose only charts are carried warns of them", async () => {
+  const json = `{"id":"c1","source":"${SALES}","plot":{"t":"line"}}`;
+  await open("carrying.uno", [], [{ id: "c1", source: SALES, json }]);
+  close(SALES);
+  expect(message()).toBe(m.source_takes_charts({ name: basename(FIXTURE) }));
+});
+
+test("a source added back has none of the carried charts that left with it", async () => {
+  const json = `{"id":"c2","source":"${ADS}","plot":{"t":"line"}}`;
+  await open("returned.uno", [BARS], [{ id: "c2", source: ADS, json }]);
+  close(ADS);
+  close(ADS);
+  expect(await until(page, () => tab(ADS) === null)).toBe(true);
+  await shell.addPaths([SECOND]);
+  close(ADS);
+  expect(await until(page, () => tab(ADS) === null)).toBe(true);
 });
 
 test("a source with no charts goes on the first ×", async () => {

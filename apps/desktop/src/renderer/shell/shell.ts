@@ -945,7 +945,7 @@ export class Shell {
   private async remove(tab: Tab): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
-    const warning = removing(tab, w.charts.over(tab.id).length > 0);
+    const warning = removing(tab, w.charts.leaveWith(tab.id));
     if (warning !== undefined && this.warned !== tab) {
       this.say(warning, true);
       this.warned = tab;
@@ -1339,8 +1339,9 @@ export class Shell {
  */
 function removing(tab: Tab, charted: boolean): string | undefined {
   const { name, edited: count } = tab;
-  if (charted) return m.source_takes_charts({ name });
-  return count > 0 ? m.source_has_edits({ name, count }) : undefined;
+  if (!charted) return count > 0 ? m.source_has_edits({ name, count }) : undefined;
+  const charts = m.source_takes_charts({ name });
+  return count > 0 ? `${m.edits_count({ count })} · ${charts}` : charts;
 }
 
 /** refAt makes a SourceRef for a path. */
