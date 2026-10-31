@@ -16,10 +16,11 @@ import {
   MIN_HEIGHT,
   MIN_WIDTH,
   placed,
+  placeOf,
   tucked,
   tucks,
 } from "@renderer/chart/place";
-import type { Room } from "@renderer/chart/place";
+import type { Rect, Room } from "@renderer/chart/place";
 
 const ROOM: Room = { w: 1200, h: 800 };
 
@@ -28,6 +29,9 @@ const SNUG: Room = { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
 
 /** A window of a new chart's size at the top left. */
 const PLACE: ChartPlace = { x: 0, y: 0, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+
+/** That window a quarter of the way across ROOM's free 780 x 540 px. */
+const RECT: Rect = { x: 195, y: 135, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
 
 /** The stylesheet's --row-h, a window head's height. */
 const HEAD = 29;
@@ -57,6 +61,39 @@ test("in a room under the least size the room wins, so the window stays inside i
   const room = { w: MIN_WIDTH / 2, h: MIN_HEIGHT / 2 };
   const rect = placed({ ...PLACE, x: 1, y: 1 }, room);
   expect(rect).toEqual({ x: 0, y: 0, width: room.w, height: room.h });
+});
+
+test("a place comes back from the rect it draws, in every room", () => {
+  const place = { ...PLACE, x: 0.25, y: 0.75 };
+  for (const room of [ROOM, { w: 640, h: 400 }, SNUG, { w: 300, h: ROOM.h }, { w: 300, h: 200 }]) {
+    const back = placeOf(placed(place, room), room, place);
+    expect(back.x).toBeCloseTo(place.x);
+    expect(back.y).toBeCloseTo(place.y);
+    expect([back.width, back.height]).toEqual([place.width, place.height]);
+  }
+});
+
+test("a rect changed on one side keeps what the room hid on the other", () => {
+  const place = { ...PLACE, x: 1 };
+  const room = { w: 300, h: ROOM.h };
+  const rect = placed(place, room);
+  const moved = placeOf({ ...rect, y: CASCADE_PX }, room, place);
+  expect([moved.x, moved.width]).toEqual([place.x, place.width]);
+  const resized = placeOf({ ...rect, height: MIN_HEIGHT }, room, place);
+  expect(resized).toEqual({ ...place, height: MIN_HEIGHT });
+});
+
+test("a rect pushed past an edge keeps to it", () => {
+  expect(placeOf({ ...RECT, x: -1 }, ROOM, PLACE).x).toBe(0);
+  expect(placeOf({ ...RECT, y: -1 }, ROOM, PLACE).y).toBe(0);
+  expect(placeOf({ ...RECT, x: ROOM.w }, ROOM, PLACE).x).toBe(1);
+  expect(placeOf({ ...RECT, y: ROOM.h }, ROOM, PLACE).y).toBe(1);
+});
+
+test("a rect pushed under the least size stores it, with its corner where it was", () => {
+  const pushed = { ...RECT, width: MIN_WIDTH - 1, height: MIN_HEIGHT - 1 };
+  const back = placed(placeOf(pushed, ROOM, PLACE), ROOM);
+  expect(back).toEqual({ ...RECT, width: MIN_WIDTH, height: MIN_HEIGHT });
 });
 
 test("a room tucks from one px under the least size, as a 0 px or zoomed sheet does", () => {
@@ -102,6 +139,6 @@ test.each<[string, Room]>([
   ["a room of exactly one window", SNUG],
 ])("%s gives only numbers", (_name, room) => {
   const rect = placed({ ...PLACE, x: 0.5, y: 0.5 }, room);
-  const boxes = [rect, fresh(3, 0, room), tucked(3, HEAD, room)];
+  const boxes = [rect, placeOf(rect, room, PLACE), fresh(3, 0, room), tucked(3, HEAD, room)];
   expect(boxes.flatMap((box) => Object.values(box)).every(Number.isFinite)).toBe(true);
 });

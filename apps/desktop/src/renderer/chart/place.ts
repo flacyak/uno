@@ -70,6 +70,24 @@ export function placed(place: ChartPlace, room: Room): Rect {
   };
 }
 
+/**
+ * placeOf gives the place a rect stores in a room, held to the room and the
+ * least size. A rect cannot show all of `was`, the place it came from, so a
+ * side with no free px keeps its fraction, and a size the rect leaves as `was`
+ * draws it stays stored. A tucked window stores nothing: its rect has no place.
+ */
+export function placeOf(rect: Rect, room: Room, was: ChartPlace): ChartPlace {
+  const drawn = placed(was, room);
+  const width = fit(rect.width, MIN_WIDTH, room.w);
+  const height = fit(rect.height, MIN_HEIGHT, room.h);
+  return {
+    x: share(rect.x, room.w - width, was.x),
+    y: share(rect.y, room.h - height, was.y),
+    width: width === drawn.width ? was.width : width,
+    height: height === drawn.height ? was.height : height,
+  };
+}
+
 /** tucks says whether a room is too small to draw any window whole. */
 export function tucks(room: Room): boolean {
   return room.w < MIN_WIDTH || room.h < MIN_HEIGHT;
