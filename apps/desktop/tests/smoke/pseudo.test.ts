@@ -168,11 +168,15 @@ test("a right click on the workspace offers its menu in the language chosen", as
   expect(english()).toEqual([]);
 });
 
-test("the warning on a source with charts is in the language chosen", async () => {
+test("what a .uno's charts say in the status line is in the language chosen", async () => {
   const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
+  const carried = { id: "c2", source: SALES, json: '{"id":"c2"}' };
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "q3.uno");
-  await writeFile(path, unoOf([BARS]));
+  await writeFile(path, unoOf([BARS], [carried]));
   await shell.openRef({ name: "q3.uno", path });
+  expect(message()).toBe(m.charts_kept({ count: 1 }));
+  expect(plain(message())).toBe("");
+
   click(`.tab[data-source="${SALES}"] .close`);
   expect(message()).toBe(m.source_takes_charts({ name: `${SALES}.csv` }));
   expect(plain(message())).toBe("");

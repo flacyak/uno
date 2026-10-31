@@ -1,6 +1,7 @@
 /**
  * @fileoverview A workspace's charts through the real shell and engine.
- * Removing a source warns of its charts first.
+ * Removing a source warns of its charts first, and an open says what it could
+ * not show of them.
  *
  * @vitest-environment happy-dom
  */
@@ -94,4 +95,13 @@ test("a source with no charts goes on the first ×", async () => {
   close(ADS);
   expect(await until(page, () => tab(ADS) === null)).toBe(true);
   expect(message()).toBe(m.removed_name({ name: basename(SECOND) }));
+});
+
+test("an open says what it could not show of a .uno's charts, once", async () => {
+  const carried = { id: "c2", source: SALES, json: '{"id":"c2","plot":{"t":"line"}}' };
+  await open("carried.uno", [BARS], [carried]);
+  expect(message()).toBe(m.charts_kept({ count: 1 }));
+
+  await open("whole.uno", [BARS]);
+  expect(message()).toBe("");
 });

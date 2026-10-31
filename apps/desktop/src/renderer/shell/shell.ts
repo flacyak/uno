@@ -719,7 +719,7 @@ export class Shell {
       this.content.hidden = false;
       this.restore(w, grid);
       grid.focus();
-      this.say("");
+      this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.

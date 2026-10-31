@@ -20,6 +20,7 @@ import type {
   Offer,
   PartInfo,
   Peeked,
+  Said,
   SourceHandle,
   SourceRef,
 } from "@engine";
@@ -247,6 +248,8 @@ export class Workspace {
 
   /** The charts over this workspace's sources. */
   readonly charts: Charts;
+  /** What the open of a .uno has to say of its charts, for the shell to say. */
+  chartsNote: Said | undefined;
 
   /** Tabs in the order they were added, which is the sidebar order. */
   private tabs: Tab[] = [];
@@ -317,6 +320,7 @@ export class Workspace {
   async add(ref: SourceRef, signal?: AbortSignal): Promise<Tab> {
     const opening = await this.engine.open(ref, signal);
     this.charts.seed(opening);
+    this.chartsNote = opening.chartsNote;
     const added = opening.sources.map((s) => this.tab(s));
     for (const { source, row, col } of opening.cells) {
       const t = added.find((a) => a.id === source);
