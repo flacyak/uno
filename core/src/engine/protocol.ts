@@ -8,7 +8,7 @@
  * a Web Worker, or a MessageChannel.
  */
 
-import type { Chart } from '@document';
+import type { Chart, ChartPlace } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Change } from '@pattern';
 import type { Said } from '@said';
@@ -159,11 +159,16 @@ export interface Changed {
   columns: ColumnInfo[];
 }
 
-/** The cursor position of each source and which source was showing. Written by a save. */
+/** The cursor position of each source, which source was showing, and where
+ * each chart's window stands. Written by a save. */
 export interface Place {
   /** The source that was showing. */
   source: string;
   cells: Array<{ source: string; row: number; col: number }>;
+  /** Where a client's windows stand now. Windows move with no request, so a
+   * chart left out, or told a place a read would refuse, stays where the
+   * engine last heard it was. */
+  charts?: Array<{ id: string; place: ChartPlace }>;
 
   /**
    * The path the .uno is saved to. A source under the same folder is pointed

@@ -1106,6 +1106,17 @@ function parsePlace(where: string, value: unknown): ChartPlace {
   };
 }
 
+/** isPlace says whether a read takes `value` as where a window sits. */
+export function isPlace(value: unknown): value is ChartPlace {
+  const p = asRecord(value);
+  return (
+    FRACTION.is(p['x']) &&
+    FRACTION.is(p['y']) &&
+    PIXELS.is(p['width']) &&
+    PIXELS.is(p['height'])
+  );
+}
+
 // ------------------------------------------------------------- writing
 
 // The key order below, and in fileSource and partsSource above, is the order
