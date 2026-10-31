@@ -255,6 +255,7 @@ export class Workspace {
         cells: [],
         charts: [],
         carriedIds: [],
+        carriedOver: [],
       };
     });
   }
@@ -431,6 +432,7 @@ export class Workspace {
       cells: doc.sources.map((s) => ({ source: s.id, ...s.state.active })),
       charts: [...this.charts.values()],
       carriedIds: this.carriedCharts.map((c) => c.id),
+      carriedOver: this.carriedCharts.map((c) => c.source),
       chartsNote,
     };
   }

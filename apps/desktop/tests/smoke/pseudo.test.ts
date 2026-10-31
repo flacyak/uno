@@ -12,11 +12,16 @@
  * @vitest-environment happy-dom
  */
 
+import { mkdtempSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
 import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
 import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
+import { BARS, SALES, unoOf } from "../charted.ts";
 import { bootShell } from "./dom-harness.ts";
 import { frame } from "./dom-page.ts";
 
@@ -161,4 +166,18 @@ test("a right click on the workspace offers its menu in the language chosen", as
   await frame();
   expect(document.querySelectorAll(".pop-item").length).toBeGreaterThan(0);
   expect(english()).toEqual([]);
+});
+
+test("what a .uno's charts say in the status line is in the language chosen", async () => {
+  const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
+  const carried = { id: "c2", source: SALES, json: '{"id":"c2"}' };
+  const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "q3.uno");
+  await writeFile(path, unoOf([BARS], [carried]));
+  await shell.openRef({ name: "q3.uno", path });
+  expect(message()).toBe(m.charts_kept({ count: 1 }));
+  expect(plain(message())).toBe("");
+
+  click(`.tab[data-source="${SALES}"] .close`);
+  expect(message()).toBe(m.source_takes_charts({ name: `${SALES}.csv` }));
+  expect(plain(message())).toBe("");
 });
