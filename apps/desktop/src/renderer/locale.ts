@@ -1,5 +1,6 @@
 /**
- * @fileoverview Formats numbers, byte sizes and lists in the app's locale.
+ * @fileoverview Formats numbers, byte sizes, times and lists in the app's
+ * locale.
  *
  * The app's locale is a separate setting from the operating system's, so
  * every formatter here is built with getLocale().
@@ -17,6 +18,12 @@ let sizes: { locale: Locale; whole: Intl.NumberFormat; tenths: Intl.NumberFormat
 
 /** Cached compact formatter, rebuilt when the locale changes. */
 let compacting: { locale: Locale; format: Intl.NumberFormat } | undefined;
+
+/**
+ * Cached time formatters, without and with the date, rebuilt when the locale
+ * changes. They keep the time zone they were built in.
+ */
+let clocks: { locale: Locale; time: Intl.DateTimeFormat; dated: Intl.DateTimeFormat } | undefined;
 
 /** The fixed-decimal formatters for the app's locale. */
 function fixed(): { whole: Intl.NumberFormat; tenths: Intl.NumberFormat } {
@@ -87,6 +94,24 @@ const MS_PER_SECOND = 1000;
 /** Formats a time in milliseconds as seconds to one decimal, with its unit: 2.4 s. */
 export function seconds(ms: number): string {
   return m.elapsed_seconds({ seconds: fixed().tenths.format(ms / MS_PER_SECOND) });
+}
+
+/**
+ * Formats a time, in ms since the epoch, in the app's locale: 2:32 PM in
+ * English, 14:32 in Spanish. A time on any day but today, before or after,
+ * comes with its date: 29/10/26, 14:32.
+ */
+export function clock(ms: number): string {
+  const locale = getLocale();
+  if (clocks?.locale !== locale) {
+    clocks = {
+      locale,
+      time: new Intl.DateTimeFormat(locale, { timeStyle: "short" }),
+      dated: new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }),
+    };
+  }
+  const today = new Date(ms).toDateString() === new Date().toDateString();
+  return (today ? clocks.time : clocks.dated).format(ms);
 }
 
 /** Joins names as a short list in the app's locale: a, b, c. */
