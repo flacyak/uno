@@ -13,6 +13,8 @@ import {
   MIN_HEIGHT,
   MIN_WIDTH,
   placed,
+  tucked,
+  tucks,
 } from "@renderer/chart/place";
 import type { Room } from "@renderer/chart/place";
 
@@ -23,6 +25,15 @@ const SNUG: Room = { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
 
 /** A window of a new chart's size at the top left. */
 const PLACE: ChartPlace = { x: 0, y: 0, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+
+/** The stylesheet's --row-h, a window head's height. */
+const HEAD = 29;
+
+/** A 640 px window with both side columns open at 168 and 250 px, less the 12 px --bar. */
+const BOTH_SIDES_OPEN = 640 - 168 - 250 - 12;
+
+/** The same window at 200% zoom, which halves its px, with the sidebar alone open. */
+const ZOOMED = 640 / 2 - 168 - 12;
 
 test("a window at the right and bottom edges stays there as the room narrows", () => {
   for (const room of [ROOM, { w: 640, h: 400 }, SNUG, { w: 300, h: 200 }]) {
@@ -43,4 +54,27 @@ test("in a room under the least size the room wins, so the window stays inside i
   const room = { w: MIN_WIDTH / 2, h: MIN_HEIGHT / 2 };
   const rect = placed({ ...PLACE, x: 1, y: 1 }, room);
   expect(rect).toEqual({ x: 0, y: 0, width: room.w, height: room.h });
+});
+
+test("a room tucks from one px under the least size, as a 0 px or zoomed sheet does", () => {
+  expect(tucks({ w: MIN_WIDTH, h: MIN_HEIGHT })).toBe(false);
+  expect(tucks({ w: MIN_WIDTH - 1, h: MIN_HEIGHT })).toBe(true);
+  expect(tucks({ w: MIN_WIDTH, h: MIN_HEIGHT - 1 })).toBe(true);
+  for (const w of [0, BOTH_SIDES_OPEN, ZOOMED]) expect(tucks({ w, h: ROOM.h })).toBe(true);
+});
+
+test("a tucked window is its head, at the room's width, stacked in list order", () => {
+  const room = { w: ZOOMED, h: ROOM.h };
+  expect(tucked(2, HEAD, room)).toEqual({ x: 0, y: 2 * HEAD, width: room.w, height: HEAD });
+});
+
+test.each<[string, Room]>([
+  ["no room", { w: 0, h: 0 }],
+  ["no width", { w: 0, h: ROOM.h }],
+  ["no height", { w: ROOM.w, h: 0 }],
+  ["a room of exactly one window", SNUG],
+])("%s gives only numbers", (_name, room) => {
+  const rect = placed({ ...PLACE, x: 0.5, y: 0.5 }, room);
+  const boxes = [rect, tucked(3, HEAD, room)];
+  expect(boxes.flatMap((box) => Object.values(box)).every(Number.isFinite)).toBe(true);
 });

@@ -50,3 +50,16 @@ export function placed(place: ChartPlace, room: Room): Rect {
     height,
   };
 }
+
+/** tucks says whether a room is too small to draw any window whole. */
+export function tucks(room: Room): boolean {
+  return room.w < MIN_WIDTH || room.h < MIN_HEIGHT;
+}
+
+/**
+ * tucked gives the rect of a room's `index`th window while the room tucks:
+ * only its `head` px head, at the room's full width, stacked from the top.
+ */
+export function tucked(index: number, head: number, room: Room): Rect {
+  return { x: 0, y: index * head, width: room.w, height: head };
+}
