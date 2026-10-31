@@ -6,12 +6,18 @@
 
 import { expect, test } from 'vite-plus/test';
 
+import type { Plot } from '@document';
 import { Engine } from '@engine';
 import type { Opened, Opening, Port, Reply, Request, Tally } from '@engine';
 
 const NAME = 'sales.csv';
 const CHART = 'c1';
-const GONE: Tally = { t: 'unread', said: { t: 'source-absent', name: NAME } };
+const PLOT: Plot = { t: 'bars', by: { col: 0, header: 'region' } };
+const GONE: Tally = {
+  t: 'unread',
+  plot: PLOT,
+  said: { t: 'source-absent', name: NAME },
+};
 /** The one source the fake engine opens, at the log's first generation. */
 const OPENED: Opened = {
   source: 'sales',
