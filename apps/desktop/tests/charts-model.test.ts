@@ -356,3 +356,28 @@ test("an edit moves a chart's tally, complete again once the pass reaches it", a
     await expect.poll(complete, TALLY_WAIT).toContain(value);
   });
 });
+
+test("a chart takes its tallies with it, by a removal or its source's", async () => {
+  const ads = { ...BARS, id: "c2", source: ADS };
+  await opened(uno(unoOf([BARS, ads])), async (w) => {
+    await completeOf(w);
+    await w.charts.remove(BARS.id);
+    expect(w.charts.heard(BARS.id)).toBeUndefined();
+    await expect.poll(() => w.charts.heard(ads.id)?.latest, TALLY_WAIT).toBeDefined();
+    await w.remove(w.sources[1]!);
+    expect(w.charts.heard(ads.id)).toBeUndefined();
+    // The same records back would show anything still kept of them.
+    w.charts.seed({ charts: [BARS, ads], carriedIds: [], carriedOver: [] });
+    expect(w.charts.heard(BARS.id)?.latest).toBeUndefined();
+    expect(w.charts.heard(ads.id)?.latest).toBeUndefined();
+  });
+});
+
+test("a removal the engine refuses keeps the chart's tallies", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    w.close();
+    await expect(w.charts.remove(BARS.id)).rejects.toThrow("the engine was closed");
+    expect(w.charts.heard(BARS.id)?.complete).toBe(was);
+  });
+});

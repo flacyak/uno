@@ -163,10 +163,13 @@ export class Charts {
     return this.tallied.get(id) ?? { latest: undefined, complete: undefined };
   }
 
-  /** Forgets the charts over a source, which left the engine with it. */
+  /** Forgets the charts over a source, which left the engine with it, and
+   * their tallies. */
   dropSource(source: string): void {
     for (const chart of this.answered.values()) {
-      if (chart.source === source) this.answered.delete(chart.id);
+      if (chart.source !== source) continue;
+      this.answered.delete(chart.id);
+      this.tallied.delete(chart.id);
     }
     this.carrying.delete(source);
   }
@@ -196,8 +199,12 @@ export class Charts {
     this.sent.set(id, record);
     try {
       await this.writing(request);
-      if (record === undefined) this.answered.delete(id);
-      else this.answered.set(id, record);
+      if (record === undefined) {
+        this.answered.delete(id);
+        this.tallied.delete(id);
+      } else {
+        this.answered.set(id, record);
+      }
     } finally {
       if (this.sent.get(id) === record) this.sent.delete(id);
     }
