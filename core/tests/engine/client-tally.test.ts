@@ -1,6 +1,7 @@
 /**
  * @fileoverview A source handle hears its charts' tallies over a fake port:
- * each taken at its generation or later, and none moves the generation.
+ * each taken at its generation or later, and none moves the generation. An
+ * older engine's open, which names no charts, reads as an open of none.
  */
 
 import { expect, test } from 'vite-plus/test';
@@ -28,9 +29,10 @@ const OPENED: Opened = {
   edits: [],
   generation: 0,
 };
+/** What an engine from before cells and charts answers an open with. */
+const OLDER: Opening = { opened: [OPENED], showing: OPENED.source };
 const ADDED: Opening = {
-  opened: [OPENED],
-  showing: OPENED.source,
+  ...OLDER,
   cells: [],
   charts: [],
   carriedIds: [],
@@ -41,23 +43,29 @@ function told(generation: number, source = OPENED.source): Reply {
   return { t: 'tally', source, chart: CHART, generation, tally: GONE };
 }
 
-/** hears returns what a handle on OPENED heard of `sent`, and its generation. */
-async function hears(sent: Reply[]) {
+/** answering returns an engine answered by a fake that gives `added` to an
+ * open, and the way to send it any other reply. */
+function answering(added: Opening) {
   let receive: (msg: Reply) => void = () => {};
   const port: Port<Reply, Request> = {
     post: (msg) => {
-      if (msg.t === 'open') receive({ t: 'opened', id: msg.id, added: ADDED });
+      if (msg.t === 'open') receive({ t: 'opened', id: msg.id, added });
     },
     listen: (fn) => {
       receive = fn;
     },
     close: () => {},
   };
-  const engine = new Engine(port);
+  return { engine: new Engine(port), send: (msg: Reply) => receive(msg) };
+}
+
+/** hears returns what a handle on OPENED heard of `sent`, and its generation. */
+async function hears(sent: Reply[]) {
+  const { engine, send } = answering(ADDED);
   const [handle] = (await engine.open({ name: NAME, path: NAME })).sources;
   const heard: Array<[string, Tally]> = [];
   handle!.onTally = (chart, tally) => heard.push([chart, tally]);
-  for (const msg of sent) receive(msg);
+  for (const msg of sent) send(msg);
   return { heard, generation: handle!.generation };
 }
 
@@ -75,4 +83,9 @@ test("a tally taken before the handle's generation, or over a source the engine 
   const offer: Reply = { t: 'offer', source, generation: later, offer: null };
   const sent = [offer, told(generation), told(later, 'elsewhere')];
   expect((await hears(sent)).heard).toEqual([]);
+});
+
+test('an open by an engine from before charts names no cells and no charts', async () => {
+  const added = await answering(OLDER).engine.open({ name: NAME, path: NAME });
+  expect(added).toMatchObject({ cells: [], charts: [], carriedIds: [] });
 });

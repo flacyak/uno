@@ -98,9 +98,9 @@ export class Engine {
       return {
         sources: added.opened.map((o) => this.adopt(o)),
         showing: added.showing,
-        cells: added.cells,
-        charts: added.charts,
-        carriedIds: added.carriedIds,
+        cells: added.cells ?? [],
+        charts: added.charts ?? [],
+        carriedIds: added.carriedIds ?? [],
         chartsNote: added.chartsNote,
       };
     } finally {
