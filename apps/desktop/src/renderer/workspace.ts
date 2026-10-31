@@ -20,6 +20,7 @@ import type {
   Offer,
   PartInfo,
   Peeked,
+  Said,
   SourceHandle,
   SourceRef,
 } from "@engine";
@@ -27,6 +28,7 @@ import { NO_ROW, Op, editEquals } from "@sheet";
 import type { Edit } from "@sheet";
 import type { Listing, SingleRef } from "@store";
 
+import { Charts } from "./charts.ts";
 import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "@paraglide/messages";
 import { bytes } from "./locale.ts";
@@ -244,6 +246,11 @@ export class Workspace {
   /** The mode is kept in memory only. Every open starts in view. */
   mode: Mode = "view";
 
+  /** The charts over this workspace's sources. */
+  readonly charts: Charts;
+  /** What the open of a .uno has to say of its charts, for the shell to say. */
+  chartsNote: Said | undefined;
+
   /** Tabs in the order they were added, which is the sidebar order. */
   private tabs: Tab[] = [];
   private showing!: Tab;
@@ -263,9 +270,10 @@ export class Workspace {
    */
   private readonly pointing = new Map<string, Pointing>();
   /**
-   * Edits, undos, redos and removals sent to the engine and not yet answered.
-   * One may wait behind a relink or append in flight, as the engine answers in
-   * order. Adds are left out, since each is listed as opening until answered.
+   * Edits, undos, redos, removals and chart changes sent to the engine and not
+   * yet answered. One may wait behind a relink or append in flight, as the
+   * engine answers in order. Adds are left out, since each is listed as opening
+   * until answered.
    */
   private writes = 0;
 
@@ -276,7 +284,13 @@ export class Workspace {
     private readonly changed: () => void,
     /** Called when a source's offer changes, with its tab. */
     private readonly offered: (tab: Tab) => void,
-  ) {}
+  ) {
+    this.charts = new Charts(
+      engine,
+      (write) => this.writing(write),
+      (source) => this.tabs.find((t) => t.id === source)?.state ?? "missing",
+    );
+  }
 
   /**
    * Opens a file through the engine and returns the workspace. Aborting
@@ -308,14 +322,16 @@ export class Workspace {
    * Each tab starts on the cell a .uno left it on.
    */
   async add(ref: SourceRef, signal?: AbortSignal): Promise<Tab> {
-    const { sources, showing, cells } = await this.engine.open(ref, signal);
-    const added = sources.map((s) => this.tab(s));
-    for (const { source, row, col } of cells) {
+    const opening = await this.engine.open(ref, signal);
+    this.charts.seed(opening);
+    this.chartsNote = opening.chartsNote;
+    const added = opening.sources.map((s) => this.tab(s));
+    for (const { source, row, col } of opening.cells) {
       const t = added.find((a) => a.id === source);
       if (t !== undefined) t.cell = { row, col };
     }
     this.tabs.push(...added);
-    return added.find((t) => t.id === showing) ?? added[0]!;
+    return added.find((t) => t.id === opening.showing) ?? added[0]!;
   }
 
   private tab(source: SourceHandle, saved?: readonly Edit[]): Tab {
@@ -325,6 +341,7 @@ export class Workspace {
       t.offer = offer;
       this.offered(t);
     };
+    source.onTally = (chart, tally) => this.charts.hear(source.id, chart, tally);
     return t;
   }
 
@@ -338,6 +355,7 @@ export class Workspace {
    */
   async remove(tab: Tab): Promise<boolean> {
     await this.writing(this.engine.remove(tab.source));
+    this.charts.dropSource(tab.id);
     const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return false;
     const was = this.tabs[i]!;
@@ -386,8 +404,8 @@ export class Workspace {
     }
   }
 
-  /** Waits for `write`, an edit, undo, redo or removal, and counts it in
-   * `writes` until the engine answers. */
+  /** Waits for `write`, an edit, undo, redo, removal or chart change, and
+   * counts it in `writes` until the engine answers. */
   private async writing<T>(write: Promise<T>): Promise<T> {
     this.writes++;
     try {
@@ -576,14 +594,15 @@ export class Workspace {
   }
 
   /** Whether there is unsaved work: an edit, a source added or removed, a
-   * source that a relink or append left other than as last saved, or an edit,
-   * undo, redo or removal still waiting on the engine. */
+   * source that a relink or append left other than as last saved, a chart
+   * added, removed or changed, or an edit, undo, redo, removal or chart change
+   * still waiting on the engine. */
   get dirty(): boolean {
     if (this.writes > 0) return true;
     const ids = this.tabs.map((t) => t.id);
     const same =
       ids.length === this.savedSources.length && ids.every((id, i) => id === this.savedSources[i]);
-    return !same || this.relinked.size > 0 || this.tabs.some((t) => t.dirty);
+    return !same || this.relinked.size > 0 || this.charts.dirty || this.tabs.some((t) => t.dirty);
   }
 
   /**
@@ -612,16 +631,21 @@ export class Workspace {
    * paths under the same folder relative to it, so it must be known before
    * serialising.
    */
-  bytes(cell: Cell, at: string): Promise<Uint8Array> {
+  async bytes(cell: Cell, at: string): Promise<Uint8Array> {
     this.showing.keep(cell);
-    return this.engine.save(
+    const written = await this.engine.save(
       {
         source: this.showing.id,
         cells: this.tabs.map((t) => ({ source: t.id, row: t.cell.row, col: t.cell.col })),
+        charts: this.charts.places,
         at,
       },
       CARRY_LIMIT,
     );
+    // The engine answers in order, so the charts it answered for are those it
+    // wrote.
+    this.charts.wrote();
+    return written;
   }
 
   /** Records a completed save: sets the path and resets all dirty state. */
@@ -629,6 +653,7 @@ export class Workspace {
     this.path = path;
     this.savedSources = this.tabs.map((t) => t.id);
     this.relinked.clear();
+    this.charts.saved();
     for (const t of this.tabs) t.saved();
   }
 

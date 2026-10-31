@@ -294,12 +294,24 @@ test('rows asked with a count that is not a count are refused or answered empty'
       })),
     },
     { t: 'rows', id: 25, source, first: 0, count: 3 },
+    {
+      t: 'save',
+      id: 26,
+      place: { source, cells: [], at: '', charts: 'x' },
+      limit: 1e9,
+    },
+    {
+      t: 'save',
+      id: 27,
+      place: { source, cells: [], at: '', charts: [null] },
+      limit: 1e9,
+    },
   ];
   for (const msg of bad) p.send(msg);
   await answered(p);
   expect(p.thrown).toEqual([]);
   expect(unhandled).toEqual([]);
-  for (let id = 2; id <= 25; id++) {
+  for (let id = 2; id <= bad.length + 1; id++) {
     const got = withId(p.replies, id);
     expect(
       got.length,

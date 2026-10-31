@@ -169,6 +169,7 @@
       }
     }
   ],
+  "source_takes_charts": "× again to remove {name} and its charts",
   "unsaved_edits_key_again": "unsaved edits · Ctrl+S first, or {key} again to drop them",
   "unsaved_edits_click_again": "unsaved edits · Ctrl+S first, or click again to drop them",
   "unsaved_edits_open_again": "unsaved edits · Ctrl+S first, or open it again to drop them",
