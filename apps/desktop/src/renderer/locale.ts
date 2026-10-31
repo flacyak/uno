@@ -15,6 +15,9 @@ let grouping: { locale: Locale; format: Intl.NumberFormat } | undefined;
 /** Cached fixed-decimal formatters, whole and to a tenth, rebuilt when the locale changes. */
 let sizes: { locale: Locale; whole: Intl.NumberFormat; tenths: Intl.NumberFormat } | undefined;
 
+/** Cached compact formatter, rebuilt when the locale changes. */
+let compacting: { locale: Locale; format: Intl.NumberFormat } | undefined;
+
 /** The fixed-decimal formatters for the app's locale. */
 function fixed(): { whole: Intl.NumberFormat; tenths: Intl.NumberFormat } {
   const locale = getLocale();
@@ -37,6 +40,24 @@ export function num(n: number): string {
   const locale = getLocale();
   if (grouping?.locale !== locale) grouping = { locale, format: new Intl.NumberFormat(locale) };
   return grouping.format.format(n);
+}
+
+/** The fraction digits a compact number keeps: 1.2M, where 1.23M runs wider than a tick. */
+const COMPACT_DIGITS = 1;
+
+/** Formats a number the short way in the app's locale: 1.2M in English, 1,2 M in Spanish. */
+export function compact(n: number): string {
+  const locale = getLocale();
+  if (compacting?.locale !== locale) {
+    compacting = {
+      locale,
+      format: new Intl.NumberFormat(locale, {
+        notation: "compact",
+        maximumFractionDigits: COMPACT_DIGITS,
+      }),
+    };
+  }
+  return compacting.format.format(n);
 }
 
 /** Bytes per KB, KB per MB, and so on. */
