@@ -27,6 +27,7 @@ import { NO_ROW, Op, editEquals } from "@sheet";
 import type { Edit } from "@sheet";
 import type { Listing, SingleRef } from "@store";
 
+import { Charts } from "./charts.ts";
 import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "@paraglide/messages";
 import { bytes } from "./locale.ts";
@@ -244,6 +245,9 @@ export class Workspace {
   /** The mode is kept in memory only. Every open starts in view. */
   mode: Mode = "view";
 
+  /** The charts over this workspace's sources. */
+  readonly charts: Charts;
+
   /** Tabs in the order they were added, which is the sidebar order. */
   private tabs: Tab[] = [];
   private showing!: Tab;
@@ -276,7 +280,9 @@ export class Workspace {
     private readonly changed: () => void,
     /** Called when a source's offer changes, with its tab. */
     private readonly offered: (tab: Tab) => void,
-  ) {}
+  ) {
+    this.charts = new Charts(engine);
+  }
 
   /**
    * Opens a file through the engine and returns the workspace. Aborting
