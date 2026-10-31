@@ -10,11 +10,11 @@ import { readContainer } from "@document";
 import type { Chart } from "@document";
 import type { SourceRef } from "@engine";
 import { Workspace } from "@renderer/workspace";
-import { BARS } from "./charted.ts";
+import { BARS, SALES, unoOf } from "./charted.ts";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
 /** The sales export alone, and the name a .uno goes by here. */
-const FILE: SourceRef = { name: "sales-q3.csv", path: FIXTURE };
+const FILE: SourceRef = { name: `${SALES}.csv`, path: FIXTURE };
 const UNO = "q3.uno";
 
 /** Opens `ref` in a workspace of its own, runs `use` over it, and closes it. */
@@ -94,5 +94,16 @@ test("a saved workspace reopens with its charts", async () => {
     await opened(uno(await bytesOf(w)), async (back) => {
       expect(back.charts.all).toStrictEqual([made]);
     });
+  });
+});
+
+test("a new chart takes no id the workspace holds or carries, whatever its name", async () => {
+  const held = [BARS, { ...BARS, id: "revenue" }];
+  const carried = ["c2", "c3"].map((id) => ({ id, source: SALES, json: `{"id":"${id}"}` }));
+  await opened(uno(unoOf(held, carried)), async (w) => {
+    const made = [await w.charts.add(BARS), await w.charts.add(BARS)];
+    expect(made.map((c) => c.id)).toStrictEqual(["c4", "c5"]);
+    await w.charts.remove("c5");
+    expect((await w.charts.add(BARS)).id).toBe("c6");
   });
 });
