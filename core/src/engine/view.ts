@@ -284,6 +284,15 @@ export class View {
     v.index = seed ?? new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.schema = schemaOf(format, ask.parts);
+    if (was !== undefined && seed !== undefined) {
+      // The charts of `was` go on from the rows the seed kept, so the tap
+      // folds the rows that follow out of the index's own chunks, as the
+      // edits show them: `was` recorded them over rows the seed keeps or
+      // reads again, so none is refused.
+      v.schema.rows = was.index.readable();
+      v.schema.replay(carried?.edits ?? []);
+      await v.adopt(was);
+    }
 
     // A cancel fails the wait below with its refusal, kept ahead of the
     // close's own, and closes the view, which stops the index.
@@ -361,7 +370,7 @@ export class View {
       signal?.removeEventListener('abort', cancelled);
       started = true;
 
-      if (carried !== undefined) {
+      if (carried !== undefined && seed === undefined) {
         v.schema.rows = index.readable();
         try {
           v.schema.replay(carried.edits);
@@ -785,6 +794,23 @@ export class View {
   unchart(id: string): void {
     this.tallies.detach(id);
     this.tally();
+  }
+
+  /**
+   * adopt takes over the folds of the charts of `was`, the view this one's
+   * index was seeded from: every block of `was` but its last, which this
+   * view reads again with the rows that follow. The last block's rows are
+   * read from `was`, so each fold can give them back. A read that fails
+   * leaves the charts to fold afresh.
+   */
+  private async adopt(was: View): Promise<void> {
+    if (was.tallies.size === 0) return;
+    const last = was.index.begun - 1;
+    try {
+      this.tallies.adopt(was.tallies, last, await was.blockRows(last));
+    } catch {
+      // The charts fold from their first row, as over any new view.
+    }
   }
 
   /**

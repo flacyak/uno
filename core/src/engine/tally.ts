@@ -2,9 +2,10 @@
  * @fileoverview A view's charts, each folded over the rows read so far.
  *
  * A pass over the view's blocks feeds every chart in order, so a chart's
- * fold holds every row before the first block it lacks, and an edit moves
- * a fold by the one row it changed. A chart reads the columns its plot
- * names, found again by header where the file moved them.
+ * fold holds every row before the first block it lacks, an edit moves a
+ * fold by the one row it changed, and an append takes over the folds of
+ * the rows it kept. A chart reads the columns its plot names, found again
+ * by header where the file moved them.
  */
 
 import type { Chart, ChartColumn, Plot } from '@document';
@@ -81,6 +82,11 @@ export class Tallies {
   /** detach stops folding the chart with `id`. */
   detach(id: string): void {
     this.charts.delete(id);
+  }
+
+  /** How many charts are attached. */
+  get size(): number {
+    return this.charts.size;
   }
 
   /** from is the first row a pending chart lacks, or undefined when none is. */
@@ -175,6 +181,33 @@ export class Tallies {
     } finally {
       for (const t of charts) t.done = false;
     }
+  }
+
+  /**
+   * adopt takes over the folds of `was`'s charts for a view whose index
+   * kept every block `was` read but `block`, its last, whose rows `last`
+   * holds, and which the view reads again with the rows that follow. A fold
+   * that holds the block gives its rows back, so every fold holds the kept
+   * rows alone, and each chart is pending, to hear the rows that follow;
+   * `was` is left with no chart. attach keeps a fold adopted while the
+   * chart reads the same columns.
+   */
+  adopt(was: Tallies, block: number, last: Block): void {
+    const kept = last.from;
+    for (const [id, t] of was.charts) {
+      // A fold takes blocks whole, so one that holds the block's first row
+      // holds the block.
+      if (holds(t, kept)) unfold(t, block, last);
+      t.rows = Math.min(t.rows, kept);
+      if (t.ahead !== undefined) {
+        const [from, end] = t.ahead;
+        t.ahead = from < kept ? [from, Math.min(end, kept)] : undefined;
+      }
+      t.done = false;
+      this.charts.set(id, t);
+    }
+    // `was`, alive until it is closed, folds nothing more into these folds.
+    was.charts.clear();
   }
 
   /**
@@ -319,6 +352,26 @@ function sample(
   const xs = shown(x);
   const ys = shown(y);
   for (let row = from; row < end; row++) fold.add(block, row, xs(row), ys(row));
+}
+
+/**
+ * unfold takes the rows of `block` out of `t`'s fold, as they showed, so
+ * the block can be folded again whole. A sample's extent of the block is
+ * empty until then.
+ */
+function unfold(t: Tallying, block: number, { from, end, shown }: Block): void {
+  if (t.t === 'sample') {
+    const xs = shown(t.x);
+    const ys = shown(t.y);
+    for (let row = from; row < end; row++) {
+      t.fold.remove(block, row, xs(row), ys(row));
+    }
+    t.fold.refold(block, new SampleFold());
+  } else {
+    const by = shown(t.by);
+    const sum = t.sum === undefined ? undefined : shown(t.sum);
+    for (let row = from; row < end; row++) t.fold.remove(by(row), sum?.(row));
+  }
 }
 
 /**
