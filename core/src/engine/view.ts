@@ -787,7 +787,7 @@ export class View {
     const header = this.tallies.attach(chart, this.schema.headers);
     if (header !== undefined) {
       const said: Said = { t: 'chart-column-gone', header, name: this.name };
-      this.postTally(chart.id, { t: 'unread', said });
+      this.postTally(chart.id, { t: 'unread', plot: chart.plot, said });
     }
     this.tally();
   }

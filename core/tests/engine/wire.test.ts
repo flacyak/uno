@@ -79,9 +79,22 @@ test("a chart's tally from either fold is plain data, and crosses as one text fr
     sample.add(block, row, revenue, units);
   });
   const coverage = { rows: rows.length, total: rows.length, complete: true };
+  const by = { col: 0, header: 'region' };
+  const sum = { col: 1, header: 'revenue' };
+  const y = { col: 2, header: 'units' };
   const tallies: Tally[] = [
-    { t: 'groups', coverage, ...groups.snapshot() },
-    { t: 'sample', coverage, ...sample.snapshot() },
+    {
+      t: 'groups',
+      plot: { t: 'bars', by, sum },
+      coverage,
+      ...groups.snapshot(),
+    },
+    {
+      t: 'sample',
+      plot: { t: 'scatter', x: sum, y },
+      coverage,
+      ...sample.snapshot(),
+    },
   ];
   for (const tally of tallies) {
     expect(JSON.parse(JSON.stringify(tally))).toEqual(tally);
