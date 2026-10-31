@@ -8,7 +8,7 @@
  * @vitest-environment happy-dom
  */
 
-import { beforeEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart } from "@document";
 import { ChartLayer } from "@renderer/chart/layer";
@@ -19,6 +19,8 @@ import { bodyMarkup } from "./markup.ts";
 
 /** The header row's height, which view.ts falls back to with no stylesheet. */
 const HEAD = 29;
+/** A window's border at 100% zoom. */
+const BORDER = 1;
 /** A room with space for every window at its place. */
 const ROOM: Room = { w: 1000, h: 600 };
 /** What a banner's height puts above the grid. */
@@ -92,6 +94,10 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", HeldObserver);
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
   const layer = new ChartLayer(root(), content());
   roomIs(ROOM);
@@ -106,13 +112,24 @@ test("the layer stays hidden until a workspace shows, and each chart has a windo
   expect(drawn(windows()[0]!).x).toBe(ROOM.w - FLUSH.place.width);
 });
 
-test("the layer starts below the header row, and moves down with a banner", () => {
+test("the layer starts on the header row's rule, and moves down with a banner", () => {
   shown(FLUSH);
-  expect(root().style.top).toBe(`${HEAD}px`);
+  expect(root().style.top).toBe(`${HEAD - BORDER}px`);
 
-  measures(content(), "offsetTop", BANNER);
+  const below = new DOMRect(0, BANNER, ROOM.w, ROOM.h);
+  vi.spyOn(content(), "getBoundingClientRect").mockReturnValue(below);
   resize(ROOM);
-  expect(root().style.top).toBe(`${BANNER + HEAD}px`);
+  expect(root().style.top).toBe(`${BANNER + HEAD - BORDER}px`);
+});
+
+test.each([
+  ["under 100%, a border of one device px is wider", 0.8, 1.25],
+  ["at 125%, it is one device px still", 1.25, 0.8],
+  ["at 200%, it is two", 2, 1],
+])("%s, and the layer lands on the rule", (_zoom, ratio, border) => {
+  vi.stubGlobal("devicePixelRatio", ratio);
+  shown(FLUSH);
+  expect(root().style.top).toBe(`${HEAD - border}px`);
 });
 
 test("the layer's sides keep clear of scrollbars wider than uno's own", () => {
