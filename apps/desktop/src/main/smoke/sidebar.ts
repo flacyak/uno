@@ -225,9 +225,13 @@ export const SIDEBAR: Check[] = [
       await frame();
       const last = document.querySelector("thead th:last-child");
       const nameEnds = last.getBoundingClientRect().right - parseFloat(getComputedStyle(last).paddingRight);
-      const patchLeft = content.getBoundingClientRect().right - parseFloat(patch.width) - parseFloat(patch.borderLeftWidth);
+      const patchRight = content.getBoundingClientRect().right;
+      const patchLeft = patchRight - parseFloat(patch.width);
       scroller.scrollLeft = 0;
       if (nameEnds > patchLeft) return "the last header's name can run to " + Math.round(nameEnds) + ", past the patch at " + Math.round(patchLeft);
+      const patchMiddle = (patchLeft + parseFloat(patch.borderLeftWidth) + patchRight) / 2;
+      const closeMiddle = (at.left + at.right) / 2;
+      if (closeMiddle !== patchMiddle) return "the × centres on " + closeMiddle + ", and the patch inside its rule on " + patchMiddle;
       // A page with no × sets --corner to 0 and has the corner back: the
       // patch is gone, and the last header pads its name as the others do.
       document.documentElement.style.setProperty("--corner", "0px");

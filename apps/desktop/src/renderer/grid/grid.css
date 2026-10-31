@@ -49,7 +49,10 @@
 /* A fixed corner at the end of the header row, shown when the grid reaches
  * the top right of the window (banner and panel both hidden). The
  * window's close button sits there. Columns scroll under it. A page with
- * no × sets `--corner` to 0, and the patch's borders go with its width. */
+ * no × sets `--corner` to 0, and the patch's borders go with its width. Its
+ * `box-sizing` is its own, as `*` does not reach a pseudo-element, and it puts
+ * the patch's rule level with the header row's. The patch is `--corner` wide
+ * inside its left border, the width the × centres in. */
 #content {
   position: relative;
 }
@@ -60,7 +63,8 @@
   top: 0;
   right: 0;
   z-index: 4;
-  width: var(--corner);
+  box-sizing: border-box;
+  width: calc(var(--corner) + min(1px, var(--corner)));
   height: var(--row-h);
   background: var(--sunken);
   border-left: min(1px, var(--corner)) solid var(--rule-2);
@@ -74,11 +78,14 @@
   width: 100%;
 }
 
+/* Each cell keeps its own borders, so the sticky header's rules move with it
+ * as rows scroll. A collapsed table would leave them where the row began. */
 table.grid {
   position: absolute;
   top: 0;
   left: 0;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   font-family: var(--mono);
   font-size: 12.5px;
