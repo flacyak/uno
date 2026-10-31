@@ -8,12 +8,17 @@
 
 export { BAND_ROWS, Band, Engine, SourceHandle } from './client.ts';
 export type { Added, Pending, RowsReply } from './client.ts';
+export { unchanged } from './fresh.ts';
 export { indexPass } from './pass.ts';
 export type { PassContext } from './pass.ts';
 export { Refusal, english, saidOf } from '@said';
 export type { CharName, Said, Sought, StepSaid } from '@said';
 export {
+  GROUPS_SENT,
+  LABEL_AT_MOST,
   ROWS_AT_MOST,
+  SCATTER_POINTS_AT_MOST,
+  TALLY_MS,
   formatBytes,
   messageOf,
   messagePort,
@@ -21,9 +26,13 @@ export {
 export type {
   Changed,
   ColumnInfo,
+  Coverage,
   EditRequest,
   FindRequest,
   Found,
+  Group,
+  Groups,
+  GroupsTally,
   MessagePortLike,
   Link,
   Loaded,
@@ -33,12 +42,17 @@ export type {
   PartInfo,
   Peeked,
   Place,
+  Point,
   Port,
   Progress,
   Reply,
   Request,
+  Sample,
+  SampleTally,
   SignIns,
+  Skipped,
   SourceRef,
+  Tally,
   Trust,
 } from './protocol.ts';
 export { Pages, RowIndex, TUNING } from './rows.ts';

@@ -40,7 +40,8 @@
 }
 
 /* With the panel closed the banner reaches the window's top right, and
- * leaves room for the × there. */
-.win-sheet:has(+ .panel[hidden]) .banner {
-  padding-right: var(--corner);
+ * leaves room for the × there. A page with no × sets `--corner` to 0, and
+ * the banner keeps its own 12px. */
+.win-sheet:has(+ .win-side > .panel[hidden]) .banner {
+  padding-right: max(12px, var(--corner));
 }

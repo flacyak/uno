@@ -11,6 +11,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { Engine } from '@engine';
 import type { SourceHandle, Tuning } from '@engine';
+import { multiProvider } from '@store';
 import { diskProvider } from '@store/node';
 import { s3Provider } from '@store/s3';
 import { bytes, connect, openOne } from '@core-tests/engine/harness';
@@ -36,6 +37,13 @@ interface Held {
 const QUIET_MS = 5;
 /** Quiet rounds in a row before the engine counts as quiet. */
 const QUIET_ROUNDS = 3;
+/**
+ * The share of a round the event loop may spend in callbacks for the round
+ * to count as quiet. The engine shares the loop, so a round it spends
+ * decoding or folding is work and not silence: 0.04 was measured idle, and
+ * 0.94 while a slice of the index tap ran.
+ */
+const ACTIVE_AT_MOST = 0.5;
 
 const RANGE = /^bytes=(\d+)-(\d+)$/;
 
@@ -84,12 +92,18 @@ export class Door {
     }
   };
 
-  /** quiet resolves after QUIET_ROUNDS silent rounds with all requests done. */
+  /**
+   * quiet resolves after QUIET_ROUNDS rounds in a row with no request sent
+   * or in flight and the event loop idle.
+   */
   async quiet(): Promise<void> {
     for (let rounds = 0; rounds < QUIET_ROUNDS;) {
       const before = this.asked.length;
+      const loop = performance.eventLoopUtilization();
       await sleep(QUIET_MS);
-      rounds = this.out === 0 && this.asked.length === before ? rounds + 1 : 0;
+      const { utilization } = performance.eventLoopUtilization(loop);
+      const silent = this.out === 0 && this.asked.length === before;
+      rounds = silent && utilization <= ACTIVE_AT_MOST ? rounds + 1 : 0;
     }
   }
 
@@ -169,28 +183,39 @@ export interface Remote {
   close(): Promise<void>;
 }
 
+/** Served is objects in a stand-in bucket, an engine, and the Door between. */
+export type Served = Omit<Remote, 'open'>;
+
 /** remote serves `object` from the stand-in bucket to an engine tuned by `tuning`. */
 export async function remote(
   object: Uint8Array,
   tuning: Tuning,
 ): Promise<Remote> {
-  const b: Bucket = await bucket(
-    undefined,
-    HOME_REGION,
-    new Map([[KEY, object]]),
-  );
+  const s = await served(new Map([[KEY, object]]), tuning);
+  return {
+    ...s,
+    open: () =>
+      openOne(s.engine, { name: 'big.csv', path: `s3://${BUCKET}/${KEY}` }),
+  };
+}
+
+/** served serves `objects` as `remote` does, to an engine that reads several as one. */
+export async function served(
+  objects: Map<string, Uint8Array>,
+  tuning: Tuning,
+): Promise<Served> {
+  const b: Bucket = await bucket(undefined, HOME_REGION, objects);
   const door = new Door();
   const s3 = s3Provider({
     credentials: () => Promise.resolve({ ...KEYS, region: HOME_REGION }),
     endpoint: b.endpoint,
     fetch: door.fetch,
   });
-  const { engine, done } = connect(tuning, [diskProvider(), s3]);
+  const single = [diskProvider(), s3];
+  const { engine, done } = connect(tuning, [...single, multiProvider(single)]);
   return {
     door,
     engine,
-    open: () =>
-      openOne(engine, { name: 'big.csv', path: `s3://${BUCKET}/${KEY}` }),
     async close() {
       door.release();
       await door.quiet();

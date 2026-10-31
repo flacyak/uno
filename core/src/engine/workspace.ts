@@ -12,6 +12,8 @@
  */
 
 import {
+  CHARTS_AT_MOST,
+  CHARTS_ENTRY,
   isAbsolute,
   isWorkspace,
   logOf,
@@ -21,7 +23,15 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type { Document, Held, HeldParts, Logged, State } from '@document';
+import type {
+  CarriedChart,
+  Chart,
+  Document,
+  Held,
+  HeldParts,
+  Logged,
+  State,
+} from '@document';
 import type { Edit } from '@sheet';
 import {
   bytesSource,
@@ -54,7 +64,7 @@ import type { Tuning } from './rows.ts';
 import { unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { View } from './view.ts';
-import type { Carried, Origin, Part } from './view.ts';
+import type { Carried, OpenAsk, Origin, Part } from './view.ts';
 
 /**
  * The largest .uno file read whole. It bounds the container file itself.
@@ -155,6 +165,8 @@ class Absent {
   }
 
   mode(_transform: boolean): void {}
+  chart(_chart: Chart): void {}
+  unchart(_id: string): void {}
   close(): Promise<void> {
     return Promise.resolve();
   }
@@ -192,6 +204,11 @@ export class Workspace {
   private extra = new Map<string, Uint8Array>();
   /** Each source's saved state from the .uno, carried into the next save. */
   private readonly states = new Map<string, State>();
+  /** The workspace's charts by id, oldest first. */
+  private readonly charts = new Map<string, Chart>();
+  /** The charts carried as their JSON into the next save: those this build
+   * cannot read, and those whose id is already kept. */
+  private carriedCharts: CarriedChart[] = [];
 
   private transform = false;
   private queue: Promise<unknown> = Promise.resolve();
@@ -231,14 +248,20 @@ export class Workspace {
       // never lists one as opening.
       if (isWorkspace(ref)) return this.openWorkspace(ref);
       const id = sourceId(ref.name, this.sources.keys());
-      const view = await this.view(id, ref, undefined, false, signal);
-      return { opened: [this.keep(view)], showing: id };
+      const view = await this.view(id, ref, undefined, { signal });
+      return {
+        opened: [this.keep(view)],
+        showing: id,
+        cells: [],
+        charts: [],
+        carriedIds: [],
+      };
     });
   }
 
   /**
    * remove takes a source out of the workspace, and its edits out of the
-   * log. Removing the last source is refused.
+   * log. Its charts go with it. Removing the last source is refused.
    */
   remove(id: string): Promise<void> {
     return this.serially(async () => {
@@ -248,6 +271,9 @@ export class Workspace {
       }
       this.sources.delete(id);
       this.states.delete(id);
+      for (const chart of this.charts.values())
+        if (chart.source === id) this.charts.delete(chart.id);
+      this.carriedCharts = this.carriedCharts.filter((c) => c.source !== id);
       this.trail = this.trail.filter((s) => s !== id);
       await source.close();
     });
@@ -273,7 +299,7 @@ export class Workspace {
       const carried: Carried = { container: '', edits: was.log };
       let view: View;
       try {
-        view = await this.view(id, to, carried, 'parts' in to);
+        view = await this.view(id, to, carried, { whole: 'parts' in to });
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));
@@ -309,7 +335,8 @@ export class Workspace {
    * append adds files at the end of a source over several files. Existing
    * parts keep their places, so every row keeps its number and the log is
    * replayed unchanged. A file already in the source, or given twice, is
-   * refused. A failed append leaves the source as it was.
+   * refused. A failed append leaves the source as it was. The new view keeps
+   * the old one's index, and reads on from its last block into the new files.
    */
   append(id: string, files: readonly SingleRef[]): Promise<Opened> {
     return this.serially(async () => {
@@ -345,7 +372,8 @@ export class Workspace {
           });
       });
 
-      const view = await this.view(id, ref, { container: '', edits: was.log });
+      const carried: Carried = { container: '', edits: was.log };
+      const view = await this.view(id, ref, carried, { extending: was });
 
       // Swapped only after the new view is open, so a failed append leaves
       // the old source in place.
@@ -388,6 +416,7 @@ export class Workspace {
           ] as const,
       ),
     );
+    const chartsNote = this.keepCharts(doc);
     for (const [src, source] of opened) {
       this.keep(source);
       this.states.set(src.id, src.state);
@@ -399,7 +428,44 @@ export class Workspace {
     return {
       opened: [...this.sources.values()].map((v) => v.opened),
       showing: doc.active,
+      cells: doc.sources.map((s) => ({ source: s.id, ...s.state.active })),
+      charts: [...this.charts.values()],
+      carriedIds: this.carriedCharts.map((c) => c.id),
+      chartsNote,
     };
+  }
+
+  /**
+   * keepCharts keeps a .uno's charts, and the ones it carries. A chart whose
+   * id is already kept is carried too, so no chart takes another's place. A
+   * chart over a source the .uno does not hold, which a build before charts
+   * may have removed, is left out. It returns what the open says of them.
+   */
+  private keepCharts(doc: Document): Said | undefined {
+    // An entry this build cannot read gives no charts. It stays whole in extra.
+    if (doc.extra.has(CHARTS_ENTRY)) return { t: 'charts-newer' };
+    const held = new Set(doc.sources.map((s) => s.id));
+    let leftOut = 0;
+    for (const chart of doc.charts ?? []) {
+      if (!held.has(chart.source)) {
+        leftOut++;
+      } else if (this.charts.has(chart.id)) {
+        const json = JSON.stringify(chart);
+        this.carriedCharts.push({ id: chart.id, source: chart.source, json });
+      } else {
+        this.charts.set(chart.id, chart);
+      }
+    }
+    for (const c of doc.carriedCharts ?? []) {
+      // One that names no source has none to lose.
+      if (c.source === '' || held.has(c.source)) this.carriedCharts.push(c);
+      else leftOut++;
+    }
+    // One left out is gone from the next save, so the note counts the ones
+    // left out over the ones carried.
+    if (leftOut > 0) return { t: 'charts-left-out', count: leftOut };
+    const kept = this.carriedCharts.length;
+    return kept === 0 ? undefined : { t: 'charts-kept', count: kept };
   }
 
   /**
@@ -505,9 +571,9 @@ export class Workspace {
     id: string,
     ref: SourceRef,
     carried: Carried | undefined,
-    whole = false,
-    signal?: AbortSignal,
+    ask: Pick<OpenAsk, 'signal' | 'extending'> & { whole?: boolean } = {},
   ): Promise<View> {
+    const { whole = false, signal, extending } = ask;
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
@@ -542,6 +608,7 @@ export class Workspace {
       header: headerModeOf(ref),
       parts: 'parts' in ref ? ref : undefined,
       signal,
+      extending,
     });
     view.connection = this.through(ref);
     if ('parts' in ref) {
@@ -556,6 +623,10 @@ export class Workspace {
   private keep(source: Source): Opened {
     this.sources.set(source.id, source);
     if (this.transform) source.mode(true);
+    // Its charts tally it, as they did any view it takes the place of.
+    for (const chart of this.charts.values()) {
+      if (chart.source === source.id) source.chart(chart);
+    }
     return source.opened;
   }
 
@@ -566,11 +637,20 @@ export class Workspace {
     return opened;
   }
 
+  /** announce lets the source under `id` be heard. serve calls it after the
+   * answer naming the source, so the client hears only from one it knows. */
+  announce(id: string): void {
+    const source = this.sources.get(id);
+    if (source instanceof View) source.announce();
+  }
+
   /** drop removes and closes every source. */
   private async drop(): Promise<void> {
     const sources = [...this.sources.values()];
     this.sources.clear();
     this.states.clear();
+    this.charts.clear();
+    this.carriedCharts = [];
     this.trail = [];
     await Promise.all(sources.map((v) => v.close()));
   }
@@ -623,6 +703,45 @@ export class Workspace {
     });
   }
 
+  /** chart adds a chart, or replaces the one with its id where it stood. */
+  chart(chart: Chart): Promise<void> {
+    return this.serially(async () => {
+      this.refuseUnreadableCharts();
+      const source = this.need(chart.source);
+      // A carried chart keeps its id, so a new chart cannot take it.
+      const taken = this.carriedCharts.some((c) => c.id === chart.id);
+      if (!this.charts.has(chart.id) && taken)
+        throw new Refusal({ t: 'chart-id-taken', id: chart.id });
+      // A save writes the carried charts too, and at most CHARTS_AT_MOST.
+      const count = this.charts.size + this.carriedCharts.length;
+      if (!this.charts.has(chart.id) && count >= CHARTS_AT_MOST)
+        throw new Refusal({ t: 'charts-at-most', limit: CHARTS_AT_MOST });
+      // A chart moved to another source stops tallying the one it left.
+      const was = this.charts.get(chart.id);
+      if (was !== undefined && was.source !== chart.source)
+        this.need(was.source).unchart(chart.id);
+      this.charts.set(chart.id, chart);
+      source.chart(chart);
+    });
+  }
+
+  /** unchart removes the shown chart with the id, and keeps a carried one. */
+  unchart(id: string): Promise<void> {
+    return this.serially(async () => {
+      this.refuseUnreadableCharts();
+      const chart = this.charts.get(id);
+      if (chart === undefined) throw new Refusal({ t: 'no-such-chart', id });
+      this.charts.delete(id);
+      this.need(chart.source).unchart(id);
+    });
+  }
+
+  /** refuseUnreadableCharts throws while the charts entry is one this build
+   * cannot read, which a save writes back whole. */
+  private refuseUnreadableCharts(): void {
+    if (this.extra.has(CHARTS_ENTRY)) throw new Refusal({ t: 'charts-newer' });
+  }
+
   // ------------------------------------------------------------ saving
 
   /**
@@ -663,6 +782,8 @@ export class Workspace {
         sources: held,
         active: this.sources.has(place.source) ? place.source : sources[0]!.id,
         log: interleave(this.trail, parts),
+        charts: [...this.charts.values()],
+        carriedCharts: this.carriedCharts,
         extra: this.extra,
         at: place.at,
       };

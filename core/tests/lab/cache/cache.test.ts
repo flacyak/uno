@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
 import { BAND_ROWS, TUNING } from '@engine';
 import type { SourceHandle, Tuning } from '@engine';
 import { readAll } from '@ingest';
-import { readAhead } from '@store/ahead';
+import { RUN, readAhead } from '@store/ahead';
 import { diskProvider, nodeSource } from '@store/node';
 import { connect, indexed, openOne } from '@core-tests/engine/harness';
 import { bytes as salesBytes, ROWS } from '@core-tests/testdata/sales-q3';
@@ -293,7 +293,7 @@ describe('readAhead under a find', () => {
     expect(await prefetched(blocks)).toBe(0);
     // The same number of reads at one length is served almost entirely.
     const same = blocks.map(() => median(blocks));
-    expect(await prefetched(same)).toBeGreaterThanOrEqual(same.length - 2);
+    expect(await prefetched(same)).toBeGreaterThanOrEqual(same.length - RUN);
   });
 });
 

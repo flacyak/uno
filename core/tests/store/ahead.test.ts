@@ -6,7 +6,7 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import { AHEAD, REMEMBERED, readAhead } from '@store/ahead';
+import { AHEAD, REMEMBERED, RUN, readAhead } from '@store/ahead';
 import type { ReadRange } from '@store/ahead';
 import { TUNING } from '@engine';
 
@@ -42,12 +42,13 @@ test('a reader going through in order has the next chunks asked for behind it', 
   const r = counting();
   const read = readAhead(r.read, SIZE);
   await read(0, CHUNK);
-  expect(r.asked, 'one read is not yet an order').toEqual([0]);
   await read(CHUNK, CHUNK);
-  // The second read in order starts read-ahead: AHEAD chunks were out,
+  expect(r.asked, 'two reads are not yet a run').toEqual([0, 100]);
+  await read(2 * CHUNK, CHUNK);
+  // The third read in order starts read-ahead: AHEAD chunks were out,
   // counting the one awaited.
-  expect(r.asked).toEqual([0, 100, 200, 300, 400]);
-  for (let at = 2 * CHUNK; at < SIZE; at += CHUNK) {
+  expect(r.asked).toEqual([0, 100, 200, 300, 400, 500]);
+  for (let at = RUN * CHUNK; at < SIZE; at += CHUNK) {
     expect((await read(at, CHUNK))[0], `the chunk at ${at}`).toBe(at / CHUNK);
   }
   // Every chunk asked for once, ending at the last.
@@ -69,13 +70,13 @@ test('the last chunk is asked for as long as the object has left', async () => {
 });
 
 // A band reads its blocks of rows back to back, each as long as it is. Only a
-// run of reads of one length is a reader going through in order.
+// run of RUN reads of one length is a reader going through in order.
 test('reads one after another of different lengths are read as asked, and a run of one length is read ahead', async () => {
   const r = counting();
   const read = readAhead(r.read, SIZE);
-  // The last length, which the read after them repeats.
-  const RUN = 75;
-  const lengths = [120, 40, 300, RUN];
+  // The last length, which the reads after them repeat.
+  const LAST = 75;
+  const lengths = [120, 40, 300, LAST];
   let at = 0;
   for (const length of lengths) {
     await read(at, length);
@@ -83,8 +84,11 @@ test('reads one after another of different lengths are read as asked, and a run 
   }
   expect(r.asked, 'only what was asked').toEqual([0, 120, 160, 460]);
 
-  await read(at, RUN);
-  expect(r.asked.slice(lengths.length)).toEqual([535, 610, 685, 760]);
+  await read(at, LAST);
+  at += LAST;
+  expect(r.asked.slice(lengths.length)).toEqual([535]);
+  await read(at, LAST);
+  expect(r.asked.slice(lengths.length + 1)).toEqual([610, 685, 760, 835]);
 });
 
 // Out-of-order reads are served as asked, and the in-order reader keeps its
@@ -94,15 +98,16 @@ test('reads out of order are read as asked and leave the reader in order alone',
   const read = readAhead(r.read, SIZE);
   await read(0, CHUNK);
   await read(CHUNK, CHUNK);
+  await read(2 * CHUNK, CHUNK);
   const before = r.asked.length;
   await read(750, 30);
   await read(20, 10);
   expect(r.asked.slice(before), 'only what was asked').toEqual([750, 20]);
   expect(
-    (await read(2 * CHUNK, CHUNK))[0],
+    (await read(RUN * CHUNK, CHUNK))[0],
     'and the next in order was already out',
-  ).toBe(2);
-  expect(r.asked.filter((a) => a === 2 * CHUNK)).toHaveLength(1);
+  ).toBe(RUN);
+  expect(r.asked.filter((a) => a === RUN * CHUNK)).toHaveLength(1);
 });
 
 test('a chunk asked for ahead that fails fails the read that wants it, and only that one', async () => {
@@ -114,20 +119,21 @@ test('a chunk asked for ahead that fails fails the read that wants it, and only 
   await expect(read(3 * CHUNK, CHUNK)).rejects.toThrow('no range at 300');
 });
 
-// Two consecutive out-of-order reads look like a second in-order reader. The
+// Two consecutive out-of-order reads of one length fall short of a run. The
 // chunks asked ahead for the first reader are kept through that.
 test('the grid drawing two blocks in a row does not cost the index what was asked ahead of it', async () => {
   const r = counting();
   const read = readAhead(r.read, SIZE);
   await read(0, CHUNK);
   await read(CHUNK, CHUNK);
-  expect(r.asked).toEqual([0, 100, 200, 300, 400]);
+  await read(2 * CHUNK, CHUNK);
+  expect(r.asked).toEqual([0, 100, 200, 300, 400, 500]);
   await read(750, 30);
   await read(780, 30);
-  await read(2 * CHUNK, CHUNK);
   await read(3 * CHUNK, CHUNK);
+  await read(4 * CHUNK, CHUNK);
   // The two blocks as asked, then only the chunks still wanted ahead.
-  expect(r.asked.slice(5)).toEqual([750, 780, 500, 600]);
+  expect(r.asked.slice(6)).toEqual([750, 780, 600, 700]);
 });
 
 // A full scan asks for every chunk once, with pairs of out-of-order reads in
@@ -159,7 +165,8 @@ test("a second reader in order gets its chunks once the first is forgotten, and 
   const read = readAhead(r.read, size);
   await read(0, CHUNK);
   await read(CHUNK, CHUNK);
-  expect(r.asked).toEqual([0, 100, 200, 300, 400]);
+  await read(2 * CHUNK, CHUNK);
+  expect(r.asked).toEqual([0, 100, 200, 300, 400, 500]);
   await read(1000, CHUNK);
   await read(1100, CHUNK);
   expect(
@@ -174,8 +181,8 @@ test("a second reader in order gets its chunks once the first is forgotten, and 
     'the first forgotten, the second has chunks asked ahead of it',
   ).toBeGreaterThan(1200 + REMEMBERED * CHUNK);
   // The first reader's next chunk is asked for again.
-  await read(2 * CHUNK, CHUNK);
-  expect(r.asked.filter((a) => a === 2 * CHUNK)).toHaveLength(2);
+  await read(RUN * CHUNK, CHUNK);
+  expect(r.asked.filter((a) => a === RUN * CHUNK)).toHaveLength(2);
 });
 
 test('a reader that has gone is not asked ahead for again at every read from elsewhere', async () => {

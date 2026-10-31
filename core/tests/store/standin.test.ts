@@ -1,9 +1,10 @@
 /**
- * @fileoverview Tests of the stand-in itself: what standin.ts promises to
- * s3.test.ts and the desktop smoke run.
+ * @fileoverview Tests of the stand-in itself: what standin.ts promises the
+ * tests that use it and the desktop smoke run.
  */
 
-import { expect, test } from 'vite-plus/test';
+import type * as Crypto from 'node:crypto';
+import { expect, test, vi } from 'vite-plus/test';
 
 import { awsCredentials, diskProvider } from '@store/node';
 import { s3Files, s3Provider } from '@store/s3';
@@ -15,8 +16,21 @@ import {
   sales,
 } from '@core-tests/engine/harness';
 import { ROWS, UNITS } from '@core-tests/testdata/sales-q3';
+import { PART_NAMES, partBytes } from '@core-tests/testdata/sales-q3-parts';
 import { HOME_REGION } from './regions.ts';
 import { at, bucket, KEYS, standinEnv } from './standin.ts';
+
+/** MD5 hashes begun so far. */
+const hashed = vi.hoisted(() => ({ md5: 0 }));
+
+vi.mock('node:crypto', async (original) => {
+  const crypto = await original<typeof Crypto>();
+  const createHash = (...args: Parameters<typeof crypto.createHash>) => {
+    if (args[0] === 'md5') hashed.md5++;
+    return crypto.createHash(...args);
+  };
+  return { ...crypto, createHash };
+});
 
 /** A handler pointed at a bucket, with the keys it accepts. */
 const reader = (endpoint: string) =>
@@ -93,6 +107,27 @@ test('reads an object out of the bucket that environment names', async () => {
     expect(b.seen.every((r) => r.region === HOME_REGION)).toBe(true);
   } finally {
     done();
+    await b.close();
+  }
+});
+
+/** A versioned bucket beside the default one. */
+const HISTORY = 'acme-history';
+/** Requests sent to it: enough for work done per request to show. */
+const REQUESTS = 20;
+
+test('hashes each body once, however many requests it answers', async () => {
+  const objects = new Map(PART_NAMES.map((name, i) => [name, partBytes[i]!]));
+  const b = await bucket(undefined, undefined, undefined, {
+    [HISTORY]: { objects, public: true, versioned: true },
+  });
+  const url = `${b.endpoint}/${HISTORY}/${PART_NAMES[0]}`;
+  try {
+    const before = hashed.md5;
+    for (let i = 0; i < REQUESTS; i++)
+      expect((await fetch(url, { method: 'HEAD' })).status).toBe(200);
+    expect(hashed.md5 - before).toBeLessThanOrEqual(objects.size);
+  } finally {
     await b.close();
   }
 });

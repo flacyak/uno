@@ -16,6 +16,7 @@ codebase.
 | `ingest`   | bytes to rows: a CSV reader, a record scanner, a sniff   |
 | `engine`   | open a file without loading it: index, pages, passes     |
 | `said`     | what the engine says to a person, as data                |
+| `tally`    | a column's numbers added up for its charts, exactly      |
 | `pattern`  | the recogniser: watch edits, propose the rest            |
 | `document` | the `.uno` codec, `Uint8Array` in and out                |
 | `library`  | the `.unof` codecs, formulas and connections, as strings |
@@ -49,7 +50,10 @@ The engine also owns the edit log. `sheet` folds the log into a `Schema`, and
 new generation number rather than a rewrite. A `Sheet` is the same schema over
 rows held in memory, which is how the tests in `tests/sheet` pin the rules a
 file the engine never loads follows. The recogniser's `Survey` counts over one
-block of rows at a time, so its offer can grow while the engine reads.
+block of rows at a time, so its offer can grow while the engine reads. A
+`View` tallies the charts over it the same way, behind the index, through the
+folds in `tally`, and posts each chart's tally once a second until the file is
+read and once more at the end.
 
 Indexing is the first pass. Validation, deduplication, splitting and format
 conversion are meant to be the next ones, each a loop over a `PassContext`
@@ -123,6 +127,8 @@ order of reads is the scenario's and not a race.
 | `index.test.ts`  | bytes and rows indexed per second, and bytes kept per row     |
 | `find.test.ts`   | what a find to the end of a file costs beside a bound column  |
 | `save.test.ts`   | what a second save of bytes already carried costs             |
+| `append.test.ts` | requests and bytes to append one file to a source of several  |
+| `chart.test.ts`  | bytes charts fetch beside the index, after it, and on an edit |
 
 Each file holds its numbers to a budget, which is what they are today, so a
 change that costs more fails.

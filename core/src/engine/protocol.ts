@@ -8,12 +8,14 @@
  * a Web Worker, or a MessageChannel.
  */
 
+import type { Chart } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Change } from '@pattern';
 import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
+import type { Groups, Sample } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -63,6 +65,12 @@ export interface Link {
    * rewrite.
    */
   version?: string;
+
+  /**
+   * When the file on disk was last written, in whole ms since 1970. Measured
+   * at the open, and never saved.
+   */
+  modified?: number;
 
   /**
    * Why this source is absent: its file is missing, or failed to open. The
@@ -119,6 +127,16 @@ export interface Opening {
   opened: Opened[];
   /** The source to show: the one just added, or the one a .uno was left on. */
   showing: string;
+  /** The cell each source of a .uno was left on. Empty otherwise. */
+  cells: Place['cells'];
+  /** The charts of a .uno over the sources it holds, oldest first, each id
+   * once. Empty otherwise. */
+  charts: Chart[];
+  /** The ids of the charts it carries but cannot show, which a new chart
+   * cannot take. Empty otherwise. */
+  carriedIds: string[];
+  /** Said once, when the .uno held charts this build cannot show. */
+  chartsNote?: Said;
 }
 
 /** An edit as a client sends it. The engine numbers it and fills in `was`. */
@@ -196,6 +214,40 @@ export interface Offer {
   rows: number;
   complete: boolean;
 }
+
+/**
+ * The least time between a chart's tallies while its source is still being
+ * read: a second, so a chart that takes minutes to read moves as a clock does.
+ */
+export const TALLY_MS = 1000;
+
+/** How much of its source a tally covers. */
+export interface Coverage {
+  /** Rows folded. */
+  rows: number;
+  /** Rows in the source, an estimate until the index is complete. */
+  total: number;
+  /** The index is complete, and every row of it is folded. */
+  complete: boolean;
+}
+
+/** A bars or pie chart's tally: rows, or a sum, per value. */
+export interface GroupsTally extends Groups {
+  t: 'groups';
+  coverage: Coverage;
+}
+
+/** A scatter's tally: some of its points, and the extent of every row. */
+export interface SampleTally extends Sample {
+  t: 'sample';
+  coverage: Coverage;
+}
+
+/**
+ * Tally is a chart's fold of its source, read as plain numbers, strings and
+ * arrays, or why the source could not be read.
+ */
+export type Tally = GroupsTally | SampleTally | { t: 'unread'; said: Said };
 
 /**
  * Peeked is a preview of a file: its header and first rows, read from the
@@ -296,6 +348,11 @@ export type Request =
   | { t: 'try'; id: number; connection: Connection }
   /** Transform allows edits and runs the recogniser over every source. View is read-only. */
   | { t: 'mode'; transform: boolean }
+  /** Add a chart over a source of the workspace, or replace the one with its
+   * id where it stood. */
+  | { t: 'chart'; id: number; chart: Chart }
+  /** Remove a chart from the workspace, named by its id. */
+  | { t: 'unchart'; id: number; chart: string }
   /** Write the workspace as a .uno. Refused if carried sources total more than limit bytes. */
   | { t: 'save'; id: number; place: Place; limit: number }
   | { t: 'close' };
@@ -328,6 +385,16 @@ export type Reply =
   | { t: 'tried'; id: number; tried: Tried }
   /** Null when the recogniser finishes with an empty proposal. */
   | { t: 'offer'; source: string; generation: number; offer: Offer | null }
+  /** Unnumbered, like offer: a chart's tally, taken at `generation`. */
+  | {
+      t: 'tally';
+      source: string;
+      chart: string;
+      generation: number;
+      tally: Tally;
+    }
+  | { t: 'charted'; id: number }
+  | { t: 'uncharted'; id: number }
   | { t: 'saved'; id: number; bytes: Uint8Array }
   /** Unnumbered, a failure of an index or a pass behind a source. */
   | { t: 'error'; id?: number; source?: string; said: Said };
@@ -366,3 +433,5 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
 }
 
 export { formatBytes, messageOf } from '@said';
+export { GROUPS_SENT, LABEL_AT_MOST, SCATTER_POINTS_AT_MOST } from '@tally';
+export type { Group, Groups, Point, Sample, Skipped } from '@tally';

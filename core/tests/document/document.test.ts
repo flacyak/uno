@@ -4,10 +4,12 @@
  */
 
 import { strFromU8, unzipSync, zipSync } from 'fflate';
-import { describe, expect, test } from 'vite-plus/test';
+import { describe, expect, test, vi } from 'vite-plus/test';
 
 import {
   BASE_VERSION,
+  CHARTS_ENTRY,
+  CHARTS_VERSION,
   FORMAT_VERSION,
   FORMULA_VERSION,
   LOG_ENTRY,
@@ -22,7 +24,8 @@ import {
   sourceId,
   writeDocument,
 } from '@document';
-import type { Document, State } from '@document';
+import type { Chart, Document, State } from '@document';
+import { CHARTS_AT_MOST } from '@document/chart';
 import { parse as parseFormula } from '@formula';
 import { read as ingestRead } from '@ingest';
 import { parse as parseProgram } from '@program';
@@ -833,5 +836,140 @@ describe("a source's id", () => {
   test('is never empty', () => {
     expect(sourceId('', [])).toBe('source');
     expect(sourceId('¿?.csv', [])).toBe('source');
+  });
+});
+
+// ------------------------------------------------------------------ charts
+
+describe("a workspace's charts", () => {
+  /** Rows per region at the right edge, as a drag leaves it, with its keys
+   * in no particular order. */
+  const PER_REGION: Chart = {
+    refresh: 0,
+    place: { height: 259.5, width: 420.25, y: 0.123456, x: 1 },
+    title: '',
+    plot: { by: { header: 'region', col: REGION }, t: 'bars' },
+    source: 'sales',
+    id: 'c1',
+  };
+
+  /** PER_REGION as the file keeps it. */
+  const SAVED = {
+    ...PER_REGION,
+    place: { x: 1, y: 0.1235, width: 420, height: 260 },
+  };
+
+  /** A newer build's chart, of a kind and with a key this build does not
+   * know, as this build carries it. */
+  const NEWER = {
+    id: 'c2',
+    source: 'sales',
+    json: '{"id":"c2","source":"sales","plot":{"t":"line"},"glow":true}',
+  };
+
+  /** As many charts as a workspace keeps. */
+  const MOST = Array.from({ length: CHARTS_AT_MOST }, (_, i) => ({
+    ...PER_REGION,
+    id: `c${i + 1}`,
+  }));
+
+  /** A one-source workspace holding `charts`. */
+  function charted(charts?: readonly Chart[]): Document {
+    return { ...saved('sales.csv').doc, charts };
+  }
+
+  // The entry is compared whole, so a moved key or an unrounded place fails.
+  test('are written after the log, each key in its place, at whole px', () => {
+    const doc = charted([PER_REGION]);
+    const entries = unzipSync(writeDocument(doc));
+
+    expect(doc.manifest.format, 'no newer format').toBe(BASE_VERSION);
+    expect(Object.keys(entries).slice(-2)).toEqual([LOG_ENTRY, CHARTS_ENTRY]);
+    const written = strFromU8(entries[CHARTS_ENTRY]!);
+    expect(JSON.stringify(JSON.parse(written))).toBe(
+      '{"version":1,"charts":[{"id":"c1","source":"sales",' +
+        '"plot":{"t":"bars","by":{"col":1,"header":"region"}},"title":"",' +
+        '"place":{"x":1,"y":0.1235,"width":420,"height":260},"refresh":0}]}',
+    );
+  });
+
+  // The check comes before the rounding, so 0.6 px is not saved as 1 px.
+  test('are refused where reading them would be', () => {
+    const place = { ...PER_REGION.place, width: 0.6 };
+    expect(() => writeDocument(charted([{ ...PER_REGION, place }]))).toThrow(
+      `${CHARTS_ENTRY} (c1): place: width is not a size of at least 1 px`,
+    );
+  });
+
+  test('add nothing to the file when there are none, to the byte', () => {
+    // One save time for both, so their bytes can match.
+    vi.setSystemTime(new Date('2026-10-29T12:00:00Z'));
+    try {
+      expect(writeDocument(charted([]))).toEqual(writeDocument(charted()));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('this build cannot read go back after the rest, as they were', () => {
+    const doc = { ...charted([PER_REGION]), carriedCharts: [NEWER] };
+    const entry = unzipSync(writeDocument(doc))[CHARTS_ENTRY]!;
+    const { charts } = JSON.parse(strFromU8(entry)) as { charts: unknown[] };
+    expect(JSON.stringify(charts[1])).toBe(NEWER.json);
+  });
+
+  test(`are kept to ${CHARTS_AT_MOST}, the carried ones counted`, () => {
+    const most = readContainer('sales.uno', writeDocument(charted(MOST)));
+    expect(most.charts).toHaveLength(CHARTS_AT_MOST);
+
+    const over = { ...charted(MOST), carriedCharts: [NEWER] };
+    expect(() => writeDocument(over)).toThrow(
+      `${CHARTS_AT_MOST + 1} charts are more than the ${CHARTS_AT_MOST} a workspace keeps`,
+    );
+  });
+
+  test('come back as they were saved, and not as an extra too', () => {
+    const bytes = writeDocument(charted([PER_REGION]));
+    const back = readContainer('sales.uno', bytes);
+    expect(back.charts).toStrictEqual([SAVED]);
+    expect(back.extra.has(CHARTS_ENTRY)).toBe(false);
+  });
+
+  test('come back through a save by a build that does not know them', () => {
+    const written = unzipSync(writeDocument(charted([PER_REGION])));
+    // Such a build reads the entry as one it does not know, and writes it back.
+    const extra = new Map([[CHARTS_ENTRY, written[CHARTS_ENTRY]!]]);
+    const bytes = writeDocument({ ...charted(), extra });
+    expect(readContainer('sales.uno', bytes).charts).toStrictEqual([SAVED]);
+  });
+
+  test('carry one this build cannot read as its text, and read the rest', () => {
+    const entries = unzipSync(writeDocument(charted()));
+    const text = `{"version":${CHARTS_VERSION},"charts":[${NEWER.json},${JSON.stringify(SAVED)}]}`;
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.charts).toStrictEqual([SAVED]);
+    expect(back.carriedCharts).toStrictEqual([NEWER]);
+  });
+
+  test.each([
+    ['is not JSON', `{"version":${CHARTS_VERSION},`],
+    ['is a newer version', `{"version":${CHARTS_VERSION + 1},"charts":[]}`],
+    ['holds no list of charts', `{"version":${CHARTS_VERSION},"charts":{}}`],
+    [
+      `holds more than ${CHARTS_AT_MOST} charts`,
+      JSON.stringify({ version: CHARTS_VERSION, charts: [...MOST, SAVED] }),
+    ],
+  ])('are kept whole, unread, when their entry %s', (_what, text) => {
+    const entries = unzipSync(writeDocument(charted()));
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.charts).toBeUndefined();
+    expect(() => writeDocument({ ...back, charts: [PER_REGION] })).toThrow(
+      `${CHARTS_ENTRY} is one this build cannot read`,
+    );
+
+    const again = unzipSync(writeDocument(back));
+    expect(strFromU8(again[CHARTS_ENTRY]!)).toBe(text);
   });
 });

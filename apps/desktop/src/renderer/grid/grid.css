@@ -48,12 +48,13 @@
 
 /* A fixed corner at the end of the header row, shown when the grid reaches
  * the top right of the window (banner and panel both hidden). The
- * window's close button sits there. Columns scroll under it. */
+ * window's close button sits there. Columns scroll under it. A page with
+ * no × sets `--corner` to 0, and the patch's borders go with its width. */
 #content {
   position: relative;
 }
 
-.win-sheet:has(> .banner[hidden]):has(+ .panel[hidden]) #content::after {
+.win-sheet:has(> .banner[hidden]):has(+ .win-side > .panel[hidden]) #content::after {
   content: "";
   position: absolute;
   top: 0;
@@ -62,8 +63,8 @@
   width: var(--corner);
   height: var(--row-h);
   background: var(--sunken);
-  border-left: 1px solid var(--rule-2);
-  border-bottom: 1px solid var(--rule);
+  border-left: min(1px, var(--corner)) solid var(--rule-2);
+  border-bottom: min(1px, var(--corner)) solid var(--rule);
 }
 
 /* The sizer is as tall as the whole sheet. The table inside holds only the
@@ -109,9 +110,10 @@ table.grid thead th {
 }
 
 /* Extra right padding on the last header cell so its text clears the
- * corner. */
-.win-sheet:has(> .banner[hidden]):has(+ .panel[hidden]) table.grid thead th:last-child {
-  padding-right: calc(11px + var(--corner) - var(--bar));
+ * corner. A page with no × sets `--corner` to 0, and the cell keeps its
+ * own 11px. */
+.win-sheet:has(> .banner[hidden]):has(+ .win-side > .panel[hidden]) table.grid thead th:last-child {
+  padding-right: calc(11px + max(0px, var(--corner) - var(--bar)));
 }
 
 /* Gutter width from `--gutter-digits`, set by the grid from the row

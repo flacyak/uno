@@ -210,14 +210,31 @@ export const SIDEBAR: Check[] = [
       const at = close.getBoundingClientRect();
       if (Math.round(innerWidth - at.right) > 12 || at.top > 12) return "the × is at " + Math.round(at.left) + "," + Math.round(at.top);
       if (at.width !== at.height || getComputedStyle(close).borderRadius !== "999px") return "the × is not a circle";
-      // The × has its corner to itself: scrolled to the end, the last header
-      // ends before it.
+      // The × has its corner to itself. With the panel closed the header row
+      // reaches the corner and ends in a patch under the ×. Scrolled to the
+      // end, the last header's name ends before the patch.
+      if (!document.querySelector("#panel").hidden) {
+        document.querySelector("#panel-toggle").click();
+        await frame();
+      }
+      const content = document.querySelector("#content");
+      const patch = getComputedStyle(content, "::after");
+      if (patch.content === "none") return "the header row has no patch under the ×";
       const scroller = document.querySelector(".grid-scroll");
       scroller.scrollLeft = scroller.scrollWidth;
       await frame();
-      const last = [...document.querySelectorAll("thead th .colhead")].at(-1).getBoundingClientRect();
+      const last = document.querySelector("thead th:last-child");
+      const nameEnds = last.getBoundingClientRect().right - parseFloat(getComputedStyle(last).paddingRight);
+      const patchLeft = content.getBoundingClientRect().right - parseFloat(patch.width) - parseFloat(patch.borderLeftWidth);
       scroller.scrollLeft = 0;
-      if (last.right > at.left) return "the last header runs under the ×";
+      if (nameEnds > patchLeft) return "the last header's name can run to " + Math.round(nameEnds) + ", past the patch at " + Math.round(patchLeft);
+      // A page with no × sets --corner to 0 and has the corner back: the
+      // patch is gone, and the last header pads its name as the others do.
+      document.documentElement.style.setProperty("--corner", "0px");
+      const bare = [patch.width, patch.borderLeftWidth, getComputedStyle(last).paddingRight].join(" ");
+      document.documentElement.style.removeProperty("--corner");
+      const others = getComputedStyle(last.previousElementSibling).paddingRight;
+      if (bare !== "0px 0px " + others) return "with --corner at 0 the patch and the last header's padding are " + bare;
       close.click();
       await frame();
       const want = "unsaved edits · Ctrl+S first, or × again to drop them";

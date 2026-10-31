@@ -4,6 +4,8 @@
 
 export {
   BASE_VERSION,
+  CHARTS_ENTRY,
+  CHARTS_VERSION,
   FORMAT_VERSION,
   FORMULA_VERSION,
   GENERATOR,
@@ -50,7 +52,20 @@ export {
   samePath,
 } from './path.ts';
 export {
+  CHARTS_AT_MOST,
+  REFRESH_MINUTES_AT_MOST,
+  TITLE_AT_MOST,
+} from './chart.ts';
+export type {
+  CarriedChart,
+  Chart,
+  ChartColumn,
+  ChartPlace,
+  Plot,
+} from './chart.ts';
+export {
   formatFor,
+  parseChart,
   readContainer,
   readDocument,
   versionFor,

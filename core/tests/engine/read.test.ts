@@ -20,12 +20,15 @@ import {
   serve,
 } from '@engine';
 import type { MessagePortLike, Reply, Request } from '@engine';
+import type { Tap } from '@engine/pass';
 import { openFormat } from '@ingest';
+import type { Format } from '@ingest';
 import { isNumber } from '@num';
 import { NO_ROW, Op } from '@sheet';
 import type { Provider } from '@plugin';
 import { sources } from '@plugin';
 import { blobSource } from '@store';
+import type { ByteSource } from '@store';
 import { diskProvider } from '@store/node';
 import {
   LAST_ROW,
@@ -219,6 +222,17 @@ test('the index serves closed blocks only, and projects the row count', () => {
   expect(index.bytesOf(2)).toEqual([50, 1010]);
 });
 
+test('a complete index seeds a longer one with every block but its last', () => {
+  const was = new RowIndex(10, 60, { blockRows: 2, blockBytes: 1 << 20 });
+  for (const offset of [10, 20, 30, 40, 50]) was.begin(offset);
+  expect(RowIndex.seeded(was, 100), 'while it indexes').toBeUndefined();
+
+  was.complete = true;
+  const index = RowIndex.seeded(was, 100)!;
+  // Blocks start at rows 0, 2 and 4. The one at 4 is scanned again.
+  expect([index.scanned, index.counted, index.readable()]).toEqual([50, 4, 2]);
+});
+
 test('a block closes at its byte budget as well as its row count', () => {
   const index = new RowIndex(0, 100, { blockRows: 100, blockBytes: 25 });
   for (const offset of [0, 10, 20, 30, 40, 60]) index.begin(offset);
@@ -250,7 +264,12 @@ test('the index keeps block starts past 4 GB exactly, at two numbers a block', (
   expect(index.readable()).toBe(blocks);
 });
 
-test('the page cache stays within its budget however much is read', async () => {
+/** indexedFixture indexes the fixture at TINY, handing each block to `tap`. */
+async function indexedFixture(tap?: Tap): Promise<{
+  source: ByteSource;
+  format: Format;
+  index: RowIndex;
+}> {
   const source = blobSource(new Blob([bytes]));
   const format = await openFormat('sales-q3.csv', source);
   const index = new RowIndex(format.dataStart, source.size, TINY);
@@ -261,8 +280,26 @@ test('the page cache stays within its budget however much is read', async () => 
     tuning: TINY,
     signal: new AbortController().signal,
     progress() {},
+    tap,
   });
+  return { source, format, index };
+}
 
+test('the index pass hands a tap each block it completes, whole, out of its chunks', async () => {
+  const handed: number[] = [];
+  const taken: Uint8Array[] = [];
+  const { format } = await indexedFixture(async (block, bytesOf) => {
+    handed.push(block);
+    taken.push(bytesOf());
+  });
+  // Every block in order, the last once the scan is complete.
+  expect(handed).toEqual(handed.map((_, block) => block));
+  const rows = taken.flatMap((block) => format.decode(block));
+  expect(widened(rows)).toEqual(sheetRows(sales, 0, ROWS, 'raw'));
+});
+
+test('the page cache stays within its budget however much is read', async () => {
+  const { source, format, index } = await indexedFixture();
   const pages = new Pages(
     'sales-q3.csv',
     source,
@@ -277,6 +314,40 @@ test('the page cache stays within its budget however much is read', async () => 
     );
     expect(pages.held).toBeLessThanOrEqual(TINY.cacheBytes);
   }
+});
+
+// The grid reads block 1 and then block 0. A second reader then reads every
+// block without keeping it, as find and the survey do. Block 1 is still the
+// oldest, so the grid's next block evicts it and block 0 stays.
+test("a read of every block that keeps none leaves the grid's recent pages in order", async () => {
+  const { source, format, index } = await indexedFixture();
+  let reads = 0;
+  const metered: ByteSource = {
+    ...source,
+    read(offset, length) {
+      reads++;
+      return source.read(offset, length);
+    },
+  };
+  const size = (block: number): number => {
+    const [start, end] = index.bytesOf(block);
+    return end - start;
+  };
+  // Room for block 0 and either of the next two, and no more.
+  const budget = size(0) + Math.max(size(1), size(2));
+  const pages = new Pages('sales-q3.csv', metered, format, index, budget);
+
+  await pages.records(1);
+  await pages.records(0);
+  const last = index.blockOf(ROWS - 1);
+  for (let block = 0; block <= last; block++) await pages.records(block, false);
+  await pages.records(2);
+
+  reads = 0;
+  await pages.records(0);
+  expect(reads, 'block 0 is still held').toBe(0);
+  await pages.records(1);
+  expect(reads, 'block 1 was evicted').toBe(1);
 });
 
 test('a failed open names the file', async () => {

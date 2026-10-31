@@ -18,6 +18,19 @@ import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import type {
+  CarriedChart,
+  Chart,
+  ChartColumn,
+  ChartPlace,
+  Plot,
+} from './chart.ts';
+import {
+  CHARTS_AT_MOST,
+  PLACE_DIGITS,
+  REFRESH_MINUTES_AT_MOST,
+  TITLE_AT_MOST,
+} from './chart.ts';
+import type {
   Document,
   FileSource,
   Held,
@@ -33,6 +46,8 @@ import type {
 } from './document.ts';
 import {
   BASE_VERSION,
+  CHARTS_ENTRY,
+  CHARTS_VERSION,
   FORMAT_VERSION,
   FORMULA_VERSION,
   GENERATOR,
@@ -88,7 +103,7 @@ export function readDocument(
 /**
  * readContainer reads a .uno as stored: the manifest, the bytes of each
  * carried source, the resolved path of each pointed-at source, the state,
- * the log and any entries beyond what this build knows.
+ * the log, the charts and any entries beyond what this build knows.
  *
  * `at` is where the .uno is. Relative pointers are resolved from it. With
  * `at` empty, a relative pointer is returned as written.
@@ -126,12 +141,14 @@ export function readContainer(
       : heldParts(src, state, at);
   });
 
+  const chartsRead = readCharts(entries[CHARTS_ENTRY]);
   return {
     manifest: m,
     sources,
     active,
     log,
-    extra: readExtra(entries, m),
+    ...chartsRead,
+    extra: readExtra(entries, m, chartsRead !== undefined),
     at,
   };
 }
@@ -243,6 +260,20 @@ export function writeDocument(d: Document): Uint8Array {
     },
     { name: LOG_ENTRY, bytes: encoder.encode(formatLog(d.log, single)) },
   );
+  // A workspace without charts writes no entry for them, so it saves as it
+  // did before charts.
+  const charts = d.charts ?? [];
+  const carried = d.carriedCharts ?? [];
+  if (charts.length + carried.length > 0) {
+    // Charts written over an entry this build cannot read would lose it.
+    const kept = d.extra.get(CHARTS_ENTRY);
+    if (kept !== undefined && readCharts(kept) === undefined)
+      throw new Error(`${CHARTS_ENTRY} is one this build cannot read`);
+    entries.push({
+      name: CHARTS_ENTRY,
+      bytes: encoder.encode(formatJSON(chartsJSON(charts, carried))),
+    });
+  }
 
   // Extra entries go back in, in name order, so a saved file keeps the same
   // layout between saves.
@@ -633,14 +664,51 @@ function readLog(
 }
 
 /**
- * readExtra collects the entries beyond those the manifest names, so the
- * next save writes them back.
+ * readCharts reads the charts entry, and carries a chart parseChart refuses
+ * as its JSON text. It gives undefined when there is no entry, or one this
+ * build cannot read: not JSON, a newer version, or no list of at most
+ * CHARTS_AT_MOST charts. Such an entry stays whole in extra.
+ */
+function readCharts(
+  bytes: Uint8Array | undefined,
+): Pick<Document, 'charts' | 'carriedCharts'> | undefined {
+  if (bytes === undefined) return undefined;
+  let o: Record<string, unknown>;
+  try {
+    o = asRecord(JSON.parse(decoder.decode(bytes)));
+  } catch {
+    return undefined;
+  }
+  if (asNumber(o['version']) > CHARTS_VERSION) return undefined;
+  const listed = o['charts'];
+  if (!Array.isArray(listed) || listed.length > CHARTS_AT_MOST)
+    return undefined;
+  const charts: Chart[] = [];
+  const carriedCharts: CarriedChart[] = [];
+  listed.forEach((raw: unknown) => {
+    try {
+      charts.push(parseChart(CHARTS_ENTRY, raw));
+    } catch {
+      const o = asRecord(raw);
+      const id = asString(o['id']);
+      const source = asString(o['source']);
+      carriedCharts.push({ id, source, json: JSON.stringify(raw) });
+    }
+  });
+  return { charts, carriedCharts };
+}
+
+/**
+ * readExtra collects the entries beyond those the manifest names, and the
+ * charts entry unless `charted`, so the next save writes them back.
  */
 function readExtra(
   entries: Record<string, Uint8Array>,
   m: Manifest,
+  charted: boolean,
 ): Map<string, Uint8Array> {
   const known = new Set([MANIFEST_ENTRY, m.sheet.entry, m.edits.entry]);
+  if (charted) known.add(CHARTS_ENTRY);
   for (const s of m.sources)
     if (s.entry !== undefined && s.entry !== '') known.add(s.entry);
 
@@ -708,6 +776,18 @@ function optional<T>(
   const v = o[key];
   if (v !== undefined && !expects.is(v))
     throw new Error(`${where}: ${key} ${expects.not}`);
+  return v;
+}
+
+/** required reads a field the way optional does, and refuses it when absent. */
+function required<T>(
+  o: Record<string, unknown>,
+  key: string,
+  expects: Expects<T>,
+  where: string,
+): T {
+  const v = o[key];
+  if (!expects.is(v)) throw new Error(`${where}: ${key} ${expects.not}`);
   return v;
 }
 
@@ -947,6 +1027,85 @@ function parseEdit(where: string, v: unknown): Edit {
   return e;
 }
 
+const NAME: Expects<string> = {
+  is: (v): v is string => isText(v) && v !== '',
+  not: 'is empty or not text',
+};
+const TITLE: Expects<string> = {
+  is: (v): v is string => isText(v) && v.length <= TITLE_AT_MOST,
+  not: `is not text of at most ${TITLE_AT_MOST} characters`,
+};
+const MINUTES: Expects<number> = {
+  is: (v): v is number => isByteCount(v) && v <= REFRESH_MINUTES_AT_MOST,
+  not: `is not a whole number of minutes from 0 to ${REFRESH_MINUTES_AT_MOST}`,
+};
+const FRACTION: Expects<number> = {
+  is: (v): v is number => typeof v === 'number' && v >= 0 && v <= 1,
+  not: 'is not a fraction from 0 to 1',
+};
+/** The least width or height: the smallest whole px, as a save keeps them. */
+const SIZE_PX_AT_LEAST = 1;
+const PIXELS: Expects<number> = {
+  is: (v): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && v >= SIZE_PX_AT_LEAST,
+  not: `is not a size of at least ${SIZE_PX_AT_LEAST} px`,
+};
+const COL: Expects<number> = { is: isByteCount, not: 'is not a column number' };
+
+/**
+ * parseChart reads one chart from view/charts.json or from a `chart`
+ * request, so the file and the wire accept the same records. `where` names
+ * it in an error before its id is known. A key it does not read is left out.
+ */
+export function parseChart(where: string, value: unknown): Chart {
+  const o = asRecord(value);
+  const id = required(o, 'id', NAME, where);
+  const chart = `${where} (${id})`;
+  return {
+    id,
+    source: required(o, 'source', NAME, chart),
+    plot: parsePlot(`${chart}: plot`, o['plot']),
+    title: required(o, 'title', TITLE, chart),
+    place: parsePlace(`${chart}: place`, o['place']),
+    refresh: required(o, 'refresh', MINUTES, chart),
+  };
+}
+
+/**
+ * parsePlot reads what a chart draws. Bars and pie name the `by` column whose
+ * values they show, and may name a `sum` column to add up per value. Scatter
+ * names its `x` and `y`.
+ */
+export function parsePlot(where: string, value: unknown): Plot {
+  const p = asRecord(value);
+  const column = (key: string): ChartColumn => ({
+    col: required(asRecord(p[key]), 'col', COL, `${where}: ${key}`),
+    header: required(asRecord(p[key]), 'header', TEXT, `${where}: ${key}`),
+  });
+  const t = required(p, 't', TEXT, where);
+  switch (t) {
+    case 'bars':
+    case 'pie':
+      if (p['sum'] === undefined) return { t, by: column('by') };
+      return { t, by: column('by'), sum: column('sum') };
+    case 'scatter':
+      return { t, x: column('x'), y: column('y') };
+    default:
+      throw new Error(`${where}: this build cannot draw ${JSON.stringify(t)}`);
+  }
+}
+
+/** parsePlace reads where a chart's window sits. */
+function parsePlace(where: string, value: unknown): ChartPlace {
+  const p = asRecord(value);
+  return {
+    x: required(p, 'x', FRACTION, where),
+    y: required(p, 'y', FRACTION, where),
+    width: required(p, 'width', PIXELS, where),
+    height: required(p, 'height', PIXELS, where),
+  };
+}
+
 // ------------------------------------------------------------- writing
 
 // The key order below, and in fileSource and partsSource above, is the order
@@ -1032,6 +1191,45 @@ function sheetStateJSON(s: State): {
       s.columnFormulas !== undefined && s.columnFormulas.length > 0
         ? s.columnFormulas
         : undefined,
+  };
+}
+
+/**
+ * chartsJSON writes each chart through parseChart, which refuses one a read
+ * would refuse and gives its keys in the order the file keeps. The carried
+ * ones follow as they were read. More than CHARTS_AT_MOST in all are refused,
+ * since a read keeps such an entry whole.
+ */
+function chartsJSON(
+  charts: readonly Chart[],
+  carried: readonly CarriedChart[],
+): unknown {
+  const count = charts.length + carried.length;
+  if (count > CHARTS_AT_MOST) {
+    throw new Error(
+      `${count} charts are more than the ${CHARTS_AT_MOST} a workspace keeps`,
+    );
+  }
+  return {
+    version: CHARTS_VERSION,
+    charts: [
+      ...charts.map((chart) => {
+        const c = parseChart(CHARTS_ENTRY, chart);
+        return { ...c, place: placeJSON(c.place) };
+      }),
+      ...carried.map((c): unknown => JSON.parse(c.json)),
+    ],
+  };
+}
+
+/** placeJSON rounds x and y to PLACE_DIGITS and the size to whole px. */
+function placeJSON(p: ChartPlace): ChartPlace {
+  const scale = 10 ** PLACE_DIGITS;
+  return {
+    x: Math.round(p.x * scale) / scale,
+    y: Math.round(p.y * scale) / scale,
+    width: Math.round(p.width),
+    height: Math.round(p.height),
   };
 }
 

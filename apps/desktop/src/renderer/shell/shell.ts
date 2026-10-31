@@ -711,6 +711,7 @@ export class Shell {
       grid.show(w.rows, w.editable);
       this.empty.hidden = true;
       this.content.hidden = false;
+      this.restore(w, grid);
       grid.focus();
       this.say("");
     } catch (err) {
@@ -905,7 +906,7 @@ export class Shell {
     if (on === undefined) return;
     const { workspace: w, grid } = on;
     if (w.active !== tab) {
-      w.active.cell = grid.selection();
+      w.active.keep(grid.selection());
       w.show(tab);
       this.showActive();
     }
@@ -918,8 +919,17 @@ export class Shell {
     if (on === undefined) return;
     const { workspace: w, grid } = on;
     grid.show(w.rows, w.editable);
-    grid.moveTo(w.active.cell.row, w.active.cell.col);
+    this.restore(w, grid);
     this.paintAll();
+  }
+
+  /**
+   * restore moves the grid to the active tab's cell. Where the grid stops
+   * short of it, as on a missing file, the tab keeps the cell.
+   */
+  private restore(w: Workspace, grid: Grid): void {
+    grid.moveTo(w.active.cell.row, w.active.cell.col);
+    w.active.shownAt(grid.selection());
   }
 
   /**
@@ -942,6 +952,8 @@ export class Shell {
       // Removing the showing tab shows its neighbour.
       this.shown(showing);
     } catch (err) {
+      // A removal whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
   }
@@ -994,6 +1006,8 @@ export class Shell {
       );
       this.shown(w.active === fresh);
     } catch (err) {
+      // A relink whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
   }
@@ -1004,7 +1018,7 @@ export class Shell {
    * while showing would come back at a stale one.
    */
   private keepSelection(w: Workspace, tab: Tab): void {
-    if (w.active === tab && this.grid !== undefined) tab.cell = this.grid.selection();
+    if (w.active === tab && this.grid !== undefined) tab.keep(this.grid.selection());
   }
 
   /**
@@ -1021,6 +1035,8 @@ export class Shell {
       this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
       this.shown(w.active === fresh);
     } catch (err) {
+      // An append whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
     // Ask the folders again: what was offered is now appended or refused.
@@ -1072,6 +1088,8 @@ export class Shell {
       await change(w);
       this.say("");
     } catch (err) {
+      // An edit whose workspace another open replaced fails quietly.
+      if (this.workspace !== w) return;
       this.say(message(err), true);
     }
     this.changed(w);

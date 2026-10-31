@@ -64,6 +64,24 @@ export class RowIndex {
     this.scanned = start;
   }
 
+  /**
+   * seeded returns an index of `size` bytes that begin with the bytes `was`
+   * indexed, holding every block of `was` but the last, or undefined while
+   * `was` is incomplete or holds no rows. A pass from `scanned` reads that
+   * block again and on into the new bytes, as a pass from the start would.
+   */
+  static seeded(was: RowIndex, size: number): RowIndex | undefined {
+    if (!was.complete || was.blocks === 0) return undefined;
+    const last = was.blocks - 1;
+    const index = new RowIndex(was.start, size, was.tuning);
+    index.firsts = was.firsts.slice();
+    index.offsets = was.offsets.slice();
+    index.blocks = last;
+    index.counted = was.firsts[last]!;
+    index.scanned = was.offsets[last]!;
+    return index;
+  }
+
   /** begin records that the next record starts at offset. Called once per record, in order. */
   begin(offset: number): void {
     const b = this.blocks;
@@ -81,6 +99,11 @@ export class RowIndex {
       this.blocks = b + 1;
     }
     this.counted++;
+  }
+
+  /** How many blocks have begun. The last may still be growing. */
+  get begun(): number {
+    return this.blocks;
   }
 
   /**
@@ -190,15 +213,20 @@ export class Pages {
   }
 
   /**
-   * records reads one block's source rows. With `keep = false` the block is
-   * decoded and the cache is left as it is.
+   * records reads one block's source rows. With `keep = false` the cache is
+   * left as it is, order included: a held or loading block is served as it
+   * is, and any other is decoded and not kept. A second reader of the whole
+   * file, such as the survey, leaves the grid's pages to be evicted in the
+   * order the grid last read them.
    */
   records(block: number, keep = true): Promise<string[][]> {
     const hit = this.cache.get(block);
     if (hit !== undefined) {
-      // Re-insert so the block becomes the newest entry in the Map.
-      this.cache.delete(block);
-      this.cache.set(block, hit);
+      if (keep) {
+        // Re-insert so the block becomes the newest entry in the Map.
+        this.cache.delete(block);
+        this.cache.set(block, hit);
+      }
       return Promise.resolve(hit.records);
     }
 

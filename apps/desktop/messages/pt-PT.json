@@ -152,6 +152,7 @@
   "reload_same_size": "o mesmo tamanho",
   "reload_size_moved": "{now}, antes {was}",
   "reload_no_change": "sem alterações no bucket",
+  "reload_no_change_on_disk": "sem alterações",
   "reload_new_version_same_size": "uma versão nova, do mesmo tamanho",
   "reload_new_version_size_moved": "uma versão nova, {now}, antes {was}",
   "edits_replayed": [
@@ -434,6 +435,30 @@
   "changed_version_same_size": "{name} não é a versão com a qual o espaço de trabalho foi guardado · tem o mesmo tamanho",
   "changed_version_sizes": "{name} não é a versão com a qual o espaço de trabalho foi guardado · agora tem {now} e antes tinha {was}",
   "changed_size": "{name} tem {now} agora e tinha {was} quando o espaço de trabalho foi guardado",
+  "charts_kept": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} gráfico que este uno não consegue mostrar é mantido tal como estava",
+        "plural=many": "{n} gráficos que este uno não consegue mostrar são mantidos tal como estavam",
+        "plural=other": "{n} gráficos que este uno não consegue mostrar são mantidos tal como estavam"
+      }
+    }
+  ],
+  "charts_left_out": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} gráfico nomeava uma fonte que este espaço de trabalho já não tem, e foi deixado de fora",
+        "plural=many": "{n} gráficos nomeavam uma fonte que este espaço de trabalho já não tem, e foram deixados de fora",
+        "plural=other": "{n} gráficos nomeavam uma fonte que este espaço de trabalho já não tem, e foram deixados de fora"
+      }
+    }
+  ],
+  "charts_newer": "os gráficos deste espaço de trabalho estão numa forma que este uno não consegue ler · são mantidos tal como estavam, e não podem ser alterados aqui",
+  "chart_column_gone": "{name} não tem nenhuma coluna chamada {header}",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um ficheiro por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só ficheiro · ficheiros só são anexados a vários lidos como um",
@@ -462,6 +487,9 @@
   ],
   "refused_workspace_closed": "o espaço de trabalho foi fechado",
   "refused_no_such_source": "nenhuma fonte chamada {id} está aberta",
+  "refused_no_such_chart": "nenhum gráfico chamado {id} está no espaço de trabalho",
+  "refused_chart_id_taken": "um gráfico que este uno não consegue mostrar já se chama {id}",
+  "refused_charts_at_most": "um espaço de trabalho guarda no máximo {limit} gráficos · remova um para fazer outro",
   "refused_source_absent": "{name} não tem um ficheiro por trás · aponte-o para um para ler suas linhas",
   "refused_point_one_at_several": [
     {

@@ -44,16 +44,23 @@ export type Mode = "view" | "transform";
 
 /**
  * Returns the status message after a reload, comparing the old tab with the
- * new one: whether the version changed (for a file with a version), whether
- * the size changed, and how many edits were replayed.
+ * new one: whether a file on disk was written since, whether the version
+ * changed (for a file with a version), whether the size changed, and how many
+ * edits were replayed.
  */
 export function reloaded(was: Tab, now: Tab): string {
   const before = was.link?.version;
   const after = now.link?.version;
   const sized = was.bytes === now.bytes;
   const moved = { now: bytes(now.bytes), was: bytes(was.bytes) };
+  const modified = now.link?.modified;
+  // The versions decide where either side has one, as in unchanged(). A file
+  // with neither that kept its size and modified time was not written since.
+  const versioned = before !== undefined || after !== undefined;
   let found: string;
-  if (before === undefined || after === undefined) {
+  if (!versioned && sized && modified !== undefined && modified === was.link?.modified) {
+    found = m.reload_no_change_on_disk();
+  } else if (before === undefined || after === undefined) {
     found = sized ? m.reload_same_size() : m.reload_size_moved(moved);
   } else if (before === after) {
     found = m.reload_no_change();
@@ -65,12 +72,54 @@ export function reloaded(was: Tab, now: Tab): string {
   return parts.join(" · ");
 }
 
+/** A relink or append in flight: the files it reads, and the tab it brings. */
+interface Pointing {
+  readonly kind: "relink" | "append";
+  readonly refs: readonly SourceRef[];
+  readonly fresh: Promise<Tab>;
+}
+
+/** Returns whether two lists of refs read the same files in the same order. */
+function sameFiles(a: readonly SourceRef[], b: readonly SourceRef[]): boolean {
+  return a.length === b.length && a.every((ref, i) => sameFile(ref, b[i]!));
+}
+
+/** Returns whether two refs read one file under one name: one path and version, or one Blob. */
+function sameFile(a: SourceRef, b: SourceRef): boolean {
+  if (a.name !== b.name) return false;
+  if ("path" in a && "path" in b) return a.path === b.path && a.version === b.version;
+  return "blob" in a && "blob" in b && a.blob === b.blob;
+}
+
+/**
+ * Returns whether `now` reads the file as the last save recorded it: `was`
+ * reads it so, and `now` reads the same path, version and size, the same
+ * parts, and is found or missing alike.
+ */
+function asRecorded(was: Tab, now: Tab): boolean {
+  return (
+    !was.changedSinceSave &&
+    was.link?.path === now.link?.path &&
+    was.link?.version === now.link?.version &&
+    was.bytes === now.bytes &&
+    was.missing === now.missing &&
+    sameFiles(was.parts ?? [], now.parts ?? [])
+  );
+}
+
+/** Returns whether `a` and `b` are the same cell. */
+function sameCell(a: Cell, b: Cell): boolean {
+  return a.row === b.row && a.col === b.col;
+}
+
 /** One source in the workspace. */
 export class Tab {
   /** The recogniser's current offer for this source, if any. */
   offer: Offer | null = null;
-  /** The selected cell, saved when another tab is shown. */
+  /** The selected cell, saved when another tab is shown, or read from a .uno. */
   cell: Cell = { row: 0, col: 0 };
+  /** Where the grid stopped short of `cell`, as it does on a missing file. */
+  private short: Cell | undefined;
   /**
    * The version the bucket holds now, when it differs from the one this tab
    * reads. Undefined while the tab reads the newest or is still unchecked.
@@ -80,6 +129,8 @@ export class Tab {
   /** The edit log as last reported by the engine, and as it was at the last save. */
   private edits: Edit[];
   private savedEdits: Edit[];
+  /** Whether a save came after this tab opened, and recorded the file as it is now. */
+  private savedSinceOpen = false;
 
   constructor(
     readonly source: SourceHandle,
@@ -126,6 +177,11 @@ export class Tab {
     return this.link?.missing !== undefined;
   }
 
+  /** Whether the file changed since the last save: the open found it so, and no save came after. */
+  get changedSinceSave(): boolean {
+    return this.link?.changed !== undefined && !this.savedSinceOpen;
+  }
+
   /** The state of the file behind this tab. */
   get state(): State {
     return stateOf(this);
@@ -162,6 +218,22 @@ export class Tab {
 
   saved(): void {
     this.savedEdits = this.edits.slice();
+    this.savedSinceOpen = true;
+  }
+
+  /** Notes where the grid stands after moving to this tab's cell. */
+  shownAt(at: Cell): void {
+    this.short = sameCell(at, this.cell) ? undefined : at;
+  }
+
+  /**
+   * Keeps `at`, the grid's selection, as the selected cell. A grid still
+   * where it stopped short of the cell leaves the cell as it was.
+   */
+  keep(at: Cell): void {
+    if (this.short !== undefined && sameCell(at, this.short)) return;
+    this.cell = at;
+    this.short = undefined;
   }
 }
 
@@ -178,11 +250,24 @@ export class Workspace {
   /** The source ids as of the last save. */
   private savedSources: string[] = [];
   /**
-   * Ids of sources relinked or appended to since the last save. Both changes
-   * leave the log and the source list as they were, so this set is what
-   * marks the workspace dirty for them.
+   * Ids of sources relinked or appended to since the last save, where the new
+   * tab reads the file other than as that save recorded it. Both changes leave
+   * the log and the source list as they were, so this set is what marks the
+   * workspace dirty for them.
    */
   private readonly relinked = new Set<string>();
+  /**
+   * The relink or append in flight for each source, by id. The same one asked
+   * again before it is answered joins it, so Reload pressed twice reads the
+   * file once. Any other goes after it, as the engine answers in order.
+   */
+  private readonly pointing = new Map<string, Pointing>();
+  /**
+   * Edits, undos, redos and removals sent to the engine and not yet answered.
+   * One may wait behind a relink or append in flight, as the engine answers in
+   * order. Adds are left out, since each is listed as opening until answered.
+   */
+  private writes = 0;
 
   private constructor(
     /** The engine this workspace owns. The panel lists and peeks through it. */
@@ -220,10 +305,15 @@ export class Workspace {
    * Opens a ref and adds its sources as tabs. Returns the tab to show: the
    * one the engine names, or the first added. The caller decides whether to
    * show it. Aborting `signal` cancels the open while it is in flight.
+   * Each tab starts on the cell a .uno left it on.
    */
   async add(ref: SourceRef, signal?: AbortSignal): Promise<Tab> {
-    const { sources, showing } = await this.engine.open(ref, signal);
+    const { sources, showing, cells } = await this.engine.open(ref, signal);
     const added = sources.map((s) => this.tab(s));
+    for (const { source, row, col } of cells) {
+      const t = added.find((a) => a.id === source);
+      if (t !== undefined) t.cell = { row, col };
+    }
     this.tabs.push(...added);
     return added.find((t) => t.id === showing) ?? added[0]!;
   }
@@ -240,18 +330,20 @@ export class Workspace {
 
   /**
    * Removes a source from the engine and the tab list. The engine refuses to
-   * remove the last source.
+   * remove the last source. The tab is found by id, since a relink or append
+   * answered first may have replaced `tab`.
    *
    * Returns true if the removed tab was the one showing. In that case the
    * next tab (or the last) is now showing and the grid must redraw.
    */
   async remove(tab: Tab): Promise<boolean> {
-    await this.engine.remove(tab.source);
-    const i = this.tabs.indexOf(tab);
+    await this.writing(this.engine.remove(tab.source));
+    const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return false;
+    const was = this.tabs[i]!;
     this.tabs.splice(i, 1);
     this.relinked.delete(tab.id);
-    if (this.showing !== tab) return false;
+    if (this.showing !== was) return false;
     this.showing = this.tabs[Math.min(i, this.tabs.length - 1)]!;
     return true;
   }
@@ -260,32 +352,73 @@ export class Workspace {
    * Points a tab at a different file. The tab is replaced by a new one that
    * keeps its sidebar position, selected cell and saved log.
    */
-  async relink(tab: Tab, ref: SourceRef): Promise<Tab> {
-    // Only a tab whose file is now found is marked relinked.
-    return this.replace(tab, await this.engine.relink(tab.source, ref), (fresh) => !fresh.missing);
+  relink(tab: Tab, ref: SourceRef): Promise<Tab> {
+    return this.point(tab, "relink", [ref], async () =>
+      this.replace(tab, await this.engine.relink(tab.source, ref)),
+    );
   }
 
   /**
    * Adds files to the end of a multi-file tab. The tab is replaced by a new
    * one that keeps its sidebar position, selected cell, log and saved log.
    */
-  async append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
-    return this.replace(tab, await this.engine.append(tab.source, [...files]), () => true);
+  append(tab: Tab, files: readonly SingleRef[]): Promise<Tab> {
+    return this.point(tab, "append", files, async () =>
+      this.replace(tab, await this.engine.append(tab.source, [...files])),
+    );
+  }
+
+  /** Runs `start` for `tab`'s source, or joins the same kind over the same files in flight. */
+  private async point(
+    tab: Tab,
+    kind: Pointing["kind"],
+    refs: readonly SourceRef[],
+    start: () => Promise<Tab>,
+  ): Promise<Tab> {
+    const was = this.pointing.get(tab.id);
+    if (was?.kind === kind && sameFiles(was.refs, refs)) return was.fresh;
+    const now: Pointing = { kind, refs, fresh: start() };
+    this.pointing.set(tab.id, now);
+    try {
+      return await now.fresh;
+    } finally {
+      if (this.pointing.get(tab.id) === now) this.pointing.delete(tab.id);
+    }
+  }
+
+  /** Waits for `write`, an edit, undo, redo or removal, and counts it in
+   * `writes` until the engine answers. */
+  private async writing<T>(write: Promise<T>): Promise<T> {
+    this.writes++;
+    try {
+      return await write;
+    } finally {
+      this.writes--;
+    }
+  }
+
+  /** The tab for `tab`'s source now, found by id, since a relink or append
+   * answered while an edit waited may have replaced `tab`. */
+  private current(tab: Tab): Tab {
+    return this.tabs.find((t) => t.id === tab.id) ?? tab;
   }
 
   /**
-   * Replaces `tab` with a new tab for `source` at the same position, with the
-   * same selected cell and saved log. `pointed` decides whether the new tab
-   * is marked relinked.
+   * Replaces the tab for `tab`'s source with a new tab for `source` at the
+   * same position, with the same selected cell and saved log, and marks it
+   * relinked unless it reads the file as last saved. The tab is found by id,
+   * since a relink or append answered first may have replaced `tab`, and
+   * only the newest handle hears the engine.
    */
-  private replace(tab: Tab, source: SourceHandle, pointed: (fresh: Tab) => boolean): Tab {
-    const i = this.tabs.indexOf(tab);
+  private replace(tab: Tab, source: SourceHandle): Tab {
+    const i = this.tabs.findIndex((t) => t.id === tab.id);
     if (i < 0) return tab;
-    const fresh = this.tab(source, tab.savedLog);
-    fresh.cell = tab.cell;
+    const was = this.tabs[i]!;
+    const fresh = this.tab(source, was.savedLog);
+    fresh.cell = was.cell;
     this.tabs[i] = fresh;
-    if (pointed(fresh)) this.relinked.add(fresh.id);
-    if (this.showing === tab) this.showing = fresh;
+    if (!asRecorded(was, fresh)) this.relinked.add(fresh.id);
+    if (this.showing === was) this.showing = fresh;
     return fresh;
   }
 
@@ -379,7 +512,8 @@ export class Workspace {
     const t = this.showing;
     const pending = t.band.write(row, col, value);
     try {
-      t.landed(await t.source.edit({ op: Op.Set, row, col, now: value }));
+      const changed = await this.writing(t.source.edit({ op: Op.Set, row, col, now: value }));
+      this.current(t).landed(changed);
     } catch (err) {
       t.band.restore(pending);
       throw err;
@@ -392,9 +526,10 @@ export class Workspace {
     const t = this.tabs.find((tab) => tab.id === offer.source);
     if (t === undefined) throw new Error(m.offer_source_gone());
     t.offer = null;
-    t.landed(
-      await t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
+    const changed = await this.writing(
+      t.source.edit({ op: Op.Apply, row: NO_ROW, col: offer.col, now: offer.program }),
     );
+    this.current(t).landed(changed);
   }
 
   /**
@@ -403,22 +538,25 @@ export class Workspace {
    * unknown column.
    */
   async bind(tab: Tab, col: number, expr: string): Promise<void> {
-    tab.landed(await tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }));
+    const changed = await this.writing(
+      tab.source.edit({ op: Op.Bind, row: NO_ROW, col, now: expr }),
+    );
+    this.current(tab).landed(changed);
   }
 
   /** Undoes the showing tab's last edit and returns that edit. */
   async undo(): Promise<Edit> {
     const t = this.showing;
-    const changed = await t.source.undo();
-    t.undone(changed);
+    const changed = await this.writing(t.source.undo());
+    this.current(t).undone(changed);
     return changed.edit;
   }
 
   /** Redoes the showing tab's last undone edit and returns it. */
   async redo(): Promise<Edit> {
     const t = this.showing;
-    const changed = await t.source.redo();
-    t.landed(changed);
+    const changed = await this.writing(t.source.redo());
+    this.current(t).landed(changed);
     return changed.edit;
   }
 
@@ -437,9 +575,11 @@ export class Workspace {
     return `${base || m.workspace_file_stem()}.uno`;
   }
 
-  /** Whether there is unsaved work: an edit, a source added or removed, or
-   * a source relinked or appended to. */
+  /** Whether there is unsaved work: an edit, a source added or removed, a
+   * source that a relink or append left other than as last saved, or an edit,
+   * undo, redo or removal still waiting on the engine. */
   get dirty(): boolean {
+    if (this.writes > 0) return true;
     const ids = this.tabs.map((t) => t.id);
     const same =
       ids.length === this.savedSources.length && ids.every((id, i) => id === this.savedSources[i]);
@@ -456,7 +596,10 @@ export class Workspace {
     );
   }
 
-  /** Whether a tab has unsaved changes, was relinked, or was added since the last save. */
+  /**
+   * Whether a tab has unsaved changes, was left other than as last saved by a
+   * relink or append, or was added since the last save.
+   */
   unsaved(tab: Tab): boolean {
     return tab.dirty || this.relinked.has(tab.id) || !this.savedSources.includes(tab.id);
   }
@@ -470,7 +613,7 @@ export class Workspace {
    * serialising.
    */
   bytes(cell: Cell, at: string): Promise<Uint8Array> {
-    this.showing.cell = cell;
+    this.showing.keep(cell);
     return this.engine.save(
       {
         source: this.showing.id,

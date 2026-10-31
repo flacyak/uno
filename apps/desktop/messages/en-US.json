@@ -141,6 +141,7 @@
   "reload_same_size": "the same size",
   "reload_size_moved": "{now}, was {was}",
   "reload_no_change": "no change in the bucket",
+  "reload_no_change_on_disk": "no change",
   "reload_new_version_same_size": "a new version, the same size",
   "reload_new_version_size_moved": "a new version, {now}, was {was}",
   "edits_replayed": [
@@ -420,6 +421,28 @@
   "changed_version_same_size": "{name} is not the version the workspace was saved against · it is the same size",
   "changed_version_sizes": "{name} is not the version the workspace was saved against · it is {now} now and was {was}",
   "changed_size": "{name} is {now} now and was {was} when the workspace was saved",
+  "charts_kept": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} chart this uno cannot show is kept as it was",
+        "plural=other": "{n} charts this uno cannot show are kept as they were"
+      }
+    }
+  ],
+  "charts_left_out": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} chart named a source this workspace no longer has, and was left out",
+        "plural=other": "{n} charts named a source this workspace no longer has, and were left out"
+      }
+    }
+  ],
+  "charts_newer": "this workspace's charts are in a form this uno cannot read · they are kept as they were, and cannot be changed here",
+  "chart_column_gone": "{name} has no column called {header}",
   "refused_only_source": "{name} is the only source here, and a workspace needs one",
   "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
   "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
@@ -447,6 +470,9 @@
   ],
   "refused_workspace_closed": "the workspace was closed",
   "refused_no_such_source": "no source called {id} is open",
+  "refused_no_such_chart": "no chart called {id} is in the workspace",
+  "refused_chart_id_taken": "a chart this uno cannot show is already called {id}",
+  "refused_charts_at_most": "a workspace keeps at most {limit} charts · remove one to make another",
   "refused_source_absent": "{name} has no file behind it · point it at one to read its rows",
   "refused_point_one_at_several": [
     {

@@ -24,7 +24,9 @@ import type {
   RowsPage,
   SignIns,
   SourceRef,
+  Tally,
 } from './protocol.ts';
+import type { Chart } from '@document';
 import { Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import type { Connection } from '@library';
@@ -41,10 +43,18 @@ export interface RowsReply extends RowsPage {
   first: number;
 }
 
-/** What an open added: one handle per source, and which one to show. */
+/** What an open added: one handle per source, which one to show, where each
+ * was left, and the charts over them. */
 export interface Added {
   sources: SourceHandle[];
   showing: string;
+  cells: Place['cells'];
+  charts: Chart[];
+  /** The ids of the charts it carries but cannot show, which a new chart
+   * cannot take. */
+  carriedIds: string[];
+  /** Said once, when the .uno held charts this build cannot show. */
+  chartsNote?: Said;
 }
 
 export class Engine {
@@ -88,6 +98,10 @@ export class Engine {
       return {
         sources: added.opened.map((o) => this.adopt(o)),
         showing: added.showing,
+        cells: added.cells,
+        charts: added.charts,
+        carriedIds: added.carriedIds,
+        chartsNote: added.chartsNote,
       };
     } finally {
       signal?.removeEventListener('abort', cancel);
@@ -143,6 +157,16 @@ export class Engine {
 
   mode(transform: boolean): void {
     if (this.gone === undefined) this.port.post({ t: 'mode', transform });
+  }
+
+  /** chart adds a chart, or replaces the one with its id where it stood. */
+  async chart(chart: Chart): Promise<void> {
+    await this.ask('charted', (id) => ({ t: 'chart', id, chart }));
+  }
+
+  /** unchart removes a chart from the workspace, named by its id. */
+  async unchart(chart: string): Promise<void> {
+    await this.ask('uncharted', (id) => ({ t: 'unchart', id, chart }));
   }
 
   /** save returns the workspace as a .uno. Refused if carried sources total
@@ -264,6 +288,15 @@ export class Engine {
         return;
       }
 
+      case 'tally': {
+        const s = this.sources.get(msg.source);
+        // Drop a tally from an older generation of the log. Only an offer or
+        // an edit's reply moves the generation, so a tally leaves it as it is.
+        if (s === undefined || msg.generation < s.generation) return;
+        s.onTally(msg.chart, msg.tally);
+        return;
+      }
+
       case 'changed': {
         const s = this.sources.get(msg.source);
         if (s !== undefined)
@@ -310,6 +343,8 @@ export class SourceHandle {
   onProgress: (progress: Progress) => void = () => {};
   /** Called with the recogniser's proposal, or null when there is none. */
   onOffer: (offer: Offer | null) => void = () => {};
+  /** Called with the id of a chart over this source, and its latest tally. */
+  onTally: (chart: string, tally: Tally) => void = () => {};
 
   constructor(engine: Engine, opened: Opened) {
     this.engine = engine;

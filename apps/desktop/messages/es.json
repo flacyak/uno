@@ -152,6 +152,7 @@
   "reload_same_size": "el mismo tamaño",
   "reload_size_moved": "{now}, antes {was}",
   "reload_no_change": "sin cambios en el bucket",
+  "reload_no_change_on_disk": "sin cambios",
   "reload_new_version_same_size": "una versión nueva, del mismo tamaño",
   "reload_new_version_size_moved": "una versión nueva, {now}, antes {was}",
   "edits_replayed": [
@@ -434,6 +435,30 @@
   "changed_version_same_size": "{name} no es la versión con la que se guardó el espacio de trabajo · tiene el mismo tamaño",
   "changed_version_sizes": "{name} no es la versión con la que se guardó el espacio de trabajo · ahora ocupa {now} y antes {was}",
   "changed_size": "{name} ocupa {now} ahora y ocupaba {was} cuando se guardó el espacio de trabajo",
+  "charts_kept": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} gráfico que esta versión de uno no puede mostrar se conserva tal como estaba",
+        "plural=many": "{n} gráficos que esta versión de uno no puede mostrar se conservan tal como estaban",
+        "plural=other": "{n} gráficos que esta versión de uno no puede mostrar se conservan tal como estaban"
+      }
+    }
+  ],
+  "charts_left_out": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} gráfico nombraba una fuente que este espacio de trabajo ya no tiene, y se dejó fuera",
+        "plural=many": "{n} gráficos nombraban una fuente que este espacio de trabajo ya no tiene, y se dejaron fuera",
+        "plural=other": "{n} gráficos nombraban una fuente que este espacio de trabajo ya no tiene, y se dejaron fuera"
+      }
+    }
+  ],
+  "charts_newer": "los gráficos de este espacio de trabajo están en una forma que esta versión de uno no puede leer · se conservan tal como estaban, y aquí no se pueden cambiar",
+  "chart_column_gone": "{name} no tiene ninguna columna llamada {header}",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",
@@ -462,6 +487,9 @@
   ],
   "refused_workspace_closed": "el espacio de trabajo se cerró",
   "refused_no_such_source": "no hay ninguna fuente abierta llamada {id}",
+  "refused_no_such_chart": "no hay ningún gráfico llamado {id} en el espacio de trabajo",
+  "refused_chart_id_taken": "un gráfico que esta versión de uno no puede mostrar ya se llama {id}",
+  "refused_charts_at_most": "un espacio de trabajo guarda como mucho {limit} gráficos · quita uno para hacer otro",
   "refused_source_absent": "{name} no tiene un archivo detrás · dirígelo a uno para leer sus filas",
   "refused_point_one_at_several": [
     {

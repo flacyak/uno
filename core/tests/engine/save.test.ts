@@ -146,6 +146,10 @@ test('a source opened from a path is pointed at, not copied', async () => {
     expect(s!.sha256, 'and nothing was hashed to say so').toBe('');
     expect(s!.bytes).toBe(bytes.length);
     expect(s!.rows).toBe(ROWS);
+    // When the file was written is measured at each open, and never saved.
+    const manifest = strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!);
+    expect(src.opened.link?.modified).toEqual(expect.any(Number));
+    expect(manifest).not.toContain(`${src.opened.link?.modified}`);
     expect(Object.keys(unzipSync(uno)).sort()).toEqual(
       [MANIFEST_ENTRY, STATE_ENTRY, LOG_ENTRY].sort(),
     );
@@ -192,7 +196,10 @@ test('a source beside the workspace is pointed at relative to it, and survives t
       name: 'q3.uno',
       path: join(there, 'q3.uno'),
     });
-    expect(src.opened.link).toEqual({ path: join(there, 'sales-q3.csv') });
+    expect(src.opened.link).toEqual({
+      path: join(there, 'sales-q3.csv'),
+      modified: expect.any(Number),
+    });
     expect(src.opened.edits).toHaveLength(1);
     expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe('1204');
   } finally {
@@ -310,7 +317,10 @@ test('pointing a source at a file again replays its edits over it', async () => 
       path: join(dir, 'elsewhere.csv'),
     });
     expect(back.id, 'the id the log names is the one it keeps').toBe('ads');
-    expect(back.opened.link).toEqual({ path: join(dir, 'elsewhere.csv') });
+    expect(back.opened.link).toEqual({
+      path: join(dir, 'elsewhere.csv'),
+      modified: expect.any(Number),
+    });
     expect(back.opened.edits).toHaveLength(1);
     expect((await back.rows(0, ADS_ROWS)).rows.map((r) => r[COST])).toEqual([
       '12.50',
@@ -440,12 +450,16 @@ test('sources added to one workspace save and reopen together', async () => {
   // Reopened as the same two sources.
   const second = connect();
   try {
-    const { sources, showing } = await second.engine.open({
+    const { sources, showing, cells } = await second.engine.open({
       name: 'q4.uno',
       path: join(dir, 'q4.uno'),
     });
     expect(sources.map((s) => s.id)).toEqual(['sales-q3', 'google-ads']);
     expect(showing).toBe('google-ads');
+    expect(cells).toEqual([
+      { source: 'sales-q3', row: 2, col: UNITS },
+      { source: 'google-ads', row: 0, col: COST },
+    ]);
     expect(sources[1]!.opened.edits).toHaveLength(1);
     expect((await sources[0]!.rows(2, 1)).rows[0]![UNITS]).toBe('1455');
   } finally {

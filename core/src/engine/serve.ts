@@ -8,6 +8,7 @@
 
 import { ROWS_AT_MOST } from './protocol.ts';
 import type { Port, Reply, Request, SignIns } from './protocol.ts';
+import { parseChart } from '@document';
 import { Refusal, saidOf } from '@said';
 import { NO_ROW } from '@sheet';
 import type { Said } from '@said';
@@ -249,6 +250,16 @@ export function serve(
       workspace.mode(m.transform);
       return undefined;
     },
+    chart: async (m) => {
+      await workspace.chart(parseChart('a chart request', m.chart));
+      return { t: 'charted' };
+    },
+    unchart: async (m) => {
+      if (typeof m.chart !== 'string')
+        throw new Refusal({ t: 'text', text: 'an unchart names no chart' });
+      await workspace.unchart(m.chart);
+      return { t: 'uncharted' };
+    },
     save: async (m) => ({
       t: 'saved',
       bytes: await workspace.save(m.place, m.limit),
@@ -268,6 +279,12 @@ export function serve(
     const answer = await handler(msg);
     if (answer !== undefined && 'id' in msg)
       port.post({ ...answer, id: msg.id });
+    // The sources an answer names are heard from only after it.
+    if (answer?.t === 'opened') {
+      for (const o of answer.added.opened) workspace.announce(o.source);
+    } else if (answer?.t === 'relinked' || answer?.t === 'appended') {
+      workspace.announce(answer.opened.source);
+    }
   }
 
   /** took records how long a request took and whether it was answered or refused. */
