@@ -1,6 +1,6 @@
 /**
  * @fileoverview A workspace's charts over the real engine. The model mirrors
- * the records the engine holds.
+ * the records the engine holds, showing a change at once.
  */
 
 import { expect, test } from "vite-plus/test";
@@ -58,11 +58,12 @@ test("adding, changing and removing a chart go through the engine", async () => 
   });
 });
 
-test("a chart the engine refuses stays as it was", async () => {
+test("a chart the engine refuses shows until it answers, and then goes", async () => {
   await opened(FILE, async (w) => {
     const held = await w.charts.add(BARS);
-    await expect(w.charts.add({ ...BARS, source: "gone" })).rejects.toThrow("no source");
-    await expect(w.charts.change(held.id, { source: "gone" })).rejects.toThrow("no source");
+    const refused = w.charts.add({ ...BARS, source: "gone" });
+    expect(w.charts.all.map((c) => c.source)).toStrictEqual([BARS.source, "gone"]);
+    await expect(refused).rejects.toThrow("no source");
     expect(w.charts.all).toStrictEqual([held]);
   });
 });
@@ -75,6 +76,37 @@ test("a chart that has gone cannot be changed or removed", async () => {
   });
 });
 
+test("a change shows at once, and one sent behind it, or behind a relink, builds on it", async () => {
+  const both = { ...BARS, title: "Rows", refresh: 5 };
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const relinked = w.relink(w.active, FILE);
+    const changes = [
+      w.charts.change(BARS.id, { title: both.title }),
+      w.charts.change(BARS.id, { refresh: both.refresh }),
+    ];
+    expect(w.charts.all).toStrictEqual([both]);
+    await Promise.all([relinked, ...changes]);
+    expect(w.charts.all).toStrictEqual([both]);
+    expect(await savedCharts(w)).toStrictEqual([both]);
+  });
+});
+
+test("a refused change puts back what the engine answered for, under any later one", async () => {
+  const titled = { ...BARS, title: "Rows" };
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const landing = w.charts.change(BARS.id, { title: titled.title });
+    await expect(w.charts.change(BARS.id, { source: "gone" })).rejects.toThrow("no source");
+    await landing;
+    expect(w.charts.all).toStrictEqual([titled]);
+
+    const refused = w.charts.change(BARS.id, { source: "gone" });
+    const later = w.charts.change(BARS.id, { source: BARS.source, refresh: 5 });
+    await expect(refused).rejects.toThrow("no source");
+    expect(w.charts.all).toStrictEqual([{ ...titled, refresh: 5 }]);
+    await later;
+  });
+});
+
 test("a removed source takes its charts out of the workspace", async () => {
   await opened(FILE, async (w) => {
     const other = await w.add({ name: "second.csv", path: SECOND });
@@ -84,6 +116,17 @@ test("a removed source takes its charts out of the workspace", async () => {
     await w.remove(other);
     expect(w.charts.all).toStrictEqual([kept]);
     expect(await savedCharts(w)).toStrictEqual([kept]);
+  });
+});
+
+test("a chart sent over a source on its way out stays where the engine holds it", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const other = w.sources[1]!;
+    const removed = w.remove(other);
+    const refused = w.charts.change(BARS.id, { source: other.id });
+    await removed;
+    await expect(refused).rejects.toThrow("no source");
+    expect(w.charts.all).toStrictEqual([BARS]);
   });
 });
 

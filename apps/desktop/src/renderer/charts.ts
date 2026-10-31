@@ -1,7 +1,8 @@
 /**
  * @fileoverview One workspace's charts. The engine keeps the records a save
- * writes, and this model mirrors them for the windows over the sheet. It puts
- * and removes through the engine, and makes each new chart's id.
+ * writes, and this model mirrors them for the windows over the sheet. A change
+ * shows at once and goes through the engine, and a refusal puts back what the
+ * engine holds. It makes each new chart's id.
  *
  * This file is plain logic, so tests run it directly.
  */
@@ -16,6 +17,9 @@ export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
 export class Charts {
   /** The charts by id, oldest first, as the engine answered for them. */
   private readonly answered = new Map<string, Chart>();
+  /** The latest record on its way for each chart, shown over the answered one
+   * until it lands. */
+  private readonly sent = new Map<string, Chart>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The count behind the ids uno makes. */
@@ -32,9 +36,11 @@ export class Charts {
     for (const id of carriedIds) this.taken.add(id);
   }
 
-  /** The charts, oldest first. */
+  /** The charts as their windows show them, oldest first. */
   get all(): readonly Chart[] {
-    return [...this.answered.values()];
+    // A Map keeps a key where it first stood, so a change stays in line and a
+    // new chart comes last.
+    return [...new Map([...this.answered, ...this.sent]).values()];
   }
 
   /** The charts over a source, oldest first. */
@@ -42,18 +48,18 @@ export class Charts {
     return this.all.filter((chart) => chart.source === source);
   }
 
-  /** Adds a chart under a new id and returns it. A refused chart is not kept. */
+  /** Adds a chart under a new id and returns it. It shows at once, and a
+   * refusal takes it away. */
   async add(chart: Omit<Chart, "id">): Promise<Chart> {
     const made = { ...chart, id: this.mint() };
     await this.put(made);
     return made;
   }
 
-  /** Changes what a chart shows. A refused change is not kept. */
+  /** Changes what a chart shows, over any change still on its way. It shows at
+   * once, and a refusal puts it back. */
   async change(id: string, shown: Partial<Shown>): Promise<void> {
-    const chart = this.answered.get(id);
-    if (chart === undefined) throw new Refusal({ t: "no-such-chart", id });
-    await this.put({ ...chart, ...shown });
+    await this.put({ ...this.need(id), ...shown });
   }
 
   /** Removes a chart. A refused removal leaves it. */
@@ -64,13 +70,29 @@ export class Charts {
 
   /** Forgets the charts over a source, which left the engine with it. */
   dropSource(source: string): void {
-    for (const chart of this.over(source)) this.answered.delete(chart.id);
+    for (const chart of this.answered.values()) {
+      if (chart.source === source) this.answered.delete(chart.id);
+    }
   }
 
-  /** Sends `chart` to the engine, and keeps it once the engine has it. */
+  /** The chart with the id as its window shows it. One that has gone is
+   * refused as the engine refuses it. */
+  private need(id: string): Chart {
+    const chart = this.all.find((c) => c.id === id);
+    if (chart === undefined) throw new Refusal({ t: "no-such-chart", id });
+    return chart;
+  }
+
+  /** Shows `chart` until the engine answers. Its answer keeps it. A refusal
+   * leaves what the engine holds, or a later record shown over it. */
   private async put(chart: Chart): Promise<void> {
-    await this.engine.chart(chart);
-    this.answered.set(chart.id, chart);
+    this.sent.set(chart.id, chart);
+    try {
+      await this.engine.chart(chart);
+      this.answered.set(chart.id, chart);
+    } finally {
+      if (this.sent.get(chart.id) === chart) this.sent.delete(chart.id);
+    }
   }
 
   /** Returns the next of 'c1', 'c2', ... that no chart of the workspace has. */
