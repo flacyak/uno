@@ -57,7 +57,7 @@ const GEOMETRY = `
   const edges = (at) => [at.left, at.top, at.right, at.bottom].join(" ");
   const unsaved = () => document.querySelector(".ws.open .dirty") !== null;
   const HEAD = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
-  const heads = () => windows().every((at) => at.height === HEAD && at.width === room().width);
+  const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
 `;
 
 export const CHARTS: Check[] = [
@@ -180,7 +180,7 @@ export const CHARTS: Check[] = [
       if (room().top !== rule()) return "the layer starts at " + room().top + ", and the header row's rule at " + rule();
       for (const at of windows()) {
         if (!within(at, room())) return "a window stands at " + edges(at) + " in a room at " + edges(room());
-        if (at.height === HEAD) return "a window is tucked in a room at " + edges(room());
+        if (at.height === HEAD + border()) return "a window is tucked in a room at " + edges(room());
       }
       return unsaved() ? "the zoom marked the workspace unsaved" : "";
     `,
@@ -205,8 +205,9 @@ export const CHARTS: Check[] = [
       const tucked = () => innerWidth >= ${NARROW_WIDTH} && heads();
       if (!(await until(tucked))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       const [top, foot] = windows();
-      if (top.left !== room().left) return "the top window stands at " + edges(top) + " in a room at " + edges(room());
-      if (top.top !== room().top || foot.top !== top.bottom) return "the heads stand at " + edges(top) + " and " + edges(foot);
+      const sidebar = document.querySelector("#sidebar").getBoundingClientRect();
+      if (top.left !== sidebar.right - border()) return "the top window stands at " + edges(top) + " beside a sidebar to " + sidebar.right;
+      if (top.top !== room().top || foot.top !== top.bottom - border()) return "the heads stand at " + edges(top) + " and " + edges(foot);
       return unsaved() ? "tucking marked the workspace unsaved" : "";
     `,
   },
@@ -222,6 +223,17 @@ export const CHARTS: Check[] = [
       };
       if (!(await until(back))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       return unsaved() ? "going back marked the workspace unsaved" : "";
+    `,
+  },
+  {
+    name: "with the sidebar closed, the layer starts at the window's own edge",
+    script: `
+      ${GEOMETRY}
+      const toggle = document.querySelector("#sidebar-toggle");
+      toggle.click();
+      const flush = await until(() => room().left === 0);
+      toggle.click();
+      return flush ? "" : "the layer starts at " + room().left;
     `,
   },
 ];

@@ -39,7 +39,7 @@ function stand(box: HTMLElement, rect: Rect): void {
 export class ChartLayer {
   /** The window of each chart showing, by chart id. */
   private readonly windows = new Map<string, HTMLElement>();
-  /** The height of the header row, and of a tucked window. */
+  /** The height of the header row, and of a tucked window's head. */
   private readonly head: number;
   /** The charts of the open workspace. */
   private charts: Pick<Charts, "all"> = { all: [] };
@@ -88,7 +88,7 @@ export class ChartLayer {
     const { width: w, height: h } = this.root.getBoundingClientRect();
     const room = { w, h };
     charts.forEach((chart, index) => {
-      const rect = tucks(room) ? tucked(index, this.head, room) : placed(chart.place, room);
+      const rect = tucks(room) ? tucked(index, this.head, border, room) : placed(chart.place, room);
       stand(this.windowOf(chart.id), rect);
     });
   }
@@ -105,6 +105,7 @@ export class ChartLayer {
     const sheetTop = must(this.root.parentElement).getBoundingClientRect().top;
     const gridTop = this.content.getBoundingClientRect().top - sheetTop;
     this.root.style.top = `${gridTop + this.head - border}px`;
+    this.root.style.setProperty("--window-border", `${border}px`);
     const grid = must(this.gauge.parentElement).getBoundingClientRect();
     const inside = this.gauge.getBoundingClientRect();
     const right = grid.width - inside.width;

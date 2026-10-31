@@ -110,10 +110,13 @@ export function tucks(room: Room): boolean {
 
 /**
  * tucked gives the rect of a room's `index`th window while the room tucks:
- * only its `head` px head, at the room's full width, stacked from the top.
+ * only its `head` px head, at the room's full width, stacked from the top. It
+ * is one `border` taller than the head, whose band fills the box between its
+ * borders, so the box's foot takes the place of the head's rule and lands on
+ * the next window's top.
  */
-export function tucked(index: number, head: number, room: Room): Rect {
-  return { x: 0, y: index * head, width: room.w, height: head };
+export function tucked(index: number, head: number, border: number, room: Room): Rect {
+  return { x: 0, y: index * head, width: room.w, height: head + border };
 }
 
 /**

@@ -133,6 +133,7 @@ test.each([
   vi.stubGlobal("devicePixelRatio", ratio);
   shown(FLUSH);
   expect(root().style.top).toBe(`${HEAD - border}px`);
+  expect(root().style.getPropertyValue("--window-border")).toBe(`${border}px`);
 });
 
 test("the layer's sides keep clear of scrollbars of any width", () => {
@@ -228,15 +229,16 @@ test("a room too narrow tucks every window to its head, stacked from the top", (
   const narrow = { w: MIN_WIDTH - 1, h: ROOM.h };
   resize(narrow);
   expect(windows().map(drawn)).toStrictEqual([
-    { x: 0, y: 0, width: narrow.w, height: HEAD },
-    { x: 0, y: HEAD, width: narrow.w, height: HEAD },
+    { x: 0, y: 0, width: narrow.w, height: HEAD + BORDER },
+    { x: 0, y: HEAD, width: narrow.w, height: HEAD + BORDER },
   ]);
 });
 
 test("a room too short tucks them too, and each goes back to its place with the room", () => {
   shown(FLUSH, INSIDE);
   resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
-  expect(windows().map((box) => drawn(box).height)).toStrictEqual([HEAD, HEAD]);
+  const tucked = HEAD + BORDER;
+  expect(windows().map((box) => drawn(box).height)).toStrictEqual([tucked, tucked]);
 
   resize(ROOM);
   expect(windows().map(drawn)).toStrictEqual([
