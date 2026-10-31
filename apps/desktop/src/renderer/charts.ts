@@ -16,9 +16,16 @@ import type { Added, Engine, GroupsTally, Place, SampleTally, Tally } from "@eng
 /** What a person changes in a chart's form. */
 export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
 
+/** The tallies of one plot over one source, as a chart heard them. */
+interface Tallied {
+  source: string;
+  latest: Tally;
+  complete: GroupsTally | SampleTally | undefined;
+}
+
 /** What a chart's window draws from. */
 export interface Heard {
-  /** The latest tally, once one has come. */
+  /** The latest tally of what the chart shows, once one has come. */
   latest: Tally | undefined;
   /** The last complete one, which stays until the next one completes. */
   complete: GroupsTally | SampleTally | undefined;
@@ -48,6 +55,11 @@ function sameShown(a: Chart, b: Chart): boolean {
   );
 }
 
+/** Returns whether `held` are tallies of `plot` over `source`. */
+function reads(held: Tallied | undefined, source: string, plot: Plot): held is Tallied {
+  return held?.source === source && samePlot(held.latest.plot, plot);
+}
+
 export class Charts {
   /** The charts by id, oldest first, as the engine answered for them. */
   private readonly answered = new Map<string, Chart>();
@@ -56,8 +68,9 @@ export class Charts {
   private readonly sent = new Map<string, Chart | undefined>();
   /** Where each moved window stands, over its chart's record. */
   private readonly moved = new Map<string, ChartPlace>();
-  /** What each chart last heard. */
-  private readonly tallied = new Map<string, Heard>();
+  /** What each chart last heard. It stays through a change, so a refusal
+   * gives it back. */
+  private readonly tallied = new Map<string, Tallied>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The sources of the charts this workspace carries and cannot show. */
@@ -149,18 +162,28 @@ export class Charts {
     if (isPlace(place)) this.moved.set(id, place);
   }
 
-  /** Takes a tally of chart `id`. The last complete tally stays until the next. */
-  hear(id: string, tally: Tally): void {
-    const kept = this.tallied.get(id)?.complete;
+  /** Takes a tally of chart `id` from `source`. The last complete tally stays
+   * until the next, while the plot and the source are the same. */
+  hear(source: string, id: string, tally: Tally): void {
+    const was = this.tallied.get(id);
+    const kept = reads(was, source, tally.plot) ? was.complete : undefined;
     const complete = tally.t !== "unread" && tally.coverage.complete ? tally : kept;
-    this.tallied.set(id, { latest: tally, complete });
+    this.tallied.set(id, { source, latest: tally, complete });
   }
 
   /** What chart `id`'s window draws from, or undefined for a chart that has
-   * gone. */
+   * gone. It leaves out tallies of another plot or source, since a chart shows
+   * a change at once, and a view posts for what it holds until the change
+   * reaches it. */
   heard(id: string): Heard | undefined {
-    if (!this.all.some((chart) => chart.id === id)) return undefined;
-    return this.tallied.get(id) ?? { latest: undefined, complete: undefined };
+    const chart = this.all.find((c) => c.id === id);
+    if (chart === undefined) return undefined;
+    const held = this.tallied.get(id);
+    const current = reads(held, chart.source, chart.plot);
+    return {
+      latest: current ? held.latest : undefined,
+      complete: current ? held.complete : undefined,
+    };
   }
 
   /** Forgets the charts over a source, which left the engine with it, and

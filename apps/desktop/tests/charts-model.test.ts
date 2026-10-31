@@ -10,7 +10,7 @@ import { expect, test } from "vite-plus/test";
 import { connect, multiProviders } from "@core-tests/engine/harness";
 import { PART_FIXTURES, PART_NAMES, PART_ROWS } from "@core-tests/testdata/sales-q3-parts";
 import { readContainer } from "@document";
-import type { Chart, ChartColumn } from "@document";
+import type { Chart, ChartColumn, Plot } from "@document";
 import type { GroupsTally, SampleTally, SourceRef } from "@engine";
 import { REGION, ROWS, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
@@ -379,5 +379,48 @@ test("a removal the engine refuses keeps the chart's tallies", async () => {
     w.close();
     await expect(w.charts.remove(BARS.id)).rejects.toThrow("the engine was closed");
     expect(w.charts.heard(BARS.id)?.complete).toBe(was);
+  });
+});
+
+test("a retitled chart hears its complete tally again", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    await w.charts.change(BARS.id, { title: "Rows" });
+    await expect.poll(() => w.charts.heard(BARS.id)?.latest, TALLY_WAIT).not.toBe(was);
+    expect(w.charts.heard(BARS.id)?.latest).toStrictEqual(was);
+  });
+});
+
+test("a chart shows only the tallies of its own plot and source, and a refused change gives them back", async () => {
+  const plot: Plot = { t: "pie", by: { col: UNITS, header: "units" } };
+  const none = { latest: undefined, complete: undefined };
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    const refused = w.charts.change(BARS.id, { source: "gone" });
+    expect(w.charts.heard(BARS.id)).toMatchObject(none);
+    await expect(refused).rejects.toThrow("no source");
+    expect(w.charts.heard(BARS.id)).toMatchObject({ latest: was, complete: was });
+
+    const changed = w.charts.change(BARS.id, { plot });
+    expect(w.charts.heard(BARS.id)).toMatchObject(none);
+    // A view goes on posting for the plot it holds until the change reaches it.
+    w.active.source.onTally(BARS.id, was);
+    expect(w.charts.heard(BARS.id)).toMatchObject(none);
+    // The first tally of the new plot keeps nothing of the old one's.
+    const partial = { ...was, plot, coverage: { ...was.coverage, complete: false } };
+    w.active.source.onTally(BARS.id, partial);
+    expect(w.charts.heard(BARS.id)).toMatchObject({ latest: partial, complete: undefined });
+    await changed;
+    expect((await completeOf(w)).plot).toStrictEqual(plot);
+  });
+});
+
+test("a chart moved to another source keeps no complete tally of the one it left", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    await w.charts.change(BARS.id, { source: ADS });
+    const partial = { ...was, coverage: { ...was.coverage, complete: false } };
+    w.sources[1]!.source.onTally(BARS.id, partial);
+    expect(w.charts.heard(BARS.id)).toMatchObject({ latest: partial, complete: undefined });
   });
 });
