@@ -8,7 +8,7 @@
  * a Web Worker, or a MessageChannel.
  */
 
-import type { Chart } from '@document';
+import type { Chart, ChartPlace } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Change } from '@pattern';
 import type { Said } from '@said';
@@ -122,19 +122,23 @@ export interface PartInfo {
   path: string;
 }
 
-/** What an open added to the workspace, in display order. */
+/** What an open added to the workspace, in display order. An older engine
+ * leaves out the cells, the charts and all that follows them. */
 export interface Opening {
   opened: Opened[];
   /** The source to show: the one just added, or the one a .uno was left on. */
   showing: string;
   /** The cell each source of a .uno was left on. Empty otherwise. */
-  cells: Place['cells'];
+  cells?: Place['cells'];
   /** The charts of a .uno over the sources it holds, oldest first, each id
    * once. Empty otherwise. */
-  charts: Chart[];
+  charts?: Chart[];
   /** The ids of the charts it carries but cannot show, which a new chart
    * cannot take. Empty otherwise. */
-  carriedIds: string[];
+  carriedIds?: string[];
+  /** The sources of those charts, which take them when they go. Empty
+   * otherwise. */
+  carriedOver?: string[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
@@ -155,11 +159,16 @@ export interface Changed {
   columns: ColumnInfo[];
 }
 
-/** The cursor position of each source and which source was showing. Written by a save. */
+/** The cursor position of each source, which source was showing, and where
+ * each chart's window stands. Written by a save. */
 export interface Place {
   /** The source that was showing. */
   source: string;
   cells: Array<{ source: string; row: number; col: number }>;
+  /** Where a client's windows stand now. Windows move with no request, so a
+   * chart left out, or told a place a read would refuse, stays where the
+   * engine last heard it was. */
+  charts?: Array<{ id: string; place: ChartPlace }>;
 
   /**
    * The path the .uno is saved to. A source under the same folder is pointed
