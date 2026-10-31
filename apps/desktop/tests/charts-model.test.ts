@@ -7,10 +7,12 @@ import { expect, test } from "vite-plus/test";
 
 import { connect } from "@core-tests/engine/harness";
 import { readContainer } from "@document";
-import type { Chart } from "@document";
+import type { Chart, ChartColumn } from "@document";
 import type { SourceRef } from "@engine";
+import { REGION, UNITS } from "@main/smoke/fixture";
+import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
-import { BARS, SALES, unoOf } from "./charted.ts";
+import { ADS, BARS, SALES, unoOf } from "./charted.ts";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
 /** The sales export alone, and the name a .uno goes by here. */
@@ -171,5 +173,41 @@ test("a new chart takes no id the workspace holds or carries, whatever its name"
     expect(made.map((c) => c.id)).toStrictEqual(["c4", "c5"]);
     await w.charts.remove("c5");
     expect((await w.charts.add(BARS)).id).toBe("c6");
+  });
+});
+
+test("a just-opened file is clean", async () => {
+  await opened(FILE, async (w) => expect(w.dirty).toBe(false));
+});
+
+test("adding, removing, and changing a chart's source, kind, columns, title or schedule mark it unsaved", async () => {
+  const by: ChartColumn = { col: REGION, header: "region" };
+  const units: ChartColumn = { col: UNITS, header: "units" };
+  const scatter: Chart = { ...BARS, id: "c2", plot: { t: "scatter", x: by, y: units } };
+  const changes: ReadonlyArray<readonly [Chart, Partial<Shown>]> = [
+    [BARS, { title: "Rows" }],
+    [BARS, { refresh: 5 }],
+    [BARS, { source: ADS }],
+    [BARS, { plot: { t: "pie", by } }],
+    [BARS, { plot: { t: "bars", by: units } }],
+    [BARS, { plot: { t: "bars", by: { ...by, header: "area" } } }],
+    [BARS, { plot: { t: "bars", by, sum: units } }],
+    [scatter, { plot: { t: "scatter", x: by, y: by } }],
+  ];
+  await opened(uno(unoOf([BARS, scatter])), async (w) => {
+    for (const [chart, shown] of changes) {
+      await w.charts.change(chart.id, shown);
+      expect(w.dirty, JSON.stringify(shown)).toBe(true);
+      await w.charts.change(chart.id, chart);
+      expect(w.dirty, "as it was saved").toBe(false);
+    }
+    const added = await w.charts.add(BARS);
+    expect(w.dirty, "a new chart").toBe(true);
+    await w.charts.remove(added.id);
+    expect(w.dirty, "the new chart gone").toBe(false);
+    await w.charts.remove(BARS.id);
+    expect(w.dirty, "a saved chart gone").toBe(true);
+    w.saved(UNO);
+    expect(w.dirty, "saved").toBe(false);
   });
 });

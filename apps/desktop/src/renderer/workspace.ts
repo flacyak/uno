@@ -584,14 +584,15 @@ export class Workspace {
   }
 
   /** Whether there is unsaved work: an edit, a source added or removed, a
-   * source that a relink or append left other than as last saved, or an edit,
-   * undo, redo or removal still waiting on the engine. */
+   * source that a relink or append left other than as last saved, a chart
+   * added, removed or changed, or an edit, undo, redo or removal still waiting
+   * on the engine. */
   get dirty(): boolean {
     if (this.writes > 0) return true;
     const ids = this.tabs.map((t) => t.id);
     const same =
       ids.length === this.savedSources.length && ids.every((id, i) => id === this.savedSources[i]);
-    return !same || this.relinked.size > 0 || this.tabs.some((t) => t.dirty);
+    return !same || this.relinked.size > 0 || this.charts.dirty || this.tabs.some((t) => t.dirty);
   }
 
   /**
@@ -637,6 +638,7 @@ export class Workspace {
     this.path = path;
     this.savedSources = this.tabs.map((t) => t.id);
     this.relinked.clear();
+    this.charts.saved();
     for (const t of this.tabs) t.saved();
   }
 
