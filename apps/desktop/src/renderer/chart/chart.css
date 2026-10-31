@@ -4,15 +4,16 @@
  * sets its top, to the scrollbars, so no window can cover either, or the
  * window's ×, and a window's top border lands on the rule and the two draw as
  * one. `--bar-right` and `--bar-bottom` are the widths layer.ts measures, for a
- * browser that draws its own scrollbars in place of `--bar`. The z-index puts
+ * browser that draws its own scrollbars in place of `--bar`, and a zoomed page,
+ * which draws those a whole number of device px. The z-index puts
  * the layer over the grid's header, editor and corner, which share the sheet's
  * stacking context, and the sheet keeps it under the scrim and the panel. The
  * grid takes the pointer wherever no window is. */
 .charts {
   position: absolute;
   left: 0;
-  right: max(var(--bar), var(--bar-right));
-  bottom: max(var(--bar), var(--bar-bottom));
+  right: var(--bar-right, var(--bar));
+  bottom: var(--bar-bottom, var(--bar));
   z-index: 5;
   overflow: hidden;
   pointer-events: none;
@@ -24,4 +25,11 @@
   border: 1px solid var(--rule);
   pointer-events: auto;
   -webkit-app-region: no-drag;
+}
+
+/* In the grid's scroller, it fills what the bars leave and lets the pointer by. */
+.chart-gauge {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
 }

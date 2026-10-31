@@ -25,9 +25,9 @@ const BORDER = 1;
 const ROOM: Room = { w: 1000, h: 600 };
 /** What a banner's height puts above the grid. */
 const BANNER = 44;
-/** Scrollbars a browser draws for itself, each past uno's 12 px. */
-const SIDE_BAR = 17;
-const FOOT_BAR = 15;
+/** Scrollbars a browser draws for itself, past uno's 12 px and not a whole px. */
+const SIDE_BAR = 17.5;
+const FOOT_BAR = 15.25;
 
 /** One chart flush to the room's right edge, and one in the middle of it. */
 const FLUSH: Chart = BARS;
@@ -36,6 +36,7 @@ const INSIDE: Chart = { ...BARS, id: "c2", place: MOVED };
 const root = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
 const content = (): HTMLElement => document.querySelector<HTMLElement>("#content")!;
 const scroller = (): HTMLElement => document.querySelector<HTMLElement>(".grid-scroll")!;
+const gauge = (): HTMLElement => document.querySelector<HTMLElement>(".grid-scroll .chart-gauge")!;
 const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".chart")];
 
 /** Fires what a ResizeObserver on the sheet would. */
@@ -51,9 +52,11 @@ class HeldObserver implements ResizeObserver {
   disconnect(): void {}
 }
 
-/** Sets a layout number happy-dom leaves at zero on one element. */
-function measures(element: HTMLElement, name: keyof HTMLElement, value: number): void {
-  Object.defineProperty(element, name, { configurable: true, value });
+/** Says what the grid's box measures, and how much of it two scrollbars take. */
+function barsAre(side: number, foot: number): void {
+  const { w, h } = ROOM;
+  vi.spyOn(scroller(), "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, w, h));
+  vi.spyOn(gauge(), "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, w - side, h - foot));
 }
 
 /** Says what the layer's box measures. */
@@ -132,14 +135,23 @@ test.each([
   expect(root().style.top).toBe(`${HEAD - border}px`);
 });
 
-test("the layer's sides keep clear of scrollbars wider than uno's own", () => {
-  measures(scroller(), "offsetWidth", ROOM.w);
-  measures(scroller(), "clientWidth", ROOM.w - SIDE_BAR);
-  measures(scroller(), "offsetHeight", ROOM.h);
-  measures(scroller(), "clientHeight", ROOM.h - FOOT_BAR);
-  shown(FLUSH);
+test("the layer's sides keep clear of scrollbars of any width", () => {
+  const { layer } = shown(FLUSH);
+  barsAre(SIDE_BAR, FOOT_BAR);
+  layer.draw();
   expect(root().style.getPropertyValue("--bar-right")).toBe(`${SIDE_BAR}px`);
   expect(root().style.getPropertyValue("--bar-bottom")).toBe(`${FOOT_BAR}px`);
+});
+
+test("a tab with no scrollbars keeps the last measure, so the room holds still", () => {
+  const { layer } = shown(FLUSH);
+  barsAre(SIDE_BAR, 0);
+  layer.draw();
+  expect(root().style.getPropertyValue("--bar-bottom")).toBe("");
+
+  barsAre(0, 0);
+  layer.draw();
+  expect(root().style.getPropertyValue("--bar-right")).toBe(`${SIDE_BAR}px`);
 });
 
 test("a resize places every window again from its chart's place", () => {

@@ -21,6 +21,16 @@ const DOUBLE_ZOOM = 2;
 /** The window's least width, where both side columns leave too little room. */
 const NARROW_WIDTH = 640;
 
+/**
+ * The View menu's Zoom In pressed five times: Electron's factor is 1.2 to the
+ * zoom level, and a press adds half a level. Each scrollbar is a fraction of a
+ * CSS px here, which clientWidth rounds one way and clientHeight the other.
+ */
+const MENU_ZOOM = 1.2 ** 2.5;
+
+/** How close devicePixelRatio comes to that factor. */
+const ZOOM_SLACK = 0.002;
+
 /** A point over the grid's tenth row, left of the windows, and one over the top window. */
 const BESIDE = { x: 400, y: 300 };
 const OVER_WINDOW = { x: 900, y: 150 };
@@ -137,6 +147,26 @@ export const CHARTS: Check[] = [
       if (beside.closest("#content") === null) return "beside the windows is " + beside.tagName;
       const over = at(${JSON.stringify(OVER_WINDOW)});
       return over.closest(".chart") === null ? "over the window is " + over.tagName : "";
+    `,
+  },
+  {
+    // A window's last device px stands over the grid, and the next on the bar.
+    name: "at the View menu's 158%, a window meets both scrollbars with no grid past it",
+    window: { zoom: MENU_ZOOM },
+    script: `
+      ${GEOMETRY}
+      const middle = (px) => (px + 0.5) / devicePixelRatio;
+      const grid = (x, y) => document.elementsFromPoint(x, y).some((hit) => hit.matches("td, th"));
+      const meets = () => {
+        const [top, foot] = windows();
+        const right = Math.round(top.right * devicePixelRatio);
+        const bottom = Math.round(foot.bottom * devicePixelRatio);
+        const y = (top.top + top.bottom) / 2;
+        const x = (foot.left + foot.right) / 2;
+        return grid(middle(right - 1), y) && !grid(middle(right), y) && grid(x, middle(bottom - 1)) && !grid(x, middle(bottom));
+      };
+      if (await until(() => Math.abs(devicePixelRatio - ${MENU_ZOOM}) < ${ZOOM_SLACK} && meets())) return "";
+      return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
     `,
   },
   {
