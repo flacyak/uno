@@ -279,6 +279,7 @@ test('a new chart cannot take the id of a chart the workspace carries', async ()
     const carried = newer('north');
     const added = await opened(engine, [NORTH, repeated], [carried]);
     expect(added.carriedIds).toStrictEqual([NORTH.id, carried.id]);
+    expect(added.carriedOver).toStrictEqual([repeated.source, carried.source]);
     const titled = { ...NORTH, title: 'Rows per region' };
     await engine.chart(titled);
     const same = { ...SOUTH, id: carried.id };

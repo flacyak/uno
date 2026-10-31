@@ -122,19 +122,23 @@ export interface PartInfo {
   path: string;
 }
 
-/** What an open added to the workspace, in display order. */
+/** What an open added to the workspace, in display order. An older engine
+ * leaves out the cells, the charts and all that follows them. */
 export interface Opening {
   opened: Opened[];
   /** The source to show: the one just added, or the one a .uno was left on. */
   showing: string;
   /** The cell each source of a .uno was left on. Empty otherwise. */
-  cells: Place['cells'];
+  cells?: Place['cells'];
   /** The charts of a .uno over the sources it holds, oldest first, each id
    * once. Empty otherwise. */
-  charts: Chart[];
+  charts?: Chart[];
   /** The ids of the charts it carries but cannot show, which a new chart
    * cannot take. Empty otherwise. */
-  carriedIds: string[];
+  carriedIds?: string[];
+  /** The sources of those charts, which take them when they go. Empty
+   * otherwise. */
+  carriedOver?: string[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
