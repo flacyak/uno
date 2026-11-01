@@ -15,11 +15,15 @@ import {
   fresh,
   MIN_HEIGHT,
   MIN_WIDTH,
+  nudged,
+  NUDGE_PX,
   placed,
+  placeOf,
   tucked,
   tucks,
 } from "@renderer/chart/place";
-import type { Room } from "@renderer/chart/place";
+import type { Rect, Room } from "@renderer/chart/place";
+import type { Press } from "@renderer/keys";
 
 const ROOM: Room = { w: 1200, h: 800 };
 
@@ -29,6 +33,9 @@ const SNUG: Room = { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
 /** A window of a new chart's size at the top left. */
 const PLACE: ChartPlace = { x: 0, y: 0, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
 
+/** That window a quarter of the way across ROOM's free 780 x 540 px. */
+const RECT: Rect = { x: 195, y: 135, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+
 /** The stylesheet's --row-h, a window head's height. */
 const HEAD = 29;
 
@@ -37,6 +44,17 @@ const BOTH_SIDES_OPEN = 640 - 168 - 250 - 12;
 
 /** The same window at 200% zoom, which halves its px, with the sidebar alone open. */
 const ZOOMED = 640 / 2 - 168 - 12;
+
+/** A press of `key`, as a window's keydown hands it over. */
+function press(key: string, more: Partial<Press> = {}): Press {
+  return { key, ctrl: false, alt: false, meta: false, shift: false, repeat: false, ...more };
+}
+
+/** The place one press leaves a window with: placed, nudged, then placeOf. */
+function pressed(place: ChartPlace, key: Press, room: Room): ChartPlace {
+  const rect = nudged(placed(place, room), key, room);
+  return rect === undefined ? place : placeOf(rect, room, place);
+}
 
 test("a window at the right and bottom edges stays there as the room narrows", () => {
   for (const room of [ROOM, { w: 640, h: 400 }, SNUG, { w: 300, h: 200 }]) {
@@ -57,6 +75,39 @@ test("in a room under the least size the room wins, so the window stays inside i
   const room = { w: MIN_WIDTH / 2, h: MIN_HEIGHT / 2 };
   const rect = placed({ ...PLACE, x: 1, y: 1 }, room);
   expect(rect).toEqual({ x: 0, y: 0, width: room.w, height: room.h });
+});
+
+test("a place comes back from the rect it draws, in every room", () => {
+  const place = { ...PLACE, x: 0.25, y: 0.75 };
+  for (const room of [ROOM, { w: 640, h: 400 }, SNUG, { w: 300, h: ROOM.h }, { w: 300, h: 200 }]) {
+    const back = placeOf(placed(place, room), room, place);
+    expect(back.x).toBeCloseTo(place.x);
+    expect(back.y).toBeCloseTo(place.y);
+    expect([back.width, back.height]).toEqual([place.width, place.height]);
+  }
+});
+
+test("a rect changed on one side keeps what the room hid on the other", () => {
+  const place = { ...PLACE, x: 1 };
+  const room = { w: 300, h: ROOM.h };
+  const rect = placed(place, room);
+  const moved = placeOf({ ...rect, y: CASCADE_PX }, room, place);
+  expect([moved.x, moved.width]).toEqual([place.x, place.width]);
+  const resized = placeOf({ ...rect, height: MIN_HEIGHT }, room, place);
+  expect(resized).toEqual({ ...place, height: MIN_HEIGHT });
+});
+
+test("a rect pushed past an edge keeps to it", () => {
+  expect(placeOf({ ...RECT, x: -1 }, ROOM, PLACE).x).toBe(0);
+  expect(placeOf({ ...RECT, y: -1 }, ROOM, PLACE).y).toBe(0);
+  expect(placeOf({ ...RECT, x: ROOM.w }, ROOM, PLACE).x).toBe(1);
+  expect(placeOf({ ...RECT, y: ROOM.h }, ROOM, PLACE).y).toBe(1);
+});
+
+test("a rect pushed under the least size stores it, with its corner where it was", () => {
+  const pushed = { ...RECT, width: MIN_WIDTH - 1, height: MIN_HEIGHT - 1 };
+  const back = placed(placeOf(pushed, ROOM, PLACE), ROOM);
+  expect(back).toEqual({ ...RECT, width: MIN_WIDTH, height: MIN_HEIGHT });
 });
 
 test("a room tucks from one px under the least size, as a 0 px or zoomed sheet does", () => {
@@ -95,6 +146,51 @@ test("a new window in a room of 0 px keeps its size at the top, as a record take
   expect(parseChart("chart", chart).place).toEqual(place);
 });
 
+test.each<[string, Partial<Rect>, Partial<Rect>]>([
+  ["ArrowLeft", { x: RECT.x - NUDGE_PX }, { width: RECT.width - NUDGE_PX }],
+  ["ArrowRight", { x: RECT.x + NUDGE_PX }, { width: RECT.width + NUDGE_PX }],
+  ["ArrowUp", { y: RECT.y - NUDGE_PX }, { height: RECT.height - NUDGE_PX }],
+  ["ArrowDown", { y: RECT.y + NUDGE_PX }, { height: RECT.height + NUDGE_PX }],
+])("%s moves a window, and resizes it with Shift", (key, moved, resized) => {
+  expect(nudged(RECT, press(key), ROOM)).toEqual({ ...RECT, ...moved });
+  expect(nudged(RECT, press(key, { shift: true }), ROOM)).toEqual({ ...RECT, ...resized });
+});
+
+test("any other key, or a chord on an arrow, leaves a window to the shell", () => {
+  expect(nudged(RECT, press("a"), ROOM)).toBeUndefined();
+  expect(nudged(RECT, press("constructor", { shift: true }), ROOM)).toBeUndefined();
+  for (const chord of [{ ctrl: true }, { alt: true }, { meta: true }]) {
+    expect(nudged(RECT, press("ArrowLeft", chord), ROOM)).toBeUndefined();
+  }
+});
+
+test("an arrow held at the edge or at the least size leaves the window where it is", () => {
+  const corner = { ...PLACE, x: 1, y: 1 };
+  for (const shift of [false, true]) {
+    expect(pressed(corner, press("ArrowRight", { shift }), ROOM)).toEqual(corner);
+    expect(pressed(corner, press("ArrowDown", { shift }), ROOM)).toEqual(corner);
+  }
+  const least = { ...PLACE, width: MIN_WIDTH, height: MIN_HEIGHT };
+  expect(pressed(least, press("ArrowLeft", { shift: true }), ROOM)).toEqual(least);
+  expect(pressed(least, press("ArrowUp", { shift: true }), ROOM)).toEqual(least);
+});
+
+test("Shift and an arrow near the edge grow a window to it, with its corner still", () => {
+  const gap = NUDGE_PX / 2;
+  const rect = { ...RECT, x: ROOM.w - RECT.width - gap, y: ROOM.h - RECT.height - gap };
+  const wider = nudged(rect, press("ArrowRight", { shift: true }), ROOM);
+  expect(wider).toEqual({ ...rect, width: RECT.width + gap });
+  const taller = nudged(rect, press("ArrowDown", { shift: true }), ROOM);
+  expect(taller).toEqual({ ...rect, height: RECT.height + gap });
+});
+
+test("a move in a room the window fills keeps the place's other side", () => {
+  const place = { ...PLACE, x: 1 };
+  const room = { w: DEFAULT_WIDTH, h: ROOM.h };
+  const moved = pressed(place, press("ArrowDown"), room);
+  expect(moved).toEqual({ ...place, y: NUDGE_PX / (room.h - DEFAULT_HEIGHT) });
+});
+
 test.each<[string, Room]>([
   ["no room", { w: 0, h: 0 }],
   ["no width", { w: 0, h: ROOM.h }],
@@ -102,6 +198,6 @@ test.each<[string, Room]>([
   ["a room of exactly one window", SNUG],
 ])("%s gives only numbers", (_name, room) => {
   const rect = placed({ ...PLACE, x: 0.5, y: 0.5 }, room);
-  const boxes = [rect, fresh(3, 0, room), tucked(3, HEAD, room)];
+  const boxes = [rect, placeOf(rect, room, PLACE), fresh(3, 0, room), tucked(3, HEAD, room)];
   expect(boxes.flatMap((box) => Object.values(box)).every(Number.isFinite)).toBe(true);
 });
