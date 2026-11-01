@@ -184,6 +184,39 @@ const CONNECTING_LATENCY_MS = 1_800;
 const ARRIVED_MS = 50;
 const ARRIVED_LOOKS = 160;
 
+/**
+ * The moves story's beats: a chart window carried by its head, resized by its
+ * grip, stepped with an arrow, and resized with Shift and an arrow.
+ */
+const MOVES = {
+  carry: 500,
+  stretch: 2_500,
+  nudge: 4_500,
+  grow: 5_900,
+  end: 7_400,
+};
+
+/** How far the moves story carries the window, and how far it resizes it. */
+const CARRY = { x: -320, y: 150 };
+const STRETCH = { x: 110, y: 90 };
+
+/** How many moves a pointer's drag takes, and how long each one lasts, in ms. */
+const DRAG_MOVES = 24;
+const DRAG_MOVE_MS = 40;
+
+/** How many times the moves story presses each arrow. */
+const NUDGES = 5;
+
+/** A stand-in for the pointer, as a capture leaves the real one out. */
+const POINTER =
+  '<svg width="16" height="24" viewBox="0 0 16 24">' +
+  '<path d="M1 1v18l5-5 3.5 8 3-1.5L9 13h6z" fill="#000" stroke="#fff" stroke-linejoin="round"/>' +
+  "</svg>";
+
+/** The stand-in's id, where a script finds it, and a z-index over the app's popups. */
+const POINTER_ID = "preview-pointer";
+const POINTER_ON_TOP = 99;
+
 /** The stand-in key of the object the refresh story's workspace points at. */
 const REFRESH_KEY = "2025/ads-q3.csv";
 
@@ -639,6 +672,7 @@ const STORIES: Record<string, Story> = {
   opening: { end: OPENING.end, script: playOpening },
   connecting: { end: CONNECTING.end, script: playConnecting },
   refused: { end: REFUSED.end, script: playRefused },
+  moves: { end: MOVES.end, script: playMoves },
 };
 
 /**
@@ -689,6 +723,71 @@ async function playRefused(win: BrowserWindow, at: Clock): Promise<void> {
   await at(REFUSED.edit);
   press(win, "Return");
   await at(REFUSED.end);
+}
+
+/**
+ * playMoves performs the moves story: a chart window carried across the sheet
+ * by its head, resized by its grip, stepped left with an arrow, and made
+ * taller with Shift and an arrow.
+ */
+async function playMoves(win: BrowserWindow, at: Clock): Promise<void> {
+  await win.webContents.executeJavaScript(`
+    (() => {
+      const pointer = document.createElement("div");
+      pointer.id = ${JSON.stringify(POINTER_ID)};
+      pointer.style.cssText = "position:fixed;z-index:${POINTER_ON_TOP};left:0;top:0;pointer-events:none;display:none";
+      pointer.innerHTML = ${JSON.stringify(POINTER)};
+      document.body.append(pointer);
+    })()
+  `);
+  await at(MOVES.carry);
+  await carry(win, ".chart .chart-title", CARRY);
+  await at(MOVES.stretch);
+  await carry(win, ".chart .chart-grip", STRETCH);
+  await at(MOVES.nudge);
+  await presses(win, "Left", NUDGES, ARROW_GAP);
+  await at(MOVES.grow);
+  for (let i = 0; i < NUDGES; i++) {
+    press(win, "Down", ["shift"]);
+    await sleep(ARROW_GAP);
+  }
+  await at(MOVES.end);
+}
+
+/** pointTo moves the pointer and its stand-in to (`x`, `y`). */
+function pointTo(
+  win: BrowserWindow,
+  x: number,
+  y: number,
+  modifiers: "leftbuttondown"[] = [],
+): void {
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y, modifiers }));
+  void win.webContents.executeJavaScript(`
+    Object.assign(document.getElementById(${JSON.stringify(POINTER_ID)}).style, {
+      display: "block",
+      transform: "translate(${x}px, ${y}px)",
+    });
+  `);
+}
+
+/** carry takes hold of what `selector` picks and drags it `by` px, eased as a hand goes. */
+async function carry(
+  win: BrowserWindow,
+  selector: string,
+  by: { x: number; y: number },
+): Promise<void> {
+  const { x, y } = await hover(win, selector);
+  pointTo(win, x, y);
+  await sleep(HOVER);
+  const left = { button: "left", clickCount: 1 } as const;
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseDown", x, y, ...left }));
+  for (let i = 1; i <= DRAG_MOVES; i++) {
+    const eased = 1 - (1 - i / DRAG_MOVES) ** 3;
+    pointTo(win, x + Math.round(by.x * eased), y + Math.round(by.y * eased), ["leftbuttondown"]);
+    await sleep(DRAG_MOVE_MS);
+  }
+  const to = { x: x + by.x, y: y + by.y };
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseUp", ...to, ...left }));
 }
 
 /**
