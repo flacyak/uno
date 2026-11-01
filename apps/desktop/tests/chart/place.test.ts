@@ -12,6 +12,7 @@ import {
   CASCADE_PX,
   DEFAULT_HEIGHT,
   DEFAULT_WIDTH,
+  dragged,
   fresh,
   HEAD_LEAST_WIDTH,
   MIN_HEIGHT,
@@ -22,6 +23,7 @@ import {
   placed,
   placeOf,
   stackHeight,
+  stretched,
   thin,
   tucked,
   tucks,
@@ -212,6 +214,37 @@ test("a move in a room the window fills keeps the place's other side", () => {
   const room = { w: DEFAULT_WIDTH, h: ROOM.h };
   const moved = pressed(place, press("ArrowDown"), room);
   expect(moved).toEqual({ ...place, y: NUDGE_PX / (room.h - DEFAULT_HEIGHT) });
+});
+
+test("a drag moves a window by the pointer's px, and keeps its size", () => {
+  expect(dragged(RECT, 30, -20, ROOM)).toEqual({ ...RECT, x: RECT.x + 30, y: RECT.y - 20 });
+});
+
+test("a drag past an edge stands the window on it", () => {
+  const far = ROOM.w + ROOM.h;
+  const right = ROOM.w - RECT.width;
+  const foot = ROOM.h - RECT.height;
+  expect(dragged(RECT, -far, -far, ROOM)).toEqual({ ...RECT, x: 0, y: 0 });
+  expect(dragged(RECT, far, far, ROOM)).toEqual({ ...RECT, x: right, y: foot });
+});
+
+test("a stretch resizes a window by the pointer's px, with its corner still", () => {
+  const wider = { ...RECT, width: RECT.width + 30, height: RECT.height - 20 };
+  expect(stretched(RECT, 30, -20, ROOM)).toEqual(wider);
+});
+
+test("a stretch stops at the least size and at the room's edge", () => {
+  const far = ROOM.w + ROOM.h;
+  const least = { ...RECT, width: MIN_WIDTH, height: MIN_HEIGHT };
+  expect(stretched(RECT, -far, -far, ROOM)).toEqual(least);
+  const most = { ...RECT, width: ROOM.w - RECT.x, height: ROOM.h - RECT.y };
+  expect(stretched(RECT, far, far, ROOM)).toEqual(most);
+});
+
+test("a stretch to the room's edge stores where it stopped, as a move past it would not", () => {
+  const far = ROOM.w + ROOM.h;
+  const rect = stretched(RECT, far, far, ROOM);
+  expect(placed(placeOf(rect, ROOM, PLACE), ROOM)).toEqual(rect);
 });
 
 test.each<[string, Room]>([
