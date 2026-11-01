@@ -15,7 +15,7 @@ import type { Chart, ChartPlace } from "@document";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
-import { MIN_HEIGHT, MIN_WIDTH, NUDGE_PX, placeOf, placed } from "@renderer/chart/place";
+import { MIN_HEIGHT, MIN_WIDTH, NUDGE_PX, dragged, placeOf, placed } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import { BARS, MOVED } from "./charted.ts";
@@ -42,6 +42,16 @@ const INSIDE: Chart = { ...BARS, id: "c2", place: MOVED };
 /** The name a workspace of several sources gives a window's source. */
 const SOURCE = "sales-q3";
 
+/** Where a pointer takes hold, and a step that keeps INSIDE inside ROOM. */
+const HOLD = { x: 500, y: 100 };
+const STEP = { x: -60, y: 40 };
+
+/** How far past the room a pointer can go. */
+const FAR = ROOM.w + ROOM.h;
+
+/** The pointer a test holds a window with. */
+const POINTER = 1;
+
 /** What the layer reads of a workspace's charts, for a test to change. */
 interface Model {
   all: readonly Chart[];
@@ -57,8 +67,10 @@ const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(
 const titles = (): Array<string | null> =>
   [...document.querySelectorAll(".chart-title")].map((title) => title.textContent);
 
-/** The first window. */
+/** The first window, and the part of it a pointer takes hold of. */
 const first = (): HTMLElement => windows()[0]!;
+const part = (selector: string): HTMLElement => first().querySelector<HTMLElement>(selector)!;
+const head = (): HTMLElement => part(".chart-head");
 
 /** Fires what a ResizeObserver on the sheet would. */
 let resized: () => void;
@@ -123,6 +135,25 @@ function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
+}
+
+/** Sends a pointer event to `at`, `x` and `y` px from where the pointer took hold. */
+function pointer(type: string, at: Element, x = 0, y = 0): PointerEvent {
+  const event = new PointerEvent(type, {
+    pointerId: POINTER,
+    clientX: HOLD.x + x,
+    clientY: HOLD.y + y,
+    bubbles: true,
+    cancelable: true,
+  });
+  at.dispatchEvent(event);
+  return event;
+}
+
+/** Takes hold of `zone` and carries it by STEP. */
+function carry(zone: HTMLElement): void {
+  pointer("pointerdown", zone);
+  pointer("pointermove", zone, STEP.x, STEP.y);
 }
 
 /** Sends a keydown to the first window. */
@@ -431,4 +462,14 @@ test("Escape gives the keys back to the grid, and goes no further", () => {
   expect(key("Escape").defaultPrevented).toBe(true);
   expect(leave).toHaveBeenCalledOnce();
   expect(shell).not.toHaveBeenCalled();
+});
+
+test("a window follows its head from where the pointer took hold, kept in the room", () => {
+  shown(INSIDE);
+  const from = placed(MOVED, ROOM);
+  carry(head());
+  expect(drawn(first())).toStrictEqual(dragged(from, STEP.x, STEP.y, ROOM));
+
+  pointer("pointermove", head(), -FAR, -FAR);
+  expect(drawn(first())).toStrictEqual({ ...from, x: 0, y: 0 });
 });
