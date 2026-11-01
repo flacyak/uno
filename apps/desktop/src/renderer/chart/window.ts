@@ -45,6 +45,8 @@ export interface Stage {
   move(id: string, place: ChartPlace): void;
   /** Stands every window where its chart says. */
   draw(): void;
+  /** Stands `box` over the other windows. */
+  raise(box: HTMLElement): void;
   /** Gives the keys back to the grid. */
   leave(): void;
 }
@@ -149,6 +151,7 @@ export class ChartWindow {
     this.box.addEventListener("pointercancel", (e) => this.lost(e));
     this.box.addEventListener("lostpointercapture", (e) => this.lost(e));
     this.box.addEventListener("keydown", (e) => this.key(e));
+    this.box.addEventListener("focusin", () => stage.raise(this.box));
   }
 
   /** show writes what `chart` says in the head, after `source` if it has one. */

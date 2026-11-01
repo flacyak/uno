@@ -48,6 +48,9 @@ const TOO_MANY_HEADS = Math.ceil(MIN_HEIGHT / HEAD) + 1;
 const FLUSH: Chart = BARS;
 const INSIDE: Chart = { ...BARS, id: "c2", place: MOVED };
 
+/** A chart over INSIDE. */
+const OVER: Chart = { ...INSIDE, id: "c3" };
+
 /** The name a workspace of several sources gives a window's source. */
 const SOURCE = "sales-q3";
 
@@ -701,4 +704,38 @@ test("Escape puts a resize back", () => {
   carry(grip());
   key("Escape");
   expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+});
+
+test("a window with the keys stands over the others, with the windows in their order", () => {
+  shown(INSIDE, OVER);
+  const [under, over] = windows() as [HTMLElement, HTMLElement];
+  const stack = (at: HTMLElement): number => Number(at.style.zIndex);
+
+  under.focus();
+  expect(stack(under)).toBeGreaterThan(stack(over));
+  over.focus();
+  expect(stack(over)).toBeGreaterThan(stack(under));
+  under.focus();
+  expect(stack(under)).toBeGreaterThan(stack(over));
+
+  expect(windows()).toStrictEqual([under, over]);
+  expect(document.activeElement).toBe(under);
+});
+
+test("a window stays over the others once it has given the keys back", () => {
+  const { layer } = shown(INSIDE, OVER);
+  const [under, over] = windows() as [HTMLElement, HTMLElement];
+  over.focus();
+  under.focus();
+  under.blur();
+  layer.draw();
+  expect(Number(under.style.zIndex)).toBeGreaterThan(Number(over.style.zIndex));
+});
+
+test("a button in a window raises it as well", () => {
+  shown(INSIDE, OVER);
+  const [under, over] = windows() as [HTMLElement, HTMLElement];
+  over.focus();
+  under.querySelector<HTMLElement>(".round-x")!.focus();
+  expect(Number(under.style.zIndex)).toBeGreaterThan(Number(over.style.zIndex));
 });

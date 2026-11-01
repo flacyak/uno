@@ -5,7 +5,7 @@
  *
  * Each window draws from its chart's place, in the room the layer leaves. A
  * resize of the room changes only what shows. A window reports back through
- * Stage, which stores its place for the next save.
+ * Stage, which stores its place for the next save and raises it.
  *
  * It is loaded with the first workspace that has charts.
  */
@@ -44,6 +44,8 @@ export class ChartLayer implements Stage {
   private charts: Shown = { all: [], sourceLabel: () => undefined, move: () => undefined };
   /** Fills the grid's scroller inside its bars, so the two boxes differ by a bar. */
   private readonly gauge = el("div", "chart-gauge");
+  /** The z-index the last window raised took. */
+  private raised = 0;
 
   constructor(
     private readonly root: HTMLElement,
@@ -81,6 +83,14 @@ export class ChartLayer implements Stage {
   /** move stores where chart `id`'s window stands, which the next draw shows. */
   move(id: string, place: ChartPlace): void {
     this.charts.move(id, place);
+  }
+
+  /**
+   * raise stands `box` over every other window, and it stays there once it has
+   * given up the keys. It goes by z-index, as moving the node would blur it.
+   */
+  raise(box: HTMLElement): void {
+    box.style.zIndex = `${++this.raised}`;
   }
 
   /**
@@ -135,7 +145,7 @@ export class ChartLayer implements Stage {
     if (bottom > 0) this.root.style.setProperty("--bar-bottom", `${bottom}px`);
   }
 
-  /** windowOf returns a chart's window, adding one on top if it has none. */
+  /** windowOf returns a chart's window, adding one over those never raised if it has none. */
   private windowOf(chart: Chart): ChartWindow {
     const held = this.windows.get(chart.id);
     if (held !== undefined) return held;

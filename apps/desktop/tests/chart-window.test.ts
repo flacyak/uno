@@ -31,6 +31,7 @@ const NO_LAYER: Stage = {
   room: () => ({ w: 0, h: 0 }),
   move: () => undefined,
   draw: () => undefined,
+  raise: () => undefined,
   leave: () => undefined,
 };
 

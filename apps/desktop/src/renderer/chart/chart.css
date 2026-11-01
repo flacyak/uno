@@ -112,10 +112,9 @@
 }
 
 /* The border says which window has the keys. It is the formula primary's mix,
- * which shows on a dark ground where --rule barely does. The window stands over
- * its neighbours, so all of the border shows. */
+ * which shows on a dark ground where --rule barely does. layer.ts raises the
+ * window over its neighbours, so all of the border shows. */
 .chart:focus-within {
-  z-index: 1;
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
