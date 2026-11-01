@@ -49,6 +49,9 @@ const STEP = { x: -60, y: 40 };
 /** How far past the room a pointer can go. */
 const FAR = ROOM.w + ROOM.h;
 
+/** The button that opens a context menu. */
+const SECONDARY = 2;
+
 /** The pointer a test holds a window with. */
 const POINTER = 1;
 
@@ -138,13 +141,20 @@ function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
 }
 
 /** Sends a pointer event to `at`, `x` and `y` px from where the pointer took hold. */
-function pointer(type: string, at: Element, x = 0, y = 0): PointerEvent {
+function pointer(
+  type: string,
+  at: Element,
+  x = 0,
+  y = 0,
+  more: PointerEventInit = {},
+): PointerEvent {
   const event = new PointerEvent(type, {
     pointerId: POINTER,
     clientX: HOLD.x + x,
     clientY: HOLD.y + y,
     bubbles: true,
     cancelable: true,
+    ...more,
   });
   at.dispatchEvent(event);
   return event;
@@ -472,4 +482,50 @@ test("a window follows its head from where the pointer took hold, kept in the ro
 
   pointer("pointermove", head(), -FAR, -FAR);
   expect(drawn(first())).toStrictEqual({ ...from, x: 0, y: 0 });
+});
+
+test("a drop stores where the window stands, once, and nothing before it", () => {
+  const { model } = shown(INSIDE);
+  const to = dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM);
+  carry(head());
+  expect(model.move).not.toHaveBeenCalled();
+
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  expect(model.move).toHaveBeenCalledOnce();
+  expect(model.all[0]!.place).toStrictEqual(placeOf(to, ROOM, MOVED));
+  expect(drawn(first()).x).toBeCloseTo(to.x);
+});
+
+test("a press takes the pointer and the keys, and leaves its mousedown to any popup", () => {
+  shown(INSIDE);
+  const focus = vi.spyOn(first(), "focus");
+  const press = pointer("pointerdown", head());
+  expect(press.defaultPrevented).toBe(false);
+  expect(head().hasPointerCapture(POINTER)).toBe(true);
+  expect(document.activeElement).toBe(first());
+  expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+});
+
+test("a click on a head stores nothing", () => {
+  const { model } = shown(INSIDE);
+  pointer("pointerdown", head());
+  pointer("pointerup", head());
+  expect(model.move).not.toHaveBeenCalled();
+});
+
+test("only the primary button takes hold of a window", () => {
+  shown(INSIDE);
+  pointer("pointerdown", head(), 0, 0, { button: SECONDARY });
+  pointer("pointermove", head(), STEP.x, STEP.y);
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+  expect(head().hasPointerCapture(POINTER)).toBe(false);
+});
+
+test("a head's buttons keep the pointer, and the window stays", () => {
+  shown(INSIDE);
+  const x = part(".round-x");
+  pointer("pointerdown", x);
+  pointer("pointermove", x, STEP.x, STEP.y);
+  expect(head().hasPointerCapture(POINTER)).toBe(false);
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
 });

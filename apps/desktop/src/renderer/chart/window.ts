@@ -25,6 +25,9 @@ const GRIP =
   '<path d="M10 3l-7 7M10 7l-3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
   "</svg>";
 
+/** A pointer's `button` for the left button, a finger or a pen's tip. */
+const PRIMARY_BUTTON = 0;
+
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
 let made = 0;
@@ -100,7 +103,10 @@ export class ChartWindow {
 
     const head = el("div", "col-head chart-head");
     head.append(this.title, x);
-    head.addEventListener("pointerdown", (e) => this.take(e, head));
+    head.addEventListener("pointerdown", (e) => {
+      const onButton = e.target instanceof Element && e.target.closest("button") !== null;
+      if (!onButton) this.take(e, head);
+    });
 
     const grip = el("span", "chart-grip");
     grip.innerHTML = GRIP;
@@ -145,6 +151,7 @@ export class ChartWindow {
    * mousedown reaches what closes an open menu or form.
    */
   private take(e: PointerEvent, zone: HTMLElement): void {
+    if (e.button !== PRIMARY_BUTTON) return;
     this.box.focus({ preventScroll: true });
     const room = this.stage.room();
     zone.setPointerCapture(e.pointerId);
@@ -160,12 +167,12 @@ export class ChartWindow {
     standAt(this.box, hold.to);
   }
 
-  /** drop stores where the pointer left the window. */
+  /** drop stores where the pointer left the window. A click stores nothing. */
   private drop(): void {
     if (this.hold === undefined) return;
-    const to = this.hold.to ?? this.hold.from;
+    const { to } = this.hold;
     this.hold = undefined;
-    this.store(to, this.stage.room());
+    if (to !== undefined) this.store(to, this.stage.room());
     this.stage.draw();
   }
 
