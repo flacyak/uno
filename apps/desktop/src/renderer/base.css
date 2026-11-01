@@ -36,6 +36,11 @@
    * Whatever reaches that corner ends this far short of it. */
   --corner: 34px;
 
+  /* A round ×, and how far in from its band it stands: an even share of what the
+   * band above a head's 1 px rule leaves. */
+  --x-size: 20px;
+  --x-inset: calc((var(--row-h) - 1px - var(--x-size)) / 2);
+
   /* Duration of the sources panel slide-in and the scrim fade. */
   --panel-in: 180ms;
 
@@ -191,18 +196,26 @@ body {
 
 /* The close button. The window is frameless, so it is fixed at the top right
  * over whichever head reaches that corner. Each head keeps `--corner` clear.
- * It stands in the middle of the band above a head's 1 px rule. */
+ * It stands in the middle of the band above a head's 1 px rule.
+ *
+ * This rule stays off the file's last place. web.css follows this file and hides
+ * it on the hosted page, and the minifier would merge the two rules into one the
+ * hosted build's test does not read as hiding the ×. */
 .win-close {
-  --size: 20px;
   position: fixed;
-  top: calc((var(--row-h) - 1px - var(--size)) / 2);
-  right: calc((var(--corner) - var(--size)) / 2);
+  top: var(--x-inset);
+  right: calc((var(--corner) - var(--x-size)) / 2);
   z-index: 5;
+}
+
+/* A round ×, on the window and on each chart. */
+.round-x {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  width: var(--size);
-  height: var(--size);
+  width: var(--x-size);
+  height: var(--x-size);
   padding: 0;
   color: var(--ink-2);
   background: var(--surface);
@@ -212,13 +225,13 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.win-close:hover {
+.round-x:hover {
   color: var(--surface);
   background: var(--flag);
   border-color: var(--flag);
 }
 
-.win-close:focus-visible {
+.round-x:focus-visible {
   outline: none;
   border-color: var(--accent);
 }
