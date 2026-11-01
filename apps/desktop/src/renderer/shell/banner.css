@@ -23,6 +23,7 @@
   flex: 1;
 }
 
+/* `nowrap` so the offer's words give way first where the banner is narrow. */
 .banner button {
   font: inherit;
   font-size: 12px;
@@ -32,6 +33,7 @@
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .banner button.primary {

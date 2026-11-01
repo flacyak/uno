@@ -12,6 +12,9 @@ import type { Check } from "./check.ts";
  */
 const DEEP_ROW = 2000;
 
+/** The sheet's width at 200% zoom in the run's window: half its 1,100 px, less the sidebar. */
+const ZOOMED_SHEET = 382;
+
 export const VIM_STYLE: Check[] = [
   {
     name: "Edit → Input → Vim-style reads keys the vim way, and is kept",
@@ -277,12 +280,18 @@ export const VIM_STYLE: Check[] = [
       // to 0, and the banner pads its right as its left. Said last, once ga
       // has run, so the checks after this one start where they expect.
       if (!document.querySelector("#panel").hidden) return "the panel is open";
-      const notNowEnds = banner.querySelector("button:last-child").getBoundingClientRect().right;
+      const notNow = banner.querySelector("button:last-child");
+      const notNowEnds = notNow.getBoundingClientRect().right;
       const closeLeft = document.querySelector("#close").getBoundingClientRect().left;
       document.documentElement.style.setProperty("--corner", "0px");
       const bare = getComputedStyle(banner).paddingRight;
       document.documentElement.style.removeProperty("--corner");
       const pads = getComputedStyle(banner).paddingLeft;
+      // Squeezed, the offer's words wrap and its buttons keep to one line.
+      banner.style.width = "${ZOOMED_SHEET}px";
+      const notNowHeight = notNow.offsetHeight;
+      const applyHeight = banner.querySelector("button.primary").offsetHeight;
+      banner.style.width = "";
 
       for (const key of ["4", "l", "g", "a"]) await press(key); // from revenue
       const region = () => document.querySelectorAll("tbody tr")[3].children[GUTTER + REGION].textContent;
@@ -301,6 +310,7 @@ export const VIM_STYLE: Check[] = [
       const none = text("#status-msg");
       if (none !== "nothing to apply") return "ga with no banner says " + JSON.stringify(none);
       if (notNowEnds > closeLeft) return "Not now runs to " + Math.round(notNowEnds) + ", past the × at " + Math.round(closeLeft);
+      if (notNowHeight !== applyHeight) return "squeezed, Not now is " + notNowHeight + "px tall beside Apply's " + applyHeight + "px";
       return bare === pads ? "" : "with --corner at 0 the banner pads its right " + bare + " and its left " + pads;
     `,
   },
