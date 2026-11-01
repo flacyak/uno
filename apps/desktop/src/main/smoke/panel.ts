@@ -22,6 +22,8 @@ export const PANEL: Check[] = [
       ${LINES}
       await press("B", { ctrlKey: true, shiftKey: true });
       if (document.querySelector("#panel").hidden) return "the panel is still closed";
+      // The panel takes focus as it starts to slide in, and the page stays put.
+      if (document.body.scrollLeft !== 0) return "the page scrolled " + document.body.scrollLeft + "px";
       const want = ["sales-q3.csv", "ads-q3.csv"];
       if (!(await until(() => want.every((n) => names(WORKSPACE).includes(n))))) {
         return "the panel lists " + JSON.stringify(names(WORKSPACE));

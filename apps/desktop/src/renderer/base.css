@@ -86,10 +86,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* `clip` so nothing scrolls the page: focus given to the sources panel as it
+ * slides in would scroll a box that only hides what overflows it. */
 #app {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: clip;
   background: var(--surface);
 }
 
