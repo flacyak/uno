@@ -7,9 +7,10 @@
 
 import { afterEach, expect, test } from "vite-plus/test";
 
-import type { Plot } from "@document";
+import type { Chart, Plot } from "@document";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { madeTitle } from "@renderer/chart/window";
+import { ChartWindow, madeTitle } from "@renderer/chart/window";
+import { BARS } from "./charted.ts";
 
 /** The columns the made titles below name. */
 const REGION = { col: 1, header: "region" };
@@ -17,8 +18,21 @@ const UNITS = { col: 4, header: "units" };
 const REVENUE = { col: 5, header: "revenue" };
 const BLANK = { col: 2, header: "" };
 
+/** A chart's window, showing `chart`. */
+function windowOf(chart: Chart): ChartWindow {
+  const made = new ChartWindow();
+  made.show(chart);
+  document.body.append(made.box);
+  return made;
+}
+
+function title(box: HTMLElement): HTMLElement {
+  return box.querySelector<HTMLElement>(".chart-title")!;
+}
+
 afterEach(() => {
   void setLocale(baseLocale, { reload: false });
+  document.body.replaceChildren();
 });
 
 test.each<[string, string, Plot]>([
@@ -41,4 +55,10 @@ test.each<[string, string, Plot]>([
   expect(madeTitle(plot)).toBe(en);
   void setLocale("es", { reload: false });
   expect(madeTitle(plot)).toBe(es);
+});
+
+test("the head says the title the plot makes, in full on the pointer too", () => {
+  const { box } = windowOf(BARS);
+  expect(title(box).textContent).toBe(madeTitle(BARS.plot));
+  expect(title(box).title).toBe(madeTitle(BARS.plot));
 });

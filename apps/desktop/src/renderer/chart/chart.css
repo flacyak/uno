@@ -46,9 +46,11 @@
   visibility: hidden;
 }
 
-/* The dialogs' box (formula.css, settings.css). */
+/* The dialogs' box (formula.css, settings.css). The radius clips the head. */
 .chart {
   position: absolute;
+  display: flex;
+  flex-direction: column;
   overflow: clip;
   background: var(--surface);
   border: 1px solid var(--rule);
@@ -85,6 +87,21 @@
 .charts.tucked .chart:not(:last-child) {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
+}
+
+/* A column's head, whose drag region would take the pointer from the chart. */
+.chart-head {
+  gap: 8px;
+  padding: 0 0 0 10px;
+  -webkit-app-region: no-drag;
+}
+
+.chart-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* In the grid's scroller, it fills what the bars leave and lets the pointer by. */
