@@ -11,17 +11,21 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { beforeAll, expect, test } from "vite-plus/test";
+import { beforeAll, expect, test, vi } from "vite-plus/test";
 
 import { readContainer } from "@document";
 import type { CarriedChart, Chart } from "@document";
 import { UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
+import { NUDGE_PX, placeOf, placed } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
 import { ADS, BARS, MOVED, SALES, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, FIXTURE, SECOND, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
+
+/** The digits a save keeps of a place's fractions: core's PLACE_DIGITS. */
+const SAVED_DIGITS = 4;
 
 const page = domPage();
 let shell: Shell;
@@ -186,6 +190,22 @@ test("Ctrl+S after a move writes the new place, with no unsaved mark", async () 
   expect(message()).toBe(m.saved_path({ path }));
   const back = readContainer(basename(path), await readFile(path));
   expect(back.charts).toStrictEqual([{ ...BARS, place: MOVED }]);
+  expect(document.querySelector(".ws.open .dirty")).toBeNull();
+});
+
+test("an arrow on a window moves it with no unsaved mark, and a save writes the place", async () => {
+  const path = await open("nudged.uno", [BARS]);
+  const room = { w: 1000, h: 600 };
+  vi.spyOn(layer(), "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, room.w, room.h));
+  const at = placed(BARS.place, room);
+  const box = document.querySelector<HTMLElement>(".chart")!;
+  box.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+  expect(shell.unsaved).toBe(false);
+
+  await shell.save();
+  const back = readContainer(basename(path), await readFile(path));
+  const { x } = placeOf({ ...at, x: at.x - NUDGE_PX }, room, BARS.place);
+  expect(back.charts?.[0]?.place.x).toBeCloseTo(x, SAVED_DIGITS);
   expect(document.querySelector(".ws.open .dirty")).toBeNull();
 });
 

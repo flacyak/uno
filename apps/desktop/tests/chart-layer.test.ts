@@ -398,3 +398,37 @@ test("an arrow moves a window and stores it at once, and Shift and an arrow resi
   expect(drawn(first()).height).toBe(from.height + NUDGE_PX);
   expect(drawn(first()).width).toBe(from.width);
 });
+
+test("an arrow stops at the window, and a chord goes on to the shell", () => {
+  shown(INSIDE);
+  const shell = vi.fn();
+  document.body.addEventListener("keydown", shell);
+  expect(key("ArrowLeft").defaultPrevented).toBe(true);
+  expect(shell).not.toHaveBeenCalled();
+
+  expect(key("ArrowLeft", { ctrlKey: true }).defaultPrevented).toBe(false);
+  expect(key("a").defaultPrevented).toBe(false);
+  expect(shell).toHaveBeenCalledTimes(2);
+});
+
+test("each arrow steps on from where the last one stored", () => {
+  shown(INSIDE);
+  key("ArrowRight");
+  key("ArrowRight");
+  expect(drawn(first()).x).toBeCloseTo(placed(MOVED, ROOM).x + 2 * NUDGE_PX);
+});
+
+test("arrows held past the room's edge leave the window on it", () => {
+  const { model } = shown({ ...INSIDE, place: { ...MOVED, x: 1 } });
+  key("ArrowRight");
+  expect(model.all[0]!.place.x).toBe(1);
+});
+
+test("Escape gives the keys back to the grid, and goes no further", () => {
+  shown(INSIDE);
+  const shell = vi.fn();
+  document.body.addEventListener("keydown", shell);
+  expect(key("Escape").defaultPrevented).toBe(true);
+  expect(leave).toHaveBeenCalledOnce();
+  expect(shell).not.toHaveBeenCalled();
+});
