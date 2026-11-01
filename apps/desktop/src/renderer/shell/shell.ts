@@ -19,6 +19,7 @@ import type { SingleRef } from "@store";
 import { s3Location } from "@store/s3";
 
 import { m } from "@paraglide/messages";
+import type { Charts } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
 import type { ShellAction } from "@renderer/grid/rows";
 import type { Host } from "@shared/host";
@@ -423,6 +424,11 @@ export class Shell {
     return this.workspace?.dirty === true;
   }
 
+  /** The open workspace's charts. */
+  get charts(): Charts | undefined {
+    return this.workspace?.charts;
+  }
+
   /**
    * quit closes the window, after any save in flight. Over unsaved edits the
    * first × warns.
@@ -713,7 +719,7 @@ export class Shell {
       this.content.hidden = false;
       this.restore(w, grid);
       grid.focus();
-      this.say("");
+      this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.
@@ -933,14 +939,15 @@ export class Shell {
   }
 
   /**
-   * remove takes a source out of the workspace. One with edits is removed on
-   * the second ×.
+   * remove takes a source out of the workspace. One with edits or charts is
+   * removed on the second ×.
    */
   private async remove(tab: Tab): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
-    if (tab.edited > 0 && this.warned !== tab) {
-      this.say(m.source_has_edits({ name: tab.name, count: tab.edited }), true);
+    const warning = removing(tab, w.charts.leaveWith(tab.id));
+    if (warning !== undefined && this.warned !== tab) {
+      this.say(warning, true);
       this.warned = tab;
       return;
     }
@@ -1324,6 +1331,17 @@ export class Shell {
     this.warned = undefined;
     this.status.say(text, isError);
   }
+}
+
+/**
+ * removing returns what the first × on `tab` warns of, or undefined for a tab
+ * with no edits and no charts, which goes on the first.
+ */
+function removing(tab: Tab, charted: boolean): string | undefined {
+  const { name, edited: count } = tab;
+  if (!charted) return count > 0 ? m.source_has_edits({ name, count }) : undefined;
+  const charts = m.source_takes_charts({ name });
+  return count > 0 ? `${m.edits_count({ count })} · ${charts}` : charts;
 }
 
 /** refAt makes a SourceRef for a path. */

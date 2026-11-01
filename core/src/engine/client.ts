@@ -53,6 +53,8 @@ export interface Added {
   /** The ids of the charts it carries but cannot show, which a new chart
    * cannot take. */
   carriedIds: string[];
+  /** The sources of those charts, which take them when they go. */
+  carriedOver: string[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
@@ -101,6 +103,7 @@ export class Engine {
         cells: added.cells ?? [],
         charts: added.charts ?? [],
         carriedIds: added.carriedIds ?? [],
+        carriedOver: added.carriedOver ?? [],
         chartsNote: added.chartsNote,
       };
     } finally {

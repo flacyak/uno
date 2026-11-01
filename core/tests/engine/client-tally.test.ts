@@ -36,6 +36,7 @@ const ADDED: Opening = {
   cells: [],
   charts: [],
   carriedIds: [],
+  carriedOver: [],
 };
 
 /** told is the reply telling CHART's tally over `source` at `generation`. */
@@ -87,5 +88,10 @@ test("a tally taken before the handle's generation, or over a source the engine 
 
 test('an open by an engine from before charts names no cells and no charts', async () => {
   const added = await answering(OLDER).engine.open({ name: NAME, path: NAME });
-  expect(added).toMatchObject({ cells: [], charts: [], carriedIds: [] });
+  expect(added).toMatchObject({
+    cells: [],
+    charts: [],
+    carriedIds: [],
+    carriedOver: [],
+  });
 });

@@ -182,6 +182,7 @@
       }
     }
   ],
+  "source_takes_charts": "× de novo para remover {name} e seus gráficos",
   "unsaved_edits_key_again": "edições não salvas · Ctrl+S primeiro, ou {key} de novo para descartá-las",
   "unsaved_edits_click_again": "edições não salvas · Ctrl+S primeiro, ou clique de novo para descartá-las",
   "unsaved_edits_open_again": "edições não salvas · Ctrl+S primeiro, ou abra de novo para descartá-las",

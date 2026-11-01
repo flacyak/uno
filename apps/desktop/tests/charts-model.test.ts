@@ -7,10 +7,12 @@ import { expect, test } from "vite-plus/test";
 
 import { connect } from "@core-tests/engine/harness";
 import { readContainer } from "@document";
-import type { Chart } from "@document";
+import type { Chart, ChartColumn } from "@document";
 import type { SourceRef } from "@engine";
+import { REGION, UNITS } from "@main/smoke/fixture";
+import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
-import { BARS, SALES, unoOf } from "./charted.ts";
+import { ADS, BARS, SALES, unoOf } from "./charted.ts";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
 /** The sales export alone, and the name a .uno goes by here. */
@@ -171,5 +173,91 @@ test("a new chart takes no id the workspace holds or carries, whatever its name"
     expect(made.map((c) => c.id)).toStrictEqual(["c4", "c5"]);
     await w.charts.remove("c5");
     expect((await w.charts.add(BARS)).id).toBe("c6");
+  });
+});
+
+test("a just-opened file is clean", async () => {
+  await opened(FILE, async (w) => expect(w.dirty).toBe(false));
+});
+
+test("adding, removing, and changing a chart's source, kind, columns, title or schedule mark it unsaved", async () => {
+  const by: ChartColumn = { col: REGION, header: "region" };
+  const units: ChartColumn = { col: UNITS, header: "units" };
+  const scatter: Chart = { ...BARS, id: "c2", plot: { t: "scatter", x: by, y: units } };
+  const changes: ReadonlyArray<readonly [Chart, Partial<Shown>]> = [
+    [BARS, { title: "Rows" }],
+    [BARS, { refresh: 5 }],
+    [BARS, { source: ADS }],
+    [BARS, { plot: { t: "pie", by } }],
+    [BARS, { plot: { t: "bars", by: units } }],
+    [BARS, { plot: { t: "bars", by: { ...by, header: "area" } } }],
+    [BARS, { plot: { t: "bars", by, sum: units } }],
+    [scatter, { plot: { t: "scatter", x: by, y: by } }],
+  ];
+  await opened(uno(unoOf([BARS, scatter])), async (w) => {
+    for (const [chart, shown] of changes) {
+      await w.charts.change(chart.id, shown);
+      expect(w.dirty, JSON.stringify(shown)).toBe(true);
+      await w.charts.change(chart.id, chart);
+      expect(w.dirty, "as it was saved").toBe(false);
+    }
+    const added = await w.charts.add(BARS);
+    expect(w.dirty, "a new chart").toBe(true);
+    await w.charts.remove(added.id);
+    expect(w.dirty, "the new chart gone").toBe(false);
+    await w.charts.remove(BARS.id);
+    expect(w.dirty, "a saved chart gone").toBe(true);
+  });
+});
+
+test("a save clears the mark only once the file is written", async () => {
+  await opened(FILE, async (w) => {
+    await w.charts.add(BARS);
+    // A failed host.save: the bytes were made, and saved() never comes.
+    await bytesOf(w);
+    expect(w.dirty).toBe(true);
+    await bytesOf(w);
+    w.saved(UNO);
+    expect(w.dirty).toBe(false);
+  });
+});
+
+test("a chart waiting on the engine counts as unsaved", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const changed = w.charts.change(BARS.id, { title: BARS.title });
+    expect(w.dirty, "on its way").toBe(true);
+    await changed;
+    expect(w.dirty, "landed, and the same as saved").toBe(false);
+  });
+});
+
+test("a save records the chart sent before it, and leaves the one sent after it unsaved", async () => {
+  await opened(FILE, async (w) => {
+    const save = (): Promise<void> => bytesOf(w).then(() => w.saved(UNO));
+    const [made] = await Promise.all([w.charts.add(BARS), save()]);
+    expect(w.dirty, "written by the save").toBe(false);
+
+    const [, after] = await Promise.all([save(), w.charts.add(BARS)]);
+    expect(w.dirty, "sent after the save").toBe(true);
+    await w.charts.remove(after.id);
+    expect(w.dirty, "gone again").toBe(false);
+
+    const refused = expect(w.charts.change(made.id, { source: "gone" })).rejects.toThrow();
+    await Promise.all([refused, save()]);
+    expect(w.dirty, "refused before the save").toBe(false);
+  });
+});
+
+test("a chart that lands while the host writes the file stays unsaved", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    await bytesOf(w);
+    const added = await w.charts.add(BARS);
+    w.saved(UNO);
+    expect(w.dirty, "added since the bytes").toBe(true);
+
+    await bytesOf(w);
+    await w.charts.remove(added.id);
+    w.saved(UNO);
+    expect(w.dirty, "removed since the bytes").toBe(true);
   });
 });

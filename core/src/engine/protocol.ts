@@ -136,6 +136,9 @@ export interface Opening {
   /** The ids of the charts it carries but cannot show, which a new chart
    * cannot take. Empty otherwise. */
   carriedIds?: string[];
+  /** The sources of those charts, which take them when they go. Empty
+   * otherwise. */
+  carriedOver?: string[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
