@@ -11,7 +11,7 @@ import type { Peeked, SourceRef } from "@engine";
 import type { Entry, Listing } from "@store";
 
 import type { Arriving, Connection, Listings, Open } from "@renderer/sources";
-import { Sources, joinedName, stateOf, trailTo } from "@renderer/sources";
+import { Sources, joinedName, stateOf, stemOf, trailTo } from "@renderer/sources";
 
 const ACME: Connection = {
   name: "acme-exports",
@@ -426,6 +426,13 @@ test("the buttons offer nothing, then one file, then each file or all of them as
       refs: [{ name: "q3.csv", parts: refs.map((ref) => ({ ref })), header: "first" }],
     },
   ]);
+});
+
+test("a file's stem is its name up to the last dot, and a dotfile's is all of it", () => {
+  expect(stemOf("sales-q3.csv")).toBe("sales-q3");
+  expect(stemOf("sales.2025.q3.csv")).toBe("sales.2025.q3");
+  expect(stemOf("exports")).toBe("exports");
+  expect(stemOf(".csv")).toBe(".csv");
 });
 
 test("files added as one are named for what their names share, back to a whole word", () => {

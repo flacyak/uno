@@ -94,6 +94,8 @@ export class Charts {
     private readonly writing: (write: Promise<void>) => Promise<void>,
     /** The state of a source, which a chart over it shows. */
     private readonly sourceState: (source: string) => State,
+    /** What a chart's head calls a source, when it has to name one at all. */
+    readonly sourceLabel: (source: string) => string | undefined,
   ) {}
 
   /** Takes the charts an open found, which count as saved, and the ids and
