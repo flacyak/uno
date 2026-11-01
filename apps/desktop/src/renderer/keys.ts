@@ -26,6 +26,18 @@ export interface Press {
   repeat: boolean;
 }
 
+/** pressOf gives the fields of `e` the input strategies read. */
+export function pressOf(e: KeyboardEvent): Press {
+  return {
+    key: e.key,
+    ctrl: e.ctrlKey,
+    alt: e.altKey,
+    meta: e.metaKey,
+    shift: e.shiftKey,
+    repeat: e.repeat,
+  };
+}
+
 /** Keys typed so far that are waiting for more: a count and a prefix key. */
 export interface Pending {
   /** The count's digits, or "" for none. */
