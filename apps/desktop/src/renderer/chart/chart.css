@@ -89,6 +89,18 @@
   border-bottom-right-radius: 0;
 }
 
+/* The border says which window has the keys. It is the formula primary's mix,
+ * which shows on a dark ground where --rule barely does. The window stands over
+ * its neighbours, so all of the border shows. */
+.chart:focus-within {
+  z-index: 1;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.chart:focus {
+  outline: none;
+}
+
 /* A column's head, whose drag region would take the pointer from the chart. */
 .chart-head {
   gap: 8px;
