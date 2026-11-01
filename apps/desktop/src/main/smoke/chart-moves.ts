@@ -4,7 +4,7 @@
  * size holds and the room's edges stop it, and Escape puts a drag back. The
  * arrows step it, and Escape gives the grid its keys back. A press raises it.
  * None of it marks the workspace unsaved, and Ctrl+S writes the places, which
- * smoke.js reads back.
+ * smoke.js reads back. A finger gets 24 px at the zones and drags a head too.
  *
  * They follow CHARTS, so the first window stands at the top of the room's right
  * edge and the second at its foot, and each picks up where the last left it.
@@ -56,6 +56,12 @@ const ROW_BELOW = 12;
 
 /** The zone a finger gets at a window's edges and grip, as the design asks. */
 const FINGER = 24;
+
+/** How many presses of an arrow take a finger's drag back across. */
+const STEPS_BACK = 2;
+
+/** A finger's drag, up and left from the room's foot right. */
+const FINGER_STEP = { x: -STEPS_BACK * NUDGE_PX, y: -40 };
 
 /** A press of `keyCode` with `modifiers`. */
 function pressing(keyCode: string, modifiers: Array<"shift" | "control"> = []): readonly Input[] {
@@ -256,6 +262,30 @@ export const CHART_MOVES: Check[] = [
     script: `
       ${MOVES}
       return wait({ bottom: room().bottom - ${NUDGE_PX}, height: ${MIN_HEIGHT} }, "a press");
+    `,
+  },
+  {
+    // Held to its least size by the checks above, so a step keeps inside the room.
+    // A pan would cancel the pointer and put the window back.
+    name: "a finger drags a window by its head, where it would pan the page",
+    touch: { selector: HEAD, by: FINGER_STEP },
+    script: `
+      ${MOVES}
+      const was = { right: room().right, bottom: room().bottom - ${NUDGE_PX} };
+      const right = was.right + ${FINGER_STEP.x};
+      return wait({ right, bottom: was.bottom + ${FINGER_STEP.y} }, "a finger's move");
+    `,
+  },
+  {
+    name: "a finger's drop leaves a window for the keys to step back",
+    input: {
+      events: Array.from({ length: STEPS_BACK }).flatMap(() => pressing("Right")),
+      through: true,
+    },
+    script: `
+      ${MOVES}
+      const right = room().right + ${FINGER_STEP.x + STEPS_BACK * NUDGE_PX};
+      return wait({ right, bottom: room().bottom + ${FINGER_STEP.y - NUDGE_PX} }, "a press");
     `,
   },
   {

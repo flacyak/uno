@@ -8,8 +8,9 @@
  * X11.
  *
  * What still reaches the page is what main sends it: scripts, the menu's
- * messages, and sendInputEvent inside `through`. Menu accelerators are
- * handled by the main process, so those still land.
+ * messages, sendInputEvent inside `through`, and DevTools input inside
+ * `throughAsync`. Menu accelerators are handled by the main process, so those
+ * still land.
  */
 
 import type { BrowserWindow } from "electron";
@@ -43,5 +44,21 @@ export function through(win: BrowserWindow, send: () => void): void {
     send();
   } finally {
     void devtools.sendCommand("Input.setIgnoreInputEvents", { ignore: true });
+  }
+}
+
+/**
+ * throughAsync is `through` for sends that have to be awaited. DevTools delivers
+ * a touch after it answers, later than `through` puts the ignore back, so the
+ * ignore stays lifted until `send` settles. A person's input can land in that
+ * time, so keep `send` to a few round trips.
+ */
+export async function throughAsync(win: BrowserWindow, send: () => Promise<void>): Promise<void> {
+  const devtools = win.webContents.debugger;
+  await devtools.sendCommand("Input.setIgnoreInputEvents", { ignore: false });
+  try {
+    await send();
+  } finally {
+    await devtools.sendCommand("Input.setIgnoreInputEvents", { ignore: true });
   }
 }

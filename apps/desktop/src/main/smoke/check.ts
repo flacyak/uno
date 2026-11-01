@@ -41,6 +41,8 @@ export interface Check {
    * `held` the button stays down, for a later check to let go of.
    */
   drag?: { selector: string; by: { x: number; y: number }; held?: boolean };
+  /** The same drag with a finger. No run has a touch screen, so DevTools sends it. */
+  touch?: { selector: string; by: { x: number; y: number } };
   /**
    * The window's zoom and width, set before the check runs, the way the View
    * menu and a drag of its edge set them. What is left out goes back to what

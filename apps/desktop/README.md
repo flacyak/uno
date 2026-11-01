@@ -454,7 +454,9 @@ The window it drives ignores the desktop. Keys, clicks and the wheel from the
 window system never reach the page, and the page keeps the focus when someone
 switches to another window. Keep working while it runs. A few of the checks send
 input down the window system's path, one dropped and the rest let through. The
-menu's accelerators are the main process's, so one of those still lands. `vp run preview` runs in the same
+menu's accelerators are the main process's, so one of those still lands. The
+finger check lifts the ignore across a few DevTools sends, so a key struck just
+then can land too. `vp run preview` runs in the same
 mode, and `src/main/driven.ts` has the details.
 
 The run starts Electron with a `--user-data-dir` of its own under `out/smoke/`,
