@@ -4,7 +4,8 @@
  * size holds and the room's edges stop it, and Escape puts a drag back. The
  * arrows step it, and Escape gives the grid its keys back. A press raises it.
  * None of it marks the workspace unsaved, and Ctrl+S writes the places, which
- * smoke.js reads back. A finger gets 24 px at the zones and drags a head too.
+ * smoke.js reads back. A finger gets 24 px at the zones and drags a head too, and
+ * a tucked head stays put.
  *
  * They follow CHARTS, so the first window stands at the top of the room's right
  * edge and the second at its foot, and each picks up where the last left it.
@@ -62,6 +63,12 @@ const STEPS_BACK = 2;
 
 /** A finger's drag, up and left from the room's foot right. */
 const FINGER_STEP = { x: -STEPS_BACK * NUDGE_PX, y: -40 };
+
+/** A sheet too short to show a window whole. */
+const SHORT_SHEET = 80;
+
+/** A point this far up from a window's foot stands in a 6 px edge zone. */
+const EDGE_REACH = 3;
 
 /** A press of `keyCode` with `modifiers`. */
 function pressing(keyCode: string, modifiers: Array<"shift" | "control"> = []): readonly Input[] {
@@ -286,6 +293,38 @@ export const CHART_MOVES: Check[] = [
       ${MOVES}
       const right = room().right + ${FINGER_STEP.x + STEPS_BACK * NUDGE_PX};
       return wait({ right, bottom: room().bottom + ${FINGER_STEP.y - NUDGE_PX} }, "a press");
+    `,
+  },
+  {
+    // The sheet is held short by hand: main keeps the window taller than this. The
+    // grid takes the keys, so the next check can see its press land.
+    name: "a tucked head shows no way to move it, and its foot takes no resize",
+    input: { events: pressing("Escape"), through: true },
+    script: `
+      ${MOVES}
+      const grid = document.querySelector("#content");
+      if (!(await until(() => document.activeElement === grid))) return "the keys are in #" + document.activeElement?.id;
+      document.querySelector(".win-sheet").style.maxHeight = ${SHORT_SHEET} + "px";
+      if (!(await until(heads))) return "the windows stand at " + windows().map(edges).join(" and ");
+      const { left, right, bottom } = first();
+      const hit = document.elementFromPoint((left + right) / 2, bottom - ${EDGE_REACH});
+      if (hit.closest(".chart-head") === null) return "the head's foot is " + hit.className;
+      const { cursor } = getComputedStyle(hit.closest(".chart-head"));
+      return cursor === "default" ? "" : "a tucked head shows " + cursor;
+    `,
+  },
+  {
+    name: "a drag on a tucked head leaves it and takes the keys, and it goes back to its place",
+    drag: { selector: HEAD, by: CARRY },
+    script: `
+      ${MOVES}
+      const box = document.querySelector(".chart");
+      const keys = await until(() => document.activeElement === box);
+      const stayed = stands({ top: room().top });
+      document.querySelector(".win-sheet").style.maxHeight = "";
+      if (!keys) return "the keys are in #" + document.activeElement?.id;
+      if (!stayed) return "the tucked window went to " + reads();
+      return wait({ width: ${MIN_WIDTH + NUDGE_PX}, height: ${MIN_HEIGHT} }, "tucking");
     `,
   },
   {
