@@ -53,6 +53,9 @@ const CLICK_AND_ARROW: readonly Input[] = [
 /** A sheet that leaves a room under a head's least width, past the 12 px bar. */
 const THIN_SHEET = 40;
 
+/** A sheet too short for two heads, which take 59 px under the header row. */
+const SHORT_SHEET = 80;
+
 /** What a window copies from the settings menu. */
 const BOX_LOOK = [
   "background-color",
@@ -328,6 +331,25 @@ export const CHARTS: Check[] = [
       if (!thin) return "a window stands at " + edges(windows()[0]) + " in a room at " + edges(room());
       if (at.closest(".chart") !== null) return "a hidden window takes the pointer";
       return (await until(() => shows() && !heads())) ? "" : "the windows stayed hidden";
+    `,
+  },
+  {
+    // The sheet is held short by hand: main keeps the window taller than this.
+    name: "tucked heads a short room cannot hold stop at its foot, and leave the scrollbar the pointer",
+    script: `
+      ${GEOMETRY}
+      const sheet = document.querySelector(".win-sheet");
+      const under = () => {
+        const [, foot] = windows();
+        return document.elementFromPoint((foot.left + foot.right) / 2, room().bottom + 1);
+      };
+      sheet.style.maxHeight = ${SHORT_SHEET} + "px";
+      const stack = await until(() => heads() && windows()[1].bottom > room().bottom);
+      const held = under();
+      sheet.style.maxHeight = "";
+      if (!stack) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+      if (held.closest(".chart") !== null) return "a head lies over the scrollbar";
+      return (await until(() => !heads())) ? "" : "the windows stayed tucked";
     `,
   },
 ];

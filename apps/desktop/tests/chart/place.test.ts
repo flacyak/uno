@@ -18,6 +18,7 @@ import {
   MIN_WIDTH,
   nudged,
   NUDGE_PX,
+  overfull,
   placed,
   placeOf,
   thin,
@@ -120,6 +121,14 @@ test("a room tucks from one px under the least size, as a 0 px or zoomed sheet d
   expect(tucks({ w: MIN_WIDTH - 1, h: MIN_HEIGHT })).toBe(true);
   expect(tucks({ w: MIN_WIDTH, h: MIN_HEIGHT - 1 })).toBe(true);
   for (const w of [0, BOTH_SIDES_OPEN, ZOOMED]) expect(tucks({ w, h: ROOM.h })).toBe(true);
+});
+
+test("a room holds tucked heads up to its foot", () => {
+  const count = 3;
+  const stack = count * HEAD + BORDER;
+  expect(overfull(count, HEAD, BORDER, { w: ROOM.w, h: stack })).toBe(false);
+  expect(overfull(count, HEAD, BORDER, { w: ROOM.w, h: stack - 1 })).toBe(true);
+  expect(overfull(0, HEAD, BORDER, { w: 0, h: 0 })).toBe(false);
 });
 
 test("a room shows a head from the head's least width up", () => {
