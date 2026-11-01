@@ -2,8 +2,8 @@
  * @fileoverview One workspace's charts. The engine keeps the records a save
  * writes, and this model mirrors them for the windows over the sheet. A change
  * shows at once and goes through the engine, and a refusal puts back what the
- * engine holds. It makes each new chart's id, and knows which changes a save
- * has yet to record.
+ * engine holds. It makes each new chart's id, knows which changes a save has
+ * yet to record, and holds what each chart last heard from its source.
  *
  * This file is plain logic, so tests run it directly.
  */
@@ -11,10 +11,31 @@
 import { isPlace } from "@document";
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { Refusal } from "@engine";
-import type { Added, Engine, Place } from "@engine";
+import type { Added, Engine, GroupsTally, Place, SampleTally, Tally } from "@engine";
+
+import type { State } from "./sources.ts";
 
 /** What a person changes in a chart's form. */
 export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
+
+/** The tallies of one plot over one source, as a chart heard them. */
+interface Tallied {
+  source: string;
+  latest: Tally;
+  complete: GroupsTally | SampleTally | undefined;
+}
+
+/** What a chart's window draws from. */
+export interface Heard {
+  /** The state of the chart's source. A source that is missing or waits on its
+   * bucket posts no tally until it is pointed at a file. A source the workspace
+   * does not hold reads as missing. */
+  state: State;
+  /** The latest tally of what the chart shows, once one has come. */
+  latest: Tally | undefined;
+  /** The last complete one, which stays until the next one completes. */
+  complete: GroupsTally | SampleTally | undefined;
+}
 
 /** The columns a plot reads, in the order its kind names them. */
 function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
@@ -40,6 +61,11 @@ function sameShown(a: Chart, b: Chart): boolean {
   );
 }
 
+/** Returns whether `held` are tallies of `plot` over `source`. */
+function reads(held: Tallied | undefined, source: string, plot: Plot): held is Tallied {
+  return held?.source === source && samePlot(held.latest.plot, plot);
+}
+
 export class Charts {
   /** The charts by id, oldest first, as the engine answered for them. */
   private readonly answered = new Map<string, Chart>();
@@ -48,6 +74,9 @@ export class Charts {
   private readonly sent = new Map<string, Chart | undefined>();
   /** Where each moved window stands, over its chart's record. */
   private readonly moved = new Map<string, ChartPlace>();
+  /** What each chart last heard. It stays through a change, so a refusal
+   * gives it back. */
+  private readonly tallied = new Map<string, Tallied>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The sources of the charts this workspace carries and cannot show. */
@@ -63,6 +92,8 @@ export class Charts {
     private readonly engine: Engine,
     /** Counts a request as a write until the engine answers it. */
     private readonly writing: (write: Promise<void>) => Promise<void>,
+    /** The state of a source, which a chart over it shows. */
+    private readonly sourceState: (source: string) => State,
   ) {}
 
   /** Takes the charts an open found, which count as saved, and the ids and
@@ -139,10 +170,38 @@ export class Charts {
     if (isPlace(place)) this.moved.set(id, place);
   }
 
-  /** Forgets the charts over a source, which left the engine with it. */
+  /** Takes a tally of chart `id` from `source`. The last complete tally stays
+   * until the next, while the plot and the source are the same. */
+  hear(source: string, id: string, tally: Tally): void {
+    const was = this.tallied.get(id);
+    const kept = reads(was, source, tally.plot) ? was.complete : undefined;
+    const complete = tally.t !== "unread" && tally.coverage.complete ? tally : kept;
+    this.tallied.set(id, { source, latest: tally, complete });
+  }
+
+  /** What chart `id`'s window draws from, or undefined for a chart that has
+   * gone. It leaves out tallies of another plot or source, since a chart shows
+   * a change at once, and a view posts for what it holds until the change
+   * reaches it. */
+  heard(id: string): Heard | undefined {
+    const chart = this.all.find((c) => c.id === id);
+    if (chart === undefined) return undefined;
+    const held = this.tallied.get(id);
+    const current = reads(held, chart.source, chart.plot);
+    return {
+      state: this.sourceState(chart.source),
+      latest: current ? held.latest : undefined,
+      complete: current ? held.complete : undefined,
+    };
+  }
+
+  /** Forgets the charts over a source, which left the engine with it, and
+   * their tallies. */
   dropSource(source: string): void {
     for (const chart of this.answered.values()) {
-      if (chart.source === source) this.answered.delete(chart.id);
+      if (chart.source !== source) continue;
+      this.answered.delete(chart.id);
+      this.tallied.delete(chart.id);
     }
     this.carrying.delete(source);
   }
@@ -172,8 +231,12 @@ export class Charts {
     this.sent.set(id, record);
     try {
       await this.writing(request);
-      if (record === undefined) this.answered.delete(id);
-      else this.answered.set(id, record);
+      if (record === undefined) {
+        this.answered.delete(id);
+        this.tallied.delete(id);
+      } else {
+        this.answered.set(id, record);
+      }
     } finally {
       if (this.sent.get(id) === record) this.sent.delete(id);
     }

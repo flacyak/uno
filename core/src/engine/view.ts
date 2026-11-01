@@ -792,9 +792,12 @@ export class View {
     this.tally();
   }
 
-  /** unchart stops tallying the chart with `id`. */
+  /** unchart stops tallying the chart with `id`, and drops any tally of it
+   * held for announce, so a chart moved off an unannounced view does not hear
+   * from it after its new source. */
   unchart(id: string): void {
     this.tallies.detach(id);
+    this.held?.delete(heldTally(id));
     this.tally();
   }
 
@@ -1217,7 +1220,7 @@ export class View {
    */
   private tell(msg: Told): void {
     if (this.abort.signal.aborted) return;
-    const key = msg.t === 'tally' ? `tally ${msg.chart}` : msg.t;
+    const key = msg.t === 'tally' ? heldTally(msg.chart) : msg.t;
     if (this.held === undefined) this.port.post(msg);
     else this.held.set(key, msg);
   }
@@ -1284,6 +1287,11 @@ function schemaOf(format: Format, parts: PartsRef | undefined): Schema {
     col: format.columns.length,
     shows: FILE_SHOWS,
   });
+}
+
+/** heldTally is the key that holds chart `id`'s tally until announce. */
+function heldTally(id: string): string {
+  return `tally ${id}`;
 }
 
 /** deepest returns one past the highest row the edits name, or 0 when none

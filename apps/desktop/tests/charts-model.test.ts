@@ -2,15 +2,17 @@
  * @fileoverview A workspace's charts over the real engine. The model mirrors
  * the records the engine holds, showing a change at once.
  * Moving one leaves the workspace clean, and the next save keeps its place.
+ * Each chart holds its latest tally and the last complete one.
  */
 
 import { expect, test } from "vite-plus/test";
 
-import { connect } from "@core-tests/engine/harness";
+import { connect, multiProviders } from "@core-tests/engine/harness";
+import { PART_FIXTURES, PART_NAMES, PART_ROWS } from "@core-tests/testdata/sales-q3-parts";
 import { readContainer } from "@document";
-import type { Chart, ChartColumn } from "@document";
-import type { SourceRef } from "@engine";
-import { REGION, UNITS } from "@main/smoke/fixture";
+import type { Chart, ChartColumn, Plot } from "@document";
+import type { GroupsTally, SampleTally, SourceRef } from "@engine";
+import { REGION, ROWS, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
 import { ADS, BARS, MOVED, SALES, unoOf } from "./charted.ts";
@@ -19,11 +21,16 @@ import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 /** The sales export alone, and the name a .uno goes by here. */
 const FILE: SourceRef = { name: `${SALES}.csv`, path: FIXTURE };
 const UNO = "q3.uno";
+/** The first part of the sales export, at a third of its rows. */
+const PART = { name: PART_NAMES[0]!, path: PART_FIXTURES[0]! };
+/** How long a tally gets to come, in a run that shares the machine. */
+const TALLY_WAIT = { timeout: 4_000 };
 
 /** Opens `ref` in a workspace of its own, runs `use` over it, and closes it. */
 async function opened(ref: SourceRef, use: (w: Workspace) => Promise<void>): Promise<void> {
   const ignore = (): void => {};
-  const w = await Workspace.open(ref, connect().engine, "", ignore, ignore);
+  const { engine } = connect(undefined, multiProviders());
+  const w = await Workspace.open(ref, engine, "", ignore, ignore);
   try {
     await use(w);
   } finally {
@@ -44,6 +51,12 @@ async function savedCharts(w: Workspace): Promise<readonly Chart[] | undefined> 
 /** A ref to `bytes` as a .uno. */
 function uno(bytes: Uint8Array): SourceRef {
   return { name: UNO, blob: new Blob([new Uint8Array(bytes)]) };
+}
+
+/** Waits for a complete tally of the chart BARS over `rows` rows, and returns it. */
+async function completeOf(w: Workspace, rows = ROWS): Promise<GroupsTally | SampleTally> {
+  await expect.poll(() => w.charts.heard(BARS.id)?.complete?.coverage.rows, TALLY_WAIT).toBe(rows);
+  return w.charts.heard(BARS.id)!.complete!;
 }
 
 test("adding, changing and removing a chart go through the engine", async () => {
@@ -294,5 +307,137 @@ test("a place a read would refuse stops no change and no save", async () => {
     w.charts.move(BARS.id, { ...MOVED, x: 2 });
     await w.charts.change(BARS.id, { title: titled.title });
     expect(await savedCharts(w)).toStrictEqual([titled]);
+  });
+});
+
+test("a reopened chart gets a complete tally", async () => {
+  await opened(FILE, async (w) => {
+    const made = await w.charts.add(BARS);
+    await opened(uno(await bytesOf(w)), async (back) => {
+      const complete = await completeOf(back);
+      expect(complete).toMatchObject({ t: "groups", plot: made.plot });
+      expect(back.charts.heard(made.id)?.latest).toBe(complete);
+    });
+  });
+});
+
+test("a relink keeps the last complete tally until the new one completes", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    const tab = await w.relink(w.active, PART);
+    const partial = { ...was, coverage: { ...was.coverage, complete: false } };
+    tab.source.onTally(BARS.id, partial);
+    expect(w.charts.heard(BARS.id)).toMatchObject({ latest: partial, complete: was });
+    await completeOf(w, PART_ROWS);
+  });
+});
+
+test("an append keeps the last complete tally until the one over every part completes", async () => {
+  const ref = { name: SALES, parts: [{ ref: PART }], header: "first" as const };
+  const next = { name: PART_NAMES[1]!, path: PART_FIXTURES[1]! };
+  // The rows of the first part and the one appended.
+  const both = PART_ROWS + PART_ROWS;
+  await opened(ref, async (w) => {
+    await w.charts.add({ ...BARS, source: w.active.id });
+    const was = await completeOf(w, PART_ROWS);
+    await w.append(w.active, [next]);
+    expect(w.charts.heard(BARS.id)?.complete).toBe(was);
+    await completeOf(w, both);
+  });
+});
+
+test("an edit moves a chart's tally, complete again once the pass reaches it", async () => {
+  const value = "Atlantis";
+  await opened(uno(unoOf([BARS])), async (w) => {
+    await completeOf(w);
+    w.transform();
+    await w.set(0, REGION, value);
+    const complete = (): string => JSON.stringify(w.charts.heard(BARS.id)?.complete);
+    await expect.poll(complete, TALLY_WAIT).toContain(value);
+  });
+});
+
+test("a chart takes its tallies with it, by a removal or its source's", async () => {
+  const ads = { ...BARS, id: "c2", source: ADS };
+  await opened(uno(unoOf([BARS, ads])), async (w) => {
+    await completeOf(w);
+    await w.charts.remove(BARS.id);
+    expect(w.charts.heard(BARS.id)).toBeUndefined();
+    await expect.poll(() => w.charts.heard(ads.id)?.latest, TALLY_WAIT).toBeDefined();
+    await w.remove(w.sources[1]!);
+    expect(w.charts.heard(ads.id)).toBeUndefined();
+    // The same records back would show anything still kept of them.
+    w.charts.seed({ charts: [BARS, ads], carriedIds: [], carriedOver: [] });
+    expect(w.charts.heard(BARS.id)?.latest).toBeUndefined();
+    expect(w.charts.heard(ads.id)?.latest).toBeUndefined();
+  });
+});
+
+test("a removal the engine refuses keeps the chart's tallies", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    w.close();
+    await expect(w.charts.remove(BARS.id)).rejects.toThrow("the engine was closed");
+    expect(w.charts.heard(BARS.id)?.complete).toBe(was);
+  });
+});
+
+test("a retitled chart hears its complete tally again", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    await w.charts.change(BARS.id, { title: "Rows" });
+    await expect.poll(() => w.charts.heard(BARS.id)?.latest, TALLY_WAIT).not.toBe(was);
+    expect(w.charts.heard(BARS.id)?.latest).toStrictEqual(was);
+  });
+});
+
+test("a chart shows only the tallies of its own plot and source, and a refused change gives them back", async () => {
+  const plot: Plot = { t: "pie", by: { col: UNITS, header: "units" } };
+  const none = { latest: undefined, complete: undefined };
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    const refused = w.charts.change(BARS.id, { source: "gone" });
+    expect(w.charts.heard(BARS.id)).toMatchObject(none);
+    await expect(refused).rejects.toThrow("no source");
+    expect(w.charts.heard(BARS.id)).toMatchObject({ latest: was, complete: was });
+
+    const changed = w.charts.change(BARS.id, { plot });
+    expect(w.charts.heard(BARS.id)).toMatchObject(none);
+    // A view goes on posting for the plot it holds until the change reaches it.
+    w.active.source.onTally(BARS.id, was);
+    expect(w.charts.heard(BARS.id)).toMatchObject(none);
+    // The first tally of the new plot keeps nothing of the old one's.
+    const partial = { ...was, plot, coverage: { ...was.coverage, complete: false } };
+    w.active.source.onTally(BARS.id, partial);
+    expect(w.charts.heard(BARS.id)).toMatchObject({ latest: partial, complete: undefined });
+    await changed;
+    expect((await completeOf(w)).plot).toStrictEqual(plot);
+  });
+});
+
+test("a chart moved to another source keeps no complete tally of the one it left", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const was = await completeOf(w);
+    await w.charts.change(BARS.id, { source: ADS });
+    const partial = { ...was, coverage: { ...was.coverage, complete: false } };
+    w.sources[1]!.source.onTally(BARS.id, partial);
+    expect(w.charts.heard(BARS.id)).toMatchObject({ latest: partial, complete: undefined });
+  });
+});
+
+test("a chart over a missing source shows its state, and hears once it is pointed at a file", async () => {
+  await opened(uno(unoOf([BARS], [], "/nowhere/sales-q3.csv")), async (w) => {
+    expect(w.charts.heard(BARS.id)).toMatchObject({ state: "missing", latest: undefined });
+    await w.relink(w.sources[0]!, FILE);
+    await completeOf(w);
+    expect(w.charts.heard(BARS.id)?.state).toBe("fine");
+  });
+});
+
+test("a chart over a source the workspace has not reads as over a missing one", async () => {
+  await opened(uno(unoOf([BARS])), async (w) => {
+    const refused = w.charts.change(BARS.id, { source: "gone" });
+    expect(w.charts.heard(BARS.id)?.state).toBe("missing");
+    await expect(refused).rejects.toThrow("no source");
   });
 });

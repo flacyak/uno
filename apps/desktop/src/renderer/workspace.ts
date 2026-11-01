@@ -285,7 +285,11 @@ export class Workspace {
     /** Called when a source's offer changes, with its tab. */
     private readonly offered: (tab: Tab) => void,
   ) {
-    this.charts = new Charts(engine, (write) => this.writing(write));
+    this.charts = new Charts(
+      engine,
+      (write) => this.writing(write),
+      (source) => this.tabs.find((t) => t.id === source)?.state ?? "missing",
+    );
   }
 
   /**
@@ -337,6 +341,7 @@ export class Workspace {
       t.offer = offer;
       this.offered(t);
     };
+    source.onTally = (chart, tally) => this.charts.hear(source.id, chart, tally);
     return t;
   }
 

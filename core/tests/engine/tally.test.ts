@@ -601,6 +601,25 @@ test('an uncharted chart is not heard from again, while another over the source 
   }
 });
 
+test('a chart uncharted before its view is announced is not heard from', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const plot: Plot = { t: 'bars', by: { col: REGION, header: 'margin' } };
+    const was = await opened(engine, [{ ...REGION_ROWS, plot }]);
+    // The relink's answer announces its view, and the unchart runs before it.
+    const relinked = engine
+      .relink(was, FILE)
+      .then((src) => ({ src, heard: new Heard(src) }));
+    await engine.unchart(REGION_ROWS.id);
+    const { src, heard } = await relinked;
+    // A round trip, after which anything posted before it has landed.
+    await src.rows(0, 1);
+    expect(heard.all).toStrictEqual([]);
+  } finally {
+    done();
+  }
+});
+
 test('a source pointed at a file again hears tallies of its new view alone, and none from the one it replaced', async () => {
   const hold = holding();
   const { engine, done } = connect(TINY, [hold.provider, blobProvider()]);
