@@ -57,6 +57,12 @@ const THIN_SHEET = 40;
 /** A sheet too short for two heads, which take 59 px under the header row. */
 const SHORT_SHEET = 80;
 
+/** How many times over a title runs past any window. */
+const LONG_TITLE = 40;
+
+/** What a finger gets around a ×, as the design asks of head buttons. */
+const FINGER = "28px";
+
 /** A caption's height, which MIN_HEIGHT allows for. */
 const CAPTION = 22;
 
@@ -88,13 +94,21 @@ const HEAD_LOOK = [
 /** What a window's × copies from the window's own. */
 const X_LOOK = ["background-color", "border", "border-radius", "color", "cursor", "width"];
 
-/** Helpers: a window's parts, and what the page computes for them. */
+/** Helpers: a window's parts, and a CSS colour as the page computes it. */
 const CHROME = `
   const box = () => document.querySelector(".chart");
   const head = () => box().querySelector(".chart-head");
   const x = () => box().querySelector(".round-x");
   const style = (at) => getComputedStyle(at);
   const rowHeight = () => parseFloat(style(document.documentElement).getPropertyValue("--row-h"));
+  const computed = (colour) => {
+    const probe = document.createElement("div");
+    probe.style.color = colour;
+    document.body.append(probe);
+    const worn = style(probe).color;
+    probe.remove();
+    return worn;
+  };
 `;
 
 /** Helpers: the boxes of the windows and the layer, and what the checks ask of them. */
@@ -371,6 +385,61 @@ export const CHARTS: Check[] = [
       const grip = box().querySelector(".chart-grip").getBoundingClientRect();
       if (grip.right !== cross.right) return "the grip ends at " + grip.right + ", and the × at " + cross.right;
       return text(".chart-title") === "Rows per Location" ? "" : "the head says " + text(".chart-title");
+    `,
+  },
+  {
+    name: "the pointer over a window's × fills it as over the window's own",
+    hover: ".chart .chart-close",
+    script: `
+      ${CHROME}
+      if (!(await until(() => x().matches(":hover")))) return "the pointer is over " + JSON.stringify(document.querySelector(":hover:not(:has(:hover))")?.className);
+      const flag = computed("var(--flag)");
+      const worn = [style(x()).backgroundColor, style(x()).borderTopColor, style(x()).color];
+      const want = [flag, flag, computed("var(--surface)")];
+      return worn.join() === want.join() ? "" : "the × wears " + worn.join(" and ");
+    `,
+  },
+  {
+    name: "the pointer over a window's grip takes it to the scrollbar thumb's hover colour",
+    hover: ".chart .chart-grip",
+    script: `
+      ${CHROME}
+      const grip = box().querySelector(".chart-grip");
+      if (!(await until(() => grip.matches(":hover")))) return "the pointer is over " + JSON.stringify(document.querySelector(":hover:not(:has(:hover))")?.className);
+      return style(grip).color === computed("var(--ink-3)") ? "" : "the grip is " + style(grip).color;
+    `,
+  },
+  {
+    name: "a long title ends in an ellipsis, and leaves the × where it stood",
+    script: `
+      ${CHROME}
+      const title = box().querySelector(".chart-title");
+      const said = title.textContent;
+      const stood = x().getBoundingClientRect().left;
+      title.textContent = said.repeat(${LONG_TITLE});
+      const left = x().getBoundingClientRect().left;
+      const [runs, shows] = [title.scrollWidth, title.clientWidth];
+      title.textContent = said;
+      if (left !== stood) return "the × moved from " + stood + " to " + left;
+      if (runs <= shows) return "the title wraps, running " + runs + "px in " + shows + "px";
+      return style(title).overflowX === "hidden" && style(title).textOverflow === "ellipsis" ? "" : "the title shows no ellipsis";
+    `,
+  },
+  {
+    // No run has a coarse pointer, so this lifts the rule out of its media query.
+    name: `a finger gets ${FINGER} around a window's ×`,
+    script: `
+      ${CHROME}
+      const inside = (rules) => [...rules].flatMap((rule) => [rule, ...inside(rule.cssRules ?? [])]);
+      const rules = [...document.styleSheets].flatMap((sheet) => inside(sheet.cssRules));
+      const reach = rules.find((rule) => rule.selectorText === ".chart-close::after");
+      if (reach?.parentRule?.conditionText !== "(pointer: coarse)") return "the × has no rule for a finger";
+      const lifted = document.createElement("style");
+      lifted.textContent = reach.cssText;
+      document.head.append(lifted);
+      const { width, height } = getComputedStyle(x(), "::after");
+      lifted.remove();
+      return width === "${FINGER}" && height === "${FINGER}" ? "" : "a finger gets " + width + " by " + height;
     `,
   },
   {

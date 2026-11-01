@@ -60,6 +60,8 @@ const SPOKEN = ["title", "aria-label", "aria-roledescription", "placeholder"];
 const UNTRANSLATED: readonly RegExp[] = [
   // The fixture's name, as a tab, a workspace and a path.
   /\S*sales-q3\S*/g,
+  // The second fixture's name, as a chart's head says it.
+  /google-ads-sales/g,
   // A column's kind and the formula badge, which are the engine's names.
   /\b(date|text|num|fx)\b/g,
   // Keys and chords, as printed on a keyboard.
@@ -189,8 +191,9 @@ test("what a .uno's charts say in the status line is in the language chosen", as
 
 test("a chart's window drawn in English is rewritten in the language chosen", async () => {
   const titled = { ...BARS, id: "c2", source: ADS, title: "From the file" };
+  const overAds = { ...BARS, id: "c3", source: ADS };
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
-  await writeFile(path, unoOf([BARS, titled]));
+  await writeFile(path, unoOf([BARS, titled, overAds]));
   await shell.openRef({ name: "charted.uno", path });
   shell.language.choose(baseLocale);
   await frame();
