@@ -46,6 +46,10 @@ export interface Stage {
 
 /** A pointer that holds a window. */
 interface Hold {
+  /** The pointer's id. */
+  pointer: number;
+  /** The element that holds its capture. */
+  zone: HTMLElement;
   /** Where it took hold, in the page's CSS px. */
   x: number;
   y: number;
@@ -121,9 +125,9 @@ export class ChartWindow {
     this.box.append(head, el("div", "chart-plot"), caption);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
     this.box.addEventListener("pointermove", (e) => this.follow(e));
-    this.box.addEventListener("pointerup", () => this.drop());
-    this.box.addEventListener("pointercancel", () => this.lost());
-    this.box.addEventListener("lostpointercapture", () => this.lost());
+    this.box.addEventListener("pointerup", (e) => this.drop(e));
+    this.box.addEventListener("pointercancel", (e) => this.lost(e));
+    this.box.addEventListener("lostpointercapture", (e) => this.lost(e));
     this.box.addEventListener("keydown", (e) => this.key(e));
   }
 
@@ -154,35 +158,39 @@ export class ChartWindow {
    * the keys and stays, as its rect has no place.
    */
   private take(e: PointerEvent, zone: HTMLElement): void {
-    if (e.button !== PRIMARY_BUTTON) return;
+    if (e.button !== PRIMARY_BUTTON || this.hold !== undefined) return;
     this.box.focus({ preventScroll: true });
     const room = this.stage.room();
     if (tucks(room)) return;
     zone.setPointerCapture(e.pointerId);
     const from = placed(this.chart.place, room);
-    this.hold = { x: e.clientX, y: e.clientY, from };
+    this.hold = { pointer: e.pointerId, zone, x: e.clientX, y: e.clientY, from };
   }
 
   /** follow stands the window where its pointer has gone, in the room as it is now. */
   private follow(e: PointerEvent): void {
     const hold = this.hold;
-    if (hold === undefined) return;
+    if (hold?.pointer !== e.pointerId) return;
     hold.to = dragged(hold.from, e.clientX - hold.x, e.clientY - hold.y, this.stage.room());
     standAt(this.box, hold.to);
   }
 
   /** drop stores where the pointer left the window. A click stores nothing. */
-  private drop(): void {
-    if (this.hold === undefined) return;
+  private drop(e: PointerEvent): void {
+    if (this.hold?.pointer !== e.pointerId) return;
     const { to } = this.hold;
     this.hold = undefined;
     if (to !== undefined) this.store(to, this.stage.room());
     this.stage.draw();
   }
 
-  /** lost answers a pointer taken away with no drop, which puts the window back. */
-  private lost(): void {
-    if (this.hold !== undefined) this.putBack();
+  /**
+   * lost answers a pointer taken away with no drop, which puts the window back.
+   * A finger's capture starts on what it pressed, which can sit inside the zone,
+   * so only the zone's own loss counts: the first is the move to the zone.
+   */
+  private lost(e: PointerEvent): void {
+    if (this.hold?.pointer === e.pointerId && e.target === this.hold.zone) this.putBack();
   }
 
   /** putBack lets go of the pointer's rect, so the window draws from its place. */

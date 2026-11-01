@@ -55,8 +55,9 @@ const FAR = ROOM.w + ROOM.h;
 /** The button that opens a context menu. */
 const SECONDARY = 2;
 
-/** The pointer a test holds a window with. */
+/** The pointer a test holds a window with, and a second finger on it. */
 const POINTER = 1;
+const OTHER_POINTER = 2;
 
 /** What the layer reads of a workspace's charts, for a test to change. */
 interface Model {
@@ -614,4 +615,39 @@ test("an arrow does nothing to a window a pointer holds", () => {
   expect(model.move).not.toHaveBeenCalled();
   key("Escape");
   expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+});
+
+test("a second pointer changes nothing while the first holds the window", () => {
+  const { model } = shown(INSIDE);
+  const to = dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM);
+  carry(head());
+  const second = { pointerId: OTHER_POINTER };
+  pointer("pointerdown", head(), 0, 0, second);
+  pointer("pointermove", head(), FAR, FAR, second);
+  pointer("pointerup", head(), FAR, FAR, second);
+  pointer("pointercancel", head(), FAR, FAR, second);
+  expect(drawn(first())).toStrictEqual(to);
+  expect(model.move).not.toHaveBeenCalled();
+
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  expect(model.move).toHaveBeenCalledOnce();
+});
+
+test("a capture moving from what a finger pressed to the head keeps the window held", () => {
+  shown(INSIDE);
+  const title = part(".chart-title");
+  pointer("pointerdown", title);
+  pointer("lostpointercapture", title);
+  pointer("pointermove", head(), STEP.x, STEP.y);
+  expect(drawn(first())).toStrictEqual(dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM));
+});
+
+test("the capture ending after a drop changes nothing", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  const { place } = model.all[0]!;
+  pointer("lostpointercapture", head());
+  expect(model.all[0]!.place).toBe(place);
+  expect(model.move).toHaveBeenCalledOnce();
 });
