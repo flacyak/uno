@@ -571,3 +571,47 @@ test("a tucked head takes the keys and stores nothing, from the pointer or an ar
   key("ArrowRight");
   expect(model.move).not.toHaveBeenCalled();
 });
+
+test("Escape puts a drag back and keeps the window's keys, and the rest of it does nothing", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  key("Escape");
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+  expect(leave).not.toHaveBeenCalled();
+
+  pointer("pointermove", head(), -FAR, -FAR);
+  pointer("pointerup", head(), -FAR, -FAR);
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+  expect(model.move).not.toHaveBeenCalled();
+});
+
+test.each(["pointercancel", "lostpointercapture"])(
+  "a pointer lost by %s puts the window back, and the next press takes hold",
+  (lost) => {
+    const { model } = shown(INSIDE);
+    carry(head());
+    pointer(lost, head());
+    expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+    expect(model.move).not.toHaveBeenCalled();
+
+    carry(head());
+    expect(drawn(first())).toStrictEqual(dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM));
+  },
+);
+
+test("a draw leaves a window with the pointer that holds it", () => {
+  const { layer } = shown(INSIDE);
+  carry(head());
+  const held = drawn(first());
+  layer.draw();
+  expect(drawn(first())).toStrictEqual(held);
+});
+
+test("an arrow does nothing to a window a pointer holds", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  key("ArrowRight");
+  expect(model.move).not.toHaveBeenCalled();
+  key("Escape");
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+});

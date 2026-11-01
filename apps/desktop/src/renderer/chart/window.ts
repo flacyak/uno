@@ -122,6 +122,8 @@ export class ChartWindow {
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
     this.box.addEventListener("pointermove", (e) => this.follow(e));
     this.box.addEventListener("pointerup", () => this.drop());
+    this.box.addEventListener("pointercancel", () => this.lost());
+    this.box.addEventListener("lostpointercapture", () => this.lost());
     this.box.addEventListener("keydown", (e) => this.key(e));
   }
 
@@ -178,6 +180,17 @@ export class ChartWindow {
     this.stage.draw();
   }
 
+  /** lost answers a pointer taken away with no drop, which puts the window back. */
+  private lost(): void {
+    if (this.hold !== undefined) this.putBack();
+  }
+
+  /** putBack lets go of the pointer's rect, so the window draws from its place. */
+  private putBack(): void {
+    this.hold = undefined;
+    this.stage.draw();
+  }
+
   /** store keeps `rect` as the chart's place. A tucked window's rect has none. */
   private store(rect: Rect, room: Room): void {
     if (!tucks(room)) this.stage.move(this.chart.id, placeOf(rect, room, this.chart.place));
@@ -185,21 +198,28 @@ export class ChartWindow {
 
   /** key answers Escape and the arrows, and leaves any other key to the shell. */
   private key(e: KeyboardEvent): void {
-    if (e.key === "Escape") this.stage.leave();
+    if (e.key === "Escape") this.escape();
     else if (!this.nudge(pressOf(e))) return;
     e.preventDefault();
     e.stopPropagation();
   }
 
+  /** escape puts back what a pointer holds, or else gives the grid the keys. */
+  private escape(): void {
+    if (this.hold === undefined) this.stage.leave();
+    else this.putBack();
+  }
+
   /**
    * nudge stands the window where `press` steps it, and returns whether it is
-   * an arrow.
+   * an arrow. While a pointer holds the window an arrow does nothing, so Escape
+   * still puts it back where the pointer found it.
    */
   private nudge(press: Press): boolean {
     const room = this.stage.room();
     const to = nudged(placed(this.chart.place, room), press, room);
     if (to === undefined) return false;
-    this.store(to, room);
+    if (this.hold === undefined) this.store(to, room);
     this.stage.draw();
     return true;
   }
