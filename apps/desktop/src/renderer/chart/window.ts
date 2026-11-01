@@ -148,12 +148,14 @@ export class ChartWindow {
   /**
    * take answers a press on `zone`, which holds the pointer from then on. The
    * press commits an open cell, through its blur. It stays uncancelled, so its
-   * mousedown reaches what closes an open menu or form.
+   * mousedown reaches what closes an open menu or form. A tucked window takes
+   * the keys and stays, as its rect has no place.
    */
   private take(e: PointerEvent, zone: HTMLElement): void {
     if (e.button !== PRIMARY_BUTTON) return;
     this.box.focus({ preventScroll: true });
     const room = this.stage.room();
+    if (tucks(room)) return;
     zone.setPointerCapture(e.pointerId);
     const from = placed(this.chart.place, room);
     this.hold = { x: e.clientX, y: e.clientY, from };

@@ -113,6 +113,11 @@
   -webkit-app-region: no-drag;
 }
 
+/* A tucked window stays where the room puts it. */
+.charts.tucked .chart-head {
+  cursor: default;
+}
+
 .chart-title {
   flex: 1 1 auto;
   min-width: 0;

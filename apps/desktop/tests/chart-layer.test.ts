@@ -42,6 +42,9 @@ const INSIDE: Chart = { ...BARS, id: "c2", place: MOVED };
 /** The name a workspace of several sources gives a window's source. */
 const SOURCE = "sales-q3";
 
+/** A room under the least height, which tucks every window to its head. */
+const TUCKING: Room = { w: ROOM.w, h: MIN_HEIGHT - 1 };
+
 /** Where a pointer takes hold, and a step that keeps INSIDE inside ROOM. */
 const HOLD = { x: 500, y: 100 };
 const STEP = { x: -60, y: 40 };
@@ -528,4 +531,43 @@ test("a head's buttons keep the pointer, and the window stays", () => {
   pointer("pointermove", x, STEP.x, STEP.y);
   expect(head().hasPointerCapture(POINTER)).toBe(false);
   expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+});
+
+test("a drag over a room that shrinks keeps to the room as it is now", () => {
+  const { model } = shown(INSIDE);
+  const smaller = { w: 700, h: 400 };
+  carry(head());
+  roomIs(smaller);
+  pointer("pointermove", head(), FAR, FAR);
+  const to = {
+    ...placed(MOVED, ROOM),
+    x: smaller.w - MOVED.width,
+    y: smaller.h - MOVED.height,
+  };
+  expect(drawn(first())).toStrictEqual(to);
+
+  pointer("pointerup", head(), FAR, FAR);
+  expect(model.all[0]!.place).toStrictEqual(placeOf(to, smaller, MOVED));
+});
+
+test("a room that tucks under a drag stores nothing, and the window tucks at the drop", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  roomIs(TUCKING);
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  expect(model.move).not.toHaveBeenCalled();
+  expect(drawn(first()).width).toBe(TUCKING.w);
+});
+
+test("a tucked head takes the keys and stores nothing, from the pointer or an arrow", () => {
+  const { model } = shown(INSIDE);
+  resize(TUCKING);
+  pointer("pointerdown", head());
+  expect(document.activeElement).toBe(first());
+  expect(head().hasPointerCapture(POINTER)).toBe(false);
+
+  pointer("pointermove", head(), STEP.x, STEP.y);
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  key("ArrowRight");
+  expect(model.move).not.toHaveBeenCalled();
 });
