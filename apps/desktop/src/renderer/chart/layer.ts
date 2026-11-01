@@ -14,7 +14,7 @@ import "./chart.css";
 import type { Charts } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
-import { placed, tucked, tucks } from "./place.ts";
+import { placed, thin, tucked, tucks } from "./place.ts";
 import type { Rect } from "./place.ts";
 
 /** The thinnest a border draws, in device px. */
@@ -91,6 +91,7 @@ export class ChartLayer {
       const rect = tucks(room) ? tucked(index, this.head, border, room) : placed(chart.place, room);
       stand(this.windowOf(chart.id), rect);
     });
+    this.root.classList.toggle("thin", thin(room));
   }
 
   /**

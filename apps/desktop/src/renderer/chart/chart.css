@@ -31,6 +31,11 @@
   left: 0;
 }
 
+/* A room too narrow for a head shows no window, and lets the pointer by. */
+.charts.thin {
+  visibility: hidden;
+}
+
 /* The dialogs' box (formula.css, settings.css). */
 .chart {
   position: absolute;

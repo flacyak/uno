@@ -17,6 +17,12 @@ export const MIN_WIDTH = 240;
 /** The shortest a window draws: about 110 px of plot under a 29 px head, over a 22 px caption. */
 export const MIN_HEIGHT = 160;
 
+/**
+ * The narrowest room that shows a head: 2 px of borders, 10 of padding, 8 of
+ * gap, 20 of × and 4 of margin.
+ */
+export const HEAD_LEAST_WIDTH = 44;
+
 /** A new window's width. Four across fill most of a full HD screen. */
 export const DEFAULT_WIDTH = 420;
 
@@ -117,6 +123,11 @@ export function tucks(room: Room): boolean {
  */
 export function tucked(index: number, head: number, border: number, room: Room): Rect {
   return { x: 0, y: index * head, width: room.w, height: head + border };
+}
+
+/** thin says whether a room is too narrow to show a head. */
+export function thin(room: Room): boolean {
+  return room.w < HEAD_LEAST_WIDTH;
 }
 
 /**

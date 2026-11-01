@@ -50,6 +50,9 @@ const CLICK_AND_ARROW: readonly Input[] = [
   { type: "keyUp", keyCode: "Down" },
 ];
 
+/** A sheet that leaves a room under a head's least width, past the 12 px bar. */
+const THIN_SHEET = 40;
+
 /** What a window copies from the settings menu. */
 const BOX_LOOK = [
   "background-color",
@@ -309,6 +312,22 @@ export const CHARTS: Check[] = [
       const [, foot] = windows();
       const under = document.elementFromPoint((foot.left + foot.right) / 2, foot.bottom + 1);
       return under.closest(".chart") === null ? "" : "a window lies over the scrollbar";
+    `,
+  },
+  {
+    // The sheet is held thin by hand, as a zoomed page with both columns open has it.
+    name: "a room too narrow for a head shows no window, and leaves what is under it the pointer",
+    script: `
+      ${GEOMETRY}
+      const sheet = document.querySelector(".win-sheet");
+      const shows = () => getComputedStyle(document.querySelector(".chart")).visibility !== "hidden";
+      sheet.style.maxWidth = ${THIN_SHEET} + "px";
+      const thin = await until(() => !shows());
+      const at = document.elementFromPoint(room().left + 1, room().top + 1);
+      sheet.style.maxWidth = "";
+      if (!thin) return "a window stands at " + edges(windows()[0]) + " in a room at " + edges(room());
+      if (at.closest(".chart") !== null) return "a hidden window takes the pointer";
+      return (await until(() => shows() && !heads())) ? "" : "the windows stayed hidden";
     `,
   },
 ];
