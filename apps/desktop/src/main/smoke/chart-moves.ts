@@ -1,15 +1,16 @@
 /**
  * @fileoverview Checks of a chart window under a real pointer. A drag moves it by
- * the pointer's px, and the grip and the edges resize it. None of it marks the
+ * the pointer's px, the grip and the edges resize it, the least size holds and
+ * the room's edges stop it, and Escape puts a drag back. None of it marks the
  * workspace unsaved.
  *
  * They follow CHARTS, so the first window stands at the top of the room's right
  * edge and the second at its foot, and each picks up where the last left it.
  */
 
-import { DEFAULT_HEIGHT, DEFAULT_WIDTH } from "@renderer/chart/place";
+import { DEFAULT_HEIGHT, DEFAULT_WIDTH, MIN_HEIGHT, MIN_WIDTH } from "@renderer/chart/place";
 import { GEOMETRY, RECT_SLACK } from "./charts.ts";
-import type { Check } from "./check.ts";
+import type { Check, Input } from "./check.ts";
 
 /** Where the pointer takes hold to move or resize the first window. */
 const HEAD = ".chart .chart-title";
@@ -21,6 +22,9 @@ const FOOT_EDGE = ".chart .chart-edge-foot";
 const CARRY = { x: -150, y: 60 };
 const STRETCH = { x: -60, y: 40 };
 
+/** A drag away from the room's foot right. */
+const CARRY_BACK = { x: CARRY.x, y: -CARRY.y };
+
 /** What the two edges take off and add. */
 const EDGE_PX = 30;
 
@@ -30,8 +34,22 @@ const CORNER_IN = 4;
 /** A point this far in from a window's box stands on its 1 px border. */
 const BORDER_IN = 0.5;
 
+/** Past any edge of any room in this run. */
+const FAR = 2000;
+
+/** A point over the grid, which a held drag lets go of. */
+const OVER_GRID = { x: 400, y: 300 };
+
 /** The zone a finger gets at a window's edges and grip, as the design asks. */
 const FINGER = 24;
+
+/** A press of `keyCode` with `modifiers`. */
+function pressing(keyCode: string, modifiers: Array<"shift" | "control"> = []): readonly Input[] {
+  return [
+    { type: "keyDown", keyCode, modifiers },
+    { type: "keyUp", keyCode, modifiers },
+  ];
+}
 
 /** Helpers: the first window, and whether it stands where a check wants it. */
 const MOVES = `
@@ -137,6 +155,59 @@ export const CHART_MOVES: Check[] = [
       if (hit.closest(".chart-grip") === null) return "a finger ${FINGER}px from the corner is on " + hit.className;
       const want = "${FINGER}px";
       return edge === want && foot === want ? "" : "the edges reach " + edge + " and " + foot;
+    `,
+  },
+  {
+    name: "the least size holds, however far the grip goes",
+    drag: { selector: GRIP, by: { x: -FAR, y: -FAR } },
+    script: `
+      ${MOVES}
+      return wait({ width: ${MIN_WIDTH}, height: ${MIN_HEIGHT} }, "a resize");
+    `,
+  },
+  {
+    name: "a drag past the room's top left stops on it",
+    drag: { selector: HEAD, by: { x: -FAR, y: -FAR } },
+    script: `
+      ${MOVES}
+      return wait({ left: room().left, top: room().top }, "a move");
+    `,
+  },
+  {
+    name: "a drag past the room's foot right stops on it",
+    drag: { selector: HEAD, by: { x: FAR, y: FAR } },
+    script: `
+      ${MOVES}
+      return wait({ right: room().right, bottom: room().bottom }, "a move");
+    `,
+  },
+  {
+    name: "a window follows the pointer while the button is down",
+    drag: { selector: HEAD, by: CARRY_BACK, held: true },
+    script: `
+      ${MOVES}
+      const bottom = room().bottom + ${CARRY_BACK.y};
+      return wait({ right: room().right + ${CARRY_BACK.x}, bottom }, "a drag");
+    `,
+  },
+  {
+    name: "Escape puts a drag back, keeps the window's keys, and the rest of the drag does nothing",
+    input: {
+      events: [
+        ...pressing("Escape"),
+        { type: "mouseMove", ...OVER_GRID, modifiers: ["leftbuttondown"] },
+        { type: "mouseUp", ...OVER_GRID, button: "left", clickCount: 1 },
+      ],
+      through: true,
+    },
+    script: `
+      ${MOVES}
+      const failed = await wait({ right: room().right, bottom: room().bottom }, "Escape");
+      if (failed !== "") return failed;
+      await frame();
+      const box = document.querySelector(".chart");
+      if (document.activeElement !== box) return "the keys are in #" + document.activeElement?.id;
+      return stands({ right: room().right, bottom: room().bottom }) ? "" : "the drag went on to " + reads();
     `,
   },
 ];
