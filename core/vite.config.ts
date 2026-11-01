@@ -1,5 +1,12 @@
 import { defineConfig } from 'vite-plus';
 
+/**
+ * How long a test or a hook may take. A CI runner's disk can stall for a
+ * minute, and a test of 40 ms then runs past the default 5 s. A hang still
+ * fails, here.
+ */
+const TEST_BUDGET_MS = 30_000;
+
 export default defineConfig({
   // The alias map in ../tsconfig.paths.json, for vitest.
   resolve: { tsconfigPaths: true },
@@ -29,6 +36,8 @@ export default defineConfig({
   test: {
     // Fails a test file that leaves a file handle open.
     setupFiles: ['tests/handles.ts'],
+    testTimeout: TEST_BUDGET_MS,
+    hookTimeout: TEST_BUDGET_MS,
   },
   lint: {
     options: {
