@@ -69,7 +69,7 @@ interface Wire {
   send(req: Request): void;
   /** Every reply, in the order the engine sent them. */
   seen: Reply[];
-  /** The reply with this id, once it lands. */
+  /** The reply with this id, already seen or still to come. */
   reply(id: number): Promise<Reply>;
   /** The first reply `is` picks out, already seen or still to come. */
   when(is: (msg: Reply) => boolean): Promise<Reply>;
@@ -87,26 +87,26 @@ function wire(providers: Provider[]): Wire {
   );
 
   const seen: Reply[] = [];
-  const waiting = new Map<number, (msg: Reply) => void>();
   const watching: Array<[(msg: Reply) => boolean, (msg: Reply) => void]> = [];
   client.listen((msg) => {
     seen.push(msg);
-    if ('id' in msg && msg.id !== undefined) waiting.get(msg.id)?.(msg);
     for (const [is, resolve] of watching.splice(0)) {
       if (is(msg)) resolve(msg);
       else watching.push([is, resolve]);
     }
   });
 
+  const when = (is: (msg: Reply) => boolean): Promise<Reply> => {
+    const already = seen.find(is);
+    if (already !== undefined) return Promise.resolve(already);
+    return new Promise((resolve) => watching.push([is, resolve]));
+  };
+
   return {
     send: (req) => client.post(req),
     seen,
-    reply: (id) => new Promise((resolve) => waiting.set(id, resolve)),
-    when: (is) => {
-      const already = seen.find(is);
-      if (already !== undefined) return Promise.resolve(already);
-      return new Promise((resolve) => watching.push([is, resolve]));
-    },
+    reply: (id) => when((msg) => 'id' in msg && msg.id === id),
+    when,
     // As Engine.close does: post a close request, then close this end only.
     close: () => {
       client.post({ t: 'close' });
