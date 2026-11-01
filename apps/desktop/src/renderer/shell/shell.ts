@@ -669,6 +669,8 @@ export class Shell {
 
     if (shown !== undefined) this.select(shown);
     else this.paintTabs();
+    // A chart's head names its source once there are several.
+    this.layer?.draw();
     if (failed.length > 0) this.say(failed.join(" · "), true);
     else if (added.length > 0) this.say(m.added_names({ names: list(added) }));
     void this.sources.askGrown();
@@ -981,8 +983,6 @@ export class Shell {
       // The workspace says whether the removed tab was showing.
       const showing = await w.remove(tab);
       if (this.workspace !== w) return;
-      // Its charts went with it.
-      this.layer?.draw();
       this.say(m.removed_name({ name: tab.name }));
       // Removing the showing tab shows its neighbour.
       this.shown(showing);
@@ -1281,12 +1281,14 @@ export class Shell {
 
   /**
    * shown repaints after a tab changed: the grid if it is the showing tab,
-   * the sidebar otherwise, and the status bar either way.
+   * the sidebar otherwise, and the status bar and the chart windows either way.
+   * A source can take its charts with it, or go by a new name.
    */
   private shown(showing: boolean): void {
     if (showing) this.showActive();
     else this.paintTabs();
     this.paintStatus();
+    this.layer?.draw();
   }
 
   /** paintAll draws the sidebar, the banner and the status bar. */

@@ -45,10 +45,11 @@ export class ChartWindow {
     this.box.append(head);
   }
 
-  /** show writes what `chart` says in the head. */
-  show(chart: Chart): void {
+  /** show writes what `chart` says in the head, after `source` if it has one. */
+  show(chart: Chart, source: string | undefined): void {
     const title = el("bdi", "", chart.title === "" ? madeTitle(chart.plot) : chart.title);
-    this.title.replaceChildren(title);
+    if (source === undefined) this.title.replaceChildren(title);
+    else this.title.replaceChildren(el("bdi", "from-file", source), " · ", title);
     this.title.title = this.title.textContent;
     this.title.classList.toggle("from-file", chart.title !== "");
   }

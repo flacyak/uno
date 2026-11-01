@@ -18,6 +18,9 @@ import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Rect } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 
+/** What the layer reads of a workspace's charts. */
+type Shown = Pick<Charts, "all" | "sourceLabel">;
+
 /** The thinnest a border draws, in device px. */
 const THINNEST_BORDER = 1;
 
@@ -43,7 +46,7 @@ export class ChartLayer {
   /** The height of the header row, and of a tucked window's head. */
   private readonly head: number;
   /** The charts of the open workspace. */
-  private charts: Pick<Charts, "all"> = { all: [] };
+  private charts: Shown = { all: [], sourceLabel: () => undefined };
   /** Fills the grid's scroller inside its bars, so the two boxes differ by a bar. */
   private readonly gauge = el("div", "chart-gauge");
 
@@ -58,7 +61,7 @@ export class ChartLayer {
   }
 
   /** show takes over from the last workspace's windows with `charts`. */
-  show(charts: Pick<Charts, "all">): void {
+  show(charts: Shown): void {
     this.charts = charts;
     this.windows.clear();
     this.root.replaceChildren();
@@ -93,7 +96,7 @@ export class ChartLayer {
     const tucking = tucks(room);
     charts.forEach((chart, index) => {
       const held = this.windowOf(chart.id);
-      held.show(chart);
+      held.show(chart, this.charts.sourceLabel(chart.source));
       stand(held.box, tucking ? tucked(index, this.head, border, room) : placed(chart.place, room));
     });
     const spills = tucking && overfull(charts.length, this.head, border, room);
