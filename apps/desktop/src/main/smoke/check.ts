@@ -36,6 +36,12 @@ export interface Check {
    */
   hover?: string;
   /**
+   * A drag, by the path a person's pointer takes, before the check runs: from
+   * the middle of what `selector` picks, `by` CSS px on, where it lets go. With
+   * `held` the button stays down, for a later check to let go of.
+   */
+  drag?: { selector: string; by: { x: number; y: number }; held?: boolean };
+  /**
    * The window's zoom and width, set before the check runs, the way the View
    * menu and a drag of its edge set them. What is left out goes back to what
    * the run started with.
