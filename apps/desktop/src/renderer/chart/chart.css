@@ -104,6 +104,23 @@
   white-space: nowrap;
 }
 
+/* As far from the window's edge as from the head's top and from its 1 px rule. */
+.chart-close {
+  position: relative;
+  margin-right: var(--x-inset);
+}
+
+/* A finger gets `--hit` around a × drawn no larger. `inset` counts from inside
+ * the ×'s 1 px border. */
+@media (pointer: coarse) {
+  .chart-close::after {
+    --hit: 28px;
+    content: "";
+    position: absolute;
+    inset: calc((var(--x-size) - var(--hit)) / 2 - 1px);
+  }
+}
+
 /* In the grid's scroller, it fills what the bars leave and lets the pointer by. */
 .chart-gauge {
   position: absolute;
