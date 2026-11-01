@@ -747,10 +747,7 @@ async function playMoves(win: BrowserWindow, at: Clock): Promise<void> {
   await at(MOVES.nudge);
   await presses(win, "Left", NUDGES, ARROW_GAP);
   await at(MOVES.grow);
-  for (let i = 0; i < NUDGES; i++) {
-    press(win, "Down", ["shift"]);
-    await sleep(ARROW_GAP);
-  }
+  await presses(win, "Down", NUDGES, ARROW_GAP, ["shift"]);
   await at(MOVES.end);
 }
 
@@ -931,10 +928,16 @@ function press(win: BrowserWindow, keyCode: string, modifiers: Modifier[] = []):
 
 type Modifier = "control" | "shift";
 
-/** presses presses keyCode `n` times, `gap` ms apart. */
-async function presses(win: BrowserWindow, keyCode: string, n: number, gap: number): Promise<void> {
+/** presses presses keyCode `n` times, `gap` ms apart, with `modifiers` held. */
+async function presses(
+  win: BrowserWindow,
+  keyCode: string,
+  n: number,
+  gap: number,
+  modifiers: Modifier[] = [],
+): Promise<void> {
   for (let i = 0; i < n; i++) {
-    press(win, keyCode);
+    press(win, keyCode, modifiers);
     await sleep(gap);
   }
 }
