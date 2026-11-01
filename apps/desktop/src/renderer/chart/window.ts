@@ -2,6 +2,11 @@
  * @fileoverview A chart's window: the dialogs' box, with a head that says what
  * the chart shows, a round × of the window's own kind, and a caption that ends
  * in a grip. The layer stands it in the room and says which chart it shows.
+ *
+ * A pointer on the head moves the window, and one on the grip or an edge
+ * resizes it. It follows the pointer alone until the drop, which stores where
+ * it stands, so a window put back has changed nothing. An arrow stores a step
+ * at once. A place asks nothing of the engine and marks nothing unsaved.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -10,7 +15,7 @@ import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
-import { dragged, nudged, placeOf, placed, tucks } from "./place.ts";
+import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
@@ -44,6 +49,9 @@ export interface Stage {
   leave(): void;
 }
 
+/** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
+type Follow = (from: Rect, dx: number, dy: number, room: Room) => Rect;
+
 /** A pointer that holds a window. */
 interface Hold {
   /** The pointer's id. */
@@ -55,6 +63,8 @@ interface Hold {
   y: number;
   /** The rect the window stood at then. */
   from: Rect;
+  /** What it does to the window. */
+  follow: Follow;
   /** The rect it has taken the window to, once it moves. */
   to?: Rect;
 }
@@ -109,20 +119,30 @@ export class ChartWindow {
     head.append(this.title, x);
     head.addEventListener("pointerdown", (e) => {
       const onButton = e.target instanceof Element && e.target.closest("button") !== null;
-      if (!onButton) this.take(e, head);
+      if (!onButton) this.take(e, head, dragged);
     });
 
     const grip = el("span", "chart-grip");
     grip.innerHTML = GRIP;
     grip.setAttribute("aria-hidden", "true");
+    grip.addEventListener("pointerdown", (e) => this.take(e, grip, stretched));
     caption.append(grip);
+
+    const right = el("div", "chart-edge chart-edge-right");
+    right.addEventListener("pointerdown", (e) => {
+      this.take(e, right, (from, dx, _dy, room) => stretched(from, dx, 0, room));
+    });
+    const foot = el("div", "chart-edge chart-edge-foot");
+    foot.addEventListener("pointerdown", (e) => {
+      this.take(e, foot, (from, _dx, dy, room) => stretched(from, 0, dy, room));
+    });
 
     this.box.tabIndex = -1;
     this.box.setAttribute("role", "group");
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, el("div", "chart-plot"), caption);
+    this.box.append(head, el("div", "chart-plot"), caption, right, foot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
     this.box.addEventListener("pointermove", (e) => this.follow(e));
     this.box.addEventListener("pointerup", (e) => this.drop(e));
@@ -157,21 +177,21 @@ export class ChartWindow {
    * mousedown reaches what closes an open menu or form. A tucked window takes
    * the keys and stays, as its rect has no place.
    */
-  private take(e: PointerEvent, zone: HTMLElement): void {
+  private take(e: PointerEvent, zone: HTMLElement, follow: Follow): void {
     if (e.button !== PRIMARY_BUTTON || this.hold !== undefined) return;
     this.box.focus({ preventScroll: true });
     const room = this.stage.room();
     if (tucks(room)) return;
     zone.setPointerCapture(e.pointerId);
     const from = placed(this.chart.place, room);
-    this.hold = { pointer: e.pointerId, zone, x: e.clientX, y: e.clientY, from };
+    this.hold = { pointer: e.pointerId, zone, x: e.clientX, y: e.clientY, from, follow };
   }
 
   /** follow stands the window where its pointer has gone, in the room as it is now. */
   private follow(e: PointerEvent): void {
     const hold = this.hold;
     if (hold?.pointer !== e.pointerId) return;
-    hold.to = dragged(hold.from, e.clientX - hold.x, e.clientY - hold.y, this.stage.room());
+    hold.to = hold.follow(hold.from, e.clientX - hold.x, e.clientY - hold.y, this.stage.room());
     standAt(this.box, hold.to);
   }
 

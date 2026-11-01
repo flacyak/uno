@@ -1,10 +1,11 @@
 /**
  * @fileoverview The layer over the sheet: one window per chart, drawn from its
  * place in the room the sheet leaves, and placed again as the sheet resizes. A
- * window steps and resizes under the arrow keys.
+ * window moves and resizes under a pointer and the arrow keys.
  *
  * happy-dom has no layout, so each test says what layout would measure, and
- * fires the resize a ResizeObserver would.
+ * fires the resize a ResizeObserver would. Its pointer capture is bookkeeping
+ * only, so each test sends a pointer's events to the element that holds it.
  *
  * @vitest-environment happy-dom
  */
@@ -15,7 +16,15 @@ import type { Chart, ChartPlace } from "@document";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
-import { MIN_HEIGHT, MIN_WIDTH, NUDGE_PX, dragged, placeOf, placed } from "@renderer/chart/place";
+import {
+  MIN_HEIGHT,
+  MIN_WIDTH,
+  NUDGE_PX,
+  dragged,
+  placeOf,
+  placed,
+  stretched,
+} from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import { BARS, MOVED } from "./charted.ts";
@@ -74,10 +83,11 @@ const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(
 const titles = (): Array<string | null> =>
   [...document.querySelectorAll(".chart-title")].map((title) => title.textContent);
 
-/** The first window, and the part of it a pointer takes hold of. */
+/** The first window, and the parts of it a pointer takes hold of. */
 const first = (): HTMLElement => windows()[0]!;
 const part = (selector: string): HTMLElement => first().querySelector<HTMLElement>(selector)!;
 const head = (): HTMLElement => part(".chart-head");
+const grip = (): HTMLElement => part(".chart-grip");
 
 /** Fires what a ResizeObserver on the sheet would. */
 let resized: () => void;
@@ -650,4 +660,45 @@ test("the capture ending after a drop changes nothing", () => {
   pointer("lostpointercapture", head());
   expect(model.all[0]!.place).toBe(place);
   expect(model.move).toHaveBeenCalledOnce();
+});
+
+test.each<[string, string, number, number]>([
+  ["the grip resizes both ways", ".chart-grip", STEP.x, STEP.y],
+  ["the right edge resizes across", ".chart-edge-right", STEP.x, 0],
+  ["the foot edge resizes down", ".chart-edge-foot", 0, STEP.y],
+])("%s, and a drop stores it", (_name, zone, dx, dy) => {
+  const { model } = shown(INSIDE);
+  const to = stretched(placed(MOVED, ROOM), dx, dy, ROOM);
+  carry(part(zone));
+  expect(drawn(first())).toStrictEqual(to);
+  expect(part(zone).hasPointerCapture(POINTER)).toBe(true);
+  expect(document.activeElement).toBe(first());
+
+  pointer("pointerup", part(zone), STEP.x, STEP.y);
+  expect(model.all[0]!.place).toStrictEqual(placeOf(to, ROOM, MOVED));
+});
+
+test("a press in the grip's svg takes hold of the grip", () => {
+  shown(INSIDE);
+  pointer("pointerdown", grip().querySelector("svg")!);
+  expect(grip().hasPointerCapture(POINTER)).toBe(true);
+});
+
+test("a resize holds at the least size and at the room's edge as it goes", () => {
+  shown(INSIDE);
+  const from = placed(MOVED, ROOM);
+  pointer("pointerdown", grip());
+  pointer("pointermove", grip(), -FAR, -FAR);
+  expect(drawn(first())).toStrictEqual({ ...from, width: MIN_WIDTH, height: MIN_HEIGHT });
+
+  pointer("pointermove", grip(), FAR, FAR);
+  const most = { ...from, width: ROOM.w - from.x, height: ROOM.h - from.y };
+  expect(drawn(first())).toStrictEqual(most);
+});
+
+test("Escape puts a resize back", () => {
+  shown(INSIDE);
+  carry(grip());
+  key("Escape");
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
 });

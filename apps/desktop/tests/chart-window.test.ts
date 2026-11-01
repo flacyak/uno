@@ -159,6 +159,8 @@ test("the head and the caption are drawn, with a grip that says nothing", () => 
     "col-head chart-head",
     "chart-plot",
     "chart-caption",
+    "chart-edge chart-edge-right",
+    "chart-edge chart-edge-foot",
   ]);
   expect(box.querySelector(".chart-caption .chart-grip")?.getAttribute("aria-hidden")).toBe("true");
 });
