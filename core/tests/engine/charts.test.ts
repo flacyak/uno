@@ -197,6 +197,47 @@ test('a workspace whose charts have all gone saves as one that never had any', a
   }
 });
 
+test('a save writes a chart at the place it is told, and one it is not told where it stood', async () => {
+  const { engine, done } = connect();
+  try {
+    await opened(engine, [NORTH, SOUTH]);
+    const moved = { x: 0.25, y: 0.5, width: 300, height: 200 };
+    const charts = [
+      { id: NORTH.id, place: moved },
+      { id: 'gone', place: moved },
+    ];
+    const place = { source: 'north', cells: [], at: '', charts };
+    const back = readContainer(
+      'q3.uno',
+      await engine.save(place, CARRIES_NOTHING),
+    );
+    expect(back.charts).toStrictEqual([{ ...NORTH, place: moved }, SOUTH]);
+  } finally {
+    done();
+  }
+});
+
+test('a save told a place a read would refuse keeps the chart where it stood', async () => {
+  const { engine, done } = connect();
+  try {
+    await opened(engine, [NORTH, SOUTH]);
+    const wild = { x: 2, y: 0, width: 300, height: 200 };
+    const nothing = { x: 0, y: 0, width: 0, height: 200 };
+    const charts = [
+      { id: NORTH.id, place: wild },
+      { id: SOUTH.id, place: nothing },
+    ];
+    const place = { source: 'north', cells: [], at: '', charts };
+    const back = readContainer(
+      'q3.uno',
+      await engine.save(place, CARRIES_NOTHING),
+    );
+    expect(back.charts).toStrictEqual([NORTH, SOUTH]);
+  } finally {
+    done();
+  }
+});
+
 test('a chart request adds a chart over a source it holds, or replaces the one with its id where it stood', async () => {
   const { engine, done } = connect();
   try {
