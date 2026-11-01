@@ -460,6 +460,7 @@
   ],
   "charts_newer": "os gráficos deste espaço de trabalho estão numa forma que este uno não consegue ler · são mantidos tal como estavam, e não podem ser alterados aqui",
   "chart_column_gone": "{name} não tem nenhuma coluna chamada {header}",
+  "chart_role": "gráfico",
   "chart_title_rows": "Linhas por {by}",
   "chart_title_sum": "Soma de {sum} por {by}",
   "chart_title_share_of_rows": "Proporção de linhas por {by}",

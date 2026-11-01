@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart } from "@document";
+import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
 import { MIN_HEIGHT, MIN_WIDTH, placed } from "@renderer/chart/place";
@@ -236,6 +237,7 @@ test("a relabel writes each window's words in the language chosen since", () => 
   void setLocale("es", { reload: false });
   layer.relabel();
   expect(titles()).toStrictEqual([madeTitle(FLUSH.plot)]);
+  expect(windows()[0]!.getAttribute("aria-roledescription")).toBe(m.chart_role());
 });
 
 test("a draw says what each chart says by then, in the same window", () => {

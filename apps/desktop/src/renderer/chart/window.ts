@@ -6,7 +6,11 @@
 import type { Chart, ChartColumn, Plot } from "@document";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
-import { el } from "@renderer/shell/util";
+import { Words, el } from "@renderer/shell/util";
+
+/** How many windows have been made, so each one's ids are its own. A chart's
+ * id can be any name, and aria-labelledby reads a space as a second id. */
+let made = 0;
 
 /** madeTitle gives the title a plot makes, in the app's language. */
 export function madeTitle(plot: Plot): string {
@@ -26,10 +30,18 @@ export class ChartWindow {
   /** The whole window, which the layer stands in the room. */
   readonly box = el("div", "chart");
   private readonly title = el("span", "chart-title");
+  /** The words that stay whichever chart the window shows. */
+  private readonly words = new Words();
 
   constructor() {
+    this.title.id = `chart-${++made}-title`;
+
     const head = el("div", "col-head chart-head");
     head.append(this.title);
+
+    this.box.setAttribute("role", "group");
+    this.box.setAttribute("aria-labelledby", this.title.id);
+    this.words.attr(this.box, "aria-roledescription", m.chart_role);
     this.box.append(head);
   }
 
@@ -38,5 +50,11 @@ export class ChartWindow {
     const title = el("bdi", "", chart.title === "" ? madeTitle(chart.plot) : chart.title);
     this.title.replaceChildren(title);
     this.title.title = this.title.textContent;
+    this.title.classList.toggle("from-file", chart.title !== "");
+  }
+
+  /** relabel writes the window's own words in the current language. */
+  relabel(): void {
+    this.words.write();
   }
 }

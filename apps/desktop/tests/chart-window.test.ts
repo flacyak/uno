@@ -1,6 +1,6 @@
 /**
- * @fileoverview A chart window's words: what a head calls its chart, in any
- * language.
+ * @fileoverview A chart window's words: what a head calls its chart, and what
+ * a screen reader is told the window is, in any language.
  *
  * @vitest-environment happy-dom
  */
@@ -8,6 +8,7 @@
 import { afterEach, expect, test } from "vite-plus/test";
 
 import type { Chart, Plot } from "@document";
+import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import { BARS } from "./charted.ts";
@@ -27,6 +28,11 @@ function windowOf(chart: Chart): ChartWindow {
   made.show(chart);
   document.body.append(made.box);
   return made;
+}
+
+/** The element an attribute of `box` points at. */
+function pointedAt(box: HTMLElement, attribute: string): Element {
+  return document.getElementById(box.getAttribute(attribute) ?? "")!;
 }
 
 function title(box: HTMLElement): HTMLElement {
@@ -60,20 +66,49 @@ test.each<[string, string, Plot]>([
   expect(madeTitle(plot)).toBe(es);
 });
 
+test("a window is a group called a chart, named by its head", () => {
+  const { box } = windowOf(BARS);
+  expect(box.getAttribute("role")).toBe("group");
+  expect(box.getAttribute("aria-roledescription")).toBe(m.chart_role());
+  expect(pointedAt(box, "aria-labelledby")).toBe(title(box));
+});
+
 test("the head says the title the plot makes, in full on the pointer too", () => {
   const { box } = windowOf(BARS);
   expect(title(box).textContent).toBe(madeTitle(BARS.plot));
   expect(title(box).title).toBe(madeTitle(BARS.plot));
+  expect(title(box).classList.contains("from-file")).toBe(false);
 });
 
-test("a person's title takes the made one's place", () => {
+test("a person's title takes the made one's place, and is marked as the file's", () => {
   const { box } = windowOf(TITLED);
   expect(title(box).textContent).toBe(TITLED.title);
   expect(title(box).title).toBe(TITLED.title);
+  expect(title(box).classList.contains("from-file")).toBe(true);
 });
 
 test("a window shown again says what its chart says now", () => {
   const made = windowOf(BARS);
+
   made.show(TITLED);
   expect(title(made.box).textContent).toBe(TITLED.title);
+
+  made.show(BARS);
+  expect(title(made.box).classList.contains("from-file")).toBe(false);
+});
+
+test("relabel writes the window's own words in the language chosen since", () => {
+  const made = windowOf(BARS);
+  void setLocale("es", { reload: false });
+  made.relabel();
+  expect(made.box.getAttribute("aria-roledescription")).toBe(m.chart_role());
+  expect(m.chart_role()).not.toBe(m.chart_role({}, { locale: baseLocale }));
+});
+
+test("each window has ids of its own, whatever its chart's id holds", () => {
+  const spaced = { ...BARS, id: "two words" };
+  const [one, two] = [windowOf(spaced).box, windowOf(spaced).box];
+  expect(pointedAt(one, "aria-labelledby")).toBe(title(one));
+  expect(pointedAt(two, "aria-labelledby")).toBe(title(two));
+  expect(one.getAttribute("aria-labelledby")).not.toBe(two.getAttribute("aria-labelledby"));
 });

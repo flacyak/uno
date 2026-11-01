@@ -68,6 +68,7 @@ export class ChartLayer {
 
   /** relabel rewrites the windows for a language change, leaving each one open. */
   relabel(): void {
+    for (const held of this.windows.values()) held.relabel();
     this.draw();
   }
 
