@@ -26,6 +26,12 @@ const GRIP =
  * id can be any name, and aria-labelledby reads a space as a second id. */
 let made = 0;
 
+/** What a window asks of the layer it stands in. */
+export interface Stage {
+  /** Gives the keys back to the grid. */
+  leave(): void;
+}
+
 /** madeTitle gives the title a plot makes, in the app's language. */
 export function madeTitle(plot: Plot): string {
   const named = ({ header, col }: ChartColumn): string => columnLabel(header, col);
@@ -55,7 +61,7 @@ export class ChartWindow {
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
 
-  constructor() {
+  constructor(private readonly stage: Stage) {
     const id = `chart-${++made}`;
     const caption = el("div", "chart-caption");
     caption.id = `${id}-caption`;
@@ -80,6 +86,7 @@ export class ChartWindow {
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
     this.box.append(head, el("div", "chart-plot"), caption);
+    this.box.addEventListener("keydown", (e) => this.key(e));
   }
 
   /** show writes what `chart` says in the head, after `source` if it has one. */
@@ -99,5 +106,13 @@ export class ChartWindow {
   /** relabel writes the window's own words in the current language. */
   relabel(): void {
     this.words.write();
+  }
+
+  /** key answers Escape, and leaves any other key to the shell. */
+  private key(e: KeyboardEvent): void {
+    if (e.key !== "Escape") return;
+    this.stage.leave();
+    e.preventDefault();
+    e.stopPropagation();
   }
 }

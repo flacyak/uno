@@ -16,6 +16,7 @@ import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
 import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import { ChartWindow } from "./window.ts";
+import type { Stage } from "./window.ts";
 
 /** What the layer reads of a workspace's charts. */
 type Shown = Pick<Charts, "all" | "sourceLabel">;
@@ -31,7 +32,7 @@ function borderWidth(): number {
   return Math.max(Math.floor(devicePixelRatio), THINNEST_BORDER) / devicePixelRatio;
 }
 
-export class ChartLayer {
+export class ChartLayer implements Stage {
   /** The window of each chart showing, by chart id. */
   private readonly windows = new Map<string, ChartWindow>();
   /** The height of the header row, and of a tucked window's head. */
@@ -45,6 +46,8 @@ export class ChartLayer {
     private readonly root: HTMLElement,
     /** Every change to the layer's box is a change to this one's. */
     private readonly content: HTMLElement,
+    /** Gives the keys back to the grid. */
+    readonly leave: () => void,
   ) {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);
@@ -123,7 +126,7 @@ export class ChartLayer {
   private windowOf(id: string): ChartWindow {
     const held = this.windows.get(id);
     if (held !== undefined) return held;
-    const made = new ChartWindow();
+    const made = new ChartWindow(this);
     this.windows.set(id, made);
     this.root.append(made.box);
     return made;
