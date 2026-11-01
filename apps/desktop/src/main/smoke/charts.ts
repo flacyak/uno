@@ -485,6 +485,26 @@ export const CHARTS: Check[] = [
     `,
   },
   {
+    name: "a cell opens in transform, for the click after this",
+    script: `
+      await press("e", { ctrlKey: true });
+      await press("Enter");
+      return (await until(() => document.querySelector(".cell-editor") !== null)) ? "" : "no cell opened";
+    `,
+  },
+  {
+    name: "a click on a window's head commits an open cell and gives the window the keys",
+    input: { events: CLICK_HEAD, through: true },
+    script: `
+      ${CHROME}
+      if (!(await until(() => document.querySelector(".cell-editor") === null))) return "the cell stayed open";
+      await frame();
+      const keys = document.activeElement;
+      await press("e", { ctrlKey: true });
+      return keys === box() ? "" : "the keys are in #" + keys?.id;
+    `,
+  },
+  {
     name: "the layer clips as far from a window as its shadow reaches, so the shadow fades before the clip",
     script: `
       ${CHROME}

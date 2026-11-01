@@ -142,3 +142,27 @@ for (const input of [defaultInput, vimStyle]) {
     expect(grid.selection()).toEqual({ row: 2, col: 0 });
   });
 }
+
+test("a cell left for a control keeps what was typed and leaves the keys there, and one left for the page around the grid gives them back", () => {
+  const { grid, press, editor, edits } = make(defaultInput);
+  grid.show(sheet(40), true);
+  grid.focus();
+  const host = document.activeElement;
+  const leaveFor = (relatedTarget: Element | null): void => {
+    press("Enter");
+    editor().value = "typed";
+    editor().dispatchEvent(new FocusEvent("blur", { relatedTarget }));
+    expect(grid.editing()).toBe(false);
+  };
+
+  leaveFor(document.body.appendChild(document.createElement("button")));
+  expect(edits).toEqual([[0, 0, "typed"]]);
+  expect(document.activeElement).not.toBe(host);
+
+  leaveFor(document.body);
+  expect(document.activeElement).toBe(host);
+
+  document.body.focus();
+  leaveFor(null);
+  expect(document.activeElement).toBe(host);
+});
