@@ -1,7 +1,7 @@
 /**
  * @fileoverview A chart's window: the dialogs' box, with a head that says what
- * the chart shows and a round × of the window's own kind. The layer stands it in
- * the room and says which chart it shows.
+ * the chart shows, a round × of the window's own kind, and a caption that ends
+ * in a grip. The layer stands it in the room and says which chart it shows.
  */
 
 import type { Chart, ChartColumn, Plot } from "@document";
@@ -13,6 +13,12 @@ import { Words, el } from "@renderer/shell/util";
 const CROSS =
   '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
   '<path d="M2 2l6 6M8 2l-6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+  "</svg>";
+
+/** The grip's two diagonal strokes, drawn in currentColor. */
+const GRIP =
+  '<svg viewBox="0 0 12 12" width="12" height="12">' +
+  '<path d="M10 3l-7 7M10 7l-3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
   "</svg>";
 
 /** How many windows have been made, so each one's ids are its own. A chart's
@@ -41,7 +47,10 @@ export class ChartWindow {
   private readonly words = new Words();
 
   constructor() {
-    this.title.id = `chart-${++made}-title`;
+    const id = `chart-${++made}`;
+    const caption = el("div", "chart-caption");
+    caption.id = `${id}-caption`;
+    this.title.id = `${id}-title`;
 
     const x = el("button", "round-x chart-close");
     x.type = "button";
@@ -51,10 +60,16 @@ export class ChartWindow {
     const head = el("div", "col-head chart-head");
     head.append(this.title, x);
 
+    const grip = el("span", "chart-grip");
+    grip.innerHTML = GRIP;
+    grip.setAttribute("aria-hidden", "true");
+    caption.append(grip);
+
     this.box.setAttribute("role", "group");
     this.box.setAttribute("aria-labelledby", this.title.id);
+    this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head);
+    this.box.append(head, el("div", "chart-plot"), caption);
   }
 
   /** show writes what `chart` says in the head, after `source` if it has one. */

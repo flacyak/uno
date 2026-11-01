@@ -3,7 +3,8 @@
  * sheet lands a window on the rules around it, clear of both scrollbars and the
  * ×, inside its room at 200% zoom, and tucked to its head where the side columns
  * leave too little room. None of it marks the workspace unsaved, and the grid
- * still takes the pointer and the keys beside a window.
+ * still takes the pointer and the keys beside a window. In light and dark, a
+ * window reads as the settings menu's box, the sidebar's band and the window's ×.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot.
@@ -55,6 +56,9 @@ const THIN_SHEET = 40;
 
 /** A sheet too short for two heads, which take 59 px under the header row. */
 const SHORT_SHEET = 80;
+
+/** A caption's height, which MIN_HEIGHT allows for. */
+const CAPTION = 22;
 
 /** What a window copies from the settings menu. */
 const BOX_LOOK = [
@@ -112,6 +116,12 @@ const COPIES = [
   { of: "the settings menu's box", copy: ".chart", from: ".settings", names: BOX_LOOK },
   { of: "the sidebar's band", copy: ".chart-head", from: "#sidebar .col-head", names: HEAD_LOOK },
   { of: "the window's ×", copy: ".chart .round-x", from: "#close", names: X_LOOK },
+  {
+    of: "the settings menu's divider",
+    copy: ".chart-caption",
+    from: ".settings section + section",
+    names: ["border-top"],
+  },
 ];
 
 /**
@@ -338,7 +348,7 @@ export const CHARTS: Check[] = [
   },
   ...WORN,
   {
-    name: "a head is one row high and drags nothing, with its × centred as the window's own",
+    name: "a head is one row high and drags nothing, its × centred as the window's own, and the caption ends the box",
     script: `
       ${CHROME}
       const [band, cross] = [head(), x()].map((at) => at.getBoundingClientRect());
@@ -354,6 +364,12 @@ export const CHARTS: Check[] = [
       const parts = [style(box()).borderLeftWidth, style(box()).borderRightWidth, style(head()).paddingLeft, style(head()).columnGap, style(x()).width, style(x()).marginRight];
       const least = parts.reduce((sum, px) => sum + parseFloat(px), 0);
       if (least !== ${HEAD_LEAST_WIDTH}) return "a head's fixed parts come to " + least + "px";
+      const caption = box().querySelector(".chart-caption").getBoundingClientRect();
+      if (caption.height !== ${CAPTION}) return "the caption is " + caption.height + "px high";
+      const foot = box().getBoundingClientRect().bottom - parseFloat(style(box()).borderBottomWidth);
+      if (caption.bottom !== foot) return "the caption ends at " + caption.bottom + ", and the box at " + foot;
+      const grip = box().querySelector(".chart-grip").getBoundingClientRect();
+      if (grip.right !== cross.right) return "the grip ends at " + grip.right + ", and the × at " + cross.right;
       return text(".chart-title") === "Rows per Location" ? "" : "the head says " + text(".chart-title");
     `,
   },

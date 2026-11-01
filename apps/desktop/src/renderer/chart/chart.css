@@ -121,6 +121,36 @@
   }
 }
 
+.chart-plot {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The rule is the dialogs' divider. --rule-2 is mixed with --paper, which puts
+ * it one level off a dark --surface. The grip ends under the ×, which sets it as
+ * far from the right as the foot. */
+.chart-caption {
+  display: flex;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 var(--x-inset) 0 10px;
+  border-top: 1px solid var(--rule);
+  font-size: 11px;
+  color: var(--ink-3);
+  user-select: none;
+}
+
+/* The scrollbar thumb's two colours (grid.css). */
+.chart-grip {
+  display: flex;
+  color: color-mix(in srgb, var(--ink-3) 50%, transparent);
+}
+
+.chart-grip:hover {
+  color: var(--ink-3);
+}
+
 /* In the grid's scroller, it fills what the bars leave and lets the pointer by. */
 .chart-gauge {
   position: absolute;
