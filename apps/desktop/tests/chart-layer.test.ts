@@ -249,6 +249,30 @@ test("a room too short tucks them too, and each goes back to its place with the 
   ]);
 });
 
+test("the layer says while it tucks, so heads can join into one stack", () => {
+  shown(FLUSH, INSIDE);
+  const tucking = (): boolean => root().classList.contains("tucked");
+  expect(tucking()).toBe(false);
+
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(tucking()).toBe(true);
+
+  resize(ROOM);
+  expect(tucking()).toBe(false);
+});
+
+test("the stack's one shadow stands as high as the heads it lies behind", () => {
+  shown(FLUSH, INSIDE);
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(root().style.getPropertyValue("--stack-height")).toBe(`${2 * HEAD + BORDER}px`);
+});
+
+test("a room with no windows is no stack, so it throws no shadow", () => {
+  shown();
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(root().classList.contains("tucked")).toBe(false);
+});
+
 test("heads a room cannot hold stop at its foot, and only while they are too many", () => {
   shown(FLUSH, INSIDE);
   const held = (): boolean => root().classList.contains("overfull");

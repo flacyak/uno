@@ -21,6 +21,7 @@ import {
   overfull,
   placed,
   placeOf,
+  stackHeight,
   thin,
   tucked,
   tucks,
@@ -141,6 +142,7 @@ test("a tucked window is its head, at the room's width, stacked in list order", 
   const rect = tucked(2, HEAD, BORDER, room);
   expect(rect).toEqual({ x: 0, y: 2 * HEAD, width: room.w, height: HEAD + BORDER });
   expect(tucked(3, HEAD, BORDER, room).y).toBe(rect.y + rect.height - BORDER);
+  expect(stackHeight(3, HEAD, BORDER)).toBe(rect.y + rect.height);
 });
 
 test("a new window goes at the top of the half away from the selected column", () => {

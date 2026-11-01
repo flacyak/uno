@@ -272,6 +272,25 @@ export const CHARTS: Check[] = [
     `,
   },
   {
+    name: "tucked heads read as one stack: square where they meet, behind one shadow that falls on neither",
+    script: `
+      ${GEOMETRY}
+      const [upper, lower] = [...document.querySelectorAll(".chart")].map((at) => [at, getComputedStyle(at)]);
+      const stack = getComputedStyle(document.querySelector("#charts"), "::before");
+      const shared = [upper[1].borderBottomLeftRadius, upper[1].borderBottomRightRadius, lower[1].borderTopLeftRadius, lower[1].borderTopRightRadius];
+      if (shared.some((radius) => radius !== "0px")) return "the heads meet on corners of " + shared.join(", ");
+      const outer = [upper[1].borderTopLeftRadius, lower[1].borderBottomRightRadius, stack.borderTopLeftRadius];
+      if (new Set(outer).size > 1) return "the stack's outer corners differ: " + outer.join(", ");
+      if (upper[1].boxShadow !== "none" || lower[1].boxShadow !== "none") return "the heads throw " + upper[1].boxShadow + " and " + lower[1].boxShadow;
+      const [top, foot] = windows();
+      if (parseFloat(stack.height) !== foot.bottom - top.top) return "the shadow is " + stack.height + " high, behind heads at " + edges(top) + " and " + edges(foot);
+      const menu = getComputedStyle(document.querySelector(".settings")).boxShadow;
+      if (stack.boxShadow !== menu) return "the stack throws " + stack.boxShadow + ", and the settings menu " + menu;
+      upper[0].scrollTop = 1;
+      return upper[0].scrollTop === 0 ? "" : "a tucked window scrolls past its head";
+    `,
+  },
+  {
     name: "with room again, each window goes back to its place",
     window: {},
     script: `
