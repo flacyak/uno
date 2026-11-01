@@ -1,14 +1,21 @@
 /**
- * @fileoverview Checks of a chart window under a real pointer. A drag moves it by
- * the pointer's px, the grip and the edges resize it, the least size holds and
- * the room's edges stop it, and Escape puts a drag back. None of it marks the
+ * @fileoverview Checks of a chart window under a real pointer and real keys. A
+ * drag moves it by the pointer's px, the grip and the edges resize it, the least
+ * size holds and the room's edges stop it, and Escape puts a drag back. The
+ * arrows step it, and Escape gives the grid its keys back. None of it marks the
  * workspace unsaved.
  *
  * They follow CHARTS, so the first window stands at the top of the room's right
  * edge and the second at its foot, and each picks up where the last left it.
  */
 
-import { DEFAULT_HEIGHT, DEFAULT_WIDTH, MIN_HEIGHT, MIN_WIDTH } from "@renderer/chart/place";
+import {
+  DEFAULT_HEIGHT,
+  DEFAULT_WIDTH,
+  MIN_HEIGHT,
+  MIN_WIDTH,
+  NUDGE_PX,
+} from "@renderer/chart/place";
 import { GEOMETRY, RECT_SLACK } from "./charts.ts";
 import type { Check, Input } from "./check.ts";
 
@@ -39,6 +46,9 @@ const FAR = 2000;
 
 /** A point over the grid, which a held drag lets go of. */
 const OVER_GRID = { x: 400, y: 300 };
+
+/** The row the selection stands on from CHARTS, and the one below it. */
+const ROW_BELOW = 12;
 
 /** The zone a finger gets at a window's edges and grip, as the design asks. */
 const FINGER = 24;
@@ -208,6 +218,46 @@ export const CHART_MOVES: Check[] = [
       const box = document.querySelector(".chart");
       if (document.activeElement !== box) return "the keys are in #" + document.activeElement?.id;
       return stands({ right: room().right, bottom: room().bottom }) ? "" : "the drag went on to " + reads();
+    `,
+  },
+  {
+    name: "an arrow steps a window",
+    input: { events: pressing("Left"), through: true },
+    script: `
+      ${MOVES}
+      return wait({ right: room().right - ${NUDGE_PX} }, "a press");
+    `,
+  },
+  {
+    name: "Shift and an arrow resize a window",
+    input: { events: pressing("Right", ["shift"]), through: true },
+    script: `
+      ${MOVES}
+      return wait({ right: room().right, width: ${MIN_WIDTH + NUDGE_PX} }, "a press");
+    `,
+  },
+  {
+    name: "an arrow up keeps a window's height",
+    input: { events: pressing("Up"), through: true },
+    script: `
+      ${MOVES}
+      return wait({ bottom: room().bottom - ${NUDGE_PX}, height: ${MIN_HEIGHT} }, "a press");
+    `,
+  },
+  {
+    name: "Escape gives the grid the keys back",
+    input: { events: pressing("Escape"), through: true },
+    script: `
+      const grid = document.querySelector("#content");
+      return (await until(() => document.activeElement === grid)) ? "" : "the keys are in #" + document.activeElement?.id;
+    `,
+  },
+  {
+    name: "the grid's arrows work again",
+    input: { events: pressing("Down"), through: true },
+    script: `
+      const cell = () => text("#status-cell");
+      return (await until(() => cell().endsWith("row ${ROW_BELOW}"))) ? "" : "the selection is at " + cell();
     `,
   },
 ];
