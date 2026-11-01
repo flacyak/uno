@@ -35,7 +35,8 @@ export class ChartWindow {
 
   /** show writes what `chart` says in the head. */
   show(chart: Chart): void {
-    this.title.replaceChildren(el("bdi", "", madeTitle(chart.plot)));
+    const title = el("bdi", "", chart.title === "" ? madeTitle(chart.plot) : chart.title);
+    this.title.replaceChildren(title);
     this.title.title = this.title.textContent;
   }
 }

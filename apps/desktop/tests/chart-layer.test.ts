@@ -11,9 +11,11 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart } from "@document";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
 import { MIN_HEIGHT, MIN_WIDTH, placed } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
+import { madeTitle } from "@renderer/chart/window";
 import { BARS, MOVED } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 
@@ -40,6 +42,8 @@ const content = (): HTMLElement => document.querySelector<HTMLElement>("#content
 const scroller = (): HTMLElement => document.querySelector<HTMLElement>(".grid-scroll")!;
 const gauge = (): HTMLElement => document.querySelector<HTMLElement>(".grid-scroll .chart-gauge")!;
 const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".chart")];
+const titles = (): Array<string | null> =>
+  [...document.querySelectorAll(".chart-title")].map((title) => title.textContent);
 
 /** Fires what a ResizeObserver on the sheet would. */
 let resized: () => void;
@@ -101,6 +105,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  void setLocale(baseLocale, { reload: false });
 });
 
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
@@ -224,6 +229,22 @@ test("a relabel keeps every window", () => {
   layer.relabel();
   expect(windows()).toHaveLength(were.length);
   were.forEach((box, i) => expect(windows()[i]).toBe(box));
+});
+
+test("a relabel writes each window's words in the language chosen since", () => {
+  const { layer } = shown(FLUSH);
+  void setLocale("es", { reload: false });
+  layer.relabel();
+  expect(titles()).toStrictEqual([madeTitle(FLUSH.plot)]);
+});
+
+test("a draw says what each chart says by then, in the same window", () => {
+  const { layer, model } = shown(FLUSH);
+  const made = windows()[0];
+  model.all = [{ ...FLUSH, title: "Rows" }];
+  layer.draw();
+  expect(titles()).toStrictEqual(["Rows"]);
+  expect(windows()[0]).toBe(made);
 });
 
 test("a room too narrow tucks every window to its head, stacked from the top", () => {

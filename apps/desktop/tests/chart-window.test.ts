@@ -18,6 +18,9 @@ const UNITS = { col: 4, header: "units" };
 const REVENUE = { col: 5, header: "revenue" };
 const BLANK = { col: 2, header: "" };
 
+/** A chart with a title a person gave it. */
+const TITLED: Chart = { ...BARS, title: "Where the rows are" };
+
 /** A chart's window, showing `chart`. */
 function windowOf(chart: Chart): ChartWindow {
   const made = new ChartWindow();
@@ -61,4 +64,16 @@ test("the head says the title the plot makes, in full on the pointer too", () =>
   const { box } = windowOf(BARS);
   expect(title(box).textContent).toBe(madeTitle(BARS.plot));
   expect(title(box).title).toBe(madeTitle(BARS.plot));
+});
+
+test("a person's title takes the made one's place", () => {
+  const { box } = windowOf(TITLED);
+  expect(title(box).textContent).toBe(TITLED.title);
+  expect(title(box).title).toBe(TITLED.title);
+});
+
+test("a window shown again says what its chart says now", () => {
+  const made = windowOf(BARS);
+  made.show(TITLED);
+  expect(title(made.box).textContent).toBe(TITLED.title);
 });

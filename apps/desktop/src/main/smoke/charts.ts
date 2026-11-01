@@ -68,10 +68,25 @@ const BOX_LOOK = [
   "font-size",
 ];
 
-/** Helpers: a window, and what the page computes for it. */
+/** What a head copies from the sidebar's band. */
+const HEAD_LOOK = [
+  "background-color",
+  "border-bottom",
+  "color",
+  "font-family",
+  "font-size",
+  "height",
+  "letter-spacing",
+  "text-transform",
+  "user-select",
+];
+
+/** Helpers: a window's parts, and what the page computes for them. */
 const CHROME = `
   const box = () => document.querySelector(".chart");
+  const head = () => box().querySelector(".chart-head");
   const style = (at) => getComputedStyle(at);
+  const rowHeight = () => parseFloat(style(document.documentElement).getPropertyValue("--row-h"));
 `;
 
 /** Helpers: the boxes of the windows and the layer, and what the checks ask of them. */
@@ -88,9 +103,10 @@ const GEOMETRY = `
   const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
 `;
 
-/** What a window copies, by selector. */
+/** What a window and its head copy, by selector. */
 const COPIES = [
   { of: "the settings menu's box", copy: ".chart", from: ".settings", names: BOX_LOOK },
+  { of: "the sidebar's band", copy: ".chart-head", from: "#sidebar .col-head", names: HEAD_LOOK },
 ];
 
 /**
@@ -98,7 +114,7 @@ const COPIES = [
  * what it copies. The menu has to be open to be read.
  */
 const WORN: Check[] = (["dark", "light"] as const).map((mode) => ({
-  name: `in ${mode} a window wears the dialogs' box`,
+  name: `in ${mode} a window wears the dialogs' box and the sidebar's band`,
   shot: `chart-${mode}`,
   script: `
     ${CHROME}
@@ -316,6 +332,16 @@ export const CHARTS: Check[] = [
     `,
   },
   ...WORN,
+  {
+    name: "a head is one row high and drags nothing",
+    script: `
+      ${CHROME}
+      const band = head().getBoundingClientRect();
+      if (band.height !== rowHeight()) return "the head is " + band.height + "px high";
+      if (style(head()).getPropertyValue("-webkit-app-region") !== "no-drag") return "the head would drag the app's window";
+      return text(".chart-title") === "Rows per Location" ? "" : "the head says " + text(".chart-title");
+    `,
+  },
   {
     name: "the layer clips as far from a window as its shadow reaches, so the shadow fades before the clip",
     script: `
