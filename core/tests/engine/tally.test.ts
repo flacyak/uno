@@ -118,14 +118,14 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     const fold = new SampleFold();
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
-    return { t: 'sample', coverage, ...fold.snapshot() };
+    return { t: 'sample', plot, coverage, ...fold.snapshot() };
   }
   const { by, sum } = plot;
   const fold = new GroupsFold(sum === undefined ? 'rows' : 'sum');
   for (let r = 0; r < rows; r++) {
     fold.add(cell(r, by), sum === undefined ? '' : cell(r, sum));
   }
-  return { t: 'groups', coverage, ...fold.snapshot() };
+  return { t: 'groups', plot, coverage, ...fold.snapshot() };
 }
 
 /** folded attaches `charts` and folds the first `rows` of the sheet, a TINY block at a time. */
@@ -259,6 +259,17 @@ test("a chart's column is found where it was, or by its header where the file mo
   const margin = { col: REGION, header: 'margin' };
   const gone: Chart = { ...REGION_ROWS, plot: { t: 'pie', by: margin } };
   expect(tallies.attach(gone, HEADERS)).toBe('margin');
+});
+
+test('a tally names the plot it reads, and a chart that keeps its fold under another plot names that one', () => {
+  const tallies = folded([REGION_ROWS]);
+  tallies.read(ROWS, true);
+  const plot: Plot = { t: 'pie', by: column(REGION) };
+  tallies.attach({ ...REGION_ROWS, plot }, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [REGION_ROWS.id, pure(plot)],
+  ]);
 });
 
 test('a chart folds each block from the first it lacks, and one attached later lacks them all', () => {
@@ -401,7 +412,8 @@ test('a scatter whose block cannot be read again is the one told its source coul
   const unreadable = () => Promise.reject(new Error('unreadable'));
   await expect(tallies.mend(moved, unreadable)).rejects.toThrow('unreadable');
   const said: Said = { t: 'changed-on-disk', name: NAME };
-  const unread = [[UNITS_REVENUE.id, { t: 'unread', said }]];
+  const { id, plot } = UNITS_REVENUE;
+  const unread = [[id, { t: 'unread', plot, said }]];
   expect(tallies.unread(said, moved)).toStrictEqual(unread);
   const pending = tallies.read(ROWS, true).map(([id]) => id);
   expect(pending).toEqual([REGION_ROWS.id]);
@@ -460,13 +472,17 @@ test("a chart's column is found by its header where the file moved it, and each 
     const charts = [moved, gone, also];
     const heard = new Heard(await opened(engine, charts));
     const [one, two, three] = charts.map((chart) => heard.of(chart.id));
-    expect(await one).toStrictEqual(pure(REGION_ROWS.plot));
-    const unread = (header: string) => ({
+    expect(await one).toStrictEqual({
+      ...pure(REGION_ROWS.plot),
+      plot: moved.plot,
+    });
+    const unread = ({ plot }: Chart, header: string) => ({
       t: 'unread',
+      plot,
       said: { t: 'chart-column-gone', header, name: NAME },
     });
-    expect(await two).toStrictEqual(unread('margin'));
-    expect(await three).toStrictEqual(unread('cost'));
+    expect(await two).toStrictEqual(unread(gone, 'margin'));
+    expect(await three).toStrictEqual(unread(also, 'cost'));
   } finally {
     done();
   }
@@ -482,12 +498,13 @@ test('a chart whose source cannot be read hears why, once, and one added afterwa
     const lasts = charts.map((chart) => heard.of(chart.id));
     const said: Said = { t: 'changed-on-disk', name: NAME };
     hold.arm(new Refusal(said));
-    for (const last of lasts) {
-      expect(await last).toStrictEqual({ t: 'unread', said });
-    }
+    const unread = charts.map(({ id, plot }) => [
+      id,
+      { t: 'unread', plot, said },
+    ]);
+    expect(await Promise.all(lasts)).toStrictEqual(unread.map(([, t]) => t));
     // A round trip, after which anything posted before it has landed.
     await src.rows(0, 1);
-    const unread = charts.map((chart) => [chart.id, { t: 'unread', said }]);
     expect(heard.all).toStrictEqual(unread);
 
     const last = heard.of(UNITS_REVENUE.id);

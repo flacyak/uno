@@ -8,7 +8,7 @@
  * a Web Worker, or a MessageChannel.
  */
 
-import type { Chart, ChartPlace } from '@document';
+import type { Chart, ChartPlace, Plot } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Change } from '@pattern';
 import type { Said } from '@said';
@@ -243,20 +243,27 @@ export interface Coverage {
 /** A bars or pie chart's tally: rows, or a sum, per value. */
 export interface GroupsTally extends Groups {
   t: 'groups';
+  plot: Plot;
   coverage: Coverage;
 }
 
 /** A scatter's tally: some of its points, and the extent of every row. */
 export interface SampleTally extends Sample {
   t: 'sample';
+  plot: Plot;
   coverage: Coverage;
 }
 
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
- * arrays, or why the source could not be read.
+ * arrays, or why the source could not be read. Each names the plot it reads,
+ * since the source's view goes on posting for the plot it holds until a
+ * chart's change reaches it, however long that waits behind a relink.
  */
-export type Tally = GroupsTally | SampleTally | { t: 'unread'; said: Said };
+export type Tally =
+  | GroupsTally
+  | SampleTally
+  | { t: 'unread'; plot: Plot; said: Said };
 
 /**
  * Peeked is a preview of a file: its header and first rows, read from the

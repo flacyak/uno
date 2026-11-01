@@ -15,6 +15,8 @@ import type { Tally } from './protocol.ts';
 
 /** How far one chart's fold has got. */
 interface Folding {
+  /** The plot the fold reads, which its tally names. */
+  plot: Plot;
   /** Which fold the plot's columns make, so a like chart can keep it. */
   key: string;
   /** Rows folded: every row before the first block it lacks. */
@@ -72,6 +74,7 @@ export class Tallies {
     }
     const was = this.charts.get(id);
     if (was?.key === t.key) {
+      was.plot = plot;
       was.done = false;
       return undefined;
     }
@@ -247,10 +250,11 @@ export class Tallies {
       const ahead = t.ahead === undefined ? 0 : t.ahead[1] - t.ahead[0];
       const complete = indexed && t.rows === total;
       const coverage = { rows: t.rows + ahead, total, complete };
+      const { plot } = t;
       const tally: Tally =
         t.t === 'sample'
-          ? { t: 'sample', coverage, ...t.fold.snapshot() }
-          : { t: 'groups', coverage, ...t.fold.snapshot() };
+          ? { t: 'sample', plot, coverage, ...t.fold.snapshot() }
+          : { t: 'groups', plot, coverage, ...t.fold.snapshot() };
       read.push([id, tally]);
       t.done = complete;
     }
@@ -266,7 +270,7 @@ export class Tallies {
     for (const id of ids ?? this.charts.keys()) {
       const t = this.charts.get(id);
       if (t === undefined || t.done) continue;
-      unread.push([id, { t: 'unread', said }]);
+      unread.push([id, { t: 'unread', plot: t.plot, said }]);
       t.done = true;
     }
     return unread;
@@ -278,7 +282,7 @@ export class Tallies {
  * put them, or returns the header of a column the view has not.
  */
 function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
-  const folding = unfolded();
+  const folding = { ...unfolded(), plot };
   if (plot.t === 'scatter') {
     const x = placeOf(plot.x, headers);
     const y = placeOf(plot.y, headers);
@@ -301,7 +305,7 @@ function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
 }
 
 /** unfolded is how far a fold has got before any row: nothing, pending. */
-function unfolded(): Omit<Folding, 'key'> {
+function unfolded(): Omit<Folding, 'plot' | 'key'> {
   return { rows: 0, ahead: undefined, done: false };
 }
 
