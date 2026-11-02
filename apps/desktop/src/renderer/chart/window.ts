@@ -8,7 +8,8 @@
  * it stands, so a window put back has changed nothing. An arrow stores a step
  * at once. A place asks nothing of the engine and marks nothing unsaved.
  *
- * The sheet scrolls under a window: a wheel over one goes on to the grid.
+ * The sheet scrolls under a window: a wheel over one goes on to the grid, unless
+ * something inside the window can still scroll that way.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -35,6 +36,15 @@ const GRIP =
 
 /** A pointer's `button` for the left button, a finger or a pen's tip. */
 const PRIMARY_BUTTON = 0;
+
+/** What names something that scrolls inside a window, for the wheel to find it. */
+const SCROLLS = ".chart-scrolls";
+
+/**
+ * How near its end a scroller counts as there, in px. At a zoom scrollTop is
+ * fractional, and the sizes it adds up to are rounded, so an end can read short.
+ */
+const SCROLL_END_SLACK = 1;
 
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
@@ -88,6 +98,20 @@ export function madeTitle(plot: Plot): string {
   return sum === undefined
     ? m.chart_title_share_of_rows({ by })
     : m.chart_title_share_of_sum({ by, sum });
+}
+
+/** canGo says whether a scroller at `at` of `end` has room `delta`'s way. */
+function canGo(delta: number, at: number, end: number): boolean {
+  return delta > 0 ? end - at > SCROLL_END_SLACK : delta < 0 && at > 0;
+}
+
+/** hasRoom says whether `scroller` can still go `dx` along or `dy` down. */
+function hasRoom(scroller: Element, dx: number, dy: number): boolean {
+  const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = scroller;
+  return (
+    canGo(dy, scrollTop, scrollHeight - clientHeight) ||
+    canGo(dx, scrollLeft, scrollWidth - clientWidth)
+  );
 }
 
 /** standAt puts a window at `rect`, in the layer's CSS px. */
@@ -233,11 +257,16 @@ export class ChartWindow {
     if (!tucks(room)) this.stage.move(this.chart.id, placeOf(rect, room, this.chart.place));
   }
 
-  /** wheel hands a turn of the wheel to the sheet behind the window. */
+  /**
+   * wheel leaves a turn to what scrolls inside the window while it has room, as
+   * the browser scrolls it, and hands any other to the sheet behind the window.
+   */
   private wheel(e: WheelEvent): void {
     if (e.ctrlKey) return; // Ctrl+wheel is zoom
-    e.preventDefault();
     const { dx, dy } = wheelWay(e.deltaX, e.deltaY, e.shiftKey);
+    const inner = e.target instanceof Element ? e.target.closest(SCROLLS) : null;
+    if (inner !== null && hasRoom(inner, dx, dy)) return;
+    e.preventDefault();
     this.stage.wheelBy(dx, dy, e.deltaMode);
   }
 
