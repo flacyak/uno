@@ -5,7 +5,8 @@
  *
  * Each window draws from its chart's place, in the room the layer leaves. A
  * resize of the room changes only what shows. A window reports back through
- * Stage, which stores its place for the next save and raises it.
+ * Stage, which stores its place for the next save and raises it, and hands the
+ * grid what the window does not take.
  *
  * It is loaded with the first workspace that has charts.
  */
@@ -53,6 +54,8 @@ export class ChartLayer implements Stage {
     private readonly content: HTMLElement,
     /** Gives the keys back to the grid. */
     readonly leave: () => void,
+    /** Scrolls the sheet by a wheel turned over a window. */
+    readonly wheelBy: (dx: number, dy: number, deltaMode: number) => void,
   ) {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);

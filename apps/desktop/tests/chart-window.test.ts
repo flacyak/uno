@@ -33,6 +33,7 @@ const NO_LAYER: Stage = {
   draw: () => undefined,
   raise: () => undefined,
   leave: () => undefined,
+  wheelBy: () => undefined,
 };
 
 /** A chart's window, showing `chart` under `source`. */
