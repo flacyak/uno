@@ -44,6 +44,12 @@ export interface Check {
   /** The same drag with a finger. No run has a touch screen, so DevTools sends it. */
   touch?: { selector: string; by: { x: number; y: number } };
   /**
+   * A turn of the wheel, by the path a person's wheel takes, before the check
+   * runs: over the middle of what `selector` picks, `down` CSS px down the page,
+   * with `modifiers` held.
+   */
+  wheel?: { selector: string; down: number; modifiers?: Array<"shift" | "control"> };
+  /**
    * The window's zoom and width, set before the check runs, the way the View
    * menu and a drag of its edge set them. What is left out goes back to what
    * the run started with.
