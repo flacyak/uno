@@ -170,6 +170,17 @@
   min-height: 0;
 }
 
+/* What scrolls inside a window fills the plot, and window.ts gives it the wheel
+ * until it reaches its end. It stands over the right edge's zone, as the grip
+ * does, so its scrollbar keeps the pointer. */
+.chart-scrolls {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 /* The rule is the dialogs' divider. --rule-2 is mixed with --paper, which puts
  * it one level off a dark --surface. The grip ends under the ×, which sets it as
  * far from the right as the foot. */
