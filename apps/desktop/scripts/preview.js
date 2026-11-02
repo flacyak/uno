@@ -23,8 +23,10 @@
  *   is chosen to edit the connection. Goes to out/refused.gif.
  * - `moves`: carries a chart window by its head, resizes it by its grip, and
  *   steps and resizes it with the arrows. Goes to out/moves.gif.
+ * - `wheel`: scrolls the sheet down and back up with the wheel over a chart
+ *   window, in the moves story's workspace. Goes to out/wheel.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel]
  * (after node scripts/build.js)
  */
 
@@ -55,7 +57,7 @@ const fixture = join(testdata, "sales-q3.csv");
 /** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
-const TO_OUT = [...AGAINST_BUCKET, "moves"];
+const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel"];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
@@ -316,7 +318,7 @@ else if (AGAINST_BUCKET.includes(story)) remote = await stageOpening(story === "
 const sidebar = story === "sidebar" ? await stageSidebar() : undefined;
 // The sidebar story opens its own workspaces once the window is up, so the
 // app starts with none.
-const staged = { browse: stage, moves: stageMoves }[story];
+const staged = { browse: stage, moves: stageMoves, wheel: stageMoves }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 
 const electron = (await import("electron")).default;
