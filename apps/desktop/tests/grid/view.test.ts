@@ -70,7 +70,10 @@ function drawn(scroller: HTMLElement): number {
 }
 
 /** Turns a wheel one row down on `scroller`, with `keys` held. */
-function turn(scroller: HTMLElement, keys: Pick<WheelEventInit, "ctrlKey"> = {}): WheelEvent {
+function turn(
+  scroller: HTMLElement,
+  keys: Pick<WheelEventInit, "ctrlKey" | "shiftKey"> = {},
+): WheelEvent {
   // happy-dom's WheelEvent keeps no modifier keys.
   const init = { deltaY: ROW_H, cancelable: true };
   const event = Object.assign(new WheelEvent("wheel", init), keys);
@@ -183,6 +186,17 @@ test("a wheel on a scaled sheet's scroller moves it the same way, and Ctrl+wheel
   expect(turn(scroller, { ctrlKey: true }).defaultPrevented).toBe(false);
   await frame();
   expect(view.visibleRows().top).toBe(1);
+});
+
+test("Shift and a wheel on a scaled sheet's scroller go along its rows", async () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(VAST), false);
+
+  turn(scroller, { shiftKey: true });
+  await frame();
+
+  expect(view.visibleRows().top).toBe(0);
+  expect(scroller.scrollLeft).toBe(ROW_H);
 });
 
 // --------------------------------------------------------------- resizing

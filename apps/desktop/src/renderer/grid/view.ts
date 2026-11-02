@@ -27,6 +27,7 @@ import {
   tableOffset,
   topToScroller,
   visibleRange,
+  wheelWay,
 } from "./metrics.ts";
 import { el } from "@renderer/shell/util";
 import { columnLabel, unnamed } from "./rows.ts";
@@ -245,7 +246,8 @@ export class View {
   private wheel(e: WheelEvent): void {
     if (e.ctrlKey) return; // Ctrl+wheel is zoom
     e.preventDefault();
-    this.wheelBy(e.deltaX, e.deltaY, e.deltaMode);
+    const { dx, dy } = wheelWay(e.deltaX, e.deltaY, e.shiftKey);
+    this.wheelBy(dx, dy, e.deltaMode);
   }
 
   /** Scrolls by a wheel's deltas, in the unit `deltaMode` names. */
