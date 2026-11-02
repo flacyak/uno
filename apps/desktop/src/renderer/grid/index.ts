@@ -136,6 +136,11 @@ export class Grid {
     return this.editor !== undefined;
   }
 
+  /** Scrolls the sheet by a wheel turned over something that stands on it. */
+  wheelBy(dx: number, dy: number, deltaMode: number): void {
+    this.view.wheelBy(dx, dy, deltaMode);
+  }
+
   focus(): void {
     this.host.focus();
   }
