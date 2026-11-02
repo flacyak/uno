@@ -75,8 +75,11 @@ const OTHER_POINTER = 2;
 /** A turn of the wheel in lines, read through to the grid as they are. */
 const TURN = { deltaX: 3, deltaY: 5, deltaMode: WheelEvent.DOM_DELTA_LINE };
 
+/** A turn of the wheel in px. */
+const DOWN = { deltaY: 10 };
+
 /** What a wheel can turn with. */
-type HeldKeys = Pick<WheelEventInit, "ctrlKey">;
+type HeldKeys = Pick<WheelEventInit, "ctrlKey" | "shiftKey">;
 
 /** What the layer reads of a workspace's charts, for a test to change. */
 interface Model {
@@ -779,4 +782,10 @@ test("Ctrl+wheel on a window is left for zoom", () => {
   const event = turn(part(".chart-plot"), TURN, { ctrlKey: true });
   expect(wheelBy).not.toHaveBeenCalled();
   expect(event.defaultPrevented).toBe(false);
+});
+
+test("Shift and the wheel go along the sheet's rows, as they do over the grid", () => {
+  shown(INSIDE);
+  turn(part(".chart-plot"), DOWN, { shiftKey: true });
+  expect(wheelBy).toHaveBeenCalledExactlyOnceWith(DOWN.deltaY, 0, WheelEvent.DOM_DELTA_PIXEL);
 });

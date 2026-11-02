@@ -13,6 +13,7 @@
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { m } from "@paraglide/messages";
+import { wheelWay } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
@@ -236,7 +237,8 @@ export class ChartWindow {
   private wheel(e: WheelEvent): void {
     if (e.ctrlKey) return; // Ctrl+wheel is zoom
     e.preventDefault();
-    this.stage.wheelBy(e.deltaX, e.deltaY, e.deltaMode);
+    const { dx, dy } = wheelWay(e.deltaX, e.deltaY, e.shiftKey);
+    this.stage.wheelBy(dx, dy, e.deltaMode);
   }
 
   /** key answers Escape and the arrows, and leaves any other key to the shell. */
