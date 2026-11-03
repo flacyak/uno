@@ -28,8 +28,11 @@ const NARROW_WIDTH = 640;
  */
 const MENU_ZOOM = 1.2 ** 2.5;
 
-/** How close devicePixelRatio comes to that factor. */
-const ZOOM_SLACK = 0.002;
+/** A page under this has taken that zoom: the run's 1100 px window is 698 px wide then. */
+const MENU_ZOOM_WIDTH = 800;
+
+/** How far two rects can read apart, past Chromium's layout unit of 1/64 px. */
+const RECT_SLACK = 0.02;
 
 /** A point over the grid's tenth row, left of the windows, and one over the top window. */
 const BESIDE = { x: 400, y: 300 };
@@ -120,10 +123,13 @@ export const CHARTS: Check[] = [
       ${GEOMETRY}
       const scroller = document.querySelector(".grid-scroll");
       const banner = document.querySelector("#banner");
+      const gauge = document.querySelector(".chart-gauge");
       const bar = () => scroller.offsetWidth - scroller.clientWidth;
+      const meet = (edge, want) => Math.abs(edge - want) < ${RECT_SLACK};
       const clear = () => {
         const sheet = scroller.getBoundingClientRect();
-        return room().right === sheet.left + scroller.clientWidth && room().bottom === sheet.top + scroller.clientHeight;
+        const inside = gauge.getBoundingClientRect();
+        return meet(room().right, sheet.left + inside.width) && meet(room().bottom, sheet.top + inside.height);
       };
       const ours = bar();
       scroller.style.scrollbarColor = "gray transparent";
@@ -165,7 +171,7 @@ export const CHARTS: Check[] = [
         const x = (foot.left + foot.right) / 2;
         return grid(middle(right - 1), y) && !grid(middle(right), y) && grid(x, middle(bottom - 1)) && !grid(x, middle(bottom));
       };
-      if (await until(() => Math.abs(devicePixelRatio - ${MENU_ZOOM}) < ${ZOOM_SLACK} && meets())) return "";
+      if (await until(() => innerWidth < ${MENU_ZOOM_WIDTH} && meets())) return "";
       return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
     `,
   },
