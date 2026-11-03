@@ -18,8 +18,10 @@ import {
   MIN_WIDTH,
   nudged,
   NUDGE_PX,
+  overfull,
   placed,
   placeOf,
+  stackHeight,
   thin,
   tucked,
   tucks,
@@ -122,6 +124,14 @@ test("a room tucks from one px under the least size, as a 0 px or zoomed sheet d
   for (const w of [0, BOTH_SIDES_OPEN, ZOOMED]) expect(tucks({ w, h: ROOM.h })).toBe(true);
 });
 
+test("a room holds tucked heads up to its foot", () => {
+  const count = 3;
+  const stack = count * HEAD + BORDER;
+  expect(overfull(count, HEAD, BORDER, { w: ROOM.w, h: stack })).toBe(false);
+  expect(overfull(count, HEAD, BORDER, { w: ROOM.w, h: stack - 1 })).toBe(true);
+  expect(overfull(0, HEAD, BORDER, { w: 0, h: 0 })).toBe(false);
+});
+
 test("a room shows a head from the head's least width up", () => {
   expect(thin({ w: HEAD_LEAST_WIDTH - 1, h: ROOM.h })).toBe(true);
   expect(thin({ w: HEAD_LEAST_WIDTH, h: ROOM.h })).toBe(false);
@@ -132,6 +142,7 @@ test("a tucked window is its head, at the room's width, stacked in list order", 
   const rect = tucked(2, HEAD, BORDER, room);
   expect(rect).toEqual({ x: 0, y: 2 * HEAD, width: room.w, height: HEAD + BORDER });
   expect(tucked(3, HEAD, BORDER, room).y).toBe(rect.y + rect.height - BORDER);
+  expect(stackHeight(3, HEAD, BORDER)).toBe(rect.y + rect.height);
 });
 
 test("a new window goes at the top of the half away from the selected column", () => {

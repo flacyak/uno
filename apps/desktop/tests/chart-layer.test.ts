@@ -28,6 +28,8 @@ const BANNER = 44;
 /** Scrollbars a browser draws for itself, past uno's 12 px and not a whole px. */
 const SIDE_BAR = 17.5;
 const FOOT_BAR = 15.25;
+/** More heads than a room of the least height holds. */
+const TOO_MANY_HEADS = Math.ceil(MIN_HEIGHT / HEAD) + 1;
 
 /** One chart flush to the room's right edge, and one in the middle of it. */
 const FLUSH: Chart = BARS;
@@ -245,6 +247,54 @@ test("a room too short tucks them too, and each goes back to its place with the 
     placed(FLUSH.place, ROOM),
     placed(INSIDE.place, ROOM),
   ]);
+});
+
+test("the layer says while it tucks, so heads can join into one stack", () => {
+  shown(FLUSH, INSIDE);
+  const tucking = (): boolean => root().classList.contains("tucked");
+  expect(tucking()).toBe(false);
+
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(tucking()).toBe(true);
+
+  resize(ROOM);
+  expect(tucking()).toBe(false);
+});
+
+test("the stack's one shadow stands as high as the heads it lies behind", () => {
+  shown(FLUSH, INSIDE);
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(root().style.getPropertyValue("--stack-height")).toBe(`${2 * HEAD + BORDER}px`);
+});
+
+test("a room with no windows is no stack, so it throws no shadow", () => {
+  shown();
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(root().classList.contains("tucked")).toBe(false);
+});
+
+test("heads a room cannot hold stop at its foot, and only while they are too many", () => {
+  shown(FLUSH, INSIDE);
+  const held = (): boolean => root().classList.contains("overfull");
+  expect(held()).toBe(false);
+
+  const stack = 2 * HEAD + BORDER;
+  resize({ w: ROOM.w, h: stack - 1 });
+  expect(held()).toBe(true);
+
+  resize({ w: ROOM.w, h: stack });
+  expect(held()).toBe(false);
+
+  resize({ w: ROOM.w, h: stack - 1 });
+  resize(ROOM);
+  expect(held()).toBe(false);
+});
+
+test("windows that stand whole keep their shadows, however many would not fit as heads", () => {
+  const many = Array.from({ length: TOO_MANY_HEADS }, (_, i) => ({ ...FLUSH, id: `c${i}` }));
+  shown(...many);
+  resize({ w: ROOM.w, h: MIN_HEIGHT });
+  expect(root().classList.contains("overfull")).toBe(false);
 });
 
 test("a room too narrow for a head shows nothing and loses nothing", () => {

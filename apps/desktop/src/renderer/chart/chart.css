@@ -11,10 +11,13 @@
  * sheet's stacking context, and the sheet keeps it under the scrim and the
  * panel. The grid takes the pointer wherever no window is.
  *
- * It clips no closer than `--shadow-reach`, the dialogs' 10 px offset plus their
- * 28 px blur, so a window's shadow falls over the scrollbars and the rules
- * around it in place of stopping in a hard line. */
+ * `--dialog-radius` and `--dialog-shadow` are the dialogs' (formula.css,
+ * settings.css). It clips no closer than `--shadow-reach`, that shadow's 10 px
+ * offset plus its 28 px blur, so a window's shadow falls over the scrollbars and
+ * the rules around it in place of stopping in a hard line. */
 .charts {
+  --dialog-radius: 8px;
+  --dialog-shadow: 0 10px 28px rgb(0 0 0 / 0.18);
   --shadow-reach: 38px;
   position: absolute;
   left: calc(-1 * var(--window-border));
@@ -31,6 +34,13 @@
   left: 0;
 }
 
+/* Tucked heads a room cannot hold stop at its edge, so none lies over the
+ * scrollbar or the status bar. A custom property keeps the px, which minifying
+ * takes off and Chromium's overflow-clip-margin needs. */
+.charts.overfull {
+  --shadow-reach: 0px;
+}
+
 /* A room too narrow for a head shows no window, and lets the pointer by. */
 .charts.thin {
   visibility: hidden;
@@ -39,16 +49,42 @@
 /* The dialogs' box (formula.css, settings.css). */
 .chart {
   position: absolute;
-  overflow: hidden;
+  overflow: clip;
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-radius: 8px;
-  box-shadow: 0 10px 28px rgb(0 0 0 / 0.18);
+  border-radius: var(--dialog-radius);
+  box-shadow: var(--dialog-shadow);
   font-family: var(--mono);
   font-size: 12px;
   color: var(--ink);
   pointer-events: auto;
   -webkit-app-region: no-drag;
+}
+
+/* Tucked heads read as one stack. They are square where they meet, so their rule
+ * runs from border to border. One box behind them throws the shadow, so no head
+ * darkens another, and layer.ts sets its `--stack-height`. */
+.charts.tucked::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--stack-height);
+  border-radius: var(--dialog-radius);
+  box-shadow: var(--dialog-shadow);
+}
+
+.charts.tucked .chart {
+  box-shadow: none;
+}
+
+.charts.tucked .chart + .chart {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.charts.tucked .chart:not(:last-child) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 /* In the grid's scroller, it fills what the bars leave and lets the pointer by. */

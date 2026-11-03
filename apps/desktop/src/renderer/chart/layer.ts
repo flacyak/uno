@@ -14,7 +14,7 @@ import "./chart.css";
 import type { Charts } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
-import { placed, thin, tucked, tucks } from "./place.ts";
+import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Rect } from "./place.ts";
 
 /** The thinnest a border draws, in device px. */
@@ -87,10 +87,16 @@ export class ChartLayer {
     this.fit(border);
     const { width: w, height: h } = this.root.getBoundingClientRect();
     const room = { w, h };
+    const tucking = tucks(room);
     charts.forEach((chart, index) => {
-      const rect = tucks(room) ? tucked(index, this.head, border, room) : placed(chart.place, room);
+      const rect = tucking ? tucked(index, this.head, border, room) : placed(chart.place, room);
       stand(this.windowOf(chart.id), rect);
     });
+    const spills = tucking && overfull(charts.length, this.head, border, room);
+    const stack = stackHeight(charts.length, this.head, border);
+    this.root.style.setProperty("--stack-height", `${stack}px`);
+    this.root.classList.toggle("tucked", tucking && charts.length > 0);
+    this.root.classList.toggle("overfull", spills);
     this.root.classList.toggle("thin", thin(room));
   }
 

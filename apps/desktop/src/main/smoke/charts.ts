@@ -53,6 +53,9 @@ const CLICK_AND_ARROW: readonly Input[] = [
 /** A sheet that leaves a room under a head's least width, past the 12 px bar. */
 const THIN_SHEET = 40;
 
+/** A sheet too short for two heads, which take 59 px under the header row. */
+const SHORT_SHEET = 80;
+
 /** What a window copies from the settings menu. */
 const BOX_LOOK = [
   "background-color",
@@ -269,6 +272,25 @@ export const CHARTS: Check[] = [
     `,
   },
   {
+    name: "tucked heads read as one stack: square where they meet, behind one shadow that falls on neither",
+    script: `
+      ${GEOMETRY}
+      const [upper, lower] = [...document.querySelectorAll(".chart")].map((at) => [at, getComputedStyle(at)]);
+      const stack = getComputedStyle(document.querySelector("#charts"), "::before");
+      const shared = [upper[1].borderBottomLeftRadius, upper[1].borderBottomRightRadius, lower[1].borderTopLeftRadius, lower[1].borderTopRightRadius];
+      if (shared.some((radius) => radius !== "0px")) return "the heads meet on corners of " + shared.join(", ");
+      const outer = [upper[1].borderTopLeftRadius, lower[1].borderBottomRightRadius, stack.borderTopLeftRadius];
+      if (new Set(outer).size > 1) return "the stack's outer corners differ: " + outer.join(", ");
+      if (upper[1].boxShadow !== "none" || lower[1].boxShadow !== "none") return "the heads throw " + upper[1].boxShadow + " and " + lower[1].boxShadow;
+      const [top, foot] = windows();
+      if (parseFloat(stack.height) !== foot.bottom - top.top) return "the shadow is " + stack.height + " high, behind heads at " + edges(top) + " and " + edges(foot);
+      const menu = getComputedStyle(document.querySelector(".settings")).boxShadow;
+      if (stack.boxShadow !== menu) return "the stack throws " + stack.boxShadow + ", and the settings menu " + menu;
+      upper[0].scrollTop = 1;
+      return upper[0].scrollTop === 0 ? "" : "a tucked window scrolls past its head";
+    `,
+  },
+  {
     name: "with room again, each window goes back to its place",
     window: {},
     script: `
@@ -328,6 +350,25 @@ export const CHARTS: Check[] = [
       if (!thin) return "a window stands at " + edges(windows()[0]) + " in a room at " + edges(room());
       if (at.closest(".chart") !== null) return "a hidden window takes the pointer";
       return (await until(() => shows() && !heads())) ? "" : "the windows stayed hidden";
+    `,
+  },
+  {
+    // The sheet is held short by hand: main keeps the window taller than this.
+    name: "tucked heads a short room cannot hold stop at its foot, and leave the scrollbar the pointer",
+    script: `
+      ${GEOMETRY}
+      const sheet = document.querySelector(".win-sheet");
+      const under = () => {
+        const [, foot] = windows();
+        return document.elementFromPoint((foot.left + foot.right) / 2, room().bottom + 1);
+      };
+      sheet.style.maxHeight = ${SHORT_SHEET} + "px";
+      const stack = await until(() => heads() && windows()[1].bottom > room().bottom);
+      const held = under();
+      sheet.style.maxHeight = "";
+      if (!stack) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+      if (held.closest(".chart") !== null) return "a head lies over the scrollbar";
+      return (await until(() => !heads())) ? "" : "the windows stayed tucked";
     `,
   },
 ];

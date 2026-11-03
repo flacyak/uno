@@ -125,6 +125,16 @@ export function tucked(index: number, head: number, border: number, room: Room):
   return { x: 0, y: index * head, width: room.w, height: head + border };
 }
 
+/** stackHeight gives how high `count` tucked windows stand, down to the last one's foot. */
+export function stackHeight(count: number, head: number, border: number): number {
+  return count * head + border;
+}
+
+/** overfull says whether `count` tucked windows do not fit in a room. */
+export function overfull(count: number, head: number, border: number, room: Room): boolean {
+  return count > 0 && stackHeight(count, head, border) > room.h;
+}
+
 /** thin says whether a room is too narrow to show a head. */
 export function thin(room: Room): boolean {
   return room.w < HEAD_LEAST_WIDTH;
