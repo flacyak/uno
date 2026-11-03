@@ -16,6 +16,7 @@ import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
 import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Rect } from "./place.ts";
+import { ChartWindow } from "./window.ts";
 
 /** The thinnest a border draws, in device px. */
 const THINNEST_BORDER = 1;
@@ -38,7 +39,7 @@ function stand(box: HTMLElement, rect: Rect): void {
 
 export class ChartLayer {
   /** The window of each chart showing, by chart id. */
-  private readonly windows = new Map<string, HTMLElement>();
+  private readonly windows = new Map<string, ChartWindow>();
   /** The height of the header row, and of a tucked window's head. */
   private readonly head: number;
   /** The charts of the open workspace. */
@@ -65,21 +66,22 @@ export class ChartLayer {
     this.draw();
   }
 
-  /** relabel redraws the windows for a language change, leaving each one open. */
+  /** relabel rewrites the windows for a language change, leaving each one open. */
   relabel(): void {
     this.draw();
   }
 
   /**
-   * draw gives each chart its one window, each at its place in the room, or
-   * tucked if the room is too small, and takes away the rest.
+   * draw gives each chart its one window, each saying what the chart says now,
+   * at its place in the room, or tucked if the room is too small, and takes away
+   * the rest.
    */
   draw(): void {
     const charts = this.charts.all;
     const showing = new Set(charts.map((chart) => chart.id));
-    for (const [id, box] of this.windows) {
+    for (const [id, held] of this.windows) {
       if (showing.has(id)) continue;
-      box.remove();
+      held.box.remove();
       this.windows.delete(id);
     }
 
@@ -89,8 +91,9 @@ export class ChartLayer {
     const room = { w, h };
     const tucking = tucks(room);
     charts.forEach((chart, index) => {
-      const rect = tucking ? tucked(index, this.head, border, room) : placed(chart.place, room);
-      stand(this.windowOf(chart.id), rect);
+      const held = this.windowOf(chart.id);
+      held.show(chart);
+      stand(held.box, tucking ? tucked(index, this.head, border, room) : placed(chart.place, room));
     });
     const spills = tucking && overfull(charts.length, this.head, border, room);
     const stack = stackHeight(charts.length, this.head, border);
@@ -122,12 +125,12 @@ export class ChartLayer {
   }
 
   /** windowOf returns a chart's window, adding one on top if it has none. */
-  private windowOf(id: string): HTMLElement {
+  private windowOf(id: string): ChartWindow {
     const held = this.windows.get(id);
     if (held !== undefined) return held;
-    const box = el("div", "chart");
-    this.windows.set(id, box);
-    this.root.append(box);
-    return box;
+    const made = new ChartWindow();
+    this.windows.set(id, made);
+    this.root.append(made.box);
+    return made;
   }
 }
