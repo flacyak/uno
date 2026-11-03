@@ -1,11 +1,17 @@
 /* Chart styles: the layer over the sheet and the windows on it. */
 
-/* The z-index puts the layer over the grid's header, editor and corner, which
- * share the sheet's stacking context, and the sheet keeps it under the scrim
- * and the panel. The grid takes the pointer wherever no window is. */
+/* The layer fills the sheet from below the header row, where layer.ts sets
+ * its top, to the scrollbars, so no window can cover either, or the window's
+ * ×. `--bar-right` and `--bar-bottom` are the widths layer.ts measures, for a
+ * browser that draws its own scrollbars in place of `--bar`. The z-index puts
+ * the layer over the grid's header, editor and corner, which share the sheet's
+ * stacking context, and the sheet keeps it under the scrim and the panel. The
+ * grid takes the pointer wherever no window is. */
 .charts {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: max(var(--bar), var(--bar-right));
+  bottom: max(var(--bar), var(--bar-bottom));
   z-index: 5;
   overflow: hidden;
   pointer-events: none;
