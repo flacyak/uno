@@ -116,6 +116,43 @@ await writeFile(
   }),
 );
 
+// A workspace with two charts of the second export, in the same folder as the
+// one above. Its thirteen columns and 2,600 rows bring out both scrollbars. One
+// chart stands at the top of the sheet's right edge and one at its foot.
+const charted = join(scratch, "sent", "charted.uno");
+const adsChart = {
+  source: "ads",
+  plot: { t: "bars", by: { col: 10, header: "Location" } },
+  title: "",
+  refresh: 0,
+};
+// A new window's size: DEFAULT_WIDTH and DEFAULT_HEIGHT in chart/place.ts.
+const chartSize = { width: 420, height: 260 };
+await writeFile(
+  charted,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [
+      {
+        id: "ads",
+        name: "google-ads-sales.csv",
+        path: second,
+        rows: 2600,
+        cols: 13,
+        state: { active: { row: 0, col: 0 } },
+      },
+    ],
+    active: "ads",
+    log: [],
+    charts: [
+      { ...adsChart, id: "c1", place: { ...chartSize, x: 1, y: 0 } },
+      { ...adsChart, id: "c2", place: { ...chartSize, x: 1, y: 1 } },
+    ],
+    extra: new Map(),
+    at: charted,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -196,6 +233,7 @@ const { code, out } = await drive("smoke", {
     // The object's address, for the check that adds it.
     UNO_SMOKE_OBJECT: object,
     UNO_SMOKE_SENT: sent,
+    UNO_SMOKE_CHARTED: charted,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits

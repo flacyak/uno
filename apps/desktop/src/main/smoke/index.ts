@@ -14,6 +14,7 @@ import type { BrowserWindow } from "electron";
 import { ask } from "@main/ask";
 import { through } from "@main/driven";
 import { AGAIN } from "./again.ts";
+import { CHARTS } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
@@ -63,6 +64,7 @@ const CHECKS: Check[] = [
   ...MULTI,
   ...SIDEBAR,
   ...AGAIN,
+  ...CHARTS,
 ];
 
 /**
