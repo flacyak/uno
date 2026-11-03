@@ -174,8 +174,8 @@
  * bars.ts sets a bar's thickness, the window's ground before the next, the
  * inset and the gap before a value. A label takes what it needs, up to
  * `--label-most` of the width, and ends in an ellipsis past that. The values are
- * mono, as the window is, so `--tip-room` in ch leaves the longest of them room
- * past the longest bar. */
+ * mono, as the window is, so the room bars.ts leaves them in ch holds the
+ * longest past the longest bar. */
 .chart-bars {
   --label-most: 40%;
   display: grid;
@@ -202,27 +202,47 @@
   white-space: nowrap;
 }
 
+/* A bar starts at zero, `--zero` of the way along the span the bars share, and
+ * runs `--share` of the span: right of zero for a value above it, and left for
+ * one below. The span leaves each side the room its values take. */
 .chart-bar-track {
-  display: flex;
+  --span: calc(100% - var(--room-below) - var(--room-above));
+  --at: calc(var(--room-below) + var(--zero) * var(--span));
+  --long: calc(var(--share) * var(--span));
+  position: relative;
   align-self: stretch;
-  align-items: center;
-  gap: var(--tip-gap);
 }
 
 /* The dataviz skill's bar: square at the baseline and round at the data's end. */
 .chart-bar {
-  flex: none;
-  align-self: stretch;
-  width: calc(var(--share) * (100% - var(--tip-room) - var(--tip-gap)));
+  position: absolute;
+  inset-block: 0;
+  left: var(--at);
+  width: var(--long);
   border-radius: 0 4px 4px 0;
   background: var(--accent);
 }
 
-/* A value wears ink, never its bar's colour. */
+/* A value wears ink, never its bar's colour, and centres on its row as its label does. */
 .chart-bar-tip {
+  position: absolute;
+  inset-block: 0;
+  left: calc(var(--at) + var(--long) + var(--tip-gap));
+  display: flex;
+  align-items: center;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.chart-bar-track.below .chart-bar {
+  left: calc(var(--at) - var(--long));
+  border-radius: 4px 0 0 4px;
+}
+
+.chart-bar-track.below .chart-bar-tip {
+  right: calc(100% - var(--at) + var(--long) + var(--tip-gap));
+  left: auto;
 }
 
 /* A forced palette would take the bars' colour away, so they wear the text's. */

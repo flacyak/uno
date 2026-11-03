@@ -1,7 +1,7 @@
 /**
- * @fileoverview A bar chart: a bar per value, the largest first, each as long
- * as its share of the largest, with the value at its tip, as many as its plot
- * holds. A line under them counts the rest.
+ * @fileoverview A bar chart: a bar per value, the largest first, each from zero
+ * to its value, with the value at its tip, as many as its plot holds. A line
+ * under them counts the rest.
  *
  * The bars are HTML that chart.css lays out by the sizes here, so a theme
  * recolours them and a zoom keeps them crisp. A label is the file's text, set
@@ -47,6 +47,15 @@ function line(words: string): HTMLElement {
 }
 
 /**
+ * room gives what the values on one side of zero take, as CSS: the longest one's
+ * characters and the gap before it, or nothing for a side with none.
+ */
+function room(side: ReadonlyArray<{ tip: string }>): string {
+  const widest = Math.max(0, ...side.map(({ tip }) => tip.length));
+  return widest === 0 ? "0px" : `calc(${widest}ch + var(--tip-gap))`;
+}
+
+/**
  * bars draws `groups` as rows or sums per value, as `plot` measures them, in a
  * plot `height` px high. A line of what is left out takes a bar's row.
  */
@@ -65,18 +74,22 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
     size: measure(g),
     tip: num(measure(g)),
   }));
-  const largest = Math.max(0, ...drawn.map(({ size }) => size));
-  const widest = Math.max(0, ...drawn.map(({ tip }) => tip.length));
+  // Every bar starts at zero, on one scale from the least sum to the largest.
+  const low = Math.min(0, ...drawn.map(({ size }) => size));
+  const span = Math.max(0, ...drawn.map(({ size }) => size)) - low;
 
   const box = el("div", "chart-bars");
   box.style.setProperty("--bar-thick", `${BAR_THICK}px`);
   box.style.setProperty("--bar-gap", `${BAR_GAP}px`);
   box.style.setProperty("--bars-inset", `${BARS_INSET}px`);
   box.style.setProperty("--tip-gap", `${TIP_GAP}px`);
-  box.style.setProperty("--tip-room", `${widest}ch`);
+  box.style.setProperty("--zero", `${span === 0 ? 0 : -low / span}`);
+  box.style.setProperty("--room-above", room(drawn.filter(({ size }) => size >= 0)));
+  box.style.setProperty("--room-below", room(drawn.filter(({ size }) => size < 0)));
   for (const { label, size, tip } of drawn) {
     const track = el("div", "chart-bar-track");
-    track.style.setProperty("--share", `${largest === 0 ? 0 : size / largest}`);
+    track.classList.toggle("below", size < 0);
+    track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(size) / span}`);
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
     box.append(el("bdi", "chart-bar-label from-file", label), track);
   }
