@@ -151,6 +151,19 @@ export const OPEN: Check[] = [
     `,
   },
   {
+    // The rows have scrolled, and a rule that is the cell's own has come along.
+    name: "the rule under the header row is its cells' own, level with the sidebar's and the corner's",
+    script: `
+      const cell = document.querySelector("thead th");
+      const band = document.querySelector("#sidebar .col-head");
+      if (cell.clientHeight !== band.clientHeight) {
+        return "a header cell is " + cell.clientHeight + "px above its rule, and the sidebar's head " + band.clientHeight + "px";
+      }
+      const corner = getComputedStyle(document.querySelector("#content"), "::after");
+      return corner.boxSizing === "border-box" ? "" : "the corner's rule stands a px lower";
+    `,
+  },
+  {
     name: "the selection follows a click",
     run: async (page) => {
       await page.scrollTo(0);

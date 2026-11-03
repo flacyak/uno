@@ -1,8 +1,9 @@
 /* Chart styles: the layer over the sheet and the windows on it. */
 
-/* The layer fills the sheet from below the header row, where layer.ts sets
- * its top, to the scrollbars, so no window can cover either, or the window's
- * ×. `--bar-right` and `--bar-bottom` are the widths layer.ts measures, for a
+/* The layer fills the sheet from the rule under the header row, where layer.ts
+ * sets its top, to the scrollbars, so no window can cover either, or the
+ * window's ×, and a window's top border lands on the rule and the two draw as
+ * one. `--bar-right` and `--bar-bottom` are the widths layer.ts measures, for a
  * browser that draws its own scrollbars in place of `--bar`. The z-index puts
  * the layer over the grid's header, editor and corner, which share the sheet's
  * stacking context, and the sheet keeps it under the scrim and the panel. The

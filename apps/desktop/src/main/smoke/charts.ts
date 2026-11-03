@@ -1,9 +1,9 @@
 /**
  * @fileoverview Checks of the chart windows in real layout: the layer over the
- * sheet keeps a window below the header row and clear of both scrollbars and
- * the ×, inside its room at 200% zoom, and tucked to its head where the side
- * columns leave too little room. None of it marks the workspace unsaved, and
- * the grid still takes the pointer and the keys beside a window.
+ * sheet lands a window on the rules around it, clear of both scrollbars and the
+ * ×, inside its room at 200% zoom, and tucked to its head where the side columns
+ * leave too little room. None of it marks the workspace unsaved, and the grid
+ * still takes the pointer and the keys beside a window.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot.
@@ -41,6 +41,8 @@ const GEOMETRY = `
   const windows = () => [...document.querySelectorAll(".chart")].map((w) => w.getBoundingClientRect());
   const room = () => document.querySelector("#charts").getBoundingClientRect();
   const header = () => document.querySelector("thead").getBoundingClientRect();
+  const border = () => parseFloat(getComputedStyle(document.querySelector("thead th")).borderBottomWidth);
+  const rule = () => header().bottom - border();
   const within = (at, box) => at.left >= box.left && at.top >= box.top && at.right <= box.right && at.bottom <= box.bottom;
   const edges = (at) => [at.left, at.top, at.right, at.bottom].join(" ");
   const unsaved = () => document.querySelector(".ws.open .dirty") !== null;
@@ -59,7 +61,7 @@ export const CHARTS: Check[] = [
     `,
   },
   {
-    name: "a workspace's charts open below the header row, clear of both scrollbars and the ×",
+    name: "a workspace's charts open on the header row's rule, over it, clear of both scrollbars and the ×",
     send: ["menu:open-path", CHARTED],
     shot: "charts-layer",
     script: `
@@ -74,7 +76,9 @@ export const CHARTS: Check[] = [
       const bottom = sheet.top + scroller.clientHeight;
       const close = document.querySelector("#close").getBoundingClientRect();
       const [top, foot] = windows();
-      if (top.top !== header().bottom) return "the top window starts at " + top.top + ", and the header row ends at " + header().bottom;
+      if (top.top !== rule()) return "the top window starts at " + top.top + ", and the header row's rule at " + rule();
+      const edge = document.elementFromPoint((top.left + top.right) / 2, top.top);
+      if (edge.closest(".chart") === null) return "the top window's border is under the " + edge.tagName;
       if (top.right !== right) return "the top window ends at " + top.right + ", and the scrollbar starts at " + right;
       if (foot.right !== right) return "the foot window ends at " + foot.right + ", and the scrollbar starts at " + right;
       if (foot.bottom !== bottom) return "the foot window ends at " + foot.bottom + ", and the scrollbar starts at " + bottom;
@@ -92,9 +96,9 @@ export const CHARTS: Check[] = [
       const bare = room().top;
       banner.textContent = "remove commas";
       banner.hidden = false;
-      const under = await until(() => room().top > bare && room().top === header().bottom);
+      const under = await until(() => room().top > bare && room().top === rule());
       banner.hidden = true;
-      if (!under) return "the layer starts at " + room().top + ", and the header row ends at " + header().bottom;
+      if (!under) return "the layer starts at " + room().top + ", and the header row's rule at " + rule();
       return (await until(() => room().top === bare)) ? "" : "the layer stayed at " + room().top;
     `,
   },
@@ -143,6 +147,7 @@ export const CHARTS: Check[] = [
       ${GEOMETRY}
       if (!(await until(() => innerWidth < ${NARROW_WIDTH}))) return "the page is " + innerWidth + "px wide";
       await frame();
+      if (room().top !== rule()) return "the layer starts at " + room().top + ", and the header row's rule at " + rule();
       for (const at of windows()) {
         if (!within(at, room())) return "a window stands at " + edges(at) + " in a room at " + edges(room());
         if (at.height === HEAD) return "a window is tucked in a room at " + edges(room());

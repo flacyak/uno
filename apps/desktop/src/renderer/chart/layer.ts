@@ -1,6 +1,6 @@
 /**
  * @fileoverview The layer over the sheet that holds a workspace's chart
- * windows. It stands beside the grid, below its header row and clear of its
+ * windows. It stands beside the grid, from its header row's rule to its
  * scrollbars, so no window can cover them and the grid's keys stay the grid's.
  *
  * Each window draws from its chart's place, in the room the layer leaves. A
@@ -16,6 +16,17 @@ import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
 import { placed, tucked, tucks } from "./place.ts";
 import type { Rect } from "./place.ts";
+
+/** The thinnest a border draws, in device px. */
+const THINNEST_BORDER = 1;
+
+/**
+ * borderWidth gives what a 1 px border draws, in CSS px. A browser floors a
+ * border to whole device px, so at a zoom it is not the 1 px it says.
+ */
+function borderWidth(): number {
+  return Math.max(Math.floor(devicePixelRatio), THINNEST_BORDER) / devicePixelRatio;
+}
 
 /** stand puts a window at `rect`, in the layer's CSS px. */
 function stand(box: HTMLElement, rect: Rect): void {
@@ -69,7 +80,8 @@ export class ChartLayer {
       this.windows.delete(id);
     }
 
-    this.fit();
+    const border = borderWidth();
+    this.fit(border);
     const { width: w, height: h } = this.root.getBoundingClientRect();
     const room = { w, h };
     charts.forEach((chart, index) => {
@@ -79,12 +91,15 @@ export class ChartLayer {
   }
 
   /**
-   * fit sets the layer's box: from under the banner and the header row, and,
-   * where a browser draws its own wider scrollbars, clear of those.
+   * fit sets the layer's box: from the rule under the header row, below any
+   * banner, so a window's top border lands on that rule, and, where a browser
+   * draws its own wider scrollbars, clear of those.
    */
-  private fit(): void {
+  private fit(border: number): void {
     const grid = must(this.content.querySelector<HTMLElement>(".grid-scroll"));
-    this.root.style.top = `${this.content.offsetTop + this.head}px`;
+    const sheetTop = must(this.root.parentElement).getBoundingClientRect().top;
+    const gridTop = this.content.getBoundingClientRect().top - sheetTop;
+    this.root.style.top = `${gridTop + this.head - border}px`;
     this.root.style.setProperty("--bar-right", `${grid.offsetWidth - grid.clientWidth}px`);
     this.root.style.setProperty("--bar-bottom", `${grid.offsetHeight - grid.clientHeight}px`);
   }
