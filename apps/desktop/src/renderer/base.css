@@ -190,11 +190,12 @@ body {
 }
 
 /* The close button. The window is frameless, so it is fixed at the top right
- * over whichever head reaches that corner. Each head keeps `--corner` clear. */
+ * over whichever head reaches that corner. Each head keeps `--corner` clear.
+ * It stands in the middle of the band above a head's 1 px rule. */
 .win-close {
   --size: 20px;
   position: fixed;
-  top: calc((var(--row-h) - var(--size)) / 2);
+  top: calc((var(--row-h) - 1px - var(--size)) / 2);
   right: calc((var(--corner) - var(--size)) / 2);
   z-index: 5;
   display: inline-flex;

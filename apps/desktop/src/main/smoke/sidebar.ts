@@ -210,6 +210,9 @@ export const SIDEBAR: Check[] = [
       const at = close.getBoundingClientRect();
       if (Math.round(innerWidth - at.right) > 12 || at.top > 12) return "the × is at " + Math.round(at.left) + "," + Math.round(at.top);
       if (at.width !== at.height || getComputedStyle(close).borderRadius !== "999px") return "the × is not a circle";
+      const band = document.querySelector("#sidebar .col-head");
+      const rule = band.getBoundingClientRect().bottom - parseFloat(getComputedStyle(band).borderBottomWidth);
+      if (rule - at.bottom !== at.top) return "the × stands " + at.top + " from the top, and " + (rule - at.bottom) + " from the rule";
       // The × has its corner to itself. With the panel closed the header row
       // reaches the corner and ends in a patch under the ×. Scrolled to the
       // end, the last header's name ends before the patch.
