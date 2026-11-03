@@ -176,8 +176,41 @@ test("muted ink and the flag read on every ground of every theme", () => {
 /** The validator measures OKLab distance times 100, the unit of its floors. */
 const DELTA_E_PER_OKLAB = 100;
 
+/** The validator's lightness band for chart colours, in OKLCH L, per mode. */
+const BAND: Record<Mode, readonly [number, number]> = { light: [0.43, 0.77], dark: [0.48, 0.67] };
+
+/** The validator's chroma floor, below which a hue reads as grey. */
+const CHROMA_FLOOR = 0.1;
+
 /** The validator's floor between neighbours, to full colour vision. */
 const NORMAL_FLOOR = 15;
+
+/** The validator's target between neighbours, to protanopia or deuteranopia. */
+const BLIND_TARGET = 8;
+
+/**
+ * The least any two chart colours stand apart to full colour vision, so a
+ * legend's keys find their slices. It borrows the validator's floor between
+ * neighbours to a colour-blind eye, which it allows where labels tell them
+ * apart too.
+ */
+const LEGEND_FLOOR = 6;
+
+/** WCAG's bound for a mark on its ground: 3 to 1. */
+const MARK = 3;
+
+/**
+ * The palettes whose grid is so light that the dark band holds some hues at
+ * MARK only at its top and the chroma floor. Below MARK the validator asks for
+ * labels on the marks or a table beside them.
+ */
+const RELIEVED = new Set(["Catppuccin Frappé dark"]);
+
+/**
+ * The least a relieved mark keeps on the grid, borrowed from the validator's
+ * floor for the faintest step of a ramp.
+ */
+const FAINTEST = 2;
 
 type Matrix = ReadonlyArray<readonly [number, number, number]>;
 
@@ -193,6 +226,23 @@ const LAB: Matrix = [
   [0.0259040371, 0.7827717662, -0.808675766],
 ];
 
+/**
+ * Protanopia and deuteranopia at full severity, on linear light: the
+ * validator's model of them (Machado, Oliveira and Fernandes, 2009).
+ */
+const BLINDNESSES: Record<string, Matrix> = {
+  protanopia: [
+    [0.152286, 1.052583, -0.204868],
+    [0.114503, 0.786281, 0.099216],
+    [-0.003882, -0.048116, 1.051998],
+  ],
+  deuteranopia: [
+    [0.367322, 0.860646, -0.227968],
+    [0.280085, 0.672501, 0.047413],
+    [-0.01182, 0.04294, 0.968881],
+  ],
+};
+
 function times(m: Matrix, v: readonly number[]): number[] {
   return m.map(([a, b, c]) => a * v[0]! + b * v[1]! + c * v[2]!);
 }
@@ -200,6 +250,11 @@ function times(m: Matrix, v: readonly number[]): number[] {
 /** A colour's OKLab lightness and two opponent axes, from its linear light. */
 function oklab(rgb: readonly number[]): number[] {
   return times(LAB, times(CONES, rgb).map(Math.cbrt));
+}
+
+/** A colour in OKLab as an eye with a blindness sees it, kept to the screen's range. */
+function seenBy(blindness: Matrix, hex: string): number[] {
+  return oklab(times(blindness, linear(hex)).map((c) => Math.min(Math.max(c, 0), 1)));
 }
 
 function apart(a: readonly number[], b: readonly number[]): number {
@@ -217,9 +272,34 @@ function besides(p: Palette): Array<[string, string]> {
   return [...next, ...closing];
 }
 
+test.each(palettes)("%s, %s: its chart colours are hues that show on the grid", (name, mode, p) => {
+  const [low, high] = BAND[mode];
+  const least = RELIEVED.has(`${name} ${mode}`) ? FAINTEST : MARK;
+  for (const c of p.chart) {
+    const [l, a, b] = oklab(linear(c));
+    expect(l, `${c} lightness`).toBeGreaterThanOrEqual(low);
+    expect(l, `${c} lightness`).toBeLessThanOrEqual(high);
+    expect(Math.hypot(a!, b!), `${c} chroma`).toBeGreaterThanOrEqual(CHROMA_FLOOR);
+    expect(contrast(c, p.surface), `${c} on the grid`).toBeGreaterThanOrEqual(least);
+  }
+});
+
 test.each(palettes)("%s, %s: a pie's colours tell apart beside each other", (_, _mode, p) => {
   for (const [a, b] of besides(p)) {
     const where = `${a} by ${b}`;
     expect(apart(oklab(linear(a)), oklab(linear(b))), where).toBeGreaterThanOrEqual(NORMAL_FLOOR);
+    for (const [name, blindness] of Object.entries(BLINDNESSES)) {
+      const seen = apart(seenBy(blindness, a), seenBy(blindness, b));
+      expect(seen, `${where} to ${name}`).toBeGreaterThanOrEqual(BLIND_TARGET);
+    }
+  }
+});
+
+test.each(palettes)("%s, %s: no two of its chart colours look alike", (_, _mode, p) => {
+  for (const [i, a] of p.chart.entries()) {
+    for (const b of p.chart.slice(i + 1)) {
+      const seen = apart(oklab(linear(a)), oklab(linear(b)));
+      expect(seen, `${a} by ${b}`).toBeGreaterThanOrEqual(LEGEND_FLOOR);
+    }
   }
 });
