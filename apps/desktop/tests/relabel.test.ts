@@ -8,15 +8,18 @@
  */
 
 import { mkdtempSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeAll, expect, test } from "vite-plus/test";
+import { beforeAll, expect, test, vi } from "vite-plus/test";
 
 import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { getLocale } from "@paraglide/runtime";
+import { ChartLayer } from "@renderer/chart/layer";
 import { num } from "@renderer/locale";
 import type { Shell } from "@renderer/shell/shell";
+import { BARS, unoOf } from "./charted.ts";
 import { bootShell } from "./smoke/dom-harness.ts";
 import { domPage, until } from "./smoke/dom-page.ts";
 
@@ -208,4 +211,25 @@ test("a find in flight finishes, in the language chosen while it ran", async () 
   expect(message()).toContain(
     m.find_text_below({ text: "zzz-not-in-the-file", row: "1", column: "" }).slice(0, 4),
   );
+});
+
+test("Ctrl+B, a theme change and two quick language changes leave each chart its one window", async () => {
+  shell.setInput("default");
+  const path = join(dir, "charted.uno");
+  await writeFile(path, unoOf([BARS, { ...BARS, id: "c2" }]));
+  await shell.openRef({ name: "charted.uno", path });
+  const windows = (): Element[] => [...document.querySelectorAll(".chart")];
+  const were = windows();
+  expect(were).toHaveLength(2);
+  const relabel = vi.spyOn(ChartLayer.prototype, "relabel");
+
+  shell.language.choose("es");
+  shell.language.choose("pt-BR");
+  await page.settle(1);
+  await page.press("b", { ctrlKey: true });
+  await page.press("b", { ctrlKey: true });
+  shell.theming.choose("tokyo-night");
+  expect(relabel).toHaveBeenCalled();
+  expect(windows()).toHaveLength(were.length);
+  were.forEach((box, i) => expect(windows()[i]).toBe(box));
 });
