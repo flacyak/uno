@@ -449,5 +449,10 @@ export function messagePort<In, Out>(p: MessagePortLike): Port<In, Out> {
 }
 
 export { formatBytes, messageOf } from '@said';
-export { GROUPS_SENT, LABEL_AT_MOST, SCATTER_POINTS_AT_MOST } from '@tally';
+export {
+  DISTINCT_AT_MOST,
+  GROUPS_SENT,
+  LABEL_AT_MOST,
+  SCATTER_POINTS_AT_MOST,
+} from '@tally';
 export type { Group, Groups, Point, Sample, Skipped } from '@tally';

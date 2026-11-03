@@ -1,15 +1,18 @@
 /**
  * @fileoverview A bar chart drawn from a tally: a bar per value, the largest
  * first, each its share of the largest, its value at the tip and the file's
- * text for its label. A plot holds as many as fit, and a line counts the rest.
+ * text for its label. A plot holds as many as fit, and a line counts the rest,
+ * and another says when a column holds more values than a tally keeps apart.
  *
  * @vitest-environment happy-dom
  */
 
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 
+import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { BARS_INSET, BAR_GAP, BAR_THICK, bars } from "@renderer/chart/bars";
 import { num } from "@renderer/locale";
 
@@ -54,6 +57,17 @@ const tips = (box: HTMLElement): Array<string | null> => texts(box, ".chart-bar-
 const lines = (box: HTMLElement): Array<string | null> => texts(box, ".chart-bars-line");
 const shares = (box: HTMLElement): number[] =>
   all(box, ".chart-bar-track").map((track) => Number(track.style.getPropertyValue("--share")));
+
+/** The regions of a column of more values than a tally keeps apart. */
+const PAST = {
+  ...REGIONS,
+  others: { values: DISTINCT_AT_MOST - REGIONS.groups.length, rows: 20_000, sum: 0 },
+  rest: { rows: 500, sum: 0 },
+};
+
+afterEach(() => {
+  void setLocale(baseLocale, { reload: false });
+});
 
 test("rows per value draw in the tally's order, each its share of the largest", () => {
   const box = bars(ROWS, REGIONS, TALL);
@@ -100,4 +114,26 @@ test("the line counts the values the tally did not send, above zero and at or be
   expect(labels(bars(SUMS, unsent, holding(REGIONS.groups.length)))).toHaveLength(2);
   const under = bars(SUMS, { ...REGIONS, below: unsent.below }, holding(REGIONS.groups.length + 1));
   expect(lines(under)).toStrictEqual([rest(3, 20)]);
+});
+
+test("values past the ones a tally keeps apart add a line that says so, each line whole in its title", () => {
+  const box = bars(ROWS, PAST, holding(REGIONS.groups.length + 2));
+  const kept = m.chart_bars_past({ count: num(DISTINCT_AT_MOST) });
+  expect(lines(box)).toStrictEqual([rest(PAST.others.values, 20_500), kept]);
+  expect(all(box, ".chart-bars-line").map((at) => at.title)).toStrictEqual(lines(box));
+  const short = bars(ROWS, PAST, holding(REGIONS.groups.length + 1));
+  expect([labels(short), lines(short)]).toStrictEqual([
+    ["North", "South"],
+    [rest(9_998, 20_801), kept],
+  ]);
+});
+
+test("the values and the lines are written in the app's language", () => {
+  void setLocale("es", { reload: false });
+  const box = bars(SUMS, PAST, holding(3));
+  expect(tips(box)).toStrictEqual(["48.160,5"]);
+  expect(lines(box)).toStrictEqual([
+    "+9999 más · 21.613 filas",
+    "más de 10.000 valores · los demás se cuentan en el resto",
+  ]);
 });
