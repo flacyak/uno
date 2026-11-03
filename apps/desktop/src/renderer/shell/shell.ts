@@ -5,7 +5,8 @@
  * It decides when things happen. What they do is in Workspace, Sources and
  * the host, which are testable on their own.
  *
- * The grid is loaded when the first file opens.
+ * The grid is loaded when the first file opens, and the chart layer with the
+ * first workspace that has charts.
  */
 
 import { isWorkspace } from "@document";
@@ -19,6 +20,7 @@ import type { SingleRef } from "@store";
 import { s3Location } from "@store/s3";
 
 import { m } from "@paraglide/messages";
+import type { ChartLayer } from "@renderer/chart/layer";
 import type { Charts } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
 import type { ShellAction } from "@renderer/grid/rows";
@@ -88,6 +90,9 @@ export class Shell {
   /** The grid, loaded on the first open. */
   private grid: Grid | undefined;
   private gridLoading: Promise<Grid> | undefined;
+  /** The chart layer, loaded with the first workspace that has charts. */
+  private layer: ChartLayer | undefined;
+  private layerLoading: Promise<ChartLayer> | undefined;
   /**
    * Counts opens, so the latest wins over an earlier one that finishes later.
    */
@@ -698,6 +703,8 @@ export class Shell {
         },
         signal,
       );
+      // Load the layer before the check below, so no open takes over after it.
+      if (w.charts.all.length > 0) await this.loadLayer();
       // A later open finished first, or this one was stopped as it opened.
       if (open !== this.opens || signal?.aborted === true) {
         w.close();
@@ -717,6 +724,7 @@ export class Shell {
       grid.show(w.rows, w.editable);
       this.empty.hidden = true;
       this.content.hidden = false;
+      this.layer?.show(w.charts);
       this.restore(w, grid);
       grid.focus();
       this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
@@ -743,6 +751,24 @@ export class Shell {
       },
     );
     return this.gridLoading;
+  }
+
+  /**
+   * loadLayer imports the chart layer and its stylesheet the first time a
+   * workspace has charts.
+   */
+  private loadLayer(): Promise<ChartLayer> {
+    this.layerLoading ??= import("@renderer/chart/layer").then(
+      ({ ChartLayer }) => {
+        this.layer = new ChartLayer(found("#charts"), this.content);
+        return this.layer;
+      },
+      (err: unknown) => {
+        this.layerLoading = undefined; // so the next open tries again
+        throw err;
+      },
+    );
+    return this.layerLoading;
   }
 
   private gridEvents(): GridEvents {
