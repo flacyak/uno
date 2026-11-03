@@ -39,10 +39,12 @@ function stand(box: HTMLElement, rect: Rect): void {
 export class ChartLayer {
   /** The window of each chart showing, by chart id. */
   private readonly windows = new Map<string, HTMLElement>();
-  /** The height of the header row, and of a tucked window. */
+  /** The height of the header row, and of a tucked window's head. */
   private readonly head: number;
   /** The charts of the open workspace. */
   private charts: Pick<Charts, "all"> = { all: [] };
+  /** Fills the grid's scroller inside its bars, so the two boxes differ by a bar. */
+  private readonly gauge = el("div", "chart-gauge");
 
   constructor(
     private readonly root: HTMLElement,
@@ -50,6 +52,7 @@ export class ChartLayer {
     private readonly content: HTMLElement,
   ) {
     this.head = readRowHeight(root);
+    must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);
     new ResizeObserver(() => this.draw()).observe(content);
   }
 
@@ -85,23 +88,30 @@ export class ChartLayer {
     const { width: w, height: h } = this.root.getBoundingClientRect();
     const room = { w, h };
     charts.forEach((chart, index) => {
-      const rect = tucks(room) ? tucked(index, this.head, room) : placed(chart.place, room);
+      const rect = tucks(room) ? tucked(index, this.head, border, room) : placed(chart.place, room);
       stand(this.windowOf(chart.id), rect);
     });
   }
 
   /**
    * fit sets the layer's box: from the rule under the header row, below any
-   * banner, so a window's top border lands on that rule, and, where a browser
-   * draws its own wider scrollbars, clear of those.
+   * banner, so a window's top border lands on that rule, and clear of the
+   * scrollbars as they stood at the last resize. A bar draws a whole number of
+   * device px, which clientWidth would round to a whole CSS px, so the bars come
+   * from the two boxes' rects. A sheet with no scrollbars keeps the last
+   * measure, so the room holds still from tab to tab.
    */
   private fit(border: number): void {
-    const grid = must(this.content.querySelector<HTMLElement>(".grid-scroll"));
     const sheetTop = must(this.root.parentElement).getBoundingClientRect().top;
     const gridTop = this.content.getBoundingClientRect().top - sheetTop;
     this.root.style.top = `${gridTop + this.head - border}px`;
-    this.root.style.setProperty("--bar-right", `${grid.offsetWidth - grid.clientWidth}px`);
-    this.root.style.setProperty("--bar-bottom", `${grid.offsetHeight - grid.clientHeight}px`);
+    this.root.style.setProperty("--window-border", `${border}px`);
+    const grid = must(this.gauge.parentElement).getBoundingClientRect();
+    const inside = this.gauge.getBoundingClientRect();
+    const right = grid.width - inside.width;
+    const bottom = grid.height - inside.height;
+    if (right > 0) this.root.style.setProperty("--bar-right", `${right}px`);
+    if (bottom > 0) this.root.style.setProperty("--bar-bottom", `${bottom}px`);
   }
 
   /** windowOf returns a chart's window, adding one on top if it has none. */

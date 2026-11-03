@@ -39,6 +39,9 @@ const RECT: Rect = { x: 195, y: 135, width: DEFAULT_WIDTH, height: DEFAULT_HEIGH
 /** The stylesheet's --row-h, a window head's height. */
 const HEAD = 29;
 
+/** A window's border at 100% zoom. */
+const BORDER = 1;
+
 /** A 640 px window with both side columns open at 168 and 250 px, less the 12 px --bar. */
 const BOTH_SIDES_OPEN = 640 - 168 - 250 - 12;
 
@@ -119,7 +122,9 @@ test("a room tucks from one px under the least size, as a 0 px or zoomed sheet d
 
 test("a tucked window is its head, at the room's width, stacked in list order", () => {
   const room = { w: ZOOMED, h: ROOM.h };
-  expect(tucked(2, HEAD, room)).toEqual({ x: 0, y: 2 * HEAD, width: room.w, height: HEAD });
+  const rect = tucked(2, HEAD, BORDER, room);
+  expect(rect).toEqual({ x: 0, y: 2 * HEAD, width: room.w, height: HEAD + BORDER });
+  expect(tucked(3, HEAD, BORDER, room).y).toBe(rect.y + rect.height - BORDER);
 });
 
 test("a new window goes at the top of the half away from the selected column", () => {
@@ -198,6 +203,11 @@ test.each<[string, Room]>([
   ["a room of exactly one window", SNUG],
 ])("%s gives only numbers", (_name, room) => {
   const rect = placed({ ...PLACE, x: 0.5, y: 0.5 }, room);
-  const boxes = [rect, placeOf(rect, room, PLACE), fresh(3, 0, room), tucked(3, HEAD, room)];
+  const boxes = [
+    rect,
+    placeOf(rect, room, PLACE),
+    fresh(3, 0, room),
+    tucked(3, HEAD, BORDER, room),
+  ];
   expect(boxes.flatMap((box) => Object.values(box)).every(Number.isFinite)).toBe(true);
 });

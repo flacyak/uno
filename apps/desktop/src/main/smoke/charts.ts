@@ -21,6 +21,16 @@ const DOUBLE_ZOOM = 2;
 /** The window's least width, where both side columns leave too little room. */
 const NARROW_WIDTH = 640;
 
+/**
+ * The View menu's Zoom In pressed five times: Electron's factor is 1.2 to the
+ * zoom level, and a press adds half a level. Each scrollbar is a fraction of a
+ * CSS px here, which clientWidth rounds one way and clientHeight the other.
+ */
+const MENU_ZOOM = 1.2 ** 2.5;
+
+/** How close devicePixelRatio comes to that factor. */
+const ZOOM_SLACK = 0.002;
+
 /** A point over the grid's tenth row, left of the windows, and one over the top window. */
 const BESIDE = { x: 400, y: 300 };
 const OVER_WINDOW = { x: 900, y: 150 };
@@ -47,7 +57,7 @@ const GEOMETRY = `
   const edges = (at) => [at.left, at.top, at.right, at.bottom].join(" ");
   const unsaved = () => document.querySelector(".ws.open .dirty") !== null;
   const HEAD = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
-  const heads = () => windows().every((at) => at.height === HEAD && at.width === room().width);
+  const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
 `;
 
 export const CHARTS: Check[] = [
@@ -140,6 +150,26 @@ export const CHARTS: Check[] = [
     `,
   },
   {
+    // A window's last device px stands over the grid, and the next on the bar.
+    name: "at the View menu's 158%, a window meets both scrollbars with no grid past it",
+    window: { zoom: MENU_ZOOM },
+    script: `
+      ${GEOMETRY}
+      const middle = (px) => (px + 0.5) / devicePixelRatio;
+      const grid = (x, y) => document.elementsFromPoint(x, y).some((hit) => hit.matches("td, th"));
+      const meets = () => {
+        const [top, foot] = windows();
+        const right = Math.round(top.right * devicePixelRatio);
+        const bottom = Math.round(foot.bottom * devicePixelRatio);
+        const y = (top.top + top.bottom) / 2;
+        const x = (foot.left + foot.right) / 2;
+        return grid(middle(right - 1), y) && !grid(middle(right), y) && grid(x, middle(bottom - 1)) && !grid(x, middle(bottom));
+      };
+      if (await until(() => Math.abs(devicePixelRatio - ${MENU_ZOOM}) < ${ZOOM_SLACK} && meets())) return "";
+      return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+    `,
+  },
+  {
     name: "at 200% zoom the windows stay inside the room",
     window: { zoom: DOUBLE_ZOOM },
     shot: "charts-zoomed",
@@ -150,7 +180,7 @@ export const CHARTS: Check[] = [
       if (room().top !== rule()) return "the layer starts at " + room().top + ", and the header row's rule at " + rule();
       for (const at of windows()) {
         if (!within(at, room())) return "a window stands at " + edges(at) + " in a room at " + edges(room());
-        if (at.height === HEAD) return "a window is tucked in a room at " + edges(room());
+        if (at.height === HEAD + border()) return "a window is tucked in a room at " + edges(room());
       }
       return unsaved() ? "the zoom marked the workspace unsaved" : "";
     `,
@@ -175,8 +205,9 @@ export const CHARTS: Check[] = [
       const tucked = () => innerWidth >= ${NARROW_WIDTH} && heads();
       if (!(await until(tucked))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       const [top, foot] = windows();
-      if (top.left !== room().left) return "the top window stands at " + edges(top) + " in a room at " + edges(room());
-      if (top.top !== room().top || foot.top !== top.bottom) return "the heads stand at " + edges(top) + " and " + edges(foot);
+      const sidebar = document.querySelector("#sidebar").getBoundingClientRect();
+      if (top.left !== sidebar.right - border()) return "the top window stands at " + edges(top) + " beside a sidebar to " + sidebar.right;
+      if (top.top !== room().top || foot.top !== top.bottom - border()) return "the heads stand at " + edges(top) + " and " + edges(foot);
       return unsaved() ? "tucking marked the workspace unsaved" : "";
     `,
   },
@@ -192,6 +223,17 @@ export const CHARTS: Check[] = [
       };
       if (!(await until(back))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       return unsaved() ? "going back marked the workspace unsaved" : "";
+    `,
+  },
+  {
+    name: "with the sidebar closed, the layer starts at the window's own edge",
+    script: `
+      ${GEOMETRY}
+      const toggle = document.querySelector("#sidebar-toggle");
+      toggle.click();
+      const flush = await until(() => room().left === 0);
+      toggle.click();
+      return flush ? "" : "the layer starts at " + room().left;
     `,
   },
 ];
