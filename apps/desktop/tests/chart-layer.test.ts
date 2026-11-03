@@ -247,11 +247,13 @@ test("a room too short tucks them too, and each goes back to its place with the 
   ]);
 });
 
-test("a sheet of no width shows nothing and loses nothing", () => {
+test("a room too narrow for a head shows nothing and loses nothing", () => {
   shown(FLUSH);
-  resize({ w: 0, h: 0 });
+  resize({ w: 0, h: ROOM.h });
   expect(drawn(windows()[0]!).width).toBe(0);
+  expect(root().classList.contains("thin")).toBe(true);
 
   resize(ROOM);
   expect(drawn(windows()[0]!)).toStrictEqual(placed(FLUSH.place, ROOM));
+  expect(root().classList.contains("thin")).toBe(false);
 });

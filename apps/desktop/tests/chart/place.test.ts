@@ -13,12 +13,14 @@ import {
   DEFAULT_HEIGHT,
   DEFAULT_WIDTH,
   fresh,
+  HEAD_LEAST_WIDTH,
   MIN_HEIGHT,
   MIN_WIDTH,
   nudged,
   NUDGE_PX,
   placed,
   placeOf,
+  thin,
   tucked,
   tucks,
 } from "@renderer/chart/place";
@@ -118,6 +120,11 @@ test("a room tucks from one px under the least size, as a 0 px or zoomed sheet d
   expect(tucks({ w: MIN_WIDTH - 1, h: MIN_HEIGHT })).toBe(true);
   expect(tucks({ w: MIN_WIDTH, h: MIN_HEIGHT - 1 })).toBe(true);
   for (const w of [0, BOTH_SIDES_OPEN, ZOOMED]) expect(tucks({ w, h: ROOM.h })).toBe(true);
+});
+
+test("a room shows a head from the head's least width up", () => {
+  expect(thin({ w: HEAD_LEAST_WIDTH - 1, h: ROOM.h })).toBe(true);
+  expect(thin({ w: HEAD_LEAST_WIDTH, h: ROOM.h })).toBe(false);
 });
 
 test("a tucked window is its head, at the room's width, stacked in list order", () => {

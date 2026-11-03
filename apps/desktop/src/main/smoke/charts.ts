@@ -10,6 +10,7 @@
  */
 
 import { DEFAULT_HEIGHT } from "@renderer/chart/place";
+import { DEFAULT_THEME } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote. */
@@ -49,6 +50,27 @@ const CLICK_AND_ARROW: readonly Input[] = [
   { type: "keyUp", keyCode: "Down" },
 ];
 
+/** A sheet that leaves a room under a head's least width, past the 12 px bar. */
+const THIN_SHEET = 40;
+
+/** What a window copies from the settings menu. */
+const BOX_LOOK = [
+  "background-color",
+  "border",
+  "border-radius",
+  "box-shadow",
+  "box-sizing",
+  "color",
+  "font-family",
+  "font-size",
+];
+
+/** Helpers: a window, and what the page computes for it. */
+const CHROME = `
+  const box = () => document.querySelector(".chart");
+  const style = (at) => getComputedStyle(at);
+`;
+
 /** Helpers: the boxes of the windows and the layer, and what the checks ask of them. */
 const GEOMETRY = `
   const windows = () => [...document.querySelectorAll(".chart")].map((w) => w.getBoundingClientRect());
@@ -62,6 +84,35 @@ const GEOMETRY = `
   const HEAD = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
   const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
 `;
+
+/** What a window copies, by selector. */
+const COPIES = [
+  { of: "the settings menu's box", copy: ".chart", from: ".settings", names: BOX_LOOK },
+];
+
+/**
+ * One check per appearance, in the theme a person starts on: each part reads as
+ * what it copies. The menu has to be open to be read.
+ */
+const WORN: Check[] = (["dark", "light"] as const).map((mode) => ({
+  name: `in ${mode} a window wears the dialogs' box`,
+  shot: `chart-${mode}`,
+  script: `
+    ${CHROME}
+    const gear = document.querySelector("#settings");
+    const menu = document.querySelector(".settings");
+    gear.click();
+    menu.querySelector('[data-appearance="${mode}"]').click();
+    menu.querySelector('[data-theme="${DEFAULT_THEME}"]').click();
+    await frame();
+    const off = ${JSON.stringify(COPIES)}.flatMap(({ of, copy, from, names }) => names.flatMap((name) => {
+      const [worn, want] = [copy, from].map((at) => style(document.querySelector(at)).getPropertyValue(name));
+      return worn === want ? [] : [of + "'s " + name + " is " + want + ", and not " + worn];
+    }));
+    gear.click();
+    return off.join(" · ");
+  `,
+}));
 
 export const CHARTS: Check[] = [
   {
@@ -240,6 +291,43 @@ export const CHARTS: Check[] = [
       const flush = await until(() => room().left === 0);
       toggle.click();
       return flush ? "" : "the layer starts at " + room().left;
+    `,
+  },
+  ...WORN,
+  {
+    name: "the layer clips as far from a window as its shadow reaches, so the shadow fades before the clip",
+    script: `
+      ${CHROME}
+      const layer = style(document.querySelector("#charts"));
+      if (layer.overflowX !== "clip" || layer.overflowY !== "clip") return "the layer's overflow is " + layer.overflow;
+      const [, offset, blur] = style(box()).boxShadow.match(/\\d+(?=px)/g).map(Number);
+      const reach = offset + blur + "px";
+      return layer.overflowClipMargin === reach ? "" : "the layer clips at " + layer.overflowClipMargin + ", and the shadow reaches " + reach;
+    `,
+  },
+  {
+    name: "a window's shadow takes no pointer from the scrollbar",
+    script: `
+      ${GEOMETRY}
+      const [, foot] = windows();
+      const under = document.elementFromPoint((foot.left + foot.right) / 2, foot.bottom + 1);
+      return under.closest(".chart") === null ? "" : "a window lies over the scrollbar";
+    `,
+  },
+  {
+    // The sheet is held thin by hand, as a zoomed page with both columns open has it.
+    name: "a room too narrow for a head shows no window, and leaves what is under it the pointer",
+    script: `
+      ${GEOMETRY}
+      const sheet = document.querySelector(".win-sheet");
+      const shows = () => getComputedStyle(document.querySelector(".chart")).visibility !== "hidden";
+      sheet.style.maxWidth = ${THIN_SHEET} + "px";
+      const thin = await until(() => !shows());
+      const at = document.elementFromPoint(room().left + 1, room().top + 1);
+      sheet.style.maxWidth = "";
+      if (!thin) return "a window stands at " + edges(windows()[0]) + " in a room at " + edges(room());
+      if (at.closest(".chart") !== null) return "a hidden window takes the pointer";
+      return (await until(() => shows() && !heads())) ? "" : "the windows stayed hidden";
     `,
   },
 ];
