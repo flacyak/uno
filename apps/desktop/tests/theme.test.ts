@@ -69,6 +69,8 @@ test("a choice is worn at once, and kept for the next launch", () => {
   theming.appear("dark");
   expect(token("--surface")).toBe("#1e202e");
   expect(token("--accent")).toBe("#7aa2f7");
+  const chart = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-6"];
+  expect(chart.map(token)).toEqual(THEMES[1].dark.chart);
   expect(kept.map.get(THEME_KEY)).toBe("tokyo-night");
   expect(kept.map.get(APPEARANCE_KEY)).toBe("dark");
 
@@ -111,11 +113,16 @@ test("the tokens a palette does not give are mixed from the ones it does", () =>
 
 // ------------------------------------------------------------ every palette
 
-function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => {
+/** A hex colour's red, green and blue, as linear light. */
+function linear(hex: string): number[] {
+  return [1, 3, 5].map((i) => {
     const c = parseInt(hex.slice(i, i + 2), 16) / 255;
     return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
+}
+
+function luminance(hex: string): number {
+  const [r, g, b] = linear(hex);
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }
 
@@ -158,5 +165,61 @@ test("muted ink and the flag read on every ground of every theme", () => {
         expect(contrast(flag, ground), `flag ${where}`).toBeGreaterThanOrEqual(READABLE);
       }
     }
+  }
+});
+
+// ------------------------------------------------------------ chart colours
+
+// The checks follow the dataviz skill's palette validator, in OKLab, on every
+// pair a pie draws side by side where it takes only neighbours.
+
+/** The validator measures OKLab distance times 100, the unit of its floors. */
+const DELTA_E_PER_OKLAB = 100;
+
+/** The validator's floor between neighbours, to full colour vision. */
+const NORMAL_FLOOR = 15;
+
+type Matrix = ReadonlyArray<readonly [number, number, number]>;
+
+/** Linear light to cone responses, and their cube roots to OKLab (Ottosson, 2020). */
+const CONES: Matrix = [
+  [0.4122214708, 0.5363325363, 0.0514459929],
+  [0.2119034982, 0.6806995451, 0.1073969566],
+  [0.0883024619, 0.2817188376, 0.6299787005],
+];
+const LAB: Matrix = [
+  [0.2104542553, 0.793617785, -0.0040720468],
+  [1.9779984951, -2.428592205, 0.4505937099],
+  [0.0259040371, 0.7827717662, -0.808675766],
+];
+
+function times(m: Matrix, v: readonly number[]): number[] {
+  return m.map(([a, b, c]) => a * v[0]! + b * v[1]! + c * v[2]!);
+}
+
+/** A colour's OKLab lightness and two opponent axes, from its linear light. */
+function oklab(rgb: readonly number[]): number[] {
+  return times(LAB, times(CONES, rgb).map(Math.cbrt));
+}
+
+function apart(a: readonly number[], b: readonly number[]): number {
+  return DELTA_E_PER_OKLAB * Math.hypot(...a.map((x, i) => x - b[i]!));
+}
+
+/**
+ * The colours a pie can draw side by side: each slice and the next, Other in
+ * --ink-3 after the sixth, and the first slice beside whichever closes the pie.
+ */
+function besides(p: Palette): Array<[string, string]> {
+  const ring = [...p.chart, p.ink3];
+  const next = ring.slice(1).map((c, i): [string, string] => [ring[i]!, c]);
+  const closing = ring.slice(2).map((c): [string, string] => [ring[0]!, c]);
+  return [...next, ...closing];
+}
+
+test.each(palettes)("%s, %s: a pie's colours tell apart beside each other", (_, _mode, p) => {
+  for (const [a, b] of besides(p)) {
+    const where = `${a} by ${b}`;
+    expect(apart(oklab(linear(a)), oklab(linear(b))), where).toBeGreaterThanOrEqual(NORMAL_FLOOR);
   }
 });
