@@ -257,11 +257,46 @@
   white-space: nowrap;
 }
 
-/* A scatter's plot, from scatter.ts, stands as far in as the bars, by the inset
- * scatter.ts gives. A point at an axis's end shows whole past it. */
+/* A scatter's plot, from scatter.ts: the y axis's labels in a gutter as wide as
+ * scatter.ts gives, the points beside them, and the x axis's labels under those.
+ * Every label stands inside the bars' inset: the y axis's last centres on the
+ * points' top, so they start half a line further in, and the x axis's first and
+ * last reach half their length past the points. Its labels stand scatter.ts's
+ * gap from the points. It is the ticks' size, so its ch is theirs. A point at
+ * an axis's end shows whole past it. */
 .chart-scatter {
+  display: grid;
+  grid-template: minmax(0, 1fr) auto / var(--gutter) minmax(0, 1fr);
+  column-gap: var(--tick-gap);
   height: 100%;
-  padding: var(--inset);
+  padding: calc(var(--inset) + 0.5lh) calc(var(--inset) + var(--x-last)) var(--inset)
+    calc(var(--inset) + max(0px, var(--x-first) - var(--gutter) - var(--tick-gap)));
+  font-size: 11px;
+}
+
+/* A label centres on its tick. The y axis's first centres on the points' foot,
+ * so the x axis's stand half a line and the gap under the points, clear of it. */
+.chart-ticks {
+  position: relative;
+}
+
+.chart-ticks .chart-tick {
+  position: absolute;
+}
+
+.chart-ticks.y .chart-tick {
+  right: 0;
+  translate: 0 -50%;
+}
+
+.chart-ticks.x {
+  grid-column: 2;
+  height: 1lh;
+  margin-top: calc(0.5lh + var(--tick-gap));
+}
+
+.chart-ticks.x .chart-tick {
+  translate: -50% 0;
 }
 
 .chart-points {

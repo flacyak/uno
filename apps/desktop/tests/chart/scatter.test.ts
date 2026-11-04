@@ -1,7 +1,8 @@
 /**
  * @fileoverview A scatter chart drawn from a tally: a point per sampled row,
  * where its x and y stand between the first and last ticks of axes that take
- * in every plotted row, over a gridline at each tick.
+ * in every plotted row, over a gridline at each tick, and each tick's label on
+ * its gridline.
  *
  * @vitest-environment happy-dom
  */
@@ -26,6 +27,11 @@ const SALES = sampleOf([0, 50, 200], [0, 3000, 4000]);
 const read = (box: HTMLElement, selector: string, name: string): Array<string | null> =>
   [...box.querySelectorAll(selector)].map((at) => at.getAttribute(name));
 
+/** `box`'s labels of the `side` axis, least first. */
+const labels = (box: HTMLElement, side: "x" | "y"): HTMLElement[] => [
+  ...box.querySelectorAll<HTMLElement>(`.chart-ticks.${side} .chart-tick`),
+];
+
 test("a point stands where its x and y fall between each axis's first tick and its last", () => {
   const box = scatter(SALES);
   expect(read(box, ".chart-point", "cx")).toStrictEqual(["0%", "25%", "100%"]);
@@ -49,6 +55,18 @@ test("a gridline crosses the plot at each tick of either axis, under the points"
   expect(read(box, ".chart-grid.y", "x2")).toStrictEqual(ticks.map(() => "100%"));
   expect(box.querySelector(".chart-grid ~ .chart-point")).not.toBeNull();
   expect(box.querySelector(".chart-point ~ .chart-grid")).toBeNull();
+});
+
+test("each tick's label stands on its gridline, y's in a gutter of the widest and x's under the plot", () => {
+  const box = scatter(SALES);
+  const [y, x] = [labels(box, "y"), labels(box, "x")];
+  expect(y.map((at) => at.textContent)).toStrictEqual(["0", "1,000", "2,000", "3,000", "4,000"]);
+  expect(y.map((at) => at.style.top)).toStrictEqual(read(box, ".chart-grid.y", "y1"));
+  expect(x.map((at) => at.textContent)).toStrictEqual(["0", "50", "100", "150", "200"]);
+  expect(x.map((at) => at.style.left)).toStrictEqual(read(box, ".chart-grid.x", "x1"));
+  // The last x label reaches half its length past the points, and the first before them.
+  const room = (name: string): string => box.style.getPropertyValue(name);
+  expect(["--gutter", "--x-first", "--x-last"].map(room)).toStrictEqual(["5ch", "0.5ch", "1.5ch"]);
 });
 
 test("a tally that plotted nothing draws nothing, as its extent of 0 is no row's", () => {
