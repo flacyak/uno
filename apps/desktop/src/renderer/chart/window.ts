@@ -65,6 +65,7 @@ export class ChartWindow {
     grip.setAttribute("aria-hidden", "true");
     caption.append(grip);
 
+    this.box.tabIndex = -1;
     this.box.setAttribute("role", "group");
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);

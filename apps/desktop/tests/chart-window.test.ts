@@ -81,6 +81,10 @@ test("a window is a group called a chart, named by its head and described by its
   expect(pointedAt(box, "aria-describedby")).toBe(box.querySelector(".chart-caption"));
 });
 
+test("a click can focus a window, and Tab passes it by", () => {
+  expect(windowOf(BARS).box.getAttribute("tabindex")).toBe("-1");
+});
+
 test("the head says the title the plot makes, in full on the pointer too", () => {
   const { box } = windowOf(BARS);
   expect(title(box).textContent).toBe(madeTitle(BARS.plot));

@@ -51,6 +51,21 @@ const CLICK_AND_ARROW: readonly Input[] = [
   { type: "keyUp", keyCode: "Down" },
 ];
 
+/** A point on the top window's head, in the run's 1100 px window and its 960 at scale 2. */
+const OVER_HEAD = { x: 800, y: 43 };
+
+/** A person's click on that head. */
+const CLICK_HEAD: readonly Input[] = [
+  { type: "mouseDown", ...OVER_HEAD, button: "left", clickCount: 1 },
+  { type: "mouseUp", ...OVER_HEAD, button: "left", clickCount: 1 },
+];
+
+/** A key a person presses that the app does nothing with. */
+const A_KEY: readonly Input[] = [
+  { type: "keyDown", keyCode: "Shift" },
+  { type: "keyUp", keyCode: "Shift" },
+];
+
 /** A sheet that leaves a room under a head's least width, past the 12 px bar. */
 const THIN_SHEET = 40;
 
@@ -443,6 +458,53 @@ export const CHARTS: Check[] = [
     `,
   },
   {
+    name: "a click on a window's head gives it the keys, and its border says so",
+    input: { events: CLICK_HEAD, through: true },
+    shot: "chart-focused",
+    script: `
+      ${CHROME}
+      if (!(await until(() => document.activeElement === box()))) return "the keys are in " + document.activeElement?.tagName;
+      const worn = style(box()).borderTopColor;
+      const want = computed("color-mix(in srgb, var(--accent) 45%, transparent)");
+      return worn === want ? "" : "the border is " + worn + ", and the formula primary's " + want;
+    `,
+  },
+  {
+    // After a key, focus from a script shows as it will when F6 moves it here.
+    name: "a window given the keys from the keyboard draws no outline over its border",
+    input: { events: A_KEY, through: true },
+    script: `
+      ${CHROME}
+      const shows = () => {
+        box().blur();
+        box().focus();
+        return box().matches(":focus-visible");
+      };
+      if (!(await until(shows))) return "the window does not show its focus, so this checks nothing";
+      return style(box()).outlineStyle === "none" ? "" : "the window has the outline " + style(box()).outline;
+    `,
+  },
+  {
+    name: "a cell opens in transform, for the click after this",
+    script: `
+      await press("e", { ctrlKey: true });
+      await press("Enter");
+      return (await until(() => document.querySelector(".cell-editor") !== null)) ? "" : "no cell opened";
+    `,
+  },
+  {
+    name: "a click on a window's head commits an open cell and gives the window the keys",
+    input: { events: CLICK_HEAD, through: true },
+    script: `
+      ${CHROME}
+      if (!(await until(() => document.querySelector(".cell-editor") === null))) return "the cell stayed open";
+      await frame();
+      const keys = document.activeElement;
+      await press("e", { ctrlKey: true });
+      return keys === box() ? "" : "the keys are in #" + keys?.id;
+    `,
+  },
+  {
     name: "the layer clips as far from a window as its shadow reaches, so the shadow fades before the clip",
     script: `
       ${CHROME}
@@ -494,6 +556,25 @@ export const CHARTS: Check[] = [
       sheet.style.maxHeight = "";
       if (!stack) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       if (held.closest(".chart") !== null) return "a head lies over the scrollbar";
+      return (await until(() => !heads())) ? "" : "the windows stayed tucked";
+    `,
+  },
+  {
+    name: "the window with the keys stands over the head below it, so all of its border shows and no shadow falls on that head",
+    script: `
+      ${GEOMETRY}
+      const sheet = document.querySelector(".win-sheet");
+      const upper = document.querySelector(".chart");
+      sheet.style.maxHeight = ${SHORT_SHEET} + "px";
+      const stack = await until(heads);
+      upper.focus();
+      const [{ left, right, bottom }] = windows();
+      const foot = document.elementFromPoint((left + right) / 2, bottom - border() / 2);
+      const shadow = getComputedStyle(upper).boxShadow;
+      sheet.style.maxHeight = "";
+      if (!stack) return "the windows stand at " + windows().map(edges).join(" and ");
+      if (!upper.contains(foot)) return "the head below lies over the border";
+      if (shadow !== "none") return "the head with the keys throws " + shadow;
       return (await until(() => !heads())) ? "" : "the windows stayed tucked";
     `,
   },

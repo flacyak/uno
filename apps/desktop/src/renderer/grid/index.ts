@@ -306,7 +306,11 @@ export class Grid {
         this.focus();
       }
     });
-    input.addEventListener("blur", () => this.commitEdit());
+    // Focus that moves to a control stays there, as it does with no cell open.
+    // Focus that moves to the page around the grid comes back to the grid.
+    input.addEventListener("blur", ({ relatedTarget: to }) => {
+      this.commitEdit(!(to instanceof Node) || to.contains(this.host));
+    });
 
     this.editor = input;
     this.view.hold(input);
@@ -385,7 +389,8 @@ export class Grid {
     if (!this.view.place(input, this.selRow, this.selCol)) this.cancelEdit();
   }
 
-  private commitEdit(): void {
+  /** Commits the open cell, and gives the grid the keys if `refocus` is set. */
+  private commitEdit(refocus = true): void {
     const input = this.editor;
     const source = this.source;
     if (input === undefined || source === undefined) return;
@@ -398,7 +403,7 @@ export class Grid {
       this.last = changeOf(this.caret, raw, value);
       this.events.onEdit(this.selRow, this.selCol, value);
     }
-    this.focus();
+    if (refocus) this.focus();
     this.view.layout();
   }
 
