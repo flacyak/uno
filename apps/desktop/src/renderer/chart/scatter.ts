@@ -35,11 +35,27 @@ function percent(share: number): string {
   return `${share * 100}%`;
 }
 
-/** scatter draws `sample`'s points against axes over its least and most. */
+/**
+ * scales says whether `axis` gives a scale: two ticks or more, each finite, and
+ * a span between them that a double holds.
+ */
+function scales(axis: Axis): boolean {
+  const { ticks } = axis;
+  const span = ticks.at(-1)! - ticks[0]!;
+  return ticks.length >= 2 && ticks.every(Number.isFinite) && Number.isFinite(span);
+}
+
+/**
+ * scatter draws `sample`'s points against axes over its least and most. A
+ * tally that plotted nothing has no extent to draw, and where no double can
+ * scale an axis its points would stand at NaN, so either draws nothing.
+ */
 export function scatter(sample: Sample): HTMLElement {
   const box = el("div", "chart-scatter");
   const x = axis(sample.least.x, sample.most.x);
   const y = axis(sample.least.y, sample.most.y);
+  if (sample.plotted === 0 || !scales(x) || !scales(y)) return box;
+
   const plot = mark("svg", "chart-points");
   plot.setAttribute("aria-hidden", "true");
   for (const [i, at] of sample.x.entries()) {

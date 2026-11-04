@@ -9,6 +9,7 @@
 import { expect, test } from "vite-plus/test";
 
 import type { Sample } from "@engine";
+import { axis } from "@renderer/chart/axes";
 import { POINT_RADIUS, scatter } from "@renderer/chart/scatter";
 
 /** A tally that sent `x` and `y` and plotted no other row. */
@@ -37,4 +38,20 @@ test("the axes take in every plotted row, not only the rows the tally sent", () 
   const box = scatter({ ...sent, least: { x: -100, y: 0 }, most: { x: 100, y: 4000 } });
   expect(read(box, ".chart-point", "cx")).toStrictEqual(["75%"]);
   expect(read(box, ".chart-point", "cy")).toStrictEqual(["75%"]);
+});
+
+test("a tally that plotted nothing draws nothing, as its extent of 0 is no row's", () => {
+  const none = { ...sampleOf([0], [0]), x: [], y: [], plotted: 0 };
+  expect(scatter(none).childElementCount).toBe(0);
+});
+
+test("an axis no double can scale draws nothing, where its points would stand at NaN", () => {
+  // A span past what a double holds gives no ticks to scale by.
+  const wide = sampleOf([-9e307, 9e307], [0, 1]);
+  expect(axis(wide.least.x, wide.most.x).ticks.length).toBeLessThan(2);
+  expect(scatter(wide).childElementCount).toBe(0);
+  // Ticks a double holds can still lie further apart than one does.
+  const far = sampleOf([-8e307, 8e307], [0, 1]);
+  expect(axis(far.least.x, far.most.x).ticks.every(Number.isFinite)).toBe(true);
+  expect(scatter(far).childElementCount).toBe(0);
 });
