@@ -11,6 +11,7 @@ import type { Chart, Plot } from "@document";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
+import type { Stage } from "@renderer/chart/window";
 import { BARS } from "./charted.ts";
 
 /** The columns the made titles below name. */
@@ -25,9 +26,12 @@ const TITLED: Chart = { ...BARS, title: "Where the rows are" };
 /** The name of a source, as a head writes it. */
 const SOURCE = "sales-q3";
 
+/** A layer for a window whose words are all a test reads. */
+const NO_LAYER: Stage = { leave: () => undefined };
+
 /** A chart's window, showing `chart` under `source`. */
 function windowOf(chart: Chart, source?: string): ChartWindow {
-  const made = new ChartWindow();
+  const made = new ChartWindow(NO_LAYER);
   made.show(chart, source);
   document.body.append(made.box);
   return made;

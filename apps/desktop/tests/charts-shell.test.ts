@@ -189,6 +189,14 @@ test("Ctrl+S after a move writes the new place, with no unsaved mark", async () 
   expect(document.querySelector(".ws.open .dirty")).toBeNull();
 });
 
+test("Escape on a window gives the keys back to the grid", async () => {
+  await open("left.uno", [BARS]);
+  const box = document.querySelector<HTMLElement>(".chart")!;
+  box.focus();
+  box.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  expect(document.activeElement).toBe(document.querySelector("#content"));
+});
+
 test("a chart change stays unsaved through a save the host cannot write", async () => {
   const path = await open("refused.uno", [BARS]);
   await shell.charts?.change(BARS.id, { title: "Rows" });

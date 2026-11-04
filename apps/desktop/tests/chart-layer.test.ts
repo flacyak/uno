@@ -58,6 +58,9 @@ const titles = (): Array<string | null> =>
 /** Fires what a ResizeObserver on the sheet would. */
 let resized: () => void;
 
+/** What the layer calls to give the grid its keys back. */
+const leave = vi.fn();
+
 /** A ResizeObserver that fires only when a test says, and only on #content. */
 class HeldObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
@@ -104,7 +107,7 @@ function modelOf(...charts: Chart[]): Model {
 /** A layer over a model holding `charts`, in ROOM, and that model. */
 function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   const model = modelOf(...charts);
-  const layer = new ChartLayer(root(), content());
+  const layer = new ChartLayer(root(), content(), leave);
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
@@ -116,6 +119,7 @@ beforeEach(() => {
   grid.className = "grid-scroll";
   content().append(grid);
   vi.stubGlobal("ResizeObserver", HeldObserver);
+  leave.mockClear();
 });
 
 afterEach(() => {
@@ -124,7 +128,7 @@ afterEach(() => {
 });
 
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
-  const layer = new ChartLayer(root(), content());
+  const layer = new ChartLayer(root(), content(), leave);
   roomIs(ROOM);
   expect(root().hidden).toBe(true);
 
