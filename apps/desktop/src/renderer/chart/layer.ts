@@ -4,22 +4,25 @@
  * scrollbars, so no window can cover them and the grid's keys stay the grid's.
  *
  * Each window draws from its chart's place, in the room the layer leaves. A
- * resize changes only what shows, so the layer writes nothing back.
+ * resize of the room changes only what shows. A window reports back through
+ * Stage, which stores its place for the next save.
  *
  * It is loaded with the first workspace that has charts.
  */
 
 import "./chart.css";
 
+import type { ChartPlace } from "@document";
 import type { Charts } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
 import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
+import type { Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
 
-/** What the layer reads of a workspace's charts. */
-type Shown = Pick<Charts, "all" | "sourceLabel">;
+/** What the layer reads of a workspace's charts, and where it stands one. */
+type Shown = Pick<Charts, "all" | "sourceLabel" | "move">;
 
 /** The thinnest a border draws, in device px. */
 const THINNEST_BORDER = 1;
@@ -38,7 +41,7 @@ export class ChartLayer implements Stage {
   /** The height of the header row, and of a tucked window's head. */
   private readonly head: number;
   /** The charts of the open workspace. */
-  private charts: Shown = { all: [], sourceLabel: () => undefined };
+  private charts: Shown = { all: [], sourceLabel: () => undefined, move: () => undefined };
   /** Fills the grid's scroller inside its bars, so the two boxes differ by a bar. */
   private readonly gauge = el("div", "chart-gauge");
 
@@ -69,6 +72,17 @@ export class ChartLayer implements Stage {
     this.draw();
   }
 
+  /** room gives the layer's box as it measures now. */
+  room(): Room {
+    const { width: w, height: h } = this.root.getBoundingClientRect();
+    return { w, h };
+  }
+
+  /** move stores where chart `id`'s window stands, which the next draw shows. */
+  move(id: string, place: ChartPlace): void {
+    this.charts.move(id, place);
+  }
+
   /**
    * draw gives each chart its one window, each saying what the chart says now,
    * at its place in the room, or tucked if the room is too small, and takes away
@@ -85,8 +99,7 @@ export class ChartLayer implements Stage {
 
     const border = borderWidth();
     this.fit(border);
-    const { width: w, height: h } = this.root.getBoundingClientRect();
-    const room = { w, h };
+    const room = this.room();
     const tucking = tucks(room);
     charts.forEach((chart, index) => {
       const held = this.windowOf(chart.id);

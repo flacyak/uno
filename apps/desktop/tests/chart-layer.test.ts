@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import type { Chart } from "@document";
+import type { Chart, ChartPlace } from "@document";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
@@ -45,6 +45,7 @@ const SOURCE = "sales-q3";
 interface Model {
   all: readonly Chart[];
   sourceLabel(source: string): string | undefined;
+  move: (id: string, place: ChartPlace) => void;
 }
 
 const root = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
@@ -54,6 +55,9 @@ const gauge = (): HTMLElement => document.querySelector<HTMLElement>(".grid-scro
 const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".chart")];
 const titles = (): Array<string | null> =>
   [...document.querySelectorAll(".chart-title")].map((title) => title.textContent);
+
+/** The first window. */
+const first = (): HTMLElement => windows()[0]!;
 
 /** Fires what a ResizeObserver on the sheet would. */
 let resized: () => void;
@@ -101,7 +105,14 @@ function drawn({ style }: HTMLElement): Rect {
 
 /** A model of a workspace of one source, holding `charts`. */
 function modelOf(...charts: Chart[]): Model {
-  return { all: charts, sourceLabel: () => undefined };
+  const model: Model = {
+    all: charts,
+    sourceLabel: () => undefined,
+    move: vi.fn((id: string, place: ChartPlace) => {
+      model.all = model.all.map((chart) => (chart.id === id ? { ...chart, place } : chart));
+    }),
+  };
+  return model;
 }
 
 /** A layer over a model holding `charts`, in ROOM, and that model. */
@@ -351,4 +362,12 @@ test("a room too narrow for a head shows nothing and loses nothing", () => {
   resize(ROOM);
   expect(drawn(windows()[0]!)).toStrictEqual(placed(FLUSH.place, ROOM));
   expect(root().classList.contains("thin")).toBe(false);
+});
+
+test("a move the layer takes stands the window there at the next draw", () => {
+  const { layer, model } = shown(INSIDE);
+  layer.move(INSIDE.id, FLUSH.place);
+  layer.draw();
+  expect(model.all[0]!.place).toBe(FLUSH.place);
+  expect(drawn(first())).toStrictEqual(placed(FLUSH.place, ROOM));
 });
