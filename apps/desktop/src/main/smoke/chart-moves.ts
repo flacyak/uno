@@ -74,6 +74,9 @@ const SHORT_SHEET = 80;
 /** A point this far up from a window's foot stands in a 6 px edge zone. */
 const EDGE_REACH = 3;
 
+/** The line under a window at its least size: the second export's two least Locations. */
+const LEAST_REST = "+2 more · 1,283 rows";
+
 /** A drag from the last window's plot out over the sheet. */
 const OVER_SHEET = { x: -500, y: -60 };
 
@@ -259,6 +262,18 @@ export const CHART_MOVES: Check[] = [
     script: `
       ${MOVES}
       return wait({ width: ${MIN_WIDTH}, height: ${MIN_HEIGHT} }, "a resize");
+    `,
+  },
+  {
+    name: "at its least size a window draws the bars its plot holds, and the line of the rest inside it",
+    shot: "chart-least",
+    script: `
+      const plot = document.querySelector(".chart .chart-plot");
+      const line = () => plot.querySelector(".chart-bars-line");
+      const drawn = () => plot.querySelectorAll(".chart-bar").length + " bars and " + JSON.stringify(line()?.textContent);
+      if (!(await until(() => line()?.textContent === ${JSON.stringify(LEAST_REST)}))) return "the plot draws " + drawn();
+      const [foot, end] = [plot, line()].map((at) => at.getBoundingClientRect().bottom);
+      return end <= foot ? "" : "the line ends at " + end + ", past the plot's foot at " + foot;
     `,
   },
   {
