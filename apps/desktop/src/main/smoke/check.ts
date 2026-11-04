@@ -30,6 +30,12 @@ export interface Check {
    */
   input?: { events: readonly Input[]; through: boolean };
   /**
+   * A selector. Before the check runs, the pointer moves to the middle of what
+   * it picks, by the path a person's pointer takes, wherever the window's size
+   * has put that.
+   */
+  hover?: string;
+  /**
    * The window's zoom and width, set before the check runs, the way the View
    * menu and a drag of its edge set them. What is left out goes back to what
    * the run started with.

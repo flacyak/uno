@@ -452,8 +452,8 @@ transform and insert with Esc keeping what was typed. It writes a screenshot to
 
 The window it drives ignores the desktop. Keys, clicks and the wheel from the
 window system never reach the page, and the page keeps the focus when someone
-switches to another window. Keep working while it runs. Three of the checks send
-input down the window system's path, once dropped and twice let through. The
+switches to another window. Keep working while it runs. A few of the checks send
+input down the window system's path, one dropped and the rest let through. The
 menu's accelerators are the main process's, so one of those still lands. `vp run preview` runs in the same
 mode, and `src/main/driven.ts` has the details.
 

@@ -195,6 +195,17 @@ function reshape(win: BrowserWindow, zoom: number, width: number, height: number
   win.setMaximumSize(width, height);
 }
 
+/** hover moves the pointer to the middle of what `selector` picks. */
+async function hover(win: BrowserWindow, selector: string): Promise<void> {
+  const [x, y] = (await win.webContents.executeJavaScript(`
+    (() => {
+      const at = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+      return [at.left + at.width / 2, at.top + at.height / 2].map(Math.round);
+    })()
+  `)) as [number, number];
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
+}
+
 /**
  * runSmoke drives the window, reports to stdout, and quits with a status the
  * shell can read.
@@ -253,6 +264,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
         if (check.input.through) through(win, send);
         else send();
       }
+      if (check.hover !== undefined) await hover(win, check.hover);
       const failure =
         check.run !== undefined
           ? await check.run(page)

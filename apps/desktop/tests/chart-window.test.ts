@@ -73,11 +73,12 @@ test.each<[string, string, Plot]>([
   expect(madeTitle(plot)).toBe(es);
 });
 
-test("a window is a group called a chart, named by its head", () => {
+test("a window is a group called a chart, named by its head and described by its caption", () => {
   const { box } = windowOf(BARS);
   expect(box.getAttribute("role")).toBe("group");
   expect(box.getAttribute("aria-roledescription")).toBe(m.chart_role());
   expect(pointedAt(box, "aria-labelledby")).toBe(title(box));
+  expect(pointedAt(box, "aria-describedby")).toBe(box.querySelector(".chart-caption"));
 });
 
 test("the head says the title the plot makes, in full on the pointer too", () => {
@@ -135,5 +136,16 @@ test("each window has ids of its own, whatever its chart's id holds", () => {
   const [one, two] = [windowOf(spaced).box, windowOf(spaced).box];
   expect(pointedAt(one, "aria-labelledby")).toBe(title(one));
   expect(pointedAt(two, "aria-labelledby")).toBe(title(two));
+  expect(pointedAt(two, "aria-describedby")).toBe(two.querySelector(".chart-caption"));
   expect(one.getAttribute("aria-labelledby")).not.toBe(two.getAttribute("aria-labelledby"));
+});
+
+test("the head and the caption are drawn, with a grip that says nothing", () => {
+  const { box } = windowOf(BARS);
+  expect([...box.children].map((child) => child.className)).toStrictEqual([
+    "col-head chart-head",
+    "chart-plot",
+    "chart-caption",
+  ]);
+  expect(box.querySelector(".chart-caption .chart-grip")?.getAttribute("aria-hidden")).toBe("true");
 });
