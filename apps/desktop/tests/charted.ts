@@ -7,7 +7,7 @@ import { basename } from "node:path";
 
 import { newManifest, writeDocument } from "@document";
 import type { CarriedChart, Chart } from "@document";
-import { REGION, ROWS } from "@main/smoke/fixture";
+import { REGION, REVENUE, ROWS, UNITS } from "@main/smoke/fixture";
 import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/bars";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
@@ -26,6 +26,17 @@ export const BARS: Chart = {
   title: "",
   place: { x: 1, y: 0, width: 420, height: 260 },
   refresh: 0,
+};
+
+/** Revenue against units of the sales export. */
+export const SCATTER: Chart = {
+  ...BARS,
+  id: "c4",
+  plot: {
+    t: "scatter",
+    x: { col: UNITS, header: "units" },
+    y: { col: REVENUE, header: "revenue" },
+  },
 };
 
 /** Where a person left a window. */

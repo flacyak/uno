@@ -26,6 +26,7 @@ export const DATE = 0;
 export const REGION = 1;
 export const REP = 2;
 export const UNITS = 4;
+export const REVENUE = 5;
 
 /** How many cells remove commas changes once rows 1, 3 and 5 of units are
  * fixed by hand. */
