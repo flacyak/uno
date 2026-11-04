@@ -361,6 +361,16 @@
   color: var(--ink-3);
 }
 
+/* What the caption says of the plot takes the room before the grip, and ends in
+ * an ellipsis where a window is too narrow for it. */
+.chart-said {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The scrollbar thumb's two colours (grid.css). It stands over the edges, and
  * takes the corner past it from both, since a corner means both ways. */
 .chart-grip {

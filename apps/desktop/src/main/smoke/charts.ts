@@ -691,4 +691,13 @@ export const CHART_SCATTER: Check[] = [
       return worn.join() === inks.join() ? "" : "a point and a gridline wear " + worn.join(" and ");
     `,
   },
+  {
+    name: "a scatter that samples says in its caption how many points it draws, whole before the grip",
+    script: `
+      const said = document.querySelector(".chart-said");
+      const drawn = counted(document.querySelectorAll(".chart-point").length);
+      if (!said.textContent.startsWith(drawn + " of ")) return "the caption says " + said.textContent + " of " + drawn + " points";
+      return said.scrollWidth > said.clientWidth ? "the caption cuts " + said.textContent : "";
+    `,
+  },
 ];

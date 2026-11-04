@@ -15,6 +15,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
 import type { GroupsTally, SampleTally } from "@engine";
+import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
@@ -30,6 +31,7 @@ import {
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
+import { num } from "@renderer/locale";
 import { BARS, MOVED, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
@@ -115,6 +117,7 @@ const labels = (): Array<string | null> =>
 const first = (): HTMLElement => windows()[0]!;
 const part = (selector: string): HTMLElement => first().querySelector<HTMLElement>(selector)!;
 const head = (): HTMLElement => part(".chart-head");
+const said = (): string => part(".chart-said").textContent ?? "";
 const grip = (): HTMLElement => part(".chart-grip");
 
 /** Fires what a ResizeObserver on the sheet would, and one on the last window's plot. */
@@ -198,9 +201,8 @@ function heardOf(...values: string[]): Heard {
 /** Units and revenue of two rows of the sales export, as a scatter's tally sends them. */
 const SENT = { x: [180, 999], y: [7200, 39960] };
 
-/** What SCATTER's chart heard once its source was read: SENT, and no other row. */
-function pointsHeard(): Heard {
-  const plotted = SENT.x.length;
+/** What SCATTER's chart heard once its source was read: SENT, of `plotted` rows. */
+function pointsHeard(plotted = SENT.x.length): Heard {
   const tally: SampleTally = {
     t: "sample",
     plot: SCATTER.plot,
@@ -484,6 +486,31 @@ test("a window draws a scatter's points from what its chart heard", async () => 
   model.heard = () => pointsHeard();
   await frame();
   expect(document.querySelectorAll(".chart-scatter .chart-point")).toHaveLength(SENT.x.length);
+});
+
+test("a scatter's caption says how many of its points it draws while it samples, in the language chosen, and nothing once it draws none", async () => {
+  const { layer, model } = shown(SCATTER);
+  model.heard = () => pointsHeard();
+  await frame();
+  expect(said()).toBe("");
+  model.heard = () => pointsHeard(ROWS);
+  layer.tallied(SCATTER.id);
+  await frame();
+  const points = (): string => m.chart_points({ count: ROWS });
+  const words = (): string =>
+    m.chart_points_sampled({ shown: num(SENT.x.length), points: points() });
+  const english = words();
+  expect(said()).toBe(english);
+  void setLocale("es", { reload: false });
+  layer.relabel();
+  await frame();
+  expect(said()).toBe(words());
+  expect(said()).not.toBe(english);
+  // A plot that draws no scatter says nothing of one.
+  model.heard = () => undefined;
+  layer.tallied(SCATTER.id);
+  await frame();
+  expect(said()).toBe("");
 });
 
 test("a room too narrow tucks every window to its head, stacked from the top", () => {
