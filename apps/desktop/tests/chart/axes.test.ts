@@ -2,13 +2,16 @@
  * @fileoverview An axis's ticks: 1, 2 or 5 times a power of ten apart, 3 to 5
  * of them, from at or below the least value to at or above the most, each the
  * decimal it stands for. Its labels, in full or compactly, one way per axis, in
- * each language, and the room they take.
+ * each language, the room they take, and the ticks drawn from them.
+ *
+ * @vitest-environment happy-dom
  */
 
 import { afterEach, expect, test } from "vite-plus/test";
 
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { axis, gutter } from "@renderer/chart/axes";
+import { axis, gutter, tickLabels } from "@renderer/chart/axes";
+import { PSEUDO_LOCALE } from "@scripts/pseudo";
 
 /** The fewest and most ticks an axis takes. */
 const TICKS_LEAST = 3;
@@ -122,4 +125,12 @@ test("a gutter is as wide as the language writes the widest tick", () => {
   expect(gutter(axis(0, 2_500_000_000))).toBe("3B".length);
   void setLocale("es", { reload: false });
   expect(gutter(axis(0, 2_500_000_000))).toBe(`3000${NBSP}M`.length);
+});
+
+test("a compact label sits under .from-file, as its letters come through no message", () => {
+  void setLocale(PSEUDO_LOCALE, { reload: false });
+  const short = tickLabels(axis(0, 9_500));
+  expect(short.map((label) => label.textContent)).toEqual(["0", "5K", "10K"]);
+  for (const label of short) expect(label.className).toBe("chart-tick from-file");
+  for (const label of tickLabels(axis(0, 4_812))) expect(label.className).toBe("chart-tick");
 });

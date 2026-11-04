@@ -9,6 +9,7 @@
  */
 
 import { compact, compactsExactly, places } from "@renderer/locale";
+import { el } from "@renderer/shell/util";
 
 /** The ticks an axis asks for: the 1-2-5 steps give it 3 to 5. */
 const TICKS_WANTED = 4;
@@ -54,6 +55,8 @@ export interface Axis {
   readonly ticks: readonly number[];
   /** Each tick as its label writes it. */
   readonly labels: readonly string[];
+  /** Whether compact() wrote the labels, in letters no message holds. */
+  readonly compact: boolean;
 }
 
 /**
@@ -115,10 +118,20 @@ export function axis(low: number, high: number): Axis {
     Math.max(...ticks.map((tick) => Math.abs(tick))) >= COMPACT_FROM &&
     ticks.every((tick) => compactsExactly(tick));
   const labels = ticks.map((tick) => (short ? compact(tick) : places(tick, -step.exponent)));
-  return { ticks, labels };
+  return { ticks, labels, compact: short };
 }
 
 /** gutter gives the room the widest of `axis`'s labels takes, in ch at a tick's size. */
 export function gutter(axis: Axis): number {
   return Math.max(0, ...axis.labels.map((label) => label.length));
+}
+
+/**
+ * tickLabels gives `axis`'s labels as chart.css writes ticks, least first. A
+ * compact one sits under .from-file, as compact() writes letters no message
+ * holds: 1.2M in the pseudo-locale.
+ */
+export function tickLabels(axis: Axis): HTMLElement[] {
+  const cls = axis.compact ? "chart-tick from-file" : "chart-tick";
+  return axis.labels.map((label) => el("span", cls, label));
 }
