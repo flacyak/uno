@@ -4,7 +4,8 @@
  * stands on the axis, and their labels.
  *
  * An axis writes every label one way, as the dataviz skill does: compactly once
- * it reaches COMPACT_FROM, and in full below that. The labels are mono, as the
+ * it reaches COMPACT_FROM, or ALONG_COMPACT_FROM for an axis along a plot whose
+ * labels fit side by side, and in full below that. The labels are mono, as the
  * window is, so the room they take is their length in ch.
  */
 
@@ -23,6 +24,12 @@ const TICKS_MOST = TICKS_WANTED + 1;
 
 /** An axis that reaches this, above or below zero, writes compactly: the dataviz skill's 10K. */
 const COMPACT_FROM = 10_000;
+
+/**
+ * An axis along a plot, whose labels in full fit side by side, writes compactly
+ * once it reaches this: the dataviz skill writes one in full under a million.
+ */
+export const ALONG_COMPACT_FROM = 1_000_000;
 
 /** The leading digits of a step between ticks. Past 5 comes 1 of the next power of ten. */
 const DIGITS = [1, 2, 5] as const;
@@ -97,12 +104,13 @@ function ticksBy(step: Step, from: number, to: number): number[] {
 
 /**
  * axis gives the axis over values from `low` to `high`, where `low` is at most
- * `high`. An axis over one value runs from zero to twice it, and one over
- * values a double barely tells apart runs as over the one further from zero.
- * It serves values within ten to the 307 of zero, over a span of ten to the
- * -307 or more: past those, a double cannot hold the ticks.
+ * `high`, which writes compactly once it reaches `compactFrom`. An axis over
+ * one value runs from zero to twice it, and one over values a double barely
+ * tells apart runs as over the one further from zero. It serves values within
+ * ten to the 307 of zero, over a span of ten to the -307 or more: past those, a
+ * double cannot hold the ticks.
  */
-export function axis(low: number, high: number): Axis {
+export function axis(low: number, high: number, compactFrom = COMPACT_FROM): Axis {
   const most = Math.max(Math.abs(low), Math.abs(high));
   const apart = high - low > most * APART_LEAST;
   const reach = apart ? 0 : most === 0 ? ZERO_REACH : most;
@@ -115,7 +123,7 @@ export function axis(low: number, high: number): Axis {
   // A label that rounds its tick, as 1.1M does 1,050,000, would misstate it, so
   // such an axis writes its ticks in full.
   const short =
-    Math.max(...ticks.map((tick) => Math.abs(tick))) >= COMPACT_FROM &&
+    Math.max(...ticks.map((tick) => Math.abs(tick))) >= compactFrom &&
     ticks.every((tick) => compactsExactly(tick));
   const labels = ticks.map((tick) => (short ? compact(tick) : places(tick, -step.exponent)));
   return { ticks, labels, compact: short };

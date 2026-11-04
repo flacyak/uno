@@ -10,7 +10,7 @@
 import { afterEach, expect, test } from "vite-plus/test";
 
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { axis, gutter, tickLabels } from "@renderer/chart/axes";
+import { ALONG_COMPACT_FROM, axis, gutter, tickLabels } from "@renderer/chart/axes";
 import { PSEUDO_LOCALE } from "@scripts/pseudo";
 
 /** The fewest and most ticks an axis takes. */
@@ -103,6 +103,12 @@ test("an axis that reaches 10,000 writes every tick compactly, as each language 
   expect(axis(-25_000, 0).labels).toEqual(["-30K", "-20K", "-10K", "0"]);
   void setLocale("es", { reload: false });
   expect(axis(0, 9_500).labels).toEqual(["0", `5${NBSP}mil`, `10${NBSP}mil`]);
+});
+
+test("an axis along a plot writes every tick in full under a million, and compactly from one", () => {
+  const along = (high: number): readonly string[] => axis(0, high, ALONG_COMPACT_FROM).labels;
+  expect(along(150_000)).toEqual(["0", "50,000", "100,000", "150,000"]);
+  expect(along(1_500_000)).toEqual(["0", "500K", "1M", "1.5M"]);
 });
 
 test("an axis with a tick compact() would round writes every tick in full", () => {
