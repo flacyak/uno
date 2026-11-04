@@ -11,7 +11,8 @@
  * The sheet scrolls under a window: a wheel over one goes on to the grid, unless
  * something inside the window can still scroll that way.
  *
- * The plot draws what the chart last heard, each time the layer shows it.
+ * The plot draws what the chart last heard, each time the layer shows the
+ * window and when the chart hears a tally.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";

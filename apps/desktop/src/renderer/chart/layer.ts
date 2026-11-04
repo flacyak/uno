@@ -98,6 +98,11 @@ export class ChartLayer implements Stage {
     return this.charts.heard(id);
   }
 
+  /** tallied draws chart `id`'s window again, as the chart heard a tally. */
+  tallied(id: string): void {
+    this.windows.get(id)?.redraw();
+  }
+
   /**
    * raise stands `box` over every other window, and it stays there once it has
    * given up the keys. It goes by z-index, as moving the node would blur it.

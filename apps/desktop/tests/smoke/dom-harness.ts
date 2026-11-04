@@ -24,6 +24,7 @@ import type { Provider } from "@plugin";
 import { connectionsIn, saveConnection } from "@store";
 import { diskProvider, nodeStore } from "@store/node";
 
+import { DEFAULT_HEIGHT } from "@renderer/chart/place";
 import type { Shell } from "@renderer/shell/shell";
 import type { Host } from "@shared/host";
 import { bodyMarkup } from "@desktop-tests/markup";
@@ -41,13 +42,21 @@ export const SECOND = join(TESTDATA, "google-ads-sales.csv");
 export const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
 
+/** A chart window's head, its caption and its two 1px borders, in px, which chart.css draws. */
+const HEAD = 29;
+const CAPTION = 22;
+const BORDERS = 2;
+
+/** What a new window leaves its plot. */
+const PLOT_HEIGHT = DEFAULT_HEIGHT - HEAD - CAPTION - BORDERS;
+
 /**
  * Fakes the layout happy-dom leaves at zero. `clientHeight` and
  * `offsetHeight` are 0 on every element in happy-dom, so the virtualiser
  * would draw only `ceil(0 / 29) + 6` rows. The getters are faked on the
  * prototype because View builds its scroller and `<thead>` itself, so the
  * prototype is what is in reach before the first layout. The scroller is 600px
- * and the header 30px.
+ * and the header 30px, and a chart's plot PLOT_HEIGHT, so its bars draw.
  *
  * `--row-h` is left alone: `readRowHeight` in view.ts falls back to 29 when
  * happy-dom's `getComputedStyle` answers "" for the custom property.
@@ -56,6 +65,7 @@ function fakeLayout(): void {
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
     get(this: HTMLElement): number {
+      if (this.classList.contains("chart-plot")) return PLOT_HEIGHT;
       return this.classList.contains("grid-scroll") ? 600 : 0;
     },
   });

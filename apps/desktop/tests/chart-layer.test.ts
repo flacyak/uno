@@ -430,6 +430,21 @@ test("a window draws what its chart heard on the next frame, and again each time
   expect(part(".chart-plot").childElementCount).toBe(0);
 });
 
+test("a window draws as each tally comes, and keeps a complete one while the next is read", async () => {
+  const { layer, model } = shown(FLUSH);
+  Object.defineProperty(part(".chart-plot"), "clientHeight", { value: ROOM.h });
+  await frame();
+  const reading = heardOf("East").latest;
+  model.heard = () => ({ state: "fine", latest: reading, complete: undefined });
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(labels()).toStrictEqual(["East"]);
+  model.heard = () => ({ ...heardOf("North", "South"), latest: reading });
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(labels()).toStrictEqual(["North", "South"]);
+});
+
 test("a room too narrow tucks every window to its head, stacked from the top", () => {
   shown(FLUSH, INSIDE);
   const narrow = { w: MIN_WIDTH - 1, h: ROOM.h };

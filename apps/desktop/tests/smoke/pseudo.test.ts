@@ -23,9 +23,9 @@ import { m } from "@paraglide/messages";
 import { baseLocale } from "@paraglide/runtime";
 import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
-import { ADS, BARS, SALES, unoOf } from "../charted.ts";
+import { ADS, BARS, SALES, SHORT_ROWS, holding, unoOf } from "../charted.ts";
 import { bootShell } from "./dom-harness.ts";
-import { frame } from "./dom-page.ts";
+import { domPage, frame, until } from "./dom-page.ts";
 
 /**
  * Selectors for text the app leaves as written: the file's cells
@@ -195,8 +195,11 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
   await writeFile(path, unoOf([BARS, titled, overAds]));
   await shell.openRef({ name: "charted.uno", path });
+  // A short plot draws the line of the rest under its bars.
+  const plot = document.querySelector<HTMLElement>(".chart-plot")!;
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
   shell.language.choose(baseLocale);
-  await frame();
+  expect(await until(domPage(), () => plot.querySelector(".chart-bars-line") !== null)).toBe(true);
   shell.language.choose(PSEUDO_LOCALE);
   await frame();
   const head = document.querySelector(".chart-title")?.textContent;

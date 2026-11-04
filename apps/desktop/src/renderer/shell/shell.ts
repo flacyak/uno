@@ -716,6 +716,7 @@ export class Shell {
 
       this.workspace?.close();
       this.workspace = w;
+      w.onTally = (chart) => this.layer?.tallied(chart);
       // Close any menu or form open for the replaced workspace.
       this.closePopups();
       if (w.path !== "") this.recents.opened(w.path);

@@ -8,6 +8,7 @@ import { basename } from "node:path";
 import { newManifest, writeDocument } from "@document";
 import type { CarriedChart, Chart } from "@document";
 import { REGION, ROWS } from "@main/smoke/fixture";
+import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/bars";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
 /** The sales export's source, and the second export's. */
@@ -29,6 +30,13 @@ export const BARS: Chart = {
 
 /** Where a person left a window. */
 export const MOVED = { x: 0.25, y: 0.5, width: 300, height: 200 };
+
+/** A plot's height that holds `rows` rows of bars or words, and not one more. */
+export const holding = (rows: number): number =>
+  2 * BARS_INSET + rows * BAR_THICK + (rows - 1) * BAR_GAP;
+
+/** A short plot's rows: a bar in each but the last, which holds the line of the rest. */
+export const SHORT_ROWS = 3;
 
 /** The bytes of a .uno of both exports, holding `charts` and carrying
  * `carried`, with the sales export at `sales`. */
