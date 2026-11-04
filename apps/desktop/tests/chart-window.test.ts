@@ -27,11 +27,16 @@ const TITLED: Chart = { ...BARS, title: "Where the rows are" };
 const SOURCE = "sales-q3";
 
 /** A layer for a window whose words are all a test reads. */
-const NO_LAYER: Stage = { leave: () => undefined };
+const NO_LAYER: Stage = {
+  room: () => ({ w: 0, h: 0 }),
+  move: () => undefined,
+  draw: () => undefined,
+  leave: () => undefined,
+};
 
 /** A chart's window, showing `chart` under `source`. */
 function windowOf(chart: Chart, source?: string): ChartWindow {
-  const made = new ChartWindow(NO_LAYER);
+  const made = new ChartWindow(chart, NO_LAYER);
   made.show(chart, source);
   document.body.append(made.box);
   return made;

@@ -12,7 +12,7 @@
 
 import "./chart.css";
 
-import type { ChartPlace } from "@document";
+import type { Chart, ChartPlace } from "@document";
 import type { Charts } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
@@ -102,7 +102,7 @@ export class ChartLayer implements Stage {
     const room = this.room();
     const tucking = tucks(room);
     charts.forEach((chart, index) => {
-      const held = this.windowOf(chart.id);
+      const held = this.windowOf(chart);
       held.show(chart, this.charts.sourceLabel(chart.source));
       held.stand(tucking ? tucked(index, this.head, border, room) : placed(chart.place, room));
     });
@@ -136,11 +136,11 @@ export class ChartLayer implements Stage {
   }
 
   /** windowOf returns a chart's window, adding one on top if it has none. */
-  private windowOf(id: string): ChartWindow {
-    const held = this.windows.get(id);
+  private windowOf(chart: Chart): ChartWindow {
+    const held = this.windows.get(chart.id);
     if (held !== undefined) return held;
-    const made = new ChartWindow(this);
-    this.windows.set(id, made);
+    const made = new ChartWindow(chart, this);
+    this.windows.set(chart.id, made);
     this.root.append(made.box);
     return made;
   }

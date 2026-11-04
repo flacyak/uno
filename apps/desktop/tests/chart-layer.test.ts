@@ -1,6 +1,7 @@
 /**
  * @fileoverview The layer over the sheet: one window per chart, drawn from its
- * place in the room the sheet leaves, and placed again as the sheet resizes.
+ * place in the room the sheet leaves, and placed again as the sheet resizes. A
+ * window steps and resizes under the arrow keys.
  *
  * happy-dom has no layout, so each test says what layout would measure, and
  * fires the resize a ResizeObserver would.
@@ -14,7 +15,7 @@ import type { Chart, ChartPlace } from "@document";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
-import { MIN_HEIGHT, MIN_WIDTH, placed } from "@renderer/chart/place";
+import { MIN_HEIGHT, MIN_WIDTH, NUDGE_PX, placeOf, placed } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import { BARS, MOVED } from "./charted.ts";
@@ -122,6 +123,18 @@ function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
+}
+
+/** Sends a keydown to the first window. */
+function key(name: string, more: KeyboardEventInit = {}): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", {
+    key: name,
+    bubbles: true,
+    cancelable: true,
+    ...more,
+  });
+  first().dispatchEvent(event);
+  return event;
 }
 
 beforeEach(() => {
@@ -370,4 +383,52 @@ test("a move the layer takes stands the window there at the next draw", () => {
   layer.draw();
   expect(model.all[0]!.place).toBe(FLUSH.place);
   expect(drawn(first())).toStrictEqual(placed(FLUSH.place, ROOM));
+});
+
+test("an arrow moves a window and stores it at once, and Shift and an arrow resize it", () => {
+  const { model } = shown(INSIDE);
+  const from = placed(MOVED, ROOM);
+  const moved = { ...from, x: from.x + NUDGE_PX };
+  key("ArrowRight");
+  expect(model.all[0]!.place).toStrictEqual(placeOf(moved, ROOM, MOVED));
+  expect(drawn(first()).x).toBeCloseTo(moved.x);
+
+  key("ArrowDown", { shiftKey: true });
+  expect(model.all[0]!.place.height).toBe(from.height + NUDGE_PX);
+  expect(drawn(first()).height).toBe(from.height + NUDGE_PX);
+  expect(drawn(first()).width).toBe(from.width);
+});
+
+test("an arrow stops at the window, and a chord goes on to the shell", () => {
+  shown(INSIDE);
+  const shell = vi.fn();
+  document.body.addEventListener("keydown", shell);
+  expect(key("ArrowLeft").defaultPrevented).toBe(true);
+  expect(shell).not.toHaveBeenCalled();
+
+  expect(key("ArrowLeft", { ctrlKey: true }).defaultPrevented).toBe(false);
+  expect(key("a").defaultPrevented).toBe(false);
+  expect(shell).toHaveBeenCalledTimes(2);
+});
+
+test("each arrow steps on from where the last one stored", () => {
+  shown(INSIDE);
+  key("ArrowRight");
+  key("ArrowRight");
+  expect(drawn(first()).x).toBeCloseTo(placed(MOVED, ROOM).x + 2 * NUDGE_PX);
+});
+
+test("arrows held past the room's edge leave the window on it", () => {
+  const { model } = shown({ ...INSIDE, place: { ...MOVED, x: 1 } });
+  key("ArrowRight");
+  expect(model.all[0]!.place.x).toBe(1);
+});
+
+test("Escape gives the keys back to the grid, and goes no further", () => {
+  shown(INSIDE);
+  const shell = vi.fn();
+  document.body.addEventListener("keydown", shell);
+  expect(key("Escape").defaultPrevented).toBe(true);
+  expect(leave).toHaveBeenCalledOnce();
+  expect(shell).not.toHaveBeenCalled();
 });
