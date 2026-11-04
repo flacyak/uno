@@ -16,8 +16,14 @@ let grouping: { locale: Locale; format: Intl.NumberFormat } | undefined;
 /** Cached fixed-decimal formatters, whole and to a tenth, rebuilt when the locale changes. */
 let sizes: { locale: Locale; whole: Intl.NumberFormat; tenths: Intl.NumberFormat } | undefined;
 
-/** Cached compact formatter, rebuilt when the locale changes. */
-let compacting: { locale: Locale; format: Intl.NumberFormat } | undefined;
+/** Cached formatters by the decimals they write, rebuilt when the locale changes. */
+let placing: { locale: Locale; formats: Map<number, Intl.NumberFormat> } | undefined;
+
+/**
+ * Cached compact formatters, rounded as compact() writes and with every digit,
+ * rebuilt when the locale changes.
+ */
+let compacting: { locale: Locale; format: Intl.NumberFormat; exact: Intl.NumberFormat } | undefined;
 
 /**
  * Cached time formatters, without and with the date, rebuilt when the locale
@@ -49,11 +55,31 @@ export function num(n: number): string {
   return grouping.format.format(n);
 }
 
+/** The most decimals Intl writes, so a number finer than ten to the -100 reads as 0. */
+const DECIMALS_MOST = 100;
+
+/**
+ * Formats a number with exactly `digits` decimals in the app's locale: 0.50 in
+ * English, 0,50 in Spanish. It writes none for fewer than none, and
+ * DECIMALS_MOST for more.
+ */
+export function places(n: number, digits: number): string {
+  const locale = getLocale();
+  const kept = Math.min(Math.max(digits, 0), DECIMALS_MOST);
+  if (placing?.locale !== locale) placing = { locale, formats: new Map() };
+  const format = placing.formats.get(kept) ?? decimals(locale, kept);
+  placing.formats.set(kept, format);
+  return format.format(n);
+}
+
 /** The fraction digits a compact number keeps: 1.2M, where 1.23M runs wider than a tick. */
 const COMPACT_DIGITS = 1;
 
-/** Formats a number the short way in the app's locale: 1.2M in English, 1,2 M in Spanish. */
-export function compact(n: number): string {
+/** The most significant digits Intl writes, more than a double holds. */
+const DIGITS_MOST = 21;
+
+/** The compact formatters for the app's locale. */
+function compacts(): { format: Intl.NumberFormat; exact: Intl.NumberFormat } {
   const locale = getLocale();
   if (compacting?.locale !== locale) {
     compacting = {
@@ -62,9 +88,27 @@ export function compact(n: number): string {
         notation: "compact",
         maximumFractionDigits: COMPACT_DIGITS,
       }),
+      exact: new Intl.NumberFormat(locale, {
+        notation: "compact",
+        maximumSignificantDigits: DIGITS_MOST,
+      }),
     };
   }
-  return compacting.format.format(n);
+  return compacting;
+}
+
+/** Formats a number the short way in the app's locale: 1.2M in English, 1,2 M in Spanish. */
+export function compact(n: number): string {
+  return compacts().format.format(n);
+}
+
+/**
+ * Whether compact() writes `n` with every digit it has: 1.2M does 1,200,000,
+ * and 1.3M rounds 1,250,000.
+ */
+export function compactsExactly(n: number): boolean {
+  const { format, exact } = compacts();
+  return format.format(n) === exact.format(n);
 }
 
 /** Bytes per KB, KB per MB, and so on. */

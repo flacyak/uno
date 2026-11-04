@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
 import { Language } from "@renderer/language";
-import { clock, compact } from "@renderer/locale";
+import { clock, compact, compactsExactly, places } from "@renderer/locale";
 import { PSEUDO_LOCALE } from "@scripts/pseudo";
 import { Kept } from "./kept.ts";
 
@@ -30,6 +30,19 @@ const COMPACT: Record<Locale, { millions: string; thousands: string }> = {
   // Intl has no such locale, and writes the pseudo-locale as English.
   [PSEUDO_LOCALE]: { millions: "1.2M", thousands: "12.3K" },
 };
+
+/** How each language writes 1,234.5 to two decimals. */
+const PLACES: Record<Locale, string> = {
+  "en-US": "1,234.50",
+  "en-GB": "1,234.50",
+  es: "1234,50",
+  "pt-BR": "1.234,50",
+  "pt-PT": "1234,50",
+  [PSEUDO_LOCALE]: "1,234.50",
+};
+
+/** The most decimals Intl writes. */
+const DECIMALS_MOST = 100;
 
 /** Date counts months from 0. */
 const OCTOBER = 9;
@@ -98,6 +111,33 @@ test("a compact number keeps one fraction digit, and none when the digit would b
 test("a compact number at the top of its range rounds up: 10K, and 1M in the next unit", () => {
   expect(compact(9_999)).toBe("10K");
   expect(compact(999_999)).toBe("1M");
+});
+
+test("compact() says when it rounds a number, as Spanish writes a billion in millions", () => {
+  expect(compactsExactly(1_200_000)).toBe(true);
+  expect(compactsExactly(1_250_000)).toBe(false);
+  expect(compactsExactly(999_999)).toBe(false);
+  expect(compact(1_050_000_000)).toBe("1.1B");
+  expect(compactsExactly(1_050_000_000)).toBe(false);
+  void setLocale("es", { reload: false });
+  expect(compact(1_050_000_000)).toBe(`1050${NBSP}M`);
+  expect(compactsExactly(1_050_000_000)).toBe(true);
+});
+
+test.each(locales)("%s writes a number to the decimals asked for", (locale) => {
+  void setLocale(locale, { reload: false });
+  expect(places(1_234.5, 2)).toBe(PLACES[locale]);
+});
+
+test("a number is written to as many decimals as each call asks for, rounded past them", () => {
+  expect([places(0.5, 0), places(0.5, 1), places(0.5, 3), places(0.0001, 4)]).toEqual([
+    "1",
+    "0.5",
+    "0.500",
+    "0.0001",
+  ]);
+  // Outside the decimals Intl writes, places() keeps to them, where Intl throws.
+  expect([places(0.5, -1), places(1e-120, 120)]).toEqual(["1", `0.${"0".repeat(DECIMALS_MOST)}`]);
 });
 
 test.each(locales)("%s writes a time short, and with its date from another day", (locale) => {
