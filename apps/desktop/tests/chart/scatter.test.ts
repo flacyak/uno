@@ -1,7 +1,7 @@
 /**
  * @fileoverview A scatter chart drawn from a tally: a point per sampled row,
  * where its x and y stand between the first and last ticks of axes that take
- * in every plotted row.
+ * in every plotted row, over a gridline at each tick.
  *
  * @vitest-environment happy-dom
  */
@@ -38,6 +38,17 @@ test("the axes take in every plotted row, not only the rows the tally sent", () 
   const box = scatter({ ...sent, least: { x: -100, y: 0 }, most: { x: 100, y: 4000 } });
   expect(read(box, ".chart-point", "cx")).toStrictEqual(["75%"]);
   expect(read(box, ".chart-point", "cy")).toStrictEqual(["75%"]);
+});
+
+test("a gridline crosses the plot at each tick of either axis, under the points", () => {
+  const box = scatter(SALES);
+  const ticks = ["0%", "25%", "50%", "75%", "100%"];
+  expect(read(box, ".chart-grid.x", "x1")).toStrictEqual(ticks);
+  expect(read(box, ".chart-grid.x", "y2")).toStrictEqual(ticks.map(() => "100%"));
+  expect(read(box, ".chart-grid.y", "y1")).toStrictEqual(ticks.toReversed());
+  expect(read(box, ".chart-grid.y", "x2")).toStrictEqual(ticks.map(() => "100%"));
+  expect(box.querySelector(".chart-grid ~ .chart-point")).not.toBeNull();
+  expect(box.querySelector(".chart-point ~ .chart-grid")).toBeNull();
 });
 
 test("a tally that plotted nothing draws nothing, as its extent of 0 is no row's", () => {

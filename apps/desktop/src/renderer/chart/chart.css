@@ -257,10 +257,43 @@
   white-space: nowrap;
 }
 
-/* A forced palette would take the bars' colour away, so they wear the text's. */
+/* A scatter's plot, from scatter.ts, stands as far in as the bars, by the inset
+ * scatter.ts gives. A point at an axis's end shows whole past it. */
+.chart-scatter {
+  height: 100%;
+  padding: var(--inset);
+}
+
+.chart-points {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* The dialogs' divider, where --rule-2, mixed with --paper, all but meets a dark
+ * --surface. A line lands on whole px however far along it stands. */
+.chart-grid {
+  stroke: var(--rule);
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-point {
+  fill: var(--accent);
+  fill-opacity: var(--point-opacity);
+}
+
+/* A forced palette would take the marks' colour away, so they wear the text's. */
 @media (forced-colors: active) {
   .chart-bar {
     background: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .chart-point {
+    fill: CanvasText;
     forced-color-adjust: none;
   }
 }
