@@ -237,10 +237,11 @@ await writeFile(
 
 // A workspace of two scatters along 0 to 800,000: one in a new window's size,
 // which has room for the x axis's labels in full, and one of the least width,
-// which has not.
+// which has not. A third, of the least width, runs along 900,000 to 1,050,000,
+// which compact() would round, so its labels crowd even compactly.
 const alongFile = join(scratch, "sent", "along.csv");
-const alongHeader = "sold,units";
-const alongRows = ["0,0", "800000,4"];
+const alongHeader = "sold,units,price";
+const alongRows = ["0,0,900000", "800000,4,1050000"];
 await writeFile(alongFile, `${[alongHeader, ...alongRows].join("\n")}\n`);
 const along = join(scratch, "sent", "along.uno");
 const alongSource = {
@@ -252,6 +253,7 @@ const alongSource = {
   state: { active: { row: 0, col: 0 } },
 };
 const soldUnits = { t: "scatter", x: { col: 0, header: "sold" }, y: { col: 1, header: "units" } };
+const priceUnits = { ...soldUnits, x: { col: 2, header: "price" } };
 const alongChart = { source: alongSource.id, plot: soldUnits, title: "", refresh: 0 };
 await writeFile(
   along,
@@ -263,6 +265,12 @@ await writeFile(
     charts: [
       { ...alongChart, id: "c1", place: { ...chartSize, x: 0, y: 0 } },
       { ...alongChart, id: "c2", place: { ...chartSize, width: leastSize.width, x: 1, y: 0 } },
+      {
+        ...alongChart,
+        id: "c3",
+        plot: priceUnits,
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 1 },
+      },
     ],
     extra: new Map(),
     at: along,

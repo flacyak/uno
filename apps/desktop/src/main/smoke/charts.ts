@@ -11,8 +11,9 @@
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot. The last three open others:
  * one whose sums leave a window of the least width too little room for bars and
- * values, one of a scatter, and one of two scatters whose x axis has room for
- * its labels in full in one window and not in the other.
+ * values, one of a scatter, and one of three scatters whose x axis has room for
+ * its labels in full in one window, not in a second, and not even compactly in
+ * the third.
  */
 
 import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
@@ -33,12 +34,14 @@ const SCATTERED = process.env["UNO_SMOKE_SCATTERED"] ?? "";
 
 /**
  * The one it wrote of two scatters along 0 to 800,000, in a new window and one
- * of the least width, and how each writes its x axis.
+ * of the least width, and one of the least width along 900,000 to 1,050,000,
+ * and how each writes its x axis.
  */
 const ALONG = process.env["UNO_SMOKE_ALONG"] ?? "";
 const ALONG_LABELS = [
   ["0", "200,000", "400,000", "600,000", "800,000"],
   ["0", "200K", "400K", "600K", "800K"],
+  ["900,000", "1,000,000"],
 ];
 
 /** The zoom that halves the room. */
@@ -713,16 +716,16 @@ export const CHART_SCATTER: Check[] = [
   },
 ];
 
-/** The run's last check, as it opens a workspace of two scatters in place of the last. */
+/** The run's last check, as it opens a workspace of three scatters in place of the last. */
 export const CHART_ALONG: Check[] = [
   {
-    name: "a scatter's x axis writes its labels in full where they fit side by side, and compactly in a window too narrow for that",
+    name: "a scatter's x axis writes its labels in full where they fit side by side, compactly in a window too narrow for that, and at every second tick where even those crowd, all clear of the y axis's",
     send: ["menu:open-path", ALONG],
     shot: "chart-along",
     script: `
       const windows = () => [...document.querySelectorAll(".chart")];
       const along = (win) => [...win.querySelectorAll(".chart-ticks.x .chart-tick")];
-      const drawn = () => windows().length === 2 && windows().every((win) => along(win).length > 0);
+      const drawn = () => windows().length === ${ALONG_LABELS.length} && windows().every((win) => along(win).length > 0);
       if (!(await arrives(drawn))) return "the windows draw no x axis";
       const said = windows().map((win) => along(win).map((label) => label.textContent));
       if (JSON.stringify(said) !== ${JSON.stringify(JSON.stringify(ALONG_LABELS))}) return "the x axes read " + JSON.stringify(said);
@@ -730,6 +733,8 @@ export const CHART_ALONG: Check[] = [
         const at = along(win).map((label) => label.getBoundingClientRect());
         const near = at.findIndex((label, i) => i > 0 && label.left - at[i - 1].right < ${TICK_GAP});
         if (near !== -1) return "two labels of " + said[windows().indexOf(win)].join() + " stand " + (at[near].left - at[near - 1].right) + " px apart";
+        const [foot, first] = [".chart-ticks.y", ".chart-ticks.x"].map((axis) => win.querySelector(axis + " .chart-tick").getBoundingClientRect());
+        if (first.top - foot.bottom < ${TICK_GAP - RECT_SLACK}) return "the x axis's first label stands " + (first.top - foot.bottom) + " px under the y axis's first";
       }
       return "";
     `,
