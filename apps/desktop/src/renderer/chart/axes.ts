@@ -7,6 +7,13 @@
 /** The ticks an axis asks for: the 1-2-5 steps give it 3 to 5. */
 const TICKS_WANTED = 4;
 
+/**
+ * The most ticks an axis takes from the 1-2-5 step under the one it asks for,
+ * which fills more of the plot: 0 to 7.5 ticks by 2 up to 8, where by 5 it
+ * runs to 10.
+ */
+const TICKS_MOST = TICKS_WANTED + 1;
+
 /** The leading digits of a step between ticks. Past 5 comes 1 of the next power of ten. */
 const DIGITS = [1, 2, 5] as const;
 
@@ -54,6 +61,14 @@ function stepOver(least: number): Step {
   return digit === undefined ? { digit: 1, exponent: exponent + 1 } : { digit, exponent };
 }
 
+/** finer gives the 1-2-5 step under `step`. Under 1 comes 5 of the power of ten below. */
+function finer(step: Step): Step {
+  const digit = DIGITS.findLast((d) => d < step.digit);
+  return digit === undefined
+    ? { digit: DIGITS.at(-1)!, exponent: step.exponent - 1 }
+    : { digit, exponent: step.exponent };
+}
+
 /** ticksBy gives the ticks `step` apart from at or below `from` to at or above `to`. */
 function ticksBy(step: Step, from: number, to: number): number[] {
   const size = decimal(step.digit, step.exponent);
@@ -79,6 +94,8 @@ export function axis(low: number, high: number): Axis {
   const reach = apart ? 0 : most === 0 ? ZERO_REACH : most;
   const from = low - reach;
   const to = high + reach;
-  const step = stepOver((to - from) / (TICKS_WANTED - 1));
+  const wanted = stepOver((to - from) / (TICKS_WANTED - 1));
+  const fine = finer(wanted);
+  const step = ticksBy(fine, from, to).length <= TICKS_MOST ? fine : wanted;
   return { ticks: ticksBy(step, from, to) };
 }
