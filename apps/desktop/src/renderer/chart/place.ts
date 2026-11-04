@@ -38,7 +38,7 @@ export const CASCADE_PX = 24;
 /** How far a press of an arrow moves or resizes a window: fine enough to line two up. */
 export const NUDGE_PX = 8;
 
-/** A place's x or y at the room's left or top edge. */
+/** A place's x or y at the room's left or top edge, and a rect's. */
 const NEAR_EDGE = 0;
 
 /** A place's x or y at the room's right or bottom edge. */
@@ -155,21 +155,36 @@ export function fresh(n: number, selectedLeft: number, room: Room): ChartPlace {
   };
 }
 
+/** dragged gives the rect a move of `dx` and `dy` leaves, stopped at the room's edges. */
+export function dragged(rect: Rect, dx: number, dy: number, room: Room): Rect {
+  return {
+    ...rect,
+    x: fit(rect.x + dx, NEAR_EDGE, room.w - rect.width),
+    y: fit(rect.y + dy, NEAR_EDGE, room.h - rect.height),
+  };
+}
+
+/**
+ * stretched gives the rect a resize of `dx` and `dy` leaves, with its top left
+ * still, from the least size up to the room's edge. It stops there because
+ * placeOf reads a rect past that edge as a move.
+ */
+export function stretched(rect: Rect, dx: number, dy: number, room: Room): Rect {
+  return {
+    ...rect,
+    width: fit(rect.width + dx, MIN_WIDTH, room.w - rect.x),
+    height: fit(rect.height + dy, MIN_HEIGHT, room.h - rect.y),
+  };
+}
+
 /**
  * nudged gives the rect a press leaves: an arrow moves it, and with Shift
- * resizes it, up to the room's edge, as placeOf reads a rect past that edge as
- * a move. placeOf holds a move to the room. Any other key, or an arrow with
- * Ctrl, Alt or Meta, gives undefined, so that press can go on to the shell.
+ * resizes it. Any other key, or an arrow with Ctrl, Alt or Meta, gives
+ * undefined, so that press can go on to the shell.
  */
 export function nudged(rect: Rect, press: Press, room: Room): Rect | undefined {
   const arrow = ARROWS.get(press.key);
   if (arrow === undefined || press.ctrl || press.alt || press.meta) return undefined;
-  const dx = arrow.dx * NUDGE_PX;
-  const dy = arrow.dy * NUDGE_PX;
-  if (!press.shift) return { ...rect, x: rect.x + dx, y: rect.y + dy };
-  return {
-    ...rect,
-    width: Math.min(rect.width + dx, room.w - rect.x),
-    height: Math.min(rect.height + dy, room.h - rect.y),
-  };
+  const step = press.shift ? stretched : dragged;
+  return step(rect, arrow.dx * NUDGE_PX, arrow.dy * NUDGE_PX, room);
 }
