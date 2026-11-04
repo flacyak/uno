@@ -469,6 +469,18 @@
   "chart_title_against": "{y} frente a {x}",
   "chart_bars_more": "+{count} más",
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",
+  "chart_points": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} punto",
+        "plural=many": "{n} puntos",
+        "plural=other": "{n} puntos"
+      }
+    }
+  ],
+  "chart_points_sampled": "{shown} de {points}",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",

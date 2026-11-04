@@ -2,16 +2,18 @@
  * @fileoverview A scatter chart drawn from a tally: a point per sampled row,
  * where its x and y stand between the first and last ticks of axes that take
  * in every plotted row, over a gridline at each tick, and each tick's label on
- * its gridline.
+ * its gridline. A sample that draws fewer points than it plotted rows says so,
+ * in the language chosen.
  *
  * @vitest-environment happy-dom
  */
 
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 
 import type { Sample } from "@engine";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { axis } from "@renderer/chart/axes";
-import { POINT_RADIUS, scatter } from "@renderer/chart/scatter";
+import { POINT_RADIUS, sampled, scatter } from "@renderer/chart/scatter";
 
 /** A tally that sent `x` and `y` and plotted no other row. */
 function sampleOf(x: number[], y: number[]): Sample {
@@ -22,6 +24,10 @@ function sampleOf(x: number[], y: number[]): Sample {
 
 /** Units against revenue: x ticks 0 to 200 by 50, and y 0 to 4,000 by 1,000. */
 const SALES = sampleOf([0, 50, 200], [0, 3000, 4000]);
+
+afterEach(() => {
+  void setLocale(baseLocale, { reload: false });
+});
 
 /** The attribute `name` of each of `box`'s `selector`. */
 const read = (box: HTMLElement, selector: string, name: string): Array<string | null> =>
@@ -67,6 +73,16 @@ test("each tick's label stands on its gridline, y's in a gutter of the widest an
   // The last x label reaches half its length past the points, and the first before them.
   const room = (name: string): string => box.style.getPropertyValue(name);
   expect(["--gutter", "--x-first", "--x-last"].map(room)).toStrictEqual(["5ch", "0.5ch", "1.5ch"]);
+});
+
+test("a sample says how many of its plotted rows it draws, in the language chosen, and nothing where it draws every one", () => {
+  const plotted = { ...SALES, plotted: 4808 };
+  expect(sampled(SALES)).toBe("");
+  expect(sampled(plotted)).toBe("3 of 4,808 points");
+  // A sampled row with a blank or a word sends no point, so a sample can send none.
+  expect(sampled({ ...SALES, x: [], y: [], plotted: 1 })).toBe("0 of 1 point");
+  void setLocale("pt-BR", { reload: false });
+  expect(sampled(plotted)).toBe("3 de 4.808 pontos");
 });
 
 test("a tally that plotted nothing draws nothing, as its extent of 0 is no row's", () => {
