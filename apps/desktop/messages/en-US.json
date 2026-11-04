@@ -445,6 +445,7 @@
   "charts_newer": "this workspace's charts are in a form this uno cannot read · they are kept as they were, and cannot be changed here",
   "chart_column_gone": "{name} has no column called {header}",
   "chart_role": "chart",
+  "chart_remove_aria": "Remove chart",
   "chart_title_rows": "Rows per {by}",
   "chart_title_sum": "Sum of {sum} per {by}",
   "chart_title_share_of_rows": "Share of rows per {by}",

@@ -42,6 +42,10 @@ function title(box: HTMLElement): HTMLElement {
   return box.querySelector<HTMLElement>(".chart-title")!;
 }
 
+function close(box: HTMLElement): HTMLButtonElement {
+  return box.querySelector<HTMLButtonElement>(".round-x")!;
+}
+
 afterEach(() => {
   void setLocale(baseLocale, { reload: false });
   document.body.replaceChildren();
@@ -98,14 +102,23 @@ test("a head with a source to name says it first, marked as the file's", () => {
   expect(title(box).querySelector(".from-file")?.textContent).toBe(SOURCE);
 });
 
-test("a window shown again says what its chart says now", () => {
+test("a window shown again says what its chart says now, and keeps the ×", () => {
   const made = windowOf(BARS, SOURCE);
+  const x = close(made.box);
 
   made.show(TITLED, undefined);
   expect(title(made.box).textContent).toBe(TITLED.title);
+  expect(close(made.box)).toBe(x);
 
   made.show(BARS, undefined);
   expect(title(made.box).classList.contains("from-file")).toBe(false);
+});
+
+test("the × is a named button of the window's own kind, and submits nothing", () => {
+  const x = close(windowOf(BARS).box);
+  expect(x.type).toBe("button");
+  expect(x.getAttribute("aria-label")).toBe(m.chart_remove_aria());
+  expect(x.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
 });
 
 test("relabel writes the window's own words in the language chosen since", () => {
@@ -113,6 +126,7 @@ test("relabel writes the window's own words in the language chosen since", () =>
   void setLocale("es", { reload: false });
   made.relabel();
   expect(made.box.getAttribute("aria-roledescription")).toBe(m.chart_role());
+  expect(close(made.box).getAttribute("aria-label")).toBe(m.chart_remove_aria());
   expect(m.chart_role()).not.toBe(m.chart_role({}, { locale: baseLocale }));
 });
 

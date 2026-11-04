@@ -9,7 +9,7 @@
  * right edge, one at the top and one at the foot.
  */
 
-import { DEFAULT_HEIGHT } from "@renderer/chart/place";
+import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { DEFAULT_THEME } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
 
@@ -81,10 +81,14 @@ const HEAD_LOOK = [
   "user-select",
 ];
 
+/** What a window's × copies from the window's own. */
+const X_LOOK = ["background-color", "border", "border-radius", "color", "cursor", "width"];
+
 /** Helpers: a window's parts, and what the page computes for them. */
 const CHROME = `
   const box = () => document.querySelector(".chart");
   const head = () => box().querySelector(".chart-head");
+  const x = () => box().querySelector(".round-x");
   const style = (at) => getComputedStyle(at);
   const rowHeight = () => parseFloat(style(document.documentElement).getPropertyValue("--row-h"));
 `;
@@ -103,10 +107,11 @@ const GEOMETRY = `
   const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
 `;
 
-/** What a window and its head copy, by selector. */
+/** What a window, its head and its × copy, by selector. */
 const COPIES = [
   { of: "the settings menu's box", copy: ".chart", from: ".settings", names: BOX_LOOK },
   { of: "the sidebar's band", copy: ".chart-head", from: "#sidebar .col-head", names: HEAD_LOOK },
+  { of: "the window's ×", copy: ".chart .round-x", from: "#close", names: X_LOOK },
 ];
 
 /**
@@ -114,7 +119,7 @@ const COPIES = [
  * what it copies. The menu has to be open to be read.
  */
 const WORN: Check[] = (["dark", "light"] as const).map((mode) => ({
-  name: `in ${mode} a window wears the dialogs' box and the sidebar's band`,
+  name: `in ${mode} a window wears the dialogs' box, the sidebar's band and the window's ×`,
   shot: `chart-${mode}`,
   script: `
     ${CHROME}
@@ -333,12 +338,22 @@ export const CHARTS: Check[] = [
   },
   ...WORN,
   {
-    name: "a head is one row high and drags nothing",
+    name: "a head is one row high and drags nothing, with its × centred as the window's own",
     script: `
       ${CHROME}
-      const band = head().getBoundingClientRect();
+      const [band, cross] = [head(), x()].map((at) => at.getBoundingClientRect());
       if (band.height !== rowHeight()) return "the head is " + band.height + "px high";
       if (style(head()).getPropertyValue("-webkit-app-region") !== "no-drag") return "the head would drag the app's window";
+      const rule = parseFloat(style(head()).borderBottomWidth);
+      const gaps = [cross.top - band.top, band.bottom - rule - cross.bottom, band.right - cross.right];
+      if (new Set(gaps).size > 1) return "the × stands " + gaps.join(", ") + " from the head's top, rule and right";
+      const own = document.querySelector("#close").getBoundingClientRect();
+      if (own.top !== gaps[0]) return "the window's own × stands " + own.top + " from the top, and this one " + gaps[0];
+      const glyph = (at) => at.querySelector("path").getAttribute("d");
+      if (glyph(x()) !== glyph(document.querySelector("#close"))) return "the × is drawn " + glyph(x());
+      const parts = [style(box()).borderLeftWidth, style(box()).borderRightWidth, style(head()).paddingLeft, style(head()).columnGap, style(x()).width, style(x()).marginRight];
+      const least = parts.reduce((sum, px) => sum + parseFloat(px), 0);
+      if (least !== ${HEAD_LEAST_WIDTH}) return "a head's fixed parts come to " + least + "px";
       return text(".chart-title") === "Rows per Location" ? "" : "the head says " + text(".chart-title");
     `,
   },

@@ -1,12 +1,19 @@
 /**
  * @fileoverview A chart's window: the dialogs' box, with a head that says what
- * the chart shows. The layer stands it in the room and says which chart it shows.
+ * the chart shows and a round × of the window's own kind. The layer stands it in
+ * the room and says which chart it shows.
  */
 
 import type { Chart, ChartColumn, Plot } from "@document";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { Words, el } from "@renderer/shell/util";
+
+/** The × on the window's own close button, drawn in currentColor. */
+const CROSS =
+  '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
+  '<path d="M2 2l6 6M8 2l-6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+  "</svg>";
 
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
@@ -36,8 +43,13 @@ export class ChartWindow {
   constructor() {
     this.title.id = `chart-${++made}-title`;
 
+    const x = el("button", "round-x chart-close");
+    x.type = "button";
+    x.innerHTML = CROSS;
+    this.words.attr(x, "aria-label", m.chart_remove_aria);
+
     const head = el("div", "col-head chart-head");
-    head.append(this.title);
+    head.append(this.title, x);
 
     this.box.setAttribute("role", "group");
     this.box.setAttribute("aria-labelledby", this.title.id);
