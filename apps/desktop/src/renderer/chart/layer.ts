@@ -15,7 +15,6 @@ import type { Charts } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
 import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
-import type { Rect } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 
 /** What the layer reads of a workspace's charts. */
@@ -30,14 +29,6 @@ const THINNEST_BORDER = 1;
  */
 function borderWidth(): number {
   return Math.max(Math.floor(devicePixelRatio), THINNEST_BORDER) / devicePixelRatio;
-}
-
-/** stand puts a window at `rect`, in the layer's CSS px. */
-function stand(box: HTMLElement, rect: Rect): void {
-  box.style.left = `${rect.x}px`;
-  box.style.top = `${rect.y}px`;
-  box.style.width = `${rect.width}px`;
-  box.style.height = `${rect.height}px`;
 }
 
 export class ChartLayer {
@@ -97,7 +88,7 @@ export class ChartLayer {
     charts.forEach((chart, index) => {
       const held = this.windowOf(chart.id);
       held.show(chart, this.charts.sourceLabel(chart.source));
-      stand(held.box, tucking ? tucked(index, this.head, border, room) : placed(chart.place, room));
+      held.stand(tucking ? tucked(index, this.head, border, room) : placed(chart.place, room));
     });
     const spills = tucking && overfull(charts.length, this.head, border, room);
     const stack = stackHeight(charts.length, this.head, border);

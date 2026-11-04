@@ -8,6 +8,7 @@ import type { Chart, ChartColumn, Plot } from "@document";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { Words, el } from "@renderer/shell/util";
+import type { Rect } from "./place.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -37,6 +38,14 @@ export function madeTitle(plot: Plot): string {
   return sum === undefined
     ? m.chart_title_share_of_rows({ by })
     : m.chart_title_share_of_sum({ by, sum });
+}
+
+/** standAt puts a window at `rect`, in the layer's CSS px. */
+function standAt(box: HTMLElement, rect: Rect): void {
+  box.style.left = `${rect.x}px`;
+  box.style.top = `${rect.y}px`;
+  box.style.width = `${rect.width}px`;
+  box.style.height = `${rect.height}px`;
 }
 
 export class ChartWindow {
@@ -80,6 +89,11 @@ export class ChartWindow {
     else this.title.replaceChildren(el("bdi", "from-file", source), " · ", title);
     this.title.title = this.title.textContent;
     this.title.classList.toggle("from-file", chart.title !== "");
+  }
+
+  /** stand puts the window at `rect`. */
+  stand(rect: Rect): void {
+    standAt(this.box, rect);
   }
 
   /** relabel writes the window's own words in the current language. */
