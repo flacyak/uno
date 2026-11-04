@@ -20,8 +20,10 @@ import { beforeAll, expect, test } from "vite-plus/test";
 
 import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
 import { m } from "@paraglide/messages";
+import { baseLocale } from "@paraglide/runtime";
+import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
-import { BARS, SALES, unoOf } from "../charted.ts";
+import { ADS, BARS, SALES, unoOf } from "../charted.ts";
 import { bootShell } from "./dom-harness.ts";
 import { frame } from "./dom-page.ts";
 
@@ -35,6 +37,8 @@ const NOT_THE_APPS = [
   ".colhead",
   ".panel-peek table",
   ".formula select",
+  // What a chart's window takes from the file: a source's name, a person's title.
+  ".chart .from-file",
   "[data-language][lang]",
   // A policy document, which is JSON the same in every language.
   ".policy .document",
@@ -47,7 +51,7 @@ const NOT_THE_APPS = [
 const ONE_SENTENCE = ["#empty p"];
 
 /** The attributes a person reads or hears, beside the text itself. */
-const SPOKEN = ["title", "aria-label", "placeholder"];
+const SPOKEN = ["title", "aria-label", "aria-roledescription", "placeholder"];
 
 /**
  * Patterns for text that is the same in every language, removed from a text
@@ -88,11 +92,12 @@ function plain(text: string): string {
   return /\p{L}/u.test(rest) ? rest.trim() : "";
 }
 
-/** Every text and spoken attribute in the window with plain letters left in it. */
-function english(): string[] {
+/** Every text and spoken attribute `within` a selector with plain letters left in it. */
+function english(within = "body"): string[] {
   const found: string[] = [];
   const sentences = ONE_SENTENCE.join(",");
-  for (const el of document.documentElement.querySelectorAll<HTMLElement>("body, body *")) {
+  const all = `${within}, ${within} *`;
+  for (const el of document.documentElement.querySelectorAll<HTMLElement>(all)) {
     if (el.closest(NOT_THE_APPS.join(",")) !== null) continue;
     const tag = `<${el.tagName.toLowerCase()} class="${el.className}">`;
     // A sentence across several elements is read once, at its root.
@@ -180,4 +185,18 @@ test("what a .uno's charts say in the status line is in the language chosen", as
   click(`.tab[data-source="${SALES}"] .close`);
   expect(message()).toBe(m.source_takes_charts({ name: `${SALES}.csv` }));
   expect(plain(message())).toBe("");
+});
+
+test("a chart's window drawn in English is rewritten in the language chosen", async () => {
+  const titled = { ...BARS, id: "c2", source: ADS, title: "From the file" };
+  const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
+  await writeFile(path, unoOf([BARS, titled]));
+  await shell.openRef({ name: "charted.uno", path });
+  shell.language.choose(baseLocale);
+  await frame();
+  shell.language.choose(PSEUDO_LOCALE);
+  await frame();
+  const head = document.querySelector(".chart-title")?.textContent;
+  expect(head).toBe(madeTitle(BARS.plot));
+  expect(english(".chart")).toEqual([]);
 });
