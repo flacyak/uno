@@ -283,6 +283,12 @@ export function trailTo(path: string): Crumb[] | undefined {
 /** The characters that separate words in a file name. */
 const BREAKS = "-_. ";
 
+/** Returns a file's name without its extension. A bare dotfile keeps its name. */
+export function stemOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
 /**
  * Returns the name for several files added as one: the shared prefix of
  * their stems, cut back to a whole word, plus the first file's extension.
@@ -296,10 +302,7 @@ export function joinedName(files: ReadonlyArray<{ name: string; path: string }>)
   if (first === undefined) return "";
   const dot = first.name.lastIndexOf(".");
   const extension = dot > 0 ? first.name.slice(dot) : "";
-  const stems = files.map((f) => {
-    const at = f.name.lastIndexOf(".");
-    return at > 0 ? f.name.slice(0, at) : f.name;
-  });
+  const stems = files.map((f) => stemOf(f.name));
 
   let shared = stems[0]!;
   for (const stem of stems) {

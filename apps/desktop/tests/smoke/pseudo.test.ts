@@ -197,6 +197,6 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   shell.language.choose(PSEUDO_LOCALE);
   await frame();
   const head = document.querySelector(".chart-title")?.textContent;
-  expect(head).toBe(madeTitle(BARS.plot));
+  expect(head).toBe(`${SALES} · ${madeTitle(BARS.plot)}`);
   expect(english(".chart")).toEqual([]);
 });

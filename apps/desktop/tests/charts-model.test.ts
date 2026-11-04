@@ -441,3 +441,19 @@ test("a chart over a source the workspace has not reads as over a missing one", 
     await expect(refused).rejects.toThrow("no source");
   });
 });
+
+test("a source goes by the stem of its file once there are several to tell apart", async () => {
+  await opened(FILE, async (w) => {
+    const [only] = w.sources;
+    expect(w.charts.sourceLabel(only!.id)).toBeUndefined();
+
+    await w.add({ name: "google-ads-sales.csv", path: SECOND });
+    const [, added] = w.sources;
+    expect(w.charts.sourceLabel(only!.id)).toBe(SALES);
+    expect(w.charts.sourceLabel(added!.id)).toBe("google-ads-sales");
+    expect(w.charts.sourceLabel("gone")).toBeUndefined();
+
+    const fresh = await w.relink(only!, { name: "sales.2025.q3.csv", path: FIXTURE });
+    expect(w.charts.sourceLabel(fresh.id)).toBe("sales.2025.q3");
+  });
+});

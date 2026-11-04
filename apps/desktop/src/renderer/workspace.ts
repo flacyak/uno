@@ -33,7 +33,7 @@ import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "@paraglide/messages";
 import { bytes } from "./locale.ts";
 import { say } from "./said.ts";
-import { stateOf } from "./sources.ts";
+import { stateOf, stemOf } from "./sources.ts";
 import type { State } from "./sources.ts";
 
 /**
@@ -289,7 +289,14 @@ export class Workspace {
       engine,
       (write) => this.writing(write),
       (source) => this.tabs.find((t) => t.id === source)?.state ?? "missing",
+      (source) => this.sourceLabel(source),
     );
+  }
+
+  /** The stem of a source's file, once there are several sources to tell apart. */
+  private sourceLabel(source: string): string | undefined {
+    const tab = this.tabs.find((t) => t.id === source);
+    return tab === undefined || this.tabs.length === 1 ? undefined : stemOf(tab.name);
   }
 
   /**

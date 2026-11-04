@@ -17,6 +17,7 @@ import { readContainer } from "@document";
 import type { CarriedChart, Chart } from "@document";
 import { UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
+import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
 import { ADS, BARS, MOVED, SALES, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, FIXTURE, SECOND, bootShell } from "./smoke/dom-harness.ts";
@@ -31,6 +32,7 @@ const tab = (id: string): HTMLElement | null =>
   document.querySelector<HTMLElement>(`.tab[data-source="${id}"]`);
 const layer = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
 const windows = (): number => document.querySelectorAll(".chart").length;
+const head = (): string | null | undefined => document.querySelector(".chart-title")?.textContent;
 
 /** Clicks the × on a source's tab. */
 function close(id: string): void {
@@ -63,6 +65,19 @@ test("a workspace's charts open a window each, and show over every tab", async (
   await page.press("Tab", { ctrlKey: true });
   expect(await until(page, () => tab(ADS)?.classList.contains("active") === true)).toBe(true);
   expect(windows()).toBe(2);
+});
+
+test("a head names its source only while the workspace has several to tell apart", async () => {
+  const title = madeTitle(BARS.plot);
+  await open("named.uno", [BARS]);
+  expect(head()).toBe(`${SALES} · ${title}`);
+
+  close(ADS);
+  expect(await until(page, () => tab(ADS) === null)).toBe(true);
+  expect(head()).toBe(title);
+
+  await shell.addPaths([SECOND]);
+  expect(head()).toBe(`${SALES} · ${title}`);
 });
 
 test("a workspace with none takes the last one's windows away", async () => {

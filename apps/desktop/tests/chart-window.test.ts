@@ -1,6 +1,6 @@
 /**
- * @fileoverview A chart window's words: what a head calls its chart, and what
- * a screen reader is told the window is, in any language.
+ * @fileoverview A chart window's words: what a head calls its chart and its
+ * source, and what a screen reader is told the window is, in any language.
  *
  * @vitest-environment happy-dom
  */
@@ -22,10 +22,13 @@ const BLANK = { col: 2, header: "" };
 /** A chart with a title a person gave it. */
 const TITLED: Chart = { ...BARS, title: "Where the rows are" };
 
-/** A chart's window, showing `chart`. */
-function windowOf(chart: Chart): ChartWindow {
+/** The name of a source, as a head writes it. */
+const SOURCE = "sales-q3";
+
+/** A chart's window, showing `chart` under `source`. */
+function windowOf(chart: Chart, source?: string): ChartWindow {
   const made = new ChartWindow();
-  made.show(chart);
+  made.show(chart, source);
   document.body.append(made.box);
   return made;
 }
@@ -87,13 +90,21 @@ test("a person's title takes the made one's place, and is marked as the file's",
   expect(title(box).classList.contains("from-file")).toBe(true);
 });
 
-test("a window shown again says what its chart says now", () => {
-  const made = windowOf(BARS);
+test("a head with a source to name says it first, marked as the file's", () => {
+  const { box } = windowOf(BARS, SOURCE);
+  const named = `${SOURCE} · ${madeTitle(BARS.plot)}`;
+  expect(title(box).textContent).toBe(named);
+  expect(title(box).title).toBe(named);
+  expect(title(box).querySelector(".from-file")?.textContent).toBe(SOURCE);
+});
 
-  made.show(TITLED);
+test("a window shown again says what its chart says now", () => {
+  const made = windowOf(BARS, SOURCE);
+
+  made.show(TITLED, undefined);
   expect(title(made.box).textContent).toBe(TITLED.title);
 
-  made.show(BARS);
+  made.show(BARS, undefined);
   expect(title(made.box).classList.contains("from-file")).toBe(false);
 });
 

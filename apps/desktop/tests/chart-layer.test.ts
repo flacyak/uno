@@ -38,6 +38,15 @@ const TOO_MANY_HEADS = Math.ceil(MIN_HEIGHT / HEAD) + 1;
 const FLUSH: Chart = BARS;
 const INSIDE: Chart = { ...BARS, id: "c2", place: MOVED };
 
+/** The name a workspace of several sources gives a window's source. */
+const SOURCE = "sales-q3";
+
+/** What the layer reads of a workspace's charts, for a test to change. */
+interface Model {
+  all: readonly Chart[];
+  sourceLabel(source: string): string | undefined;
+}
+
 const root = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
 const content = (): HTMLElement => document.querySelector<HTMLElement>("#content")!;
 const scroller = (): HTMLElement => document.querySelector<HTMLElement>(".grid-scroll")!;
@@ -87,9 +96,14 @@ function drawn({ style }: HTMLElement): Rect {
   };
 }
 
+/** A model of a workspace of one source, holding `charts`. */
+function modelOf(...charts: Chart[]): Model {
+  return { all: charts, sourceLabel: () => undefined };
+}
+
 /** A layer over a model holding `charts`, in ROOM, and that model. */
-function shown(...charts: Chart[]): { layer: ChartLayer; model: { all: readonly Chart[] } } {
-  const model = { all: charts };
+function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
+  const model = modelOf(...charts);
   const layer = new ChartLayer(root(), content());
   roomIs(ROOM);
   layer.show(model);
@@ -114,7 +128,7 @@ test("the layer stays hidden until a workspace shows, and each chart has a windo
   roomIs(ROOM);
   expect(root().hidden).toBe(true);
 
-  layer.show({ all: [FLUSH, INSIDE] });
+  layer.show(modelOf(FLUSH, INSIDE));
   expect(root().hidden).toBe(false);
   expect(windows().map(drawn)).toStrictEqual([
     placed(FLUSH.place, ROOM),
@@ -217,7 +231,7 @@ test("another workspace's charts take new windows, whatever their ids", () => {
   const { layer } = shown(FLUSH);
   const was = windows()[0];
 
-  layer.show({ all: [{ ...FLUSH, place: MOVED }] });
+  layer.show(modelOf({ ...FLUSH, place: MOVED }));
   expect(windows()).toHaveLength(1);
   expect(windows()[0]).not.toBe(was);
   expect(drawn(windows()[0]!)).toStrictEqual(placed(MOVED, ROOM));
@@ -240,12 +254,16 @@ test("a relabel writes each window's words in the language chosen since", () => 
   expect(windows()[0]!.getAttribute("aria-roledescription")).toBe(m.chart_role());
 });
 
-test("a draw says what each chart says by then, in the same window", () => {
+test("a draw says what each chart and its source say by then, in the same window", () => {
   const { layer, model } = shown(FLUSH);
   const made = windows()[0];
   model.all = [{ ...FLUSH, title: "Rows" }];
   layer.draw();
   expect(titles()).toStrictEqual(["Rows"]);
+
+  model.sourceLabel = () => SOURCE;
+  layer.draw();
+  expect(titles()).toStrictEqual([`${SOURCE} · Rows`]);
   expect(windows()[0]).toBe(made);
 });
 
