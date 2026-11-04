@@ -263,14 +263,17 @@
  * points' top, so they start half a line further in, and the x axis's first and
  * last reach half their length past the points. Its labels stand scatter.ts's
  * gap from the points. It is the ticks' size, so its ch is theirs. A point at
- * an axis's end shows whole past it. */
+ * an axis's end shows whole past it. The SVG paints from the whole px nearest
+ * its start, so the points start on one, and a gridline lands where its label
+ * centres. */
 .chart-scatter {
   display: grid;
-  grid-template: minmax(0, 1fr) auto / var(--gutter) minmax(0, 1fr);
+  grid-template: minmax(0, 1fr) auto / round(up, var(--gutter), 1px) minmax(0, 1fr);
   column-gap: var(--tick-gap);
   height: 100%;
-  padding: calc(var(--inset) + 0.5lh) calc(var(--inset) + var(--x-last)) var(--inset)
-    calc(var(--inset) + max(0px, var(--x-first) - var(--gutter) - var(--tick-gap)));
+  padding: round(up, calc(var(--inset) + 0.5lh), 1px) calc(var(--inset) + var(--x-last))
+    var(--inset)
+    round(up, calc(var(--inset) + max(0px, var(--x-first) - var(--gutter) - var(--tick-gap))), 1px);
   font-size: 11px;
 }
 
