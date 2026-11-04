@@ -10,7 +10,7 @@ import "./grid.css";
 
 import { m } from "@paraglide/messages";
 import type { InputStrategy } from "@renderer/input/strategy";
-import { NOTHING, changeOf, isJump, replay, showing, target } from "@renderer/keys";
+import { NOTHING, changeOf, isJump, pressOf, replay, showing, target } from "@renderer/keys";
 import { dispatch, el } from "@renderer/shell/util";
 import type { Handlers } from "@renderer/shell/util";
 import type { Action, Caret, Change, Motion, Pending } from "@renderer/keys";
@@ -174,14 +174,8 @@ export class Grid {
     if (this.source === undefined) return;
     if (this.editor !== undefined) return; // the editor handles its own keys
 
-    const step = this.input.interpret(this.editable ? "transform" : "view", this.pending, {
-      key: e.key,
-      ctrl: e.ctrlKey,
-      alt: e.altKey,
-      meta: e.metaKey,
-      shift: e.shiftKey,
-      repeat: e.repeat,
-    });
+    const mode = this.editable ? "transform" : "view";
+    const step = this.input.interpret(mode, this.pending, pressOf(e));
     if (step === undefined) return;
     e.preventDefault();
     this.wait(step.pending);
