@@ -1,8 +1,14 @@
 /**
  * @fileoverview A chart's axes: ticks 1, 2 or 5 times a power of ten apart,
  * from at or below the least value to at or above the most, so every mark
- * stands on the axis.
+ * stands on the axis, and their labels.
+ *
+ * An axis writes every label one way, as the dataviz skill does: compactly once
+ * it reaches COMPACT_FROM, and in full below that. The labels are mono, as the
+ * window is, so the room they take is their length in ch.
  */
+
+import { compact, compactsExactly, places } from "@renderer/locale";
 
 /** The ticks an axis asks for: the 1-2-5 steps give it 3 to 5. */
 const TICKS_WANTED = 4;
@@ -13,6 +19,9 @@ const TICKS_WANTED = 4;
  * runs to 10.
  */
 const TICKS_MOST = TICKS_WANTED + 1;
+
+/** An axis that reaches this, above or below zero, writes compactly: the dataviz skill's 10K. */
+const COMPACT_FROM = 10_000;
 
 /** The leading digits of a step between ticks. Past 5 comes 1 of the next power of ten. */
 const DIGITS = [1, 2, 5] as const;
@@ -39,10 +48,12 @@ interface Step {
   readonly exponent: number;
 }
 
-/** An axis: the ticks it draws. */
+/** An axis: the ticks it draws, and how it writes them. */
 export interface Axis {
   /** The ticks, least first, a step apart. */
   readonly ticks: readonly number[];
+  /** Each tick as its label writes it. */
+  readonly labels: readonly string[];
 }
 
 /**
@@ -97,5 +108,17 @@ export function axis(low: number, high: number): Axis {
   const wanted = stepOver((to - from) / (TICKS_WANTED - 1));
   const fine = finer(wanted);
   const step = ticksBy(fine, from, to).length <= TICKS_MOST ? fine : wanted;
-  return { ticks: ticksBy(step, from, to) };
+  const ticks = ticksBy(step, from, to);
+  // A label that rounds its tick, as 1.1M does 1,050,000, would misstate it, so
+  // such an axis writes its ticks in full.
+  const short =
+    Math.max(...ticks.map((tick) => Math.abs(tick))) >= COMPACT_FROM &&
+    ticks.every((tick) => compactsExactly(tick));
+  const labels = ticks.map((tick) => (short ? compact(tick) : places(tick, -step.exponent)));
+  return { ticks, labels };
+}
+
+/** gutter gives the room the widest of `axis`'s labels takes, in ch at a tick's size. */
+export function gutter(axis: Axis): number {
+  return Math.max(0, ...axis.labels.map((label) => label.length));
 }
