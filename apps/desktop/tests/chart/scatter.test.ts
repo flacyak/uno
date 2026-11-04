@@ -2,8 +2,9 @@
  * @fileoverview A scatter chart drawn from a tally: a point per sampled row,
  * where its x and y stand between the first and last ticks of axes that take
  * in every plotted row, over a gridline at each tick, and each tick's label on
- * its gridline. A sample that draws fewer points than it plotted rows says so,
- * in the language chosen.
+ * its gridline. The x axis writes its labels in full under a million, and
+ * compactly where they stand too close. A sample that draws fewer points than
+ * it plotted rows says so, in the language chosen.
  *
  * @vitest-environment happy-dom
  */
@@ -13,7 +14,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import type { Sample } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { axis } from "@renderer/chart/axes";
-import { POINT_RADIUS, sampled, scatter } from "@renderer/chart/scatter";
+import { POINT_RADIUS, TICK_GAP, fitAlong, sampled, scatter } from "@renderer/chart/scatter";
 
 /** A tally that sent `x` and `y` and plotted no other row. */
 function sampleOf(x: number[], y: number[]): Sample {
@@ -28,6 +29,13 @@ const SALES = sampleOf([0, 50, 200], [0, 3000, 4000]);
 afterEach(() => {
   void setLocale(baseLocale, { reload: false });
 });
+
+/** Revenue against itself, ticked 0 to 150,000 by 50,000 both ways. */
+const WIDE = sampleOf([0, 150_000], [0, 150_000]);
+
+/** WIDE's labels along x in full, and up y as compact() writes them. */
+const ALONG = ["0", "50,000", "100,000", "150,000"];
+const UP = ["0", "50K", "100K", "150K"];
 
 /** The attribute `name` of each of `box`'s `selector`. */
 const read = (box: HTMLElement, selector: string, name: string): Array<string | null> =>
@@ -73,6 +81,37 @@ test("each tick's label stands on its gridline, y's in a gutter of the widest an
   // The last x label reaches half its length past the points, and the first before them.
   const room = (name: string): string => box.style.getPropertyValue(name);
   expect(["--gutter", "--x-first", "--x-last"].map(room)).toStrictEqual(["5ch", "0.5ch", "1.5ch"]);
+});
+
+test("an x axis under a million writes its labels in full, where the y axis compacts from 10,000", () => {
+  const box = scatter(WIDE);
+  expect(labels(box, "x").map((at) => at.textContent)).toStrictEqual(ALONG);
+  expect(labels(box, "y").map((at) => at.textContent)).toStrictEqual(UP);
+});
+
+test("an x axis whose labels in full stand under TICK_GAP apart writes them compactly, as y does", () => {
+  // Lays out WIDE's x labels as a page would, `apart` px from middle to middle, and fits them.
+  const fitted = (apart: number, width: number): HTMLElement => {
+    const box = scatter(WIDE);
+    for (const [i, label] of labels(box, "x").entries()) {
+      const at = new DOMRect(i * apart - width / 2, 0, width);
+      Object.defineProperty(label, "getBoundingClientRect", { value: () => at });
+    }
+    fitAlong(box, WIDE);
+    return box;
+  };
+  const said = (box: HTMLElement): Array<string | null> =>
+    labels(box, "x").map((at) => at.textContent);
+  const width = 40;
+  expect(said(fitted(width + TICK_GAP, width))).toStrictEqual(ALONG);
+  const crowded = fitted(width + TICK_GAP - 1, width);
+  expect(said(crowded)).toStrictEqual(UP);
+  expect(crowded.style.getPropertyValue("--x-last")).toBe("2ch");
+  expect(labels(crowded, "x").map((at) => at.style.left)).toStrictEqual(
+    read(crowded, ".chart-grid.x", "x1"),
+  );
+  // A plot not laid out yet keeps its labels, to fit them once it is.
+  expect(said(fitted(0, 0))).toStrictEqual(ALONG);
 });
 
 test("a sample says how many of its plotted rows it draws, in the language chosen, and nothing where it draws every one", () => {

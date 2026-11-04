@@ -26,7 +26,7 @@ import { Words, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
-import { sampled, scatter } from "./scatter.ts";
+import { fitAlong, sampled, scatter } from "./scatter.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -235,9 +235,10 @@ export class ChartWindow {
 
   /**
    * paint draws what the chart last heard, at the plot's height, and fits the
-   * values to its width once they stand in it. A complete tally stays drawn
-   * while the next one is read, and a first one draws as it comes. A pie draws
-   * nothing yet. The caption says what a scatter's sample leaves out.
+   * values or the x axis to its width once they stand in it. A complete tally
+   * stays drawn while the next one is read, and a first one draws as it comes.
+   * A pie draws nothing yet. The caption says what a scatter's sample leaves
+   * out.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -249,7 +250,9 @@ export class ChartWindow {
       this.plot.replaceChildren(drawn);
       fitTips(drawn);
     } else if (plot.t === "scatter" && tally?.t === "sample") {
-      this.plot.replaceChildren(scatter(tally));
+      const drawn = scatter(tally);
+      this.plot.replaceChildren(drawn);
+      fitAlong(drawn, tally);
       this.say(sampled(tally));
     } else {
       this.plot.replaceChildren();
