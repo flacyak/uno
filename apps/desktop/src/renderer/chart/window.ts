@@ -10,15 +10,19 @@
  *
  * The sheet scrolls under a window: a wheel over one goes on to the grid, unless
  * something inside the window can still scroll that way.
+ *
+ * The plot draws what the chart last heard, each time the layer shows it.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { m } from "@paraglide/messages";
+import type { Heard } from "@renderer/charts";
 import { wheelWay } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
+import { bars } from "./bars.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 
@@ -64,6 +68,8 @@ export interface Stage {
   leave(): void;
   /** Scrolls the sheet by a wheel turned over a window. */
   wheelBy(dx: number, dy: number, deltaMode: number): void;
+  /** What chart `id` last heard from its source. */
+  heard(id: string): Heard | undefined;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -126,10 +132,14 @@ export class ChartWindow {
   /** The whole window, which the layer stands in the room. */
   readonly box = el("div", "chart");
   private readonly title = el("span", "chart-title");
+  /** The body between the head and the caption, which draws the chart. */
+  private readonly plot = el("div", "chart-plot");
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
   /** The pointer that holds the window, while one does. */
   private hold: Hold | undefined;
+  /** The frame the next draw of the plot waits for, or 0. */
+  private frame = 0;
 
   constructor(
     /** The chart the window shows, as the layer last said. */
@@ -173,7 +183,7 @@ export class ChartWindow {
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, el("div", "chart-plot"), caption, right, foot);
+    this.box.append(head, this.plot, caption, right, foot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
     this.box.addEventListener("pointermove", (e) => this.follow(e));
     this.box.addEventListener("pointerup", (e) => this.drop(e));
@@ -184,7 +194,10 @@ export class ChartWindow {
     this.box.addEventListener("focusin", () => stage.raise(this.box));
   }
 
-  /** show writes what `chart` says in the head, after `source` if it has one. */
+  /**
+   * show writes what `chart` says in the head, after `source` if it has one,
+   * and draws the plot again.
+   */
   show(chart: Chart, source: string | undefined): void {
     this.chart = chart;
     const title = el("bdi", "", chart.title === "" ? madeTitle(chart.plot) : chart.title);
@@ -192,6 +205,7 @@ export class ChartWindow {
     else this.title.replaceChildren(el("bdi", "from-file", source), " · ", title);
     this.title.title = this.title.textContent;
     this.title.classList.toggle("from-file", chart.title !== "");
+    this.redraw();
   }
 
   /** stand puts the window at `rect`, unless a pointer holds it. */
@@ -202,6 +216,28 @@ export class ChartWindow {
   /** relabel writes the window's own words in the current language. */
   relabel(): void {
     this.words.write();
+  }
+
+  /** redraw draws the plot again on the next frame. Repeated calls coalesce. */
+  redraw(): void {
+    if (this.frame !== 0) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
+      this.paint();
+    });
+  }
+
+  /**
+   * paint draws what the chart last heard, at the plot's height. A complete
+   * tally stays drawn while the next one is read, and a first one draws as it
+   * comes. Bars are all a plot draws yet.
+   */
+  private paint(): void {
+    const heard = this.stage.heard(this.chart.id);
+    const tally = heard?.complete ?? heard?.latest;
+    const { plot } = this.chart;
+    if (plot.t !== "bars" || tally?.t !== "groups") this.plot.replaceChildren();
+    else this.plot.replaceChildren(bars(plot, tally, this.plot.clientHeight));
   }
 
   /**
