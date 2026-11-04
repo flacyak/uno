@@ -19,6 +19,13 @@ const ON_TICK = 1e-9;
 /** How far an axis over 0 alone reaches either side, as 0 gives no scale of its own. */
 const ZERO_REACH = 1;
 
+/**
+ * The least span an axis tells from one value, as a share of the values' size:
+ * far below a span a person charts, and far above a double's error of 2.2e-16,
+ * near which the ticks run together.
+ */
+const APART_LEAST = 1e-12;
+
 /** A step between ticks: `digit` times ten to the `exponent`. */
 interface Step {
   readonly digit: number;
@@ -61,10 +68,15 @@ function ticksBy(step: Step, from: number, to: number): number[] {
 
 /**
  * axis gives the axis over values from `low` to `high`, where `low` is at most
- * `high`. An axis over one value runs from zero to twice it.
+ * `high`. An axis over one value runs from zero to twice it, and one over
+ * values a double barely tells apart runs as over the one further from zero.
+ * It serves values within ten to the 307 of zero, over a span of ten to the
+ * -307 or more: past those, a double cannot hold the ticks.
  */
 export function axis(low: number, high: number): Axis {
-  const reach = low !== high ? 0 : low === 0 ? ZERO_REACH : Math.abs(low);
+  const most = Math.max(Math.abs(low), Math.abs(high));
+  const apart = high - low > most * APART_LEAST;
+  const reach = apart ? 0 : most === 0 ? ZERO_REACH : most;
   const from = low - reach;
   const to = high + reach;
   const step = stepOver((to - from) / (TICKS_WANTED - 1));
