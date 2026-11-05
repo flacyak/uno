@@ -12,7 +12,7 @@
 import type { Plot } from "@document";
 import type { Groups } from "@engine";
 import { el } from "@renderer/shell/util";
-import { BARS_INSET } from "./bars.ts";
+import { BARS_INSET, TIP_GAP } from "./bars.ts";
 import { mark } from "./scatter.ts";
 
 /** How many values have a slice of their own: the colours a theme gives a chart. */
@@ -51,6 +51,9 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
  * from after the sixth. The six wear --chart-1 to --chart-6, in their order.
  */
 const OTHER_KEY = "var(--ink-3)";
+
+/** The room between the ring and a label, in px: as far as a bar's value stands from its bar. */
+export const LABEL_GAP = TIP_GAP;
 
 /** The SVG's view: two across, round its middle, so the ring's radius is 1. */
 const VIEW = "-1 -1 2 2";
@@ -119,6 +122,9 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
   }
   if (drawn.length > 1) ring.append(...gaps);
   box.style.setProperty("--inset", `${BARS_INSET}px`);
-  box.append(ring);
+  box.style.setProperty("--label-gap", `${LABEL_GAP}px`);
+  const disc = el("div", "chart-pie-disc");
+  disc.append(ring);
+  box.append(disc);
   return box;
 }

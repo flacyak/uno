@@ -324,10 +324,22 @@
 }
 
 /* A pie's plot, from pie.ts: the ring as large as the plot holds inside the
- * bars' inset, in its middle, and round whatever the shape of the window. */
+ * bars' inset, less a line and pie.ts's gap above and below for a label there,
+ * in the plot's middle and round whatever its shape. It is a label's size, so
+ * its lh is a label's line. */
 .chart-pie {
+  container-type: size;
+  display: grid;
+  place-items: center;
   height: 100%;
-  padding: var(--inset);
+  font-size: 11px;
+}
+
+.chart-pie-disc {
+  --across: min(100cqw - 2 * var(--inset), 100cqh - 2 * (var(--inset) + var(--label-gap) + 1lh));
+  position: relative;
+  width: var(--across);
+  height: var(--across);
 }
 
 .chart-slices {

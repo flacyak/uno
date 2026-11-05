@@ -18,7 +18,7 @@
  */
 
 import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
-import { PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
+import { LABEL_GAP, PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { POINT_OPACITY, TICK_GAP } from "@renderer/chart/scatter";
 import { DEFAULT_THEME } from "@renderer/theme";
@@ -773,7 +773,13 @@ export const CHART_PIE: Check[] = [
         const [left, top] = ["left", "top"].map((side) => Math.min(...at.map((r) => r[side])));
         const [right, bottom] = ["right", "bottom"].map((side) => Math.max(...at.map((r) => r[side])));
         const ring = new DOMRect(left, top, right - left, bottom - top);
-        const across = Math.min(plot.width, plot.height) - 2 * ${BARS_INSET};
+        // The plot keeps a line of its labels' size and their gap above and below the ring.
+        const probe = document.createElement("div");
+        probe.style.height = "1lh";
+        win.querySelector(".chart-pie-disc").append(probe);
+        const line = probe.getBoundingClientRect().height;
+        probe.remove();
+        const across = Math.min(plot.width, plot.height - 2 * (line + ${LABEL_GAP})) - 2 * ${BARS_INSET};
         if (off(ring.width, across) || off(ring.height, across)) return "a ring stands at " + edges(ring) + " in a plot at " + edges(plot);
         if (off(left + right, plot.left + plot.right) || off(top + bottom, plot.top + plot.bottom)) return "a ring stands at " + edges(ring) + ", off the middle of a plot at " + edges(plot);
         const worn = slices(win).map((slice) => style(slice).fill);
