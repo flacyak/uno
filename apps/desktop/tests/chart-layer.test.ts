@@ -2,7 +2,7 @@
  * @fileoverview The layer over the sheet: one window per chart, drawn from its
  * place in the room the sheet leaves, and placed again as the sheet resizes. A
  * window moves and resizes under a pointer and the arrow keys, and a wheel over
- * one goes on to the sheet.
+ * one goes on to the sheet unless something inside it can still scroll.
  *
  * happy-dom has no layout, so each test says what layout would measure, and
  * fires the resize a ResizeObserver would. Its pointer capture is bookkeeping
@@ -75,8 +75,17 @@ const OTHER_POINTER = 2;
 /** A turn of the wheel in lines, read through to the grid as they are. */
 const TURN = { deltaX: 3, deltaY: 5, deltaMode: WheelEvent.DOM_DELTA_LINE };
 
+/** How far a scrollable scrolls each way, and where it stands at each end. */
+const END = 300;
+const START = { scrollTop: 0, scrollLeft: 0 };
+const FOOT = { ...START, scrollTop: END };
+const SIDE = { ...START, scrollLeft: END };
+
 /** A turn of the wheel in px. */
 const DOWN = { deltaY: 10 };
+const UP = { deltaY: -10 };
+const RIGHT = { deltaX: 10 };
+const LEFT = { deltaX: -10 };
 
 /** What a wheel can turn with. */
 type HeldKeys = Pick<WheelEventInit, "ctrlKey" | "shiftKey">;
@@ -215,6 +224,15 @@ function turn(at: Element, init: WheelEventInit, keys: HeldKeys = {}): WheelEven
   const event = Object.assign(made, keys);
   at.dispatchEvent(event);
   return event;
+}
+
+/** A named scrollable in the first window's plot, that scrolls END px, standing `at`. */
+function scrollable(at = START): HTMLElement {
+  const inner = part(".chart-plot").appendChild(document.createElement("div"));
+  inner.className = "chart-scrolls";
+  // happy-dom has no layout, so a client size reads 0.
+  Object.defineProperties(inner, { scrollHeight: { value: END }, scrollWidth: { value: END } });
+  return Object.assign(inner, at);
 }
 
 beforeEach(() => {
@@ -788,4 +806,47 @@ test("Shift and the wheel go along the sheet's rows, as they do over the grid", 
   shown(INSIDE);
   turn(part(".chart-plot"), DOWN, { shiftKey: true });
   expect(wheelBy).toHaveBeenCalledExactlyOnceWith(DOWN.deltaY, 0, WheelEvent.DOM_DELTA_PIXEL);
+});
+
+test.each([
+  { way: "down", room: START, end: FOOT, wheel: DOWN },
+  { way: "up", room: FOOT, end: START, wheel: UP },
+  { way: "right", room: START, end: SIDE, wheel: RIGHT },
+  { way: "left", room: SIDE, end: START, wheel: LEFT },
+])("a scrollable takes a wheel $way while it has room, and then the sheet does", (ways) => {
+  shown(INSIDE);
+  const inner = scrollable(ways.room);
+  const row = inner.appendChild(document.createElement("div"));
+
+  // A wheel left uncancelled over a scrollable is the browser's to scroll.
+  expect(turn(row, ways.wheel).defaultPrevented).toBe(false);
+  expect(wheelBy).not.toHaveBeenCalled();
+
+  Object.assign(inner, ways.end);
+  expect(turn(row, ways.wheel).defaultPrevented).toBe(true);
+  expect(wheelBy).toHaveBeenCalledOnce();
+});
+
+test("Shift and the wheel ask a scrollable for room along its rows, past any down it", () => {
+  shown(INSIDE);
+  const inner = scrollable(FOOT);
+  expect(turn(inner, DOWN, { shiftKey: true }).defaultPrevented).toBe(false);
+
+  Object.assign(inner, SIDE);
+  expect(turn(inner, DOWN, { shiftKey: true }).defaultPrevented).toBe(true);
+  expect(wheelBy).toHaveBeenCalledOnce();
+});
+
+test("a scrollable a fraction short of its end counts as there", () => {
+  shown(INSIDE);
+  // scrollTop is fractional at a zoom, where the sizes it adds to are rounded.
+  turn(scrollable({ ...START, scrollTop: END - 0.5 }), DOWN);
+  expect(wheelBy).toHaveBeenCalledOnce();
+});
+
+test("a wheel on a window's head goes to the sheet, with a scrollable in its plot", () => {
+  shown(INSIDE);
+  scrollable();
+  turn(head(), DOWN);
+  expect(wheelBy).toHaveBeenCalledOnce();
 });
