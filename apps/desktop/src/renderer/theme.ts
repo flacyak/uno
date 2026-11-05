@@ -11,10 +11,19 @@
  * - The remaining tokens are mixed from those in `tokensOf`. The warning
  *   amber is the same under every theme.
  *
+ * Each palette adds six chart colours of uno's own: the accent's hue, then
+ * five hues of the dataviz skill's reference palette. The first is stepped
+ * from the accent and the rest from the reference until a pie's neighbours
+ * pass the skill's palette validator on the theme's grid, which theme.test.ts
+ * checks.
+ *
  * The chosen theme and appearance are kept in local storage.
  */
 
-/** The seven colours a palette defines. The other tokens are mixed from these. */
+/** Six colours a chart tells its values apart by, in the order it gives them. */
+export type ChartColours = readonly [string, string, string, string, string, string];
+
+/** The colours a palette defines. The other tokens are mixed from these. */
 export interface Palette {
   /** Chrome background: sidebar, status bar, column headers. */
   sunken: string;
@@ -27,6 +36,8 @@ export interface Palette {
   ink3: string;
   rule: string;
   accent: string;
+  /** Worn as --chart-1 to --chart-6. */
+  chart: ChartColours;
 }
 
 export interface Theme {
@@ -51,6 +62,7 @@ export const THEMES = [
       ink3: "#6e6661",
       rule: "#e7ddd0",
       accent: "#c2571f",
+      chart: ["#e0723e", "#c8477e", "#2a78d6", "#12a572", "#6250d6", "#067605"],
     },
     dark: {
       sunken: "#1c1917",
@@ -60,6 +72,7 @@ export const THEMES = [
       ink3: "#a8a29e",
       rule: "#33302c",
       accent: "#ea884b",
+      chart: ["#b45607", "#d85383", "#3987e5", "#199e70", "#9085e9", "#3ea939"],
     },
   },
   {
@@ -74,6 +87,7 @@ export const THEMES = [
       ink3: "#585a65",
       rule: "#c1c2c7",
       accent: "#2959aa",
+      chart: ["#4172c6", "#dd5b25", "#0d9768", "#b37907", "#cc5f8a", "#008300"],
     },
     dark: {
       sunken: "#16161e",
@@ -83,6 +97,7 @@ export const THEMES = [
       ink3: "#a5a8bb",
       rule: "#292e42",
       accent: "#7aa2f7",
+      chart: ["#5d86de", "#d95926", "#199e70", "#c98500", "#d55181", "#008300"],
     },
   },
   {
@@ -97,6 +112,7 @@ export const THEMES = [
       ink3: "#7d5c6a",
       rule: "#ecd7de",
       accent: "#b83d72",
+      chart: ["#db5d90", "#0a9163", "#2a78d6", "#c28409", "#6250d6", "#008300"],
     },
     dark: {
       sunken: "#1f141c",
@@ -106,6 +122,7 @@ export const THEMES = [
       ink3: "#b18ea0",
       rule: "#3c2a36",
       accent: "#e88fb4",
+      chart: ["#bd447e", "#37a67a", "#3987e5", "#c98500", "#9085e9", "#0a8708"],
     },
   },
   {
@@ -120,6 +137,7 @@ export const THEMES = [
       ink3: "#555869",
       rule: "#ccd0da",
       accent: "#8839ef",
+      chart: ["#8839ef", "#e4612c", "#0f9e6d", "#ba7e08", "#e05d93", "#008300"],
     },
     dark: {
       sunken: "#232634",
@@ -129,6 +147,7 @@ export const THEMES = [
       ink3: "#b5bfe2",
       rule: "#51576d",
       accent: "#ca9ee6",
+      chart: ["#bc61ee", "#e4612e", "#199e70", "#c98500", "#e25d8c", "#33a02e"],
     },
   },
 ] as const satisfies readonly Theme[];
@@ -165,8 +184,9 @@ const ACCENT_WASH: Record<Mode, string> = { light: "14%", dark: "22%" };
 const SCRIM: Record<Mode, string> = { light: "rgb(0 0 0 / 30%)", dark: "rgb(0 0 0 / 50%)" };
 
 /**
- * Returns the CSS custom properties for a palette: the seven it defines and
- * the ones mixed from them. The names match those declared in base.css.
+ * Returns the CSS custom properties for a palette: the colours it defines and
+ * the ones mixed from them. The names match those declared in base.css, save
+ * --chart-1 to --chart-6, which only a themed chart reads.
  */
 export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
   return {
@@ -185,6 +205,12 @@ export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
     "--flag": WARNING_INK[mode],
     "--flag-b": `color-mix(in srgb, ${WARNING} ${WARNING_WASH[mode]}, ${p.paper})`,
     "--scrim": SCRIM[mode],
+    "--chart-1": p.chart[0],
+    "--chart-2": p.chart[1],
+    "--chart-3": p.chart[2],
+    "--chart-4": p.chart[3],
+    "--chart-5": p.chart[4],
+    "--chart-6": p.chart[5],
   };
 }
 
