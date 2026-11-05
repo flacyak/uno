@@ -14,6 +14,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
+import { DISTINCT_AT_MOST } from "@engine";
 import type { GroupsTally, SampleTally } from "@engine";
 import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
@@ -493,6 +494,15 @@ test("a window draws a pie's slices from what its chart heard", async () => {
   model.heard = () => heardOf("North", "South");
   await frame();
   expect(document.querySelectorAll(".chart-pie .chart-slice")).toHaveLength(2);
+});
+
+test("a pie's caption says how it counts the values past those a tally keeps apart", async () => {
+  const { model } = shown(PIE);
+  const { latest } = heardOf("North");
+  const tally = latest?.t === "groups" ? { ...latest, rest: { rows: 5, sum: 0 } } : undefined;
+  model.heard = () => ({ state: "fine", latest: tally, complete: tally });
+  await frame();
+  expect(said()).toBe(m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) }));
 });
 
 test("a scatter's caption says how many of its points it draws while it samples, in the language chosen, and nothing once it draws none", async () => {

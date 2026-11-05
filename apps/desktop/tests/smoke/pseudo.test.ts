@@ -23,7 +23,7 @@ import { m } from "@paraglide/messages";
 import { baseLocale } from "@paraglide/runtime";
 import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
-import { ADS, BARS, SALES, SCATTER, SHORT_ROWS, holding, unoOf } from "../charted.ts";
+import { ADS, BARS, DEVICES, SALES, SCATTER, SHORT_ROWS, holding, unoOf } from "../charted.ts";
 import { bootShell } from "./dom-harness.ts";
 import { domPage, frame, until } from "./dom-page.ts";
 
@@ -193,15 +193,19 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   const titled = { ...BARS, id: "c2", source: ADS, title: "From the file" };
   const overAds = { ...BARS, id: "c3", source: ADS };
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
-  await writeFile(path, unoOf([BARS, titled, overAds, SCATTER]));
+  await writeFile(path, unoOf([BARS, titled, overAds, SCATTER, DEVICES]));
   await shell.openRef({ name: "charted.uno", path });
-  // A short plot draws the line of the rest under its bars, and the scatter samples.
+  // A short plot draws the line of the rest under its bars, the scatter samples,
+  // and the pie labels its slices.
   const plot = document.querySelector<HTMLElement>(".chart-plot")!;
   Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
   shell.language.choose(baseLocale);
   const said = (): string =>
     [...document.querySelectorAll(".chart-said")].map((at) => at.textContent).join("");
-  const drawn = (): boolean => plot.querySelector(".chart-bars-line") !== null && said() !== "";
+  const labelled = (): boolean =>
+    document.querySelectorAll(".chart-pie .chart-slice-label").length > 0;
+  const drawn = (): boolean =>
+    plot.querySelector(".chart-bars-line") !== null && said() !== "" && labelled();
   expect(await until(domPage(), drawn)).toBe(true);
   shell.language.choose(PSEUDO_LOCALE);
   await frame();

@@ -1,7 +1,8 @@
 /**
  * @fileoverview A pie chart: each value's share of the rows, or of a sum. The
  * six largest values above zero have a slice each, and one Other after them
- * holds the rest. A value at or below zero has no share to draw.
+ * holds the rest. A value at or below zero has no share to draw. The caption
+ * says how Other takes the values past those a tally keeps apart.
  *
  * The slices go round from the top, as SVG on a ring of radius 1, so whatever
  * sizes the SVG sizes the pie, round in any shape. Each wears its colour as
@@ -12,9 +13,10 @@
  */
 
 import type { Plot } from "@document";
+import { DISTINCT_AT_MOST } from "@engine";
 import type { Groups } from "@engine";
 import { m } from "@paraglide/messages";
-import { percent } from "@renderer/locale";
+import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { BARS_INSET, TIP_GAP } from "./bars.ts";
 import { mark } from "./scatter.ts";
@@ -31,6 +33,11 @@ export interface Slice {
   size: number;
 }
 
+/** measureOf gives what a group measures in `plot`: its rows, or the sum of its cells. */
+function measureOf(plot: Pie): (g: { rows: number; sum: number }) => number {
+  return (g) => (plot.sum === undefined ? g.rows : g.sum);
+}
+
 /**
  * slices gives `groups` as a pie draws them, each as `plot` measures it: the
  * PIE_SLICES_AT_MOST largest sent groups above zero, then Other, which adds the
@@ -38,8 +45,7 @@ export interface Slice {
  * has no Other, as the chart colours hold Other apart from the sixth alone.
  */
 export function slices(plot: Pie, groups: Groups): Slice[] {
-  const measure = (g: { rows: number; sum: number }): number =>
-    plot.sum === undefined ? g.rows : g.sum;
+  const measure = measureOf(plot);
   const above = groups.groups.filter((g) => measure(g) > 0);
   const own = above.slice(0, PIE_SLICES_AT_MOST).map((g) => ({ value: g.value, size: measure(g) }));
   if (own.length < PIE_SLICES_AT_MOST) return own;
@@ -48,6 +54,22 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
   // so Other takes them only where they come to more than zero.
   const other = after + measure(groups.others) + Math.max(measure(groups.rest), 0);
   return other > 0 ? [...own, { value: undefined, size: other }] : own;
+}
+
+/**
+ * past gives what a pie's caption says of the values past those a tally keeps
+ * apart, or nothing where there are none. Other counts their rows as they are,
+ * and takes their sum where it comes to more than zero, though it nets values
+ * of either sign, so the caption says so. Where they come to nothing above
+ * zero, or the pie draws no Other, it leaves them out, and says that.
+ */
+export function past(plot: Pie, groups: Groups): string {
+  const { rest } = groups;
+  if (rest.rows === 0) return "";
+  const count = num(DISTINCT_AT_MOST);
+  const counted = slices(plot, groups).length > PIE_SLICES_AT_MOST && measureOf(plot)(rest) > 0;
+  if (!counted) return m.chart_pie_past_left_out({ count });
+  return plot.sum === undefined ? "" : m.chart_pie_past_net({ count });
 }
 
 /**
