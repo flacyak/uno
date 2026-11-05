@@ -156,6 +156,49 @@ await writeFile(
   }),
 );
 
+// A workspace of one chart, a sum per region whose values run long on both
+// sides of zero, in a window of the least width and a new window's height.
+const signedFile = join(scratch, "sent", "signed.csv");
+const signedHeader = "region,revenue";
+const signedRows = [
+  "North,1234567.891",
+  "Andhra Pradesh regional office,234567.5",
+  "West,98765.25",
+  "South,-1234567.891",
+];
+await writeFile(signedFile, `${[signedHeader, ...signedRows].join("\n")}\n`);
+const signed = join(scratch, "sent", "signed.uno");
+const signedSource = {
+  id: "signed",
+  name: "signed.csv",
+  path: signedFile,
+  rows: signedRows.length,
+  cols: signedHeader.split(",").length,
+  state: { active: { row: 0, col: 0 } },
+};
+const sums = { t: "bars", by: { col: 0, header: "region" }, sum: { col: 1, header: "revenue" } };
+await writeFile(
+  signed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [signedSource],
+    active: signedSource.id,
+    log: [],
+    charts: [
+      {
+        id: "c1",
+        source: signedSource.id,
+        plot: sums,
+        title: "",
+        refresh: 0,
+        place: { width: leastSize.width, height: chartSize.height, x: 0, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: signed,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -237,6 +280,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_OBJECT: object,
     UNO_SMOKE_SENT: sent,
     UNO_SMOKE_CHARTED: charted,
+    UNO_SMOKE_SIGNED: signed,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits

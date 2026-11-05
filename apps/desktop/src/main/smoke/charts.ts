@@ -8,15 +8,21 @@
  * Its bars draw once its chart's tally completes, as bars.ts sizes them.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
- * right edge, one at the top and one at the foot.
+ * right edge, one at the top and one at the foot. The last opens another, whose
+ * sums leave a window of the least width too little room for bars and values.
  */
 
+import { SPAN_LEAST } from "@renderer/chart/bars";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { DEFAULT_THEME } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote. */
 const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
+
+/** The one it wrote of a sum per region, and its regions, whose values run long on both sides of zero. */
+const SIGNED = process.env["UNO_SMOKE_SIGNED"] ?? "";
+const SIGNED_REGIONS = 4;
 
 /** The zoom that halves the room. */
 const DOUBLE_ZOOM = 2;
@@ -612,6 +618,28 @@ export const CHARTS: Check[] = [
       if (!upper.contains(foot)) return "the head below lies over the border";
       if (shadow !== "none") return "the head with the keys throws " + shadow;
       return (await until(() => !heads())) ? "" : "the windows stayed tucked";
+    `,
+  },
+];
+
+/** The run's last check, as it opens a workspace in place of the one the others read. */
+export const CHART_SIGNED: Check[] = [
+  {
+    name: "a sum with long values on both sides of zero keeps its bars at the least width, and its values inside their tracks",
+    send: ["menu:open-path", SIGNED],
+    shot: "chart-signed",
+    script: `
+      const tracks = () => [...document.querySelectorAll(".chart-bar-track")];
+      if (!(await arrives(() => tracks().length === ${SIGNED_REGIONS}))) return "the plot draws " + tracks().length + " bars";
+      const drawn = tracks().map((track) => {
+        const [line, bar, tip] = [track, ...track.children].map((at) => at.getBoundingClientRect());
+        return { below: track.classList.contains("below"), line, bar, tip };
+      });
+      const widest = (below) => Math.max(0, ...drawn.filter((at) => at.below === below).map(({ bar }) => bar.width));
+      const span = widest(false) + widest(true);
+      if (span < ${SPAN_LEAST}) return "the bars share " + span + " px of tracks " + drawn[0].line.width + " px wide";
+      const out = drawn.find(({ line, tip }) => tip !== undefined && (tip.left < line.left || tip.right > line.right));
+      return out === undefined ? "" : "a value runs from " + out.tip.left + " to " + out.tip.right + ", past its track's " + out.line.right;
     `,
   },
 ];

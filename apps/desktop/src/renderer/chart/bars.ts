@@ -6,7 +6,7 @@
  * The bars are HTML that chart.css lays out by the sizes here, so a theme
  * recolours them and a zoom keeps them crisp. A label is the file's text, set
  * as text alone. The values are mono, so the room they take is their length in
- * ch.
+ * ch, and a plot too narrow for them beside its bars draws the bars alone.
  */
 
 import type { Plot } from "@document";
@@ -30,6 +30,12 @@ export const BARS_INSET = 10;
 
 /** The space between a bar's end and its value, in px. */
 export const TIP_GAP = 6;
+
+/**
+ * The least of a track the bars keep beside their values, in px: twice a bar's
+ * thickness, so the longest bar reads as a length.
+ */
+export const SPAN_LEAST = 2 * BAR_THICK;
 
 /** What a bar chart draws. */
 type Bars = Extract<Plot, { t: "bars" }>;
@@ -103,4 +109,24 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
   }
   if (past) box.append(line(m.chart_bars_past({ count: num(DISTINCT_AT_MOST) })));
   return box;
+}
+
+/**
+ * fitTips takes the values out of `box`, as bars drew it, where they would leave
+ * its bars under SPAN_LEAST px of their track, so the bars take the whole track.
+ * The dataviz skill leaves a value with no room past its bar to the tooltip and
+ * the table. It measures the drawn values, so `box` stands in the page by then.
+ */
+export function fitTips(box: HTMLElement): void {
+  const track = box.querySelector(".chart-bar-track")?.getBoundingClientRect().width ?? 0;
+  // What the values on one side of zero take: the widest, and the gap before it.
+  const taken = (side: string): number => {
+    const tips = [...box.querySelectorAll(`.chart-bar-track${side} .chart-bar-tip`)];
+    const widest = Math.max(0, ...tips.map((tip) => tip.getBoundingClientRect().width));
+    return tips.length === 0 ? 0 : widest + TIP_GAP;
+  };
+  // A plot not laid out yet has nothing to measure, and draws again as it takes a size.
+  if (track === 0 || track - taken(".below") - taken(":not(.below)") >= SPAN_LEAST) return;
+  for (const tip of box.querySelectorAll(".chart-bar-tip")) tip.remove();
+  for (const side of ["--room-above", "--room-below"]) box.style.setProperty(side, "0px");
 }

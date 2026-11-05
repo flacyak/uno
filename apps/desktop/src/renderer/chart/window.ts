@@ -23,7 +23,7 @@ import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
-import { bars } from "./bars.ts";
+import { bars, fitTips } from "./bars.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 
@@ -231,16 +231,22 @@ export class ChartWindow {
   }
 
   /**
-   * paint draws what the chart last heard, at the plot's height. A complete
-   * tally stays drawn while the next one is read, and a first one draws as it
-   * comes. Bars are all a plot draws yet.
+   * paint draws what the chart last heard, at the plot's height, and fits the
+   * values to its width once they stand in it. A complete tally stays drawn
+   * while the next one is read, and a first one draws as it comes. Bars are all
+   * a plot draws yet.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
     const tally = heard?.complete ?? heard?.latest;
     const { plot } = this.chart;
-    if (plot.t !== "bars" || tally?.t !== "groups") this.plot.replaceChildren();
-    else this.plot.replaceChildren(bars(plot, tally, this.plot.clientHeight));
+    if (plot.t !== "bars" || tally?.t !== "groups") {
+      this.plot.replaceChildren();
+      return;
+    }
+    const drawn = bars(plot, tally, this.plot.clientHeight);
+    this.plot.replaceChildren(drawn);
+    fitTips(drawn);
   }
 
   /**

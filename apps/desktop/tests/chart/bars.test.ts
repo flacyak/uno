@@ -13,7 +13,7 @@ import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { bars } from "@renderer/chart/bars";
+import { SPAN_LEAST, TIP_GAP, bars, fitTips } from "@renderer/chart/bars";
 import { num } from "@renderer/locale";
 import { holding } from "../charted.ts";
 
@@ -56,6 +56,16 @@ const lines = (box: HTMLElement): Array<string | null> => texts(box, ".chart-bar
 const shares = (box: HTMLElement): number[] =>
   all(box, ".chart-bar-track").map((track) => Number(track.style.getPropertyValue("--share")));
 const property = (box: HTMLElement, name: string): string => box.style.getPropertyValue(name);
+
+/** The width a page gives a value here, in px. */
+const TIP_PX = 30;
+
+/** Lays out each of `box`'s `selector` as a page would, `width` px wide. */
+function widen(box: HTMLElement, selector: string, width: number): void {
+  for (const at of all(box, selector)) {
+    Object.defineProperty(at, "getBoundingClientRect", { value: () => new DOMRect(0, 0, width) });
+  }
+}
 
 /** The regions of a column of more values than a tally keeps apart. */
 const PAST = {
@@ -104,6 +114,25 @@ test("sums all above zero or all below leave no room past zero, but a sum of not
   expect([property(under, "--zero"), property(under, "--room-above")]).toStrictEqual(["1", "0px"]);
   const nothing = tallyOf({ value: "a", rows: 1, sum: 0 }, { value: "b", rows: 2, sum: -5 });
   expect(property(bars(SUMS, nothing, TALL), "--room-above")).toBe("calc(1ch + var(--tip-gap))");
+});
+
+test("values that would leave the bars under SPAN_LEAST of their track give way to the bars", () => {
+  const signed = tallyOf({ value: "a", rows: 1, sum: 300 }, { value: "b", rows: 1, sum: -100 });
+  // Draws `signed` in tracks `track` px wide, each value TIP_PX wide, and fits it.
+  const fitted = (track: number): HTMLElement => {
+    const box = bars(SUMS, signed, TALL);
+    widen(box, ".chart-bar-track", track);
+    widen(box, ".chart-bar-tip", TIP_PX);
+    fitTips(box);
+    return box;
+  };
+  const needs = 2 * (TIP_PX + TIP_GAP) + SPAN_LEAST;
+  expect(tips(fitted(needs))).toStrictEqual(["300", "-100"]);
+  const narrow = fitted(needs - 1);
+  const rooms = ["--room-above", "--room-below"].map((side) => property(narrow, side));
+  expect([tips(narrow), rooms]).toStrictEqual([[], ["0px", "0px"]]);
+  // A plot not laid out yet keeps its values, to fit them once it is.
+  expect(tips(fitted(0))).toStrictEqual(["300", "-100"]);
 });
 
 test("a value's label is the file's text, marked as the file's, and never markup", () => {
