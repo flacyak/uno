@@ -23,7 +23,7 @@ import { m } from "@paraglide/messages";
 import { baseLocale } from "@paraglide/runtime";
 import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
-import { ADS, BARS, SALES, SHORT_ROWS, holding, unoOf } from "../charted.ts";
+import { ADS, BARS, SALES, SCATTER, SHORT_ROWS, holding, unoOf } from "../charted.ts";
 import { bootShell } from "./dom-harness.ts";
 import { domPage, frame, until } from "./dom-page.ts";
 
@@ -193,16 +193,20 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   const titled = { ...BARS, id: "c2", source: ADS, title: "From the file" };
   const overAds = { ...BARS, id: "c3", source: ADS };
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
-  await writeFile(path, unoOf([BARS, titled, overAds]));
+  await writeFile(path, unoOf([BARS, titled, overAds, SCATTER]));
   await shell.openRef({ name: "charted.uno", path });
-  // A short plot draws the line of the rest under its bars.
+  // A short plot draws the line of the rest under its bars, and the scatter samples.
   const plot = document.querySelector<HTMLElement>(".chart-plot")!;
   Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
   shell.language.choose(baseLocale);
-  expect(await until(domPage(), () => plot.querySelector(".chart-bars-line") !== null)).toBe(true);
+  const said = (): string =>
+    [...document.querySelectorAll(".chart-said")].map((at) => at.textContent).join("");
+  const drawn = (): boolean => plot.querySelector(".chart-bars-line") !== null && said() !== "";
+  expect(await until(domPage(), drawn)).toBe(true);
   shell.language.choose(PSEUDO_LOCALE);
   await frame();
   const head = document.querySelector(".chart-title")?.textContent;
   expect(head).toBe(`${SALES} · ${madeTitle(BARS.plot)}`);
+  expect(said()).toContain(PSEUDO_OPEN);
   expect(english(".chart")).toEqual([]);
 });

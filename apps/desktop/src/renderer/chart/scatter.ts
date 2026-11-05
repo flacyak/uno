@@ -7,10 +7,13 @@
  * sizes it and a theme recolours them. Each point wears the accent at a low
  * opacity, so where points crowd the accent shows deeper. The labels are HTML
  * placed in the same shares, and mono, so the room they take is their length
- * in ch.
+ * in ch. Where a tally sends fewer points than it plotted rows, the caption
+ * says so.
  */
 
 import type { Sample } from "@engine";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { axis, gutter, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
@@ -75,6 +78,18 @@ function writeAlong(box: HTMLElement, x: Axis): void {
   box.querySelector(".chart-ticks.x")!.replaceChildren(...labels);
   box.style.setProperty("--x-first", `${x.labels[0]!.length / 2}ch`);
   box.style.setProperty("--x-last", `${x.labels.at(-1)!.length / 2}ch`);
+}
+
+/**
+ * sampled gives what a scatter's caption says of `sample`: how many of its
+ * plotted rows it draws, where it draws fewer than every one, or else nothing.
+ * A sampled row with a blank or a word sends no point, so that can be fewer
+ * than SCATTER_POINTS_AT_MOST.
+ */
+export function sampled(sample: Sample): string {
+  const shown = sample.x.length;
+  const points = m.chart_points({ count: sample.plotted });
+  return shown < sample.plotted ? m.chart_points_sampled({ shown: num(shown), points }) : "";
 }
 
 /**

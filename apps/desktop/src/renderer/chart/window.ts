@@ -26,7 +26,7 @@ import { Words, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
-import { scatter } from "./scatter.ts";
+import { sampled, scatter } from "./scatter.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -136,6 +136,8 @@ export class ChartWindow {
   private readonly title = el("span", "chart-title");
   /** The body between the head and the caption, which draws the chart. */
   private readonly plot = el("div", "chart-plot");
+  /** What the caption says of what the plot draws. */
+  private readonly said = el("span", "chart-said");
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
   /** The pointer that holds the window, while one does. */
@@ -169,7 +171,7 @@ export class ChartWindow {
     grip.innerHTML = GRIP;
     grip.setAttribute("aria-hidden", "true");
     grip.addEventListener("pointerdown", (e) => this.take(e, grip, stretched));
-    caption.append(grip);
+    caption.append(this.said, grip);
 
     const right = el("div", "chart-edge chart-edge-right");
     right.addEventListener("pointerdown", (e) => {
@@ -235,21 +237,29 @@ export class ChartWindow {
    * paint draws what the chart last heard, at the plot's height, and fits the
    * values to its width once they stand in it. A complete tally stays drawn
    * while the next one is read, and a first one draws as it comes. A pie draws
-   * nothing yet.
+   * nothing yet. The caption says what a scatter's sample leaves out.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
     const tally = heard?.complete ?? heard?.latest;
     const { plot } = this.chart;
+    this.say("");
     if (plot.t === "bars" && tally?.t === "groups") {
       const drawn = bars(plot, tally, this.plot.clientHeight);
       this.plot.replaceChildren(drawn);
       fitTips(drawn);
     } else if (plot.t === "scatter" && tally?.t === "sample") {
       this.plot.replaceChildren(scatter(tally));
+      this.say(sampled(tally));
     } else {
       this.plot.replaceChildren();
     }
+  }
+
+  /** say writes `words` in the caption, whole in its title, as a narrow window cuts them. */
+  private say(words: string): void {
+    this.said.textContent = words;
+    this.said.title = words;
   }
 
   /**
