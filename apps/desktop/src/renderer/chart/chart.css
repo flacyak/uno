@@ -247,6 +247,16 @@
   left: auto;
 }
 
+/* An axis's tick, from axes.ts: in the caption's ink, which reads at 4.5:1 on
+ * every ground, its digits in columns, on one line. The window is mono, so the
+ * gutter axes.ts gives in ch holds the widest at this size. */
+.chart-tick {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* A forced palette would take the bars' colour away, so they wear the text's. */
 @media (forced-colors: active) {
   .chart-bar {
