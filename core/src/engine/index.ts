@@ -14,6 +14,7 @@ export type { PassContext } from './pass.ts';
 export { Refusal, english, saidOf } from '@said';
 export type { CharName, Said, Sought, StepSaid } from '@said';
 export {
+  DISTINCT_AT_MOST,
   GROUPS_SENT,
   LABEL_AT_MOST,
   ROWS_AT_MOST,

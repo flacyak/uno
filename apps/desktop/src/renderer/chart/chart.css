@@ -187,6 +187,15 @@
   font-size: 11px;
 }
 
+/* The line of what a plot leaves out runs under both columns, in the caption's ink. */
+.chart-bars-line {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--ink-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chart-bar-label {
   overflow: hidden;
   text-overflow: ellipsis;

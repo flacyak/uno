@@ -1,6 +1,7 @@
 /**
  * @fileoverview A bar chart: a bar per value, the largest first, each as long
- * as its share of the largest, with the value at its tip.
+ * as its share of the largest, with the value at its tip, as many as its plot
+ * holds. A line under them counts the rest.
  *
  * The bars are HTML that chart.css lays out by the sizes here, so a theme
  * recolours them and a zoom keeps them crisp. A label is the file's text, set
@@ -9,7 +10,9 @@
  */
 
 import type { Plot } from "@document";
+import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
+import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 
@@ -31,10 +34,33 @@ export const TIP_GAP = 6;
 /** What a bar chart draws. */
 type Bars = Extract<Plot, { t: "bars" }>;
 
-/** bars draws `groups` as rows or sums per value, as `plot` measures them. */
-export function bars(plot: Bars, groups: Groups): HTMLElement {
+/** rowsIn gives how many rows of bars or words a plot `height` px high holds. */
+function rowsIn(height: number): number {
+  return Math.max(Math.floor((height - 2 * BARS_INSET + BAR_GAP) / (BAR_THICK + BAR_GAP)), 0);
+}
+
+/** line gives a line of `words` under the bars, whole in its title, as a narrow plot cuts it. */
+function line(words: string): HTMLElement {
+  const said = el("div", "chart-bars-line", words);
+  said.title = words;
+  return said;
+}
+
+/**
+ * bars draws `groups` as rows or sums per value, as `plot` measures them, in a
+ * plot `height` px high. A line of what is left out takes a bar's row.
+ */
+export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
   const measure = (g: Group): number => (plot.sum === undefined ? g.rows : g.sum);
-  const drawn = groups.groups.map((g) => ({
+  const { others, below, rest } = groups;
+  // The rest holds the rows of values past those a tally keeps apart, which it
+  // cannot count, so a line of its own says there are more.
+  const past = rest.rows > 0;
+  const unsent = others.values + below.values > 0 || past;
+  const rows = rowsIn(height) - (past ? 1 : 0);
+  const all = groups.groups;
+  const fit = all.length + (unsent ? 1 : 0) <= rows ? all.length : Math.max(rows - 1, 0);
+  const drawn = all.slice(0, fit).map((g) => ({
     label: g.value,
     size: measure(g),
     tip: num(measure(g)),
@@ -54,5 +80,14 @@ export function bars(plot: Bars, groups: Groups): HTMLElement {
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
     box.append(el("bdi", "chart-bar-label from-file", label), track);
   }
+
+  const left = all.slice(fit);
+  if (left.length > 0 || unsent) {
+    const values = left.length + others.values + below.values;
+    const rowsLeft = left.reduce((sum, g) => sum + g.rows, others.rows + below.rows + rest.rows);
+    const more = m.chart_bars_more({ count: num(values) });
+    box.append(line(`${more} · ${m.rows_count({ count: rowsLeft })}`));
+  }
+  if (past) box.append(line(m.chart_bars_past({ count: num(DISTINCT_AT_MOST) })));
   return box;
 }
