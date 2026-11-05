@@ -9,7 +9,7 @@
  * @vitest-environment happy-dom
  */
 
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { Sample } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
@@ -27,6 +27,7 @@ function sampleOf(x: number[], y: number[]): Sample {
 const SALES = sampleOf([0, 50, 200], [0, 3000, 4000]);
 
 afterEach(() => {
+  vi.restoreAllMocks();
   void setLocale(baseLocale, { reload: false });
 });
 
@@ -36,6 +37,9 @@ const WIDE = sampleOf([0, 150_000], [0, 150_000]);
 /** WIDE's labels along x in full, and up y as compact() writes them. */
 const ALONG = ["0", "50,000", "100,000", "150,000"];
 const UP = ["0", "50K", "100K", "150K"];
+
+/** How wide a label's character is laid out, in px: 11 px mono's ch, rounded up. */
+const CH = 7;
 
 /** The attribute `name` of each of `box`'s `selector`. */
 const read = (box: HTMLElement, selector: string, name: string): Array<string | null> =>
@@ -112,6 +116,40 @@ test("an x axis whose labels in full stand under TICK_GAP apart writes them comp
   );
   // A plot not laid out yet keeps its labels, to fit them once it is.
   expect(said(fitted(0, 0))).toStrictEqual(ALONG);
+});
+
+test("an x axis whose labels crowd even compactly labels every second tick, or fewer, over every gridline", () => {
+  // 1,050,000 reads 1.1M compactly, so these ticks stay in full.
+  const near = sampleOf([900_000, 1_050_000], [0, 1]);
+  const ticks = ["900,000", "950,000", "1,000,000", "1,050,000"] as const;
+  // Lays each label out as a page would, centred on its tick, `apart` px from the next tick.
+  const fitted = (apart: number): HTMLElement => {
+    const wide = apart * (ticks.length - 1);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        const width = this.textContent!.length * CH;
+        return new DOMRect((parseFloat(this.style.left) / 100) * wide - width / 2, 0, width);
+      },
+    );
+    const box = scatter(near);
+    fitAlong(box, near);
+    return box;
+  };
+  const said = (box: HTMLElement): Array<string | null> =>
+    labels(box, "x").map((at) => at.textContent);
+  // How far apart the middles of labels `a` and `b` stand where the two touch.
+  const touching = (a: string, b: string): number => ((a.length + b.length) / 2) * CH;
+  const [first, second, third, last] = ticks;
+  // The widest two stand TICK_GAP apart, and every other two further.
+  expect(said(fitted(touching(third, last) + TICK_GAP))).toStrictEqual(ticks);
+  // The first two touch, and every second tick's labels stand two ticks apart.
+  const thinned = fitted(touching(first, second));
+  expect(said(thinned)).toStrictEqual([first, third]);
+  expect(labels(thinned, "x").map((at) => at.style.left)).toStrictEqual(
+    read(thinned, ".chart-grid.x", "x1").filter((_, i) => i % 2 === 0),
+  );
+  // Every second tick's labels touch too, so only the first is written.
+  expect(said(fitted(touching(first, third) / 2))).toStrictEqual([first]);
 });
 
 test("a sample says how many of its plotted rows it draws, in the language chosen, and nothing where it draws every one", () => {

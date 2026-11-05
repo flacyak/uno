@@ -76,14 +76,15 @@ function gridline(cls: string, x1: string, y1: string, x2: string, y2: string): 
 }
 
 /**
- * writeAlong writes `x`'s labels under `box`'s points, each at its tick's share.
- * A label centres on its tick, so the first and last reach half their length
- * past the points.
+ * writeAlong writes `x`'s labels under `box`'s points, each at its tick's share,
+ * at every `every`th tick from the first. A label centres on its tick, so the
+ * plot keeps half the first and last label's length past the points, whichever
+ * ones it writes.
  */
-function writeAlong(box: HTMLElement, x: Axis): void {
+function writeAlong(box: HTMLElement, x: Axis, every = 1): void {
   const labels = tickLabels(x);
   for (const [i, label] of labels.entries()) label.style.left = percent(share(x, x.ticks[i]!));
-  box.querySelector(".chart-ticks.x")!.replaceChildren(...labels);
+  box.querySelector(".chart-ticks.x")!.replaceChildren(...labels.filter((_, i) => i % every === 0));
   box.style.setProperty("--x-first", `${x.labels[0]!.length / 2}ch`);
   box.style.setProperty("--x-last", `${x.labels.at(-1)!.length / 2}ch`);
 }
@@ -141,18 +142,33 @@ export function scatter(sample: Sample): HTMLElement {
   return box;
 }
 
+/** along gives where `box`'s x axis labels stand, as the page lays them out. */
+function along(box: HTMLElement): DOMRect[] {
+  return [...box.querySelectorAll(".chart-ticks.x .chart-tick")].map((label) =>
+    label.getBoundingClientRect(),
+  );
+}
+
+/** crowded says whether two of `drawn`, side by side, stand under TICK_GAP apart. */
+function crowded(drawn: readonly DOMRect[]): boolean {
+  // A plot not laid out yet has nothing to measure, and draws again as it takes a size.
+  return drawn.some((at, i) => i > 0 && at.width > 0 && at.left - drawn[i - 1]!.right < TICK_GAP);
+}
+
 /**
  * fitAlong writes the x axis of `box`, as scatter drew `sample`, compactly from
  * 10,000, as the y axis is, where its labels in full stand under TICK_GAP
- * apart. It measures the drawn labels, so `box` stands in the page by then.
+ * apart. Where those crowd too, as an axis compact() would round stays in full,
+ * it labels every second tick, or every fourth, and so on, over every gridline.
+ * It measures the drawn labels, so `box` stands in the page by then.
  */
 export function fitAlong(box: HTMLElement, sample: Sample): void {
-  const drawn = [...box.querySelectorAll(".chart-ticks.x .chart-tick")].map((label) =>
-    label.getBoundingClientRect(),
-  );
-  // A plot not laid out yet has nothing to measure, and draws again as it takes a size.
-  const near = drawn.some(
-    (at, i) => i > 0 && at.width > 0 && at.left - drawn[i - 1]!.right < TICK_GAP,
-  );
-  if (near) writeAlong(box, axis(sample.least.x, sample.most.x));
+  if (!crowded(along(box))) return;
+  const x = axis(sample.least.x, sample.most.x);
+  writeAlong(box, x);
+  // The plot keeps its room whichever labels it writes, so those kept stand as measured.
+  const drawn = along(box);
+  let every = 1;
+  while (crowded(drawn.filter((_, i) => i % every === 0))) every *= 2;
+  if (every > 1) writeAlong(box, x, every);
 }
