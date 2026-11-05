@@ -128,6 +128,9 @@ const adsChart = {
 };
 // A new window's size: DEFAULT_WIDTH and DEFAULT_HEIGHT in chart/place.ts.
 const chartSize = { width: 420, height: 260 };
+// The least size and one step of an arrow: MIN_WIDTH, MIN_HEIGHT and NUDGE_PX there.
+const leastSize = { width: 240, height: 160 };
+const nudge = 8;
 await writeFile(
   charted,
   writeDocument({
@@ -328,6 +331,22 @@ try {
     trouble.push(`acme-exports-2.unof covers ${second.prefix}, not the whole bucket`);
 } catch (err) {
   trouble.push(`the saved connection did not read back: ${err.message}`);
+}
+
+// The charted workspace, which the last checks saved with Ctrl+S after moving
+// its first window. That window ends on the room's right edge at the least
+// height, a nudge wide of the least width and a nudge up from the foot. The
+// second never moved.
+const chartsBack = readContainer("charted.uno", await readFile(charted), charted).charts;
+const [firstBack, lastBack] = chartsBack.map((chart) => chart.place);
+const standsAt = (place, want) => Object.keys(want).every((side) => place[side] === want[side]);
+const nudgedUp = firstBack.y > 0 && firstBack.y < 1;
+const stepped = { x: 1, width: leastSize.width + nudge, height: leastSize.height };
+if (!nudgedUp || !standsAt(firstBack, stepped)) {
+  trouble.push(`the moved window was saved at ${JSON.stringify(firstBack)}`);
+}
+if (!standsAt(lastBack, { ...chartSize, x: 1, y: 1 })) {
+  trouble.push(`the window left alone was saved at ${JSON.stringify(lastBack)}`);
 }
 
 if (trouble.length > 0) {

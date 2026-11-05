@@ -2,8 +2,9 @@
  * @fileoverview Checks of a chart window under a real pointer and real keys. A
  * drag moves it by the pointer's px, the grip and the edges resize it, the least
  * size holds and the room's edges stop it, and Escape puts a drag back. The
- * arrows step it, and Escape gives the grid its keys back. None of it marks the
- * workspace unsaved.
+ * arrows step it, and Escape gives the grid its keys back. A press raises it.
+ * None of it marks the workspace unsaved, and Ctrl+S writes the places, which
+ * smoke.js reads back.
  *
  * They follow CHARTS, so the first window stands at the top of the room's right
  * edge and the second at its foot, and each picks up where the last left it.
@@ -24,6 +25,9 @@ const HEAD = ".chart .chart-title";
 const GRIP = ".chart .chart-grip";
 const RIGHT_EDGE = ".chart .chart-edge-right";
 const FOOT_EDGE = ".chart .chart-edge-foot";
+
+/** The second window's head. */
+const LAST_HEAD = ".chart:last-child .chart-title";
 
 /** A drag and a resize that fit the room at the run's 1100 px and at its 960 at scale 2. */
 const CARRY = { x: -150, y: 60 };
@@ -71,6 +75,16 @@ const MOVES = `
   const wait = async (want, doing) => {
     if (!(await until(() => stands(want)))) return "the window stands at " + reads();
     return unsaved() ? doing + " marked the workspace unsaved" : "";
+  };
+`;
+
+/** Helpers: the two windows, and what stands at the first one's middle, which both cover. */
+const STACK = `
+  ${GEOMETRY}
+  const boxes = [...document.querySelectorAll(".chart")];
+  const shared = () => {
+    const { left, right, top, bottom } = windows()[0];
+    return document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
   };
 `;
 
@@ -258,6 +272,45 @@ export const CHART_MOVES: Check[] = [
     script: `
       const cell = () => text("#status-cell");
       return (await until(() => cell().endsWith("row ${ROW_BELOW}"))) ? "" : "the selection is at " + cell();
+    `,
+  },
+  {
+    name: "a window raised once stands over one later in the page, with the keys gone",
+    script: `
+      ${STACK}
+      return shared().closest(".chart") === boxes[0] ? "" : "the window is under " + shared().className;
+    `,
+  },
+  {
+    name: "a press on a window under another raises it, with the windows in their order",
+    drag: { selector: LAST_HEAD, by: { x: 0, y: 0 } },
+    script: `
+      ${STACK}
+      const [under, over] = boxes;
+      if (!(await until(() => over.contains(shared())))) return "the raised window is under " + shared().className;
+      if (document.activeElement !== over) return "the keys are in #" + document.activeElement?.id;
+      if (document.querySelector(".chart") !== under) return "the windows changed order";
+      return unsaved() ? "a raise marked the workspace unsaved" : "";
+    `,
+  },
+  {
+    name: "a raised window stays over the others once the grid has the keys back",
+    input: { events: pressing("Escape"), through: true },
+    script: `
+      ${STACK}
+      const grid = document.querySelector("#content");
+      if (!(await until(() => document.activeElement === grid))) return "the keys are in #" + document.activeElement?.id;
+      return boxes[1].contains(shared()) ? "" : "the raised window went under " + shared().className;
+    `,
+  },
+  {
+    name: "Ctrl+S writes the windows' places, and marks nothing",
+    input: { events: pressing("S", ["control"]), through: true },
+    script: `
+      ${MOVES}
+      const said = () => text("#status-msg");
+      if (!(await until(() => said().includes("charted.uno")))) return "the status says " + JSON.stringify(said());
+      return unsaved() ? "the save left a mark" : "";
     `,
   },
 ];
