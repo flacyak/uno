@@ -653,7 +653,7 @@ export const CHART_SIGNED: Check[] = [
 /** A check after CHART_SIGNED, as it opens a workspace of a scatter in place of that one. */
 export const CHART_SCATTER: Check[] = [
   {
-    name: "a scatter stands its points inside its axes in the accent, each tick's label centred on its gridline and clear of the others",
+    name: "a scatter stands its points inside its axes in the accent, from a whole px, each tick's label centred on its gridline and clear of the others",
     send: ["menu:open-path", SCATTERED],
     shot: "chart-scatter",
     script: `
@@ -669,6 +669,9 @@ export const CHART_SCATTER: Check[] = [
       const centres = all(".chart-point").map((point) => middle(rect(point)));
       const strayed = centres.find(({ x, y }) => !within(new DOMRect(x, y), grown(axes, ${RECT_SLACK})));
       if (strayed !== undefined) return "a point stands at " + strayed.x + " " + strayed.y + ", past axes at " + edges(axes);
+      const between = (at) => off(at, Math.round(at));
+      const from = rect(document.querySelector(".chart"));
+      if (between(axes.left - from.left) || between(axes.top - from.top)) return "the points start between px, at " + edges(axes) + " in a window at " + edges(from);
       for (const side of ["x", "y"]) {
         const lines = all(".chart-grid." + side).map((line) => middle(rect(line))[side]);
         const labels = all(".chart-ticks." + side + " .chart-tick").map((label) => middle(rect(label))[side]);
