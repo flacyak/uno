@@ -24,7 +24,7 @@ import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
-import { coverage } from "./caption.ts";
+import { coverage, reading } from "./caption.ts";
 import { fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
@@ -138,6 +138,8 @@ export class ChartWindow {
   private readonly title = el("span", "chart-title");
   /** The body between the head and the caption, which draws the chart. */
   private readonly plot = el("div", "chart-plot");
+  /** How far the chart has read its source, under the head, while it reads. */
+  private readonly track = el("div", "chart-coverage");
   /** What the caption says of what the plot draws. */
   private readonly said = el("span", "chart-said");
   /** The words that stay whichever chart the window shows. */
@@ -189,7 +191,7 @@ export class ChartWindow {
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, this.plot, caption, right, foot);
+    this.box.append(head, this.plot, this.track, caption, right, foot);
     // Whatever resizes the window, the plot draws again in the frame it lands in.
     new ResizeObserver(() => this.paint()).observe(this.plot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
@@ -241,7 +243,8 @@ export class ChartWindow {
    * tally stays drawn while the next one is read, and a first one draws as it
    * comes. The caption says how much of its source the chart has read, then
    * what a scatter's sample leaves out, or how a pie counts the values past
-   * those a tally keeps apart.
+   * those a tally keeps apart. The track under the head shows how far the
+   * chart has read, while it reads.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -266,6 +269,9 @@ export class ChartWindow {
       this.plot.replaceChildren();
     }
     this.say(words.filter((said) => said !== "").join(" · "));
+    const read = reading(heard);
+    this.track.hidden = read === undefined;
+    this.track.style.setProperty("--read", `${read ?? 0}`);
   }
 
   /** say writes `words` in the caption, whole in its title, as a narrow window cuts them. */
