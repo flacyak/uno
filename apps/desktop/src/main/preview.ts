@@ -207,6 +207,22 @@ const DRAG_MOVE_MS = 40;
 /** How many times the moves story presses each arrow. */
 const NUDGES = 5;
 
+/**
+ * The wheel story's beats: the pointer brought over a chart window, the wheel
+ * turned down the sheet behind it, and turned back up.
+ */
+const WHEEL = {
+  point: 500,
+  down: 1_400,
+  up: 3_900,
+  end: 6_200,
+};
+
+/** How many turns the wheel story makes each way, their px, and the ms each lasts. */
+const WHEEL_TURNS = 30;
+const WHEEL_TURN_PX = 48;
+const WHEEL_TURN_MS = 60;
+
 /** A stand-in for the pointer, as a capture leaves the real one out. */
 const POINTER =
   '<svg width="16" height="24" viewBox="0 0 16 24">' +
@@ -673,6 +689,7 @@ const STORIES: Record<string, Story> = {
   connecting: { end: CONNECTING.end, script: playConnecting },
   refused: { end: REFUSED.end, script: playRefused },
   moves: { end: MOVES.end, script: playMoves },
+  wheel: { end: WHEEL.end, script: playWheel },
 };
 
 /**
@@ -731,15 +748,7 @@ async function playRefused(win: BrowserWindow, at: Clock): Promise<void> {
  * taller with Shift and an arrow.
  */
 async function playMoves(win: BrowserWindow, at: Clock): Promise<void> {
-  await win.webContents.executeJavaScript(`
-    (() => {
-      const pointer = document.createElement("div");
-      pointer.id = ${JSON.stringify(POINTER_ID)};
-      pointer.style.cssText = "position:fixed;z-index:${POINTER_ON_TOP};left:0;top:0;pointer-events:none;display:none";
-      pointer.innerHTML = ${JSON.stringify(POINTER)};
-      document.body.append(pointer);
-    })()
-  `);
+  await standIn(win);
   await at(MOVES.carry);
   await carry(win, ".chart .chart-title", CARRY);
   await at(MOVES.stretch);
@@ -749,6 +758,46 @@ async function playMoves(win: BrowserWindow, at: Clock): Promise<void> {
   await at(MOVES.grow);
   await presses(win, "Down", NUDGES, ARROW_GAP, ["shift"]);
   await at(MOVES.end);
+}
+
+/**
+ * playWheel performs the wheel story: the sheet scrolled down and back up by a
+ * wheel turned over a chart window.
+ */
+async function playWheel(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  await at(WHEEL.point);
+  const { x, y } = await hover(win, ".chart:last-child .chart-plot");
+  pointTo(win, x, y);
+  await at(WHEEL.down);
+  await turnWheel(win, x, y, WHEEL_TURN_PX);
+  await at(WHEEL.up);
+  await turnWheel(win, x, y, -WHEEL_TURN_PX);
+  await at(WHEEL.end);
+}
+
+/**
+ * turnWheel turns the wheel over (`x`, `y`) WHEEL_TURNS times, `down` px down
+ * the page each time. Electron counts a turn down as a negative delta.
+ */
+async function turnWheel(win: BrowserWindow, x: number, y: number, down: number): Promise<void> {
+  for (let i = 0; i < WHEEL_TURNS; i++) {
+    through(win, () => win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down }));
+    await sleep(WHEEL_TURN_MS);
+  }
+}
+
+/** standIn adds the pointer's stand-in to the page, hidden until pointTo moves it. */
+async function standIn(win: BrowserWindow): Promise<void> {
+  await win.webContents.executeJavaScript(`
+    (() => {
+      const pointer = document.createElement("div");
+      pointer.id = ${JSON.stringify(POINTER_ID)};
+      pointer.style.cssText = "position:fixed;z-index:${POINTER_ON_TOP};left:0;top:0;pointer-events:none;display:none";
+      pointer.innerHTML = ${JSON.stringify(POINTER)};
+      document.body.append(pointer);
+    })()
+  `);
 }
 
 /** pointTo moves the pointer and its stand-in to (`x`, `y`). */
