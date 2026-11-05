@@ -41,7 +41,10 @@ export const TICK_GAP = TIP_GAP;
 const SVG = "http://www.w3.org/2000/svg";
 
 /** mark makes an SVG `tag` of class `cls`. */
-function mark<K extends keyof SVGElementTagNameMap>(tag: K, cls: string): SVGElementTagNameMap[K] {
+export function mark<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  cls: string,
+): SVGElementTagNameMap[K] {
   const made = document.createElementNS(SVG, tag);
   made.setAttribute("class", cls);
   return made;

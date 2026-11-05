@@ -2,10 +2,15 @@
  * @fileoverview A pie chart: each value's share of the rows, or of a sum. The
  * six largest values above zero have a slice each, and one Other after them
  * holds the rest. A value at or below zero has no share to draw.
+ *
+ * The slices go round from the top, as SVG on a ring of radius 1, so whatever
+ * sizes the SVG sizes the pie, round in any shape.
  */
 
 import type { Plot } from "@document";
 import type { Groups } from "@engine";
+import { el } from "@renderer/shell/util";
+import { mark } from "./scatter.ts";
 
 /** How many values have a slice of their own: the colours a theme gives a chart. */
 export const PIE_SLICES_AT_MOST = 6;
@@ -36,4 +41,62 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
   // so Other takes them only where they come to more than zero.
   const other = after + measure(groups.others) + Math.max(measure(groups.rest), 0);
   return other > 0 ? [...own, { value: undefined, size: other }] : own;
+}
+
+/** The SVG's view: two across, round its middle, so the ring's radius is 1. */
+const VIEW = "-1 -1 2 2";
+
+/** How finely a path is written: to a millionth of the radius, far under a px of any pie. */
+const PATH_SCALE = 1e6;
+
+/** at writes `n` as a path holds it, to PATH_SCALE. */
+function at(n: number): string {
+  return `${Math.round(n * PATH_SCALE) / PATH_SCALE}`;
+}
+
+/** point gives where `turn` of the way round from the top, clockwise, stands on the ring. */
+function point(turn: number): string {
+  const angle = 2 * Math.PI * turn;
+  return `${at(Math.sin(angle))} ${at(-Math.cos(angle))}`;
+}
+
+/**
+ * wedge gives the slice from `from` to `to` of the way round. The whole ring is
+ * a circle, as no one arc ends where it starts.
+ */
+function wedge(from: number, to: number): SVGElement {
+  if (from === 0 && to === 1) {
+    const all = mark("circle", "chart-slice");
+    all.setAttribute("r", "1");
+    return all;
+  }
+  const slice = mark("path", "chart-slice");
+  // The arc goes the long way round for a slice of more than half the pie.
+  const long = to - from > 1 / 2 ? 1 : 0;
+  slice.setAttribute("d", `M0 0L${point(from)}A1 1 0 ${long} 1 ${point(to)}Z`);
+  return slice;
+}
+
+/**
+ * pie draws `groups` as `plot` shares them out, from the top clockwise. A pie
+ * of nothing above zero, or of a whole no double holds, has no share to draw,
+ * so draws nothing.
+ */
+export function pie(plot: Pie, groups: Groups): HTMLElement {
+  const box = el("div", "chart-pie");
+  const drawn = slices(plot, groups);
+  const whole = drawn.reduce((sum, { size }) => sum + size, 0);
+  if (drawn.length === 0 || !Number.isFinite(whole)) return box;
+  const ring = mark("svg", "chart-slices");
+  ring.setAttribute("viewBox", VIEW);
+  ring.setAttribute("aria-hidden", "true");
+  // Each slice ends where the sizes so far reach, so the last ends on the whole.
+  let reached = 0;
+  for (const { size } of drawn) {
+    const from = reached / whole;
+    reached += size;
+    ring.append(wedge(from, reached / whole));
+  }
+  box.append(ring);
+  return box;
 }
