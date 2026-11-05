@@ -24,6 +24,7 @@ import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
+import { pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
@@ -237,8 +238,7 @@ export class ChartWindow {
    * paint draws what the chart last heard, at the plot's height, and fits the
    * values or the x axis to its width once they stand in it. A complete tally
    * stays drawn while the next one is read, and a first one draws as it comes.
-   * A pie draws nothing yet. The caption says what a scatter's sample leaves
-   * out.
+   * The caption says what a scatter's sample leaves out.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -254,6 +254,8 @@ export class ChartWindow {
       this.plot.replaceChildren(drawn);
       fitAlong(drawn, tally);
       this.say(sampled(tally));
+    } else if (plot.t === "pie" && tally?.t === "groups") {
+      this.plot.replaceChildren(pie(plot, tally));
     } else {
       this.plot.replaceChildren();
     }

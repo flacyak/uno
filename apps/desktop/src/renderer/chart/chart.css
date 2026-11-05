@@ -323,6 +323,19 @@
   fill-opacity: var(--point-opacity);
 }
 
+/* A pie's plot, from pie.ts: the ring as large as the plot holds inside the
+ * bars' inset, in its middle, and round whatever the shape of the window. */
+.chart-pie {
+  height: 100%;
+  padding: var(--inset);
+}
+
+.chart-slices {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* A pie's slice, from pie.ts, wears the `--key` it sets. Two slices stand
  * apart by 1 px of the page's ground, whatever the size of the pie. */
 .chart-slice {

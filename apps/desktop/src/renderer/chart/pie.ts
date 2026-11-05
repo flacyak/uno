@@ -12,6 +12,7 @@
 import type { Plot } from "@document";
 import type { Groups } from "@engine";
 import { el } from "@renderer/shell/util";
+import { BARS_INSET } from "./bars.ts";
 import { mark } from "./scatter.ts";
 
 /** How many values have a slice of their own: the colours a theme gives a chart. */
@@ -117,6 +118,7 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
     gaps.push(gap(from));
   }
   if (drawn.length > 1) ring.append(...gaps);
+  box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.append(ring);
   return box;
 }
