@@ -284,6 +284,13 @@ test.each(palettes)("%s, %s: its chart colours are hues that show on the grid", 
   }
 });
 
+// A bar wears the accent, a mark on the grid's ground, which a window wears,
+// and on the page's.
+test.each(palettes)("%s, %s: its accent shows as a mark on either ground", (_, _mode, p) => {
+  expect(contrast(p.accent, p.surface), "on the grid").toBeGreaterThanOrEqual(MARK);
+  expect(contrast(p.accent, p.paper), "on the page").toBeGreaterThanOrEqual(MARK);
+});
+
 test.each(palettes)("%s, %s: a pie's colours tell apart beside each other", (_, _mode, p) => {
   for (const [a, b] of besides(p)) {
     const where = `${a} by ${b}`;

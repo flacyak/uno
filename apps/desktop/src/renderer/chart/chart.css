@@ -170,6 +170,60 @@
   min-height: 0;
 }
 
+/* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.
+ * bars.ts sets a bar's thickness, the window's ground before the next, the
+ * inset and the gap before a value. A label takes what it needs, up to
+ * `--label-most` of the width, and ends in an ellipsis past that. The values are
+ * mono, as the window is, so `--tip-room` in ch leaves the longest of them room
+ * past the longest bar. */
+.chart-bars {
+  --label-most: 40%;
+  display: grid;
+  grid-template-columns: fit-content(var(--label-most)) minmax(0, 1fr);
+  grid-auto-rows: var(--bar-thick);
+  gap: var(--bar-gap) 8px;
+  align-items: center;
+  padding: var(--bars-inset);
+  font-size: 11px;
+}
+
+.chart-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-bar-track {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  gap: var(--tip-gap);
+}
+
+/* The dataviz skill's bar: square at the baseline and round at the data's end. */
+.chart-bar {
+  flex: none;
+  align-self: stretch;
+  width: calc(var(--share) * (100% - var(--tip-room) - var(--tip-gap)));
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+}
+
+/* A value wears ink, never its bar's colour. */
+.chart-bar-tip {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A forced palette would take the bars' colour away, so they wear the text's. */
+@media (forced-colors: active) {
+  .chart-bar {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+}
+
 /* What scrolls inside a window fills the plot, and window.ts gives it the wheel
  * until it reaches its end. It stands over the right edge's zone, as the grip
  * does, so its scrollbar keeps the pointer. */
