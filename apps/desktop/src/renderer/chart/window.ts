@@ -2,6 +2,11 @@
  * @fileoverview A chart's window: the dialogs' box, with a head that says what
  * the chart shows, a round × of the window's own kind, and a caption that ends
  * in a grip. The layer stands it in the room and says which chart it shows.
+ *
+ * A pointer on the head moves the window, and one on the grip or an edge
+ * resizes it. It follows the pointer alone until the drop, which stores where
+ * it stands, so a window put back has changed nothing. An arrow stores a step
+ * at once. A place asks nothing of the engine and marks nothing unsaved.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -10,7 +15,7 @@ import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
-import { nudged, placeOf, placed, tucks } from "./place.ts";
+import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
@@ -25,6 +30,9 @@ const GRIP =
   '<path d="M10 3l-7 7M10 7l-3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
   "</svg>";
 
+/** A pointer's `button` for the left button, a finger or a pen's tip. */
+const PRIMARY_BUTTON = 0;
+
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
 let made = 0;
@@ -37,8 +45,30 @@ export interface Stage {
   move(id: string, place: ChartPlace): void;
   /** Stands every window where its chart says. */
   draw(): void;
+  /** Stands `box` over the other windows. */
+  raise(box: HTMLElement): void;
   /** Gives the keys back to the grid. */
   leave(): void;
+}
+
+/** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
+type Follow = (from: Rect, dx: number, dy: number, room: Room) => Rect;
+
+/** A pointer that holds a window. */
+interface Hold {
+  /** The pointer's id. */
+  pointer: number;
+  /** The element that holds its capture. */
+  zone: HTMLElement;
+  /** Where it took hold, in the page's CSS px. */
+  x: number;
+  y: number;
+  /** The rect the window stood at then. */
+  from: Rect;
+  /** What it does to the window. */
+  follow: Follow;
+  /** The rect it has taken the window to, once it moves. */
+  to?: Rect;
 }
 
 /** madeTitle gives the title a plot makes, in the app's language. */
@@ -69,6 +99,8 @@ export class ChartWindow {
   private readonly title = el("span", "chart-title");
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
+  /** The pointer that holds the window, while one does. */
+  private hold: Hold | undefined;
 
   constructor(
     /** The chart the window shows, as the layer last said. */
@@ -87,19 +119,39 @@ export class ChartWindow {
 
     const head = el("div", "col-head chart-head");
     head.append(this.title, x);
+    head.addEventListener("pointerdown", (e) => {
+      const onButton = e.target instanceof Element && e.target.closest("button") !== null;
+      if (!onButton) this.take(e, head, dragged);
+    });
 
     const grip = el("span", "chart-grip");
     grip.innerHTML = GRIP;
     grip.setAttribute("aria-hidden", "true");
+    grip.addEventListener("pointerdown", (e) => this.take(e, grip, stretched));
     caption.append(grip);
+
+    const right = el("div", "chart-edge chart-edge-right");
+    right.addEventListener("pointerdown", (e) => {
+      this.take(e, right, (from, dx, _dy, room) => stretched(from, dx, 0, room));
+    });
+    const foot = el("div", "chart-edge chart-edge-foot");
+    foot.addEventListener("pointerdown", (e) => {
+      this.take(e, foot, (from, _dx, dy, room) => stretched(from, 0, dy, room));
+    });
 
     this.box.tabIndex = -1;
     this.box.setAttribute("role", "group");
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, el("div", "chart-plot"), caption);
+    this.box.append(head, el("div", "chart-plot"), caption, right, foot);
+    // A pointer's capture sends these to the zone it pressed, and they bubble here.
+    this.box.addEventListener("pointermove", (e) => this.follow(e));
+    this.box.addEventListener("pointerup", (e) => this.drop(e));
+    this.box.addEventListener("pointercancel", (e) => this.lost(e));
+    this.box.addEventListener("lostpointercapture", (e) => this.lost(e));
     this.box.addEventListener("keydown", (e) => this.key(e));
+    this.box.addEventListener("focusin", () => stage.raise(this.box));
   }
 
   /** show writes what `chart` says in the head, after `source` if it has one. */
@@ -112,14 +164,62 @@ export class ChartWindow {
     this.title.classList.toggle("from-file", chart.title !== "");
   }
 
-  /** stand puts the window at `rect`. */
+  /** stand puts the window at `rect`, unless a pointer holds it. */
   stand(rect: Rect): void {
-    standAt(this.box, rect);
+    if (this.hold === undefined) standAt(this.box, rect);
   }
 
   /** relabel writes the window's own words in the current language. */
   relabel(): void {
     this.words.write();
+  }
+
+  /**
+   * take answers a press on `zone`, which holds the pointer from then on. The
+   * press commits an open cell, through its blur. It stays uncancelled, so its
+   * mousedown reaches what closes an open menu or form. A tucked window takes
+   * the keys and stays, as its rect has no place.
+   */
+  private take(e: PointerEvent, zone: HTMLElement, follow: Follow): void {
+    if (e.button !== PRIMARY_BUTTON || this.hold !== undefined) return;
+    this.box.focus({ preventScroll: true });
+    const room = this.stage.room();
+    if (tucks(room)) return;
+    zone.setPointerCapture(e.pointerId);
+    const from = placed(this.chart.place, room);
+    this.hold = { pointer: e.pointerId, zone, x: e.clientX, y: e.clientY, from, follow };
+  }
+
+  /** follow stands the window where its pointer has gone, in the room as it is now. */
+  private follow(e: PointerEvent): void {
+    const hold = this.hold;
+    if (hold?.pointer !== e.pointerId) return;
+    hold.to = hold.follow(hold.from, e.clientX - hold.x, e.clientY - hold.y, this.stage.room());
+    standAt(this.box, hold.to);
+  }
+
+  /** drop stores where the pointer left the window. A click stores nothing. */
+  private drop(e: PointerEvent): void {
+    if (this.hold?.pointer !== e.pointerId) return;
+    const { to } = this.hold;
+    this.hold = undefined;
+    if (to !== undefined) this.store(to, this.stage.room());
+    this.stage.draw();
+  }
+
+  /**
+   * lost answers a pointer taken away with no drop, which puts the window back.
+   * A finger's capture starts on what it pressed, which can sit inside the zone,
+   * so only the zone's own loss counts: the first is the move to the zone.
+   */
+  private lost(e: PointerEvent): void {
+    if (this.hold?.pointer === e.pointerId && e.target === this.hold.zone) this.putBack();
+  }
+
+  /** putBack lets go of the pointer's rect, so the window draws from its place. */
+  private putBack(): void {
+    this.hold = undefined;
+    this.stage.draw();
   }
 
   /** store keeps `rect` as the chart's place. A tucked window's rect has none. */
@@ -129,21 +229,28 @@ export class ChartWindow {
 
   /** key answers Escape and the arrows, and leaves any other key to the shell. */
   private key(e: KeyboardEvent): void {
-    if (e.key === "Escape") this.stage.leave();
+    if (e.key === "Escape") this.escape();
     else if (!this.nudge(pressOf(e))) return;
     e.preventDefault();
     e.stopPropagation();
   }
 
+  /** escape puts back what a pointer holds, or else gives the grid the keys. */
+  private escape(): void {
+    if (this.hold === undefined) this.stage.leave();
+    else this.putBack();
+  }
+
   /**
    * nudge stands the window where `press` steps it, and returns whether it is
-   * an arrow.
+   * an arrow. While a pointer holds the window an arrow does nothing, so Escape
+   * still puts it back where the pointer found it.
    */
   private nudge(press: Press): boolean {
     const room = this.stage.room();
     const to = nudged(placed(this.chart.place, room), press, room);
     if (to === undefined) return false;
-    this.store(to, room);
+    if (this.hold === undefined) this.store(to, room);
     this.stage.draw();
     return true;
   }

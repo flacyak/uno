@@ -46,12 +46,21 @@
   visibility: hidden;
 }
 
-/* The dialogs' box (formula.css, settings.css). The radius clips the head. */
+/* The dialogs' box (formula.css, settings.css). It clips at its border's outer
+ * edge, so the resize zones take the border, and the head rounds itself inside
+ * it. `--edge-hit` is how far a resize zone reaches in from an edge, and
+ * `--grip-reach` how far the grip's hit area stands past its 12 px box: the
+ * caption's 5 px under it and the border. A window isolates what stacks inside
+ * it, so no grip stands over a window on top. No press on it starts a selection. */
 .chart {
+  --edge-hit: 6px;
+  --grip-reach: 6px;
   position: absolute;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   overflow: clip;
+  overflow-clip-margin: border-box;
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--dialog-radius);
@@ -60,7 +69,17 @@
   font-size: 12px;
   color: var(--ink);
   pointer-events: auto;
+  user-select: none;
   -webkit-app-region: no-drag;
+}
+
+/* A finger gets 24 px at each edge and from the corner: the grip's 12 px, the
+ * 4 px past it to the window's edge, and this reach. */
+@media (pointer: coarse) {
+  .chart {
+    --edge-hit: 24px;
+    --grip-reach: 8px;
+  }
 }
 
 /* Tucked heads read as one stack. They are square where they meet, so their rule
@@ -75,7 +94,10 @@
   box-shadow: var(--dialog-shadow);
 }
 
+/* A tucked window has no zones, so it clips inside its border, and its head stays
+ * square for the corners the stack leaves off. */
 .charts.tucked .chart {
+  overflow-clip-margin: padding-box;
   box-shadow: none;
 }
 
@@ -90,10 +112,9 @@
 }
 
 /* The border says which window has the keys. It is the formula primary's mix,
- * which shows on a dark ground where --rule barely does. The window stands over
- * its neighbours, so all of the border shows. */
+ * which shows on a dark ground where --rule barely does. layer.ts raises the
+ * window over its neighbours, so all of the border shows. */
 .chart:focus-within {
-  z-index: 1;
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
@@ -101,11 +122,22 @@
   outline: none;
 }
 
-/* A column's head, whose drag region would take the pointer from the chart. */
+/* A column's head, whose drag region would take the pointer from the chart.
+ * touch-action keeps a finger or a pen on the window, where it would pan. */
 .chart-head {
+  --inner-radius: calc(var(--dialog-radius) - var(--window-border));
   gap: 8px;
   padding: 0 0 0 10px;
+  border-radius: var(--inner-radius) var(--inner-radius) 0 0;
+  cursor: move;
+  touch-action: none;
   -webkit-app-region: no-drag;
+}
+
+/* A tucked window stays where the room puts it. */
+.charts.tucked .chart-head {
+  border-radius: 0;
+  cursor: default;
 }
 
 .chart-title {
@@ -150,17 +182,53 @@
   border-top: 1px solid var(--rule);
   font-size: 11px;
   color: var(--ink-3);
-  user-select: none;
 }
 
-/* The scrollbar thumb's two colours (grid.css). */
+/* The scrollbar thumb's two colours (grid.css). It stands over the edges, and
+ * takes the corner past it from both, since a corner means both ways. */
 .chart-grip {
+  position: relative;
+  z-index: 1;
   display: flex;
   color: color-mix(in srgb, var(--ink-3) 50%, transparent);
+  cursor: nwse-resize;
+  touch-action: none;
 }
 
 .chart-grip:hover {
   color: var(--ink-3);
+}
+
+.chart-grip::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--grip-reach));
+}
+
+/* Both stand on the window's border, the line a person aims at. */
+.chart-edge {
+  position: absolute;
+  right: calc(-1 * var(--window-border));
+  bottom: calc(-1 * var(--window-border));
+  touch-action: none;
+}
+
+/* It starts under the head, so the × keeps the pointer. */
+.chart-edge-right {
+  top: var(--row-h);
+  width: var(--edge-hit);
+  cursor: ew-resize;
+}
+
+.chart-edge-foot {
+  left: 0;
+  height: var(--edge-hit);
+  cursor: ns-resize;
+}
+
+/* A tucked window shows its head alone, and has no foot to take hold of. */
+.charts.tucked .chart-edge {
+  display: none;
 }
 
 /* In the grid's scroller, it fills what the bars leave and lets the pointer by. */

@@ -14,6 +14,7 @@ import type { BrowserWindow } from "electron";
 import { ask } from "@main/ask";
 import { through } from "@main/driven";
 import { AGAIN } from "./again.ts";
+import { CHART_MOVES } from "./chart-moves.ts";
 import { CHARTS } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
@@ -65,6 +66,7 @@ const CHECKS: Check[] = [
   ...SIDEBAR,
   ...AGAIN,
   ...CHARTS,
+  ...CHART_MOVES,
 ];
 
 /**
@@ -195,15 +197,36 @@ function reshape(win: BrowserWindow, zoom: number, width: number, height: number
   win.setMaximumSize(width, height);
 }
 
-/** hover moves the pointer to the middle of what `selector` picks. */
-async function hover(win: BrowserWindow, selector: string): Promise<void> {
-  const [x, y] = (await win.webContents.executeJavaScript(`
+/** middle gives the middle of what `selector` picks, in whole px. */
+function middle(win: BrowserWindow, selector: string): Promise<[number, number]> {
+  return win.webContents.executeJavaScript(`
     (() => {
       const at = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
       return [at.left + at.width / 2, at.top + at.height / 2].map(Math.round);
     })()
-  `)) as [number, number];
+  `) as Promise<[number, number]>;
+}
+
+/** hover moves the pointer to the middle of what `selector` picks. */
+async function hover(win: BrowserWindow, selector: string): Promise<void> {
+  const [x, y] = await middle(win, selector);
   through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
+}
+
+/** drag takes hold of what `selector` picks and carries it `by` CSS px. */
+async function drag(
+  win: BrowserWindow,
+  { selector, by, held = false }: NonNullable<Check["drag"]>,
+): Promise<void> {
+  const [x, y] = await middle(win, selector);
+  const to = { x: x + by.x, y: y + by.y };
+  const left = { button: "left", clickCount: 1 } as const;
+  through(win, () => {
+    win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+    win.webContents.sendInputEvent({ type: "mouseDown", x, y, ...left });
+    win.webContents.sendInputEvent({ type: "mouseMove", ...to, modifiers: ["leftbuttondown"] });
+    if (!held) win.webContents.sendInputEvent({ type: "mouseUp", ...to, ...left });
+  });
 }
 
 /**
@@ -265,6 +288,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
         else send();
       }
       if (check.hover !== undefined) await hover(win, check.hover);
+      if (check.drag !== undefined) await drag(win, check.drag);
       const failure =
         check.run !== undefined
           ? await check.run(page)

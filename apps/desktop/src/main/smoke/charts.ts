@@ -34,7 +34,7 @@ const MENU_ZOOM = 1.2 ** 2.5;
 const MENU_ZOOM_WIDTH = 800;
 
 /** How far two rects can read apart, past Chromium's layout unit of 1/64 px. */
-const RECT_SLACK = 0.02;
+export const RECT_SLACK = 0.02;
 
 /** A point over the grid's tenth row, left of the windows, and one over the top window. */
 const BESIDE = { x: 400, y: 300 };
@@ -127,7 +127,7 @@ const CHROME = `
 `;
 
 /** Helpers: the boxes of the windows and the layer, and what the checks ask of them. */
-const GEOMETRY = `
+export const GEOMETRY = `
   const windows = () => [...document.querySelectorAll(".chart")].map((w) => w.getBoundingClientRect());
   const room = () => document.querySelector("#charts").getBoundingClientRect();
   const header = () => document.querySelector("thead").getBoundingClientRect();

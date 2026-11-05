@@ -1,10 +1,11 @@
 /**
  * @fileoverview The layer over the sheet: one window per chart, drawn from its
  * place in the room the sheet leaves, and placed again as the sheet resizes. A
- * window steps and resizes under the arrow keys.
+ * window moves and resizes under a pointer and the arrow keys.
  *
  * happy-dom has no layout, so each test says what layout would measure, and
- * fires the resize a ResizeObserver would.
+ * fires the resize a ResizeObserver would. Its pointer capture is bookkeeping
+ * only, so each test sends a pointer's events to the element that holds it.
  *
  * @vitest-environment happy-dom
  */
@@ -15,7 +16,15 @@ import type { Chart, ChartPlace } from "@document";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
-import { MIN_HEIGHT, MIN_WIDTH, NUDGE_PX, placeOf, placed } from "@renderer/chart/place";
+import {
+  MIN_HEIGHT,
+  MIN_WIDTH,
+  NUDGE_PX,
+  dragged,
+  placeOf,
+  placed,
+  stretched,
+} from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import { BARS, MOVED } from "./charted.ts";
@@ -39,8 +48,28 @@ const TOO_MANY_HEADS = Math.ceil(MIN_HEIGHT / HEAD) + 1;
 const FLUSH: Chart = BARS;
 const INSIDE: Chart = { ...BARS, id: "c2", place: MOVED };
 
+/** A chart over INSIDE. */
+const OVER: Chart = { ...INSIDE, id: "c3" };
+
 /** The name a workspace of several sources gives a window's source. */
 const SOURCE = "sales-q3";
+
+/** A room under the least height, which tucks every window to its head. */
+const TUCKING: Room = { w: ROOM.w, h: MIN_HEIGHT - 1 };
+
+/** Where a pointer takes hold, and a step that keeps INSIDE inside ROOM. */
+const HOLD = { x: 500, y: 100 };
+const STEP = { x: -60, y: 40 };
+
+/** How far past the room a pointer can go. */
+const FAR = ROOM.w + ROOM.h;
+
+/** The button that opens a context menu. */
+const SECONDARY = 2;
+
+/** The pointer a test holds a window with, and a second finger on it. */
+const POINTER = 1;
+const OTHER_POINTER = 2;
 
 /** What the layer reads of a workspace's charts, for a test to change. */
 interface Model {
@@ -57,8 +86,11 @@ const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(
 const titles = (): Array<string | null> =>
   [...document.querySelectorAll(".chart-title")].map((title) => title.textContent);
 
-/** The first window. */
+/** The first window, and the parts of it a pointer takes hold of. */
 const first = (): HTMLElement => windows()[0]!;
+const part = (selector: string): HTMLElement => first().querySelector<HTMLElement>(selector)!;
+const head = (): HTMLElement => part(".chart-head");
+const grip = (): HTMLElement => part(".chart-grip");
 
 /** Fires what a ResizeObserver on the sheet would. */
 let resized: () => void;
@@ -123,6 +155,32 @@ function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
+}
+
+/** Sends a pointer event to `at`, `x` and `y` px from where the pointer took hold. */
+function pointer(
+  type: string,
+  at: Element,
+  x = 0,
+  y = 0,
+  more: PointerEventInit = {},
+): PointerEvent {
+  const event = new PointerEvent(type, {
+    pointerId: POINTER,
+    clientX: HOLD.x + x,
+    clientY: HOLD.y + y,
+    bubbles: true,
+    cancelable: true,
+    ...more,
+  });
+  at.dispatchEvent(event);
+  return event;
+}
+
+/** Takes hold of `zone` and carries it by STEP. */
+function carry(zone: HTMLElement): void {
+  pointer("pointerdown", zone);
+  pointer("pointermove", zone, STEP.x, STEP.y);
 }
 
 /** Sends a keydown to the first window. */
@@ -431,4 +489,253 @@ test("Escape gives the keys back to the grid, and goes no further", () => {
   expect(key("Escape").defaultPrevented).toBe(true);
   expect(leave).toHaveBeenCalledOnce();
   expect(shell).not.toHaveBeenCalled();
+});
+
+test("a window follows its head from where the pointer took hold, kept in the room", () => {
+  shown(INSIDE);
+  const from = placed(MOVED, ROOM);
+  carry(head());
+  expect(drawn(first())).toStrictEqual(dragged(from, STEP.x, STEP.y, ROOM));
+
+  pointer("pointermove", head(), -FAR, -FAR);
+  expect(drawn(first())).toStrictEqual({ ...from, x: 0, y: 0 });
+});
+
+test("a drop stores where the window stands, once, and nothing before it", () => {
+  const { model } = shown(INSIDE);
+  const to = dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM);
+  carry(head());
+  expect(model.move).not.toHaveBeenCalled();
+
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  expect(model.move).toHaveBeenCalledOnce();
+  expect(model.all[0]!.place).toStrictEqual(placeOf(to, ROOM, MOVED));
+  expect(drawn(first()).x).toBeCloseTo(to.x);
+});
+
+test("a press takes the pointer and the keys, and leaves its mousedown to any popup", () => {
+  shown(INSIDE);
+  const focus = vi.spyOn(first(), "focus");
+  const press = pointer("pointerdown", head());
+  expect(press.defaultPrevented).toBe(false);
+  expect(head().hasPointerCapture(POINTER)).toBe(true);
+  expect(document.activeElement).toBe(first());
+  expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+});
+
+test("a click on a head stores nothing", () => {
+  const { model } = shown(INSIDE);
+  pointer("pointerdown", head());
+  pointer("pointerup", head());
+  expect(model.move).not.toHaveBeenCalled();
+});
+
+test("only the primary button takes hold of a window", () => {
+  shown(INSIDE);
+  pointer("pointerdown", head(), 0, 0, { button: SECONDARY });
+  pointer("pointermove", head(), STEP.x, STEP.y);
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+  expect(head().hasPointerCapture(POINTER)).toBe(false);
+});
+
+test("a head's buttons keep the pointer, and the window stays", () => {
+  shown(INSIDE);
+  const x = part(".round-x");
+  pointer("pointerdown", x);
+  pointer("pointermove", x, STEP.x, STEP.y);
+  expect(head().hasPointerCapture(POINTER)).toBe(false);
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+});
+
+test("a drag over a room that shrinks keeps to the room as it is now", () => {
+  const { model } = shown(INSIDE);
+  const smaller = { w: 700, h: 400 };
+  carry(head());
+  roomIs(smaller);
+  pointer("pointermove", head(), FAR, FAR);
+  const to = {
+    ...placed(MOVED, ROOM),
+    x: smaller.w - MOVED.width,
+    y: smaller.h - MOVED.height,
+  };
+  expect(drawn(first())).toStrictEqual(to);
+
+  pointer("pointerup", head(), FAR, FAR);
+  expect(model.all[0]!.place).toStrictEqual(placeOf(to, smaller, MOVED));
+});
+
+test("a room that tucks under a drag stores nothing, and the window tucks at the drop", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  roomIs(TUCKING);
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  expect(model.move).not.toHaveBeenCalled();
+  expect(drawn(first()).width).toBe(TUCKING.w);
+});
+
+test("a tucked head takes the keys and stores nothing, from the pointer or an arrow", () => {
+  const { model } = shown(INSIDE);
+  resize(TUCKING);
+  pointer("pointerdown", head());
+  expect(document.activeElement).toBe(first());
+  expect(head().hasPointerCapture(POINTER)).toBe(false);
+
+  pointer("pointermove", head(), STEP.x, STEP.y);
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  key("ArrowRight");
+  expect(model.move).not.toHaveBeenCalled();
+});
+
+test("Escape puts a drag back and keeps the window's keys, and the rest of it does nothing", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  key("Escape");
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+  expect(leave).not.toHaveBeenCalled();
+
+  pointer("pointermove", head(), -FAR, -FAR);
+  pointer("pointerup", head(), -FAR, -FAR);
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+  expect(model.move).not.toHaveBeenCalled();
+});
+
+test.each(["pointercancel", "lostpointercapture"])(
+  "a pointer lost by %s puts the window back, and the next press takes hold",
+  (lost) => {
+    const { model } = shown(INSIDE);
+    carry(head());
+    pointer(lost, head());
+    expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+    expect(model.move).not.toHaveBeenCalled();
+
+    carry(head());
+    expect(drawn(first())).toStrictEqual(dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM));
+  },
+);
+
+test("a draw leaves a window with the pointer that holds it", () => {
+  const { layer } = shown(INSIDE);
+  carry(head());
+  const held = drawn(first());
+  layer.draw();
+  expect(drawn(first())).toStrictEqual(held);
+});
+
+test("an arrow does nothing to a window a pointer holds", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  key("ArrowRight");
+  expect(model.move).not.toHaveBeenCalled();
+  key("Escape");
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+});
+
+test("a second pointer changes nothing while the first holds the window", () => {
+  const { model } = shown(INSIDE);
+  const to = dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM);
+  carry(head());
+  const second = { pointerId: OTHER_POINTER };
+  pointer("pointerdown", head(), 0, 0, second);
+  pointer("pointermove", head(), FAR, FAR, second);
+  pointer("pointerup", head(), FAR, FAR, second);
+  pointer("pointercancel", head(), FAR, FAR, second);
+  expect(drawn(first())).toStrictEqual(to);
+  expect(model.move).not.toHaveBeenCalled();
+
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  expect(model.move).toHaveBeenCalledOnce();
+});
+
+test("a capture moving from what a finger pressed to the head keeps the window held", () => {
+  shown(INSIDE);
+  const title = part(".chart-title");
+  pointer("pointerdown", title);
+  pointer("lostpointercapture", title);
+  pointer("pointermove", head(), STEP.x, STEP.y);
+  expect(drawn(first())).toStrictEqual(dragged(placed(MOVED, ROOM), STEP.x, STEP.y, ROOM));
+});
+
+test("the capture ending after a drop changes nothing", () => {
+  const { model } = shown(INSIDE);
+  carry(head());
+  pointer("pointerup", head(), STEP.x, STEP.y);
+  const { place } = model.all[0]!;
+  pointer("lostpointercapture", head());
+  expect(model.all[0]!.place).toBe(place);
+  expect(model.move).toHaveBeenCalledOnce();
+});
+
+test.each<[string, string, number, number]>([
+  ["the grip resizes both ways", ".chart-grip", STEP.x, STEP.y],
+  ["the right edge resizes across", ".chart-edge-right", STEP.x, 0],
+  ["the foot edge resizes down", ".chart-edge-foot", 0, STEP.y],
+])("%s, and a drop stores it", (_name, zone, dx, dy) => {
+  const { model } = shown(INSIDE);
+  const to = stretched(placed(MOVED, ROOM), dx, dy, ROOM);
+  carry(part(zone));
+  expect(drawn(first())).toStrictEqual(to);
+  expect(part(zone).hasPointerCapture(POINTER)).toBe(true);
+  expect(document.activeElement).toBe(first());
+
+  pointer("pointerup", part(zone), STEP.x, STEP.y);
+  expect(model.all[0]!.place).toStrictEqual(placeOf(to, ROOM, MOVED));
+});
+
+test("a press in the grip's svg takes hold of the grip", () => {
+  shown(INSIDE);
+  pointer("pointerdown", grip().querySelector("svg")!);
+  expect(grip().hasPointerCapture(POINTER)).toBe(true);
+});
+
+test("a resize holds at the least size and at the room's edge as it goes", () => {
+  shown(INSIDE);
+  const from = placed(MOVED, ROOM);
+  pointer("pointerdown", grip());
+  pointer("pointermove", grip(), -FAR, -FAR);
+  expect(drawn(first())).toStrictEqual({ ...from, width: MIN_WIDTH, height: MIN_HEIGHT });
+
+  pointer("pointermove", grip(), FAR, FAR);
+  const most = { ...from, width: ROOM.w - from.x, height: ROOM.h - from.y };
+  expect(drawn(first())).toStrictEqual(most);
+});
+
+test("Escape puts a resize back", () => {
+  shown(INSIDE);
+  carry(grip());
+  key("Escape");
+  expect(drawn(first())).toStrictEqual(placed(MOVED, ROOM));
+});
+
+test("a window with the keys stands over the others, with the windows in their order", () => {
+  shown(INSIDE, OVER);
+  const [under, over] = windows() as [HTMLElement, HTMLElement];
+  const stack = (at: HTMLElement): number => Number(at.style.zIndex);
+
+  under.focus();
+  expect(stack(under)).toBeGreaterThan(stack(over));
+  over.focus();
+  expect(stack(over)).toBeGreaterThan(stack(under));
+  under.focus();
+  expect(stack(under)).toBeGreaterThan(stack(over));
+
+  expect(windows()).toStrictEqual([under, over]);
+  expect(document.activeElement).toBe(under);
+});
+
+test("a window stays over the others once it has given the keys back", () => {
+  const { layer } = shown(INSIDE, OVER);
+  const [under, over] = windows() as [HTMLElement, HTMLElement];
+  over.focus();
+  under.focus();
+  under.blur();
+  layer.draw();
+  expect(Number(under.style.zIndex)).toBeGreaterThan(Number(over.style.zIndex));
+});
+
+test("a button in a window raises it as well", () => {
+  shown(INSIDE, OVER);
+  const [under, over] = windows() as [HTMLElement, HTMLElement];
+  over.focus();
+  under.querySelector<HTMLElement>(".round-x")!.focus();
+  expect(Number(under.style.zIndex)).toBeGreaterThan(Number(over.style.zIndex));
 });

@@ -31,6 +31,7 @@ const NO_LAYER: Stage = {
   room: () => ({ w: 0, h: 0 }),
   move: () => undefined,
   draw: () => undefined,
+  raise: () => undefined,
   leave: () => undefined,
 };
 
@@ -159,6 +160,8 @@ test("the head and the caption are drawn, with a grip that says nothing", () => 
     "col-head chart-head",
     "chart-plot",
     "chart-caption",
+    "chart-edge chart-edge-right",
+    "chart-edge chart-edge-foot",
   ]);
   expect(box.querySelector(".chart-caption .chart-grip")?.getAttribute("aria-hidden")).toBe("true");
 });
