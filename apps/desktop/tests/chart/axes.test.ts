@@ -1,12 +1,14 @@
 /**
  * @fileoverview An axis's ticks: 1, 2 or 5 times a power of ten apart, 3 to 5
  * of them, from at or below the least value to at or above the most, each the
- * decimal it stands for.
+ * decimal it stands for. Its labels, in full or compactly, one way per axis, in
+ * each language, and the room they take.
  */
 
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 
-import { axis } from "@renderer/chart/axes";
+import { baseLocale, setLocale } from "@paraglide/runtime";
+import { axis, gutter } from "@renderer/chart/axes";
 
 /** The fewest and most ticks an axis takes. */
 const TICKS_LEAST = 3;
@@ -27,6 +29,16 @@ const SURE_DIGITS = 15;
 
 /** How far a step or an end may stray, in steps: a double's error, far short of a step. */
 const STRAY = 1e-6;
+
+/** The no-break space Intl writes between a number and its unit, so a label never wraps there. */
+const NBSP = "\u00a0";
+
+/** The most decimals Intl writes. */
+const DECIMALS_MOST = 100;
+
+afterEach(() => {
+  void setLocale(baseLocale, { reload: false });
+});
 
 test("an axis ticks 3 to 5 times, 1, 2 or 5 times a power of ten apart, over every value", () => {
   for (let power = POWER_LEAST; power <= POWER_MOST; power++) {
@@ -75,4 +87,39 @@ test("an axis over values a double barely tells apart runs as over one of them",
   expect(axis(0.1, 0.10000000000000002).ticks).toEqual([0, 0.05, 0.1, 0.15, 0.2]);
   expect(axis(1.1, 1.1000000000000003).ticks).toEqual([0, 1, 2, 3]);
   expect(axis(100.1, 100.10000000000001).ticks).toEqual([0, 100, 200, 300]);
+});
+
+test("an axis short of 10,000 writes its ticks in full, as each language does", () => {
+  expect(axis(0, 4_812).labels).toEqual(["0", "2,000", "4,000", "6,000"]);
+  void setLocale("es", { reload: false });
+  expect(axis(0, 4_812).labels).toEqual(["0", "2000", "4000", "6000"]);
+});
+
+test("an axis that reaches 10,000 writes every tick compactly, as each language does", () => {
+  expect(axis(0, 9_500).labels).toEqual(["0", "5K", "10K"]);
+  expect(axis(-25_000, 0).labels).toEqual(["-30K", "-20K", "-10K", "0"]);
+  void setLocale("es", { reload: false });
+  expect(axis(0, 9_500).labels).toEqual(["0", `5${NBSP}mil`, `10${NBSP}mil`]);
+});
+
+test("an axis with a tick compact() would round writes every tick in full", () => {
+  // 1,050,000 reads 1.1M compactly.
+  const labels = ["900,000", "950,000", "1,000,000", "1,050,000"];
+  expect(axis(900_000, 1_050_000).labels).toEqual(labels);
+});
+
+test("an axis writes every tick to its step's decimals, as each language does", () => {
+  expect(axis(0, 0.9).labels).toEqual(["0.0", "0.5", "1.0"]);
+  expect(axis(0.0001, 0.0004).labels).toEqual(["0.0001", "0.0002", "0.0003", "0.0004"]);
+  // Past the most decimals Intl writes, a step is written to those, so every tick reads 0.
+  expect(new Set(axis(1e-120, 3e-120).labels)).toEqual(new Set([`0.${"0".repeat(DECIMALS_MOST)}`]));
+  void setLocale("es", { reload: false });
+  expect(axis(0, 0.9).labels).toEqual(["0,0", "0,5", "1,0"]);
+});
+
+test("a gutter is as wide as the language writes the widest tick", () => {
+  // An axis to 2,500,000,000 ends on 3B in English, and 3000 M in Spanish.
+  expect(gutter(axis(0, 2_500_000_000))).toBe("3B".length);
+  void setLocale("es", { reload: false });
+  expect(gutter(axis(0, 2_500_000_000))).toBe(`3000${NBSP}M`.length);
 });
