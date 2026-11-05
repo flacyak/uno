@@ -14,7 +14,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
-import type { GroupsTally } from "@engine";
+import type { GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
@@ -30,7 +30,7 @@ import {
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
-import { BARS, MOVED, SHORT_ROWS, holding } from "./charted.ts";
+import { BARS, MOVED, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
 
@@ -190,6 +190,26 @@ function heardOf(...values: string[]): Heard {
     others: none,
     below: none,
     rest: none,
+    skipped: { blank: 0, unparsed: 0 },
+  };
+  return { state: "fine", latest: tally, complete: tally };
+}
+
+/** Units and revenue of two rows of the sales export, as a scatter's tally sends them. */
+const SENT = { x: [180, 999], y: [7200, 39960] };
+
+/** What SCATTER's chart heard once its source was read: SENT, and no other row. */
+function pointsHeard(): Heard {
+  const plotted = SENT.x.length;
+  const tally: SampleTally = {
+    t: "sample",
+    plot: SCATTER.plot,
+    coverage: { rows: plotted, total: plotted, complete: true },
+    x: SENT.x,
+    y: SENT.y,
+    plotted,
+    least: { x: SENT.x[0]!, y: SENT.y[0]! },
+    most: { x: SENT.x[1]!, y: SENT.y[1]! },
     skipped: { blank: 0, unparsed: 0 },
   };
   return { state: "fine", latest: tally, complete: tally };
@@ -457,6 +477,13 @@ test("a window draws its bars again in the frame its plot resizes", () => {
   Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
   plotResized();
   expect(labels()).toStrictEqual(["North", "South"]);
+});
+
+test("a window draws a scatter's points from what its chart heard", async () => {
+  const { model } = shown(SCATTER);
+  model.heard = () => pointsHeard();
+  await frame();
+  expect(document.querySelectorAll(".chart-scatter .chart-point")).toHaveLength(SENT.x.length);
 });
 
 test("a room too narrow tucks every window to its head, stacked from the top", () => {

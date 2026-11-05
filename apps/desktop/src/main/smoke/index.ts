@@ -16,7 +16,7 @@ import { through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
 import { CHART_WHEEL } from "./chart-wheel.ts";
-import { CHARTS, CHART_SIGNED } from "./charts.ts";
+import { CHARTS, CHART_SCATTER, CHART_SIGNED } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
@@ -70,6 +70,7 @@ const CHECKS: Check[] = [
   ...CHART_MOVES,
   ...CHART_WHEEL,
   ...CHART_SIGNED,
+  ...CHART_SCATTER,
 ];
 
 /**

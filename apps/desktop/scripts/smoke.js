@@ -199,6 +199,42 @@ await writeFile(
   }),
 );
 
+// A workspace of one chart, the fixture's revenue against its units, in a new
+// window's size. It plots more rows than a scatter draws, so it samples them.
+// Its rows and the columns it charts are fixture.ts's ROWS, UNITS and REVENUE,
+// of the six columns that file names.
+const scattered = join(scratch, "sent", "scattered.uno");
+const salesSource = {
+  id: "sales",
+  name: "sales-q3.csv",
+  path: fixture,
+  rows: 4812,
+  cols: 6,
+  state: { active: { row: 0, col: 0 } },
+};
+const against = { t: "scatter", x: { col: 4, header: "units" }, y: { col: 5, header: "revenue" } };
+await writeFile(
+  scattered,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [salesSource],
+    active: salesSource.id,
+    log: [],
+    charts: [
+      {
+        id: "c1",
+        source: salesSource.id,
+        plot: against,
+        title: "",
+        refresh: 0,
+        place: { ...chartSize, x: 0, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: scattered,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -281,6 +317,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_SENT: sent,
     UNO_SMOKE_CHARTED: charted,
     UNO_SMOKE_SIGNED: signed,
+    UNO_SMOKE_SCATTERED: scattered,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits

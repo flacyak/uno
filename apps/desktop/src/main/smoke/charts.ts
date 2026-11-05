@@ -5,15 +5,18 @@
  * leave too little room. None of it marks the workspace unsaved, and the grid
  * still takes the pointer and the keys beside a window. In light and dark, a
  * window reads as the settings menu's box, the sidebar's band and the window's ×.
- * Its bars draw once its chart's tally completes, as bars.ts sizes them.
+ * Its bars draw once its chart's tally completes, as bars.ts sizes them, and a
+ * scatter's points stand inside its axes, against labels on their gridlines.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
- * right edge, one at the top and one at the foot. The last opens another, whose
- * sums leave a window of the least width too little room for bars and values.
+ * right edge, one at the top and one at the foot. The last two open others: one
+ * whose sums leave a window of the least width too little room for bars and
+ * values, and one of a scatter.
  */
 
-import { SPAN_LEAST } from "@renderer/chart/bars";
+import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
+import { POINT_OPACITY } from "@renderer/chart/scatter";
 import { DEFAULT_THEME } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
 
@@ -23,6 +26,9 @@ const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
 /** The one it wrote of a sum per region, and its regions, whose values run long on both sides of zero. */
 const SIGNED = process.env["UNO_SMOKE_SIGNED"] ?? "";
 const SIGNED_REGIONS = 4;
+
+/** The one it wrote of a scatter of the fixture's revenue against its units. */
+const SCATTERED = process.env["UNO_SMOKE_SCATTERED"] ?? "";
 
 /** The zoom that halves the room. */
 const DOUBLE_ZOOM = 2;
@@ -622,7 +628,7 @@ export const CHARTS: Check[] = [
   },
 ];
 
-/** The run's last check, as it opens a workspace in place of the one the others read. */
+/** A check near the run's end, as it opens a workspace in place of the one the others read. */
 export const CHART_SIGNED: Check[] = [
   {
     name: "a sum with long values on both sides of zero keeps its bars at the least width, and its values inside their tracks",
@@ -640,6 +646,46 @@ export const CHART_SIGNED: Check[] = [
       if (span < ${SPAN_LEAST}) return "the bars share " + span + " px of tracks " + drawn[0].line.width + " px wide";
       const out = drawn.find(({ line, tip }) => tip !== undefined && (tip.left < line.left || tip.right > line.right));
       return out === undefined ? "" : "a value runs from " + out.tip.left + " to " + out.tip.right + ", past its track's " + out.line.right;
+    `,
+  },
+];
+
+/** A check after CHART_SIGNED, as it opens a workspace of a scatter in place of that one. */
+export const CHART_SCATTER: Check[] = [
+  {
+    name: "a scatter stands its points inside its axes in the accent, each tick's label centred on its gridline and clear of the others",
+    send: ["menu:open-path", SCATTERED],
+    shot: "chart-scatter",
+    script: `
+      ${GEOMETRY}
+      ${CHROME}
+      const all = (selector) => [...document.querySelectorAll(selector)];
+      if (!(await arrives(() => all(".chart-point").length > 0))) return "the plot draws no points";
+      const rect = (at) => at.getBoundingClientRect();
+      const middle = (at) => ({ x: (at.left + at.right) / 2, y: (at.top + at.bottom) / 2 });
+      const off = (a, b) => Math.abs(a - b) > ${RECT_SLACK};
+      const grown = (at, by) => new DOMRect(at.left - by, at.top - by, at.width + 2 * by, at.height + 2 * by);
+      const axes = rect(document.querySelector(".chart-points"));
+      const centres = all(".chart-point").map((point) => middle(rect(point)));
+      const strayed = centres.find(({ x, y }) => !within(new DOMRect(x, y), grown(axes, ${RECT_SLACK})));
+      if (strayed !== undefined) return "a point stands at " + strayed.x + " " + strayed.y + ", past axes at " + edges(axes);
+      for (const side of ["x", "y"]) {
+        const lines = all(".chart-grid." + side).map((line) => middle(rect(line))[side]);
+        const labels = all(".chart-ticks." + side + " .chart-tick").map((label) => middle(rect(label))[side]);
+        const wrong = labels.findIndex((at, i) => off(at, lines[i]));
+        if (lines.length < 2 || wrong !== -1) return side + "'s labels centre at " + labels.join() + ", and its gridlines at " + lines.join();
+      }
+      const ticks = all(".chart-tick").map(rect);
+      const meet = (a, b) => a.left <= b.right && b.left <= a.right && a.top <= b.bottom && b.top <= a.bottom;
+      const met = ticks.flatMap((a, i) => ticks.slice(i + 1).filter((b) => meet(a, b)).map((b) => [a, b]));
+      if (met.length > 0) return "labels meet at " + edges(met[0][0]) + " and " + edges(met[0][1]);
+      const plot = rect(document.querySelector(".chart-plot"));
+      const past = ticks.find((at) => !within(at, grown(plot, ${RECT_SLACK - BARS_INSET})));
+      if (past !== undefined) return "a label at " + edges(past) + " runs into the inset of the plot at " + edges(plot);
+      const [point, line] = [".chart-point", ".chart-grid"].map((at) => style(document.querySelector(at)));
+      const worn = [point.fill, point.fillOpacity, line.stroke];
+      const inks = [computed("var(--accent)"), "${POINT_OPACITY}", computed("var(--rule)")];
+      return worn.join() === inks.join() ? "" : "a point and a gridline wear " + worn.join(" and ");
     `,
   },
 ];
