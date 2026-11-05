@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
 import { Language } from "@renderer/language";
-import { clock, compact, compactsExactly, places } from "@renderer/locale";
+import { clock, compact, compactsExactly, percent, places } from "@renderer/locale";
 import { PSEUDO_LOCALE } from "@scripts/pseudo";
 import { Kept } from "./kept.ts";
 
@@ -39,6 +39,16 @@ const PLACES: Record<Locale, string> = {
   "pt-BR": "1.234,50",
   "pt-PT": "1234,50",
   [PSEUDO_LOCALE]: "1,234.50",
+};
+
+/** How each language writes a quarter, and a share under a tenth, as a percent. */
+const PERCENT: Record<Locale, { quarter: string; small: string }> = {
+  "en-US": { quarter: "25%", small: "8.1%" },
+  "en-GB": { quarter: "25%", small: "8.1%" },
+  es: { quarter: `25${NBSP}%`, small: `8,1${NBSP}%` },
+  "pt-BR": { quarter: "25%", small: "8,1%" },
+  "pt-PT": { quarter: "25%", small: "8,1%" },
+  [PSEUDO_LOCALE]: { quarter: "25%", small: "8.1%" },
 };
 
 /** The most decimals Intl writes. */
@@ -138,6 +148,16 @@ test("a number is written to as many decimals as each call asks for, rounded pas
   ]);
   // Outside the decimals Intl writes, places() keeps to them, where Intl throws.
   expect([places(0.5, -1), places(1e-120, 120)]).toEqual(["1", `0.${"0".repeat(DECIMALS_MOST)}`]);
+});
+
+test.each(locales)("%s writes a share as a percent", (locale) => {
+  void setLocale(locale, { reload: false });
+  expect({ quarter: percent(0.25), small: percent(0.0812) }).toEqual(PERCENT[locale]);
+});
+
+test("a share keeps two significant digits, so a small one never reads as none", () => {
+  const written = [percent(1), percent(0.333), percent(0.004), percent(0.000012)];
+  expect(written).toEqual(["100%", "33%", "0.4%", "0.0012%"]);
 });
 
 test.each(locales)("%s writes a time short, and with its date from another day", (locale) => {
