@@ -235,6 +235,40 @@ await writeFile(
   }),
 );
 
+// A workspace of two scatters along 0 to 800,000: one in a new window's size,
+// which has room for the x axis's labels in full, and one of the least width,
+// which has not.
+const alongFile = join(scratch, "sent", "along.csv");
+const alongHeader = "sold,units";
+const alongRows = ["0,0", "800000,4"];
+await writeFile(alongFile, `${[alongHeader, ...alongRows].join("\n")}\n`);
+const along = join(scratch, "sent", "along.uno");
+const alongSource = {
+  id: "along",
+  name: "along.csv",
+  path: alongFile,
+  rows: alongRows.length,
+  cols: alongHeader.split(",").length,
+  state: { active: { row: 0, col: 0 } },
+};
+const soldUnits = { t: "scatter", x: { col: 0, header: "sold" }, y: { col: 1, header: "units" } };
+const alongChart = { source: alongSource.id, plot: soldUnits, title: "", refresh: 0 };
+await writeFile(
+  along,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [alongSource],
+    active: alongSource.id,
+    log: [],
+    charts: [
+      { ...alongChart, id: "c1", place: { ...chartSize, x: 0, y: 0 } },
+      { ...alongChart, id: "c2", place: { ...chartSize, width: leastSize.width, x: 1, y: 0 } },
+    ],
+    extra: new Map(),
+    at: along,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -318,6 +352,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_CHARTED: charted,
     UNO_SMOKE_SIGNED: signed,
     UNO_SMOKE_SCATTERED: scattered,
+    UNO_SMOKE_ALONG: along,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits

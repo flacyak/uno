@@ -1,7 +1,9 @@
 /**
  * @fileoverview A scatter chart: a point per sampled row, where its x and y
  * stand on two axes that take in every plotted row, over a gridline at each
- * tick. The y axis's labels stand left of the plot, and the x axis's under it.
+ * tick. The y axis's labels stand left of the plot, and the x axis's under it,
+ * in full under a million where they fit side by side, as the dataviz skill
+ * writes an axis along a plot.
  *
  * The points and gridlines are SVG placed in shares of the plot, so chart.css
  * sizes it and a theme recolours them. Each point wears the accent at a low
@@ -15,7 +17,7 @@ import type { Sample } from "@engine";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { axis, gutter, tickLabels } from "./axes.ts";
+import { ALONG_COMPACT_FROM, axis, gutter, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
 import { BARS_INSET, TIP_GAP } from "./bars.ts";
 
@@ -28,6 +30,12 @@ export const POINT_RADIUS = 4;
  * at 1.5:1 to 1.8:1 on --surface, under the 3:1 a mark wants.
  */
 export const POINT_OPACITY = 0.3;
+
+/**
+ * The room between a label and the points, and the least between two of the x
+ * axis's labels, in px: as far as a bar's value stands from its bar.
+ */
+export const TICK_GAP = TIP_GAP;
 
 /** The namespace an SVG element is made in. */
 const SVG = "http://www.w3.org/2000/svg";
@@ -99,7 +107,7 @@ export function sampled(sample: Sample): string {
  */
 export function scatter(sample: Sample): HTMLElement {
   const box = el("div", "chart-scatter");
-  const x = axis(sample.least.x, sample.most.x);
+  const x = axis(sample.least.x, sample.most.x, ALONG_COMPACT_FROM);
   const y = axis(sample.least.y, sample.most.y);
   if (sample.plotted === 0 || !scales(x) || !scales(y)) return box;
 
@@ -127,8 +135,24 @@ export function scatter(sample: Sample): HTMLElement {
   }
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--gutter", `${gutter(y)}ch`);
-  box.style.setProperty("--tick-gap", `${TIP_GAP}px`);
+  box.style.setProperty("--tick-gap", `${TICK_GAP}px`);
   box.append(up, plot, el("div", "chart-ticks x"));
   writeAlong(box, x);
   return box;
+}
+
+/**
+ * fitAlong writes the x axis of `box`, as scatter drew `sample`, compactly from
+ * 10,000, as the y axis is, where its labels in full stand under TICK_GAP
+ * apart. It measures the drawn labels, so `box` stands in the page by then.
+ */
+export function fitAlong(box: HTMLElement, sample: Sample): void {
+  const drawn = [...box.querySelectorAll(".chart-ticks.x .chart-tick")].map((label) =>
+    label.getBoundingClientRect(),
+  );
+  // A plot not laid out yet has nothing to measure, and draws again as it takes a size.
+  const near = drawn.some(
+    (at, i) => i > 0 && at.width > 0 && at.left - drawn[i - 1]!.right < TICK_GAP,
+  );
+  if (near) writeAlong(box, axis(sample.least.x, sample.most.x));
 }
