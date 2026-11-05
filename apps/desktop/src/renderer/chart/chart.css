@@ -342,6 +342,23 @@
   height: var(--across);
 }
 
+/* A label stands pie.ts's gap past the ring by the middle of its slice: right
+ * of there on the right, left on the left and centred straight above or below,
+ * above at the top and below at the foot, so it stands clear of the ring. */
+.chart-slice-label {
+  position: absolute;
+  left: calc(50% + var(--x) * (50% + var(--label-gap)));
+  top: calc(50% + var(--y) * (50% + var(--label-gap)));
+  translate: calc((sign(var(--x)) - 1) * 50%) calc((var(--y) - 1) * 50%);
+  white-space: nowrap;
+}
+
+/* A share wears ink, never its slice's colour, as a bar's value does. */
+.chart-slice-share {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
 .chart-slices {
   display: block;
   width: 100%;

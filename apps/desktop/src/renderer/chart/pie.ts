@@ -6,11 +6,14 @@
  * The slices go round from the top, as SVG on a ring of radius 1, so whatever
  * sizes the SVG sizes the pie, round in any shape. Each wears its colour as
  * --key, which chart.css fills it with, so a theme recolours it, and a line of
- * the page's ground parts it from the next.
+ * the page's ground parts it from the next. Its label, HTML outside the ring,
+ * gives its value, the file's text set as text alone, and its share.
  */
 
 import type { Plot } from "@document";
 import type { Groups } from "@engine";
+import { m } from "@paraglide/messages";
+import { percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { BARS_INSET, TIP_GAP } from "./bars.ts";
 import { mark } from "./scatter.ts";
@@ -66,10 +69,15 @@ function at(n: number): string {
   return `${Math.round(n * PATH_SCALE) / PATH_SCALE}`;
 }
 
-/** point gives where `turn` of the way round from the top, clockwise, stands on the ring. */
-function point(turn: number): string {
+/** onRing gives where `turn` of the way round from the top, clockwise, stands on the ring. */
+function onRing(turn: number): [number, number] {
   const angle = 2 * Math.PI * turn;
-  return `${at(Math.sin(angle))} ${at(-Math.cos(angle))}`;
+  return [Math.sin(angle), -Math.cos(angle)];
+}
+
+/** point writes where `turn` of the way round stands on the ring, as a path holds it. */
+function point(turn: number): string {
+  return onRing(turn).map(at).join(" ");
 }
 
 /**
@@ -97,6 +105,22 @@ function gap(turn: number): SVGElement {
 }
 
 /**
+ * label gives the label of a slice of `value`, or Other, `share` of the whole,
+ * with where the middle of its arc, `turn` of the way round, stands on the
+ * ring as --x and --y, for chart.css to stand it past there on its side.
+ */
+function label(value: string | undefined, share: number, turn: number): HTMLElement {
+  const said = el("div", "chart-slice-label");
+  const name =
+    value === undefined ? el("span", "", m.chart_pie_other()) : el("bdi", "from-file", value);
+  said.append(name, " ", el("span", "chart-slice-share", percent(share)));
+  const [x, y] = onRing(turn);
+  said.style.setProperty("--x", at(x));
+  said.style.setProperty("--y", at(y));
+  return said;
+}
+
+/**
  * pie draws `groups` as `plot` shares them out, from the top clockwise. A pie
  * of nothing above zero, or of a whole no double holds, has no share to draw,
  * so draws nothing.
@@ -112,19 +136,22 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
   // Each slice ends where the sizes so far reach, so the last ends on the whole.
   let reached = 0;
   const gaps: SVGElement[] = [];
+  const labels: HTMLElement[] = [];
   for (const [i, { value, size }] of drawn.entries()) {
     const from = reached / whole;
     reached += size;
-    const slice = wedge(from, reached / whole);
+    const to = reached / whole;
+    const slice = wedge(from, to);
     slice.style.setProperty("--key", value === undefined ? OTHER_KEY : `var(--chart-${i + 1})`);
     ring.append(slice);
     gaps.push(gap(from));
+    labels.push(label(value, size / whole, (from + to) / 2));
   }
   if (drawn.length > 1) ring.append(...gaps);
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--label-gap", `${LABEL_GAP}px`);
   const disc = el("div", "chart-pie-disc");
-  disc.append(ring);
+  disc.append(ring, ...labels);
   box.append(disc);
   return box;
 }
