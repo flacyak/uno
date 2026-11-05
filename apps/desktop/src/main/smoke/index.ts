@@ -12,7 +12,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow } from "electron";
 
 import { ask } from "@main/ask";
-import { through } from "@main/driven";
+import { through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
 import { CHARTS } from "./charts.ts";
@@ -229,6 +229,21 @@ async function drag(
   });
 }
 
+/** touch presses a finger on what `selector` picks and carries it `by` CSS px. */
+async function touch(
+  win: BrowserWindow,
+  { selector, by }: NonNullable<Check["touch"]>,
+): Promise<void> {
+  const [x, y] = await middle(win, selector);
+  const send = (type: string, touchPoints: ReadonlyArray<{ x: number; y: number }>): unknown =>
+    win.webContents.debugger.sendCommand("Input.dispatchTouchEvent", { type, touchPoints });
+  await throughAsync(win, async () => {
+    await send("touchStart", [{ x, y }]);
+    await send("touchMove", [{ x: x + by.x, y: y + by.y }]);
+    await send("touchEnd", []);
+  });
+}
+
 /**
  * runSmoke drives the window, reports to stdout, and quits with a status the
  * shell can read.
@@ -289,6 +304,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
       }
       if (check.hover !== undefined) await hover(win, check.hover);
       if (check.drag !== undefined) await drag(win, check.drag);
+      if (check.touch !== undefined) await touch(win, check.touch);
       const failure =
         check.run !== undefined
           ? await check.run(page)
