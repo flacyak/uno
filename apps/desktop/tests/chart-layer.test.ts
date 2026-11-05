@@ -1,7 +1,8 @@
 /**
  * @fileoverview The layer over the sheet: one window per chart, drawn from its
  * place in the room the sheet leaves, and placed again as the sheet resizes. A
- * window moves and resizes under a pointer and the arrow keys.
+ * window moves and resizes under a pointer and the arrow keys, and a wheel over
+ * one goes on to the sheet.
  *
  * happy-dom has no layout, so each test says what layout would measure, and
  * fires the resize a ResizeObserver would. Its pointer capture is bookkeeping
@@ -71,6 +72,12 @@ const SECONDARY = 2;
 const POINTER = 1;
 const OTHER_POINTER = 2;
 
+/** A turn of the wheel in lines, read through to the grid as they are. */
+const TURN = { deltaX: 3, deltaY: 5, deltaMode: WheelEvent.DOM_DELTA_LINE };
+
+/** What a wheel can turn with. */
+type HeldKeys = Pick<WheelEventInit, "ctrlKey">;
+
 /** What the layer reads of a workspace's charts, for a test to change. */
 interface Model {
   all: readonly Chart[];
@@ -97,6 +104,9 @@ let resized: () => void;
 
 /** What the layer calls to give the grid its keys back. */
 const leave = vi.fn();
+
+/** What the layer calls to scroll the sheet. */
+const wheelBy = vi.fn();
 
 /** A ResizeObserver that fires only when a test says, and only on #content. */
 class HeldObserver implements ResizeObserver {
@@ -151,7 +161,7 @@ function modelOf(...charts: Chart[]): Model {
 /** A layer over a model holding `charts`, in ROOM, and that model. */
 function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   const model = modelOf(...charts);
-  const layer = new ChartLayer(root(), content(), leave);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy);
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
@@ -195,6 +205,15 @@ function key(name: string, more: KeyboardEventInit = {}): KeyboardEvent {
   return event;
 }
 
+/** Turns the wheel over `at`, with `keys` held. */
+function turn(at: Element, init: WheelEventInit, keys: HeldKeys = {}): WheelEvent {
+  // happy-dom's WheelEvent keeps no modifier keys.
+  const made = new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init });
+  const event = Object.assign(made, keys);
+  at.dispatchEvent(event);
+  return event;
+}
+
 beforeEach(() => {
   document.body.innerHTML = bodyMarkup();
   const grid = document.createElement("div");
@@ -202,6 +221,7 @@ beforeEach(() => {
   content().append(grid);
   vi.stubGlobal("ResizeObserver", HeldObserver);
   leave.mockClear();
+  wheelBy.mockClear();
 });
 
 afterEach(() => {
@@ -210,7 +230,7 @@ afterEach(() => {
 });
 
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
-  const layer = new ChartLayer(root(), content(), leave);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy);
   roomIs(ROOM);
   expect(root().hidden).toBe(true);
 
@@ -738,4 +758,25 @@ test("a button in a window raises it as well", () => {
   over.focus();
   under.querySelector<HTMLElement>(".round-x")!.focus();
   expect(Number(under.style.zIndex)).toBeGreaterThan(Number(over.style.zIndex));
+});
+
+test("a wheel on any part of a window goes to the sheet, and leaves the window and the keys", () => {
+  const { model } = shown(INSIDE);
+  const stood = drawn(first());
+  for (const at of [head(), part(".chart-plot"), part(".chart-caption"), grip(), first()]) {
+    wheelBy.mockClear();
+    const event = turn(at, TURN);
+    expect(wheelBy).toHaveBeenCalledExactlyOnceWith(TURN.deltaX, TURN.deltaY, TURN.deltaMode);
+    expect(event.defaultPrevented).toBe(true);
+  }
+  expect(drawn(first())).toEqual(stood);
+  expect(model.move).not.toHaveBeenCalled();
+  expect(document.activeElement).not.toBe(first());
+});
+
+test("Ctrl+wheel on a window is left for zoom", () => {
+  shown(INSIDE);
+  const event = turn(part(".chart-plot"), TURN, { ctrlKey: true });
+  expect(wheelBy).not.toHaveBeenCalled();
+  expect(event.defaultPrevented).toBe(false);
 });

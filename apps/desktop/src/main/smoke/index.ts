@@ -15,6 +15,7 @@ import { ask } from "@main/ask";
 import { through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
+import { CHART_WHEEL } from "./chart-wheel.ts";
 import { CHARTS } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
@@ -67,6 +68,7 @@ const CHECKS: Check[] = [
   ...AGAIN,
   ...CHARTS,
   ...CHART_MOVES,
+  ...CHART_WHEEL,
 ];
 
 /**
@@ -161,6 +163,9 @@ const PRELUDE = `
  */
 const COMPOSITED_MS = 120;
 
+/** A script that settles once the page has drawn two frames. */
+const TWO_FRAMES = "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))";
+
 /** The zoom a window opens at. */
 const FULL_ZOOM = 1;
 
@@ -174,9 +179,7 @@ const NO_LIMIT = 0;
 async function shoot(win: BrowserWindow, name: string): Promise<void> {
   const dir = process.env["UNO_SMOKE"];
   if (dir === undefined || dir === "") return;
-  await win.webContents.executeJavaScript(
-    "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))",
-  );
+  await win.webContents.executeJavaScript(TWO_FRAMES);
   await sleep(COMPOSITED_MS);
   const image = await win.webContents.capturePage();
   const path = join(dir, `${name}.png`);
@@ -245,6 +248,22 @@ async function touch(
 }
 
 /**
+ * wheel turns the wheel over what `selector` picks. The page answers it first and
+ * the scroll it causes comes after, so the ignore stays lifted over two frames.
+ * Electron counts a turn down as a negative delta, the other way to the page.
+ */
+async function wheel(
+  win: BrowserWindow,
+  { selector, down, modifiers = [] }: NonNullable<Check["wheel"]>,
+): Promise<void> {
+  const [x, y] = await middle(win, selector);
+  await throughAsync(win, async () => {
+    win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down, modifiers });
+    await win.webContents.executeJavaScript(TWO_FRAMES);
+  });
+}
+
+/**
  * runSmoke drives the window, reports to stdout, and quits with a status the
  * shell can read.
  *
@@ -305,6 +324,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
       if (check.hover !== undefined) await hover(win, check.hover);
       if (check.drag !== undefined) await drag(win, check.drag);
       if (check.touch !== undefined) await touch(win, check.touch);
+      if (check.wheel !== undefined) await wheel(win, check.wheel);
       const failure =
         check.run !== undefined
           ? await check.run(page)

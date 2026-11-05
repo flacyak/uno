@@ -7,6 +7,8 @@
  * resizes it. It follows the pointer alone until the drop, which stores where
  * it stands, so a window put back has changed nothing. An arrow stores a step
  * at once. A place asks nothing of the engine and marks nothing unsaved.
+ *
+ * The sheet scrolls under a window: a wheel over one goes on to the grid.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -49,6 +51,8 @@ export interface Stage {
   raise(box: HTMLElement): void;
   /** Gives the keys back to the grid. */
   leave(): void;
+  /** Scrolls the sheet by a wheel turned over a window. */
+  wheelBy(dx: number, dy: number, deltaMode: number): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -151,6 +155,7 @@ export class ChartWindow {
     this.box.addEventListener("pointercancel", (e) => this.lost(e));
     this.box.addEventListener("lostpointercapture", (e) => this.lost(e));
     this.box.addEventListener("keydown", (e) => this.key(e));
+    this.box.addEventListener("wheel", (e) => this.wheel(e), { passive: false });
     this.box.addEventListener("focusin", () => stage.raise(this.box));
   }
 
@@ -225,6 +230,13 @@ export class ChartWindow {
   /** store keeps `rect` as the chart's place. A tucked window's rect has none. */
   private store(rect: Rect, room: Room): void {
     if (!tucks(room)) this.stage.move(this.chart.id, placeOf(rect, room, this.chart.place));
+  }
+
+  /** wheel hands a turn of the wheel to the sheet behind the window. */
+  private wheel(e: WheelEvent): void {
+    if (e.ctrlKey) return; // Ctrl+wheel is zoom
+    e.preventDefault();
+    this.stage.wheelBy(e.deltaX, e.deltaY, e.deltaMode);
   }
 
   /** key answers Escape and the arrows, and leaves any other key to the shell. */

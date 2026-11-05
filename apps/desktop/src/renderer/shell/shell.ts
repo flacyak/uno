@@ -762,7 +762,12 @@ export class Shell {
   private loadLayer(): Promise<ChartLayer> {
     this.layerLoading ??= import("@renderer/chart/layer").then(
       ({ ChartLayer }) => {
-        this.layer = new ChartLayer(found("#charts"), this.content, () => this.grid?.focus());
+        this.layer = new ChartLayer(
+          found("#charts"),
+          this.content,
+          () => this.grid?.focus(),
+          (dx, dy, deltaMode) => this.grid?.wheelBy(dx, dy, deltaMode),
+        );
         return this.layer;
       },
       (err: unknown) => {

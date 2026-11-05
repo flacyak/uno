@@ -27,6 +27,9 @@ import { domPage, until } from "./smoke/dom-page.ts";
 /** The digits a save keeps of a place's fractions: core's PLACE_DIGITS. */
 const SAVED_DIGITS = 4;
 
+/** A turn of the wheel, in px. */
+const WHEELED = 120;
+
 const page = domPage();
 let shell: Shell;
 const dir = mkdtempSync(join(tmpdir(), "uno-charts-shell-"));
@@ -215,6 +218,18 @@ test("Escape on a window gives the keys back to the grid", async () => {
   box.focus();
   box.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(document.activeElement).toBe(document.querySelector("#content"));
+});
+
+test("a wheel on a window scrolls the sheet behind it, and marks nothing", async () => {
+  await open("wheeled.uno", [BARS]);
+  const sheet = document.querySelector<HTMLElement>(".grid-scroll")!;
+  const plot = document.querySelector<HTMLElement>(".chart-plot")!;
+  sheet.scrollTop = 0;
+
+  plot.dispatchEvent(new WheelEvent("wheel", { deltaY: WHEELED, bubbles: true, cancelable: true }));
+
+  expect(sheet.scrollTop).toBe(WHEELED);
+  expect(document.querySelector(".ws.open .dirty")).toBeNull();
 });
 
 test("a chart change stays unsaved through a save the host cannot write", async () => {

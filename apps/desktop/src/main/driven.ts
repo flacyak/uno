@@ -35,7 +35,8 @@ export async function drive(win: BrowserWindow): Promise<void> {
  *
  * A wheel event gets through, and the scroll it causes is dropped: Chromium
  * sends the scroll after the page has answered the wheel, and by then the
- * ignore is back. Scroll with a script, as preview.ts does.
+ * ignore is back. Scroll with a script, as preview.ts does, or turn the wheel
+ * inside `throughAsync`, as the smoke does.
  */
 export function through(win: BrowserWindow, send: () => void): void {
   const devtools = win.webContents.debugger;
