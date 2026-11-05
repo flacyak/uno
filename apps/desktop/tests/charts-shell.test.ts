@@ -89,6 +89,8 @@ test("a chart draws its bars once its tally completes, and again in the language
   const quarter = REGIONS.map(() => counted(ROWS / REGIONS.length));
   expect(await until(page, () => texts(".chart-bar-tip").join() === quarter.join())).toBe(true);
   expect(texts(".chart-bar-label")).toStrictEqual(REGIONS);
+  expect(texts(".chart-said")).toStrictEqual([m.rows_count({ count: ROWS })]);
+  expect(document.querySelector<HTMLElement>(".chart-coverage")!.hidden).toBe(true);
 
   const plot = document.querySelector<HTMLElement>(".chart-plot")!;
   Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
@@ -110,6 +112,19 @@ test("a head names its source only while the workspace has several to tell apart
 
   await shell.addPaths([SECOND]);
   expect(head()).toBe(`${SALES} · ${title}`);
+});
+
+test("a chart over a missing source says so and offers Re-point, which opens the panel on its source", async () => {
+  const path = join(dir, "missing.uno");
+  await writeFile(path, unoOf([BARS], [], "/nowhere/sales-q3.csv"));
+  await shell.openRef({ name: "missing.uno", path });
+  const state = (): string | undefined => document.querySelector(".chart-state")?.textContent;
+  expect(await until(page, () => state() !== undefined)).toBe(true);
+  const missing = m.chart_source_missing({ name: `${SALES}.csv` });
+  expect(state()).toBe(`${missing}${m.action_repoint()}`);
+  expect(document.querySelector<HTMLElement>(".chart-coverage")!.hidden).toBe(true);
+  document.querySelector<HTMLElement>(".chart-state button")!.click();
+  expect(document.querySelector<HTMLElement>("#panel")!.hidden).toBe(false);
 });
 
 test("a workspace with none takes the last one's windows away", async () => {
