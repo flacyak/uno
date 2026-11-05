@@ -4,7 +4,9 @@
  * size holds and the room's edges stop it, and Escape puts a drag back. The
  * arrows step it, and Escape gives the grid its keys back. A press raises it.
  * None of it marks the workspace unsaved, and Ctrl+S writes the places, which
- * smoke.js reads back. A finger gets 24 px at the zones and drags a head too.
+ * smoke.js reads back. A finger gets 24 px at the zones and drags a head too, a
+ * tucked head stays put, a press closes an open popup, and a drag from a window
+ * selects nothing.
  *
  * They follow CHARTS, so the first window stands at the top of the room's right
  * edge and the second at its foot, and each picks up where the last left it.
@@ -19,6 +21,7 @@ import {
 } from "@renderer/chart/place";
 import { GEOMETRY, RECT_SLACK } from "./charts.ts";
 import type { Check, Input } from "./check.ts";
+import { RIGHT_CLICK } from "./sidebar.ts";
 
 /** Where the pointer takes hold to move or resize the first window. */
 const HEAD = ".chart .chart-title";
@@ -26,8 +29,10 @@ const GRIP = ".chart .chart-grip";
 const RIGHT_EDGE = ".chart .chart-edge-right";
 const FOOT_EDGE = ".chart .chart-edge-foot";
 
-/** The second window's head. */
+/** The second window's head, grip and plot. */
 const LAST_HEAD = ".chart:last-child .chart-title";
+const LAST_GRIP = ".chart:last-child .chart-grip";
+const LAST_PLOT = ".chart:last-child .chart-plot";
 
 /** A drag and a resize that fit the room at the run's 1100 px and at its 960 at scale 2. */
 const CARRY = { x: -150, y: 60 };
@@ -63,6 +68,39 @@ const STEPS_BACK = 2;
 /** A finger's drag, up and left from the room's foot right. */
 const FINGER_STEP = { x: -STEPS_BACK * NUDGE_PX, y: -40 };
 
+/** A sheet too short to show a window whole. */
+const SHORT_SHEET = 80;
+
+/** A point this far up from a window's foot stands in a 6 px edge zone. */
+const EDGE_REACH = 3;
+
+/** A drag from the last window's plot out over the sheet. */
+const OVER_SHEET = { x: -500, y: -60 };
+
+/** A right click on the open workspace. */
+const ON_WORKSPACE = `rightClick(document.querySelector(".ws.open"));`;
+
+/** What a press on a window closes: how each opens, and what shows while it is open. */
+const POPUPS = [
+  { popup: "a menu", opens: ON_WORKSPACE, shows: ".pop-menu" },
+  {
+    popup: "the settings menu",
+    opens: `document.querySelector("#settings").click();`,
+    shows: ".settings:not([hidden])",
+  },
+  {
+    popup: "the formula form",
+    opens: `${ON_WORKSPACE} await frame(); choose("Insert formula…");`,
+    shows: ".formula",
+  },
+];
+
+/** What each of POPUPS is pressed away with, and the name a check gives it. */
+const PRESSED = [
+  { part: "head", zone: LAST_HEAD },
+  { part: "grip", zone: LAST_GRIP },
+];
+
 /** A press of `keyCode` with `modifiers`. */
 function pressing(keyCode: string, modifiers: Array<"shift" | "control"> = []): readonly Input[] {
   return [
@@ -93,6 +131,34 @@ const STACK = `
     return document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
   };
 `;
+
+/**
+ * For each of POPUPS and PRESSED, a check opens it and the next presses the zone
+ * for real, as what closes a popup listens for the mousedown a pointerdown leaves
+ * uncancelled. A popup starts to listen on its next tick, so the first waits a frame.
+ */
+const PRESSES: Check[] = POPUPS.flatMap(({ popup, opens, shows }) =>
+  PRESSED.flatMap(({ part, zone }) => [
+    {
+      name: `${popup} opens over the windows, for a press on the ${part}`,
+      script: `
+        ${RIGHT_CLICK}
+        ${opens}
+        await frame();
+        return document.querySelector(${JSON.stringify(shows)}) === null ? "nothing opened" : "";
+      `,
+    },
+    {
+      name: `a press on a window's ${part} closes ${popup}, and the window takes the keys`,
+      drag: { selector: zone, by: { x: 0, y: 0 } },
+      script: `
+        if (!(await until(() => document.querySelector(${JSON.stringify(shows)}) === null))) return "it stayed open";
+        const box = document.querySelector(".chart:last-child");
+        return (await until(() => document.activeElement === box)) ? "" : "the keys are in #" + document.activeElement?.id;
+      `,
+    },
+  ]),
+);
 
 export const CHART_MOVES: Check[] = [
   {
@@ -289,6 +355,38 @@ export const CHART_MOVES: Check[] = [
     `,
   },
   {
+    // The sheet is held short by hand: main keeps the window taller than this. The
+    // grid takes the keys, so the next check can see its press land.
+    name: "a tucked head shows no way to move it, and its foot takes no resize",
+    input: { events: pressing("Escape"), through: true },
+    script: `
+      ${MOVES}
+      const grid = document.querySelector("#content");
+      if (!(await until(() => document.activeElement === grid))) return "the keys are in #" + document.activeElement?.id;
+      document.querySelector(".win-sheet").style.maxHeight = ${SHORT_SHEET} + "px";
+      if (!(await until(heads))) return "the windows stand at " + windows().map(edges).join(" and ");
+      const { left, right, bottom } = first();
+      const hit = document.elementFromPoint((left + right) / 2, bottom - ${EDGE_REACH});
+      if (hit.closest(".chart-head") === null) return "the head's foot is " + hit.className;
+      const { cursor } = getComputedStyle(hit.closest(".chart-head"));
+      return cursor === "default" ? "" : "a tucked head shows " + cursor;
+    `,
+  },
+  {
+    name: "a drag on a tucked head leaves it and takes the keys, and it goes back to its place",
+    drag: { selector: HEAD, by: CARRY },
+    script: `
+      ${MOVES}
+      const box = document.querySelector(".chart");
+      const keys = await until(() => document.activeElement === box);
+      const stayed = stands({ top: room().top });
+      document.querySelector(".win-sheet").style.maxHeight = "";
+      if (!keys) return "the keys are in #" + document.activeElement?.id;
+      if (!stayed) return "the tucked window went to " + reads();
+      return wait({ width: ${MIN_WIDTH + NUDGE_PX}, height: ${MIN_HEIGHT} }, "tucking");
+    `,
+  },
+  {
     name: "Escape gives the grid the keys back",
     input: { events: pressing("Escape"), through: true },
     script: `
@@ -341,6 +439,19 @@ export const CHART_MOVES: Check[] = [
       const said = () => text("#status-msg");
       if (!(await until(() => said().includes("charted.uno")))) return "the status says " + JSON.stringify(said());
       return unsaved() ? "the save left a mark" : "";
+    `,
+  },
+  ...PRESSES,
+  {
+    // The window has the keys already, so only the frames say the press has landed.
+    name: "a drag from a window's plot selects nothing, and no press on its border can",
+    drag: { selector: LAST_PLOT, by: OVER_SHEET },
+    script: `
+      for (let i = 0; i < SETTLE_FRAMES; i++) await frame();
+      const selection = getSelection();
+      if (!selection.isCollapsed) return "the drag selected " + selection.toString().length + " characters";
+      const { userSelect } = getComputedStyle(document.querySelector(".chart"));
+      return userSelect === "none" ? "" : "a window's border selects: " + userSelect;
     `,
   },
 ];

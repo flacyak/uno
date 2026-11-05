@@ -12,7 +12,7 @@ import type { Check } from "./check.ts";
 
 /** Helpers: a right click on a line, the names in a list, and the context
  * menu's items. */
-const RIGHT_CLICK = `
+export const RIGHT_CLICK = `
   const rightClick = (el) => {
     const at = el.getBoundingClientRect();
     el.dispatchEvent(new MouseEvent("contextmenu", {
