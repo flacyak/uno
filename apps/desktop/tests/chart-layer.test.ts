@@ -31,7 +31,7 @@ import {
 } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
-import type { Heard } from "@renderer/charts";
+import type { Heard, SourceState } from "@renderer/charts";
 import { num } from "@renderer/locale";
 import { BARS, MOVED, PIE, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
@@ -60,6 +60,9 @@ const OVER: Chart = { ...INSIDE, id: "c3" };
 
 /** The name a workspace of several sources gives a window's source. */
 const SOURCE = "sales-q3";
+
+/** A source a chart reads, as its window hears it. */
+const FINE: SourceState = { state: "fine", name: `${SOURCE}.csv` };
 
 /** A room under the least height, which tucks every window to its head. */
 const TUCKING: Room = { w: ROOM.w, h: MIN_HEIGHT - 1 };
@@ -196,7 +199,7 @@ function heardOf(...values: string[]): Heard {
     rest: none,
     skipped: { blank: 0, unparsed: 0 },
   };
-  return { state: "fine", latest: tally, complete: tally };
+  return { ...FINE, latest: tally, complete: tally };
 }
 
 /** What FLUSH's chart heard with `rows` of `total` read: a tally of East, still being read. */
@@ -204,7 +207,7 @@ function readOf(rows: number, total: number): Heard {
   const { latest } = heardOf("East");
   const tally =
     latest?.t === "groups" ? { ...latest, coverage: { rows, total, complete: false } } : undefined;
-  return { state: "fine", latest: tally, complete: undefined };
+  return { ...FINE, latest: tally, complete: undefined };
 }
 
 /** Units and revenue of two rows of the sales export, as a scatter's tally sends them. */
@@ -223,7 +226,7 @@ function pointsHeard(plotted = SENT.x.length): Heard {
     most: { x: SENT.x[1]!, y: SENT.y[1]! },
     skipped: { blank: 0, unparsed: 0 },
   };
-  return { state: "fine", latest: tally, complete: tally };
+  return { ...FINE, latest: tally, complete: tally };
 }
 
 /** A layer over a model holding `charts`, in ROOM, and that model. */
@@ -468,7 +471,7 @@ test("a window draws as each tally comes, and keeps a complete one while the nex
   Object.defineProperty(part(".chart-plot"), "clientHeight", { value: ROOM.h });
   await frame();
   const reading = heardOf("East").latest;
-  model.heard = () => ({ state: "fine", latest: reading, complete: undefined });
+  model.heard = () => ({ ...FINE, latest: reading, complete: undefined });
   layer.tallied(FLUSH.id);
   await frame();
   expect(labels()).toStrictEqual(["East"]);
@@ -483,7 +486,7 @@ test("a track under the head shows how far a chart has read, until its tally com
   Object.defineProperty(part(".chart-plot"), "clientHeight", { value: ROOM.h });
   const track = (): HTMLElement => part(".chart-coverage");
   const read = (): string => track().style.getPropertyValue("--read");
-  model.heard = () => ({ state: "fine", latest: undefined, complete: undefined });
+  model.heard = () => ({ ...FINE, latest: undefined, complete: undefined });
   await frame();
   expect([track().hidden, read()]).toStrictEqual([false, "0"]);
   model.heard = () => readOf(2, 5);
@@ -533,7 +536,7 @@ test("a pie's caption says how it counts the values past those a tally keeps apa
   const { model } = shown(PIE);
   const { latest } = heardOf("North");
   const tally = latest?.t === "groups" ? { ...latest, rest: { rows: 5, sum: 0 } } : undefined;
-  model.heard = () => ({ state: "fine", latest: tally, complete: tally });
+  model.heard = () => ({ ...FINE, latest: tally, complete: tally });
   await frame();
   const past = m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) });
   expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past}`);

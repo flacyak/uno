@@ -25,12 +25,20 @@ interface Tallied {
   complete: GroupsTally | SampleTally | undefined;
 }
 
-/** What a chart's window draws from. */
-export interface Heard {
+/** A chart's source, as its window says it when it has nothing of it to draw. */
+export interface SourceState {
   /** The state of the chart's source. A source that is missing or waits on its
    * bucket posts no tally until it is pointed at a file. A source the workspace
    * does not hold reads as missing. */
   state: State;
+  /** The source's file name, or its id for one the workspace does not hold. */
+  name: string;
+  /** The bucket the source waits on, while it is unconnected. */
+  bucket?: string;
+}
+
+/** What a chart's window draws from. */
+export interface Heard extends SourceState {
   /** The latest tally of what the chart shows, once one has come. */
   latest: Tally | undefined;
   /** The last complete one, which stays until the next one completes. */
@@ -92,8 +100,8 @@ export class Charts {
     private readonly engine: Engine,
     /** Counts a request as a write until the engine answers it. */
     private readonly writing: (write: Promise<void>) => Promise<void>,
-    /** The state of a source, which a chart over it shows. */
-    private readonly sourceState: (source: string) => State,
+    /** A source as a chart over it says it. */
+    private readonly sourceState: (source: string) => SourceState,
     /** What a chart's head calls a source, when it has to name one at all. */
     readonly sourceLabel: (source: string) => string | undefined,
   ) {}
@@ -191,7 +199,7 @@ export class Charts {
     const held = this.tallied.get(id);
     const current = reads(held, chart.source, chart.plot);
     return {
-      state: this.sourceState(chart.source),
+      ...this.sourceState(chart.source),
       latest: current ? held.latest : undefined,
       complete: current ? held.complete : undefined,
     };
