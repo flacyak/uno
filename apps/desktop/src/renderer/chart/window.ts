@@ -24,7 +24,7 @@ import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
-import { coverage, reading } from "./caption.ts";
+import { body, coverage, drawable, reading } from "./caption.ts";
 import { fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
@@ -244,11 +244,12 @@ export class ChartWindow {
    * comes. The caption says how much of its source the chart has read, then
    * what a scatter's sample leaves out, or how a pie counts the values past
    * those a tally keeps apart. The track under the head shows how far the
-   * chart has read, while it reads.
+   * chart has read, while it reads, and a chart with nothing to draw says why
+   * in the plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
-    const tally = heard?.complete ?? heard?.latest;
+    const tally = drawable(heard);
     const { plot } = this.chart;
     const words = [coverage(heard?.latest)];
     if (plot.t === "bars" && tally?.t === "groups") {
@@ -266,7 +267,7 @@ export class ChartWindow {
       fitLabels(drawn);
       words.push(past(plot, tally));
     } else {
-      this.plot.replaceChildren();
+      this.plot.replaceChildren(...this.state(heard));
     }
     this.say(words.filter((said) => said !== "").join(" · "));
     const read = reading(heard);
@@ -278,6 +279,15 @@ export class ChartWindow {
   private say(words: string): void {
     this.said.textContent = words;
     this.said.title = words;
+  }
+
+  /** state gives what the plot shows in place of a chart it cannot draw, or nothing for one that has gone. */
+  private state(heard: Heard | undefined): HTMLElement[] {
+    const said = heard === undefined ? undefined : body(this.chart.plot, heard);
+    if (said === undefined) return [];
+    const box = el("div", "chart-state");
+    box.append(el("bdi", "", said.words));
+    return [box];
   }
 
   /**
