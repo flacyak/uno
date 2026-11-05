@@ -14,7 +14,7 @@
 import "./chart.css";
 
 import type { Chart, ChartPlace } from "@document";
-import type { Charts } from "@renderer/charts";
+import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
 import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
@@ -23,7 +23,7 @@ import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
-type Shown = Pick<Charts, "all" | "sourceLabel" | "move">;
+type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
 
 /** The thinnest a border draws, in device px. */
 const THINNEST_BORDER = 1;
@@ -42,7 +42,12 @@ export class ChartLayer implements Stage {
   /** The height of the header row, and of a tucked window's head. */
   private readonly head: number;
   /** The charts of the open workspace. */
-  private charts: Shown = { all: [], sourceLabel: () => undefined, move: () => undefined };
+  private charts: Shown = {
+    all: [],
+    sourceLabel: () => undefined,
+    move: () => undefined,
+    heard: () => undefined,
+  };
   /** Fills the grid's scroller inside its bars, so the two boxes differ by a bar. */
   private readonly gauge = el("div", "chart-gauge");
   /** The z-index the last window raised took. */
@@ -86,6 +91,16 @@ export class ChartLayer implements Stage {
   /** move stores where chart `id`'s window stands, which the next draw shows. */
   move(id: string, place: ChartPlace): void {
     this.charts.move(id, place);
+  }
+
+  /** heard gives what chart `id` last heard, for its window to draw. */
+  heard(id: string): Heard | undefined {
+    return this.charts.heard(id);
+  }
+
+  /** tallied draws chart `id`'s window again, as the chart heard a tally. */
+  tallied(id: string): void {
+    this.windows.get(id)?.redraw();
   }
 
   /**

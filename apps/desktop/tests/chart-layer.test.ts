@@ -14,6 +14,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
+import type { GroupsTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
@@ -28,8 +29,10 @@ import {
 } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
+import type { Heard } from "@renderer/charts";
 import { BARS, MOVED } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
+import { frame } from "./smoke/dom-page.ts";
 
 /** The header row's height, which view.ts falls back to with no stylesheet. */
 const HEAD = 29;
@@ -95,6 +98,7 @@ interface Model {
   all: readonly Chart[];
   sourceLabel(source: string): string | undefined;
   move: (id: string, place: ChartPlace) => void;
+  heard: (id: string) => Heard | undefined;
 }
 
 const root = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
@@ -104,6 +108,8 @@ const gauge = (): HTMLElement => document.querySelector<HTMLElement>(".grid-scro
 const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".chart")];
 const titles = (): Array<string | null> =>
   [...document.querySelectorAll(".chart-title")].map((title) => title.textContent);
+const labels = (): Array<string | null> =>
+  [...document.querySelectorAll(".chart-bar-label")].map((label) => label.textContent);
 
 /** The first window, and the parts of it a pointer takes hold of. */
 const first = (): HTMLElement => windows()[0]!;
@@ -163,11 +169,28 @@ function modelOf(...charts: Chart[]): Model {
   const model: Model = {
     all: charts,
     sourceLabel: () => undefined,
+    heard: () => undefined,
     move: vi.fn((id: string, place: ChartPlace) => {
       model.all = model.all.map((chart) => (chart.id === id ? { ...chart, place } : chart));
     }),
   };
   return model;
+}
+
+/** What FLUSH's chart heard once its source was read: a row of each of `values`. */
+function heardOf(...values: string[]): Heard {
+  const none = { values: 0, rows: 0, sum: 0 };
+  const tally: GroupsTally = {
+    t: "groups",
+    plot: FLUSH.plot,
+    coverage: { rows: values.length, total: values.length, complete: true },
+    groups: values.map((value) => ({ value, rows: 1, sum: 0 })),
+    others: none,
+    below: none,
+    rest: none,
+    skipped: { blank: 0, unparsed: 0 },
+  };
+  return { state: "fine", latest: tally, complete: tally };
 }
 
 /** A layer over a model holding `charts`, in ROOM, and that model. */
@@ -392,6 +415,34 @@ test("a draw says what each chart and its source say by then, in the same window
   layer.draw();
   expect(titles()).toStrictEqual([`${SOURCE} · Rows`]);
   expect(windows()[0]).toBe(made);
+});
+
+test("a window draws what its chart heard on the next frame, and again each time it shows", async () => {
+  const { layer, model } = shown(FLUSH);
+  Object.defineProperty(part(".chart-plot"), "clientHeight", { value: ROOM.h });
+  model.heard = () => heardOf("North", "South");
+  await frame();
+  expect(labels()).toStrictEqual(["North", "South"]);
+  // A changed chart hears nothing of its new plot until a tally of it comes.
+  model.heard = () => undefined;
+  layer.draw();
+  await frame();
+  expect(part(".chart-plot").childElementCount).toBe(0);
+});
+
+test("a window draws as each tally comes, and keeps a complete one while the next is read", async () => {
+  const { layer, model } = shown(FLUSH);
+  Object.defineProperty(part(".chart-plot"), "clientHeight", { value: ROOM.h });
+  await frame();
+  const reading = heardOf("East").latest;
+  model.heard = () => ({ state: "fine", latest: reading, complete: undefined });
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(labels()).toStrictEqual(["East"]);
+  model.heard = () => ({ ...heardOf("North", "South"), latest: reading });
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(labels()).toStrictEqual(["North", "South"]);
 });
 
 test("a room too narrow tucks every window to its head, stacked from the top", () => {

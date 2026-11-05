@@ -13,8 +13,9 @@ import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { BARS_INSET, BAR_GAP, BAR_THICK, bars } from "@renderer/chart/bars";
+import { bars } from "@renderer/chart/bars";
 import { num } from "@renderer/locale";
+import { holding } from "../charted.ts";
 
 const REGION = { col: 1, header: "region" };
 const ROWS = { t: "bars", by: REGION } as const;
@@ -36,9 +37,6 @@ const REGIONS = tallyOf(
 const FIVE = tallyOf(
   ...[50, 40, 30, 20, 10].map((rows, i) => ({ value: `v${i + 1}`, rows, sum: 0 })),
 );
-
-/** A plot's height that holds `rows` rows of bars or words, and not one more. */
-const holding = (rows: number): number => 2 * BARS_INSET + rows * BAR_THICK + (rows - 1) * BAR_GAP;
 
 /** A plot that holds every region. */
 const TALL = holding(REGIONS.groups.length);

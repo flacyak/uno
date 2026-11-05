@@ -250,6 +250,8 @@ export class Workspace {
   readonly charts: Charts;
   /** What the open of a .uno has to say of its charts, for the shell to say. */
   chartsNote: Said | undefined;
+  /** Called when a chart hears a tally, with the chart's id. */
+  onTally: (chart: string) => void = () => undefined;
 
   /** Tabs in the order they were added, which is the sidebar order. */
   private tabs: Tab[] = [];
@@ -348,7 +350,10 @@ export class Workspace {
       t.offer = offer;
       this.offered(t);
     };
-    source.onTally = (chart, tally) => this.charts.hear(source.id, chart, tally);
+    source.onTally = (chart, tally) => {
+      this.charts.hear(source.id, chart, tally);
+      this.onTally(chart);
+    };
     return t;
   }
 

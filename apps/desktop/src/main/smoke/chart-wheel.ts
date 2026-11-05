@@ -88,7 +88,7 @@ export const CHART_WHEEL: Check[] = [
     "return along();",
   ),
   {
-    // No window holds a scrollable of its own yet, so this one puts one in.
+    // No window holds a scrollable of its own yet, so this one takes the place of its bars.
     name: "a chart's scrollable fills its plot, and its bar keeps the pointer from the edge's zone",
     script: `
       ${WHEEL}
@@ -98,7 +98,7 @@ export const CHART_WHEEL: Check[] = [
       const rows = document.createElement("div");
       rows.style.height = "${LONG}px";
       held.append(rows);
-      plot.append(held);
+      plot.replaceChildren(held);
       await frame();
       if (held.clientHeight !== plot.clientHeight) return "it fills " + held.clientHeight + " of " + plot.clientHeight;
       const { overscrollBehaviorY } = getComputedStyle(held);

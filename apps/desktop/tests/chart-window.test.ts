@@ -34,6 +34,7 @@ const NO_LAYER: Stage = {
   raise: () => undefined,
   leave: () => undefined,
   wheelBy: () => undefined,
+  heard: () => undefined,
 };
 
 /** A chart's window, showing `chart` under `source`. */
