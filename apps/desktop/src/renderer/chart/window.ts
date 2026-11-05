@@ -12,7 +12,7 @@
  * something inside the window can still scroll that way.
  *
  * The plot draws what the chart last heard, each time the layer shows the
- * window and when the chart hears a tally.
+ * window, as the window resizes, and when the chart hears a tally.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -185,6 +185,8 @@ export class ChartWindow {
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
     this.box.append(head, this.plot, caption, right, foot);
+    // Whatever resizes the window, the plot draws again in the frame it lands in.
+    new ResizeObserver(() => this.paint()).observe(this.plot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
     this.box.addEventListener("pointermove", (e) => this.follow(e));
     this.box.addEventListener("pointerup", (e) => this.drop(e));

@@ -30,7 +30,7 @@ import {
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
-import { BARS, MOVED } from "./charted.ts";
+import { BARS, MOVED, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
 
@@ -117,8 +117,9 @@ const part = (selector: string): HTMLElement => first().querySelector<HTMLElemen
 const head = (): HTMLElement => part(".chart-head");
 const grip = (): HTMLElement => part(".chart-grip");
 
-/** Fires what a ResizeObserver on the sheet would. */
+/** Fires what a ResizeObserver on the sheet would, and one on the last window's plot. */
 let resized: () => void;
+let plotResized: () => void;
 
 /** What the layer calls to give the grid its keys back. */
 const leave = vi.fn();
@@ -126,11 +127,12 @@ const leave = vi.fn();
 /** What the layer calls to scroll the sheet. */
 const wheelBy = vi.fn();
 
-/** A ResizeObserver that fires only when a test says, and only on #content. */
+/** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
   observe(target: Element): void {
     if (target === content()) resized = () => this.callback([], this);
+    if (target.matches(".chart-plot")) plotResized = () => this.callback([], this);
   }
   unobserve(): void {}
   disconnect(): void {}
@@ -442,6 +444,18 @@ test("a window draws as each tally comes, and keeps a complete one while the nex
   model.heard = () => ({ ...heardOf("North", "South"), latest: reading });
   layer.tallied(FLUSH.id);
   await frame();
+  expect(labels()).toStrictEqual(["North", "South"]);
+});
+
+test("a window draws its bars again in the frame its plot resizes", () => {
+  const { model } = shown(FLUSH);
+  model.heard = () => heardOf("North", "South", "West", "East");
+  const plot = part(".chart-plot");
+  Object.defineProperty(plot, "clientHeight", { value: ROOM.h, configurable: true });
+  plotResized();
+  expect(labels()).toStrictEqual(["North", "South", "West", "East"]);
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
+  plotResized();
   expect(labels()).toStrictEqual(["North", "South"]);
 });
 

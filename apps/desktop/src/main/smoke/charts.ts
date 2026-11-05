@@ -5,6 +5,7 @@
  * leave too little room. None of it marks the workspace unsaved, and the grid
  * still takes the pointer and the keys beside a window. In light and dark, a
  * window reads as the settings menu's box, the sidebar's band and the window's ×.
+ * Its bars draw once its chart's tally completes, as bars.ts sizes them.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot.
@@ -80,6 +81,9 @@ const FINGER = "28px";
 
 /** A caption's height, which MIN_HEIGHT allows for. */
 const CAPTION = 22;
+
+/** The second export's rows per Location, the largest first, as a new window's bars say them. */
+const LOCATION_ROWS = ["661", "656", "650", "633"];
 
 /** What a window copies from the settings menu. */
 const BOX_LOOK = [
@@ -211,6 +215,38 @@ export const CHARTS: Check[] = [
       if (foot.bottom !== bottom) return "the foot window ends at " + foot.bottom + ", and the scrollbar starts at " + bottom;
       if (top.top < close.bottom) return "the top window starts at " + top.top + ", beside the × to " + close.bottom;
       return unsaved() ? "opening the workspace marked it unsaved" : "";
+    `,
+  },
+  {
+    name: "a chart draws its bars once its tally completes, in the accent, as thick and as far apart as bars.ts sets, each value on its label's line",
+    shot: "chart-bars",
+    script: `
+      ${GEOMETRY}
+      ${CHROME}
+      const plots = [...document.querySelectorAll(".chart-plot")];
+      const all = (plot, selector) => [...plot.querySelectorAll(selector)];
+      const said = (plot) => all(plot, ".chart-bar-tip").map((tip) => tip.textContent).join();
+      const want = ${JSON.stringify(LOCATION_ROWS.join())};
+      if (!(await arrives(() => plots.every((plot) => said(plot) === want)))) return "the bars say " + plots.map(said).join(" and ");
+      const [plot] = plots;
+      const px = (name) => parseFloat(style(plot.querySelector(".chart-bars")).getPropertyValue(name));
+      const [thick, gap, inset] = ["--bar-thick", "--bar-gap", "--bars-inset"].map(px);
+      const [bars, tips, labels] = [".chart-bar", ".chart-bar-tip", ".chart-bar-label"].map((at) => all(plot, at).map((one) => one.getBoundingClientRect()));
+      const track = plot.querySelector(".chart-bar-track").getBoundingClientRect();
+      if (bars[0].top !== plot.getBoundingClientRect().top + inset) return "the first bar stands at " + edges(bars[0]);
+      for (const [i, bar] of bars.entries()) {
+        const above = i === 0 ? bar.top - gap : bars[i - 1].bottom;
+        if (bar.height !== thick || bar.top - above !== gap || bar.left !== track.left) return "bar " + i + " stands at " + edges(bar);
+        if (labels[i].right > bar.left || tips[i].left < bar.right) return "bar " + i + " at " + edges(bar) + " meets its label or its value";
+      }
+      if (Math.abs(tips[0].right - track.right) > ${RECT_SLACK}) return "the longest value ends at " + tips[0].right + ", and its track at " + track.right;
+      const top = (at) => { const range = document.createRange(); range.selectNodeContents(at); return range.getBoundingClientRect().top; };
+      const [values, names] = [".chart-bar-tip", ".chart-bar-label"].map((at) => all(plot, at).map(top));
+      const off = values.findIndex((value, i) => value !== names[i]);
+      if (off !== -1) return "value " + off + "'s text stands at " + values[off] + ", and its label's at " + names[off];
+      const worn = [style(plot.querySelector(".chart-bar")).backgroundColor, style(plot.querySelector(".chart-bar-tip")).color];
+      const inks = [computed("var(--accent)"), computed("var(--ink-2)")];
+      return worn.join() === inks.join() ? "" : "a bar and its value wear " + worn.join(" and ");
     `,
   },
   {
