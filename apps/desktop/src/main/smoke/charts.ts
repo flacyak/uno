@@ -876,4 +876,36 @@ export const CHART_STATES: Check[] = [
       return "";
     `,
   },
+  {
+    name: "in dark, the words wear the values' ink and the button the text's",
+    shot: "chart-states-dark",
+    script: `
+      ${CHROME}
+      const gear = document.querySelector("#settings");
+      gear.click();
+      document.querySelector('.settings [data-appearance="dark"]').click();
+      gear.click();
+      await frame();
+      const state = document.querySelector(".chart-state");
+      const worn = [style(state).color, style(state.querySelector("button")).color];
+      const inks = [computed("var(--ink-2)"), computed("var(--ink)")];
+      return worn.join() === inks.join() ? "" : "the words and the button wear " + worn.join(" and ");
+    `,
+  },
+  {
+    name: "Re-point on a chart opens the panel's browser, and Connect the connect form on its bucket",
+    shot: "chart-states-connect",
+    script: `
+      const [connect, repoint] = ${JSON.stringify(STATE_WORDS.map(([, action]) => action))};
+      const press = (action) => [...document.querySelectorAll(".chart-state button")].find((button) => button.textContent === action).click();
+      const [panel, list, form] = ["#panel", ".panel-list", ".panel-connect"].map((at) => document.querySelector(at));
+      // Re-point goes first, as panel.repoint leaves an open connect form in place.
+      press(repoint);
+      if (!(await until(() => !panel.hidden && !list.hidden))) return "Re-point left the panel closed";
+      press(connect);
+      if (!(await until(() => !form.hidden))) return "Connect left the connect form hidden";
+      const bucket = form.querySelector('[aria-label="bucket"]').value;
+      return bucket === "nobody-connected" ? "" : "the form is on " + JSON.stringify(bucket);
+    `,
+  },
 ];
