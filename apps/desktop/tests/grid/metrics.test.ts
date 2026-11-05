@@ -20,6 +20,7 @@ import {
   tableOffset,
   topToScroller,
   visibleRange,
+  wheelWay,
 } from "@renderer/grid/metrics";
 
 /** The stylesheet's default row height. */
@@ -159,6 +160,16 @@ test("the visible range at the end of the sheet clamps rather than running past 
   const range = visibleRange(2900, ROW_H, 310, 95);
   expect(range.bottom).toBe(94);
   expect(range.top).toBeLessThanOrEqual(range.bottom);
+});
+
+test("Shift sends a wheel along the row, as the browser does past what its event says", () => {
+  expect(wheelWay(0, 120, true)).toEqual({ dx: 120, dy: 0 });
+  expect(wheelWay(0, -120, true)).toEqual({ dx: -120, dy: 0 });
+});
+
+test("a wheel keeps its deltas with no Shift, and where the system has already swapped them", () => {
+  expect(wheelWay(5, 120, false)).toEqual({ dx: 5, dy: 120 });
+  expect(wheelWay(120, 0, true)).toEqual({ dx: 120, dy: 0 });
 });
 
 test("a page is at least 1 row even when the viewport is shorter than one row", () => {

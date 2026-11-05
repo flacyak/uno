@@ -42,6 +42,15 @@ export function measure(
   };
 }
 
+/**
+ * The way a wheel scrolls. With Shift held a browser takes a wheel down and up
+ * along the row, though its event still says down. macOS swaps the deltas itself,
+ * so a wheel with a sideways delta is left as it came.
+ */
+export function wheelWay(dx: number, dy: number, shift: boolean): { dx: number; dy: number } {
+  return shift && dx === 0 ? { dx: dy, dy: 0 } : { dx, dy };
+}
+
 /** Clamps a value to [0, max]. */
 export function clamp(value: number, max: number): number {
   return Math.max(0, Math.min(max, value));

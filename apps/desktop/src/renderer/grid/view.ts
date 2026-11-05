@@ -27,6 +27,7 @@ import {
   tableOffset,
   topToScroller,
   visibleRange,
+  wheelWay,
 } from "./metrics.ts";
 import { el } from "@renderer/shell/util";
 import { columnLabel, unnamed } from "./rows.ts";
@@ -245,14 +246,20 @@ export class View {
   private wheel(e: WheelEvent): void {
     if (e.ctrlKey) return; // Ctrl+wheel is zoom
     e.preventDefault();
+    const { dx, dy } = wheelWay(e.deltaX, e.deltaY, e.shiftKey);
+    this.wheelBy(dx, dy, e.deltaMode);
+  }
+
+  /** Scrolls by a wheel's deltas, in the unit `deltaMode` names. */
+  wheelBy(dx: number, dy: number, deltaMode: number): void {
     const unit =
-      e.deltaMode === WheelEvent.DOM_DELTA_LINE
+      deltaMode === WheelEvent.DOM_DELTA_LINE
         ? this.rowHeight
-        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+        : deltaMode === WheelEvent.DOM_DELTA_PAGE
           ? this.scroller.clientHeight
           : 1;
-    this.top += e.deltaY * unit;
-    this.scroller.scrollLeft += e.deltaX * unit;
+    this.scrollTo(this.top + dy * unit);
+    this.scroller.scrollLeft += dx * unit;
     this.schedule();
   }
 

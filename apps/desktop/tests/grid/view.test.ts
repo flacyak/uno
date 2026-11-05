@@ -21,6 +21,10 @@ import { frame } from "@desktop-tests/smoke/dom-page";
 const ROW_H = 29;
 /** The header height the view is told, since happy-dom skips layout. */
 const HEAD_H = 30;
+/** A sheet far past the scroller's cap, where one row is under a px of scrollTop. */
+const VAST = 100_000_000;
+/** A wheel's deltas in px, which its mode reads as they are. */
+const PIXELS = WheelEvent.DOM_DELTA_PIXEL;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -63,6 +67,18 @@ function make(viewport: number): {
 
 function drawn(scroller: HTMLElement): number {
   return scroller.querySelectorAll("tbody tr").length;
+}
+
+/** Turns a wheel one row down on `scroller`, with `keys` held. */
+function turn(
+  scroller: HTMLElement,
+  keys: Pick<WheelEventInit, "ctrlKey" | "shiftKey"> = {},
+): WheelEvent {
+  // happy-dom's WheelEvent keeps no modifier keys.
+  const init = { deltaY: ROW_H, cancelable: true };
+  const event = Object.assign(new WheelEvent("wheel", init), keys);
+  scroller.dispatchEvent(event);
+  return event;
 }
 
 // ---------------------------------------------------------------- gutter
@@ -111,6 +127,76 @@ test("the same rows shown again keep where they were scrolled to", () => {
   view.show(sheet(40, 12), true);
 
   expect(scroller.scrollLeft).toBe(500);
+});
+
+// ------------------------------------------------------------------ wheel
+
+test("a wheel from outside scrolls an unscaled sheet by its px, down and along", () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(1000, 12), false);
+
+  view.wheelBy(40, 2 * ROW_H, PIXELS);
+
+  expect(scroller.scrollTop).toBe(2 * ROW_H);
+  expect(scroller.scrollLeft).toBe(40);
+});
+
+test("a wheel from outside counts in rows or in pages when its mode says so", () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(1000, 12), false);
+
+  view.wheelBy(3, 3, WheelEvent.DOM_DELTA_LINE);
+  expect(scroller.scrollTop).toBe(3 * ROW_H);
+  expect(scroller.scrollLeft).toBe(3 * ROW_H);
+
+  view.wheelBy(0, 1, WheelEvent.DOM_DELTA_PAGE);
+  expect(scroller.scrollTop).toBe(3 * ROW_H + 600);
+});
+
+test("a wheel from outside stops at the sheet's ends", () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(1000), false);
+
+  view.wheelBy(0, -ROW_H, PIXELS);
+  expect(scroller.scrollTop).toBe(0);
+
+  view.wheelBy(0, 1000 * ROW_H, PIXELS);
+  expect(scroller.scrollTop).toBe(1000 * ROW_H + HEAD_H - 600);
+});
+
+test("a wheel from outside moves a scaled sheet one row, a step its scrollTop cannot hold", async () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(VAST), false);
+
+  view.wheelBy(0, ROW_H, PIXELS);
+  await frame();
+
+  expect(view.visibleRows().top).toBe(1);
+  expect(scroller.querySelector("tbody tr")!.children[0]!.textContent).toBe("2");
+});
+
+test("a wheel on a scaled sheet's scroller moves it the same way, and Ctrl+wheel stays zoom", async () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(VAST), false);
+
+  expect(turn(scroller).defaultPrevented).toBe(true);
+  await frame();
+  expect(view.visibleRows().top).toBe(1);
+
+  expect(turn(scroller, { ctrlKey: true }).defaultPrevented).toBe(false);
+  await frame();
+  expect(view.visibleRows().top).toBe(1);
+});
+
+test("Shift and a wheel on a scaled sheet's scroller go along its rows", async () => {
+  const { view, scroller } = make(600);
+  view.show(sheet(VAST), false);
+
+  turn(scroller, { shiftKey: true });
+  await frame();
+
+  expect(view.visibleRows().top).toBe(0);
+  expect(scroller.scrollLeft).toBe(ROW_H);
 });
 
 // --------------------------------------------------------------- resizing
