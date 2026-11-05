@@ -7,14 +7,15 @@
  * window reads as the settings menu's box, the sidebar's band and the window's ×.
  * Its bars draw once its chart's tally completes, as bars.ts sizes them, a
  * scatter's points stand inside its axes, against labels on their gridlines,
- * and a pie stands round in its plot, in the chart colours.
+ * and a pie stands round in its plot, in the chart colours, its labels clear of
+ * one another, or a list beside it where they cannot be.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot. The last four open others:
  * one whose sums leave a window of the least width too little room for bars and
  * values, one of a scatter, one of three scatters whose x axis has room for its
  * labels in full in one window, not in a second, and not even compactly in the
- * third, and one of two pies.
+ * third, and one of three pies.
  */
 
 import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
@@ -47,12 +48,13 @@ const ALONG_LABELS = [
 ];
 
 /**
- * The one it wrote of two pies of the second export's rows, and their slices:
- * one for each way it writes Location, and one for each of the six largest of
- * the nine it writes Device, and Other.
+ * The one it wrote of three pies of the second export's rows, and their slices:
+ * one for each way it writes Location, and in two, one for each of the six
+ * largest of the nine it writes Device, and Other. The last stands in a window
+ * of the least size.
  */
 const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
-const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1];
+const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
 
 /** The zoom that halves the room. */
 const DOUBLE_ZOOM = 2;
@@ -751,7 +753,7 @@ export const CHART_ALONG: Check[] = [
   },
 ];
 
-/** The run's last check, as it opens a workspace of two pies in place of the last. */
+/** The run's last checks: the first opens a workspace of three pies in place of the last. */
 export const CHART_PIE: Check[] = [
   {
     name: "a pie stands round in the middle of its plot, inside the bars' inset, in the chart colours and Other in the caption's ink, each slice parted from the next by the page's ground",
@@ -780,8 +782,10 @@ export const CHART_PIE: Check[] = [
         const line = probe.getBoundingClientRect().height;
         probe.remove();
         const across = Math.min(plot.width, plot.height - 2 * (line + ${LABEL_GAP})) - 2 * ${BARS_INSET};
-        if (off(ring.width, across) || off(ring.height, across)) return "a ring stands at " + edges(ring) + " in a plot at " + edges(plot);
-        if (off(left + right, plot.left + plot.right) || off(top + bottom, plot.top + plot.bottom)) return "a ring stands at " + edges(ring) + ", off the middle of a plot at " + edges(plot);
+        // A pie that lists its slices stands beside its list, which the next check reads.
+        const labelled = win.querySelector(".chart-pie.listed") === null;
+        if (labelled && (off(ring.width, across) || off(ring.height, across))) return "a ring stands at " + edges(ring) + " in a plot at " + edges(plot);
+        if (labelled && (off(left + right, plot.left + plot.right) || off(top + bottom, plot.top + plot.bottom))) return "a ring stands at " + edges(ring) + ", off the middle of a plot at " + edges(plot);
         const worn = slices(win).map((slice) => style(slice).fill);
         const keys = worn.map((_, i) => computed(i < ${PIE_SLICES_AT_MOST} ? "var(--chart-" + (i + 1) + ")" : "var(--ink-3)"));
         if (worn.join(" ") !== keys.join(" ")) return "the slices wear " + worn.join(" and ");
@@ -789,6 +793,47 @@ export const CHART_PIE: Check[] = [
         if (gap !== computed("var(--paper)")) return "a line of " + gap + " parts the slices";
       }
       return "";
+    `,
+  },
+  {
+    name: "a pie's labels stand clear of the ring and of one another inside the inset, and where they cannot, a list exactly the inset from the ring, the two in the plot's middle, gives every slice in its colour",
+    shot: "chart-pie-listed",
+    script: `
+      ${GEOMETRY}
+      ${CHROME}
+      const rect = (at) => at.getBoundingClientRect();
+      const pies = [...document.querySelectorAll(".chart-pie")];
+      const listed = pies.map((pie) => pie.classList.contains("listed"));
+      if (listed.join() !== "false,false,true") return "the pies stand listed " + listed.join(" and ");
+      const near = (a, b, gap) => a + gap > b + ${RECT_SLACK};
+      const meet = (a, b) => near(a.right, b.left, ${LABEL_GAP}) && near(b.right, a.left, ${LABEL_GAP}) && near(a.bottom, b.top, ${LABEL_GAP}) && near(b.bottom, a.top, ${LABEL_GAP});
+      // A plot inside its inset, and a list's room in it, which takes its whole height.
+      const inset = (room, tall) => new DOMRect(room.left + ${BARS_INSET}, room.top + (tall ? 0 : ${BARS_INSET}), room.width - ${2 * BARS_INSET}, room.height - (tall ? 0 : ${2 * BARS_INSET}));
+      const inside = (at, room) => within(at, new DOMRect(room.x - ${RECT_SLACK}, room.y - ${RECT_SLACK}, room.width + ${2 * RECT_SLACK}, room.height + ${2 * RECT_SLACK}));
+      for (const pie of pies.filter((_, i) => !listed[i])) {
+        const [plot, ring] = [pie, pie.querySelector(".chart-slices")].map(rect);
+        const labels = [...pie.querySelectorAll(".chart-slice-label")].map(rect);
+        const out = [ring, ...labels].find((at) => !inside(at, inset(plot, false)));
+        if (out !== undefined) return "a pie draws at " + edges(out) + ", past the inset of a plot at " + edges(plot);
+        const middle = { x: (ring.left + ring.right) / 2, y: (ring.top + ring.bottom) / 2 };
+        const clamp = (n, low, high) => Math.min(Math.max(n, low), high);
+        const reach = (at) => Math.hypot(clamp(middle.x, at.left, at.right) - middle.x, clamp(middle.y, at.top, at.bottom) - middle.y);
+        const onRing = labels.find((at) => reach(at) < ring.width / 2);
+        if (onRing !== undefined) return "a label at " + edges(onRing) + " meets a ring at " + edges(ring);
+        const met = labels.find((a, i) => labels.slice(i + 1).some((b) => meet(a, b)));
+        if (met !== undefined) return "a label at " + edges(met) + " meets another";
+      }
+      const list = pies[listed.indexOf(true)];
+      const [space, disc, entries] = [list, list.querySelector(".chart-slices"), list.querySelector(".chart-legend")].map(rect);
+      const rows = [...list.querySelectorAll(".chart-legend li")].map(rect);
+      const out = [disc, ...rows].find((at, i) => !inside(at, inset(space, i > 0)));
+      if (out !== undefined) return "a listed pie draws at " + edges(out) + " in a plot at " + edges(space);
+      const off = (a, b) => Math.abs(a - b) > ${RECT_SLACK};
+      if (off(entries.left - disc.right, ${BARS_INSET})) return "the list stands " + (entries.left - disc.right) + " px from the ring";
+      if (off(disc.left - space.left, space.right - entries.right)) return "the ring and the list stand " + (disc.left - space.left) + " and " + (space.right - entries.right) + " px from the plot's sides";
+      const keys = [...list.querySelectorAll(".chart-legend-key")].map((key) => style(key).backgroundColor);
+      const fills = [...list.querySelectorAll(".chart-slice")].map((slice) => style(slice).fill);
+      return keys.join(" ") === fills.join(" ") ? "" : "the list's keys wear " + keys.join(" and ") + " beside slices of " + fills.join(" and ");
     `,
   },
 ];

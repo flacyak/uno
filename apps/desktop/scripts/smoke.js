@@ -277,9 +277,10 @@ await writeFile(
   }),
 );
 
-// A workspace of two pies of the second export's rows, in a new window's size:
-// one per Location, which it writes four ways, and one per Device, which it
-// writes nine, so its six largest have a slice each and the rest an Other.
+// A workspace of pies of the second export's rows, in a new window's size: one
+// per Location, which it writes four ways, and one per Device, which it writes
+// nine, so its six largest have a slice each and the rest an Other. A third,
+// per Device in a window of the least size, has too little room to label them.
 const pies = join(scratch, "sent", "pies.uno");
 const adsSource = {
   id: "ads",
@@ -301,6 +302,7 @@ await writeFile(
     charts: [
       { ...pieChart, id: "c1", plot: shareOf(10, "Location"), place: { ...chartSize, x: 0, y: 0 } },
       { ...pieChart, id: "c2", plot: shareOf(11, "Device"), place: { ...chartSize, x: 1, y: 0 } },
+      { ...pieChart, id: "c3", plot: shareOf(11, "Device"), place: { ...leastSize, x: 1, y: 1 } },
     ],
     extra: new Map(),
     at: pies,
