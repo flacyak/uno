@@ -4,7 +4,9 @@
  * holds the rest. A value at or below zero has no share to draw.
  *
  * The slices go round from the top, as SVG on a ring of radius 1, so whatever
- * sizes the SVG sizes the pie, round in any shape.
+ * sizes the SVG sizes the pie, round in any shape. Each wears its colour as
+ * --key, which chart.css fills it with, so a theme recolours it, and a line of
+ * the page's ground parts it from the next.
  */
 
 import type { Plot } from "@document";
@@ -43,6 +45,12 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
   return other > 0 ? [...own, { value: undefined, size: other }] : own;
 }
 
+/**
+ * What Other wears: the caption's ink, which the chart colours stand apart
+ * from after the sixth. The six wear --chart-1 to --chart-6, in their order.
+ */
+const OTHER_KEY = "var(--ink-3)";
+
 /** The SVG's view: two across, round its middle, so the ring's radius is 1. */
 const VIEW = "-1 -1 2 2";
 
@@ -77,6 +85,13 @@ function wedge(from: number, to: number): SVGElement {
   return slice;
 }
 
+/** gap gives the line that parts two slices where they meet, `turn` of the way round. */
+function gap(turn: number): SVGElement {
+  const line = mark("path", "chart-slice-gap");
+  line.setAttribute("d", `M0 0L${point(turn)}`);
+  return line;
+}
+
 /**
  * pie draws `groups` as `plot` shares them out, from the top clockwise. A pie
  * of nothing above zero, or of a whole no double holds, has no share to draw,
@@ -92,11 +107,16 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
   ring.setAttribute("aria-hidden", "true");
   // Each slice ends where the sizes so far reach, so the last ends on the whole.
   let reached = 0;
-  for (const { size } of drawn) {
+  const gaps: SVGElement[] = [];
+  for (const [i, { value, size }] of drawn.entries()) {
     const from = reached / whole;
     reached += size;
-    ring.append(wedge(from, reached / whole));
+    const slice = wedge(from, reached / whole);
+    slice.style.setProperty("--key", value === undefined ? OTHER_KEY : `var(--chart-${i + 1})`);
+    ring.append(slice);
+    gaps.push(gap(from));
   }
+  if (drawn.length > 1) ring.append(...gaps);
   box.append(ring);
   return box;
 }

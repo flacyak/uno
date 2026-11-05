@@ -1,7 +1,8 @@
 /**
  * @fileoverview A pie chart's slices of a tally: one for each value above zero,
- * the six largest first, and Other after them for the rest.
- * Each runs its share of the way round from the top.
+ * the six largest first, and Other after them for the rest. Each runs its share
+ * of the way round from the top, wears a chart colour, Other the caption's ink,
+ * and a line of the page's ground parts it from the next slice round the ring.
  *
  * @vitest-environment happy-dom
  */
@@ -31,9 +32,12 @@ const EIGHT = tallyOf(...[80, 70, 60, 50, 40, 30, 20, 10].map((n, i) => sent(`v$
 const firstOf = (groups: Groups, count = groups.groups.length): Slice[] =>
   groups.groups.slice(0, count).map(({ value, rows }) => ({ value, size: rows }));
 
-/** The paths `box`'s slices draw. */
-const paths = (box: HTMLElement): Array<string | null> =>
-  [...box.querySelectorAll(".chart-slice")].map((slice) => slice.getAttribute("d"));
+/** Rows per region: half of them North, and a quarter each South and West. */
+const HALVED = tallyOf(sent("North", 2), sent("South", 1), sent("West", 1));
+
+/** The paths `box`'s `selector` draw. */
+const paths = (box: HTMLElement, selector = ".chart-slice"): Array<string | null> =>
+  [...box.querySelectorAll(selector)].map((at) => at.getAttribute("d"));
 
 test("each value above zero has a slice, the largest first, of its rows or its sum", () => {
   const regions = tallyOf(sent("North", 1204, 48160.5), sent("South", 812, 0), sent("West", 3, -1));
@@ -67,8 +71,7 @@ test("a pie of fewer than six slices has no Other, nor one of six with nothing p
 });
 
 test("each slice runs its share of the way round, clockwise from the top, the largest first", () => {
-  const halved = tallyOf(sent("North", 2), sent("South", 1), sent("West", 1));
-  expect(paths(pie(ROWS, halved))).toStrictEqual([
+  expect(paths(pie(ROWS, HALVED))).toStrictEqual([
     "M0 0L0 -1A1 1 0 0 1 0 1Z",
     "M0 0L0 1A1 1 0 0 1 -1 0Z",
     "M0 0L-1 0A1 1 0 0 1 0 -1Z",
@@ -86,4 +89,18 @@ test("a pie of nothing above zero, or of a whole no double holds, draws nothing"
   expect(pie(SUMS, tallyOf(sent("North", 3, 0))).childElementCount).toBe(0);
   const most = sent("North", 1, Number.MAX_VALUE);
   expect(pie(SUMS, tallyOf(most, { ...most, value: "South" })).childElementCount).toBe(0);
+});
+
+test("each slice wears the chart colours in order, and Other the caption's ink", () => {
+  const drawn = [...pie(ROWS, EIGHT).querySelectorAll<SVGElement>(".chart-slice")];
+  const own = Array.from({ length: PIE_SLICES_AT_MOST }, (_, i) => `var(--chart-${i + 1})`);
+  const keys = drawn.map((slice) => slice.style.getPropertyValue("--key"));
+  expect(keys).toStrictEqual([...own, "var(--ink-3)"]);
+});
+
+test("a line parts each slice from the next, over them all, and a lone one from none", () => {
+  const box = pie(ROWS, HALVED);
+  expect(paths(box, ".chart-slice-gap")).toStrictEqual(["M0 0L0 -1", "M0 0L0 1", "M0 0L-1 0"]);
+  expect(box.querySelector(".chart-slice-gap ~ .chart-slice")).toBeNull();
+  expect(pie(ROWS, tallyOf(sent("North", 3))).querySelector(".chart-slice-gap")).toBeNull();
 });
