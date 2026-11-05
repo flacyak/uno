@@ -57,6 +57,7 @@ const tips = (box: HTMLElement): Array<string | null> => texts(box, ".chart-bar-
 const lines = (box: HTMLElement): Array<string | null> => texts(box, ".chart-bars-line");
 const shares = (box: HTMLElement): number[] =>
   all(box, ".chart-bar-track").map((track) => Number(track.style.getPropertyValue("--share")));
+const property = (box: HTMLElement, name: string): string => box.style.getPropertyValue(name);
 
 /** The regions of a column of more values than a tally keeps apart. */
 const PAST = {
@@ -81,6 +82,30 @@ test("a sum per value draws each value's sum, and a sum of nothing no bar", () =
   expect(tips(box)).toStrictEqual(["48,160.5", "32,480", "0"]);
   expect(shares(box)).toStrictEqual([1, 32480 / 48160.5, 0]);
   expect(shares(bars(SUMS, tallyOf({ value: "", rows: 1, sum: 0 }), TALL))).toStrictEqual([0]);
+});
+
+test("a sum below zero draws left of zero, on the scale of the sums above it", () => {
+  const signed = tallyOf(
+    { value: "North", rows: 3, sum: 300 },
+    { value: "South", rows: 2, sum: -100 },
+  );
+  const box = bars(SUMS, signed, TALL);
+  expect(property(box, "--zero")).toBe(`${100 / 400}`);
+  expect(shares(box)).toStrictEqual([300 / 400, 100 / 400]);
+  expect(all(box, ".chart-bar-track.below")).toStrictEqual([all(box, ".chart-bar-track")[1]]);
+  expect(tips(box)).toStrictEqual(["300", "-100"]);
+  expect([property(box, "--room-above"), property(box, "--room-below")]).toStrictEqual([
+    "calc(3ch + var(--tip-gap))",
+    "calc(4ch + var(--tip-gap))",
+  ]);
+});
+
+test("sums all above zero or all below leave no room past zero, but a sum of nothing keeps its own", () => {
+  expect(property(bars(SUMS, REGIONS, TALL), "--room-below")).toBe("0px");
+  const under = bars(SUMS, tallyOf({ value: "", rows: 2, sum: -5 }), TALL);
+  expect([property(under, "--zero"), property(under, "--room-above")]).toStrictEqual(["1", "0px"]);
+  const nothing = tallyOf({ value: "a", rows: 1, sum: 0 }, { value: "b", rows: 2, sum: -5 });
+  expect(property(bars(SUMS, nothing, TALL), "--room-above")).toBe("calc(1ch + var(--tip-gap))");
 });
 
 test("a value's label is the file's text, marked as the file's, and never markup", () => {
