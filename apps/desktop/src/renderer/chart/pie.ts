@@ -58,6 +58,9 @@ const OTHER_KEY = "var(--ink-3)";
 /** The room between the ring and a label, in px: as far as a bar's value stands from its bar. */
 export const LABEL_GAP = TIP_GAP;
 
+/** How far past its room a label may measure, in px: a layout's rounding, under a px. */
+const FIT_SLACK = 0.5;
+
 /** The SVG's view: two across, round its middle, so the ring's radius is 1. */
 const VIEW = "-1 -1 2 2";
 
@@ -154,4 +157,36 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
   disc.append(ring, ...labels);
   box.append(disc);
   return box;
+}
+
+/** before says whether `a` stands `gap` px or more before `b`, give or take FIT_SLACK. */
+function before(a: number, b: number, gap: number): boolean {
+  return a + gap <= b + FIT_SLACK;
+}
+
+/**
+ * fitLabels marks `box`, as pie drew it, listed where two of its labels stand
+ * under LABEL_GAP apart or one runs into the plot's inset. It measures the
+ * drawn labels, so `box` stands in the page by then.
+ */
+export function fitLabels(box: HTMLElement): void {
+  const room = box.getBoundingClientRect();
+  // A plot not laid out yet has nothing to measure, and draws again as it takes a size.
+  if (room.width === 0) return;
+  const inside = (rect: DOMRect): boolean =>
+    before(room.left, rect.left, BARS_INSET) &&
+    before(room.top, rect.top, BARS_INSET) &&
+    before(rect.right, room.right, BARS_INSET) &&
+    before(rect.bottom, room.bottom, BARS_INSET);
+  // Two labels stand apart where one stands LABEL_GAP over the other, or along it.
+  const apart = (a: DOMRect, b: DOMRect): boolean =>
+    before(a.bottom, b.top, LABEL_GAP) ||
+    before(b.bottom, a.top, LABEL_GAP) ||
+    before(a.right, b.left, LABEL_GAP) ||
+    before(b.right, a.left, LABEL_GAP);
+  const drawn = [...box.querySelectorAll(".chart-slice-label")].map((shown) =>
+    shown.getBoundingClientRect(),
+  );
+  const fit = drawn.every((a, i) => inside(a) && drawn.slice(i + 1).every((b) => apart(a, b)));
+  box.classList.toggle("listed", !fit);
 }
