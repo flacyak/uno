@@ -21,8 +21,10 @@
  *   out/connecting.gif.
  * - `refused`: the same with the bucket's name mistyped. The line fails and
  *   is chosen to edit the connection. Goes to out/refused.gif.
+ * - `moves`: carries a chart window by its head, resizes it by its grip, and
+ *   steps and resizes it with the arrows. Goes to out/moves.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves]
  * (after node scripts/build.js)
  */
 
@@ -31,6 +33,8 @@ import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { newManifest, writeDocument } from "@uno/core/document";
 
 import {
   DRIVEN_LANGUAGE_ENV,
@@ -48,9 +52,11 @@ const root = resolve(pkg, "../../..");
 const testdata = join(pkg, "../../core/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 
-const STORIES = ["browse", "sidebar", "edit", "refresh", "opening", "connecting", "refused"];
-/** The stories filmed against the stand-in bucket. Their GIFs go to out/. */
+/** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
+/** The stories whose GIFs go to out/, as docs/ shows none of them. */
+const TO_OUT = [...AGAINST_BUCKET, "moves"];
+const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
   console.error(`preview: no story called ${story} · ${STORIES.join(", ")}`);
@@ -58,10 +64,10 @@ if (!STORIES.includes(story)) {
 }
 
 // The frames are scratch. The GIF goes to docs/, or to out/ for the stories
-// filmed against the bucket.
+// TO_OUT names.
 const frames = join(pkg, "out/preview");
 const takes = join(root, "docs");
-const gif = AGAINST_BUCKET.includes(story)
+const gif = TO_OUT.includes(story)
   ? join(pkg, `out/${story}.gif`)
   : join(takes, story === "sidebar" ? "sidebar.gif" : "preview.gif");
 
@@ -203,6 +209,45 @@ async function stageSidebar() {
   return { workspaces, fresh };
 }
 
+/**
+ * stageMoves writes the moves story's workspace: the fixture with a chart at
+ * the top of the sheet's right edge, in a new window's size, and another under
+ * it. Returns the .uno's path.
+ */
+async function stageMoves() {
+  const dir = await freshDir("moves");
+  const csv = join(dir, "sales-q3.csv");
+  const uno = join(dir, "q3-close.uno");
+  await copyFile(fixture, csv);
+  const plot = { t: "bars", by: { col: 1, header: "region" } };
+  const chart = { source: "sales", plot, title: "", refresh: 0 };
+  // A new window's size: DEFAULT_WIDTH and DEFAULT_HEIGHT in chart/place.ts.
+  const size = { width: 420, height: 260 };
+  const charts = [
+    { ...chart, id: "c1", place: { ...size, x: 1, y: 0 } },
+    { ...chart, id: "c2", place: { ...size, x: 1, y: 1 } },
+  ];
+  const source = { id: "sales", name: "sales-q3.csv", path: csv };
+  const state = { active: { row: 0, col: 0 } };
+  // What the fixture holds, as a saved workspace records it.
+  const shape = { rows: 4812, cols: 6 };
+  const sources = [{ ...source, ...shape, state }];
+  const manifest = newManifest();
+  await writeFile(
+    uno,
+    writeDocument({
+      manifest,
+      sources,
+      active: "sales",
+      log: [],
+      charts,
+      extra: new Map(),
+      at: uno,
+    }),
+  );
+  return uno;
+}
+
 /** The object the refresh story's workspace points at, in the stand-in bucket. */
 const REFRESH_KEY = "2025/ads-q3.csv";
 
@@ -271,8 +316,8 @@ else if (AGAINST_BUCKET.includes(story)) remote = await stageOpening(story === "
 const sidebar = story === "sidebar" ? await stageSidebar() : undefined;
 // The sidebar story opens its own workspaces once the window is up, so the
 // app starts with none.
-const opened =
-  sidebar !== undefined ? [] : [story === "browse" ? await stage() : (remote?.uno ?? fixture)];
+const staged = { browse: stage, moves: stageMoves }[story];
+const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 
 const electron = (await import("electron")).default;
 
