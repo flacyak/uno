@@ -199,15 +199,35 @@
 
 /* What the plot says in place of a chart it cannot draw, from caption.ts: in
  * the window's size and the values' ink, in the plot's middle, as far from its
- * sides as the head's words, and on as many lines as that takes. */
+ * sides as the head's words, and on as many lines as that takes. Its action's
+ * button stands the head's gap under the words, as the forms' buttons
+ * (formula.css). */
 .chart-state {
   display: grid;
   place-content: center;
+  justify-items: center;
+  gap: 8px;
   height: 100%;
   padding: 0 10px;
   color: var(--ink-2);
   text-align: center;
   overflow-wrap: anywhere;
+}
+
+.chart-state button {
+  padding: 3px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.chart-state button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 /* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.

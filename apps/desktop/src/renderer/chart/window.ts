@@ -22,7 +22,7 @@ import { wheelWay } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
-import { Words, el } from "@renderer/shell/util";
+import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
 import { body, coverage, drawable, reading } from "./caption.ts";
 import { fitLabels, past, pie } from "./pie.ts";
@@ -74,6 +74,8 @@ export interface Stage {
   wheelBy(dx: number, dy: number, deltaMode: number): void;
   /** What chart `id` last heard from its source. */
   heard(id: string): Heard | undefined;
+  /** Opens the sources panel on `source`, to point it at a file or connect its bucket. */
+  repoint(source: string): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -281,12 +283,18 @@ export class ChartWindow {
     this.said.title = words;
   }
 
-  /** state gives what the plot shows in place of a chart it cannot draw, or nothing for one that has gone. */
+  /**
+   * state gives what the plot shows in place of a chart it cannot draw, with
+   * the button of any action that mends it, or nothing for one that has gone.
+   */
   private state(heard: Heard | undefined): HTMLElement[] {
     const said = heard === undefined ? undefined : body(this.chart.plot, heard);
     if (said === undefined) return [];
     const box = el("div", "chart-state");
     box.append(el("bdi", "", said.words));
+    if (said.action !== undefined) {
+      box.append(button("", said.action, () => this.stage.repoint(this.chart.source)));
+    }
     return [box];
   }
 

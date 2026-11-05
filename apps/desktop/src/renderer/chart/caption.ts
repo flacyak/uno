@@ -14,9 +14,11 @@ import { columnLabel } from "@renderer/grid/rows";
 import { list, percent } from "@renderer/locale";
 import { say } from "@renderer/said";
 
-/** What a chart's plot says in place of what it cannot draw. */
+/** What a chart's plot says in place of what it cannot draw, and the action it offers. */
 export interface Body {
   words: string;
+  /** The button's words: Re-point for a missing source, Connect for one waiting on its bucket. */
+  action?: string;
 }
 
 /**
@@ -83,16 +85,25 @@ function valued(plot: Plot): string[] {
 
 /**
  * body gives what the plot says in place of a chart it cannot draw, or
- * undefined where it draws one: why the chart cannot read its column, that it
- * reads its source before the first tally, or that the tally has no values in
- * the plot's columns yet. A source that is missing or waits on its bucket is
- * said nowhere yet.
+ * undefined where it draws one: why the chart cannot read its column, that its
+ * source is missing or waits on its bucket, with the action that mends it,
+ * that it reads its source before the first tally, or that the tally has no
+ * values in the plot's columns yet.
  */
 export function body(plot: Plot, heard: Heard): Body | undefined {
   if (drawable(heard) !== undefined) return undefined;
   const { state, latest, name } = heard;
   if (latest?.t === "unread") return { words: say(latest.said) };
-  if (state === "missing" || state === "unconnected") return undefined;
+  if (state === "missing") {
+    return { words: m.chart_source_missing({ name }), action: m.action_repoint() };
+  }
+  if (state === "unconnected") {
+    const bucket = heard.bucket ?? name;
+    return {
+      words: m.chart_bucket_unconnected({ bucket }),
+      action: m.sources_connect_bucket({ bucket }),
+    };
+  }
   if (latest === undefined) return { words: m.chart_reading({ name }) };
   return { words: m.chart_no_values_yet({ columns: list(valued(plot)) }) };
 }
