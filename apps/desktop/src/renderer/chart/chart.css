@@ -198,7 +198,8 @@
   white-space: nowrap;
 }
 
-.chart-bar-label {
+.chart-bar-label,
+.chart-legend .chart-slice-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -353,10 +354,60 @@
   white-space: nowrap;
 }
 
+/* Where labels would meet or run into the inset, pie.ts lists the slices beside
+ * the ring, both in the plot's middle inside its inset, as far apart as from its
+ * edge: the ring as large as the height holds, up to half the width. */
+.chart-pie.listed {
+  grid-template: minmax(0, 1fr) / auto minmax(0, max-content);
+  justify-content: center;
+  gap: var(--inset);
+  padding: 0 var(--inset);
+}
+
+.chart-pie.listed .chart-pie-disc {
+  --across: min(100cqh - 2 * var(--inset), (100cqw - var(--inset)) / 2);
+}
+
+.chart-pie.listed .chart-slice-label,
+.chart-pie:not(.listed) .chart-legend {
+  display: none;
+}
+
+/* An entry is its slice's colour as the design's 10 px key, its value, which
+ * ends in an ellipsis where the list is narrow, and its share, in columns. The
+ * list takes the plot's whole height, as seven entries need in a window of the
+ * least height, and scrolls where even that is too short, under the wheel as
+ * .chart-scrolls and with no bar: Chromium keeps a bar's width in a scroller's
+ * max-content, which would stand the list that much off the ring. */
+.chart-legend {
+  --key-size: 10px;
+  display: grid;
+  grid-template-columns: var(--key-size) minmax(0, max-content) auto;
+  align-content: safe center;
+  gap: 0 var(--label-gap);
+  padding: 0;
+  scrollbar-width: none;
+  list-style: none;
+}
+
+.chart-legend li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.chart-legend-key {
+  height: var(--key-size);
+  border-radius: 2px;
+  background: var(--key);
+}
+
 /* A share wears ink, never its slice's colour, as a bar's value does. */
 .chart-slice-share {
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .chart-slices {
