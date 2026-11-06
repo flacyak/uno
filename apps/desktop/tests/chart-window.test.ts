@@ -165,6 +165,7 @@ test("the head, the track and the caption are drawn, with a grip that says nothi
   expect([...box.children].map((child) => child.className)).toStrictEqual([
     "col-head chart-head",
     "chart-plot",
+    "chart-summary",
     "chart-coverage",
     "chart-caption",
     "chart-edge chart-edge-right",

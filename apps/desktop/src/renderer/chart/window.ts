@@ -13,8 +13,9 @@
  *
  * The plot draws what the chart last heard, each time the layer shows the
  * window, as the window resizes, and when the chart hears a tally. The
- * caption's count of the cells that were not numbers is a button that finds
- * them in the sheet.
+ * drawing is an image a screen reader hears named by what the chart says it
+ * shows, from the last complete tally. The caption's count of the cells that
+ * were not numbers is a button that finds them in the sheet.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -31,6 +32,8 @@ import { belowZero, fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
+import { summary } from "./summary.ts";
+import type { Summary } from "./summary.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -162,6 +165,17 @@ export class ChartWindow {
   /** How far the chart has read its source, under the head, while it reads. */
   private readonly track = el("div", "chart-coverage");
   /**
+   * What the drawing says it shows, out of sight, which a screen reader hears
+   * as its name: the app's words, the values from the file, marked as the
+   * file's, and the count of the rest, each in a span of its own.
+   */
+  private readonly summary = el("div", "chart-summary");
+  private readonly told: Record<keyof Summary, HTMLElement> = {
+    said: el("span", "chart-summary-said"),
+    values: el("bdi", "chart-summary-values from-file"),
+    more: el("span", "chart-summary-more"),
+  };
+  /**
    * What the caption says of what the plot draws: the words before the
    * button, the · between them and it, the button, and the words after it.
    */
@@ -189,6 +203,9 @@ export class ChartWindow {
     const caption = el("div", "chart-caption");
     caption.id = `${id}-caption`;
     this.title.id = `${id}-title`;
+    this.summary.id = `${id}-summary`;
+    this.summary.hidden = true;
+    this.summary.append(this.told.said, " ", this.told.values, " ", this.told.more);
 
     const x = el("button", "round-x chart-close");
     x.type = "button";
@@ -225,7 +242,7 @@ export class ChartWindow {
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, this.plot, this.track, caption, right, foot);
+    this.box.append(head, this.plot, this.summary, this.track, caption, right, foot);
     // Whatever resizes the window, the plot draws again in the frame it lands in.
     new ResizeObserver(() => this.paint()).observe(this.plot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
@@ -244,7 +261,7 @@ export class ChartWindow {
    */
   show(chart: Chart, source: string | undefined): void {
     this.chart = chart;
-    const title = el("bdi", "", chart.title === "" ? madeTitle(chart.plot) : chart.title);
+    const title = el("bdi", "", this.named());
     if (source === undefined) this.title.replaceChildren(title);
     else this.title.replaceChildren(el("bdi", "from-file", source), " · ", title);
     this.title.title = this.title.textContent;
@@ -257,9 +274,13 @@ export class ChartWindow {
     if (this.hold === undefined) standAt(this.box, rect);
   }
 
-  /** relabel writes the window's own words in the current language. */
+  /**
+   * relabel writes the window's own words in the current language, and draws
+   * the plot again, whose words and summary follow the language too.
+   */
   relabel(): void {
     this.words.write();
+    this.redraw();
   }
 
   /** redraw draws the plot again on the next frame. Repeated calls coalesce. */
@@ -289,19 +310,14 @@ export class ChartWindow {
     const latest = heard?.latest;
     const before = [coverage(latest), blank(latest)];
     const after: string[] = [];
+    const named = this.summarise(heard);
     if (plot.t === "bars" && tally?.t === "groups") {
-      const drawn = bars(plot, tally, this.plot.clientHeight);
-      this.fill(drawn);
-      fitTips(drawn);
+      fitTips(this.place(bars(plot, tally, this.plot.clientHeight), named));
     } else if (plot.t === "scatter" && tally?.t === "sample") {
-      const drawn = scatter(tally);
-      this.fill(drawn);
-      fitAlong(drawn, tally);
+      fitAlong(this.place(scatter(tally), named), tally);
       after.push(sampled(tally));
     } else if (plot.t === "pie" && tally?.t === "groups") {
-      const drawn = pie(plot, tally);
-      this.fill(drawn);
-      fitLabels(drawn);
+      fitLabels(this.place(pie(plot, tally), named));
       after.push(past(plot, tally), belowZero(plot, tally));
     } else {
       this.fill(...this.state(heard));
@@ -310,6 +326,37 @@ export class ChartWindow {
     const read = reading(heard);
     this.track.hidden = read === undefined;
     this.track.style.setProperty("--read", `${read ?? 0}`);
+  }
+
+  /** place puts `drawn` in the plot as an image, named by what `named` names, and gives it back. */
+  private place(drawn: HTMLElement, named: string): HTMLElement {
+    drawn.setAttribute("role", "img");
+    drawn.setAttribute("aria-labelledby", named);
+    this.fill(drawn);
+    return drawn;
+  }
+
+  /**
+   * summarise writes what the drawing says it shows, from the last complete
+   * tally, so a partial never changes it, and gives the id of what names the
+   * drawing: the summary, or the head's title until a tally completes. Each
+   * paint writes it again, so a relabel and a new title reach it.
+   */
+  private summarise(heard: Heard | undefined): string {
+    const complete = heard?.complete;
+    const told =
+      heard === undefined || complete === undefined
+        ? undefined
+        : summary(this.named(), heard.name, this.chart.plot, complete);
+    for (const part of ["said", "values", "more"] as const) {
+      this.told[part].textContent = told?.[part] ?? "";
+    }
+    return told === undefined ? this.title.id : this.summary.id;
+  }
+
+  /** named gives what the head calls the chart: the person's title, or the one its plot makes. */
+  private named(): string {
+    return this.chart.title === "" ? madeTitle(this.chart.plot) : this.chart.title;
   }
 
   /**
