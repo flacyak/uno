@@ -12,7 +12,9 @@
  * something inside the window can still scroll that way.
  *
  * The plot draws what the chart last heard, each time the layer shows the
- * window, as the window resizes, and when the chart hears a tally.
+ * window, as the window resizes, and when the chart hears a tally. The
+ * caption's count of the cells that were not numbers is a button that finds
+ * them in the sheet.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -53,6 +55,9 @@ const SCROLLS = ".chart-scrolls";
  * fractional, and the sizes it adds up to are rounded, so an end can read short.
  */
 const SCROLL_END_SLACK = 1;
+
+/** What parts the caption's words. */
+const SEP = " · ";
 
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
@@ -117,6 +122,15 @@ export function madeTitle(plot: Plot): string {
     : m.chart_title_share_of_sum({ by, sum });
 }
 
+/**
+ * numbered gives the columns a plot reads numbers from: the one it sums, or a
+ * scatter's x and y.
+ */
+function numbered(plot: Plot): ChartColumn[] {
+  if (plot.t === "scatter") return [plot.x, plot.y];
+  return plot.sum === undefined ? [] : [plot.sum];
+}
+
 /** canGo says whether a scroller at `at` of `end` has room `delta`'s way. */
 function canGo(delta: number, at: number, end: number): boolean {
   return delta > 0 ? end - at > SCROLL_END_SLACK : delta < 0 && at > 0;
@@ -147,8 +161,18 @@ export class ChartWindow {
   private readonly plot = el("div", "chart-plot");
   /** How far the chart has read its source, under the head, while it reads. */
   private readonly track = el("div", "chart-coverage");
-  /** What the caption says of what the plot draws. */
+  /**
+   * What the caption says of what the plot draws: the words before the
+   * button, the · between them and it, the button, and the words after it.
+   */
   private readonly said = el("span", "chart-said");
+  private readonly before = el("span", "chart-said-before");
+  private readonly dot = el("span", "chart-said-dot");
+  private readonly after = el("span", "chart-said-after");
+  /** The count of the cells that were not numbers, the button that finds them in the sheet. */
+  private readonly find = button("chart-find", "", () =>
+    this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
+  );
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
   /** The pointer that holds the window, while one does. */
@@ -182,6 +206,9 @@ export class ChartWindow {
     grip.innerHTML = GRIP;
     grip.setAttribute("aria-hidden", "true");
     grip.addEventListener("pointerdown", (e) => this.take(e, grip, stretched));
+    // The button shows once a tally counts cells that were not numbers.
+    this.find.hidden = true;
+    this.said.append(this.before, this.dot, this.find, this.after);
     caption.append(this.said, grip);
 
     const right = el("div", "chart-edge chart-edge-right");
@@ -260,7 +287,8 @@ export class ChartWindow {
     const tally = drawable(heard);
     const { plot } = this.chart;
     const latest = heard?.latest;
-    const words = [coverage(latest), blank(latest), notNumbers(latest)];
+    const before = [coverage(latest), blank(latest)];
+    const after: string[] = [];
     if (plot.t === "bars" && tally?.t === "groups") {
       const drawn = bars(plot, tally, this.plot.clientHeight);
       this.plot.replaceChildren(drawn);
@@ -269,25 +297,41 @@ export class ChartWindow {
       const drawn = scatter(tally);
       this.plot.replaceChildren(drawn);
       fitAlong(drawn, tally);
-      words.push(sampled(tally));
+      after.push(sampled(tally));
     } else if (plot.t === "pie" && tally?.t === "groups") {
       const drawn = pie(plot, tally);
       this.plot.replaceChildren(drawn);
       fitLabels(drawn);
-      words.push(past(plot, tally), belowZero(plot, tally));
+      after.push(past(plot, tally), belowZero(plot, tally));
     } else {
       this.plot.replaceChildren(...this.state(heard));
     }
-    this.say(words.filter((said) => said !== "").join(" · "));
+    this.say(before, notNumbers(latest), after);
     const read = reading(heard);
     this.track.hidden = read === undefined;
     this.track.style.setProperty("--read", `${read ?? 0}`);
   }
 
-  /** say writes `words` in the caption, whole in its title, as a narrow window cuts them. */
-  private say(words: string): void {
-    this.said.textContent = words;
-    this.said.title = words;
+  /**
+   * say writes the caption: the words `before` the button, `count`, the cells
+   * that were not numbers, as the button, and the words `after` it, those that
+   * say something, with · between them, and the whole in its title, as a
+   * narrow window cuts them. The button is the one element whichever words
+   * stand around it, so a repaint never takes the keys from it; a count of
+   * none hides it, and gives the keys it held to the window.
+   */
+  private say(before: readonly string[], count: string, after: readonly string[]): void {
+    const lead = before.filter((part) => part !== "").join(SEP);
+    const trail = after.filter((part) => part !== "").join(SEP);
+    if (count === "" && document.activeElement === this.find) {
+      this.box.focus({ preventScroll: true });
+    }
+    this.find.hidden = count === "";
+    this.find.textContent = count;
+    this.before.textContent = lead;
+    this.dot.textContent = lead !== "" && count !== "" ? SEP : "";
+    this.after.textContent = trail !== "" && (lead !== "" || count !== "") ? SEP + trail : trail;
+    this.said.title = this.said.textContent;
   }
 
   /**

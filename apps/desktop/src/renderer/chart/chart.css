@@ -543,6 +543,35 @@
   white-space: nowrap;
 }
 
+/* The count of the cells that were not numbers is the button that finds them.
+ * It wears the caption's words where they would stand, its margins taking back
+ * its padding and its border, and shows as a button under the pointer, as the
+ * status bar's toggles do. It stands over the foot edge's zone, as the grip
+ * does. */
+.chart-find {
+  position: relative;
+  z-index: 1;
+  margin: 0 -5px;
+  padding: 0 4px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chart-find:hover {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+
+.chart-find:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* The scrollbar thumb's two colours (grid.css). It stands over the edges, and
  * takes the corner past it from both, since a corner means both ways. */
 .chart-grip {
