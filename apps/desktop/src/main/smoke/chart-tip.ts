@@ -2,7 +2,8 @@
  * @fileoverview Checks of the box that says what a mark is worth, under a
  * real pointer. The pointer over a bar's row shows the box right of the
  * pointer, inside the window, the row wearing the cursor, or left of it by
- * the window's edge, and the pointer leaving the plot takes it away.
+ * the window's edge; the box's words keep the accent over a capital
+ * whole; and the pointer leaving the plot takes it away.
  *
  * CHART_TIP follows CHART_WHEEL, which leaves the charted workspace's last
  * window, bars of the fixture's regions, raised over the first.
@@ -19,6 +20,9 @@ const CELL = "tbody tr:nth-child(3) td:nth-child(2)";
 
 /** How far a box may stand from where tooltip.ts puts it, as a window stands on half px. */
 const NEAR_PX = 0.5;
+
+/** A capital whose accent stands above the box's line. */
+const ACCENTED = "Ñ";
 
 /** Helpers: the window, its plot, box and rows, which row wears the cursor, and what each says. */
 const TIP = `
@@ -83,6 +87,28 @@ export const CHART_TIP: Check[] = [
       const { left, right } = rows()[0].querySelector(".chart-bar-tip").getBoundingClientRect();
       const box = tip.getBoundingClientRect();
       return near(box.right, Math.round((left + right) / 2) - ${TIP_OFFSET}) ? inside() : "the box stands at " + edges(box);
+    `,
+  },
+  {
+    name: "the box's words keep the accent over a capital whole",
+    script: `
+      ${TIP}
+      // The nearest box that clips stands above the accent's ink, which
+      // stands its ascent above the line, where an empty inline block sits.
+      const probe = tip.cloneNode(true);
+      const words = probe.querySelector(".chart-tip-words");
+      const line = document.createElement("span");
+      line.style.display = "inline-block";
+      words.replaceChildren("${ACCENTED}", line);
+      tip.after(probe);
+      let clip = words;
+      while (clip.parentElement && getComputedStyle(clip).overflowY === "visible") clip = clip.parentElement;
+      const pen = document.createElement("canvas").getContext("2d");
+      pen.font = getComputedStyle(words).font;
+      const ink = line.getBoundingClientRect().bottom - pen.measureText("${ACCENTED}").actualBoundingBoxAscent;
+      const top = clip.getBoundingClientRect().top;
+      probe.remove();
+      return ink >= top ? "" : "the accent's ink starts at " + ink + ", above the clip at " + top;
     `,
   },
   {
