@@ -737,7 +737,9 @@ export const CHART_SCATTER: Check[] = [
       const drawn = counted(document.querySelectorAll(".chart-point").length);
       const words = counted(ROWS) + " rows · " + counted(BLANK_ROWS) + " blank · " + drawn + " of " + counted(ROWS - BLANK_ROWS) + " points";
       if (said.textContent !== words) return "the caption says " + said.textContent + ", not " + words;
-      return said.scrollWidth > said.clientWidth ? "the caption cuts " + said.textContent : "";
+      // Each span clips its own words, so a cut shows in a span and never in the row.
+      const spans = [".chart-said-before", ".chart-said-after"].map((at) => said.querySelector(at));
+      return spans.some((at) => at.scrollWidth > at.clientWidth) ? "the caption cuts " + said.textContent : "";
     `,
   },
 ];
