@@ -2,7 +2,7 @@
  * @fileoverview What a chart says of one of its marks, under the pointer or
  * stepped to with the keys: what the mark is worth, as readings of a value
  * and what it is of, under the colour the mark wears. A bar's row is its hit
- * target.
+ * target, and a slice its own shape.
  *
  * A value from the file is set as text alone, and a number is written in the
  * app's language.
@@ -11,14 +11,19 @@
 import type { Plot } from "@document";
 import type { Groups } from "@engine";
 import { m } from "@paraglide/messages";
-import { num } from "@renderer/locale";
+import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
+import { slices, wholeOf } from "./pie.ts";
 
 /** What the bars and the points wear, as the box's key. */
 const ACCENT = "var(--accent)";
 
-/** What a bar chart draws. */
+/** What parts a label's words, as the caption's. */
+const SEP = " · ";
+
+/** What a bar chart and a pie draw. */
 type Bars = Extract<Plot, { t: "bars" }>;
+type Pie = Extract<Plot, { t: "pie" }>;
 
 /** One of a mark's readings: a number, and what it is of. */
 export interface Reading {
@@ -88,4 +93,25 @@ export function barTargets(plot: Bars, groups: Groups, box: HTMLElement): Target
     };
   });
   return { all, under: among(all, ".chart-bar-row") };
+}
+
+/**
+ * sliceTargets gives the targets of `box`, as pie drew `groups` for `plot`:
+ * each slice, worth what it measures, labelled by its value, or the app's
+ * word for Other, and its share of the whole.
+ */
+export function sliceTargets(plot: Pie, groups: Groups, box: HTMLElement): Targets {
+  const drawn = slices(plot, groups);
+  const whole = wholeOf(drawn);
+  const all = [...box.querySelectorAll<SVGElement>(".chart-slice")].map((slice, i) => {
+    const { value, size } = drawn[i]!;
+    const said = (): Reading[] => {
+      const label = el("span");
+      const name = value === undefined ? el("span", "", m.chart_pie_other()) : named(value);
+      label.append(name, `${SEP}${percent(size / whole)}`);
+      return [{ value: num(size), label }];
+    };
+    return { mark: slice, at: slice, key: slice.style.getPropertyValue("--key"), said };
+  });
+  return { all, under: among(all, ".chart-slice") };
 }
