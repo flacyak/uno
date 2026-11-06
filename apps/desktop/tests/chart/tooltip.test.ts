@@ -310,3 +310,16 @@ test("the box stands left of the pointer at the window's right edge, back inside
   plot.dispatchEvent(new PointerEvent("pointerleave"));
   expect([...shown(tip).slice(0, 2), ...cursors()]).toStrictEqual([false, "", false, false, false]);
 });
+
+test("a new drawing puts the cursor on the point under the pointer then, and takes it away where none is in reach", () => {
+  const { tip, plot } = over(plotted(SALES, 100), (box) => pointTargets(AGAINST, SALES, box));
+  moveTo(plot, 25, 75);
+  expect(shown(tip)[1]).toBe("50 units · 1,000 revenue");
+  // A point now stands before it, so the one under the pointer is the third.
+  const more = sampleOf([0, 10, 48, 200], [0, 0, 1000, 4000]);
+  tip.show(pointTargets(AGAINST, more, plotted(more, 100)));
+  expect(shown(tip)[1]).toBe("48 units · 1,000 revenue");
+  const far = sampleOf([0, 190, 200], [0, 3900, 4000]);
+  tip.show(pointTargets(AGAINST, far, plotted(far, 100)));
+  expect(shown(tip).slice(0, 2)).toStrictEqual([false, ""]);
+});
