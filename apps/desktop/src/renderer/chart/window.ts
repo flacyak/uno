@@ -15,8 +15,9 @@
  * window, as the window resizes, and when the chart hears a tally. The
  * drawing is an image a screen reader hears named by what the chart says it
  * shows, from the last complete tally, and t puts the table of the same in
- * its place, and back. The caption's count of the cells that were not numbers
- * is a button that finds them in the sheet.
+ * its place, and back. The pointer over a mark shows what it is worth in a
+ * box beside it. The caption's count of the cells that were not numbers is a
+ * button that finds them in the sheet.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -37,6 +38,7 @@ import { fitAlong, sampled, scatter } from "./scatter.ts";
 import { summary } from "./summary.ts";
 import type { Summary } from "./summary.ts";
 import { table } from "./table.ts";
+import { NONE, Tooltip, targets } from "./tooltip.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -219,6 +221,8 @@ export class ChartWindow {
   private readonly toggle = button("chart-head-button chart-table-toggle", "", () => this.flip());
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
+  /** The box that says what the mark under the pointer is worth. */
+  private readonly tip: Tooltip;
   /** The pointer that holds the window, while one does. */
   private hold: Hold | undefined;
   /** The frame the next draw of the plot waits for, or 0. */
@@ -239,6 +243,7 @@ export class ChartWindow {
     this.title.id = `${id}-title`;
     this.summary.id = `${id}-summary`;
     this.summary.hidden = true;
+    this.tip = new Tooltip(this.plot, this.box, `${id}-tip`);
     this.summary.append(this.told.said, " ", this.told.values, " ", this.told.more);
 
     const x = el("button", "round-x chart-close");
@@ -279,7 +284,7 @@ export class ChartWindow {
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, this.plot, this.summary, this.track, caption, right, foot);
+    this.box.append(head, this.plot, this.tip.box, this.summary, this.track, caption, right, foot);
     // Whatever resizes the window, the plot draws again in the frame it lands in.
     new ResizeObserver(() => this.paint()).observe(this.plot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
@@ -344,7 +349,7 @@ export class ChartWindow {
     const { plot } = this.chart;
     const latest = heard?.latest;
     const named = this.summarise(heard);
-    if (tally === undefined) this.fill(...this.state(heard));
+    if (tally === undefined) this.fill(false, ...this.state(heard));
     else if (this.tabled) this.tabulate(tally);
     else this.draw(plot, tally, named);
     const after = tally === undefined ? [] : extra(plot, tally);
@@ -356,24 +361,30 @@ export class ChartWindow {
 
   /**
    * draw draws `tally` as `plot` reads it, at the plot's height, as an image
-   * `named` names, and fits the values, the x axis or the labels to the plot
-   * once they stand in it.
+   * `named` names, fits the values, the x axis or the labels to the plot
+   * once they stand in it, and gives the box the marks where the fit leaves
+   * them.
    */
   private draw(plot: Plot, tally: GroupsTally | SampleTally, named: string): void {
+    let drawn: HTMLElement | undefined;
     if (plot.t === "bars" && tally.t === "groups") {
-      fitTips(this.place(bars(plot, tally, this.plot.clientHeight), named));
+      drawn = this.place(bars(plot, tally, this.plot.clientHeight), named);
+      fitTips(drawn);
     } else if (plot.t === "scatter" && tally.t === "sample") {
-      fitAlong(this.place(scatter(tally), named), tally);
+      drawn = this.place(scatter(tally), named);
+      fitAlong(drawn, tally);
     } else if (plot.t === "pie" && tally.t === "groups") {
-      fitLabels(this.place(pie(plot, tally), named));
+      drawn = this.place(pie(plot, tally), named);
+      fitLabels(drawn);
     }
+    if (drawn !== undefined) this.tip.show(targets(plot, tally, drawn));
   }
 
   /** place puts `drawn` in the plot as an image, named by what `named` names, and gives it back. */
   private place(drawn: HTMLElement, named: string): HTMLElement {
     drawn.setAttribute("role", "img");
     drawn.setAttribute("aria-labelledby", named);
-    this.fill(drawn);
+    this.fill(true, drawn);
     return drawn;
   }
 
@@ -389,7 +400,7 @@ export class ChartWindow {
       const called = el("bdi", this.chart.title === "" ? "" : "from-file", title);
       this.table = { of: tally, title, box: table(this.chart.plot, tally, called) };
     }
-    if (this.plot.firstChild !== this.table.box) this.fill(this.table.box);
+    if (this.plot.firstChild !== this.table.box) this.fill(false, this.table.box);
   }
 
   /** flip puts the table in the plot's place, or the plot back, and the button says which. */
@@ -425,11 +436,13 @@ export class ChartWindow {
   /**
    * fill puts `shown` in the plot's place. What stood there goes, and the keys
    * it held come to the window, as the find button's do, so a repaint never
-   * leaves them to the page.
+   * leaves them to the page. Anything but a `drawing` leaves the box no mark
+   * to stand by.
    */
-  private fill(...shown: Node[]): void {
+  private fill(drawing: boolean, ...shown: Node[]): void {
     if (this.plot.contains(document.activeElement)) this.box.focus({ preventScroll: true });
     this.plot.replaceChildren(...shown);
+    if (!drawing) this.tip.show(NONE);
   }
 
   /**
