@@ -731,11 +731,12 @@ export const CHART_SCATTER: Check[] = [
     `,
   },
   {
-    name: "a scatter that samples says in its caption how many points it draws, after its rows and whole before the grip",
+    name: "a scatter that samples says in its caption how many points it draws, after its rows and the rows it could not place, and whole before the grip",
     script: `
       const said = document.querySelector(".chart-said");
       const drawn = counted(document.querySelectorAll(".chart-point").length);
-      if (!said.textContent.includes(" rows · " + drawn + " of ")) return "the caption says " + said.textContent + " of " + drawn + " points";
+      const words = counted(ROWS) + " rows · " + counted(BLANK_ROWS) + " blank · " + drawn + " of " + counted(ROWS - BLANK_ROWS) + " points";
+      if (said.textContent !== words) return "the caption says " + said.textContent + ", not " + words;
       return said.scrollWidth > said.clientWidth ? "the caption cuts " + said.textContent : "";
     `,
   },

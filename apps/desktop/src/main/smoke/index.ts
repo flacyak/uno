@@ -29,6 +29,7 @@ import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
 import {
+  BLANK_ROWS,
   COMMAS_LEFT,
   DATE,
   DOM_ROWS,
@@ -95,6 +96,8 @@ const PRELUDE = `
   // gutter before those, so a column's cell is one further along.
   const ROWS = ${ROWS};
   const DATE = ${DATE}, REGION = ${REGION}, REP = ${REP}, UNITS = ${UNITS};
+  // Rows with no units and no revenue, which a chart of either leaves out.
+  const BLANK_ROWS = ${BLANK_ROWS};
   const GUTTER = ${GUTTER};
   // What remove commas changes once rows 1, 3 and 5 of units are fixed by hand.
   const COMMAS_LEFT = ${COMMAS_LEFT};

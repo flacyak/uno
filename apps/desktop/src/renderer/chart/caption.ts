@@ -1,17 +1,17 @@
 /**
  * @fileoverview What a chart's caption says of how much of its source it has
  * read, from the coverage its latest tally carries: the share read while the
- * tally is partial, and the rows once it is complete. The track under the head
- * shows the same share while the chart reads, and the plot says why it draws
- * nothing while it has nothing to draw.
+ * tally is partial, and the rows once it is complete, then the cells the tally
+ * left out. The track under the head shows the same share while the chart
+ * reads, and the plot says why it draws nothing while it has nothing to draw.
  */
 
 import type { ChartColumn, Plot } from "@document";
-import type { Coverage, GroupsTally, SampleTally, Tally } from "@engine";
+import type { Coverage, GroupsTally, SampleTally, Skipped, Tally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
-import { list, percent } from "@renderer/locale";
+import { list, num, percent } from "@renderer/locale";
 import { say } from "@renderer/said";
 
 /** What a chart's plot says in place of what it cannot draw, and the action it offers. */
@@ -40,6 +40,21 @@ export function coverage(latest: Tally | undefined): string {
   const { rows, complete } = latest.coverage;
   if (complete) return m.rows_count({ count: rows });
   return m.chart_partial({ read: percent(share(latest.coverage)) });
+}
+
+/** skipped gives what `latest` left out, where it is a tally the chart could read. */
+function skipped(latest: Tally | undefined): Skipped | undefined {
+  return latest === undefined || latest.t === "unread" ? undefined : latest.skipped;
+}
+
+/**
+ * blank gives what the caption says of the cells a tally left out as blank,
+ * or nothing where it left out none. A scatter counts a row it could not
+ * place once, as blank where neither of its cells holds a word.
+ */
+export function blank(latest: Tally | undefined): string {
+  const left = skipped(latest)?.blank ?? 0;
+  return left > 0 ? m.chart_blank({ count: num(left) }) : "";
 }
 
 /**
