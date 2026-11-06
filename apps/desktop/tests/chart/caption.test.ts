@@ -10,7 +10,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import type { GroupsTally, SampleTally, Tally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
-import { blank, body, coverage } from "@renderer/chart/caption";
+import { blank, body, coverage, notNumbers } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
 import { BARS, SCATTER } from "../charted.ts";
 
@@ -90,6 +90,24 @@ test("the caption counts the cells a tally left out as blank, in the language ch
   }
   expect(blank(undefined)).toBe("");
   expect(blank(UNREAD)).toBe("");
+});
+
+/** What each language says of one cell that was not a number, and of LEFT_OUT. */
+const NOT_NUMBERS: ReadonlyArray<[Locale, string, string]> = [
+  ["en-US", "1 not a number", "1,200 not numbers"],
+  ["en-GB", "1 not a number", "1,200 not numbers"],
+  ["es", "1 no es número", "1200 no son números"],
+  ["pt-BR", "1 não é número", "1.200 não são números"],
+  ["pt-PT", "1 não é número", "1200 não são números"],
+];
+
+test("the caption counts the cells that were not numbers, one or more, in the language chosen", () => {
+  for (const [locale, one, more] of NOT_NUMBERS) {
+    void setLocale(locale, { reload: false });
+    expect(notNumbers(leftOut(0, 1)), locale).toBe(one);
+    expect(notNumbers(leftOut(0, LEFT_OUT)), locale).toBe(more);
+  }
+  expect(notNumbers(leftOut(LEFT_OUT))).toBe("");
 });
 
 /** What a chart over the export heard with `latest` as its latest tally. */

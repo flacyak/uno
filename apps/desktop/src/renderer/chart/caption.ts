@@ -58,6 +58,15 @@ export function blank(latest: Tally | undefined): string {
 }
 
 /**
+ * notNumbers gives what the caption says of the cells a tally left out as not
+ * numbers, or nothing where it left out none. A scatter counts such a row once.
+ */
+export function notNumbers(latest: Tally | undefined): string {
+  const left = skipped(latest)?.unparsed ?? 0;
+  return left > 0 ? m.chart_not_numbers({ count: left }) : "";
+}
+
+/**
  * reading gives how far a chart has read its source, from 0 to 1, while it
  * reads: nothing of it before the first tally, and then the latest tally's
  * share until one completes. It is undefined where nothing is read: the tally

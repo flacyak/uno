@@ -24,7 +24,7 @@ import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
-import { blank, body, coverage, drawable, reading } from "./caption.ts";
+import { blank, body, coverage, drawable, notNumbers, reading } from "./caption.ts";
 import { fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
@@ -254,7 +254,7 @@ export class ChartWindow {
     const tally = drawable(heard);
     const { plot } = this.chart;
     const latest = heard?.latest;
-    const words = [coverage(latest), blank(latest)];
+    const words = [coverage(latest), blank(latest), notNumbers(latest)];
     if (plot.t === "bars" && tally?.t === "groups") {
       const drawn = bars(plot, tally, this.plot.clientHeight);
       this.plot.replaceChildren(drawn);
