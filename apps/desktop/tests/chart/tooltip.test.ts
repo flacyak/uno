@@ -311,6 +311,16 @@ test("the box stands left of the pointer at the window's right edge, back inside
   expect([...shown(tip).slice(0, 2), ...cursors()]).toStrictEqual([false, "", false, false, false]);
 });
 
+test("the point the cursor is on comes in front of the points drawn after it", () => {
+  const { plot } = over(plotted(SALES, 100), (box) => pointTargets(AGAINST, SALES, box));
+  moveTo(plot, 25, 75);
+  const last = plot.querySelector(".chart-points")?.lastElementChild;
+  expect([last?.getAttribute("cx"), last?.classList.contains("cursor")]).toStrictEqual([
+    "25%",
+    true,
+  ]);
+});
+
 test("a new drawing puts the cursor on the point under the pointer then, and takes it away where none is in reach", () => {
   const { tip, plot } = over(plotted(SALES, 100), (box) => pointTargets(AGAINST, SALES, box));
   moveTo(plot, 25, 75);

@@ -68,6 +68,8 @@ export interface Target {
   mark: Element;
   /** The mark the box stands by when the keys step to it. */
   at: Element;
+  /** Whether the mark comes in front of the marks drawn after it while it has the cursor. */
+  front: boolean;
   /** The colour the mark wears, as CSS. */
   key: string;
   /** What the mark is worth, read when the box says it. */
@@ -128,6 +130,7 @@ export function barTargets(plot: Bars, groups: Groups, box: HTMLElement): Target
     return {
       mark: row,
       at: row.querySelector(".chart-bar-tip") ?? row.querySelector(".chart-bar")!,
+      front: false,
       key: ACCENT,
       said: () => [{ value: num(measure(g)), label: named(g.value) }],
     };
@@ -151,7 +154,13 @@ export function sliceTargets(plot: Pie, groups: Groups, box: HTMLElement): Targe
       label.append(name, `${SEP}${percent(size / whole)}`);
       return [{ value: num(size), label }];
     };
-    return { mark: slice, at: slice, key: slice.style.getPropertyValue("--key"), said };
+    return {
+      mark: slice,
+      at: slice,
+      front: false,
+      key: slice.style.getPropertyValue("--key"),
+      said,
+    };
   });
   return { all, under: among(all, ".chart-slice") };
 }
@@ -171,6 +180,7 @@ export function pointTargets(plot: Scatter, sample: Sample, box: HTMLElement): T
   const all = points.map((point, i) => ({
     mark: point,
     at: point,
+    front: true,
     key: ACCENT,
     said: () => [
       { value: num(sample.x[i]!), label: column(plot.x) },
@@ -310,6 +320,7 @@ export class Tooltip {
       this.worn?.classList.remove(CURSOR);
       target.mark.classList.add(CURSOR);
       this.worn = target.mark;
+      if (target.front) target.mark.parentElement?.append(target.mark);
       this.say(target);
     }
     this.cursor = { at, point };
