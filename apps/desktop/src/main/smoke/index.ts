@@ -15,6 +15,7 @@ import { ask } from "@main/ask";
 import { through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
+import { CHART_TIP } from "./chart-tip.ts";
 import { CHART_TABLE, CHART_WHEEL } from "./chart-wheel.ts";
 import {
   CHARTS,
@@ -77,6 +78,7 @@ const CHECKS: Check[] = [
   ...CHARTS,
   ...CHART_MOVES,
   ...CHART_WHEEL,
+  ...CHART_TIP,
   ...CHART_SIGNED,
   ...CHART_SCATTER,
   ...CHART_TABLE,
