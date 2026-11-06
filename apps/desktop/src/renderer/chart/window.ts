@@ -19,6 +19,7 @@
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
+import type { GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { wheelWay } from "@renderer/grid/metrics";
@@ -132,6 +133,17 @@ export function madeTitle(plot: Plot): string {
 function numbered(plot: Plot): ChartColumn[] {
   if (plot.t === "scatter") return [plot.x, plot.y];
   return plot.sum === undefined ? [] : [plot.sum];
+}
+
+/**
+ * extra gives what the caption says after the counts, for the plot's kind:
+ * what a scatter's sample leaves out, or how a pie counts the values past
+ * those a tally keeps apart and the values at or below zero it leaves out.
+ */
+function extra(plot: Plot, tally: GroupsTally | SampleTally): string[] {
+  if (plot.t === "scatter" && tally.t === "sample") return [sampled(tally)];
+  if (plot.t === "pie" && tally.t === "groups") return [past(plot, tally), belowZero(plot, tally)];
+  return [];
 }
 
 /** canGo says whether a scroller at `at` of `end` has room `delta`'s way. */
@@ -293,13 +305,10 @@ export class ChartWindow {
   }
 
   /**
-   * paint draws what the chart last heard, at the plot's height, and fits the
-   * values, the x axis or the labels to it once they stand in it. A complete
-   * tally stays drawn while the next one is read, and a first one draws as it
-   * comes. The caption says how much of its source the chart has read and
-   * what the tally left out, then what a scatter's sample leaves out, or how
-   * a pie counts the values past those a tally keeps apart and the values at
-   * or below zero it leaves out. The track under the head shows how far the
+   * paint draws what the chart last heard. A complete tally stays drawn while
+   * the next one is read, and a first one draws as it comes. The caption says
+   * how much of its source the chart has read and what the tally left out,
+   * then what the plot's kind says. The track under the head shows how far the
    * chart has read, while it reads, and a chart with nothing to draw says why
    * in the plot's place.
    */
@@ -308,24 +317,29 @@ export class ChartWindow {
     const tally = drawable(heard);
     const { plot } = this.chart;
     const latest = heard?.latest;
-    const before = [coverage(latest), blank(latest)];
-    const after: string[] = [];
     const named = this.summarise(heard);
-    if (plot.t === "bars" && tally?.t === "groups") {
-      fitTips(this.place(bars(plot, tally, this.plot.clientHeight), named));
-    } else if (plot.t === "scatter" && tally?.t === "sample") {
-      fitAlong(this.place(scatter(tally), named), tally);
-      after.push(sampled(tally));
-    } else if (plot.t === "pie" && tally?.t === "groups") {
-      fitLabels(this.place(pie(plot, tally), named));
-      after.push(past(plot, tally), belowZero(plot, tally));
-    } else {
-      this.fill(...this.state(heard));
-    }
-    this.say(before, notNumbers(latest), after);
+    if (tally === undefined) this.fill(...this.state(heard));
+    else this.draw(plot, tally, named);
+    const after = tally === undefined ? [] : extra(plot, tally);
+    this.say([coverage(latest), blank(latest)], notNumbers(latest), after);
     const read = reading(heard);
     this.track.hidden = read === undefined;
     this.track.style.setProperty("--read", `${read ?? 0}`);
+  }
+
+  /**
+   * draw draws `tally` as `plot` reads it, at the plot's height, as an image
+   * `named` names, and fits the values, the x axis or the labels to the plot
+   * once they stand in it.
+   */
+  private draw(plot: Plot, tally: GroupsTally | SampleTally, named: string): void {
+    if (plot.t === "bars" && tally.t === "groups") {
+      fitTips(this.place(bars(plot, tally, this.plot.clientHeight), named));
+    } else if (plot.t === "scatter" && tally.t === "sample") {
+      fitAlong(this.place(scatter(tally), named), tally);
+    } else if (plot.t === "pie" && tally.t === "groups") {
+      fitLabels(this.place(pie(plot, tally), named));
+    }
   }
 
   /** place puts `drawn` in the plot as an image, named by what `named` names, and gives it back. */
