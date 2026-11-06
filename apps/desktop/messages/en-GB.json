@@ -483,6 +483,7 @@
   "chart_source_missing": "{name} is missing",
   "chart_bucket_unconnected": "{bucket} is not connected",
   "chart_blank": "{count} blank",
+  "chart_blank_value": "(blank)",
   "chart_not_numbers": [
     {
       "declarations": ["input count", "local plural = count: plural", "local n = count: number"],

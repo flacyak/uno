@@ -144,12 +144,17 @@ function gap(turn: number): SVGElement {
   return line;
 }
 
-/** words gives what a slice says: its value, the file's text, or Other, and its share. */
+/**
+ * words gives what a slice says: its value, the file's text, or Other, or the
+ * app's word for the rows whose cell is blank, and its share.
+ */
 function words(value: string | undefined, share: number): [HTMLElement, HTMLElement] {
   const name =
     value === undefined
       ? el("span", "chart-slice-name", m.chart_pie_other())
-      : el("bdi", "chart-slice-name from-file", value);
+      : value === ""
+        ? el("span", "chart-slice-name", m.chart_blank_value())
+        : el("bdi", "chart-slice-name from-file", value);
   return [name, el("span", "chart-slice-share", percent(share))];
 }
 

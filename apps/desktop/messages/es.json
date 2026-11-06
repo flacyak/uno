@@ -501,6 +501,7 @@
   "chart_source_missing": "falta {name}",
   "chart_bucket_unconnected": "{bucket} no está conectado",
   "chart_blank": "{count} en blanco",
+  "chart_blank_value": "(en blanco)",
   "chart_not_numbers": [
     {
       "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
