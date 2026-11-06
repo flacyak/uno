@@ -1,16 +1,17 @@
 /**
  * @fileoverview What a chart says it shows, in the language chosen: its title,
  * its source and its rows, then the largest values with what each measures and
- * a count of the rest. The app's words and the values from the file stand apart.
+ * a count of the rest, or a scatter's points and what its axes span. The app's
+ * words and the values from the file stand apart.
  */
 
 import { afterEach, expect, test } from "vite-plus/test";
 
-import type { Group, GroupsTally } from "@engine";
+import type { Group, GroupsTally, SampleTally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { SUMMARY_VALUES, summary } from "@renderer/chart/summary";
 import { madeTitle } from "@renderer/chart/window";
-import { BARS, PIE } from "../charted.ts";
+import { BARS, PIE, SCATTER } from "../charted.ts";
 
 /** The sales export's file, and its rows. */
 const NAME = "sales-q3.csv";
@@ -44,6 +45,19 @@ function tallyOf(groups: Group[]): GroupsTally {
 
 /** A sum of revenue per region. */
 const SUMS = { ...BARS.plot, sum: { col: 5, header: "revenue" } };
+
+/** A complete tally of the scatter over ROWS rows, which sent two of the points it plotted. */
+const SAMPLE: SampleTally = {
+  t: "sample",
+  plot: SCATTER.plot,
+  coverage: { rows: ROWS, total: ROWS, complete: true },
+  x: [180, 999],
+  y: [7200, 39960],
+  plotted: 4808,
+  least: { x: 1, y: 0 },
+  most: { x: 2400, y: 1048000 },
+  skipped: { blank: 4, unparsed: 0 },
+};
 
 afterEach(() => void setLocale(baseLocale, { reload: false }));
 
@@ -93,5 +107,17 @@ test("a pie's summary gives each slice's share, Other among them", () => {
   const halved = tallyOf([sent("North", 2, 0), sent("South", 1, 0), sent("West", 1, 0)]);
   expect(summary(madeTitle(PIE.plot), NAME, PIE.plot, halved).values).toBe(
     "North 50%, South 25%, West 25%",
+  );
+});
+
+test("a scatter's summary counts its points and spans both axes, with no values from the file apart", () => {
+  expect(summary(madeTitle(SCATTER.plot), NAME, SCATTER.plot, SAMPLE)).toStrictEqual({
+    said: "revenue against units in sales-q3.csv, 4,812 rows. 4,808 points, units from 1 to 2,400 and revenue from 0 to 1,048,000.",
+    values: "",
+    more: "",
+  });
+  void setLocale("es", { reload: false });
+  expect(summary(madeTitle(SCATTER.plot), NAME, SCATTER.plot, SAMPLE).said).toBe(
+    "revenue frente a units en sales-q3.csv, 4812 filas. 4808 puntos, units de 1 a 2400 y revenue de 0 a 1.048.000.",
   );
 });
