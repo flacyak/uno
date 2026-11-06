@@ -15,8 +15,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { GroupsTally, SampleTally } from "@engine";
-import { ROWS } from "@main/smoke/fixture";
+import type { GroupsTally, SampleTally, Skipped } from "@engine";
+import { BLANK_ROWS, REGION, REVENUE, ROWS, UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
@@ -233,6 +233,13 @@ function pointsHeard(plotted = SENT.x.length): Heard {
     skipped: { blank: 0, unparsed: 0 },
   };
   return { ...FINE, latest: tally, complete: tally };
+}
+
+/** `heard` with the cells its tally left out counted as `skipped`. */
+function leftOut(heard: Heard, skipped: Skipped): Heard {
+  const { latest } = heard;
+  const tally = latest === undefined || latest.t === "unread" ? undefined : { ...latest, skipped };
+  return { ...heard, latest: tally, complete: tally };
 }
 
 /** A layer over a model holding `charts`, in ROOM, and that model. */
@@ -610,6 +617,46 @@ test("a scatter's caption says how many of its points it draws while it samples,
   layer.tallied(SCATTER.id);
   await frame();
   expect(said()).toBe("");
+});
+
+test("a caption counts what a tally left out after its rows, before what a scatter's sample leaves out, and its not-numbers count is the button that finds them", async () => {
+  const { model } = shown(SCATTER);
+  const left = { blank: BLANK_ROWS, unparsed: 1 };
+  model.heard = () => leftOut(pointsHeard(ROWS), left);
+  await frame();
+  const counts = `${m.chart_blank({ count: num(left.blank) })} · ${m.chart_not_numbers({ count: 1 })}`;
+  const all = m.chart_points({ count: ROWS });
+  const points = m.chart_points_sampled({ shown: num(SENT.x.length), points: all });
+  expect(said()).toBe(`${m.rows_count({ count: ROWS })} · ${counts} · ${points}`);
+  expect(part(".chart-said").title).toBe(said());
+  const find = part(".chart-find");
+  expect(find.textContent).toBe(m.chart_not_numbers({ count: 1 }));
+  find.click();
+  const x = { col: UNITS, header: "units" };
+  const y = { col: REVENUE, header: "revenue" };
+  expect(notNumbers).toHaveBeenCalledExactlyOnceWith(SCATTER.source, [x, y]);
+});
+
+test("a bar chart's not-numbers count finds them in the column it sums, keeps the keys through a tally, and a count of none hides it and gives them to the window", async () => {
+  const sum = { col: REVENUE, header: "revenue" };
+  const sums: Chart = { ...FLUSH, plot: { t: "bars", by: { col: REGION, header: "region" }, sum } };
+  const { layer, model } = shown(sums);
+  model.heard = () => leftOut(heardOf("North"), { blank: 0, unparsed: 2 });
+  await frame();
+  const find = part(".chart-find");
+  find.click();
+  expect(notNumbers).toHaveBeenCalledExactlyOnceWith(FLUSH.source, [sum]);
+  find.focus();
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(part(".chart-find")).toBe(find);
+  expect(document.activeElement).toBe(find);
+  model.heard = () => heardOf("North");
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(find.hidden).toBe(true);
+  expect(said()).toBe(m.rows_count({ count: 1 }));
+  expect(document.activeElement).toBe(first());
 });
 
 test("a room too narrow tucks every window to its head, stacked from the top", () => {
