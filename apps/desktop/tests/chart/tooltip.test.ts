@@ -415,3 +415,15 @@ test("a step goes on from the row under the pointer, and the box moves from the 
   tip.step(pressed("ArrowRight"));
   expect(shown(tip)).toStrictEqual([true, "812 South", beside(edges[1]!)]);
 });
+
+test("a tap puts the cursor on a mark, and a finger lifting off leaves it there, where a pointer leaving takes it away", () => {
+  const { tip, plot } = over(bars(ROWS, REGIONS, TALL), (box) => barTargets(ROWS, REGIONS, box));
+  const [row] = document.querySelectorAll(".chart-bar-row");
+  const touch = { clientX: 100, clientY: 50, pointerType: "touch", bubbles: true };
+  row!.dispatchEvent(new PointerEvent("pointerdown", touch));
+  expect(shown(tip)).toStrictEqual([true, "1,204 North", `${100 + TIP_OFFSET}px 38px`]);
+  plot.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "touch" }));
+  expect([shown(tip)[0], ...cursors()]).toStrictEqual([true, true, false, false]);
+  plot.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+  expect([shown(tip)[0], ...cursors()]).toStrictEqual([false, false, false, false]);
+});

@@ -48,6 +48,9 @@ const ACCENT = "var(--accent)";
 /** What a mark wears while the cursor is on it. */
 const CURSOR = "cursor";
 
+/** The pointer a finger is, which leaves the plot as it lifts off. */
+const TOUCH = "touch";
+
 /** Where a key steps the cursor, from `at` among marks up to `last`. */
 type Step = (at: number | undefined, last: number) => number;
 
@@ -262,12 +265,12 @@ export function stood(anchor: DOMRectReadOnly, size: Room, room: Room): Point {
 
 /**
  * Tooltip is the box that says what a mark is worth. It hears the pointer
- * over `plot`, and stands in `within`, the window, by the mark the pointer
- * is over, which wears the cursor, and a screen reader hears it as what the
- * plot describes. The keys step the cursor while the plot has them, and it
- * goes with them. A new drawing keeps a cursor the keys put on the mark at
- * the same place among its marks, and puts one the pointer put on the mark
- * under the pointer then.
+ * over `plot`, or a tap on it, and stands in `within`, the window, by the
+ * mark the pointer is over, which wears the cursor, and a screen reader
+ * hears it as what the plot describes. The keys step the cursor while the
+ * plot has them, and it goes with them. A new drawing keeps a cursor the
+ * keys put on the mark at the same place among its marks, and puts one the
+ * pointer put on the mark under the pointer then.
  */
 export class Tooltip {
   /** The box, which the window holds beside its plot. */
@@ -294,7 +297,11 @@ export class Tooltip {
     // A screen reader says which keys step the cursor, as STEPS reads them.
     plot.setAttribute("aria-keyshortcuts", [...STEPS.keys()].join(" "));
     plot.addEventListener("pointermove", (e) => this.point(e));
-    plot.addEventListener("pointerleave", () => this.clear());
+    plot.addEventListener("pointerdown", (e) => this.point(e));
+    // A finger lifting off leaves the plot, so a tap's cursor stays for the next tap.
+    plot.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== TOUCH) this.clear();
+    });
     plot.addEventListener("focusout", () => this.clear());
   }
 
