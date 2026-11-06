@@ -29,9 +29,9 @@ function words(cell: HTMLTableCellElement, text: string, fromFile: boolean): HTM
   return cell;
 }
 
-/** header gives a column's header of `text`, the file's or the app's. */
-function header(text: string, fromFile: boolean): HTMLTableCellElement {
-  const th = el("th");
+/** header gives a column's header of `text`, the file's or the app's, over the digits' column if `digits`. */
+function header(text: string, fromFile: boolean, digits = false): HTMLTableCellElement {
+  const th = el("th", digits ? "num" : "");
   th.scope = "col";
   return words(th, text, fromFile);
 }
@@ -74,12 +74,12 @@ function grouped(
   const heads = [
     header(columnLabel(by.header, by.col), true),
     sum === undefined
-      ? header(m.chart_table_rows(), false)
-      : header(columnLabel(sum.header, sum.col), true),
+      ? header(m.chart_table_rows(), false, true)
+      : header(columnLabel(sum.header, sum.col), true, true),
   ];
   const drawn = plot.t === "pie" ? slices(plot, groups) : [];
   const whole = wholeOf(drawn);
-  if (plot.t === "pie") heads.push(header(m.chart_table_share(), false));
+  if (plot.t === "pie") heads.push(header(m.chart_table_share(), false, true));
   // cells gives a row's cells: `n`, what it measures, and for a pie the share
   // of `inPie`, what the pie draws of it.
   const cells = (n: number, inPie: number): HTMLElement[] => {
@@ -113,7 +113,7 @@ function points(
   sample: Sample,
 ): [HTMLElement[], HTMLElement[]] {
   const heads = [plot.x, plot.y].map(({ header: name, col }) =>
-    header(columnLabel(name, col), true),
+    header(columnLabel(name, col), true, true),
   );
   return [heads, sample.x.map((x, i) => row(digits(x), digits(sample.y[i]!)))];
 }
@@ -129,7 +129,7 @@ function parts(plot: Plot, tally: GroupsTally | SampleTally): [HTMLElement[], HT
  * `called`, what the head calls the chart, in the window's scroller.
  */
 export function table(plot: Plot, tally: GroupsTally | SampleTally, called: Node): HTMLElement {
-  const box = el("div", "chart-table chart-scrolls");
+  const box = el("div", "chart-table chart-scrolls themed-bar");
   const made = el("table");
   const caption = el("caption");
   caption.append(called);

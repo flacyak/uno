@@ -519,6 +519,81 @@
   overscroll-behavior: contain;
 }
 
+/* The table, from table.ts, in the plot's place as its scroller. It is the
+ * ticks' size, and a row is as high as a head's button, which its digits sit
+ * in with room. A person can select from it, where the window lets nothing
+ * else be selected. Its caption is a screen reader's: in the page, out of
+ * sight. A cell stands as far from the window's edge as the head's words. Its
+ * own ground paints the header row's band and rule across the top, under the
+ * bar where no cell reaches, so the band runs to the window's edge as the
+ * grid's does. */
+.chart-table {
+  font-size: 11px;
+  user-select: text;
+  background: linear-gradient(var(--sunken) calc(var(--x-size) - 1px), var(--rule) 0) top / auto
+    var(--x-size) repeat-x;
+}
+
+.chart-table table {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.chart-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chart-table th,
+.chart-table td {
+  height: var(--x-size);
+  padding: 0 10px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* The header row stays at the top as the rows scroll, as the grid's does, in
+ * the band's ground over a rule, which its height holds, and the bar's track
+ * starts under it, as the grid's does under its header row. */
+.chart-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--sunken);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-3);
+}
+
+.chart-table::-webkit-scrollbar-track:vertical {
+  margin-top: var(--x-size);
+}
+
+/* A number's column is the digits': its header stands right over its numbers,
+ * which wear the ink a bar's value does. */
+.chart-table .num {
+  text-align: right;
+}
+
+.chart-table td.num {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every second row is on the grid's even ground (grid.css). */
+.chart-table tbody tr:nth-child(even) > * {
+  background: color-mix(in srgb, var(--sunken) 42%, transparent);
+}
+
+/* The line of the values past those a tally keeps apart, in the caption's ink. */
+.chart-table-line {
+  color: var(--ink-3);
+}
+
 /* The rule is the dialogs' divider. --rule-2 is mixed with --paper, which puts
  * it one level off a dark --surface. The grip ends under the ×, which sets it as
  * far from the right as the foot. */

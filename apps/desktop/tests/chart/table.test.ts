@@ -64,6 +64,7 @@ test("a table has a row per value sent, the largest first, its value heading the
   expect(
     [...head!.children].map((th) => `${th.tagName} ${th.getAttribute("scope")}`),
   ).toStrictEqual(["TH col", "TH col"]);
+  expect([...head!.children].map((th) => th.className)).toStrictEqual(["", "num"]);
   expect(head!.querySelector(".from-file")?.textContent).toBe("region");
   expect(first!.firstElementChild?.getAttribute("scope")).toBe("row");
   expect(first!.querySelector("th .from-file")?.textContent).toBe("North");
@@ -164,5 +165,7 @@ test("a scatter's table has a row per point drawn, in the order sent, under its 
   ]);
   expect(box.querySelectorAll("thead .from-file")).toHaveLength(2);
   expect(box.querySelectorAll("tbody th")).toHaveLength(0);
-  expect([...box.querySelectorAll("td")].every((td) => td.classList.contains("num"))).toBe(true);
+  expect([...box.querySelectorAll("th, td")].every((cell) => cell.classList.contains("num"))).toBe(
+    true,
+  );
 });
