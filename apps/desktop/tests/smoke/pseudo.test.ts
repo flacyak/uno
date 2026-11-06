@@ -190,10 +190,12 @@ test("what a .uno's charts say in the status line is in the language chosen", as
 });
 
 test("a chart's window drawn in English is rewritten in the language chosen", async () => {
+  // Two charts name a column the second export has not, so they draw nothing.
   const titled = { ...BARS, id: "c2", source: ADS, title: "From the file" };
   const overAds = { ...BARS, id: "c3", source: ADS };
+  const readable = [BARS, SCATTER, DEVICES];
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
-  await writeFile(path, unoOf([BARS, titled, overAds, SCATTER, DEVICES]));
+  await writeFile(path, unoOf([...readable, titled, overAds]));
   await shell.openRef({ name: "charted.uno", path });
   // A short plot draws the line of the rest under its bars, the scatter samples,
   // and the pie labels its slices.
@@ -212,6 +214,15 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   const head = document.querySelector(".chart-title")?.textContent;
   expect(head).toBe(`${SALES} · ${madeTitle(BARS.plot)}`);
   expect(said()).toContain(PSEUDO_OPEN);
+  // What each drawing says it shows is written once its tally completes, in the
+  // language chosen by then, its values from the file apart.
+  const summaries = (): string[] =>
+    [...document.querySelectorAll(".chart-summary-said")]
+      .map((at) => at.textContent ?? "")
+      .filter((text) => text !== "");
+  expect(await until(domPage(), () => summaries().length === readable.length)).toBe(true);
+  expect(summaries().every((text) => text.includes(PSEUDO_OPEN))).toBe(true);
+  expect(document.querySelector(".chart-summary .from-file")!.textContent).toMatch(/\S/);
   expect(english(".chart")).toEqual([]);
 });
 
