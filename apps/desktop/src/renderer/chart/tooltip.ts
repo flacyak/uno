@@ -40,6 +40,9 @@ export const TIP_EDGE = EDGE;
 /** What the bars and the points wear, as the box's key. */
 const ACCENT = "var(--accent)";
 
+/** What a mark wears while the cursor is on it. */
+const CURSOR = "cursor";
+
 /** What parts a label's words, as the caption's. */
 const SEP = " · ";
 
@@ -223,4 +226,97 @@ export function stood(anchor: DOMRectReadOnly, size: Room, room: Room): Point {
     x: Math.max(TIP_EDGE, Math.min(x, room.w - size.w - TIP_EDGE)),
     y: Math.max(TIP_EDGE, Math.min(y, room.h - size.h - TIP_EDGE)),
   };
+}
+
+/**
+ * Tooltip is the box that says what a mark is worth. It stands in `within`,
+ * the window, by a mark of `plot`'s drawing, which wears the cursor, and a
+ * screen reader hears it as what the plot describes. A new drawing keeps the
+ * cursor on the mark at the same place among its marks.
+ */
+export class Tooltip {
+  /** The box, which the window holds beside its plot. */
+  readonly box = el("div", "chart-tip");
+  private readonly key = el("span", "chart-tip-key");
+  private readonly words = el("span", "chart-tip-words");
+  private targets: Targets = NONE;
+  /** The mark wearing the cursor. */
+  private worn: Element | undefined;
+  /** Where the cursor is among the marks, and the pointer's point where a pointer put it there. */
+  private cursor: { at: number; point?: Point } | undefined;
+
+  constructor(
+    plot: HTMLElement,
+    private readonly within: HTMLElement,
+    id: string,
+  ) {
+    this.box.id = id;
+    this.box.hidden = true;
+    this.box.setAttribute("role", "tooltip");
+    this.box.append(this.key, this.words);
+    plot.setAttribute("aria-describedby", id);
+  }
+
+  /** show takes the marks of a new drawing, keeping the cursor where it stood among them. */
+  show(targets: Targets): void {
+    this.targets = targets;
+    const count = targets.all.length;
+    if (this.cursor === undefined || count === 0) this.clear();
+    else this.place(Math.min(this.cursor.at, count - 1), this.cursor.point);
+  }
+
+  /** clear takes the cursor off its mark and hides the box, emptied, so the plot describes no mark. */
+  clear(): void {
+    this.worn?.classList.remove(CURSOR);
+    this.worn = undefined;
+    this.cursor = undefined;
+    this.box.hidden = true;
+    this.words.replaceChildren();
+  }
+
+  /**
+   * place puts the cursor on mark `at`, says what it is worth, and stands the
+   * box by `point`, or beside the mark where no pointer put it there.
+   */
+  private place(at: number, point?: Point): void {
+    const target = this.targets.all[at]!;
+    if (this.worn !== target.mark) {
+      this.worn?.classList.remove(CURSOR);
+      target.mark.classList.add(CURSOR);
+      this.worn = target.mark;
+      this.say(target);
+    }
+    this.cursor = { at, point };
+    this.box.hidden = false;
+    this.stand(
+      point === undefined ? target.at.getBoundingClientRect() : new DOMRect(point.x, point.y),
+    );
+  }
+
+  /** say writes `target`'s key and its readings in the box, each value strong before its label. */
+  private say({ key, said }: Target): void {
+    this.key.style.setProperty("--key", key);
+    this.words.replaceChildren(
+      ...said().flatMap(({ value, label }, i) => {
+        const muted = el("span", "chart-tip-label");
+        muted.append(label);
+        return [...(i > 0 ? [SEP] : []), el("strong", "chart-tip-value", value), " ", muted];
+      }),
+    );
+  }
+
+  /**
+   * stand puts the box by `by`, where a mark or a pointer's point stands in
+   * the page, inside the window.
+   */
+  private stand(by: DOMRectReadOnly): void {
+    const room = this.within.getBoundingClientRect();
+    const { clientLeft, clientTop, clientWidth, clientHeight } = this.within;
+    const [left, top] = [room.left + clientLeft, room.top + clientTop];
+    const anchor = new DOMRect(by.x - left, by.y - top, by.width, by.height);
+    const size = { w: this.box.offsetWidth, h: this.box.offsetHeight };
+    const { x, y } = stood(anchor, size, { w: clientWidth, h: clientHeight });
+    this.box.style.left = `${x}px`;
+    this.box.style.top = `${y}px`;
+  }
 }
