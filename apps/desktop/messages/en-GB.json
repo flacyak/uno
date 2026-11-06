@@ -497,6 +497,7 @@
   "chart_summary": "{title} in {name}, {rows}.",
   "chart_summary_more": "and {count} more.",
   "chart_summary_points": "{points}, {x} from {xLeast} to {xMost} and {y} from {yLeast} to {yMost}.",
+  "chart_table_rows": "rows",
   "refused_only_source": "{name} is the only source here, and a workspace needs one",
   "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
   "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
