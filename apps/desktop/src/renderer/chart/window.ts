@@ -291,25 +291,35 @@ export class ChartWindow {
     const after: string[] = [];
     if (plot.t === "bars" && tally?.t === "groups") {
       const drawn = bars(plot, tally, this.plot.clientHeight);
-      this.plot.replaceChildren(drawn);
+      this.fill(drawn);
       fitTips(drawn);
     } else if (plot.t === "scatter" && tally?.t === "sample") {
       const drawn = scatter(tally);
-      this.plot.replaceChildren(drawn);
+      this.fill(drawn);
       fitAlong(drawn, tally);
       after.push(sampled(tally));
     } else if (plot.t === "pie" && tally?.t === "groups") {
       const drawn = pie(plot, tally);
-      this.plot.replaceChildren(drawn);
+      this.fill(drawn);
       fitLabels(drawn);
       after.push(past(plot, tally), belowZero(plot, tally));
     } else {
-      this.plot.replaceChildren(...this.state(heard));
+      this.fill(...this.state(heard));
     }
     this.say(before, notNumbers(latest), after);
     const read = reading(heard);
     this.track.hidden = read === undefined;
     this.track.style.setProperty("--read", `${read ?? 0}`);
+  }
+
+  /**
+   * fill puts `shown` in the plot's place. What stood there goes, and the keys
+   * it held come to the window, as the find button's do, so a repaint never
+   * leaves them to the page.
+   */
+  private fill(...shown: Node[]): void {
+    if (this.plot.contains(document.activeElement)) this.box.focus({ preventScroll: true });
+    this.plot.replaceChildren(...shown);
   }
 
   /**
