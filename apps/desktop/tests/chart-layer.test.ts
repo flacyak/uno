@@ -137,6 +137,9 @@ const wheelBy = vi.fn();
 /** What the layer calls to open the sources panel on a window's source. */
 const repoint = vi.fn();
 
+/** What the layer calls to find the cells a window's tally could not read as numbers. */
+const notNumbers = vi.fn();
+
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
@@ -235,7 +238,7 @@ function pointsHeard(plotted = SENT.x.length): Heard {
 /** A layer over a model holding `charts`, in ROOM, and that model. */
 function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   const model = modelOf(...charts);
-  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint, notNumbers);
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
@@ -306,6 +309,7 @@ beforeEach(() => {
   leave.mockClear();
   wheelBy.mockClear();
   repoint.mockClear();
+  notNumbers.mockClear();
 });
 
 afterEach(() => {
@@ -314,7 +318,7 @@ afterEach(() => {
 });
 
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
-  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint, notNumbers);
   roomIs(ROOM);
   expect(root().hidden).toBe(true);
 
