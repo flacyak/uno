@@ -14,14 +14,28 @@ import type { Groups, GroupsTally, Sample, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel, unnamed } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
+import { EDGE } from "@renderer/shell/menu";
 import { el } from "@renderer/shell/util";
 import { slices, wholeOf } from "./pie.ts";
+import type { Room } from "./place.ts";
 
 /**
  * How near a pointer has to come to a point, in px: half the dataviz skill's
  * least hit area, 24 px across.
  */
 export const HIT_RADIUS = 12;
+
+/**
+ * How far the box stands from its anchor, in px: clear of a pointer's arrow,
+ * which reaches about 12 px right of its point.
+ */
+export const TIP_OFFSET = 16;
+
+/**
+ * How far the box keeps inside the window's edge, in px: as far as the
+ * pop-up menu keeps inside the app's.
+ */
+export const TIP_EDGE = EDGE;
 
 /** What the bars and the points wear, as the box's key. */
 const ACCENT = "var(--accent)";
@@ -186,4 +200,27 @@ export function targets(plot: Plot, tally: GroupsTally | SampleTally, drawn: HTM
   if (plot.t === "pie" && tally.t === "groups") return sliceTargets(plot, tally, drawn);
   if (plot.t === "scatter" && tally.t === "sample") return pointTargets(plot, tally, drawn);
   return NONE;
+}
+
+/** A point in the page, or in the window's own px. */
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * stood gives where a box `size` stands by `anchor`, a mark's box or a
+ * pointer's point: TIP_OFFSET right of it, or left of it where `room` has
+ * too little room on its right, and centred on it, moved as far as keeps the
+ * whole of it TIP_EDGE inside the room, and TIP_EDGE from the room's corner
+ * where it is larger than the room.
+ */
+export function stood(anchor: DOMRectReadOnly, size: Room, room: Room): Point {
+  const right = anchor.right + TIP_OFFSET;
+  const x = right + size.w <= room.w - TIP_EDGE ? right : anchor.left - TIP_OFFSET - size.w;
+  const y = (anchor.top + anchor.bottom - size.h) / 2;
+  return {
+    x: Math.max(TIP_EDGE, Math.min(x, room.w - size.w - TIP_EDGE)),
+    y: Math.max(TIP_EDGE, Math.min(y, room.h - size.h - TIP_EDGE)),
+  };
 }

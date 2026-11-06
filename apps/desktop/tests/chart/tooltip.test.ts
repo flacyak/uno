@@ -1,8 +1,9 @@
 /**
  * @fileoverview What a chart's marks are worth, from tooltip.ts: a bar's row
  * is worth the value it measures, a slice its measure and its share, and a
- * point its x and its y, each labelled by the file's text; and which mark a
- * pointer is over, a point being the nearest within HIT_RADIUS.
+ * point its x and its y, each labelled by the file's text; which mark a
+ * pointer is over, a point being the nearest within HIT_RADIUS; and where
+ * the box stands by a mark, inside the window.
  *
  * @vitest-environment happy-dom
  */
@@ -18,9 +19,12 @@ import { scatter } from "@renderer/chart/scatter";
 import {
   HIT_RADIUS,
   NONE,
+  TIP_EDGE,
+  TIP_OFFSET,
   barTargets,
   pointTargets,
   sliceTargets,
+  stood,
   targets,
 } from "@renderer/chart/tooltip";
 import type { Reading, Target } from "@renderer/chart/tooltip";
@@ -202,4 +206,28 @@ test("targets gives a drawing's marks for its plot's kind, and none for a tally 
   expect(targets(SHARES, groups, pie(SHARES, REGIONS)).all).toHaveLength(2);
   expect(targets(AGAINST, sample, scatter(SALES)).all).toHaveLength(3);
   expect(targets(ROWS, sample, bars(ROWS, REGIONS, TALL))).toBe(NONE);
+});
+
+/** A window's room, and a box's size, in px. */
+const ROOM = { w: 400, h: 300 };
+const SIZE = { w: 80, h: 24 };
+
+/** A pointer's point at `x`, `y`, as an anchor. */
+const at = (x: number, y: number): DOMRect => new DOMRect(x, y);
+
+test("the box stands TIP_OFFSET right of its anchor, centred on it, moved back TIP_EDGE inside the room, or at its edge where it is larger", () => {
+  expect(stood(at(100, 100), SIZE, ROOM)).toStrictEqual({ x: 100 + TIP_OFFSET, y: 88 });
+  expect(stood(at(0, 290), SIZE, ROOM)).toStrictEqual({ x: TIP_OFFSET, y: 272 });
+  expect(stood(at(0, 0), SIZE, ROOM)).toStrictEqual({ x: TIP_OFFSET, y: TIP_EDGE });
+  expect(stood(at(100, 100), { w: 500, h: 400 }, ROOM)).toStrictEqual({
+    x: TIP_EDGE,
+    y: TIP_EDGE,
+  });
+});
+
+test("the box stands TIP_OFFSET left of its anchor where the room has too little on its right, and at the room's edge where neither side has enough", () => {
+  expect(stood(at(390, 100), SIZE, ROOM).x).toBe(390 - TIP_OFFSET - SIZE.w);
+  const mark = new DOMRect(300, 90, 30, 20);
+  expect(stood(mark, SIZE, ROOM).x).toBe(mark.left - TIP_OFFSET - SIZE.w);
+  expect(stood(at(60, 100), SIZE, { w: 150, h: ROOM.h }).x).toBe(TIP_EDGE);
 });
