@@ -1,16 +1,18 @@
 /**
  * @fileoverview What a chart says it shows, in a sentence: its title, its
  * source and its rows, then the largest values with what each measures and a
- * count of the rest. A screen reader hears it as the drawing's name, so it
- * says the exact values the marks only show.
+ * count of the rest, or the points a scatter plots and what its axes span. A
+ * screen reader hears it as the drawing's name, so it says the exact values
+ * the marks only show.
  *
  * The app's words follow the language, and the values from the file stand
  * apart from them, so a window can mark them as the file's.
  */
 
-import type { Plot } from "@document";
+import type { ChartColumn, Plot } from "@document";
 import type { Group, GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
+import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent } from "@renderer/locale";
 import { slices, wholeOf } from "./pie.ts";
 
@@ -19,7 +21,7 @@ export const SUMMARY_VALUES = 3;
 
 /** What a chart says it shows. */
 export interface Summary {
-  /** The app's words: the title, the source and the rows. */
+  /** The app's words: the title, the source and the rows, then what a scatter spans. */
   said: string;
   /** The values from the file, each with what it measures, or nothing for a scatter. */
   values: string;
@@ -57,6 +59,21 @@ function valued(plot: Grouped, tally: GroupsTally): { each: string[]; more: numb
   return { each, more };
 }
 
+/** spanned gives what a scatter's summary says of its points, and of what its axes span. */
+function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: SampleTally): string {
+  const label = ({ header, col }: ChartColumn): string => columnLabel(header, col);
+  const { least, most } = tally;
+  return m.chart_summary_points({
+    points: m.chart_points({ count: tally.plotted }),
+    x: label(plot.x),
+    xLeast: num(least.x),
+    xMost: num(most.x),
+    y: label(plot.y),
+    yLeast: num(least.y),
+    yMost: num(most.y),
+  });
+}
+
 /**
  * summary gives what a chart called `title`, over the file `name`, says it
  * shows of `tally`, which `plot` reads: the values from the file apart from
@@ -69,7 +86,11 @@ export function summary(
   tally: GroupsTally | SampleTally,
 ): Summary {
   const said = m.chart_summary({ title, name, rows: m.rows_count({ count: tally.coverage.rows }) });
-  if (plot.t === "scatter" || tally.t !== "groups") return { said, values: "", more: "" };
+  if (plot.t === "scatter") {
+    const span = tally.t === "sample" ? ` ${spanned(plot, tally)}` : "";
+    return { said: `${said}${span}`, values: "", more: "" };
+  }
+  if (tally.t !== "groups") return { said, values: "", more: "" };
   const { each, more } = valued(plot, tally);
   return {
     said,
