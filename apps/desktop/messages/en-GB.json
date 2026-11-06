@@ -467,6 +467,16 @@
   "chart_pie_other": "Other",
   "chart_pie_past_net": "more than {count} values · later ones go in Other at their net sum",
   "chart_pie_past_left_out": "more than {count} values · later ones are left out",
+  "chart_pie_below_zero": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} value at or below zero left out",
+        "plural=other": "{n} values at or below zero left out"
+      }
+    }
+  ],
   "chart_partial": "partial · {read} read",
   "chart_reading": "reading {name}…",
   "chart_no_values_yet": "no values in {columns} yet",
