@@ -1,15 +1,19 @@
 /**
  * @fileoverview Checks of the box that says what a mark is worth, under a
- * real pointer. The pointer over a bar's row shows the box right of the
- * pointer, inside the window, the row wearing the cursor, or left of it by
- * the window's edge; the box's words keep the accent over a capital
- * whole; and the pointer leaving the plot takes it away.
+ * real pointer and real keys. The pointer over a bar's row shows the box
+ * right of the pointer, inside the window, the row wearing the cursor, or
+ * left of it by the window's edge; the box's words keep the accent over a
+ * capital whole; the plot takes the keys; Right and End step the cursor
+ * down the rows, the box standing by each bar's value; and the pointer
+ * leaving the plot takes it away.
  *
  * CHART_TIP follows CHART_WHEEL, which leaves the charted workspace's last
  * window, bars of the fixture's regions, raised over the first.
  */
 
 import { TIP_EDGE, TIP_OFFSET } from "@renderer/chart/tooltip";
+import { pressing } from "./chart-moves.ts";
+import { A_KEY } from "./charts.ts";
 import type { Check } from "./check.ts";
 
 /** The last window's rows, counted from one. */
@@ -112,11 +116,60 @@ export const CHART_TIP: Check[] = [
     `,
   },
   {
+    name: "the plot takes the keys, and shows it inside its own edge, in the accent, and the keys leaving it take the cursor away",
+    input: { events: A_KEY, through: true },
+    script: `
+      ${TIP}
+      // After a key, focus from a script shows as it will when Tab moves it
+      // here. The keys leave the plot on the way, and the cursor goes with them.
+      const shows = () => {
+        plot.blur();
+        plot.focus();
+        return plot.matches(":focus-visible");
+      };
+      if (!(await until(shows))) return "the plot does not show its focus, so this checks nothing";
+      const { outlineWidth, outlineColor } = getComputedStyle(plot);
+      if (outlineWidth !== "1px" || outlineColor !== computed("var(--accent)")) return "the plot's outline is " + outlineWidth + " " + outlineColor;
+      win.dataset.stood = edges(win.getBoundingClientRect());
+      if (!tip.hidden) return "the box still says " + JSON.stringify(said());
+      return worn() === -1 ? "" : "the cursor stayed on row " + worn();
+    `,
+  },
+  {
+    name: "Right puts the cursor on the first row, and the box stands right of its value, or left of it over the bar, halfway down, with the window where it was",
+    input: { events: pressing("Right"), through: true },
+    script: `
+      ${TIP}
+      if (!(await until(() => worn() === 0))) return "the cursor is on row " + worn();
+      const one = rows()[0];
+      if (said() !== says(one)) return "the box says " + JSON.stringify(said()) + ", and the row " + JSON.stringify(says(one));
+      const value = one.querySelector(".chart-bar-tip").getBoundingClientRect();
+      const box = tip.getBoundingClientRect();
+      const beside = near(box.left, value.right + ${TIP_OFFSET}) || near(box.right, value.left - ${TIP_OFFSET});
+      if (!beside || !near((box.top + box.bottom) / 2, (value.top + value.bottom) / 2)) {
+        return "the box stands at " + edges(box) + ", and the value at " + edges(value);
+      }
+      const stood = edges(win.getBoundingClientRect());
+      if (stood !== win.dataset.stood) return "the window moved to " + stood + " from " + win.dataset.stood;
+      return inside();
+    `,
+  },
+  {
+    name: "End takes the cursor to the last row",
+    input: { events: pressing("End"), through: true },
+    script: `
+      ${TIP}
+      if (!(await until(() => worn() === rows().length - 1))) return "the cursor is on row " + worn();
+      return said() === says(rows().at(-1)) ? inside() : "the box says " + JSON.stringify(said());
+    `,
+  },
+  {
     name: "the pointer leaving the plot takes the box and the cursor away",
     hover: CELL,
     script: `
       ${TIP}
       if (!(await until(() => tip.hidden))) return "the box still says " + JSON.stringify(said());
+      plot.blur();
       return worn() === -1 ? "" : "the cursor stayed on row " + worn();
     `,
   },

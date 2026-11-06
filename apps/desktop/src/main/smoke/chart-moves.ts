@@ -102,7 +102,10 @@ const PRESSED = [
 ];
 
 /** A press of `keyCode` with `modifiers`. */
-function pressing(keyCode: string, modifiers: Array<"shift" | "control"> = []): readonly Input[] {
+export function pressing(
+  keyCode: string,
+  modifiers: Array<"shift" | "control"> = [],
+): readonly Input[] {
   return [
     { type: "keyDown", keyCode, modifiers },
     { type: "keyUp", keyCode, modifiers },
