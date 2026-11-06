@@ -1,18 +1,21 @@
 /**
  * @fileoverview A chart's table, drawn from a tally: a row per value sent, the
- * largest first, with what it measures in the app's language. Its caption says
- * what the chart is called, its headers name the columns, and the file's text
- * is marked as the file's.
+ * largest first, with what it measures in the app's language, the values a
+ * tally sent none of counted after them, and a line for the values past those
+ * a tally keeps apart. Its caption says what the chart is called, its headers
+ * name the columns, and the file's text is marked as the file's.
  *
  * @vitest-environment happy-dom
  */
 
 import { afterEach, expect, test } from "vite-plus/test";
 
+import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, GroupsTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { table } from "@renderer/chart/table";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { BARS } from "../charted.ts";
 
@@ -81,4 +84,23 @@ test("a sum's column is headed by the column summed, a blank value is called bla
   expect(box.querySelectorAll("thead .from-file")).toHaveLength(2);
   expect(box.querySelector("tbody tr:first-child th .from-file")).toBeNull();
   expect([...box.querySelectorAll("td")].every((td) => td.classList.contains("num"))).toBe(true);
+});
+
+test("the values a tally sent none of are one row after the sent ones, and a line says when later values are counted in the rest", () => {
+  const unsent = { values: 5, rows: 20, sum: 100 };
+  const past = { rows: 7, sum: 1 };
+  const tally = { ...tallyOf(sent("North", 2)), others: unsent, below: unsent, rest: past };
+  const box = table(BARS.plot, tally, called());
+  expect(rows(box)).toStrictEqual([
+    ["region", "rows"],
+    ["North", "2"],
+    [m.chart_bars_more({ count: "10" }), "47"],
+    [m.chart_bars_past({ count: num(DISTINCT_AT_MOST) })],
+  ]);
+  expect(box.querySelector("tbody tr:last-child td")?.getAttribute("colspan")).toBe("2");
+  expect(rows(table(SUMS, tally, called())).at(2)).toStrictEqual([
+    m.chart_bars_more({ count: "10" }),
+    "201",
+  ]);
+  expect(rows(table(BARS.plot, tallyOf(sent("North", 2)), called()))).toHaveLength(2);
 });
