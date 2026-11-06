@@ -558,6 +558,57 @@
   stroke-width: 2px;
 }
 
+/* The box that says what the mark under the cursor is worth, from tooltip.ts,
+ * which stands it in the window over the plot, out of the pointer's way: the
+ * pop-up menu's look (menu.css) at the ticks' size, the mark's colour as a
+ * short key, its value strong, and what that is of in the caption's ink. It
+ * is never wider than the window less tooltip.ts's --tip-edge on each side,
+ * its words ending in an ellipsis past that, and its lines are a whole even
+ * height, so the box is 22 px high and stands on whole px centred on a row. */
+.chart-tip {
+  --key-length: 10px;
+  --key-thick: 2px;
+  position: absolute;
+  max-width: calc(100% - 2 * var(--tip-edge));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.12);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.chart-tip-words {
+  min-width: 0;
+  overflow-x: clip;
+  text-overflow: ellipsis;
+}
+
+.chart-tip-key {
+  flex: none;
+  width: var(--key-length);
+  height: var(--key-thick);
+  border-radius: var(--key-thick);
+  background: var(--key);
+}
+
+.chart-tip-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tip-label {
+  color: var(--ink-3);
+}
+
 /* A forced palette would take the marks' colour away, so they wear the text's,
  * and a pie's slices stand apart by the page's. */
 @media (forced-colors: active) {

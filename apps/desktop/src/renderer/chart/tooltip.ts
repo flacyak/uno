@@ -266,6 +266,7 @@ export class Tooltip {
     this.box.id = id;
     this.box.hidden = true;
     this.box.setAttribute("role", "tooltip");
+    this.box.style.setProperty("--tip-edge", `${TIP_EDGE}px`);
     this.box.append(this.key, this.words);
     plot.setAttribute("aria-describedby", id);
     plot.addEventListener("pointermove", (e) => this.point(e));
