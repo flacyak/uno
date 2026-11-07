@@ -10,7 +10,7 @@ import type { Chart, HeldFile, HeldPart, HeldParts } from '@document';
 import { trimSpace } from '@go';
 import { headerOf, labelOf, openFormat } from '@ingest';
 import type { Format } from '@ingest';
-import { isNumber } from '@num';
+import { isNumber, parse } from '@num';
 import { MIN_EXAMPLES, Survey, gather } from '@pattern';
 import type { Example } from '@pattern';
 import { described as describedProgram, text as programText } from '@program';
@@ -1028,7 +1028,8 @@ export class View {
    * undefined for a request with zero possible matches.
    *
    * An "unparsed" match tests a date column with isDate and a numeric or
-   * flagged column with isNumber. A blank cell is skipped.
+   * flagged column with isNumber. A "not-number" match tests any column with
+   * parse, as a chart's fold reads its cells. A blank cell is skipped.
    */
   private async matcher(
     req: FindRequest,
@@ -1036,6 +1037,9 @@ export class View {
     if (req.match.t === 'text') {
       const text = req.match.text;
       return text === '' ? undefined : (shown) => shown.includes(text);
+    }
+    if (req.match.t === 'not-number') {
+      return (shown) => shown !== '' && parse(shown) === undefined;
     }
 
     const column = (await this.columns())[req.col];
