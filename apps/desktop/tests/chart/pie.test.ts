@@ -5,19 +5,21 @@
  * and a line of the page's ground parts it from the next slice round the ring.
  * A label past the ring by the middle of each arc gives its value and its share.
  * Labels that would meet or run into the inset give way to a list by the ring.
+ * The caption says how Other takes the values past those a tally keeps apart.
  *
  * @vitest-environment happy-dom
  */
 
 import { afterEach, expect, test } from "vite-plus/test";
 
+import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { BARS_INSET } from "@renderer/chart/bars";
-import { LABEL_GAP, PIE_SLICES_AT_MOST, fitLabels, pie, slices } from "@renderer/chart/pie";
+import { LABEL_GAP, PIE_SLICES_AT_MOST, fitLabels, past, pie, slices } from "@renderer/chart/pie";
 import type { Slice } from "@renderer/chart/pie";
-import { percent } from "@renderer/locale";
+import { num, percent } from "@renderer/locale";
 
 const ROWS = { t: "pie", by: { col: 1, header: "region" } } as const;
 const SUMS = { ...ROWS, sum: { col: 5, header: "revenue" } };
@@ -200,4 +202,17 @@ test("the list gives each slice's colour, then its value and its share, in their
   expect(keys.map((key) => key?.style.getPropertyValue("--key"))).toStrictEqual(own);
   // window.ts hands a wheel to the nearest .chart-scrolls while it has room.
   expect(entries[0]?.closest(".chart-scrolls")).toBe(entries[0]?.parentElement);
+});
+
+test("the caption says Other takes the net sum of the values past a tally's own, or that the pie leaves them out", () => {
+  const count = num(DISTINCT_AT_MOST);
+  const left = m.chart_pie_past_left_out({ count });
+  const rest = (sum: number): Groups => ({ ...EIGHT, rest: { rows: 2, sum } });
+  expect(past(SUMS, EIGHT)).toBe("");
+  expect(past(SUMS, rest(15))).toBe(m.chart_pie_past_net({ count }));
+  expect(past(SUMS, rest(-15))).toBe(left);
+  // Other counts their rows as they are, and a pie of five slices has no Other.
+  expect(past(ROWS, rest(0))).toBe("");
+  const five = tallyOf(...EIGHT.groups.slice(0, PIE_SLICES_AT_MOST - 1));
+  expect(past(ROWS, { ...five, rest: { rows: 2, sum: 0 } })).toBe(left);
 });

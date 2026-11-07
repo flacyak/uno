@@ -482,6 +482,8 @@
   ],
   "chart_points_sampled": "{shown} de {points}",
   "chart_pie_other": "Otros",
+  "chart_pie_past_net": "más de {count} valores · los demás van en Otros por su suma neta",
+  "chart_pie_past_left_out": "más de {count} valores · los demás se dejan fuera",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",

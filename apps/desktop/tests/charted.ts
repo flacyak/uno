@@ -46,6 +46,17 @@ export const PIE: Chart = {
   plot: { t: "pie", by: { col: REGION, header: "region" } },
 };
 
+/** The second export's Device column, which writes nine values. */
+const DEVICE = 11;
+
+/** Each Device's share of the second export's rows: six slices and an Other. */
+export const DEVICES: Chart = {
+  ...PIE,
+  id: "c6",
+  source: ADS,
+  plot: { t: "pie", by: { col: DEVICE, header: "Device" } },
+};
+
 /** Where a person left a window. */
 export const MOVED = { x: 0.25, y: 0.5, width: 300, height: 200 };
 
