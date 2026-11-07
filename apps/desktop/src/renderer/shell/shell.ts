@@ -1010,6 +1010,12 @@ export class Shell {
     window.addEventListener("keydown", (e) => {
       // A key the grid already handled stops here.
       if (e.defaultPrevented) return;
+      // F6 and Shift+F6, which neither input strategy reads, step through the charts.
+      if (e.key === "F6" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        if (this.layer?.step(e.shiftKey ? -1 : 1) !== true) this.grid?.focus();
+        return;
+      }
       // Ctrl+PageDown, Ctrl+PageUp, Ctrl+Tab and Ctrl+Shift+Tab move between
       // tabs.
       if (e.ctrlKey && !e.altKey && !e.metaKey && this.workspace !== undefined) {

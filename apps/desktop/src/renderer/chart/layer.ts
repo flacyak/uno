@@ -64,6 +64,9 @@ export class ChartLayer implements Stage {
   /** How far up a stack of heads too high for the room stands, so the one with the keys shows. */
   private reach = 0;
 
+  /** The order F6 goes in: the windows front to back, as they stood before it raised any. */
+  private round: string[] = [];
+
   constructor(
     private readonly root: HTMLElement,
     /** Every change to the layer's box is a change to this one's. */
@@ -86,6 +89,7 @@ export class ChartLayer implements Stage {
     this.charts = charts;
     this.windows.clear();
     this.reach = 0;
+    this.round = [];
     this.root.replaceChildren();
     this.root.hidden = false;
     this.draw();
@@ -119,6 +123,21 @@ export class ChartLayer implements Stage {
   /** focus gives chart `id`'s window the keys, which raises it. */
   focus(id: string): void {
     this.windows.get(id)?.box.focus({ preventScroll: true });
+  }
+
+  /**
+   * step gives the keys to the window `by` places on in the order F6 goes in,
+   * from the one that has them or from the grid, and says whether one took
+   * them. The order is taken afresh when the keys come from outside it.
+   */
+  step(by: 1 | -1): boolean {
+    const at = [...this.windows].find(([, held]) => held.box.contains(document.activeElement));
+    if (at === undefined || !this.round.includes(at[0])) this.round = this.frontToBack();
+    const ids = this.round.filter((id) => this.windows.has(id));
+    const to = at === undefined ? (by === 1 ? 0 : ids.length - 1) : ids.indexOf(at[0]) + by;
+    const id = ids[to];
+    if (id !== undefined) this.focus(id);
+    return id !== undefined && this.windows.get(id)?.box.contains(document.activeElement) === true;
   }
 
   /** leave gives the keys back to the grid. */
@@ -251,6 +270,18 @@ export class ChartLayer implements Stage {
     }
     const most = whole(stackHeight(charts.length, this.head, border) - room.h);
     return Math.max(0, Math.min(reach, most));
+  }
+
+  /**
+   * frontToBack gives the windows' chart ids from the top one down: those raised
+   * by z-index, then those never raised, the last made first.
+   */
+  private frontToBack(): string[] {
+    const z = (held: ChartWindow): number => Number(held.box.style.zIndex);
+    return [...this.windows]
+      .reverse()
+      .sort(([, a], [, b]) => z(b) - z(a))
+      .map(([id]) => id);
   }
 
   /** windowOf returns a chart's window, adding one over those never raised if it has none. */
