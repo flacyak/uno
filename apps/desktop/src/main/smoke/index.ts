@@ -12,16 +12,27 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow } from "electron";
 
 import { ask } from "@main/ask";
-import { through, throughAsync } from "@main/driven";
+import { pick, through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
+import { CHART_EDITS } from "./chart-edits.ts";
+import { CHART_FORM } from "./chart-form.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
-import { CHART_WHEEL } from "./chart-wheel.ts";
-import { CHARTS, CHART_ALONG, CHART_PIE, CHART_SCATTER, CHART_SIGNED } from "./charts.ts";
+import { CHART_TIP } from "./chart-tip.ts";
+import { CHART_TABLE, CHART_WHEEL } from "./chart-wheel.ts";
+import {
+  CHARTS,
+  CHART_ALONG,
+  CHART_PIE,
+  CHART_SCATTER,
+  CHART_SIGNED,
+  CHART_STATES,
+} from "./charts.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
 import {
+  BLANK_ROWS,
   COMMAS_LEFT,
   DATE,
   DOM_ROWS,
@@ -65,14 +76,19 @@ const CHECKS: Check[] = [
   ...REFRESH,
   ...MULTI,
   ...SIDEBAR,
+  ...CHART_FORM,
   ...AGAIN,
   ...CHARTS,
   ...CHART_MOVES,
   ...CHART_WHEEL,
+  ...CHART_TIP,
   ...CHART_SIGNED,
   ...CHART_SCATTER,
+  ...CHART_TABLE,
   ...CHART_ALONG,
   ...CHART_PIE,
+  ...CHART_STATES,
+  ...CHART_EDITS,
 ];
 
 /**
@@ -87,6 +103,8 @@ const PRELUDE = `
   // gutter before those, so a column's cell is one further along.
   const ROWS = ${ROWS};
   const DATE = ${DATE}, REGION = ${REGION}, REP = ${REP}, UNITS = ${UNITS};
+  // Rows with no units and no revenue, which a chart of either leaves out.
+  const BLANK_ROWS = ${BLANK_ROWS};
   const GUTTER = ${GUTTER};
   // What remove commas changes once rows 1, 3 and 5 of units are fixed by hand.
   const COMMAS_LEFT = ${COMMAS_LEFT};
@@ -220,6 +238,21 @@ async function hover(win: BrowserWindow, selector: string): Promise<void> {
   through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
 }
 
+/** click presses what `selector` picks `count` times in a row, as a person's pointer does. */
+async function click(
+  win: BrowserWindow,
+  { selector, count = 1 }: NonNullable<Check["click"]>,
+): Promise<void> {
+  const [x, y] = await middle(win, selector);
+  through(win, () => {
+    win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+    for (let clickCount = 1; clickCount <= count; clickCount++) {
+      win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount });
+      win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount });
+    }
+  });
+}
+
 /** drag takes hold of what `selector` picks and carries it `by` CSS px. */
 async function drag(
   win: BrowserWindow,
@@ -313,6 +346,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
     try {
       if (check.ask !== undefined) await ask("smoke", check.ask);
       if (check.send !== undefined) win.webContents.send(...check.send);
+      if (check.pick !== undefined) pick(check.pick);
       if (check.window !== undefined) {
         const { zoom = FULL_ZOOM, width = fullWidth } = check.window;
         reshape(win, zoom, width, height);
@@ -326,6 +360,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
         else send();
       }
       if (check.hover !== undefined) await hover(win, check.hover);
+      if (check.click !== undefined) await click(win, check.click);
       if (check.drag !== undefined) await drag(win, check.drag);
       if (check.touch !== undefined) await touch(win, check.touch);
       if (check.wheel !== undefined) await wheel(win, check.wheel);
