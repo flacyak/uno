@@ -5,18 +5,20 @@
  * leave too little room. None of it marks the workspace unsaved, and the grid
  * still takes the pointer and the keys beside a window. In light and dark, a
  * window reads as the settings menu's box, the sidebar's band and the window's ×.
- * Its bars draw once its chart's tally completes, as bars.ts sizes them, and a
- * scatter's points stand inside its axes, against labels on their gridlines.
+ * Its bars draw once its chart's tally completes, as bars.ts sizes them, a
+ * scatter's points stand inside its axes, against labels on their gridlines,
+ * and a pie stands round in its plot, in the chart colours.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
- * right edge, one at the top and one at the foot. The last three open others:
+ * right edge, one at the top and one at the foot. The last four open others:
  * one whose sums leave a window of the least width too little room for bars and
- * values, one of a scatter, and one of three scatters whose x axis has room for
- * its labels in full in one window, not in a second, and not even compactly in
- * the third.
+ * values, one of a scatter, one of three scatters whose x axis has room for its
+ * labels in full in one window, not in a second, and not even compactly in the
+ * third, and one of two pies.
  */
 
 import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
+import { PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { POINT_OPACITY, TICK_GAP } from "@renderer/chart/scatter";
 import { DEFAULT_THEME } from "@renderer/theme";
@@ -43,6 +45,14 @@ const ALONG_LABELS = [
   ["0", "200K", "400K", "600K", "800K"],
   ["900,000", "1,000,000"],
 ];
+
+/**
+ * The one it wrote of two pies of the second export's rows, and their slices:
+ * one for each way it writes Location, and one for each of the six largest of
+ * the nine it writes Device, and Other.
+ */
+const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
+const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1];
 
 /** The zoom that halves the room. */
 const DOUBLE_ZOOM = 2;
@@ -716,7 +726,7 @@ export const CHART_SCATTER: Check[] = [
   },
 ];
 
-/** The run's last check, as it opens a workspace of three scatters in place of the last. */
+/** A check after CHART_SCATTER, as it opens a workspace of three scatters in place of that one. */
 export const CHART_ALONG: Check[] = [
   {
     name: "a scatter's x axis writes its labels in full where they fit side by side, compactly in a window too narrow for that, and at every second tick where even those crowd, all clear of the y axis's",
@@ -735,6 +745,42 @@ export const CHART_ALONG: Check[] = [
         if (near !== -1) return "two labels of " + said[windows().indexOf(win)].join() + " stand " + (at[near].left - at[near - 1].right) + " px apart";
         const [foot, first] = [".chart-ticks.y", ".chart-ticks.x"].map((axis) => win.querySelector(axis + " .chart-tick").getBoundingClientRect());
         if (first.top - foot.bottom < ${TICK_GAP - RECT_SLACK}) return "the x axis's first label stands " + (first.top - foot.bottom) + " px under the y axis's first";
+      }
+      return "";
+    `,
+  },
+];
+
+/** The run's last check, as it opens a workspace of two pies in place of the last. */
+export const CHART_PIE: Check[] = [
+  {
+    name: "a pie stands round in the middle of its plot, inside the bars' inset, in the chart colours and Other in the caption's ink, each slice parted from the next by the page's ground",
+    send: ["menu:open-path", PIES],
+    shot: "chart-pie",
+    script: `
+      ${GEOMETRY}
+      ${CHROME}
+      const pies = () => [...document.querySelectorAll(".chart")];
+      const slices = (win) => [...win.querySelectorAll(".chart-slice")];
+      const drawn = () => pies().length === ${PIE_SLICES.length} && pies().every((win) => slices(win).length > 0);
+      if (!(await arrives(drawn))) return "the pies draw no slices";
+      const counts = pies().map((win) => slices(win).length);
+      if (counts.join() !== "${PIE_SLICES.join()}") return "the pies draw " + counts.join(" and ") + " slices";
+      const off = (a, b) => Math.abs(a - b) > ${RECT_SLACK};
+      for (const win of pies()) {
+        const plot = win.querySelector(".chart-plot").getBoundingClientRect();
+        const at = slices(win).map((slice) => slice.getBoundingClientRect());
+        const [left, top] = ["left", "top"].map((side) => Math.min(...at.map((r) => r[side])));
+        const [right, bottom] = ["right", "bottom"].map((side) => Math.max(...at.map((r) => r[side])));
+        const ring = new DOMRect(left, top, right - left, bottom - top);
+        const across = Math.min(plot.width, plot.height) - 2 * ${BARS_INSET};
+        if (off(ring.width, across) || off(ring.height, across)) return "a ring stands at " + edges(ring) + " in a plot at " + edges(plot);
+        if (off(left + right, plot.left + plot.right) || off(top + bottom, plot.top + plot.bottom)) return "a ring stands at " + edges(ring) + ", off the middle of a plot at " + edges(plot);
+        const worn = slices(win).map((slice) => style(slice).fill);
+        const keys = worn.map((_, i) => computed(i < ${PIE_SLICES_AT_MOST} ? "var(--chart-" + (i + 1) + ")" : "var(--ink-3)"));
+        if (worn.join(" ") !== keys.join(" ")) return "the slices wear " + worn.join(" and ");
+        const gap = style(win.querySelector(".chart-slice-gap")).stroke;
+        if (gap !== computed("var(--paper)")) return "a line of " + gap + " parts the slices";
       }
       return "";
     `,

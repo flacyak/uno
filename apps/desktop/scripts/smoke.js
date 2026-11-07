@@ -277,6 +277,36 @@ await writeFile(
   }),
 );
 
+// A workspace of two pies of the second export's rows, in a new window's size:
+// one per Location, which it writes four ways, and one per Device, which it
+// writes nine, so its six largest have a slice each and the rest an Other.
+const pies = join(scratch, "sent", "pies.uno");
+const adsSource = {
+  id: "ads",
+  name: "google-ads-sales.csv",
+  path: second,
+  rows: 2600,
+  cols: 13,
+  state: { active: { row: 0, col: 0 } },
+};
+const shareOf = (col, header) => ({ t: "pie", by: { col, header } });
+const pieChart = { source: adsSource.id, title: "", refresh: 0 };
+await writeFile(
+  pies,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [adsSource],
+    active: adsSource.id,
+    log: [],
+    charts: [
+      { ...pieChart, id: "c1", plot: shareOf(10, "Location"), place: { ...chartSize, x: 0, y: 0 } },
+      { ...pieChart, id: "c2", plot: shareOf(11, "Device"), place: { ...chartSize, x: 1, y: 0 } },
+    ],
+    extra: new Map(),
+    at: pies,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -361,6 +391,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_SIGNED: signed,
     UNO_SMOKE_SCATTERED: scattered,
     UNO_SMOKE_ALONG: along,
+    UNO_SMOKE_PIES: pies,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits

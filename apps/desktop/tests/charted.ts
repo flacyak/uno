@@ -39,6 +39,13 @@ export const SCATTER: Chart = {
   },
 };
 
+/** Each region's share of the sales export's rows. */
+export const PIE: Chart = {
+  ...BARS,
+  id: "c5",
+  plot: { t: "pie", by: { col: REGION, header: "region" } },
+};
+
 /** Where a person left a window. */
 export const MOVED = { x: 0.25, y: 0.5, width: 300, height: 200 };
 

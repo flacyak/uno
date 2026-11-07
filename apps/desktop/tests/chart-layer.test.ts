@@ -32,7 +32,7 @@ import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
 import { num } from "@renderer/locale";
-import { BARS, MOVED, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
+import { BARS, MOVED, PIE, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
 
@@ -486,6 +486,13 @@ test("a window draws a scatter's points from what its chart heard", async () => 
   model.heard = () => pointsHeard();
   await frame();
   expect(document.querySelectorAll(".chart-scatter .chart-point")).toHaveLength(SENT.x.length);
+});
+
+test("a window draws a pie's slices from what its chart heard", async () => {
+  const { model } = shown(PIE);
+  model.heard = () => heardOf("North", "South");
+  await frame();
+  expect(document.querySelectorAll(".chart-pie .chart-slice")).toHaveLength(2);
 });
 
 test("a scatter's caption says how many of its points it draws while it samples, in the language chosen, and nothing once it draws none", async () => {
