@@ -107,6 +107,7 @@ export class ChartForm {
       field(m.chart_form_title_field(), this.title),
     ];
     this.form.open(fields, place);
+    this.form.say(m.chart_form_hint(), false);
     this.by.focus();
   }
 

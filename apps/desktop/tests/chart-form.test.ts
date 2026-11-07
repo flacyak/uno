@@ -81,11 +81,12 @@ function press(key: string, shiftKey = false): KeyboardEvent {
 /** Lets an insert in flight settle. */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve));
 
-test("it opens on the selected column, with the keys in it", () => {
-  form();
+test("it opens on the selected column, with the keys in it, and says what Enter and Esc do", () => {
+  const { box } = form();
   const by = select("by");
   expect(by.value).toBe(String(REGION));
   expect(document.activeElement).toBe(by);
+  expect(box.querySelector(".note")!.textContent).toBe(m.chart_form_hint());
 });
 
 test("Enter inserts bars of the selected column, and closes", async () => {

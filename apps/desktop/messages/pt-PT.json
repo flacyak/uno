@@ -479,6 +479,7 @@
   "chart_form_sum": "soma de",
   "chart_form_sum_none": "nenhuma, contar linhas",
   "chart_form_title_field": "título",
+  "chart_form_hint": "Enter insere · Esc fecha",
   "chart_inserted": "inserido: {title}",
   "chart_bars_more": "+{count} mais",
   "chart_bars_past": "mais de {count} valores · os demais são contados no resto",

@@ -479,6 +479,7 @@
   "chart_form_sum": "suma de",
   "chart_form_sum_none": "ninguna, contar filas",
   "chart_form_title_field": "título",
+  "chart_form_hint": "Intro inserta · Esc cierra",
   "chart_inserted": "insertado: {title}",
   "chart_bars_more": "+{count} más",
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",
