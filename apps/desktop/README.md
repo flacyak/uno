@@ -51,7 +51,7 @@ The column stops storing values of its own and shows what the expression compute
 Inserting one switches to transform, since it changes the file, and it is one edit that Ctrl+Z takes back.
 An expression the engine cannot read is refused in the form, in the engine's words, and the form stays open on what was typed.
 
-Ctrl+Shift+G and `:chart` open the chart form `Insert chart…` opens, on the open workspace, under the selected column's header.
+Ctrl+Shift+G, `:chart` and the View menu's `Insert chart…` open the chart form the right click's `Insert chart…` opens, on the open workspace, under the selected column's header.
 
 The three columns, the sidebar, the sheet and the sources panel, each begin with a head one row high.
 Together they make one line across the top of the window, and the round `×` at its right end closes the window.

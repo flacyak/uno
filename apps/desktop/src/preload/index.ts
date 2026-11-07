@@ -53,7 +53,14 @@ ipcRenderer.on("engine:port", (event, id: number) => {
  */
 contextBridge.exposeInMainWorld("unoMenu", {
   on(
-    channel: "menu:open" | "menu:add" | "menu:save" | "menu:save-as" | "menu:mode" | "menu:sources",
+    channel:
+      | "menu:open"
+      | "menu:add"
+      | "menu:save"
+      | "menu:save-as"
+      | "menu:mode"
+      | "menu:sources"
+      | "menu:chart",
     fn: () => void,
   ): void {
     ipcRenderer.on(channel, () => fn());

@@ -18,7 +18,8 @@ type MenuChannel =
   | "menu:save"
   | "menu:save-as"
   | "menu:mode"
-  | "menu:sources";
+  | "menu:sources"
+  | "menu:chart";
 
 interface MenuBridge {
   on(channel: MenuChannel, fn: () => void): void;
@@ -43,6 +44,7 @@ if (bridge === undefined) {
   menu?.on("menu:save-as", () => void shell.saveAs());
   menu?.on("menu:mode", () => shell.toggleMode());
   menu?.on("menu:sources", () => shell.showPanel());
+  menu?.on("menu:chart", () => shell.insertChartHere());
   menu?.onOpenPath((path) => void shell.openPath(path));
   menu?.onAddPaths((paths) => void shell.addPaths(paths));
   menu?.onInput((name) => shell.setInput(name));
