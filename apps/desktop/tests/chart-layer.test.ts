@@ -134,6 +134,9 @@ const leave = vi.fn();
 /** What the layer calls to scroll the sheet. */
 const wheelBy = vi.fn();
 
+/** What the layer calls to open the sources panel on a window's source. */
+const repoint = vi.fn();
+
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
@@ -232,7 +235,7 @@ function pointsHeard(plotted = SENT.x.length): Heard {
 /** A layer over a model holding `charts`, in ROOM, and that model. */
 function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   const model = modelOf(...charts);
-  const layer = new ChartLayer(root(), content(), leave, wheelBy);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint);
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
@@ -302,6 +305,7 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", HeldObserver);
   leave.mockClear();
   wheelBy.mockClear();
+  repoint.mockClear();
 });
 
 afterEach(() => {
@@ -310,7 +314,7 @@ afterEach(() => {
 });
 
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
-  const layer = new ChartLayer(root(), content(), leave, wheelBy);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint);
   roomIs(ROOM);
   expect(root().hidden).toBe(true);
 
@@ -489,6 +493,7 @@ test("a track under the head shows how far a chart has read, until its tally com
   model.heard = () => ({ ...FINE, latest: undefined, complete: undefined });
   await frame();
   expect([track().hidden, read()]).toStrictEqual([false, "0"]);
+  expect(part(".chart-state").textContent).toBe(m.chart_reading({ name: FINE.name }));
   model.heard = () => readOf(2, 5);
   layer.tallied(FLUSH.id);
   await frame();
@@ -504,6 +509,35 @@ test("a track under the head shows how far a chart has read, until its tally com
   layer.tallied(FLUSH.id);
   await frame();
   expect([track().hidden, said()]).toStrictEqual([true, m.rows_count({ count: 2 })]);
+});
+
+test("a window over a missing source says so and offers Re-point, which asks for the panel on its source", async () => {
+  const { layer, model } = shown(FLUSH);
+  model.heard = () => ({ ...FINE, state: "missing", latest: undefined, complete: undefined });
+  await frame();
+  const words = m.chart_source_missing({ name: FINE.name });
+  expect(part(".chart-state").textContent).toBe(`${words}${m.action_repoint()}`);
+  expect(part(".chart-coverage").hidden).toBe(true);
+  part(".chart-state button").click();
+  expect(repoint).toHaveBeenCalledExactlyOnceWith(FLUSH.source);
+  void setLocale("es", { reload: false });
+  layer.relabel();
+  await frame();
+  expect(part(".chart-state button").textContent).toBe(m.action_repoint());
+  expect(part(".chart-state button").textContent).not.toBe("Re-point");
+});
+
+test("a window over a source waiting on its bucket offers to connect it", async () => {
+  const { model } = shown(FLUSH);
+  const bucket = "open-data";
+  const waiting = { ...FINE, state: "unconnected", bucket } as const;
+  model.heard = () => ({ ...waiting, latest: undefined, complete: undefined });
+  await frame();
+  expect(part(".chart-state bdi").textContent).toBe(m.chart_bucket_unconnected({ bucket }));
+  const connect = part(".chart-state button");
+  expect(connect.textContent).toBe(m.sources_connect_bucket({ bucket }));
+  connect.click();
+  expect(repoint).toHaveBeenCalledExactlyOnceWith(FLUSH.source);
 });
 
 test("a window draws its bars again in the frame its plot resizes", () => {
