@@ -203,6 +203,35 @@ test('find reads the column past any band, with the log applied', async () => {
   }
 });
 
+test('a find for what a tally could not read as a number passes formatted numbers and blanks, and lands on a word', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const src = await openOne(engine, {
+      name: 'sales-q3.csv',
+      blob: new Blob([bytes]),
+    });
+    await indexed(src);
+    const notNumber = (from: number) =>
+      src.find({ col: UNITS, from, dir: 1, match: { t: 'not-number' } });
+
+    // Every units cell is a number once its comma goes, or blank in a short
+    // row, and a search down from above the first row looks at every row.
+    expect(await notNumber(-1)).toEqual({
+      row: null,
+      searched: ROWS,
+      complete: true,
+    });
+
+    const far = 4000;
+    engine.mode(true);
+    await src.edit({ op: Op.Set, row: far, col: UNITS, now: 'n/a' });
+    expect((await notNumber(-1)).row).toBe(far);
+    expect((await notNumber(far)).row).toBe(null);
+  } finally {
+    done();
+  }
+});
+
 test('the index serves closed blocks only, and projects the row count', () => {
   const index = new RowIndex(10, 1010, { blockRows: 2, blockBytes: 1 << 20 });
   for (const offset of [10, 20, 30, 40, 50]) index.begin(offset);
