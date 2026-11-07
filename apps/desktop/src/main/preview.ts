@@ -18,7 +18,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow, Rectangle } from "electron";
 
 import { ask } from "./ask.ts";
-import { pick, through, throughAsync } from "./driven.ts";
+import { pick, shownBy, through, throughAsync } from "./driven.ts";
 
 /**
  * Milliseconds between frame captures. Faster than the 12fps the GIF is
@@ -272,6 +272,8 @@ const INSERT = {
 const KEYED = { column: 500, open: 2_400, enter: 6_400, end: 8_600 };
 /** Where the pointer rests in those stories, on a cell clear of the form and the window it inserts. */
 const KEYED_REST = "tbody tr:nth-child(20) td:nth-child(2)";
+/** The keys the View menu's Insert chart… shows. */
+const INSERT_CHART_KEYS = "CmdOrCtrl+Shift+G";
 
 /**
  * The kinds story's beats: the insert story's, once for a pie of region and
@@ -303,6 +305,12 @@ const POINTER =
 /** The stand-in's id, where a script finds it, and a z-index over the app's popups. */
 const POINTER_ID = "preview-pointer";
 const POINTER_ON_TOP = 99;
+
+/** The stand-in menu's id, and its gap from the window's edge, menu.ts's EDGE. */
+const MENU_ID = "preview-menu";
+const MENU_EDGE = 4;
+/** What a menu shows for CmdOrCtrl and CommandOrControl, on the platform filming. */
+const CMD_OR_CTRL = process.platform === "darwin" ? "Cmd" : "Ctrl";
 
 /** The stand-in key of the object the refresh story's workspace points at. */
 const REFRESH_KEY = "2025/ads-q3.csv";
@@ -775,7 +783,15 @@ const STORIES: Record<string, Story> = {
       press(win, "Return");
     }),
   },
-  menu: { end: KEYED.end, script: playKeyed(() => pick("CmdOrCtrl+Shift+G")) },
+  menu: {
+    end: KEYED.end,
+    script: playKeyed(async (win, { glideTo, pressOn }) => {
+      await pressOn(await standInMenu(win, INSERT_CHART_KEYS));
+      await win.webContents.executeJavaScript(`document.getElementById("${MENU_ID}").remove()`);
+      pick(INSERT_CHART_KEYS);
+      await glideTo(KEYED_REST);
+    }),
+  },
 };
 
 /**
@@ -956,17 +972,20 @@ async function playKinds(win: BrowserWindow, at: Clock): Promise<void> {
 
 /**
  * playKeyed gives a story that selects region, opens the chart form on it by
- * `open`, and presses Enter on the form for its bars.
+ * `open`, which may move the pointer, and presses Enter on the form for its
+ * bars.
  */
-function playKeyed(open: (win: BrowserWindow) => void | Promise<void>): Story["script"] {
+function playKeyed(
+  open: (win: BrowserWindow, pointer: Glider) => void | Promise<void>,
+): Story["script"] {
   return async (win, at) => {
-    const { glideTo, pressOn } = await glider(win);
+    const pointer = await glider(win);
     await at(KEYED.column);
     // The gutter comes first, so region is a row's third cell.
-    await pressOn("tbody tr:nth-child(3) td:nth-child(3)");
-    await glideTo(KEYED_REST);
+    await pointer.pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+    await pointer.glideTo(KEYED_REST);
     await at(KEYED.open);
-    await open(win);
+    await open(win, pointer);
     await at(KEYED.enter);
     press(win, "Return");
     await at(KEYED.end);
@@ -1024,6 +1043,50 @@ async function standIn(win: BrowserWindow): Promise<void> {
       document.body.append(pointer);
     })()
   `);
+}
+
+/**
+ * standInMenu draws the application menu holding the item that shows `keys`,
+ * in the app's own menu look at the window's top-left, as a capture leaves a
+ * native menu out and the menu bar shows on macOS alone. It gives the item's
+ * selector.
+ */
+async function standInMenu(win: BrowserWindow, keys: string): Promise<string> {
+  const shown = shownBy(keys);
+  if (shown === undefined) throw new Error(`no menu item shows ${keys}`);
+  const items = shown.menu.submenu?.items.filter((at) => at.visible && at.type !== "separator");
+  const rows = items?.map((at) => [
+    at.label,
+    at.accelerator?.replace(/CmdOrCtrl|CommandOrControl/, CMD_OR_CTRL),
+    at === shown.item,
+  ]);
+  await win.webContents.executeJavaScript(`
+    (() => {
+      const row = (label, keys) => {
+        const [item, shown] = [document.createElement("div"), document.createElement("span")];
+        item.className = "pop-item";
+        shown.className = "keys";
+        shown.textContent = keys ?? "";
+        item.append(label, shown);
+        return item;
+      };
+      const menu = document.createElement("div");
+      menu.id = "${MENU_ID}";
+      menu.className = "pop-menu";
+      menu.style.cssText = "left:${MENU_EDGE}px;top:${MENU_EDGE}px";
+      // The menu's own label heads it, in the keys' ink.
+      const head = row("", ${JSON.stringify(shown.menu.label)});
+      head.style.cssText = "pointer-events:none;justify-content:flex-start";
+      const items = ${JSON.stringify(rows ?? [])}.map(([label, keys, picked]) => {
+        const item = row(label, keys);
+        item.toggleAttribute("data-picked", picked);
+        return item;
+      });
+      menu.append(head, ...items);
+      document.body.append(menu);
+    })()
+  `);
+  return `#${MENU_ID} [data-picked]`;
 }
 
 /** pointTo moves the pointer and its stand-in to (`x`, `y`). */

@@ -38,7 +38,8 @@
  *   on units and makes a scatter of it against revenue. Goes to out/kinds.gif.
  * - `chord`, `command` and `menu`: select region, open the chart form under its
  *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
- *   Insert chart…, and press Enter on it. Each goes to out/<story>.gif.
+ *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
+ *   out/<story>.gif.
  *
  * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|chord|command|menu]
  * (after node scripts/build.js)

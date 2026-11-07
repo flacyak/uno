@@ -14,7 +14,7 @@
  */
 
 import { Menu } from "electron";
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, MenuItem } from "electron";
 
 /**
  * drive makes the window ignore all input from the window system and report
@@ -70,10 +70,18 @@ export async function throughAsync(win: BrowserWindow, send: () => Promise<void>
  * it. The menu has to leave the keys to the page, which reads them itself.
  */
 export function pick(keys: string): void {
-  const items = Menu.getApplicationMenu()?.items.flatMap((menu) => menu.submenu?.items ?? []);
-  const item = items?.find((at) => at.accelerator === keys);
+  const item = shownBy(keys)?.item;
   if (item === undefined || item.registerAccelerator) {
     throw new Error(`no menu item leaves ${keys} to the page`);
   }
   item.click();
+}
+
+/** shownBy gives the application menu's item that shows `keys`, and its menu. */
+export function shownBy(keys: string): { menu: MenuItem; item: MenuItem } | undefined {
+  for (const menu of Menu.getApplicationMenu()?.items ?? []) {
+    const item = menu.submenu?.items.find((at) => at.accelerator === keys);
+    if (item !== undefined) return { menu, item };
+  }
+  return undefined;
 }
