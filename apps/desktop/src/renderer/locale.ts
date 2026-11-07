@@ -25,6 +25,9 @@ let placing: { locale: Locale; formats: Map<number, Intl.NumberFormat> } | undef
  */
 let compacting: { locale: Locale; format: Intl.NumberFormat; exact: Intl.NumberFormat } | undefined;
 
+/** Cached percent formatter, rebuilt when the locale changes. */
+let shares: { locale: Locale; format: Intl.NumberFormat } | undefined;
+
 /**
  * Cached time formatters, without and with the date, rebuilt when the locale
  * changes. They keep the time zone they were built in.
@@ -109,6 +112,25 @@ export function compact(n: number): string {
 export function compactsExactly(n: number): boolean {
   const { format, exact } = compacts();
   return format.format(n) === exact.format(n);
+}
+
+/** The significant digits a share keeps: 8.1% tells a small one from none, and 33% stays short. */
+const SHARE_DIGITS = 2;
+
+/**
+ * Formats a share of a whole as a percent in the app's locale: 25% and 8.1% in
+ * English, 25 % in Spanish.
+ */
+export function percent(share: number): string {
+  const locale = getLocale();
+  if (shares?.locale !== locale) {
+    const format = new Intl.NumberFormat(locale, {
+      style: "percent",
+      maximumSignificantDigits: SHARE_DIGITS,
+    });
+    shares = { locale, format };
+  }
+  return shares.format.format(share);
 }
 
 /** Bytes per KB, KB per MB, and so on. */
