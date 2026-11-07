@@ -8,6 +8,7 @@
  * --key, which chart.css fills it with, so a theme recolours it, and a line of
  * the page's ground parts it from the next. Its label, HTML outside the ring,
  * gives its value, the file's text set as text alone, and its share.
+ * Where labels would meet or run past the plot, a list beside the ring gives them.
  */
 
 import type { Plot } from "@document";
@@ -107,6 +108,15 @@ function gap(turn: number): SVGElement {
   return line;
 }
 
+/** words gives what a slice says: its value, the file's text, or Other, and its share. */
+function words(value: string | undefined, share: number): [HTMLElement, HTMLElement] {
+  const name =
+    value === undefined
+      ? el("span", "chart-slice-name", m.chart_pie_other())
+      : el("bdi", "chart-slice-name from-file", value);
+  return [name, el("span", "chart-slice-share", percent(share))];
+}
+
 /**
  * label gives the label of a slice of `value`, or Other, `share` of the whole,
  * with where the middle of its arc, `turn` of the way round, stands on the
@@ -114,13 +124,21 @@ function gap(turn: number): SVGElement {
  */
 function label(value: string | undefined, share: number, turn: number): HTMLElement {
   const said = el("div", "chart-slice-label");
-  const name =
-    value === undefined ? el("span", "", m.chart_pie_other()) : el("bdi", "from-file", value);
-  said.append(name, " ", el("span", "chart-slice-share", percent(share)));
+  const [name, part] = words(value, share);
+  said.append(name, " ", part);
   const [x, y] = onRing(turn);
   said.style.setProperty("--x", at(x));
   said.style.setProperty("--y", at(y));
   return said;
+}
+
+/** entry gives a slice's entry in the list: its colour, `key`, then what it says. */
+function entry(key: string, value: string | undefined, share: number): HTMLElement {
+  const swatch = el("span", "chart-legend-key");
+  swatch.style.setProperty("--key", key);
+  const item = el("li");
+  item.append(swatch, ...words(value, share));
+  return item;
 }
 
 /**
@@ -140,22 +158,25 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
   let reached = 0;
   const gaps: SVGElement[] = [];
   const labels: HTMLElement[] = [];
+  const list = el("ul", "chart-legend chart-scrolls");
   for (const [i, { value, size }] of drawn.entries()) {
     const from = reached / whole;
     reached += size;
     const to = reached / whole;
     const slice = wedge(from, to);
-    slice.style.setProperty("--key", value === undefined ? OTHER_KEY : `var(--chart-${i + 1})`);
+    const key = value === undefined ? OTHER_KEY : `var(--chart-${i + 1})`;
+    slice.style.setProperty("--key", key);
     ring.append(slice);
     gaps.push(gap(from));
     labels.push(label(value, size / whole, (from + to) / 2));
+    list.append(entry(key, value, size / whole));
   }
   if (drawn.length > 1) ring.append(...gaps);
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--label-gap", `${LABEL_GAP}px`);
   const disc = el("div", "chart-pie-disc");
   disc.append(ring, ...labels);
-  box.append(disc);
+  box.append(disc, list);
   return box;
 }
 

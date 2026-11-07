@@ -4,6 +4,7 @@
  * of the way round from the top, wears a chart colour, Other the caption's ink,
  * and a line of the page's ground parts it from the next slice round the ring.
  * A label past the ring by the middle of each arc gives its value and its share.
+ * Labels that would meet or run into the inset give way to a list by the ring.
  *
  * @vitest-environment happy-dom
  */
@@ -188,4 +189,15 @@ test("a plot not laid out yet keeps its labels, to fit them once it is", () => {
   const box = pie(ROWS, HALVED);
   fitLabels(box);
   expect(listed(box)).toBe(false);
+});
+
+test("the list gives each slice's colour, then its value and its share, in their order, and takes the wheel", () => {
+  const entries = [...pie(ROWS, HALVED).querySelectorAll(".chart-legend li")];
+  const said = entries.map((entry) => entry.textContent);
+  expect(said).toStrictEqual(["North50%", "South25%", "West25%"]);
+  const keys = entries.map((entry) => entry.querySelector<HTMLElement>(".chart-legend-key"));
+  const own = [1, 2, 3].map((n) => `var(--chart-${n})`);
+  expect(keys.map((key) => key?.style.getPropertyValue("--key"))).toStrictEqual(own);
+  // window.ts hands a wheel to the nearest .chart-scrolls while it has room.
+  expect(entries[0]?.closest(".chart-scrolls")).toBe(entries[0]?.parentElement);
 });

@@ -88,7 +88,8 @@ export const CHART_WHEEL: Check[] = [
     "return along();",
   ),
   {
-    // No window holds a scrollable of its own yet, so this one takes the place of its bars.
+    // A listed pie's list is a window's own scrollable, but none overflows in this run, so
+    // this one takes the place of its bars.
     name: "a chart's scrollable fills its plot, and its bar keeps the pointer from the edge's zone",
     script: `
       ${WHEEL}
