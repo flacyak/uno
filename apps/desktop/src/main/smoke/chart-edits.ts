@@ -1,19 +1,22 @@
 /**
- * @fileoverview A chart changed from its own window under a real pointer and
- * real keys. They follow CHART_STATES, whose last window charts a column the
- * second export has not. Carried up clear of the room's foot, a double-click
- * on its head opens the chart form under the head, and Enter applies the first
- * column, which the window draws and which marks the workspace unsaved. F2
- * opens the form again, Escape gives the window the keys back, and Ctrl+Z
- * there undoes nothing and says why.
+ * @fileoverview A chart changed and removed from its own window under a real
+ * pointer and real keys. They follow CHART_STATES, whose last window charts a
+ * column the second export has not. Carried up clear of the room's foot, a
+ * double-click on its head opens the chart form under the head, and Enter
+ * applies the first column, which the window draws and which marks the
+ * workspace unsaved. F2 opens the form again, Escape gives the window the keys
+ * back, and Ctrl+Z there undoes nothing and says why. A click on the × arms it
+ * and the second removes the chart, as two presses of Delete remove another.
  */
 
 import { pressing } from "./chart-moves.ts";
+import { STATE_WINDOWS } from "./charts.ts";
 import type { Check } from "./check.ts";
 
-/** The last window and its head. */
+/** The last window, its head and its ×. */
 const LAST = ".chart:last-child";
 const LAST_HEAD = `${LAST} .chart-title`;
+const LAST_X = `${LAST} .chart-close`;
 
 /** A carry up the room, which leaves the form room to hang under the head. */
 const UP = { x: 0, y: -200 };
@@ -24,10 +27,11 @@ const DOUBLE = 2;
 /** What the status line says of Ctrl+Z on a chart. */
 const UNDO_HINT = "Ctrl+Z undoes edits in the grid · Esc goes back to it";
 
-/** Helpers: the chart form, the last window, and whether it has the keys. */
+/** Helpers: the chart form, the last window, and the windows left. */
 const FORM = `
   const form = () => document.querySelector(".chart-form");
   const last = () => document.querySelector(${JSON.stringify(LAST)});
+  const count = () => document.querySelectorAll(".chart").length;
   const keyed = () => document.activeElement === last() ? "" : "the keys are in " + document.activeElement?.className;
 `;
 
@@ -90,6 +94,55 @@ export const CHART_EDITS: Check[] = [
     script: `
       ${FORM}
       return (await until(() => text("#status-msg") === ${JSON.stringify(UNDO_HINT)})) ? keyed() : "the status line says " + text("#status-msg");
+    `,
+  },
+  {
+    name: "a click on a chart's × arms it, and says what a second does",
+    click: { selector: LAST_X },
+    script: `
+      ${FORM}
+      if (!last().querySelector(".chart-close").classList.contains("armed")) return "the × is not armed";
+      return text("#status-msg").startsWith("× or Delete again removes the chart") ? "" : "the status line says " + text("#status-msg");
+    `,
+  },
+  {
+    name: "with the pointer off it, an armed × keeps the flag's fill and wears a ring",
+    hover: LAST_HEAD,
+    shot: "chart-remove-armed",
+    script: `
+      ${FORM}
+      const x = last().querySelector(".chart-close");
+      const probe = document.body.appendChild(document.createElement("i"));
+      probe.style.background = "var(--flag)";
+      const flag = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      if (!(await until(() => getComputedStyle(x).backgroundColor === flag))) return "the × wears " + getComputedStyle(x).backgroundColor;
+      return getComputedStyle(x).boxShadow !== "none" ? "" : "the armed × wears no ring";
+    `,
+  },
+  {
+    name: "a second click on the × removes the chart, and the grid takes the keys",
+    click: { selector: LAST_X },
+    script: `
+      ${FORM}
+      if (!(await until(() => count() === ${STATE_WINDOWS - 1}))) return count() + " windows stand";
+      return document.activeElement?.closest("#content") !== null ? "" : "the keys are in " + document.activeElement?.className;
+    `,
+  },
+  {
+    name: "a click on a head gives its window the keys",
+    click: { selector: LAST_HEAD },
+    script: `
+      ${FORM}
+      return (await until(() => keyed() === "")) ? "" : keyed();
+    `,
+  },
+  {
+    name: "Delete on the window arms its removal, and a second removes it",
+    input: { events: [...pressing("Delete"), ...pressing("Delete")], through: true },
+    script: `
+      ${FORM}
+      return (await until(() => count() === ${STATE_WINDOWS - 2})) ? "" : count() + " windows stand";
     `,
   },
 ];

@@ -73,6 +73,8 @@ const STATE_WORDS = [
   ["lost.csv is missing", "Re-point"],
   ["google-ads-sales.csv has no column called Nowhere", "Edit chart"],
 ];
+/** The windows CHART_STATES leaves standing, one a state. */
+export const STATE_WINDOWS = STATE_WORDS.length;
 
 /** The zoom that halves the room. */
 export const DOUBLE_ZOOM = 2;
