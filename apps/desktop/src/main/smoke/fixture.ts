@@ -22,6 +22,9 @@ export function counted(n: number): string {
 export const GUTTER = 1;
 
 export const ROWS = 4812;
+/** Rows that end after channel, with no units and no revenue, which a chart
+ * of either leaves out as blank. */
+export const BLANK_ROWS = 4;
 export const DATE = 0;
 export const REGION = 1;
 export const REP = 2;
