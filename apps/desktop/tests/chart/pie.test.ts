@@ -3,15 +3,19 @@
  * the six largest first, and Other after them for the rest. Each runs its share
  * of the way round from the top, wears a chart colour, Other the caption's ink,
  * and a line of the page's ground parts it from the next slice round the ring.
+ * A label past the ring by the middle of each arc gives its value and its share.
  *
  * @vitest-environment happy-dom
  */
 
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 
 import type { Group, Groups } from "@engine";
+import { m } from "@paraglide/messages";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { PIE_SLICES_AT_MOST, pie, slices } from "@renderer/chart/pie";
 import type { Slice } from "@renderer/chart/pie";
+import { percent } from "@renderer/locale";
 
 const ROWS = { t: "pie", by: { col: 1, header: "region" } } as const;
 const SUMS = { ...ROWS, sum: { col: 5, header: "revenue" } };
@@ -38,6 +42,14 @@ const HALVED = tallyOf(sent("North", 2), sent("South", 1), sent("West", 1));
 /** The paths `box`'s `selector` draw. */
 const paths = (box: HTMLElement, selector = ".chart-slice"): Array<string | null> =>
   [...box.querySelectorAll(selector)].map((at) => at.getAttribute("d"));
+
+/** `box`'s labels, in the order of their slices. */
+const labels = (box: HTMLElement): HTMLElement[] =>
+  Array.from(box.querySelectorAll<HTMLElement>(".chart-slice-label"));
+
+afterEach(() => {
+  void setLocale(baseLocale, { reload: false });
+});
 
 test("each value above zero has a slice, the largest first, of its rows or its sum", () => {
   const regions = tallyOf(sent("North", 1204, 48160.5), sent("South", 812, 0), sent("West", 3, -1));
@@ -103,4 +115,28 @@ test("a line parts each slice from the next, over them all, and a lone one from 
   expect(paths(box, ".chart-slice-gap")).toStrictEqual(["M0 0L0 -1", "M0 0L0 1", "M0 0L-1 0"]);
   expect(box.querySelector(".chart-slice-gap ~ .chart-slice")).toBeNull();
   expect(pie(ROWS, tallyOf(sent("North", 3))).querySelector(".chart-slice-gap")).toBeNull();
+});
+
+test("a slice's label is its value as the file has it and its share, and Other's its own name", () => {
+  const box = pie(ROWS, tallyOf(sent("<b>North</b>", 2), ...HALVED.groups.slice(1)));
+  const said = labels(box).map((label) => label.textContent);
+  expect(said).toStrictEqual(["<b>North</b> 50%", "South 25%", "West 25%"]);
+  expect(box.querySelector(".chart-slice-label .from-file")?.textContent).toBe("<b>North</b>");
+  void setLocale("es", { reload: false });
+  const rows = EIGHT.groups.map((g) => g.rows);
+  const sum = (ns: number[]): number => ns.reduce((total, n) => total + n, 0);
+  const share = sum(rows.slice(PIE_SLICES_AT_MOST)) / sum(rows);
+  const other = labels(pie(ROWS, EIGHT)).at(-1)!;
+  expect(other.textContent).toBe(`${m.chart_pie_other()} ${percent(share)}`);
+  expect(other.querySelector(".from-file")).toBeNull();
+});
+
+test("a label holds where its slice's middle stands on the ring, a lone slice's straight below", () => {
+  // North's middle is a quarter of the way round, and South's and West's five
+  // and seven eighths, as far from the middle across as down or up. A lone
+  // slice's is half way, straight below, where x rounds to none.
+  const drawn = [...labels(pie(ROWS, HALVED)), ...labels(pie(ROWS, tallyOf(sent("North", 3))))];
+  const [x, y] = ["--x", "--y"].map((at) => drawn.map((label) => label.style.getPropertyValue(at)));
+  expect(x).toStrictEqual(["1", "-0.707107", "-0.707107", "0"]);
+  expect(y).toStrictEqual(["0", "0.707107", "-0.707107", "1"]);
 });

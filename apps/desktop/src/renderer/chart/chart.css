@@ -324,10 +324,39 @@
 }
 
 /* A pie's plot, from pie.ts: the ring as large as the plot holds inside the
- * bars' inset, in its middle, and round whatever the shape of the window. */
+ * bars' inset, less a line and pie.ts's gap above and below for a label there,
+ * in the plot's middle and round whatever its shape. It is a label's size, so
+ * its lh is a label's line. */
 .chart-pie {
+  container-type: size;
+  display: grid;
+  place-items: center;
   height: 100%;
-  padding: var(--inset);
+  font-size: 11px;
+}
+
+.chart-pie-disc {
+  --across: min(100cqw - 2 * var(--inset), 100cqh - 2 * (var(--inset) + var(--label-gap) + 1lh));
+  position: relative;
+  width: var(--across);
+  height: var(--across);
+}
+
+/* A label stands pie.ts's gap past the ring by the middle of its slice: right
+ * of there on the right, left on the left and centred straight above or below,
+ * above at the top and below at the foot, so it stands clear of the ring. */
+.chart-slice-label {
+  position: absolute;
+  left: calc(50% + var(--x) * (50% + var(--label-gap)));
+  top: calc(50% + var(--y) * (50% + var(--label-gap)));
+  translate: calc((sign(var(--x)) - 1) * 50%) calc((var(--y) - 1) * 50%);
+  white-space: nowrap;
+}
+
+/* A share wears ink, never its slice's colour, as a bar's value does. */
+.chart-slice-share {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .chart-slices {
