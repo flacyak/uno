@@ -502,20 +502,23 @@ test("a pie's caption says how it counts the values past those a tally keeps apa
   const tally = latest?.t === "groups" ? { ...latest, rest: { rows: 5, sum: 0 } } : undefined;
   model.heard = () => ({ state: "fine", latest: tally, complete: tally });
   await frame();
-  expect(said()).toBe(m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) }));
+  const past = m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) });
+  expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past}`);
 });
 
 test("a scatter's caption says how many of its points it draws while it samples, in the language chosen, and nothing once it draws none", async () => {
   const { layer, model } = shown(SCATTER);
   model.heard = () => pointsHeard();
   await frame();
-  expect(said()).toBe("");
+  expect(said()).toBe(m.rows_count({ count: SENT.x.length }));
   model.heard = () => pointsHeard(ROWS);
   layer.tallied(SCATTER.id);
   await frame();
   const points = (): string => m.chart_points({ count: ROWS });
-  const words = (): string =>
-    m.chart_points_sampled({ shown: num(SENT.x.length), points: points() });
+  const words = (): string => {
+    const sampled = m.chart_points_sampled({ shown: num(SENT.x.length), points: points() });
+    return `${m.rows_count({ count: ROWS })} · ${sampled}`;
+  };
   const english = words();
   expect(said()).toBe(english);
   void setLocale("es", { reload: false });

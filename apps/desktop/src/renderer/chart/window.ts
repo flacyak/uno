@@ -24,6 +24,7 @@ import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import { Words, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
+import { coverage } from "./caption.ts";
 import { fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
@@ -238,14 +239,15 @@ export class ChartWindow {
    * paint draws what the chart last heard, at the plot's height, and fits the
    * values, the x axis or the labels to it once they stand in it. A complete
    * tally stays drawn while the next one is read, and a first one draws as it
-   * comes. The caption says what a scatter's sample leaves out, and how a pie
-   * counts the values past those a tally keeps apart.
+   * comes. The caption says how much of its source the chart has read, then
+   * what a scatter's sample leaves out, or how a pie counts the values past
+   * those a tally keeps apart.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
     const tally = heard?.complete ?? heard?.latest;
     const { plot } = this.chart;
-    this.say("");
+    const words = [coverage(heard?.latest)];
     if (plot.t === "bars" && tally?.t === "groups") {
       const drawn = bars(plot, tally, this.plot.clientHeight);
       this.plot.replaceChildren(drawn);
@@ -254,15 +256,16 @@ export class ChartWindow {
       const drawn = scatter(tally);
       this.plot.replaceChildren(drawn);
       fitAlong(drawn, tally);
-      this.say(sampled(tally));
+      words.push(sampled(tally));
     } else if (plot.t === "pie" && tally?.t === "groups") {
       const drawn = pie(plot, tally);
       this.plot.replaceChildren(drawn);
       fitLabels(drawn);
-      this.say(past(plot, tally));
+      words.push(past(plot, tally));
     } else {
       this.plot.replaceChildren();
     }
+    this.say(words.filter((said) => said !== "").join(" · "));
   }
 
   /** say writes `words` in the caption, whole in its title, as a narrow window cuts them. */

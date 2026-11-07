@@ -484,6 +484,7 @@
   "chart_pie_other": "Outros",
   "chart_pie_past_net": "mais de {count} valores · os demais entram em Outros pela soma líquida",
   "chart_pie_past_left_out": "mais de {count} valores · os demais ficam de fora",
+  "chart_partial": "parcial · {read} lido",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um arquivo por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só arquivo · arquivos só são anexados a vários lidos como um",
