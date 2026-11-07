@@ -29,6 +29,7 @@ import type { Edit } from "@sheet";
 import type { Listing, SingleRef } from "@store";
 
 import { Charts } from "./charts.ts";
+import type { SourceState } from "./charts.ts";
 import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "@paraglide/messages";
 import { bytes } from "./locale.ts";
@@ -290,9 +291,16 @@ export class Workspace {
     this.charts = new Charts(
       engine,
       (write) => this.writing(write),
-      (source) => this.tabs.find((t) => t.id === source)?.state ?? "missing",
+      (source) => this.sourceState(source),
       (source) => this.sourceLabel(source),
     );
+  }
+
+  /** A source as a chart over it says it. One the workspace has not reads as missing. */
+  private sourceState(source: string): SourceState {
+    const tab = this.tabs.find((t) => t.id === source);
+    if (tab === undefined) return { state: "missing", name: source };
+    return { state: tab.state, name: tab.name, bucket: tab.link?.connect?.bucket };
   }
 
   /** The stem of a source's file, once there are several sources to tell apart. */

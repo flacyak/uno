@@ -425,19 +425,20 @@ test("a chart moved to another source keeps no complete tally of the one it left
   });
 });
 
-test("a chart over a missing source shows its state, and hears once it is pointed at a file", async () => {
+test("a chart over a missing source shows its state and its name, and hears once it is pointed at a file", async () => {
   await opened(uno(unoOf([BARS], [], "/nowhere/sales-q3.csv")), async (w) => {
-    expect(w.charts.heard(BARS.id)).toMatchObject({ state: "missing", latest: undefined });
+    const missing = { state: "missing", name: FILE.name, bucket: undefined, latest: undefined };
+    expect(w.charts.heard(BARS.id)).toMatchObject(missing);
     await w.relink(w.sources[0]!, FILE);
     await completeOf(w);
-    expect(w.charts.heard(BARS.id)?.state).toBe("fine");
+    expect(w.charts.heard(BARS.id)).toMatchObject({ state: "fine", name: FILE.name });
   });
 });
 
-test("a chart over a source the workspace has not reads as over a missing one", async () => {
+test("a chart over a source the workspace has not reads as over a missing one, by its id", async () => {
   await opened(uno(unoOf([BARS])), async (w) => {
     const refused = w.charts.change(BARS.id, { source: "gone" });
-    expect(w.charts.heard(BARS.id)?.state).toBe("missing");
+    expect(w.charts.heard(BARS.id)).toMatchObject({ state: "missing", name: "gone" });
     await expect(refused).rejects.toThrow("no source");
   });
 });
