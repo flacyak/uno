@@ -37,6 +37,8 @@ const NOT_THE_APPS = [
   ".colhead",
   ".panel-peek table",
   ".formula select",
+  // The chart form's sources and columns.
+  ".chart-form .from-file",
   // What a chart's window takes from the file: a source's name, a person's title.
   ".chart .from-file",
   "[data-language][lang]",
@@ -173,6 +175,15 @@ test("a right click on the workspace offers its menu in the language chosen", as
   await frame();
   expect(document.querySelectorAll(".pop-item").length).toBeGreaterThan(0);
   expect(english()).toEqual([]);
+});
+
+test("the chart form is in the language chosen", async () => {
+  const items = [...document.querySelectorAll<HTMLElement>(".pop-item")];
+  items.find((item) => item.textContent === m.menu_insert_chart())?.click();
+  expect(await until(domPage(), () => document.querySelector(".chart-form") !== null)).toBe(true);
+  expect(english()).toEqual([]);
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
+  document.querySelector(".chart-form")?.dispatchEvent(escape);
 });
 
 test("what a .uno's charts say in the status line is in the language chosen", async () => {
