@@ -156,8 +156,11 @@ await writeFile(
   }),
 );
 
-// A workspace of one chart, a sum per region whose values run long on both
-// sides of zero, in a window of the least width and a new window's height.
+// A workspace of two charts over a sum per region whose values run long on
+// both sides of zero, each in a window of the least width and a new window's
+// height: bars of the sums, and a pie of them, whose caption runs past its
+// window. The last row's revenue is not a number, for the caption to count
+// and find.
 const signedFile = join(scratch, "sent", "signed.csv");
 const signedHeader = "region,revenue";
 const signedRows = [
@@ -165,6 +168,7 @@ const signedRows = [
   "Andhra Pradesh regional office,234567.5",
   "West,98765.25",
   "South,-1234567.891",
+  "North,n/a",
 ];
 await writeFile(signedFile, `${[signedHeader, ...signedRows].join("\n")}\n`);
 const signed = join(scratch, "sent", "signed.uno");
@@ -177,6 +181,8 @@ const signedSource = {
   state: { active: { row: 0, col: 0 } },
 };
 const sums = { t: "bars", by: { col: 0, header: "region" }, sum: { col: 1, header: "revenue" } };
+const share = { ...sums, t: "pie" };
+const signedPlace = { width: leastSize.width, height: chartSize.height, x: 0, y: 0 };
 await writeFile(
   signed,
   writeDocument({
@@ -185,13 +191,14 @@ await writeFile(
     active: signedSource.id,
     log: [],
     charts: [
+      { id: "c1", source: signedSource.id, plot: sums, title: "", refresh: 0, place: signedPlace },
       {
-        id: "c1",
+        id: "c2",
         source: signedSource.id,
-        plot: sums,
+        plot: share,
         title: "",
         refresh: 0,
-        place: { width: leastSize.width, height: chartSize.height, x: 0, y: 0 },
+        place: { ...signedPlace, x: 1 },
       },
     ],
     extra: new Map(),
@@ -309,6 +316,48 @@ await writeFile(
   }),
 );
 
+// A workspace of three charts over what a chart cannot read: a source in a
+// bucket no connection covers, one whose file is not there, and a column the
+// second export has not. The first two sources have no rows behind them.
+const states = join(scratch, "sent", "states.uno");
+const absent = { bytes: 0, rows: 0, cols: 0, state: { active: { row: 0, col: 0 } } };
+const waitingSource = {
+  ...absent,
+  id: "waiting",
+  name: "waiting.csv",
+  path: "s3://nobody-connected/2025/waiting.csv",
+};
+const lostSource = {
+  ...absent,
+  id: "lost",
+  name: "lost.csv",
+  path: join(scratch, "sent", "lost.csv"),
+};
+const rowsPer = (source, col, header) => ({
+  source,
+  plot: { t: "bars", by: { col, header } },
+  title: "",
+  refresh: 0,
+});
+// The column the second export has not: the one past its last.
+const gone = adsSource.cols;
+await writeFile(
+  states,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [adsSource, waitingSource, lostSource],
+    active: adsSource.id,
+    log: [],
+    charts: [
+      { ...rowsPer("waiting", 0, "date"), id: "c1", place: { ...chartSize, x: 0, y: 0 } },
+      { ...rowsPer("lost", 0, "date"), id: "c2", place: { ...chartSize, x: 1, y: 0 } },
+      { ...rowsPer("ads", gone, "Nowhere"), id: "c3", place: { ...chartSize, x: 0.5, y: 1 } },
+    ],
+    extra: new Map(),
+    at: states,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -394,6 +443,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_SCATTERED: scattered,
     UNO_SMOKE_ALONG: along,
     UNO_SMOKE_PIES: pies,
+    UNO_SMOKE_STATES: states,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits

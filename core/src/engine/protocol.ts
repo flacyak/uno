@@ -181,12 +181,19 @@ export interface Place {
 /** A find: the next row down or up one column whose cell matches. */
 export interface FindRequest {
   col: number;
-  /** The row the search starts beside. Matching starts at the next row. */
+  /**
+   * The row the search starts beside. Matching starts at the next row, so a
+   * search down from -1 looks at the first row too.
+   */
   from: number;
   /** 1 looks down, -1 up. */
   dir: 1 | -1;
-  /** Match a cell that fails to parse as its column's kind, or one whose text contains `text`. */
-  match: { t: 'unparsed' } | { t: 'text'; text: string };
+  /**
+   * Match a cell that fails to parse as its column's kind, one a chart's tally
+   * could not read as a number (not blank, and no number once its formatting
+   * is removed, as a fold reads it), or one whose text contains `text`.
+   */
+  match: { t: 'unparsed' } | { t: 'not-number' } | { t: 'text'; text: string };
 }
 
 export interface Found {
