@@ -264,6 +264,22 @@ const INSERT = {
   end: 10_000,
 };
 
+/**
+ * The kinds story's beats: the insert story's, once for a pie of region and
+ * once for a scatter of units, with the kind chosen in the form before Enter.
+ * Each Down chooses the next kind after bars, KIND_STEP_MS apart. The gutter
+ * comes first, so region is a row's third cell and units its sixth, clicked in
+ * a row under the pie's window.
+ */
+const KINDS = [
+  { row: 3, cell: 3, downs: 1, column: 500, menu: 2_000, chart: 3_600, choose: 6_400 },
+  { row: 15, cell: 6, downs: 2, column: 10_000, menu: 11_600, chart: 13_200, choose: 16_000 },
+];
+/** How long a Down holds each kind, and how long the last holds before Enter. */
+const KIND_STEP_MS = 1_000;
+const KIND_HOLD_MS = 1_000;
+const KINDS_END = 21_600;
+
 /** How many moves a glide takes, how long each lasts, and how many Rights the tip story presses. */
 const GLIDE_MOVES = 24;
 const GLIDE_MOVE_MS = 50;
@@ -739,6 +755,7 @@ const STORIES: Record<string, Story> = {
   table: { end: TABLE.end, script: playTable },
   tip: { end: TIP.stop, script: playTip },
   insert: { end: INSERT.end, script: playInsert },
+  kinds: { end: KINDS_END, script: playKinds },
 };
 
 /**
@@ -877,15 +894,7 @@ async function playTip(win: BrowserWindow, at: Clock): Promise<void> {
  * from the workspace's menu, and Enter on the form for its bars.
  */
 async function playInsert(win: BrowserWindow, at: Clock): Promise<void> {
-  await standIn(win);
-  let from = await middle(win, "#content");
-  // The stand-in glides to each thing before the press on it.
-  const pressOn = async (selector: string, button: "left" | "right" = "left"): Promise<void> => {
-    const to = await middle(win, selector);
-    await glide(win, from, to);
-    from = to;
-    await click(win, selector, button);
-  };
+  const { pressOn } = await glider(win);
   await at(INSERT.column);
   // The gutter comes first, so region is a row's third cell.
   await pressOn("tbody tr:nth-child(3) td:nth-child(3)");
@@ -896,6 +905,57 @@ async function playInsert(win: BrowserWindow, at: Clock): Promise<void> {
   await at(INSERT.enter);
   press(win, "Return");
   await at(INSERT.end);
+}
+
+/**
+ * playKinds performs the kinds story: Insert chart… from the workspace's menu
+ * on region, then on units, choosing a pie and then a scatter in the form.
+ */
+async function playKinds(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  for (const kind of KINDS) {
+    await at(kind.column);
+    await pressOn(`tbody tr:nth-child(${kind.row}) td:nth-child(${kind.cell})`);
+    await at(kind.menu);
+    await pressOn(".ws.open", "right");
+    await at(kind.chart);
+    await pressOn(".pop-menu .pop-item:nth-child(2)");
+    // The first form waits for its module, so the keys wait for the form.
+    await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+    // The pointer leaves the source's name for the kind the keys change.
+    await glideTo('.chart-form select[name="kind"]');
+    await at(kind.choose);
+    // The keys open in By, the field after the kind.
+    press(win, "Tab", ["shift"]);
+    await presses(win, "Down", kind.downs, KIND_STEP_MS);
+    await sleep(KIND_HOLD_MS);
+    press(win, "Return");
+  }
+  await at(KINDS_END);
+}
+
+/** What the stand-in pointer does: glides to a thing, or glides to it and presses it. */
+interface Glider {
+  glideTo: (selector: string) => Promise<void>;
+  pressOn: (selector: string, button?: "left" | "right") => Promise<void>;
+}
+
+/** glider shows the stand-in pointer, which glides from wherever it last went. */
+async function glider(win: BrowserWindow): Promise<Glider> {
+  await standIn(win);
+  let from = await middle(win, "#content");
+  const glideTo = async (selector: string): Promise<void> => {
+    const to = await middle(win, selector);
+    await glide(win, from, to);
+    from = to;
+  };
+  return {
+    glideTo,
+    pressOn: async (selector, button = "left") => {
+      await glideTo(selector);
+      await click(win, selector, button);
+    },
+  };
 }
 
 /**
