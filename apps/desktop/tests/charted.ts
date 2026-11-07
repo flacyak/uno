@@ -46,6 +46,17 @@ export const PIE: Chart = {
   plot: { t: "pie", by: { col: REGION, header: "region" } },
 };
 
+/** Each region's share of the sales export's revenue. */
+export const SHARES: Chart = {
+  ...PIE,
+  id: "c7",
+  plot: {
+    t: "pie",
+    by: { col: REGION, header: "region" },
+    sum: { col: REVENUE, header: "revenue" },
+  },
+};
+
 /** The second export's Device column, which writes nine values. */
 const DEVICE = 11;
 

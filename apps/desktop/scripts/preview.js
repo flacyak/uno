@@ -25,8 +25,26 @@
  *   steps and resizes it with the arrows. Goes to out/moves.gif.
  * - `wheel`: scrolls the sheet down and back up with the wheel over a chart
  *   window, in the moves story's workspace. Goes to out/wheel.gif.
+ * - `table`: presses t on a chart window of a scatter for the table of its
+ *   points, scrolls it with the wheel, and presses t again for the points.
+ *   Goes to out/table.gif.
+ * - `tip`: glides the pointer down a chart window's bars, each saying what it
+ *   is worth, then clicks the plot and steps through them with the keys.
+ *   Goes to out/tip.gif.
+ * - `insert`: selects region, chooses Insert chart… from the open workspace's
+ *   right-click menu, and presses Enter on the form for a window of its bars.
+ *   Goes to out/insert.gif.
+ * - `kinds`: chooses Insert chart… on region and makes a pie in the form, then
+ *   on units and makes a scatter of it against revenue. Goes to out/kinds.gif.
+ * - `change`: opens the chart form from a chart window's edit button, steps By
+ *   from region to rep and applies it, then presses the × once to arm it and
+ *   again to remove the chart. Goes to out/change.gif.
+ * - `chord`, `command` and `menu`: select region, open the chart form under its
+ *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
+ *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
+ *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -56,8 +74,12 @@ const fixture = join(testdata, "sales-q3.csv");
 
 /** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
+/** The stories that open the chart form by its keys or the View menu. */
+const KEYED = ["chord", "command", "menu"];
+/** The other stories that film charts. */
+const CHARTED = ["moves", "wheel", "table", "tip", "insert", "kinds", "change"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
-const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel"];
+const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
@@ -212,23 +234,34 @@ async function stageSidebar() {
 }
 
 /**
- * stageMoves writes the moves story's workspace: the fixture with a chart at
- * the top of the sheet's right edge, in a new window's size, and another under
- * it. Returns the .uno's path.
+ * Rows per region of the fixture, the chart the moves, wheel and tip stories
+ * show twice, and the change story once.
  */
-async function stageMoves() {
-  const dir = await freshDir("moves");
+const REGION_BARS = { t: "bars", by: { col: 1, header: "region" } };
+
+/** Revenue against units of the fixture, whose table of points runs past any window. */
+const AGAINST = { t: "scatter", x: { col: 4, header: "units" }, y: { col: 5, header: "revenue" } };
+
+/**
+ * stageCharts writes a story's workspace in the folder `name`: the fixture
+ * with a chart of the first of `plots` at the top of the sheet's right edge,
+ * in a new window's size, and one of the second under it. Returns the .uno's
+ * path.
+ */
+async function stageCharts(name, plots) {
+  const dir = await freshDir(name);
   const csv = join(dir, "sales-q3.csv");
   const uno = join(dir, "q3-close.uno");
   await copyFile(fixture, csv);
-  const plot = { t: "bars", by: { col: 1, header: "region" } };
-  const chart = { source: "sales", plot, title: "", refresh: 0 };
+  const chart = { source: "sales", title: "", refresh: 0 };
   // A new window's size: DEFAULT_WIDTH and DEFAULT_HEIGHT in chart/place.ts.
   const size = { width: 420, height: 260 };
-  const charts = [
-    { ...chart, id: "c1", place: { ...size, x: 1, y: 0 } },
-    { ...chart, id: "c2", place: { ...size, x: 1, y: 1 } },
-  ];
+  const charts = plots.map((plot, i) => ({
+    ...chart,
+    plot,
+    id: `c${i + 1}`,
+    place: { ...size, x: 1, y: i },
+  }));
   const source = { id: "sales", name: "sales-q3.csv", path: csv };
   const state = { active: { row: 0, col: 0 } };
   // What the fixture holds, as a saved workspace records it.
@@ -318,7 +351,19 @@ else if (AGAINST_BUCKET.includes(story)) remote = await stageOpening(story === "
 const sidebar = story === "sidebar" ? await stageSidebar() : undefined;
 // The sidebar story opens its own workspaces once the window is up, so the
 // app starts with none.
-const staged = { browse: stage, moves: stageMoves, wheel: stageMoves }[story];
+const staged = {
+  browse: stage,
+  moves: () => stageCharts("moves", [REGION_BARS, REGION_BARS]),
+  wheel: () => stageCharts("wheel", [REGION_BARS, REGION_BARS]),
+  table: () => stageCharts("table", [REGION_BARS, AGAINST]),
+  tip: () => stageCharts("tip", [REGION_BARS, REGION_BARS]),
+  insert: () => stageCharts("insert", []),
+  kinds: () => stageCharts("kinds", []),
+  change: () => stageCharts("change", [REGION_BARS]),
+  chord: () => stageCharts("chord", []),
+  command: () => stageCharts("command", []),
+  menu: () => stageCharts("menu", []),
+}[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 
 const electron = (await import("electron")).default;

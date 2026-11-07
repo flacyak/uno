@@ -1,7 +1,8 @@
 /**
  * @fileoverview A key is read once. When the grid handles a key, the shell
  * leaves it alone: Ctrl+B pages up under vim-style and the sidebar stays as it
- * was. Runs over the real shell and engine.
+ * was, and Ctrl+Shift+G opens one chart form with the grid where it was. Runs
+ * over the real shell and engine.
  *
  * @vitest-environment happy-dom
  */
@@ -60,4 +61,17 @@ test("Ctrl+B under the default keys toggles the sidebar", async () => {
   expect(sidebarOpen()).toBe(false);
   await page.press("b", { ctrlKey: true });
   expect(sidebarOpen()).toBe(true);
+});
+
+test("Ctrl+Shift+G opens one chart form under either keys, and the grid stays put", async () => {
+  for (const input of ["vim-style", "default"] as const) {
+    shell.setInput(input);
+    const at = cell();
+    await page.press("G", { ctrlKey: true, shiftKey: true });
+    const form = (): Element | null => document.querySelector(".chart-form");
+    expect(await until(page, () => form() !== null), input).toBe(true);
+    expect([document.querySelectorAll(".chart-form").length, cell()], input).toStrictEqual([1, at]);
+    form()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(form(), input).toBeNull();
+  }
 });
