@@ -24,6 +24,11 @@ export interface Check {
    */
   send?: readonly [channel: string, ...args: unknown[]];
   /**
+   * The keys an application menu item shows. The item is picked before the
+   * check runs, the way a person picks it, and has to leave its keys to the page.
+   */
+  pick?: string;
+  /**
    * Input events sent to the window before the check runs, by the path a
    * person's input takes. The window is driven, so it takes them only when
    * `through` is set.
