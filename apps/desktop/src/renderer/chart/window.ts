@@ -1,7 +1,10 @@
 /**
  * @fileoverview A chart's window: the dialogs' box, with a head that says what
  * the chart shows, a round × of the window's own kind, and a caption that ends
- * in a grip. The layer stands it in the room and says which chart it shows.
+ * in a grip. The layer stands it in the room and says which chart it shows,
+ * and the head's edit button opens the chart form on it, as Enter, F2 and a
+ * double-click on the head do. The × and Delete ask to remove the chart, and
+ * Ctrl+Z says it undoes edits in the grid, and undoes none.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
  * resizes it. It follows the pointer alone until the drop, which stores where
@@ -12,28 +15,52 @@
  * something inside the window can still scroll that way.
  *
  * The plot draws what the chart last heard, each time the layer shows the
- * window, as the window resizes, and when the chart hears a tally.
+ * window, as the window resizes, and when the chart hears a tally. The
+ * drawing is an image a screen reader hears named by what the chart says it
+ * shows, from the last complete tally, and t puts the table of the same in
+ * its place, and back. The pointer over a mark shows what it is worth in a
+ * box beside it, and the arrows step the box through the marks while the
+ * plot has the keys. The caption's count of the cells that were not numbers
+ * is a button that finds them in the sheet.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
+import type { GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { wheelWay } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
-import { Words, el } from "@renderer/shell/util";
+import type { MenuPlace } from "@renderer/shell/menu";
+import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
-import { coverage, reading } from "./caption.ts";
-import { fitLabels, past, pie } from "./pie.ts";
+import { blank, body, coverage, drawable, notNumbers, reading } from "./caption.ts";
+import { belowZero, fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
+import { summary } from "./summary.ts";
+import type { Summary } from "./summary.ts";
+import { table } from "./table.ts";
+import { NONE, Tooltip, targets } from "./tooltip.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
   '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
   '<path d="M2 2l6 6M8 2l-6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+  "</svg>";
+
+/** The table button's glyph, a header row over two columns, drawn in currentColor. */
+const TABLE =
+  '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
+  '<path d="M1.5 1.5h7v7h-7zM1.5 4.5h7M4.5 4.5v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+  "</svg>";
+
+/** The edit button's pencil over the line it writes, drawn in currentColor. */
+const PENCIL =
+  '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
+  '<path d="M2 8.5h6.5M2 7l1-2.5L6.5 1 8 2.5 4.5 6Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
   "</svg>";
 
 /** The grip's two diagonal strokes, drawn in currentColor. */
@@ -53,6 +80,21 @@ const SCROLLS = ".chart-scrolls";
  * fractional, and the sizes it adds up to are rounded, so an end can read short.
  */
 const SCROLL_END_SLACK = 1;
+
+/** What parts the caption's words. */
+const SEP = " · ";
+
+/** The key that puts the table in the plot's place, and the plot back. */
+const TABLE_KEY = "t";
+
+/** The keys that open the chart form on a window's chart, as its edit button does. */
+const EDIT_KEYS: ReadonlySet<string> = new Set(["Enter", "F2"]);
+
+/** The letter that undoes an edit in the grid with Ctrl or Cmd, which a window keeps from it. */
+const UNDO_KEY = "z";
+
+/** The key that asks to remove a window's chart, as its × does. */
+const DELETE_KEY = "Delete";
 
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
@@ -74,6 +116,19 @@ export interface Stage {
   wheelBy(dx: number, dy: number, deltaMode: number): void;
   /** What chart `id` last heard from its source. */
   heard(id: string): Heard | undefined;
+  /** Opens the sources panel on `source`, to point it at a file or connect its bucket. */
+  repoint(source: string): void;
+  /**
+   * Shows `source`, and finds the first cell of `columns` that its tally could
+   * not read as a number.
+   */
+  notNumbers(source: string, columns: readonly ChartColumn[]): void;
+  /** Opens the chart form on chart `id`, hung at `place`. */
+  edit(id: string, place: MenuPlace): void;
+  /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
+  remove(id: string, title: string): void;
+  /** Writes `text` on the status line. */
+  say(text: string): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -110,6 +165,52 @@ export function madeTitle(plot: Plot): string {
     : m.chart_title_share_of_sum({ by, sum });
 }
 
+/**
+ * numbered gives the columns a plot reads numbers from: the one it sums, or a
+ * scatter's x and y.
+ */
+function numbered(plot: Plot): ChartColumn[] {
+  if (plot.t === "scatter") return [plot.x, plot.y];
+  return plot.sum === undefined ? [] : [plot.sum];
+}
+
+/** undoKey says whether `press` is Ctrl+Z, or Cmd+Z, which undoes an edit in the grid. */
+function undoKey({ key, ctrl, alt, meta, shift }: Press): boolean {
+  return (ctrl || meta) && !alt && !shift && key.toLowerCase() === UNDO_KEY;
+}
+
+/** tableKey says whether `press` is t alone, pressed once. */
+function tableKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
+  return key === TABLE_KEY && !ctrl && !alt && !meta && !repeat;
+}
+
+/** deleteKey says whether `press` is Delete alone, pressed once. */
+function deleteKey({ key, ctrl, alt, meta, shift, repeat }: Press): boolean {
+  return key === DELETE_KEY && !ctrl && !alt && !meta && !shift && !repeat;
+}
+
+/** onButton says whether `at` is a button, or inside one. */
+function onButton(at: EventTarget | null): boolean {
+  return at instanceof Element && at.closest("button") !== null;
+}
+
+/** edits says whether `press` on `at` opens the chart form. Enter on a button is the button's. */
+function edits({ key, ctrl, alt, meta, shift, repeat }: Press, at: EventTarget | null): boolean {
+  if (ctrl || alt || meta || shift || repeat || !EDIT_KEYS.has(key)) return false;
+  return key !== "Enter" || !onButton(at);
+}
+
+/**
+ * extra gives what the caption says after the counts, for the plot's kind:
+ * what a scatter's sample leaves out, or how a pie counts the values past
+ * those a tally keeps apart and the values at or below zero it leaves out.
+ */
+function extra(plot: Plot, tally: GroupsTally | SampleTally): string[] {
+  if (plot.t === "scatter" && tally.t === "sample") return [sampled(tally)];
+  if (plot.t === "pie" && tally.t === "groups") return [past(plot, tally), belowZero(plot, tally)];
+  return [];
+}
+
 /** canGo says whether a scroller at `at` of `end` has room `delta`'s way. */
 function canGo(delta: number, at: number, end: number): boolean {
   return delta > 0 ? end - at > SCROLL_END_SLACK : delta < 0 && at > 0;
@@ -136,18 +237,57 @@ export class ChartWindow {
   /** The whole window, which the layer stands in the room. */
   readonly box = el("div", "chart");
   private readonly title = el("span", "chart-title");
+  /** The head's parts: the source's name, while it names one, and the title after it. */
+  private readonly sourced = el("bdi", "from-file");
+  private readonly between = document.createTextNode(SEP);
+  private readonly titled = el("bdi");
   /** The body between the head and the caption, which draws the chart. */
   private readonly plot = el("div", "chart-plot");
   /** How far the chart has read its source, under the head, while it reads. */
   private readonly track = el("div", "chart-coverage");
-  /** What the caption says of what the plot draws. */
+  /**
+   * What the drawing says it shows, out of sight, which a screen reader hears
+   * as its name: the app's words, the values from the file, marked as the
+   * file's, and the count of the rest, each in a span of its own.
+   */
+  private readonly summary = el("div", "chart-summary");
+  private readonly told: Record<keyof Summary, HTMLElement> = {
+    said: el("span", "chart-summary-said"),
+    values: el("bdi", "chart-summary-values from-file"),
+    more: el("span", "chart-summary-more"),
+  };
+  /**
+   * What the caption says of what the plot draws: the words before the
+   * button, the · between them and it, the button, and the words after it.
+   */
   private readonly said = el("span", "chart-said");
+  private readonly before = el("span", "chart-said-before");
+  private readonly dot = el("span", "chart-said-dot");
+  private readonly after = el("span", "chart-said-after");
+  /** The count of the cells that were not numbers, the button that finds them in the sheet. */
+  private readonly find = button("chart-find", "", () =>
+    this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
+  );
+  /** The head's button that puts the table in the plot's place, pressed in while it stands there. */
+  private readonly toggle = button("chart-head-button chart-table-toggle", "", () => this.flip());
+  /** The head's button that opens the chart form on the chart. */
+  private readonly edit = button("chart-head-button chart-edit", "", () => this.change());
+  /** The head, whose rule the chart form hangs on. */
+  private readonly head = el("div", "col-head chart-head");
+  /** The ×, which asks to remove the chart. */
+  private readonly cross = button("round-x chart-close", "", () => this.unchart());
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
+  /** The box that says what the mark under the pointer is worth. */
+  private readonly tip: Tooltip;
   /** The pointer that holds the window, while one does. */
   private hold: Hold | undefined;
   /** The frame the next draw of the plot waits for, or 0. */
   private frame = 0;
+  /** Whether the table stands in the plot's place. */
+  private tabled = false;
+  /** The table of the tally and title it holds, kept while they stand, so a repaint keeps its scroll. */
+  private table: { of: GroupsTally | SampleTally; title: string; box: HTMLElement } | undefined;
 
   constructor(
     /** The chart the window shows, as the layer last said. */
@@ -158,23 +298,34 @@ export class ChartWindow {
     const caption = el("div", "chart-caption");
     caption.id = `${id}-caption`;
     this.title.id = `${id}-title`;
+    this.summary.id = `${id}-summary`;
+    this.summary.hidden = true;
+    this.tip = new Tooltip(this.plot, this.box, `${id}-tip`);
+    this.summary.append(this.told.said, " ", this.told.values, " ", this.told.more);
 
-    const x = el("button", "round-x chart-close");
-    x.type = "button";
-    x.innerHTML = CROSS;
-    this.words.attr(x, "aria-label", m.chart_remove_aria);
+    this.cross.innerHTML = CROSS;
+    this.words.attr(this.cross, "aria-label", m.chart_remove_aria);
+    this.toggle.innerHTML = TABLE;
+    this.toggle.setAttribute("aria-pressed", "false");
+    this.words.attr(this.toggle, "aria-label", m.chart_table_aria);
+    this.edit.innerHTML = PENCIL;
+    this.words.attr(this.edit, "aria-label", m.chart_edit);
 
-    const head = el("div", "col-head chart-head");
-    head.append(this.title, x);
-    head.addEventListener("pointerdown", (e) => {
-      const onButton = e.target instanceof Element && e.target.closest("button") !== null;
-      if (!onButton) this.take(e, head, dragged);
+    this.head.append(this.title, this.toggle, this.edit, this.cross);
+    this.head.addEventListener("pointerdown", (e) => {
+      if (!onButton(e.target)) this.take(e, this.head, dragged);
+    });
+    this.head.addEventListener("dblclick", (e) => {
+      if (!onButton(e.target)) this.change();
     });
 
     const grip = el("span", "chart-grip");
     grip.innerHTML = GRIP;
     grip.setAttribute("aria-hidden", "true");
     grip.addEventListener("pointerdown", (e) => this.take(e, grip, stretched));
+    // The button shows once a tally counts cells that were not numbers.
+    this.find.hidden = true;
+    this.said.append(this.before, this.dot, this.find, this.after);
     caption.append(this.said, grip);
 
     const right = el("div", "chart-edge chart-edge-right");
@@ -191,7 +342,16 @@ export class ChartWindow {
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, this.plot, this.track, caption, right, foot);
+    this.box.append(
+      this.head,
+      this.plot,
+      this.tip.box,
+      this.summary,
+      this.track,
+      caption,
+      right,
+      foot,
+    );
     // Whatever resizes the window, the plot draws again in the frame it lands in.
     new ResizeObserver(() => this.paint()).observe(this.plot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
@@ -210,12 +370,23 @@ export class ChartWindow {
    */
   show(chart: Chart, source: string | undefined): void {
     this.chart = chart;
-    const title = el("bdi", "", chart.title === "" ? madeTitle(chart.plot) : chart.title);
-    if (source === undefined) this.title.replaceChildren(title);
-    else this.title.replaceChildren(el("bdi", "from-file", source), " · ", title);
+    this.titled.textContent = this.named();
+    this.sourced.textContent = source ?? "";
+    const parts = source === undefined ? [this.titled] : [this.sourced, this.between, this.titled];
+    // The parts stay while they stand, so a press on one is still under the
+    // pointer as it lifts after a draw, and makes a click.
+    if (this.title.firstChild !== parts[0]) this.title.replaceChildren(...parts);
     this.title.title = this.title.textContent;
     this.title.classList.toggle("from-file", chart.title !== "");
     this.redraw();
+  }
+
+  /** arm shows the × in the flag's fill while its next press removes the chart, and
+   * names what that press does. */
+  arm(armed: boolean): void {
+    this.cross.classList.toggle("armed", armed);
+    this.cross.title = armed ? m.chart_remove_armed({ title: this.named() }) : "";
+    this.cross.setAttribute("aria-label", armed ? this.cross.title : m.chart_remove_aria());
   }
 
   /** stand puts the window at `rect`, unless a pointer holds it. */
@@ -223,9 +394,14 @@ export class ChartWindow {
     if (this.hold === undefined) standAt(this.box, rect);
   }
 
-  /** relabel writes the window's own words in the current language. */
+  /**
+   * relabel writes the window's own words in the current language, and draws
+   * the plot again, whose words, table and summary follow the language too.
+   */
   relabel(): void {
     this.words.write();
+    this.table = undefined;
+    this.redraw();
   }
 
   /** redraw draws the plot again on the next frame. Repeated calls coalesce. */
@@ -238,46 +414,159 @@ export class ChartWindow {
   }
 
   /**
-   * paint draws what the chart last heard, at the plot's height, and fits the
-   * values, the x axis or the labels to it once they stand in it. A complete
-   * tally stays drawn while the next one is read, and a first one draws as it
-   * comes. The caption says how much of its source the chart has read, then
-   * what a scatter's sample leaves out, or how a pie counts the values past
-   * those a tally keeps apart. The track under the head shows how far the
-   * chart has read, while it reads.
+   * paint draws what the chart last heard, or puts its table in the plot's
+   * place. A complete tally stays drawn while the next one is read, and a
+   * first one draws as it comes. The caption says how much of its source the
+   * chart has read and what the tally left out, then what the plot's kind
+   * says. The track under the head shows how far the chart has read, while it
+   * reads, and a chart with nothing to draw says why in the plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
-    const tally = heard?.complete ?? heard?.latest;
+    const tally = drawable(heard);
     const { plot } = this.chart;
-    const words = [coverage(heard?.latest)];
-    if (plot.t === "bars" && tally?.t === "groups") {
-      const drawn = bars(plot, tally, this.plot.clientHeight);
-      this.plot.replaceChildren(drawn);
-      fitTips(drawn);
-    } else if (plot.t === "scatter" && tally?.t === "sample") {
-      const drawn = scatter(tally);
-      this.plot.replaceChildren(drawn);
-      fitAlong(drawn, tally);
-      words.push(sampled(tally));
-    } else if (plot.t === "pie" && tally?.t === "groups") {
-      const drawn = pie(plot, tally);
-      this.plot.replaceChildren(drawn);
-      fitLabels(drawn);
-      words.push(past(plot, tally));
-    } else {
-      this.plot.replaceChildren();
-    }
-    this.say(words.filter((said) => said !== "").join(" · "));
+    const latest = heard?.latest;
+    const named = this.summarise(heard);
+    if (tally === undefined) this.fill(false, ...this.state(heard));
+    else if (this.tabled) this.tabulate(tally);
+    else this.draw(plot, tally, named);
+    const after = tally === undefined ? [] : extra(plot, tally);
+    this.say([coverage(latest), blank(latest)], notNumbers(latest), after);
     const read = reading(heard);
     this.track.hidden = read === undefined;
     this.track.style.setProperty("--read", `${read ?? 0}`);
   }
 
-  /** say writes `words` in the caption, whole in its title, as a narrow window cuts them. */
-  private say(words: string): void {
-    this.said.textContent = words;
-    this.said.title = words;
+  /**
+   * draw draws `tally` as `plot` reads it, at the plot's height, as an image
+   * `named` names, fits the values, the x axis or the labels to the plot
+   * once they stand in it, and gives the box the marks where the fit leaves
+   * them.
+   */
+  private draw(plot: Plot, tally: GroupsTally | SampleTally, named: string): void {
+    let drawn: HTMLElement | undefined;
+    if (plot.t === "bars" && tally.t === "groups") {
+      drawn = this.place(bars(plot, tally, this.plot.clientHeight), named);
+      fitTips(drawn);
+    } else if (plot.t === "scatter" && tally.t === "sample") {
+      drawn = this.place(scatter(tally), named);
+      fitAlong(drawn, tally);
+    } else if (plot.t === "pie" && tally.t === "groups") {
+      drawn = this.place(pie(plot, tally), named);
+      fitLabels(drawn);
+    }
+    if (drawn !== undefined) this.tip.show(targets(plot, tally, drawn));
+  }
+
+  /** place puts `drawn` in the plot as an image, named by what `named` names, and gives it back. */
+  private place(drawn: HTMLElement, named: string): HTMLElement {
+    drawn.setAttribute("role", "img");
+    drawn.setAttribute("aria-labelledby", named);
+    this.fill(true, drawn);
+    return drawn;
+  }
+
+  /**
+   * tabulate puts the table of `tally` in the plot's place. The table stands
+   * while its tally and its title do, so a repaint of the same leaves it as
+   * it is, scrolled where it was, and a new tally, a new title or a relabel
+   * builds it again.
+   */
+  private tabulate(tally: GroupsTally | SampleTally): void {
+    const title = this.named();
+    if (this.table?.of !== tally || this.table.title !== title) {
+      const called = el("bdi", this.chart.title === "" ? "" : "from-file", title);
+      this.table = { of: tally, title, box: table(this.chart.plot, tally, called) };
+    }
+    if (this.plot.firstChild !== this.table.box) this.fill(false, this.table.box);
+  }
+
+  /** flip puts the table in the plot's place, or the plot back, and the button says which. */
+  private flip(): void {
+    this.tabled = !this.tabled;
+    this.toggle.setAttribute("aria-pressed", `${this.tabled}`);
+    this.redraw();
+  }
+
+  /**
+   * summarise writes what the drawing says it shows, from the last complete
+   * tally, so a partial never changes it, and gives the id of what names the
+   * drawing: the summary, or the head's title until a tally completes. Each
+   * paint writes it again, so a relabel and a new title reach it.
+   */
+  private summarise(heard: Heard | undefined): string {
+    const complete = heard?.complete;
+    const told =
+      heard === undefined || complete === undefined
+        ? undefined
+        : summary(this.named(), heard.name, this.chart.plot, complete);
+    for (const part of ["said", "values", "more"] as const) {
+      this.told[part].textContent = told?.[part] ?? "";
+    }
+    return told === undefined ? this.title.id : this.summary.id;
+  }
+
+  /** named gives what the head calls the chart: the person's title, or the one its plot makes. */
+  private named(): string {
+    return this.chart.title === "" ? madeTitle(this.chart.plot) : this.chart.title;
+  }
+
+  /**
+   * fill puts `shown` in the plot's place. What stood there goes, and the keys
+   * it held come to the window, as the find button's do, so a repaint never
+   * leaves them to the page. A plot that goes on drawing keeps them. Anything
+   * but a `drawing` leaves the box no mark to stand by, and Tab passes the
+   * plot by.
+   */
+  private fill(drawing: boolean, ...shown: Node[]): void {
+    const held = document.activeElement;
+    const kept = drawing && held === this.plot;
+    if (!kept && this.plot.contains(held)) this.box.focus({ preventScroll: true });
+    this.plot.replaceChildren(...shown);
+    // Tab reaches a drawing after the head's buttons, for the keys to step its marks.
+    if (drawing) {
+      this.plot.tabIndex = 0;
+    } else {
+      this.plot.removeAttribute("tabindex");
+      this.tip.show(NONE);
+    }
+  }
+
+  /**
+   * say writes the caption: the words `before` the button, `count`, the cells
+   * that were not numbers, as the button, and the words `after` it, those that
+   * say something, with · between them, and the whole in its title, as a
+   * narrow window cuts them. The button is the one element whichever words
+   * stand around it, so a repaint never takes the keys from it; a count of
+   * none hides it, and gives the keys it held to the window.
+   */
+  private say(before: readonly string[], count: string, after: readonly string[]): void {
+    const lead = before.filter((part) => part !== "").join(SEP);
+    const trail = after.filter((part) => part !== "").join(SEP);
+    if (count === "" && document.activeElement === this.find) {
+      this.box.focus({ preventScroll: true });
+    }
+    this.find.hidden = count === "";
+    this.find.textContent = count;
+    this.before.textContent = lead;
+    this.dot.textContent = lead !== "" && count !== "" ? SEP : "";
+    this.after.textContent = trail !== "" && (lead !== "" || count !== "") ? SEP + trail : trail;
+    this.said.title = this.said.textContent;
+  }
+
+  /**
+   * state gives what the plot shows in place of a chart it cannot draw, with
+   * the button of any action that mends it, or nothing for one that has gone.
+   */
+  private state(heard: Heard | undefined): HTMLElement[] {
+    const said = heard === undefined ? undefined : body(this.chart.plot, heard);
+    if (said === undefined) return [];
+    const box = el("div", "chart-state");
+    box.append(el("bdi", "", said.words));
+    if (said.action !== undefined) {
+      box.append(button("", said.action, () => this.stage.repoint(this.chart.source)));
+    }
+    return [box];
   }
 
   /**
@@ -346,12 +635,46 @@ export class ChartWindow {
     this.stage.wheelBy(dx, dy, e.deltaMode);
   }
 
-  /** key answers Escape and the arrows, and leaves any other key to the shell. */
+  /**
+   * key answers Escape, t, Enter, F2, Delete, Ctrl+Z and the arrows, and
+   * leaves any other key to the shell. An arrow in the plot steps the cursor
+   * through its marks, and one in the table scrolls it, as each has the keys
+   * then.
+   */
   private key(e: KeyboardEvent): void {
+    const press = pressOf(e);
     if (e.key === "Escape") this.escape();
-    else if (!this.nudge(pressOf(e))) return;
+    else if (tableKey(press)) this.flip();
+    else if (edits(press, e.target)) this.change();
+    else if (deleteKey(press)) this.unchart();
+    else if (undoKey(press)) this.stage.say(m.chart_undo_hint());
+    else if (!this.arrow(press, e.target)) return;
     e.preventDefault();
     e.stopPropagation();
+  }
+
+  /**
+   * arrow gives `press`, from `at`, to the cursor in the plot, or to the
+   * window's place where the cursor does not take it, and returns whether
+   * either stepped.
+   */
+  private arrow(press: Press, at: EventTarget | null): boolean {
+    if (at === this.plot && this.tip.step(press)) return true;
+    const inTable = at instanceof Element && at.closest(SCROLLS) !== null;
+    return !inTable && this.nudge(press);
+  }
+
+  /** change asks for the chart form on the chart, its border on the window's and the head's rule. */
+  private change(): void {
+    const { left } = this.box.getBoundingClientRect();
+    const { bottom } = this.head.getBoundingClientRect();
+    const rule = parseFloat(getComputedStyle(this.head).borderBottomWidth);
+    this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) });
+  }
+
+  /** unchart asks to remove the chart, by the title its head gives it. */
+  private unchart(): void {
+    this.stage.remove(this.chart.id, this.named());
   }
 
   /** escape puts back what a pointer holds, or else gives the grid the keys. */
