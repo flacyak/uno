@@ -4,9 +4,12 @@
   /* How far in from its padding Chromium starts a select's text: the inner
    * start padding of its menu list. */
   --select-text-inset: 4px;
+  /* The least gap to the window's edge, EDGE in form.ts, which hang() keeps. */
+  --form-edge: 8px;
   position: fixed;
   z-index: 10;
-  width: 320px;
+  /* A window narrower than the form and its gaps narrows it to fit. */
+  width: min(320px, calc(100vw - 2 * var(--form-edge)));
   margin: 0;
   padding: 6px;
   background: var(--surface);
