@@ -24,7 +24,7 @@ export interface MenuPlace {
 }
 
 /** The minimum gap between a menu and the window's edge, in pixels. */
-const EDGE = 4;
+export const EDGE = 4;
 
 /** below returns the place directly under an element, left edges aligned. */
 export function below(anchor: HTMLElement): MenuPlace {
