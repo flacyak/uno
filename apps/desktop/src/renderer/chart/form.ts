@@ -48,6 +48,9 @@ const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
   ["scatter", m.chart_kind_scatter],
 ];
 
+/** How many number columns a scatter needs: one across it and one up it. */
+const SCATTER_COLUMNS = 2;
+
 export class ChartForm {
   private readonly form: PopForm;
   private readonly from = select("source");
@@ -55,7 +58,9 @@ export class ChartForm {
   private readonly by = select("by");
   /** The number column bars or a pie sum, or "" for none, which counts the rows. */
   private readonly sum = select("sum");
+  /** The number column across a scatter, the selected one where it holds numbers. */
   private readonly x = select("x");
+  /** The number column up a scatter, one other than X. */
   private readonly y = select("y");
   /** The fields bars and a pie ask for, and those a scatter asks for. */
   private readonly grouped = [
@@ -73,7 +78,7 @@ export class ChartForm {
     private readonly sources: readonly ChartSource[],
     /** The active source, which the form opens on. */
     active: ChartSource,
-    /** The column selected in the grid, which bars or a pie count by. */
+    /** The column selected in the grid, which By and a scatter's X start on. */
     selected: number,
     private readonly asks: ChartAsks,
   ) {
@@ -127,35 +132,44 @@ export class ChartForm {
   private choose(): void {
     const header = (select: HTMLSelectElement): string | undefined =>
       select.value === "" ? undefined : this.source.band.columns[Number(select.value)]?.header;
-    const [by, sum] = [header(this.by), header(this.sum)];
+    const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(header);
     this.source = this.sources[Number(this.from.value)] ?? this.source;
     this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
     const at = this.source.band.columns.findIndex((c) => c.header === by);
-    this.offer(Math.max(0, at), sum);
+    this.offer(Math.max(0, at), kept);
   }
 
   /** offer fills the selects with the source's columns, choosing `by` and the
-   * number column whose header is `sum`, if any. X is the first number
-   * column, and Y another. */
-  private offer(by: number, sum?: string): void {
+   * number columns whose headers `kept` has for Sum of, X and Y. X is otherwise
+   * `by` where it holds numbers, or else the first number column, and never Y's,
+   * and Y is otherwise one other than X. */
+  private offer(by: number, kept: ReadonlyArray<string | undefined> = []): void {
+    const columns = this.source.band.columns;
     const numbers: number[] = [];
     this.by.replaceChildren();
     this.sum.replaceChildren(option(m.chart_form_sum_none(), ""));
     this.x.replaceChildren();
     this.y.replaceChildren();
-    for (const [i, c] of this.source.band.columns.entries()) {
+    for (const [i, c] of columns.entries()) {
       this.by.append(fromFile(c.header, i));
       // Cells that do not read as numbers are left out of a sum or a scatter and counted.
       if (c.kind !== "num" && !c.flagged) continue;
       numbers.push(i);
-      this.sum.append(fromFile(c.header, i, c.header === sum));
-      this.x.append(fromFile(c.header, i));
-      this.y.append(fromFile(c.header, i));
+      for (const offered of [this.sum, this.x, this.y]) offered.append(fromFile(c.header, i));
     }
-    this.by.value = String(clamp(by, this.source.band.columns.length - 1));
-    const x = numbers[0];
-    this.x.value = String(x ?? "");
-    this.y.value = String(numbers.find((i) => i !== x) ?? x ?? "");
+    const named = (header?: string): number | undefined =>
+      numbers.find((i) => columns[i]?.header === header);
+    const [sum, x, y] = kept.map(named);
+    const xAt = x ?? [by, ...numbers].find((i) => numbers.includes(i) && i !== y) ?? y;
+    const yAt = y ?? numbers.find((i) => i !== xAt) ?? xAt;
+    this.by.value = String(clamp(by, columns.length - 1));
+    this.sum.value = String(sum ?? "");
+    this.x.value = String(xAt ?? "");
+    this.y.value = String(yAt ?? "");
+
+    const scatters = numbers.length >= SCATTER_COLUMNS;
+    for (const made of this.kind.options) if (made.value === "scatter") made.disabled = !scatters;
+    if (!scatters && this.kind.value === "scatter") this.kind.value = "bars";
     this.ask();
   }
 
@@ -206,11 +220,10 @@ export class ChartForm {
 }
 
 /** fromFile is the option of column `col`, labelled as the file names it. */
-function fromFile(header: string, col: number, selected = false): HTMLOptionElement {
+function fromFile(header: string, col: number): HTMLOptionElement {
   // A blank header is labelled by its position, as in the grid.
   const made = option(columnLabel(header, col), String(col));
   made.className = "from-file";
-  made.selected = selected;
   return made;
 }
 
