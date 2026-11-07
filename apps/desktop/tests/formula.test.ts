@@ -90,3 +90,14 @@ test("Tab steps over a control that is disabled", () => {
   );
   expect(document.activeElement).toBe(controls[0]);
 });
+
+// The chart form hides the fields its kind does not ask for. Focus cannot land
+// in a hidden field, so Tab passes it.
+test("Tab steps over a control in a hidden field", () => {
+  const { box } = form();
+  const controls = [...box.querySelectorAll<HTMLElement>("select, input, button")];
+  controls[1]!.closest<HTMLElement>(".field")!.hidden = true;
+  controls[0]!.focus();
+  box.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+  expect(document.activeElement).toBe(controls[2]);
+});
