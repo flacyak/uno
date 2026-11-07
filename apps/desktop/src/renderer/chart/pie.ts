@@ -2,7 +2,8 @@
  * @fileoverview A pie chart: each value's share of the rows, or of a sum. The
  * six largest values above zero have a slice each, and one Other after them
  * holds the rest. A value at or below zero has no share to draw. The caption
- * says how Other takes the values past those a tally keeps apart.
+ * says how Other takes the values past those a tally keeps apart, and counts
+ * the values at or below zero the pie leaves out.
  *
  * The slices go round from the top, as SVG on a ring of radius 1, so whatever
  * sizes the SVG sizes the pie, round in any shape. Each wears its colour as
@@ -56,6 +57,12 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
   return other > 0 ? [...own, { value: undefined, size: other }] : own;
 }
 
+/** wholeOf gives what `drawn` adds up to, or 0 for a whole no double holds, which no share is of. */
+export function wholeOf(drawn: readonly Slice[]): number {
+  const whole = drawn.reduce((sum, { size }) => sum + size, 0);
+  return Number.isFinite(whole) ? whole : 0;
+}
+
 /**
  * past gives what a pie's caption says of the values past those a tally keeps
  * apart, or nothing where there are none. Other counts their rows as they are,
@@ -70,6 +77,19 @@ export function past(plot: Pie, groups: Groups): string {
   const counted = slices(plot, groups).length > PIE_SLICES_AT_MOST && measureOf(plot)(rest) > 0;
   if (!counted) return m.chart_pie_past_left_out({ count });
   return plot.sum === undefined ? "" : m.chart_pie_past_net({ count });
+}
+
+/**
+ * belowZero gives what a pie's caption says of the values at or below zero,
+ * which have no share to draw: those sent and those not, as `plot` measures
+ * them. A value's rows are always above zero, so a share of rows leaves none
+ * out, and the caption says nothing.
+ */
+export function belowZero(plot: Pie, groups: Groups): string {
+  const measure = measureOf(plot);
+  const sent = groups.groups.filter((g) => measure(g) <= 0).length;
+  const count = sent + groups.below.values;
+  return count > 0 ? m.chart_pie_below_zero({ count }) : "";
 }
 
 /**
@@ -130,12 +150,17 @@ function gap(turn: number): SVGElement {
   return line;
 }
 
-/** words gives what a slice says: its value, the file's text, or Other, and its share. */
+/**
+ * words gives what a slice says: its value, the file's text, or Other, or the
+ * app's word for the rows whose cell is blank, and its share.
+ */
 function words(value: string | undefined, share: number): [HTMLElement, HTMLElement] {
   const name =
     value === undefined
       ? el("span", "chart-slice-name", m.chart_pie_other())
-      : el("bdi", "chart-slice-name from-file", value);
+      : value === ""
+        ? el("span", "chart-slice-name", m.chart_blank_value())
+        : el("bdi", "chart-slice-name from-file", value);
   return [name, el("span", "chart-slice-share", percent(share))];
 }
 
@@ -171,8 +196,8 @@ function entry(key: string, value: string | undefined, share: number): HTMLEleme
 export function pie(plot: Pie, groups: Groups): HTMLElement {
   const box = el("div", "chart-pie");
   const drawn = slices(plot, groups);
-  const whole = drawn.reduce((sum, { size }) => sum + size, 0);
-  if (drawn.length === 0 || !Number.isFinite(whole)) return box;
+  const whole = wholeOf(drawn);
+  if (whole === 0) return box;
   const ring = mark("svg", "chart-slices");
   ring.setAttribute("viewBox", VIEW);
   ring.setAttribute("aria-hidden", "true");
