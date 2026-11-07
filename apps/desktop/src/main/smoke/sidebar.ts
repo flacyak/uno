@@ -144,12 +144,12 @@ export const SIDEBAR: Check[] = [
     `,
   },
   {
-    name: "a right click on the open workspace offers a formula, a source and a save",
+    name: "a right click on the open workspace offers a formula, a chart, a source and a save",
     script: `
       ${RIGHT_CLICK}
       rightClick(document.querySelector(".ws.open"));
       await frame();
-      const want = ["Insert formula…", "Add source…", "Save", "Save as…"];
+      const want = ["Insert formula…", "Insert chart…", "Add source…", "Save", "Save as…"];
       if (JSON.stringify(offered()) !== JSON.stringify(want)) return "the menu offers " + JSON.stringify(offered());
       const menu = document.querySelector(".pop-menu").getBoundingClientRect();
       return menu.right <= innerWidth && menu.bottom <= innerHeight ? "" : "the menu runs off the window";
@@ -263,7 +263,7 @@ export const SIDEBAR: Check[] = [
       ${RIGHT_CLICK}
       rightClick(document.querySelector(".ws:not(.open)"));
       await frame();
-      const want = ["Open", "Insert formula…", "Remove from list"];
+      const want = ["Open", "Insert formula…", "Insert chart…", "Remove from list"];
       if (JSON.stringify(offered()) !== JSON.stringify(want)) return "the menu offers " + JSON.stringify(offered());
       choose("Remove from list");
       await frame();
