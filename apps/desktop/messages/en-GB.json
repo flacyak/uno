@@ -467,7 +467,39 @@
   "chart_pie_other": "Other",
   "chart_pie_past_net": "more than {count} values · later ones go in Other at their net sum",
   "chart_pie_past_left_out": "more than {count} values · later ones are left out",
+  "chart_pie_below_zero": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} value at or below zero left out",
+        "plural=other": "{n} values at or below zero left out"
+      }
+    }
+  ],
   "chart_partial": "partial · {read} read",
+  "chart_reading": "reading {name}…",
+  "chart_no_values_yet": "no values in {columns} yet",
+  "chart_source_missing": "{name} is missing",
+  "chart_bucket_unconnected": "{bucket} is not connected",
+  "chart_blank": "{count} blank",
+  "chart_blank_value": "(blank)",
+  "chart_not_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} not a number",
+        "plural=other": "{n} not numbers"
+      }
+    }
+  ],
+  "chart_summary": "{title} in {name}, {rows}.",
+  "chart_summary_more": "and {count} more.",
+  "chart_summary_points": "{points}, {x} from {xLeast} to {xMost} and {y} from {yLeast} to {yMost}.",
+  "chart_table_rows": "rows",
+  "chart_table_share": "share",
+  "chart_table_aria": "Table",
   "refused_only_source": "{name} is the only source here, and a workspace needs one",
   "refused_append_to_absent": "{name} has no file behind it, so nothing can be appended to it",
   "refused_append_to_one_file": "{name} is one file · files are appended only to several read as one",
