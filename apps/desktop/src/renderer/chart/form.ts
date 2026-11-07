@@ -3,7 +3,7 @@
  * column whose values its bars or pie count the rows of, or sum a number column
  * over, or the two number columns a scatter sets against each other, and its
  * title. It opens on the active source, and another source keeps each column it
- * has a header for.
+ * has a header for. Opened on a chart, it shows what the chart shows.
  *
  * An empty title shows the one the chart makes, which follows the language.
  * The engine keeps the chart, and a refusal is shown in the form, which stays
@@ -13,7 +13,7 @@
 import "./form.css";
 
 import { TITLE_AT_MOST } from "@document";
-import type { ChartColumn, Plot } from "@document";
+import type { Chart, ChartColumn, Plot } from "@document";
 import type { ColumnInfo } from "@engine";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
@@ -40,6 +40,12 @@ export interface ChartAsks {
   /** Called when the form closes. */
   closed(): void;
 }
+
+/** What the form opens on: the column selected in the grid, to insert a chart
+ * of it, or a chart over the active source, to change it. */
+export type Opening =
+  | { t: "insert"; col: number }
+  | { t: "change"; chart: Pick<Chart, "plot" | "title"> };
 
 /** The kinds of chart, in the order the form offers them. */
 const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
@@ -78,8 +84,8 @@ export class ChartForm {
     private readonly sources: readonly ChartSource[],
     /** The active source, which the form opens on. */
     active: ChartSource,
-    /** The column selected in the grid, which By and a scatter's X start on. */
-    selected: number,
+    /** What the form opens on. */
+    opening: Opening,
     private readonly asks: ChartAsks,
   ) {
     this.source = active;
@@ -102,7 +108,8 @@ export class ChartForm {
     this.kind.append(...KINDS.map(([t, words]) => option(words(), t)));
     this.kind.addEventListener("change", () => this.ask());
 
-    this.offer(selected);
+    if (opening.t === "insert") this.offer(opening.col);
+    else this.opensOn(opening.chart.plot);
     for (const column of [this.by, this.sum, this.x, this.y]) {
       column.addEventListener("change", () => this.name());
     }
@@ -110,6 +117,7 @@ export class ChartForm {
     this.title.type = "text";
     this.title.maxLength = TITLE_AT_MOST;
     this.title.autocomplete = "off";
+    if (opening.t === "change") this.title.value = opening.chart.title;
 
     const fields = [
       field(m.chart_form_source(), this.from),
@@ -120,7 +128,7 @@ export class ChartForm {
     ];
     this.form.open(fields, place);
     this.form.say(m.chart_form_hint(), false);
-    this.by.focus();
+    this.first().focus();
   }
 
   close(): void {
@@ -135,8 +143,30 @@ export class ChartForm {
     const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(header);
     this.source = this.sources[Number(this.from.value)] ?? this.source;
     this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
-    const at = this.source.band.columns.findIndex((c) => c.header === by);
-    this.offer(Math.max(0, at), kept);
+    this.offer(this.at(by), kept);
+  }
+
+  /** opensOn chooses `plot`'s kind, and the source's columns it names. */
+  private opensOn(plot: Plot): void {
+    this.kind.value = plot.t;
+    if (plot.t === "scatter") {
+      this.offer(this.at(plot.x.header), [undefined, plot.x.header, plot.y.header]);
+    } else {
+      this.offer(this.at(plot.by.header), [plot.sum?.header]);
+    }
+  }
+
+  /** at gives the source's column with `header`, or else its first. */
+  private at(header: string | undefined): number {
+    return Math.max(
+      0,
+      this.source.band.columns.findIndex((c) => c.header === header),
+    );
+  }
+
+  /** first gives the column select the kind chosen asks for first. */
+  private first(): HTMLSelectElement {
+    return this.kind.value === "scatter" ? this.x : this.by;
   }
 
   /** offer fills the selects with the source's columns, choosing `by` and the
@@ -212,7 +242,7 @@ export class ChartForm {
       this.close();
     } catch (err) {
       this.form.say(message(err), true);
-      (this.kind.value === "scatter" ? this.x : this.by).focus();
+      this.first().focus();
     } finally {
       this.form.submit.disabled = false;
     }

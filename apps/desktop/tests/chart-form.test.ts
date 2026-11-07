@@ -1,6 +1,7 @@
 /**
  * @fileoverview The chart form: what it opens on, what Enter inserts, and how
- * Esc, Tab and a refusal behave in it.
+ * Esc, Tab and a refusal behave in it. Opened on a chart, it shows what the
+ * chart shows.
  *
  * @vitest-environment happy-dom
  */
@@ -12,6 +13,7 @@ import type { Plot } from "@document";
 import { Refusal } from "@engine";
 import { m } from "@paraglide/messages";
 import { ChartForm } from "@renderer/chart/form";
+import type { ChartSource, Opening } from "@renderer/chart/form";
 import { madeTitle } from "@renderer/chart/window";
 import { num } from "@renderer/locale";
 
@@ -55,17 +57,18 @@ const inserting = (plot: Plot, title = "", source = SALES.id): string =>
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
 
-/** Opens the form on the column `selected`, with `insert` answering each insert. */
+/** Opens the form on `opening` over `active`, with `insert` answering each insert. */
 function form(
   insert = (): Promise<void> => Promise.resolve(),
-  selected = REGION,
+  opening: Opening = { t: "insert", col: REGION },
+  active: ChartSource = SALES,
 ): {
   asked: string[];
   box: HTMLFormElement;
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS], SALES, selected, {
+  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS], active, opening, {
     insert: (source, plot, title) => {
       asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
@@ -151,7 +154,7 @@ test("a scatter asks for X and Y of the number columns, the first two to begin",
 });
 
 test("a scatter's X starts on the selected column, where it holds numbers", () => {
-  form(undefined, REVENUE);
+  form(undefined, { t: "insert", col: REVENUE });
   pick("kind", "scatter");
   expect([select("x").value, select("y").value]).toStrictEqual([String(REVENUE), String(UNITS)]);
 });
@@ -270,4 +273,27 @@ test("a refusal stays in the form, on the column chosen", async () => {
   expect(note.textContent).toBe(m.refused_charts_at_most({ limit: num(CHARTS_AT_MOST) }));
   expect(asked).toStrictEqual([regionBars]);
   expect(document.activeElement).toBe(select("by"));
+});
+
+/** Opens the form to change a chart of `plot` titled `title` over `active`. */
+const changing = (plot: Plot, title = "", active: ChartSource = SALES): ReturnType<typeof form> =>
+  form(undefined, { t: "change", chart: { plot, title } }, active);
+
+/** The values of the open form's selects named `names`. */
+const chosen = (...names: string[]): string[] => names.map((name) => select(name).value);
+
+test("a chart's form opens on what it shows, over its source", () => {
+  const units = { col: UNITS, header: "units" };
+  const revenue = { col: REVENUE, header: "revenue" };
+  changing({ ...REGION_BARS, sum: revenue }, "Takings");
+  expect(chosen("kind", "by", "sum")).toStrictEqual(["bars", String(REGION), String(REVENUE)]);
+  expect(document.querySelector<HTMLInputElement>(".chart-form input")!.value).toBe("Takings");
+  expect(document.activeElement).toBe(select("by"));
+
+  // The ads export has region second.
+  changing({ t: "pie", by: { col: REGION, header: "region" } }, "", ADS);
+  expect(chosen("source", "kind", "by")).toStrictEqual(["1", "pie", "1"]);
+  changing({ t: "scatter", x: revenue, y: units });
+  expect(chosen("kind", "x", "y")).toStrictEqual(["scatter", String(REVENUE), String(UNITS)]);
+  expect(document.activeElement).toBe(select("x"));
 });
