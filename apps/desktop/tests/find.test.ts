@@ -28,6 +28,8 @@ class Held {
   readonly requests: FindRequest[] = [];
   /** Where the grid's selection is. */
   selection = { row: 0, col: 0 };
+  /** The headers of the showing tab's columns, all of them number columns. */
+  headers = ["amount"];
 
   constructor(readonly tabs: Tab[]) {
     this.active = tabs[0]!;
@@ -44,10 +46,10 @@ class Held {
   }
 }
 
-/** A workspace with one column, whose finds `held` holds. */
+/** A workspace of `held`'s columns, whose finds `held` holds. */
 function workspaceOf(held: Held): Workspace {
   return {
-    rows: { columns: [{ header: "amount", kind: "num", flagged: false }] },
+    rows: { columns: held.headers.map((header) => ({ header, kind: "num", flagged: false })) },
     get active(): Tab {
       return held.active;
     },
@@ -230,4 +232,87 @@ test("a slow find dropped for a tab the person left takes its searching with it"
 
   expect(moved).toEqual([]);
   expect(said).toEqual(["searching…", ""]);
+});
+
+/** A find down `col` from above its first row for the cells a tally could not read as numbers. */
+const down = (col: number): FindRequest => ({ col, from: -1, dir: 1, match: { t: "not-number" } });
+
+test("a chart's not-numbers find starts above the first row of its column, lands where it finds one, and tries the next column on a miss", async () => {
+  const held = new Held([tab("ledger.csv")]);
+  held.headers = ["amount", "units"];
+  const moved: number[][] = [];
+  const said: string[] = [];
+  const f = finder(held, moved, said);
+
+  const done = f.notNumbers(held.headers.map((header, col) => ({ col, header })));
+  held.miss(10, true);
+  await vi.waitFor(() => expect(held.asked).toHaveLength(1));
+  held.answer(7);
+  await done;
+
+  expect(held.requests).toEqual([down(0), down(1)]);
+  expect(moved.join(" ")).toBe("0,0 0,1 7,1");
+  expect(said).toEqual(["! nothing below row 1 in amount fails to parse as a number", ""]);
+});
+
+test("a chart's column is found by its header where it has moved, and one the tab has not is passed over", async () => {
+  const held = new Held([tab("ledger.csv")]);
+  held.headers = ["units", "amount"];
+  const moved: number[][] = [];
+  const f = finder(held, moved, []);
+
+  const gone = { col: 0, header: "gone" };
+  const done = f.notNumbers([gone, { col: 0, header: "amount" }]);
+  held.answer(3);
+  await done;
+
+  expect(held.requests).toEqual([down(1)]);
+  expect(moved.join(" ")).toBe("0,1 3,1");
+});
+
+test("a chart's not-numbers search ends with the tab the person left, and goes on to no column there", async () => {
+  const held = new Held([tab("ledger.csv"), tab("q3.csv")]);
+  held.headers = ["amount", "units"];
+  const moved: number[][] = [];
+  const said: string[] = [];
+  const f = finder(held, moved, said);
+
+  let ended = false;
+  void f.notNumbers(held.headers.map((header, col) => ({ col, header }))).then(() => {
+    ended = true;
+  });
+  held.active = held.tabs[1]!;
+  held.miss(10, true);
+  // A search that went on would ask down the next column, and wait on its answer.
+  await vi.waitFor(() => expect(ended || held.asked.length > 0).toBe(true));
+
+  expect(ended).toBe(true);
+  expect(held.requests).toEqual([down(0)]);
+  expect(moved.join(" ")).toBe("0,0");
+  expect(said).toEqual([]);
+});
+
+test("a chart's not-numbers search ends with a find of the person's own over it, whose answer lands, and goes on to no column", async () => {
+  const held = new Held([tab("ledger.csv")]);
+  held.headers = ["amount", "units"];
+  const moved: number[][] = [];
+  const said: string[] = [];
+  const f = finder(held, moved, said);
+
+  let ended = false;
+  void f.notNumbers(held.headers.map((header, col) => ({ col, header }))).then(() => {
+    ended = true;
+  });
+  // ]f while the first column's find is out, then that find's answer, which is dropped.
+  f.unparsed(1);
+  held.answer(3);
+  // A search that went on would ask down the next column, and wait on its answer.
+  await vi.waitFor(() => expect(ended || held.asked.length > 1).toBe(true));
+  held.answer(5);
+  await Promise.resolve();
+
+  expect(ended).toBe(true);
+  expect(held.requests).toEqual([down(0), { col: 0, from: 0, dir: 1, match: { t: "unparsed" } }]);
+  expect(moved.join(" ")).toBe("0,0 5,0");
+  expect(said).toEqual([""]);
 });

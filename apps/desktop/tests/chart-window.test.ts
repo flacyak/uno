@@ -1,18 +1,23 @@
 /**
  * @fileoverview A chart window's words: what a head calls its chart and its
- * source, and what a screen reader is told the window is, in any language.
+ * source, what a screen reader is told the window is, and what its drawing
+ * says it shows, in any language.
  *
  * @vitest-environment happy-dom
  */
 
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, Plot } from "@document";
+import type { GroupsTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
+import { summary } from "@renderer/chart/summary";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import type { Stage } from "@renderer/chart/window";
+import type { Heard } from "@renderer/charts";
 import { BARS } from "./charted.ts";
+import { frame } from "./smoke/dom-page.ts";
 
 /** The columns the made titles below name. */
 const REGION = { col: 1, header: "region" };
@@ -35,6 +40,8 @@ const NO_LAYER: Stage = {
   leave: () => undefined,
   wheelBy: () => undefined,
   heard: () => undefined,
+  repoint: () => undefined,
+  notNumbers: () => undefined,
 };
 
 /** A chart's window, showing `chart` under `source`. */
@@ -144,6 +151,8 @@ test("relabel writes the window's own words in the language chosen since", () =>
   made.relabel();
   expect(made.box.getAttribute("aria-roledescription")).toBe(m.chart_role());
   expect(close(made.box).getAttribute("aria-label")).toBe(m.chart_remove_aria());
+  const toggle = made.box.querySelector(".chart-table-toggle");
+  expect(toggle?.getAttribute("aria-label")).toBe(m.chart_table_aria());
   expect(m.chart_role()).not.toBe(m.chart_role({}, { locale: baseLocale }));
 });
 
@@ -161,10 +170,213 @@ test("the head, the track and the caption are drawn, with a grip that says nothi
   expect([...box.children].map((child) => child.className)).toStrictEqual([
     "col-head chart-head",
     "chart-plot",
+    "chart-summary",
     "chart-coverage",
     "chart-caption",
     "chart-edge chart-edge-right",
     "chart-edge chart-edge-foot",
   ]);
   expect(box.querySelector(".chart-caption .chart-grip")?.getAttribute("aria-hidden")).toBe("true");
+});
+
+test("a repaint that takes what held the keys out of the plot gives them to the window", async () => {
+  const missing: Heard = { state: "missing", name: SOURCE, latest: undefined, complete: undefined };
+  const made = new ChartWindow(BARS, { ...NO_LAYER, heard: () => missing });
+  made.show(BARS, undefined);
+  document.body.append(made.box);
+  await frame();
+  const repoint = made.box.querySelector<HTMLButtonElement>(".chart-state button")!;
+  repoint.focus();
+  expect(document.activeElement).toBe(repoint);
+  made.redraw();
+  await frame();
+  expect(made.box.querySelector(".chart-state button")).not.toBe(repoint);
+  expect(document.activeElement).toBe(made.box);
+});
+
+/** The sales export's file, as a window hears its source named. */
+const NAME = "sales-q3.csv";
+
+/** A tally of BARS with a row of each of `values`, complete or still read. */
+function tallyOf(values: string[], complete: boolean): GroupsTally {
+  const none = { values: 0, rows: 0, sum: 0 };
+  return {
+    t: "groups",
+    plot: BARS.plot,
+    coverage: { rows: values.length, total: values.length, complete },
+    groups: values.map((value) => ({ value, rows: 1, sum: 0 })),
+    others: none,
+    below: none,
+    rest: none,
+    skipped: { blank: 0, unparsed: 0 },
+  };
+}
+
+/** What BARS's chart heard: `latest`, and `complete` as the last complete tally. */
+const heardOf = (latest: GroupsTally, complete: GroupsTally | undefined): Heard => ({
+  state: "fine",
+  name: NAME,
+  latest,
+  complete,
+});
+
+/** A window of `chart`, whose chart hears what `heard` says by each draw, over a stage of `more`. */
+function hearing(heard: () => Heard, chart = BARS, more: Partial<Stage> = {}): ChartWindow {
+  const made = new ChartWindow(chart, { ...NO_LAYER, heard, ...more });
+  made.show(chart, undefined);
+  document.body.append(made.box);
+  return made;
+}
+
+/** Presses `key` on `at`, as a person's keydown bubbles to the window, with `init` held. */
+function press(at: Element, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+  at.dispatchEvent(event);
+  return event;
+}
+
+/** The table in the plot's place, and the values heading its rows. */
+const tableOf = (box: HTMLElement): HTMLElement | null =>
+  box.querySelector<HTMLElement>(".chart-plot > .chart-table.chart-scrolls");
+const rowHeads = (box: HTMLElement): Array<string | null> =>
+  [...box.querySelectorAll(".chart-table tbody th")].map((th) => th.textContent);
+
+const image = (box: HTMLElement): HTMLElement => box.querySelector<HTMLElement>('[role="img"]')!;
+const told = (box: HTMLElement): string => box.querySelector(".chart-summary")?.textContent ?? "";
+
+test("the drawing is an image named by the head until a tally completes, then by what the chart says it shows, which a partial never changes", async () => {
+  const read = tallyOf(["North", "South"], true);
+  let heard = heardOf(tallyOf(["North"], false), undefined);
+  const made = hearing(() => heard);
+  await frame();
+  expect(image(made.box).classList.contains("chart-bars")).toBe(true);
+  expect(pointedAt(image(made.box), "aria-labelledby")).toBe(title(made.box));
+  expect(told(made.box).trim()).toBe("");
+
+  heard = heardOf(read, read);
+  made.redraw();
+  await frame();
+  const { said, values, more } = summary(madeTitle(BARS.plot), NAME, BARS.plot, read);
+  expect(pointedAt(image(made.box), "aria-labelledby")).toBe(
+    made.box.querySelector(".chart-summary"),
+  );
+  expect(told(made.box)).toBe(`${said} ${values} ${more}`);
+  expect(made.box.querySelector(".chart-summary .from-file")?.textContent).toBe(values);
+
+  heard = heardOf(tallyOf(["North", "South", "West"], false), read);
+  made.redraw();
+  await frame();
+  expect(told(made.box)).toBe(`${said} ${values} ${more}`);
+});
+
+test("a relabel writes the summary in the language chosen since, out of sight", async () => {
+  const read = tallyOf(["North", "South"], true);
+  const made = hearing(() => heardOf(read, read));
+  await frame();
+  void setLocale("es", { reload: false });
+  made.relabel();
+  await frame();
+  const { said } = summary(madeTitle(BARS.plot), NAME, BARS.plot, read);
+  expect(said).toContain("Filas");
+  expect(made.box.querySelector(".chart-summary-said")?.textContent).toBe(said);
+  expect(made.box.querySelector<HTMLElement>(".chart-summary")?.hidden).toBe(true);
+});
+
+test("t turns the plot into the table of its tally, which stays the element it was through a repaint, and t again brings the plot back", async () => {
+  const read = tallyOf(["North", "South"], true);
+  const made = hearing(() => heardOf(read, read));
+  await frame();
+  expect(press(made.box, "t").defaultPrevented).toBe(true);
+  await frame();
+  const shown = tableOf(made.box)!;
+  expect(rowHeads(made.box)).toStrictEqual(["North", "South"]);
+  expect(made.box.querySelector('[role="img"]')).toBeNull();
+  made.redraw();
+  await frame();
+  expect(tableOf(made.box)).toBe(shown);
+  shown.tabIndex = -1; // Chromium makes a scroller focusable; a tabindex does here.
+  shown.focus();
+  press(shown, "t");
+  await frame();
+  expect(tableOf(made.box)).toBeNull();
+  expect(image(made.box).classList.contains("chart-bars")).toBe(true);
+  expect(document.activeElement).toBe(made.box);
+});
+
+test("a new tally or a relabel builds the table again, in the language chosen, and a held or chorded t does nothing", async () => {
+  const one = tallyOf(["North"], true);
+  let heard = heardOf(one, one);
+  const made = hearing(() => heard);
+  await frame();
+  press(made.box, "t");
+  await frame();
+  const was = tableOf(made.box)!;
+  was.tabIndex = -1;
+  was.focus();
+  const read = tallyOf(["North", "South"], true);
+  heard = heardOf(read, read);
+  made.redraw();
+  await frame();
+  expect(tableOf(made.box)).not.toBe(was);
+  expect(document.activeElement).toBe(made.box);
+  expect(rowHeads(made.box)).toStrictEqual(["North", "South"]);
+  void setLocale("es", { reload: false });
+  made.relabel();
+  await frame();
+  const header = made.box.querySelector(".chart-table thead th:last-child")?.textContent;
+  expect(header).toBe(m.chart_table_rows());
+  expect(header).toBe("filas");
+  for (const held of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { repeat: true }]) {
+    expect(press(made.box, "t", held).defaultPrevented).toBe(false);
+  }
+  await frame();
+  expect(tableOf(made.box)).not.toBeNull();
+});
+
+test("the table's caption is what the head calls the chart, marked as the file's where a person named it", async () => {
+  const read = tallyOf(["North"], true);
+  const made = hearing(() => heardOf(read, read), TITLED);
+  await frame();
+  press(made.box, "t");
+  await frame();
+  const caption = (): Element => made.box.querySelector(".chart-table caption")!;
+  expect(caption().textContent).toBe(TITLED.title);
+  expect(caption().querySelector(".from-file")).not.toBeNull();
+  made.show(BARS, undefined);
+  await frame();
+  expect(caption().textContent).toBe(madeTitle(BARS.plot));
+  expect(caption().querySelector(".from-file")).toBeNull();
+});
+
+test("arrows in the table scroll it, and leave the window where it stands", async () => {
+  const read = tallyOf(["North"], true);
+  const draw = vi.fn();
+  const made = hearing(() => heardOf(read, read), BARS, { draw });
+  await frame();
+  press(made.box, "t");
+  await frame();
+  expect(press(tableOf(made.box)!, "ArrowDown").defaultPrevented).toBe(false);
+  expect(draw).not.toHaveBeenCalled();
+  expect(press(made.box, "ArrowDown").defaultPrevented).toBe(true);
+  expect(draw).toHaveBeenCalledOnce();
+});
+
+test("the head's table button puts the table in the plot's place, pressed while it shows, and brings the plot back", async () => {
+  const read = tallyOf(["North"], true);
+  const made = hearing(() => heardOf(read, read));
+  await frame();
+  const toggle = made.box.querySelector<HTMLButtonElement>(".chart-head .chart-table-toggle")!;
+  expect(toggle.type).toBe("button");
+  expect(toggle.getAttribute("aria-label")).toBe(m.chart_table_aria());
+  expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  expect(toggle.nextElementSibling).toBe(close(made.box));
+  expect(toggle.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  toggle.click();
+  await frame();
+  expect(tableOf(made.box)).not.toBeNull();
+  expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  press(made.box, "t");
+  await frame();
+  expect(tableOf(made.box)).toBeNull();
+  expect(toggle.getAttribute("aria-pressed")).toBe("false");
 });
