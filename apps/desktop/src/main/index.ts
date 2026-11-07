@@ -260,6 +260,13 @@ function menuFor(input: string): Menu {
           registerAccelerator: false,
           click: send("menu:sources"),
         },
+        // Same: the renderer binds this key itself.
+        {
+          label: m.menu_insert_chart(),
+          accelerator: "CmdOrCtrl+Shift+G",
+          registerAccelerator: false,
+          click: send("menu:chart"),
+        },
         { type: "separator" },
         // A plain item, reached by click only. The reload role would bind
         // Ctrl+R, which is redo in the grid, and a reload loses the open

@@ -1,0 +1,274 @@
+/**
+ * @fileoverview The chart form: picks the source, the kind of chart, the
+ * column whose values its bars or pie count the rows of, or sum a number column
+ * over, or the two number columns a scatter sets against each other, and its
+ * title. It opens on the active source, and another source keeps each column it
+ * has a header for. Opened on a chart, it shows what the chart shows, and its
+ * primary button is Apply.
+ *
+ * An empty title shows the one the chart makes, which follows the language.
+ * The engine keeps the chart, and a refusal is shown in the form, which stays
+ * open on what was chosen.
+ */
+
+import "./form.css";
+
+import { TITLE_AT_MOST } from "@document";
+import type { Chart, ChartColumn, Plot } from "@document";
+import type { ColumnInfo } from "@engine";
+import { m } from "@paraglide/messages";
+import { clamp } from "@renderer/grid/metrics";
+import { columnLabel } from "@renderer/grid/rows";
+import { PopForm, field } from "@renderer/shell/form";
+import type { MenuPlace } from "@renderer/shell/menu";
+import { el, message, option } from "@renderer/shell/util";
+import { madeTitle } from "./window.ts";
+
+/** A source the form charts, as a tab has it: its id, its name, its columns,
+ * and whether its file is missing. */
+export interface ChartSource {
+  id: string;
+  name: string;
+  band: { columns: ReadonlyArray<Pick<ColumnInfo, "header" | "kind" | "flagged">> };
+  missing: boolean;
+}
+
+/** What the form asks of the shell. */
+export interface ChartAsks {
+  /** Inserts a chart of `plot` over `source`, titled `title` or "" for the one
+   * it makes, or changes the chart the form opened on to it. Throws with a
+   * message when refused. */
+  send(source: ChartSource, plot: Plot, title: string): Promise<void>;
+  /** Called when the form closes. */
+  closed(): void;
+}
+
+/** What the form opens on: the column selected in the grid, to insert a chart
+ * of it, or a chart over the active source, to change it. */
+export type Opening =
+  | { t: "insert"; col: number }
+  | { t: "change"; chart: Pick<Chart, "plot" | "title"> };
+
+/** The kinds of chart, in the order the form offers them. */
+const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
+  ["bars", m.chart_kind_bars],
+  ["pie", m.chart_kind_pie],
+  ["scatter", m.chart_kind_scatter],
+];
+
+/** How many number columns a scatter needs: one across it and one up it. */
+const SCATTER_COLUMNS = 2;
+
+export class ChartForm {
+  private readonly form: PopForm;
+  private readonly from = select("source");
+  private readonly kind = select("kind");
+  private readonly by = select("by");
+  /** The number column bars or a pie sum, or "" for none, which counts the rows. */
+  private readonly sum = select("sum");
+  /** The number column across a scatter, the selected one where it holds numbers. */
+  private readonly x = select("x");
+  /** The number column up a scatter, one other than X. */
+  private readonly y = select("y");
+  /** The fields bars and a pie ask for, and those a scatter asks for. */
+  private readonly grouped = [
+    field(m.chart_form_by(), this.by),
+    field(m.chart_form_sum(), this.sum),
+  ];
+  private readonly paired = [field(m.chart_form_x(), this.x), field(m.chart_form_y(), this.y)];
+  private readonly title = el("input");
+  /** The source chosen, whose columns the selects offer. */
+  private source: ChartSource;
+
+  constructor(
+    place: MenuPlace,
+    /** The workspace's sources, in the order of their tabs. */
+    private readonly sources: readonly ChartSource[],
+    /** The active source, which the form opens on. */
+    active: ChartSource,
+    /** What the form opens on. */
+    private readonly opening: Opening,
+    private readonly asks: ChartAsks,
+  ) {
+    this.source = active;
+    const changes = opening.t === "change";
+    const label = changes ? m.chart_edit() : m.chart_form_title();
+    const heading = changes
+      ? m.chart_form_title_chart({ title: opening.chart.title || madeTitle(opening.chart.plot) })
+      : m.chart_form_title_source({ source: active.name });
+    const primary = changes ? m.action_apply() : m.action_insert();
+    this.form = new PopForm("chart-form", label, heading, primary, {
+      submit: () => void this.send(),
+      // Enter on any field sends what the form holds, so a chart is made or changed in one key.
+      enters: (target) => !(target instanceof HTMLButtonElement),
+      closed: () => asks.closed(),
+    });
+
+    for (const [i, s] of sources.entries()) {
+      const made = this.from.appendChild(option(s.name, String(i)));
+      made.className = "from-file";
+      // A source whose file is missing has no rows to chart.
+      made.disabled = s.missing;
+    }
+    this.from.value = String(sources.indexOf(active));
+    this.from.addEventListener("change", () => this.choose());
+    this.kind.append(...KINDS.map(([t, words]) => option(words(), t)));
+    this.kind.addEventListener("change", () => this.ask());
+
+    if (opening.t === "insert") this.offer(opening.col);
+    else this.opensOn(opening.chart.plot);
+    for (const column of [this.by, this.sum, this.x, this.y]) {
+      column.addEventListener("change", () => this.name());
+    }
+
+    this.title.type = "text";
+    this.title.maxLength = TITLE_AT_MOST;
+    this.title.autocomplete = "off";
+    if (opening.t === "change") this.title.value = opening.chart.title;
+
+    const fields = [
+      field(m.chart_form_source(), this.from),
+      field(m.chart_form_kind(), this.kind),
+      ...this.grouped,
+      ...this.paired,
+      field(m.chart_form_title_field(), this.title),
+    ];
+    this.form.open(fields, place);
+    this.form.say(changes ? m.chart_form_hint_change() : m.chart_form_hint(), false);
+    this.first().focus();
+  }
+
+  close(): void {
+    this.form.close();
+  }
+
+  /** choose offers the columns of the source chosen, keeping each column
+   * chosen whose header it has, and names it in an insert's title line. */
+  private choose(): void {
+    const header = (select: HTMLSelectElement): string | undefined =>
+      select.value === "" ? undefined : this.source.band.columns[Number(select.value)]?.header;
+    const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(header);
+    this.source = this.sources[Number(this.from.value)] ?? this.source;
+    if (this.opening.t === "insert") {
+      this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
+    }
+    this.offer(this.at(by), kept);
+  }
+
+  /** opensOn chooses `plot`'s kind, and the source's columns it names. */
+  private opensOn(plot: Plot): void {
+    this.kind.value = plot.t;
+    if (plot.t === "scatter") {
+      this.offer(this.at(plot.x.header), [undefined, plot.x.header, plot.y.header]);
+    } else {
+      this.offer(this.at(plot.by.header), [plot.sum?.header]);
+    }
+  }
+
+  /** at gives the source's column with `header`, or else its first. */
+  private at(header: string | undefined): number {
+    return Math.max(
+      0,
+      this.source.band.columns.findIndex((c) => c.header === header),
+    );
+  }
+
+  /** first gives the column select the kind chosen asks for first. */
+  private first(): HTMLSelectElement {
+    return this.kind.value === "scatter" ? this.x : this.by;
+  }
+
+  /** offer fills the selects with the source's columns, choosing `by` and the
+   * number columns whose headers `kept` has for Sum of, X and Y. X is otherwise
+   * `by` where it holds numbers, or else the first number column, and never Y's,
+   * and Y is otherwise one other than X. */
+  private offer(by: number, kept: ReadonlyArray<string | undefined> = []): void {
+    const columns = this.source.band.columns;
+    const numbers: number[] = [];
+    this.by.replaceChildren();
+    this.sum.replaceChildren(option(m.chart_form_sum_none(), ""));
+    this.x.replaceChildren();
+    this.y.replaceChildren();
+    for (const [i, c] of columns.entries()) {
+      this.by.append(fromFile(c.header, i));
+      // Cells that do not read as numbers are left out of a sum or a scatter and counted.
+      if (c.kind !== "num" && !c.flagged) continue;
+      numbers.push(i);
+      for (const offered of [this.sum, this.x, this.y]) offered.append(fromFile(c.header, i));
+    }
+    const named = (header?: string): number | undefined =>
+      numbers.find((i) => columns[i]?.header === header);
+    const [sum, x, y] = kept.map(named);
+    const xAt = x ?? [by, ...numbers].find((i) => numbers.includes(i) && i !== y) ?? y;
+    const yAt = y ?? numbers.find((i) => i !== xAt) ?? xAt;
+    this.by.value = String(clamp(by, columns.length - 1));
+    this.sum.value = String(sum ?? "");
+    this.x.value = String(xAt ?? "");
+    this.y.value = String(yAt ?? "");
+
+    const scatters = numbers.length >= SCATTER_COLUMNS;
+    for (const made of this.kind.options) if (made.value === "scatter") made.disabled = !scatters;
+    if (!scatters && this.kind.value === "scatter") this.kind.value = "bars";
+    this.ask();
+  }
+
+  /** ask shows the fields the kind chosen asks for, and the title it makes. */
+  private ask(): void {
+    const scatter = this.kind.value === "scatter";
+    for (const line of this.grouped) line.hidden = scatter;
+    for (const line of this.paired) line.hidden = !scatter;
+    this.name();
+  }
+
+  /** plot gives what the chart draws: bars or a pie of the rows, or of the sum,
+   * per value of `by`, or a scatter of `y` against `x`. */
+  private plot(): Plot {
+    if (this.kind.value === "scatter") {
+      return { t: "scatter", x: this.column(this.x.value), y: this.column(this.y.value) };
+    }
+    const t = this.kind.value === "pie" ? "pie" : "bars";
+    const by = this.column(this.by.value);
+    return this.sum.value === "" ? { t, by } : { t, by, sum: this.column(this.sum.value) };
+  }
+
+  /** column gives the source's column whose option has `value`, as a chart reads it. */
+  private column(value: string): ChartColumn {
+    const col = Number(value);
+    return { col, header: this.source.band.columns[col]?.header ?? "" };
+  }
+
+  /** name shows the title the chart makes, which an empty title keeps. */
+  private name(): void {
+    this.title.placeholder = madeTitle(this.plot());
+  }
+
+  /** send sends the chart, unless one is in flight, and closes once the engine keeps it. */
+  private async send(): Promise<void> {
+    if (this.form.submit.disabled) return;
+    this.form.submit.disabled = true;
+    try {
+      await this.asks.send(this.source, this.plot(), this.title.value.trim());
+      this.close();
+    } catch (err) {
+      this.form.say(message(err), true);
+      this.first().focus();
+    } finally {
+      this.form.submit.disabled = false;
+    }
+  }
+}
+
+/** fromFile is the option of column `col`, labelled as the file names it. */
+function fromFile(header: string, col: number): HTMLOptionElement {
+  // A blank header is labelled by its position, as in the grid.
+  const made = option(columnLabel(header, col), String(col));
+  made.className = "from-file";
+  return made;
+}
+
+/** select makes a select named for what it sets. */
+function select(name: string): HTMLSelectElement {
+  const made = el("select");
+  made.name = name;
+  return made;
+}

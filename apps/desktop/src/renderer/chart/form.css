@@ -1,0 +1,28 @@
+/* The chart form, in the pop-up forms' look (form.css). Its labels stand in a
+ * column as wide as the longest, so a language with longer words keeps them
+ * whole, and at least as wide as the formula form's, the field's 8 px inset
+ * and its 48 px label, so the two forms' controls line up in English. The
+ * note stands under the controls. Each rule outranks form.css's, whichever
+ * loads first. */
+
+.pop-form.chart-form {
+  display: grid;
+  grid-template-columns: minmax(calc(8px + 48px), max-content) minmax(0, 1fr);
+  column-gap: 8px;
+}
+
+.pop-form.chart-form .title,
+.pop-form.chart-form .buttons {
+  grid-column: 1 / -1;
+}
+
+.pop-form.chart-form .field {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.pop-form.chart-form .note {
+  grid-column: 2;
+  margin: 4px 8px 0 0;
+}
