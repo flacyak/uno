@@ -13,14 +13,22 @@
 
 import "./chart.css";
 
-import type { Chart, ChartPlace } from "@document";
+import type { Chart, ChartColumn, ChartPlace } from "@document";
 import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
+import type { ColumnSpan } from "@renderer/grid/view";
+import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
-import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
+import { fresh, overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
+
+/** What a window asks of the shell, which the layer hands on. */
+export type Asks = Pick<
+  Stage,
+  "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "remove" | "say"
+>;
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
 type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
@@ -53,24 +61,31 @@ export class ChartLayer implements Stage {
   /** The z-index the last window raised took. */
   private raised = 0;
 
+  /** How far up a stack of heads too high for the room stands, so the one with the keys shows. */
+  private reach = 0;
+
   constructor(
     private readonly root: HTMLElement,
     /** Every change to the layer's box is a change to this one's. */
     private readonly content: HTMLElement,
-    /** Gives the keys back to the grid. */
-    readonly leave: () => void,
-    /** Scrolls the sheet by a wheel turned over a window. */
-    readonly wheelBy: (dx: number, dy: number, deltaMode: number) => void,
+    private readonly asks: Asks,
   ) {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);
     new ResizeObserver(() => this.draw()).observe(content);
+    // A head past the room's foot comes into view once it has the keys.
+    root.addEventListener("focusin", () => {
+      if (root.classList.contains("overfull")) this.draw();
+    });
   }
 
-  /** show takes over from the last workspace's windows with `charts`. */
+  /** show takes over from the last workspace's windows with `charts`, if it
+   * is not showing them already. */
   show(charts: Shown): void {
+    if (charts === this.charts) return;
     this.charts = charts;
     this.windows.clear();
+    this.reach = 0;
     this.root.replaceChildren();
     this.root.hidden = false;
     this.draw();
@@ -91,6 +106,59 @@ export class ChartLayer implements Stage {
   /** move stores where chart `id`'s window stands, which the next draw shows. */
   move(id: string, place: ChartPlace): void {
     this.charts.move(id, place);
+  }
+
+  /** fresh gives a new chart's place, away from `column`, which stands
+   * across the window. */
+  fresh(column: ColumnSpan): ChartPlace {
+    const { left } = this.root.getBoundingClientRect();
+    const inRoom = { left: column.left - left, right: column.right - left };
+    return fresh(this.charts.all.length, inRoom, this.room());
+  }
+
+  /** focus gives chart `id`'s window the keys, which raises it. */
+  focus(id: string): void {
+    this.windows.get(id)?.box.focus({ preventScroll: true });
+  }
+
+  /** leave gives the keys back to the grid. */
+  leave(): void {
+    this.asks.leave();
+  }
+
+  /** wheelBy scrolls the sheet by a wheel turned over a window. */
+  wheelBy(dx: number, dy: number, deltaMode: number): void {
+    this.asks.wheelBy(dx, dy, deltaMode);
+  }
+
+  /** repoint opens the sources panel on `source`. */
+  repoint(source: string): void {
+    this.asks.repoint(source);
+  }
+
+  /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */
+  notNumbers(source: string, columns: readonly ChartColumn[]): void {
+    this.asks.notNumbers(source, columns);
+  }
+
+  /** edit opens the chart form on chart `id`, hung at `place`. */
+  edit(id: string, place: MenuPlace): void {
+    this.asks.edit(id, place);
+  }
+
+  /** remove removes chart `id`, titled `title`, on the second ask. */
+  remove(id: string, title: string): void {
+    this.asks.remove(id, title);
+  }
+
+  /** say writes `text` on the status line. */
+  say(text: string): void {
+    this.asks.say(text);
+  }
+
+  /** arm shows chart `id`'s × as the one whose next press removes it, and no other. */
+  arm(id: string | undefined): void {
+    for (const [shown, held] of this.windows) held.arm(shown === id);
   }
 
   /** heard gives what chart `id` last heard, for its window to draw. */
@@ -129,12 +197,14 @@ export class ChartLayer implements Stage {
     this.fit(border);
     const room = this.room();
     const tucking = tucks(room);
+    const spills = tucking && overfull(charts.length, this.head, border, room);
+    this.reach = spills ? this.reaching(charts, border, room) : 0;
     charts.forEach((chart, index) => {
       const held = this.windowOf(chart);
       held.show(chart, this.charts.sourceLabel(chart.source));
-      held.stand(tucking ? tucked(index, this.head, border, room) : placed(chart.place, room));
+      const slot = tucked(index, this.head, border, room);
+      held.stand(tucking ? { ...slot, y: slot.y - this.reach } : placed(chart.place, room));
     });
-    const spills = tucking && overfull(charts.length, this.head, border, room);
     const stack = stackHeight(charts.length, this.head, border);
     this.root.style.setProperty("--stack-height", `${stack}px`);
     this.root.classList.toggle("tucked", tucking && charts.length > 0);
@@ -161,6 +231,26 @@ export class ChartLayer implements Stage {
     const bottom = grid.height - inside.height;
     if (right > 0) this.root.style.setProperty("--bar-right", `${right}px`);
     if (bottom > 0) this.root.style.setProperty("--bar-bottom", `${bottom}px`);
+  }
+
+  /**
+   * reaching gives how far up the stack of `charts` stands in `room`, in whole
+   * heads, so the room's top cuts none: as far as it stood, moved only as far
+   * as it takes to show the head with the keys whole, and no further than it
+   * takes to show the last head.
+   */
+  private reaching(charts: readonly Chart[], border: number, room: Room): number {
+    const whole = (px: number): number => Math.ceil(px / this.head) * this.head;
+    const has = (chart: Chart): boolean =>
+      this.windows.get(chart.id)?.box.contains(document.activeElement) === true;
+    const keyed = charts.findIndex(has);
+    let reach = this.reach;
+    if (keyed >= 0) {
+      const { y, height } = tucked(keyed, this.head, border, room);
+      reach = Math.min(Math.max(reach, whole(y + height - room.h)), y);
+    }
+    const most = whole(stackHeight(charts.length, this.head, border) - room.h);
+    return Math.max(0, Math.min(reach, most));
   }
 
   /** windowOf returns a chart's window, adding one over those never raised if it has none. */

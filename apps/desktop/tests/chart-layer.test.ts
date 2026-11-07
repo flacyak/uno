@@ -15,8 +15,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { GroupsTally, SampleTally } from "@engine";
-import { ROWS } from "@main/smoke/fixture";
+import type { GroupsTally, SampleTally, Skipped } from "@engine";
+import { BLANK_ROWS, REGION, REVENUE, ROWS, UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartLayer } from "@renderer/chart/layer";
@@ -33,7 +33,7 @@ import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard, SourceState } from "@renderer/charts";
 import { num } from "@renderer/locale";
-import { BARS, MOVED, PIE, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
+import { BARS, MOVED, PIE, SCATTER, SHARES, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
 
@@ -134,6 +134,24 @@ const leave = vi.fn();
 /** What the layer calls to scroll the sheet. */
 const wheelBy = vi.fn();
 
+/** What the layer calls to open the sources panel on a window's source. */
+const repoint = vi.fn();
+
+/** What the layer calls to find the cells a window's tally could not read as numbers. */
+const notNumbers = vi.fn();
+
+/** What the layer calls to open the chart form on a window's chart. */
+const edit = vi.fn();
+
+/** What the layer calls to remove a window's chart. */
+const remove = vi.fn();
+
+/** What the layer calls to write on the status line. */
+const say = vi.fn();
+
+/** Everything the layer asks of the shell. */
+const asks = { leave, wheelBy, repoint, notNumbers, edit, remove, say };
+
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
@@ -229,10 +247,17 @@ function pointsHeard(plotted = SENT.x.length): Heard {
   return { ...FINE, latest: tally, complete: tally };
 }
 
+/** `heard` with the cells its tally left out counted as `skipped`. */
+function leftOut(heard: Heard, skipped: Skipped): Heard {
+  const { latest } = heard;
+  const tally = latest === undefined || latest.t === "unread" ? undefined : { ...latest, skipped };
+  return { ...heard, latest: tally, complete: tally };
+}
+
 /** A layer over a model holding `charts`, in ROOM, and that model. */
 function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   const model = modelOf(...charts);
-  const layer = new ChartLayer(root(), content(), leave, wheelBy);
+  const layer = new ChartLayer(root(), content(), asks);
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
@@ -302,6 +327,8 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", HeldObserver);
   leave.mockClear();
   wheelBy.mockClear();
+  repoint.mockClear();
+  notNumbers.mockClear();
 });
 
 afterEach(() => {
@@ -310,7 +337,7 @@ afterEach(() => {
 });
 
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
-  const layer = new ChartLayer(root(), content(), leave, wheelBy);
+  const layer = new ChartLayer(root(), content(), asks);
   roomIs(ROOM);
   expect(root().hidden).toBe(true);
 
@@ -489,6 +516,7 @@ test("a track under the head shows how far a chart has read, until its tally com
   model.heard = () => ({ ...FINE, latest: undefined, complete: undefined });
   await frame();
   expect([track().hidden, read()]).toStrictEqual([false, "0"]);
+  expect(part(".chart-state").textContent).toBe(m.chart_reading({ name: FINE.name }));
   model.heard = () => readOf(2, 5);
   layer.tallied(FLUSH.id);
   await frame();
@@ -504,6 +532,35 @@ test("a track under the head shows how far a chart has read, until its tally com
   layer.tallied(FLUSH.id);
   await frame();
   expect([track().hidden, said()]).toStrictEqual([true, m.rows_count({ count: 2 })]);
+});
+
+test("a window over a missing source says so and offers Re-point, which asks for the panel on its source", async () => {
+  const { layer, model } = shown(FLUSH);
+  model.heard = () => ({ ...FINE, state: "missing", latest: undefined, complete: undefined });
+  await frame();
+  const words = m.chart_source_missing({ name: FINE.name });
+  expect(part(".chart-state").textContent).toBe(`${words}${m.action_repoint()}`);
+  expect(part(".chart-coverage").hidden).toBe(true);
+  part(".chart-state button").click();
+  expect(repoint).toHaveBeenCalledExactlyOnceWith(FLUSH.source);
+  void setLocale("es", { reload: false });
+  layer.relabel();
+  await frame();
+  expect(part(".chart-state button").textContent).toBe(m.action_repoint());
+  expect(part(".chart-state button").textContent).not.toBe("Re-point");
+});
+
+test("a window over a source waiting on its bucket offers to connect it", async () => {
+  const { model } = shown(FLUSH);
+  const bucket = "open-data";
+  const waiting = { ...FINE, state: "unconnected", bucket } as const;
+  model.heard = () => ({ ...waiting, latest: undefined, complete: undefined });
+  await frame();
+  expect(part(".chart-state bdi").textContent).toBe(m.chart_bucket_unconnected({ bucket }));
+  const connect = part(".chart-state button");
+  expect(connect.textContent).toBe(m.sources_connect_bucket({ bucket }));
+  connect.click();
+  expect(repoint).toHaveBeenCalledExactlyOnceWith(FLUSH.source);
 });
 
 test("a window draws its bars again in the frame its plot resizes", () => {
@@ -532,14 +589,19 @@ test("a window draws a pie's slices from what its chart heard", async () => {
   expect(document.querySelectorAll(".chart-pie .chart-slice")).toHaveLength(2);
 });
 
-test("a pie's caption says how it counts the values past those a tally keeps apart", async () => {
-  const { model } = shown(PIE);
+test("a pie's caption says how it counts the values past those a tally keeps apart, and the values at or below zero it leaves out", async () => {
+  // A pie of sums: a share of rows leaves no value at or below zero out.
+  const { model } = shown(SHARES);
   const { latest } = heardOf("North");
-  const tally = latest?.t === "groups" ? { ...latest, rest: { rows: 5, sum: 0 } } : undefined;
+  const groups = [{ value: "North", rows: 1, sum: 10 }];
+  const left = { rest: { rows: 5, sum: 0 }, below: { values: 2, rows: 2, sum: -8 } };
+  const sums = { plot: SHARES.plot, groups, ...left };
+  const tally = latest?.t === "groups" ? { ...latest, ...sums } : undefined;
   model.heard = () => ({ ...FINE, latest: tally, complete: tally });
   await frame();
   const past = m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) });
-  expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past}`);
+  const below = m.chart_pie_below_zero({ count: left.below.values });
+  expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past} · ${below}`);
 });
 
 test("a scatter's caption says how many of its points it draws while it samples, in the language chosen, and nothing once it draws none", async () => {
@@ -567,6 +629,46 @@ test("a scatter's caption says how many of its points it draws while it samples,
   layer.tallied(SCATTER.id);
   await frame();
   expect(said()).toBe("");
+});
+
+test("a caption counts what a tally left out after its rows, before what a scatter's sample leaves out, and its not-numbers count is the button that finds them", async () => {
+  const { model } = shown(SCATTER);
+  const left = { blank: BLANK_ROWS, unparsed: 1 };
+  model.heard = () => leftOut(pointsHeard(ROWS), left);
+  await frame();
+  const counts = `${m.chart_blank({ count: num(left.blank) })} · ${m.chart_not_numbers({ count: 1 })}`;
+  const all = m.chart_points({ count: ROWS });
+  const points = m.chart_points_sampled({ shown: num(SENT.x.length), points: all });
+  expect(said()).toBe(`${m.rows_count({ count: ROWS })} · ${counts} · ${points}`);
+  expect(part(".chart-said").title).toBe(said());
+  const find = part(".chart-find");
+  expect(find.textContent).toBe(m.chart_not_numbers({ count: 1 }));
+  find.click();
+  const x = { col: UNITS, header: "units" };
+  const y = { col: REVENUE, header: "revenue" };
+  expect(notNumbers).toHaveBeenCalledExactlyOnceWith(SCATTER.source, [x, y]);
+});
+
+test("a bar chart's not-numbers count finds them in the column it sums, keeps the keys through a tally, and a count of none hides it and gives them to the window", async () => {
+  const sum = { col: REVENUE, header: "revenue" };
+  const sums: Chart = { ...FLUSH, plot: { t: "bars", by: { col: REGION, header: "region" }, sum } };
+  const { layer, model } = shown(sums);
+  model.heard = () => leftOut(heardOf("North"), { blank: 0, unparsed: 2 });
+  await frame();
+  const find = part(".chart-find");
+  find.click();
+  expect(notNumbers).toHaveBeenCalledExactlyOnceWith(FLUSH.source, [sum]);
+  find.focus();
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(part(".chart-find")).toBe(find);
+  expect(document.activeElement).toBe(find);
+  model.heard = () => heardOf("North");
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(find.hidden).toBe(true);
+  expect(said()).toBe(m.rows_count({ count: 1 }));
+  expect(document.activeElement).toBe(first());
 });
 
 test("a room too narrow tucks every window to its head, stacked from the top", () => {
@@ -631,6 +733,33 @@ test("heads a room cannot hold stop at its foot, and only while they are too man
   resize({ w: ROOM.w, h: stack - 1 });
   resize(ROOM);
   expect(held()).toBe(false);
+});
+
+test("a head past the foot comes into view with the keys, and the stack moves no further", () => {
+  shown(...Array.from({ length: TOO_MANY_HEADS }, (_, i) => ({ ...FLUSH, id: `c${i}` })));
+  resize(TUCKING);
+  const last = windows().at(-1)!;
+  const tops = (): number[] => windows().map((box) => drawn(box).y);
+  last.focus();
+  const { y } = drawn(last);
+  expect(y > 0 && y + HEAD + BORDER <= TUCKING.h).toBe(true);
+  // The room's top cuts no head, and one that shows whole takes the keys where it stands.
+  expect(tops().every((top) => top % HEAD === 0)).toBe(true);
+  const before = tops();
+  windows().at(-2)!.focus();
+  expect(tops()).toStrictEqual(before);
+  first().focus();
+  expect(drawn(first()).y).toBe(0);
+});
+
+test("another workspace's stack starts at the room's top, however far the last one stood", () => {
+  const heads = (prefix: string): Chart[] =>
+    Array.from({ length: TOO_MANY_HEADS }, (_, i) => ({ ...FLUSH, id: `${prefix}${i}` }));
+  const { layer } = shown(...heads("c"));
+  resize(TUCKING);
+  windows().at(-1)!.focus();
+  layer.show(modelOf(...heads("d")));
+  expect(drawn(first()).y).toBe(0);
 });
 
 test("windows that stand whole keep their shadows, however many would not fit as heads", () => {
