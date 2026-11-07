@@ -194,6 +194,8 @@ export type Command =
   | { t: "open"; force: boolean }
   /** :sources, opens the sources panel. */
   | { t: "sources" }
+  /** :chart, opens the chart form on the selected column. */
+  | { t: "chart" }
   /** :{n}, go to a row numbered from 1. */
   | { t: "row"; row: number }
   | { t: "unknown"; text: string };
@@ -221,6 +223,8 @@ export function command(text: string): Command {
       return { t: "open", force: true };
     case "sources":
       return { t: "sources" };
+    case "chart":
+      return { t: "chart" };
   }
   return { t: "unknown", text: typed };
 }
