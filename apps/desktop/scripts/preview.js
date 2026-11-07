@@ -31,8 +31,11 @@
  * - `tip`: glides the pointer down a chart window's bars, each saying what it
  *   is worth, then clicks the plot and steps through them with the keys.
  *   Goes to out/tip.gif.
+ * - `insert`: selects region, chooses Insert chart… from the open workspace's
+ *   right-click menu, and presses Enter on the form for a window of its bars.
+ *   Goes to out/insert.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert]
  * (after node scripts/build.js)
  */
 
@@ -63,7 +66,7 @@ const fixture = join(testdata, "sales-q3.csv");
 /** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
-const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel", "table", "tip"];
+const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel", "table", "tip", "insert"];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
@@ -338,6 +341,7 @@ const staged = {
   wheel: () => stageCharts("wheel", [REGION_BARS, REGION_BARS]),
   table: () => stageCharts("table", [REGION_BARS, AGAINST]),
   tip: () => stageCharts("tip", [REGION_BARS, REGION_BARS]),
+  insert: () => stageCharts("insert", []),
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 

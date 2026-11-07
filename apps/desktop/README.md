@@ -43,7 +43,7 @@ One that has never been saved is named for its first source and says `not saved`
 The `+ New workspace` at the foot of the sidebar asks for a file, as Ctrl+O does.
 A spreadsheet opens as a new workspace, and Ctrl+S keeps it as a `.uno`.
 
-A right click on a workspace offers `Insert formula…`.
+A right click on a workspace offers `Insert formula…` and `Insert chart…`.
 On a workspace that is not open it offers `Open` and `Remove from list` too, and on the open one `Add source…`, `Save` and `Save as…`.
 The formula form opens on the column the grid has selected, in the source showing.
 A formula is arithmetic over the row's other columns by name, such as `revenue / units`.
