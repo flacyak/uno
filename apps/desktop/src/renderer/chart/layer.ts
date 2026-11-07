@@ -61,6 +61,8 @@ export class ChartLayer implements Stage {
     readonly leave: () => void,
     /** Scrolls the sheet by a wheel turned over a window. */
     readonly wheelBy: (dx: number, dy: number, deltaMode: number) => void,
+    /** Opens the sources panel on a source, to point it at a file or connect its bucket. */
+    readonly repoint: (source: string) => void,
   ) {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);
