@@ -19,7 +19,7 @@ import {
   MIN_WIDTH,
   NUDGE_PX,
 } from "@renderer/chart/place";
-import { GEOMETRY, RECT_SLACK } from "./charts.ts";
+import { BORDER_IN, GEOMETRY, RECT_SLACK } from "./charts.ts";
 import type { Check, Input } from "./check.ts";
 import { RIGHT_CLICK } from "./sidebar.ts";
 
@@ -46,9 +46,6 @@ const EDGE_PX = 30;
 
 /** How far in from a window's corner a point stands inside its 8 px radius. */
 const CORNER_IN = 4;
-
-/** A point this far in from a window's box stands on its 1 px border. */
-const BORDER_IN = 0.5;
 
 /** Past any edge of any room in this run. */
 const FAR = 2000;
@@ -105,7 +102,10 @@ const PRESSED = [
 ];
 
 /** A press of `keyCode` with `modifiers`. */
-function pressing(keyCode: string, modifiers: Array<"shift" | "control"> = []): readonly Input[] {
+export function pressing(
+  keyCode: string,
+  modifiers: Array<"shift" | "control"> = [],
+): readonly Input[] {
   return [
     { type: "keyDown", keyCode, modifiers },
     { type: "keyUp", keyCode, modifiers },

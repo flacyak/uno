@@ -13,6 +13,7 @@ import type { InputStrategy } from "@renderer/input/strategy";
 import { NOTHING, changeOf, isJump, pressOf, replay, showing, target } from "@renderer/keys";
 import { dispatch, el } from "@renderer/shell/util";
 import type { Handlers } from "@renderer/shell/util";
+import type { MenuPlace } from "@renderer/shell/menu";
 import type { Action, Caret, Change, Motion, Pending } from "@renderer/keys";
 import { num } from "@renderer/locale";
 import { clamp } from "./metrics.ts";
@@ -22,6 +23,7 @@ import type { Cell, GridEvents, Rows, ShellAction } from "./rows.ts";
 /** Actions the grid carries out itself. */
 type GridAction = Exclude<Action, ShellAction>;
 import { View } from "./view.ts";
+import type { ColumnSpan } from "./view.ts";
 
 export type { GridEvents, Rows, ShellAction } from "./rows.ts";
 
@@ -124,6 +126,22 @@ export class Grid {
 
   selection(): { row: number; col: number } {
     return { row: this.selRow, col: this.selCol };
+  }
+
+  /** Gives where column `col` stands across the window. */
+  columnSpan(col: number): ColumnSpan {
+    return this.view.columnSpan(col);
+  }
+
+  /** Gives where a form on column `col` hangs, under its header cell. */
+  underHead(col: number): MenuPlace {
+    return this.view.underHead(col);
+  }
+
+  /** Scrolls the selected cell into view. */
+  reveal(): void {
+    this.view.scrollIntoView(this.selRow, this.selCol);
+    this.view.layout();
   }
 
   /** Selects a cell and scrolls it into view. */
