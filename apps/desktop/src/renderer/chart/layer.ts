@@ -17,6 +17,7 @@ import type { Chart, ChartColumn, ChartPlace } from "@document";
 import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import type { ColumnSpan } from "@renderer/grid/view";
+import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
 import { fresh, overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Room } from "./place.ts";
@@ -24,7 +25,7 @@ import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
 
 /** What a window asks of the shell, which the layer hands on. */
-export type Asks = Pick<Stage, "leave" | "wheelBy" | "repoint" | "notNumbers">;
+export type Asks = Pick<Stage, "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit">;
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
 type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
@@ -127,6 +128,11 @@ export class ChartLayer implements Stage {
   /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */
   notNumbers(source: string, columns: readonly ChartColumn[]): void {
     this.asks.notNumbers(source, columns);
+  }
+
+  /** edit opens the chart form on chart `id`, hung at `place`. */
+  edit(id: string, place: MenuPlace): void {
+    this.asks.edit(id, place);
   }
 
   /** heard gives what chart `id` last heard, for its window to draw. */

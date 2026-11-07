@@ -1,7 +1,8 @@
 /**
  * @fileoverview A chart's window: the dialogs' box, with a head that says what
  * the chart shows, a round × of the window's own kind, and a caption that ends
- * in a grip. The layer stands it in the room and says which chart it shows.
+ * in a grip. The layer stands it in the room and says which chart it shows,
+ * and the head's edit button opens the chart form on it.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
  * resizes it. It follows the pointer alone until the drop, which stores where
@@ -29,6 +30,7 @@ import { wheelWay } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
+import type { MenuPlace } from "@renderer/shell/menu";
 import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
 import { blank, body, coverage, drawable, notNumbers, reading } from "./caption.ts";
@@ -51,6 +53,12 @@ const CROSS =
 const TABLE =
   '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
   '<path d="M1.5 1.5h7v7h-7zM1.5 4.5h7M4.5 4.5v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+  "</svg>";
+
+/** The edit button's pencil over the line it writes, drawn in currentColor. */
+const PENCIL =
+  '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
+  '<path d="M2 8.5h6.5M2 7l1-2.5L6.5 1 8 2.5 4.5 6Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
   "</svg>";
 
 /** The grip's two diagonal strokes, drawn in currentColor. */
@@ -104,6 +112,8 @@ export interface Stage {
    * not read as a number.
    */
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
+  /** Opens the chart form on chart `id`, hung at `place`. */
+  edit(id: string, place: MenuPlace): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -220,6 +230,9 @@ export class ChartWindow {
   );
   /** The head's button that puts the table in the plot's place, pressed in while it stands there. */
   private readonly toggle = button("chart-head-button chart-table-toggle", "", () => this.flip());
+  /** The head's button that opens the chart form on the chart. */
+  private readonly edit = button("chart-head-button chart-edit", "", () => this.change());
+  private readonly head = el("div", "col-head chart-head");
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
   /** The box that says what the mark under the pointer is worth. */
@@ -254,9 +267,11 @@ export class ChartWindow {
     this.toggle.innerHTML = TABLE;
     this.toggle.setAttribute("aria-pressed", "false");
     this.words.attr(this.toggle, "aria-label", m.chart_table_aria);
+    this.edit.innerHTML = PENCIL;
+    this.words.attr(this.edit, "aria-label", m.chart_edit);
 
-    const head = el("div", "col-head chart-head");
-    head.append(this.title, this.toggle, x);
+    const head = this.head;
+    head.append(this.title, this.toggle, this.edit, x);
     head.addEventListener("pointerdown", (e) => {
       const onButton = e.target instanceof Element && e.target.closest("button") !== null;
       if (!onButton) this.take(e, head, dragged);
@@ -581,6 +596,14 @@ export class ChartWindow {
     if (at === this.plot && this.tip.step(press)) return true;
     const inTable = at instanceof Element && at.closest(SCROLLS) !== null;
     return !inTable && this.nudge(press);
+  }
+
+  /** change asks for the chart form on the chart, its border on the window's and the head's rule. */
+  private change(): void {
+    const { left } = this.box.getBoundingClientRect();
+    const { bottom } = this.head.getBoundingClientRect();
+    const rule = parseFloat(getComputedStyle(this.head).borderBottomWidth);
+    this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) });
   }
 
   /** escape puts back what a pointer holds, or else gives the grid the keys. */
