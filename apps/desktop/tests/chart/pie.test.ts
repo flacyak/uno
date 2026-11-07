@@ -5,7 +5,8 @@
  * and a line of the page's ground parts it from the next slice round the ring.
  * A label past the ring by the middle of each arc gives its value and its share.
  * Labels that would meet or run into the inset give way to a list by the ring.
- * The caption says how Other takes the values past those a tally keeps apart.
+ * The caption says how Other takes the values past those a tally keeps apart,
+ * and counts the values at or below zero the pie leaves out.
  *
  * @vitest-environment happy-dom
  */
@@ -17,7 +18,15 @@ import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { BARS_INSET } from "@renderer/chart/bars";
-import { LABEL_GAP, PIE_SLICES_AT_MOST, fitLabels, past, pie, slices } from "@renderer/chart/pie";
+import {
+  LABEL_GAP,
+  PIE_SLICES_AT_MOST,
+  belowZero,
+  fitLabels,
+  past,
+  pie,
+  slices,
+} from "@renderer/chart/pie";
 import type { Slice } from "@renderer/chart/pie";
 import { num, percent } from "@renderer/locale";
 
@@ -215,4 +224,19 @@ test("the caption says Other takes the net sum of the values past a tally's own,
   expect(past(ROWS, rest(0))).toBe("");
   const five = tallyOf(...EIGHT.groups.slice(0, PIE_SLICES_AT_MOST - 1));
   expect(past(ROWS, { ...five, rest: { rows: 2, sum: 0 } })).toBe(left);
+});
+
+test("the caption counts the values at or below zero a pie leaves out, sent or not, in the language chosen", () => {
+  const signed = tallyOf(sent("North", 2, 10), sent("South", 1, 0), sent("West", 1, -5));
+  expect(belowZero(SUMS, signed)).toBe("2 values at or below zero left out");
+  const unsent = { ...signed, below: { values: 1, rows: 3, sum: -8 } };
+  expect(belowZero(SUMS, unsent)).toBe("3 values at or below zero left out");
+  const one = tallyOf(sent("West", 1, -5));
+  expect(belowZero(SUMS, one)).toBe("1 value at or below zero left out");
+  // A value's rows are never at or below zero, and a pie of sums above zero leaves none out.
+  expect(belowZero(ROWS, signed)).toBe("");
+  expect(belowZero(SUMS, EIGHT)).toBe("");
+  void setLocale("es", { reload: false });
+  expect(belowZero(SUMS, unsent)).toBe("3 valores en cero o por debajo se dejan fuera");
+  expect(belowZero(SUMS, one)).toBe("1 valor en cero o por debajo se deja fuera");
 });
