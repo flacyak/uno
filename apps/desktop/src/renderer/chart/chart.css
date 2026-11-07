@@ -154,15 +154,47 @@
   margin-right: var(--x-inset);
 }
 
-/* A finger gets `--hit` around a × drawn no larger. `inset` counts from inside
- * the ×'s 1 px border. */
+/* A finger gets `--hit` around a × drawn no larger, and as much around a
+ * head's button. `inset` counts from inside the 1 px border each has. */
 @media (pointer: coarse) {
-  .chart-close::after {
+  .chart-close::after,
+  .chart-head-button::after {
     --hit: 28px;
     content: "";
     position: absolute;
     inset: calc((var(--x-size) - var(--hit)) / 2 - 1px);
   }
+}
+
+/* A head's button is as big as the ×, round-cornered, its glyph in the head's
+ * ink, and under the pointer, or pressed in, it wears the settings toggle's
+ * look (settings.css). The keys give it the accent's border. */
+.chart-head-button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--x-size);
+  height: var(--x-size);
+  padding: 0;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chart-head-button:hover,
+.chart-head-button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+
+.chart-head-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 /* What a plot draws stops at its foot, so none of it stands on the caption. */
@@ -197,6 +229,39 @@
   background: var(--accent);
 }
 
+/* What the plot says in place of a chart it cannot draw, from caption.ts: in
+ * the window's size and the values' ink, in the plot's middle, as far from its
+ * sides as the head's words, and on as many lines as that takes. Its action's
+ * button stands the head's gap under the words, as the forms' buttons
+ * (formula.css). */
+.chart-state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 10px;
+  color: var(--ink-2);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.chart-state button {
+  padding: 3px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.chart-state button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.
  * bars.ts sets a bar's thickness, the window's ground before the next, the
  * inset and the gap before a value. A label takes what it needs, up to
@@ -212,6 +277,16 @@
   align-items: center;
   padding: var(--bars-inset);
   font-size: 11px;
+}
+
+/* A value's row: its label, then its track, in the columns the bars share and
+ * as high as a bar, so the whole row is the bar's hit target. */
+.chart-bar-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-self: stretch;
+  align-items: center;
 }
 
 /* The line of what a plot leaves out runs under both columns, in the caption's ink. */
@@ -486,6 +561,81 @@
   overscroll-behavior: contain;
 }
 
+/* The table, from table.ts, in the plot's place as its scroller. It is the
+ * ticks' size, and a row is as high as a head's button, which its digits sit
+ * in with room. A person can select from it, where the window lets nothing
+ * else be selected. Its caption is a screen reader's: in the page, out of
+ * sight. A cell stands as far from the window's edge as the head's words. Its
+ * own ground paints the header row's band and rule across the top, under the
+ * bar where no cell reaches, so the band runs to the window's edge as the
+ * grid's does. */
+.chart-table {
+  font-size: 11px;
+  user-select: text;
+  background: linear-gradient(var(--sunken) calc(var(--x-size) - 1px), var(--rule) 0) top / auto
+    var(--x-size) repeat-x;
+}
+
+.chart-table table {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.chart-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chart-table th,
+.chart-table td {
+  height: var(--x-size);
+  padding: 0 10px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* The header row stays at the top as the rows scroll, as the grid's does, in
+ * the band's ground over a rule, which its height holds, and the bar's track
+ * starts under it, as the grid's does under its header row. */
+.chart-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--sunken);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-3);
+}
+
+.chart-table::-webkit-scrollbar-track:vertical {
+  margin-top: var(--x-size);
+}
+
+/* A number's column is the digits': its header stands right over its numbers,
+ * which wear the ink a bar's value does. */
+.chart-table .num {
+  text-align: right;
+}
+
+.chart-table td.num {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every second row is on the grid's even ground (grid.css). */
+.chart-table tbody tr:nth-child(even) > * {
+  background: color-mix(in srgb, var(--sunken) 42%, transparent);
+}
+
+/* The line of the values past those a tally keeps apart, in the caption's ink. */
+.chart-table-line {
+  color: var(--ink-3);
+}
+
 /* The rule is the dialogs' divider. --rule-2 is mixed with --paper, which puts
  * it one level off a dark --surface. The grip ends under the ×, which sets it as
  * far from the right as the foot. */
@@ -500,14 +650,72 @@
   color: var(--ink-3);
 }
 
-/* What the caption says of the plot takes the room before the grip, and ends in
- * an ellipsis where a window is too narrow for it. */
+/* What the caption says of the plot takes the room before the grip. Where a
+ * window is too narrow for it, the words after the button give way first, as
+ * they take only the room the rest leaves, down to none, and then the words
+ * before it, each ending in an ellipsis while any of it shows; the button and
+ * the · before it stay whole. `--find-reach` is how far the button's box
+ * stands past its words, its padding and its border; the padding keeps that
+ * box inside the caption's where no words follow it, off the grip's box,
+ * though the grip's reach still stands over its last `--grip-reach` there.
+ * The spaces around a · are kept, as each stands at an end of its span. */
 .chart-said {
+  --find-reach: 5px;
+  display: flex;
   flex: 1 1 auto;
+  align-items: baseline;
+  min-width: 0;
+  padding-right: var(--find-reach);
+  white-space: pre;
+}
+
+.chart-said-before,
+.chart-said-after {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.chart-said-before {
+  flex: 0 1 auto;
+}
+
+.chart-said-after {
+  flex: 1 1 0;
+}
+
+.chart-said-dot,
+.chart-find {
+  flex: none;
+}
+
+/* The count of the cells that were not numbers is the button that finds them.
+ * It wears the caption's words where they would stand, its margins taking back
+ * its padding and its border, and shows as a button under the pointer, as the
+ * status bar's toggles do. It stands over the foot edge's zone, as the grip
+ * does. */
+.chart-find {
+  position: relative;
+  z-index: 1;
+  margin: 0 calc(-1 * var(--find-reach));
+  padding: 0 4px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chart-find:hover {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+
+.chart-find:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 /* The scrollbar thumb's two colours (grid.css). It stands over the edges, and
