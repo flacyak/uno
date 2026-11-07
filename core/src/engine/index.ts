@@ -60,6 +60,7 @@ export { Pages, RowIndex, TUNING } from './rows.ts';
 export type { Tuning } from './rows.ts';
 export { serve } from './serve.ts';
 export type { Connecting } from './serve.ts';
+export { placeOf } from './tally.ts';
 export {
   BYTES,
   COLLECTOR_VARIABLES,

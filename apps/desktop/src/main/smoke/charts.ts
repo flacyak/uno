@@ -8,14 +8,15 @@
  * Its bars draw once its chart's tally completes, as bars.ts sizes them, a
  * scatter's points stand inside its axes, against labels on their gridlines,
  * and a pie stands round in its plot, in the chart colours, its labels clear of
- * one another, or a list beside it where they cannot be.
+ * one another, or a list beside it where they cannot be. A chart over what it
+ * cannot read says why in its plot, with the button that mends it.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
- * right edge, one at the top and one at the foot. The last four open others:
+ * right edge, one at the top and one at the foot. The last five open others:
  * one whose sums leave a window of the least width too little room for bars and
  * values, one of a scatter, one of three scatters whose x axis has room for its
  * labels in full in one window, not in a second, and not even compactly in the
- * third, and one of three pies.
+ * third, one of three pies, and one of three charts over what they cannot read.
  */
 
 import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
@@ -55,6 +56,18 @@ const ALONG_LABELS = [
  */
 const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
+
+/**
+ * The one it wrote of three charts over what a chart cannot read: a source in
+ * a bucket no connection covers, one whose file is not there, and a column the
+ * second export has not. What each plot says of it, and the button under that.
+ */
+const STATES = process.env["UNO_SMOKE_STATES"] ?? "";
+const STATE_WORDS = [
+  ["nobody-connected is not connected", "Connect nobody-connected"],
+  ["lost.csv is missing", "Re-point"],
+  ["google-ads-sales.csv has no column called Nowhere", ""],
+];
 
 /** The zoom that halves the room. */
 const DOUBLE_ZOOM = 2;
@@ -834,6 +847,65 @@ export const CHART_PIE: Check[] = [
       const keys = [...list.querySelectorAll(".chart-legend-key")].map((key) => style(key).backgroundColor);
       const fills = [...list.querySelectorAll(".chart-slice")].map((slice) => style(slice).fill);
       return keys.join(" ") === fills.join(" ") ? "" : "the list's keys wear " + keys.join(" and ") + " beside slices of " + fills.join(" and ");
+    `,
+  },
+];
+
+/** Checks after CHART_PIE, as they open a workspace of charts over what they cannot read in place of that one. */
+export const CHART_STATES: Check[] = [
+  {
+    name: "a chart over what it cannot read says why in the middle of its plot, with Connect or Re-point under the words where one mends it, and no track",
+    send: ["menu:open-path", STATES],
+    shot: "chart-states",
+    script: `
+      ${GEOMETRY}
+      const states = () => [...document.querySelectorAll(".chart .chart-state")];
+      const parts = (state) => [state.querySelector("bdi"), state.querySelector("button")].filter((part) => part !== null);
+      const said = () => JSON.stringify(states().map((state) => [...parts(state).map((part) => part.textContent), ""].slice(0, 2)));
+      // A column the file has not is said once the engine has read the header.
+      if (!(await arrives(() => said() === ${JSON.stringify(JSON.stringify(STATE_WORDS))}))) return "the plots say " + said();
+      const off = (a, b) => Math.abs(a - b) > ${RECT_SLACK};
+      for (const state of states()) {
+        const plot = state.closest(".chart-plot").getBoundingClientRect();
+        const drawn = parts(state).map((part) => part.getBoundingClientRect());
+        const [left, top] = ["left", "top"].map((side) => Math.min(...drawn.map((r) => r[side])));
+        const [right, bottom] = ["right", "bottom"].map((side) => Math.max(...drawn.map((r) => r[side])));
+        if (off(left + right, plot.left + plot.right) || off(top + bottom, plot.top + plot.bottom)) return "the words stand at " + [left, top, right, bottom].join(" ") + ", off the middle of a plot at " + edges(plot);
+        if (getComputedStyle(state.closest(".chart").querySelector(".chart-coverage")).display !== "none") return "a track shows under " + state.textContent;
+      }
+      return "";
+    `,
+  },
+  {
+    name: "in dark, the words wear the values' ink and the button the text's",
+    shot: "chart-states-dark",
+    script: `
+      ${CHROME}
+      const gear = document.querySelector("#settings");
+      gear.click();
+      document.querySelector('.settings [data-appearance="dark"]').click();
+      gear.click();
+      await frame();
+      const state = document.querySelector(".chart-state");
+      const worn = [style(state).color, style(state.querySelector("button")).color];
+      const inks = [computed("var(--ink-2)"), computed("var(--ink)")];
+      return worn.join() === inks.join() ? "" : "the words and the button wear " + worn.join(" and ");
+    `,
+  },
+  {
+    name: "Re-point on a chart opens the panel's browser, and Connect the connect form on its bucket",
+    shot: "chart-states-connect",
+    script: `
+      const [connect, repoint] = ${JSON.stringify(STATE_WORDS.map(([, action]) => action))};
+      const press = (action) => [...document.querySelectorAll(".chart-state button")].find((button) => button.textContent === action).click();
+      const [panel, list, form] = ["#panel", ".panel-list", ".panel-connect"].map((at) => document.querySelector(at));
+      // Re-point goes first, as panel.repoint leaves an open connect form in place.
+      press(repoint);
+      if (!(await until(() => !panel.hidden && !list.hidden))) return "Re-point left the panel closed";
+      press(connect);
+      if (!(await until(() => !form.hidden))) return "Connect left the connect form hidden";
+      const bucket = form.querySelector('[aria-label="bucket"]').value;
+      return bucket === "nobody-connected" ? "" : "the form is on " + JSON.stringify(bucket);
     `,
   },
 ];
