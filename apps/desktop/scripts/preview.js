@@ -36,12 +36,15 @@
  *   Goes to out/insert.gif.
  * - `kinds`: chooses Insert chart… on region and makes a pie in the form, then
  *   on units and makes a scatter of it against revenue. Goes to out/kinds.gif.
+ * - `change`: opens the chart form from a chart window's edit button, steps By
+ *   from region to rep and applies it, then presses the × once to arm it and
+ *   again to remove the chart. Goes to out/change.gif.
  * - `chord`, `command` and `menu`: select region, open the chart form under its
  *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -73,8 +76,10 @@ const fixture = join(testdata, "sales-q3.csv");
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 /** The stories that open the chart form by its keys or the View menu. */
 const KEYED = ["chord", "command", "menu"];
+/** The other stories that film charts. */
+const CHARTED = ["moves", "wheel", "table", "tip", "insert", "kinds", "change"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
-const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel", "table", "tip", "insert", "kinds", ...KEYED];
+const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
@@ -228,7 +233,10 @@ async function stageSidebar() {
   return { workspaces, fresh };
 }
 
-/** Rows per region of the fixture, the chart the moves, wheel and tip stories show twice. */
+/**
+ * Rows per region of the fixture, the chart the moves, wheel and tip stories
+ * show twice, and the change story once.
+ */
 const REGION_BARS = { t: "bars", by: { col: 1, header: "region" } };
 
 /** Revenue against units of the fixture, whose table of points runs past any window. */
@@ -351,6 +359,7 @@ const staged = {
   tip: () => stageCharts("tip", [REGION_BARS, REGION_BARS]),
   insert: () => stageCharts("insert", []),
   kinds: () => stageCharts("kinds", []),
+  change: () => stageCharts("change", [REGION_BARS]),
   chord: () => stageCharts("chord", []),
   command: () => stageCharts("command", []),
   menu: () => stageCharts("menu", []),
