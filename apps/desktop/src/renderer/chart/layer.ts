@@ -23,6 +23,9 @@ import type { Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
 
+/** What a window asks of the shell, which the layer hands on. */
+export type Asks = Pick<Stage, "leave" | "wheelBy" | "repoint" | "notNumbers">;
+
 /** What the layer reads of a workspace's charts, and where it stands one. */
 type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
 
@@ -58,17 +61,7 @@ export class ChartLayer implements Stage {
     private readonly root: HTMLElement,
     /** Every change to the layer's box is a change to this one's. */
     private readonly content: HTMLElement,
-    /** Gives the keys back to the grid. */
-    readonly leave: () => void,
-    /** Scrolls the sheet by a wheel turned over a window. */
-    readonly wheelBy: (dx: number, dy: number, deltaMode: number) => void,
-    /** Opens the sources panel on a source, to point it at a file or connect its bucket. */
-    readonly repoint: (source: string) => void,
-    /**
-     * Shows a source, and finds the first cell of its columns that a chart's
-     * tally could not read as a number.
-     */
-    readonly notNumbers: (source: string, columns: readonly ChartColumn[]) => void,
+    private readonly asks: Asks,
   ) {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);
@@ -114,6 +107,26 @@ export class ChartLayer implements Stage {
   /** focus gives chart `id`'s window the keys, which raises it. */
   focus(id: string): void {
     this.windows.get(id)?.box.focus({ preventScroll: true });
+  }
+
+  /** leave gives the keys back to the grid. */
+  leave(): void {
+    this.asks.leave();
+  }
+
+  /** wheelBy scrolls the sheet by a wheel turned over a window. */
+  wheelBy(dx: number, dy: number, deltaMode: number): void {
+    this.asks.wheelBy(dx, dy, deltaMode);
+  }
+
+  /** repoint opens the sources panel on `source`. */
+  repoint(source: string): void {
+    this.asks.repoint(source);
+  }
+
+  /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */
+  notNumbers(source: string, columns: readonly ChartColumn[]): void {
+    this.asks.notNumbers(source, columns);
   }
 
   /** heard gives what chart `id` last heard, for its window to draw. */
