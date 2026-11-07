@@ -4,9 +4,10 @@
  * under them counts the rest.
  *
  * The bars are HTML that chart.css lays out by the sizes here, so a theme
- * recolours them and a zoom keeps them crisp. A label is the file's text, set
- * as text alone. The values are mono, so the room they take is their length in
- * ch, and a plot too narrow for them beside its bars draws the bars alone.
+ * recolours them and a zoom keeps them crisp: a row per value, its label then
+ * its bar on a track. A label is the file's text, set as text alone. The
+ * values are mono, so the room they take is their length in ch, and a plot
+ * too narrow for them beside its bars draws the bars alone.
  */
 
 import type { Plot } from "@document";
@@ -62,6 +63,15 @@ function room(side: ReadonlyArray<{ tip: string }>): string {
 }
 
 /**
+ * named gives a bar's label: its value, the file's text, or the app's word for
+ * the rows whose cell is blank, which a tally counts as a value of their own.
+ */
+function named(value: string): HTMLElement {
+  if (value === "") return el("span", "chart-bar-label", m.chart_blank_value());
+  return el("bdi", "chart-bar-label from-file", value);
+}
+
+/**
  * bars draws `groups` as rows or sums per value, as `plot` measures them, in a
  * plot `height` px high. A line of what is left out takes a bar's row.
  */
@@ -97,7 +107,9 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
     track.classList.toggle("below", size < 0);
     track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(size) / span}`);
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
-    box.append(el("bdi", "chart-bar-label from-file", label), track);
+    const row = el("div", "chart-bar-row");
+    row.append(named(label), track);
+    box.append(row);
   }
 
   const left = all.slice(fit);
