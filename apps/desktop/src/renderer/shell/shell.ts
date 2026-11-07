@@ -10,6 +10,7 @@
  */
 
 import { isWorkspace } from "@document";
+import type { Chart, ChartColumn } from "@document";
 import { Engine, messagePort } from "@engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@engine";
 import { NO_ROW } from "@sheet";
@@ -20,6 +21,7 @@ import type { SingleRef } from "@store";
 import { s3Location } from "@store/s3";
 
 import { m } from "@paraglide/messages";
+import type { ChartForm, ChartSource } from "@renderer/chart/form";
 import type { ChartLayer } from "@renderer/chart/layer";
 import type { Charts } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
@@ -68,6 +70,9 @@ const SIDEBAR_CLOSED = "closed";
 /** The class on #app while the sidebar is closed. */
 const NO_SIDEBAR = "no-sidebar";
 
+/** A new chart's minutes between checks: 0, by hand only, until the form asks. */
+const BY_HAND = 0;
+
 /**
  * An action that would close the workspace and drop its edits: Ctrl+O, the
  * window's ×, a workspace picked from the sidebar, or a .uno named on the
@@ -108,9 +113,10 @@ export class Shell {
   private saving: Promise<void> | undefined;
   /** The input strategy, used by the grid and the status bar. */
   private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
-  /** The open pop-up menu and formula form, if any. */
+  /** The open pop-up menu, formula form and chart form, if any. */
   private menu: PopMenu | undefined;
   private formula: FormulaForm | undefined;
+  private chartForm: ChartForm | undefined;
   /** Whether the sidebar is open. */
   private sidebarOpen = localStorage.getItem(SIDEBAR_KEY) !== SIDEBAR_CLOSED;
   /** The workspaces the sidebar lists. */
@@ -464,10 +470,11 @@ export class Shell {
     }
   }
 
-  /** closePopups dismisses the menu and the formula form, whichever is open. */
+  /** closePopups dismisses the menu and the forms, whichever is open. */
   private closePopups(): void {
     this.menu?.close();
     this.formula?.close();
+    this.chartForm?.close();
   }
 
   /** offer opens a pop-up menu, closing any menu or form already open. */
@@ -499,6 +506,11 @@ export class Shell {
       label: m.menu_insert_formula(),
       choose: () => void this.insertFormula(path, place),
     };
+    const open: MenuItem = { label: m.menu_open(), choose: () => void this.openRecent(path) };
+    const chart: MenuItem = {
+      label: m.menu_insert_chart(),
+      choose: () => void this.insertChart(path, place),
+    };
     const forget: MenuItem = {
       label: m.menu_remove_from_list(),
       choose: () => {
@@ -509,11 +521,12 @@ export class Shell {
     const items: MenuItem[] = isOpen
       ? [
           formula,
+          { ...chart, keys: "Ctrl+Shift+G" },
           { label: m.menu_add_source(), keys: "Ctrl+Shift+O", choose: () => void this.add() },
           { label: m.menu_save(), keys: "Ctrl+S", choose: () => void this.save() },
           { label: m.menu_save_as(), keys: "Ctrl+Shift+S", choose: () => void this.saveAs() },
         ]
-      : [{ label: m.menu_open(), choose: () => void this.openRecent(path) }, formula, forget];
+      : [open, formula, chart, forget];
     this.offer(place, items);
   }
 
@@ -540,6 +553,82 @@ export class Shell {
         this.grid?.focus();
       },
     });
+  }
+
+  /**
+   * insertChart opens the chart form at `place` on the active source of the
+   * workspace at `path` and its selected column, opening that workspace first
+   * if needed. An inserted chart's window takes the keys, or else the grid.
+   */
+  private async insertChart(path: string, place: MenuPlace): Promise<void> {
+    if (!(await this.openRecent(path))) return;
+    const on = this.showing();
+    if (on === undefined) return;
+    const { workspace: w, grid } = on;
+    const tab = w.active;
+    if (tab.missing) {
+      this.say(m.source_no_file_point_first({ name: tab.name }), true);
+      return;
+    }
+
+    // The form loads the window's module, so the second import is at hand.
+    const { ChartForm } = await import("@renderer/chart/form");
+    const { madeTitle } = await import("@renderer/chart/window");
+    if (this.workspace !== w) return;
+    const col = grid.selection().col;
+    let made: string | undefined;
+    this.closePopups();
+    this.chartForm = new ChartForm(place, w.sources, tab, col, {
+      insert: async (source, plot, title) => {
+        made = (await this.chart(w, source, { plot, title }, grid.columnSpan(col))).id;
+        this.say(m.chart_inserted({ title: title === "" ? madeTitle(plot) : title }));
+      },
+      closed: () => {
+        this.chartForm = undefined;
+        if (made === undefined) this.grid?.focus();
+        else this.layer?.focus(made);
+      },
+    });
+  }
+
+  /**
+   * insertChartHere opens the chart form under the selected column's header,
+   * for a key or a menu that has no place of its own to open it at.
+   */
+  insertChartHere(): void {
+    const on = this.showing();
+    if (on === undefined) return;
+    const { workspace: w, grid } = on;
+    // The form hangs under the column, so a column scrolled away comes back.
+    grid.reveal();
+    void this.insertChart(w.path, grid.underHead(grid.selection().col));
+  }
+
+  /**
+   * chart adds a chart over `source` in a new window, away from `column`,
+   * showing the chart layer for the first. The window is drawn at once and
+   * again once the engine answers, and a refusal is thrown for the form.
+   */
+  private async chart(
+    w: Workspace,
+    source: ChartSource,
+    shown: Pick<Chart, "plot" | "title">,
+    column: { left: number; right: number },
+  ): Promise<Chart> {
+    const layer = await this.loadLayer();
+    if (this.workspace !== w || !w.sources.some((t) => t.id === source.id)) {
+      throw new Error(m.source_no_longer_open({ name: source.name }));
+    }
+    layer.show(w.charts);
+    const place = layer.fresh(column);
+    const adding = w.charts.add({ ...shown, source: source.id, place, refresh: BY_HAND });
+    layer.draw();
+    try {
+      return await adding;
+    } finally {
+      layer.draw();
+      this.paintTabs();
+    }
   }
 
   /**
@@ -768,6 +857,8 @@ export class Shell {
           this.content,
           () => this.grid?.focus(),
           (dx, dy, deltaMode) => this.grid?.wheelBy(dx, dy, deltaMode),
+          (source) => this.withTab(source, (tab) => this.repoint(tab)),
+          (source, columns) => this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
         );
         return this.layer;
       },
@@ -869,6 +960,7 @@ export class Shell {
       // Under Vim-style Ctrl+B pages up, wherever the keys are.
       ["b", { run: () => this.toggleSidebar(), when: () => this.input.name === "default" }],
       ["e", { run: () => this.toggleMode() }],
+      ["Shift+g", { run: () => this.insertChartHere() }],
       [
         "z",
         { run: () => void this.history("undo"), when: () => this.workspace?.editable === true },
@@ -1012,6 +1104,16 @@ export class Shell {
     // Reload is offered.
     else if (state === "newer") this.panel.showTab(tab.id);
     else this.panel.repoint(tab.id);
+  }
+
+  /**
+   * findNotNumbers is a chart's "3 not numbers": shows the chart's source and
+   * lands the grid on the first cell of `columns` that its tally could not
+   * read as a number.
+   */
+  private findNotNumbers(tab: Tab, columns: readonly ChartColumn[]): void {
+    this.select(tab);
+    void this.finder.notNumbers(columns);
   }
 
   /**
@@ -1236,6 +1338,7 @@ export class Shell {
       else void this.open(true);
     },
     sources: () => this.showPanel(),
+    chart: () => this.insertChartHere(),
     row: (c) => this.grid?.act({ t: "move", motion: "last-row", count: c.row }),
     unknown: (c) => this.say(m.not_a_command({ text: c.text }), true),
   };

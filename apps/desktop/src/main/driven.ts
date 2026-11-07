@@ -10,10 +10,11 @@
  * What still reaches the page is what main sends it: scripts, the menu's
  * messages, sendInputEvent inside `through`, and DevTools input inside
  * `throughAsync`. Menu accelerators are handled by the main process, so those
- * still land.
+ * still land, and `pick` clicks an application menu item by the keys it shows.
  */
 
-import type { BrowserWindow } from "electron";
+import { Menu } from "electron";
+import type { BrowserWindow, MenuItem } from "electron";
 
 /**
  * drive makes the window ignore all input from the window system and report
@@ -62,4 +63,25 @@ export async function throughAsync(win: BrowserWindow, send: () => Promise<void>
   } finally {
     await devtools.sendCommand("Input.setIgnoreInputEvents", { ignore: true });
   }
+}
+
+/**
+ * pick clicks the application menu's item that shows `keys`, as a person picks
+ * it. The menu has to leave the keys to the page, which reads them itself.
+ */
+export function pick(keys: string): void {
+  const item = shownBy(keys)?.item;
+  if (item === undefined || item.registerAccelerator) {
+    throw new Error(`no menu item leaves ${keys} to the page`);
+  }
+  item.click();
+}
+
+/** shownBy gives the application menu's item that shows `keys`, and its menu. */
+export function shownBy(keys: string): { menu: MenuItem; item: MenuItem } | undefined {
+  for (const menu of Menu.getApplicationMenu()?.items ?? []) {
+    const item = menu.submenu?.items.find((at) => at.accelerator === keys);
+    if (item !== undefined) return { menu, item };
+  }
+  return undefined;
 }

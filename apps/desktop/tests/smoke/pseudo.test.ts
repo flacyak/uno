@@ -37,6 +37,8 @@ const NOT_THE_APPS = [
   ".colhead",
   ".panel-peek table",
   ".formula select",
+  // The chart form's sources and columns.
+  ".chart-form .from-file",
   // What a chart's window takes from the file: a source's name, a person's title.
   ".chart .from-file",
   "[data-language][lang]",
@@ -175,6 +177,15 @@ test("a right click on the workspace offers its menu in the language chosen", as
   expect(english()).toEqual([]);
 });
 
+test("the chart form is in the language chosen", async () => {
+  const items = [...document.querySelectorAll<HTMLElement>(".pop-item")];
+  items.find((item) => item.firstChild?.textContent === m.menu_insert_chart())?.click();
+  expect(await until(domPage(), () => document.querySelector(".chart-form") !== null)).toBe(true);
+  expect(english()).toEqual([]);
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
+  document.querySelector(".chart-form")?.dispatchEvent(escape);
+});
+
 test("what a .uno's charts say in the status line is in the language chosen", async () => {
   const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
   const carried = { id: "c2", source: SALES, json: '{"id":"c2"}' };
@@ -190,10 +201,12 @@ test("what a .uno's charts say in the status line is in the language chosen", as
 });
 
 test("a chart's window drawn in English is rewritten in the language chosen", async () => {
+  // Two charts name a column the second export has not, so they draw nothing.
   const titled = { ...BARS, id: "c2", source: ADS, title: "From the file" };
   const overAds = { ...BARS, id: "c3", source: ADS };
+  const readable = [BARS, SCATTER, DEVICES];
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
-  await writeFile(path, unoOf([BARS, titled, overAds, SCATTER, DEVICES]));
+  await writeFile(path, unoOf([...readable, titled, overAds]));
   await shell.openRef({ name: "charted.uno", path });
   // A short plot draws the line of the rest under its bars, the scatter samples,
   // and the pie labels its slices.
@@ -212,5 +225,34 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   const head = document.querySelector(".chart-title")?.textContent;
   expect(head).toBe(`${SALES} · ${madeTitle(BARS.plot)}`);
   expect(said()).toContain(PSEUDO_OPEN);
+  // What each drawing says it shows is written once its tally completes, in the
+  // language chosen by then, its values from the file apart.
+  const summaries = (): string[] =>
+    [...document.querySelectorAll(".chart-summary-said")]
+      .map((at) => at.textContent ?? "")
+      .filter((text) => text !== "");
+  expect(await until(domPage(), () => summaries().length === readable.length)).toBe(true);
+  expect(summaries().every((text) => text.includes(PSEUDO_OPEN))).toBe(true);
+  expect(document.querySelector(".chart-summary .from-file")!.textContent).toMatch(/\S/);
+  expect(english(".chart")).toEqual([]);
+  // t turns the first plot into its table, whose words follow the language too.
+  const first = document.querySelector<HTMLElement>(".chart")!;
+  first.dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+  await frame();
+  const header = document.querySelector(".chart-table thead th:last-child")?.textContent;
+  expect(header).toBe(m.chart_table_rows());
+  expect(header).toContain(PSEUDO_OPEN);
+  expect(document.querySelectorAll(".chart-table tbody th .from-file").length).toBeGreaterThan(0);
+  expect(english(".chart")).toEqual([]);
+});
+
+test("a chart over a missing source says so and offers Re-point in the language chosen", async () => {
+  const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "missing.uno");
+  await writeFile(path, unoOf([BARS], [], "/nowhere/sales-q3.csv"));
+  await shell.openRef({ name: "missing.uno", path });
+  const state = (): string => document.querySelector(".chart-state")?.textContent ?? "";
+  expect(await until(domPage(), () => state() !== "")).toBe(true);
+  const missing = m.chart_source_missing({ name: `${SALES}.csv` });
+  expect(state()).toBe(`${missing}${m.action_repoint()}`);
   expect(english(".chart")).toEqual([]);
 });
