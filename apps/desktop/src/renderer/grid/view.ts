@@ -29,9 +29,19 @@ import {
   visibleRange,
   wheelWay,
 } from "./metrics.ts";
+import type { MenuPlace } from "@renderer/shell/menu";
 import { el } from "@renderer/shell/util";
 import { columnLabel, unnamed } from "./rows.ts";
 import type { Cell, Rows } from "./rows.ts";
+
+/** The width of a cell's right and bottom rules, in px, as grid.css draws them. */
+const RULE_PX = 1;
+
+/** Where a column stands across a box, by its edges, in px. */
+export interface ColumnSpan {
+  left: number;
+  right: number;
+}
 
 export class View {
   /** The rows being drawn, or undefined. */
@@ -74,7 +84,7 @@ export class View {
     /** Called after every layout. */
     private readonly laidOut: () => void,
   ) {
-    this.scroller = el("div", "grid-scroll");
+    this.scroller = el("div", "grid-scroll themed-bar");
     this.sizer = el("div", "grid-sizer");
     this.table = el("table");
     this.table.className = "grid";
@@ -300,6 +310,26 @@ export class View {
     const col = Array.prototype.indexOf.call(tr.children, td) - 1;
     const row = this.first + Array.prototype.indexOf.call(this.body.children, tr);
     return { row, col };
+  }
+
+  /** Gives where column `col` stands across the window, from its header
+   * cell, which is there for every row, drawn or pending. */
+  columnSpan(col: number): ColumnSpan {
+    const cell = this.headCell(col);
+    return { left: cell?.left ?? 0, right: cell?.right ?? 0 };
+  }
+
+  /** Gives where a form on column `col` hangs: on the rules left of and under
+   * its header cell, so the form's border lies on them. */
+  underHead(col: number): MenuPlace {
+    const cell = this.headCell(col);
+    const left = Math.round((cell?.left ?? 0) - RULE_PX);
+    return { left, top: Math.round((cell?.bottom ?? 0) - RULE_PX) };
+  }
+
+  /** Gives the box of column `col`'s header cell. */
+  private headCell(col: number): DOMRect | undefined {
+    return this.head.firstElementChild?.children[col + 1]?.getBoundingClientRect();
   }
 
   /** Scrolls the least amount needed to show the whole cell, vertically and

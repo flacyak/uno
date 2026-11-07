@@ -24,6 +24,11 @@ export interface Check {
    */
   send?: readonly [channel: string, ...args: unknown[]];
   /**
+   * The keys an application menu item shows. The item is picked before the
+   * check runs, the way a person picks it, and has to leave its keys to the page.
+   */
+  pick?: string;
+  /**
    * Input events sent to the window before the check runs, by the path a
    * person's input takes. The window is driven, so it takes them only when
    * `through` is set.
@@ -35,6 +40,12 @@ export interface Check {
    * has put that.
    */
   hover?: string;
+  /**
+   * A click, by the path a person's pointer takes, before the check runs: on
+   * the middle of what `selector` picks, `count` presses in a row, so two make
+   * a double-click.
+   */
+  click?: { selector: string; count?: number };
   /**
    * A drag, by the path a person's pointer takes, before the check runs: from
    * the middle of what `selector` picks, `by` CSS px on, where it lets go. With
