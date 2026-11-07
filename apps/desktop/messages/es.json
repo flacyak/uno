@@ -467,6 +467,16 @@
   "chart_title_share_of_rows": "Proporción de filas por {by}",
   "chart_title_share_of_sum": "Proporción de {sum} por {by}",
   "chart_title_against": "{y} frente a {x}",
+  "chart_form_title": "Insertar gráfico",
+  "chart_form_title_source": "Insertar gráfico · {source}",
+  "chart_form_kind": "gráfico",
+  "chart_kind_bars": "Barras",
+  "chart_kind_pie": "Circular",
+  "chart_kind_scatter": "Dispersión",
+  "chart_form_by": "por",
+  "chart_form_sum": "suma de",
+  "chart_form_sum_none": "ninguna, contar filas",
+  "chart_form_title_field": "título",
   "chart_bars_more": "+{count} más",
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",
   "chart_points": [
@@ -484,7 +494,41 @@
   "chart_pie_other": "Otros",
   "chart_pie_past_net": "más de {count} valores · los demás van en Otros por su suma neta",
   "chart_pie_past_left_out": "más de {count} valores · los demás se dejan fuera",
+  "chart_pie_below_zero": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} valor en cero o por debajo se deja fuera",
+        "plural=many": "{n} valores en cero o por debajo se dejan fuera",
+        "plural=other": "{n} valores en cero o por debajo se dejan fuera"
+      }
+    }
+  ],
   "chart_partial": "parcial · {read} leído",
+  "chart_reading": "leyendo {name}…",
+  "chart_no_values_yet": "aún no hay valores en {columns}",
+  "chart_source_missing": "falta {name}",
+  "chart_bucket_unconnected": "{bucket} no está conectado",
+  "chart_blank": "{count} en blanco",
+  "chart_blank_value": "(en blanco)",
+  "chart_not_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} no es número",
+        "plural=many": "{n} no son números",
+        "plural=other": "{n} no son números"
+      }
+    }
+  ],
+  "chart_summary": "{title} en {name}, {rows}.",
+  "chart_summary_more": "y {count} más.",
+  "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} y {y} de {yLeast} a {yMost}.",
+  "chart_table_rows": "filas",
+  "chart_table_share": "proporción",
+  "chart_table_aria": "Tabla",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",

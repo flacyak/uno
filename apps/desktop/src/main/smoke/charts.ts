@@ -8,14 +8,15 @@
  * Its bars draw once its chart's tally completes, as bars.ts sizes them, a
  * scatter's points stand inside its axes, against labels on their gridlines,
  * and a pie stands round in its plot, in the chart colours, its labels clear of
- * one another, or a list beside it where they cannot be.
+ * one another, or a list beside it where they cannot be. A chart over what it
+ * cannot read says why in its plot, with the button that mends it.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
- * right edge, one at the top and one at the foot. The last four open others:
+ * right edge, one at the top and one at the foot. The last five open others:
  * one whose sums leave a window of the least width too little room for bars and
  * values, one of a scatter, one of three scatters whose x axis has room for its
  * labels in full in one window, not in a second, and not even compactly in the
- * third, and one of three pies.
+ * third, one of three pies, and one of three charts over what they cannot read.
  */
 
 import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
@@ -28,9 +29,14 @@ import type { Check, Input } from "./check.ts";
 /** The workspace smoke.js wrote. */
 const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
 
-/** The one it wrote of a sum per region, and its regions, whose values run long on both sides of zero. */
+/**
+ * The one it wrote of a sum per region, and its regions, whose values run long
+ * on both sides of zero, and its rows, the last of them the one whose revenue
+ * is not a number.
+ */
 const SIGNED = process.env["UNO_SMOKE_SIGNED"] ?? "";
 const SIGNED_REGIONS = 4;
+const SIGNED_ROWS = 5;
 
 /** The one it wrote of a scatter of the fixture's revenue against its units. */
 const SCATTERED = process.env["UNO_SMOKE_SCATTERED"] ?? "";
@@ -56,6 +62,18 @@ const ALONG_LABELS = [
 const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
 
+/**
+ * The one it wrote of three charts over what a chart cannot read: a source in
+ * a bucket no connection covers, one whose file is not there, and a column the
+ * second export has not. What each plot says of it, and the button under that.
+ */
+const STATES = process.env["UNO_SMOKE_STATES"] ?? "";
+const STATE_WORDS = [
+  ["nobody-connected is not connected", "Connect nobody-connected"],
+  ["lost.csv is missing", "Re-point"],
+  ["google-ads-sales.csv has no column called Nowhere", ""],
+];
+
 /** The zoom that halves the room. */
 const DOUBLE_ZOOM = 2;
 
@@ -74,6 +92,9 @@ const MENU_ZOOM_WIDTH = 800;
 
 /** How far two rects can read apart, past Chromium's layout unit of 1/64 px. */
 export const RECT_SLACK = 0.02;
+
+/** A point this far in from a box stands on its 1 px border. */
+export const BORDER_IN = 0.5;
 
 /** A point over the grid's tenth row, left of the windows, and one over the top window. */
 const BESIDE = { x: 400, y: 300 };
@@ -100,7 +121,7 @@ const CLICK_HEAD: readonly Input[] = [
 ];
 
 /** A key a person presses that the app does nothing with. */
-const A_KEY: readonly Input[] = [
+export const A_KEY: readonly Input[] = [
   { type: "keyDown", keyCode: "Shift" },
   { type: "keyUp", keyCode: "Shift" },
 ];
@@ -516,12 +537,14 @@ export const CHARTS: Check[] = [
   },
   {
     // No run has a coarse pointer, so this lifts the rule out of its media query.
+    // The rule names the head's buttons beside the ×, so it is found among its selectors.
     name: `a finger gets ${FINGER} around a window's ×`,
     script: `
       ${CHROME}
       const inside = (rules) => [...rules].flatMap((rule) => [rule, ...inside(rule.cssRules ?? [])]);
       const rules = [...document.styleSheets].flatMap((sheet) => inside(sheet.cssRules));
-      const reach = rules.find((rule) => rule.selectorText === ".chart-close::after");
+      const named = (rule) => (rule.selectorText ?? "").split(",").map((one) => one.trim());
+      const reach = rules.find((rule) => named(rule).includes(".chart-close::after"));
       if (reach?.parentRule?.conditionText !== "(pointer: coarse)") return "the × has no rule for a finger";
       const lifted = document.createElement("style");
       lifted.textContent = reach.cssText;
@@ -674,6 +697,45 @@ export const CHART_SIGNED: Check[] = [
       return out === undefined ? "" : "a value runs from " + out.tip.left + " to " + out.tip.right + ", past its track's " + out.line.right;
     `,
   },
+  {
+    name: "the caption's count of the cells that were not numbers is a button on the caption's line, over the foot edge's zone as the grip is, and lands the grid on the first of them",
+    script: `
+      const said = document.querySelector(".chart-said");
+      const find = said.querySelector(".chart-find");
+      const words = counted(${SIGNED_ROWS}) + " rows · 1 not a number";
+      if (said.textContent !== words || find.hidden) return "the caption says " + said.textContent + (find.hidden ? " with no button" : "");
+      const [box, line, foot] = [find, said, document.querySelector(".chart-edge-foot")].map((at) => at.getBoundingClientRect());
+      if (box.top < line.top || box.bottom > line.bottom) return "the button stands from " + box.top + " to " + box.bottom + ", past the caption's " + line.top + " to " + line.bottom;
+      const stacked = (at) => [getComputedStyle(at).position, getComputedStyle(at).zIndex].join(" ");
+      if (stacked(find) !== stacked(document.querySelector(".chart-grip"))) return "the button stacks as " + stacked(find) + ", the grip as " + stacked(document.querySelector(".chart-grip"));
+      const probe = { x: (box.left + box.right) / 2, y: box.bottom - ${BORDER_IN} };
+      if (probe.y < foot.top) return "the button ends at " + box.bottom + ", above the foot edge's zone from " + foot.top;
+      const under = document.elementFromPoint(probe.x, probe.y);
+      if (under !== find) return "over the foot edge's zone the pointer finds " + (under === null ? "nothing" : under.className);
+      find.click();
+      const cell = () => text("#status-cell");
+      if (!(await until(() => cell() === "revenue · row " + ${SIGNED_ROWS}))) return "the grid stands on " + cell();
+      return "";
+    `,
+  },
+  {
+    name: "a window too narrow for its caption cuts the words after the button first, and never the button or the words before it",
+    script: `
+      const said = document.querySelectorAll(".chart-said")[1];
+      const words = counted(${SIGNED_ROWS}) + " rows · 1 not a number · 1 value at or below zero left out";
+      if (!(await arrives(() => said.textContent === words))) return "the pie's caption says " + said.textContent;
+      if (said.title !== words) return "the caption's title says " + said.title;
+      const [before, find, after] = [".chart-said-before", ".chart-find", ".chart-said-after"].map((at) => said.querySelector(at));
+      const cut = (at) => at.scrollWidth > at.clientWidth;
+      if (!cut(after)) return "the words after the button fit the window: " + said.textContent;
+      if (cut(before)) return "the words before the button are cut: " + before.textContent;
+      const [box, line] = [find, said].map((at) => at.getBoundingClientRect());
+      if (box.left < line.left || box.right > line.right) return "the button runs from " + box.left + " to " + box.right + ", past the caption's " + line.left + " to " + line.right;
+      const under = document.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+      if (under !== find) return "at the button's middle the pointer finds " + (under === null ? "nothing" : under.className);
+      return "";
+    `,
+  },
 ];
 
 /** A check after CHART_SIGNED, as it opens a workspace of a scatter in place of that one. */
@@ -718,12 +780,15 @@ export const CHART_SCATTER: Check[] = [
     `,
   },
   {
-    name: "a scatter that samples says in its caption how many points it draws, after its rows and whole before the grip",
+    name: "a scatter that samples says in its caption how many points it draws, after its rows and the rows it could not place, and whole before the grip",
     script: `
       const said = document.querySelector(".chart-said");
       const drawn = counted(document.querySelectorAll(".chart-point").length);
-      if (!said.textContent.includes(" rows · " + drawn + " of ")) return "the caption says " + said.textContent + " of " + drawn + " points";
-      return said.scrollWidth > said.clientWidth ? "the caption cuts " + said.textContent : "";
+      const words = counted(ROWS) + " rows · " + counted(BLANK_ROWS) + " blank · " + drawn + " of " + counted(ROWS - BLANK_ROWS) + " points";
+      if (said.textContent !== words) return "the caption says " + said.textContent + ", not " + words;
+      // Each span clips its own words, so a cut shows in a span and never in the row.
+      const spans = [".chart-said-before", ".chart-said-after"].map((at) => said.querySelector(at));
+      return spans.some((at) => at.scrollWidth > at.clientWidth) ? "the caption cuts " + said.textContent : "";
     `,
   },
 ];
@@ -834,6 +899,65 @@ export const CHART_PIE: Check[] = [
       const keys = [...list.querySelectorAll(".chart-legend-key")].map((key) => style(key).backgroundColor);
       const fills = [...list.querySelectorAll(".chart-slice")].map((slice) => style(slice).fill);
       return keys.join(" ") === fills.join(" ") ? "" : "the list's keys wear " + keys.join(" and ") + " beside slices of " + fills.join(" and ");
+    `,
+  },
+];
+
+/** Checks after CHART_PIE, as they open a workspace of charts over what they cannot read in place of that one. */
+export const CHART_STATES: Check[] = [
+  {
+    name: "a chart over what it cannot read says why in the middle of its plot, with Connect or Re-point under the words where one mends it, and no track",
+    send: ["menu:open-path", STATES],
+    shot: "chart-states",
+    script: `
+      ${GEOMETRY}
+      const states = () => [...document.querySelectorAll(".chart .chart-state")];
+      const parts = (state) => [state.querySelector("bdi"), state.querySelector("button")].filter((part) => part !== null);
+      const said = () => JSON.stringify(states().map((state) => [...parts(state).map((part) => part.textContent), ""].slice(0, 2)));
+      // A column the file has not is said once the engine has read the header.
+      if (!(await arrives(() => said() === ${JSON.stringify(JSON.stringify(STATE_WORDS))}))) return "the plots say " + said();
+      const off = (a, b) => Math.abs(a - b) > ${RECT_SLACK};
+      for (const state of states()) {
+        const plot = state.closest(".chart-plot").getBoundingClientRect();
+        const drawn = parts(state).map((part) => part.getBoundingClientRect());
+        const [left, top] = ["left", "top"].map((side) => Math.min(...drawn.map((r) => r[side])));
+        const [right, bottom] = ["right", "bottom"].map((side) => Math.max(...drawn.map((r) => r[side])));
+        if (off(left + right, plot.left + plot.right) || off(top + bottom, plot.top + plot.bottom)) return "the words stand at " + [left, top, right, bottom].join(" ") + ", off the middle of a plot at " + edges(plot);
+        if (getComputedStyle(state.closest(".chart").querySelector(".chart-coverage")).display !== "none") return "a track shows under " + state.textContent;
+      }
+      return "";
+    `,
+  },
+  {
+    name: "in dark, the words wear the values' ink and the button the text's",
+    shot: "chart-states-dark",
+    script: `
+      ${CHROME}
+      const gear = document.querySelector("#settings");
+      gear.click();
+      document.querySelector('.settings [data-appearance="dark"]').click();
+      gear.click();
+      await frame();
+      const state = document.querySelector(".chart-state");
+      const worn = [style(state).color, style(state.querySelector("button")).color];
+      const inks = [computed("var(--ink-2)"), computed("var(--ink)")];
+      return worn.join() === inks.join() ? "" : "the words and the button wear " + worn.join(" and ");
+    `,
+  },
+  {
+    name: "Re-point on a chart opens the panel's browser, and Connect the connect form on its bucket",
+    shot: "chart-states-connect",
+    script: `
+      const [connect, repoint] = ${JSON.stringify(STATE_WORDS.map(([, action]) => action))};
+      const press = (action) => [...document.querySelectorAll(".chart-state button")].find((button) => button.textContent === action).click();
+      const [panel, list, form] = ["#panel", ".panel-list", ".panel-connect"].map((at) => document.querySelector(at));
+      // Re-point goes first, as panel.repoint leaves an open connect form in place.
+      press(repoint);
+      if (!(await until(() => !panel.hidden && !list.hidden))) return "Re-point left the panel closed";
+      press(connect);
+      if (!(await until(() => !form.hidden))) return "Connect left the connect form hidden";
+      const bucket = form.querySelector('[aria-label="bucket"]').value;
+      return bucket === "nobody-connected" ? "" : "the form is on " + JSON.stringify(bucket);
     `,
   },
 ];
