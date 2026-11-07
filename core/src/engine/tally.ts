@@ -412,9 +412,10 @@ function move(
 
 /**
  * placeOf finds a chart's column among the headers: where the chart left it
- * while the header there is its own, else where its header is now.
+ * while the header there is its own, else where its header is now. The
+ * renderer finds the column a tally read the same way.
  */
-function placeOf(
+export function placeOf(
   column: ChartColumn,
   headers: readonly string[],
 ): number | undefined {

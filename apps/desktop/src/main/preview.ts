@@ -18,7 +18,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow, Rectangle } from "electron";
 
 import { ask } from "./ask.ts";
-import { through } from "./driven.ts";
+import { pick, shownBy, through, throughAsync } from "./driven.ts";
 
 /**
  * Milliseconds between frame captures. Faster than the 12fps the GIF is
@@ -223,6 +223,79 @@ const WHEEL_TURNS = 30;
 const WHEEL_TURN_PX = 48;
 const WHEEL_TURN_MS = 60;
 
+/**
+ * The table story's beats: a chart window given the keys by a click on its
+ * head, t pressed for the table of its points, the wheel turned down the
+ * table, and t pressed again for the points.
+ */
+const TABLE = {
+  click: 500,
+  press: 1_500,
+  turn: 2_700,
+  back: 5_000,
+  end: 6_300,
+};
+
+/**
+ * The tip story's beats: the pointer brought over a chart window's first
+ * bar, glided down its rows, a click on the last for the plot to take the
+ * keys, Home for the first row, Right down the rows, and End for the last.
+ */
+const TIP = {
+  point: 500,
+  glide: 1_000,
+  click: 2_800,
+  home: 3_400,
+  right: 3_900,
+  end: 5_400,
+  stop: 6_400,
+};
+
+/**
+ * The insert story's beats: a cell of region clicked, a right click on the
+ * open workspace, Insert chart… chosen, and Enter on the form, which opens on
+ * region, for a window of its bars.
+ */
+const INSERT = {
+  column: 500,
+  menu: 2_400,
+  chart: 4_300,
+  enter: 7_800,
+  end: 10_000,
+};
+
+/**
+ * The beats of the stories that open the chart form by Ctrl+Shift+G, :chart
+ * and the View menu: a cell of region clicked, the form opened under its
+ * header, and Enter on the form for a window of its bars.
+ */
+const KEYED = { column: 500, open: 2_400, enter: 6_400, end: 8_600 };
+/** Where the pointer rests in those stories, on a cell clear of the form and the window it inserts. */
+const KEYED_REST = "tbody tr:nth-child(20) td:nth-child(2)";
+/** The keys the View menu's Insert chart… shows. */
+const INSERT_CHART_KEYS = "CmdOrCtrl+Shift+G";
+
+/**
+ * The kinds story's beats: the insert story's, once for a pie of region and
+ * once for a scatter of units, with the kind chosen in the form before Enter.
+ * Each Down chooses the next kind after bars, KIND_STEP_MS apart. The gutter
+ * comes first, so region is a row's third cell and units its sixth, clicked in
+ * a row under the pie's window.
+ */
+const KINDS = [
+  { row: 3, cell: 3, downs: 1, column: 500, menu: 2_000, chart: 3_600, choose: 6_400 },
+  { row: 15, cell: 6, downs: 2, column: 10_000, menu: 11_600, chart: 13_200, choose: 16_000 },
+];
+/** How long a Down holds each kind, and how long the last holds before Enter. */
+const KIND_STEP_MS = 1_000;
+const KIND_HOLD_MS = 1_000;
+const KINDS_END = 21_600;
+
+/** How many moves a glide takes, how long each lasts, and how many Rights the tip story presses. */
+const GLIDE_MOVES = 24;
+const GLIDE_MOVE_MS = 50;
+const RIGHTS = 3;
+
 /** A stand-in for the pointer, as a capture leaves the real one out. */
 const POINTER =
   '<svg width="16" height="24" viewBox="0 0 16 24">' +
@@ -232,6 +305,12 @@ const POINTER =
 /** The stand-in's id, where a script finds it, and a z-index over the app's popups. */
 const POINTER_ID = "preview-pointer";
 const POINTER_ON_TOP = 99;
+
+/** The stand-in menu's id, and its gap from the window's edge, menu.ts's EDGE. */
+const MENU_ID = "preview-menu";
+const MENU_EDGE = 4;
+/** What a menu shows for CmdOrCtrl and CommandOrControl, on the platform filming. */
+const CMD_OR_CTRL = process.platform === "darwin" ? "Cmd" : "Ctrl";
 
 /** The stand-in key of the object the refresh story's workspace points at. */
 const REFRESH_KEY = "2025/ads-q3.csv";
@@ -690,6 +769,29 @@ const STORIES: Record<string, Story> = {
   refused: { end: REFUSED.end, script: playRefused },
   moves: { end: MOVES.end, script: playMoves },
   wheel: { end: WHEEL.end, script: playWheel },
+  table: { end: TABLE.end, script: playTable },
+  tip: { end: TIP.stop, script: playTip },
+  insert: { end: INSERT.end, script: playInsert },
+  kinds: { end: KINDS_END, script: playKinds },
+  chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
+  command: {
+    end: KEYED.end,
+    script: playKeyed(async (win) => {
+      // The command line is vim-style's.
+      win.webContents.send("menu:input", "vim-style");
+      await type(win, ":chart");
+      press(win, "Return");
+    }),
+  },
+  menu: {
+    end: KEYED.end,
+    script: playKeyed(async (win, { glideTo, pressOn }) => {
+      await pressOn(await standInMenu(win, INSERT_CHART_KEYS));
+      await win.webContents.executeJavaScript(`document.getElementById("${MENU_ID}").remove()`);
+      pick(INSERT_CHART_KEYS);
+      await glideTo(KEYED_REST);
+    }),
+  },
 };
 
 /**
@@ -777,14 +879,157 @@ async function playWheel(win: BrowserWindow, at: Clock): Promise<void> {
 }
 
 /**
+ * playTable performs the table story: the last chart window, a scatter's,
+ * given the keys by a click on its head, t for the table of its points, the
+ * wheel turned down the table, and t again for the points.
+ */
+async function playTable(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  await at(TABLE.click);
+  const head = await hover(win, ".chart:last-child .chart-title");
+  pointTo(win, head.x, head.y);
+  await click(win, ".chart:last-child .chart-title");
+  await at(TABLE.press);
+  press(win, "t");
+  await at(TABLE.turn);
+  const { x, y } = await hover(win, ".chart:last-child .chart-plot");
+  pointTo(win, x, y);
+  await turnWheel(win, x, y, WHEEL_TURN_PX);
+  await at(TABLE.back);
+  press(win, "t");
+  await at(TABLE.end);
+}
+
+/**
+ * playTip performs the tip story: the pointer over the last chart window's
+ * first bar, glided down its rows, a click on the last for the plot to take
+ * the keys, Home, Right down the rows, and End.
+ */
+async function playTip(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  await at(TIP.point);
+  const rows = ".chart:last-child .chart-bar-row";
+  const from = await middle(win, `${rows}:first-child`);
+  const to = await middle(win, `${rows}:last-child`);
+  pointTo(win, from.x, from.y);
+  await at(TIP.glide);
+  await glide(win, from, to);
+  await at(TIP.click);
+  await click(win, `${rows}:last-child`);
+  await at(TIP.home);
+  press(win, "Home");
+  await at(TIP.right);
+  await presses(win, "Right", RIGHTS, ARROW_GAP * 2);
+  await at(TIP.end);
+  press(win, "End");
+  await at(TIP.stop);
+}
+
+/**
+ * playInsert performs the insert story: region selected, then Insert chart…
+ * from the workspace's menu, and Enter on the form for its bars.
+ */
+async function playInsert(win: BrowserWindow, at: Clock): Promise<void> {
+  const { pressOn } = await glider(win);
+  await at(INSERT.column);
+  // The gutter comes first, so region is a row's third cell.
+  await pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+  await at(INSERT.menu);
+  await pressOn(".ws.open", "right");
+  await at(INSERT.chart);
+  await pressOn(".pop-menu .pop-item:nth-child(2)");
+  await at(INSERT.enter);
+  press(win, "Return");
+  await at(INSERT.end);
+}
+
+/**
+ * playKinds performs the kinds story: Insert chart… from the workspace's menu
+ * on region, then on units, choosing a pie and then a scatter in the form.
+ */
+async function playKinds(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  for (const kind of KINDS) {
+    await at(kind.column);
+    await pressOn(`tbody tr:nth-child(${kind.row}) td:nth-child(${kind.cell})`);
+    await at(kind.menu);
+    await pressOn(".ws.open", "right");
+    await at(kind.chart);
+    await pressOn(".pop-menu .pop-item:nth-child(2)");
+    // The first form waits for its module, so the keys wait for the form.
+    await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+    // The pointer leaves the source's name for the kind the keys change.
+    await glideTo('.chart-form select[name="kind"]');
+    await at(kind.choose);
+    // The keys open in By, the field after the kind.
+    press(win, "Tab", ["shift"]);
+    await presses(win, "Down", kind.downs, KIND_STEP_MS);
+    await sleep(KIND_HOLD_MS);
+    press(win, "Return");
+  }
+  await at(KINDS_END);
+}
+
+/**
+ * playKeyed gives a story that selects region, opens the chart form on it by
+ * `open`, which may move the pointer, and presses Enter on the form for its
+ * bars.
+ */
+function playKeyed(
+  open: (win: BrowserWindow, pointer: Glider) => void | Promise<void>,
+): Story["script"] {
+  return async (win, at) => {
+    const pointer = await glider(win);
+    await at(KEYED.column);
+    // The gutter comes first, so region is a row's third cell.
+    await pointer.pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+    await pointer.glideTo(KEYED_REST);
+    await at(KEYED.open);
+    await open(win, pointer);
+    await at(KEYED.enter);
+    press(win, "Return");
+    await at(KEYED.end);
+  };
+}
+
+/** What the stand-in pointer does: glides to a thing, or glides to it and presses it. */
+interface Glider {
+  glideTo: (selector: string) => Promise<void>;
+  pressOn: (selector: string, button?: "left" | "right") => Promise<void>;
+}
+
+/** glider shows the stand-in pointer, which glides from wherever it last went. */
+async function glider(win: BrowserWindow): Promise<Glider> {
+  await standIn(win);
+  let from = await middle(win, "#content");
+  const glideTo = async (selector: string): Promise<void> => {
+    const to = await middle(win, selector);
+    await glide(win, from, to);
+    from = to;
+  };
+  return {
+    glideTo,
+    pressOn: async (selector, button = "left") => {
+      await glideTo(selector);
+      await click(win, selector, button);
+    },
+  };
+}
+
+/**
  * turnWheel turns the wheel over (`x`, `y`) WHEEL_TURNS times, `down` px down
- * the page each time. Electron counts a turn down as a negative delta.
+ * the page each time. Electron counts a turn down as a negative delta. The
+ * scroll a turn causes lands after the page answers it, so the ignore stays
+ * lifted until the last turn is over, as driven.ts says, and what a window's
+ * own scrollable takes from the wheel scrolls too.
  */
 async function turnWheel(win: BrowserWindow, x: number, y: number, down: number): Promise<void> {
-  for (let i = 0; i < WHEEL_TURNS; i++) {
-    through(win, () => win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down }));
-    await sleep(WHEEL_TURN_MS);
-  }
+  await throughAsync(win, async () => {
+    for (let i = 0; i < WHEEL_TURNS; i++) {
+      win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down });
+      await sleep(WHEEL_TURN_MS);
+    }
+  });
 }
 
 /** standIn adds the pointer's stand-in to the page, hidden until pointTo moves it. */
@@ -798,6 +1043,50 @@ async function standIn(win: BrowserWindow): Promise<void> {
       document.body.append(pointer);
     })()
   `);
+}
+
+/**
+ * standInMenu draws the application menu holding the item that shows `keys`,
+ * in the app's own menu look at the window's top-left, as a capture leaves a
+ * native menu out and the menu bar shows on macOS alone. It gives the item's
+ * selector.
+ */
+async function standInMenu(win: BrowserWindow, keys: string): Promise<string> {
+  const shown = shownBy(keys);
+  if (shown === undefined) throw new Error(`no menu item shows ${keys}`);
+  const items = shown.menu.submenu?.items.filter((at) => at.visible && at.type !== "separator");
+  const rows = items?.map((at) => [
+    at.label,
+    at.accelerator?.replace(/CmdOrCtrl|CommandOrControl/, CMD_OR_CTRL),
+    at === shown.item,
+  ]);
+  await win.webContents.executeJavaScript(`
+    (() => {
+      const row = (label, keys) => {
+        const [item, shown] = [document.createElement("div"), document.createElement("span")];
+        item.className = "pop-item";
+        shown.className = "keys";
+        shown.textContent = keys ?? "";
+        item.append(label, shown);
+        return item;
+      };
+      const menu = document.createElement("div");
+      menu.id = "${MENU_ID}";
+      menu.className = "pop-menu";
+      menu.style.cssText = "left:${MENU_EDGE}px;top:${MENU_EDGE}px";
+      // The menu's own label heads it, in the keys' ink.
+      const head = row("", ${JSON.stringify(shown.menu.label)});
+      head.style.cssText = "pointer-events:none;justify-content:flex-start";
+      const items = ${JSON.stringify(rows ?? [])}.map(([label, keys, picked]) => {
+        const item = row(label, keys);
+        item.toggleAttribute("data-picked", picked);
+        return item;
+      });
+      menu.append(head, ...items);
+      document.body.append(menu);
+    })()
+  `);
+  return `#${MENU_ID} [data-picked]`;
 }
 
 /** pointTo moves the pointer and its stand-in to (`x`, `y`). */
@@ -928,6 +1217,28 @@ async function click(
  * returns that point.
  */
 async function hover(win: BrowserWindow, selector: string): Promise<{ x: number; y: number }> {
+  const at = await middle(win, selector);
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", ...at }));
+  return at;
+}
+
+/** glide moves the stand-in from `from` to `to`, slowing as it comes. */
+async function glide(
+  win: BrowserWindow,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<void> {
+  for (let i = 1; i <= GLIDE_MOVES; i++) {
+    const eased = 1 - (1 - i / GLIDE_MOVES) ** 3;
+    const x = Math.round(from.x + (to.x - from.x) * eased);
+    const y = Math.round(from.y + (to.y - from.y) * eased);
+    pointTo(win, x, y);
+    await sleep(GLIDE_MOVE_MS);
+  }
+}
+
+/** middle gives the centre of the element matching selector, in the page's px. */
+async function middle(win: BrowserWindow, selector: string): Promise<{ x: number; y: number }> {
   // The page returns null for a missing element, and the throw happens here
   // with the selector: an error thrown in the page arrives as a bare "Script
   // failed to execute".
@@ -940,8 +1251,6 @@ async function hover(win: BrowserWindow, selector: string): Promise<{ x: number;
     })()
   `)) as { x: number; y: number } | null;
   if (at === null) throw new Error(`nothing to point at ${selector}`);
-  const { x, y } = at;
-  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
   return at;
 }
 
