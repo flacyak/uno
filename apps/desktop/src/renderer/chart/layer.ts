@@ -13,7 +13,7 @@
 
 import "./chart.css";
 
-import type { Chart, ChartPlace } from "@document";
+import type { Chart, ChartColumn, ChartPlace } from "@document";
 import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
@@ -61,6 +61,13 @@ export class ChartLayer implements Stage {
     readonly leave: () => void,
     /** Scrolls the sheet by a wheel turned over a window. */
     readonly wheelBy: (dx: number, dy: number, deltaMode: number) => void,
+    /** Opens the sources panel on a source, to point it at a file or connect its bucket. */
+    readonly repoint: (source: string) => void,
+    /**
+     * Shows a source, and finds the first cell of its columns that a chart's
+     * tally could not read as a number.
+     */
+    readonly notNumbers: (source: string, columns: readonly ChartColumn[]) => void,
   ) {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);

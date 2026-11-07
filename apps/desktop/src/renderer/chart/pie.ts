@@ -2,7 +2,8 @@
  * @fileoverview A pie chart: each value's share of the rows, or of a sum. The
  * six largest values above zero have a slice each, and one Other after them
  * holds the rest. A value at or below zero has no share to draw. The caption
- * says how Other takes the values past those a tally keeps apart.
+ * says how Other takes the values past those a tally keeps apart, and counts
+ * the values at or below zero the pie leaves out.
  *
  * The slices go round from the top, as SVG on a ring of radius 1, so whatever
  * sizes the SVG sizes the pie, round in any shape. Each wears its colour as
@@ -73,6 +74,19 @@ export function past(plot: Pie, groups: Groups): string {
 }
 
 /**
+ * belowZero gives what a pie's caption says of the values at or below zero,
+ * which have no share to draw: those sent and those not, as `plot` measures
+ * them. A value's rows are always above zero, so a share of rows leaves none
+ * out, and the caption says nothing.
+ */
+export function belowZero(plot: Pie, groups: Groups): string {
+  const measure = measureOf(plot);
+  const sent = groups.groups.filter((g) => measure(g) <= 0).length;
+  const count = sent + groups.below.values;
+  return count > 0 ? m.chart_pie_below_zero({ count }) : "";
+}
+
+/**
  * What Other wears: the caption's ink, which the chart colours stand apart
  * from after the sixth. The six wear --chart-1 to --chart-6, in their order.
  */
@@ -130,12 +144,17 @@ function gap(turn: number): SVGElement {
   return line;
 }
 
-/** words gives what a slice says: its value, the file's text, or Other, and its share. */
+/**
+ * words gives what a slice says: its value, the file's text, or Other, or the
+ * app's word for the rows whose cell is blank, and its share.
+ */
 function words(value: string | undefined, share: number): [HTMLElement, HTMLElement] {
   const name =
     value === undefined
       ? el("span", "chart-slice-name", m.chart_pie_other())
-      : el("bdi", "chart-slice-name from-file", value);
+      : value === ""
+        ? el("span", "chart-slice-name", m.chart_blank_value())
+        : el("bdi", "chart-slice-name from-file", value);
   return [name, el("span", "chart-slice-share", percent(share))];
 }
 
