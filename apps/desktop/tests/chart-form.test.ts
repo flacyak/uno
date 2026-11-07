@@ -12,6 +12,7 @@ import type { Plot } from "@document";
 import { Refusal } from "@engine";
 import { m } from "@paraglide/messages";
 import { ChartForm } from "@renderer/chart/form";
+import { madeTitle } from "@renderer/chart/window";
 import { num } from "@renderer/locale";
 
 /** The sales export's headers. */
@@ -21,9 +22,11 @@ const HEADERS = ["date", "region", "rep", "channel", "units", "revenue"];
 const REGION = 1;
 
 /** What the form asks of the shell to insert `plot` over the sales export. */
-const inserting = (plot: Plot): string => `insert sales ${JSON.stringify(plot)}`;
+const inserting = (plot: Plot, title = ""): string =>
+  `insert sales ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
 
-const regionBars = inserting({ t: "bars", by: { col: REGION, header: "region" } });
+const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
+const regionBars = inserting(REGION_BARS);
 
 /** Opens the form on region, with `insert` answering each insert. */
 function form(insert = (): Promise<void> => Promise.resolve()): {
@@ -34,8 +37,8 @@ function form(insert = (): Promise<void> => Promise.resolve()): {
   const asked: string[] = [];
   const band = { columns: HEADERS.map((header) => ({ header })) };
   new ChartForm({ left: 0, top: 0 }, { id: "sales", name: "sales-q3.csv", band }, REGION, {
-    insert: (source, plot) => {
-      asked.push(`insert ${source.id} ${JSON.stringify(plot)}`);
+    insert: (source, plot, title) => {
+      asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
     },
     closed: () => asked.push("closed"),
@@ -64,6 +67,23 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(press("Enter").defaultPrevented).toBe(true);
   await settle();
   expect(asked).toStrictEqual([regionBars, "closed"]);
+});
+
+test("an empty title shows the one the chart makes, which follows the column", () => {
+  const { box } = form();
+  const [by, title] = [box.querySelector("select")!, box.querySelector("input")!];
+  expect(title.placeholder).toBe(madeTitle(REGION_BARS));
+  by.value = String(REGION + 1);
+  by.dispatchEvent(new Event("change"));
+  expect(title.placeholder).toBe(madeTitle({ t: "bars", by: { col: REGION + 1, header: "rep" } }));
+});
+
+test("a title of one's own goes in the chart, without the spaces round it", async () => {
+  const { asked, box } = form();
+  box.querySelector("input")!.value = "  Orders per region ";
+  box.requestSubmit();
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "Orders per region"), "closed"]);
 });
 
 test("Esc closes it and inserts nothing", () => {

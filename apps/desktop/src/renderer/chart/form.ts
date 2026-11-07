@@ -1,11 +1,15 @@
 /**
  * @fileoverview The chart form: picks the column of the active source whose
- * values a chart's bars count the rows of. The engine keeps the chart, and a
- * refusal is shown in the form, which stays open on what was chosen.
+ * values a chart's bars count the rows of, and its title.
+ *
+ * An empty title shows the one the chart makes, which follows the language.
+ * The engine keeps the chart, and a refusal is shown in the form, which stays
+ * open on what was chosen.
  */
 
 import "./form.css";
 
+import { TITLE_AT_MOST } from "@document";
 import type { Plot } from "@document";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
@@ -13,6 +17,7 @@ import { columnLabel } from "@renderer/grid/rows";
 import { PopForm, field } from "@renderer/shell/form";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, message, option } from "@renderer/shell/util";
+import { madeTitle } from "./window.ts";
 
 /** A source the form charts, as a tab has it: its id, its name and its columns' headers. */
 export interface ChartSource {
@@ -23,8 +28,9 @@ export interface ChartSource {
 
 /** What the form asks of the shell. */
 export interface ChartAsks {
-  /** Inserts a chart of `plot` over `source`. Throws with a message when refused. */
-  insert(source: ChartSource, plot: Plot): Promise<void>;
+  /** Inserts a chart of `plot` over `source`, titled `title` or "" for the one
+   * it makes. Throws with a message when refused. */
+  insert(source: ChartSource, plot: Plot, title: string): Promise<void>;
   /** Called when the form closes. */
   closed(): void;
 }
@@ -32,6 +38,7 @@ export interface ChartAsks {
 export class ChartForm {
   private readonly form: PopForm;
   private readonly by = el("select");
+  private readonly title = el("input");
 
   constructor(
     place: MenuPlace,
@@ -40,8 +47,8 @@ export class ChartForm {
     selected: number,
     private readonly asks: ChartAsks,
   ) {
-    const title = m.chart_form_title_source({ source: source.name });
-    this.form = new PopForm("chart-form", m.chart_form_title(), title, m.action_insert(), {
+    const heading = m.chart_form_title_source({ source: source.name });
+    this.form = new PopForm("chart-form", m.chart_form_title(), heading, m.action_insert(), {
       submit: () => void this.insert(),
       // Enter on any field inserts, so the form makes a chart in one key.
       enters: (target) => !(target instanceof HTMLButtonElement),
@@ -55,7 +62,18 @@ export class ChartForm {
       this.by.append(made);
     }
     this.by.value = String(clamp(selected, source.band.columns.length - 1));
-    this.form.open([field(m.chart_form_by(), this.by)], place);
+    this.by.addEventListener("change", () => this.name());
+
+    this.title.type = "text";
+    this.title.maxLength = TITLE_AT_MOST;
+    this.title.autocomplete = "off";
+
+    const fields = [
+      field(m.chart_form_by(), this.by),
+      field(m.chart_form_title_field(), this.title),
+    ];
+    this.form.open(fields, place);
+    this.name();
     this.by.focus();
   }
 
@@ -69,12 +87,17 @@ export class ChartForm {
     return { t: "bars", by: { col, header: this.source.band.columns[col]?.header ?? "" } };
   }
 
+  /** name shows the title the chart makes, which an empty title keeps. */
+  private name(): void {
+    this.title.placeholder = madeTitle(this.plot());
+  }
+
   /** insert sends the chart, unless one is in flight, and closes once the engine keeps it. */
   private async insert(): Promise<void> {
     if (this.form.submit.disabled) return;
     this.form.submit.disabled = true;
     try {
-      await this.asks.insert(this.source, this.plot());
+      await this.asks.insert(this.source, this.plot(), this.title.value.trim());
       this.close();
     } catch (err) {
       this.form.say(message(err), true);
