@@ -227,6 +227,7 @@
   "menu_file": "Ficheiro…",
   "menu_browse_sources": "Explorar fontes…",
   "menu_insert_formula": "Inserir fórmula…",
+  "menu_insert_chart": "Inserir gráfico…",
   "menu_remove_from_list": "Remover da lista",
   "menu_add_source": "Adicionar fonte…",
   "menu_save": "Guardar",
@@ -462,11 +463,29 @@
   "chart_column_gone": "{name} não tem nenhuma coluna chamada {header}",
   "chart_role": "gráfico",
   "chart_remove_aria": "Remover gráfico",
+  "chart_edit": "Editar gráfico",
   "chart_title_rows": "Linhas por {by}",
   "chart_title_sum": "Soma de {sum} por {by}",
   "chart_title_share_of_rows": "Proporção de linhas por {by}",
   "chart_title_share_of_sum": "Proporção de {sum} por {by}",
   "chart_title_against": "{y} em relação a {x}",
+  "chart_form_title": "Inserir gráfico",
+  "chart_form_title_source": "Inserir gráfico · {source}",
+  "chart_form_source": "fonte",
+  "chart_form_kind": "gráfico",
+  "chart_kind_bars": "Barras",
+  "chart_kind_pie": "Circular",
+  "chart_kind_scatter": "Dispersão",
+  "chart_form_by": "por",
+  "chart_form_sum": "soma de",
+  "chart_form_sum_none": "nenhuma, contar linhas",
+  "chart_form_x": "x",
+  "chart_form_y": "y",
+  "chart_form_title_field": "título",
+  "chart_form_hint": "Enter insere · Esc fecha",
+  "chart_form_title_chart": "Gráfico · {title}",
+  "chart_form_hint_change": "Enter aplica · Esc fecha",
+  "chart_inserted": "inserido: {title}",
   "chart_bars_more": "+{count} mais",
   "chart_bars_past": "mais de {count} valores · os demais são contados no resto",
   "chart_points": [
@@ -484,7 +503,41 @@
   "chart_pie_other": "Outros",
   "chart_pie_past_net": "mais de {count} valores · os demais entram em Outros pela soma líquida",
   "chart_pie_past_left_out": "mais de {count} valores · os demais ficam de fora",
+  "chart_pie_below_zero": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} valor em zero ou abaixo fica de fora",
+        "plural=many": "{n} valores em zero ou abaixo ficam de fora",
+        "plural=other": "{n} valores em zero ou abaixo ficam de fora"
+      }
+    }
+  ],
   "chart_partial": "parcial · {read} lido",
+  "chart_reading": "a ler {name}…",
+  "chart_no_values_yet": "ainda não há valores em {columns}",
+  "chart_source_missing": "{name} está ausente",
+  "chart_bucket_unconnected": "{bucket} não está conectado",
+  "chart_blank": "{count} em branco",
+  "chart_blank_value": "(em branco)",
+  "chart_not_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} não é número",
+        "plural=many": "{n} não são números",
+        "plural=other": "{n} não são números"
+      }
+    }
+  ],
+  "chart_summary": "{title} em {name}, {rows}.",
+  "chart_summary_more": "e mais {count}.",
+  "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",
+  "chart_table_rows": "linhas",
+  "chart_table_share": "proporção",
+  "chart_table_aria": "Tabela",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um ficheiro por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só ficheiro · ficheiros só são anexados a vários lidos como um",

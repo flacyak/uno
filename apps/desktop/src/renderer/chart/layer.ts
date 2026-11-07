@@ -13,14 +13,18 @@
 
 import "./chart.css";
 
-import type { Chart, ChartPlace } from "@document";
+import type { Chart, ChartColumn, ChartPlace } from "@document";
 import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
+import type { ColumnSpan } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
-import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
+import { fresh, overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
+
+/** What a window asks of the shell, which the layer hands on. */
+export type Asks = Pick<Stage, "leave" | "wheelBy" | "repoint" | "notNumbers">;
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
 type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
@@ -57,18 +61,17 @@ export class ChartLayer implements Stage {
     private readonly root: HTMLElement,
     /** Every change to the layer's box is a change to this one's. */
     private readonly content: HTMLElement,
-    /** Gives the keys back to the grid. */
-    readonly leave: () => void,
-    /** Scrolls the sheet by a wheel turned over a window. */
-    readonly wheelBy: (dx: number, dy: number, deltaMode: number) => void,
+    private readonly asks: Asks,
   ) {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);
     new ResizeObserver(() => this.draw()).observe(content);
   }
 
-  /** show takes over from the last workspace's windows with `charts`. */
+  /** show takes over from the last workspace's windows with `charts`, if it
+   * is not showing them already. */
   show(charts: Shown): void {
+    if (charts === this.charts) return;
     this.charts = charts;
     this.windows.clear();
     this.root.replaceChildren();
@@ -91,6 +94,39 @@ export class ChartLayer implements Stage {
   /** move stores where chart `id`'s window stands, which the next draw shows. */
   move(id: string, place: ChartPlace): void {
     this.charts.move(id, place);
+  }
+
+  /** fresh gives a new chart's place, away from `column`, which stands
+   * across the window. */
+  fresh(column: ColumnSpan): ChartPlace {
+    const { left } = this.root.getBoundingClientRect();
+    const inRoom = { left: column.left - left, right: column.right - left };
+    return fresh(this.charts.all.length, inRoom, this.room());
+  }
+
+  /** focus gives chart `id`'s window the keys, which raises it. */
+  focus(id: string): void {
+    this.windows.get(id)?.box.focus({ preventScroll: true });
+  }
+
+  /** leave gives the keys back to the grid. */
+  leave(): void {
+    this.asks.leave();
+  }
+
+  /** wheelBy scrolls the sheet by a wheel turned over a window. */
+  wheelBy(dx: number, dy: number, deltaMode: number): void {
+    this.asks.wheelBy(dx, dy, deltaMode);
+  }
+
+  /** repoint opens the sources panel on `source`. */
+  repoint(source: string): void {
+    this.asks.repoint(source);
+  }
+
+  /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */
+  notNumbers(source: string, columns: readonly ChartColumn[]): void {
+    this.asks.notNumbers(source, columns);
   }
 
   /** heard gives what chart `id` last heard, for its window to draw. */
