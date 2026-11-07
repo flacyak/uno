@@ -18,7 +18,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow, Rectangle } from "electron";
 
 import { ask } from "./ask.ts";
-import { through } from "./driven.ts";
+import { through, throughAsync } from "./driven.ts";
 
 /**
  * Milliseconds between frame captures. Faster than the 12fps the GIF is
@@ -222,6 +222,39 @@ const WHEEL = {
 const WHEEL_TURNS = 30;
 const WHEEL_TURN_PX = 48;
 const WHEEL_TURN_MS = 60;
+
+/**
+ * The table story's beats: a chart window given the keys by a click on its
+ * head, t pressed for the table of its points, the wheel turned down the
+ * table, and t pressed again for the points.
+ */
+const TABLE = {
+  click: 500,
+  press: 1_500,
+  turn: 2_700,
+  back: 5_000,
+  end: 6_300,
+};
+
+/**
+ * The tip story's beats: the pointer brought over a chart window's first
+ * bar, glided down its rows, a click on the last for the plot to take the
+ * keys, Home for the first row, Right down the rows, and End for the last.
+ */
+const TIP = {
+  point: 500,
+  glide: 1_000,
+  click: 2_800,
+  home: 3_400,
+  right: 3_900,
+  end: 5_400,
+  stop: 6_400,
+};
+
+/** How many moves the tip story's glide takes, how long each lasts, and how many Rights it presses. */
+const GLIDE_MOVES = 24;
+const GLIDE_MOVE_MS = 50;
+const RIGHTS = 3;
 
 /** A stand-in for the pointer, as a capture leaves the real one out. */
 const POINTER =
@@ -690,6 +723,8 @@ const STORIES: Record<string, Story> = {
   refused: { end: REFUSED.end, script: playRefused },
   moves: { end: MOVES.end, script: playMoves },
   wheel: { end: WHEEL.end, script: playWheel },
+  table: { end: TABLE.end, script: playTable },
+  tip: { end: TIP.stop, script: playTip },
 };
 
 /**
@@ -777,14 +812,70 @@ async function playWheel(win: BrowserWindow, at: Clock): Promise<void> {
 }
 
 /**
+ * playTable performs the table story: the last chart window, a scatter's,
+ * given the keys by a click on its head, t for the table of its points, the
+ * wheel turned down the table, and t again for the points.
+ */
+async function playTable(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  await at(TABLE.click);
+  const head = await hover(win, ".chart:last-child .chart-title");
+  pointTo(win, head.x, head.y);
+  await click(win, ".chart:last-child .chart-title");
+  await at(TABLE.press);
+  press(win, "t");
+  await at(TABLE.turn);
+  const { x, y } = await hover(win, ".chart:last-child .chart-plot");
+  pointTo(win, x, y);
+  await turnWheel(win, x, y, WHEEL_TURN_PX);
+  await at(TABLE.back);
+  press(win, "t");
+  await at(TABLE.end);
+}
+
+/**
+ * playTip performs the tip story: the pointer over the last chart window's
+ * first bar, glided down its rows, a click on the last for the plot to take
+ * the keys, Home, Right down the rows, and End.
+ */
+async function playTip(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  await at(TIP.point);
+  const rows = ".chart:last-child .chart-bar-row";
+  const from = await middle(win, `${rows}:first-child`);
+  const to = await middle(win, `${rows}:last-child`);
+  pointTo(win, from.x, from.y);
+  await at(TIP.glide);
+  for (let i = 1; i <= GLIDE_MOVES; i++) {
+    const eased = 1 - (1 - i / GLIDE_MOVES) ** 3;
+    pointTo(win, from.x, Math.round(from.y + (to.y - from.y) * eased));
+    await sleep(GLIDE_MOVE_MS);
+  }
+  await at(TIP.click);
+  await click(win, `${rows}:last-child`);
+  await at(TIP.home);
+  press(win, "Home");
+  await at(TIP.right);
+  await presses(win, "Right", RIGHTS, ARROW_GAP * 2);
+  await at(TIP.end);
+  press(win, "End");
+  await at(TIP.stop);
+}
+
+/**
  * turnWheel turns the wheel over (`x`, `y`) WHEEL_TURNS times, `down` px down
- * the page each time. Electron counts a turn down as a negative delta.
+ * the page each time. Electron counts a turn down as a negative delta. The
+ * scroll a turn causes lands after the page answers it, so the ignore stays
+ * lifted until the last turn is over, as driven.ts says, and what a window's
+ * own scrollable takes from the wheel scrolls too.
  */
 async function turnWheel(win: BrowserWindow, x: number, y: number, down: number): Promise<void> {
-  for (let i = 0; i < WHEEL_TURNS; i++) {
-    through(win, () => win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down }));
-    await sleep(WHEEL_TURN_MS);
-  }
+  await throughAsync(win, async () => {
+    for (let i = 0; i < WHEEL_TURNS; i++) {
+      win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down });
+      await sleep(WHEEL_TURN_MS);
+    }
+  });
 }
 
 /** standIn adds the pointer's stand-in to the page, hidden until pointTo moves it. */
@@ -928,6 +1019,13 @@ async function click(
  * returns that point.
  */
 async function hover(win: BrowserWindow, selector: string): Promise<{ x: number; y: number }> {
+  const at = await middle(win, selector);
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", ...at }));
+  return at;
+}
+
+/** middle gives the centre of the element matching selector, in the page's px. */
+async function middle(win: BrowserWindow, selector: string): Promise<{ x: number; y: number }> {
   // The page returns null for a missing element, and the throw happens here
   // with the selector: an error thrown in the page arrives as a bare "Script
   // failed to execute".
@@ -940,8 +1038,6 @@ async function hover(win: BrowserWindow, selector: string): Promise<{ x: number;
     })()
   `)) as { x: number; y: number } | null;
   if (at === null) throw new Error(`nothing to point at ${selector}`);
-  const { x, y } = at;
-  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
   return at;
 }
 

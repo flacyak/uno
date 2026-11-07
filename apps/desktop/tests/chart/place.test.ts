@@ -29,9 +29,19 @@ import {
   tucks,
 } from "@renderer/chart/place";
 import type { Rect, Room } from "@renderer/chart/place";
+import type { ColumnSpan } from "@renderer/grid/view";
 import type { Press } from "@renderer/keys";
 
 const ROOM: Room = { w: 1200, h: 800 };
+
+/** A grid column's width at zoom 1, as the sales export's channel draws. */
+const COLUMN_WIDTH = 146;
+
+/** A column `left` px into the room. */
+const columnAt = (left: number): ColumnSpan => ({ left, right: left + COLUMN_WIDTH });
+
+/** How far a column across the room's middle reaches past it on its shorter side. */
+const PAST_MIDDLE = 2;
 
 /** A room of exactly one window of a new chart's size. */
 const SNUG: Room = { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
@@ -148,23 +158,29 @@ test("a tucked window is its head, at the room's width, stacked in list order", 
 });
 
 test("a new window goes at the top of the half away from the selected column", () => {
-  const right = placed(fresh(0, 0, ROOM), ROOM);
+  const right = placed(fresh(0, columnAt(0), ROOM), ROOM);
   expect([right.y, right.width, right.height]).toEqual([0, DEFAULT_WIDTH, DEFAULT_HEIGHT]);
   expect(right.x).toBeGreaterThanOrEqual(ROOM.w / 2);
-  expect(fresh(0, ROOM.w / 2 - 1, ROOM).x).toBe(1);
+  expect(fresh(0, columnAt(ROOM.w / 2 - COLUMN_WIDTH / 2 - 1), ROOM).x).toBe(1);
 
-  const left = placed(fresh(0, ROOM.w / 2, ROOM), ROOM);
+  const left = placed(fresh(0, columnAt(ROOM.w / 2), ROOM), ROOM);
   expect(left.x + left.width).toBeLessThanOrEqual(ROOM.w / 2);
 });
 
+test("a column across the middle sends a new window to the half it has less of", () => {
+  const half = ROOM.w / 2;
+  expect(fresh(0, columnAt(half - PAST_MIDDLE), ROOM).x).toBe(0);
+  expect(fresh(0, columnAt(half - COLUMN_WIDTH + PAST_MIDDLE), ROOM).x).toBe(1);
+});
+
 test("each chart already there moves a new one down, as far as the room goes", () => {
-  expect(placed(fresh(3, 0, ROOM), ROOM).y).toBeCloseTo(3 * CASCADE_PX);
+  expect(placed(fresh(3, columnAt(0), ROOM), ROOM).y).toBeCloseTo(3 * CASCADE_PX);
   const room = { w: ROOM.w, h: DEFAULT_HEIGHT + CASCADE_PX };
-  expect(placed(fresh(3, 0, room), room).y).toBe(CASCADE_PX);
+  expect(placed(fresh(3, columnAt(0), room), room).y).toBe(CASCADE_PX);
 });
 
 test("a new window in a room of 0 px keeps its size at the top, as a record takes it", () => {
-  const place = fresh(3, 0, { w: 0, h: 0 });
+  const place = fresh(3, columnAt(0), { w: 0, h: 0 });
   expect([place.y, place.width, place.height]).toEqual([0, DEFAULT_WIDTH, DEFAULT_HEIGHT]);
   const plot = { t: "bars", by: { col: 0, header: "region" } };
   const chart = { id: "c1", source: "s1", plot, title: "", place, refresh: 0 };
@@ -257,7 +273,7 @@ test.each<[string, Room]>([
   const boxes = [
     rect,
     placeOf(rect, room, PLACE),
-    fresh(3, 0, room),
+    fresh(3, columnAt(0), room),
     tucked(3, HEAD, BORDER, room),
   ];
   expect(boxes.flatMap((box) => Object.values(box)).every(Number.isFinite)).toBe(true);
