@@ -197,6 +197,39 @@
   background: var(--accent);
 }
 
+/* What the plot says in place of a chart it cannot draw, from caption.ts: in
+ * the window's size and the values' ink, in the plot's middle, as far from its
+ * sides as the head's words, and on as many lines as that takes. Its action's
+ * button stands the head's gap under the words, as the forms' buttons
+ * (formula.css). */
+.chart-state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 10px;
+  color: var(--ink-2);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.chart-state button {
+  padding: 3px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.chart-state button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.
  * bars.ts sets a bar's thickness, the window's ground before the next, the
  * inset and the gap before a value. A label takes what it needs, up to
@@ -500,14 +533,72 @@
   color: var(--ink-3);
 }
 
-/* What the caption says of the plot takes the room before the grip, and ends in
- * an ellipsis where a window is too narrow for it. */
+/* What the caption says of the plot takes the room before the grip. Where a
+ * window is too narrow for it, the words after the button give way first, as
+ * they take only the room the rest leaves, down to none, and then the words
+ * before it, each ending in an ellipsis while any of it shows; the button and
+ * the · before it stay whole. `--find-reach` is how far the button's box
+ * stands past its words, its padding and its border; the padding keeps that
+ * box inside the caption's where no words follow it, off the grip's box,
+ * though the grip's reach still stands over its last `--grip-reach` there.
+ * The spaces around a · are kept, as each stands at an end of its span. */
 .chart-said {
+  --find-reach: 5px;
+  display: flex;
   flex: 1 1 auto;
+  align-items: baseline;
+  min-width: 0;
+  padding-right: var(--find-reach);
+  white-space: pre;
+}
+
+.chart-said-before,
+.chart-said-after {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.chart-said-before {
+  flex: 0 1 auto;
+}
+
+.chart-said-after {
+  flex: 1 1 0;
+}
+
+.chart-said-dot,
+.chart-find {
+  flex: none;
+}
+
+/* The count of the cells that were not numbers is the button that finds them.
+ * It wears the caption's words where they would stand, its margins taking back
+ * its padding and its border, and shows as a button under the pointer, as the
+ * status bar's toggles do. It stands over the foot edge's zone, as the grip
+ * does. */
+.chart-find {
+  position: relative;
+  z-index: 1;
+  margin: 0 calc(-1 * var(--find-reach));
+  padding: 0 4px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chart-find:hover {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+
+.chart-find:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 /* The scrollbar thumb's two colours (grid.css). It stands over the edges, and

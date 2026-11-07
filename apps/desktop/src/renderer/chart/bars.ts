@@ -62,6 +62,15 @@ function room(side: ReadonlyArray<{ tip: string }>): string {
 }
 
 /**
+ * named gives a bar's label: its value, the file's text, or the app's word for
+ * the rows whose cell is blank, which a tally counts as a value of their own.
+ */
+function named(value: string): HTMLElement {
+  if (value === "") return el("span", "chart-bar-label", m.chart_blank_value());
+  return el("bdi", "chart-bar-label from-file", value);
+}
+
+/**
  * bars draws `groups` as rows or sums per value, as `plot` measures them, in a
  * plot `height` px high. A line of what is left out takes a bar's row.
  */
@@ -97,7 +106,7 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
     track.classList.toggle("below", size < 0);
     track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(size) / span}`);
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
-    box.append(el("bdi", "chart-bar-label from-file", label), track);
+    box.append(named(label), track);
   }
 
   const left = all.slice(fit);

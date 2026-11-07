@@ -12,7 +12,9 @@ import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import type { Stage } from "@renderer/chart/window";
+import type { Heard } from "@renderer/charts";
 import { BARS } from "./charted.ts";
+import { frame } from "./smoke/dom-page.ts";
 
 /** The columns the made titles below name. */
 const REGION = { col: 1, header: "region" };
@@ -35,6 +37,8 @@ const NO_LAYER: Stage = {
   leave: () => undefined,
   wheelBy: () => undefined,
   heard: () => undefined,
+  repoint: () => undefined,
+  notNumbers: () => undefined,
 };
 
 /** A chart's window, showing `chart` under `source`. */
@@ -167,4 +171,19 @@ test("the head, the track and the caption are drawn, with a grip that says nothi
     "chart-edge chart-edge-foot",
   ]);
   expect(box.querySelector(".chart-caption .chart-grip")?.getAttribute("aria-hidden")).toBe("true");
+});
+
+test("a repaint that takes what held the keys out of the plot gives them to the window", async () => {
+  const missing: Heard = { state: "missing", name: SOURCE, latest: undefined, complete: undefined };
+  const made = new ChartWindow(BARS, { ...NO_LAYER, heard: () => missing });
+  made.show(BARS, undefined);
+  document.body.append(made.box);
+  await frame();
+  const repoint = made.box.querySelector<HTMLButtonElement>(".chart-state button")!;
+  repoint.focus();
+  expect(document.activeElement).toBe(repoint);
+  made.redraw();
+  await frame();
+  expect(made.box.querySelector(".chart-state button")).not.toBe(repoint);
+  expect(document.activeElement).toBe(made.box);
 });
