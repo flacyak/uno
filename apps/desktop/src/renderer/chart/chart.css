@@ -323,15 +323,35 @@
   fill-opacity: var(--point-opacity);
 }
 
-/* A forced palette would take the marks' colour away, so they wear the text's. */
+/* A pie's slice, from pie.ts, wears the `--key` it sets. Two slices stand
+ * apart by 1 px of the page's ground, whatever the size of the pie. */
+.chart-slice {
+  fill: var(--key);
+}
+
+.chart-slice-gap {
+  fill: none;
+  stroke: var(--paper);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* A forced palette would take the marks' colour away, so they wear the text's,
+ * and a pie's slices stand apart by the page's. */
 @media (forced-colors: active) {
   .chart-bar {
     background: CanvasText;
     forced-color-adjust: none;
   }
 
-  .chart-point {
+  .chart-point,
+  .chart-slice {
     fill: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .chart-slice-gap {
+    stroke: Canvas;
     forced-color-adjust: none;
   }
 }
