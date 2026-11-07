@@ -3,14 +3,14 @@
  * on the workspace opens the chart form on the selected column, and Enter makes
  * bars of it, which draw from the real engine in a window that takes the keys.
  * Another insert keeps the windows there, and adds one window however many
- * Enters it takes.
+ * Enters it takes. A pie and a scatter chosen in the form draw too.
  *
  * @vitest-environment happy-dom
  */
 
 import { beforeAll, expect, test } from "vite-plus/test";
 
-import { ROWS, counted } from "@main/smoke/fixture";
+import { REGION, ROWS, UNITS, counted } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { FIRST_ROWS_MS, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, frame, until } from "./smoke/dom-page.ts";
@@ -68,4 +68,33 @@ test("another insert keeps the window there, and two Enters add one window", asy
   expect(windows.length).toBe(2);
   expect(windows[0]).toBe(first);
   expect(document.activeElement).toBe(windows[1]);
+});
+
+test("the form makes a pie of region and a scatter of units, which draw from the engine", async () => {
+  const kind = (t: string): HTMLSelectElement => {
+    const chosen = document.querySelector<HTMLSelectElement>('.chart-form select[name="kind"]')!;
+    chosen.value = t;
+    chosen.dispatchEvent(new Event("change"));
+    return chosen;
+  };
+  await openForm();
+  await enter(kind("pie"));
+  const shares = m.chart_title_share_of_rows({ by: "region" });
+  expect(document.querySelector("#status-msg")!.textContent).toBe(
+    m.chart_inserted({ title: shares }),
+  );
+  const slices = (): number => document.querySelectorAll(".chart-pie .chart-slice").length;
+  expect(await until(page, () => slices() === REGIONS.length)).toBe(true);
+
+  // The window has the keys, and Escape gives them back to the grid.
+  await page.press("Escape");
+  for (let col = REGION; col < UNITS; col++) await page.press("ArrowRight");
+  await openForm();
+  await enter(kind("scatter"));
+  const against = m.chart_title_against({ x: "units", y: "revenue" });
+  expect(document.querySelector("#status-msg")!.textContent).toBe(
+    m.chart_inserted({ title: against }),
+  );
+  const points = (): number => document.querySelectorAll(".chart-scatter .chart-point").length;
+  expect(await until(page, () => points() > 0)).toBe(true);
 });
