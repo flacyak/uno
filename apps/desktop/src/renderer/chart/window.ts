@@ -3,7 +3,8 @@
  * the chart shows, a round × of the window's own kind, and a caption that ends
  * in a grip. The layer stands it in the room and says which chart it shows,
  * and the head's edit button opens the chart form on it, as Enter, F2 and a
- * double-click on the head do. The × and Delete ask to remove the chart.
+ * double-click on the head do. The × and Delete ask to remove the chart, and
+ * Ctrl+Z says it undoes edits in the grid, and undoes none.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
  * resizes it. It follows the pointer alone until the drop, which stores where
@@ -89,6 +90,9 @@ const TABLE_KEY = "t";
 /** The keys that open the chart form on a window's chart, as its edit button does. */
 const EDIT_KEYS: ReadonlySet<string> = new Set(["Enter", "F2"]);
 
+/** The letter that undoes an edit in the grid with Ctrl or Cmd, which a window keeps from it. */
+const UNDO_KEY = "z";
+
 /** The key that asks to remove a window's chart, as its × does. */
 const DELETE_KEY = "Delete";
 
@@ -123,6 +127,8 @@ export interface Stage {
   edit(id: string, place: MenuPlace): void;
   /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
   remove(id: string, title: string): void;
+  /** Writes `text` on the status line. */
+  say(text: string): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -166,6 +172,11 @@ export function madeTitle(plot: Plot): string {
 function numbered(plot: Plot): ChartColumn[] {
   if (plot.t === "scatter") return [plot.x, plot.y];
   return plot.sum === undefined ? [] : [plot.sum];
+}
+
+/** undoKey says whether `press` is Ctrl+Z, or Cmd+Z, which undoes an edit in the grid. */
+function undoKey({ key, ctrl, alt, meta, shift }: Press): boolean {
+  return (ctrl || meta) && !alt && !shift && key.toLowerCase() === UNDO_KEY;
 }
 
 /** tableKey says whether `press` is t alone, pressed once. */
@@ -625,9 +636,10 @@ export class ChartWindow {
   }
 
   /**
-   * key answers Escape, t, Enter, F2, Delete and the arrows, and leaves any
-   * other key to the shell. An arrow in the plot steps the cursor through its
-   * marks, and one in the table scrolls it, as each has the keys then.
+   * key answers Escape, t, Enter, F2, Delete, Ctrl+Z and the arrows, and
+   * leaves any other key to the shell. An arrow in the plot steps the cursor
+   * through its marks, and one in the table scrolls it, as each has the keys
+   * then.
    */
   private key(e: KeyboardEvent): void {
     const press = pressOf(e);
@@ -635,6 +647,7 @@ export class ChartWindow {
     else if (tableKey(press)) this.flip();
     else if (edits(press, e.target)) this.change();
     else if (deleteKey(press)) this.unchart();
+    else if (undoKey(press)) this.stage.say(m.chart_undo_hint());
     else if (!this.arrow(press, e.target)) return;
     e.preventDefault();
     e.stopPropagation();

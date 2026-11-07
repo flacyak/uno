@@ -448,6 +448,7 @@
   "chart_role": "chart",
   "chart_remove_aria": "Remove chart",
   "chart_remove_armed": "× or Delete again removes the chart {title}",
+  "chart_undo_hint": "Ctrl+Z undoes edits in the grid · Esc goes back to it",
   "chart_edit": "Edit chart",
   "chart_title_rows": "Rows per {by}",
   "chart_title_sum": "Sum of {sum} per {by}",

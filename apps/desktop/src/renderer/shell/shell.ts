@@ -938,6 +938,7 @@ export class Shell {
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
           edit: (id, place) => void this.editChart(id, place),
           remove: (id, title) => void this.unchart(id, title),
+          say: (text) => this.say(text),
         });
         return this.layer;
       },
