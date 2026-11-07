@@ -12,10 +12,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
 
+import { Refusal } from "@engine";
 import { REGION, REP } from "@main/smoke/fixture";
 import type { Provider } from "@plugin";
 import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
+import { message } from "@renderer/shell/util";
 import { diskProvider } from "@store/node";
 import { BARS, SALES, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, bootShell } from "./smoke/dom-harness.ts";
@@ -95,4 +97,17 @@ test("a new title shows at once, and the tally the engine sends again reads no b
   expect(head()).toBe(`${SALES} · Who sold`);
   expect(await until(page, () => heard.mock.calls.length > 0)).toBe(true);
   expect([reads, labels()]).toStrictEqual([before, REPS.join()]);
+});
+
+test("a change refused after Esc closed its form is said on the status line", async () => {
+  let refuse: (err: Refusal) => void = () => {};
+  const refusing = new Promise<void>((_, reject) => (refuse = reject));
+  vi.spyOn(shell.charts!, "change").mockReturnValueOnce(refusing);
+  const by = await edit();
+  by.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  form()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  const refused = new Refusal({ t: "no-such-chart", id: "gone" });
+  refuse(refused);
+  const said = (): string | null => document.querySelector("#status-msg")!.textContent;
+  expect(await until(page, () => said() === message(refused))).toBe(true);
 });

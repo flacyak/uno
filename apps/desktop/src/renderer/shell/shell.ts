@@ -625,12 +625,26 @@ export class Shell {
     this.closePopups();
     this.chartForm = new ChartForm(place, w.sources, tab, opening, {
       send: (source, plot, title) =>
-        this.drawn(w.charts.change(id, { source: source.id, plot, title })),
+        this.told(w, this.drawn(w.charts.change(id, { source: source.id, plot, title }))),
       closed: () => {
         this.chartForm = undefined;
         this.layer?.focus(id);
       },
     });
+  }
+
+  /**
+   * told waits on what the chart form sent through `w`, and says a refusal on
+   * the status line once the form that sent it has closed, as its note is gone.
+   */
+  private async told(w: Workspace, sent: Promise<void>): Promise<void> {
+    const sender = this.chartForm;
+    try {
+      await sent;
+    } catch (err) {
+      if (this.chartForm !== sender && this.workspace === w) this.say(message(err), true);
+      throw err;
+    }
   }
 
   /**
