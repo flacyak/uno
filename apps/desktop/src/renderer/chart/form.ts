@@ -22,11 +22,13 @@ import type { MenuPlace } from "@renderer/shell/menu";
 import { el, message, option } from "@renderer/shell/util";
 import { madeTitle } from "./window.ts";
 
-/** A source the form charts, as a tab has it: its id, its name and its columns. */
+/** A source the form charts, as a tab has it: its id, its name, its columns,
+ * and whether its file is missing. */
 export interface ChartSource {
   id: string;
   name: string;
   band: { columns: ReadonlyArray<Pick<ColumnInfo, "header" | "kind" | "flagged">> };
+  missing: boolean;
 }
 
 /** What the form asks of the shell. */
@@ -78,6 +80,8 @@ export class ChartForm {
     for (const [i, s] of sources.entries()) {
       const made = this.from.appendChild(option(s.name, String(i)));
       made.className = "from-file";
+      // A source whose file is missing has no rows to chart.
+      made.disabled = s.missing;
     }
     this.from.value = String(sources.indexOf(active));
     this.from.addEventListener("change", () => this.choose());
