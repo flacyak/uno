@@ -33,6 +33,12 @@ import { el } from "@renderer/shell/util";
 import { columnLabel, unnamed } from "./rows.ts";
 import type { Cell, Rows } from "./rows.ts";
 
+/** Where a column stands across a box, by its edges, in px. */
+export interface ColumnSpan {
+  left: number;
+  right: number;
+}
+
 export class View {
   /** The rows being drawn, or undefined. */
   source: Rows | undefined;
@@ -74,7 +80,7 @@ export class View {
     /** Called after every layout. */
     private readonly laidOut: () => void,
   ) {
-    this.scroller = el("div", "grid-scroll");
+    this.scroller = el("div", "grid-scroll themed-bar");
     this.sizer = el("div", "grid-sizer");
     this.table = el("table");
     this.table.className = "grid";
@@ -300,6 +306,13 @@ export class View {
     const col = Array.prototype.indexOf.call(tr.children, td) - 1;
     const row = this.first + Array.prototype.indexOf.call(this.body.children, tr);
     return { row, col };
+  }
+
+  /** Gives where column `col` stands across the window, from its header
+   * cell, which is there for every row, drawn or pending. */
+  columnSpan(col: number): ColumnSpan {
+    const cell = this.head.firstElementChild?.children[col + 1]?.getBoundingClientRect();
+    return { left: cell?.left ?? 0, right: cell?.right ?? 0 };
   }
 
   /** Scrolls the least amount needed to show the whole cell, vertically and
