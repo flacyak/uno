@@ -13,7 +13,8 @@ import { afterEach, expect, test } from "vite-plus/test";
 import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { PIE_SLICES_AT_MOST, pie, slices } from "@renderer/chart/pie";
+import { BARS_INSET } from "@renderer/chart/bars";
+import { LABEL_GAP, PIE_SLICES_AT_MOST, fitLabels, pie, slices } from "@renderer/chart/pie";
 import type { Slice } from "@renderer/chart/pie";
 import { percent } from "@renderer/locale";
 
@@ -46,6 +47,32 @@ const paths = (box: HTMLElement, selector = ".chart-slice"): Array<string | null
 /** `box`'s labels, in the order of their slices. */
 const labels = (box: HTMLElement): HTMLElement[] =>
   Array.from(box.querySelectorAll<HTMLElement>(".chart-slice-label"));
+
+/** A plot here, a label's width and line in it, and pie.ts's FIT_SLACK, in px. */
+const PLOT = new DOMRect(0, 0, 400, 200);
+const WIDTH = 60;
+const LINE = 14;
+const SLACK = 0.5;
+
+/** Labels along a line through the plot's middle, from `lefts`, and down a column, from `tops`. */
+const along = (...lefts: number[]): DOMRect[] =>
+  lefts.map((x) => new DOMRect(x, PLOT.height / 2, WIDTH, LINE));
+const down = (...tops: number[]): DOMRect[] =>
+  tops.map((y) => new DOMRect(PLOT.width / 2, y, WIDTH, LINE));
+
+/** A pie of a slice per rect, drawn in PLOT with its labels laid out at `rects`, then fitted. */
+function fitted(rects: DOMRect[]): HTMLElement {
+  const box = pie(ROWS, tallyOf(...rects.map((_, i) => sent(`v${i + 1}`, 1))));
+  Object.defineProperty(box, "getBoundingClientRect", { value: () => PLOT });
+  for (const [i, shown] of labels(box).entries()) {
+    Object.defineProperty(shown, "getBoundingClientRect", { value: () => rects[i] });
+  }
+  fitLabels(box);
+  return box;
+}
+
+/** Whether fitLabels marked `box` for its list. */
+const listed = (box: HTMLElement): boolean => box.classList.contains("listed");
 
 afterEach(() => {
   void setLocale(baseLocale, { reload: false });
@@ -139,4 +166,26 @@ test("a label holds where its slice's middle stands on the ring, a lone slice's 
   const [x, y] = ["--x", "--y"].map((at) => drawn.map((label) => label.style.getPropertyValue(at)));
   expect(x).toStrictEqual(["1", "-0.707107", "-0.707107", "0"]);
   expect(y).toStrictEqual(["0", "0.707107", "-0.707107", "1"]);
+});
+
+test("labels LABEL_GAP apart inside the plot's inset fit, along a line or down a column, give or take the slack", () => {
+  const right = PLOT.width - BARS_INSET - WIDTH;
+  const step = WIDTH + LABEL_GAP - SLACK;
+  expect(listed(fitted(along(BARS_INSET, BARS_INSET + step, right)))).toBe(false);
+  const foot = PLOT.height - BARS_INSET - LINE;
+  expect(listed(fitted(down(BARS_INSET, BARS_INSET + LINE + LABEL_GAP, foot)))).toBe(false);
+});
+
+test("labels under LABEL_GAP apart, or a px into the plot's inset on any side, mark the pie listed", () => {
+  expect(listed(fitted(along(BARS_INSET, BARS_INSET + WIDTH + LABEL_GAP - 1)))).toBe(true);
+  expect(listed(fitted(down(BARS_INSET, BARS_INSET + LINE + LABEL_GAP - 1)))).toBe(true);
+  const sides = [BARS_INSET - 1, PLOT.width - BARS_INSET - WIDTH + 1].map((at) => along(at));
+  const ends = [BARS_INSET - 1, PLOT.height - BARS_INSET - LINE + 1].map((at) => down(at));
+  expect([...sides, ...ends].every((rects) => listed(fitted(rects)))).toBe(true);
+});
+
+test("a plot not laid out yet keeps its labels, to fit them once it is", () => {
+  const box = pie(ROWS, HALVED);
+  fitLabels(box);
+  expect(listed(box)).toBe(false);
 });
