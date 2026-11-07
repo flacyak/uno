@@ -9,6 +9,7 @@
 import type { ChartPlace } from "@document";
 
 import { clamp } from "@renderer/grid/metrics";
+import type { ColumnSpan } from "@renderer/grid/view";
 import type { Press } from "@renderer/keys";
 
 /** The narrowest a window draws: a title beside the head's four 20 px buttons. */
@@ -142,13 +143,14 @@ export function thin(room: Room): boolean {
 
 /**
  * fresh gives a new window's place when `n` charts are already there: at the
- * top of the half of the room away from the column selected at `selectedLeft`,
- * flush to that half's outer edge. A room under twice the window's width has
- * it cross the middle.
+ * top of the half of the room away from the `selected` column, the half its
+ * middle is not in, flush to that half's outer edge. A room under twice the
+ * window's width has it cross the middle.
  */
-export function fresh(n: number, selectedLeft: number, room: Room): ChartPlace {
+export function fresh(n: number, selected: ColumnSpan, room: Room): ChartPlace {
+  const middle = (selected.left + selected.right) / 2;
   return {
-    x: selectedLeft < room.w / 2 ? FAR_EDGE : NEAR_EDGE,
+    x: middle < room.w / 2 ? FAR_EDGE : NEAR_EDGE,
     y: share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE),
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,
