@@ -144,6 +144,15 @@ test("a value's label is the file's text, marked as the file's, and never markup
   expect(label?.querySelector("img")).toBeNull();
 });
 
+test("the bar of the rows with no value is labelled blank, the app's word in its language", () => {
+  const unvalued = tallyOf({ value: "", rows: 3, sum: 0 });
+  const [label] = all(bars(ROWS, unvalued, TALL), ".chart-bar-label");
+  expect(label?.textContent).toBe(m.chart_blank_value());
+  expect(label?.classList.contains("from-file")).toBe(false);
+  void setLocale("es", { reload: false });
+  expect(labels(bars(ROWS, unvalued, TALL))).toStrictEqual(["(en blanco)"]);
+});
+
 test("a plot draws the bars it holds, and the line of the rest takes a bar's row", () => {
   const every = bars(ROWS, FIVE, holding(FIVE.groups.length));
   expect([labels(every).length, lines(every)]).toStrictEqual([FIVE.groups.length, []]);

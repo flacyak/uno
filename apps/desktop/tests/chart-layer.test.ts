@@ -33,7 +33,7 @@ import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard, SourceState } from "@renderer/charts";
 import { num } from "@renderer/locale";
-import { BARS, MOVED, PIE, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
+import { BARS, MOVED, PIE, SCATTER, SHARES, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
 
@@ -134,6 +134,12 @@ const leave = vi.fn();
 /** What the layer calls to scroll the sheet. */
 const wheelBy = vi.fn();
 
+/** What the layer calls to open the sources panel on a window's source. */
+const repoint = vi.fn();
+
+/** What the layer calls to find the cells a window's tally could not read as numbers. */
+const notNumbers = vi.fn();
+
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
@@ -232,7 +238,7 @@ function pointsHeard(plotted = SENT.x.length): Heard {
 /** A layer over a model holding `charts`, in ROOM, and that model. */
 function shown(...charts: Chart[]): { layer: ChartLayer; model: Model } {
   const model = modelOf(...charts);
-  const layer = new ChartLayer(root(), content(), leave, wheelBy);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint, notNumbers);
   roomIs(ROOM);
   layer.show(model);
   return { layer, model };
@@ -302,6 +308,8 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", HeldObserver);
   leave.mockClear();
   wheelBy.mockClear();
+  repoint.mockClear();
+  notNumbers.mockClear();
 });
 
 afterEach(() => {
@@ -310,7 +318,7 @@ afterEach(() => {
 });
 
 test("the layer stays hidden until a workspace shows, and each chart has a window at its place", () => {
-  const layer = new ChartLayer(root(), content(), leave, wheelBy);
+  const layer = new ChartLayer(root(), content(), leave, wheelBy, repoint, notNumbers);
   roomIs(ROOM);
   expect(root().hidden).toBe(true);
 
@@ -489,6 +497,7 @@ test("a track under the head shows how far a chart has read, until its tally com
   model.heard = () => ({ ...FINE, latest: undefined, complete: undefined });
   await frame();
   expect([track().hidden, read()]).toStrictEqual([false, "0"]);
+  expect(part(".chart-state").textContent).toBe(m.chart_reading({ name: FINE.name }));
   model.heard = () => readOf(2, 5);
   layer.tallied(FLUSH.id);
   await frame();
@@ -504,6 +513,35 @@ test("a track under the head shows how far a chart has read, until its tally com
   layer.tallied(FLUSH.id);
   await frame();
   expect([track().hidden, said()]).toStrictEqual([true, m.rows_count({ count: 2 })]);
+});
+
+test("a window over a missing source says so and offers Re-point, which asks for the panel on its source", async () => {
+  const { layer, model } = shown(FLUSH);
+  model.heard = () => ({ ...FINE, state: "missing", latest: undefined, complete: undefined });
+  await frame();
+  const words = m.chart_source_missing({ name: FINE.name });
+  expect(part(".chart-state").textContent).toBe(`${words}${m.action_repoint()}`);
+  expect(part(".chart-coverage").hidden).toBe(true);
+  part(".chart-state button").click();
+  expect(repoint).toHaveBeenCalledExactlyOnceWith(FLUSH.source);
+  void setLocale("es", { reload: false });
+  layer.relabel();
+  await frame();
+  expect(part(".chart-state button").textContent).toBe(m.action_repoint());
+  expect(part(".chart-state button").textContent).not.toBe("Re-point");
+});
+
+test("a window over a source waiting on its bucket offers to connect it", async () => {
+  const { model } = shown(FLUSH);
+  const bucket = "open-data";
+  const waiting = { ...FINE, state: "unconnected", bucket } as const;
+  model.heard = () => ({ ...waiting, latest: undefined, complete: undefined });
+  await frame();
+  expect(part(".chart-state bdi").textContent).toBe(m.chart_bucket_unconnected({ bucket }));
+  const connect = part(".chart-state button");
+  expect(connect.textContent).toBe(m.sources_connect_bucket({ bucket }));
+  connect.click();
+  expect(repoint).toHaveBeenCalledExactlyOnceWith(FLUSH.source);
 });
 
 test("a window draws its bars again in the frame its plot resizes", () => {
@@ -532,14 +570,19 @@ test("a window draws a pie's slices from what its chart heard", async () => {
   expect(document.querySelectorAll(".chart-pie .chart-slice")).toHaveLength(2);
 });
 
-test("a pie's caption says how it counts the values past those a tally keeps apart", async () => {
-  const { model } = shown(PIE);
+test("a pie's caption says how it counts the values past those a tally keeps apart, and the values at or below zero it leaves out", async () => {
+  // A pie of sums: a share of rows leaves no value at or below zero out.
+  const { model } = shown(SHARES);
   const { latest } = heardOf("North");
-  const tally = latest?.t === "groups" ? { ...latest, rest: { rows: 5, sum: 0 } } : undefined;
+  const groups = [{ value: "North", rows: 1, sum: 10 }];
+  const left = { rest: { rows: 5, sum: 0 }, below: { values: 2, rows: 2, sum: -8 } };
+  const sums = { plot: SHARES.plot, groups, ...left };
+  const tally = latest?.t === "groups" ? { ...latest, ...sums } : undefined;
   model.heard = () => ({ ...FINE, latest: tally, complete: tally });
   await frame();
   const past = m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) });
-  expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past}`);
+  const below = m.chart_pie_below_zero({ count: left.below.values });
+  expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past} · ${below}`);
 });
 
 test("a scatter's caption says how many of its points it draws while it samples, in the language chosen, and nothing once it draws none", async () => {
