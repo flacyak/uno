@@ -3,7 +3,8 @@
  * column whose values its bars or pie count the rows of, or sum a number column
  * over, or the two number columns a scatter sets against each other, and its
  * title. It opens on the active source, and another source keeps each column it
- * has a header for. Opened on a chart, it shows what the chart shows.
+ * has a header for. Opened on a chart, it shows what the chart shows, and its
+ * primary button is Apply.
  *
  * An empty title shows the one the chart makes, which follows the language.
  * The engine keeps the chart, and a refusal is shown in the form, which stays
@@ -35,8 +36,9 @@ export interface ChartSource {
 /** What the form asks of the shell. */
 export interface ChartAsks {
   /** Inserts a chart of `plot` over `source`, titled `title` or "" for the one
-   * it makes. Throws with a message when refused. */
-  insert(source: ChartSource, plot: Plot, title: string): Promise<void>;
+   * it makes, or changes the chart the form opened on to it. Throws with a
+   * message when refused. */
+  send(source: ChartSource, plot: Plot, title: string): Promise<void>;
   /** Called when the form closes. */
   closed(): void;
 }
@@ -85,14 +87,19 @@ export class ChartForm {
     /** The active source, which the form opens on. */
     active: ChartSource,
     /** What the form opens on. */
-    opening: Opening,
+    private readonly opening: Opening,
     private readonly asks: ChartAsks,
   ) {
     this.source = active;
-    const heading = m.chart_form_title_source({ source: active.name });
-    this.form = new PopForm("chart-form", m.chart_form_title(), heading, m.action_insert(), {
-      submit: () => void this.insert(),
-      // Enter on any field inserts, so the form makes a chart in one key.
+    const changes = opening.t === "change";
+    const label = changes ? m.chart_edit() : m.chart_form_title();
+    const heading = changes
+      ? m.chart_form_title_chart({ title: opening.chart.title || madeTitle(opening.chart.plot) })
+      : m.chart_form_title_source({ source: active.name });
+    const primary = changes ? m.action_apply() : m.action_insert();
+    this.form = new PopForm("chart-form", label, heading, primary, {
+      submit: () => void this.send(),
+      // Enter on any field sends what the form holds, so a chart is made or changed in one key.
       enters: (target) => !(target instanceof HTMLButtonElement),
       closed: () => asks.closed(),
     });
@@ -127,7 +134,7 @@ export class ChartForm {
       field(m.chart_form_title_field(), this.title),
     ];
     this.form.open(fields, place);
-    this.form.say(m.chart_form_hint(), false);
+    this.form.say(changes ? m.chart_form_hint_change() : m.chart_form_hint(), false);
     this.first().focus();
   }
 
@@ -136,13 +143,15 @@ export class ChartForm {
   }
 
   /** choose offers the columns of the source chosen, keeping each column
-   * chosen whose header it has, and names it in the title line. */
+   * chosen whose header it has, and names it in an insert's title line. */
   private choose(): void {
     const header = (select: HTMLSelectElement): string | undefined =>
       select.value === "" ? undefined : this.source.band.columns[Number(select.value)]?.header;
     const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(header);
     this.source = this.sources[Number(this.from.value)] ?? this.source;
-    this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
+    if (this.opening.t === "insert") {
+      this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
+    }
     this.offer(this.at(by), kept);
   }
 
@@ -233,12 +242,12 @@ export class ChartForm {
     this.title.placeholder = madeTitle(this.plot());
   }
 
-  /** insert sends the chart, unless one is in flight, and closes once the engine keeps it. */
-  private async insert(): Promise<void> {
+  /** send sends the chart, unless one is in flight, and closes once the engine keeps it. */
+  private async send(): Promise<void> {
     if (this.form.submit.disabled) return;
     this.form.submit.disabled = true;
     try {
-      await this.asks.insert(this.source, this.plot(), this.title.value.trim());
+      await this.asks.send(this.source, this.plot(), this.title.value.trim());
       this.close();
     } catch (err) {
       this.form.say(message(err), true);

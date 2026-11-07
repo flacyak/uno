@@ -580,7 +580,7 @@ export class Shell {
     let made: string | undefined;
     this.closePopups();
     this.chartForm = new ChartForm(place, w.sources, tab, opening, {
-      insert: async (source, plot, title) => {
+      send: async (source, plot, title) => {
         made = (await this.chart(w, source, { plot, title }, grid.columnSpan(col))).id;
         this.say(m.chart_inserted({ title: title === "" ? madeTitle(plot) : title }));
       },

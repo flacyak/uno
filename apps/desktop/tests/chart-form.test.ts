@@ -1,7 +1,7 @@
 /**
  * @fileoverview The chart form: what it opens on, what Enter inserts, and how
  * Esc, Tab and a refusal behave in it. Opened on a chart, it shows what the
- * chart shows.
+ * chart shows, and Apply sends what it holds.
  *
  * @vitest-environment happy-dom
  */
@@ -52,7 +52,7 @@ const TAKINGS = { ...SALES, id: "takings", band: { columns: [COLUMNS[REVENUE], C
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id): string =>
-  `insert ${source} ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
+  `send ${source} ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
 
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
@@ -69,8 +69,8 @@ function form(
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
   new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS], active, opening, {
-    insert: (source, plot, title) => {
-      asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
+    send: (source, plot, title) => {
+      asked.push(`send ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
     },
     closed: () => asked.push("closed"),
@@ -296,4 +296,19 @@ test("a chart's form opens on what it shows, over its source", () => {
   changing({ t: "scatter", x: revenue, y: units });
   expect(chosen("kind", "x", "y")).toStrictEqual(["scatter", String(REVENUE), String(UNITS)]);
   expect(document.activeElement).toBe(select("x"));
+});
+
+test("a chart's form is titled by the chart, and Apply sends what it holds", async () => {
+  const { asked, box } = changing(REGION_BARS, "Takings");
+  const heading = (): string | null => box.querySelector(".title")!.textContent;
+  expect(box.getAttribute("aria-label")).toBe(m.chart_edit());
+  expect(heading()).toBe(m.chart_form_title_chart({ title: "Takings" }));
+  expect(box.querySelector("button.primary")!.textContent).toBe(m.action_apply());
+  expect(box.querySelector(".note")!.textContent).toBe(m.chart_form_hint_change());
+  // Another source leaves the title line on the chart, and keeps region, second in it.
+  pick("source", "1");
+  expect(heading()).toBe(m.chart_form_title_chart({ title: "Takings" }));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "Takings", ADS.id), "closed"]);
 });
