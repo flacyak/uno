@@ -3,10 +3,14 @@
  * workspace opens it on the selected column, and it wears the formula form's
  * look in light and in dark, its controls in line with the formula form's.
  * Escape closes it with nothing inserted, so the chart layer still waits for
- * the first workspace with charts.
+ * the first workspace with charts. Ctrl+Shift+G and the View menu open it
+ * under the selected column's header, which comes back first if it was
+ * scrolled out of a zoomed window.
  */
 
 import { DEFAULT_THEME } from "@renderer/theme";
+import { pressing } from "./chart-moves.ts";
+import { DOUBLE_ZOOM, NARROW_WIDTH } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { RIGHT_CLICK } from "./sidebar.ts";
 
@@ -40,6 +44,27 @@ const FORMS = `
       buttons: [...form.querySelectorAll(".buttons button")].map((at) => [...gaps(at, ["right", "bottom", "height"]), ...style(at, inks)]),
     };
   };
+`;
+
+/** The chart form opened by its keys on the selected column, closed once
+ * measured, and `under`, the header cell's rules its border lies on. */
+const KEYED = `
+  if (!(await arrives(() => document.querySelector(".chart-form") !== null))) return "no chart form opened";
+  const form = document.querySelector(".chart-form");
+  const by = form.querySelector('select[name="by"]');
+  const cell = document.querySelector("thead tr").children[Number(by.value) + GUTTER];
+  const [box, head, chosen] = [form.getBoundingClientRect(), cell.getBoundingClientRect(), by.selectedOptions[0].textContent];
+  form.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  if (chosen !== text("#status-cell").split(" · ")[0]) return "the form opened on " + chosen;
+  const rule = (at, side) => parseFloat(getComputedStyle(at).getPropertyValue("border-" + side + "-width"));
+  const under = [head.left - rule(cell.previousElementSibling, "right"), head.bottom - rule(cell, "bottom")].map(Math.round);
+`;
+
+/** The chart form opened by its keys stands under the selected column's header. */
+const UNDER_HEAD = `
+  ${KEYED}
+  const at = [box.left, box.top].map(Math.round);
+  return at.join() === under.join() ? "" : "the form stands at " + at + ", not under the header at " + under;
 `;
 
 /** One check a mode: the formula form's look, then the chart form's, left open for the shot. */
@@ -91,5 +116,45 @@ export const CHART_FORM: Check[] = [
       if (document.querySelector(".chart") !== null) return "a chart was inserted";
       return document.querySelector("#charts").hidden ? "" : "the layer shows";
     `,
+  },
+  {
+    name: "Ctrl+Shift+G opens the chart form under the selected column's header",
+    input: { events: pressing("G", ["control", "shift"]), through: true },
+    script: UNDER_HEAD,
+  },
+  {
+    name: "the View menu's Insert chart… opens the chart form under the selected column's header",
+    pick: "CmdOrCtrl+Shift+G",
+    script: UNDER_HEAD,
+  },
+  {
+    name: "at 200% zoom, region's column scrolls out of view with region selected",
+    window: { zoom: DOUBLE_ZOOM },
+    script: `
+      if (!(await until(() => innerWidth < ${NARROW_WIDTH}))) return "the page is " + innerWidth + "px wide";
+      document.querySelectorAll("tbody tr")[2].children[GUTTER + REGION].click();
+      const sheet = document.querySelector(".grid-scroll");
+      sheet.scrollLeft = sheet.scrollWidth;
+      await frame();
+      const head = document.querySelector("thead tr").children[GUTTER + REGION].getBoundingClientRect();
+      return head.right <= sheet.getBoundingClientRect().left ? "" : "region's header stands at " + head.right;
+    `,
+  },
+  {
+    name: "Ctrl+Shift+G scrolls the selected column back and opens the chart form over it",
+    input: { events: pressing("G", ["control", "shift"]), through: true },
+    script: `
+      ${KEYED}
+      const sheet = document.querySelector(".grid-scroll").getBoundingClientRect();
+      if (head.left < sheet.left || head.right > sheet.right) return "the header stands at " + head.left + " to " + head.right;
+      // The zoomed page leaves the form too little room to stand at the header's left.
+      const over = box.left < head.right && head.left < box.right;
+      return over && Math.round(box.top) === under[1] ? "" : "the form stands at " + box.left + "," + box.top + ", away from " + under;
+    `,
+  },
+  {
+    name: "back at full zoom, the page is as wide as the run began",
+    window: {},
+    script: `return (await until(() => innerWidth > ${NARROW_WIDTH})) ? "" : "the page is " + innerWidth + "px wide";`,
   },
 ];
