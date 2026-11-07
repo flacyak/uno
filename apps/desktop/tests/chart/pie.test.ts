@@ -5,7 +5,8 @@
  * and a line of the page's ground parts it from the next slice round the ring.
  * A label past the ring by the middle of each arc gives its value and its share.
  * Labels that would meet or run into the inset give way to a list by the ring.
- * The caption says how Other takes the values past those a tally keeps apart.
+ * The caption says how Other takes the values past those a tally keeps apart,
+ * and counts the values at or below zero the pie leaves out.
  *
  * @vitest-environment happy-dom
  */
@@ -17,7 +18,15 @@ import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { BARS_INSET } from "@renderer/chart/bars";
-import { LABEL_GAP, PIE_SLICES_AT_MOST, fitLabels, past, pie, slices } from "@renderer/chart/pie";
+import {
+  LABEL_GAP,
+  PIE_SLICES_AT_MOST,
+  belowZero,
+  fitLabels,
+  past,
+  pie,
+  slices,
+} from "@renderer/chart/pie";
 import type { Slice } from "@renderer/chart/pie";
 import { num, percent } from "@renderer/locale";
 
@@ -161,6 +170,18 @@ test("a slice's label is its value as the file has it and its share, and Other's
   expect(other.querySelector(".from-file")).toBeNull();
 });
 
+test("the slice of the rows with no value is named blank in its label and the list, the app's word in its language", () => {
+  const box = pie(ROWS, tallyOf(sent("North", 2), sent("", 1)));
+  const names = [...box.querySelectorAll(".chart-slice-name")];
+  const blank = m.chart_blank_value();
+  expect(names.map((name) => name.textContent)).toStrictEqual(["North", blank, "North", blank]);
+  const fromFile = names.map((name) => name.classList.contains("from-file"));
+  expect(fromFile).toStrictEqual([true, false, true, false]);
+  void setLocale("pt-BR", { reload: false });
+  const [alone] = labels(pie(ROWS, tallyOf(sent("", 1))));
+  expect(alone?.textContent).toBe("(em branco) 100%");
+});
+
 test("a label holds where its slice's middle stands on the ring, a lone slice's straight below", () => {
   // North's middle is a quarter of the way round, and South's and West's five
   // and seven eighths, as far from the middle across as down or up. A lone
@@ -215,4 +236,19 @@ test("the caption says Other takes the net sum of the values past a tally's own,
   expect(past(ROWS, rest(0))).toBe("");
   const five = tallyOf(...EIGHT.groups.slice(0, PIE_SLICES_AT_MOST - 1));
   expect(past(ROWS, { ...five, rest: { rows: 2, sum: 0 } })).toBe(left);
+});
+
+test("the caption counts the values at or below zero a pie leaves out, sent or not, in the language chosen", () => {
+  const signed = tallyOf(sent("North", 2, 10), sent("South", 1, 0), sent("West", 1, -5));
+  expect(belowZero(SUMS, signed)).toBe("2 values at or below zero left out");
+  const unsent = { ...signed, below: { values: 1, rows: 3, sum: -8 } };
+  expect(belowZero(SUMS, unsent)).toBe("3 values at or below zero left out");
+  const one = tallyOf(sent("West", 1, -5));
+  expect(belowZero(SUMS, one)).toBe("1 value at or below zero left out");
+  // A value's rows are never at or below zero, and a pie of sums above zero leaves none out.
+  expect(belowZero(ROWS, signed)).toBe("");
+  expect(belowZero(SUMS, EIGHT)).toBe("");
+  void setLocale("es", { reload: false });
+  expect(belowZero(SUMS, unsent)).toBe("3 valores en cero o por debajo se dejan fuera");
+  expect(belowZero(SUMS, one)).toBe("1 valor en cero o por debajo se deja fuera");
 });
