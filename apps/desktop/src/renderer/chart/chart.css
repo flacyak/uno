@@ -11,7 +11,7 @@
  * sheet's stacking context, and the sheet keeps it under the scrim and the
  * panel. The grid takes the pointer wherever no window is.
  *
- * `--dialog-radius` and `--dialog-shadow` are the dialogs' (formula.css,
+ * `--dialog-radius` and `--dialog-shadow` are the dialogs' (form.css,
  * settings.css). It clips no closer than `--shadow-reach`, that shadow's 10 px
  * offset plus its 28 px blur, so a window's shadow falls over the scrollbars and
  * the rules around it in place of stopping in a hard line. */
@@ -46,7 +46,7 @@
   visibility: hidden;
 }
 
-/* The dialogs' box (formula.css, settings.css). It clips at its border's outer
+/* The dialogs' box (form.css, settings.css). It clips at its border's outer
  * edge, so the resize zones take the border, and the head rounds itself inside
  * it. `--edge-hit` is how far a resize zone reaches in from an edge, and
  * `--grip-reach` how far the grip's hit area stands past its 12 px box: the
@@ -241,7 +241,7 @@
  * the window's size and the values' ink, in the plot's middle, as far from its
  * sides as the head's words, and on as many lines as that takes. Its action's
  * button stands the head's gap under the words, as the forms' buttons
- * (formula.css). */
+ * (form.css). */
 .chart-state {
   display: grid;
   place-content: center;

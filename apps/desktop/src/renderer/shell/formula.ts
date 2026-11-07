@@ -7,11 +7,10 @@
  * stays open.
  */
 
-import "./formula.css";
-
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
+import { field } from "./form.ts";
 import type { MenuPlace } from "./menu.ts";
 import { button, clickAway, el, hang, message, option, walk } from "./util.ts";
 
@@ -40,7 +39,7 @@ const NAMEABLE = /^[\p{L}_][\p{L}\p{N}_]*$/u;
 const EDGE = 8;
 
 export class FormulaForm {
-  private readonly box = el("form", "formula");
+  private readonly box = el("form", "pop-form formula");
   private readonly column = el("select");
   private readonly expr = el("input");
   private readonly note = el("div");
@@ -168,11 +167,4 @@ export class FormulaForm {
     this.note.title = text;
     this.note.className = isError ? "note err" : "note";
   }
-}
-
-/** field is one row of the form: a label and a control. */
-function field(name: string, control: HTMLElement): HTMLElement {
-  const line = el("label", "field");
-  line.append(el("span", "what", name), control);
-  return line;
 }
