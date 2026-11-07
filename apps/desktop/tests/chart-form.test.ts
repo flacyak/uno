@@ -28,7 +28,8 @@ const COLUMNS = [
 /** The column selected in the grid: region. */
 const REGION = 1;
 
-/** The column a sum is of: revenue. */
+/** The number columns: units, then revenue, which a sum is of. */
+const UNITS = 4;
 const REVENUE = 5;
 
 /** The workspace's sources: the sales export, active, then an ads export with
@@ -78,6 +79,10 @@ function pick(name: string, value: string): void {
   select(name).dispatchEvent(new Event("change"));
 }
 
+/** The labels of the fields that show. */
+const shown = (box: HTMLElement): Array<string | null> =>
+  [...box.querySelectorAll<HTMLElement>(".field:not([hidden]) .what")].map((at) => at.textContent);
+
 /** Presses `key` where the keys are, and returns the event. */
 function press(key: string, shiftKey = false): KeyboardEvent {
   const e = new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
@@ -103,12 +108,12 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a pie and a scatter, and makes bars and pies", () => {
+test("it offers bars, a pie and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.textContent, o.disabled]);
   const kinds = [m.chart_kind_bars(), m.chart_kind_pie(), m.chart_kind_scatter()];
-  expect(offered).toStrictEqual(kinds.map((words, i) => [words, i === kinds.length - 1]));
+  expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
   expect(kind.value).toBe("bars");
 });
 
@@ -122,6 +127,20 @@ test("a pie shares out the rows, or a sum, per value of the selected column", as
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(pie), "closed"]);
+});
+
+test("a scatter asks for X and Y of the number columns, the first two to begin", async () => {
+  const { asked, box } = form();
+  pick("kind", "scatter");
+  const words = [m.chart_form_source(), m.chart_form_kind(), m.chart_form_x(), m.chart_form_y()];
+  expect(shown(box)).toStrictEqual([...words, m.chart_form_title_field()]);
+  expect([...select("x").options].map((o) => o.textContent)).toStrictEqual(["units", "revenue"]);
+  const x = { col: UNITS, header: "units" };
+  const scatter: Plot = { t: "scatter", x, y: { col: REVENUE, header: "revenue" } };
+  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(scatter));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(scatter), "closed"]);
 });
 
 test("an empty title shows the one the chart makes, which follows the column", () => {
