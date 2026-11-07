@@ -469,6 +469,7 @@
   "chart_title_against": "{y} em relação a {x}",
   "chart_form_title": "Inserir gráfico",
   "chart_form_title_source": "Inserir gráfico · {source}",
+  "chart_form_source": "fonte",
   "chart_form_kind": "gráfico",
   "chart_kind_bars": "Barras",
   "chart_kind_pie": "Pizza",

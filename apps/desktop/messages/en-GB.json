@@ -453,6 +453,7 @@
   "chart_title_against": "{y} against {x}",
   "chart_form_title": "Insert chart",
   "chart_form_title_source": "Insert chart · {source}",
+  "chart_form_source": "source",
   "chart_form_kind": "chart",
   "chart_kind_bars": "Bars",
   "chart_kind_pie": "Pie",

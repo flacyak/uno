@@ -1,7 +1,8 @@
 /**
- * @fileoverview The chart form: picks the kind of chart, the column of the
- * active source whose values its bars count the rows of, or sum a number
- * column over, and its title. It makes bars, and shows the kinds to come.
+ * @fileoverview The chart form: picks the source, the kind of chart, the
+ * column whose values its bars count the rows of, or sum a number column over,
+ * and its title. It opens on the active source, and another source keeps each
+ * column it has a header for. It makes bars, and shows the kinds to come.
  *
  * An empty title shows the one the chart makes, which follows the language.
  * The engine keeps the chart, and a refusal is shown in the form, which stays
@@ -46,20 +47,27 @@ const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
 
 export class ChartForm {
   private readonly form: PopForm;
+  private readonly from = select("source");
   private readonly kind = select("kind");
   private readonly by = select("by");
   /** The number column the bars sum, or "" for none, which counts the rows. */
   private readonly sum = select("sum");
   private readonly title = el("input");
+  /** The source chosen, whose columns the selects offer. */
+  private source: ChartSource;
 
   constructor(
     place: MenuPlace,
-    private readonly source: ChartSource,
+    /** The workspace's sources, in the order of their tabs. */
+    private readonly sources: readonly ChartSource[],
+    /** The active source, which the form opens on. */
+    active: ChartSource,
     /** The column selected in the grid, which the bars count by. */
     selected: number,
     private readonly asks: ChartAsks,
   ) {
-    const heading = m.chart_form_title_source({ source: source.name });
+    this.source = active;
+    const heading = m.chart_form_title_source({ source: active.name });
     this.form = new PopForm("chart-form", m.chart_form_title(), heading, m.action_insert(), {
       submit: () => void this.insert(),
       // Enter on any field inserts, so the form makes a chart in one key.
@@ -67,6 +75,12 @@ export class ChartForm {
       closed: () => asks.closed(),
     });
 
+    for (const [i, s] of sources.entries()) {
+      const made = this.from.appendChild(option(s.name, String(i)));
+      made.className = "from-file";
+    }
+    this.from.value = String(sources.indexOf(active));
+    this.from.addEventListener("change", () => this.choose());
     for (const [t, words] of KINDS) {
       const made = this.kind.appendChild(option(words(), t));
       // Only bars are made yet, so the other kinds cannot be chosen.
@@ -82,6 +96,7 @@ export class ChartForm {
     this.title.autocomplete = "off";
 
     const fields = [
+      field(m.chart_form_source(), this.from),
       field(m.chart_form_kind(), this.kind),
       field(m.chart_form_by(), this.by),
       field(m.chart_form_sum(), this.sum),
@@ -95,14 +110,27 @@ export class ChartForm {
     this.form.close();
   }
 
-  /** offer fills the selects with the source's columns, choosing `by`. */
-  private offer(by: number): void {
+  /** choose offers the columns of the source chosen, keeping each column
+   * chosen whose header it has, and names it in the title line. */
+  private choose(): void {
+    const header = (select: HTMLSelectElement): string | undefined =>
+      select.value === "" ? undefined : this.source.band.columns[Number(select.value)]?.header;
+    const [by, sum] = [header(this.by), header(this.sum)];
+    this.source = this.sources[Number(this.from.value)] ?? this.source;
+    this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
+    const at = this.source.band.columns.findIndex((c) => c.header === by);
+    this.offer(Math.max(0, at), sum);
+  }
+
+  /** offer fills the selects with the source's columns, choosing `by` and the
+   * number column whose header is `sum`, if any. */
+  private offer(by: number, sum?: string): void {
     this.by.replaceChildren();
     this.sum.replaceChildren(option(m.chart_form_sum_none(), ""));
     for (const [i, c] of this.source.band.columns.entries()) {
       this.by.append(fromFile(c.header, i));
       // Cells that do not read as numbers are left out of a sum and counted.
-      if (c.kind === "num" || c.flagged) this.sum.append(fromFile(c.header, i));
+      if (c.kind === "num" || c.flagged) this.sum.append(fromFile(c.header, i, c.header === sum));
     }
     this.by.value = String(clamp(by, this.source.band.columns.length - 1));
     this.name();
@@ -144,10 +172,11 @@ export class ChartForm {
 }
 
 /** fromFile is the option of column `col`, labelled as the file names it. */
-function fromFile(header: string, col: number): HTMLOptionElement {
+function fromFile(header: string, col: number, selected = false): HTMLOptionElement {
   // A blank header is labelled by its position, as in the grid.
   const made = option(columnLabel(header, col), String(col));
   made.className = "from-file";
+  made.selected = selected;
   return made;
 }
 

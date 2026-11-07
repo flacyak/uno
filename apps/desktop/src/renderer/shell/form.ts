@@ -26,6 +26,8 @@ export interface Held {
 
 export class PopForm {
   private readonly box: HTMLFormElement;
+  /** The title line. */
+  readonly heading = el("div", "title");
   readonly submit: HTMLButtonElement;
   private readonly note = el("div", "note");
   private disarm: () => void = () => {};
@@ -44,7 +46,8 @@ export class PopForm {
     this.box = el("form", `pop-form ${cls}`);
     this.box.setAttribute("aria-label", label);
     this.box.noValidate = true;
-    this.box.append(el("div", "title", title));
+    this.heading.textContent = title;
+    this.box.append(this.heading);
     this.submit = el("button", "primary", primary);
     this.submit.type = "submit";
 
