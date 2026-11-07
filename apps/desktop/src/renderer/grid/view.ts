@@ -74,7 +74,7 @@ export class View {
     /** Called after every layout. */
     private readonly laidOut: () => void,
   ) {
-    this.scroller = el("div", "grid-scroll");
+    this.scroller = el("div", "grid-scroll themed-bar");
     this.sizer = el("div", "grid-sizer");
     this.table = el("table");
     this.table.className = "grid";
