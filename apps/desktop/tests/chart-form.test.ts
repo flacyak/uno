@@ -56,6 +56,10 @@ function form(insert = (): Promise<void> => Promise.resolve()): {
   return { asked, box: document.querySelector<HTMLFormElement>(".chart-form")! };
 }
 
+/** The open form's select named `name`. */
+const select = (name: string): HTMLSelectElement =>
+  document.querySelector<HTMLSelectElement>(`.chart-form select[name="${name}"]`)!;
+
 /** Presses `key` where the keys are, and returns the event. */
 function press(key: string, shiftKey = false): KeyboardEvent {
   const e = new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
@@ -67,7 +71,8 @@ function press(key: string, shiftKey = false): KeyboardEvent {
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve));
 
 test("it opens on the selected column, with the keys in it", () => {
-  const by = form().box.querySelector("select")!;
+  form();
+  const by = select("by");
   expect(by.value).toBe(String(REGION));
   expect(document.activeElement).toBe(by);
 });
@@ -79,9 +84,18 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
+test("it offers bars, a pie and a scatter, and makes bars", () => {
+  form();
+  const kind = select("kind");
+  const offered = [...kind.options].map((o) => [o.textContent, o.disabled]);
+  const kinds = [m.chart_kind_bars(), m.chart_kind_pie(), m.chart_kind_scatter()];
+  expect(offered).toStrictEqual(kinds.map((words, i) => [words, i > 0]));
+  expect(kind.value).toBe("bars");
+});
+
 test("an empty title shows the one the chart makes, which follows the column", () => {
   const { box } = form();
-  const [by, title] = [box.querySelector("select")!, box.querySelector("input")!];
+  const [by, title] = [select("by"), box.querySelector("input")!];
   expect(title.placeholder).toBe(madeTitle(REGION_BARS));
   by.value = String(REGION + 1);
   by.dispatchEvent(new Event("change"));
@@ -98,7 +112,7 @@ test("a title of one's own goes in the chart, without the spaces round it", asyn
 
 test("a sum is of a number column, and is in the title the chart makes", async () => {
   const { asked, box } = form();
-  const sum = box.querySelectorAll("select")[1]!;
+  const sum = select("sum");
   const offered = [...sum.options].map((o) => o.textContent);
   expect(offered).toStrictEqual([m.chart_form_sum_none(), "units", "revenue"]);
   expect(sum.value).toBe("");
@@ -122,6 +136,7 @@ test("Esc closes it and inserts nothing", () => {
 test("Tab walks the controls round the ends, and never leaves the form", () => {
   const { box } = form();
   const controls = [...box.querySelectorAll<HTMLElement>("select, input, button")];
+  controls[0]!.focus();
   expect(press("Tab", true).defaultPrevented).toBe(true);
   expect(document.activeElement).toBe(controls.at(-1));
   expect(press("Tab").defaultPrevented).toBe(true);
@@ -140,5 +155,5 @@ test("a refusal stays in the form, on the column chosen", async () => {
   expect(note.className).toBe("note err");
   expect(note.textContent).toBe(m.refused_charts_at_most({ limit: num(CHARTS_AT_MOST) }));
   expect(asked).toStrictEqual([regionBars]);
-  expect(document.activeElement).toBe(box.querySelector("select"));
+  expect(document.activeElement).toBe(select("by"));
 });

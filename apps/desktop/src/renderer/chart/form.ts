@@ -1,7 +1,7 @@
 /**
- * @fileoverview The chart form: picks the column of the active source whose
- * values a chart's bars count the rows of, or sum a number column over, and
- * its title.
+ * @fileoverview The chart form: picks the kind of chart, the column of the
+ * active source whose values its bars count the rows of, or sum a number
+ * column over, and its title. It makes bars, and shows the kinds to come.
  *
  * An empty title shows the one the chart makes, which follows the language.
  * The engine keeps the chart, and a refusal is shown in the form, which stays
@@ -37,11 +37,19 @@ export interface ChartAsks {
   closed(): void;
 }
 
+/** The kinds of chart, in the order the form offers them. */
+const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
+  ["bars", m.chart_kind_bars],
+  ["pie", m.chart_kind_pie],
+  ["scatter", m.chart_kind_scatter],
+];
+
 export class ChartForm {
   private readonly form: PopForm;
-  private readonly by = el("select");
+  private readonly kind = select("kind");
+  private readonly by = select("by");
   /** The number column the bars sum, or "" for none, which counts the rows. */
-  private readonly sum = el("select");
+  private readonly sum = select("sum");
   private readonly title = el("input");
 
   constructor(
@@ -59,6 +67,12 @@ export class ChartForm {
       closed: () => asks.closed(),
     });
 
+    for (const [t, words] of KINDS) {
+      const made = this.kind.appendChild(option(words(), t));
+      // Only bars are made yet, so the other kinds cannot be chosen.
+      made.disabled = t !== "bars";
+    }
+
     this.sum.append(option(m.chart_form_sum_none(), ""));
     for (const [i, c] of source.band.columns.entries()) {
       this.by.append(fromFile(c.header, i));
@@ -74,6 +88,7 @@ export class ChartForm {
     this.title.autocomplete = "off";
 
     const fields = [
+      field(m.chart_form_kind(), this.kind),
       field(m.chart_form_by(), this.by),
       field(m.chart_form_sum(), this.sum),
       field(m.chart_form_title_field(), this.title),
@@ -127,5 +142,12 @@ function fromFile(header: string, col: number): HTMLOptionElement {
   // A blank header is labelled by its position, as in the grid.
   const made = option(columnLabel(header, col), String(col));
   made.className = "from-file";
+  return made;
+}
+
+/** select makes a select named for what it sets. */
+function select(name: string): HTMLSelectElement {
+  const made = el("select");
+  made.name = name;
   return made;
 }
