@@ -235,3 +235,27 @@ body {
   outline: none;
   border-color: var(--accent);
 }
+
+/* A scroller's bar in the theme's colours, which the grid's and a chart's
+ * wear. The thumb stands clear of the track by its transparent border, and
+ * the corner lets the ground through. */
+.themed-bar::-webkit-scrollbar {
+  width: var(--bar);
+  height: var(--bar);
+}
+
+.themed-bar::-webkit-scrollbar-thumb {
+  min-width: 32px;
+  min-height: 32px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-3) 50%, transparent) content-box;
+}
+
+.themed-bar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-3);
+}
+
+.themed-bar::-webkit-scrollbar-corner {
+  background: transparent;
+}
