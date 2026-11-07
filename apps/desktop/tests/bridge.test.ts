@@ -90,9 +90,9 @@ const PRELOAD_LISTENS = new Set([
   ...PRELOAD_MENU_UNION,
 ]);
 
-test("the main -> renderer extraction found the ten channels this file assumes", () => {
-  expect(MAIN_SENDS.size).toBe(10);
-  expect(PRELOAD_LISTENS.size).toBe(10);
+test("the main -> renderer extraction found the eleven channels this file assumes", () => {
+  expect(MAIN_SENDS.size).toBe(11);
+  expect(PRELOAD_LISTENS.size).toBe(11);
 });
 
 test("every channel main sends is listened for in preload", () => {
@@ -111,10 +111,17 @@ const RENDERER_MENU_UNION = unionMembers(
   requireOne(/type MenuChannel =\s*([^;]+);/, RENDERER_MAIN, "MenuChannel"),
 );
 
-test("MenuChannel in the renderer names the same six channels as preload's union", () => {
-  expect(RENDERER_MENU_UNION.length).toBe(6);
-  expect(PRELOAD_MENU_UNION.length).toBe(6);
+test("MenuChannel in the renderer names the same seven channels as preload's union", () => {
+  expect(RENDERER_MENU_UNION.length).toBe(7);
+  expect(PRELOAD_MENU_UNION.length).toBe(7);
   expect([...RENDERER_MENU_UNION].sort()).toEqual([...PRELOAD_MENU_UNION].sort());
+});
+
+test("the View menu's Insert chart… is sent by main, heard by preload and named in MenuChannel", () => {
+  const chart = "menu:chart";
+  expect(
+    [MAIN_SENDS, PRELOAD_LISTENS, new Set(RENDERER_MENU_UNION)].map((c) => c.has(chart)),
+  ).toEqual([true, true, true]);
 });
 
 // ------------------------------------------------- file:pick-save, file:open

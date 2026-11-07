@@ -23,6 +23,7 @@ export interface Row {
 /** The modifiers a check presses a key with. */
 export interface KeyModifiers {
   ctrlKey?: boolean;
+  shiftKey?: boolean;
 }
 
 /** Where a `Wait` looks: a selector's first match, or a drawn cell by row and
