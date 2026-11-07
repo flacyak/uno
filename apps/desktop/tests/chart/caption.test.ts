@@ -134,9 +134,10 @@ const NO_POINTS: SampleTally = {
 /** A complete tally of BARS with a value in it, which a plot draws. */
 const DRAWN = { ...tallyOf(ROWS, ROWS), groups: [{ value: "North", rows: ROWS, sum: 0 }] };
 
-test("the plot says it reads before the first tally, why it cannot read its column, and that a tally has no values yet, in the language chosen", () => {
+test("the plot says it reads before the first tally, why it cannot read its column, with Edit chart, and that a tally has no values yet, in the language chosen", () => {
   expect(body(BARS.plot, heardOf(undefined))).toStrictEqual({ words: `reading ${NAME}…` });
-  const gone = { words: `${NAME} has no column called region` };
+  const edit = { words: "Edit chart", opens: "form" };
+  const gone = { words: `${NAME} has no column called region`, action: edit };
   expect(body(BARS.plot, heardOf(UNREAD))).toStrictEqual(gone);
   expect(body(BARS.plot, heardOf(tallyOf(ROWS, ROWS)))).toStrictEqual({
     words: "no values in region yet",
@@ -152,6 +153,7 @@ test("the plot says it reads before the first tally, why it cannot read its colu
   expect(body(BARS.plot, heardOf(tallyOf(ROWS, ROWS)))).toStrictEqual({
     words: "aún no hay valores en region",
   });
+  expect(body(BARS.plot, heardOf(UNREAD))?.action?.words).toBe("Editar gráfico");
 });
 
 test("the plot says its source is missing or waits on its bucket, with Re-point or Connect, in the language chosen", () => {
@@ -159,16 +161,17 @@ test("the plot says its source is missing or waits on its bucket, with Re-point 
   const waiting = { ...heardOf(undefined), state: "unconnected", bucket: "open-data" } as const;
   expect(body(BARS.plot, missing)).toStrictEqual({
     words: `${NAME} is missing`,
-    action: "Re-point",
+    action: { words: "Re-point", opens: "panel" },
   });
   expect(body(BARS.plot, waiting)).toStrictEqual({
     words: "open-data is not connected",
-    action: "Connect open-data",
+    action: { words: "Connect open-data", opens: "panel" },
   });
   void setLocale("es", { reload: false });
-  expect(body(BARS.plot, missing)).toStrictEqual({ words: `falta ${NAME}`, action: "Redirigir" });
+  const repoint = { words: "Redirigir", opens: "panel" };
+  expect(body(BARS.plot, missing)).toStrictEqual({ words: `falta ${NAME}`, action: repoint });
   expect(body(BARS.plot, waiting)).toStrictEqual({
     words: "open-data no está conectado",
-    action: "Conectar open-data",
+    action: { words: "Conectar open-data", opens: "panel" },
   });
 });
