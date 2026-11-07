@@ -309,6 +309,48 @@ await writeFile(
   }),
 );
 
+// A workspace of three charts over what a chart cannot read: a source in a
+// bucket no connection covers, one whose file is not there, and a column the
+// second export has not. The first two sources have no rows behind them.
+const states = join(scratch, "sent", "states.uno");
+const absent = { bytes: 0, rows: 0, cols: 0, state: { active: { row: 0, col: 0 } } };
+const waitingSource = {
+  ...absent,
+  id: "waiting",
+  name: "waiting.csv",
+  path: "s3://nobody-connected/2025/waiting.csv",
+};
+const lostSource = {
+  ...absent,
+  id: "lost",
+  name: "lost.csv",
+  path: join(scratch, "sent", "lost.csv"),
+};
+const rowsPer = (source, col, header) => ({
+  source,
+  plot: { t: "bars", by: { col, header } },
+  title: "",
+  refresh: 0,
+});
+// The column the second export has not: the one past its last.
+const gone = adsSource.cols;
+await writeFile(
+  states,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [adsSource, waitingSource, lostSource],
+    active: adsSource.id,
+    log: [],
+    charts: [
+      { ...rowsPer("waiting", 0, "date"), id: "c1", place: { ...chartSize, x: 0, y: 0 } },
+      { ...rowsPer("lost", 0, "date"), id: "c2", place: { ...chartSize, x: 1, y: 0 } },
+      { ...rowsPer("ads", gone, "Nowhere"), id: "c3", place: { ...chartSize, x: 0.5, y: 1 } },
+    ],
+    extra: new Map(),
+    at: states,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -394,6 +436,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_SCATTERED: scattered,
     UNO_SMOKE_ALONG: along,
     UNO_SMOKE_PIES: pies,
+    UNO_SMOKE_STATES: states,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits
