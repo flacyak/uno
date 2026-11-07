@@ -10,6 +10,7 @@
  */
 
 import { isWorkspace } from "@document";
+import type { ChartColumn } from "@document";
 import { Engine, messagePort } from "@engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@engine";
 import { NO_ROW } from "@sheet";
@@ -768,6 +769,8 @@ export class Shell {
           this.content,
           () => this.grid?.focus(),
           (dx, dy, deltaMode) => this.grid?.wheelBy(dx, dy, deltaMode),
+          (source) => this.withTab(source, (tab) => this.repoint(tab)),
+          (source, columns) => this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
         );
         return this.layer;
       },
@@ -1012,6 +1015,16 @@ export class Shell {
     // Reload is offered.
     else if (state === "newer") this.panel.showTab(tab.id);
     else this.panel.repoint(tab.id);
+  }
+
+  /**
+   * findNotNumbers is a chart's "3 not numbers": shows the chart's source and
+   * lands the grid on the first cell of `columns` that its tally could not
+   * read as a number.
+   */
+  private findNotNumbers(tab: Tab, columns: readonly ChartColumn[]): void {
+    this.select(tab);
+    void this.finder.notNumbers(columns);
   }
 
   /**

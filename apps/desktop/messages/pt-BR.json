@@ -484,7 +484,41 @@
   "chart_pie_other": "Outros",
   "chart_pie_past_net": "mais de {count} valores · os demais entram em Outros pela soma líquida",
   "chart_pie_past_left_out": "mais de {count} valores · os demais ficam de fora",
+  "chart_pie_below_zero": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} valor em zero ou abaixo fica de fora",
+        "plural=many": "{n} valores em zero ou abaixo ficam de fora",
+        "plural=other": "{n} valores em zero ou abaixo ficam de fora"
+      }
+    }
+  ],
   "chart_partial": "parcial · {read} lido",
+  "chart_reading": "lendo {name}…",
+  "chart_no_values_yet": "ainda não há valores em {columns}",
+  "chart_source_missing": "{name} está ausente",
+  "chart_bucket_unconnected": "{bucket} não está conectado",
+  "chart_blank": "{count} em branco",
+  "chart_blank_value": "(em branco)",
+  "chart_not_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} não é número",
+        "plural=many": "{n} não são números",
+        "plural=other": "{n} não são números"
+      }
+    }
+  ],
+  "chart_summary": "{title} em {name}, {rows}.",
+  "chart_summary_more": "e mais {count}.",
+  "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",
+  "chart_table_rows": "linhas",
+  "chart_table_share": "proporção",
+  "chart_table_aria": "Tabela",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um arquivo por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só arquivo · arquivos só são anexados a vários lidos como um",
