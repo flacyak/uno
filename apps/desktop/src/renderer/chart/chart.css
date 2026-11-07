@@ -197,6 +197,19 @@
   background: var(--accent);
 }
 
+/* What the plot says in place of a chart it cannot draw, from caption.ts: in
+ * the window's size and the values' ink, in the plot's middle, as far from its
+ * sides as the head's words, and on as many lines as that takes. */
+.chart-state {
+  display: grid;
+  place-content: center;
+  height: 100%;
+  padding: 0 10px;
+  color: var(--ink-2);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 /* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.
  * bars.ts sets a bar's thickness, the window's ground before the next, the
  * inset and the gap before a value. A label takes what it needs, up to
