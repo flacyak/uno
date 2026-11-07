@@ -18,7 +18,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow, Rectangle } from "electron";
 
 import { ask } from "./ask.ts";
-import { through, throughAsync } from "./driven.ts";
+import { pick, through, throughAsync } from "./driven.ts";
 
 /**
  * Milliseconds between frame captures. Faster than the 12fps the GIF is
@@ -263,6 +263,15 @@ const INSERT = {
   enter: 7_800,
   end: 10_000,
 };
+
+/**
+ * The beats of the stories that open the chart form by Ctrl+Shift+G, :chart
+ * and the View menu: a cell of region clicked, the form opened under its
+ * header, and Enter on the form for a window of its bars.
+ */
+const KEYED = { column: 500, open: 2_400, enter: 6_400, end: 8_600 };
+/** Where the pointer rests in those stories, on a cell clear of the form and the window it inserts. */
+const KEYED_REST = "tbody tr:nth-child(20) td:nth-child(2)";
 
 /**
  * The kinds story's beats: the insert story's, once for a pie of region and
@@ -756,6 +765,17 @@ const STORIES: Record<string, Story> = {
   tip: { end: TIP.stop, script: playTip },
   insert: { end: INSERT.end, script: playInsert },
   kinds: { end: KINDS_END, script: playKinds },
+  chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
+  command: {
+    end: KEYED.end,
+    script: playKeyed(async (win) => {
+      // The command line is vim-style's.
+      win.webContents.send("menu:input", "vim-style");
+      await type(win, ":chart");
+      press(win, "Return");
+    }),
+  },
+  menu: { end: KEYED.end, script: playKeyed(() => pick("CmdOrCtrl+Shift+G")) },
 };
 
 /**
@@ -932,6 +952,25 @@ async function playKinds(win: BrowserWindow, at: Clock): Promise<void> {
     press(win, "Return");
   }
   await at(KINDS_END);
+}
+
+/**
+ * playKeyed gives a story that selects region, opens the chart form on it by
+ * `open`, and presses Enter on the form for its bars.
+ */
+function playKeyed(open: (win: BrowserWindow) => void | Promise<void>): Story["script"] {
+  return async (win, at) => {
+    const { glideTo, pressOn } = await glider(win);
+    await at(KEYED.column);
+    // The gutter comes first, so region is a row's third cell.
+    await pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+    await glideTo(KEYED_REST);
+    await at(KEYED.open);
+    await open(win);
+    await at(KEYED.enter);
+    press(win, "Return");
+    await at(KEYED.end);
+  };
 }
 
 /** What the stand-in pointer does: glides to a thing, or glides to it and presses it. */

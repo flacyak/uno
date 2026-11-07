@@ -36,8 +36,11 @@
  *   Goes to out/insert.gif.
  * - `kinds`: chooses Insert chart… on region and makes a pie in the form, then
  *   on units and makes a scatter of it against revenue. Goes to out/kinds.gif.
+ * - `chord`, `command` and `menu`: select region, open the chart form under its
+ *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
+ *   Insert chart…, and press Enter on it. Each goes to out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -67,8 +70,10 @@ const fixture = join(testdata, "sales-q3.csv");
 
 /** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
+/** The stories that open the chart form by its keys or the View menu. */
+const KEYED = ["chord", "command", "menu"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
-const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel", "table", "tip", "insert", "kinds"];
+const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel", "table", "tip", "insert", "kinds", ...KEYED];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
@@ -345,6 +350,9 @@ const staged = {
   tip: () => stageCharts("tip", [REGION_BARS, REGION_BARS]),
   insert: () => stageCharts("insert", []),
   kinds: () => stageCharts("kinds", []),
+  chord: () => stageCharts("chord", []),
+  command: () => stageCharts("command", []),
+  menu: () => stageCharts("menu", []),
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 
