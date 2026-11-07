@@ -49,6 +49,14 @@ const GONE = { id: "gone", name: "ads-q2.csv", band: { columns: [] }, missing: t
 const SUMS = { ...SALES, id: "sums", band: { columns: [COLUMNS[REVENUE], COLUMNS[UNITS]] } };
 const COST = { header: "cost", kind: "num", flagged: false } as const;
 const TAKINGS = { ...SALES, id: "takings", band: { columns: [COLUMNS[REVENUE], COST] } };
+/** Then one that names units twice and region twice, and the second of each. */
+const TWINS = {
+  ...SALES,
+  id: "twins",
+  band: { columns: [COLUMNS[UNITS], COLUMNS[UNITS], COLUMNS[REGION], COLUMNS[REGION]] },
+};
+const UNITS_TWIN = 1;
+const REGION_TWIN = 3;
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id): string =>
@@ -68,7 +76,7 @@ function form(
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS], active, opening, {
+  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS, TWINS], active, opening, {
     send: (source, plot, title) => {
       asked.push(`send ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
@@ -229,7 +237,9 @@ test("another source offers its columns, and keeps those it has a header for", a
 test("a source whose file is missing is offered, and cannot be chosen", () => {
   form();
   const offered = [...select("source").options].map((o) => [o.textContent, o.disabled]);
-  expect(offered).toStrictEqual([SALES, ADS, GONE, SUMS, TAKINGS].map((s) => [s.name, s.missing]));
+  expect(offered).toStrictEqual(
+    [SALES, ADS, GONE, SUMS, TAKINGS, TWINS].map((s) => [s.name, s.missing]),
+  );
 });
 
 test("Esc closes it and inserts nothing", () => {
@@ -311,4 +321,17 @@ test("a chart's form is titled by the chart, and Apply sends what it holds", asy
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(REGION_BARS, "Takings", ADS.id), "closed"]);
+});
+
+test("a chart's form opens on the chart's own columns where two share a header", async () => {
+  const twinned: Plot = {
+    t: "bars",
+    by: { col: REGION_TWIN, header: "region" },
+    sum: { col: UNITS_TWIN, header: "units" },
+  };
+  const { asked } = changing(twinned, "", TWINS);
+  expect(chosen("by", "sum")).toStrictEqual([String(REGION_TWIN), String(UNITS_TWIN)]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(twinned, "", TWINS.id), "closed"]);
 });
