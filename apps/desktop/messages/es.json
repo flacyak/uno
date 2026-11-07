@@ -470,6 +470,8 @@
   "chart_form_title": "Insertar gráfico",
   "chart_form_title_source": "Insertar gráfico · {source}",
   "chart_form_by": "por",
+  "chart_form_sum": "suma de",
+  "chart_form_sum_none": "ninguna, contar filas",
   "chart_form_title_field": "título",
   "chart_bars_more": "+{count} más",
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",

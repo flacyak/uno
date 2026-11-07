@@ -454,6 +454,8 @@
   "chart_form_title": "Insert chart",
   "chart_form_title_source": "Insert chart · {source}",
   "chart_form_by": "by",
+  "chart_form_sum": "sum of",
+  "chart_form_sum_none": "none, count rows",
   "chart_form_title_field": "title",
   "chart_bars_more": "+{count} more",
   "chart_bars_past": "more than {count} values · later ones are counted in the rest",
