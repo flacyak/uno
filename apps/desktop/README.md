@@ -51,7 +51,7 @@ The column stops storing values of its own and shows what the expression compute
 Inserting one switches to transform, since it changes the file, and it is one edit that Ctrl+Z takes back.
 An expression the engine cannot read is refused in the form, in the engine's words, and the form stays open on what was typed.
 
-Ctrl+Shift+G opens the chart form `Insert chart…` opens, on the open workspace, under the selected column's header.
+Ctrl+Shift+G and `:chart` open the chart form `Insert chart…` opens, on the open workspace, under the selected column's header.
 
 The three columns, the sidebar, the sheet and the sources panel, each begin with a head one row high.
 Together they make one line across the top of the window, and the round `×` at its right end closes the window.
@@ -349,7 +349,8 @@ any cell, and `gx` is Not now.
 
 `:` opens a command line in the status bar, in either mode. `:w` saves as Ctrl+S
 does, `:sav` is Save As, `:e` opens a file but refuses over unsaved edits unless
-it is `:e!`, `:sources` opens the sources panel, and `:{n}` goes to row n.
+it is `:e!`, `:sources` opens the sources panel, `:chart` opens the chart form,
+and `:{n}` goes to row n.
 There is no `:q`; closing is the window's job.
 
 `gt` and `gT` go to the next and previous source's tab, `{n}gt` to the nth.

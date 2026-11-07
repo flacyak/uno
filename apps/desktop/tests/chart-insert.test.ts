@@ -4,7 +4,7 @@
  * bars of it, which draw from the real engine in a window that takes the keys.
  * Another insert keeps the windows there, and adds one window however many
  * Enters it takes. A pie and a scatter chosen in the form draw too. Ctrl+Shift+G
- * opens the same form.
+ * and :chart open the same form.
  *
  * @vitest-environment happy-dom
  */
@@ -13,6 +13,7 @@ import { beforeAll, expect, test } from "vite-plus/test";
 
 import { REGION, ROWS, UNITS, counted } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
+import type { Shell } from "@renderer/shell/shell";
 import { FIRST_ROWS_MS, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, frame, until } from "./smoke/dom-page.ts";
 
@@ -20,6 +21,7 @@ import { domPage, frame, until } from "./smoke/dom-page.ts";
 const REGIONS = ["East", "North", "South", "West"];
 
 const page = domPage();
+let shell: Shell;
 
 const texts = (selector: string): Array<string | null> =>
   [...document.querySelectorAll(selector)].map((at) => at.textContent);
@@ -50,7 +52,9 @@ async function enter(at: Element, times = 1): Promise<void> {
   expect(await until(page, () => document.querySelector(".chart-form") === null)).toBe(true);
 }
 
-beforeAll(() => bootShell(), FIRST_ROWS_MS);
+beforeAll(async () => {
+  shell = await bootShell();
+}, FIRST_ROWS_MS);
 
 test("Insert chart… makes bars of the selected column, which draw from the engine", async () => {
   // Select region, the second column.
@@ -122,4 +126,19 @@ test("Ctrl+Shift+G then Enter on region makes bars of its 4,812 rows", async () 
       .join();
   const quarter = REGIONS.map(() => counted(ROWS / REGIONS.length));
   expect(await until(page, () => tips() === quarter.join())).toBe(true);
+});
+
+test(":chart at the vim-style prompt opens the chart form on the selected column", async () => {
+  await page.press("Escape");
+  shell.setInput("vim-style");
+  await page.press(":");
+  const cmd = document.querySelector<HTMLInputElement>("#status-cmd")!;
+  cmd.value = ":chart";
+  cmd.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+  );
+  const by = await formOpened();
+  expect([by.value, document.activeElement]).toStrictEqual([String(REGION), by]);
+  by.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  shell.setInput("default");
 });

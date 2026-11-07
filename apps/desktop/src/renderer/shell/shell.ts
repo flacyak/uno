@@ -1338,6 +1338,7 @@ export class Shell {
       else void this.open(true);
     },
     sources: () => this.showPanel(),
+    chart: () => this.insertChartHere(),
     row: (c) => this.grid?.act({ t: "move", motion: "last-row", count: c.row }),
     unknown: (c) => this.say(m.not_a_command({ text: c.text }), true),
   };
