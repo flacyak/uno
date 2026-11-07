@@ -467,6 +467,9 @@
   "chart_title_share_of_rows": "Proporção de linhas por {by}",
   "chart_title_share_of_sum": "Proporção de {sum} por {by}",
   "chart_title_against": "{y} em relação a {x}",
+  "chart_form_title": "Inserir gráfico",
+  "chart_form_title_source": "Inserir gráfico · {source}",
+  "chart_form_by": "por",
   "chart_bars_more": "+{count} mais",
   "chart_bars_past": "mais de {count} valores · os demais são contados no resto",
   "chart_points": [
