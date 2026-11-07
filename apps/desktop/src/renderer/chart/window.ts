@@ -370,9 +370,12 @@ export class ChartWindow {
     this.redraw();
   }
 
-  /** arm shows the × in the flag's fill while its next press removes the chart. */
+  /** arm shows the × in the flag's fill while its next press removes the chart, and
+   * names what that press does. */
   arm(armed: boolean): void {
     this.cross.classList.toggle("armed", armed);
+    this.cross.title = armed ? m.chart_remove_armed({ title: this.named() }) : "";
+    this.cross.setAttribute("aria-label", armed ? this.cross.title : m.chart_remove_aria());
   }
 
   /** stand puts the window at `rect`, unless a pointer holds it. */
