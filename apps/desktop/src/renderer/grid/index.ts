@@ -22,6 +22,7 @@ import type { Cell, GridEvents, Rows, ShellAction } from "./rows.ts";
 /** Actions the grid carries out itself. */
 type GridAction = Exclude<Action, ShellAction>;
 import { View } from "./view.ts";
+import type { ColumnSpan } from "./view.ts";
 
 export type { GridEvents, Rows, ShellAction } from "./rows.ts";
 
@@ -124,6 +125,11 @@ export class Grid {
 
   selection(): { row: number; col: number } {
     return { row: this.selRow, col: this.selCol };
+  }
+
+  /** Gives where column `col` stands across the window. */
+  columnSpan(col: number): ColumnSpan {
+    return this.view.columnSpan(col);
   }
 
   /** Selects a cell and scrolls it into view. */
