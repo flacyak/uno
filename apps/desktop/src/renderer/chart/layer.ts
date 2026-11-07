@@ -140,6 +140,12 @@ export class ChartLayer implements Stage {
     return id !== undefined && this.windows.get(id)?.box.contains(document.activeElement) === true;
   }
 
+  /** front gives the keys to the window on top, if there is one. */
+  front(): void {
+    const [id] = this.frontToBack();
+    if (id !== undefined) this.focus(id);
+  }
+
   /** leave gives the keys back to the grid. */
   leave(): void {
     this.asks.leave();

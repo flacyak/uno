@@ -1047,6 +1047,8 @@ export class Shell {
       ["b", { run: () => this.toggleSidebar(), when: () => this.input.name === "default" }],
       ["e", { run: () => this.toggleMode() }],
       ["Shift+g", { run: () => this.insertChartHere() }],
+      // A way to the charts for a browser that keeps F6 for itself.
+      ["Shift+f", { run: () => this.layer?.front() }],
       [
         "z",
         { run: () => void this.history("undo"), when: () => this.workspace?.editable === true },

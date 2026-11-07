@@ -53,6 +53,10 @@ An expression the engine cannot read is refused in the form, in the engine's wor
 
 Ctrl+Shift+G, `:chart` and the View menu's `Insert chart…` open the chart form the right click's `Insert chart…` opens, on the open workspace, under the selected column's header.
 
+F6 moves the keys from the grid through the chart windows, front to back, and on to the grid, and Shift+F6 goes the other way.
+Ctrl+Shift+F gives the keys to the window on top, for a browser that keeps F6 for itself, and Escape gives them back to the grid.
+F6 in the cell editor does nothing.
+
 The three columns, the sidebar, the sheet and the sources panel, each begin with a head one row high.
 Together they make one line across the top of the window, and the round `×` at its right end closes the window.
 Over unsaved edits the first `×` says so and the second closes.
