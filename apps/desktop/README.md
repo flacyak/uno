@@ -43,13 +43,19 @@ One that has never been saved is named for its first source and says `not saved`
 The `+ New workspace` at the foot of the sidebar asks for a file, as Ctrl+O does.
 A spreadsheet opens as a new workspace, and Ctrl+S keeps it as a `.uno`.
 
-A right click on a workspace offers `Insert formula…`.
+A right click on a workspace offers `Insert formula…` and `Insert chart…`.
 On a workspace that is not open it offers `Open` and `Remove from list` too, and on the open one `Add source…`, `Save` and `Save as…`.
 The formula form opens on the column the grid has selected, in the source showing.
 A formula is arithmetic over the row's other columns by name, such as `revenue / units`.
 The column stops storing values of its own and shows what the expression computes, and its header wears `fx` with the expression on hover.
 Inserting one switches to transform, since it changes the file, and it is one edit that Ctrl+Z takes back.
 An expression the engine cannot read is refused in the form, in the engine's words, and the form stays open on what was typed.
+
+Ctrl+Shift+G, `:chart` and the View menu's `Insert chart…` open the chart form the right click's `Insert chart…` opens, on the open workspace, under the selected column's header.
+
+F6 moves the keys from the grid through the chart windows, front to back, and on to the grid, and Shift+F6 goes the other way.
+Ctrl+Shift+F gives the keys to the window on top, for a browser that keeps F6 for itself, and Escape gives them back to the grid.
+F6 in the cell editor does nothing.
 
 The three columns, the sidebar, the sheet and the sources panel, each begin with a head one row high.
 Together they make one line across the top of the window, and the round `×` at its right end closes the window.
@@ -347,7 +353,8 @@ any cell, and `gx` is Not now.
 
 `:` opens a command line in the status bar, in either mode. `:w` saves as Ctrl+S
 does, `:sav` is Save As, `:e` opens a file but refuses over unsaved edits unless
-it is `:e!`, `:sources` opens the sources panel, and `:{n}` goes to row n.
+it is `:e!`, `:sources` opens the sources panel, `:chart` opens the chart form,
+and `:{n}` goes to row n.
 There is no `:q`; closing is the window's job.
 
 `gt` and `gT` go to the next and previous source's tab, `{n}gt` to the nth.

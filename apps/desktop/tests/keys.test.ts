@@ -34,13 +34,14 @@ test(". sets the whole value after any other insert", () => {
 
 // ----------------------------------------------------------- command line
 
-test("the command line reads :w, :sav, :e, :e! and a row number", () => {
+test("the command line reads :w, :sav, :e, :e!, :sources, :chart and a row number", () => {
   expect(command("w")).toEqual({ t: "write" });
   expect(command(" write ")).toEqual({ t: "write" });
   expect(command("sav")).toEqual({ t: "save-as" });
   expect(command("e")).toEqual({ t: "open", force: false });
   expect(command("e!")).toEqual({ t: "open", force: true });
   expect(command("sources")).toEqual({ t: "sources" });
+  expect(command("chart")).toEqual({ t: "chart" });
   expect(command("5000000")).toEqual({ t: "row", row: 5_000_000 });
   expect(command("")).toEqual({ t: "none" });
   expect(command("q"), "closing is the window's job").toEqual({ t: "unknown", text: "q" });
