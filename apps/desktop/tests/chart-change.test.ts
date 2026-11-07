@@ -1,7 +1,8 @@
 /**
  * @fileoverview A chart changed from its own window, through the real shell
  * and engine: the edit button opens the chart form on the chart, Apply on
- * another column refolds and redraws it, and a new title reads no bytes.
+ * another column refolds and redraws it, and a new title reads no bytes. Enter,
+ * F2 and a double-click on the head open the form too.
  *
  * @vitest-environment happy-dom
  */
@@ -110,4 +111,25 @@ test("a change refused after Esc closed its form is said on the status line", as
   refuse(refused);
   const said = (): string | null => document.querySelector("#status-msg")!.textContent;
   expect(await until(page, () => said() === message(refused))).toBe(true);
+});
+
+test("Enter, F2 and a double-click on the head open the form on the chart, and Esc gives the keys back", async () => {
+  const box = document.querySelector<HTMLElement>(".chart")!;
+  const opens = async (at: Element, e: Event): Promise<void> => {
+    at.dispatchEvent(e);
+    expect(await until(page, () => form() !== null)).toBe(true);
+    form()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect([form(), document.activeElement]).toStrictEqual([null, box]);
+  };
+  const key = (k: string): KeyboardEvent =>
+    new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
+  await opens(box, key("Enter"));
+  await opens(box, key("F2"));
+  await opens(
+    document.querySelector(".chart-title")!,
+    new MouseEvent("dblclick", { bubbles: true }),
+  );
+  // Enter on a head's button is the button's.
+  box.querySelector(".chart-table-toggle")!.dispatchEvent(key("Enter"));
+  expect(form()).toBeNull();
 });

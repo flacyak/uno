@@ -2,7 +2,8 @@
  * @fileoverview A chart's window: the dialogs' box, with a head that says what
  * the chart shows, a round × of the window's own kind, and a caption that ends
  * in a grip. The layer stands it in the room and says which chart it shows,
- * and the head's edit button opens the chart form on it.
+ * and the head's edit button opens the chart form on it, as Enter, F2 and a
+ * double-click on the head do.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
  * resizes it. It follows the pointer alone until the drop, which stores where
@@ -85,6 +86,9 @@ const SEP = " · ";
 /** The key that puts the table in the plot's place, and the plot back. */
 const TABLE_KEY = "t";
 
+/** The keys that open the chart form on a window's chart, as its edit button does. */
+const EDIT_KEYS: ReadonlySet<string> = new Set(["Enter", "F2"]);
+
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
 let made = 0;
@@ -164,6 +168,17 @@ function tableKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
   return key === TABLE_KEY && !ctrl && !alt && !meta && !repeat;
 }
 
+/** onButton says whether `at` is a button, or inside one. */
+function onButton(at: EventTarget | null): boolean {
+  return at instanceof Element && at.closest("button") !== null;
+}
+
+/** edits says whether `press` on `at` opens the chart form. Enter on a button is the button's. */
+function edits({ key, ctrl, alt, meta, shift, repeat }: Press, at: EventTarget | null): boolean {
+  if (ctrl || alt || meta || shift || repeat || !EDIT_KEYS.has(key)) return false;
+  return key !== "Enter" || !onButton(at);
+}
+
 /**
  * extra gives what the caption says after the counts, for the plot's kind:
  * what a scatter's sample leaves out, or how a pie counts the values past
@@ -201,6 +216,10 @@ export class ChartWindow {
   /** The whole window, which the layer stands in the room. */
   readonly box = el("div", "chart");
   private readonly title = el("span", "chart-title");
+  /** The head's parts: the source's name, while it names one, and the title after it. */
+  private readonly sourced = el("bdi", "from-file");
+  private readonly between = document.createTextNode(SEP);
+  private readonly titled = el("bdi");
   /** The body between the head and the caption, which draws the chart. */
   private readonly plot = el("div", "chart-plot");
   /** How far the chart has read its source, under the head, while it reads. */
@@ -232,6 +251,7 @@ export class ChartWindow {
   private readonly toggle = button("chart-head-button chart-table-toggle", "", () => this.flip());
   /** The head's button that opens the chart form on the chart. */
   private readonly edit = button("chart-head-button chart-edit", "", () => this.change());
+  /** The head, whose rule the chart form hangs on. */
   private readonly head = el("div", "col-head chart-head");
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
@@ -270,11 +290,12 @@ export class ChartWindow {
     this.edit.innerHTML = PENCIL;
     this.words.attr(this.edit, "aria-label", m.chart_edit);
 
-    const head = this.head;
-    head.append(this.title, this.toggle, this.edit, x);
-    head.addEventListener("pointerdown", (e) => {
-      const onButton = e.target instanceof Element && e.target.closest("button") !== null;
-      if (!onButton) this.take(e, head, dragged);
+    this.head.append(this.title, this.toggle, this.edit, x);
+    this.head.addEventListener("pointerdown", (e) => {
+      if (!onButton(e.target)) this.take(e, this.head, dragged);
+    });
+    this.head.addEventListener("dblclick", (e) => {
+      if (!onButton(e.target)) this.change();
     });
 
     const grip = el("span", "chart-grip");
@@ -300,7 +321,16 @@ export class ChartWindow {
     this.box.setAttribute("aria-labelledby", this.title.id);
     this.box.setAttribute("aria-describedby", caption.id);
     this.words.attr(this.box, "aria-roledescription", m.chart_role);
-    this.box.append(head, this.plot, this.tip.box, this.summary, this.track, caption, right, foot);
+    this.box.append(
+      this.head,
+      this.plot,
+      this.tip.box,
+      this.summary,
+      this.track,
+      caption,
+      right,
+      foot,
+    );
     // Whatever resizes the window, the plot draws again in the frame it lands in.
     new ResizeObserver(() => this.paint()).observe(this.plot);
     // A pointer's capture sends these to the zone it pressed, and they bubble here.
@@ -319,9 +349,12 @@ export class ChartWindow {
    */
   show(chart: Chart, source: string | undefined): void {
     this.chart = chart;
-    const title = el("bdi", "", this.named());
-    if (source === undefined) this.title.replaceChildren(title);
-    else this.title.replaceChildren(el("bdi", "from-file", source), " · ", title);
+    this.titled.textContent = this.named();
+    this.sourced.textContent = source ?? "";
+    const parts = source === undefined ? [this.titled] : [this.sourced, this.between, this.titled];
+    // The parts stay while they stand, so a press on one is still under the
+    // pointer as it lifts after a draw, and makes a click.
+    if (this.title.firstChild !== parts[0]) this.title.replaceChildren(...parts);
     this.title.title = this.title.textContent;
     this.title.classList.toggle("from-file", chart.title !== "");
     this.redraw();
@@ -574,14 +607,15 @@ export class ChartWindow {
   }
 
   /**
-   * key answers Escape, t and the arrows, and leaves any other key to the
-   * shell. An arrow in the plot steps the cursor through its marks, and one
-   * in the table scrolls it, as each has the keys then.
+   * key answers Escape, t, Enter, F2 and the arrows, and leaves any other key
+   * to the shell. An arrow in the plot steps the cursor through its marks, and
+   * one in the table scrolls it, as each has the keys then.
    */
   private key(e: KeyboardEvent): void {
     const press = pressOf(e);
     if (e.key === "Escape") this.escape();
     else if (tableKey(press)) this.flip();
+    else if (edits(press, e.target)) this.change();
     else if (!this.arrow(press, e.target)) return;
     e.preventDefault();
     e.stopPropagation();
