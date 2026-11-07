@@ -73,13 +73,7 @@ export class ChartForm {
       made.disabled = t !== "bars";
     }
 
-    this.sum.append(option(m.chart_form_sum_none(), ""));
-    for (const [i, c] of source.band.columns.entries()) {
-      this.by.append(fromFile(c.header, i));
-      // Cells that do not read as numbers are left out of a sum and counted.
-      if (c.kind === "num" || c.flagged) this.sum.append(fromFile(c.header, i));
-    }
-    this.by.value = String(clamp(selected, source.band.columns.length - 1));
+    this.offer(selected);
     this.by.addEventListener("change", () => this.name());
     this.sum.addEventListener("change", () => this.name());
 
@@ -94,12 +88,24 @@ export class ChartForm {
       field(m.chart_form_title_field(), this.title),
     ];
     this.form.open(fields, place);
-    this.name();
     this.by.focus();
   }
 
   close(): void {
     this.form.close();
+  }
+
+  /** offer fills the selects with the source's columns, choosing `by`. */
+  private offer(by: number): void {
+    this.by.replaceChildren();
+    this.sum.replaceChildren(option(m.chart_form_sum_none(), ""));
+    for (const [i, c] of this.source.band.columns.entries()) {
+      this.by.append(fromFile(c.header, i));
+      // Cells that do not read as numbers are left out of a sum and counted.
+      if (c.kind === "num" || c.flagged) this.sum.append(fromFile(c.header, i));
+    }
+    this.by.value = String(clamp(by, this.source.band.columns.length - 1));
+    this.name();
   }
 
   /** plot gives what the chart draws: bars of the rows, or of the sum, per value of `by`. */
