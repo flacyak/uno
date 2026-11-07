@@ -1,6 +1,9 @@
-/* The formula form, positioned where the workspace was right-clicked. */
+/* The pop-up forms (form.ts), hung where they were opened from. */
 
-.formula {
+.pop-form {
+  /* How far in from its padding Chromium starts a select's text: the inner
+   * start padding of its menu list. */
+  --select-text-inset: 4px;
   position: fixed;
   z-index: 10;
   width: 320px;
@@ -15,7 +18,7 @@
   color: var(--ink);
 }
 
-.formula .title {
+.pop-form .title {
   margin-bottom: 8px;
   padding: 6px 8px 8px;
   font-size: 10px;
@@ -28,20 +31,20 @@
   white-space: nowrap;
 }
 
-.formula .field {
+.pop-form .field {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 3px 8px;
 }
 
-.formula .what {
+.pop-form .what {
   flex: 0 0 48px;
   color: var(--ink-3);
 }
 
-.formula select,
-.formula input {
+.pop-form select,
+.pop-form input {
   flex: 1;
   min-width: 0;
   height: 26px;
@@ -54,18 +57,24 @@
   outline: none;
 }
 
-.formula select:focus,
-.formula input:focus {
+/* An input's text starts where a select's does, so a form's lines of text
+ * stand in one column. */
+.pop-form input {
+  padding-left: calc(8px + var(--select-text-inset));
+}
+
+.pop-form select:focus,
+.pop-form input:focus {
   border-color: var(--accent);
 }
 
-.formula input::placeholder {
+.pop-form input::placeholder {
   color: var(--ink-3);
 }
 
-/* The hint under the expression, or the engine's refusal. Two lines at
+/* The hint under the fields, or the engine's refusal. Two lines at
  * most; the full text is the hover text. */
-.formula .note {
+.pop-form .note {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -77,18 +86,18 @@
   color: var(--ink-3);
 }
 
-.formula .note.err {
+.pop-form .note.err {
   color: var(--flag);
 }
 
-.formula .buttons {
+.pop-form .buttons {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
   padding: 10px 8px 4px;
 }
 
-.formula button {
+.pop-form button {
   padding: 3px 11px;
   font: inherit;
   font-size: 11.5px;
@@ -99,18 +108,18 @@
   cursor: pointer;
 }
 
-.formula button.primary {
+.pop-form button.primary {
   color: var(--accent);
   background: var(--accent-b);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-.formula button:focus-visible {
+.pop-form button:focus-visible {
   outline: none;
   border-color: var(--accent);
 }
 
-.formula button:disabled {
+.pop-form button:disabled {
   opacity: 0.6;
   cursor: default;
 }
