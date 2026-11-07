@@ -156,11 +156,12 @@ test("each window has ids of its own, whatever its chart's id holds", () => {
   expect(one.getAttribute("aria-labelledby")).not.toBe(two.getAttribute("aria-labelledby"));
 });
 
-test("the head and the caption are drawn, with a grip that says nothing", () => {
+test("the head, the track and the caption are drawn, with a grip that says nothing", () => {
   const { box } = windowOf(BARS);
   expect([...box.children].map((child) => child.className)).toStrictEqual([
     "col-head chart-head",
     "chart-plot",
+    "chart-coverage",
     "chart-caption",
     "chart-edge chart-edge-right",
     "chart-edge chart-edge-foot",

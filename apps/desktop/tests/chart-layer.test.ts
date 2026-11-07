@@ -199,6 +199,14 @@ function heardOf(...values: string[]): Heard {
   return { state: "fine", latest: tally, complete: tally };
 }
 
+/** What FLUSH's chart heard with `rows` of `total` read: a tally of East, still being read. */
+function readOf(rows: number, total: number): Heard {
+  const { latest } = heardOf("East");
+  const tally =
+    latest?.t === "groups" ? { ...latest, coverage: { rows, total, complete: false } } : undefined;
+  return { state: "fine", latest: tally, complete: undefined };
+}
+
 /** Units and revenue of two rows of the sales export, as a scatter's tally sends them. */
 const SENT = { x: [180, 999], y: [7200, 39960] };
 
@@ -468,6 +476,31 @@ test("a window draws as each tally comes, and keeps a complete one while the nex
   layer.tallied(FLUSH.id);
   await frame();
   expect(labels()).toStrictEqual(["North", "South"]);
+});
+
+test("a track under the head shows how far a chart has read, until its tally completes", async () => {
+  const { layer, model } = shown(FLUSH);
+  Object.defineProperty(part(".chart-plot"), "clientHeight", { value: ROOM.h });
+  const track = (): HTMLElement => part(".chart-coverage");
+  const read = (): string => track().style.getPropertyValue("--read");
+  model.heard = () => ({ state: "fine", latest: undefined, complete: undefined });
+  await frame();
+  expect([track().hidden, read()]).toStrictEqual([false, "0"]);
+  model.heard = () => readOf(2, 5);
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect([track().hidden, read()]).toStrictEqual([false, "0.4"]);
+  expect(said()).toBe(m.chart_partial({ read: "40%" }));
+  // The last complete tally stays drawn while the next is read, which the track shows.
+  model.heard = () => ({ ...heardOf("North", "South"), latest: readOf(2, 5).latest });
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(labels()).toStrictEqual(["North", "South"]);
+  expect([track().hidden, read()]).toStrictEqual([false, "0.4"]);
+  model.heard = () => heardOf("North", "South");
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect([track().hidden, said()]).toStrictEqual([true, m.rows_count({ count: 2 })]);
 });
 
 test("a window draws its bars again in the frame its plot resizes", () => {

@@ -172,6 +172,31 @@
   overflow: clip;
 }
 
+/* How far the chart has read its source, from window.ts: the arriving bar
+ * (arriving.css), as high as it and round at both ends, filled `--read` of its
+ * length in the accent. It stands under the head, as far from the sides as the
+ * head's words and inside the bars' inset, and goes once the tally completes. */
+.chart-coverage {
+  --track-height: 4px;
+  --track-gap: 2px;
+  position: absolute;
+  top: calc(var(--row-h) + var(--track-gap));
+  right: 10px;
+  left: 10px;
+  height: var(--track-height);
+  border-radius: 999px;
+  background: var(--rule);
+}
+
+.chart-coverage::after {
+  content: "";
+  display: block;
+  width: calc(var(--read) * 100%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
 /* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.
  * bars.ts sets a bar's thickness, the window's ground before the next, the
  * inset and the gap before a value. A label takes what it needs, up to
@@ -432,7 +457,8 @@
 /* A forced palette would take the marks' colour away, so they wear the text's,
  * and a pie's slices stand apart by the page's. */
 @media (forced-colors: active) {
-  .chart-bar {
+  .chart-bar,
+  .chart-coverage::after {
     background: CanvasText;
     forced-color-adjust: none;
   }
