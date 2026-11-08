@@ -463,6 +463,7 @@
   "chart_form_sum": "sum of",
   "chart_form_sum_none": "none, count rows",
   "chart_form_title_field": "title",
+  "chart_form_hint": "Enter inserts · Esc closes",
   "chart_inserted": "inserted {title}",
   "chart_bars_more": "+{count} more",
   "chart_bars_past": "more than {count} values · later ones are counted in the rest",
