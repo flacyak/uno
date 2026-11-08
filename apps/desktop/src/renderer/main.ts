@@ -26,6 +26,7 @@ interface MenuBridge {
   onOpenPath(fn: (path: string) => void): void;
   onAddPaths(fn: (paths: string[]) => void): void;
   onInput(fn: (name: string) => void): void;
+  onWake(fn: () => void): void;
   inputChosen(name: InputName): void;
   languageChosen(locale: Locale): void;
 }
@@ -48,6 +49,7 @@ if (bridge === undefined) {
   menu?.onOpenPath((path) => void shell.openPath(path));
   menu?.onAddPaths((paths) => void shell.addPaths(paths));
   menu?.onInput((name) => shell.setInput(name));
+  menu?.onWake(() => shell.wake());
   // Keep the menu's input check mark in sync with the shell's input strategy.
   shell.onInput = (name) => menu?.inputChosen(name);
   menu?.inputChosen(shell.inputName);

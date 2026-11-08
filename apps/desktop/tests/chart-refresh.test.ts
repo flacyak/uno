@@ -6,10 +6,11 @@
  * folder cannot be listed, and says nothing once another workspace has
  * opened, and the refresh of a carried source, or of one whose files the
  * open did not find, is off and says why. On a schedule, the first check
- * opens nothing over the file as it was read, one that comes due over the
- * rewritten file draws its new row and says nothing, r or Reload starts the
- * schedule over, one over several files appends the new one alone, and
- * another workspace's open stops the schedule.
+ * opens nothing over the file as it was read, one that came due while the
+ * page was hidden or offline runs once it is back, over the rewritten file
+ * drawing its new row and saying nothing, r or Reload starts the schedule
+ * over, one over several files appends the new one alone, and another
+ * workspace's open stops the schedule.
  *
  * @vitest-environment happy-dom
  */
@@ -216,10 +217,11 @@ test("a schedule opens nothing over the file as it was read, and draws the rewri
 
   await appendFile(csv, ADDED_ROW);
   const before = message();
-  // A sleep moves the wall clock past the next check, and fires no timer.
+  // A sleep, or a page held back while hidden, moves the wall clock past the
+  // next check before its timer fires.
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(Date.now() + MINUTE_MS);
-  shell.wake();
+  document.dispatchEvent(new Event("visibilitychange"));
   vi.useRealTimers();
   expect(await counts(ROWS + 1)).toBe(true);
   expect(paths()).toStrictEqual([csv]);
@@ -253,7 +255,7 @@ test("a schedule over several files appends the new one alone, saying nothing", 
   const before = message();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(Date.now() + MINUTE_MS);
-  shell.wake();
+  window.dispatchEvent(new Event("online"));
   vi.useRealTimers();
   expect(await counts(PART_ROWS * copies.length)).toBe(true);
   const added = { name: basename(copies.at(-1)!), path: copies.at(-1) };

@@ -273,6 +273,10 @@ export class Shell {
         await Promise.all([this.askNewer(), this.sources.askGrown()]);
       }),
     );
+    // A schedule that came due while the page was away, or offline, runs once
+    // it is back.
+    document.addEventListener("visibilitychange", () => this.wake());
+    window.addEventListener("online", () => this.wake());
     this.paintTabs();
     this.paintStatus();
   }
