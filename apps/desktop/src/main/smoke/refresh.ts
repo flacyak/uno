@@ -92,9 +92,9 @@ export const REFRESH: Check[] = [
       const said = /^reloaded ads-q3.csv · a new version, the same size( · \\d+ edits? replayed)?$/;
       if (!(await arrives(() => said.test(text("#status-msg"))))) return "the status bar says " + JSON.stringify(text("#status-msg"));
       if (tab("ads-q3.csv").querySelector(".trouble") !== null) return "the tab still wears its mark";
-      // The new version is not the one the workspace records, so there is
-      // something to save.
-      if (tab("ads-q3.csv").querySelector(".dirty") === null) return "the tab has no dot";
+      // A reload of the tab's own object leaves the workspace clean, and the
+      // next save records the new version.
+      if (tab("ads-q3.csv").querySelector(".dirty") !== null) return "the tab has a dot";
       const first = () => document.querySelector("tbody tr:not(.pending) td:nth-child(2)")?.textContent;
       if (!(await arrives(() => first() === "A3000"))) return "the first cell reads " + JSON.stringify(first());
       // Another focus finds the object as just reloaded, so the line keeps

@@ -148,15 +148,15 @@ test("Reload reads the newer version, lands the edits on it, and says what chang
   }
 });
 
-// A save records the version a tab reads, so reading a new one at the same
-// size leaves something to save.
-test("Reload of a new version marks its tab unsaved", async () => {
+// A reload of the tab's own path leaves the workspace clean, and the next
+// save records the version it read.
+test("Reload of a new version leaves its tab saved", async () => {
   const w = await both();
   try {
     const remote = w.sources.find((t) => t.name === "google-ads.csv")!;
     b.objects.set(KEY, enc.encode(ADS_AGAIN));
     const fresh = await w.relink(remote, { name: "google-ads.csv", path: OBJECT });
-    expect(w.unsaved(fresh)).toBe(true);
+    expect(w.unsaved(fresh)).toBe(false);
   } finally {
     w.close();
   }
