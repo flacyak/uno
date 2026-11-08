@@ -227,6 +227,7 @@
   "menu_file": "Archivo…",
   "menu_browse_sources": "Explorar fuentes…",
   "menu_insert_formula": "Insertar fórmula…",
+  "menu_insert_chart": "Insertar gráfico…",
   "menu_remove_from_list": "Quitar de la lista",
   "menu_add_source": "Añadir fuente…",
   "menu_save": "Guardar",
@@ -478,6 +479,7 @@
   "chart_form_sum": "suma de",
   "chart_form_sum_none": "ninguna, contar filas",
   "chart_form_title_field": "título",
+  "chart_inserted": "insertado: {title}",
   "chart_bars_more": "+{count} más",
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",
   "chart_points": [

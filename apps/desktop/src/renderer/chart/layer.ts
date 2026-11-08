@@ -16,8 +16,9 @@ import "./chart.css";
 import type { Chart, ChartColumn, ChartPlace } from "@document";
 import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
+import type { ColumnSpan } from "@renderer/grid/view";
 import { el, must } from "@renderer/shell/util";
-import { overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
+import { fresh, overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
@@ -74,8 +75,10 @@ export class ChartLayer implements Stage {
     new ResizeObserver(() => this.draw()).observe(content);
   }
 
-  /** show takes over from the last workspace's windows with `charts`. */
+  /** show takes over from the last workspace's windows with `charts`, if it
+   * is not showing them already. */
   show(charts: Shown): void {
+    if (charts === this.charts) return;
     this.charts = charts;
     this.windows.clear();
     this.root.replaceChildren();
@@ -98,6 +101,19 @@ export class ChartLayer implements Stage {
   /** move stores where chart `id`'s window stands, which the next draw shows. */
   move(id: string, place: ChartPlace): void {
     this.charts.move(id, place);
+  }
+
+  /** fresh gives a new chart's place, away from `column`, which stands
+   * across the window. */
+  fresh(column: ColumnSpan): ChartPlace {
+    const { left } = this.root.getBoundingClientRect();
+    const inRoom = { left: column.left - left, right: column.right - left };
+    return fresh(this.charts.all.length, inRoom, this.room());
+  }
+
+  /** focus gives chart `id`'s window the keys, which raises it. */
+  focus(id: string): void {
+    this.windows.get(id)?.box.focus({ preventScroll: true });
   }
 
   /** heard gives what chart `id` last heard, for its window to draw. */
