@@ -7,8 +7,8 @@
  * opened, and the refresh of a carried source, or of one whose files the
  * open did not find, is off and says why. On a schedule, the first check
  * opens nothing over the file as it was read, one that comes due over the
- * rewritten file draws its new row and says nothing, and another workspace's
- * open stops the schedule.
+ * rewritten file draws its new row and says nothing, r or Reload starts the
+ * schedule over, and another workspace's open stops the schedule.
  *
  * @vitest-environment happy-dom
  */
@@ -224,6 +224,17 @@ test("a schedule opens nothing over the file as it was read, and draws the rewri
   expect(paths()).toStrictEqual([csv]);
   expect([message(), shell.unsaved]).toStrictEqual([before, false]);
   refresh.mockRestore();
+});
+
+test("r on a scheduled chart, or Reload on its source's line, starts its schedule over", async () => {
+  const refreshed = vi.spyOn(Refresher.prototype, "refreshed");
+  r();
+  shell.showPanel();
+  const line = new KeyboardEvent("keydown", { key: "r", bubbles: true, cancelable: true });
+  document.querySelector(".panel-list")!.dispatchEvent(line);
+  shell.togglePanel();
+  expect(refreshed.mock.calls).toStrictEqual([[SALES], [SALES]]);
+  refreshed.mockRestore();
 });
 
 test("another workspace's open stops the schedule", async () => {

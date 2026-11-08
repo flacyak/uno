@@ -5,7 +5,7 @@
  * is out is skipped; a wake checks each overdue source once, however many
  * intervals it slept through; and failed checks, among them one with no
  * answer in time, whose source waits for its answer, back off up to a cap,
- * until a refresh by hand.
+ * until a refresh by hand, which also ends a wait on the source's bucket.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -129,6 +129,20 @@ test("a refresh by hand forgets the failures, and the next check is an interval 
   refresher.refreshed("a");
   await vi.advanceTimersByTimeAsync(EVERY_MS);
   expect(checked, "checked an interval after the refresh by hand").toHaveLength(2);
+});
+
+test("a source waiting on its bucket is checked an interval after a read by hand", async () => {
+  let answer: Refreshed = { t: "waiting", why: "unconnected" };
+  refresher = new Refresher((source) => {
+    checked.push(source);
+    return Promise.resolve(answer);
+  });
+  refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
+  await vi.advanceTimersByTimeAsync(0);
+  answer = SAME;
+  refresher.refreshed("a");
+  await vi.advanceTimersByTimeAsync(EVERY_MS);
+  expect(checked, "checked an interval after the read by hand").toHaveLength(2);
 });
 
 test("a check with no answer in time fails, and the next waits for its answer, then backs off", async () => {

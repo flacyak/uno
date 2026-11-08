@@ -1253,11 +1253,12 @@ export class Shell {
    * refresh reads a tab's source again by hand: Reload for one file, or an
    * append of the files its folder now holds after its last part. A tab
    * waiting on its bucket opens the connect form, as its ! mark does, and a
-   * folder that cannot be listed says why.
+   * folder that cannot be listed says why. Its schedule starts over.
    */
   private async refresh(tab: Tab): Promise<void> {
     if (tab.state === "unconnected") return this.repoint(tab);
     if (tab.parts === undefined) return this.reload(tab);
+    this.refresher?.refreshed(tab.id);
     const w = this.workspace;
     try {
       await this.sources.askGrownOf(tab);
@@ -1290,11 +1291,13 @@ export class Shell {
 
   /**
    * pointAt points a tab at a file. The edits replay over the file. A file
-   * that fails to take them is refused and the tab is left as it was.
+   * that fails to take them is refused and the tab is left as it was. Its
+   * schedule starts over.
    */
   private async pointAt(tab: Tab, ref: SourceRef, said?: (fresh: Tab) => string): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.refresher?.refreshed(tab.id);
     this.keepSelection(w, tab);
     try {
       const fresh = await w.relink(tab, ref);
@@ -1329,11 +1332,13 @@ export class Shell {
 
   /**
    * append adds files to the end of a multi-file tab. Files that read
-   * differently from the tab's first are refused and the tab is left as it was.
+   * differently from the tab's first are refused and the tab is left as it
+   * was. Its schedule starts over.
    */
   private async append(tab: Tab, files: readonly SingleRef[]): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.refresher?.refreshed(tab.id);
     this.keepSelection(w, tab);
     try {
       const fresh = await w.append(tab, files);

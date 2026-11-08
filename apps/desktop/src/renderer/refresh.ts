@@ -83,10 +83,11 @@ export class Refresher {
     this.tick();
   }
 
-  /** Says a source is being read again by hand, which forgets its failures and
-   * puts its next check an interval from now. */
+  /** Says a source is being read again by hand, which forgets its failures,
+   * ends a wait on its bucket and puts its next check an interval from now. */
   refreshed(source: string): void {
     this.failures.delete(source);
+    this.waiting.delete(source);
     this.checked.set(source, Date.now());
     this.tick();
   }
