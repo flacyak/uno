@@ -494,8 +494,8 @@ export class Workspace {
    * join in flight. Cell edits no save has recorded hold a changed file for a
    * refresh by hand, since a rewritten file can put their rows elsewhere.
    * Saved edits replay over it as they do on Reload: the hold is for work the
-   * person has not kept yet. One still indexing, or with no file of its own,
-   * waits.
+   * person has not kept yet. One still indexing, waiting on its bucket, which
+   * it asks nothing, or with no file of its own, waits.
    */
   async refresh(id: string): Promise<Refreshed> {
     const tab = this.tabs.find((t) => t.id === id);
@@ -503,6 +503,7 @@ export class Workspace {
     if (tab === undefined || link === undefined || link.path === "") {
       return { t: "waiting", why: "nothing" };
     }
+    if (tab.state === "unconnected") return { t: "waiting", why: "unconnected" };
     if (!tab.missing && !tab.source.progress.complete) return { t: "waiting", why: "indexing" };
     if (unchanged(link, tab.bytes, await this.engine.stat(link.path))) return { t: "same" };
     const edits = tab.unsavedCells;
