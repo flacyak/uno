@@ -521,7 +521,7 @@ export class Shell {
     const items: MenuItem[] = isOpen
       ? [
           formula,
-          chart,
+          { ...chart, keys: "Ctrl+Shift+G" },
           { label: m.menu_add_source(), keys: "Ctrl+Shift+O", choose: () => void this.add() },
           { label: m.menu_save(), keys: "Ctrl+S", choose: () => void this.save() },
           { label: m.menu_save_as(), keys: "Ctrl+Shift+S", choose: () => void this.saveAs() },
@@ -589,6 +589,19 @@ export class Shell {
         else this.layer?.focus(made);
       },
     });
+  }
+
+  /**
+   * insertChartHere opens the chart form under the selected column's header,
+   * for a key or a menu that has no place of its own to open it at.
+   */
+  insertChartHere(): void {
+    const on = this.showing();
+    if (on === undefined) return;
+    const { workspace: w, grid } = on;
+    // The form hangs under the column, so a column scrolled away comes back.
+    grid.reveal();
+    void this.insertChart(w.path, grid.underHead(grid.selection().col));
   }
 
   /**
@@ -947,6 +960,7 @@ export class Shell {
       // Under Vim-style Ctrl+B pages up, wherever the keys are.
       ["b", { run: () => this.toggleSidebar(), when: () => this.input.name === "default" }],
       ["e", { run: () => this.toggleMode() }],
+      ["Shift+g", { run: () => this.insertChartHere() }],
       [
         "z",
         { run: () => void this.history("undo"), when: () => this.workspace?.editable === true },
@@ -1324,6 +1338,7 @@ export class Shell {
       else void this.open(true);
     },
     sources: () => this.showPanel(),
+    chart: () => this.insertChartHere(),
     row: (c) => this.grid?.act({ t: "move", motion: "last-row", count: c.row }),
     unknown: (c) => this.say(m.not_a_command({ text: c.text }), true),
   };

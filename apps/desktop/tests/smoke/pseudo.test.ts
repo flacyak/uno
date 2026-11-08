@@ -179,7 +179,7 @@ test("a right click on the workspace offers its menu in the language chosen", as
 
 test("the chart form is in the language chosen", async () => {
   const items = [...document.querySelectorAll<HTMLElement>(".pop-item")];
-  items.find((item) => item.textContent === m.menu_insert_chart())?.click();
+  items.find((item) => item.firstChild?.textContent === m.menu_insert_chart())?.click();
   expect(await until(domPage(), () => document.querySelector(".chart-form") !== null)).toBe(true);
   expect(english()).toEqual([]);
   const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
