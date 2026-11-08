@@ -3,15 +3,16 @@
  * the shortest interval among its charts, until no chart schedules it; one
  * still indexing waits until it is ready; a check that comes due while one
  * is out is skipped; a wake checks each overdue source once, however many
- * intervals it slept through; and failed checks back off up to a cap, until
- * a refresh by hand.
+ * intervals it slept through; and failed checks, among them one with no
+ * answer in time, whose source waits for its answer, back off up to a cap,
+ * until a refresh by hand.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import { Refresher } from "@renderer/refresh";
 import type { Refreshed } from "@renderer/refresh";
-import { BACKOFF_CAP_MS } from "@renderer/timing";
+import { BACKOFF_CAP_MS, CHECK_TIMEOUT_MS } from "@renderer/timing";
 
 /** One chart's schedule of every 5 min, and another's three times as long. */
 const EVERY_MS = 300_000;
@@ -128,4 +129,20 @@ test("a refresh by hand forgets the failures, and the next check is an interval 
   refresher.refreshed("a");
   await vi.advanceTimersByTimeAsync(EVERY_MS);
   expect(checked, "checked an interval after the refresh by hand").toHaveLength(2);
+});
+
+test("a check with no answer in time fails, and the next waits for its answer, then backs off", async () => {
+  let answer = (): void => {};
+  refresher = new Refresher((source) => {
+    checked.push(source);
+    return new Promise((resolve) => (answer = () => resolve(SAME)));
+  });
+  refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
+  await vi.advanceTimersByTimeAsync(CHECK_TIMEOUT_MS + BACKOFF_CAP_MS);
+  expect(checked, "no second check beside the one still out").toHaveLength(1);
+  answer();
+  await vi.advanceTimersByTimeAsync(EVERY_MS);
+  expect(checked, "backed off from the check that timed out").toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(EVERY_MS);
+  expect(checked).toHaveLength(2);
 });
