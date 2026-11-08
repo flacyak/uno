@@ -537,12 +537,14 @@ export const CHARTS: Check[] = [
   },
   {
     // No run has a coarse pointer, so this lifts the rule out of its media query.
+    // The rule names the head's buttons beside the ×, so it is found among its selectors.
     name: `a finger gets ${FINGER} around a window's ×`,
     script: `
       ${CHROME}
       const inside = (rules) => [...rules].flatMap((rule) => [rule, ...inside(rule.cssRules ?? [])]);
       const rules = [...document.styleSheets].flatMap((sheet) => inside(sheet.cssRules));
-      const reach = rules.find((rule) => rule.selectorText === ".chart-close::after");
+      const named = (rule) => (rule.selectorText ?? "").split(",").map((one) => one.trim());
+      const reach = rules.find((rule) => named(rule).includes(".chart-close::after"));
       if (reach?.parentRule?.conditionText !== "(pointer: coarse)") return "the × has no rule for a finger";
       const lifted = document.createElement("style");
       lifted.textContent = reach.cssText;

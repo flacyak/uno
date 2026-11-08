@@ -154,15 +154,47 @@
   margin-right: var(--x-inset);
 }
 
-/* A finger gets `--hit` around a × drawn no larger. `inset` counts from inside
- * the ×'s 1 px border. */
+/* A finger gets `--hit` around a × drawn no larger, and as much around a
+ * head's button. `inset` counts from inside the 1 px border each has. */
 @media (pointer: coarse) {
-  .chart-close::after {
+  .chart-close::after,
+  .chart-head-button::after {
     --hit: 28px;
     content: "";
     position: absolute;
     inset: calc((var(--x-size) - var(--hit)) / 2 - 1px);
   }
+}
+
+/* A head's button is as big as the ×, round-cornered, its glyph in the head's
+ * ink, and under the pointer, or pressed in, it wears the settings toggle's
+ * look (settings.css). The keys give it the accent's border. */
+.chart-head-button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--x-size);
+  height: var(--x-size);
+  padding: 0;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chart-head-button:hover,
+.chart-head-button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+
+.chart-head-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 /* What a plot draws stops at its foot, so none of it stands on the caption. */

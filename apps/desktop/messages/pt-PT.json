@@ -518,6 +518,7 @@
   "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",
   "chart_table_rows": "linhas",
   "chart_table_share": "proporção",
+  "chart_table_aria": "Tabela",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um ficheiro por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só ficheiro · ficheiros só são anexados a vários lidos como um",

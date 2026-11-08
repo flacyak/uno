@@ -151,6 +151,8 @@ test("relabel writes the window's own words in the language chosen since", () =>
   made.relabel();
   expect(made.box.getAttribute("aria-roledescription")).toBe(m.chart_role());
   expect(close(made.box).getAttribute("aria-label")).toBe(m.chart_remove_aria());
+  const toggle = made.box.querySelector(".chart-table-toggle");
+  expect(toggle?.getAttribute("aria-label")).toBe(m.chart_table_aria());
   expect(m.chart_role()).not.toBe(m.chart_role({}, { locale: baseLocale }));
 });
 
@@ -357,4 +359,24 @@ test("arrows in the table scroll it, and leave the window where it stands", asyn
   expect(draw).not.toHaveBeenCalled();
   expect(press(made.box, "ArrowDown").defaultPrevented).toBe(true);
   expect(draw).toHaveBeenCalledOnce();
+});
+
+test("the head's table button puts the table in the plot's place, pressed while it shows, and brings the plot back", async () => {
+  const read = tallyOf(["North"], true);
+  const made = hearing(() => heardOf(read, read));
+  await frame();
+  const toggle = made.box.querySelector<HTMLButtonElement>(".chart-head .chart-table-toggle")!;
+  expect(toggle.type).toBe("button");
+  expect(toggle.getAttribute("aria-label")).toBe(m.chart_table_aria());
+  expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  expect(toggle.nextElementSibling).toBe(close(made.box));
+  expect(toggle.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  toggle.click();
+  await frame();
+  expect(tableOf(made.box)).not.toBeNull();
+  expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  press(made.box, "t");
+  await frame();
+  expect(tableOf(made.box)).toBeNull();
+  expect(toggle.getAttribute("aria-pressed")).toBe("false");
 });

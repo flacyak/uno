@@ -44,6 +44,12 @@ const CROSS =
   '<path d="M2 2l6 6M8 2l-6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
   "</svg>";
 
+/** The table button's glyph, a header row over two columns, drawn in currentColor. */
+const TABLE =
+  '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
+  '<path d="M1.5 1.5h7v7h-7zM1.5 4.5h7M4.5 4.5v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+  "</svg>";
+
 /** The grip's two diagonal strokes, drawn in currentColor. */
 const GRIP =
   '<svg viewBox="0 0 12 12" width="12" height="12">' +
@@ -209,6 +215,8 @@ export class ChartWindow {
   private readonly find = button("chart-find", "", () =>
     this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
   );
+  /** The head's button that puts the table in the plot's place, pressed in while it stands there. */
+  private readonly toggle = button("chart-head-button chart-table-toggle", "", () => this.flip());
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
   /** The pointer that holds the window, while one does. */
@@ -237,9 +245,12 @@ export class ChartWindow {
     x.type = "button";
     x.innerHTML = CROSS;
     this.words.attr(x, "aria-label", m.chart_remove_aria);
+    this.toggle.innerHTML = TABLE;
+    this.toggle.setAttribute("aria-pressed", "false");
+    this.words.attr(this.toggle, "aria-label", m.chart_table_aria);
 
     const head = el("div", "col-head chart-head");
-    head.append(this.title, x);
+    head.append(this.title, this.toggle, x);
     head.addEventListener("pointerdown", (e) => {
       const onButton = e.target instanceof Element && e.target.closest("button") !== null;
       if (!onButton) this.take(e, head, dragged);
@@ -381,9 +392,10 @@ export class ChartWindow {
     if (this.plot.firstChild !== this.table.box) this.fill(this.table.box);
   }
 
-  /** flip puts the table in the plot's place, or the plot back. */
+  /** flip puts the table in the plot's place, or the plot back, and the button says which. */
   private flip(): void {
     this.tabled = !this.tabled;
+    this.toggle.setAttribute("aria-pressed", `${this.tabled}`);
     this.redraw();
   }
 
