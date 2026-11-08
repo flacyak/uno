@@ -252,6 +252,7 @@
   "nothing_yanked": "nothing yanked",
   "computed_nothing_to_type": "{column} is computed from a formula · nothing to type over",
   "row_still_loading": "row {row} is still loading",
+  "typed_before_reread": "nothing was written · the file was read again while you typed",
   "yank_clipboard_refused": "yanked, but the system clipboard refused it",
   "column_flagged_hint": "looks numeric, does not parse",
   "offer_ambiguous": "another rule fits these examples too",

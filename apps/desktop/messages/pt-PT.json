@@ -266,6 +266,7 @@
   "nothing_yanked": "nada copiado",
   "computed_nothing_to_type": "{column} é calculada por uma fórmula · não há nada para sobrescrever",
   "row_still_loading": "a linha {row} ainda está a carregar",
+  "typed_before_reread": "nada foi gravado · o ficheiro foi lido de novo enquanto escrevia",
   "yank_clipboard_refused": "copiado, mas a área de transferência do sistema recusou",
   "column_flagged_hint": "parece numérica, mas não é lida como número",
   "offer_ambiguous": "outra regra também se encaixa nestes exemplos",

@@ -1141,8 +1141,12 @@ export class Shell {
     const on = this.showing();
     if (on === undefined) return;
     const { workspace: w, grid } = on;
-    grid.show(w.rows, w.editable, keep);
-    if (!keep) this.restore(w, grid);
+    if (keep) {
+      grid.refreshed(w.rows, w.editable);
+    } else {
+      grid.show(w.rows, w.editable);
+      this.restore(w, grid);
+    }
     this.paintAll();
   }
 
