@@ -4,6 +4,7 @@
  * workspace's charts.
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 
 import { newManifest, writeDocument } from "@document";
@@ -96,14 +97,21 @@ export function carriedUnoOf(charts: Chart[], raw: Uint8Array): Uint8Array {
   });
 }
 
+/** The extent a save measures of part `i` at `path`: all its bytes, past the
+ * header line in every part after the first. A part not on disk has none. */
+function extentOf(path: string, i: number): { bytes: number; skip: number } {
+  if (!existsSync(path)) return { bytes: 0, skip: 0 };
+  const bytes = readFileSync(path);
+  return { bytes: bytes.length, skip: i === 0 ? 0 : bytes.indexOf("\n") + 1 };
+}
+
 /** The bytes of a .uno of the sales export read as one from `parts`, holding
  * `charts`. */
 export function partsUnoOf(charts: Chart[], parts: readonly string[]): Uint8Array {
-  const held = parts.map((path) => ({
+  const held = parts.map((path, i) => ({
     name: basename(path),
     path,
-    bytes: 0,
-    skip: 0,
+    ...extentOf(path, i),
     unterminated: false,
   }));
   const sales = { ...HELD, id: SALES, name: SALES, parts: held, header: "first" as const };
