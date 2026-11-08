@@ -18,7 +18,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow, Rectangle } from "electron";
 
 import { ask } from "./ask.ts";
-import { through } from "./driven.ts";
+import { through, throughAsync } from "./driven.ts";
 
 /**
  * Milliseconds between frame captures. Faster than the 12fps the GIF is
@@ -222,6 +222,19 @@ const WHEEL = {
 const WHEEL_TURNS = 30;
 const WHEEL_TURN_PX = 48;
 const WHEEL_TURN_MS = 60;
+
+/**
+ * The table story's beats: a chart window given the keys by a click on its
+ * head, t pressed for the table of its points, the wheel turned down the
+ * table, and t pressed again for the points.
+ */
+const TABLE = {
+  click: 500,
+  press: 1_500,
+  turn: 2_700,
+  back: 5_000,
+  end: 6_300,
+};
 
 /** A stand-in for the pointer, as a capture leaves the real one out. */
 const POINTER =
@@ -690,6 +703,7 @@ const STORIES: Record<string, Story> = {
   refused: { end: REFUSED.end, script: playRefused },
   moves: { end: MOVES.end, script: playMoves },
   wheel: { end: WHEEL.end, script: playWheel },
+  table: { end: TABLE.end, script: playTable },
 };
 
 /**
@@ -777,14 +791,41 @@ async function playWheel(win: BrowserWindow, at: Clock): Promise<void> {
 }
 
 /**
+ * playTable performs the table story: the last chart window, a scatter's,
+ * given the keys by a click on its head, t for the table of its points, the
+ * wheel turned down the table, and t again for the points.
+ */
+async function playTable(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  await at(TABLE.click);
+  const head = await hover(win, ".chart:last-child .chart-title");
+  pointTo(win, head.x, head.y);
+  await click(win, ".chart:last-child .chart-title");
+  await at(TABLE.press);
+  press(win, "t");
+  await at(TABLE.turn);
+  const { x, y } = await hover(win, ".chart:last-child .chart-plot");
+  pointTo(win, x, y);
+  await turnWheel(win, x, y, WHEEL_TURN_PX);
+  await at(TABLE.back);
+  press(win, "t");
+  await at(TABLE.end);
+}
+
+/**
  * turnWheel turns the wheel over (`x`, `y`) WHEEL_TURNS times, `down` px down
- * the page each time. Electron counts a turn down as a negative delta.
+ * the page each time. Electron counts a turn down as a negative delta. The
+ * scroll a turn causes lands after the page answers it, so the ignore stays
+ * lifted until the last turn is over, as driven.ts says, and what a window's
+ * own scrollable takes from the wheel scrolls too.
  */
 async function turnWheel(win: BrowserWindow, x: number, y: number, down: number): Promise<void> {
-  for (let i = 0; i < WHEEL_TURNS; i++) {
-    through(win, () => win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down }));
-    await sleep(WHEEL_TURN_MS);
-  }
+  await throughAsync(win, async () => {
+    for (let i = 0; i < WHEEL_TURNS; i++) {
+      win.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: -down });
+      await sleep(WHEEL_TURN_MS);
+    }
+  });
 }
 
 /** standIn adds the pointer's stand-in to the page, hidden until pointTo moves it. */
