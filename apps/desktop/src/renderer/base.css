@@ -233,6 +233,11 @@ body {
   border-color: var(--flag);
 }
 
+/* An armed × wears a ring as well, so the press that arms it shows under the pointer. */
+.round-x.armed {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--flag) 45%, transparent);
+}
+
 .round-x:focus-visible {
   outline: none;
   border-color: var(--accent);

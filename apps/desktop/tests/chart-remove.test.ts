@@ -42,6 +42,7 @@ test("the first × arms it and says so, and the second removes the chart and set
   cross(bars!).click();
   expect(cross(bars!).classList.contains("armed")).toBe(true);
   expect(message()).toBe(m.chart_remove_armed({ title: madeTitle(BARS.plot) }));
+  expect(cross(bars!).getAttribute("aria-label")).toBe(message());
   expect([windows().length, dotted()]).toStrictEqual([2, false]);
 
   cross(bars!).click();
@@ -62,6 +63,7 @@ test("Delete arms the same, another message disarms it, and the next two remove 
   // The source's × says it takes its charts with it.
   document.querySelector<HTMLElement>(`.tab[data-source="${SALES}"] .close`)!.click();
   expect(cross(pie!).classList.contains("armed")).toBe(false);
+  expect(cross(pie!).getAttribute("aria-label")).toBe(m.chart_remove_aria());
   pie!.dispatchEvent(del());
   expect(windows()).toStrictEqual([pie]);
   pie!.dispatchEvent(del());
