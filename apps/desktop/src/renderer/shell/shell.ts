@@ -1226,15 +1226,23 @@ export class Shell {
   /**
    * refresh reads a tab's source again by hand: Reload for one file, or an
    * append of the files its folder now holds after its last part. A tab
-   * waiting on its bucket opens the connect form, as its ! mark does.
+   * waiting on its bucket opens the connect form, as its ! mark does, and a
+   * folder that cannot be listed says why.
    */
   private async refresh(tab: Tab): Promise<void> {
     if (tab.state === "unconnected") return this.repoint(tab);
     if (tab.parts === undefined) return this.reload(tab);
-    await this.sources.askGrown();
-    // An append answered while the folder was listed has replaced the tab.
-    const now = this.tabAt(tab.id);
-    if (now === undefined) return;
+    const w = this.workspace;
+    try {
+      await this.sources.askGrownOf(tab);
+    } catch (err) {
+      if (this.workspace === w) this.say(message(err), true);
+      return;
+    }
+    // A refresh whose workspace another open replaced ends quietly, and an
+    // append answered while the folder was listed has replaced the tab.
+    const now = w?.sources.find((t) => t.id === tab.id);
+    if (this.workspace !== w || now === undefined) return;
     const grown = this.sources.grown(now);
     if (grown === undefined) this.say(m.refresh_no_new_files({ name: now.name }));
     else await this.append(now, grown.files);

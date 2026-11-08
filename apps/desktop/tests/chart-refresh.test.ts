@@ -2,7 +2,8 @@
  * @fileoverview A chart refreshed by hand from its own window, through the real
  * shell and engine: r or the head's refresh button reads a rewritten file
  * again and draws the new rows, r twice reads it once, and a source of several
- * files appends the new one alone.
+ * files appends the new one alone, says why its folder cannot be listed, and
+ * says nothing once another workspace has opened.
  *
  * @vitest-environment happy-dom
  */
@@ -12,7 +13,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
 
-import { Engine } from "@engine";
+import { Engine, Refusal } from "@engine";
 import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
@@ -20,7 +21,7 @@ import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
 import { BARS, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, FIXTURE, bootShell } from "./smoke/dom-harness.ts";
-import { domPage, until } from "./smoke/dom-page.ts";
+import { domPage, frame, until } from "./smoke/dom-page.ts";
 
 /** A row of the sales export's shape, which a rewrite adds at its end. */
 const ADDED_ROW = "2026-10-01,West,Ada Okafor,direct,1,1.00\r\n";
@@ -106,4 +107,36 @@ test("r on a chart over several files appends the new one alone, and says when t
   r();
   const none = m.refresh_no_new_files({ name: "sales-q3" });
   expect(await until(page, () => message() === none)).toBe(true);
+
+  // A folder that cannot be listed says why, where it would say nothing is new.
+  const offline = "the bucket is offline";
+  const refused = new Refusal({ t: "text", text: offline });
+  const list = vi.spyOn(Engine.prototype, "list").mockRejectedValueOnce(refused);
+  r();
+  expect(await until(page, () => message() === offline)).toBe(true);
+  list.mockRestore();
+});
+
+test("a folder refresh still listing when another workspace opens ends there, without a word", async () => {
+  let release = (): void => undefined;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let listed: Promise<unknown> = held;
+  // The first listing waits for the release, then asks the engine as the next one does.
+  const gated = vi
+    .spyOn(Engine.prototype, "list")
+    .mockImplementationOnce(function (this: Engine, path, cursor) {
+      const later = held.then(() => this.list(path, cursor));
+      listed = later;
+      return later;
+    });
+  r();
+  const uno = join(dir, "q3.uno");
+  await shell.openRef({ name: basename(uno), path: uno }, uno);
+  const before = message();
+  release();
+  // The open closed the engine the listing asked, so the listing fails.
+  await listed.catch(() => undefined);
+  await frame();
+  expect(message()).toBe(before);
+  gated.mockRestore();
 });
