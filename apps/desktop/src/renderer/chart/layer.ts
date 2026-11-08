@@ -61,6 +61,9 @@ export class ChartLayer implements Stage {
   /** The z-index the last window raised took. */
   private raised = 0;
 
+  /** How far up a stack of heads too high for the room stands, so the one with the keys shows. */
+  private reach = 0;
+
   constructor(
     private readonly root: HTMLElement,
     /** Every change to the layer's box is a change to this one's. */
@@ -70,6 +73,10 @@ export class ChartLayer implements Stage {
     this.head = readRowHeight(root);
     must(content.querySelector<HTMLElement>(".grid-scroll")).append(this.gauge);
     new ResizeObserver(() => this.draw()).observe(content);
+    // A head past the room's foot comes into view once it has the keys.
+    root.addEventListener("focusin", () => {
+      if (root.classList.contains("overfull")) this.draw();
+    });
   }
 
   /** show takes over from the last workspace's windows with `charts`, if it
@@ -78,6 +85,7 @@ export class ChartLayer implements Stage {
     if (charts === this.charts) return;
     this.charts = charts;
     this.windows.clear();
+    this.reach = 0;
     this.root.replaceChildren();
     this.root.hidden = false;
     this.draw();
@@ -189,12 +197,14 @@ export class ChartLayer implements Stage {
     this.fit(border);
     const room = this.room();
     const tucking = tucks(room);
+    const spills = tucking && overfull(charts.length, this.head, border, room);
+    this.reach = spills ? this.reaching(charts, border, room) : 0;
     charts.forEach((chart, index) => {
       const held = this.windowOf(chart);
       held.show(chart, this.charts.sourceLabel(chart.source));
-      held.stand(tucking ? tucked(index, this.head, border, room) : placed(chart.place, room));
+      const slot = tucked(index, this.head, border, room);
+      held.stand(tucking ? { ...slot, y: slot.y - this.reach } : placed(chart.place, room));
     });
-    const spills = tucking && overfull(charts.length, this.head, border, room);
     const stack = stackHeight(charts.length, this.head, border);
     this.root.style.setProperty("--stack-height", `${stack}px`);
     this.root.classList.toggle("tucked", tucking && charts.length > 0);
@@ -221,6 +231,26 @@ export class ChartLayer implements Stage {
     const bottom = grid.height - inside.height;
     if (right > 0) this.root.style.setProperty("--bar-right", `${right}px`);
     if (bottom > 0) this.root.style.setProperty("--bar-bottom", `${bottom}px`);
+  }
+
+  /**
+   * reaching gives how far up the stack of `charts` stands in `room`, in whole
+   * heads, so the room's top cuts none: as far as it stood, moved only as far
+   * as it takes to show the head with the keys whole, and no further than it
+   * takes to show the last head.
+   */
+  private reaching(charts: readonly Chart[], border: number, room: Room): number {
+    const whole = (px: number): number => Math.ceil(px / this.head) * this.head;
+    const has = (chart: Chart): boolean =>
+      this.windows.get(chart.id)?.box.contains(document.activeElement) === true;
+    const keyed = charts.findIndex(has);
+    let reach = this.reach;
+    if (keyed >= 0) {
+      const { y, height } = tucked(keyed, this.head, border, room);
+      reach = Math.min(Math.max(reach, whole(y + height - room.h)), y);
+    }
+    const most = whole(stackHeight(charts.length, this.head, border) - room.h);
+    return Math.max(0, Math.min(reach, most));
   }
 
   /** windowOf returns a chart's window, adding one over those never raised if it has none. */

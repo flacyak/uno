@@ -735,6 +735,33 @@ test("heads a room cannot hold stop at its foot, and only while they are too man
   expect(held()).toBe(false);
 });
 
+test("a head past the foot comes into view with the keys, and the stack moves no further", () => {
+  shown(...Array.from({ length: TOO_MANY_HEADS }, (_, i) => ({ ...FLUSH, id: `c${i}` })));
+  resize(TUCKING);
+  const last = windows().at(-1)!;
+  const tops = (): number[] => windows().map((box) => drawn(box).y);
+  last.focus();
+  const { y } = drawn(last);
+  expect(y > 0 && y + HEAD + BORDER <= TUCKING.h).toBe(true);
+  // The room's top cuts no head, and one that shows whole takes the keys where it stands.
+  expect(tops().every((top) => top % HEAD === 0)).toBe(true);
+  const before = tops();
+  windows().at(-2)!.focus();
+  expect(tops()).toStrictEqual(before);
+  first().focus();
+  expect(drawn(first()).y).toBe(0);
+});
+
+test("another workspace's stack starts at the room's top, however far the last one stood", () => {
+  const heads = (prefix: string): Chart[] =>
+    Array.from({ length: TOO_MANY_HEADS }, (_, i) => ({ ...FLUSH, id: `${prefix}${i}` }));
+  const { layer } = shown(...heads("c"));
+  resize(TUCKING);
+  windows().at(-1)!.focus();
+  layer.show(modelOf(...heads("d")));
+  expect(drawn(first()).y).toBe(0);
+});
+
 test("windows that stand whole keep their shadows, however many would not fit as heads", () => {
   const many = Array.from({ length: TOO_MANY_HEADS }, (_, i) => ({ ...FLUSH, id: `c${i}` }));
   shown(...many);
