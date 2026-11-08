@@ -31,9 +31,14 @@ const REGION = 1;
 /** The column a sum is of: revenue. */
 const REVENUE = 5;
 
-/** What the form asks of the shell to insert `plot` over the sales export. */
-const inserting = (plot: Plot, title = ""): string =>
-  `insert sales ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
+/** The workspace's sources: the sales export, active, then an ads export with
+ * its region elsewhere and no revenue. */
+const SALES = { id: "sales", name: "sales-q3.csv", band: { columns: COLUMNS } };
+const ADS = { id: "ads", name: "ads-q3.csv", band: { columns: [COLUMNS[4], COLUMNS[REGION]] } };
+
+/** What the form asks of the shell to insert `plot` over `source`. */
+const inserting = (plot: Plot, title = "", source = SALES.id): string =>
+  `insert ${source} ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
 
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
@@ -45,8 +50,7 @@ function form(insert = (): Promise<void> => Promise.resolve()): {
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  const source = { id: "sales", name: "sales-q3.csv", band: { columns: COLUMNS } };
-  new ChartForm({ left: 0, top: 0 }, source, REGION, {
+  new ChartForm({ left: 0, top: 0 }, [SALES, ADS], SALES, REGION, {
     insert: (source, plot, title) => {
       asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
@@ -123,6 +127,27 @@ test("a sum is of a number column, and is in the title the chart makes", async (
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(revenue), "closed"]);
+});
+
+test("another source offers its columns, and keeps those it has a header for", async () => {
+  const { asked, box } = form();
+  select("sum").value = String(REVENUE);
+  select("source").value = "1";
+  select("source").dispatchEvent(new Event("change"));
+  expect(box.querySelector(".title")!.textContent).toBe(
+    m.chart_form_title_source({ source: ADS.name }),
+  );
+  expect([...select("by").options].map((o) => o.textContent)).toStrictEqual(["units", "region"]);
+  expect([select("by").value, select("sum").value]).toStrictEqual(["1", ""]);
+  select("sum").value = "0";
+  press("Enter");
+  await settle();
+  const units: Plot = {
+    t: "bars",
+    by: { col: 1, header: "region" },
+    sum: { col: 0, header: "units" },
+  };
+  expect(asked).toStrictEqual([inserting(units, "", ADS.id), "closed"]);
 });
 
 test("Esc closes it and inserts nothing", () => {
