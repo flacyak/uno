@@ -13,12 +13,13 @@
 import { newManifest, readContainer, writeDocument } from "@uno/core/document";
 import { parseConnection } from "@uno/core/library";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HOME_REGION } from "@core-tests/store/regions";
 import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@core-tests/store/standin";
+import { CHECK_TIMEOUT_MS, MINUTE_MS } from "@renderer/timing";
 import {
   DRIVEN_LANGUAGE_ENV,
   DRIVEN_LANGUAGE_SWITCH,
@@ -358,6 +359,38 @@ await writeFile(
   }),
 );
 
+// A workspace of one chart that checks its file every minute, the shortest
+// schedule, over a file of two rows. A check asks for a third, and the chart
+// draws it once the minute is up, which may take a check's own limit more.
+const everyMinute = 1;
+const scheduledFile = join(scratch, "sent", "scheduled.csv");
+const scheduledHeader = "region";
+const scheduledRows = ["North", "South"];
+const grownRow = "West";
+await writeFile(scheduledFile, `${[scheduledHeader, ...scheduledRows].join("\n")}\n`);
+const scheduled = join(scratch, "sent", "scheduled.uno");
+const scheduledSource = {
+  id: "scheduled",
+  name: "scheduled.csv",
+  path: scheduledFile,
+  rows: scheduledRows.length,
+  cols: 1,
+  state: { active: { row: 0, col: 0 } },
+};
+const scheduledChart = { ...rowsPer(scheduledSource.id, 0, scheduledHeader), refresh: everyMinute };
+await writeFile(
+  scheduled,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [scheduledSource],
+    active: scheduledSource.id,
+    log: [],
+    charts: [{ ...scheduledChart, id: "c1", place: { ...chartSize, x: 0, y: 0 } }],
+    extra: new Map(),
+    at: scheduled,
+  }),
+);
+
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");
@@ -412,11 +445,15 @@ function again(path) {
 /**
  * answer handles what a check asks of this script: `rewrite <key>` rewrites
  * the object at <key> with one digit changed, `put <key> ...` puts the
- * objects held in ARRIVING for those keys into the bucket, and
- * `again [<path>]` starts a second uno and waits for it to exit.
+ * objects held in ARRIVING for those keys into the bucket, `again [<path>]`
+ * starts a second uno and waits for it to exit, and `grow` adds a row to the
+ * scheduled chart's file.
  */
 function answer(what) {
   const [verb, ...keys] = what.split(" ");
+  if (verb === "grow" && keys.length === 0) {
+    return appendFile(scheduledFile, `${grownRow}\n`).then(() => true);
+  }
   if (verb === "again" && keys.length <= 1) return again(keys[0]);
   if (verb === "put" && keys.length > 0 && keys.every((k) => ARRIVING.has(k))) {
     for (const k of keys) standin.objects.set(k, ARRIVING.get(k));
@@ -444,6 +481,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_ALONG: along,
     UNO_SMOKE_PIES: pies,
     UNO_SMOKE_STATES: states,
+    UNO_SMOKE_SCHEDULED: scheduled,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,
     // The stand-in's endpoint and keys. The engine's utility process inherits
@@ -453,7 +491,8 @@ const { code, out } = await drive("smoke", {
     AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
   }),
   answer,
-  deadlineMs: 60_000,
+  // The run's own minute, and what the scheduled chart may wait.
+  deadlineMs: 60_000 + everyMinute * MINUTE_MS + CHECK_TIMEOUT_MS,
   onTimeout: () => void shut(),
 });
 await shut();
