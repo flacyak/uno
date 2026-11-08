@@ -1,6 +1,9 @@
 /* The pop-up forms (form.ts), hung where they were opened from. */
 
 .pop-form {
+  /* How far in from its padding Chromium starts a select's text: the inner
+   * start padding of its menu list. */
+  --select-text-inset: 4px;
   position: fixed;
   z-index: 10;
   width: 320px;
@@ -52,6 +55,12 @@
   border: 1px solid var(--rule);
   border-radius: 4px;
   outline: none;
+}
+
+/* An input's text starts where a select's does, so a form's lines of text
+ * stand in one column. */
+.pop-form input {
+  padding-left: calc(8px + var(--select-text-inset));
 }
 
 .pop-form select:focus,
