@@ -15,11 +15,21 @@ import { ChartForm } from "@renderer/chart/form";
 import { madeTitle } from "@renderer/chart/window";
 import { num } from "@renderer/locale";
 
-/** The sales export's headers. */
-const HEADERS = ["date", "region", "rep", "channel", "units", "revenue"];
+/** The sales export's columns, as the engine reads them. Revenue's numbers are formatted. */
+const COLUMNS = [
+  { header: "date", kind: "date", flagged: false },
+  { header: "region", kind: "text", flagged: false },
+  { header: "rep", kind: "text", flagged: false },
+  { header: "channel", kind: "text", flagged: false },
+  { header: "units", kind: "num", flagged: false },
+  { header: "revenue", kind: "text", flagged: true },
+] as const;
 
 /** The column selected in the grid: region. */
 const REGION = 1;
+
+/** The column a sum is of: revenue. */
+const REVENUE = 5;
 
 /** What the form asks of the shell to insert `plot` over the sales export. */
 const inserting = (plot: Plot, title = ""): string =>
@@ -35,8 +45,8 @@ function form(insert = (): Promise<void> => Promise.resolve()): {
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  const band = { columns: HEADERS.map((header) => ({ header })) };
-  new ChartForm({ left: 0, top: 0 }, { id: "sales", name: "sales-q3.csv", band }, REGION, {
+  const source = { id: "sales", name: "sales-q3.csv", band: { columns: COLUMNS } };
+  new ChartForm({ left: 0, top: 0 }, source, REGION, {
     insert: (source, plot, title) => {
       asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
@@ -84,6 +94,21 @@ test("a title of one's own goes in the chart, without the spaces round it", asyn
   box.requestSubmit();
   await settle();
   expect(asked).toStrictEqual([inserting(REGION_BARS, "Orders per region"), "closed"]);
+});
+
+test("a sum is of a number column, and is in the title the chart makes", async () => {
+  const { asked, box } = form();
+  const sum = box.querySelectorAll("select")[1]!;
+  const offered = [...sum.options].map((o) => o.textContent);
+  expect(offered).toStrictEqual([m.chart_form_sum_none(), "units", "revenue"]);
+  expect(sum.value).toBe("");
+  sum.value = String(REVENUE);
+  sum.dispatchEvent(new Event("change"));
+  const revenue: Plot = { ...REGION_BARS, sum: { col: REVENUE, header: "revenue" } };
+  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(revenue));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(revenue), "closed"]);
 });
 
 test("Esc closes it and inserts nothing", () => {
