@@ -41,6 +41,12 @@ export interface Check {
    */
   hover?: string;
   /**
+   * A click, by the path a person's pointer takes, before the check runs: on
+   * the middle of what `selector` picks, `count` presses in a row, so two make
+   * a double-click.
+   */
+  click?: { selector: string; count?: number };
+  /**
    * A drag, by the path a person's pointer takes, before the check runs: from
    * the middle of what `selector` picks, `by` CSS px on, where it lets go. With
    * `held` the button stays down, for a later check to let go of.
