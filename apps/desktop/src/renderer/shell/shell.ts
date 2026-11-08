@@ -853,14 +853,13 @@ export class Shell {
   private loadLayer(): Promise<ChartLayer> {
     this.layerLoading ??= import("@renderer/chart/layer").then(
       ({ ChartLayer }) => {
-        this.layer = new ChartLayer(
-          found("#charts"),
-          this.content,
-          () => this.grid?.focus(),
-          (dx, dy, deltaMode) => this.grid?.wheelBy(dx, dy, deltaMode),
-          (source) => this.withTab(source, (tab) => this.repoint(tab)),
-          (source, columns) => this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
-        );
+        this.layer = new ChartLayer(found("#charts"), this.content, {
+          leave: () => this.grid?.focus(),
+          wheelBy: (dx, dy, deltaMode) => this.grid?.wheelBy(dx, dy, deltaMode),
+          repoint: (source) => this.withTab(source, (tab) => this.repoint(tab)),
+          notNumbers: (source, columns) =>
+            this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
+        });
         return this.layer;
       },
       (err: unknown) => {
