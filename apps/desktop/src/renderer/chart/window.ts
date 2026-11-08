@@ -25,7 +25,7 @@ import type { Press } from "@renderer/keys";
 import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
 import { blank, body, coverage, drawable, notNumbers, reading } from "./caption.ts";
-import { fitLabels, past, pie } from "./pie.ts";
+import { belowZero, fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
@@ -245,9 +245,10 @@ export class ChartWindow {
    * tally stays drawn while the next one is read, and a first one draws as it
    * comes. The caption says how much of its source the chart has read and
    * what the tally left out, then what a scatter's sample leaves out, or how
-   * a pie counts the values past those a tally keeps apart. The track under
-   * the head shows how far the chart has read, while it reads, and a chart
-   * with nothing to draw says why in the plot's place.
+   * a pie counts the values past those a tally keeps apart and the values at
+   * or below zero it leaves out. The track under the head shows how far the
+   * chart has read, while it reads, and a chart with nothing to draw says why
+   * in the plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -268,7 +269,7 @@ export class ChartWindow {
       const drawn = pie(plot, tally);
       this.plot.replaceChildren(drawn);
       fitLabels(drawn);
-      words.push(past(plot, tally));
+      words.push(past(plot, tally), belowZero(plot, tally));
     } else {
       this.plot.replaceChildren(...this.state(heard));
     }

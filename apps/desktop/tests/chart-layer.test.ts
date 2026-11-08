@@ -33,7 +33,7 @@ import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard, SourceState } from "@renderer/charts";
 import { num } from "@renderer/locale";
-import { BARS, MOVED, PIE, SCATTER, SHORT_ROWS, holding } from "./charted.ts";
+import { BARS, MOVED, PIE, SCATTER, SHARES, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
 
@@ -566,14 +566,19 @@ test("a window draws a pie's slices from what its chart heard", async () => {
   expect(document.querySelectorAll(".chart-pie .chart-slice")).toHaveLength(2);
 });
 
-test("a pie's caption says how it counts the values past those a tally keeps apart", async () => {
-  const { model } = shown(PIE);
+test("a pie's caption says how it counts the values past those a tally keeps apart, and the values at or below zero it leaves out", async () => {
+  // A pie of sums: a share of rows leaves no value at or below zero out.
+  const { model } = shown(SHARES);
   const { latest } = heardOf("North");
-  const tally = latest?.t === "groups" ? { ...latest, rest: { rows: 5, sum: 0 } } : undefined;
+  const groups = [{ value: "North", rows: 1, sum: 10 }];
+  const left = { rest: { rows: 5, sum: 0 }, below: { values: 2, rows: 2, sum: -8 } };
+  const sums = { plot: SHARES.plot, groups, ...left };
+  const tally = latest?.t === "groups" ? { ...latest, ...sums } : undefined;
   model.heard = () => ({ ...FINE, latest: tally, complete: tally });
   await frame();
   const past = m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) });
-  expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past}`);
+  const below = m.chart_pie_below_zero({ count: left.below.values });
+  expect(said()).toBe(`${m.rows_count({ count: 1 })} · ${past} · ${below}`);
 });
 
 test("a scatter's caption says how many of its points it draws while it samples, in the language chosen, and nothing once it draws none", async () => {

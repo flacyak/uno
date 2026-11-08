@@ -484,6 +484,17 @@
   "chart_pie_other": "Otros",
   "chart_pie_past_net": "más de {count} valores · los demás van en Otros por su suma neta",
   "chart_pie_past_left_out": "más de {count} valores · los demás se dejan fuera",
+  "chart_pie_below_zero": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} valor en cero o por debajo se deja fuera",
+        "plural=many": "{n} valores en cero o por debajo se dejan fuera",
+        "plural=other": "{n} valores en cero o por debajo se dejan fuera"
+      }
+    }
+  ],
   "chart_partial": "parcial · {read} leído",
   "chart_reading": "leyendo {name}…",
   "chart_no_values_yet": "aún no hay valores en {columns}",

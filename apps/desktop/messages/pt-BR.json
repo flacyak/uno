@@ -484,6 +484,17 @@
   "chart_pie_other": "Outros",
   "chart_pie_past_net": "mais de {count} valores · os demais entram em Outros pela soma líquida",
   "chart_pie_past_left_out": "mais de {count} valores · os demais ficam de fora",
+  "chart_pie_below_zero": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} valor em zero ou abaixo fica de fora",
+        "plural=many": "{n} valores em zero ou abaixo ficam de fora",
+        "plural=other": "{n} valores em zero ou abaixo ficam de fora"
+      }
+    }
+  ],
   "chart_partial": "parcial · {read} lido",
   "chart_reading": "lendo {name}…",
   "chart_no_values_yet": "ainda não há valores em {columns}",
