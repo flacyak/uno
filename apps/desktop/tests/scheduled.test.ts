@@ -1,7 +1,9 @@
 /**
  * @fileoverview A scheduled check of a file: one stat, which reads nothing
- * while the file is as it was read, and a rewritten file read again with the
- * workspace left clean. Runs over the real engine and the disk.
+ * while the file is as it was read, a rewritten file read again with the
+ * workspace left clean, and one with unsaved cell edits held until a save
+ * records them, where a column edit holds nothing. Runs over the real engine
+ * and the disk.
  */
 
 import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -55,5 +57,28 @@ test("a check of a file as it was read reads nothing, and one of a rewritten fil
   expect(relink).toHaveBeenCalledOnce();
   expect(w.rows.rows()).toBe(2);
   expect(w.dirty).toBe(false);
+  w.close();
+});
+
+test("a rewritten file with unsaved cell edits is held, and read once a save records them", async () => {
+  const w = await indexed("edited.csv");
+  w.transform();
+  await w.set(0, 0, "9");
+  await appendFile(w.active.link!.path, ADDED);
+  relink.mockClear();
+  expect(await w.refresh(w.active.id)).toStrictEqual({ t: "held", edits: 1 });
+  expect(relink).not.toHaveBeenCalled();
+
+  w.saved(join(dir, "edited.uno"));
+  expect(await w.refresh(w.active.id)).toStrictEqual({ t: "read" });
+  w.close();
+});
+
+test("a rewritten file with an unsaved column edit alone is read again", async () => {
+  const w = await indexed("bound.csv");
+  w.transform();
+  await w.bind(w.active, 0, "1");
+  await appendFile(w.active.link!.path, ADDED);
+  expect(await w.refresh(w.active.id)).toStrictEqual({ t: "read" });
   w.close();
 });
