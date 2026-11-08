@@ -65,13 +65,13 @@ export const CHART_WHEEL: Check[] = [
     script: `${WHEEL} sheet.scrollTop = 0; return reaches(0);`,
   },
   turned(
-    "the wheel over a chart's plot scrolls the sheet behind it, and leaves the keys and the marks",
+    "the wheel over a chart's plot scrolls the sheet behind it, and leaves the keys in the window and the marks",
     { selector: PLOT, down: NOTCH },
     `
       const box = document.querySelector(".chart:last-child");
       const failed = await reaches(${NOTCH});
       if (failed !== "") return failed;
-      if (document.activeElement !== box) return "the keys are in #" + document.activeElement?.id;
+      if (!box.contains(document.activeElement)) return "the keys are in #" + document.activeElement?.id;
       return document.querySelector(".ws.open .dirty") === null ? "" : "the wheel marked the workspace unsaved";
     `,
   ),

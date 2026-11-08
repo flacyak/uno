@@ -411,3 +411,50 @@ test("the pointer over a bar's row shows what it is worth in the box after the p
   await frame();
   expect([tip.hidden, made.box.querySelector(".cursor")]).toStrictEqual([true, null]);
 });
+
+test("the plot takes the keys, Right on it shows what the first bar is worth as the pointer would, and Down, which steps nothing, moves the window", async () => {
+  const read = tallyOf(["North", "South"], true);
+  const draw = vi.fn();
+  const made = hearing(() => heardOf(read, read), BARS, { room: () => ({ w: 900, h: 600 }), draw });
+  const plot = made.box.querySelector<HTMLElement>(".chart-plot")!;
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
+  await frame();
+  const tip = made.box.querySelector<HTMLElement>(".chart-tip")!;
+  const words = (): string | undefined => tip.querySelector(".chart-tip-words")?.textContent;
+  expect(plot.tabIndex).toBe(0);
+  plot.focus();
+  expect(document.activeElement).toBe(plot);
+  expect(press(plot, "ArrowRight").defaultPrevented).toBe(true);
+  expect([tip.hidden, words()]).toStrictEqual([false, "1 North"]);
+  expect(made.box.querySelector(".cursor")).toBe(made.box.querySelector(".chart-bar-row"));
+  draw.mockClear();
+  expect(press(plot, "ArrowDown").defaultPrevented).toBe(true);
+  expect(draw).toHaveBeenCalledOnce();
+});
+
+test("the keys and the cursor stay in the plot through a new tally and go together, and Tab passes the plot by while the table stands there", async () => {
+  const read = tallyOf(["North", "South"], true);
+  let heard = heardOf(read, read);
+  const made = hearing(() => heard);
+  const plot = made.box.querySelector<HTMLElement>(".chart-plot")!;
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
+  await frame();
+  const tip = made.box.querySelector<HTMLElement>(".chart-tip")!;
+  const words = (): string | undefined => tip.querySelector(".chart-tip-words")?.textContent;
+  plot.focus();
+  press(plot, "ArrowRight");
+  const more = tallyOf(["West", "North", "South"], true);
+  heard = heardOf(more, more);
+  made.redraw();
+  await frame();
+  expect([document.activeElement, words()]).toStrictEqual([plot, "1 West"]);
+  made.box.focus();
+  expect([tip.hidden, made.box.querySelector(".cursor")]).toStrictEqual([true, null]);
+  plot.focus();
+  press(plot, "t");
+  await frame();
+  expect([document.activeElement, plot.hasAttribute("tabindex")]).toStrictEqual([made.box, false]);
+  press(made.box, "t");
+  await frame();
+  expect(plot.tabIndex).toBe(0);
+});

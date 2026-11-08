@@ -121,7 +121,7 @@ const CLICK_HEAD: readonly Input[] = [
 ];
 
 /** A key a person presses that the app does nothing with. */
-const A_KEY: readonly Input[] = [
+export const A_KEY: readonly Input[] = [
   { type: "keyDown", keyCode: "Shift" },
   { type: "keyUp", keyCode: "Shift" },
 ];

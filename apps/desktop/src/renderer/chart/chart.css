@@ -204,6 +204,14 @@
   overflow: clip;
 }
 
+/* The plot given the keys from the keyboard shows it a px inside its own edge,
+ * in the head buttons' colour, as the window's border already says the keys
+ * are in the window, clear of that border as of the head's and caption's rules. */
+.chart-plot:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
 /* How far the chart has read its source, from window.ts: the arriving bar
  * (arriving.css), as high as it and round at both ends, filled `--read` of its
  * length in the accent. It stands under the head, as far from the sides as the

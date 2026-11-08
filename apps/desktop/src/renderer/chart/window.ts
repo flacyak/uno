@@ -16,8 +16,9 @@
  * drawing is an image a screen reader hears named by what the chart says it
  * shows, from the last complete tally, and t puts the table of the same in
  * its place, and back. The pointer over a mark shows what it is worth in a
- * box beside it. The caption's count of the cells that were not numbers is a
- * button that finds them in the sheet.
+ * box beside it, and the arrows step the box through the marks while the
+ * plot has the keys. The caption's count of the cells that were not numbers
+ * is a button that finds them in the sheet.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -436,13 +437,22 @@ export class ChartWindow {
   /**
    * fill puts `shown` in the plot's place. What stood there goes, and the keys
    * it held come to the window, as the find button's do, so a repaint never
-   * leaves them to the page. Anything but a `drawing` leaves the box no mark
-   * to stand by.
+   * leaves them to the page. A plot that goes on drawing keeps them. Anything
+   * but a `drawing` leaves the box no mark to stand by, and Tab passes the
+   * plot by.
    */
   private fill(drawing: boolean, ...shown: Node[]): void {
-    if (this.plot.contains(document.activeElement)) this.box.focus({ preventScroll: true });
+    const held = document.activeElement;
+    const kept = drawing && held === this.plot;
+    if (!kept && this.plot.contains(held)) this.box.focus({ preventScroll: true });
     this.plot.replaceChildren(...shown);
-    if (!drawing) this.tip.show(NONE);
+    // Tab reaches a drawing after the head's buttons, for the keys to step its marks.
+    if (drawing) {
+      this.plot.tabIndex = 0;
+    } else {
+      this.plot.removeAttribute("tabindex");
+      this.tip.show(NONE);
+    }
   }
 
   /**
@@ -550,16 +560,27 @@ export class ChartWindow {
 
   /**
    * key answers Escape, t and the arrows, and leaves any other key to the
-   * shell. An arrow in the table scrolls it, as the table has the keys then.
+   * shell. An arrow in the plot steps the cursor through its marks, and one
+   * in the table scrolls it, as each has the keys then.
    */
   private key(e: KeyboardEvent): void {
     const press = pressOf(e);
-    const inTable = e.target instanceof Element && e.target.closest(SCROLLS) !== null;
     if (e.key === "Escape") this.escape();
     else if (tableKey(press)) this.flip();
-    else if (inTable || !this.nudge(press)) return;
+    else if (!this.arrow(press, e.target)) return;
     e.preventDefault();
     e.stopPropagation();
+  }
+
+  /**
+   * arrow gives `press`, from `at`, to the cursor in the plot, or to the
+   * window's place where the cursor does not take it, and returns whether
+   * either stepped.
+   */
+  private arrow(press: Press, at: EventTarget | null): boolean {
+    if (at === this.plot && this.tip.step(press)) return true;
+    const inTable = at instanceof Element && at.closest(SCROLLS) !== null;
+    return !inTable && this.nudge(press);
   }
 
   /** escape puts back what a pointer holds, or else gives the grid the keys. */
