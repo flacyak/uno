@@ -1,6 +1,7 @@
 /**
  * @fileoverview A chart's table: every value its tally sent with what it
- * measures, the largest first. It is the text alternative to the drawing: it
+ * measures, the largest first, and the values left out counted after them.
+ * It is the text alternative to the drawing: it
  * gives the exact numbers, a finger scrolls it, a person selects from it, and
  * a screen reader walks it as a table, under a caption that says what the
  * chart is called, its headers naming the columns.
@@ -10,11 +11,15 @@
  */
 
 import type { Plot } from "@document";
-import type { Group, Groups, GroupsTally, SampleTally } from "@engine";
+import { DISTINCT_AT_MOST } from "@engine";
+import type { Groups, GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
+
+/** What a tally measures of a value, or of the values it leaves out: their rows and their sum. */
+type Measured = Pick<Groups["rest"], "rows" | "sum">;
 
 /** words writes `text` in `cell`: the file's, in a bdi marked as the file's, or the app's. */
 function words(cell: HTMLTableCellElement, text: string, fromFile: boolean): HTMLTableCellElement {
@@ -51,22 +56,37 @@ function row(...cells: HTMLElement[]): HTMLTableRowElement {
 
 /**
  * grouped gives a bars or pie chart's headers and rows: the value's column
- * and what `plot` measures, the rows or the column it sums, then a row per
- * value sent, the largest first.
+ * and what `plot` measures, the rows or the column it sums; a row per value
+ * sent, the largest first; one row for the values a tally sent none of,
+ * counted, with their rows or sum and those of the values past the ones a
+ * tally keeps apart; and a line that says so where there are such values.
  */
 function grouped(
   plot: Exclude<Plot, { t: "scatter" }>,
   groups: Groups,
 ): [HTMLElement[], HTMLElement[]] {
   const { by, sum } = plot;
-  const measure = (g: Group): number => (sum === undefined ? g.rows : g.sum);
+  const measure = (g: Measured): number => (sum === undefined ? g.rows : g.sum);
   const heads = [
     header(columnLabel(by.header, by.col), true),
     sum === undefined
       ? header(m.chart_table_rows(), false)
       : header(columnLabel(sum.header, sum.col), true),
   ];
-  return [heads, groups.groups.map((g) => row(rowHead(g.value), digits(measure(g))))];
+  const rows = groups.groups.map((g) => row(rowHead(g.value), digits(measure(g))));
+  const { others, below, rest } = groups;
+  const left = others.values + below.values;
+  if (left > 0) {
+    const more = el("th", "", m.chart_bars_more({ count: num(left) }));
+    more.scope = "row";
+    rows.push(row(more, digits(measure(others) + measure(below) + measure(rest))));
+  }
+  if (rest.rows > 0) {
+    const line = el("td", "chart-table-line", m.chart_bars_past({ count: num(DISTINCT_AT_MOST) }));
+    line.colSpan = heads.length;
+    rows.push(row(line));
+  }
+  return [heads, rows];
 }
 
 /**
