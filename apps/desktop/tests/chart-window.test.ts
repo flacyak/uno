@@ -1,7 +1,7 @@
 /**
  * @fileoverview A chart window's words: what a head calls its chart and its
- * source, what a screen reader is told the window is, and what its drawing
- * says it shows, in any language.
+ * source, what a screen reader is told the window is, what its drawing says
+ * it shows, in any language, and what a mark says under the pointer.
  *
  * @vitest-environment happy-dom
  */
@@ -16,7 +16,7 @@ import { summary } from "@renderer/chart/summary";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import type { Stage } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
-import { BARS } from "./charted.ts";
+import { BARS, SHORT_ROWS, holding } from "./charted.ts";
 import { frame } from "./smoke/dom-page.ts";
 
 /** The columns the made titles below name. */
@@ -68,6 +68,7 @@ function close(box: HTMLElement): HTMLButtonElement {
 afterEach(() => {
   void setLocale(baseLocale, { reload: false });
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 test.each<[string, string, Plot]>([
@@ -170,6 +171,7 @@ test("the head, the track and the caption are drawn, with a grip that says nothi
   expect([...box.children].map((child) => child.className)).toStrictEqual([
     "col-head chart-head",
     "chart-plot",
+    "chart-tip",
     "chart-summary",
     "chart-coverage",
     "chart-caption",
@@ -379,4 +381,33 @@ test("the head's table button puts the table in the plot's place, pressed while 
   await frame();
   expect(tableOf(made.box)).toBeNull();
   expect(toggle.getAttribute("aria-pressed")).toBe("false");
+});
+
+test("the pointer over a bar's row shows what it is worth in the box after the plot, a new tally puts the cursor on the row under the pointer then, and the table takes it away", async () => {
+  const read = tallyOf(["North", "South"], true);
+  let heard = heardOf(read, read);
+  const made = hearing(() => heard);
+  const plot = made.box.querySelector<HTMLElement>(".chart-plot")!;
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS) });
+  await frame();
+  const tip = made.box.querySelector<HTMLElement>(".chart-plot + .chart-tip")!;
+  expect(tip.getAttribute("role")).toBe("tooltip");
+  expect(pointedAt(plot, "aria-describedby")).toBe(tip);
+  expect(tip.hidden).toBe(true);
+  const rows = (): Element[] => [...made.box.querySelectorAll(".chart-bar-row")];
+  rows()[1]!.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+  expect(tip.hidden).toBe(false);
+  expect(tip.querySelector(".chart-tip-words")?.textContent).toBe("1 South");
+  expect(made.box.querySelector(".cursor")).toBe(rows()[1]);
+  const more = tallyOf(["West", "North", "South"], true);
+  heard = heardOf(more, more);
+  // The pointer rests where it was, over the row that stands there now.
+  vi.spyOn(document, "elementFromPoint").mockImplementation(() => rows()[1] ?? null);
+  made.redraw();
+  await frame();
+  expect(tip.querySelector(".chart-tip-words")?.textContent).toBe("1 North");
+  expect(made.box.querySelector(".cursor")).toBe(rows()[1]);
+  press(made.box, "t");
+  await frame();
+  expect([tip.hidden, made.box.querySelector(".cursor")]).toStrictEqual([true, null]);
 });
