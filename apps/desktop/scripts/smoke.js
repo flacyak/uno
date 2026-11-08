@@ -156,8 +156,11 @@ await writeFile(
   }),
 );
 
-// A workspace of one chart, a sum per region whose values run long on both
-// sides of zero, in a window of the least width and a new window's height.
+// A workspace of two charts over a sum per region whose values run long on
+// both sides of zero, each in a window of the least width and a new window's
+// height: bars of the sums, and a pie of them, whose caption runs past its
+// window. The last row's revenue is not a number, for the caption to count
+// and find.
 const signedFile = join(scratch, "sent", "signed.csv");
 const signedHeader = "region,revenue";
 const signedRows = [
@@ -165,6 +168,7 @@ const signedRows = [
   "Andhra Pradesh regional office,234567.5",
   "West,98765.25",
   "South,-1234567.891",
+  "North,n/a",
 ];
 await writeFile(signedFile, `${[signedHeader, ...signedRows].join("\n")}\n`);
 const signed = join(scratch, "sent", "signed.uno");
@@ -177,6 +181,8 @@ const signedSource = {
   state: { active: { row: 0, col: 0 } },
 };
 const sums = { t: "bars", by: { col: 0, header: "region" }, sum: { col: 1, header: "revenue" } };
+const share = { ...sums, t: "pie" };
+const signedPlace = { width: leastSize.width, height: chartSize.height, x: 0, y: 0 };
 await writeFile(
   signed,
   writeDocument({
@@ -185,13 +191,14 @@ await writeFile(
     active: signedSource.id,
     log: [],
     charts: [
+      { id: "c1", source: signedSource.id, plot: sums, title: "", refresh: 0, place: signedPlace },
       {
-        id: "c1",
+        id: "c2",
         source: signedSource.id,
-        plot: sums,
+        plot: share,
         title: "",
         refresh: 0,
-        place: { width: leastSize.width, height: chartSize.height, x: 0, y: 0 },
+        place: { ...signedPlace, x: 1 },
       },
     ],
     extra: new Map(),

@@ -29,9 +29,14 @@ import type { Check, Input } from "./check.ts";
 /** The workspace smoke.js wrote. */
 const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
 
-/** The one it wrote of a sum per region, and its regions, whose values run long on both sides of zero. */
+/**
+ * The one it wrote of a sum per region, and its regions, whose values run long
+ * on both sides of zero, and its rows, the last of them the one whose revenue
+ * is not a number.
+ */
 const SIGNED = process.env["UNO_SMOKE_SIGNED"] ?? "";
 const SIGNED_REGIONS = 4;
+const SIGNED_ROWS = 5;
 
 /** The one it wrote of a scatter of the fixture's revenue against its units. */
 const SCATTERED = process.env["UNO_SMOKE_SCATTERED"] ?? "";
@@ -87,6 +92,9 @@ const MENU_ZOOM_WIDTH = 800;
 
 /** How far two rects can read apart, past Chromium's layout unit of 1/64 px. */
 export const RECT_SLACK = 0.02;
+
+/** A point this far in from a box stands on its 1 px border. */
+export const BORDER_IN = 0.5;
 
 /** A point over the grid's tenth row, left of the windows, and one over the top window. */
 const BESIDE = { x: 400, y: 300 };
@@ -687,6 +695,45 @@ export const CHART_SIGNED: Check[] = [
       return out === undefined ? "" : "a value runs from " + out.tip.left + " to " + out.tip.right + ", past its track's " + out.line.right;
     `,
   },
+  {
+    name: "the caption's count of the cells that were not numbers is a button on the caption's line, over the foot edge's zone as the grip is, and lands the grid on the first of them",
+    script: `
+      const said = document.querySelector(".chart-said");
+      const find = said.querySelector(".chart-find");
+      const words = counted(${SIGNED_ROWS}) + " rows · 1 not a number";
+      if (said.textContent !== words || find.hidden) return "the caption says " + said.textContent + (find.hidden ? " with no button" : "");
+      const [box, line, foot] = [find, said, document.querySelector(".chart-edge-foot")].map((at) => at.getBoundingClientRect());
+      if (box.top < line.top || box.bottom > line.bottom) return "the button stands from " + box.top + " to " + box.bottom + ", past the caption's " + line.top + " to " + line.bottom;
+      const stacked = (at) => [getComputedStyle(at).position, getComputedStyle(at).zIndex].join(" ");
+      if (stacked(find) !== stacked(document.querySelector(".chart-grip"))) return "the button stacks as " + stacked(find) + ", the grip as " + stacked(document.querySelector(".chart-grip"));
+      const probe = { x: (box.left + box.right) / 2, y: box.bottom - ${BORDER_IN} };
+      if (probe.y < foot.top) return "the button ends at " + box.bottom + ", above the foot edge's zone from " + foot.top;
+      const under = document.elementFromPoint(probe.x, probe.y);
+      if (under !== find) return "over the foot edge's zone the pointer finds " + (under === null ? "nothing" : under.className);
+      find.click();
+      const cell = () => text("#status-cell");
+      if (!(await until(() => cell() === "revenue · row " + ${SIGNED_ROWS}))) return "the grid stands on " + cell();
+      return "";
+    `,
+  },
+  {
+    name: "a window too narrow for its caption cuts the words after the button first, and never the button or the words before it",
+    script: `
+      const said = document.querySelectorAll(".chart-said")[1];
+      const words = counted(${SIGNED_ROWS}) + " rows · 1 not a number · 1 value at or below zero left out";
+      if (!(await arrives(() => said.textContent === words))) return "the pie's caption says " + said.textContent;
+      if (said.title !== words) return "the caption's title says " + said.title;
+      const [before, find, after] = [".chart-said-before", ".chart-find", ".chart-said-after"].map((at) => said.querySelector(at));
+      const cut = (at) => at.scrollWidth > at.clientWidth;
+      if (!cut(after)) return "the words after the button fit the window: " + said.textContent;
+      if (cut(before)) return "the words before the button are cut: " + before.textContent;
+      const [box, line] = [find, said].map((at) => at.getBoundingClientRect());
+      if (box.left < line.left || box.right > line.right) return "the button runs from " + box.left + " to " + box.right + ", past the caption's " + line.left + " to " + line.right;
+      const under = document.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+      if (under !== find) return "at the button's middle the pointer finds " + (under === null ? "nothing" : under.className);
+      return "";
+    `,
+  },
 ];
 
 /** A check after CHART_SIGNED, as it opens a workspace of a scatter in place of that one. */
@@ -737,7 +784,9 @@ export const CHART_SCATTER: Check[] = [
       const drawn = counted(document.querySelectorAll(".chart-point").length);
       const words = counted(ROWS) + " rows · " + counted(BLANK_ROWS) + " blank · " + drawn + " of " + counted(ROWS - BLANK_ROWS) + " points";
       if (said.textContent !== words) return "the caption says " + said.textContent + ", not " + words;
-      return said.scrollWidth > said.clientWidth ? "the caption cuts " + said.textContent : "";
+      // Each span clips its own words, so a cut shows in a span and never in the row.
+      const spans = [".chart-said-before", ".chart-said-after"].map((at) => said.querySelector(at));
+      return spans.some((at) => at.scrollWidth > at.clientWidth) ? "the caption cuts " + said.textContent : "";
     `,
   },
 ];
