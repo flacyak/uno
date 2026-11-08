@@ -127,6 +127,33 @@ test("a chart over a missing source says so and offers Re-point, which opens the
   expect(document.querySelector<HTMLElement>("#panel")!.hidden).toBe(false);
 });
 
+/**
+ * A revenue column with a blank and a word in it, and the row of the word as
+ * the status bar counts it.
+ */
+const AMOUNTS = ["North,10", "South,n/a", "West,", "East,5"];
+const WORD_ROW = AMOUNTS.findIndex((row) => row.endsWith("n/a")) + 1;
+
+test("the caption's count of the cells that were not numbers is a button that lands the grid on the first of them", async () => {
+  const csv = join(dir, "amounts.csv");
+  await writeFile(csv, `region,revenue\n${AMOUNTS.join("\n")}\n`);
+  const sum = { col: 1, header: "revenue" };
+  const sums: Chart = { ...BARS, plot: { t: "bars", by: { col: 0, header: "region" }, sum } };
+  const path = join(dir, "amounts.uno");
+  await writeFile(path, unoOf([sums], [], csv));
+  await shell.openRef({ name: "amounts.uno", path });
+  const find = (): HTMLElement | null => document.querySelector(".chart-find");
+  expect(await until(page, () => find()?.hidden === false)).toBe(true);
+  const rows = m.rows_count({ count: AMOUNTS.length });
+  const left = `${m.chart_blank({ count: num(1) })} · ${m.chart_not_numbers({ count: 1 })}`;
+  expect(texts(".chart-said")).toStrictEqual([`${rows} · ${left}`]);
+
+  find()!.click();
+  const cell = (): string => document.querySelector("#status-cell")?.textContent ?? "";
+  const landed = `${sum.header} · ${m.status_row({ row: num(WORD_ROW) })}`;
+  expect(await until(page, () => cell() === landed), cell()).toBe(true);
+});
+
 test("a workspace with none takes the last one's windows away", async () => {
   await open("before.uno", [BARS]);
   await open("none.uno", []);
