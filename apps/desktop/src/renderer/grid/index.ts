@@ -80,15 +80,21 @@ export class Grid {
   /**
    * Shows `source`, or clears the grid. `keep` preserves the selection,
    * scroll position and marks, for the same data arriving as a new Rows
-   * object (a band replaced by a sheet when entering transform).
+   * object (a band replaced by a sheet when entering transform, or a file
+   * read again).
    */
   show(source: Rows | undefined, editable: boolean, keep = false): void {
     this.cancelEdit();
     this.editable = editable;
     this.wait(NOTHING);
     if (keep) {
-      // Carry the current marks over to the new Rows object.
-      if (source !== undefined) this.marked.set(source, this.marks);
+      // Carry the current marks over to the new Rows object. A file read
+      // again can be shorter, so the selection stays inside it.
+      if (source !== undefined) {
+        this.marked.set(source, this.marks);
+        this.selRow = clamp(this.selRow, source.rows() - 1);
+        this.selCol = clamp(this.selCol, source.cols() - 1);
+      }
     } else {
       this.marks = this.marksOf(source);
       this.selRow = 0;

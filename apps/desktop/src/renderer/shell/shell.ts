@@ -1133,13 +1133,16 @@ export class Shell {
     grid.focus();
   }
 
-  /** showActive shows the workspace's active tab at its saved selection. */
-  private showActive(): void {
+  /**
+   * showActive shows the workspace's active tab at its saved selection, or
+   * with `keep`, read again where the grid stands.
+   */
+  private showActive(keep = false): void {
     const on = this.showing();
     if (on === undefined) return;
     const { workspace: w, grid } = on;
-    grid.show(w.rows, w.editable);
-    this.restore(w, grid);
+    grid.show(w.rows, w.editable, keep);
+    if (!keep) this.restore(w, grid);
     this.paintAll();
   }
 
@@ -1235,7 +1238,9 @@ export class Shell {
           : (said?.(fresh) ??
               m.source_reads_from({ name: fresh.name, from: "path" in ref ? ref.path : ref.name })),
       );
-      this.shown(w.active === fresh);
+      // A tab whose file was missing showed no rows, so it comes back on its
+      // own cell.
+      this.shown(w.active === fresh, !tab.missing);
     } catch (err) {
       // A relink whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
@@ -1264,7 +1269,7 @@ export class Shell {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;
       this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
-      this.shown(w.active === fresh);
+      this.shown(w.active === fresh, true);
     } catch (err) {
       // An append whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
@@ -1479,10 +1484,11 @@ export class Shell {
   /**
    * shown repaints after a tab changed: the grid if it is the showing tab,
    * the sidebar otherwise, and the status bar and the chart windows either way.
-   * A source can take its charts with it, or go by a new name.
+   * A source can take its charts with it, or go by a new name. `keep` keeps
+   * the grid's selection, scroll and marks over a tab read again.
    */
-  private shown(showing: boolean): void {
-    if (showing) this.showActive();
+  private shown(showing: boolean, keep = false): void {
+    if (showing) this.showActive(keep);
     else this.paintTabs();
     this.paintStatus();
     this.layer?.draw();
