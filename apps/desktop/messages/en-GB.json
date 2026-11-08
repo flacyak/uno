@@ -451,6 +451,9 @@
   "chart_title_share_of_rows": "Share of rows per {by}",
   "chart_title_share_of_sum": "Share of {sum} per {by}",
   "chart_title_against": "{y} against {x}",
+  "chart_form_title": "Insert chart",
+  "chart_form_title_source": "Insert chart · {source}",
+  "chart_form_by": "by",
   "chart_bars_more": "+{count} more",
   "chart_bars_past": "more than {count} values · later ones are counted in the rest",
   "chart_points": [
