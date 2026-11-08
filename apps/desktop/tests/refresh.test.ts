@@ -1,17 +1,21 @@
 /**
  * @fileoverview The Refresher's timing: a source is checked at once, then at
- * the shortest interval among its charts, until no chart schedules it; a
- * check that comes due while one is out is skipped; and a wake checks each
- * overdue source once, however many intervals it slept through.
+ * the shortest interval among its charts, until no chart schedules it; one
+ * still indexing waits until it is ready; a check that comes due while one
+ * is out is skipped; and a wake checks each overdue source once, however
+ * many intervals it slept through.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import { Refresher } from "@renderer/refresh";
+import type { Refreshed } from "@renderer/refresh";
 
 /** One chart's schedule of every 5 min, and another's three times as long. */
 const EVERY_MS = 300_000;
 const LONGER = 3;
+
+const SAME: Refreshed = { t: "same" };
 
 let refresher: Refresher;
 let checked: string[];
@@ -21,7 +25,7 @@ beforeEach(() => {
   checked = [];
   refresher = new Refresher((source) => {
     checked.push(source);
-    return Promise.resolve();
+    return Promise.resolve(SAME);
   });
 });
 afterEach(() => {
@@ -41,7 +45,7 @@ test("a source is checked at once, then at the shortest interval among its chart
 });
 
 test("a wake while a check is out starts no second, and the next is due an interval after it ends", async () => {
-  let finish: () => void = () => {};
+  let finish: (done: Refreshed) => void = () => {};
   refresher = new Refresher((source) => {
     checked.push(source);
     return new Promise((resolve) => (finish = resolve));
@@ -49,11 +53,26 @@ test("a wake while a check is out starts no second, and the next is due an inter
   refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
   refresher.wake();
   expect(checked, "the first is still out").toStrictEqual(["a"]);
-  finish();
+  finish(SAME);
   await vi.advanceTimersByTimeAsync(EVERY_MS - 1);
   expect(checked).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(1);
   expect(checked).toHaveLength(2);
+});
+
+test("a source still indexing is checked again once it is ready, not before", async () => {
+  let answer: Refreshed = { t: "waiting", why: "indexing" };
+  refresher = new Refresher((source) => {
+    checked.push(source);
+    return Promise.resolve(answer);
+  });
+  refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
+  await vi.advanceTimersByTimeAsync(LONGER * EVERY_MS);
+  expect(checked, "waiting on its index").toHaveLength(1);
+  answer = SAME;
+  refresher.ready("a");
+  await vi.advanceTimersByTimeAsync(EVERY_MS);
+  expect(checked).toHaveLength(3);
 });
 
 test("a wake after a sleep checks each overdue source once, and leaves one not yet due", async () => {
