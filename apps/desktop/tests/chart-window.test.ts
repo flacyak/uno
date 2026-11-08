@@ -42,6 +42,7 @@ const NO_LAYER: Stage = {
   heard: () => undefined,
   repoint: () => undefined,
   notNumbers: () => undefined,
+  edit: () => undefined,
 };
 
 /** A chart's window, showing `chart` under `source`. */
@@ -363,6 +364,14 @@ test("arrows in the table scroll it, and leave the window where it stands", asyn
   expect(draw).toHaveBeenCalledOnce();
 });
 
+test("the head's edit button stands between the table's and the ×, named for what it does", () => {
+  const { box } = windowOf(BARS);
+  const edit = box.querySelector<HTMLButtonElement>(".chart-head .chart-edit")!;
+  expect(edit.previousElementSibling).toBe(box.querySelector(".chart-table-toggle"));
+  expect(edit.nextElementSibling).toBe(close(box));
+  expect(edit.getAttribute("aria-label")).toBe(m.chart_edit());
+});
+
 test("the head's table button puts the table in the plot's place, pressed while it shows, and brings the plot back", async () => {
   const read = tallyOf(["North"], true);
   const made = hearing(() => heardOf(read, read));
@@ -371,7 +380,6 @@ test("the head's table button puts the table in the plot's place, pressed while 
   expect(toggle.type).toBe("button");
   expect(toggle.getAttribute("aria-label")).toBe(m.chart_table_aria());
   expect(toggle.getAttribute("aria-pressed")).toBe("false");
-  expect(toggle.nextElementSibling).toBe(close(made.box));
   expect(toggle.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
   toggle.click();
   await frame();

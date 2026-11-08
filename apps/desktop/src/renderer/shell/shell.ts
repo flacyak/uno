@@ -606,6 +606,34 @@ export class Shell {
   }
 
   /**
+   * editChart opens the chart form at `place` on chart `id` of the open
+   * workspace, over its source, and Apply sends the chart what the form holds.
+   * The chart's window takes the keys back as the form closes.
+   */
+  private async editChart(id: string, place: MenuPlace): Promise<void> {
+    const w = this.workspace;
+    const chart = w?.charts.all.find((c) => c.id === id);
+    const tab = w?.sources.find((t) => t.id === chart?.source);
+    if (w === undefined || chart === undefined || tab === undefined) return;
+    if (tab.missing) {
+      this.say(m.source_no_file_point_first({ name: tab.name }), true);
+      return;
+    }
+    const { ChartForm } = await import("@renderer/chart/form");
+    if (this.workspace !== w) return;
+    const opening: Opening = { t: "change", chart };
+    this.closePopups();
+    this.chartForm = new ChartForm(place, w.sources, tab, opening, {
+      send: (source, plot, title) =>
+        this.drawn(w.charts.change(id, { source: source.id, plot, title })),
+      closed: () => {
+        this.chartForm = undefined;
+        this.layer?.focus(id);
+      },
+    });
+  }
+
+  /**
    * chart adds a chart over `source` in a new window, away from `column`,
    * showing the chart layer for the first. The window is drawn at once and
    * again once the engine answers, and a refusal is thrown for the form.
@@ -622,12 +650,19 @@ export class Shell {
     }
     layer.show(w.charts);
     const place = layer.fresh(column);
-    const adding = w.charts.add({ ...shown, source: source.id, place, refresh: BY_HAND });
-    layer.draw();
+    return this.drawn(w.charts.add({ ...shown, source: source.id, place, refresh: BY_HAND }));
+  }
+
+  /**
+   * drawn draws the chart windows at once and again once `request` settles,
+   * since a refusal puts a chart back, and paints the tabs then, for the dot.
+   */
+  private async drawn<T>(request: Promise<T>): Promise<T> {
+    this.layer?.draw();
     try {
-      return await adding;
+      return await request;
     } finally {
-      layer.draw();
+      this.layer?.draw();
       this.paintTabs();
     }
   }
@@ -859,6 +894,7 @@ export class Shell {
           repoint: (source) => this.withTab(source, (tab) => this.repoint(tab)),
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
+          edit: (id, place) => void this.editChart(id, place),
         });
         return this.layer;
       },
