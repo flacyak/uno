@@ -15,8 +15,9 @@ import { DISTINCT_AT_MOST } from "@engine";
 import type { Groups, GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
-import { num } from "@renderer/locale";
+import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
+import { PIE_SLICES_AT_MOST, slices, unsent, wholeOf } from "./pie.ts";
 
 /** What a tally measures of a value, or of the values it leaves out: their rows and their sum. */
 type Measured = Pick<Groups["rest"], "rows" | "sum">;
@@ -56,10 +57,13 @@ function row(...cells: HTMLElement[]): HTMLTableRowElement {
 
 /**
  * grouped gives a bars or pie chart's headers and rows: the value's column
- * and what `plot` measures, the rows or the column it sums; a row per value
- * sent, the largest first; one row for the values a tally sent none of,
- * counted, with their rows or sum and those of the values past the ones a
- * tally keeps apart; and a line that says so where there are such values.
+ * and what `plot` measures, the rows or the column it sums, and a pie's
+ * share column; a row per value sent, the largest first; one row for the
+ * values a tally sent none of, counted, with their rows or sum and those of
+ * the values past the ones a tally keeps apart; and a line that says so where
+ * there are such values. A share is of the pie's whole, its slices': a value
+ * at or below zero has none, and the values sent none of have Other's share
+ * of them, or none where the pie draws no Other.
  */
 function grouped(
   plot: Exclude<Plot, { t: "scatter" }>,
@@ -73,13 +77,24 @@ function grouped(
       ? header(m.chart_table_rows(), false)
       : header(columnLabel(sum.header, sum.col), true),
   ];
-  const rows = groups.groups.map((g) => row(rowHead(g.value), digits(measure(g))));
+  const drawn = plot.t === "pie" ? slices(plot, groups) : [];
+  const whole = wholeOf(drawn);
+  if (plot.t === "pie") heads.push(header(m.chart_table_share(), false));
+  // cells gives a row's cells: `n`, what it measures, and for a pie the share
+  // of `inPie`, what the pie draws of it.
+  const cells = (n: number, inPie: number): HTMLElement[] => {
+    const share = inPie > 0 && whole > 0 ? percent(inPie / whole) : "";
+    return plot.t === "pie" ? [digits(n), el("td", "num", share)] : [digits(n)];
+  };
+  const rows = groups.groups.map((g) => row(rowHead(g.value), ...cells(measure(g), measure(g))));
   const { others, below, rest } = groups;
   const left = others.values + below.values;
   if (left > 0) {
     const more = el("th", "", m.chart_bars_more({ count: num(left) }));
     more.scope = "row";
-    rows.push(row(more, digits(measure(others) + measure(below) + measure(rest))));
+    const inOther =
+      drawn.length > PIE_SLICES_AT_MOST && plot.t === "pie" ? unsent(plot, groups) : 0;
+    rows.push(row(more, ...cells(measure(others) + measure(below) + measure(rest), inOther)));
   }
   if (rest.rows > 0) {
     const line = el("td", "chart-table-line", m.chart_bars_past({ count: num(DISTINCT_AT_MOST) }));

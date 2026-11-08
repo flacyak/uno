@@ -51,10 +51,19 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
   const own = above.slice(0, PIE_SLICES_AT_MOST).map((g) => ({ value: g.value, size: measure(g) }));
   if (own.length < PIE_SLICES_AT_MOST) return own;
   const after = above.slice(PIE_SLICES_AT_MOST).reduce((sum, g) => sum + measure(g), 0);
-  // The values past those a tally keeps apart sum together whatever their sign,
-  // so Other takes them only where they come to more than zero.
-  const other = after + measure(groups.others) + Math.max(measure(groups.rest), 0);
+  const other = after + unsent(plot, groups);
   return other > 0 ? [...own, { value: undefined, size: other }] : own;
+}
+
+/**
+ * unsent gives what Other takes of the values a tally sent none of, as `plot`
+ * measures them: those above zero as they are, and the values past those a
+ * tally keeps apart, which sum together whatever their sign, only where they
+ * come to more than zero.
+ */
+export function unsent(plot: Pie, groups: Groups): number {
+  const measure = measureOf(plot);
+  return measure(groups.others) + Math.max(measure(groups.rest), 0);
 }
 
 /** wholeOf gives what `drawn` adds up to, or 0 for a whole no double holds, which no share is of. */

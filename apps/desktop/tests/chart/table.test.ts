@@ -17,7 +17,7 @@ import { baseLocale, setLocale } from "@paraglide/runtime";
 import { table } from "@renderer/chart/table";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { BARS } from "../charted.ts";
+import { BARS, PIE, SHARES } from "../charted.ts";
 
 /** A sum of revenue per region. */
 const SUMS = { ...BARS.plot, sum: { col: 5, header: "revenue" } };
@@ -103,4 +103,42 @@ test("the values a tally sent none of are one row after the sent ones, and a lin
     "201",
   ]);
   expect(rows(table(BARS.plot, tallyOf(sent("North", 2)), called()))).toHaveLength(2);
+});
+
+test("a pie's table gives each value's share of the pie's whole, and none to a value at or below zero", () => {
+  const sums = tallyOf(sent("North", 2, 300), sent("South", 1, 100), sent("West", 1, -50));
+  expect(rows(table(SHARES.plot, sums, called()))).toStrictEqual([
+    ["region", "revenue", "share"],
+    ["North", "300", "75%"],
+    ["South", "100", "25%"],
+    ["West", "-50", ""],
+  ]);
+  // Every value's rows are above zero, so each has a share.
+  const unsent = { values: 5, rows: 20, sum: 0 };
+  const seven = [20, 10, 10, 10, 10, 10, 10].map((n, i) => sent(`v${i + 1}`, n));
+  const counts = { ...tallyOf(...seven), others: unsent };
+  const shares = rows(table(PIE.plot, counts, called())).map((cells) => cells.at(-1));
+  expect(shares).toStrictEqual(["share", "20%", "10%", "10%", "10%", "10%", "10%", "10%", "20%"]);
+});
+
+test("the row of the values sent none of has the share Other draws of them, and none where the pie draws no Other", () => {
+  // Other takes the values past those a tally keeps apart only where they come
+  // to more than zero, and never the values at or below zero, so the shares
+  // add up to the pie's whole: 900 in six slices and 200 in Other.
+  const seven = [300, 200, 100, 100, 100, 100, 100].map((n, i) => sent(`v${i + 1}`, 1, n));
+  const netted = {
+    ...tallyOf(...seven),
+    others: { values: 10, rows: 10, sum: 100 },
+    below: { values: 5, rows: 5, sum: -80 },
+    rest: { rows: 20, sum: -300 },
+  };
+  const more = m.chart_bars_more({ count: "15" });
+  expect(rows(table(SHARES.plot, netted, called())).at(-2)).toStrictEqual([more, "-280", "9.1%"]);
+  const few = { ...tallyOf(...seven.slice(0, 3)), rest: { rows: 50, sum: 1000 } };
+  const two = { ...few, others: { values: 2, rows: 2, sum: 50 } };
+  expect(rows(table(SHARES.plot, two, called())).at(-2)).toStrictEqual([
+    m.chart_bars_more({ count: "2" }),
+    "1,050",
+    "",
+  ]);
 });
