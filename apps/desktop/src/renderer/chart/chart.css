@@ -280,8 +280,13 @@
 }
 
 /* A value's row: its label, then its track, in the columns the bars share and
- * as high as a bar, so the whole row is the bar's hit target. */
+ * as high as a bar, so the whole row is the bar's hit target. It reaches
+ * --wash-out past its label and its value, for the cursor's wash, and its
+ * padding gives that back, so the columns stand where they would. */
 .chart-bar-row {
+  --wash-out: 4px;
+  margin-inline: calc(-1 * var(--wash-out));
+  padding-inline: var(--wash-out);
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
@@ -529,6 +534,81 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* The mark the cursor is on, from tooltip.ts. A bar moves a fifth of the way
+ * from the accent to the ink, over a wash of the accent across its row, a
+ * slice the same from its own colour, and a point the same in full, ringed in
+ * the page's ground, as tooltip.ts brings it in front of the points after it. */
+.chart-bar-row.cursor {
+  border-radius: 4px;
+  background: var(--accent-b);
+}
+
+.chart-bar-row.cursor .chart-bar {
+  background: color-mix(in srgb, var(--accent) 80%, var(--ink));
+}
+
+.chart-slice.cursor {
+  fill: color-mix(in srgb, var(--key) 80%, var(--ink));
+}
+
+.chart-point.cursor {
+  fill: color-mix(in srgb, var(--accent) 80%, var(--ink));
+  fill-opacity: 1;
+  stroke: var(--paper);
+  stroke-width: 2px;
+}
+
+/* The box that says what the mark under the cursor is worth, from tooltip.ts,
+ * which stands it in the window over the plot, out of the pointer's way: the
+ * pop-up menu's look (menu.css) at the ticks' size, the mark's colour as a
+ * short key, its value strong, and what that is of in the caption's ink. It
+ * is never wider than the window less tooltip.ts's --tip-edge on each side,
+ * its words ending in an ellipsis past that, and its lines are a whole even
+ * height, so the box is 22 px high and stands on whole px centred on a row. */
+.chart-tip {
+  --key-length: 10px;
+  --key-thick: 2px;
+  position: absolute;
+  max-width: calc(100% - 2 * var(--tip-edge));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.12);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.chart-tip-words {
+  min-width: 0;
+  overflow-x: clip;
+  text-overflow: ellipsis;
+}
+
+.chart-tip-key {
+  flex: none;
+  width: var(--key-length);
+  height: var(--key-thick);
+  border-radius: var(--key-thick);
+  background: var(--key);
+}
+
+.chart-tip-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tip-label {
+  color: var(--ink-3);
+}
+
 /* A forced palette would take the marks' colour away, so they wear the text's,
  * and a pie's slices stand apart by the page's. */
 @media (forced-colors: active) {
@@ -547,6 +627,15 @@
   .chart-slice-gap {
     stroke: Canvas;
     forced-color-adjust: none;
+  }
+
+  .chart-bar-row.cursor .chart-bar {
+    background: Highlight;
+  }
+
+  .chart-point.cursor,
+  .chart-slice.cursor {
+    fill: Highlight;
   }
 }
 
