@@ -13,7 +13,7 @@
  */
 
 import { mkdtempSync } from "node:fs";
-import { copyFile, writeFile } from "node:fs/promises";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
@@ -25,7 +25,18 @@ import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
-import { ADS, BARS, DEVICES, SALES, SCATTER, SHORT_ROWS, holding, unoOf } from "../charted.ts";
+import {
+  ADS,
+  BARS,
+  DEVICES,
+  SALES,
+  SCATTER,
+  SHORT_ROWS,
+  carriedUnoOf,
+  holding,
+  partsUnoOf,
+  unoOf,
+} from "../charted.ts";
 import { FIXTURE, bootShell } from "./dom-harness.ts";
 import { domPage, frame, until } from "./dom-page.ts";
 
@@ -299,4 +310,28 @@ test("what r says over a chart whose folder holds no new file is in the language
   const none = m.refresh_no_new_files({ name: SALES });
   expect(await until(domPage(), () => message() === none)).toBe(true);
   expect(plain(message())).toBe("");
+});
+
+test("a refresh with nothing to read again, and what r says over it, are in the language chosen", async () => {
+  const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "carried.uno");
+  await writeFile(path, carriedUnoOf([BARS], new Uint8Array(await readFile(FIXTURE))));
+  await shell.openRef({ name: "carried.uno", path });
+  // The chart's tally completes before the test ends, so no draw outlives the page.
+  const summary = (): string => document.querySelector(".chart-summary-said")?.textContent ?? "";
+  expect(await until(domPage(), () => summary() !== "")).toBe(true);
+  const hint = m.chart_refresh_carried({ name: basename(FIXTURE) });
+  expect(document.querySelector(".chart-refresh")?.getAttribute("title")).toBe(hint);
+  expect(english(".chart")).toEqual([]);
+  const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
+  document.querySelector(".chart")!.dispatchEvent(new KeyboardEvent("keydown", { key: "r" }));
+  expect([message(), plain(message())]).toStrictEqual([hint, ""]);
+
+  const lost = join(dirname(path), "lost.uno");
+  await writeFile(lost, partsUnoOf([BARS], [join(dirname(path), "sales-q3-part-1.csv")]));
+  await shell.openRef({ name: "lost.uno", path: lost });
+  expect(await until(domPage(), () => document.querySelector(".chart-state") !== null)).toBe(true);
+  expect(english(".chart")).toEqual([]);
+  document.querySelector(".chart")!.dispatchEvent(new KeyboardEvent("keydown", { key: "r" }));
+  const why = m.chart_refresh_lost({ name: SALES });
+  expect([message(), plain(message())]).toStrictEqual([why, ""]);
 });
