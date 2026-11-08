@@ -1,8 +1,9 @@
 /**
  * @fileoverview The chart form: picks the source, the kind of chart, the
- * column whose values its bars count the rows of, or sum a number column over,
- * and its title. It opens on the active source, and another source keeps each
- * column it has a header for. It makes bars, and shows the kinds to come.
+ * column whose values its bars or pie count the rows of, or sum a number column
+ * over, and its title. It opens on the active source, and another source keeps
+ * each column it has a header for. It makes bars and pies, and shows the
+ * scatter to come.
  *
  * An empty title shows the one the chart makes, which follows the language.
  * The engine keeps the chart, and a refusal is shown in the form, which stays
@@ -52,7 +53,7 @@ export class ChartForm {
   private readonly from = select("source");
   private readonly kind = select("kind");
   private readonly by = select("by");
-  /** The number column the bars sum, or "" for none, which counts the rows. */
+  /** The number column bars or a pie sum, or "" for none, which counts the rows. */
   private readonly sum = select("sum");
   private readonly title = el("input");
   /** The source chosen, whose columns the selects offer. */
@@ -64,7 +65,7 @@ export class ChartForm {
     private readonly sources: readonly ChartSource[],
     /** The active source, which the form opens on. */
     active: ChartSource,
-    /** The column selected in the grid, which the bars count by. */
+    /** The column selected in the grid, which bars or a pie count by. */
     selected: number,
     private readonly asks: ChartAsks,
   ) {
@@ -87,9 +88,10 @@ export class ChartForm {
     this.from.addEventListener("change", () => this.choose());
     for (const [t, words] of KINDS) {
       const made = this.kind.appendChild(option(words(), t));
-      // Only bars are made yet, so the other kinds cannot be chosen.
-      made.disabled = t !== "bars";
+      // A scatter is not made yet, so it cannot be chosen.
+      made.disabled = t === "scatter";
     }
+    this.kind.addEventListener("change", () => this.name());
 
     this.offer(selected);
     this.by.addEventListener("change", () => this.name());
@@ -141,12 +143,12 @@ export class ChartForm {
     this.name();
   }
 
-  /** plot gives what the chart draws: bars of the rows, or of the sum, per value of `by`. */
+  /** plot gives what the chart draws: bars or a pie of the rows, or of the sum,
+   * per value of `by`. */
   private plot(): Plot {
+    const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
-    return this.sum.value === ""
-      ? { t: "bars", by }
-      : { t: "bars", by, sum: this.column(this.sum.value) };
+    return this.sum.value === "" ? { t, by } : { t, by, sum: this.column(this.sum.value) };
   }
 
   /** column gives the source's column whose option has `value`, as a chart reads it. */

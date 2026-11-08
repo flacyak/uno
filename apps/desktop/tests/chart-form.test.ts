@@ -71,6 +71,13 @@ function form(insert = (): Promise<void> => Promise.resolve()): {
 const select = (name: string): HTMLSelectElement =>
   document.querySelector<HTMLSelectElement>(`.chart-form select[name="${name}"]`)!;
 
+/** Chooses `value` in the select named `name`, with the keys in it. */
+function pick(name: string, value: string): void {
+  select(name).focus();
+  select(name).value = value;
+  select(name).dispatchEvent(new Event("change"));
+}
+
 /** Presses `key` where the keys are, and returns the event. */
 function press(key: string, shiftKey = false): KeyboardEvent {
   const e = new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
@@ -96,13 +103,25 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a pie and a scatter, and makes bars", () => {
+test("it offers bars, a pie and a scatter, and makes bars and pies", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.textContent, o.disabled]);
   const kinds = [m.chart_kind_bars(), m.chart_kind_pie(), m.chart_kind_scatter()];
-  expect(offered).toStrictEqual(kinds.map((words, i) => [words, i > 0]));
+  expect(offered).toStrictEqual(kinds.map((words, i) => [words, i === kinds.length - 1]));
   expect(kind.value).toBe("bars");
+});
+
+test("a pie shares out the rows, or a sum, per value of the selected column", async () => {
+  const { asked, box } = form();
+  pick("kind", "pie");
+  pick("sum", String(REVENUE));
+  const by = { col: REGION, header: "region" };
+  const pie: Plot = { t: "pie", by, sum: { col: REVENUE, header: "revenue" } };
+  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(pie));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(pie), "closed"]);
 });
 
 test("an empty title shows the one the chart makes, which follows the column", () => {
