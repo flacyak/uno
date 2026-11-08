@@ -251,7 +251,20 @@ const TIP = {
   stop: 6_400,
 };
 
-/** How many moves the tip story's glide takes, how long each lasts, and how many Rights it presses. */
+/**
+ * The insert story's beats: a cell of region clicked, a right click on the
+ * open workspace, Insert chart… chosen, and Enter on the form, which opens on
+ * region, for a window of its bars.
+ */
+const INSERT = {
+  column: 500,
+  menu: 2_400,
+  chart: 4_300,
+  enter: 7_800,
+  end: 10_000,
+};
+
+/** How many moves a glide takes, how long each lasts, and how many Rights the tip story presses. */
 const GLIDE_MOVES = 24;
 const GLIDE_MOVE_MS = 50;
 const RIGHTS = 3;
@@ -725,6 +738,7 @@ const STORIES: Record<string, Story> = {
   wheel: { end: WHEEL.end, script: playWheel },
   table: { end: TABLE.end, script: playTable },
   tip: { end: TIP.stop, script: playTip },
+  insert: { end: INSERT.end, script: playInsert },
 };
 
 /**
@@ -846,11 +860,7 @@ async function playTip(win: BrowserWindow, at: Clock): Promise<void> {
   const to = await middle(win, `${rows}:last-child`);
   pointTo(win, from.x, from.y);
   await at(TIP.glide);
-  for (let i = 1; i <= GLIDE_MOVES; i++) {
-    const eased = 1 - (1 - i / GLIDE_MOVES) ** 3;
-    pointTo(win, from.x, Math.round(from.y + (to.y - from.y) * eased));
-    await sleep(GLIDE_MOVE_MS);
-  }
+  await glide(win, from, to);
   await at(TIP.click);
   await click(win, `${rows}:last-child`);
   await at(TIP.home);
@@ -860,6 +870,32 @@ async function playTip(win: BrowserWindow, at: Clock): Promise<void> {
   await at(TIP.end);
   press(win, "End");
   await at(TIP.stop);
+}
+
+/**
+ * playInsert performs the insert story: region selected, then Insert chart…
+ * from the workspace's menu, and Enter on the form for its bars.
+ */
+async function playInsert(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  let from = await middle(win, "#content");
+  // The stand-in glides to each thing before the press on it.
+  const pressOn = async (selector: string, button: "left" | "right" = "left"): Promise<void> => {
+    const to = await middle(win, selector);
+    await glide(win, from, to);
+    from = to;
+    await click(win, selector, button);
+  };
+  await at(INSERT.column);
+  // The gutter comes first, so region is a row's third cell.
+  await pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+  await at(INSERT.menu);
+  await pressOn(".ws.open", "right");
+  await at(INSERT.chart);
+  await pressOn(".pop-menu .pop-item:nth-child(2)");
+  await at(INSERT.enter);
+  press(win, "Return");
+  await at(INSERT.end);
 }
 
 /**
@@ -1022,6 +1058,21 @@ async function hover(win: BrowserWindow, selector: string): Promise<{ x: number;
   const at = await middle(win, selector);
   through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", ...at }));
   return at;
+}
+
+/** glide moves the stand-in from `from` to `to`, slowing as it comes. */
+async function glide(
+  win: BrowserWindow,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<void> {
+  for (let i = 1; i <= GLIDE_MOVES; i++) {
+    const eased = 1 - (1 - i / GLIDE_MOVES) ** 3;
+    const x = Math.round(from.x + (to.x - from.x) * eased);
+    const y = Math.round(from.y + (to.y - from.y) * eased);
+    pointTo(win, x, y);
+    await sleep(GLIDE_MOVE_MS);
+  }
 }
 
 /** middle gives the centre of the element matching selector, in the page's px. */
