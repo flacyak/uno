@@ -286,6 +286,13 @@ const KINDS = [
   { row: 3, cell: 3, downs: 1, column: 500, menu: 2_000, chart: 3_600, choose: 6_400 },
   { row: 15, cell: 6, downs: 2, column: 10_000, menu: 11_600, chart: 13_200, choose: 16_000 },
 ];
+/**
+ * The change story's beats: the edit button pressed on a window of region's
+ * bars, Down in the form's By for rep, Enter to apply it, then the × pressed
+ * once to arm it and again to remove the chart.
+ */
+const CHANGE = { edit: 800, by: 3_200, apply: 4_600, arm: 7_400, remove: 9_800, end: 12_000 };
+
 /** How long a Down holds each kind, and how long the last holds before Enter. */
 const KIND_STEP_MS = 1_000;
 const KIND_HOLD_MS = 1_000;
@@ -773,6 +780,7 @@ const STORIES: Record<string, Story> = {
   tip: { end: TIP.stop, script: playTip },
   insert: { end: INSERT.end, script: playInsert },
   kinds: { end: KINDS_END, script: playKinds },
+  change: { end: CHANGE.end, script: playChange },
   chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
   command: {
     end: KEYED.end,
@@ -968,6 +976,28 @@ async function playKinds(win: BrowserWindow, at: Clock): Promise<void> {
     press(win, "Return");
   }
   await at(KINDS_END);
+}
+
+/**
+ * playChange performs the change story: the chart form opened on a window from
+ * its edit button, By stepped to rep and applied, then the × pressed twice.
+ */
+async function playChange(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(CHANGE.edit);
+  await pressOn(".chart .chart-edit");
+  // The first form waits for its module, so the keys wait for the form.
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo('.chart-form select[name="by"]');
+  await at(CHANGE.by);
+  press(win, "Down");
+  await at(CHANGE.apply);
+  press(win, "Return");
+  await at(CHANGE.arm);
+  await pressOn(".chart .chart-close");
+  await at(CHANGE.remove);
+  await pressOn(".chart .chart-close");
+  await at(CHANGE.end);
 }
 
 /**
