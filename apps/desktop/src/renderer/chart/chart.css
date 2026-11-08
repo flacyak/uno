@@ -126,6 +126,7 @@
  * touch-action keeps a finger or a pen on the window, where it would pan. */
 .chart-head {
   --inner-radius: calc(var(--dialog-radius) - var(--window-border));
+  container: chart-head / inline-size;
   gap: 8px;
   padding: 0 0 0 10px;
   border-radius: var(--inner-radius) var(--inner-radius) 0 0;
@@ -190,6 +191,15 @@
   color: var(--ink);
   background: var(--surface);
   border-color: var(--rule);
+}
+
+/* A head with no room for its buttons beside the × drops them, so the ×
+ * keeps its inset; their keys still work. The room is the head's padding,
+ * its four gaps, the four buttons, the × among them, and the ×'s inset. */
+@container chart-head (width < calc(10px + 4 * 8px + 4 * 20px + 4px)) {
+  .chart-head-button {
+    display: none;
+  }
 }
 
 .chart-head-button:focus-visible {

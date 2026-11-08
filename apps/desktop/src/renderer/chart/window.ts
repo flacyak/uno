@@ -3,7 +3,8 @@
  * the chart shows, a round × of the window's own kind, and a caption that ends
  * in a grip. The layer stands it in the room and says which chart it shows,
  * and the head's edit button opens the chart form on it, as Enter, F2 and a
- * double-click on the head do. The × and Delete ask to remove the chart, and
+ * double-click on the head do. The head's refresh button and r read the
+ * chart's source again by hand. The × and Delete ask to remove the chart, and
  * Ctrl+Z says it undoes edits in the grid, and undoes none.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
@@ -51,6 +52,12 @@ const CROSS =
   '<path d="M2 2l6 6M8 2l-6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
   "</svg>";
 
+/** The refresh button's circular arrow, its head at the gap, drawn in currentColor. */
+const ARROW =
+  '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
+  '<path d="M8.5 5.5A3.5 3.5 0 1 1 7.5 3M7.5 1v2h-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+  "</svg>";
+
 /** The table button's glyph, a header row over two columns, drawn in currentColor. */
 const TABLE =
   '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">' +
@@ -86,6 +93,9 @@ const SEP = " · ";
 
 /** The key that puts the table in the plot's place, and the plot back. */
 const TABLE_KEY = "t";
+
+/** The key that reads a window's source again, as its refresh button does. */
+const REFRESH_KEY = "r";
 
 /** The keys that open the chart form on a window's chart, as its edit button does. */
 const EDIT_KEYS: ReadonlySet<string> = new Set(["Enter", "F2"]);
@@ -125,6 +135,8 @@ export interface Stage {
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
   /** Opens the chart form on chart `id`, hung at `place`. */
   edit(id: string, place: MenuPlace): void;
+  /** Reads `source` again by hand, as Reload does. */
+  refresh(source: string): void;
   /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
   remove(id: string, title: string): void;
   /** Writes `text` on the status line. */
@@ -182,6 +194,11 @@ function undoKey({ key, ctrl, alt, meta, shift }: Press): boolean {
 /** tableKey says whether `press` is t alone, pressed once. */
 function tableKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
   return key === TABLE_KEY && !ctrl && !alt && !meta && !repeat;
+}
+
+/** refreshKey says whether `press` reads the chart's source again. */
+function refreshKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
+  return key === REFRESH_KEY && !ctrl && !alt && !meta && !repeat;
 }
 
 /** deleteKey says whether `press` is Delete alone, pressed once. */
@@ -268,6 +285,10 @@ export class ChartWindow {
   private readonly find = button("chart-find", "", () =>
     this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
   );
+  /** The head's button that reads the chart's source again. */
+  private readonly again = button("chart-head-button chart-refresh", "", () =>
+    this.stage.refresh(this.chart.source),
+  );
   /** The head's button that puts the table in the plot's place, pressed in while it stands there. */
   private readonly toggle = button("chart-head-button chart-table-toggle", "", () => this.flip());
   /** The head's button that opens the chart form on the chart. */
@@ -305,13 +326,15 @@ export class ChartWindow {
 
     this.cross.innerHTML = CROSS;
     this.words.attr(this.cross, "aria-label", m.chart_remove_aria);
+    this.again.innerHTML = ARROW;
+    this.words.attr(this.again, "aria-label", m.chart_refresh_aria);
     this.toggle.innerHTML = TABLE;
     this.toggle.setAttribute("aria-pressed", "false");
     this.words.attr(this.toggle, "aria-label", m.chart_table_aria);
     this.edit.innerHTML = PENCIL;
     this.words.attr(this.edit, "aria-label", m.chart_edit);
 
-    this.head.append(this.title, this.toggle, this.edit, this.cross);
+    this.head.append(this.title, this.again, this.toggle, this.edit, this.cross);
     this.head.addEventListener("pointerdown", (e) => {
       if (!onButton(e.target)) this.take(e, this.head, dragged);
     });
@@ -642,7 +665,7 @@ export class ChartWindow {
   }
 
   /**
-   * key answers Escape, t, Enter, F2, Delete, Ctrl+Z and the arrows, and
+   * key answers Escape, t, r, Enter, F2, Delete, Ctrl+Z and the arrows, and
    * leaves any other key to the shell. An arrow in the plot steps the cursor
    * through its marks, and one in the table scrolls it, as each has the keys
    * then.
@@ -651,6 +674,7 @@ export class ChartWindow {
     const press = pressOf(e);
     if (e.key === "Escape") this.escape();
     else if (tableKey(press)) this.flip();
+    else if (refreshKey(press)) this.stage.refresh(this.chart.source);
     else if (edits(press, e.target)) this.change();
     else if (deleteKey(press)) this.unchart();
     else if (undoKey(press)) this.stage.say(m.chart_undo_hint());

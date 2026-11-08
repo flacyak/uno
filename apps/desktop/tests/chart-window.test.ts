@@ -43,6 +43,7 @@ const NO_LAYER: Stage = {
   repoint: () => undefined,
   notNumbers: () => undefined,
   edit: () => undefined,
+  refresh: () => undefined,
   remove: () => undefined,
   say: () => undefined,
 };
@@ -394,6 +395,20 @@ test("the head's edit button stands between the table's and the ×, named for wh
   expect(edit.previousElementSibling).toBe(box.querySelector(".chart-table-toggle"));
   expect(edit.nextElementSibling).toBe(close(box));
   expect(edit.getAttribute("aria-label")).toBe(m.chart_edit());
+});
+
+test("the head's refresh button stands first of its buttons, and it and r ask to read the chart's source", () => {
+  const refresh = vi.fn();
+  const { box } = new ChartWindow(BARS, { ...NO_LAYER, refresh });
+  const again = box.querySelector<HTMLButtonElement>(".chart-head .chart-refresh")!;
+  expect(again.nextElementSibling).toBe(box.querySelector(".chart-table-toggle"));
+  expect(again.getAttribute("aria-label")).toBe(m.chart_refresh_aria());
+  again.click();
+  expect(press(box, "r").defaultPrevented).toBe(true);
+  // A held r, or one with a modifier, reads nothing.
+  press(box, "r", { repeat: true });
+  press(box, "r", { ctrlKey: true });
+  expect(refresh.mock.calls).toStrictEqual([[BARS.source], [BARS.source]]);
 });
 
 test("the head's table button puts the table in the plot's place, pressed while it shows, and brings the plot back", async () => {
