@@ -170,6 +170,18 @@ test("a slice's label is its value as the file has it and its share, and Other's
   expect(other.querySelector(".from-file")).toBeNull();
 });
 
+test("the slice of the rows with no value is named blank in its label and the list, the app's word in its language", () => {
+  const box = pie(ROWS, tallyOf(sent("North", 2), sent("", 1)));
+  const names = [...box.querySelectorAll(".chart-slice-name")];
+  const blank = m.chart_blank_value();
+  expect(names.map((name) => name.textContent)).toStrictEqual(["North", blank, "North", blank]);
+  const fromFile = names.map((name) => name.classList.contains("from-file"));
+  expect(fromFile).toStrictEqual([true, false, true, false]);
+  void setLocale("pt-BR", { reload: false });
+  const [alone] = labels(pie(ROWS, tallyOf(sent("", 1))));
+  expect(alone?.textContent).toBe("(em branco) 100%");
+});
+
 test("a label holds where its slice's middle stands on the ring, a lone slice's straight below", () => {
   // North's middle is a quarter of the way round, and South's and West's five
   // and seven eighths, as far from the middle across as down or up. A lone
