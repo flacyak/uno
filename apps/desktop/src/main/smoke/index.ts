@@ -12,7 +12,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserWindow } from "electron";
 
 import { ask } from "@main/ask";
-import { through, throughAsync } from "@main/driven";
+import { pick, through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
 import { CHART_FORM } from "./chart-form.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
@@ -329,6 +329,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
     try {
       if (check.ask !== undefined) await ask("smoke", check.ask);
       if (check.send !== undefined) win.webContents.send(...check.send);
+      if (check.pick !== undefined) pick(check.pick);
       if (check.window !== undefined) {
         const { zoom = FULL_ZOOM, width = fullWidth } = check.window;
         reshape(win, zoom, width, height);

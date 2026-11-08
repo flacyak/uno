@@ -75,10 +75,10 @@ const STATE_WORDS = [
 ];
 
 /** The zoom that halves the room. */
-const DOUBLE_ZOOM = 2;
+export const DOUBLE_ZOOM = 2;
 
 /** The window's least width, where both side columns leave too little room. */
-const NARROW_WIDTH = 640;
+export const NARROW_WIDTH = 640;
 
 /**
  * The View menu's Zoom In pressed five times: Electron's factor is 1.2 to the
