@@ -35,10 +35,12 @@ import { Language, offered } from "@renderer/language";
 import type { Command } from "@renderer/keys";
 import { list, num } from "@renderer/locale";
 import { Recents } from "@renderer/recents";
+import { Refresher } from "@renderer/refresh";
+import type { Refreshed } from "@renderer/refresh";
 import { say } from "@renderer/said";
 import { Sources, connectionLine } from "@renderer/sources";
 import type { Arriving } from "@renderer/sources";
-import { NEWER_AFTER_MS } from "@renderer/timing";
+import { MINUTE_MS, NEWER_AFTER_MS } from "@renderer/timing";
 import { Workspace, reloaded } from "@renderer/workspace";
 import type { Tab } from "@renderer/workspace";
 import { bannerParts, offerKey } from "./banner.ts";
@@ -98,6 +100,8 @@ export class Shell {
   /** The chart layer, loaded with the first workspace that has charts. */
   private layer: ChartLayer | undefined;
   private layerLoading: Promise<ChartLayer> | undefined;
+  /** The open workspace's chart schedules. */
+  private refresher: Refresher | undefined;
   /**
    * Counts opens, so the latest wins over an earlier one that finishes later.
    */
@@ -701,12 +705,31 @@ export class Shell {
    */
   private async drawn<T>(request: Promise<T>): Promise<T> {
     this.layer?.draw();
+    this.plan();
     try {
       return await request;
     } finally {
       this.layer?.draw();
+      this.plan();
       this.paintTabs();
     }
+  }
+
+  /** plan hands the open workspace's chart schedules to its Refresher. */
+  private plan(): void {
+    const charts = this.workspace?.charts.all ?? [];
+    const scheduled = charts.filter((c) => c.refresh !== BY_HAND);
+    this.refresher?.plan(
+      scheduled.map((c) => ({ source: c.source, everyMs: c.refresh * MINUTE_MS })),
+    );
+  }
+
+  /**
+   * wake checks each chart's source whose schedule came due while the machine
+   * slept, the page was hidden or the network was down.
+   */
+  wake(): void {
+    this.refresher?.wake();
   }
 
   /**
@@ -882,8 +905,10 @@ export class Shell {
       opened = w;
 
       this.workspace?.close();
+      this.refresher?.dispose();
       this.workspace = w;
       w.onTally = (chart) => this.layer?.tallied(chart);
+      this.refresher = new Refresher((id) => this.scheduled(w, id));
       // Close any menu or form open for the replaced workspace.
       this.closePopups();
       if (w.path !== "") this.recents.opened(w.path);
@@ -898,6 +923,7 @@ export class Shell {
       this.restore(w, grid);
       grid.focus();
       this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
+      this.plan();
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.
@@ -1246,6 +1272,20 @@ export class Shell {
     const grown = this.sources.grown(now);
     if (grown === undefined) this.say(m.refresh_no_new_files({ name: now.name }));
     else await this.append(now, grown.files);
+  }
+
+  /**
+   * scheduled checks a chart's source when its schedule comes due, and shows
+   * what it read where the source shows. It writes nothing on the status line,
+   * so a schedule never talks over the person's own messages.
+   */
+  private async scheduled(w: Workspace, id: string): Promise<Refreshed> {
+    const tab = w.sources.find((t) => t.id === id);
+    if (tab !== undefined) this.keepSelection(w, tab);
+    const done = await w.refresh(id);
+    // A tab whose file was missing showed no rows, so it comes back on its own cell.
+    if (done.t === "read" && this.workspace === w) this.shown(w.active.id === id, !tab?.missing);
+    return done;
   }
 
   /**

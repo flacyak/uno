@@ -5,7 +5,10 @@
  * once, a source of several files appends the new one alone, says why its
  * folder cannot be listed, and says nothing once another workspace has
  * opened, and the refresh of a carried source, or of one whose files the
- * open did not find, is off and says why.
+ * open did not find, is off and says why. On a schedule, the first check
+ * opens nothing over the file as it was read, one that comes due over the
+ * rewritten file draws its new row and says nothing, and another workspace's
+ * open stops the schedule.
  *
  * @vitest-environment happy-dom
  */
@@ -19,7 +22,10 @@ import { Engine, Refusal } from "@engine";
 import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { Charts } from "@renderer/charts";
+import { Refresher } from "@renderer/refresh";
 import type { Shell } from "@renderer/shell/shell";
+import { MINUTE_MS } from "@renderer/timing";
+import { Workspace } from "@renderer/workspace";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
 import { BARS, SALES, carriedUnoOf, partsUnoOf, unoOf } from "./charted.ts";
@@ -28,6 +34,9 @@ import { domPage, frame, until } from "./smoke/dom-page.ts";
 
 /** A row of the sales export's shape, which a rewrite adds at its end. */
 const ADDED_ROW = "2026-10-01,West,Ada Okafor,direct,1,1.00\r\n";
+
+/** The shortest schedule a chart keeps: a check every minute. */
+const EVERY_MINUTE = 1;
 
 /** How many files core's testdata cuts the sales export into, beside it. */
 const PART_COUNT = 3;
@@ -188,4 +197,38 @@ test("a chart over several files the open could not find has its refresh off, an
   expect(r()).toBe(false);
   expect([message(), relink.mock.calls.length]).toStrictEqual([hint, 0]);
   relink.mockRestore();
+});
+
+test("a schedule opens nothing over the file as it was read, and draws the rewritten file's new row, saying nothing", async () => {
+  await mkdir(join(dir, "scheduled"));
+  const csv = join(dir, "scheduled", basename(FIXTURE));
+  await copyFile(FIXTURE, csv);
+  const uno = join(dir, "scheduled.uno");
+  await writeFile(uno, unoOf([{ ...BARS, refresh: EVERY_MINUTE }], [], csv));
+  const refresh = vi.spyOn(Workspace.prototype, "refresh");
+  await shell.openRef({ name: basename(uno), path: uno }, uno);
+  expect(await counts(ROWS)).toBe(true);
+  opened.mockClear();
+  // The first check comes as the workspace opens.
+  await vi.waitUntil(async () => (await refresh.mock.results.at(-1)?.value)?.t === "same");
+  expect(paths()).toStrictEqual([]);
+
+  await appendFile(csv, ADDED_ROW);
+  const before = message();
+  // A sleep moves the wall clock past the next check, and fires no timer.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.now() + MINUTE_MS);
+  shell.wake();
+  vi.useRealTimers();
+  expect(await counts(ROWS + 1)).toBe(true);
+  expect(paths()).toStrictEqual([csv]);
+  expect([message(), shell.unsaved]).toStrictEqual([before, false]);
+  refresh.mockRestore();
+});
+
+test("another workspace's open stops the schedule", async () => {
+  const dispose = vi.spyOn(Refresher.prototype, "dispose");
+  await shell.openRef({ name: basename(FIXTURE), path: FIXTURE });
+  expect(dispose).toHaveBeenCalledOnce();
+  dispose.mockRestore();
 });
