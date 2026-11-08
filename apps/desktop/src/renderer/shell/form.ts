@@ -97,9 +97,10 @@ export class PopForm {
     this.note.className = isError ? "note err" : "note";
   }
 
-  /** Every focusable control, in document order. */
+  /** Every focusable control outside a hidden field, in document order. */
   private controls(): HTMLElement[] {
-    return [...this.box.querySelectorAll<HTMLElement>("select, input, button")];
+    const all = [...this.box.querySelectorAll<HTMLElement>("select, input, button")];
+    return all.filter((c) => c.closest("[hidden]") === null);
   }
 }
 
