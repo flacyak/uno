@@ -214,7 +214,7 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
   let reached = 0;
   const gaps: SVGElement[] = [];
   const labels: HTMLElement[] = [];
-  const list = el("ul", "chart-legend chart-scrolls");
+  const list = el("ul", "chart-legend chart-scrolls themed-bar");
   for (const [i, { value, size }] of drawn.entries()) {
     const from = reached / whole;
     reached += size;
