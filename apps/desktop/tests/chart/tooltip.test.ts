@@ -29,6 +29,7 @@ import {
   targets,
 } from "@renderer/chart/tooltip";
 import type { Reading, Target, Targets } from "@renderer/chart/tooltip";
+import type { Press } from "@renderer/keys";
 import { el } from "@renderer/shell/util";
 import { holding } from "../charted.ts";
 
@@ -200,6 +201,13 @@ test("the nearest point within HIT_RADIUS of a pointer is the target, and none f
   expect(near(null, HIT_RADIUS / 2 - 1, HIT_RADIUS)).toBe(0);
 });
 
+test("the keys step through the points from left to right, and a pointer finds each at its place among them", () => {
+  const unsorted = sampleOf([200, 0, 50], [4000, 0, 1000]);
+  const { all, under } = pointTargets(AGAINST, unsorted, plotted(unsorted, 100));
+  expect(all.map((point) => said(point)[0]![0])).toStrictEqual(["0", "50", "200"]);
+  expect([under(null, 0, 100), under(null, 25, 75), under(null, 100, 0)]).toStrictEqual([0, 1, 2]);
+});
+
 test("targets gives a drawing's marks for its plot's kind, and none for a tally of another", () => {
   const complete = { coverage: { rows: 3, total: 3, complete: true } };
   const groups: GroupsTally = { t: "groups", plot: ROWS, ...complete, ...REGIONS };
@@ -332,4 +340,78 @@ test("a new drawing puts the cursor on the point under the pointer then, and tak
   const far = sampleOf([0, 190, 200], [0, 3900, 4000]);
   tip.show(pointTargets(AGAINST, far, plotted(far, 100)));
   expect(shown(tip).slice(0, 2)).toStrictEqual([false, ""]);
+});
+
+/** A press of `key` alone, or with `shift`, as keys.ts reads it. */
+const pressed = (key: string, shift = false): Press => ({
+  key,
+  ctrl: false,
+  alt: false,
+  meta: false,
+  shift,
+  repeat: false,
+});
+
+/** Each bar's value laid out BAR_PITCH px under the one before, so the box stands by whichever has the cursor. */
+const BAR_PITCH = 30;
+const BAR = { left: 40, top: 10, width: 100, height: 24 };
+
+/** A tooltip over bars whose values are laid out, and where each value's right edge stands. */
+function stepping(): { tip: Tooltip; plot: HTMLElement; edges: Array<[number, number]> } {
+  const laid = over(bars(ROWS, REGIONS, TALL), (box) => barTargets(ROWS, REGIONS, box));
+  const edges = [...document.querySelectorAll<HTMLElement>(".chart-bar-tip")].map((value, i) => {
+    const top = BAR.top + i * BAR_PITCH;
+    laidOut(value, new DOMRect(BAR.left, top, BAR.width, BAR.height));
+    return [BAR.left + BAR.width, top + BAR.height / 2] satisfies [number, number];
+  });
+  return { ...laid, edges };
+}
+
+/** Where the box stands by a value whose right edge is at `x`, `y`. */
+const beside = ([x, y]: [number, number]): string => `${x + TIP_OFFSET}px ${y - SIZE.h / 2}px`;
+
+test("Right, Left, Home and End step the cursor through the rows, from the first or the last, and the box stands right of the bar's value, halfway down, saying what the pointer would", () => {
+  const { tip, edges } = stepping();
+  expect(tip.step(pressed("ArrowRight"))).toBe(true);
+  expect(shown(tip)).toStrictEqual([true, "1,204 North", beside(edges[0]!)]);
+  expect(cursors()).toStrictEqual([true, false, false]);
+  tip.step(pressed("ArrowRight"));
+  expect(shown(tip)).toStrictEqual([true, "812 South", beside(edges[1]!)]);
+  tip.step(pressed("End"));
+  tip.step(pressed("ArrowRight"));
+  expect([shown(tip)[1], ...cursors()]).toStrictEqual([
+    `301 ${m.chart_blank_value()}`,
+    false,
+    false,
+    true,
+  ]);
+  tip.step(pressed("Home"));
+  tip.step(pressed("ArrowLeft"));
+  expect([shown(tip)[1], ...cursors()]).toStrictEqual(["1,204 North", true, false, false]);
+  tip.clear();
+  tip.step(pressed("ArrowLeft"));
+  expect(cursors()).toStrictEqual([false, false, true]);
+});
+
+test("the plot names the keys that step its cursor, for a screen reader", () => {
+  const plot = el("div");
+  new Tooltip(plot, el("div"), "tip");
+  expect(plot.getAttribute("aria-keyshortcuts")).toBe("ArrowRight ArrowLeft Home End");
+});
+
+test("a key that is not a step, a step with Shift, and a step through no marks are left alone", () => {
+  const { tip } = stepping();
+  expect(tip.step(pressed("ArrowUp"))).toBe(false);
+  expect(tip.step(pressed("ArrowRight", true))).toBe(false);
+  expect([shown(tip)[0], ...cursors()]).toStrictEqual([false, false, false, false]);
+  tip.show(NONE);
+  expect(tip.step(pressed("ArrowRight"))).toBe(false);
+  expect(shown(tip)[0]).toBe(false);
+});
+
+test("a step goes on from the row under the pointer, and the box moves from the pointer to the side of the bar's value", () => {
+  const { tip, edges } = stepping();
+  moveTo(document.querySelectorAll(".chart-bar-row")[0]!, 100, 50);
+  tip.step(pressed("ArrowRight"));
+  expect(shown(tip)).toStrictEqual([true, "812 South", beside(edges[1]!)]);
 });

@@ -5,7 +5,9 @@
  * mark is worth strong, and what that is of in the caption's ink, while the
  * mark wears the cursor. A bar's row is its hit target, a slice its own
  * shape, and a point snaps to the nearest within HIT_RADIUS, so none has to
- * be hit dead on.
+ * be hit dead on. Right, Left, Home and End on the plot step the cursor
+ * through the marks in the order they were drawn, a scatter's from left to
+ * right.
  *
  * A value from the file is set as text alone, and a number is written in the
  * app's language.
@@ -14,6 +16,7 @@
 import type { ChartColumn, Plot } from "@document";
 import type { Groups, GroupsTally, Sample, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
+import type { Press } from "@renderer/keys";
 import { columnLabel, unnamed } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { EDGE } from "@renderer/shell/menu";
@@ -44,6 +47,21 @@ const ACCENT = "var(--accent)";
 
 /** What a mark wears while the cursor is on it. */
 const CURSOR = "cursor";
+
+/** Where a key steps the cursor, from `at` among marks up to `last`. */
+type Step = (at: number | undefined, last: number) => number;
+
+/**
+ * Where each key steps the cursor: Right and Left to the next mark and the
+ * one before, from the first or the last where no mark has the cursor, and
+ * Home and End to the first and the last.
+ */
+const STEPS: ReadonlyMap<string, Step> = new Map<string, Step>([
+  ["ArrowRight", (at, last) => (at === undefined ? 0 : Math.min(at + 1, last))],
+  ["ArrowLeft", (at, last) => (at === undefined ? last : Math.max(at - 1, 0))],
+  ["Home", () => 0],
+  ["End", (_at, last) => last],
+]);
 
 /** What parts a label's words, as the caption's. */
 const SEP = " · ";
@@ -172,12 +190,15 @@ function share(point: Element, name: string): number {
 
 /**
  * pointTargets gives the targets of `box`, as scatter drew `sample` for
- * `plot`: each point, worth its x and its y, named by their columns. The
- * target of a pointer is the nearest point within HIT_RADIUS of it.
+ * `plot`: each point, worth its x and its y, named by their columns, from
+ * left to right. The target of a pointer is the nearest point within
+ * HIT_RADIUS of it.
  */
 export function pointTargets(plot: Scatter, sample: Sample, box: HTMLElement): Targets {
-  const points = [...box.querySelectorAll(".chart-point")];
-  const all = points.map((point, i) => ({
+  const points = [...box.querySelectorAll(".chart-point")]
+    .map((point, i) => ({ point, i, x: share(point, "cx"), y: share(point, "cy") }))
+    .sort((a, b) => a.x - b.x);
+  const all = points.map(({ point, i }) => ({
     mark: point,
     at: point,
     front: true,
@@ -187,14 +208,13 @@ export function pointTargets(plot: Scatter, sample: Sample, box: HTMLElement): T
       { value: num(sample.y[i]!), label: column(plot.y) },
     ],
   }));
-  const shares = points.map((point) => ({ x: share(point, "cx"), y: share(point, "cy") }));
   const svg = box.querySelector(".chart-points");
   const under = (_hit: EventTarget | null, x: number, y: number): number | undefined => {
     if (svg === null) return undefined;
     const { left, top, width, height } = svg.getBoundingClientRect();
     let near: number | undefined;
     let least = HIT_RADIUS ** 2;
-    for (const [i, at] of shares.entries()) {
+    for (const [i, at] of points.entries()) {
       const apart = (left + at.x * width - x) ** 2 + (top + at.y * height - y) ** 2;
       if (apart <= least) {
         least = apart;
@@ -244,8 +264,10 @@ export function stood(anchor: DOMRectReadOnly, size: Room, room: Room): Point {
  * Tooltip is the box that says what a mark is worth. It hears the pointer
  * over `plot`, and stands in `within`, the window, by the mark the pointer
  * is over, which wears the cursor, and a screen reader hears it as what the
- * plot describes. A new drawing puts the cursor on the mark under the
- * pointer then.
+ * plot describes. The keys step the cursor while the plot has them, and it
+ * goes with them. A new drawing keeps a cursor the keys put on the mark at
+ * the same place among its marks, and puts one the pointer put on the mark
+ * under the pointer then.
  */
 export class Tooltip {
   /** The box, which the window holds beside its plot. */
@@ -269,8 +291,11 @@ export class Tooltip {
     this.box.style.setProperty("--tip-edge", `${TIP_EDGE}px`);
     this.box.append(this.key, this.words);
     plot.setAttribute("aria-describedby", id);
+    // A screen reader says which keys step the cursor, as STEPS reads them.
+    plot.setAttribute("aria-keyshortcuts", [...STEPS.keys()].join(" "));
     plot.addEventListener("pointermove", (e) => this.point(e));
     plot.addEventListener("pointerleave", () => this.clear());
+    plot.addEventListener("focusout", () => this.clear());
   }
 
   /**
@@ -285,6 +310,20 @@ export class Tooltip {
     if (point !== undefined) this.hover(document.elementFromPoint(point.x, point.y), point);
     else if (this.cursor === undefined || count === 0) this.clear();
     else this.place(Math.min(this.cursor.at, count - 1));
+  }
+
+  /**
+   * step moves the cursor where `press` says, as STEPS reads it, and returns
+   * whether it is one of those keys alone, with marks to step through.
+   */
+  step(press: Press): boolean {
+    const last = this.targets.all.length - 1;
+    const to = STEPS.get(press.key)?.(this.cursor?.at, last);
+    if (to === undefined || last < 0 || press.ctrl || press.alt || press.meta || press.shift) {
+      return false;
+    }
+    this.place(to);
+    return true;
   }
 
   /** clear takes the cursor off its mark and hides the box, emptied, so the plot describes no mark. */
