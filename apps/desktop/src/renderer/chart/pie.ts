@@ -57,6 +57,12 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
   return other > 0 ? [...own, { value: undefined, size: other }] : own;
 }
 
+/** wholeOf gives what `drawn` adds up to, or 0 for a whole no double holds, which no share is of. */
+export function wholeOf(drawn: readonly Slice[]): number {
+  const whole = drawn.reduce((sum, { size }) => sum + size, 0);
+  return Number.isFinite(whole) ? whole : 0;
+}
+
 /**
  * past gives what a pie's caption says of the values past those a tally keeps
  * apart, or nothing where there are none. Other counts their rows as they are,
@@ -190,8 +196,8 @@ function entry(key: string, value: string | undefined, share: number): HTMLEleme
 export function pie(plot: Pie, groups: Groups): HTMLElement {
   const box = el("div", "chart-pie");
   const drawn = slices(plot, groups);
-  const whole = drawn.reduce((sum, { size }) => sum + size, 0);
-  if (drawn.length === 0 || !Number.isFinite(whole)) return box;
+  const whole = wholeOf(drawn);
+  if (whole === 0) return box;
   const ring = mark("svg", "chart-slices");
   ring.setAttribute("viewBox", VIEW);
   ring.setAttribute("aria-hidden", "true");

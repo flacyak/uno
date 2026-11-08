@@ -513,6 +513,8 @@
       }
     }
   ],
+  "chart_summary": "{title} en {name}, {rows}.",
+  "chart_summary_more": "y {count} más.",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",
