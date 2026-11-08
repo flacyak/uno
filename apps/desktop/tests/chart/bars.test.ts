@@ -85,6 +85,12 @@ test("rows per value draw in the tally's order, each its share of the largest", 
   expect(shares(box)).toStrictEqual([1, 812 / 1204, 301 / 1204]);
 });
 
+test("a value's label and its track stand in a row of their own, under the bars' box", () => {
+  const rows = all(bars(ROWS, REGIONS, TALL), ".chart-bars > .chart-bar-row");
+  const parts = rows.map((row) => [...row.children].map((part) => part.classList[0]));
+  expect(parts).toStrictEqual(REGIONS.groups.map(() => ["chart-bar-label", "chart-bar-track"]));
+});
+
 test("a sum per value draws each value's sum, and a sum of nothing no bar", () => {
   const box = bars(SUMS, REGIONS, TALL);
   expect(tips(box)).toStrictEqual(["48,160.5", "32,480", "0"]);

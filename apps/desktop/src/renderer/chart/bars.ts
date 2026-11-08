@@ -4,9 +4,10 @@
  * under them counts the rest.
  *
  * The bars are HTML that chart.css lays out by the sizes here, so a theme
- * recolours them and a zoom keeps them crisp. A label is the file's text, set
- * as text alone. The values are mono, so the room they take is their length in
- * ch, and a plot too narrow for them beside its bars draws the bars alone.
+ * recolours them and a zoom keeps them crisp: a row per value, its label then
+ * its bar on a track. A label is the file's text, set as text alone. The
+ * values are mono, so the room they take is their length in ch, and a plot
+ * too narrow for them beside its bars draws the bars alone.
  */
 
 import type { Plot } from "@document";
@@ -106,7 +107,9 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
     track.classList.toggle("below", size < 0);
     track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(size) / span}`);
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
-    box.append(named(label), track);
+    const row = el("div", "chart-bar-row");
+    row.append(named(label), track);
+    box.append(row);
   }
 
   const left = all.slice(fit);

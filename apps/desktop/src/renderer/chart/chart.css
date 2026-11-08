@@ -279,6 +279,16 @@
   font-size: 11px;
 }
 
+/* A value's row: its label, then its track, in the columns the bars share and
+ * as high as a bar, so the whole row is the bar's hit target. */
+.chart-bar-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-self: stretch;
+  align-items: center;
+}
+
 /* The line of what a plot leaves out runs under both columns, in the caption's ink. */
 .chart-bars-line {
   grid-column: 1 / -1;
