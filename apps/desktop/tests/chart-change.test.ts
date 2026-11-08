@@ -2,7 +2,8 @@
  * @fileoverview A chart changed from its own window, through the real shell
  * and engine: the edit button opens the chart form on the chart, Apply on
  * another column refolds and redraws it, and a new title reads no bytes. Enter,
- * F2 and a double-click on the head open the form too.
+ * F2 and a double-click on the head open the form too, and Ctrl+Z on a chart
+ * undoes no edit in the grid.
  *
  * @vitest-environment happy-dom
  */
@@ -14,7 +15,8 @@ import { join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
 
 import { Refusal } from "@engine";
-import { REGION, REP } from "@main/smoke/fixture";
+import { REGION, REP, UNITS } from "@main/smoke/fixture";
+import { m } from "@paraglide/messages";
 import type { Provider } from "@plugin";
 import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
@@ -27,6 +29,9 @@ import { domPage, until } from "./smoke/dom-page.ts";
 /** The sales export's regions and reps, as their tallies send them. */
 const REGIONS = ["East", "North", "South", "West"];
 const REPS = ["Ada Okafor", "Ben Iyer", "Cai Moreau", "Dara Nkemi"];
+
+/** A row of the sales export, whose units an edit changes. */
+const EDITED_ROW = 5;
 
 const page = domPage();
 let shell: Shell;
@@ -132,4 +137,21 @@ test("Enter, F2 and a double-click on the head open the form on the chart, and E
   // Enter on a head's button is the button's.
   box.querySelector(".chart-table-toggle")!.dispatchEvent(key("Enter"));
   expect(form()).toBeNull();
+});
+
+test("Ctrl+Z on a chart undoes no edit in the grid, and says what it would undo", async () => {
+  await page.press("e", { ctrlKey: true });
+  await page.clickCell(EDITED_ROW, UNITS);
+  await page.press("Enter");
+  await page.setEditorValue("1101");
+  await page.press("Enter");
+  const edited = [{ selector: "#status-file", includes: m.edits_count({ count: 1 }) }];
+  expect(await page.until(edited)).toBe(true);
+  const box = document.querySelector<HTMLElement>(".chart")!;
+  box.focus();
+  const undo = { key: "z", ctrlKey: true, bubbles: true, cancelable: true };
+  expect(box.dispatchEvent(new KeyboardEvent("keydown", undo))).toBe(false);
+  expect(document.querySelector("#status-msg")!.textContent).toBe(m.chart_undo_hint());
+  await page.settle(1);
+  expect(await page.until(edited)).toBe(true);
 });

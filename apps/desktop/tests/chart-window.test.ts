@@ -44,6 +44,7 @@ const NO_LAYER: Stage = {
   notNumbers: () => undefined,
   edit: () => undefined,
   remove: () => undefined,
+  say: () => undefined,
 };
 
 /** A chart's window, showing `chart` under `source`. */

@@ -464,6 +464,7 @@
   "chart_role": "gráfico",
   "chart_remove_aria": "Remover gráfico",
   "chart_remove_armed": "× ou Delete outra vez remove o gráfico {title}",
+  "chart_undo_hint": "Ctrl+Z anula as edições da grelha · Esc volta para ela",
   "chart_edit": "Editar gráfico",
   "chart_title_rows": "Linhas por {by}",
   "chart_title_sum": "Soma de {sum} por {by}",
