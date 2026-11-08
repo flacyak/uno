@@ -1,15 +1,16 @@
 /**
  * @fileoverview What a chart's caption says of how much of its source it has
  * read, in the language chosen: the share read while its tally is partial, and
- * the rows once it is complete. And what its plot says in place of a chart it
- * cannot draw.
+ * the rows once it is complete, then the cells the tally left out. And what its
+ * plot says in place of a chart it cannot draw.
  */
 
 import { afterEach, expect, test } from "vite-plus/test";
 
 import type { GroupsTally, SampleTally, Tally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { body, coverage } from "@renderer/chart/caption";
+import type { Locale } from "@paraglide/runtime";
+import { blank, body, coverage, notNumbers } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
 import { BARS, SCATTER } from "../charted.ts";
 
@@ -62,6 +63,51 @@ test("the share read is of the rows the index estimates, which the rows read can
 test("the caption says nothing of the source before a tally, or of one the chart could not read", () => {
   expect(coverage(undefined)).toBe("");
   expect(coverage(UNREAD)).toBe("");
+});
+
+/** A complete tally of BARS that left out `blank` cells as blank, and `unparsed` as not numbers. */
+function leftOut(blank: number, unparsed = 0): GroupsTally {
+  return { ...tallyOf(ROWS, ROWS), skipped: { blank, unparsed } };
+}
+
+/** How many cells a tally leaves out here. */
+const LEFT_OUT = 1200;
+
+/** What each language says of LEFT_OUT blank cells. */
+const BLANK: ReadonlyArray<[Locale, string]> = [
+  ["en-US", "1,200 blank"],
+  ["en-GB", "1,200 blank"],
+  ["es", "1200 en blanco"],
+  ["pt-BR", "1.200 em branco"],
+  ["pt-PT", "1200 em branco"],
+];
+
+test("the caption counts the cells a tally left out as blank, in the language chosen, and says nothing of none", () => {
+  for (const [locale, words] of BLANK) {
+    void setLocale(locale, { reload: false });
+    expect(blank(leftOut(LEFT_OUT)), locale).toBe(words);
+    expect(blank(leftOut(0)), locale).toBe("");
+  }
+  expect(blank(undefined)).toBe("");
+  expect(blank(UNREAD)).toBe("");
+});
+
+/** What each language says of one cell that was not a number, and of LEFT_OUT. */
+const NOT_NUMBERS: ReadonlyArray<[Locale, string, string]> = [
+  ["en-US", "1 not a number", "1,200 not numbers"],
+  ["en-GB", "1 not a number", "1,200 not numbers"],
+  ["es", "1 no es número", "1200 no son números"],
+  ["pt-BR", "1 não é número", "1.200 não são números"],
+  ["pt-PT", "1 não é número", "1200 não são números"],
+];
+
+test("the caption counts the cells that were not numbers, one or more, in the language chosen", () => {
+  for (const [locale, one, more] of NOT_NUMBERS) {
+    void setLocale(locale, { reload: false });
+    expect(notNumbers(leftOut(0, 1)), locale).toBe(one);
+    expect(notNumbers(leftOut(0, LEFT_OUT)), locale).toBe(more);
+  }
+  expect(notNumbers(leftOut(LEFT_OUT))).toBe("");
 });
 
 /** What a chart over the export heard with `latest` as its latest tally. */

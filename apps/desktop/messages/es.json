@@ -489,6 +489,18 @@
   "chart_no_values_yet": "aún no hay valores en {columns}",
   "chart_source_missing": "falta {name}",
   "chart_bucket_unconnected": "{bucket} no está conectado",
+  "chart_blank": "{count} en blanco",
+  "chart_not_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} no es número",
+        "plural=many": "{n} no son números",
+        "plural=other": "{n} no son números"
+      }
+    }
+  ],
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",
