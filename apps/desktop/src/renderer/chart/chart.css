@@ -186,11 +186,18 @@
   cursor: pointer;
 }
 
-.chart-head-button:hover,
+.chart-head-button:enabled:hover,
 .chart-head-button[aria-pressed="true"] {
   color: var(--ink);
   background: var(--surface);
   border-color: var(--rule);
+}
+
+/* A refresh with nothing to read again stands faint, as the connect form's
+ * disabled buttons do (panel.css). */
+.chart-head-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* A head with no room for its buttons beside the × drops them, so the ×

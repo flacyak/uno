@@ -1,14 +1,15 @@
 /**
  * @fileoverview A chart refreshed by hand from its own window, through the real
  * shell and engine: r or the head's refresh button reads a rewritten file
- * again and draws the new rows, r twice reads it once, and a source of several
+ * again and draws the new rows, r twice reads it once, a source of several
  * files appends the new one alone, says why its folder cannot be listed, and
- * says nothing once another workspace has opened.
+ * says nothing once another workspace has opened, and a carried source's
+ * refresh is off and says why.
  *
  * @vitest-environment happy-dom
  */
 
-import { appendFile, copyFile, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
@@ -19,7 +20,7 @@ import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
-import { BARS, unoOf } from "./charted.ts";
+import { BARS, carriedUnoOf, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, FIXTURE, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, frame, until } from "./smoke/dom-page.ts";
 
@@ -139,4 +140,19 @@ test("a folder refresh still listing when another workspace opens ends there, wi
   await frame();
   expect(message()).toBe(before);
   gated.mockRestore();
+});
+
+test("a chart over a carried source has its refresh off, and r says there is nothing to read again", async () => {
+  const uno = join(dir, "carried.uno");
+  await writeFile(uno, carriedUnoOf([BARS], new Uint8Array(await readFile(FIXTURE))));
+  await shell.openRef({ name: basename(uno), path: uno }, uno);
+  expect(await counts(ROWS)).toBe(true);
+
+  const again = box().querySelector<HTMLButtonElement>(".chart-refresh")!;
+  const hint = m.chart_refresh_carried({ name: basename(FIXTURE) });
+  expect([again.disabled, again.title]).toStrictEqual([true, hint]);
+  const relink = vi.spyOn(Engine.prototype, "relink");
+  expect(r()).toBe(false);
+  expect([message(), relink.mock.calls.length]).toStrictEqual([hint, 0]);
+  relink.mockRestore();
 });

@@ -4,8 +4,10 @@
  * in a grip. The layer stands it in the room and says which chart it shows,
  * and the head's edit button opens the chart form on it, as Enter, F2 and a
  * double-click on the head do. The head's refresh button and r read the
- * chart's source again by hand. The × and Delete ask to remove the chart, and
- * Ctrl+Z says it undoes edits in the grid, and undoes none.
+ * chart's source again by hand, and over a source carried inside the
+ * workspace they say there is nothing to read again. The × and Delete ask
+ * to remove the chart, and Ctrl+Z says it undoes edits in the grid, and
+ * undoes none.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
  * resizes it. It follows the pointer alone until the drop, which stores where
@@ -196,6 +198,11 @@ function tableKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
   return key === TABLE_KEY && !ctrl && !alt && !meta && !repeat;
 }
 
+/** cannotRead says why `heard`'s source has nothing to read again, or nothing where it has. */
+function cannotRead(heard: Heard | undefined): string | undefined {
+  return heard?.carried === true ? m.chart_refresh_carried({ name: heard.name }) : undefined;
+}
+
 /** refreshKey says whether `press` reads the chart's source again. */
 function refreshKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
   return key === REFRESH_KEY && !ctrl && !alt && !meta && !repeat;
@@ -286,9 +293,7 @@ export class ChartWindow {
     this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
   );
   /** The head's button that reads the chart's source again. */
-  private readonly again = button("chart-head-button chart-refresh", "", () =>
-    this.stage.refresh(this.chart.source),
-  );
+  private readonly again = button("chart-head-button chart-refresh", "", () => this.refresh());
   /** The head's button that puts the table in the plot's place, pressed in while it stands there. */
   private readonly toggle = button("chart-head-button chart-table-toggle", "", () => this.flip());
   /** The head's button that opens the chart form on the chart. */
@@ -455,6 +460,9 @@ export class ChartWindow {
     else this.draw(plot, tally, named);
     const after = tally === undefined ? [] : extra(plot, tally);
     this.say([coverage(latest), blank(latest)], notNumbers(latest), after);
+    const why = cannotRead(heard);
+    this.again.disabled = why !== undefined;
+    this.again.title = why ?? "";
     const read = reading(heard);
     this.track.hidden = read === undefined;
     this.track.style.setProperty("--read", `${read ?? 0}`);
@@ -674,7 +682,7 @@ export class ChartWindow {
     const press = pressOf(e);
     if (e.key === "Escape") this.escape();
     else if (tableKey(press)) this.flip();
-    else if (refreshKey(press)) this.stage.refresh(this.chart.source);
+    else if (refreshKey(press)) this.refresh();
     else if (edits(press, e.target)) this.change();
     else if (deleteKey(press)) this.unchart();
     else if (undoKey(press)) this.stage.say(m.chart_undo_hint());
@@ -700,6 +708,13 @@ export class ChartWindow {
     const { bottom } = this.head.getBoundingClientRect();
     const rule = parseFloat(getComputedStyle(this.head).borderBottomWidth);
     this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) });
+  }
+
+  /** refresh asks to read the chart's source again, or says why it has nothing to read. */
+  private refresh(): void {
+    const why = cannotRead(this.stage.heard(this.chart.id));
+    if (why === undefined) this.stage.refresh(this.chart.source);
+    else this.stage.say(why);
   }
 
   /** unchart asks to remove the chart, by the title its head gives it. */
