@@ -1,19 +1,28 @@
 /**
  * @fileoverview What a chart's marks are worth, from tooltip.ts: a bar's row
- * is worth the value it measures and a slice its measure and its share, each
- * labelled by the file's text, and which mark a pointer is over.
+ * is worth the value it measures, a slice its measure and its share, and a
+ * point its x and its y, each labelled by the file's text; and which mark a
+ * pointer is over, a point being the nearest within HIT_RADIUS.
  *
  * @vitest-environment happy-dom
  */
 
 import { afterEach, expect, test } from "vite-plus/test";
 
-import type { Group, Groups } from "@engine";
+import type { Group, Groups, GroupsTally, Sample, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { bars } from "@renderer/chart/bars";
 import { pie } from "@renderer/chart/pie";
-import { barTargets, sliceTargets } from "@renderer/chart/tooltip";
+import { scatter } from "@renderer/chart/scatter";
+import {
+  HIT_RADIUS,
+  NONE,
+  barTargets,
+  pointTargets,
+  sliceTargets,
+  targets,
+} from "@renderer/chart/tooltip";
 import type { Reading, Target } from "@renderer/chart/tooltip";
 import { holding } from "../charted.ts";
 
@@ -22,6 +31,7 @@ const REVENUE = { col: 5, header: "revenue" };
 const ROWS = { t: "bars", by: REGION } as const;
 const SUMS = { ...ROWS, sum: REVENUE };
 const SHARES = { t: "pie", by: REGION, sum: REVENUE } as const;
+const AGAINST = { t: "scatter", x: { col: 4, header: "units" }, y: REVENUE } as const;
 
 /** A tally of `groups` alone. */
 function tallyOf(...groups: Group[]): Groups {
@@ -127,4 +137,69 @@ test("Other is worth what it adds up, under the caption's ink, and says the app'
   const other = all.at(-1)!;
   expect(said(other)).toStrictEqual([["30", `${m.chart_pie_other()} · 8.3%`, "SPAN"]]);
   expect(other.key).toBe("var(--ink-3)");
+});
+
+/** A tally that sent `x` and `y` and plotted no other row. */
+function sampleOf(x: number[], y: number[]): Sample {
+  const least = { x: Math.min(...x), y: Math.min(...y) };
+  const most = { x: Math.max(...x), y: Math.max(...y) };
+  return { x, y, plotted: x.length, least, most, skipped: { blank: 0, unparsed: 0 } };
+}
+
+/** Units against revenue: points a quarter of the way along and up, and at both ends. */
+const SALES = sampleOf([0, 50, 200], [0, 1000, 4000]);
+
+/** The points' box, laid out `width` px wide and as high, at the page's corner. */
+function plotted(sample: Sample, width: number): HTMLElement {
+  const box = scatter(sample);
+  const rect = new DOMRect(0, 0, width, width);
+  Object.defineProperty(box.querySelector(".chart-points"), "getBoundingClientRect", {
+    value: () => rect,
+  });
+  return box;
+}
+
+test("a point is worth its x and its y, each named by its column, or the app's name for one with none", () => {
+  const { all } = pointTargets(AGAINST, SALES, plotted(SALES, 100));
+  expect(all.map(said)).toStrictEqual([
+    [
+      ["0", "units", "BDI"],
+      ["0", "revenue", "BDI"],
+    ],
+    [
+      ["50", "units", "BDI"],
+      ["1,000", "revenue", "BDI"],
+    ],
+    [
+      ["200", "units", "BDI"],
+      ["4,000", "revenue", "BDI"],
+    ],
+  ]);
+  const unnamed = { ...AGAINST, y: { col: 5, header: "" } };
+  const [first] = pointTargets(unnamed, SALES, plotted(SALES, 100)).all;
+  expect(said(first!)[1]).toStrictEqual(["0", m.column_unnamed({ number: 6 }), "SPAN"]);
+});
+
+test("the nearest point within HIT_RADIUS of a pointer is the target, and none further", () => {
+  const { under } = pointTargets(AGAINST, SALES, plotted(SALES, 100));
+  // The points stand at (0, 100), (25, 75) and (100, 0).
+  expect(under(null, 25, 75)).toBe(1);
+  expect(under(null, 25 + HIT_RADIUS, 75)).toBe(1);
+  expect(under(null, 25 + HIT_RADIUS + 1, 75)).toBeUndefined();
+  expect(under(null, 100, 0)).toBe(2);
+  // Two points HIT_RADIUS apart: the pointer goes to the nearer.
+  const pair = sampleOf([0, 10], [0, 0]);
+  const near = pointTargets(AGAINST, pair, plotted(pair, HIT_RADIUS)).under;
+  expect(near(null, HIT_RADIUS / 2 + 1, HIT_RADIUS)).toBe(1);
+  expect(near(null, HIT_RADIUS / 2 - 1, HIT_RADIUS)).toBe(0);
+});
+
+test("targets gives a drawing's marks for its plot's kind, and none for a tally of another", () => {
+  const complete = { coverage: { rows: 3, total: 3, complete: true } };
+  const groups: GroupsTally = { t: "groups", plot: ROWS, ...complete, ...REGIONS };
+  const sample: SampleTally = { t: "sample", plot: AGAINST, ...complete, ...SALES };
+  expect(targets(ROWS, groups, bars(ROWS, REGIONS, TALL)).all).toHaveLength(3);
+  expect(targets(SHARES, groups, pie(SHARES, REGIONS)).all).toHaveLength(2);
+  expect(targets(AGAINST, sample, scatter(SALES)).all).toHaveLength(3);
+  expect(targets(ROWS, sample, bars(ROWS, REGIONS, TALL))).toBe(NONE);
 });
