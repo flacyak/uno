@@ -15,6 +15,7 @@ import "./form.css";
 
 import { TITLE_AT_MOST } from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
+import { placeOf } from "@engine";
 import type { ColumnInfo } from "@engine";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
@@ -145,9 +146,9 @@ export class ChartForm {
   /** choose offers the columns of the source chosen, keeping each column
    * chosen whose header it has, and names it in an insert's title line. */
   private choose(): void {
-    const header = (select: HTMLSelectElement): string | undefined =>
-      select.value === "" ? undefined : this.source.band.columns[Number(select.value)]?.header;
-    const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(header);
+    const chosen = (select: HTMLSelectElement): ChartColumn | undefined =>
+      select.value === "" ? undefined : this.column(select.value);
+    const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(chosen);
     this.source = this.sources[Number(this.from.value)] ?? this.source;
     if (this.opening.t === "insert") {
       this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
@@ -158,19 +159,19 @@ export class ChartForm {
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
     this.kind.value = plot.t;
-    if (plot.t === "scatter") {
-      this.offer(this.at(plot.x.header), [undefined, plot.x.header, plot.y.header]);
-    } else {
-      this.offer(this.at(plot.by.header), [plot.sum?.header]);
-    }
+    if (plot.t === "scatter") this.offer(this.at(plot.x), [undefined, plot.x, plot.y]);
+    else this.offer(this.at(plot.by), [plot.sum]);
   }
 
-  /** at gives the source's column with `header`, or else its first. */
-  private at(header: string | undefined): number {
-    return Math.max(
-      0,
-      this.source.band.columns.findIndex((c) => c.header === header),
-    );
+  /** at gives where the source holds `column`, or else its first column. */
+  private at(column: ChartColumn | undefined): number {
+    return this.placed(column) ?? 0;
+  }
+
+  /** placed gives where the source holds `column`, found as a tally finds it. */
+  private placed(column: ChartColumn | undefined): number | undefined {
+    const headers = this.source.band.columns.map((c) => c.header);
+    return column === undefined ? undefined : placeOf(column, headers);
   }
 
   /** first gives the column select the kind chosen asks for first. */
@@ -178,11 +179,11 @@ export class ChartForm {
     return this.kind.value === "scatter" ? this.x : this.by;
   }
 
-  /** offer fills the selects with the source's columns, choosing `by` and the
-   * number columns whose headers `kept` has for Sum of, X and Y. X is otherwise
-   * `by` where it holds numbers, or else the first number column, and never Y's,
-   * and Y is otherwise one other than X. */
-  private offer(by: number, kept: ReadonlyArray<string | undefined> = []): void {
+  /** offer fills the selects with the source's columns, choosing `by` and,
+   * for Sum of, X and Y, where the source holds the number columns `kept`. X is
+   * otherwise `by` where it holds numbers, or else the first number column, and
+   * never Y's, and Y is otherwise one other than X. */
+  private offer(by: number, kept: ReadonlyArray<ChartColumn | undefined> = []): void {
     const columns = this.source.band.columns;
     const numbers: number[] = [];
     this.by.replaceChildren();
@@ -196,9 +197,11 @@ export class ChartForm {
       numbers.push(i);
       for (const offered of [this.sum, this.x, this.y]) offered.append(fromFile(c.header, i));
     }
-    const named = (header?: string): number | undefined =>
-      numbers.find((i) => columns[i]?.header === header);
-    const [sum, x, y] = kept.map(named);
+    const held = (column?: ChartColumn): number | undefined => {
+      const at = this.placed(column);
+      return at !== undefined && numbers.includes(at) ? at : undefined;
+    };
+    const [sum, x, y] = kept.map(held);
     const xAt = x ?? [by, ...numbers].find((i) => numbers.includes(i) && i !== y) ?? y;
     const yAt = y ?? numbers.find((i) => i !== xAt) ?? xAt;
     this.by.value = String(clamp(by, columns.length - 1));
