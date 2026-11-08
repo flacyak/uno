@@ -77,17 +77,18 @@ export function notNumbers(latest: Tally | undefined): string {
 
 /**
  * reading gives how far a chart has read its source, from 0 to 1, while it
- * reads: nothing of it before the first tally, and then the latest tally's
- * share until one completes. It is undefined where nothing is read: the tally
- * is complete, the chart cannot read its column, its source is missing or
- * waits on its bucket, or the chart has gone.
+ * reads: nothing of it before the first tally, or of a source being read
+ * again, and then the latest tally's share until one completes. It is
+ * undefined where nothing is read: the tally is complete, the chart cannot
+ * read its column, its source is missing or waits on its bucket, or the
+ * chart has gone.
  */
 export function reading(heard: Heard | undefined): number | undefined {
   if (heard === undefined || heard.state === "missing" || heard.state === "unconnected") {
     return undefined;
   }
   const { latest } = heard;
-  if (latest === undefined) return 0;
+  if (latest === undefined || heard.rereading === true) return 0;
   if (latest.t === "unread" || latest.coverage.complete) return undefined;
   return share(latest.coverage);
 }

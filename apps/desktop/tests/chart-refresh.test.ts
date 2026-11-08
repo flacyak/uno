@@ -1,11 +1,11 @@
 /**
  * @fileoverview A chart refreshed by hand from its own window, through the real
  * shell and engine: r or the head's refresh button reads a rewritten file
- * again and draws the new rows, r twice reads it once, a source of several
- * files appends the new one alone, says why its folder cannot be listed, and
- * says nothing once another workspace has opened, and the refresh of a
- * carried source, or of one whose files the open did not find, is off and
- * says why.
+ * again, the last picture faint until the new rows come, r twice reads it
+ * once, a source of several files appends the new one alone, says why its
+ * folder cannot be listed, and says nothing once another workspace has
+ * opened, and the refresh of a carried source, or of one whose files the
+ * open did not find, is off and says why.
  *
  * @vitest-environment happy-dom
  */
@@ -18,6 +18,7 @@ import { beforeAll, expect, test, vi } from "vite-plus/test";
 import { Engine, Refusal } from "@engine";
 import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
+import { Charts } from "@renderer/charts";
 import type { Shell } from "@renderer/shell/shell";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
@@ -83,6 +84,22 @@ test("r twice, and the head's button after it, send one relink between them", as
   box().querySelector<HTMLButtonElement>(".chart-refresh")!.click();
   expect(relink).toHaveBeenCalledOnce();
   expect(await counts(ROWS + 2)).toBe(true);
+  relink.mockRestore();
+});
+
+test("r draws the last picture faint over an empty track before the file read again tallies", async () => {
+  const hear = vi.spyOn(Charts.prototype, "hear").mockImplementation(() => undefined);
+  const relink = vi.spyOn(Engine.prototype, "relink");
+  r();
+  await relink.mock.results[0]!.value;
+  await frame();
+  const plot = box().querySelector<HTMLElement>(".chart-plot")!;
+  const track = box().querySelector<HTMLElement>(".chart-coverage")!;
+  expect([plot.classList.contains("chart-stale"), track.hidden]).toStrictEqual([true, false]);
+  // The caption still counts the rows of the last read.
+  expect(said()).toBe(m.rows_count({ count: ROWS + 2 }));
+  expect(track.style.getPropertyValue("--read")).toBe("0");
+  hear.mockRestore();
   relink.mockRestore();
 });
 

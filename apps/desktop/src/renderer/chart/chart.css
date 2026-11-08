@@ -214,6 +214,13 @@
   border-color: var(--accent);
 }
 
+/* The last complete picture, from window.ts, while the source is read again:
+ * faint over the track that shows how far, so the chart never flashes empty. */
+.chart-plot.chart-stale {
+  --refetch-opacity: 0.6;
+  opacity: var(--refetch-opacity);
+}
+
 /* What a plot draws stops at its foot, so none of it stands on the caption. */
 .chart-plot {
   flex: 1 1 auto;

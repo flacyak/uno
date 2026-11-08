@@ -496,19 +496,24 @@ test("a window draws what its chart heard on the next frame, and again each time
   expect(part(".chart-plot").childElementCount).toBe(0);
 });
 
-test("a window draws as each tally comes, and keeps a complete one while the next is read", async () => {
+test("a window draws as each tally comes, and keeps a complete one faint while the next is read", async () => {
   const { layer, model } = shown(FLUSH);
   Object.defineProperty(part(".chart-plot"), "clientHeight", { value: ROOM.h });
+  const faint = (): boolean => part(".chart-plot").classList.contains("chart-stale");
   await frame();
-  const reading = heardOf("East").latest;
+  const reading = readOf(1, 2).latest;
   model.heard = () => ({ ...FINE, latest: reading, complete: undefined });
   layer.tallied(FLUSH.id);
   await frame();
-  expect(labels()).toStrictEqual(["East"]);
+  expect([labels(), faint()]).toStrictEqual([["East"], false]);
   model.heard = () => ({ ...heardOf("North", "South"), latest: reading });
   layer.tallied(FLUSH.id);
   await frame();
-  expect(labels()).toStrictEqual(["North", "South"]);
+  expect([labels(), faint()]).toStrictEqual([["North", "South"], true]);
+  model.heard = () => heardOf("North", "South");
+  layer.tallied(FLUSH.id);
+  await frame();
+  expect(faint()).toBe(false);
 });
 
 test("a track under the head shows how far a chart has read, until its tally completes", async () => {
