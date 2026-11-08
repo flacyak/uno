@@ -236,6 +236,26 @@ const TABLE = {
   end: 6_300,
 };
 
+/**
+ * The tip story's beats: the pointer brought over a chart window's first
+ * bar, glided down its rows, a click on the last for the plot to take the
+ * keys, Home for the first row, Right down the rows, and End for the last.
+ */
+const TIP = {
+  point: 500,
+  glide: 1_000,
+  click: 2_800,
+  home: 3_400,
+  right: 3_900,
+  end: 5_400,
+  stop: 6_400,
+};
+
+/** How many moves the tip story's glide takes, how long each lasts, and how many Rights it presses. */
+const GLIDE_MOVES = 24;
+const GLIDE_MOVE_MS = 50;
+const RIGHTS = 3;
+
 /** A stand-in for the pointer, as a capture leaves the real one out. */
 const POINTER =
   '<svg width="16" height="24" viewBox="0 0 16 24">' +
@@ -704,6 +724,7 @@ const STORIES: Record<string, Story> = {
   moves: { end: MOVES.end, script: playMoves },
   wheel: { end: WHEEL.end, script: playWheel },
   table: { end: TABLE.end, script: playTable },
+  tip: { end: TIP.stop, script: playTip },
 };
 
 /**
@@ -810,6 +831,35 @@ async function playTable(win: BrowserWindow, at: Clock): Promise<void> {
   await at(TABLE.back);
   press(win, "t");
   await at(TABLE.end);
+}
+
+/**
+ * playTip performs the tip story: the pointer over the last chart window's
+ * first bar, glided down its rows, a click on the last for the plot to take
+ * the keys, Home, Right down the rows, and End.
+ */
+async function playTip(win: BrowserWindow, at: Clock): Promise<void> {
+  await standIn(win);
+  await at(TIP.point);
+  const rows = ".chart:last-child .chart-bar-row";
+  const from = await middle(win, `${rows}:first-child`);
+  const to = await middle(win, `${rows}:last-child`);
+  pointTo(win, from.x, from.y);
+  await at(TIP.glide);
+  for (let i = 1; i <= GLIDE_MOVES; i++) {
+    const eased = 1 - (1 - i / GLIDE_MOVES) ** 3;
+    pointTo(win, from.x, Math.round(from.y + (to.y - from.y) * eased));
+    await sleep(GLIDE_MOVE_MS);
+  }
+  await at(TIP.click);
+  await click(win, `${rows}:last-child`);
+  await at(TIP.home);
+  press(win, "Home");
+  await at(TIP.right);
+  await presses(win, "Right", RIGHTS, ARROW_GAP * 2);
+  await at(TIP.end);
+  press(win, "End");
+  await at(TIP.stop);
 }
 
 /**
@@ -969,6 +1019,13 @@ async function click(
  * returns that point.
  */
 async function hover(win: BrowserWindow, selector: string): Promise<{ x: number; y: number }> {
+  const at = await middle(win, selector);
+  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", ...at }));
+  return at;
+}
+
+/** middle gives the centre of the element matching selector, in the page's px. */
+async function middle(win: BrowserWindow, selector: string): Promise<{ x: number; y: number }> {
   // The page returns null for a missing element, and the throw happens here
   // with the selector: an error thrown in the page arrives as a bare "Script
   // failed to execute".
@@ -981,8 +1038,6 @@ async function hover(win: BrowserWindow, selector: string): Promise<{ x: number;
     })()
   `)) as { x: number; y: number } | null;
   if (at === null) throw new Error(`nothing to point at ${selector}`);
-  const { x, y } = at;
-  through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y }));
   return at;
 }
 

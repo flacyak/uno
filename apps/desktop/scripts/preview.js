@@ -28,8 +28,11 @@
  * - `table`: presses t on a chart window of a scatter for the table of its
  *   points, scrolls it with the wheel, and presses t again for the points.
  *   Goes to out/table.gif.
+ * - `tip`: glides the pointer down a chart window's bars, each saying what it
+ *   is worth, then clicks the plot and steps through them with the keys.
+ *   Goes to out/tip.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip]
  * (after node scripts/build.js)
  */
 
@@ -60,7 +63,7 @@ const fixture = join(testdata, "sales-q3.csv");
 /** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
-const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel", "table"];
+const TO_OUT = [...AGAINST_BUCKET, "moves", "wheel", "table", "tip"];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
@@ -214,7 +217,7 @@ async function stageSidebar() {
   return { workspaces, fresh };
 }
 
-/** Rows per region of the fixture, the chart the moves and wheel stories show twice. */
+/** Rows per region of the fixture, the chart the moves, wheel and tip stories show twice. */
 const REGION_BARS = { t: "bars", by: { col: 1, header: "region" } };
 
 /** Revenue against units of the fixture, whose table of points runs past any window. */
@@ -334,6 +337,7 @@ const staged = {
   moves: () => stageCharts("moves", [REGION_BARS, REGION_BARS]),
   wheel: () => stageCharts("wheel", [REGION_BARS, REGION_BARS]),
   table: () => stageCharts("table", [REGION_BARS, AGAINST]),
+  tip: () => stageCharts("tip", [REGION_BARS, REGION_BARS]),
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 
