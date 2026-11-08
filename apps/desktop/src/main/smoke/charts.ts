@@ -132,7 +132,7 @@ export const A_KEY: readonly Input[] = [
 const THIN_SHEET = 40;
 
 /** A sheet too short for two heads, which take 59 px under the header row. */
-const SHORT_SHEET = 80;
+export const SHORT_SHEET = 80;
 
 /** How many times over a title runs past any window. */
 const LONG_TITLE = 40;

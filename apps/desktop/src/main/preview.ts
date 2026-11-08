@@ -293,6 +293,19 @@ const KINDS = [
  */
 const CHANGE = { edit: 800, by: 3_200, apply: 4_600, arm: 7_400, remove: 9_800, end: 12_000 };
 
+/** What the focus story holds as it presses F6: nothing three times, then Shift three times. */
+const FOCUS_KEYS: Modifier[][] = [[], [], [], ["shift"], ["shift"], ["shift"]];
+
+/**
+ * The focus story's beats: a cell pressed, the first F6 once the pointer rests,
+ * each press after it a step later, and how long Ctrl+Shift+F holds.
+ */
+const FOCUS = { cell: 400, first: 3_200, step: 1_600, hold: 1_800 };
+
+/** When the focus story presses Ctrl+Shift+F, a step after the last F6, and its end. */
+const FOCUS_FRONT = FOCUS.first + FOCUS_KEYS.length * FOCUS.step;
+const FOCUS_END = FOCUS_FRONT + FOCUS.hold;
+
 /** How long a Down holds each kind, and how long the last holds before Enter. */
 const KIND_STEP_MS = 1_000;
 const KIND_HOLD_MS = 1_000;
@@ -781,6 +794,7 @@ const STORIES: Record<string, Story> = {
   insert: { end: INSERT.end, script: playInsert },
   kinds: { end: KINDS_END, script: playKinds },
   change: { end: CHANGE.end, script: playChange },
+  focus: { end: FOCUS_END, script: playFocus },
   chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
   command: {
     end: KEYED.end,
@@ -998,6 +1012,27 @@ async function playChange(win: BrowserWindow, at: Clock): Promise<void> {
   await at(CHANGE.remove);
   await pressOn(".chart .chart-close");
   await at(CHANGE.end);
+}
+
+/**
+ * playFocus performs the focus story: a cell of region pressed, then F6 from
+ * the grid to the window at the foot, the one at the top and the grid again,
+ * Shift+F6 back through them, then Ctrl+Shift+F to the window on top. The
+ * press and the glide after it take until the first F6.
+ */
+async function playFocus(win: BrowserWindow, at: Clock): Promise<void> {
+  const pointer = await glider(win);
+  await at(FOCUS.cell);
+  // The gutter comes first, so region is a row's third cell.
+  await pointer.pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+  await pointer.glideTo(KEYED_REST);
+  for (const [i, modifiers] of FOCUS_KEYS.entries()) {
+    await at(FOCUS.first + i * FOCUS.step);
+    press(win, "F6", modifiers);
+  }
+  await at(FOCUS_FRONT);
+  press(win, "F", ["control", "shift"]);
+  await at(FOCUS_END);
 }
 
 /**

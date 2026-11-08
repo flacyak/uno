@@ -39,12 +39,15 @@
  * - `change`: opens the chart form from a chart window's edit button, steps By
  *   from region to rep and applies it, then presses the × once to arm it and
  *   again to remove the chart. Goes to out/change.gif.
+ * - `focus`: presses a cell of region, then F6 three times from the grid,
+ *   through both chart windows and back, Shift+F6 three times the other way,
+ *   then Ctrl+Shift+F. Goes to out/focus.gif.
  * - `chord`, `command` and `menu`: select region, open the chart form under its
  *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|focus|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -77,7 +80,7 @@ const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 /** The stories that open the chart form by its keys or the View menu. */
 const KEYED = ["chord", "command", "menu"];
 /** The other stories that film charts. */
-const CHARTED = ["moves", "wheel", "table", "tip", "insert", "kinds", "change"];
+const CHARTED = ["moves", "wheel", "table", "tip", "insert", "kinds", "change", "focus"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
@@ -239,7 +242,10 @@ async function stageSidebar() {
  */
 const REGION_BARS = { t: "bars", by: { col: 1, header: "region" } };
 
-/** Revenue against units of the fixture, whose table of points runs past any window. */
+/**
+ * Revenue against units of the fixture, whose table of points runs past any
+ * window, and the focus story's window at the foot.
+ */
 const AGAINST = { t: "scatter", x: { col: 4, header: "units" }, y: { col: 5, header: "revenue" } };
 
 /**
@@ -360,6 +366,7 @@ const staged = {
   insert: () => stageCharts("insert", []),
   kinds: () => stageCharts("kinds", []),
   change: () => stageCharts("change", [REGION_BARS]),
+  focus: () => stageCharts("focus", [REGION_BARS, AGAINST]),
   chord: () => stageCharts("chord", []),
   command: () => stageCharts("command", []),
   menu: () => stageCharts("menu", []),

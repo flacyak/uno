@@ -16,6 +16,7 @@ import { pick, through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
 import { CHART_EDITS } from "./chart-edits.ts";
 import { CHART_FORM } from "./chart-form.ts";
+import { CHART_KEYS } from "./chart-keys.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
 import { CHART_TIP } from "./chart-tip.ts";
 import { CHART_TABLE, CHART_WHEEL } from "./chart-wheel.ts";
@@ -79,6 +80,7 @@ const CHECKS: Check[] = [
   ...CHART_FORM,
   ...AGAIN,
   ...CHARTS,
+  ...CHART_KEYS,
   ...CHART_MOVES,
   ...CHART_WHEEL,
   ...CHART_TIP,
