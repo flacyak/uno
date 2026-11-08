@@ -12,14 +12,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
+import { UNITS } from "@main/smoke/fixture";
+import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
 import { BARS, PIE, SCATTER, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, bootShell } from "./smoke/dom-harness.ts";
+import { domPage, until } from "./smoke/dom-page.ts";
 
+const page = domPage();
 let shell: Shell;
 
 /** Each window's name, in the order the file lists its charts. */
 const NAMES = ["bars", "pie", "scatter"];
+
+/** The units of the sales export's first row, which show once it has loaded. */
+const FIRST_UNITS = "1,204";
 
 const grid = (): HTMLElement => document.querySelector<HTMLElement>("#content")!;
 const windows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".chart")];
@@ -60,3 +67,40 @@ for (const input of ["default", "vim-style"] as const) {
     expect([f6(true), f6(true), f6(true)]).toStrictEqual(["scatter", "pie", "grid"]);
   });
 }
+
+test("Ctrl+Shift+F gives the keys to the window on top under either keys", async () => {
+  await open("front.uno");
+  const front = { ctrlKey: true, shiftKey: true };
+  expect(press("F", front)).toBe("scatter");
+  for (const [input, raised] of [
+    ["default", 0],
+    ["vim-style", 1],
+  ] as const) {
+    shell.setInput(input);
+    windows()[raised]!.focus();
+    grid().focus();
+    expect(press("F", front), input).toBe(NAMES[raised]);
+  }
+});
+
+test("Ctrl+E and Ctrl+Shift+G on a window reach the shell", async () => {
+  await open("chords.uno");
+  windows()[1]!.focus();
+  press("e", { ctrlKey: true });
+  expect(document.querySelector("#status-mode")?.textContent).toBe(m.mode_transform());
+  press("G", { ctrlKey: true, shiftKey: true });
+  expect(await until(page, () => document.querySelector(".chart-form") !== null)).toBe(true);
+});
+
+test("F6 in the cell editor leaves the keys there", async () => {
+  shell.setInput("default");
+  await open("editing.uno");
+  press("e", { ctrlKey: true });
+  expect(await page.until([{ row: 0, col: UNITS, equals: FIRST_UNITS }])).toBe(true);
+  await page.clickCell(0, UNITS);
+  await page.press("Enter");
+  const editor = document.querySelector(".cell-editor");
+  expect(editor).not.toBeNull();
+  await page.press("F6");
+  expect(document.activeElement).toBe(editor);
+});
