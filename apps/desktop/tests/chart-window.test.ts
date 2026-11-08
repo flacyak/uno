@@ -43,6 +43,7 @@ const NO_LAYER: Stage = {
   repoint: () => undefined,
   notNumbers: () => undefined,
   edit: () => undefined,
+  remove: () => undefined,
 };
 
 /** A chart's window, showing `chart` under `source`. */

@@ -109,6 +109,8 @@ export class Shell {
   /** What the warning on screen is about: the tab whose × would remove it, or
    * the action that would drop unsaved edits. */
   private warned: Tab | Dropping | undefined;
+  /** The chart the next × or Delete on its window removes, once it was warned of. */
+  private armed: string | undefined;
   /** The save in flight. A second Ctrl+S joins it, and the × waits for it. */
   private saving: Promise<void> | undefined;
   /** The input strategy, used by the grid and the status bar. */
@@ -648,6 +650,32 @@ export class Shell {
   }
 
   /**
+   * unchart removes chart `id`, titled `title`, on the second × or Delete, as a
+   * source with edits goes: the first says what the second does. The grid
+   * takes the keys, and a refusal gives them to the window it brings back.
+   */
+  private async unchart(id: string, title: string): Promise<void> {
+    const w = this.workspace;
+    if (w === undefined) return;
+    if (this.armed !== id) {
+      this.say(m.chart_remove_armed({ title }), true);
+      this.armed = id;
+      this.layer?.arm(id);
+      return;
+    }
+    const removing = this.drawn(w.charts.remove(id));
+    this.grid?.focus();
+    try {
+      await removing;
+      this.say(m.removed_name({ name: title }));
+    } catch (err) {
+      if (this.workspace !== w) return;
+      this.say(message(err), true);
+      this.layer?.focus(id);
+    }
+  }
+
+  /**
    * chart adds a chart over `source` in a new window, away from `column`,
    * showing the chart layer for the first. The window is drawn at once and
    * again once the engine answers, and a refusal is thrown for the form.
@@ -909,6 +937,7 @@ export class Shell {
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
           edit: (id, place) => void this.editChart(id, place),
+          remove: (id, title) => void this.unchart(id, title),
         });
         return this.layer;
       },
@@ -1517,8 +1546,10 @@ export class Shell {
    */
   private say(text: string, isError = false): void {
     // Any message replaces the unsaved-edits warning, so a second Ctrl+O
-    // works only while the warning is on screen.
+    // works only while the warning is on screen, and a chart's × the same.
     this.warned = undefined;
+    this.armed = undefined;
+    this.layer?.arm(undefined);
     this.status.say(text, isError);
   }
 }

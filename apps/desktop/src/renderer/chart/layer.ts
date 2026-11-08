@@ -25,7 +25,7 @@ import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
 
 /** What a window asks of the shell, which the layer hands on. */
-export type Asks = Pick<Stage, "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit">;
+export type Asks = Pick<Stage, "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "remove">;
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
 type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
@@ -133,6 +133,16 @@ export class ChartLayer implements Stage {
   /** edit opens the chart form on chart `id`, hung at `place`. */
   edit(id: string, place: MenuPlace): void {
     this.asks.edit(id, place);
+  }
+
+  /** remove removes chart `id`, titled `title`, on the second ask. */
+  remove(id: string, title: string): void {
+    this.asks.remove(id, title);
+  }
+
+  /** arm shows chart `id`'s × as the one whose next press removes it, and no other. */
+  arm(id: string | undefined): void {
+    for (const [shown, held] of this.windows) held.arm(shown === id);
   }
 
   /** heard gives what chart `id` last heard, for its window to draw. */

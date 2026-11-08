@@ -225,7 +225,9 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.round-x:hover {
+/* An armed ×, whose next press removes what it stands on, keeps the hover's fill. */
+.round-x:hover,
+.round-x.armed {
   color: var(--surface);
   background: var(--flag);
   border-color: var(--flag);

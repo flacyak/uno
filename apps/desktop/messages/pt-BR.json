@@ -463,6 +463,7 @@
   "chart_column_gone": "{name} não tem nenhuma coluna chamada {header}",
   "chart_role": "gráfico",
   "chart_remove_aria": "Remover gráfico",
+  "chart_remove_armed": "× ou Delete de novo remove o gráfico {title}",
   "chart_edit": "Editar gráfico",
   "chart_title_rows": "Linhas por {by}",
   "chart_title_sum": "Soma de {sum} por {by}",

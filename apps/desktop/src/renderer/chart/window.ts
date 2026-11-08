@@ -3,7 +3,7 @@
  * the chart shows, a round × of the window's own kind, and a caption that ends
  * in a grip. The layer stands it in the room and says which chart it shows,
  * and the head's edit button opens the chart form on it, as Enter, F2 and a
- * double-click on the head do.
+ * double-click on the head do. The × and Delete ask to remove the chart.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
  * resizes it. It follows the pointer alone until the drop, which stores where
@@ -89,6 +89,9 @@ const TABLE_KEY = "t";
 /** The keys that open the chart form on a window's chart, as its edit button does. */
 const EDIT_KEYS: ReadonlySet<string> = new Set(["Enter", "F2"]);
 
+/** The key that asks to remove a window's chart, as its × does. */
+const DELETE_KEY = "Delete";
+
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
 let made = 0;
@@ -118,6 +121,8 @@ export interface Stage {
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
   /** Opens the chart form on chart `id`, hung at `place`. */
   edit(id: string, place: MenuPlace): void;
+  /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
+  remove(id: string, title: string): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -166,6 +171,11 @@ function numbered(plot: Plot): ChartColumn[] {
 /** tableKey says whether `press` is t alone, pressed once. */
 function tableKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
   return key === TABLE_KEY && !ctrl && !alt && !meta && !repeat;
+}
+
+/** deleteKey says whether `press` is Delete alone, pressed once. */
+function deleteKey({ key, ctrl, alt, meta, shift, repeat }: Press): boolean {
+  return key === DELETE_KEY && !ctrl && !alt && !meta && !shift && !repeat;
 }
 
 /** onButton says whether `at` is a button, or inside one. */
@@ -253,6 +263,8 @@ export class ChartWindow {
   private readonly edit = button("chart-head-button chart-edit", "", () => this.change());
   /** The head, whose rule the chart form hangs on. */
   private readonly head = el("div", "col-head chart-head");
+  /** The ×, which asks to remove the chart. */
+  private readonly cross = button("round-x chart-close", "", () => this.unchart());
   /** The words that stay whichever chart the window shows. */
   private readonly words = new Words();
   /** The box that says what the mark under the pointer is worth. */
@@ -280,17 +292,15 @@ export class ChartWindow {
     this.tip = new Tooltip(this.plot, this.box, `${id}-tip`);
     this.summary.append(this.told.said, " ", this.told.values, " ", this.told.more);
 
-    const x = el("button", "round-x chart-close");
-    x.type = "button";
-    x.innerHTML = CROSS;
-    this.words.attr(x, "aria-label", m.chart_remove_aria);
+    this.cross.innerHTML = CROSS;
+    this.words.attr(this.cross, "aria-label", m.chart_remove_aria);
     this.toggle.innerHTML = TABLE;
     this.toggle.setAttribute("aria-pressed", "false");
     this.words.attr(this.toggle, "aria-label", m.chart_table_aria);
     this.edit.innerHTML = PENCIL;
     this.words.attr(this.edit, "aria-label", m.chart_edit);
 
-    this.head.append(this.title, this.toggle, this.edit, x);
+    this.head.append(this.title, this.toggle, this.edit, this.cross);
     this.head.addEventListener("pointerdown", (e) => {
       if (!onButton(e.target)) this.take(e, this.head, dragged);
     });
@@ -358,6 +368,11 @@ export class ChartWindow {
     this.title.title = this.title.textContent;
     this.title.classList.toggle("from-file", chart.title !== "");
     this.redraw();
+  }
+
+  /** arm shows the × in the flag's fill while its next press removes the chart. */
+  arm(armed: boolean): void {
+    this.cross.classList.toggle("armed", armed);
   }
 
   /** stand puts the window at `rect`, unless a pointer holds it. */
@@ -607,15 +622,16 @@ export class ChartWindow {
   }
 
   /**
-   * key answers Escape, t, Enter, F2 and the arrows, and leaves any other key
-   * to the shell. An arrow in the plot steps the cursor through its marks, and
-   * one in the table scrolls it, as each has the keys then.
+   * key answers Escape, t, Enter, F2, Delete and the arrows, and leaves any
+   * other key to the shell. An arrow in the plot steps the cursor through its
+   * marks, and one in the table scrolls it, as each has the keys then.
    */
   private key(e: KeyboardEvent): void {
     const press = pressOf(e);
     if (e.key === "Escape") this.escape();
     else if (tableKey(press)) this.flip();
     else if (edits(press, e.target)) this.change();
+    else if (deleteKey(press)) this.unchart();
     else if (!this.arrow(press, e.target)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -638,6 +654,11 @@ export class ChartWindow {
     const { bottom } = this.head.getBoundingClientRect();
     const rule = parseFloat(getComputedStyle(this.head).borderBottomWidth);
     this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) });
+  }
+
+  /** unchart asks to remove the chart, by the title its head gives it. */
+  private unchart(): void {
+    this.stage.remove(this.chart.id, this.named());
   }
 
   /** escape puts back what a pointer holds, or else gives the grid the keys. */
