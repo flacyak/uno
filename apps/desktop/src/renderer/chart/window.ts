@@ -5,9 +5,9 @@
  * and the head's edit button opens the chart form on it, as Enter, F2 and a
  * double-click on the head do. The head's refresh button and r read the
  * chart's source again by hand, and over a source carried inside the
- * workspace they say there is nothing to read again. The × and Delete ask
- * to remove the chart, and Ctrl+Z says it undoes edits in the grid, and
- * undoes none.
+ * workspace, or one whose files the open did not find, they say there is
+ * nothing to read again. The × and Delete ask to remove the chart, and
+ * Ctrl+Z says it undoes edits in the grid, and undoes none.
  *
  * A pointer on the head moves the window, and one on the grip or an edge
  * resizes it. It follows the pointer alone until the drop, which stores where
@@ -200,7 +200,9 @@ function tableKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
 
 /** cannotRead says why `heard`'s source has nothing to read again, or nothing where it has. */
 function cannotRead(heard: Heard | undefined): string | undefined {
-  return heard?.carried === true ? m.chart_refresh_carried({ name: heard.name }) : undefined;
+  if (heard?.carried === true) return m.chart_refresh_carried({ name: heard.name });
+  if (heard?.lost === true) return m.chart_refresh_lost({ name: heard.name });
+  return undefined;
 }
 
 /** refreshKey says whether `press` reads the chart's source again. */

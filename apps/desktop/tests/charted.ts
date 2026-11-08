@@ -96,6 +96,28 @@ export function carriedUnoOf(charts: Chart[], raw: Uint8Array): Uint8Array {
   });
 }
 
+/** The bytes of a .uno of the sales export read as one from `parts`, holding
+ * `charts`. */
+export function partsUnoOf(charts: Chart[], parts: readonly string[]): Uint8Array {
+  const held = parts.map((path) => ({
+    name: basename(path),
+    path,
+    bytes: 0,
+    skip: 0,
+    unterminated: false,
+  }));
+  const sales = { ...HELD, id: SALES, name: SALES, parts: held, header: "first" as const };
+  return writeDocument({
+    manifest: newManifest(),
+    sources: [sales],
+    active: SALES,
+    log: [],
+    charts,
+    extra: new Map(),
+    at: "",
+  });
+}
+
 /** The bytes of a .uno of both exports, holding `charts` and carrying
  * `carried`, with the sales export at `sales`. */
 export function unoOf(charts: Chart[], carried: CarriedChart[] = [], sales = FIXTURE): Uint8Array {

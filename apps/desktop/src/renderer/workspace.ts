@@ -283,7 +283,8 @@ export class Workspace {
     const tab = this.tabs.find((t) => t.id === source);
     if (tab === undefined) return { state: "missing", name: source };
     const carried = tab.link === undefined && tab.parts === undefined;
-    return { state: tab.state, name: tab.name, bucket: tab.link?.connect?.bucket, carried };
+    const lost = tab.link?.path === "";
+    return { state: tab.state, name: tab.name, bucket: tab.link?.connect?.bucket, carried, lost };
   }
 
   /** The stem of a source's file, once there are several sources to tell apart. */

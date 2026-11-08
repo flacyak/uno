@@ -3,8 +3,9 @@
  * shell and engine: r or the head's refresh button reads a rewritten file
  * again and draws the new rows, r twice reads it once, a source of several
  * files appends the new one alone, says why its folder cannot be listed, and
- * says nothing once another workspace has opened, and a carried source's
- * refresh is off and says why.
+ * says nothing once another workspace has opened, and the refresh of a
+ * carried source, or of one whose files the open did not find, is off and
+ * says why.
  *
  * @vitest-environment happy-dom
  */
@@ -20,7 +21,7 @@ import { m } from "@paraglide/messages";
 import type { Shell } from "@renderer/shell/shell";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
-import { BARS, carriedUnoOf, unoOf } from "./charted.ts";
+import { BARS, SALES, carriedUnoOf, partsUnoOf, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, FIXTURE, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, frame, until } from "./smoke/dom-page.ts";
 
@@ -150,6 +151,21 @@ test("a chart over a carried source has its refresh off, and r says there is not
 
   const again = box().querySelector<HTMLButtonElement>(".chart-refresh")!;
   const hint = m.chart_refresh_carried({ name: basename(FIXTURE) });
+  expect([again.disabled, again.title]).toStrictEqual([true, hint]);
+  const relink = vi.spyOn(Engine.prototype, "relink");
+  expect(r()).toBe(false);
+  expect([message(), relink.mock.calls.length]).toStrictEqual([hint, 0]);
+  relink.mockRestore();
+});
+
+test("a chart over several files the open could not find has its refresh off, and r says why", async () => {
+  const uno = join(dir, "lost.uno");
+  await writeFile(uno, partsUnoOf([BARS], [join(dir, "lost", basename(PART_FIXTURES[0]!))]));
+  await shell.openRef({ name: basename(uno), path: uno }, uno);
+  expect(await until(page, () => box()?.querySelector(".chart-state") !== null)).toBe(true);
+
+  const again = box().querySelector<HTMLButtonElement>(".chart-refresh")!;
+  const hint = m.chart_refresh_lost({ name: SALES });
   expect([again.disabled, again.title]).toStrictEqual([true, hint]);
   const relink = vi.spyOn(Engine.prototype, "relink");
   expect(r()).toBe(false);

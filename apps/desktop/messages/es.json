@@ -544,6 +544,7 @@
   "chart_table_aria": "Tabla",
   "chart_refresh_aria": "Actualizar",
   "chart_refresh_carried": "{name} va dentro del espacio de trabajo, así que no hay nada que volver a leer",
+  "chart_refresh_lost": "no se encontraron los archivos de {name} al abrir el espacio de trabajo, así que no hay nada que volver a leer",
   "refused_only_source": "{name} es la única fuente aquí, y un espacio de trabajo necesita una",
   "refused_append_to_absent": "{name} no tiene un archivo detrás, así que no se le puede añadir nada al final",
   "refused_append_to_one_file": "{name} es un solo archivo · solo se añaden archivos al final de varios leídos como uno",
