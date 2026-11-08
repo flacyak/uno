@@ -1,7 +1,7 @@
 /**
  * @fileoverview What a chart's marks are worth, from tooltip.ts: a bar's row
- * is worth the value it measures, labelled by the file's text, and which row
- * a pointer is over.
+ * is worth the value it measures and a slice its measure and its share, each
+ * labelled by the file's text, and which mark a pointer is over.
  *
  * @vitest-environment happy-dom
  */
@@ -12,7 +12,8 @@ import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { bars } from "@renderer/chart/bars";
-import { barTargets } from "@renderer/chart/tooltip";
+import { pie } from "@renderer/chart/pie";
+import { barTargets, sliceTargets } from "@renderer/chart/tooltip";
 import type { Reading, Target } from "@renderer/chart/tooltip";
 import { holding } from "../charted.ts";
 
@@ -20,6 +21,7 @@ const REGION = { col: 1, header: "region" };
 const REVENUE = { col: 5, header: "revenue" };
 const ROWS = { t: "bars", by: REGION } as const;
 const SUMS = { ...ROWS, sum: REVENUE };
+const SHARES = { t: "pie", by: REGION, sum: REVENUE } as const;
 
 /** A tally of `groups` alone. */
 function tallyOf(...groups: Group[]): Groups {
@@ -92,4 +94,37 @@ test("the row under a pointer is the target, from its label or its bar, and the 
   expect(under(bar!, 0, 0)).toBe(1);
   expect(under(box, 0, 0)).toBeUndefined();
   expect(under(null, 0, 0)).toBeUndefined();
+});
+
+/** Eight values sent, the largest first: six for slices, and two more for Other. */
+const EIGHT = tallyOf(
+  ...[80, 70, 60, 50, 40, 30, 20, 10].map((rows, i) => ({ value: `v${i + 1}`, rows, sum: rows })),
+);
+
+test("a slice is worth what it measures, labelled by its value and its share, under its own colour", () => {
+  const box = pie(SHARES, REGIONS);
+  const { all, under } = sliceTargets(SHARES, REGIONS, box);
+  expect(all.map((target) => target.mark)).toStrictEqual([...box.querySelectorAll(".chart-slice")]);
+  expect(all.map(said)).toStrictEqual([
+    [["48,160.5", "North · 60%", "SPAN"]],
+    [["32,480", "South · 40%", "SPAN"]],
+  ]);
+  expect(all.map((target) => target.key)).toStrictEqual(["var(--chart-1)", "var(--chart-2)"]);
+  expect(all[0]!.said()[0]!.label.firstChild).toMatchObject({
+    nodeName: "BDI",
+    textContent: "North",
+  });
+  expect(under(box.querySelectorAll(".chart-slice")[1]!, 0, 0)).toBe(1);
+  expect(under(box.querySelector(".chart-slice-label"), 0, 0)).toBeUndefined();
+});
+
+test("Other is worth what it adds up, under the caption's ink, and says the app's word", () => {
+  const { all } = sliceTargets(
+    { t: "pie", by: REGION },
+    EIGHT,
+    pie({ t: "pie", by: REGION }, EIGHT),
+  );
+  const other = all.at(-1)!;
+  expect(said(other)).toStrictEqual([["30", `${m.chart_pie_other()} · 8.3%`, "SPAN"]]);
+  expect(other.key).toBe("var(--ink-3)");
 });
