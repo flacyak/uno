@@ -32,9 +32,16 @@ const REGION = 1;
 const REVENUE = 5;
 
 /** The workspace's sources: the sales export, active, then an ads export with
- * its region elsewhere and no revenue. */
-const SALES = { id: "sales", name: "sales-q3.csv", band: { columns: COLUMNS } };
-const ADS = { id: "ads", name: "ads-q3.csv", band: { columns: [COLUMNS[4], COLUMNS[REGION]] } };
+ * its region elsewhere and no revenue, then one whose file is missing, which
+ * the engine opens with no columns. */
+const SALES = { id: "sales", name: "sales-q3.csv", band: { columns: COLUMNS }, missing: false };
+const ADS = {
+  id: "ads",
+  name: "ads-q3.csv",
+  band: { columns: [COLUMNS[4], COLUMNS[REGION]] },
+  missing: false,
+};
+const GONE = { id: "gone", name: "ads-q2.csv", band: { columns: [] }, missing: true };
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id): string =>
@@ -50,7 +57,7 @@ function form(insert = (): Promise<void> => Promise.resolve()): {
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  new ChartForm({ left: 0, top: 0 }, [SALES, ADS], SALES, REGION, {
+  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE], SALES, REGION, {
     insert: (source, plot, title) => {
       asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
@@ -148,6 +155,12 @@ test("another source offers its columns, and keeps those it has a header for", a
     sum: { col: 0, header: "units" },
   };
   expect(asked).toStrictEqual([inserting(units, "", ADS.id), "closed"]);
+});
+
+test("a source whose file is missing is offered, and cannot be chosen", () => {
+  form();
+  const offered = [...select("source").options].map((o) => [o.textContent, o.disabled]);
+  expect(offered).toStrictEqual([SALES, ADS, GONE].map((s) => [s.name, s.missing]));
 });
 
 test("Esc closes it and inserts nothing", () => {
