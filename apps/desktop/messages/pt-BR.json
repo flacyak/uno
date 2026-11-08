@@ -516,6 +516,7 @@
   "chart_summary": "{title} em {name}, {rows}.",
   "chart_summary_more": "e mais {count}.",
   "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",
+  "chart_table_rows": "linhas",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um arquivo por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só arquivo · arquivos só são anexados a vários lidos como um",
