@@ -563,8 +563,14 @@ export class ChartWindow {
     if (said === undefined) return [];
     const box = el("div", "chart-state");
     box.append(el("bdi", "", said.words));
-    if (said.action !== undefined) {
-      box.append(button("", said.action, () => this.stage.repoint(this.chart.source)));
+    const { action } = said;
+    if (action !== undefined) {
+      box.append(
+        button("", action.words, () => {
+          if (action.opens === "form") this.change();
+          else this.stage.repoint(this.chart.source);
+        }),
+      );
     }
     return [box];
   }

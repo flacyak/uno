@@ -203,6 +203,24 @@ test("a repaint that takes what held the keys out of the plot gives them to the 
   expect(document.activeElement).toBe(made.box);
 });
 
+test("a chart whose column has gone offers Edit chart, which asks for the chart form on it", async () => {
+  const said = { t: "chart-column-gone", header: "region", name: SOURCE } as const;
+  const latest = { t: "unread", plot: BARS.plot, said } as const;
+  const edit = vi.fn();
+  const made = new ChartWindow(BARS, {
+    ...NO_LAYER,
+    heard: () => ({ state: "fine", name: SOURCE, latest, complete: undefined }),
+    edit,
+  });
+  made.show(BARS, undefined);
+  document.body.append(made.box);
+  await frame();
+  const button = made.box.querySelector<HTMLButtonElement>(".chart-state button")!;
+  expect(button.textContent).toBe(m.chart_edit());
+  button.click();
+  expect(edit).toHaveBeenCalledWith(BARS.id, expect.anything());
+});
+
 /** The sales export's file, as a window hears its source named. */
 const NAME = "sales-q3.csv";
 

@@ -17,8 +17,17 @@ import { say } from "@renderer/said";
 /** What a chart's plot says in place of what it cannot draw, and the action it offers. */
 export interface Body {
   words: string;
-  /** The button's words: Re-point for a missing source, Connect for one waiting on its bucket. */
-  action?: string;
+  action?: Mend;
+}
+
+/**
+ * A button that mends what a plot cannot draw: Re-point for a missing source
+ * and Connect for one waiting on its bucket, which open the sources panel, or
+ * Edit chart for a column that has gone, which opens the chart form.
+ */
+export interface Mend {
+  words: string;
+  opens: "panel" | "form";
 }
 
 /**
@@ -112,20 +121,25 @@ function valued(plot: Plot): string[] {
  * undefined where it draws one: why the chart cannot read its column, that its
  * source is missing or waits on its bucket, with the action that mends it,
  * that it reads its source before the first tally, or that the tally has no
- * values in the plot's columns yet.
+ * values in the plot's columns yet. A column that has gone offers Edit chart.
  */
 export function body(plot: Plot, heard: Heard): Body | undefined {
   if (drawable(heard) !== undefined) return undefined;
   const { state, latest, name } = heard;
-  if (latest?.t === "unread") return { words: say(latest.said) };
+  if (latest?.t === "unread") {
+    const words = say(latest.said);
+    const gone = latest.said.t === "chart-column-gone";
+    return gone ? { words, action: { words: m.chart_edit(), opens: "form" } } : { words };
+  }
   if (state === "missing") {
-    return { words: m.chart_source_missing({ name }), action: m.action_repoint() };
+    const action: Mend = { words: m.action_repoint(), opens: "panel" };
+    return { words: m.chart_source_missing({ name }), action };
   }
   if (state === "unconnected") {
     const bucket = heard.bucket ?? name;
     return {
       words: m.chart_bucket_unconnected({ bucket }),
-      action: m.sources_connect_bucket({ bucket }),
+      action: { words: m.sources_connect_bucket({ bucket }), opens: "panel" },
     };
   }
   if (latest === undefined) return { words: m.chart_reading({ name }) };

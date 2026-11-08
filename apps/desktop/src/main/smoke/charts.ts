@@ -71,7 +71,7 @@ const STATES = process.env["UNO_SMOKE_STATES"] ?? "";
 const STATE_WORDS = [
   ["nobody-connected is not connected", "Connect nobody-connected"],
   ["lost.csv is missing", "Re-point"],
-  ["google-ads-sales.csv has no column called Nowhere", ""],
+  ["google-ads-sales.csv has no column called Nowhere", "Edit chart"],
 ];
 
 /** The zoom that halves the room. */
@@ -906,7 +906,7 @@ export const CHART_PIE: Check[] = [
 /** Checks after CHART_PIE, as they open a workspace of charts over what they cannot read in place of that one. */
 export const CHART_STATES: Check[] = [
   {
-    name: "a chart over what it cannot read says why in the middle of its plot, with Connect or Re-point under the words where one mends it, and no track",
+    name: "a chart over what it cannot read says why in the middle of its plot, with Connect, Re-point or Edit chart under the words, and no track",
     send: ["menu:open-path", STATES],
     shot: "chart-states",
     script: `
@@ -958,6 +958,18 @@ export const CHART_STATES: Check[] = [
       if (!(await until(() => !form.hidden))) return "Connect left the connect form hidden";
       const bucket = form.querySelector('[aria-label="bucket"]').value;
       return bucket === "nobody-connected" ? "" : "the form is on " + JSON.stringify(bucket);
+    `,
+  },
+  {
+    name: "Edit chart on a chart whose column has gone opens the chart form on it",
+    script: `
+      const [, , edit] = ${JSON.stringify(STATE_WORDS.map(([, action]) => action))};
+      [...document.querySelectorAll(".chart-state button")].find((button) => button.textContent === edit).click();
+      if (!(await arrives(() => document.querySelector(".chart-form") !== null))) return "no chart form opened";
+      const form = document.querySelector(".chart-form");
+      const primary = form.querySelector("button.primary").textContent;
+      form.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      return primary === "Apply" ? "" : "the form's button says " + primary;
     `,
   },
 ];
