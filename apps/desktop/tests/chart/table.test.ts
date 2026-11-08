@@ -2,8 +2,9 @@
  * @fileoverview A chart's table, drawn from a tally: a row per value sent, the
  * largest first, with what it measures in the app's language, the values a
  * tally sent none of counted after them, and a line for the values past those
- * a tally keeps apart. Its caption says what the chart is called, its headers
- * name the columns, and the file's text is marked as the file's.
+ * a tally keeps apart; or a row per point a scatter drew. Its caption says
+ * what the chart is called, its headers name the columns, and the file's text
+ * is marked as the file's.
  *
  * @vitest-environment happy-dom
  */
@@ -11,13 +12,13 @@
 import { afterEach, expect, test } from "vite-plus/test";
 
 import { DISTINCT_AT_MOST } from "@engine";
-import type { Group, GroupsTally } from "@engine";
+import type { Group, GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { table } from "@renderer/chart/table";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { BARS, PIE, SHARES } from "../charted.ts";
+import { BARS, PIE, SCATTER, SHARES } from "../charted.ts";
 
 /** A sum of revenue per region. */
 const SUMS = { ...BARS.plot, sum: { col: 5, header: "revenue" } };
@@ -141,4 +142,27 @@ test("the row of the values sent none of has the share Other draws of them, and 
     "1,050",
     "",
   ]);
+});
+
+test("a scatter's table has a row per point drawn, in the order sent, under its x and y columns", () => {
+  const sample: SampleTally = {
+    t: "sample",
+    plot: SCATTER.plot,
+    coverage: { rows: 2, total: 2, complete: true },
+    x: [999, 180],
+    y: [39960, 7200],
+    plotted: 2,
+    least: { x: 180, y: 7200 },
+    most: { x: 999, y: 39960 },
+    skipped: { blank: 0, unparsed: 0 },
+  };
+  const box = table(SCATTER.plot, sample, called());
+  expect(rows(box)).toStrictEqual([
+    ["units", "revenue"],
+    ["999", "39,960"],
+    ["180", "7,200"],
+  ]);
+  expect(box.querySelectorAll("thead .from-file")).toHaveLength(2);
+  expect(box.querySelectorAll("tbody th")).toHaveLength(0);
+  expect([...box.querySelectorAll("td")].every((td) => td.classList.contains("num"))).toBe(true);
 });

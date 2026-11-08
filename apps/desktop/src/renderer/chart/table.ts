@@ -1,10 +1,10 @@
 /**
  * @fileoverview A chart's table: every value its tally sent with what it
- * measures, the largest first, and the values left out counted after them.
- * It is the text alternative to the drawing: it
- * gives the exact numbers, a finger scrolls it, a person selects from it, and
- * a screen reader walks it as a table, under a caption that says what the
- * chart is called, its headers naming the columns.
+ * measures, the largest first, and the values left out counted after them,
+ * or each point a scatter drew. It is the text alternative to the drawing:
+ * it gives the exact numbers, a finger scrolls it, a person selects from it,
+ * and a screen reader walks it as a table, under a caption that says what
+ * the chart is called, its headers naming the columns.
  *
  * It is HTML chart.css lays out as the window's scroller. A value is the
  * file's text, set as text alone, and a number is in the app's language.
@@ -12,7 +12,7 @@
 
 import type { Plot } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { Groups, GroupsTally, SampleTally } from "@engine";
+import type { Groups, GroupsTally, Sample, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
@@ -105,6 +105,26 @@ function grouped(
 }
 
 /**
+ * points gives a scatter's headers and rows: its x and y columns, and a row
+ * per point drawn, in the order sent.
+ */
+function points(
+  plot: Extract<Plot, { t: "scatter" }>,
+  sample: Sample,
+): [HTMLElement[], HTMLElement[]] {
+  const heads = [plot.x, plot.y].map(({ header: name, col }) =>
+    header(columnLabel(name, col), true),
+  );
+  return [heads, sample.x.map((x, i) => row(digits(x), digits(sample.y[i]!)))];
+}
+
+/** parts gives the headers and rows of `tally` as `plot` reads it, or none of a tally of another kind. */
+function parts(plot: Plot, tally: GroupsTally | SampleTally): [HTMLElement[], HTMLElement[]] {
+  if (plot.t === "scatter") return tally.t === "sample" ? points(plot, tally) : [[], []];
+  return tally.t === "groups" ? grouped(plot, tally) : [[], []];
+}
+
+/**
  * table gives `tally` as `plot` reads it, as a table under a caption of
  * `called`, what the head calls the chart, in the window's scroller.
  */
@@ -113,8 +133,7 @@ export function table(plot: Plot, tally: GroupsTally | SampleTally, called: Node
   const made = el("table");
   const caption = el("caption");
   caption.append(called);
-  const [heads, rows] =
-    plot.t !== "scatter" && tally.t === "groups" ? grouped(plot, tally) : [[], []];
+  const [heads, rows] = parts(plot, tally);
   const thead = el("thead");
   thead.append(row(...heads));
   const tbody = el("tbody");
