@@ -76,6 +76,11 @@ export interface Stage {
   heard(id: string): Heard | undefined;
   /** Opens the sources panel on `source`, to point it at a file or connect its bucket. */
   repoint(source: string): void;
+  /**
+   * Shows `source`, and finds the first cell of `columns` that its tally could
+   * not read as a number.
+   */
+  notNumbers(source: string, columns: readonly ChartColumn[]): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
