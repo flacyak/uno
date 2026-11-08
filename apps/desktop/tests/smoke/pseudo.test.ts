@@ -256,3 +256,24 @@ test("a chart over a missing source says so and offers Re-point in the language 
   expect(state()).toBe(`${missing}${m.action_repoint()}`);
   expect(english(".chart")).toEqual([]);
 });
+
+test("a chart's edit form, its armed × and what Ctrl+Z says on it are in the language chosen", async () => {
+  const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "edited.uno");
+  await writeFile(path, unoOf([BARS]));
+  await shell.openRef({ name: "edited.uno", path });
+  // The chart's tally completes before the test ends, so no draw outlives the page.
+  const summary = (): string => document.querySelector(".chart-summary-said")?.textContent ?? "";
+  expect(await until(domPage(), () => summary() !== "")).toBe(true);
+  const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
+  click(".chart .chart-edit");
+  expect(await until(domPage(), () => document.querySelector(".chart-form") !== null)).toBe(true);
+  expect([...english(".chart-form"), ...english(".chart")]).toEqual([]);
+  const form = document.querySelector(".chart-form")!;
+  form.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  const undo = { key: "z", ctrlKey: true, bubbles: true, cancelable: true };
+  document.querySelector(".chart")!.dispatchEvent(new KeyboardEvent("keydown", undo));
+  expect([message(), plain(message())]).toStrictEqual([m.chart_undo_hint(), ""]);
+  click(".chart .chart-close");
+  const title = madeTitle(BARS.plot);
+  expect([message(), plain(message())]).toStrictEqual([m.chart_remove_armed({ title }), ""]);
+});
