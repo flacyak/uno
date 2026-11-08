@@ -138,6 +138,10 @@ test("a window shown again says what its chart says now, and keeps the ×", () =
 
   made.show(BARS, undefined);
   expect(title(made.box).classList.contains("from-file")).toBe(false);
+  // A draw keeps the words a press stands on, so its lift there makes a click.
+  const words = title(made.box).firstElementChild;
+  made.show(BARS, undefined);
+  expect(words?.isConnected).toBe(true);
 });
 
 test("the × is a named button of the window's own kind, and submits nothing", () => {
