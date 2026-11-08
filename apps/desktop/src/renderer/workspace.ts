@@ -9,8 +9,8 @@
  * This file is plain logic, so tests run it directly.
  */
 
-import { isWorkspace } from "@document";
-import { Band } from "@engine";
+import { baseOf, isWorkspace } from "@document";
+import { Band, unchanged } from "@engine";
 import type {
   Changed,
   Engine,
@@ -33,6 +33,7 @@ import type { SourceState } from "./charts.ts";
 import type { Cell, Rows } from "./grid/rows.ts";
 import { m } from "@paraglide/messages";
 import { bytes } from "./locale.ts";
+import type { Refreshed } from "./refresh.ts";
 import { say } from "./said.ts";
 import { stateOf, stemOf } from "./sources.ts";
 import type { State } from "./sources.ts";
@@ -476,6 +477,23 @@ export class Workspace {
       }
     });
     return moved;
+  }
+
+  /**
+   * Checks a source of one file for its charts' schedule with one stat, and
+   * reads the file again only when it changed, with Reload's ref so the two
+   * join in flight. One still indexing, or with no file of its own, waits.
+   */
+  async refresh(id: string): Promise<Refreshed> {
+    const tab = this.tabs.find((t) => t.id === id);
+    const link = tab?.link;
+    if (tab === undefined || link === undefined || link.path === "") {
+      return { t: "waiting", why: "nothing" };
+    }
+    if (!tab.missing && !tab.source.progress.complete) return { t: "waiting", why: "indexing" };
+    if (unchanged(link, tab.bytes, await this.engine.stat(link.path))) return { t: "same" };
+    await this.relink(tab, { name: baseOf(link.path), path: link.path });
+    return { t: "read" };
   }
 
   /** The tabs in sidebar order. */
