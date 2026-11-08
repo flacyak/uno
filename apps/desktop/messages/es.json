@@ -253,6 +253,7 @@
   "removed_name": "{name} quitado",
   "stopped_opening": "se detuvo la apertura de {name}",
   "appended_to": "{files} añadido al final de {name}",
+  "refresh_no_new_files": "{name} · no hay archivos nuevos en su carpeta",
   "indexing_g_again": "indexando {percent} % · G otra vez cuando termine",
   "row_not_indexed": "la fila {row} todavía no está indexada",
   "nothing_to_apply": "nada que aplicar",

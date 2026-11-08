@@ -13,9 +13,9 @@
  */
 
 import { mkdtempSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { copyFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test } from "vite-plus/test";
 
 import { PSEUDO_CLOSE, PSEUDO_LOCALE, PSEUDO_OPEN } from "@scripts/pseudo";
@@ -23,8 +23,10 @@ import { m } from "@paraglide/messages";
 import { baseLocale } from "@paraglide/runtime";
 import { madeTitle } from "@renderer/chart/window";
 import type { Shell } from "@renderer/shell/shell";
+import { multiProvider } from "@store";
+import { diskProvider } from "@store/node";
 import { ADS, BARS, DEVICES, SALES, SCATTER, SHORT_ROWS, holding, unoOf } from "../charted.ts";
-import { bootShell } from "./dom-harness.ts";
+import { FIXTURE, bootShell } from "./dom-harness.ts";
 import { domPage, frame, until } from "./dom-page.ts";
 
 /**
@@ -131,7 +133,9 @@ const click = (selector: string): void => {
 let shell: Shell;
 
 beforeAll(async () => {
-  shell = await bootShell();
+  // A source over several files reads through the disk as one.
+  const disk = diskProvider();
+  shell = await bootShell({}, [disk, multiProvider([disk])]);
   // Open everything that can be on screen in English first, so the check is
   // that changing the language redraws each of them.
   click("#panel-toggle");
@@ -276,4 +280,23 @@ test("a chart's edit form, its armed × and what Ctrl+Z says on it are in the la
   click(".chart .chart-close");
   const title = madeTitle(BARS.plot);
   expect([message(), plain(message())]).toStrictEqual([m.chart_remove_armed({ title }), ""]);
+});
+
+test("what r says over a chart whose folder holds no new file is in the language chosen", async () => {
+  const part = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "sales-q3-part-1.csv");
+  await copyFile(join(dirname(FIXTURE), basename(part)), part);
+  const parts = [{ ref: { name: basename(part), path: part } }];
+  await shell.openRef({ name: SALES, parts, header: "first" });
+  shell.insertChartHere();
+  expect(await until(domPage(), () => document.querySelector(".chart-form") !== null)).toBe(true);
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+  document.querySelector(".chart-form select")!.dispatchEvent(enter);
+  // The chart's tally completes before the test ends, so no draw outlives the page.
+  const summary = (): string => document.querySelector(".chart-summary-said")?.textContent ?? "";
+  expect(await until(domPage(), () => summary() !== "")).toBe(true);
+  const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
+  document.querySelector(".chart")!.dispatchEvent(new KeyboardEvent("keydown", { key: "r" }));
+  const none = m.refresh_no_new_files({ name: SALES });
+  expect(await until(domPage(), () => message() === none)).toBe(true);
+  expect(plain(message())).toBe("");
 });
