@@ -2,8 +2,8 @@
  * @fileoverview What a chart's marks are worth, from tooltip.ts: a bar's row
  * is worth the value it measures, a slice its measure and its share, and a
  * point its x and its y, each labelled by the file's text; which mark a
- * pointer is over, a point being the nearest within HIT_RADIUS; and where
- * the box stands by a mark, inside the window.
+ * pointer is over, a point being the nearest within HIT_RADIUS; and the box
+ * that says it beside the mark under the pointer, inside the window.
  *
  * @vitest-environment happy-dom
  */
@@ -21,13 +21,15 @@ import {
   NONE,
   TIP_EDGE,
   TIP_OFFSET,
+  Tooltip,
   barTargets,
   pointTargets,
   sliceTargets,
   stood,
   targets,
 } from "@renderer/chart/tooltip";
-import type { Reading, Target } from "@renderer/chart/tooltip";
+import type { Reading, Target, Targets } from "@renderer/chart/tooltip";
+import { el } from "@renderer/shell/util";
 import { holding } from "../charted.ts";
 
 const REGION = { col: 1, header: "region" };
@@ -230,4 +232,81 @@ test("the box stands TIP_OFFSET left of its anchor where the room has too little
   const mark = new DOMRect(300, 90, 30, 20);
   expect(stood(mark, SIZE, ROOM).x).toBe(mark.left - TIP_OFFSET - SIZE.w);
   expect(stood(at(60, 100), SIZE, { w: 150, h: ROOM.h }).x).toBe(TIP_EDGE);
+});
+
+/** Lays `at` out as a page would: `rect` is its box, and the sizes it reads. */
+function laidOut(at: HTMLElement, rect: DOMRect): void {
+  Object.defineProperties(at, {
+    getBoundingClientRect: { value: () => rect },
+    clientWidth: { value: rect.width },
+    clientHeight: { value: rect.height },
+    offsetWidth: { value: rect.width },
+    offsetHeight: { value: rect.height },
+  });
+}
+
+/**
+ * A tooltip over a plot of `drawn`, in a window ROOM px big at the page's
+ * corner, whose box measures SIZE, showing `of`'s marks.
+ */
+function over(
+  drawn: HTMLElement,
+  of: (box: HTMLElement) => Targets,
+): { tip: Tooltip; plot: HTMLElement } {
+  const within = el("div");
+  const plot = el("div");
+  plot.append(drawn);
+  within.append(plot);
+  document.body.append(within);
+  laidOut(within, new DOMRect(0, 0, ROOM.w, ROOM.h));
+  const tip = new Tooltip(plot, within, "tip");
+  within.append(tip.box);
+  laidOut(tip.box, new DOMRect(0, 0, SIZE.w, SIZE.h));
+  tip.show(of(drawn));
+  return { tip, plot };
+}
+
+/** Moves a pointer to `x`, `y` over `at`, which bubbles to the plot. */
+function moveTo(at: Element, x: number, y: number): void {
+  at.dispatchEvent(new PointerEvent("pointermove", { clientX: x, clientY: y, bubbles: true }));
+}
+
+/** Whether the box shows, what it says, and where it stands. */
+const shown = (tip: Tooltip): [boolean, string | null, string] => [
+  !tip.box.hidden,
+  tip.box.querySelector(".chart-tip-words")?.textContent ?? null,
+  `${tip.box.style.left} ${tip.box.style.top}`,
+];
+
+/** Which rows wear the cursor. */
+const cursors = (): boolean[] =>
+  [...document.querySelectorAll(".chart-bar-row")].map((row) => row.classList.contains("cursor"));
+
+test("the pointer over a bar's row shows the box right of the pointer with the bar's value strong, under its key, and the row wears the cursor", () => {
+  const { tip } = over(bars(ROWS, REGIONS, TALL), (box) => barTargets(ROWS, REGIONS, box));
+  const rows = [...document.querySelectorAll(".chart-bar-row")];
+  moveTo(rows[1]!.querySelector(".chart-bar-label")!, 100, 50);
+  expect(shown(tip)).toStrictEqual([true, "812 South", `${100 + TIP_OFFSET}px 38px`]);
+  expect(tip.box.querySelector("strong.chart-tip-value")?.textContent).toBe("812");
+  expect(tip.box.querySelector(".chart-tip-label .from-file")?.textContent).toBe("South");
+  const key = tip.box.querySelector<HTMLElement>(".chart-tip-key");
+  expect(key?.style.getPropertyValue("--key")).toBe("var(--accent)");
+  expect(tip.box.getAttribute("role")).toBe("tooltip");
+  expect(cursors()).toStrictEqual([false, true, false]);
+  moveTo(rows[0]!, 120, 20);
+  expect(shown(tip)).toStrictEqual([true, "1,204 North", `${120 + TIP_OFFSET}px 8px`]);
+  expect(cursors()).toStrictEqual([true, false, false]);
+});
+
+test("the box stands left of the pointer at the window's right edge, back inside at its foot, and goes, emptied, as the pointer leaves the rows or the plot", () => {
+  const { tip, plot } = over(bars(ROWS, REGIONS, TALL), (box) => barTargets(ROWS, REGIONS, box));
+  const [row] = document.querySelectorAll(".chart-bar-row");
+  moveTo(row!, ROOM.w - 1, ROOM.h - 1);
+  const left = ROOM.w - 1 - TIP_OFFSET - SIZE.w;
+  expect(shown(tip)[2]).toBe(`${left}px ${ROOM.h - SIZE.h - TIP_EDGE}px`);
+  moveTo(plot, 10, 10);
+  expect([shown(tip)[0], ...cursors()]).toStrictEqual([false, false, false, false]);
+  moveTo(row!, 10, 10);
+  plot.dispatchEvent(new PointerEvent("pointerleave"));
+  expect([...shown(tip).slice(0, 2), ...cursors()]).toStrictEqual([false, "", false, false, false]);
 });

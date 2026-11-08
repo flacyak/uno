@@ -1,9 +1,11 @@
 /**
  * @fileoverview What a chart says of one of its marks, under the pointer or
- * stepped to with the keys: what the mark is worth, as readings of a value
- * and what it is of, under the colour the mark wears. A bar's row is its hit
- * target, a slice its own shape, and a point snaps to the nearest within
- * HIT_RADIUS, so none has to be hit dead on.
+ * stepped to with the keys: a box of the pop-up menu's kind beside the mark,
+ * inside the window, with the colour the mark wears as its key, what the
+ * mark is worth strong, and what that is of in the caption's ink, while the
+ * mark wears the cursor. A bar's row is its hit target, a slice its own
+ * shape, and a point snaps to the nearest within HIT_RADIUS, so none has to
+ * be hit dead on.
  *
  * A value from the file is set as text alone, and a number is written in the
  * app's language.
@@ -229,10 +231,11 @@ export function stood(anchor: DOMRectReadOnly, size: Room, room: Room): Point {
 }
 
 /**
- * Tooltip is the box that says what a mark is worth. It stands in `within`,
- * the window, by a mark of `plot`'s drawing, which wears the cursor, and a
- * screen reader hears it as what the plot describes. A new drawing keeps the
- * cursor on the mark at the same place among its marks.
+ * Tooltip is the box that says what a mark is worth. It hears the pointer
+ * over `plot`, and stands in `within`, the window, by the mark the pointer
+ * is over, which wears the cursor, and a screen reader hears it as what the
+ * plot describes. A new drawing puts the cursor on the mark under the
+ * pointer then.
  */
 export class Tooltip {
   /** The box, which the window holds beside its plot. */
@@ -255,14 +258,22 @@ export class Tooltip {
     this.box.setAttribute("role", "tooltip");
     this.box.append(this.key, this.words);
     plot.setAttribute("aria-describedby", id);
+    plot.addEventListener("pointermove", (e) => this.point(e));
+    plot.addEventListener("pointerleave", () => this.clear());
   }
 
-  /** show takes the marks of a new drawing, keeping the cursor where it stood among them. */
+  /**
+   * show takes the marks of a new drawing: a cursor the pointer put goes to
+   * the mark under the pointer now, and any other stays where it stood among
+   * them.
+   */
   show(targets: Targets): void {
     this.targets = targets;
     const count = targets.all.length;
-    if (this.cursor === undefined || count === 0) this.clear();
-    else this.place(Math.min(this.cursor.at, count - 1), this.cursor.point);
+    const point = this.cursor?.point;
+    if (point !== undefined) this.hover(document.elementFromPoint(point.x, point.y), point);
+    else if (this.cursor === undefined || count === 0) this.clear();
+    else this.place(Math.min(this.cursor.at, count - 1));
   }
 
   /** clear takes the cursor off its mark and hides the box, emptied, so the plot describes no mark. */
@@ -272,6 +283,21 @@ export class Tooltip {
     this.cursor = undefined;
     this.box.hidden = true;
     this.words.replaceChildren();
+  }
+
+  /** point puts the cursor on the mark under the pointer at `e`. */
+  private point(e: PointerEvent): void {
+    this.hover(e.target, { x: e.clientX, y: e.clientY });
+  }
+
+  /**
+   * hover puts the cursor on the mark a pointer at `point` is over, `hit`
+   * being what it is over, or takes it off where there is none.
+   */
+  private hover(hit: EventTarget | null, point: Point): void {
+    const at = this.targets.under(hit, point.x, point.y);
+    if (at === undefined) this.clear();
+    else this.place(at, point);
   }
 
   /**
