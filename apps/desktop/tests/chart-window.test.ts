@@ -6,7 +6,7 @@
  * @vitest-environment happy-dom
  */
 
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, Plot } from "@document";
 import type { GroupsTally } from "@engine";
@@ -226,6 +226,19 @@ function hearing(heard: () => Heard, chart = BARS, more: Partial<Stage> = {}): C
   return made;
 }
 
+/** Presses `key` on `at`, as a person's keydown bubbles to the window, with `init` held. */
+function press(at: Element, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+  at.dispatchEvent(event);
+  return event;
+}
+
+/** The table in the plot's place, and the values heading its rows. */
+const tableOf = (box: HTMLElement): HTMLElement | null =>
+  box.querySelector<HTMLElement>(".chart-plot > .chart-table.chart-scrolls");
+const rowHeads = (box: HTMLElement): Array<string | null> =>
+  [...box.querySelectorAll(".chart-table tbody th")].map((th) => th.textContent);
+
 const image = (box: HTMLElement): HTMLElement => box.querySelector<HTMLElement>('[role="img"]')!;
 const told = (box: HTMLElement): string => box.querySelector(".chart-summary")?.textContent ?? "";
 
@@ -265,4 +278,83 @@ test("a relabel writes the summary in the language chosen since, out of sight", 
   expect(said).toContain("Filas");
   expect(made.box.querySelector(".chart-summary-said")?.textContent).toBe(said);
   expect(made.box.querySelector<HTMLElement>(".chart-summary")?.hidden).toBe(true);
+});
+
+test("t turns the plot into the table of its tally, which stays the element it was through a repaint, and t again brings the plot back", async () => {
+  const read = tallyOf(["North", "South"], true);
+  const made = hearing(() => heardOf(read, read));
+  await frame();
+  expect(press(made.box, "t").defaultPrevented).toBe(true);
+  await frame();
+  const shown = tableOf(made.box)!;
+  expect(rowHeads(made.box)).toStrictEqual(["North", "South"]);
+  expect(made.box.querySelector('[role="img"]')).toBeNull();
+  made.redraw();
+  await frame();
+  expect(tableOf(made.box)).toBe(shown);
+  shown.tabIndex = -1; // Chromium makes a scroller focusable; a tabindex does here.
+  shown.focus();
+  press(shown, "t");
+  await frame();
+  expect(tableOf(made.box)).toBeNull();
+  expect(image(made.box).classList.contains("chart-bars")).toBe(true);
+  expect(document.activeElement).toBe(made.box);
+});
+
+test("a new tally or a relabel builds the table again, in the language chosen, and a held or chorded t does nothing", async () => {
+  const one = tallyOf(["North"], true);
+  let heard = heardOf(one, one);
+  const made = hearing(() => heard);
+  await frame();
+  press(made.box, "t");
+  await frame();
+  const was = tableOf(made.box)!;
+  was.tabIndex = -1;
+  was.focus();
+  const read = tallyOf(["North", "South"], true);
+  heard = heardOf(read, read);
+  made.redraw();
+  await frame();
+  expect(tableOf(made.box)).not.toBe(was);
+  expect(document.activeElement).toBe(made.box);
+  expect(rowHeads(made.box)).toStrictEqual(["North", "South"]);
+  void setLocale("es", { reload: false });
+  made.relabel();
+  await frame();
+  const header = made.box.querySelector(".chart-table thead th:last-child")?.textContent;
+  expect(header).toBe(m.chart_table_rows());
+  expect(header).toBe("filas");
+  for (const held of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { repeat: true }]) {
+    expect(press(made.box, "t", held).defaultPrevented).toBe(false);
+  }
+  await frame();
+  expect(tableOf(made.box)).not.toBeNull();
+});
+
+test("the table's caption is what the head calls the chart, marked as the file's where a person named it", async () => {
+  const read = tallyOf(["North"], true);
+  const made = hearing(() => heardOf(read, read), TITLED);
+  await frame();
+  press(made.box, "t");
+  await frame();
+  const caption = (): Element => made.box.querySelector(".chart-table caption")!;
+  expect(caption().textContent).toBe(TITLED.title);
+  expect(caption().querySelector(".from-file")).not.toBeNull();
+  made.show(BARS, undefined);
+  await frame();
+  expect(caption().textContent).toBe(madeTitle(BARS.plot));
+  expect(caption().querySelector(".from-file")).toBeNull();
+});
+
+test("arrows in the table scroll it, and leave the window where it stands", async () => {
+  const read = tallyOf(["North"], true);
+  const draw = vi.fn();
+  const made = hearing(() => heardOf(read, read), BARS, { draw });
+  await frame();
+  press(made.box, "t");
+  await frame();
+  expect(press(tableOf(made.box)!, "ArrowDown").defaultPrevented).toBe(false);
+  expect(draw).not.toHaveBeenCalled();
+  expect(press(made.box, "ArrowDown").defaultPrevented).toBe(true);
+  expect(draw).toHaveBeenCalledOnce();
 });

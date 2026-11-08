@@ -224,6 +224,15 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   expect(summaries().every((text) => text.includes(PSEUDO_OPEN))).toBe(true);
   expect(document.querySelector(".chart-summary .from-file")!.textContent).toMatch(/\S/);
   expect(english(".chart")).toEqual([]);
+  // t turns the first plot into its table, whose words follow the language too.
+  const first = document.querySelector<HTMLElement>(".chart")!;
+  first.dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+  await frame();
+  const header = document.querySelector(".chart-table thead th:last-child")?.textContent;
+  expect(header).toBe(m.chart_table_rows());
+  expect(header).toContain(PSEUDO_OPEN);
+  expect(document.querySelectorAll(".chart-table tbody th .from-file").length).toBeGreaterThan(0);
+  expect(english(".chart")).toEqual([]);
 });
 
 test("a chart over a missing source says so and offers Re-point in the language chosen", async () => {

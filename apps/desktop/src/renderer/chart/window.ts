@@ -14,8 +14,9 @@
  * The plot draws what the chart last heard, each time the layer shows the
  * window, as the window resizes, and when the chart hears a tally. The
  * drawing is an image a screen reader hears named by what the chart says it
- * shows, from the last complete tally. The caption's count of the cells that
- * were not numbers is a button that finds them in the sheet.
+ * shows, from the last complete tally, and t puts the table of the same in
+ * its place, and back. The caption's count of the cells that were not numbers
+ * is a button that finds them in the sheet.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -35,6 +36,7 @@ import type { Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
 import { summary } from "./summary.ts";
 import type { Summary } from "./summary.ts";
+import { table } from "./table.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -62,6 +64,9 @@ const SCROLL_END_SLACK = 1;
 
 /** What parts the caption's words. */
 const SEP = " · ";
+
+/** The key that puts the table in the plot's place, and the plot back. */
+const TABLE_KEY = "t";
 
 /** How many windows have been made, so each one's ids are its own. A chart's
  * id can be any name, and aria-labelledby reads a space as a second id. */
@@ -135,6 +140,11 @@ function numbered(plot: Plot): ChartColumn[] {
   return plot.sum === undefined ? [] : [plot.sum];
 }
 
+/** tableKey says whether `press` is t alone, pressed once. */
+function tableKey({ key, ctrl, alt, meta, repeat }: Press): boolean {
+  return key === TABLE_KEY && !ctrl && !alt && !meta && !repeat;
+}
+
 /**
  * extra gives what the caption says after the counts, for the plot's kind:
  * what a scatter's sample leaves out, or how a pie counts the values past
@@ -205,6 +215,10 @@ export class ChartWindow {
   private hold: Hold | undefined;
   /** The frame the next draw of the plot waits for, or 0. */
   private frame = 0;
+  /** Whether the table stands in the plot's place. */
+  private tabled = false;
+  /** The table of the tally and title it holds, kept while they stand, so a repaint keeps its scroll. */
+  private table: { of: GroupsTally | SampleTally; title: string; box: HTMLElement } | undefined;
 
   constructor(
     /** The chart the window shows, as the layer last said. */
@@ -288,10 +302,11 @@ export class ChartWindow {
 
   /**
    * relabel writes the window's own words in the current language, and draws
-   * the plot again, whose words and summary follow the language too.
+   * the plot again, whose words, table and summary follow the language too.
    */
   relabel(): void {
     this.words.write();
+    this.table = undefined;
     this.redraw();
   }
 
@@ -305,12 +320,12 @@ export class ChartWindow {
   }
 
   /**
-   * paint draws what the chart last heard. A complete tally stays drawn while
-   * the next one is read, and a first one draws as it comes. The caption says
-   * how much of its source the chart has read and what the tally left out,
-   * then what the plot's kind says. The track under the head shows how far the
-   * chart has read, while it reads, and a chart with nothing to draw says why
-   * in the plot's place.
+   * paint draws what the chart last heard, or puts its table in the plot's
+   * place. A complete tally stays drawn while the next one is read, and a
+   * first one draws as it comes. The caption says how much of its source the
+   * chart has read and what the tally left out, then what the plot's kind
+   * says. The track under the head shows how far the chart has read, while it
+   * reads, and a chart with nothing to draw says why in the plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -319,6 +334,7 @@ export class ChartWindow {
     const latest = heard?.latest;
     const named = this.summarise(heard);
     if (tally === undefined) this.fill(...this.state(heard));
+    else if (this.tabled) this.tabulate(tally);
     else this.draw(plot, tally, named);
     const after = tally === undefined ? [] : extra(plot, tally);
     this.say([coverage(latest), blank(latest)], notNumbers(latest), after);
@@ -348,6 +364,27 @@ export class ChartWindow {
     drawn.setAttribute("aria-labelledby", named);
     this.fill(drawn);
     return drawn;
+  }
+
+  /**
+   * tabulate puts the table of `tally` in the plot's place. The table stands
+   * while its tally and its title do, so a repaint of the same leaves it as
+   * it is, scrolled where it was, and a new tally, a new title or a relabel
+   * builds it again.
+   */
+  private tabulate(tally: GroupsTally | SampleTally): void {
+    const title = this.named();
+    if (this.table?.of !== tally || this.table.title !== title) {
+      const called = el("bdi", this.chart.title === "" ? "" : "from-file", title);
+      this.table = { of: tally, title, box: table(this.chart.plot, tally, called) };
+    }
+    if (this.plot.firstChild !== this.table.box) this.fill(this.table.box);
+  }
+
+  /** flip puts the table in the plot's place, or the plot back. */
+  private flip(): void {
+    this.tabled = !this.tabled;
+    this.redraw();
   }
 
   /**
@@ -486,10 +523,16 @@ export class ChartWindow {
     this.stage.wheelBy(dx, dy, e.deltaMode);
   }
 
-  /** key answers Escape and the arrows, and leaves any other key to the shell. */
+  /**
+   * key answers Escape, t and the arrows, and leaves any other key to the
+   * shell. An arrow in the table scrolls it, as the table has the keys then.
+   */
   private key(e: KeyboardEvent): void {
+    const press = pressOf(e);
+    const inTable = e.target instanceof Element && e.target.closest(SCROLLS) !== null;
     if (e.key === "Escape") this.escape();
-    else if (!this.nudge(pressOf(e))) return;
+    else if (tableKey(press)) this.flip();
+    else if (inTable || !this.nudge(press)) return;
     e.preventDefault();
     e.stopPropagation();
   }
