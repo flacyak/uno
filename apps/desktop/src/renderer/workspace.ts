@@ -244,6 +244,8 @@ export class Workspace {
   chartsNote: Said | undefined;
   /** Called when a chart hears a tally, with the chart's id. */
   onTally: (chart: string) => void = () => undefined;
+  /** Called when a source's index completes, with the source's id. */
+  onIndexed: (source: string) => void = () => undefined;
 
   /** Tabs in the order they were added, which is the sidebar order. */
   private tabs: Tab[] = [];
@@ -347,7 +349,10 @@ export class Workspace {
 
   private tab(source: SourceHandle, saved?: readonly Edit[]): Tab {
     const t = new Tab(source, new Band(source, this.changed), saved);
-    source.onProgress = () => this.changed();
+    source.onProgress = (progress) => {
+      this.changed();
+      if (progress.complete) this.onIndexed(source.id);
+    };
     source.onOffer = (offer) => {
       t.offer = offer;
       this.offered(t);
