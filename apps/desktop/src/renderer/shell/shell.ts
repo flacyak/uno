@@ -768,6 +768,7 @@ export class Shell {
           this.content,
           () => this.grid?.focus(),
           (dx, dy, deltaMode) => this.grid?.wheelBy(dx, dy, deltaMode),
+          (source) => this.withTab(source, (tab) => this.repoint(tab)),
         );
         return this.layer;
       },

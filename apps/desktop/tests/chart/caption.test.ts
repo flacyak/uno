@@ -107,3 +107,22 @@ test("the plot says it reads before the first tally, why it cannot read its colu
     words: "aún no hay valores en region",
   });
 });
+
+test("the plot says its source is missing or waits on its bucket, with Re-point or Connect, in the language chosen", () => {
+  const missing = { ...heardOf(undefined), state: "missing" } as const;
+  const waiting = { ...heardOf(undefined), state: "unconnected", bucket: "open-data" } as const;
+  expect(body(BARS.plot, missing)).toStrictEqual({
+    words: `${NAME} is missing`,
+    action: "Re-point",
+  });
+  expect(body(BARS.plot, waiting)).toStrictEqual({
+    words: "open-data is not connected",
+    action: "Connect open-data",
+  });
+  void setLocale("es", { reload: false });
+  expect(body(BARS.plot, missing)).toStrictEqual({ words: `falta ${NAME}`, action: "Redirigir" });
+  expect(body(BARS.plot, waiting)).toStrictEqual({
+    words: "open-data no está conectado",
+    action: "Conectar open-data",
+  });
+});

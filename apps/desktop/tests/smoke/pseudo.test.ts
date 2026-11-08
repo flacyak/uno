@@ -214,3 +214,14 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   expect(said()).toContain(PSEUDO_OPEN);
   expect(english(".chart")).toEqual([]);
 });
+
+test("a chart over a missing source says so and offers Re-point in the language chosen", async () => {
+  const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "missing.uno");
+  await writeFile(path, unoOf([BARS], [], "/nowhere/sales-q3.csv"));
+  await shell.openRef({ name: "missing.uno", path });
+  const state = (): string => document.querySelector(".chart-state")?.textContent ?? "";
+  expect(await until(domPage(), () => state() !== "")).toBe(true);
+  const missing = m.chart_source_missing({ name: `${SALES}.csv` });
+  expect(state()).toBe(`${missing}${m.action_repoint()}`);
+  expect(english(".chart")).toEqual([]);
+});

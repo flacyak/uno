@@ -487,6 +487,8 @@
   "chart_partial": "parcial · {read} lido",
   "chart_reading": "lendo {name}…",
   "chart_no_values_yet": "ainda não há valores em {columns}",
+  "chart_source_missing": "{name} está ausente",
+  "chart_bucket_unconnected": "{bucket} não está conectado",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um arquivo por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só arquivo · arquivos só são anexados a vários lidos como um",
