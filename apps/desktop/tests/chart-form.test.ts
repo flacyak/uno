@@ -28,7 +28,8 @@ const COLUMNS = [
 /** The column selected in the grid: region. */
 const REGION = 1;
 
-/** The column a sum is of: revenue. */
+/** The number columns: units, then revenue, which a sum is of. */
+const UNITS = 4;
 const REVENUE = 5;
 
 /** The workspace's sources: the sales export, active, then an ads export with
@@ -42,6 +43,10 @@ const ADS = {
   missing: false,
 };
 const GONE = { id: "gone", name: "ads-q2.csv", band: { columns: [] }, missing: true };
+/** Then the sales export's sums, revenue before units, and its takings, revenue beside a cost. */
+const SUMS = { ...SALES, id: "sums", band: { columns: [COLUMNS[REVENUE], COLUMNS[UNITS]] } };
+const COST = { header: "cost", kind: "num", flagged: false } as const;
+const TAKINGS = { ...SALES, id: "takings", band: { columns: [COLUMNS[REVENUE], COST] } };
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id): string =>
@@ -50,14 +55,17 @@ const inserting = (plot: Plot, title = "", source = SALES.id): string =>
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
 
-/** Opens the form on region, with `insert` answering each insert. */
-function form(insert = (): Promise<void> => Promise.resolve()): {
+/** Opens the form on the column `selected`, with `insert` answering each insert. */
+function form(
+  insert = (): Promise<void> => Promise.resolve(),
+  selected = REGION,
+): {
   asked: string[];
   box: HTMLFormElement;
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE], SALES, REGION, {
+  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS], SALES, selected, {
     insert: (source, plot, title) => {
       asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
@@ -77,6 +85,10 @@ function pick(name: string, value: string): void {
   select(name).value = value;
   select(name).dispatchEvent(new Event("change"));
 }
+
+/** The labels of the fields that show. */
+const shown = (box: HTMLElement): Array<string | null> =>
+  [...box.querySelectorAll<HTMLElement>(".field:not([hidden]) .what")].map((at) => at.textContent);
 
 /** Presses `key` where the keys are, and returns the event. */
 function press(key: string, shiftKey = false): KeyboardEvent {
@@ -103,12 +115,12 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a pie and a scatter, and makes bars and pies", () => {
+test("it offers bars, a pie and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.textContent, o.disabled]);
   const kinds = [m.chart_kind_bars(), m.chart_kind_pie(), m.chart_kind_scatter()];
-  expect(offered).toStrictEqual(kinds.map((words, i) => [words, i === kinds.length - 1]));
+  expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
   expect(kind.value).toBe("bars");
 });
 
@@ -122,6 +134,40 @@ test("a pie shares out the rows, or a sum, per value of the selected column", as
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(pie), "closed"]);
+});
+
+test("a scatter asks for X and Y of the number columns, the first two to begin", async () => {
+  const { asked, box } = form();
+  pick("kind", "scatter");
+  const words = [m.chart_form_source(), m.chart_form_kind(), m.chart_form_x(), m.chart_form_y()];
+  expect(shown(box)).toStrictEqual([...words, m.chart_form_title_field()]);
+  expect([...select("x").options].map((o) => o.textContent)).toStrictEqual(["units", "revenue"]);
+  const x = { col: UNITS, header: "units" };
+  const scatter: Plot = { t: "scatter", x, y: { col: REVENUE, header: "revenue" } };
+  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(scatter));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(scatter), "closed"]);
+});
+
+test("a scatter's X starts on the selected column, where it holds numbers", () => {
+  form(undefined, REVENUE);
+  pick("kind", "scatter");
+  expect([select("x").value, select("y").value]).toStrictEqual([String(REVENUE), String(UNITS)]);
+});
+
+test("another source keeps a scatter's columns by header, or makes bars under two number columns", () => {
+  const { box } = form();
+  pick("kind", "scatter");
+  pick("source", "3");
+  expect([select("x").value, select("y").value]).toStrictEqual(["1", "0"]);
+  // Units is gone, so X takes the number column Y leaves.
+  pick("source", "4");
+  expect([select("x").value, select("y").value]).toStrictEqual(["1", "0"]);
+  pick("source", "1");
+  expect(select("kind").value).toBe("bars");
+  expect(select("kind").options[2]!.disabled).toBe(true);
+  expect(shown(box)).toContain(m.chart_form_by());
 });
 
 test("an empty title shows the one the chart makes, which follows the column", () => {
@@ -180,7 +226,7 @@ test("another source offers its columns, and keeps those it has a header for", a
 test("a source whose file is missing is offered, and cannot be chosen", () => {
   form();
   const offered = [...select("source").options].map((o) => [o.textContent, o.disabled]);
-  expect(offered).toStrictEqual([SALES, ADS, GONE].map((s) => [s.name, s.missing]));
+  expect(offered).toStrictEqual([SALES, ADS, GONE, SUMS, TAKINGS].map((s) => [s.name, s.missing]));
 });
 
 test("Esc closes it and inserts nothing", () => {
@@ -199,6 +245,16 @@ test("Tab walks the controls round the ends, and never leaves the form", () => {
   expect(document.activeElement).toBe(controls.at(-1));
   expect(press("Tab").defaultPrevented).toBe(true);
   expect(document.activeElement).toBe(controls[0]);
+});
+
+test("Tab passes the fields the kind chosen does not ask for", () => {
+  form();
+  pick("kind", "scatter");
+  expect(press("Tab").defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(select("x"));
+  pick("kind", "bars");
+  press("Tab");
+  expect(document.activeElement).toBe(select("by"));
 });
 
 // Enter on a button is the button's, so the refused chart is asked for once.

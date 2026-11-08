@@ -478,6 +478,8 @@
   "chart_form_by": "por",
   "chart_form_sum": "soma de",
   "chart_form_sum_none": "nenhuma, contar linhas",
+  "chart_form_x": "x",
+  "chart_form_y": "y",
   "chart_form_title_field": "título",
   "chart_form_hint": "Enter insere · Esc fecha",
   "chart_inserted": "inserido: {title}",
