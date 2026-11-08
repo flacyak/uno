@@ -21,7 +21,7 @@ import type { SingleRef } from "@store";
 import { s3Location } from "@store/s3";
 
 import { m } from "@paraglide/messages";
-import type { ChartForm, ChartSource } from "@renderer/chart/form";
+import type { ChartForm, ChartSource, Opening } from "@renderer/chart/form";
 import type { ChartLayer } from "@renderer/chart/layer";
 import type { Charts } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
@@ -576,10 +576,11 @@ export class Shell {
     const { madeTitle } = await import("@renderer/chart/window");
     if (this.workspace !== w) return;
     const col = grid.selection().col;
+    const opening: Opening = { t: "insert", col };
     let made: string | undefined;
     this.closePopups();
-    this.chartForm = new ChartForm(place, w.sources, tab, col, {
-      insert: async (source, plot, title) => {
+    this.chartForm = new ChartForm(place, w.sources, tab, opening, {
+      send: async (source, plot, title) => {
         made = (await this.chart(w, source, { plot, title }, grid.columnSpan(col))).id;
         this.say(m.chart_inserted({ title: title === "" ? madeTitle(plot) : title }));
       },

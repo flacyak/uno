@@ -3,7 +3,8 @@
  * column whose values its bars or pie count the rows of, or sum a number column
  * over, or the two number columns a scatter sets against each other, and its
  * title. It opens on the active source, and another source keeps each column it
- * has a header for.
+ * has a header for. Opened on a chart, it shows what the chart shows, and its
+ * primary button is Apply.
  *
  * An empty title shows the one the chart makes, which follows the language.
  * The engine keeps the chart, and a refusal is shown in the form, which stays
@@ -13,7 +14,7 @@
 import "./form.css";
 
 import { TITLE_AT_MOST } from "@document";
-import type { ChartColumn, Plot } from "@document";
+import type { Chart, ChartColumn, Plot } from "@document";
 import type { ColumnInfo } from "@engine";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
@@ -35,11 +36,18 @@ export interface ChartSource {
 /** What the form asks of the shell. */
 export interface ChartAsks {
   /** Inserts a chart of `plot` over `source`, titled `title` or "" for the one
-   * it makes. Throws with a message when refused. */
-  insert(source: ChartSource, plot: Plot, title: string): Promise<void>;
+   * it makes, or changes the chart the form opened on to it. Throws with a
+   * message when refused. */
+  send(source: ChartSource, plot: Plot, title: string): Promise<void>;
   /** Called when the form closes. */
   closed(): void;
 }
+
+/** What the form opens on: the column selected in the grid, to insert a chart
+ * of it, or a chart over the active source, to change it. */
+export type Opening =
+  | { t: "insert"; col: number }
+  | { t: "change"; chart: Pick<Chart, "plot" | "title"> };
 
 /** The kinds of chart, in the order the form offers them. */
 const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
@@ -78,15 +86,20 @@ export class ChartForm {
     private readonly sources: readonly ChartSource[],
     /** The active source, which the form opens on. */
     active: ChartSource,
-    /** The column selected in the grid, which By and a scatter's X start on. */
-    selected: number,
+    /** What the form opens on. */
+    private readonly opening: Opening,
     private readonly asks: ChartAsks,
   ) {
     this.source = active;
-    const heading = m.chart_form_title_source({ source: active.name });
-    this.form = new PopForm("chart-form", m.chart_form_title(), heading, m.action_insert(), {
-      submit: () => void this.insert(),
-      // Enter on any field inserts, so the form makes a chart in one key.
+    const changes = opening.t === "change";
+    const label = changes ? m.chart_edit() : m.chart_form_title();
+    const heading = changes
+      ? m.chart_form_title_chart({ title: opening.chart.title || madeTitle(opening.chart.plot) })
+      : m.chart_form_title_source({ source: active.name });
+    const primary = changes ? m.action_apply() : m.action_insert();
+    this.form = new PopForm("chart-form", label, heading, primary, {
+      submit: () => void this.send(),
+      // Enter on any field sends what the form holds, so a chart is made or changed in one key.
       enters: (target) => !(target instanceof HTMLButtonElement),
       closed: () => asks.closed(),
     });
@@ -102,7 +115,8 @@ export class ChartForm {
     this.kind.append(...KINDS.map(([t, words]) => option(words(), t)));
     this.kind.addEventListener("change", () => this.ask());
 
-    this.offer(selected);
+    if (opening.t === "insert") this.offer(opening.col);
+    else this.opensOn(opening.chart.plot);
     for (const column of [this.by, this.sum, this.x, this.y]) {
       column.addEventListener("change", () => this.name());
     }
@@ -110,6 +124,7 @@ export class ChartForm {
     this.title.type = "text";
     this.title.maxLength = TITLE_AT_MOST;
     this.title.autocomplete = "off";
+    if (opening.t === "change") this.title.value = opening.chart.title;
 
     const fields = [
       field(m.chart_form_source(), this.from),
@@ -119,8 +134,8 @@ export class ChartForm {
       field(m.chart_form_title_field(), this.title),
     ];
     this.form.open(fields, place);
-    this.form.say(m.chart_form_hint(), false);
-    this.by.focus();
+    this.form.say(changes ? m.chart_form_hint_change() : m.chart_form_hint(), false);
+    this.first().focus();
   }
 
   close(): void {
@@ -128,15 +143,39 @@ export class ChartForm {
   }
 
   /** choose offers the columns of the source chosen, keeping each column
-   * chosen whose header it has, and names it in the title line. */
+   * chosen whose header it has, and names it in an insert's title line. */
   private choose(): void {
     const header = (select: HTMLSelectElement): string | undefined =>
       select.value === "" ? undefined : this.source.band.columns[Number(select.value)]?.header;
     const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(header);
     this.source = this.sources[Number(this.from.value)] ?? this.source;
-    this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
-    const at = this.source.band.columns.findIndex((c) => c.header === by);
-    this.offer(Math.max(0, at), kept);
+    if (this.opening.t === "insert") {
+      this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
+    }
+    this.offer(this.at(by), kept);
+  }
+
+  /** opensOn chooses `plot`'s kind, and the source's columns it names. */
+  private opensOn(plot: Plot): void {
+    this.kind.value = plot.t;
+    if (plot.t === "scatter") {
+      this.offer(this.at(plot.x.header), [undefined, plot.x.header, plot.y.header]);
+    } else {
+      this.offer(this.at(plot.by.header), [plot.sum?.header]);
+    }
+  }
+
+  /** at gives the source's column with `header`, or else its first. */
+  private at(header: string | undefined): number {
+    return Math.max(
+      0,
+      this.source.band.columns.findIndex((c) => c.header === header),
+    );
+  }
+
+  /** first gives the column select the kind chosen asks for first. */
+  private first(): HTMLSelectElement {
+    return this.kind.value === "scatter" ? this.x : this.by;
   }
 
   /** offer fills the selects with the source's columns, choosing `by` and the
@@ -203,16 +242,16 @@ export class ChartForm {
     this.title.placeholder = madeTitle(this.plot());
   }
 
-  /** insert sends the chart, unless one is in flight, and closes once the engine keeps it. */
-  private async insert(): Promise<void> {
+  /** send sends the chart, unless one is in flight, and closes once the engine keeps it. */
+  private async send(): Promise<void> {
     if (this.form.submit.disabled) return;
     this.form.submit.disabled = true;
     try {
-      await this.asks.insert(this.source, this.plot(), this.title.value.trim());
+      await this.asks.send(this.source, this.plot(), this.title.value.trim());
       this.close();
     } catch (err) {
       this.form.say(message(err), true);
-      (this.kind.value === "scatter" ? this.x : this.by).focus();
+      this.first().focus();
     } finally {
       this.form.submit.disabled = false;
     }

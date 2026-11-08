@@ -1,6 +1,7 @@
 /**
  * @fileoverview The chart form: what it opens on, what Enter inserts, and how
- * Esc, Tab and a refusal behave in it.
+ * Esc, Tab and a refusal behave in it. Opened on a chart, it shows what the
+ * chart shows, and Apply sends what it holds.
  *
  * @vitest-environment happy-dom
  */
@@ -12,6 +13,7 @@ import type { Plot } from "@document";
 import { Refusal } from "@engine";
 import { m } from "@paraglide/messages";
 import { ChartForm } from "@renderer/chart/form";
+import type { ChartSource, Opening } from "@renderer/chart/form";
 import { madeTitle } from "@renderer/chart/window";
 import { num } from "@renderer/locale";
 
@@ -50,24 +52,25 @@ const TAKINGS = { ...SALES, id: "takings", band: { columns: [COLUMNS[REVENUE], C
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id): string =>
-  `insert ${source} ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
+  `send ${source} ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
 
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
 
-/** Opens the form on the column `selected`, with `insert` answering each insert. */
+/** Opens the form on `opening` over `active`, with `insert` answering each insert. */
 function form(
   insert = (): Promise<void> => Promise.resolve(),
-  selected = REGION,
+  opening: Opening = { t: "insert", col: REGION },
+  active: ChartSource = SALES,
 ): {
   asked: string[];
   box: HTMLFormElement;
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS], SALES, selected, {
-    insert: (source, plot, title) => {
-      asked.push(`insert ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
+  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS], active, opening, {
+    send: (source, plot, title) => {
+      asked.push(`send ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
       return insert();
     },
     closed: () => asked.push("closed"),
@@ -151,7 +154,7 @@ test("a scatter asks for X and Y of the number columns, the first two to begin",
 });
 
 test("a scatter's X starts on the selected column, where it holds numbers", () => {
-  form(undefined, REVENUE);
+  form(undefined, { t: "insert", col: REVENUE });
   pick("kind", "scatter");
   expect([select("x").value, select("y").value]).toStrictEqual([String(REVENUE), String(UNITS)]);
 });
@@ -270,4 +273,42 @@ test("a refusal stays in the form, on the column chosen", async () => {
   expect(note.textContent).toBe(m.refused_charts_at_most({ limit: num(CHARTS_AT_MOST) }));
   expect(asked).toStrictEqual([regionBars]);
   expect(document.activeElement).toBe(select("by"));
+});
+
+/** Opens the form to change a chart of `plot` titled `title` over `active`. */
+const changing = (plot: Plot, title = "", active: ChartSource = SALES): ReturnType<typeof form> =>
+  form(undefined, { t: "change", chart: { plot, title } }, active);
+
+/** The values of the open form's selects named `names`. */
+const chosen = (...names: string[]): string[] => names.map((name) => select(name).value);
+
+test("a chart's form opens on what it shows, over its source", () => {
+  const units = { col: UNITS, header: "units" };
+  const revenue = { col: REVENUE, header: "revenue" };
+  changing({ ...REGION_BARS, sum: revenue }, "Takings");
+  expect(chosen("kind", "by", "sum")).toStrictEqual(["bars", String(REGION), String(REVENUE)]);
+  expect(document.querySelector<HTMLInputElement>(".chart-form input")!.value).toBe("Takings");
+  expect(document.activeElement).toBe(select("by"));
+
+  // The ads export has region second.
+  changing({ t: "pie", by: { col: REGION, header: "region" } }, "", ADS);
+  expect(chosen("source", "kind", "by")).toStrictEqual(["1", "pie", "1"]);
+  changing({ t: "scatter", x: revenue, y: units });
+  expect(chosen("kind", "x", "y")).toStrictEqual(["scatter", String(REVENUE), String(UNITS)]);
+  expect(document.activeElement).toBe(select("x"));
+});
+
+test("a chart's form is titled by the chart, and Apply sends what it holds", async () => {
+  const { asked, box } = changing(REGION_BARS, "Takings");
+  const heading = (): string | null => box.querySelector(".title")!.textContent;
+  expect(box.getAttribute("aria-label")).toBe(m.chart_edit());
+  expect(heading()).toBe(m.chart_form_title_chart({ title: "Takings" }));
+  expect(box.querySelector("button.primary")!.textContent).toBe(m.action_apply());
+  expect(box.querySelector(".note")!.textContent).toBe(m.chart_form_hint_change());
+  // Another source leaves the title line on the chart, and keeps region, second in it.
+  pick("source", "1");
+  expect(heading()).toBe(m.chart_form_title_chart({ title: "Takings" }));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "Takings", ADS.id), "closed"]);
 });
