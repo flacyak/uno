@@ -4,6 +4,8 @@
  * refusal is shown in the form, which stays open on what was chosen.
  */
 
+import "./form.css";
+
 import type { Plot } from "@document";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
