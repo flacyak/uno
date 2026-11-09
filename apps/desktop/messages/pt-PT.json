@@ -537,6 +537,7 @@
   "chart_every_hours": "a cada {count} h",
   "chart_every_hour": "a cada hora",
   "chart_every_day": "todos os dias",
+  "chart_checked": "revisto {time}",
   "chart_reading": "a ler {name}…",
   "chart_no_values_yet": "ainda não há valores em {columns}",
   "chart_source_missing": "{name} está ausente",

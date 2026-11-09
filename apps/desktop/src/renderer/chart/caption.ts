@@ -4,7 +4,7 @@
  * tally is partial, and the rows once it is complete, then the cells the tally
  * left out. The track under the head shows the same share while the chart
  * reads, and the plot says why it draws nothing while it has nothing to draw.
- * At its right end it says how often its source is checked.
+ * At its right end it says how often its source is checked, and when it was.
  */
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
@@ -13,7 +13,8 @@ import type { Coverage, GroupsTally, SampleTally, Skipped, Tally } from "@engine
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
-import { list, num, percent } from "@renderer/locale";
+import { clock, list, num, percent } from "@renderer/locale";
+import type { Checks } from "@renderer/refresh";
 import { say } from "@renderer/said";
 
 /** What a chart's plot says in place of what it cannot draw, and the action it offers. */
@@ -160,4 +161,15 @@ export function every(minutes: number): string {
   if (minutes === DAY_MINUTES) return m.chart_every_day();
   if (minutes % HOUR_MINUTES !== 0) return m.chart_every_minutes({ count: num(minutes) });
   return m.chart_every_hours({ count: num(minutes / HOUR_MINUTES) });
+}
+
+/**
+ * checked gives when the caption says a chart's source was last checked:
+ * after a check that found it as it was or read it again, or a read by hand,
+ * and nothing before one or while its check waits.
+ */
+export function checked(checks: Checks | undefined): string {
+  const found = checks?.found.t;
+  if (checks === undefined || (found !== "same" && found !== "read")) return "";
+  return m.chart_checked({ time: clock(checks.at) });
 }

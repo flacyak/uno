@@ -3,17 +3,18 @@
  * read, in the language chosen: the share read while its tally is partial, and
  * the rows once it is complete, then the cells the tally left out. And what its
  * plot says in place of a chart it cannot draw. And at the caption's right end,
- * how often its source is checked.
+ * how often its source is checked and when it last was.
  */
 
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
 import type { GroupsTally, SampleTally, Tally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
-import { blank, body, coverage, every, notNumbers } from "@renderer/chart/caption";
+import { blank, body, checked, coverage, every, notNumbers } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
+import type { Checks } from "@renderer/refresh";
 import { BARS, SCATTER } from "../charted.ts";
 
 /** The sales export's rows, and how many of them a tally two fifths through has read. */
@@ -46,12 +47,29 @@ const UNREAD: Tally = {
   said: { t: "chart-column-gone", header: "region", name: NAME },
 };
 
+/** Date counts months from 0. */
+const OCTOBER = 9;
+
+/** 29 October 2026 at 14:32 where the test runs, so a clock reads the same on any machine. */
+const AT = new Date(2026, OCTOBER, 29, 14, 32).getTime();
+
+/** The day after AT, whose clock writes AT with its date. */
+const NEXT_DAY = new Date(2026, OCTOBER, 30).getTime();
+
 /** Schedules the caption names: a quarter hour, an hour and a half, and two hours. */
 const QUARTER_HOUR = 15;
 const HOUR_AND_HALF = 90;
 const TWO_HOURS = 2 * HOUR_MINUTES;
 
-afterEach(() => void setLocale(baseLocale, { reload: false }));
+/** A source's checks, of which the last ended at AT and found `found`. */
+function checksOf(found: Checks["found"]): Checks {
+  return { at: AT, found, next: undefined };
+}
+
+afterEach(() => {
+  void setLocale(baseLocale, { reload: false });
+  vi.useRealTimers();
+});
 
 test("the caption says the share read while a tally is partial, and the rows once it is complete", () => {
   expect(coverage(tallyOf(READ, ROWS))).toBe("partial · 40% read");
@@ -202,4 +220,19 @@ test("the caption names a chart's schedule in the language chosen, and nothing f
     "cada 2 h",
     "cada día",
   ]);
+});
+
+test("the caption says when a check found its source or read it, with the date on another day, in the language chosen", () => {
+  vi.useFakeTimers({ now: AT });
+  expect(checked(checksOf({ t: "same" }))).toBe("checked 2:32 PM");
+  expect(checked(checksOf({ t: "read" }))).toBe("checked 2:32 PM");
+  vi.setSystemTime(NEXT_DAY);
+  expect(checked(checksOf({ t: "same" }))).toBe("checked 10/29/26, 2:32 PM");
+  void setLocale("es", { reload: false });
+  expect(checked(checksOf({ t: "read" }))).toBe("revisado 29/10/26, 14:32");
+});
+
+test("the caption says nothing of a source never checked, or whose check waits", () => {
+  expect(checked(undefined)).toBe("");
+  expect(checked(checksOf({ t: "waiting", why: "indexing" }))).toBe("");
 });
