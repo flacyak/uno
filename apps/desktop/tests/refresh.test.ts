@@ -6,6 +6,8 @@
  * intervals it slept through; and failed checks, among them one with no
  * answer in time, whose source waits for its answer, back off up to a cap,
  * until a refresh by hand, which also ends a wait on the source's bucket.
+ * Each source's checks say when the last ended, what it found and when the
+ * next is due.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -20,6 +22,9 @@ const LONGER = 3;
 
 /** The cap on a backed-off wait, in intervals. */
 const CAPPED = BACKOFF_CAP_MS / EVERY_MS;
+
+/** The wait after one failed check, in intervals: the interval doubled. */
+const BACKED_OFF = 2;
 
 const SAME: Refreshed = { t: "same" };
 
@@ -159,4 +164,40 @@ test("a check with no answer in time fails, and the next waits for its answer, t
   expect(checked, "backed off from the check that timed out").toHaveLength(1);
   await vi.advanceTimersByTimeAsync(EVERY_MS);
   expect(checked).toHaveLength(2);
+});
+
+test("a source's checks say when the last ended, what it found and when the next is due", async () => {
+  const told: string[] = [];
+  refresher = new Refresher(
+    () => Promise.resolve(SAME),
+    (source) => told.push(source),
+  );
+  expect(refresher.checks("a"), "never checked").toBeUndefined();
+  refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
+  await vi.advanceTimersByTimeAsync(0);
+  const at = Date.now();
+  expect(refresher.checks("a")).toStrictEqual({ at, found: SAME, next: at + EVERY_MS });
+  expect(told).toStrictEqual(["a"]);
+});
+
+test("a failed check says what failed it, and its next try waits out the backoff", async () => {
+  const refused = new Error("refused");
+  refresher = new Refresher(() => Promise.reject(refused));
+  refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
+  await vi.advanceTimersByTimeAsync(0);
+  const at = Date.now();
+  const found = { t: "failed", error: refused };
+  expect(refresher.checks("a")).toStrictEqual({ at, found, next: at + BACKED_OFF * EVERY_MS });
+});
+
+test("a read by hand of a source no chart schedules says it read, with no next check", () => {
+  const told: string[] = [];
+  refresher = new Refresher(
+    () => Promise.resolve(SAME),
+    (source) => told.push(source),
+  );
+  refresher.refreshed("a");
+  const found = { t: "read" };
+  expect(refresher.checks("a")).toStrictEqual({ at: Date.now(), found, next: undefined });
+  expect(told).toStrictEqual(["a"]);
 });

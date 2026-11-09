@@ -4,7 +4,9 @@
  * charts, an interval after its last check ended. Due times are wall-clock
  * times and nothing pauses while the window is hidden, so a check that came
  * due while the machine slept runs once on wake, not once per interval missed.
- * A source whose checks fail waits longer for each failure in a row.
+ * A source whose checks fail waits longer for each failure in a row. Each
+ * source's checks say when the last ended, what it found and when the next is
+ * due, for its charts' captions.
  *
  * This file is plain logic, so tests run it directly.
  */
@@ -23,6 +25,20 @@ export type Refreshed =
   /** The source cannot be checked until ready() says so: it is indexing,
    * waits on its bucket, or has no file to read again. */
   | { t: "waiting"; why: "indexing" | "unconnected" | "nothing" };
+
+/** A check that failed, and what failed it. */
+export interface Failed {
+  t: "failed";
+  error: unknown;
+}
+
+/** When a source's last check ended, or its read by hand began, what came of
+ * it, and when the next check is due, while one is. */
+export interface Checks {
+  at: number;
+  found: Refreshed | Failed;
+  next: number | undefined;
+}
 
 /** A chart's schedule: its source, checked every `everyMs`. */
 export interface Due {
@@ -55,11 +71,28 @@ export class Refresher {
   private readonly waiting = new Set<string>();
   /** The checks of each source that failed in a row. */
   private readonly failures = new Map<string, number>();
+  /** What each source's last check found, or how it failed. */
+  private readonly found = new Map<string, Refreshed | Failed>();
+  /** Hears which source's checks changed. */
+  private readonly told: (source: string) => void;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
-  /** `run` checks a source, and reads it again when it changed. */
-  constructor(run: (source: string) => Promise<Refreshed>) {
+  /** `run` checks a source, and reads it again when it changed. `told` hears
+   * each source whose checks changed. */
+  constructor(run: (source: string) => Promise<Refreshed>, told = (_source: string): void => {}) {
     this.run = run;
+    this.told = told;
+  }
+
+  /** Says when `source` was last checked, what came of it and when the next
+   * check is due, or nothing where it has not been checked. */
+  checks(source: string): Checks | undefined {
+    const at = this.checked.get(source);
+    const found = this.found.get(source);
+    if (at === undefined || found === undefined) return undefined;
+    const everyMs = this.every.get(source);
+    const due = everyMs !== undefined && !this.running.has(source) && !this.waiting.has(source);
+    return { at, found, next: due ? at + this.wait(source, everyMs) : undefined };
   }
 
   /** Takes the charts' schedules, after every change to the charts. */
@@ -89,7 +122,9 @@ export class Refresher {
     this.failures.delete(source);
     this.waiting.delete(source);
     this.checked.set(source, Date.now());
+    this.found.set(source, { t: "read" });
     this.tick();
+    this.told(source);
   }
 
   /** Stops the timer and drops the schedules, so a check still out starts nothing. */
@@ -124,17 +159,21 @@ export class Refresher {
   private async check(source: string): Promise<void> {
     this.running.add(source);
     const run = this.run(source);
+    let found: Refreshed | Failed;
     try {
-      const done = await answered(run);
-      if (done.t === "waiting") this.waiting.add(source);
+      found = await answered(run);
+      if (found.t === "waiting") this.waiting.add(source);
       this.failures.delete(source);
-    } catch {
+    } catch (error) {
+      found = { t: "failed", error };
       this.failures.set(source, (this.failures.get(source) ?? 0) + 1);
       // A check given up on stays out until it ends, so no second one starts beside it.
       await run.catch(() => undefined);
     }
     this.running.delete(source);
     this.checked.set(source, Date.now());
+    this.found.set(source, found);
     this.tick();
+    this.told(source);
   }
 }
