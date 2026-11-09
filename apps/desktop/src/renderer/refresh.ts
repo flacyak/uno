@@ -46,14 +46,14 @@ export interface Due {
   everyMs: number;
 }
 
+/** What fails a check with no answer in CHECK_TIMEOUT_MS. */
+export class NoAnswer extends Error {}
+
 /** Resolves as `check` does, or rejects once CHECK_TIMEOUT_MS passes with no answer. */
 function answered<T>(check: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`no answer in ${CHECK_TIMEOUT_MS} ms`)),
-      CHECK_TIMEOUT_MS,
-    );
+    timer = setTimeout(() => reject(new NoAnswer()), CHECK_TIMEOUT_MS);
   });
   return Promise.race([check, late]).finally(() => clearTimeout(timer));
 }
@@ -155,21 +155,27 @@ export class Refresher {
     return Math.min(everyMs * 2 ** failed, Math.max(everyMs, BACKOFF_CAP_MS));
   }
 
-  /** Checks one source, and sets the timer again once it ends or fails. */
+  /** Checks one source, and sets the timer again once it ends or fails. One
+   * with no answer in time fails, and says so until its answer comes. */
   private async check(source: string): Promise<void> {
     this.running.add(source);
     const run = this.run(source);
     let found: Refreshed | Failed;
     try {
       found = await answered(run);
-      if (found.t === "waiting") this.waiting.add(source);
       this.failures.delete(source);
     } catch (error) {
       found = { t: "failed", error };
       this.failures.set(source, (this.failures.get(source) ?? 0) + 1);
-      // A check given up on stays out until it ends, so no second one starts beside it.
-      await run.catch(() => undefined);
+      if (error instanceof NoAnswer) {
+        // A check given up on stays out until it ends, so no second one starts beside it.
+        this.checked.set(source, Date.now());
+        this.found.set(source, found);
+        this.told(source);
+        found = await run.catch((late: unknown): Failed => ({ t: "failed", error: late }));
+      }
     }
+    if (found.t === "waiting") this.waiting.add(source);
     this.running.delete(source);
     this.checked.set(source, Date.now());
     this.found.set(source, found);

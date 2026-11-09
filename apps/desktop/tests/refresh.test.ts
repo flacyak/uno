@@ -7,12 +7,13 @@
  * answer in time, whose source waits for its answer, back off up to a cap,
  * until a refresh by hand, which also ends a wait on the source's bucket.
  * Each source's checks say when the last ended, what it found and when the
- * next is due.
+ * next is due, and one with no answer in time says it failed until its answer
+ * comes.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { Refresher } from "@renderer/refresh";
+import { NoAnswer, Refresher } from "@renderer/refresh";
 import type { Refreshed } from "@renderer/refresh";
 import { BACKOFF_CAP_MS, CHECK_TIMEOUT_MS } from "@renderer/timing";
 
@@ -164,6 +165,24 @@ test("a check with no answer in time fails, and the next waits for its answer, t
   expect(checked, "backed off from the check that timed out").toHaveLength(1);
   await vi.advanceTimersByTimeAsync(EVERY_MS);
   expect(checked).toHaveLength(2);
+});
+
+test("a check with no answer in time says it failed until its answer comes, then what it found", async () => {
+  let answer = (): void => {};
+  refresher = new Refresher(
+    () => new Promise((resolve) => (answer = () => resolve({ t: "read" }))),
+  );
+  refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
+  await vi.advanceTimersByTimeAsync(CHECK_TIMEOUT_MS);
+  const unanswered = { t: "failed", error: expect.any(NoAnswer) };
+  expect(refresher.checks("a")).toStrictEqual({
+    at: Date.now(),
+    found: unanswered,
+    next: undefined,
+  });
+  answer();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(refresher.checks("a")?.found).toStrictEqual({ t: "read" });
 });
 
 test("a source's checks say when the last ended, what it found and when the next is due", async () => {
